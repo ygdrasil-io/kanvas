@@ -43,8 +43,9 @@ class ArcOfZorroTest {
             val similarity = TestUtils.compareBitmaps(testResult, referenceImage)
             println("🔍 ArcOfZorro similarity with Skia reference: ${String.format("%.2f", similarity)}%")
             
-            // Track similarity scores over time
-            SimilarityTracker.updateScore("ArcOfZorroGM", similarity)
+            // Track similarity scores over time and fail if similarity drops significantly
+            val scoreAcceptable = SimilarityTracker.updateScore("ArcOfZorroGM", similarity)
+            assertTrue(scoreAcceptable, "Similarity score dropped significantly compared to previous best")
             
             // For now, we just log the similarity
             assertTrue(similarity >= 0, "Similarity should be calculated")
