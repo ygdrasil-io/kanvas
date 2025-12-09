@@ -3,10 +3,12 @@
 ## 🚨 Problèmes critiques à résoudre
 
 ### 1. Correction des erreurs de compilation
-- [ ] Résoudre le problème de version Java/Kotlin (erreur "25.0.1")
-- [ ] Vérifier la compatibilité des dépendances Gradle
-- [ ] Corriger les éventuelles erreurs de syntaxe Kotlin
-- [ ] Tester avec différentes versions de JDK (17, 21)
+- [x] Résoudre le problème de version Java/Kotlin (erreur "25.0.1")
+- [x] Vérifier la compatibilité des dépendances Gradle
+- [x] Corriger les erreurs de compilation dans Path.kt
+- [x] Ajouter les propriétés centerX et centerY à la classe Rect
+- [x] Rendre les propriétés points et verbs internes pour l'accès dans PathUtils
+- [x] Corriger la signature de la méthode computeLength dans PathUtils
 
 ### 2. Configuration du projet
 - [ ] Vérifier que le wrapper Gradle fonctionne correctement
