@@ -46,11 +46,20 @@ class Path {
     
     /**
      * Draws a quadratic curve to the specified point
+     * Also known as conicTo in Skia terminology
      */
     fun quadTo(x1: Float, y1: Float, x2: Float, y2: Float) {
         points.add(Point(x1, y1))
         points.add(Point(x2, y2))
         verbs.add(PathVerb.QUAD)
+    }
+    
+    /**
+     * Draws a conic curve to the specified point
+     * This is an alias for quadTo, using Skia's terminology
+     */
+    fun conicTo(x1: Float, y1: Float, x2: Float, y2: Float) {
+        quadTo(x1, y1, x2, y2)
     }
     
     /**
@@ -165,9 +174,28 @@ class Path {
             if (i == 0) {
                 moveTo(x.toFloat(), y.toFloat())
             } else {
-                // For better precision, we could use conicTo here like Skia does
-                // But for now, we'll use lineTo as an approximation
-                lineTo(x.toFloat(), y.toFloat())
+                // Use conicTo for better arc approximation (like Skia)
+                // Calculate control point for the conic curve using proper geometry
+                val prevAngle = normalizedStart + (i - 1) * angleStep
+                val prevRadians = SkScalarDegreesToRadians(prevAngle)
+                val prevX = centerX + radiusX * SkScalarCos(prevRadians)
+                val prevY = centerY + radiusY * SkScalarSin(prevRadians)
+                
+                // Calculate the angle between the two points
+                val angleDiff = angleStep
+                val angleMid = prevAngle + angleDiff / 2.0f
+                val midRadians = SkScalarDegreesToRadians(angleMid)
+                
+                // For circular arcs, the control point should be at a distance
+                // that creates a smooth curve. We use a factor based on the angle.
+                // This is similar to Skia's approach for approximating arcs with conics.
+                val controlDistanceFactor = 1.0f / (1.0f + 0.25f * SkScalarAbs(angleDiff))
+                
+                // Calculate control point position
+                val controlX = centerX + radiusX * SkScalarCos(midRadians) * controlDistanceFactor
+                val controlY = centerY + radiusY * SkScalarSin(midRadians) * controlDistanceFactor
+                
+                conicTo(controlX, controlY, x, y)
             }
         }
     }
