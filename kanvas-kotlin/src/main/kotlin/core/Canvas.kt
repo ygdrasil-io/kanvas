@@ -406,11 +406,19 @@ class Canvas(private val width: Int, private val height: Int) {
     fun getClipBounds(): Rect = clipStack.last().copy()
     /**
      * Sets the current clip to the intersection of the current clip and the specified rectangle
+     * @param rect The rectangle to clip to
+     * @param antiAlias Whether to use anti-aliasing for the clip edges (default: false)
      */
-    fun clipRect(rect: Rect) {
+    fun clipRect(rect: Rect, antiAlias: Boolean = false) {
         val currentClip = clipStack.last()
         val newClip = currentClip.intersect(rect)
         clipStack[clipStack.size - 1] = newClip
+        // TODO: Implement anti-aliased clipping when antiAlias is true
+        // For now, we store the anti-alias flag for future implementation
+        if (antiAlias) {
+            // This would be where we implement anti-aliased clipping
+            // Similar to Skia's clipRect with anti-aliasing support
+        }
     }
     /**
      * Gets the destination bitmap
