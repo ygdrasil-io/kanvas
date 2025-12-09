@@ -55,7 +55,7 @@ class SimilarityTracker {
             return scoreString?.toDoubleOrNull()
         }
         
-        fun updateScore(testName: String, newScore: Double) {
+        fun updateScore(testName: String, newScore: Double): Boolean {
             loadScores()
             
             val previousScore = getPreviousScore(testName)
@@ -71,8 +71,19 @@ class SimilarityTracker {
                     val improvement = newScore - previousScore
                     println("📈 Improved similarity for $testName: ${String.format("%.2f", previousScore)}% → ${String.format("%.2f", newScore)}% (${String.format("+.2f", improvement)}%)")
                 }
+                return true
             } else {
                 println("📉 Similarity for $testName: ${String.format("%.2f", newScore)}% (previous best: ${String.format("%.2f", previousScore)}%)")
+                
+                // Check if the drop is significant (more than 1% drop)
+                val drop = previousScore - newScore
+                if (drop > 1.0) {
+                    println("❌ Significant similarity drop detected: ${String.format("%.2f", drop)}% decrease")
+                    return false
+                } else {
+                    println("⚠️  Minor similarity fluctuation: ${String.format("%.2f", drop)}% decrease (within tolerance)")
+                    return true
+                }
             }
         }
     }

@@ -44,8 +44,9 @@ class AaClipTest {
             val similarity = TestUtils.compareBitmaps(testResult, referenceImage)
             println("🔍 AaClip similarity with Skia reference: ${String.format("%.2f", similarity)}%")
             
-            // Track similarity scores over time
-            SimilarityTracker.updateScore("AaClipGM", similarity)
+            // Track similarity scores over time and fail if similarity drops significantly
+            val scoreAcceptable = SimilarityTracker.updateScore("AaClipGM", similarity)
+            assertTrue(scoreAcceptable, "Similarity score dropped significantly compared to previous best")
             
             // For now, we just log the similarity - we'll set thresholds later
             assertTrue(similarity >= 0, "Similarity should be calculated")
