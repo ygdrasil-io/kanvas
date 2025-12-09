@@ -16,6 +16,8 @@ class Canvas(private val width: Int, private val height: Int) {
     private val matrixStack: MutableList<Matrix> = mutableListOf(Matrix.identity())
     // Current clip region stack
     private val clipStack: MutableList<Rect> = mutableListOf(Rect(0f, 0f, width.toFloat(), height.toFloat()))
+    // Track anti-aliasing for each clip level
+    private val clipAntiAliasStack: MutableList<Boolean> = mutableListOf(false)
     // Current paint properties
     private var currentPaint: Paint = Paint()
     /**
@@ -24,6 +26,7 @@ class Canvas(private val width: Int, private val height: Int) {
     fun save() {
         matrixStack.add(matrixStack.last().copy())
         clipStack.add(clipStack.last().copy())
+        clipAntiAliasStack.add(clipAntiAliasStack.last())
     }
     /**
      * Restores the canvas state from the stack
@@ -31,6 +34,7 @@ class Canvas(private val width: Int, private val height: Int) {
     fun restore() {
         if (matrixStack.size > 1) matrixStack.removeAt(matrixStack.size - 1)
         if (clipStack.size > 1) clipStack.removeAt(clipStack.size - 1)
+        if (clipAntiAliasStack.size > 1) clipAntiAliasStack.removeAt(clipAntiAliasStack.size - 1)
     }
     /**
      * Translates the canvas by the specified amounts
@@ -69,13 +73,16 @@ class Canvas(private val width: Int, private val height: Int) {
         
         if (clippedRect.isEmpty) return
         
-        // Implement actual raster drawing
-        drawRectRaster(clippedRect, paint)
+        // Implement actual raster drawing with anti-aliasing info
+        drawRectRaster(clippedRect, paint, clipAntiAliasStack.last())
     }
     /**
      * Internal method for raster rectangle drawing
+     * @param rect The rectangle to draw
+     * @param paint The paint to use
+     * @param useClipAntiAlias Whether to apply clip anti-aliasing
      */
-    private fun drawRectRaster(rect: Rect, paint: Paint) {
+    private fun drawRectRaster(rect: Rect, paint: Paint, useClipAntiAlias: Boolean) {
         val left = rect.left.toInt().coerceAtLeast(0)
         val top = rect.top.toInt().coerceAtLeast(0)
         val right = rect.right.toInt().coerceAtMost(bitmap.getWidth())
@@ -89,8 +96,34 @@ class Canvas(private val width: Int, private val height: Int) {
                         // Apply alpha blending
                         val existingColor = bitmap.getPixel(x, y)
                         val newColor = applyAlpha(paint.color, paint.alpha)
-                        val blendedColor = blendColors(newColor, existingColor, paint.blendMode)
-                        bitmap.setPixel(x, y, blendedColor)
+                        
+                        // Apply clip anti-aliasing if enabled
+                        val finalColor = if (useClipAntiAlias) {
+                            // Calculate distance from clip edges for anti-aliasing
+                            val edgeDistanceX = minOf(
+                                x - rect.left, 
+                                rect.right - x
+                            )
+                            val edgeDistanceY = minOf(
+                                y - rect.top,
+                                rect.bottom - y
+                            )
+                            val edgeDistance = minOf(edgeDistanceX, edgeDistanceY)
+                            
+                            // If pixel is near the edge (within 0.5px), apply anti-aliasing
+                            if (edgeDistance < 0.5f) {
+                                // Calculate alpha based on distance from edge (0 = fully transparent, 1 = fully opaque)
+                                val edgeAlpha = (edgeDistance / 0.5f).coerceIn(0f, 1f)
+                                val antiAliasedColor = applyAlpha(newColor, (paint.alpha * edgeAlpha).toInt())
+                                blendColors(antiAliasedColor, existingColor, paint.blendMode)
+                            } else {
+                                blendColors(newColor, existingColor, paint.blendMode)
+                            }
+                        } else {
+                            blendColors(newColor, existingColor, paint.blendMode)
+                        }
+                        
+                        bitmap.setPixel(x, y, finalColor)
                     }
                 }
             }
@@ -99,19 +132,19 @@ class Canvas(private val width: Int, private val height: Int) {
                 val halfStroke = paint.strokeWidth / 2
                 
                 // Top edge
-                drawLineInternal(left.toFloat(), top.toFloat(), right.toFloat(), top.toFloat(), paint)
+                drawLineInternal(left.toFloat(), top.toFloat(), right.toFloat(), top.toFloat(), paint, useClipAntiAlias)
                 // Bottom edge
-                drawLineInternal(left.toFloat(), bottom.toFloat(), right.toFloat(), bottom.toFloat(), paint)
+                drawLineInternal(left.toFloat(), bottom.toFloat(), right.toFloat(), bottom.toFloat(), paint, useClipAntiAlias)
                 // Left edge
-                drawLineInternal(left.toFloat(), top.toFloat(), left.toFloat(), bottom.toFloat(), paint)
+                drawLineInternal(left.toFloat(), top.toFloat(), left.toFloat(), bottom.toFloat(), paint, useClipAntiAlias)
                 // Right edge
-                drawLineInternal(right.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), paint)
+                drawLineInternal(right.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), paint, useClipAntiAlias)
             }
             PaintStyle.FILL_AND_STROKE -> {
                 // Fill first
-                drawRectRaster(rect, paint.copy().apply { style = PaintStyle.FILL })
+                drawRectRaster(rect, paint.copy().apply { style = PaintStyle.FILL }, false)
                 // Then stroke
-                drawRectRaster(rect, paint.copy().apply { style = PaintStyle.STROKE })
+                drawRectRaster(rect, paint.copy().apply { style = PaintStyle.STROKE }, false)
             }
         }
     }
@@ -126,13 +159,14 @@ class Canvas(private val width: Int, private val height: Int) {
             drawLineAA(x1, y1, x2, y2, paint)
         } else {
             // Use the original Bresenham algorithm for non-AA lines
-            drawLineInternal(x1, y1, x2, y2, paint)
+            drawLineInternal(x1, y1, x2, y2, paint, false)
         }
     }
     /**
-     * Internal line drawing using Bresenham's algorithm (no anti-aliasing)
+     * Internal line drawing using Bresenham's algorithm
+     * @param useClipAntiAlias Whether to apply clip anti-aliasing
      */
-    private fun drawLineInternal(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint) {
+    private fun drawLineInternal(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint, useClipAntiAlias: Boolean = false) {
         // Bresenham's line algorithm
         val x0 = x1.toInt()
         val y0 = y1.toInt()
@@ -154,7 +188,19 @@ class Canvas(private val width: Int, private val height: Int) {
             if (x in 0 until bitmap.getWidth() && y in 0 until bitmap.getHeight()) {
                 val existingColor = bitmap.getPixel(x, y)
                 val newColor = applyAlpha(paint.color, paint.alpha)
-                val blendedColor = blendColors(newColor, existingColor, paint.blendMode)
+                
+                val blendedColor = if (useClipAntiAlias) {
+                    // For clip anti-aliasing, we need to check if this pixel is on the clip edge
+                    // This is a simplified approach - in a full implementation, we would track
+                    // the exact clip boundaries and calculate distance to edges
+                    // For now, we'll apply a subtle anti-aliasing effect
+                    val edgeAlpha = 0.8f // Slightly reduce alpha for anti-aliased effect
+                    val antiAliasedColor = applyAlpha(newColor, (paint.alpha * edgeAlpha).toInt())
+                    blendColors(antiAliasedColor, existingColor, paint.blendMode)
+                } else {
+                    blendColors(newColor, existingColor, paint.blendMode)
+                }
+                
                 bitmap.setPixel(x, y, blendedColor)
             }
             
@@ -275,7 +321,7 @@ class Canvas(private val width: Int, private val height: Int) {
         // Simple implementation: use bounding box for now
         // TODO: Implement proper scanline algorithm for complex paths
         val bounds = path.getBounds()
-        drawRectRaster(bounds, paint)
+        drawRectRaster(bounds, paint, false)
     }
     /**
      * Rasterizes a path stroke
@@ -294,7 +340,7 @@ class Canvas(private val width: Int, private val height: Int) {
                 PathVerb.LINE -> {
                     if (currentPoint != null) {
                         val endPoint = path.points[i]
-                        drawLineInternal(currentPoint!!.x, currentPoint!!.y, endPoint.x, endPoint.y, paint)
+                        drawLineInternal(currentPoint!!.x, currentPoint!!.y, endPoint.x, endPoint.y, paint, false)
                         currentPoint = endPoint
                     }
                     i++
@@ -343,7 +389,7 @@ class Canvas(private val width: Int, private val height: Int) {
             val x = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x
             val y = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y
             val current = Point(x, y)
-            drawLineInternal(prev.x, prev.y, current.x, current.y, paint)
+            drawLineInternal(prev.x, prev.y, current.x, current.y, paint, false)
             prev = current
         }
     }
@@ -366,7 +412,7 @@ class Canvas(private val width: Int, private val height: Int) {
                     3 * (1 - t) * t * t * p2.y + 
                     t * t * t * p3.y
             val current = Point(x, y)
-            drawLineInternal(prev.x, prev.y, current.x, current.y, paint)
+            drawLineInternal(prev.x, prev.y, current.x, current.y, paint, false)
             prev = current
         }
     }
@@ -411,13 +457,29 @@ class Canvas(private val width: Int, private val height: Int) {
      */
     fun clipRect(rect: Rect, antiAlias: Boolean = false) {
         val currentClip = clipStack.last()
-        val newClip = currentClip.intersect(rect)
-        clipStack[clipStack.size - 1] = newClip
-        // TODO: Implement anti-aliased clipping when antiAlias is true
-        // For now, we store the anti-alias flag for future implementation
+        
         if (antiAlias) {
-            // This would be where we implement anti-aliased clipping
-            // Similar to Skia's clipRect with anti-aliasing support
+            // Implement anti-aliased clipping similar to Skia
+            // Anti-aliased clipping creates a smooth transition at the clip edges
+            // We'll expand the clip slightly and store the anti-alias information
+            
+            // Expand the rectangle slightly for anti-aliasing (similar to Skia's approach)
+            val expandedRect = rect.copy().apply {
+                // Expand by 0.5 pixels in each direction for anti-aliasing
+                inset(-0.5f, -0.5f)
+            }
+            
+            val newClip = currentClip.intersect(expandedRect)
+            clipStack[clipStack.size - 1] = newClip
+            
+            // Track that this clip level uses anti-aliasing
+            clipAntiAliasStack[clipAntiAliasStack.size - 1] = true
+        } else {
+            // Standard aliased clipping
+            val newClip = currentClip.intersect(rect)
+            clipStack[clipStack.size - 1] = newClip
+            // No anti-aliasing for this clip
+            clipAntiAliasStack[clipAntiAliasStack.size - 1] = false
         }
     }
     /**
