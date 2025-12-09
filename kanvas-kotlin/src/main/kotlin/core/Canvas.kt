@@ -2,25 +2,22 @@ package com.kanvas.core
 
 import java.nio.ByteBuffer
 import kotlin.math.abs
+import core.*
 
 /**
  * Kanvas is the main drawing surface that provides an interface for drawing operations.
  * It maintains a stack of transformations and clip regions.
  */
 class Canvas(private val width: Int, private val height: Int) {
-    
+
     // Destination bitmap for raster rendering
     private val bitmap: Bitmap = Bitmap.create(width, height, BitmapConfig.ARGB_8888)
-    
     // Current transformation matrix stack
     private val matrixStack: MutableList<Matrix> = mutableListOf(Matrix.identity())
-    
     // Current clip region stack
     private val clipStack: MutableList<Rect> = mutableListOf(Rect(0f, 0f, width.toFloat(), height.toFloat()))
-    
     // Current paint properties
     private var currentPaint: Paint = Paint()
-    
     /**
      * Saves the current canvas state (matrix and clip) onto a stack
      */
@@ -28,7 +25,6 @@ class Canvas(private val width: Int, private val height: Int) {
         matrixStack.add(matrixStack.last().copy())
         clipStack.add(clipStack.last().copy())
     }
-    
     /**
      * Restores the canvas state from the stack
      */
@@ -36,7 +32,6 @@ class Canvas(private val width: Int, private val height: Int) {
         if (matrixStack.size > 1) matrixStack.removeAt(matrixStack.size - 1)
         if (clipStack.size > 1) clipStack.removeAt(clipStack.size - 1)
     }
-    
     /**
      * Translates the canvas by the specified amounts
      */
@@ -44,7 +39,6 @@ class Canvas(private val width: Int, private val height: Int) {
         val currentMatrix = matrixStack.last()
         currentMatrix.postTranslate(dx, dy)
     }
-    
     /**
      * Scales the canvas by the specified amounts
      */
@@ -52,7 +46,6 @@ class Canvas(private val width: Int, private val height: Int) {
         val currentMatrix = matrixStack.last()
         currentMatrix.postScale(sx, sy)
     }
-    
     /**
      * Rotates the canvas by the specified degrees
      */
@@ -60,14 +53,12 @@ class Canvas(private val width: Int, private val height: Int) {
         val currentMatrix = matrixStack.last()
         currentMatrix.postRotate(degrees)
     }
-    
     /**
      * Sets the current paint to use for drawing operations
      */
     fun setPaint(paint: Paint) {
         this.currentPaint = paint
     }
-    
     /**
      * Draws a rectangle with the current paint
      */
@@ -81,7 +72,6 @@ class Canvas(private val width: Int, private val height: Int) {
         // Implement actual raster drawing
         drawRectRaster(clippedRect, paint)
     }
-    
     /**
      * Internal method for raster rectangle drawing
      */
@@ -109,13 +99,13 @@ class Canvas(private val width: Int, private val height: Int) {
                 val halfStroke = paint.strokeWidth / 2
                 
                 // Top edge
-                drawLine(left.toFloat(), top.toFloat(), right.toFloat(), top.toFloat(), paint)
+                drawLineInternal(left.toFloat(), top.toFloat(), right.toFloat(), top.toFloat(), paint)
                 // Bottom edge
-                drawLine(left.toFloat(), bottom.toFloat(), right.toFloat(), bottom.toFloat(), paint)
+                drawLineInternal(left.toFloat(), bottom.toFloat(), right.toFloat(), bottom.toFloat(), paint)
                 // Left edge
-                drawLine(left.toFloat(), top.toFloat(), left.toFloat(), bottom.toFloat(), paint)
+                drawLineInternal(left.toFloat(), top.toFloat(), left.toFloat(), bottom.toFloat(), paint)
                 // Right edge
-                drawLine(right.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), paint)
+                drawLineInternal(right.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), paint)
             }
             PaintStyle.FILL_AND_STROKE -> {
                 // Fill first
@@ -125,11 +115,24 @@ class Canvas(private val width: Int, private val height: Int) {
             }
         }
     }
-    
     /**
      * Draws a line between two points
      */
-    private fun drawLine(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint) {
+    fun drawLine(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint = currentPaint) {
+        // Check if we should use anti-aliasing
+        val useAA = paint.isAntiAlias
+        
+        if (useAA) {
+            drawLineAA(x1, y1, x2, y2, paint)
+        } else {
+            // Use the original Bresenham algorithm for non-AA lines
+            drawLineInternal(x1, y1, x2, y2, paint)
+        }
+    }
+    /**
+     * Internal line drawing using Bresenham's algorithm (no anti-aliasing)
+     */
+    private fun drawLineInternal(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint) {
         // Bresenham's line algorithm
         val x0 = x1.toInt()
         val y0 = y1.toInt()
@@ -168,7 +171,57 @@ class Canvas(private val width: Int, private val height: Int) {
             }
         }
     }
-    
+    /**
+     * Draws an anti-aliased line using Skia-like coverage approach
+     */
+    private fun drawLineAA(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint) {
+        // Get the bounding box of the line
+        val minX = minOf(x1, x2).toInt() - 1
+        val maxX = maxOf(x1, x2).toInt() + 1
+        val minY = minOf(y1, y2).toInt() - 1
+        val maxY = maxOf(y1, y2).toInt() + 1
+        
+        // For each pixel in the bounding box, compute coverage
+        for (y in minY..maxY) {
+            for (x in maxOf(0, minX)..minOf(bitmap.getWidth() - 1, maxX)) {
+                if (x !in 0 until bitmap.getWidth() || y !in 0 until bitmap.getHeight()) {
+                    continue
+                }
+                
+                // Compute distance from pixel center to line
+                val pixelCenterX = x + 0.5f
+                val pixelCenterY = y + 0.5f
+                val distance = computeDistanceToLine(pixelCenterX, pixelCenterY, x1, y1, x2, y2)
+                
+                // Get coverage from table (like Skia)
+                val coverage = getCoverage(distance)
+                
+                if (coverage.toInt() == 0) continue // Skip if no coverage
+                
+                // Apply coverage to the color
+                val srcColor = applyAlpha(paint.color, paint.alpha)
+                val dstColor = bitmap.getPixel(x, y)
+                
+                // Blend using coverage (like Skia's SkAlphaMulQ)
+                val blendedColor = blendWithCoverage(srcColor, dstColor, coverage)
+                bitmap.setPixel(x, y, blendedColor)
+            }
+        }
+    }
+    /**
+     * Blend two colors using coverage (like Skia's alpha blending)
+     */
+    private fun blendWithCoverage(src: Color, dst: Color, coverage: SkAlpha): Color {
+        val invCoverage = (255 - coverage.toInt()).toFloat() / 255f
+        val coverageRatio = coverage.toInt().toFloat() / 255f
+        
+        return Color(
+            (src.red * coverageRatio + dst.red * invCoverage).toInt().coerceIn(0, 255),
+            (src.green * coverageRatio + dst.green * invCoverage).toInt().coerceIn(0, 255),
+            (src.blue * coverageRatio + dst.blue * invCoverage).toInt().coerceIn(0, 255),
+            (src.alpha * coverageRatio + dst.alpha * invCoverage).toInt().coerceIn(0, 255)
+        )
+    }
     /**
      * Applies alpha to a color
      */
@@ -176,14 +229,12 @@ class Canvas(private val width: Int, private val height: Int) {
         val resultAlpha = (color.alpha * alpha) / 255
         return Color(color.red, color.green, color.blue, resultAlpha)
     }
-    
     /**
      * Blends two colors using the specified blend mode
      */
     private fun blendColors(src: Color, dst: Color, mode: BlendMode): Color {
         return BitmapUtils.blendColors(src, dst, mode)
     }
-    
     /**
      * Draws a path with the current paint
      */
@@ -217,7 +268,6 @@ class Canvas(private val width: Int, private val height: Int) {
             }
         }
     }
-    
     /**
      * Rasterizes a path fill using scanline algorithm
      */
@@ -227,7 +277,6 @@ class Canvas(private val width: Int, private val height: Int) {
         val bounds = path.getBounds()
         drawRectRaster(bounds, paint)
     }
-    
     /**
      * Rasterizes a path stroke
      */
@@ -245,7 +294,7 @@ class Canvas(private val width: Int, private val height: Int) {
                 PathVerb.LINE -> {
                     if (currentPoint != null) {
                         val endPoint = path.points[i]
-                        drawLine(currentPoint!!.x, currentPoint!!.y, endPoint.x, endPoint.y, paint)
+                        drawLineInternal(currentPoint!!.x, currentPoint!!.y, endPoint.x, endPoint.y, paint)
                         currentPoint = endPoint
                     }
                     i++
@@ -279,7 +328,6 @@ class Canvas(private val width: Int, private val height: Int) {
             }
         }
     }
-    
     /**
      * Draws a quadratic curve by approximating with line segments
      */
@@ -295,11 +343,10 @@ class Canvas(private val width: Int, private val height: Int) {
             val x = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x
             val y = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y
             val current = Point(x, y)
-            drawLine(prev.x, prev.y, current.x, current.y, paint)
+            drawLineInternal(prev.x, prev.y, current.x, current.y, paint)
             prev = current
         }
     }
-    
     /**
      * Draws a cubic curve by approximating with line segments
      */
@@ -319,11 +366,10 @@ class Canvas(private val width: Int, private val height: Int) {
                     3 * (1 - t) * t * t * p2.y + 
                     t * t * t * p3.y
             val current = Point(x, y)
-            drawLine(prev.x, prev.y, current.x, current.y, paint)
+            drawLineInternal(prev.x, prev.y, current.x, current.y, paint)
             prev = current
         }
     }
-    
     /**
      * Draws text at the specified position
      */
@@ -344,24 +390,20 @@ class Canvas(private val width: Int, private val height: Int) {
             drawRect(charRect, paint)
         }
     }
-    
     /**
      * Clears the canvas with the specified color
      */
     fun clear(color: Color) {
         bitmap.eraseColor(color)
     }
-    
     /**
      * Gets the current transformation matrix
      */
     fun getMatrix(): Matrix = matrixStack.last().copy()
-    
     /**
      * Gets the current clip bounds
      */
     fun getClipBounds(): Rect = clipStack.last().copy()
-    
     /**
      * Sets the current clip to the intersection of the current clip and the specified rectangle
      */
@@ -370,13 +412,62 @@ class Canvas(private val width: Int, private val height: Int) {
         val newClip = currentClip.intersect(rect)
         clipStack[clipStack.size - 1] = newClip
     }
-    
     /**
      * Gets the destination bitmap
      */
     fun getBitmap(): Bitmap = bitmap.copy()
-    
     companion object {
+        // Anti-aliasing coverage table (like Skia's gLineCoverage)
+        private val COVERAGE_TABLE: ByteArray = ByteArray(256) {
+            // Skia-like coverage function: smooth transition
+            when {
+                it < 64 -> (it * 4).toByte() // Linear ramp up
+                it < 192 -> 255.toByte() // Full coverage
+                else -> ((255 - it) * 4).toByte() // Linear ramp down
+            }
+        }
+        
+        /**
+         * Get coverage value for a given distance (like Skia's LineCoverage)
+         */
+        fun getCoverage(distance: Float): SkAlpha {
+            // Convert distance to 0-255 range
+            val normalizedDist = (distance * 255f).coerceIn(0f, 255f)
+            val index = normalizedDist.toInt().coerceIn(0, 255)
+            return COVERAGE_TABLE[index].toUByte()
+        }
+        
+        /**
+         * Compute distance from point to line segment
+         */
+        fun computeDistanceToLine(x: Float, y: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
+            // Vector from point to line start
+            val vx = x - x1
+            val vy = y - y1
+            
+            // Line direction vector
+            val dx = x2 - x1
+            val dy = y2 - y1
+            
+            val lengthSquared = dx * dx + dy * dy
+            if (lengthSquared == 0f) {
+                return kotlin.math.sqrt(vx * vx + vy * vy) // Point to point distance
+            }
+            
+            // Projection factor
+            val t = (vx * dx + vy * dy) / lengthSquared
+            
+            // Clamp to segment
+            val clampedT = t.coerceIn(0f, 1f)
+            
+            // Closest point on segment
+            val closestX = x1 + clampedT * dx
+            val closestY = y1 + clampedT * dy
+            
+            // Distance to closest point
+            return kotlin.math.sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY))
+        }
+        
         /**
          * Creates a new raster canvas
          */
@@ -401,17 +492,14 @@ data class Matrix(
     var persp2: Float = 1f
 ) {
     fun copy(): Matrix = Matrix(scaleX, skewX, transX, skewY, scaleY, transY, persp0, persp1, persp2)
-    
     fun postTranslate(dx: Float, dy: Float) {
         transX += dx
         transY += dy
     }
-    
     fun postScale(sx: Float, sy: Float) {
         scaleX *= sx
         scaleY *= sy
     }
-    
     fun postRotate(degrees: Float) {
         val radians = Math.toRadians(degrees.toDouble()).toFloat()
         val cos = kotlin.math.cos(radians)
@@ -427,7 +515,6 @@ data class Matrix(
         skewX = newSkewX
         scaleY = newScaleY
     }
-    
     fun mapRect(rect: Rect): Rect {
         // Transform the four corners of the rectangle
         val topLeft = transformPoint(rect.left, rect.top)
@@ -443,7 +530,6 @@ data class Matrix(
         
         return Rect(minX, minY, maxX, maxY)
     }
-    
     /**
      * Transforms a single point using this matrix
      */
@@ -452,7 +538,6 @@ data class Matrix(
         val newY = x * skewY + y * scaleY + transY
         return Point(newX, newY)
     }
-    
     companion object {
         fun identity(): Matrix = Matrix()
     }
@@ -467,9 +552,7 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
     val centerX: Float get() = left + width / 2
     val centerY: Float get() = top + height / 2
     val isEmpty: Boolean get() = left >= right || top >= bottom
-    
     fun copy(): Rect = Rect(left, top, right, bottom)
-    
     /**
      * Insets the rectangle by the specified amounts
      * @param dx horizontal inset (positive values make the rect smaller)
@@ -481,7 +564,6 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
         right -= dx
         bottom -= dy
     }
-    
     fun intersect(other: Rect): Rect {
         val newLeft = kotlin.math.max(left, other.left)
         val newTop = kotlin.math.max(top, other.top)
@@ -490,7 +572,6 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
         
         return Rect(newLeft, newTop, newRight, newBottom)
     }
-    
     override fun toString(): String = "Rect($left, $top, $right, $bottom)"
 }
 
