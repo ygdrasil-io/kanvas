@@ -43,6 +43,9 @@ class AaRectModesTest {
             val similarity = TestUtils.compareBitmaps(testResult, referenceImage)
             println("🔍 AaRectModes similarity with Skia reference: ${String.format("%.2f", similarity)}%")
             
+            // Track similarity scores over time
+            SimilarityTracker.updateScore("AaRectModesGM", similarity)
+            
             // For now, we just log the similarity
             assertTrue(similarity >= 0, "Similarity should be calculated")
             
