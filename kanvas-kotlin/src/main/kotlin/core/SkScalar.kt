@@ -1,5 +1,7 @@
 package core
 
+import com.kanvas.core.Color
+
 /**
  * Implementation of Skia's SkScalar and SkFixed types for high-precision calculations.
  * This provides the numerical precision needed for accurate graphics rendering.
@@ -179,6 +181,11 @@ class SkFixed(private val value: Int) {
 }
 
 /**
+ * Skia's scalar 1.0 constant (SK_Scalar1)
+ */
+const val SK_Scalar1: SkScalar = 1.0f
+
+/**
  * Skia's PI constant in SkScalar format
  */
 const val SK_ScalarPI: SkScalar = 3.14159265358979323846f
@@ -253,6 +260,55 @@ typealias SkAlpha = UByte
 fun SkAlphaFromSkScalar(value: SkScalar): SkAlpha {
     val clamped = value.coerceIn(0.0f, 1.0f)
     return (clamped * 255f).toInt().toUByte()
+}
+
+/**
+ * Convert integer to SkScalar (SkIntToScalar)
+ */
+fun SkIntToScalar(value: Int): SkScalar {
+    return value.toFloat()
+}
+
+/**
+ * Convert SkScalar to integer (SkScalarToInt)
+ */
+fun SkScalarToInt(value: SkScalar): Int {
+    return value.toInt()
+}
+
+/**
+ * Convert SkScalar to integer with rounding (SkScalarRoundToInt)
+ */
+fun SkScalarRoundToInt(value: SkScalar): Int {
+    return kotlin.math.round(value).toInt()
+}
+
+/**
+ * Convert SkScalar to integer with floor (SkScalarFloorToInt)
+ */
+fun SkScalarFloorToInt(value: SkScalar): Int {
+    return kotlin.math.floor(value).toInt()
+}
+
+/**
+ * Convert SkScalar to integer with ceil (SkScalarCeilToInt)
+ */
+fun SkScalarCeilToInt(value: SkScalar): Int {
+    return kotlin.math.ceil(value).toInt()
+}
+
+/**
+ * Skia-style RGB color creation (SkColorSetRGB)
+ */
+fun SkColorSetRGB(red: Int, green: Int, blue: Int): Color {
+    return Color(red, green, blue, 255)
+}
+
+/**
+ * Skia-style ARGB color creation (SkColorSetARGB)
+ */
+fun SkColorSetARGB(alpha: Int, red: Int, green: Int, blue: Int): Color {
+    return Color(red, green, blue, alpha)
 }
 
 /**

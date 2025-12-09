@@ -1,6 +1,7 @@
 package testing.skia
 
 import com.kanvas.core.*
+import core.*
 import testing.GM
 import testing.DrawResult
 import testing.Size
@@ -24,20 +25,21 @@ class AaClipGM : GM() {
         
         // Repeat 4x with .2, .4, .6, .8 px offsets
         // These offsets test sub-pixel positioning
-        canvas.translate(1.0f/5, 1.0f/5)
-        canvas.translate(50f, 0f)
+        // Using SK_Scalar1 / 5 for precision like C++ version
+        canvas.translate(SK_Scalar1 / 5, SK_Scalar1 / 5)
+        canvas.translate(SkIntToScalar(50), 0f)
         drawRectTests(canvas)
         
-        canvas.translate(1.0f/5, 1.0f/5)
-        canvas.translate(50f, 0f)
+        canvas.translate(SK_Scalar1 / 5, SK_Scalar1 / 5)
+        canvas.translate(SkIntToScalar(50), 0f)
         drawRectTests(canvas)
         
-        canvas.translate(1.0f/5, 1.0f/5)
-        canvas.translate(50f, 0f)
+        canvas.translate(SK_Scalar1 / 5, SK_Scalar1 / 5)
+        canvas.translate(SkIntToScalar(50), 0f)
         drawRectTests(canvas)
         
-        canvas.translate(1.0f/5, 1.0f/5)
-        canvas.translate(50f, 0f)
+        canvas.translate(SK_Scalar1 / 5, SK_Scalar1 / 5)
+        canvas.translate(SkIntToScalar(50), 0f)
         drawRectTests(canvas)
         
         return DrawResult.OK
@@ -53,19 +55,22 @@ class AaClipGM : GM() {
     }
     
     private fun drawSquare(canvas: Canvas, x: Int, y: Int) {
-        val target = Rect(0f, 0f, 10f, 10f)
+        // SkRect::MakeWH(10 * SK_Scalar1, 10 * SK_Scalar1)
+        val target = Rect(0f, 0f, 10f * SK_Scalar1, 10f * SK_Scalar1)
         draw(canvas, target, x, y)
     }
     
     private fun drawColumn(canvas: Canvas, x: Int, y: Int) {
         // Test a tall, thin rectangle (1px wide, 10px tall)
-        val target = Rect(0f, 0f, 1f, 10f)
+        // SkRect::MakeWH(1 * SK_Scalar1, 10 * SK_Scalar1)
+        val target = Rect(0f, 0f, 1f * SK_Scalar1, 10f * SK_Scalar1)
         draw(canvas, target, x, y)
     }
     
     private fun drawBar(canvas: Canvas, x: Int, y: Int) {
         // Test a short, wide rectangle (10px wide, 1px tall)
-        val target = Rect(0f, 0f, 10f, 1f)
+        // SkRect::MakeWH(10 * SK_Scalar1, 1 * SK_Scalar1)
+        val target = Rect(0f, 0f, 10f * SK_Scalar1, 1f * SK_Scalar1)
         draw(canvas, target, x, y)
     }
     
@@ -78,41 +83,44 @@ class AaClipGM : GM() {
      */
     private fun draw(canvas: Canvas, target: Rect, x: Int, y: Int) {
         val borderPaint = Paint().apply {
-            color = Color(0, 0xDD, 0, 255) // Green border
+            color = SkColorSetRGB(0x0, 0xDD, 0x0) // Green border - SkColorSetRGB(0x0, 0xDD, 0x0)
             isAntiAlias = true
             style = PaintStyle.FILL
         }
         
         val backgroundPaint = Paint().apply {
-            color = Color(0xDD, 0, 0, 255) // Red background (should be clipped)
+            color = SkColorSetRGB(0xDD, 0x0, 0x0) // Red background - SkColorSetRGB(0xDD, 0x0, 0x0)
             isAntiAlias = true
             style = PaintStyle.FILL
         }
         
         val foregroundPaint = Paint().apply {
-            color = Color(0, 0, 0xDD, 255) // Blue foreground (should be visible)
+            color = SkColorSetRGB(0x0, 0x0, 0xDD) // Blue foreground - SkColorSetRGB(0x0, 0x0, 0xDD)
             isAntiAlias = true
             style = PaintStyle.FILL
         }
         
         canvas.save()
-        canvas.translate(x.toFloat(), y.toFloat())
+        canvas.translate(SkIntToScalar(x), SkIntToScalar(y)) // SkIntToScalar conversion
         
-        // Draw green border (2px inset from target)
+        // Draw green border (2px inset from target) - using SkIntToScalar(-2)
         val borderRect = target.copy().apply {
-            inset(-2f, -2f)
+            inset(SkIntToScalar(-2), SkIntToScalar(-2)) // SkIntToScalar(-2)
         }
         canvas.drawRect(borderRect, borderPaint)
+        
+        // Reset target after border drawing (like C++ version)
+        // target.inset(SkIntToScalar(2), SkIntToScalar(2)) - not needed as we use original target
         
         // Draw red background (should be mostly clipped)
         canvas.drawRect(target, backgroundPaint)
         
-        // Set clip to match the target rectangle
-        canvas.clipRect(target)
+        // Set clip to match the target rectangle with anti-aliasing
+        canvas.clipRect(target, true) // Added anti-aliasing parameter like C++
         
         // Draw blue foreground (4px inset from target) - this should be visible
         val foregroundRect = target.copy().apply {
-            inset(-4f, -4f)
+            inset(SkIntToScalar(-4), SkIntToScalar(-4)) // SkIntToScalar(-4)
         }
         canvas.drawRect(foregroundRect, foregroundPaint)
         
