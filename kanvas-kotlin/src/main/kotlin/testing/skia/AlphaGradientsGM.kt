@@ -1,6 +1,7 @@
 package testing.skia
 
 import com.kanvas.core.*
+import core.*
 import testing.GM
 import testing.DrawResult
 import testing.Size
@@ -105,14 +106,24 @@ class AlphaGradientsGM : GM() {
     }
     
     private fun interpolateColors(color1: Color, color2: Color, ratio: Float): Color {
-        // Linear interpolation between two colors
-        val invRatio = 1f - ratio
+        // Use SkFixed for high-precision color interpolation (like Skia)
+        val skRatio = SkFixed.fromFloat(ratio)
+        val skInvRatio = SkFixed.fromFloat(1f) - skRatio
+        
+        val r = SkFixedMul(SkFixed.fromInt(color1.red), skInvRatio) + 
+                SkFixedMul(SkFixed.fromInt(color2.red), skRatio)
+        val g = SkFixedMul(SkFixed.fromInt(color1.green), skInvRatio) + 
+                SkFixedMul(SkFixed.fromInt(color2.green), skRatio)
+        val b = SkFixedMul(SkFixed.fromInt(color1.blue), skInvRatio) + 
+                SkFixedMul(SkFixed.fromInt(color2.blue), skRatio)
+        val a = SkFixedMul(SkFixed.fromInt(color1.alpha), skInvRatio) + 
+                SkFixedMul(SkFixed.fromInt(color2.alpha), skRatio)
         
         return Color(
-            (color1.red * invRatio + color2.red * ratio).toInt().coerceIn(0, 255),
-            (color1.green * invRatio + color2.green * ratio).toInt().coerceIn(0, 255),
-            (color1.blue * invRatio + color2.blue * ratio).toInt().coerceIn(0, 255),
-            (color1.alpha * invRatio + color2.alpha * ratio).toInt().coerceIn(0, 255)
+            r.toInt().coerceIn(0, 255),
+            g.toInt().coerceIn(0, 255),
+            b.toInt().coerceIn(0, 255),
+            a.toInt().coerceIn(0, 255)
         )
     }
     

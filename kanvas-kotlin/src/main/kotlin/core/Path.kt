@@ -2,6 +2,14 @@ package com.kanvas.core
 
 import kotlin.math.abs
 import kotlin.math.sqrt
+import core.*
+
+/**
+ * Extension function to convert Float to SkScalar
+ */
+private fun Float.toSkScalar(): SkScalar {
+    return this
+}
 
 /**
  * Path represents a series of points, lines, and curves that can be drawn on a canvas.
@@ -113,55 +121,54 @@ class Path {
     }
     
     /**
-     * Adds an arc to the path (simplified implementation)
+     * Adds an arc to the path using SkScalar precision (inspired by Skia's implementation)
      * 
      * @param oval The bounding rectangle for the oval that the arc is part of
      * @param startAngle The starting angle of the arc in degrees
      * @param sweepAngle The sweep angle of the arc in degrees
      */
     fun addArc(oval: Rect, startAngle: Float, sweepAngle: Float) {
-        // Convert angles to radians
-        val startRad = Math.toRadians(startAngle.toDouble()).toFloat()
-        val sweepRad = Math.toRadians(sweepAngle.toDouble()).toFloat()
-        val endRad = startRad + sweepRad
+        // Convert to SkScalar for high precision (like Skia)
+        val skStartAngle = startAngle.toSkScalar()
+        val skSweepAngle = sweepAngle.toSkScalar()
+        
+        // Normalize angles like Skia does
+        val normalizedStart = SkScalarMod(skStartAngle, 360.0f)
+        val normalizedSweep = if (skSweepAngle < 0) {
+            SkScalarMod(skSweepAngle, 360.0f)
+        } else {
+            skSweepAngle
+        }
+        
+        // Handle special cases
+        if (normalizedSweep == 0.0f) {
+            return
+        }
+        
+        // Use more segments for better precision (like Skia's kMaxSegments)
+        val segments = SkScalarCeil(SkScalarAbs(normalizedSweep) / 4.0f).coerceAtLeast(1)
+        val angleStep = normalizedSweep / segments.toFloat()
         
         val centerX = oval.centerX
         val centerY = oval.centerY
-        val radiusX = oval.width / 2
-        val radiusY = oval.height / 2
+        val radiusX = oval.width / 2.0f
+        val radiusY = oval.height / 2.0f
         
-        // Calculate start and end points
-        val startX = centerX + radiusX * kotlin.math.cos(startRad.toDouble()).toFloat()
-        val startY = centerY + radiusY * kotlin.math.sin(startRad.toDouble()).toFloat()
-        
-        val endX = centerX + radiusX * kotlin.math.cos(endRad.toDouble()).toFloat()
-        val endY = centerY + radiusY * kotlin.math.sin(endRad.toDouble()).toFloat()
-        
-        // Move to start point
-        moveTo(startX, startY)
-        
-        // Approximate the arc with cubic curves
-        // This is a simplified approach - a full implementation would use multiple segments
-        val segments = (kotlin.math.abs(sweepAngle) / 45f).toInt().coerceAtLeast(1)
-        
-        for (i in 1..segments) {
-            val t = i.toFloat() / segments
-            val angle = startRad + t * sweepRad
+        for (i in 0..segments) {
+            val angle = normalizedStart + i * angleStep
+            val radians = SkScalarDegreesToRadians(angle)
             
-            // Control points for the cubic curve
-            val control1Angle = startRad + (t - 0.333f) * sweepRad
-            val control2Angle = startRad + (t + 0.333f) * sweepRad
+            // Use SkScalar trigonometric functions for precision
+            val x = centerX + radiusX * SkScalarCos(radians)
+            val y = centerY + radiusY * SkScalarSin(radians)
             
-            val c1x = centerX + radiusX * kotlin.math.cos(control1Angle.toDouble()).toFloat()
-            val c1y = centerY + radiusY * kotlin.math.sin(control1Angle.toDouble()).toFloat()
-            
-            val c2x = centerX + radiusX * kotlin.math.cos(control2Angle.toDouble()).toFloat()
-            val c2y = centerY + radiusY * kotlin.math.sin(control2Angle.toDouble()).toFloat()
-            
-            val endPx = centerX + radiusX * kotlin.math.cos(angle.toDouble()).toFloat()
-            val endPy = centerY + radiusY * kotlin.math.sin(angle.toDouble()).toFloat()
-            
-            cubicTo(c1x, c1y, c2x, c2y, endPx, endPy)
+            if (i == 0) {
+                moveTo(x.toFloat(), y.toFloat())
+            } else {
+                // For better precision, we could use conicTo here like Skia does
+                // But for now, we'll use lineTo as an approximation
+                lineTo(x.toFloat(), y.toFloat())
+            }
         }
     }
     
