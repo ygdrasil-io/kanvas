@@ -142,6 +142,19 @@ class Bitmap(private val width: Int, private val height: Int, private val config
     }
     
     /**
+     * Checks if the bitmap contains any non-transparent pixels
+     */
+    fun hasNonTransparentPixels(): Boolean {
+        for (pixel in pixels) {
+            val alpha = (pixel shr 24) and 0xFF
+            if (alpha > 0) {
+                return true
+            }
+        }
+        return false
+    }
+    
+    /**
      * Gets the bitmap as a ByteBuffer for interop
      */
     fun toByteBuffer(): ByteBuffer {

@@ -361,6 +361,15 @@ class Canvas(private val width: Int, private val height: Int) {
     fun getClipBounds(): Rect = clipStack.last().copy()
     
     /**
+     * Sets the current clip to the intersection of the current clip and the specified rectangle
+     */
+    fun clipRect(rect: Rect) {
+        val currentClip = clipStack.last()
+        val newClip = currentClip.intersect(rect)
+        clipStack[clipStack.size - 1] = newClip
+    }
+    
+    /**
      * Gets the destination bitmap
      */
     fun getBitmap(): Bitmap = bitmap.copy()
@@ -458,6 +467,18 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
     val isEmpty: Boolean get() = left >= right || top >= bottom
     
     fun copy(): Rect = Rect(left, top, right, bottom)
+    
+    /**
+     * Insets the rectangle by the specified amounts
+     * @param dx horizontal inset (positive values make the rect smaller)
+     * @param dy vertical inset (positive values make the rect smaller)
+     */
+    fun inset(dx: Float, dy: Float) {
+        left += dx
+        top += dy
+        right -= dx
+        bottom -= dy
+    }
     
     fun intersect(other: Rect): Rect {
         val newLeft = kotlin.math.max(left, other.left)

@@ -9,15 +9,14 @@ repositories {
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation(kotlin("stdlib-jdk8"))
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(25)
 }
 
 application {
-    mainClass.set("com.kanvas.examples.ImageExportExampleKt")
+    mainClass.set("testing.TestRunnerExampleKt")
 }
 
 tasks {

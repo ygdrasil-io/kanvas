@@ -113,6 +113,59 @@ class Path {
     }
     
     /**
+     * Adds an arc to the path (simplified implementation)
+     * 
+     * @param oval The bounding rectangle for the oval that the arc is part of
+     * @param startAngle The starting angle of the arc in degrees
+     * @param sweepAngle The sweep angle of the arc in degrees
+     */
+    fun addArc(oval: Rect, startAngle: Float, sweepAngle: Float) {
+        // Convert angles to radians
+        val startRad = Math.toRadians(startAngle.toDouble()).toFloat()
+        val sweepRad = Math.toRadians(sweepAngle.toDouble()).toFloat()
+        val endRad = startRad + sweepRad
+        
+        val centerX = oval.centerX
+        val centerY = oval.centerY
+        val radiusX = oval.width / 2
+        val radiusY = oval.height / 2
+        
+        // Calculate start and end points
+        val startX = centerX + radiusX * kotlin.math.cos(startRad.toDouble()).toFloat()
+        val startY = centerY + radiusY * kotlin.math.sin(startRad.toDouble()).toFloat()
+        
+        val endX = centerX + radiusX * kotlin.math.cos(endRad.toDouble()).toFloat()
+        val endY = centerY + radiusY * kotlin.math.sin(endRad.toDouble()).toFloat()
+        
+        // Move to start point
+        moveTo(startX, startY)
+        
+        // Approximate the arc with cubic curves
+        // This is a simplified approach - a full implementation would use multiple segments
+        val segments = (kotlin.math.abs(sweepAngle) / 45f).toInt().coerceAtLeast(1)
+        
+        for (i in 1..segments) {
+            val t = i.toFloat() / segments
+            val angle = startRad + t * sweepRad
+            
+            // Control points for the cubic curve
+            val control1Angle = startRad + (t - 0.333f) * sweepRad
+            val control2Angle = startRad + (t + 0.333f) * sweepRad
+            
+            val c1x = centerX + radiusX * kotlin.math.cos(control1Angle.toDouble()).toFloat()
+            val c1y = centerY + radiusY * kotlin.math.sin(control1Angle.toDouble()).toFloat()
+            
+            val c2x = centerX + radiusX * kotlin.math.cos(control2Angle.toDouble()).toFloat()
+            val c2y = centerY + radiusY * kotlin.math.sin(control2Angle.toDouble()).toFloat()
+            
+            val endPx = centerX + radiusX * kotlin.math.cos(angle.toDouble()).toFloat()
+            val endPy = centerY + radiusY * kotlin.math.sin(angle.toDouble()).toFloat()
+            
+            cubicTo(c1x, c1y, c2x, c2y, endPx, endPy)
+        }
+    }
+    
+    /**
      * Gets the fill type for this path
      */
     fun getFillType(): FillType = fillType
