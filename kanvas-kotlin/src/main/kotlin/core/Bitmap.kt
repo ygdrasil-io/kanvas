@@ -221,7 +221,7 @@ object BitmapUtils {
         return result
     }
     
-    private fun blendColors(src: Color, dst: Color, mode: BlendMode): Color {
+    internal fun blendColors(src: Color, dst: Color, mode: BlendMode): Color {
         val sa = src.alpha / 255f
         val da = dst.alpha / 255f
         val sr = src.red / 255f

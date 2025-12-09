@@ -4,6 +4,17 @@
 
 Aucun
 
+## ✅ Fonctionnalités de rendu de base implémentées
+
+- [x] Rendu raster réel dans `Canvas.drawRect()` avec support pour FILL, STROKE et FILL_AND_STROKE
+- [x] Rendu de chemin dans `Canvas.drawPath()` avec support pour les lignes et courbes
+- [x] Rendu de texte basique dans `Canvas.drawText()`
+- [x] Opérations de clear et fill fonctionnelles
+- [x] Gestion complète des transformations matricielles (translation, scale, rotation)
+- [x] Algorithmes de rasterisation basiques (Bresenham pour les lignes, remplissage de rectangles)
+- [x] Support des transformations matricielles pour les rectangles et chemins
+- [x] Gestion des clips et transformations
+
 ## 🎨 Implémentation du rendu
 
 ### Système de Canvas
