@@ -56,22 +56,19 @@ class AaClipGM : GM() {
     
     private fun drawSquare(canvas: Canvas, x: Int, y: Int) {
         // SkRect::MakeWH(10 * SK_Scalar1, 10 * SK_Scalar1)
-        val target = Rect(0f, 0f, 10f * SK_Scalar1, 10f * SK_Scalar1)
-        draw(canvas, target, x, y)
+        draw(canvas, Rect(0f, 0f, 10f * SK_Scalar1, 10f * SK_Scalar1), x, y)
     }
     
     private fun drawColumn(canvas: Canvas, x: Int, y: Int) {
         // Test a tall, thin rectangle (1px wide, 10px tall)
         // SkRect::MakeWH(1 * SK_Scalar1, 10 * SK_Scalar1)
-        val target = Rect(0f, 0f, 1f * SK_Scalar1, 10f * SK_Scalar1)
-        draw(canvas, target, x, y)
+        draw(canvas, Rect(0f, 0f, 1f * SK_Scalar1, 10f * SK_Scalar1), x, y)
     }
     
     private fun drawBar(canvas: Canvas, x: Int, y: Int) {
         // Test a short, wide rectangle (10px wide, 1px tall)
         // SkRect::MakeWH(10 * SK_Scalar1, 1 * SK_Scalar1)
-        val target = Rect(0f, 0f, 10f * SK_Scalar1, 1f * SK_Scalar1)
-        draw(canvas, target, x, y)
+        draw(canvas, Rect(0f, 0f, 10f * SK_Scalar1, 1f * SK_Scalar1), x, y)
     }
     
     /**
@@ -103,14 +100,10 @@ class AaClipGM : GM() {
         canvas.save()
         canvas.translate(SkIntToScalar(x), SkIntToScalar(y)) // SkIntToScalar conversion
         
-        // Draw green border (2px inset from target) - using SkIntToScalar(-2)
-        val borderRect = target.copy().apply {
-            inset(SkIntToScalar(-2), SkIntToScalar(-2)) // SkIntToScalar(-2)
-        }
-        canvas.drawRect(borderRect, borderPaint)
-        
-        // Reset target after border drawing (like C++ version)
-        // target.inset(SkIntToScalar(2), SkIntToScalar(2)) - not needed as we use original target
+        // Draw green border (2px inset from target) - EXACT C++ logic
+        target.inset(SkIntToScalar(-2), SkIntToScalar(-2)) // SkIntToScalar(-2)
+        canvas.drawRect(target, borderPaint)
+        target.inset(SkIntToScalar(2), SkIntToScalar(2)) // Reset target like C++
         
         // Draw red background (should be mostly clipped)
         canvas.drawRect(target, backgroundPaint)
@@ -118,11 +111,9 @@ class AaClipGM : GM() {
         // Set clip to match the target rectangle with anti-aliasing
         canvas.clipRect(target, true) // Added anti-aliasing parameter like C++
         
-        // Draw blue foreground (4px inset from target) - this should be visible
-        val foregroundRect = target.copy().apply {
-            inset(SkIntToScalar(-4), SkIntToScalar(-4)) // SkIntToScalar(-4)
-        }
-        canvas.drawRect(foregroundRect, foregroundPaint)
+        // Draw blue foreground (4px inset from target) - EXACT C++ logic
+        target.inset(SkIntToScalar(-4), SkIntToScalar(-4)) // SkIntToScalar(-4)
+        canvas.drawRect(target, foregroundPaint)
         
         canvas.restore()
     }
