@@ -8,8 +8,8 @@ import kotlin.math.sqrt
  */
 class Path {
     
-    private val points: MutableList<Point> = mutableListOf()
-    private val verbs: MutableList<PathVerb> = mutableListOf()
+    internal val points: MutableList<Point> = mutableListOf()
+    internal val verbs: MutableList<PathVerb> = mutableListOf()
     private var fillType: FillType = FillType.WINDING
     
     /**

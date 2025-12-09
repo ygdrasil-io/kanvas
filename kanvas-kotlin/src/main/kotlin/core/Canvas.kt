@@ -180,6 +180,8 @@ data class Matrix(
 data class Rect(var left: Float, var top: Float, var right: Float, var bottom: Float) {
     val width: Float get() = right - left
     val height: Float get() = bottom - top
+    val centerX: Float get() = left + width / 2
+    val centerY: Float get() = top + height / 2
     val isEmpty: Boolean get() = left >= right || top >= bottom
     
     fun copy(): Rect = Rect(left, top, right, bottom)
