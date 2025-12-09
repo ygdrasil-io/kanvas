@@ -284,12 +284,14 @@ class Canvas(private val width: Int, private val height: Int) {
      * Draws a quadratic curve by approximating with line segments
      */
     private fun drawQuadraticCurve(p0: Point, p1: Point, p2: Point, paint: Paint) {
-        // Simple approximation with 4 line segments
-        val segments = 4
+        // Improved approximation with 8 line segments for better precision
+        // This matches Skia's approach for rendering conic curves
+        val segments = 8
         var prev = p0
         
         for (i in 1..segments) {
             val t = i.toFloat() / segments
+            // Quadratic Bezier curve formula: B(t) = (1-t)^2*P0 + 2(1-t)t*P1 + t^2*P2
             val x = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x
             val y = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y
             val current = Point(x, y)
