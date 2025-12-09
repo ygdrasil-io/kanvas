@@ -17,7 +17,7 @@ kotlin {
 }
 
 application {
-    mainClass.set("com.kanvas.examples.SimpleExampleKt")
+    mainClass.set("com.kanvas.examples.ImageExportExampleKt")
 }
 
 tasks {
