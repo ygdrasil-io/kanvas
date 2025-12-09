@@ -5,39 +5,37 @@ import testing.skia.AaRectModesGM
 import testing.skia.AddArcGM
 
 /**
- * Example demonstrating how to use the Kanvas GM test framework.
- * This shows the basic workflow for running GM tests.
+ * Kanvas Skia GM Test Runner
+ * Focused on running Skia ported tests and validating Kanvas implementation
  */
 fun main() {
-    println("🚀 Kanvas GM Test Framework Example")
-    println("===================================\n")
+    println("🎨 Kanvas Skia GM Tests")
+    println("=======================\n")
     
-    // Create a test runner
+    // Create a test runner focused on Skia tests
     val runner = TestRunner()
     runner.setOutputDir("gm_test_output")
     runner.setVerbose(true)
     
-    // Register some example tests
-    runner.register(BasicShapesGM())
-    runner.register(simpleRectTest)
-    runner.register(gradientTest)
-    runner.register(ClippingTestGM())
-    runner.register(TransformationTestGM())
-    
     // Register Skia ported tests
+    println("📋 Registering Skia GM tests:")
     runner.register(AaClipGM())
-    runner.register(AaRectModesGM())
-    runner.register(AddArcGM())
+    println("  ✓ AaClipGM - Anti-aliased clipping test")
     
-    println("Registered ${runner.getTestList().size} tests:")
-    runner.getTestList().forEach { testName ->
-        println("  - $testName")
-    }
+    runner.register(AaRectModesGM())
+    println("  ✓ AaRectModesGM - Anti-aliased rectangle modes test")
+    
+    runner.register(AddArcGM())
+    println("  ✓ AddArcGM - Arc drawing test")
+    
+    println("\n📊 Total tests registered: ${runner.getTestList().size}")
     println()
     
-    // Run all tests
+    // Run all Skia tests
+    println("🚀 Running Skia GM tests...\n")
     runner.runAll()
     
-    println("\n🎉 Test run complete!")
-    println("Check the 'gm_test_output' directory for PNG results.")
+    println("\n🎉 Skia GM test run complete!")
+    println("📁 Results saved in 'gm_test_output/' directory")
+    println("💡 Compare with Skia reference images in 'int-result/8888/gm/'")
 }

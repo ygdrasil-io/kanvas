@@ -11,7 +11,8 @@ import testing.Size
 import java.io.File
 
 /**
- * TestRunner is responsible for executing GM tests and managing their output.
+ * TestRunner is responsible for executing Skia GM tests and managing their output.
+ * Focused on running ported Skia tests to validate Kanvas implementation.
  */
 class TestRunner {
     private val tests = mutableListOf<GM>()
@@ -46,7 +47,7 @@ class TestRunner {
         // Create output directory if it doesn't exist
         File(outputDir).mkdirs()
         
-        println("Running ${tests.size} GM tests...")
+        println("Running ${tests.size} Skia GM tests...")
         
         var passed = 0
         var failed = 0
