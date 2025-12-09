@@ -3,6 +3,10 @@ package testing
 import testing.skia.AaClipGM
 import testing.skia.AaRectModesGM
 import testing.skia.AddArcGM
+import testing.skia.AlphaImageGM
+import testing.skia.AlphaGradientsGM
+import testing.skia.ArcOfZorroGM
+import testing.skia.ArcToGM
 
 /**
  * Kanvas Skia GM Test Runner
@@ -27,6 +31,18 @@ fun main() {
     
     runner.register(AddArcGM())
     println("  ✓ AddArcGM - Arc drawing test")
+    
+    runner.register(AlphaImageGM())
+    println("  ✓ AlphaImageGM - Alpha channel image test")
+    
+    runner.register(AlphaGradientsGM())
+    println("  ✓ AlphaGradientsGM - Alpha gradients test")
+    
+    runner.register(ArcOfZorroGM())
+    println("  ✓ ArcOfZorroGM - Complex arc patterns test")
+    
+    runner.register(ArcToGM())
+    println("  ✓ ArcToGM - ArcTo path operations test")
     
     println("\n📊 Total tests registered: ${runner.getTestList().size}")
     println()
