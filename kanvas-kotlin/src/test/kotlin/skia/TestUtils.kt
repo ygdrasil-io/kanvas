@@ -10,6 +10,73 @@ import testing.GM
 import java.io.File
 import javax.imageio.ImageIO
 import java.awt.image.BufferedImage
+import java.util.Properties
+import java.io.FileInputStream
+import java.io.FileOutputStream
+
+/**
+ * Class to manage similarity scores for GM tests
+ */
+class SimilarityTracker {
+    companion object {
+        private const val SCORES_FILE = "test-similarity-scores.properties"
+        private val scores = Properties()
+        private var loaded = false
+        
+        private fun loadScores() {
+            if (loaded) return
+            
+            try {
+                val scoresFile = File(SCORES_FILE)
+                if (scoresFile.exists()) {
+                    FileInputStream(scoresFile).use { 
+                        scores.load(it)
+                    }
+                }
+                loaded = true
+            } catch (e: Exception) {
+                println("⚠️  Could not load similarity scores: ${e.message}")
+            }
+        }
+        
+        private fun saveScores() {
+            try {
+                FileOutputStream(SCORES_FILE).use { 
+                    scores.store(it, "Kanvas Skia GM Test Similarity Scores")
+                }
+            } catch (e: Exception) {
+                println("❌ Could not save similarity scores: ${e.message}")
+            }
+        }
+        
+        fun getPreviousScore(testName: String): Double? {
+            loadScores()
+            val scoreString = scores.getProperty(testName)
+            return scoreString?.toDoubleOrNull()
+        }
+        
+        fun updateScore(testName: String, newScore: Double) {
+            loadScores()
+            
+            val previousScore = getPreviousScore(testName)
+            
+            if (previousScore == null || newScore > previousScore) {
+                // Store the new score if it's better or if there was no previous score
+                scores.setProperty(testName, newScore.toString())
+                saveScores()
+                
+                if (previousScore == null) {
+                    println("📊 New similarity score recorded for $testName: ${String.format("%.2f", newScore)}%")
+                } else {
+                    val improvement = newScore - previousScore
+                    println("📈 Improved similarity for $testName: ${String.format("%.2f", previousScore)}% → ${String.format("%.2f", newScore)}% (${String.format("+.2f", improvement)}%)")
+                }
+            } else {
+                println("📉 Similarity for $testName: ${String.format("%.2f", newScore)}% (previous best: ${String.format("%.2f", previousScore)}%)")
+            }
+        }
+    }
+}
 
 /**
  * Test utilities for Skia GM tests using Kotlin Test framework

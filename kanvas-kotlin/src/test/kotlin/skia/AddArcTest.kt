@@ -43,6 +43,9 @@ class AddArcTest {
             val similarity = TestUtils.compareBitmaps(testResult, referenceImage)
             println("🔍 AddArc similarity with Skia reference: ${String.format("%.2f", similarity)}%")
             
+            // Track similarity scores over time
+            SimilarityTracker.updateScore("AddArcGM", similarity)
+            
             // For now, we just log the similarity
             assertTrue(similarity >= 0, "Similarity should be calculated")
             
