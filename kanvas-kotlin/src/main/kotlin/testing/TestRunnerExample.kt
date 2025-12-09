@@ -7,6 +7,8 @@ import testing.skia.AlphaImageGM
 import testing.skia.AlphaGradientsGM
 import testing.skia.ArcOfZorroGM
 import testing.skia.ArcToGM
+import testing.skia.BigRectGM
+import testing.skia.GradientGM
 
 /**
  * Kanvas Skia GM Test Runner
@@ -43,6 +45,12 @@ fun main() {
     
     runner.register(ArcToGM())
     println("  ✓ ArcToGM - ArcTo path operations test")
+    
+    runner.register(BigRectGM())
+    println("  ✓ BigRectGM - Large rectangle performance test")
+    
+    runner.register(GradientGM())
+    println("  ✓ GradientGM - Gradient drawing test")
     
     println("\n📊 Total tests registered: ${runner.getTestList().size}")
     println()
