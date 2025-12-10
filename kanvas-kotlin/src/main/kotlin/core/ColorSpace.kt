@@ -18,7 +18,30 @@ data class ColorInfo(
     val colorType: ColorType,
     val alphaType: AlphaType,
     val colorSpace: ColorSpace
-)
+) {
+    /**
+     * Get the width based on color type (simplified - in real Skia this would come from bitmap)
+     */
+    fun width(): Int {
+        // In real implementation, this would come from the associated bitmap/device
+        return 0 // Placeholder
+    }
+    
+    /**
+     * Get the height based on color type (simplified - in real Skia this would come from bitmap)
+     */
+    fun height(): Int {
+        // In real implementation, this would come from the associated bitmap/device
+        return 0 // Placeholder
+    }
+    
+    /**
+     * Check if this color info represents opaque pixels
+     */
+    fun isOpaque(): Boolean {
+        return alphaType == AlphaType.OPAQUE
+    }
+}
 
 enum class ColorType {
     ALPHA_8,    // 8-bit alpha only
