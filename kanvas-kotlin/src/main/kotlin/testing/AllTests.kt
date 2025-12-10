@@ -1,6 +1,26 @@
 package testing
 
-import testing.skia.*
+import testing.skia.AaClipGM
+import testing.skia.AaRectModesGM
+import testing.skia.AaXferModesGM
+import testing.skia.AddArcGM
+import testing.skia.AlphaGradientsGM
+import testing.skia.AlphaImageGM
+import testing.skia.ArcOfZorroGM
+import testing.skia.ArcToGM
+import testing.skia.BeziersGM
+import testing.skia.BigRectGM
+import testing.skia.BitmapRectGM
+import testing.skia.BleedGM
+import testing.skia.CircleSizesGM
+import testing.skia.ClearSwizzleGM
+import testing.skia.ColorspaceGM
+import testing.skia.ConcavePathsGM
+import testing.skia.ConvexPathsGM
+import testing.skia.CubicPathsGM
+import testing.skia.DashingGM
+import testing.skia.DestColorGM
+import testing.skia.FillRectGradientGM
 
 /**
  * Central registration point for all Skia GM tests
@@ -33,11 +53,11 @@ fun registerAllTests() {
     
     // Level 2: Intermediate Tests (Medium Priority)
     // These will be implemented in future phases
+    registerGM(BeziersGM())  // NEW: Bézier curves test
     // registerGM(AnalyticGradientsGM())
     // registerGM(ArithModeGM())
     // registerGM(AttributesGM())
     // registerGM(BatchedConvexPathsGM())
-    // registerGM(BeziersGM())
     // registerGM(BicubicGM())
     // registerGM(BigMatrixGM())
     // registerGM(BitmapCopyGM())
@@ -102,15 +122,17 @@ fun getTestImplementationStatus(): Map<String, TestCategoryStatus> {
     
     // Level 2: Intermediate Tests
     val level2Tests = listOf(
-        "AnalyticGradientsGM", "ArithModeGM", "AttributesGM", "BatchedConvexPathsGM",
-        "BeziersGM", "BicubicGM", "BigMatrixGM", "BitmapCopyGM", "BitmapFiltersGM",
+        "BeziersGM", "AnalyticGradientsGM", "ArithModeGM", "AttributesGM", "BatchedConvexPathsGM",
+        "BicubicGM", "BigMatrixGM", "BitmapCopyGM", "BitmapFiltersGM",
         "BitmapImageGM", "BitmapShaderGM", "BitmapTiledGM"
     )
     
+    val level2Implemented = listOf("BeziersGM")
+    
     status["Level 2: Intermediate"] = TestCategoryStatus(
         total = level2Tests.size,
-        implemented = 0,
-        progress = 0
+        implemented = level2Implemented.size,
+        progress = level2Implemented.size * 100 / level2Tests.size
     )
     
     // Level 3: Advanced Tests
