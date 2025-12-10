@@ -20,6 +20,7 @@ import testing.skia.BigMatrixGM
 import testing.skia.BigRectGM
 import testing.skia.BitmapCopyGM
 import testing.skia.BitmapFiltersGM
+import testing.skia.BitmapImageGM
 import testing.skia.BitmapRectGM
 import testing.skia.BleedGM
 import testing.skia.CircleSizesGM
@@ -74,7 +75,7 @@ fun registerAllTests() {
     registerGM(AnalyticGradientsGM())  // NEW: Analytic gradients test
     registerGM(BicubicGM())  // NEW: Bicubic filtering test
     registerGM(BitmapFiltersGM())  // NEW: Bitmap filtering test
-    // registerGM(BitmapImageGM())
+    registerGM(BitmapImageGM())  // NEW: Bitmap image loading test
     // registerGM(BitmapShaderGM())
     // registerGM(BitmapTiledGM())
     
