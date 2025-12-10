@@ -57,19 +57,19 @@ class AaClipGM : GM() {
     
     private fun drawSquare(canvas: Canvas, x: Int, y: Int) {
         // SkRect::MakeWH(10 * SK_Scalar1, 10 * SK_Scalar1)
-        draw(canvas, Rect(0f, 0f, 10f * SK_Scalar1, 10f * SK_Scalar1), x, y)
+        draw(canvas, Rect.makeWH(10f * SK_Scalar1, 10f * SK_Scalar1), x, y)
     }
     
     private fun drawColumn(canvas: Canvas, x: Int, y: Int) {
         // Test a tall, thin rectangle (1px wide, 10px tall)
         // SkRect::MakeWH(1 * SK_Scalar1, 10 * SK_Scalar1)
-        draw(canvas, Rect(0f, 0f, 1f * SK_Scalar1, 10f * SK_Scalar1), x, y)
+        draw(canvas, Rect.makeWH(1f * SK_Scalar1, 10f * SK_Scalar1), x, y)
     }
     
     private fun drawBar(canvas: Canvas, x: Int, y: Int) {
         // Test a short, wide rectangle (10px wide, 1px tall)
         // SkRect::MakeWH(10 * SK_Scalar1, 1 * SK_Scalar1)
-        draw(canvas, Rect(0f, 0f, 10f * SK_Scalar1, 1f * SK_Scalar1), x, y)
+        draw(canvas, Rect.makeWH(10f * SK_Scalar1, 1f * SK_Scalar1), x, y)
     }
     
     /**

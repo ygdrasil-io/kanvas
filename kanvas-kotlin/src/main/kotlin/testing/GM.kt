@@ -7,11 +7,7 @@ import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
 import com.kanvas.core.Path
 import com.kanvas.core.Rect
-
-/**
- * Simple data class to represent size (width, height)
- */
-data class Size(val width: Float, val height: Float)
+import com.kanvas.core.Size
 
 /**
  * DrawResult represents the outcome of a GM (Graphics Module) test execution.
