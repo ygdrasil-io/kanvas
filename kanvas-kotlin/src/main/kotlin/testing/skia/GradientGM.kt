@@ -1,6 +1,6 @@
 package testing.skia
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
@@ -24,7 +24,7 @@ class GradientGM : GM() {
     
     override fun getSize(): Size = Size(256f, 256f)
     
-    override fun onDraw(canvas: CanvasInterface): DrawResult {
+    override fun onDraw(canvas: Canvas): DrawResult {
         val size = getSize()
         
         // Set background
@@ -43,7 +43,7 @@ class GradientGM : GM() {
         return DrawResult.OK
     }
     
-    private fun drawSimulatedGradients(canvas: CanvasInterface) {
+    private fun drawSimulatedGradients(canvas: Canvas) {
         // Gradient 1: Horizontal gradient (blue to red)
         drawHorizontalGradient(canvas, Rect(20f, 20f, 200f, 60f), 
                               Color(0, 0, 255, 255), Color(255, 0, 0, 255))
@@ -61,7 +61,7 @@ class GradientGM : GM() {
                            Color(255, 0, 0, 255), Color(255, 255, 255, 255))
     }
     
-    private fun drawHorizontalGradient(canvas: CanvasInterface, rect: Rect, color1: Color, color2: Color) {
+    private fun drawHorizontalGradient(canvas: Canvas, rect: Rect, color1: Color, color2: Color) {
         val segmentWidth = rect.width / 20f
         
         for (i in 0..19) {
@@ -83,7 +83,7 @@ class GradientGM : GM() {
         }
     }
     
-    private fun drawVerticalGradient(canvas: CanvasInterface, rect: Rect, color1: Color, color2: Color) {
+    private fun drawVerticalGradient(canvas: Canvas, rect: Rect, color1: Color, color2: Color) {
         val segmentHeight = rect.height / 20f
         
         for (i in 0..19) {
@@ -105,7 +105,7 @@ class GradientGM : GM() {
         }
     }
     
-    private fun drawDiagonalGradient(canvas: CanvasInterface, rect: Rect, color1: Color, color2: Color) {
+    private fun drawDiagonalGradient(canvas: Canvas, rect: Rect, color1: Color, color2: Color) {
         // Simplified diagonal gradient using horizontal segments with varying heights
         val segmentWidth = rect.width / 15f
         
@@ -129,7 +129,7 @@ class GradientGM : GM() {
         }
     }
     
-    private fun drawRadialGradient(canvas: CanvasInterface, rect: Rect, color1: Color, color2: Color) {
+    private fun drawRadialGradient(canvas: Canvas, rect: Rect, color1: Color, color2: Color) {
         // Simplified radial gradient using concentric rectangles
         val centerX = (rect.left + rect.right) / 2
         val centerY = (rect.top + rect.bottom) / 2
@@ -192,7 +192,7 @@ class GradientGM : GM() {
         )
     }
     
-    private fun addLabels(canvas: CanvasInterface) {
+    private fun addLabels(canvas: Canvas) {
         val titlePaint = Paint().apply {
             color = Color(0, 0, 0, 255)
             textSize = 16f

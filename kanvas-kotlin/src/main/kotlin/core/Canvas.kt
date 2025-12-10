@@ -4,7 +4,7 @@ package com.kanvas.core
  * Enhanced Canvas implementation that uses a Device for rendering
  * This provides better separation of concerns and aligns with Skia's architecture
  */
-class CanvasWithDevice(private val device: Device) : CanvasInterface {
+class Canvas(private val device: Device) {
     
     // Current transformation matrix stack
     private val matrixStack: MutableList<Matrix> = mutableListOf(Matrix.identity())
@@ -18,12 +18,12 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Get the width of the canvas
      */
-    override val width: Int get() = device.width
+    val width: Int get() = device.width
     
     /**
      * Get the height of the canvas
      */
-    override val height: Int get() = device.height
+    val height: Int get() = device.height
     
     /**
      * Get the underlying device
@@ -33,7 +33,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Get the current bitmap
      */
-    override val bitmap: Bitmap get() = device.bitmap
+    val bitmap: Bitmap get() = device.bitmap
 
     /**
      * Get a copy of the current bitmap (compatibility method)
@@ -45,7 +45,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Saves the current canvas state (matrix and clip) onto a stack
      */
-    override fun save() {
+    fun save() {
         matrixStack.add(matrixStack.last().copy())
         clipStack.add(clipStack.last().copy())
     }
@@ -53,7 +53,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Restores the most recently saved canvas state
      */
-    override fun restore() {
+    fun restore() {
         if (matrixStack.size > 1) {
             matrixStack.removeAt(matrixStack.size - 1)
             updateDeviceState()
@@ -67,7 +67,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Saves the current state and applies a new clip
      */
-    override fun saveLayer(clippingRect: Rect, paint: Paint?): Int {
+    fun saveLayer(clippingRect: Rect, paint: Paint?): Int {
         save()
         clipRect(clippingRect, SkClipOp.INTERSECT, false)
         return matrixStack.size - 1 // Return save count
@@ -76,7 +76,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Restores to the specified save count
      */
-    override fun restoreToCount(saveCount: Int) {
+    fun restoreToCount(saveCount: Int) {
         while (matrixStack.size > saveCount + 1) {
             restore()
         }
@@ -87,7 +87,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Translates the canvas by (dx, dy)
      */
-    override fun translate(dx: Float, dy: Float) {
+    fun translate(dx: Float, dy: Float) {
         val currentMatrix = matrixStack.last()
         matrixStack[matrixStack.size - 1] = currentMatrix.translate(dx, dy)
         updateDeviceState()
@@ -96,7 +96,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Scales the canvas by (sx, sy)
      */
-    override fun scale(sx: Float, sy: Float) {
+    fun scale(sx: Float, sy: Float) {
         val currentMatrix = matrixStack.last()
         matrixStack[matrixStack.size - 1] = currentMatrix.scale(sx, sy)
         updateDeviceState()
@@ -105,7 +105,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Rotates the canvas by degrees around (x, y)
      */
-    override fun rotate(degrees: Float, x: Float, y: Float) {
+    fun rotate(degrees: Float, x: Float, y: Float) {
         val currentMatrix = matrixStack.last()
         matrixStack[matrixStack.size - 1] = currentMatrix.rotate(degrees, x, y)
         updateDeviceState()
@@ -114,7 +114,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Applies a transformation matrix
      */
-    override fun concat(matrix: Matrix) {
+    fun concat(matrix: Matrix) {
         val currentMatrix = matrixStack.last()
         matrixStack[matrixStack.size - 1] = currentMatrix.concat(matrix)
         updateDeviceState()
@@ -123,7 +123,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Sets the transformation matrix
      */
-    override fun setMatrix(matrix: Matrix) {
+    fun setMatrix(matrix: Matrix) {
         matrixStack[matrixStack.size - 1] = matrix.copy()
         updateDeviceState()
     }
@@ -131,14 +131,14 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Gets the current transformation matrix
      */
-    override fun getTotalMatrix(): Matrix = matrixStack.last().copy()
+    fun getTotalMatrix(): Matrix = matrixStack.last().copy()
     
     // ===== Clip Methods =====
     
     /**
      * Clips the canvas to the specified rectangle
      */
-    override fun clipRect(rect: Rect, op: SkClipOp, doAntiAlias: Boolean) {
+    fun clipRect(rect: Rect, op: SkClipOp, doAntiAlias: Boolean = false) {
         val currentClip = clipStack.last()
         val newClip = when (op) {
             SkClipOp.INTERSECT -> currentClip.intersect(rect)
@@ -154,28 +154,28 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Compatibility method for old Canvas interface - clip with INTERSECT operation
      */
-    override fun clipRect(rect: Rect, doAntiAlias: Boolean) {
+    fun clipRect(rect: Rect, doAntiAlias: Boolean = false) {
         clipRect(rect, SkClipOp.INTERSECT, doAntiAlias)
     }
     
     /**
      * Gets the current clip bounds
      */
-    override fun getClipBounds(): Rect = clipStack.last().copy()
+    fun getClipBounds(): Rect = clipStack.last().copy()
     
     // ===== Drawing Methods =====
     
     /**
      * Draws a rectangle
      */
-    override fun drawRect(rect: Rect, paint: Paint) {
+    fun drawRect(rect: Rect, paint: Paint) {
         device.drawRect(rect, paint)
     }
     
     /**
      * Draws a rounded rectangle
      */
-    override fun drawRoundRect(rect: Rect, rx: Float, ry: Float, paint: Paint) {
+    fun drawRoundRect(rect: Rect, rx: Float, ry: Float, paint: Paint) {
         // For now, approximate with a regular rect
         // TODO: Implement proper rounded rect rendering
         drawRect(rect, paint)
@@ -184,7 +184,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Draws a circle
      */
-    override fun drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint) {
+    fun drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint) {
         val rect = Rect(cx - radius, cy - radius, cx + radius, cy + radius)
         // For now, draw as a square - TODO: implement proper circle rendering
         drawRect(rect, paint)
@@ -193,7 +193,7 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Draws an oval
      */
-    override fun drawOval(oval: Rect, paint: Paint) {
+    fun drawOval(oval: Rect, paint: Paint) {
         // For now, draw as the bounding rect - TODO: implement proper oval rendering
         drawRect(oval, paint)
     }
@@ -201,35 +201,35 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
     /**
      * Draws a path
      */
-    override fun drawPath(path: Path, paint: Paint) {
+    fun drawPath(path: Path, paint: Paint) {
         device.drawPath(path, paint)
     }
     
     /**
      * Draws text
      */
-    override fun drawText(text: String, x: Float, y: Float, paint: Paint) {
+    fun drawText(text: String, x: Float, y: Float, paint: Paint) {
         device.drawText(text, x, y, paint)
     }
     
     /**
      * Draws an image
      */
-    override fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint) {
+    fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint) {
         device.drawImage(image, src, dst, paint)
     }
     
     /**
      * Clears the canvas with a color
      */
-    override fun clear(color: Color) {
+    fun clear(color: Color) {
         device.clear(color)
     }
     
     /**
      * Flushes any pending drawing operations
      */
-    override fun flush() {
+    fun flush() {
         device.flush()
     }
     
@@ -262,45 +262,6 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
 }
 
 /**
- * Canvas interface that defines the drawing API
- */
-interface CanvasInterface {
-    val width: Int
-    val height: Int
-    val bitmap: Bitmap
-    
-    // State management
-    fun save()
-    fun restore()
-    fun saveLayer(clippingRect: Rect, paint: Paint? = null): Int
-    fun restoreToCount(saveCount: Int)
-    
-    // Transformations
-    fun translate(dx: Float, dy: Float)
-    fun scale(sx: Float, sy: Float)
-    fun rotate(degrees: Float, x: Float, y: Float)
-    fun concat(matrix: Matrix)
-    fun setMatrix(matrix: Matrix)
-    fun getTotalMatrix(): Matrix
-    
-    // Clipping
-    fun clipRect(rect: Rect, op: SkClipOp, doAntiAlias: Boolean = false)
-    fun clipRect(rect: Rect, doAntiAlias: Boolean = false) // Compatibility method
-    fun getClipBounds(): Rect
-    
-    // Drawing
-    fun drawRect(rect: Rect, paint: Paint)
-    fun drawRoundRect(rect: Rect, rx: Float, ry: Float, paint: Paint)
-    fun drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint)
-    fun drawOval(oval: Rect, paint: Paint)
-    fun drawPath(path: Path, paint: Paint)
-    fun drawText(text: String, x: Float, y: Float, paint: Paint)
-    fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint)
-    fun clear(color: Color)
-    fun flush()
-}
-
-/**
  * Canvas factory methods
  */
 object CanvasFactory {
@@ -308,31 +269,31 @@ object CanvasFactory {
     /**
      * Create a canvas with a raster device (CPU rendering)
      */
-    fun createRaster(width: Int, height: Int): CanvasWithDevice {
+    fun createRaster(width: Int, height: Int): Canvas {
         val device = Devices.makeRaster(width, height)
-        return CanvasWithDevice(device)
+        return Canvas(device)
     }
     
     /**
      * Create a canvas from an existing bitmap
      */
-    fun createFromBitmap(bitmap: Bitmap): CanvasWithDevice {
+    fun createFromBitmap(bitmap: Bitmap): Canvas {
         val device = Devices.makeFromBitmap(bitmap)
-        return CanvasWithDevice(device)
+        return Canvas(device)
     }
     
     /**
      * Create a canvas with a specific device
      */
-    fun createWithDevice(device: Device): CanvasWithDevice {
-        return CanvasWithDevice(device)
+    fun createWithDevice(device: Device): Canvas {
+        return Canvas(device)
     }
 
     /**
      * Create a canvas from width and height (compatibility constructor)
      * This provides the same interface as the old Canvas(width, height)
      */
-    fun create(width: Int, height: Int): CanvasWithDevice {
+    fun create(width: Int, height: Int): Canvas {
         return CanvasFactory.createRaster(width, height)
     }
 }

@@ -1,6 +1,6 @@
 package testing.skia
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
@@ -23,7 +23,7 @@ class ArcToGM : GM() {
     
     override fun getSize(): Size = Size(256f, 256f)
     
-    override fun onDraw(canvas: CanvasInterface): DrawResult {
+    override fun onDraw(canvas: Canvas): DrawResult {
         val size = getSize()
         
         // Set background
@@ -45,7 +45,7 @@ class ArcToGM : GM() {
         return DrawResult.OK
     }
     
-    private fun testArcToOperations(canvas: CanvasInterface) {
+    private fun testArcToOperations(canvas: Canvas) {
         val paint = Paint().apply {
             color = Color(0, 0, 0, 255) // Black
             strokeWidth = 2f
@@ -78,7 +78,7 @@ class ArcToGM : GM() {
         canvas.drawPath(path3, paint)
     }
     
-    private fun testArcToVariations(canvas: CanvasInterface) {
+    private fun testArcToVariations(canvas: Canvas) {
         val paint = Paint().apply {
             color = Color(0x88, 0, 0x88, 255) // Purple
             strokeWidth = 1.5f
@@ -118,7 +118,7 @@ class ArcToGM : GM() {
         }
     }
     
-    private fun addLabels(canvas: CanvasInterface) {
+    private fun addLabels(canvas: Canvas) {
         val titlePaint = Paint().apply {
             color = Color(0, 0, 0, 255)
             textSize = 16f

@@ -1,6 +1,6 @@
 package testing.skia
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
@@ -22,7 +22,7 @@ class BigRectGM : GM() {
     
     override fun getSize(): Size = Size(325f, 125f)
     
-    override fun onDraw(canvas: CanvasInterface): DrawResult {
+    override fun onDraw(canvas: Canvas): DrawResult {
         // Test with sizes:
         //   - reasonable size (for comparison),
         //   - outside the range of int32, and
@@ -64,7 +64,7 @@ class BigRectGM : GM() {
         return DrawResult.OK
     }
     
-    private fun drawBigRect(canvas: CanvasInterface, big: Float, rectPaint: Paint) {
+    private fun drawBigRect(canvas: Canvas, big: Float, rectPaint: Paint) {
         // Looks like this:
         // +--+-+----+-+----+
         // |  | |    | |    |

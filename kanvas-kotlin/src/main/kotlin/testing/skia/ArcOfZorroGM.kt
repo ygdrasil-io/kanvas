@@ -1,6 +1,6 @@
 package testing.skia
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
@@ -22,7 +22,7 @@ class ArcOfZorroGM : GM() {
     
     override fun getSize(): Size = Size(256f, 256f)
     
-    override fun onDraw(canvas: CanvasInterface): DrawResult {
+    override fun onDraw(canvas: Canvas): DrawResult {
         val size = getSize()
         
         // Set background
@@ -41,7 +41,7 @@ class ArcOfZorroGM : GM() {
         return DrawResult.OK
     }
     
-    private fun drawZorroPattern(canvas: CanvasInterface) {
+    private fun drawZorroPattern(canvas: Canvas) {
         val paint = Paint().apply {
             color = Color(0, 0, 0, 255) // Black arcs
             strokeWidth = 2f
@@ -97,7 +97,7 @@ class ArcOfZorroGM : GM() {
         }
     }
     
-    private fun addLabels(canvas: CanvasInterface) {
+    private fun addLabels(canvas: Canvas) {
         val titlePaint = Paint().apply {
             color = Color(0, 0, 0, 255)
             textSize = 16f
