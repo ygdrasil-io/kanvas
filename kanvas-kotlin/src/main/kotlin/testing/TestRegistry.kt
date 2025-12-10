@@ -1,7 +1,7 @@
 package testing
 
+import com.kanvas.core.CanvasInterface
 import com.kanvas.core.Color
-import com.kanvas.core.Canvas
 
 /**
  * Global test registry that automatically registers GM tests.
@@ -45,7 +45,7 @@ fun registerSimpleGM(
     width: Int,
     height: Int,
     backgroundColor: Color = Color.WHITE,
-    drawProc: (Canvas) -> Unit
+    drawProc: (CanvasInterface) -> Unit
 ) {
     TestRegistry.register(simpleGM(name, width, height, backgroundColor, drawProc))
 }

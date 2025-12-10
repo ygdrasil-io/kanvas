@@ -1,9 +1,13 @@
 package testing.skia
 
-import com.kanvas.core.*
-import testing.GM
-import testing.DrawResult
+import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Color
+import com.kanvas.core.Paint
+import com.kanvas.core.PaintStyle
+import com.kanvas.core.Rect
 import com.kanvas.core.Size
+import testing.DrawResult
+import testing.GM
 
 /**
  * Port of Skia's bigrect.cpp test
@@ -18,7 +22,7 @@ class BigRectGM : GM() {
     
     override fun getSize(): Size = Size(325f, 125f)
     
-    override fun onDraw(canvas: Canvas): DrawResult {
+    override fun onDraw(canvas: CanvasInterface): DrawResult {
         // Test with sizes:
         //   - reasonable size (for comparison),
         //   - outside the range of int32, and
@@ -60,7 +64,7 @@ class BigRectGM : GM() {
         return DrawResult.OK
     }
     
-    private fun drawBigRect(canvas: Canvas, big: Float, rectPaint: Paint) {
+    private fun drawBigRect(canvas: CanvasInterface, big: Float, rectPaint: Paint) {
         // Looks like this:
         // +--+-+----+-+----+
         // |  | |    | |    |

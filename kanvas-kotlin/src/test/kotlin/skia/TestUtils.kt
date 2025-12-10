@@ -1,18 +1,18 @@
 package skia
 
 import com.kanvas.core.Bitmap
-import com.kanvas.core.Canvas
+import com.kanvas.core.CanvasFactory
 import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
 import com.kanvas.core.Rect
 import testing.GM
-import java.io.File
-import javax.imageio.ImageIO
 import java.awt.image.BufferedImage
-import java.util.Properties
+import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.*
+import javax.imageio.ImageIO
 
 /**
  * Class to manage similarity scores for GM tests
@@ -98,7 +98,7 @@ object TestUtils {
      * Run a GM test and return the resulting bitmap
      */
     fun runGmTest(gm: GM, width: Int, height: Int): Bitmap {
-        val canvas = Canvas(width, height)
+        val canvas = CanvasFactory.create(width, height)
         
         // Set white background
         val bgPaint = Paint().apply {
@@ -111,7 +111,7 @@ object TestUtils {
         gm.onDraw(canvas)
         
         // Get the bitmap from the canvas
-        return canvas.getBitmap()
+        return canvas.getBitmapCopy()
     }
     
     /**

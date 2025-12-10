@@ -1,9 +1,13 @@
 package testing.skia
 
-import com.kanvas.core.*
-import testing.GM
-import testing.DrawResult
+import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Color
+import com.kanvas.core.Paint
+import com.kanvas.core.PaintStyle
+import com.kanvas.core.Rect
 import com.kanvas.core.Size
+import testing.DrawResult
+import testing.GM
 
 /**
  * Port of Skia's alpha_image.cpp test
@@ -18,7 +22,7 @@ class AlphaImageGM : GM() {
     
     override fun getSize(): Size = Size(256f, 256f)
     
-    override fun onDraw(canvas: Canvas): DrawResult {
+    override fun onDraw(canvas: CanvasInterface): DrawResult {
         val size = getSize()
         
         // Set background to make alpha visible
@@ -43,7 +47,7 @@ class AlphaImageGM : GM() {
         return DrawResult.OK
     }
     
-    private fun testBasicAlphaImage(canvas: Canvas) {
+    private fun testBasicAlphaImage(canvas: CanvasInterface) {
         // Create a simple alpha-only image (simulated with transparent colors)
         val alphaPaint = Paint().apply {
             style = PaintStyle.FILL
@@ -62,7 +66,7 @@ class AlphaImageGM : GM() {
         }
     }
     
-    private fun testAlphaGradientImage(canvas: Canvas) {
+    private fun testAlphaGradientImage(canvas: CanvasInterface) {
         // Simulate alpha gradient by drawing rectangles with varying alpha
         val gradientPaint = Paint().apply {
             style = PaintStyle.FILL
@@ -78,7 +82,7 @@ class AlphaImageGM : GM() {
         }
     }
     
-    private fun testAlphaPatterns(canvas: Canvas) {
+    private fun testAlphaPatterns(canvas: CanvasInterface) {
         // Test different alpha patterns
         val patternPaint = Paint().apply {
             style = PaintStyle.FILL
@@ -116,7 +120,7 @@ class AlphaImageGM : GM() {
         }
     }
     
-    private fun addLabels(canvas: Canvas) {
+    private fun addLabels(canvas: CanvasInterface) {
         val textPaint = Paint().apply {
             color = Color(0, 0, 0, 255)
             textSize = 14f

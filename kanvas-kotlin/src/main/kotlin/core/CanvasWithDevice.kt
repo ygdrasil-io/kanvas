@@ -34,6 +34,11 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
      * Get the current bitmap
      */
     override val bitmap: Bitmap get() = device.bitmap
+
+    /**
+     * Get a copy of the current bitmap (compatibility method)
+     */
+    fun getBitmapCopy(): Bitmap = bitmap.copy()
     
     // ===== State Management =====
     
@@ -144,6 +149,13 @@ class CanvasWithDevice(private val device: Device) : CanvasInterface {
         }
         clipStack[clipStack.size - 1] = newClip
         updateDeviceState()
+    }
+
+    /**
+     * Compatibility method for old Canvas interface - clip with INTERSECT operation
+     */
+    override fun clipRect(rect: Rect, doAntiAlias: Boolean) {
+        clipRect(rect, SkClipOp.INTERSECT, doAntiAlias)
     }
     
     /**
@@ -273,6 +285,7 @@ interface CanvasInterface {
     
     // Clipping
     fun clipRect(rect: Rect, op: SkClipOp, doAntiAlias: Boolean = false)
+    fun clipRect(rect: Rect, doAntiAlias: Boolean = false) // Compatibility method
     fun getClipBounds(): Rect
     
     // Drawing
@@ -313,5 +326,13 @@ object CanvasFactory {
      */
     fun createWithDevice(device: Device): CanvasWithDevice {
         return CanvasWithDevice(device)
+    }
+
+    /**
+     * Create a canvas from width and height (compatibility constructor)
+     * This provides the same interface as the old Canvas(width, height)
+     */
+    fun create(width: Int, height: Int): CanvasWithDevice {
+        return CanvasFactory.createRaster(width, height)
     }
 }

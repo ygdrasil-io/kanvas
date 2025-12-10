@@ -1,9 +1,17 @@
 package skia
 
+import com.kanvas.core.CanvasFactory
+import com.kanvas.core.Color
+import com.kanvas.core.Matrix
+import com.kanvas.core.Paint
+import com.kanvas.core.PaintStyle
+import com.kanvas.core.Path
+import com.kanvas.core.PathUtils
+import com.kanvas.core.PathVerb
+import com.kanvas.core.Point
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import com.kanvas.core.*
 
 /**
  * Test for conic curve implementation
@@ -105,7 +113,7 @@ class ConicTest {
 
     @Test
     fun conicCurveCanBeDrawnOnCanvas() {
-        val canvas = Canvas.createRaster(200, 200)
+        val canvas = CanvasFactory.createRaster(200, 200)
         val paint = Paint().apply {
             color = Color(255, 0, 0)
             strokeWidth = 2f
@@ -120,7 +128,7 @@ class ConicTest {
         canvas.drawPath(path, paint)
 
         // Verify that something was drawn
-        val bitmap = canvas.getBitmap()
+        val bitmap = canvas.getBitmapCopy()
         var hasNonWhitePixel = false
         for (y in 0 until bitmap.getHeight()) {
             for (x in 0 until bitmap.getWidth()) {
