@@ -12,6 +12,7 @@ import testing.skia.BatchedConvexPathsGM
 import testing.skia.BeziersGM
 import testing.skia.BigMatrixGM
 import testing.skia.BigRectGM
+import testing.skia.BitmapCopyGM
 import testing.skia.BitmapRectGM
 import testing.skia.BleedGM
 import testing.skia.CircleSizesGM
@@ -58,12 +59,11 @@ fun registerAllTests() {
     registerGM(BatchedConvexPathsGM())  // NEW: Batched convex paths test
     registerGM(BigRectGM())  // NEW: Big rectangle with clipping test
     registerGM(BigMatrixGM())  // NEW: Large matrix transformations test
+    registerGM(BitmapCopyGM())  // NEW: Bitmap copy between configurations test
     // registerGM(AnalyticGradientsGM())
     // registerGM(ArithModeGM())
     // registerGM(AttributesGM())
     // registerGM(BicubicGM())
-    // registerGM(BigMatrixGM())
-    // registerGM(BitmapCopyGM())
     // registerGM(BitmapFiltersGM())
     // registerGM(BitmapImageGM())
     // registerGM(BitmapShaderGM())
@@ -130,7 +130,7 @@ fun getTestImplementationStatus(): Map<String, TestCategoryStatus> {
         "BitmapImageGM", "BitmapShaderGM", "BitmapTiledGM"
     )
     
-    val level2Implemented = listOf("BeziersGM", "BatchedConvexPathsGM", "BigMatrixGM")
+    val level2Implemented = listOf("BeziersGM", "BatchedConvexPathsGM", "BigMatrixGM", "BitmapCopyGM")
     
     status["Level 2: Intermediate"] = TestCategoryStatus(
         total = level2Tests.size,
