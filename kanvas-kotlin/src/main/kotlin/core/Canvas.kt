@@ -560,38 +560,17 @@ class Canvas(private val width: Int, private val height: Int) {
         val currentClip = clipStack.last()
         val isAA = edgeStyle == ClipEdgeStyle.SOFT
 
-        val newClip = when (op) {
-            SkClipOp.INTERSECT -> {
-                if (isAA) {
-                    // For anti-aliased clipping, expand the rectangle slightly
-                    val expandedRect = rect.copy().apply {
-                        inset(-0.5f, -0.5f) // Expand by 0.5 pixels in each direction
-                    }
-                    currentClip.intersect(expandedRect)
-                } else {
-                    currentClip.intersect(rect)
-                }
-            }
-            SkClipOp.DIFFERENCE -> {
-                if (isAA) {
-                    // For anti-aliased clipping, expand the rectangle slightly
-                    val expandedRect = rect.copy().apply {
-                        inset(-0.5f, -0.5f) // Expand by 0.5 pixels in each direction
-                    }
-                    currentClip.difference(expandedRect)
-                } else {
-                    currentClip.difference(rect)
-                }
-            }
-        }
+        // TODO
+    }
 
-        // Update the clip stacks
-        clipStack[clipStack.size - 1] = newClip
-        originalClipStack[originalClipStack.size - 1] = when (op) {
-            SkClipOp.INTERSECT -> currentClip.intersect(rect)
-            SkClipOp.DIFFERENCE -> currentClip.difference(rect)
-        }
-        clipAntiAliasStack[clipAntiAliasStack.size - 1] = isAA
+    fun drawOval(r: Rect, paint: Paint) {
+        // To avoid redundant logic in our culling code and various backends, we always sort rects
+        // before passing them along.
+        onDrawOval(r.makeSorted(), paint)
+    }
+
+    fun onDrawOval(r: Rect, paint: Paint) {
+        //TODO
     }
 
     /**
@@ -748,36 +727,3 @@ data class Matrix(
         fun identity(): Matrix = Matrix()
     }
 }
-
-/**
- * Represents a rectangular region
- */
-data class Rect(var left: Float, var top: Float, var right: Float, var bottom: Float) {
-    val width: Float get() = right - left
-    val height: Float get() = bottom - top
-    val centerX: Float get() = left + width / 2
-    val centerY: Float get() = top + height / 2
-    val isEmpty: Boolean get() = left >= right || top >= bottom
-    fun copy(): Rect = Rect(left, top, right, bottom)
-    /**
-     * Insets the rectangle by the specified amounts
-     * @param dx horizontal inset (positive values make the rect smaller)
-     * @param dy vertical inset (positive values make the rect smaller)
-     */
-    fun inset(dx: Float, dy: Float) {
-        left += dx
-        top += dy
-        right -= dx
-        bottom -= dy
-    }
-    fun intersect(other: Rect): Rect {
-        val newLeft = kotlin.math.max(left, other.left)
-        val newTop = kotlin.math.max(top, other.top)
-        val newRight = kotlin.math.min(right, other.right)
-        val newBottom = kotlin.math.min(bottom, other.bottom)
-        
-        return Rect(newLeft, newTop, newRight, newBottom)
-    }
-    override fun toString(): String = "Rect($left, $top, $right, $bottom)"
-}
-

@@ -37,17 +37,15 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
     }
 
     /**
-     * Returns a sorted version of this rectangle where left <= right and top <= bottom
+     * Returns a sorted version of the rectangle (left <= right, top <= bottom)
      */
     fun makeSorted(): Rect {
         val sortedLeft = kotlin.math.min(left, right)
-        val sortedRight = kotlin.math.max(left, right)
         val sortedTop = kotlin.math.min(top, bottom)
+        val sortedRight = kotlin.math.max(left, right)
         val sortedBottom = kotlin.math.max(top, bottom)
-
         return Rect(sortedLeft, sortedTop, sortedRight, sortedBottom)
     }
-
     /**
      * Returns true if this rectangle intersects with another rectangle
      */
@@ -195,6 +193,116 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
         right = maxX
         bottom = maxY
     }
+
+    /**
+     * Returns true if this rectangle is finite (all coordinates are finite numbers)
+     * Similar to SkRect::isFinite()
+     */
+    fun isFinite(): Boolean {
+        return left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()
+    }
+
+    /**
+     * Returns true if this rectangle is sorted (left <= right and top <= bottom)
+     * Similar to SkRect::isSorted()
+     */
+    fun isSorted(): Boolean {
+        return left <= right && top <= bottom
+    }
+
+    /**
+     * Returns a new rectangle that is offset by the specified amounts
+     * Similar to SkRect::makeOffset()
+     */
+    fun makeOffset(dx: Float, dy: Float): Rect {
+        return Rect(left + dx, top + dy, right + dx, bottom + dy)
+    }
+
+    /**
+     * Returns a new rectangle that is inset by the specified amounts
+     * Similar to SkRect::makeInset()
+     */
+    fun makeInset(dx: Float, dy: Float): Rect {
+        return Rect(left + dx, top + dy, right - dx, bottom - dy)
+    }
+
+    /**
+     * Returns a new rectangle that is outset by the specified amounts
+     * Similar to SkRect::makeOutset()
+     */
+    fun makeOutset(dx: Float, dy: Float): Rect {
+        return Rect(left - dx, top - dy, right + dx, bottom + dy)
+    }
+
+    /**
+     * Returns the center point of this rectangle
+     */
+    fun center(): Point {
+        return Point(centerX, centerY)
+    }
+
+    /**
+     * Returns a new rectangle with the same dimensions but positioned at (0, 0)
+     */
+    fun makeOffsetToOrigin(): Rect {
+        val width = this.width
+        val height = this.height
+        return Rect(0f, 0f, width, height)
+    }
+
+    /**
+     * Returns true if this rectangle is approximately equal to another rectangle
+     * within a small epsilon value
+     */
+    fun approximatelyEquals(other: Rect, epsilon: Float = 0.001f): Boolean {
+        return kotlin.math.abs(left - other.left) < epsilon &&
+               kotlin.math.abs(top - other.top) < epsilon &&
+               kotlin.math.abs(right - other.right) < epsilon &&
+               kotlin.math.abs(bottom - other.bottom) < epsilon
+    }
+
+    /**
+     * Calculates the difference between this rectangle and another rectangle.
+     * Returns a list of rectangles that represent the area of this rectangle
+     * that is not overlapped by the other rectangle.
+     * 
+     * This is similar to the concept of "rectangle subtraction" where we
+     * remove the overlapping area and return the remaining regions.
+     */
+    fun difference(other: Rect): List<Rect> {
+        if (!intersects(other)) {
+            return listOf(copy()) // No intersection, return this rectangle
+        }
+        
+        val result = mutableListOf<Rect>()
+        
+        // Calculate intersection
+        val intersection = intersect(other)
+        
+        // Add regions that are not overlapped
+        
+        // Left region
+        if (left < intersection.left) {
+            result.add(Rect(left, top, intersection.left, bottom))
+        }
+        
+        // Right region
+        if (right > intersection.right) {
+            result.add(Rect(intersection.right, top, right, bottom))
+        }
+        
+        // Top region
+        if (top < intersection.top) {
+            result.add(Rect(intersection.left, top, intersection.right, intersection.top))
+        }
+        
+        // Bottom region
+        if (bottom > intersection.bottom) {
+            result.add(Rect(intersection.left, intersection.bottom, intersection.right, bottom))
+        }
+        
+        return result
+    }
     
     /**
      * Subtracts another rectangle from this rectangle.
@@ -272,4 +380,5 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
          */
         fun makeLarge(): Rect = Rect(-(1 shl 29).toFloat(), -(1 shl 29).toFloat(), (1 shl 29).toFloat(), (1 shl 29).toFloat())
     }
+
 }

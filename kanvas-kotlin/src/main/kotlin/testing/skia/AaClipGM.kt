@@ -8,14 +8,9 @@ import com.kanvas.core.SK_Scalar1
 import com.kanvas.core.Size
 import com.kanvas.core.SkColorSetRGB
 import com.kanvas.core.SkIntToScalar
-import testing.DrawResult
-import testing.GM
-import com.kanvas.core.*
-import core.*
-import testing.GM
-import testing.DrawResult
-import testing.Size
 import com.kanvas.core.SkClipOp
+import testing.DrawResult
+import testing.GM
 
 /**
  * Port of Skia's aaclip.cpp test
