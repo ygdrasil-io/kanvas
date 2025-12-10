@@ -1,6 +1,6 @@
 package testing
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 
 /**
@@ -45,7 +45,7 @@ fun registerSimpleGM(
     width: Int,
     height: Int,
     backgroundColor: Color = Color.WHITE,
-    drawProc: (CanvasInterface) -> Unit
+    drawProc: (Canvas) -> Unit
 ) {
     TestRegistry.register(simpleGM(name, width, height, backgroundColor, drawProc))
 }

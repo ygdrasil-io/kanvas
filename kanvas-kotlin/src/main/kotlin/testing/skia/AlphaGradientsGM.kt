@@ -1,6 +1,6 @@
 package testing.skia
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
@@ -24,7 +24,7 @@ class AlphaGradientsGM : GM() {
     
     override fun getSize(): Size = Size(640f, 480f)
     
-    override fun onDraw(canvas: CanvasInterface): DrawResult {
+    override fun onDraw(canvas: Canvas): DrawResult {
         val size = getSize()
         
         // Set background
@@ -43,7 +43,7 @@ class AlphaGradientsGM : GM() {
         return DrawResult.OK
     }
     
-    private fun testAlphaGradients(canvas: CanvasInterface) {
+    private fun testAlphaGradients(canvas: Canvas) {
         // Define gradient test cases (simplified from original Skia test)
         val testCases = listOf(
             GradientTestCase(Color(255, 255, 255, 255), Color(255, 255, 255, 0), "White to Transparent"),
@@ -79,7 +79,7 @@ class AlphaGradientsGM : GM() {
         }
     }
     
-    private fun drawSimulatedGradient(canvas: CanvasInterface, rect: Rect, color1: Color, color2: Color) {
+    private fun drawSimulatedGradient(canvas: Canvas, rect: Rect, color1: Color, color2: Color) {
         // Simulate gradient by drawing multiple rectangles with interpolated colors
         val segmentHeight = rect.height / 10f
         
@@ -132,7 +132,7 @@ class AlphaGradientsGM : GM() {
         )
     }
     
-    private fun addLabels(canvas: CanvasInterface) {
+    private fun addLabels(canvas: Canvas) {
         val titlePaint = Paint().apply {
             color = Color(0, 0, 0, 255)
             textSize = 18f

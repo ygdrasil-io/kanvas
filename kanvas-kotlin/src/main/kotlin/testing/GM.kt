@@ -1,6 +1,6 @@
 package testing
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
@@ -53,12 +53,12 @@ abstract class GM {
     /**
      * Main drawing method - implement this to perform the test
      */
-    abstract fun onDraw(canvas: CanvasInterface): DrawResult
+    abstract fun onDraw(canvas: Canvas): DrawResult
     
     /**
      * Draw the background color
      */
-    protected fun drawBackground(canvas: CanvasInterface) {
+    protected fun drawBackground(canvas: Canvas) {
         val size = getSize()
         val bgPaint = Paint().apply {
             color = backgroundColor
@@ -70,7 +70,7 @@ abstract class GM {
     /**
      * Main entry point for executing the GM test
      */
-    fun draw(canvas: CanvasInterface): DrawResult {
+    fun draw(canvas: Canvas): DrawResult {
         // Call onceBeforeDraw exactly once
         if (!haveCalledOnceBeforeDraw) {
             haveCalledOnceBeforeDraw = true
@@ -105,12 +105,12 @@ class SimpleGM(
     private val name: String,
     private val size: Size,
     private val backgroundColor: Color = Color.WHITE,
-    private val drawProc: (CanvasInterface) -> DrawResult
+    private val drawProc: (Canvas) -> DrawResult
 ) : GM(backgroundColor) {
     
     override fun getName(): String = name
     override fun getSize(): Size = size
-    override fun onDraw(canvas: CanvasInterface): DrawResult = drawProc(canvas)
+    override fun onDraw(canvas: Canvas): DrawResult = drawProc(canvas)
 }
 
 /**
@@ -121,7 +121,7 @@ fun simpleGM(
     width: Int,
     height: Int,
     backgroundColor: Color = Color.WHITE,
-    drawProc: (CanvasInterface) -> Unit
+    drawProc: (Canvas) -> Unit
 ): SimpleGM {
     return SimpleGM(name, Size(width.toFloat(), height.toFloat()), backgroundColor) { canvas ->
         drawProc(canvas)

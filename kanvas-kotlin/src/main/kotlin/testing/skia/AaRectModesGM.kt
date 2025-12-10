@@ -1,6 +1,6 @@
 package testing.skia
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
@@ -37,7 +37,7 @@ class AaRectModesGM : GM() {
         val gAlphaValue = listOf(0xFF, 0x88, 0x88)
     }
     
-    override fun onDraw(canvas: CanvasInterface): DrawResult {
+    override fun onDraw(canvas: Canvas): DrawResult {
         // Create background shader - replica of make_bg_shader() from C++
         val bgPaint = createBackgroundShader()
         
@@ -96,7 +96,7 @@ class AaRectModesGM : GM() {
         }
     }
     
-    private fun drawCell(canvas: CanvasInterface, mode: String, a0: Int, a1: Int): Float {
+    private fun drawCell(canvas: Canvas, mode: String, a0: Int, a1: Int): Float {
         // Replica of drawCell() from C++
         val paint = Paint().apply {
             isAntiAlias = true

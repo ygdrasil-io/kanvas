@@ -1,6 +1,6 @@
 package testing.skia
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
 import com.kanvas.core.Rect
@@ -25,7 +25,7 @@ class AaClipGM : GM() {
     
     override fun getSize(): Size = Size(240f, 120f)
     
-    override fun onDraw(canvas: CanvasInterface): DrawResult {
+    override fun onDraw(canvas: Canvas): DrawResult {
         // Initial pixel-boundary-aligned draw
         drawRectTests(canvas)
         
@@ -54,24 +54,24 @@ class AaClipGM : GM() {
     /**
      * Draw the three test cases: square, column, and bar
      */
-    private fun drawRectTests(canvas: CanvasInterface) {
+    private fun drawRectTests(canvas: Canvas) {
         drawSquare(canvas, 10, 10)
         drawColumn(canvas, 30, 10)
         drawBar(canvas, 10, 30)
     }
     
-    private fun drawSquare(canvas: CanvasInterface, x: Int, y: Int) {
+    private fun drawSquare(canvas: Canvas, x: Int, y: Int) {
         // SkRect::MakeWH(10 * SK_Scalar1, 10 * SK_Scalar1)
         draw(canvas, Rect.makeWH(10f * SK_Scalar1, 10f * SK_Scalar1), x, y)
     }
     
-    private fun drawColumn(canvas: CanvasInterface, x: Int, y: Int) {
+    private fun drawColumn(canvas: Canvas, x: Int, y: Int) {
         // Test a tall, thin rectangle (1px wide, 10px tall)
         // SkRect::MakeWH(1 * SK_Scalar1, 10 * SK_Scalar1)
         draw(canvas, Rect.makeWH(1f * SK_Scalar1, 10f * SK_Scalar1), x, y)
     }
     
-    private fun drawBar(canvas: CanvasInterface, x: Int, y: Int) {
+    private fun drawBar(canvas: Canvas, x: Int, y: Int) {
         // Test a short, wide rectangle (10px wide, 1px tall)
         // SkRect::MakeWH(10 * SK_Scalar1, 1 * SK_Scalar1)
         draw(canvas, Rect.makeWH(10f * SK_Scalar1, 1f * SK_Scalar1), x, y)
@@ -84,7 +84,7 @@ class AaClipGM : GM() {
      * Expected result: blue center surrounded by green border, no red visible.
      * The red should be completely clipped by the target rectangle.
      */
-    private fun draw(canvas: CanvasInterface, target: Rect, x: Int, y: Int) {
+    private fun draw(canvas: Canvas, target: Rect, x: Int, y: Int) {
         val borderPaint = Paint().apply {
             color = SkColorSetRGB(0x0, 0xDD, 0x0) // Green border - SkColorSetRGB(0x0, 0xDD, 0x0)
             isAntiAlias = true

@@ -1,6 +1,6 @@
 package testing.skia
 
-import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
@@ -23,7 +23,7 @@ class AddArcGM : GM() {
     
     override fun getSize(): Size = Size(400f, 300f)
     
-    override fun onDraw(canvas: CanvasInterface): DrawResult {
+    override fun onDraw(canvas: Canvas): DrawResult {
         val size = getSize()
         
         // Set white background
@@ -45,7 +45,7 @@ class AddArcGM : GM() {
         return DrawResult.OK
     }
     
-    private fun testBasicArcs(canvas: CanvasInterface) {
+    private fun testBasicArcs(canvas: Canvas) {
         val strokePaint = Paint().apply {
             color = Color(0, 0, 0xFF, 255) // Blue
             strokeWidth = 3f
@@ -82,7 +82,7 @@ class AddArcGM : GM() {
         canvas.drawText("360° arc (circle)", 40f, 315f, textPaint)
     }
     
-    private fun testArcCombinations(canvas: CanvasInterface) {
+    private fun testArcCombinations(canvas: Canvas) {
         val strokePaint = Paint().apply {
             color = Color(0xFF, 0, 0, 255) // Red
             strokeWidth = 2f
@@ -125,7 +125,7 @@ class AddArcGM : GM() {
         canvas.drawText("Decorative arcs", 320f, 310f, textPaint)
     }
     
-    private fun testFilledArcs(canvas: CanvasInterface) {
+    private fun testFilledArcs(canvas: Canvas) {
         val fillPaint = Paint().apply {
             color = Color(0x88, 0, 0xFF, 180) // Purple with transparency
             style = PaintStyle.FILL
