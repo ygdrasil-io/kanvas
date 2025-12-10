@@ -4,7 +4,7 @@ import com.kanvas.core.*
 import core.*
 import testing.GM
 import testing.DrawResult
-import testing.Size
+import com.kanvas.core.Size
 
 /**
  * Port of Skia's alphagradients.cpp test

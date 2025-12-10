@@ -25,6 +25,11 @@ enum class ClipEdgeStyle {
 }
 
 /**
+ * Simple data class to represent size (width, height)
+ */
+data class Size(val width: Float, val height: Float)
+
+/**
  * Kanvas is the main drawing surface that provides an interface for drawing operations.
  * It maintains a stack of transformations and clip regions.
  */
@@ -126,13 +131,13 @@ class Canvas(private val width: Int, private val height: Int) {
                             // Calculate distance from original clip edges for anti-aliasing
                             // Use the original clip rectangle (before expansion) for accurate anti-aliasing
                             val originalClip = originalClipStack.last()
-                            
+
                             // Use float coordinates for more precise distance calculation
                             val xf = x.toFloat()
                             val yf = y.toFloat()
-                            
+
                             val edgeDistanceX = minOf(
-                                xf - originalClip.left, 
+                                xf - originalClip.left,
                                 originalClip.right - xf
                             )
                             val edgeDistanceY = minOf(
@@ -548,7 +553,7 @@ class Canvas(private val width: Int, private val height: Int) {
     fun clipRect(rect: Rect, doAA: Boolean = false) {
         clipRect(rect, SkClipOp.INTERSECT, doAA)
     }
-    
+
     /**
      * Internal method that implements the actual clipping logic
      * This matches Skia's onClipRect method structure
@@ -556,7 +561,7 @@ class Canvas(private val width: Int, private val height: Int) {
     private fun onClipRect(rect: Rect, op: SkClipOp, edgeStyle: ClipEdgeStyle) {
         val currentClip = clipStack.last()
         val isAA = edgeStyle == ClipEdgeStyle.SOFT
-        
+
         val newClip = when (op) {
             SkClipOp.INTERSECT -> {
                 if (isAA) {
@@ -581,7 +586,7 @@ class Canvas(private val width: Int, private val height: Int) {
                 }
             }
         }
-        
+
         // Update the clip stacks
         clipStack[clipStack.size - 1] = newClip
         originalClipStack[originalClipStack.size - 1] = when (op) {
@@ -595,7 +600,7 @@ class Canvas(private val width: Int, private val height: Int) {
      * Clip the canvas with the specified rectangle using the given clip operation and anti-aliasing
      * This method matches Skia's C++ interface exactly:
      * void SkCanvas::clipRect(const SkRect& rect, SkClipOp op, bool doAA)
-     * 
+     *
      * @param rect The rectangle to clip with
      * @param op The clip operation to perform (INTERSECT or DIFFERENCE)
      * @param doAA Whether to use anti-aliasing for the clip edges (matches Skia's parameter name)
@@ -605,13 +610,13 @@ class Canvas(private val width: Int, private val height: Int) {
         if (!rect.isFinite()) {
             return;
         }
-        
+
         // This would be checkForDeferredSave() in Skia
         // For now, we'll just proceed with the clipping
-        
+
         // Determine edge style based on anti-aliasing flag (matches Skia's logic)
         val edgeStyle = if (doAA) ClipEdgeStyle.SOFT else ClipEdgeStyle.HARD
-        
+
         // Call the internal method with sorted rectangle (matches Skia's rect.makeSorted())
         onClipRect(rect.makeSorted(), op, edgeStyle)
     }
@@ -755,25 +760,6 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
     val centerX: Float get() = left + width / 2
     val centerY: Float get() = top + height / 2
     val isEmpty: Boolean get() = left >= right || top >= bottom
-    
-    /**
-     * Checks if the rectangle has finite coordinates (not NaN or infinite)
-     */
-    fun isFinite(): Boolean {
-        return left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()
-    }
-    
-    /**
-     * Returns a sorted version of the rectangle (left <= right, top <= bottom)
-     */
-    fun makeSorted(): Rect {
-        val sortedLeft = kotlin.math.min(left, right)
-        val sortedTop = kotlin.math.min(top, bottom)
-        val sortedRight = kotlin.math.max(left, right)
-        val sortedBottom = kotlin.math.max(top, bottom)
-        return Rect(sortedLeft, sortedTop, sortedRight, sortedBottom)
-    }
-    
     fun copy(): Rect = Rect(left, top, right, bottom)
     /**
      * Insets the rectangle by the specified amounts
@@ -794,47 +780,6 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
         
         return Rect(newLeft, newTop, newRight, newBottom)
     }
-    
-    /**
-     * Computes the difference between this rectangle and another rectangle
-     * This represents the area that is in this rectangle but not in the other
-     */
-    fun difference(other: Rect): Rect {
-        // For simplicity, we'll implement this as the area outside the intersection
-        // This is a basic implementation - a full implementation would need to handle
-        // multiple regions, but for our clipRect purposes, this is sufficient
-        
-        val intersection = this.intersect(other)
-        
-        // If there's no intersection, return this rectangle
-        if (intersection.isEmpty) {
-            return this.copy()
-        }
-        
-        // If the other rectangle completely contains this one, return empty
-        if (intersection.left <= this.left && intersection.top <= this.top &&
-            intersection.right >= this.right && intersection.bottom >= this.bottom) {
-            return Rect(0f, 0f, 0f, 0f) // Empty rect
-        }
-        
-        // For now, return the original rectangle minus the intersection
-        // This is a simplified approach
-        return this.copy()
-    }
-    
     override fun toString(): String = "Rect($left, $top, $right, $bottom)"
 }
 
-/**
- * Represents a color in RGBA format
- */
-data class Color(val red: Int, val green: Int, val blue: Int, val alpha: Int = 255) {
-    companion object {
-        val TRANSPARENT = Color(0, 0, 0, 0)
-        val BLACK = Color(0, 0, 0)
-        val WHITE = Color(255, 255, 255)
-        val RED = Color(255, 0, 0)
-        val GREEN = Color(0, 255, 0)
-        val BLUE = Color(0, 0, 255)
-    }
-}
