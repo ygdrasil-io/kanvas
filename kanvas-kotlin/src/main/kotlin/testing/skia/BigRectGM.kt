@@ -7,90 +7,113 @@ import testing.Size
 
 /**
  * Port of Skia's bigrect.cpp test
- * Tests drawing of large rectangles and performance.
+ * Tests drawing of large rectangles with various sizes and paint configurations.
  * 
- * This test creates large rectangles to test rendering performance
- * and verify that Kanvas can handle large drawing operations correctly.
+ * This test systematically tests different combinations of paint styles, stroke widths,
+ * and anti-aliasing settings with rectangles of varying sizes, including very large sizes
+ * that test the limits of the rendering system.
  */
 class BigRectGM : GM() {
     override fun getName(): String = "bigrect"
     
-    override fun getSize(): Size = Size(256f, 256f)
+    override fun getSize(): Size = Size(325f, 125f)
     
     override fun onDraw(canvas: Canvas): DrawResult {
-        val size = getSize()
-        
-        // Set background
-        val bgPaint = Paint().apply {
-            color = Color(0xFF, 0xFF, 0xFF, 255) // White background
-            style = PaintStyle.FILL
+        // Test with sizes:
+        //   - reasonable size (for comparison),
+        //   - outside the range of int32, and
+        //   - outside the range of SkFixed.
+        val sizes = listOf(100f, 5e10f, 1e6f)
+
+        for (i in 0 until 8) {
+            for (j in 0 until 3) {
+                canvas.save()
+                canvas.translate((i * 40 + 5).toFloat(), (j * 40 + 5).toFloat())
+
+                val paint = Paint().apply {
+                    color = Color(0, 0, 0xFF, 255) // Blue
+                    // These are the three parameters that affect the behavior of drawing
+                    if (i and 1 != 0) {
+                        style = PaintStyle.FILL
+                    } else {
+                        style = PaintStyle.STROKE
+                    }
+                    if (i and 2 != 0) {
+                        strokeWidth = 1f
+                    } else {
+                        strokeWidth = 0f
+                    }
+                    if (i and 4 != 0) {
+                        isAntiAlias = true
+                    } else {
+                        isAntiAlias = false
+                    }
+                }
+
+                drawBigRect(canvas, sizes[j], paint)
+                canvas.restore()
+            }
         }
-        canvas.drawRect(Rect(0f, 0f, size.width, size.height), bgPaint)
-        
-        // Draw large rectangles with different colors and styles
-        drawLargeRectangles(canvas)
-        
-        // Add descriptive labels
-        addLabels(canvas)
         
         return DrawResult.OK
     }
     
-    private fun drawLargeRectangles(canvas: Canvas) {
-        // Test 1: Large filled rectangle
-        val fillPaint = Paint().apply {
-            color = Color(0x88, 0xAA, 0xFF, 200) // Semi-transparent blue
-            style = PaintStyle.FILL
-        }
-        canvas.drawRect(Rect(20f, 20f, 236f, 128f), fillPaint)
-        
-        // Test 2: Large stroked rectangle
-        val strokePaint = Paint().apply {
+    private fun drawBigRect(canvas: Canvas, big: Float, rectPaint: Paint) {
+        // Looks like this:
+        // +--+-+----+-+----+
+        // |  | |    | |    |
+        // |--+-+----+-+----+
+        // |--+-+----+-+----+
+        // |  | |    | |    |
+        // |  | |    +-+    |
+        // +--+-+--+     +--+
+        // +--+-+--+     +--+
+        // |  | |    +-+    |
+        // |  | |    | |    |
+        // +--+-+----+-+----+
+
+        canvas.clipRect(Rect(0f, 0f, 35f, 35f))
+
+        // Align to pixel boundaries.
+        canvas.translate(0.5f, 0.5f)
+
+        val horiz = Rect(-big, 5f, big, 10f)
+        canvas.drawRect(horiz, rectPaint)
+
+        val vert = Rect(5f, -big, 10f, big)
+        canvas.drawRect(vert, rectPaint)
+
+        val fromLeft = Rect(-big, 20f, 17f, 25f)
+        canvas.drawRect(fromLeft, rectPaint)
+
+        val fromTop = Rect(20f, -big, 25f, 17f)
+        canvas.drawRect(fromTop, rectPaint)
+
+        val fromRight = Rect(28f, 20f, big, 25f)
+        canvas.drawRect(fromRight, rectPaint)
+
+        val fromBottom = Rect(20f, 28f, 25f, big)
+        canvas.drawRect(fromBottom, rectPaint)
+
+        val leftBorder = Rect(-2f, -1f, 0f, 35f)
+        canvas.drawRect(leftBorder, rectPaint)
+
+        val topBorder = Rect(-1f, -2f, 35f, 0f)
+        canvas.drawRect(topBorder, rectPaint)
+
+        val rightBorder = Rect(34f, -1f, 36f, 35f)
+        canvas.drawRect(rightBorder, rectPaint)
+
+        val bottomBorder = Rect(-1f, 34f, 35f, 36f)
+        canvas.drawRect(bottomBorder, rectPaint)
+
+        val outOfBoundsPaint = Paint().apply {
             color = Color(0xFF, 0, 0, 255) // Red
-            strokeWidth = 4f
             style = PaintStyle.STROKE
+            strokeWidth = 0f
         }
-        canvas.drawRect(Rect(30f, 40f, 226f, 118f), strokePaint)
-        
-        // Test 3: Multiple overlapping rectangles
-        val colors = listOf(
-            Color(0xFF, 0x88, 0, 180),
-            Color(0, 0xFF, 0x88, 180),
-            Color(0x88, 0, 0xFF, 180)
-        )
-        
-        for (i in colors.indices) {
-            val paint = Paint().apply {
-                color = colors[i]
-                style = PaintStyle.FILL
-            }
-            val x = 40f + i * 20f
-            val y = 150f + i * 10f
-            canvas.drawRect(Rect(x, y, x + 180f, y + 60f), paint)
-        }
-        
-        // Test 4: Rectangle with different blend modes (placeholder for when implemented)
-        val blendPaint = Paint().apply {
-            color = Color(0xFF, 0xFF, 0, 150) // Semi-transparent yellow
-            style = PaintStyle.FILL
-            // blendMode = BlendMode.SRC_OVER // Will be implemented later
-        }
-        canvas.drawRect(Rect(60f, 60f, 180f, 180f), blendPaint)
-    }
-    
-    private fun addLabels(canvas: Canvas) {
-        val titlePaint = Paint().apply {
-            color = Color(0, 0, 0, 255)
-            textSize = 16f
-            style = PaintStyle.FILL
-        }
-        canvas.drawText("Large Rectangle Test", 20f, 18f, titlePaint)
-        
-        val infoPaint = Paint().apply {
-            color = Color(0x88, 0, 0, 255)
-            textSize = 12f
-            style = PaintStyle.FILL
-        }
-        canvas.drawText("Testing large rectangle drawing and performance", 20f, 240f, infoPaint)
+
+        val outOfBounds = Rect(-1f, -1f, 35f, 35f)
+        canvas.drawRect(outOfBounds, outOfBoundsPaint)
     }
 }
