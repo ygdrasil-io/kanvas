@@ -5,6 +5,7 @@ import core.*
 import testing.GM
 import testing.DrawResult
 import testing.Size
+import com.kanvas.core.SkClipOp
 
 /**
  * Port of Skia's aaclip.cpp test
@@ -109,7 +110,8 @@ class AaClipGM : GM() {
         canvas.drawRect(target, backgroundPaint)
         
         // Set clip to match the target rectangle with anti-aliasing
-        canvas.clipRect(target, true) // Added anti-aliasing parameter like C++
+        // Use the Skia-aligned method: clipRect(rect, SkClipOp.INTERSECT, doAA)
+        canvas.clipRect(target, SkClipOp.INTERSECT, true)
         
         // Draw blue foreground (4px inset from target) - EXACT C++ logic
         target.inset(SkIntToScalar(-4), SkIntToScalar(-4)) // SkIntToScalar(-4)
