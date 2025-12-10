@@ -1,5 +1,6 @@
 package com.kanvas.core
 
+import device.BitmapDevice
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -134,7 +135,7 @@ class DeviceTest {
         assertEquals(100f, initialClip.bottom)
         
         // Test that drawing outside clip bounds doesn't affect the bitmap
-        if (device is RasterDevice) {
+        if (device is BitmapDevice) {
             device.setClipBounds(Rect(20f, 20f, 80f, 80f))
             
             val paint = Paint().apply {
@@ -159,7 +160,7 @@ class DeviceTest {
     fun `test device matrix transform`() {
         val device = Devices.makeRaster(100, 100)
         
-        if (device is RasterDevice) {
+        if (device is BitmapDevice) {
             // Apply a translation
             val translationMatrix = Matrix.identity().translate(10f, 20f)
             device.setMatrix(translationMatrix)

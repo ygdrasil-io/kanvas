@@ -1,5 +1,7 @@
 package com.kanvas.core
 
+import device.BitmapDevice
+
 /**
  * Enhanced Canvas implementation that uses a Device for rendering
  * This provides better separation of concerns and aligns with Skia's architecture
@@ -254,7 +256,7 @@ class Canvas(private val device: Device) {
         val currentClip = clipStack.last()
         
         // Update device state
-        if (device is RasterDevice) {
+        if (device is BitmapDevice) {
             device.setMatrix(currentMatrix)
             device.setClipBounds(currentClip)
         }

@@ -1,5 +1,7 @@
 package com.kanvas.core
 
+import device.BitmapDevice
+
 /**
  * Device interface, inspired by Skia's SkDevice
  * Represents a drawing surface that can render graphics primitives
@@ -79,14 +81,14 @@ object Devices {
         AlphaType.PREMUL,
         ColorSpace.SRGB
     )): Device {
-        return RasterDevice(width, height, colorInfo)
+        return BitmapDevice(width, height, colorInfo)
     }
     
     /**
      * Create a device from an existing bitmap
      */
     fun makeFromBitmap(bitmap: Bitmap): Device {
-        return RasterDevice(bitmap.getWidth(), bitmap.getHeight(), bitmap.colorInfo).apply {
+        return BitmapDevice(bitmap.getWidth(), bitmap.getHeight(), bitmap.colorInfo).apply {
             // Copy existing bitmap content
             for (y in 0 until height) {
                 for (x in 0 until width) {
