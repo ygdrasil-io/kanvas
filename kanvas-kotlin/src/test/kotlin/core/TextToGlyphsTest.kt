@@ -158,8 +158,8 @@ class TextToGlyphsTest {
         val largeGlyphRun = largeFont.createGlyphRun(text)
         
         // Larger font should produce larger glyph advances
-        val smallTotalWidth = smallGlyphRun.glyphs.sumOf { it.advanceX }
-        val largeTotalWidth = largeGlyphRun.glyphs.sumOf { it.advanceX }
+        val smallTotalWidth = smallGlyphRun.glyphs.sumOf { it.advanceX.toDouble() }
+        val largeTotalWidth = largeGlyphRun.glyphs.sumOf { it.advanceX.toDouble() }
         
         assertTrue(largeTotalWidth > smallTotalWidth)
     }

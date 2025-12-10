@@ -16,6 +16,7 @@ import testing.skia.BleedGM
 import testing.skia.CircleSizesGM
 import testing.skia.ClearSwizzleGM
 import testing.skia.ColorspaceGM
+import testing.skia.ComplexPathsGM
 import testing.skia.ConcavePathsGM
 import testing.skia.ConvexPathsGM
 import testing.skia.CubicPathsGM
@@ -56,6 +57,7 @@ fun registerAllTests() {
     registerGM(BeziersGM())  // NEW: Bézier curves test
     registerGM(BatchedConvexPathsGM())  // NEW: Batched convex paths test
     registerGM(BigRectGM())  // NEW: Big rectangle with clipping test
+    registerGM(ComplexPathsGM())  // NEW: Complex paths with transformations and gradients
     // registerGM(AnalyticGradientsGM())
     // registerGM(ArithModeGM())
     // registerGM(AttributesGM())
