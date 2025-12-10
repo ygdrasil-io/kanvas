@@ -17,6 +17,12 @@ import com.kanvas.core.RRect
 import com.kanvas.core.Rect
 import com.kanvas.core.Shader
 import com.kanvas.core.SurfaceProps
+import core.GlyphPainter
+import core.GlyphRun
+import core.GlyphRunList
+import core.Point
+import core.SimpleRect
+import core.createGlyphRun
 
 /**
  * Base device implementation for CPU rasterization
@@ -50,6 +56,9 @@ class BitmapDevice(
     
     // Current shader for fill operations
     private var currentShader: Shader? = null
+    
+    // Glyph painter for text rendering
+    private val glyphPainter: GlyphPainter = GlyphPainter.create()
 
     init {
         // Initialize with transparent background
@@ -131,12 +140,80 @@ class BitmapDevice(
     }
 
     override fun drawText(text: String, x: Float, y: Float, paint: Paint) {
-        // TODO: Implement text rendering
-        // For now, we'll just draw a placeholder rectangle
-        val textWidth = text.length * 10f // Approximate
-        val textHeight = 20f // Approximate
-        val textRect = Rect(x, y - textHeight, x + textWidth, y)
-        drawRect(textRect, paint)
+        // Create a GlyphRun from the text
+        val font = paint.getFont() ?: return
+        val glyphRun = font.createGlyphRun(text, x, y)
+        
+        // Draw the GlyphRun using our GlyphPainter
+        drawGlyphRun(glyphRun, paint)
+    }
+    
+    /**
+     * Draw a GlyphRun on this device.
+     * This is the core text rendering method that handles the actual glyph drawing.
+     */
+    fun drawGlyphRun(glyphRun: GlyphRun, paint: Paint) {
+        // Apply clip to the glyph run bounds
+        val glyphBounds = glyphRun.getBounds()
+        val clippedBounds = SimpleRect(
+            kotlin.math.max(glyphBounds.left, clipBounds.left),
+            kotlin.math.max(glyphBounds.top, clipBounds.top),
+            kotlin.math.min(glyphBounds.right, clipBounds.right),
+            kotlin.math.min(glyphBounds.bottom, clipBounds.bottom)
+        )
+        
+        // If the glyph run is completely outside the clip, skip rendering
+        if (clippedBounds.isEmpty) return
+        
+        // Apply transform to the glyph run
+        val transformedGlyphRun = applyTransformToGlyphRun(glyphRun)
+        
+        // Use the GlyphPainter to render the glyph run
+        glyphPainter.drawGlyphRun(this, transformedGlyphRun, paint)
+    }
+
+    /**
+     * Draw a list of glyph runs on this device.
+     * This is the core text rendering method that handles multiple glyph runs efficiently.
+     * Inspired by Skia's onDrawGlyphRunList method.
+     */
+    override fun onDrawGlyphRunList(glyphRunList: GlyphRunList, paint: Paint) {
+        // Check if the glyph run list is empty
+        if (glyphRunList.isEmpty()) return
+        
+        // Apply clip to the glyph run list bounds
+        val glyphRunListBounds = glyphRunList.getSourceBoundsWithOrigin()
+        val clippedBounds = SimpleRect(
+            kotlin.math.max(glyphRunListBounds.left, clipBounds.left),
+            kotlin.math.max(glyphRunListBounds.top, clipBounds.top),
+            kotlin.math.min(glyphRunListBounds.right, clipBounds.right),
+            kotlin.math.min(glyphRunListBounds.bottom, clipBounds.bottom)
+        )
+        
+        // If the glyph run list is completely outside the clip, skip rendering
+        if (clippedBounds.isEmpty) return
+        
+        // Draw each glyph run in the list
+        for (glyphRun in glyphRunList) {
+            drawGlyphRun(glyphRun, paint)
+        }
+    }
+    
+
+    
+    /**
+     * Apply the current transform matrix to a GlyphRun.
+     * This transforms each glyph position according to the device's current matrix.
+     */
+    private fun applyTransformToGlyphRun(glyphRun: GlyphRun): GlyphRun {
+        val transformedPositions = glyphRun.positions.map { position ->
+            // Apply the matrix transformation to the point
+            val newX = currentMatrix.scaleX * position.x + currentMatrix.skewY * position.y + currentMatrix.transX
+            val newY = currentMatrix.skewX * position.x + currentMatrix.scaleY * position.y + currentMatrix.transY
+            Point(newX, newY)
+        }
+        
+        return GlyphRun(glyphRun.font, transformedPositions, glyphRun.glyphs)
     }
 
     override fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint) {
