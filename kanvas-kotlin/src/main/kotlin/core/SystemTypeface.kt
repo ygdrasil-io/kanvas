@@ -75,28 +75,123 @@ class SystemTypeface private constructor(
     
     /**
      * Retourne les métriques de la police.
-     * Utilise les métriques de l'AWT Font.
+     * Utilise les métriques de l'AWT Font avec des calculs plus précis.
      */
     override fun getMetrics(): FontMetrics {
         val transform = AffineTransform()
         val fontRenderContext = FontRenderContext(transform, true, true)
         val awtMetrics = awtFont.getLineMetrics("ABC", fontRenderContext)
         
+        // Calculer les métriques plus précisément
+        val ascent = awtMetrics.ascent.toFloat()
+        val descent = awtMetrics.descent.toFloat()
+        val leading = awtMetrics.leading.toFloat()
+        
+        // Calculer la hauteur de la ligne
+        val lineHeight = ascent + descent + leading
+        
+        // Calculer les largeurs de caractères plus précisément
+        val avgCharWidth = calculateAverageCharWidth(fontRenderContext)
+        val maxCharWidth = calculateMaxCharWidth(fontRenderContext)
+        
+        // Calculer la hauteur x (hauteur des lettres minuscules)
+        val xHeight = calculateXHeight(fontRenderContext)
+        
+        // Calculer la hauteur des majuscules
+        val capHeight = calculateCapHeight(fontRenderContext)
+        
+        // Calculer l'épaisseur et la position du soulignement
+        val underlineThickness = lineHeight * 0.05f // 5% de la hauteur de ligne
+        val underlinePosition = ascent * 0.8f // 80% de l'ascender
+        
         return FontMetrics(
-            top = 0f,
-            ascent = awtMetrics.ascent.toFloat(),
-            descent = awtMetrics.descent.toFloat(),
-            bottom = 0f,
-            leading = awtMetrics.leading.toFloat(),
-            avgCharWidth = awtFont.getStringBounds("A", fontRenderContext).width.toFloat(),
-            maxCharWidth = awtFont.getStringBounds("W", fontRenderContext).width.toFloat(),
-            xMin = 0f,
-            xMax = 0f,
-            xHeight = awtMetrics.ascent.toFloat() * 0.5f, // Approximation
-            capHeight = awtMetrics.ascent.toFloat(),
-            underlineThickness = 1f,
-            underlinePosition = awtMetrics.descent.toFloat()
+            top = -ascent, // Position supérieure de la ligne
+            ascent = ascent,
+            descent = descent,
+            bottom = descent, // Position inférieure de la ligne
+            leading = leading,
+            avgCharWidth = avgCharWidth,
+            maxCharWidth = maxCharWidth,
+            xMin = 0f, // À calculer plus précisément dans une implémentation complète
+            xMax = maxCharWidth, // Largeur maximale comme approximation
+            xHeight = xHeight,
+            capHeight = capHeight,
+            underlineThickness = underlineThickness,
+            underlinePosition = underlinePosition
         )
+    }
+    
+    /**
+     * Calcule la largeur moyenne des caractères.
+     */
+    private fun calculateAverageCharWidth(fontRenderContext: FontRenderContext): Float {
+        // Utiliser une sélection de caractères représentatifs
+        val sampleChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        var totalWidth = 0f
+        var charCount = 0
+        
+        for (char in sampleChars) {
+            val bounds = awtFont.getStringBounds(char.toString(), fontRenderContext)
+            totalWidth += bounds.width.toFloat()
+            charCount++
+        }
+        
+        return if (charCount > 0) totalWidth / charCount else awtFont.size2D.toFloat() * 0.6f
+    }
+    
+    /**
+     * Calcule la largeur maximale des caractères.
+     */
+    private fun calculateMaxCharWidth(fontRenderContext: FontRenderContext): Float {
+        // Tester plusieurs caractères larges
+        val wideChars = "MW@#$%&*()[]{}<>"
+        var maxWidth = 0f
+        
+        for (char in wideChars) {
+            val bounds = awtFont.getStringBounds(char.toString(), fontRenderContext)
+            val width = bounds.width.toFloat()
+            if (width > maxWidth) {
+                maxWidth = width
+            }
+        }
+        
+        return maxWidth
+    }
+    
+    /**
+     * Calcule la hauteur x (hauteur des lettres minuscules).
+     */
+    private fun calculateXHeight(fontRenderContext: FontRenderContext): Float {
+        // Utiliser des lettres minuscules représentatives
+        val xChars = "abcdefghijklmnopqrstuvwxyz"
+        var totalHeight = 0f
+        var charCount = 0
+        
+        for (char in xChars) {
+            val bounds = awtFont.getStringBounds(char.toString(), fontRenderContext)
+            totalHeight += bounds.height.toFloat()
+            charCount++
+        }
+        
+        return if (charCount > 0) totalHeight / charCount else awtFont.size2D.toFloat() * 0.5f
+    }
+    
+    /**
+     * Calcule la hauteur des majuscules.
+     */
+    private fun calculateCapHeight(fontRenderContext: FontRenderContext): Float {
+        // Utiliser des lettres majuscules représentatives
+        val capChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        var totalHeight = 0f
+        var charCount = 0
+        
+        for (char in capChars) {
+            val bounds = awtFont.getStringBounds(char.toString(), fontRenderContext)
+            totalHeight += bounds.height.toFloat()
+            charCount++
+        }
+        
+        return if (charCount > 0) totalHeight / charCount else awtFont.size2D.toFloat() * 0.7f
     }
     
     override fun toString(): String {
