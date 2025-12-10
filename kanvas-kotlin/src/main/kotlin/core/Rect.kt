@@ -72,6 +72,22 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
     }
 
     /**
+     * Returns the width divided by 2, similar to SkRectPriv::HalfWidth
+     * Avoids potential overflow by dividing first
+     */
+    fun halfWidth(): Float {
+        return (left + right) / 2
+    }
+
+    /**
+     * Returns the height divided by 2, similar to SkRectPriv::HalfHeight
+     * Avoids potential overflow by dividing first
+     */
+    fun halfHeight(): Float {
+        return (top + bottom) / 2
+    }
+
+    /**
      * Offsets the rectangle by the specified amounts
      */
     fun offset(dx: Float, dy: Float) {
@@ -244,5 +260,16 @@ data class Rect(var left: Float, var top: Float, var right: Float, var bottom: F
          * Creates a rectangle from a size
          */
         fun makeSize(size: Size): Rect = Rect(0f, 0f, size.width, size.height)
+
+        /**
+         * Creates the largest possible rectangle, similar to SkRectPriv::MakeLargest
+         */
+        fun makeLargest(): Rect = Rect(Float.MIN_VALUE, Float.MIN_VALUE, Float.MAX_VALUE, Float.MAX_VALUE)
+
+        /**
+         * Creates a very large rectangle that can be safely round-tripped with integer coordinates
+         * Similar to SkRectPriv::MakeILarge
+         */
+        fun makeLarge(): Rect = Rect(-(1 shl 29).toFloat(), -(1 shl 29).toFloat(), (1 shl 29).toFloat(), (1 shl 29).toFloat())
     }
 }
