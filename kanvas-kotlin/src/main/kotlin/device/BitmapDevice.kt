@@ -1,6 +1,7 @@
 package device
 
 import com.kanvas.core.AlphaType
+import com.kanvas.core.Arc
 import com.kanvas.core.Bitmap
 import com.kanvas.core.BitmapConfig
 import com.kanvas.core.Color
@@ -12,6 +13,7 @@ import com.kanvas.core.Matrix
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
 import com.kanvas.core.Path
+import com.kanvas.core.RRect
 import com.kanvas.core.Rect
 import com.kanvas.core.Shader
 import com.kanvas.core.SurfaceProps
@@ -64,6 +66,56 @@ class BitmapDevice(
 
         // Rasterize the rectangle
         rasterizeRect(transformedRect, paint)
+    }
+
+    override fun drawOval(oval: Rect, paint: Paint) {
+        // Apply clip
+        val clippedOval = oval.intersect(clipBounds)
+        if (clippedOval.isEmpty) return
+
+        // Apply transform
+        val transformedOval = currentMatrix.mapRect(clippedOval)
+
+        // Rasterize the oval (simplified - use bounding box for now)
+        rasterizeOval(transformedOval, paint)
+    }
+
+    override fun drawArc(arc: Arc, paint: Paint) {
+        // Apply clip to the arc's oval
+        val clippedOval = arc.oval.intersect(clipBounds)
+        if (clippedOval.isEmpty) return
+
+        // Create a transformed arc
+        val transformedOval = currentMatrix.mapRect(clippedOval)
+        val transformedArc = Arc(transformedOval, arc.startAngle, arc.sweepAngle, arc.useCenter)
+
+        // Rasterize the arc
+        rasterizeArc(transformedArc, paint)
+    }
+
+    override fun drawRRect(rrect: RRect, paint: Paint) {
+        // Apply clip to the RRect's bounds
+        val clippedBounds = rrect.rect.intersect(clipBounds)
+        if (clippedBounds.isEmpty) return
+
+        // Create a transformed RRect
+        val transformedRect = currentMatrix.mapRect(clippedBounds)
+        val transformedRRect = RRect(transformedRect, rrect.rx, rrect.ry)
+
+        // Rasterize the rounded rectangle
+        rasterizeRRect(transformedRRect, paint)
+    }
+
+    override fun drawPaint(paint: Paint) {
+        // Fill the entire clip region with the paint
+        val clipBounds = getClipBounds()
+        if (clipBounds.isEmpty) return
+
+        // Apply transform to the clip bounds
+        val transformedClip = currentMatrix.mapRect(clipBounds)
+
+        // Rasterize using the paint color
+        rasterizeRect(transformedClip, paint)
     }
 
     override fun drawPath(path: Path, paint: Paint) {
@@ -441,5 +493,175 @@ class BitmapDevice(
      */
     private fun applyShader(color: Color, x: Float, y: Float): Color {
         return currentShader?.applyToColor(color, x, y) ?: color
+    }
+
+    // ===== Advanced Primitive Rasterization =====
+
+    private fun rasterizeOval(oval: Rect, paint: Paint) {
+        // Simplified oval rasterization using midpoint algorithm
+        val centerX = oval.centerX
+        val centerY = oval.centerY
+        val radiusX = oval.width / 2
+        val radiusY = oval.height / 2
+        
+        // Convert to integer coordinates
+        val left = oval.left.toInt().coerceAtLeast(0)
+        val top = oval.top.toInt().coerceAtLeast(0)
+        val right = oval.right.toInt().coerceAtMost(width - 1)
+        val bottom = oval.bottom.toInt().coerceAtMost(height - 1)
+        
+        // Simple approach: fill the bounding box (for now)
+        // TODO: Implement proper ellipse rasterization
+        when (paint.style) {
+            PaintStyle.FILL -> {
+                for (y in top..bottom) {
+                    for (x in left..right) {
+                        // Check if point is inside the ellipse
+                        val dx = (x - centerX) / radiusX
+                        val dy = (y - centerY) / radiusY
+                        if (dx * dx + dy * dy <= 1.0) {
+                            val color = applyShader(paint.color, x.toFloat(), y.toFloat())
+                            bitmap.setPixel(x, y, color)
+                        }
+                    }
+                }
+            }
+            PaintStyle.STROKE -> {
+                // Draw the bounding rectangle as a placeholder
+                rasterizeRect(Rect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat()), paint)
+            }
+            PaintStyle.FILL_AND_STROKE -> {
+                rasterizeOval(oval, paint.copy().apply { style = PaintStyle.FILL })
+                rasterizeOval(oval, paint.copy().apply { style = PaintStyle.STROKE })
+            }
+        }
+    }
+
+    private fun rasterizeArc(arc: Arc, paint: Paint) {
+        // Simplified arc rasterization
+        if (!arc.isValid) return
+        
+        // Convert to integer coordinates
+        val left = arc.oval.left.toInt().coerceAtLeast(0)
+        val top = arc.oval.top.toInt().coerceAtLeast(0)
+        val right = arc.oval.right.toInt().coerceAtMost(width - 1)
+        val bottom = arc.oval.bottom.toInt().coerceAtMost(height - 1)
+        
+        // For now, draw the bounding oval
+        rasterizeOval(arc.oval, paint)
+        
+        // TODO: Implement proper arc rasterization based on angles
+    }
+
+    private fun rasterizeRRect(rrect: RRect, paint: Paint) {
+        // Simplified rounded rectangle rasterization
+        val rect = rrect.rect
+        
+        // Convert to integer coordinates
+        val left = rect.left.toInt().coerceAtLeast(0)
+        val top = rect.top.toInt().coerceAtLeast(0)
+        val right = rect.right.toInt().coerceAtMost(width - 1)
+        val bottom = rect.bottom.toInt().coerceAtMost(height - 1)
+        
+        when (paint.style) {
+            PaintStyle.FILL -> {
+                // Fill the main rectangle area
+                for (y in top + rrect.ry.toInt()..bottom - rrect.ry.toInt()) {
+                    for (x in left + rrect.rx.toInt()..right - rrect.rx.toInt()) {
+                        val color = applyShader(paint.color, x.toFloat(), y.toFloat())
+                        bitmap.setPixel(x, y, color)
+                    }
+                }
+                
+                // Fill the rounded corners (simplified)
+                // Top-left corner
+                fillRoundedCorner(left, top, rrect.rx, rrect.ry, paint)
+                // Top-right corner
+                fillRoundedCorner(right - rrect.rx.toInt(), top, rrect.rx, rrect.ry, paint)
+                // Bottom-left corner
+                fillRoundedCorner(left, bottom - rrect.ry.toInt(), rrect.rx, rrect.ry, paint)
+                // Bottom-right corner
+                fillRoundedCorner(right - rrect.rx.toInt(), bottom - rrect.ry.toInt(), rrect.rx, rrect.ry, paint)
+            }
+            PaintStyle.STROKE -> {
+                // Draw the bounding rectangle as a placeholder
+                rasterizeRect(rect, paint)
+            }
+            PaintStyle.FILL_AND_STROKE -> {
+                rasterizeRRect(rrect, paint.copy().apply { style = PaintStyle.FILL })
+                rasterizeRRect(rrect, paint.copy().apply { style = PaintStyle.STROKE })
+            }
+        }
+    }
+
+    private fun fillRoundedCorner(x: Int, y: Int, rx: Float, ry: Float, paint: Paint) {
+        val radiusX = rx.toInt()
+        val radiusY = ry.toInt()
+        
+        // Simple quarter-ellipse approximation
+        for (cornerY in 0..radiusY) {
+            for (cornerX in 0..radiusX) {
+                val dx = cornerX.toFloat() / radiusX
+                val dy = cornerY.toFloat() / radiusY
+                if (dx * dx + dy * dy <= 1.0) {
+                    val pixelX = x + cornerX
+                    val pixelY = y + cornerY
+                    if (pixelX >= 0 && pixelX < width && pixelY >= 0 && pixelY < height) {
+                        val color = applyShader(paint.color, pixelX.toFloat(), pixelY.toFloat())
+                        bitmap.setPixel(pixelX, pixelY, color)
+                    }
+                }
+            }
+        }
+    }
+
+    // ===== Pixel Access Methods =====
+
+    override fun writePixels(src: Bitmap, x: Int, y: Int): Boolean {
+        // Validate parameters
+        if (x < 0 || y < 0 || x + src.getWidth() > width || y + src.getHeight() > height) {
+            return false
+        }
+
+        // Copy pixels from source to device
+        for (srcY in 0 until src.getHeight()) {
+            for (srcX in 0 until src.getWidth()) {
+                val dstX = x + srcX
+                val dstY = y + srcY
+                bitmap.setPixel(dstX, dstY, src.getPixel(srcX, srcY))
+            }
+        }
+        return true
+    }
+
+    override fun readPixels(dst: Bitmap, x: Int, y: Int): Boolean {
+        // Validate parameters
+        if (x < 0 || y < 0 || x + dst.getWidth() > width || y + dst.getHeight() > height) {
+            return false
+        }
+
+        // Copy pixels from device to destination
+        for (dstY in 0 until dst.getHeight()) {
+            for (dstX in 0 until dst.getWidth()) {
+                val srcX = x + dstX
+                val srcY = y + dstY
+                dst.setPixel(dstX, dstY, bitmap.getPixel(srcX, srcY))
+            }
+        }
+        return true
+    }
+
+    override fun accessPixels(): Bitmap {
+        return bitmap
+    }
+
+    override fun peekPixels(): Bitmap {
+        return bitmap
+    }
+
+    override fun replaceClip(rect: Rect) {
+        // Apply device bounds to the new clip
+        val deviceBounds = Rect(0f, 0f, width.toFloat(), height.toFloat())
+        clipBounds = rect.intersect(deviceBounds)
     }
 }
