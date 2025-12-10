@@ -18,6 +18,7 @@ class Path {
     
     internal val points: MutableList<Point> = mutableListOf()
     internal val verbs: MutableList<PathVerb> = mutableListOf()
+    internal val conicWeights: MutableList<Float> = mutableListOf()
     private var fillType: FillType = FillType.WINDING
     
     /**
@@ -26,6 +27,7 @@ class Path {
     fun reset() {
         points.clear()
         verbs.clear()
+        conicWeights.clear()
     }
     
     /**
@@ -57,9 +59,27 @@ class Path {
     /**
      * Draws a conic curve to the specified point
      * This is an alias for quadTo, using Skia's terminology
+     * @param weight The conic weight (default 1.0, which makes it equivalent to quadTo)
      */
-    fun conicTo(x1: Float, y1: Float, x2: Float, y2: Float) {
-        quadTo(x1, y1, x2, y2)
+    fun conicTo(x1: Float, y1: Float, x2: Float, y2: Float, weight: Float = 1.0f) {
+        if (verbs.isEmpty() || verbs.last() == PathVerb.CLOSE) {
+            moveTo(0f, 0f)
+        }
+        
+        if (weight == 1.0f) {
+            // Weight of 1.0 makes it equivalent to a quadratic curve
+            quadTo(x1, y1, x2, y2)
+        } else if (weight.isFinite() && weight > 0) {
+            // Store as a true conic with weight
+            points.add(Point(x1, y1))
+            points.add(Point(x2, y2))
+            verbs.add(PathVerb.CONIC)
+            conicWeights.add(weight)
+        } else {
+            // For invalid weights, approximate with lines (like Skia)
+            lineTo(x1, y1)
+            lineTo(x2, y2)
+        }
     }
     
     /**
@@ -235,6 +255,45 @@ class Path {
             maxY = maxY.coerceAtLeast(point.y)
         }
         
+        // For conic curves, we need to approximate their bounds
+        // since they can extend beyond the control points
+        var pointIndex = 0
+        for (i in verbs.indices) {
+            when (verbs[i]) {
+                PathVerb.CONIC -> {
+                    if (pointIndex + 1 < points.size) {
+                        val p0 = if (i > 0 && verbs[i-1] != PathVerb.MOVE && verbs[i-1] != PathVerb.CLOSE) {
+                            points[pointIndex - 1]
+                        } else {
+                            Point(0f, 0f) // Default start point
+                        }
+                        val p1 = points[pointIndex]
+                        val p2 = points[pointIndex + 1]
+                        val conicCount = verbs.take(i).count { it == PathVerb.CONIC }
+                        val weight = conicWeights[conicCount]
+                        
+                        // Approximate conic bounds by including control points
+                        // and estimating the curve's extent based on weight
+                        minX = minX.coerceAtMost(p0.x.coerceAtMost(p1.x).coerceAtMost(p2.x))
+                        minY = minY.coerceAtMost(p0.y.coerceAtMost(p1.y).coerceAtMost(p2.y))
+                        maxX = maxX.coerceAtLeast(p0.x.coerceAtLeast(p1.x).coerceAtLeast(p2.x))
+                        maxY = maxY.coerceAtLeast(p0.y.coerceAtLeast(p1.y).coerceAtLeast(p2.y))
+                        
+                        pointIndex += 2
+                    }
+                }
+                PathVerb.QUAD, PathVerb.CUBIC -> {
+                    // For quad and cubic, just include their points
+                    pointIndex += if (verbs[i] == PathVerb.QUAD) 2 else 3
+                }
+                else -> {
+                    if (verbs[i] != PathVerb.CLOSE) {
+                        pointIndex++
+                    }
+                }
+            }
+        }
+        
         return Rect(minX, minY, maxX, maxY)
     }
     
@@ -249,6 +308,7 @@ class Path {
                 point.x * matrix.skewY + point.y * matrix.scaleY + matrix.transY
             )
         }
+        // Conic weights are not transformed as they are scalar values
     }
     
     /**
@@ -258,6 +318,7 @@ class Path {
         val newPath = Path()
         newPath.points.addAll(this.points)
         newPath.verbs.addAll(this.verbs)
+        newPath.conicWeights.addAll(this.conicWeights)
         newPath.fillType = this.fillType
         return newPath
     }
@@ -279,6 +340,7 @@ enum class PathVerb {
     MOVE,   // Move to a point
     LINE,   // Draw a line
     QUAD,   // Draw a quadratic curve
+    CONIC,  // Draw a conic curve (with weight)
     CUBIC,  // Draw a cubic curve
     CLOSE   // Close the current contour
 }
@@ -340,6 +402,28 @@ object PathUtils {
                         
                         // Simple approximation - could be more accurate
                         length += distance(p0, p1) + distance(p1, p2)
+                        lastPoint = p2
+                    }
+                }
+                PathVerb.CONIC -> {
+                    if (lastPoint != null && i + 1 < path.points.size) {
+                        // Approximate conic curve length
+                        val p0 = lastPoint!!
+                        val p1 = path.points[i]
+                        val p2 = path.points[i + 1]
+                        val conicCount = path.verbs.take(i).count { it == PathVerb.CONIC }
+                        val weight = path.conicWeights[conicCount]
+                        
+                        // For conic curves, the length depends on the weight
+                        // Weight = 1.0 is equivalent to quadratic, other weights create different curves
+                        if (weight == 1.0f) {
+                            // Quadratic approximation
+                            length += distance(p0, p1) + distance(p1, p2)
+                        } else {
+                            // For other weights, use a simple approximation
+                            // This could be improved with a proper conic length calculation
+                            length += distance(p0, p1) + distance(p1, p2)
+                        }
                         lastPoint = p2
                     }
                 }

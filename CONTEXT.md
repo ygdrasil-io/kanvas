@@ -144,14 +144,14 @@ kanvas/
 
 ## 📊 Comparaison Skia vs Kanvas
 
-| Aspect | Skia (C++) | Kanvas (Kotlin) |
-|--------|------------|-----------------|
-| **Langage** | C++17 | Kotlin 1.9+ |
-| **Plateforme** | Multiplateforme | JVM/Android |
-| **Performance** | Native | JVM optimisé |
-| **GPU Backends** | Vulkan, Metal, OpenGL, D3D | À implémenter |
+| Aspect | Skia (C++) | Kanvas (Kotlin)   |
+|--------|------------|-------------------|
+| **Langage** | C++17 | Kotlin 2.3+       |
+| **Plateforme** | Multiplateforme | JVM        |
+| **Performance** | Native | JVM optimisé      |
+| **GPU Backends** | Vulkan, Metal, OpenGL, D3D | À implémenter     |
 | **API** | C++/Java | Kotlin idiomatique |
-| **Intégration** | Complexe | Native Kotlin |
+| **Intégration** | Complexe | Native Kotlin     |
 
 ## 🚀 Roadmap
 
@@ -159,8 +159,6 @@ kanvas/
 - ✅ Analyse de la structure Skia
 - ✅ Création de l'architecture Kotlin
 - ✅ Implementation des structures de base
-- ❌ Résolution des problèmes de build
-- ❌ Implementation du rendu raster
 
 ### Phase 2: Rendu Complet
 - ❌ Algorithmes de remplissage
