@@ -1,5 +1,15 @@
 package testing.skia
 
+import com.kanvas.core.Canvas
+import com.kanvas.core.Paint
+import com.kanvas.core.PaintStyle
+import com.kanvas.core.Rect
+import com.kanvas.core.SK_Scalar1
+import com.kanvas.core.Size
+import com.kanvas.core.SkColorSetRGB
+import com.kanvas.core.SkIntToScalar
+import testing.DrawResult
+import testing.GM
 import com.kanvas.core.*
 import core.*
 import testing.GM

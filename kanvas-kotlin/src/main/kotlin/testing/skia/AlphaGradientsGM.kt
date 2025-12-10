@@ -1,10 +1,15 @@
 package testing.skia
 
-import com.kanvas.core.*
-import core.*
-import testing.GM
-import testing.DrawResult
+import com.kanvas.core.Canvas
+import com.kanvas.core.Color
+import com.kanvas.core.Paint
+import com.kanvas.core.PaintStyle
+import com.kanvas.core.Rect
 import com.kanvas.core.Size
+import com.kanvas.core.SkFixed
+import com.kanvas.core.SkFixedMul
+import testing.DrawResult
+import testing.GM
 
 /**
  * Port of Skia's alphagradients.cpp test
