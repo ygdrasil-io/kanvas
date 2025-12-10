@@ -17,7 +17,7 @@ These tests cover basic drawing operations that Kanvas should support first.
 6. ✅ `alphagradients.cpp` - Alpha gradients (AlphaGradientsGM.kt)
 7. ✅ `arcofzorro.cpp` - Arc drawing patterns (ArcOfZorroGM.kt)
 8. ✅ `arcto.cpp` - Arc-to path operations (ArcToGM.kt)
-9. ✅ `bigrect.cpp` - Large rectangle drawing (BigRectGM.kt)
+9. ✅ `bigrect.cpp` - Large rectangle drawing (BigRectGM.kt) - MOVED TO LEVEL 2
 10. ✅ `bitmaprect.cpp` - Bitmap rectangle drawing (BitmapRectGM.kt)
 11. ✅ `bleed.cpp` - Color bleeding tests (BleedGM.kt) - NEW
 12. ✅ `circle_sizes.cpp` - Circle drawing with different sizes (CircleSizesGM.kt)
@@ -199,16 +199,16 @@ This provides a comprehensive roadmap for implementing Skia DM tests in Kanvas, 
 ## 📊 Implementation Progress
 
 ### Level 1 Tests Status
-- **Total Tests**: 20
-- **Implemented**: 20 ✅
+- **Total Tests**: 19
+- **Implemented**: 19 ✅
 - **Remaining**: 0 ❌
 - **Progress**: 100%
 
 ### Level 2 Tests Status
 - **Total Tests**: 12
-- **Implemented**: 1 ✅
-- **Remaining**: 11 ❌
-- **Progress**: 8%
+- **Implemented**: 3 ✅
+- **Remaining**: 9 ❌
+- **Progress**: 25%
 
 ### Implemented Tests
 
@@ -236,6 +236,8 @@ This provides a comprehensive roadmap for implementing Skia DM tests in Kanvas, 
 
 #### Level 2 Tests
 - ✅ BeziersGM.kt (NEW) - Bézier curves test
+- ✅ BatchedConvexPathsGM.kt (NEW) - Batched convex paths test
+- ✅ BigRectGM.kt (NEW) - Big rectangle with clipping test
 
 ### APIs Added
 During this implementation phase, the following APIs were added:
@@ -249,6 +251,9 @@ During this implementation phase, the following APIs were added:
 7. **Line Drawing** - Added `drawLine()` method to Canvas class
 8. **Random Number Generation** - Added `SkRandom` class for generating random values
 9. **Bézier Curve Testing** - Added `BeziersGM` for testing quadratic and cubic Bézier curves
+10. **Batched Convex Paths** - Added `BatchedConvexPathsGM` for testing complex path transformations
+11. **Big Rectangle Clipping** - Added `BigRectGM` for testing large rectangle drawing with clipping
+12. **Complex Path Operations** - Added `ComplexPathsGM` for testing advanced path operations with gradients and transformations
 
 ### Next Steps
 1. Implement remaining Level 2 tests (intermediate features)
