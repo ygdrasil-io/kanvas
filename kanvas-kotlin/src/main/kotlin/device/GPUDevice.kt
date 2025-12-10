@@ -2,16 +2,20 @@ package device
 
 import com.kanvas.core.Arc
 import com.kanvas.core.Bitmap
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.ColorInfo
 import com.kanvas.core.Device
+import com.kanvas.core.DirectContext
 import com.kanvas.core.Matrix
 import com.kanvas.core.Paint
 import com.kanvas.core.Path
 import com.kanvas.core.RRect
+import com.kanvas.core.RecordingContext
 import com.kanvas.core.Rect
 import com.kanvas.core.SamplingOptions
 import com.kanvas.core.Shader
+import com.kanvas.core.Surface
 import com.kanvas.core.SurfaceProps
 import core.GlyphRunList
 
@@ -175,5 +179,35 @@ class GPUDevice(
     override fun drawPaint(paint: Paint) {
         // TODO: Implement GPU-accelerated paint drawing
         fallbackDevice.drawPaint(paint)
+    }
+
+    override fun draw(canvas: Canvas, paint: Paint?) {
+        // TODO: Implement GPU-accelerated canvas drawing
+        // For now, delegate to fallback device
+        fallbackDevice.draw(canvas, paint)
+    }
+
+    override fun getSurface(): Surface {
+        // TODO: Implement GPU surface handling
+        // For now, delegate to fallback device
+        return fallbackDevice.getSurface()
+    }
+
+    override fun getCanvas(): Canvas {
+        // TODO: Implement GPU canvas creation
+        // For now, delegate to fallback device
+        return fallbackDevice.getCanvas()
+    }
+
+    override fun getRecordingContext(): RecordingContext? {
+        // TODO: Implement actual GPU recording context
+        // For now, return a placeholder recording context
+        return RecordingContext()
+    }
+
+    override fun getDirectContext(): DirectContext? {
+        // TODO: Implement actual GPU direct context
+        // For now, return a placeholder direct context
+        return DirectContext()
     }
 }

@@ -4,6 +4,7 @@ import com.kanvas.core.AlphaType
 import com.kanvas.core.Arc
 import com.kanvas.core.Bitmap
 import com.kanvas.core.BitmapConfig
+import com.kanvas.core.Canvas
 import com.kanvas.core.Color
 import com.kanvas.core.ColorInfo
 import com.kanvas.core.ColorSpace
@@ -19,6 +20,7 @@ import com.kanvas.core.RRect
 import com.kanvas.core.Rect
 import com.kanvas.core.SamplingOptions
 import com.kanvas.core.Shader
+import com.kanvas.core.Surface
 import com.kanvas.core.SurfaceProps
 import core.GlyphPainter
 import core.GlyphRun
@@ -128,6 +130,34 @@ class BitmapDevice(
 
         // Rasterize using the paint color
         rasterizeRect(transformedClip, paint)
+    }
+
+    override fun draw(canvas: Canvas, paint: Paint?) {
+        // Get the source canvas's bitmap
+        val sourceBitmap = canvas.bitmap
+        
+        // If no paint is provided, draw the source bitmap directly
+        if (paint == null) {
+            // Draw the source bitmap directly without any paint effects
+            val srcRect = Rect(0f, 0f, sourceBitmap.getWidth().toFloat(), sourceBitmap.getHeight().toFloat())
+            val dstRect = Rect(0f, 0f, sourceBitmap.getWidth().toFloat(), sourceBitmap.getHeight().toFloat())
+            
+            // Create a temporary paint for direct drawing
+            val directPaint = Paint().apply {
+                style = PaintStyle.FILL
+                colorFilter = null // No color filtering
+                shader = null // No shader
+            }
+            
+            drawImage(sourceBitmap, srcRect, dstRect, directPaint)
+        } else {
+            // Apply the paint effects to the source bitmap
+            val srcRect = Rect(0f, 0f, sourceBitmap.getWidth().toFloat(), sourceBitmap.getHeight().toFloat())
+            val dstRect = Rect(0f, 0f, sourceBitmap.getWidth().toFloat(), sourceBitmap.getHeight().toFloat())
+            
+            // Use the provided paint which may include color filtering, shaders, etc.
+            drawImage(sourceBitmap, srcRect, dstRect, paint)
+        }
     }
 
     override fun drawPath(path: Path, paint: Paint) {
@@ -917,5 +947,15 @@ class BitmapDevice(
         // Apply device bounds to the new clip
         val deviceBounds = Rect(0f, 0f, width.toFloat(), height.toFloat())
         clipBounds = rect.intersect(deviceBounds)
+    }
+    
+    override fun getSurface(): Surface {
+        // Create a surface that wraps this device
+        return Surface(width, height, colorInfo, surfaceProps)
+    }
+
+    override fun getCanvas(): Canvas {
+        // Create a canvas that uses this device for rendering
+        return Canvas(this)
     }
 }
