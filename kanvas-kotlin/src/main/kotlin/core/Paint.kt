@@ -18,7 +18,7 @@ class Paint {
     
     // Text properties
     var textSize: Float = 12f
-    var typeface: Typeface? = null
+    var typeface: core.Typeface? = null
     var textAlign: TextAlign = TextAlign.LEFT
     var textEncoding: TextEncoding = TextEncoding.UTF8
     
@@ -69,10 +69,7 @@ class Paint {
      * Get the font for this paint, creating a default one if none is set.
      */
     fun getFont(): Font? {
-        if (typeface != null) {
-            return Font(typeface as core.Typeface, textSize)
-        }
-        return null
+        return typeface?.let { Font(it, textSize) }
     }
     
     override fun toString(): String {
@@ -159,13 +156,6 @@ enum class BlendMode {
     SATURATION,   // [Sa + Da - Sa*Da, set saturation of Sc to Dc]
     COLOR,        // [Sa + Da - Sa*Da, set color of Sc to Dc]
     LUMINOSITY    // [Sa + Da - Sa*Da, set luminosity of Sc to Dc]
-}
-
-/**
- * Typeface representation
- */
-class Typeface {
-    // TODO: Implement typeface loading and management
 }
 
 
