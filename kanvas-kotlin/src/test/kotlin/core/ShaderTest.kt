@@ -108,7 +108,7 @@ class ShaderTest {
         bitmap.setPixel(0, 1, Color.BLUE)
         bitmap.setPixel(1, 1, Color.WHITE)
         
-        val shader = Shaders.makeBitmapShader(bitmap)
+        val shader = Shaders.makeBitmapShader(bitmap, TileMode.REPEAT, TileMode.REPEAT)
         
         // Test pixel access
         assertEquals(Color.RED, shader.shade(0f, 0f))
@@ -119,6 +119,28 @@ class ShaderTest {
         // Test repeat mode
         assertEquals(Color.RED, shader.shade(2f, 0f)) // Should repeat
         assertEquals(Color.RED, shader.shade(4f, 2f)) // Should repeat
+    }
+    
+    @Test
+    fun testBitmapShaderDecalMode() {
+        // Create a simple 2x2 bitmap
+        val bitmap = Bitmap.create(2, 2)
+        bitmap.setPixel(0, 0, Color.RED)
+        bitmap.setPixel(1, 0, Color.GREEN)
+        bitmap.setPixel(0, 1, Color.BLUE)
+        bitmap.setPixel(1, 1, Color.WHITE)
+        
+        val shader = Shaders.makeBitmapShader(bitmap, TileMode.DECAL, TileMode.DECAL)
+        
+        // Test pixel access within bounds
+        assertEquals(Color.RED, shader.shade(0f, 0f))
+        assertEquals(Color.GREEN, shader.shade(1f, 0f))
+        assertEquals(Color.BLUE, shader.shade(0f, 1f))
+        assertEquals(Color.WHITE, shader.shade(1f, 1f))
+        
+        // Test DECAL mode - should clamp to edge colors
+        assertEquals(Color.GREEN, shader.shade(2f, 0f)) // Should clamp to last pixel in row
+        assertEquals(Color.WHITE, shader.shade(4f, 2f)) // Should clamp to last pixel
     }
 
     @Test
@@ -138,6 +160,10 @@ class ShaderTest {
         // Test MIRROR mode
         val mirrorShader = Shaders.makeLinearGradient(colors, null, start, end, TileMode.MIRROR)
         assertEquals(Color.BLUE, mirrorShader.shade(1f, 0f)) // Should mirror
+        
+        // Test DECAL mode
+        val decalShader = Shaders.makeLinearGradient(colors, null, start, end, TileMode.DECAL)
+        assertEquals(Color.BLUE, decalShader.shade(2f, 0f)) // Should be clamped to end like CLAMP
     }
 
     @Test
