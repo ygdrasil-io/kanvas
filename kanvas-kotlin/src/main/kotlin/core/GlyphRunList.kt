@@ -100,9 +100,14 @@ class GlyphRunList {
 
     /**
      * Check if this GlyphRunList has any RSXForm (rotated/scaled glyphs)
-     * For now, we return false since we don't support RSXForm yet
+     * Corresponds to sktext::GlyphRunList::hasRSXForm() in Skia
      */
     fun hasRSXForm(): Boolean {
+        for (glyphRun in glyphRuns) {
+            if (glyphRun.hasRSXForm()) {
+                return true
+            }
+        }
         return false
     }
 
