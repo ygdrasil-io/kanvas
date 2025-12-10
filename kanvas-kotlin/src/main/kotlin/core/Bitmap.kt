@@ -10,6 +10,19 @@ class Bitmap(private val width: Int, private val height: Int, private val config
     private val pixels: IntArray
     private val rowBytes: Int
     
+    // Color info for this bitmap
+    val colorInfo: ColorInfo = ColorInfo(
+        when (config) {
+            BitmapConfig.ALPHA_8 -> ColorType.ALPHA_8
+            BitmapConfig.RGB_565 -> ColorType.RGB_565
+            BitmapConfig.ARGB_4444 -> ColorType.ARGB_4444
+            BitmapConfig.ARGB_8888 -> ColorType.RGBA_8888
+            BitmapConfig.RGBA_F16 -> ColorType.RGBA_F16
+        },
+        AlphaType.PREMUL,
+        ColorSpace.SRGB
+    )
+    
     init {
         require(width > 0 && height > 0) { "Bitmap dimensions must be positive" }
         

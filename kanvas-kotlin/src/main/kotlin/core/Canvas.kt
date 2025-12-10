@@ -68,21 +68,21 @@ class Canvas(private val width: Int, private val height: Int) {
      */
     fun translate(dx: Float, dy: Float) {
         val currentMatrix = matrixStack.last()
-        currentMatrix.postTranslate(dx, dy)
+        matrixStack[matrixStack.size - 1] = currentMatrix.translate(dx, dy)
     }
     /**
      * Scales the canvas by the specified amounts
      */
     fun scale(sx: Float, sy: Float) {
         val currentMatrix = matrixStack.last()
-        currentMatrix.postScale(sx, sy)
+        matrixStack[matrixStack.size - 1] = currentMatrix.scale(sx, sy)
     }
     /**
      * Rotates the canvas by the specified degrees
      */
     fun rotate(degrees: Float) {
         val currentMatrix = matrixStack.last()
-        currentMatrix.postRotate(degrees)
+        matrixStack[matrixStack.size - 1] = currentMatrix.rotate(degrees, 0f, 0f)
     }
     /**
      * Sets the current paint to use for drawing operations
@@ -665,65 +665,3 @@ class Canvas(private val width: Int, private val height: Int) {
 /**
  * Represents a 3x3 transformation matrix
  */
-data class Matrix(
-    var scaleX: Float = 1f,
-    var skewX: Float = 0f,
-    var transX: Float = 0f,
-    var skewY: Float = 0f,
-    var scaleY: Float = 1f,
-    var transY: Float = 0f,
-    var persp0: Float = 0f,
-    var persp1: Float = 0f,
-    var persp2: Float = 1f
-) {
-    fun copy(): Matrix = Matrix(scaleX, skewX, transX, skewY, scaleY, transY, persp0, persp1, persp2)
-    fun postTranslate(dx: Float, dy: Float) {
-        transX += dx
-        transY += dy
-    }
-    fun postScale(sx: Float, sy: Float) {
-        scaleX *= sx
-        scaleY *= sy
-    }
-    fun postRotate(degrees: Float) {
-        val radians = Math.toRadians(degrees.toDouble()).toFloat()
-        val cos = kotlin.math.cos(radians)
-        val sin = kotlin.math.sin(radians)
-        
-        val newScaleX = scaleX * cos + skewY * sin
-        val newSkewY = -scaleX * sin + skewY * cos
-        val newSkewX = skewX * cos + scaleY * sin
-        val newScaleY = -skewX * sin + scaleY * cos
-        
-        scaleX = newScaleX
-        skewY = newSkewY
-        skewX = newSkewX
-        scaleY = newScaleY
-    }
-    fun mapRect(rect: Rect): Rect {
-        // Transform the four corners of the rectangle
-        val topLeft = transformPoint(rect.left, rect.top)
-        val topRight = transformPoint(rect.right, rect.top)
-        val bottomLeft = transformPoint(rect.left, rect.bottom)
-        val bottomRight = transformPoint(rect.right, rect.bottom)
-        
-        // Find the bounding box of the transformed rectangle
-        val minX = minOf(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x)
-        val maxX = maxOf(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x)
-        val minY = minOf(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y)
-        val maxY = maxOf(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y)
-        
-        return Rect(minX, minY, maxX, maxY)
-    }
-    /**
-     * Transforms a single point using this matrix
-     */
-    private fun transformPoint(x: Float, y: Float): Point {
-        val newX = x * scaleX + y * skewX + transX
-        val newY = x * skewY + y * scaleY + transY
-        return Point(newX, newY)
-    }
-    companion object {
-        fun identity(): Matrix = Matrix()
-    }
-}
