@@ -141,6 +141,90 @@ class ShaderTest {
     }
 
     @Test
+    fun testShaderActuallyUsedInDrawing() {
+        // Create a canvas with a gradient shader
+        val canvas = CanvasFactory.createRaster(100, 100)
+        
+        // Create a gradient that goes from red to blue horizontally
+        val colors = listOf(Color.RED, Color.BLUE)
+        val shader = Shaders.makeLinearGradient(
+            colors, 
+            null, 
+            Point(0f, 0f), 
+            Point(100f, 0f)
+        )
+        
+        canvas.setShader(shader)
+        
+        // Draw a rectangle that should show the gradient
+        val paint = Paint().apply {
+            style = PaintStyle.FILL
+        }
+        
+        canvas.drawRect(Rect(0f, 0f, 100f, 100f), paint)
+        
+        // Check that we actually have a gradient (left should be red, right should be blue)
+        val bitmap = canvas.bitmap
+        
+        // Left side should be mostly red
+        val leftColor = bitmap.getPixel(10, 50)
+        assertTrue(leftColor.red > 200, "Left side should be red, got $leftColor")
+        assertTrue(leftColor.blue < 100, "Left side should not be blue, got $leftColor")
+        
+        // Right side should be mostly blue
+        val rightColor = bitmap.getPixel(90, 50)
+        assertTrue(rightColor.blue > 200, "Right side should be blue, got $rightColor")
+        assertTrue(rightColor.red < 100, "Right side should not be red, got $rightColor")
+        
+        // Middle should be a mix (purple)
+        val middleColor = bitmap.getPixel(50, 50)
+        assertTrue(middleColor.red > 100, "Middle should have red component, got $middleColor")
+        assertTrue(middleColor.blue > 100, "Middle should have blue component, got $middleColor")
+    }
+
+    @Test
+    fun testRadialShaderActuallyUsedInDrawing() {
+        // Create a canvas with a radial gradient shader
+        val canvas = CanvasFactory.createRaster(100, 100)
+        
+        // Create a radial gradient that goes from red at center to blue at edges
+        val colors = listOf(Color.RED, Color.BLUE)
+        val shader = Shaders.makeRadialGradient(
+            colors, 
+            null, 
+            Point(50f, 50f), 
+            40f
+        )
+        
+        canvas.setShader(shader)
+        
+        // Draw a rectangle that should show the radial gradient
+        val paint = Paint().apply {
+            style = PaintStyle.FILL
+        }
+        
+        canvas.drawRect(Rect(0f, 0f, 100f, 100f), paint)
+        
+        // Check that we actually have a radial gradient
+        val bitmap = canvas.bitmap
+        
+        // Center should be mostly red
+        val centerColor = bitmap.getPixel(50, 50)
+        assertTrue(centerColor.red > 200, "Center should be red, got $centerColor")
+        assertTrue(centerColor.blue < 100, "Center should not be blue, got $centerColor")
+        
+        // Edge should be mostly blue
+        val edgeColor = bitmap.getPixel(90, 50)
+        assertTrue(edgeColor.blue > 200, "Edge should be blue, got $edgeColor")
+        assertTrue(edgeColor.red < 100, "Edge should not be red, got $edgeColor")
+        
+        // Middle distance should be a mix (purple)
+        val middleColor = bitmap.getPixel(70, 50)
+        assertTrue(middleColor.red > 100, "Middle distance should have red component, got $middleColor")
+        assertTrue(middleColor.blue > 100, "Middle distance should have blue component, got $middleColor")
+    }
+
+    @Test
     fun testShaderIntegrationWithCanvas() {
         val canvas = CanvasFactory.createRaster(100, 100)
         

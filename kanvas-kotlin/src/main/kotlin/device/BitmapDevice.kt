@@ -333,7 +333,13 @@ class BitmapDevice(
             PaintStyle.FILL -> {
                 for (y in top until bottom) {
                     for (x in left until right) {
-                        bitmap.setPixel(x, y, paint.color)
+                        // Apply shader if available, otherwise use paint color
+                        val color = if (currentShader != null) {
+                            applyShader(paint.color, x.toFloat(), y.toFloat())
+                        } else {
+                            paint.color
+                        }
+                        bitmap.setPixel(x, y, color)
                     }
                 }
             }
@@ -341,19 +347,47 @@ class BitmapDevice(
                 // Simple stroke: draw border pixels
                 // Top border
                 for (x in left until right) {
-                    if (top >= 0 && top < bitmap.getHeight()) bitmap.setPixel(x, top, paint.color)
+                    if (top >= 0 && top < bitmap.getHeight()) {
+                        val color = if (currentShader != null) {
+                            applyShader(paint.color, x.toFloat(), top.toFloat())
+                        } else {
+                            paint.color
+                        }
+                        bitmap.setPixel(x, top, color)
+                    }
                 }
                 // Bottom border
                 for (x in left until right) {
-                    if (bottom - 1 >= 0 && bottom - 1 < bitmap.getHeight()) bitmap.setPixel(x, bottom - 1, paint.color)
+                    if (bottom - 1 >= 0 && bottom - 1 < bitmap.getHeight()) {
+                        val color = if (currentShader != null) {
+                            applyShader(paint.color, x.toFloat(), (bottom - 1).toFloat())
+                        } else {
+                            paint.color
+                        }
+                        bitmap.setPixel(x, bottom - 1, color)
+                    }
                 }
                 // Left border
                 for (y in top until bottom) {
-                    if (left >= 0 && left < bitmap.getWidth()) bitmap.setPixel(left, y, paint.color)
+                    if (left >= 0 && left < bitmap.getWidth()) {
+                        val color = if (currentShader != null) {
+                            applyShader(paint.color, left.toFloat(), y.toFloat())
+                        } else {
+                            paint.color
+                        }
+                        bitmap.setPixel(left, y, color)
+                    }
                 }
                 // Right border
                 for (y in top until bottom) {
-                    if (right - 1 >= 0 && right - 1 < bitmap.getWidth()) bitmap.setPixel(right - 1, y, paint.color)
+                    if (right - 1 >= 0 && right - 1 < bitmap.getWidth()) {
+                        val color = if (currentShader != null) {
+                            applyShader(paint.color, (right - 1).toFloat(), y.toFloat())
+                        } else {
+                            paint.color
+                        }
+                        bitmap.setPixel(right - 1, y, color)
+                    }
                 }
             }
             PaintStyle.FILL_AND_STROKE -> {
@@ -378,7 +412,13 @@ class BitmapDevice(
 
                 for (y in top..bottom) {
                     for (x in left..right) {
-                        bitmap.setPixel(x, y, paint.color)
+                        // Apply shader if available, otherwise use paint color
+                        val color = if (currentShader != null) {
+                            applyShader(paint.color, x.toFloat(), y.toFloat())
+                        } else {
+                            paint.color
+                        }
+                        bitmap.setPixel(x, y, color)
                     }
                 }
             }
@@ -424,7 +464,12 @@ class BitmapDevice(
                 val srcColor = image.getPixel(sx, sy)
 
                 // Apply paint color filter if any
-                val finalColor = paint.colorFilter?.apply(srcColor) ?: srcColor
+                var finalColor = paint.colorFilter?.apply(srcColor) ?: srcColor
+
+                // Apply shader if available (shaders can modify image colors)
+                if (currentShader != null) {
+                    finalColor = applyShader(finalColor, (dstLeft + dx).toFloat(), (dstTop + dy).toFloat())
+                }
 
                 // Set destination pixel
                 val dstX = dstLeft + dx
