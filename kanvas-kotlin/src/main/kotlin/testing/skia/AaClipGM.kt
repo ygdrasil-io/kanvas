@@ -112,11 +112,8 @@ class AaClipGM : GM() {
         canvas.clipRect(target, true) // Added anti-aliasing parameter like C++
         
         // Draw blue foreground (4px inset from target) - EXACT C++ logic
-        // We need to create a new rectangle for the blue draw to avoid modifying the clip target
-        val blueRect = target.copy().apply {
-            inset(SkIntToScalar(-4), SkIntToScalar(-4)) // SkIntToScalar(-4)
-        }
-        canvas.drawRect(blueRect, foregroundPaint)
+        target.inset(SkIntToScalar(-4), SkIntToScalar(-4)) // SkIntToScalar(-4)
+        canvas.drawRect(target, foregroundPaint)
         
         canvas.restore()
     }
