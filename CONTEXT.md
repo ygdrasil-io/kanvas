@@ -135,12 +135,185 @@ kanvas/
 - [ ] Rendu de texte avec gestion des polices
 - [ ] Support international (Unicode, RTL)
 - [ ] Mise en forme avancée
+- [ ] Gestion des polices variables (OpenType)
+- [ ] Texte le long de chemins courbes
+- [ ] Effets de texte (ombres, contours, dégradés)
 
 ### Performance
 - [ ] Rendu optimisé pour la JVM
 - [ ] Support multi-thread
 - [ ] Gestion intelligente de la mémoire
 - [ ] Caching des ressources
+
+## 📚 Architecture de Gestion du Texte dans Skia
+
+### Structure de Base
+
+Skia utilise une architecture sophistiquée pour le rendu de texte qui peut être divisée en plusieurs composants clés :
+
+#### 1. Classes Principales
+
+- **SkFont** : Classe principale définissant les propriétés de rendu du texte
+  - Taille, échelle, inclinaison
+  - Anti-aliasing et hinting
+  - Conversion texte → glyphes
+
+- **SkTypeface** : Représente la famille de police et le style
+  - Gestion des polices système
+  - Support multi-plateforme (FreeType, Core Text, DirectWrite)
+
+- **SkTextBlob** : Conteneur pour le texte et les informations de positionnement
+  - Optimisé pour les performances
+  - Support des transformations complexes
+
+- **SkGlyphRun** : Séquence de glyphes avec leurs positions
+  - Gestion des rotations et transformations
+  - Organisation efficace du rendu
+
+#### 2. Processus de Rendu de Texte
+
+Le rendu de texte dans Skia suit un pipeline bien défini :
+
+```mermaid
+graph TD
+    A[Texte d'entrée] --> B[Conversion en glyphes]
+    B --> C[Création de GlyphRuns]
+    C --> D[Sélection de la méthode de rendu]
+    D --> E1[Dessin comme chemins]
+    D --> E2[Dessin comme masques]
+    D --> E3[Dessin comme bitmaps]
+    D --> E4[Dessin comme drawables]
+    E1 --> F[Application au canvas]
+    E2 --> F
+    E3 --> F
+    E4 --> F
+```
+
+### Méthodes de Rendu
+
+Skia utilise plusieurs stratégies pour dessiner les glyphes, choisies dynamiquement en fonction des paramètres :
+
+#### 1. Dessin comme Chemins (Paths)
+- Utilisé pour les textes de grande taille ou avec transformations complexes
+- Les glyphes sont convertis en chemins vectoriels (`SkPath`)
+- Permet un rendu précis mais plus lent
+- Géré par `SkStrikeSpec::ShouldDrawAsPath()`
+
+#### 2. Dessin comme Masques
+- Méthode la plus courante pour le texte normal
+- Les glyphes sont rendus comme des masques alpha
+- Utilise `SkBlitter` pour une application optimisée
+- Support de l'anti-aliasing et du sous-pixel rendering
+
+#### 3. Dessin comme Bitmaps
+- Pour les glyphes mis en cache
+- Utilise `drawBitmap()` avec transformations matricielles
+- Optimisé pour les performances
+
+#### 4. Dessin comme Drawables
+- Pour les glyphes complexes (emoji, icônes)
+- Utilise `SkDrawable` pour un rendu avancé
+
+### Architecture de Rendu Détaillée
+
+#### SkFont
+```kotlin
+class SkFont {
+    val typeface: SkTypeface
+    var size: Float
+    var scaleX: Float
+    var skewX: Float
+    var hinting: SkFontHinting
+    var edging: Edging
+    
+    fun textToGlyphs(text: String): List<SkGlyphID>
+    fun measureText(text: String): Float
+    fun hasSomeAntiAliasing(): Boolean
+}
+```
+
+#### GlyphRunListPainter
+- Classe principale pour dessiner les GlyphRuns
+- Détermine la meilleure méthode de rendu pour chaque glyphe
+- Gère le cache des glyphes via `SkStrike`
+- Applique les transformations matricielles
+
+#### SkStrike et Mise en Cache
+- `SkStrike` représente une police à une taille et style spécifiques
+- Met en cache les représentations des glyphes
+- Utilise `SkStrikeSpec` pour identifier de manière unique une configuration
+
+#### SkBlitter pour l'Application de Masques
+- Classe optimisée pour appliquer des masques
+- Gère différents modes de fusion et formats de pixels
+- Implémentations spécifiques au CPU pour les performances
+
+### Flux de Rendu Typique
+
+1. **Conversion du texte** :
+   ```cpp
+   // Conversion du texte en GlyphRunList
+   auto glyphRunList = blobToGlyphRunList(textBlob, position);
+   ```
+
+2. **Sélection de la méthode** :
+   ```cpp
+   if (SkStrikeSpec::ShouldDrawAsPath(paint, font, matrix)) {
+       // Dessiner comme chemins
+   } else {
+       // Dessiner comme masques ou bitmaps
+   }
+   ```
+
+3. **Rendu des masques** :
+   ```cpp
+   SkMask mask = glyph->mask(position);
+   blitter->blitMask(mask, bounds);
+   ```
+
+### Optimisations Clés
+
+- **Mise en cache agressive** : Glyphes mis en cache à différentes tailles
+- **Sélection intelligente** : Choix automatique entre masques, chemins et bitmaps
+- **Sous-pixels** : Rendu LCD de haute qualité
+- **Anti-aliasing** : Plusieurs niveaux de qualité
+- **Polices variables** : Support OpenType Variable Fonts
+
+### Support Multi-Plateforme
+
+Skia utilise différentes implémentations de `SkTypeface` :
+- **FreeType** : Linux/Android
+- **Core Text** : macOS/iOS  
+- **DirectWrite** : Windows
+- **Fontations** : Nouveau moteur Rust
+
+### Exemple de Code
+
+```kotlin
+// Création d'une police
+val font = Font(Typeface.makeFromFile("Arial.ttf"), 24.0f)
+
+// Création d'un blob de texte
+val blob = TextBlob.Builder().apply {
+    val run = allocRun(font, "Hello")
+    // Configuration des glyphes...
+}.build()
+
+// Dessin sur le canvas
+canvas.drawTextBlob(blob, 100f, 100f, Paint().apply {
+    color = Color.BLACK
+    isAntiAlias = true
+})
+```
+
+### Fonctionnalités Avancées
+
+- **Texte avec transformations** : Rotations, mises à l'échelle, perspectives
+- **Texte le long de chemins** : Support pour le texte sur courbes
+- **Effets de texte** : Ombre, contour, dégradés via shaders
+- **Internationalisation** : Unicode complet, texte bidirectionnel
+
+Cette architecture permet à Skia de fournir un rendu de texte haute performance et de haute qualité sur toutes les plateformes, tout en maintenant une API cohérente et flexible.
 
 ## 📊 Comparaison Skia vs Kanvas
 
