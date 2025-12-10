@@ -165,6 +165,15 @@ class Canvas(private val device: Device) {
      */
     fun getClipBounds(): Rect = clipStack.last().copy()
     
+    // Shader support
+    fun setShader(shader: Shader?) {
+        device.setShader(shader)
+    }
+    
+    fun getShader(): Shader? {
+        return device.getShader()
+    }
+    
     // ===== Drawing Methods =====
     
     /**
