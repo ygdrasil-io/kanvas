@@ -1,16 +1,30 @@
-package com.kanvas.core
+package device
+
+import com.kanvas.core.AlphaType
+import com.kanvas.core.Bitmap
+import com.kanvas.core.BitmapConfig
+import com.kanvas.core.Color
+import com.kanvas.core.ColorInfo
+import com.kanvas.core.ColorSpace
+import com.kanvas.core.ColorType
+import com.kanvas.core.Device
+import com.kanvas.core.Matrix
+import com.kanvas.core.Paint
+import com.kanvas.core.PaintStyle
+import com.kanvas.core.Path
+import com.kanvas.core.Rect
 
 /**
  * Base device implementation for CPU rasterization
  * Inspired by Skia's SkBaseDevice and SkRasterDevice
  */
-class RasterDevice(
+class BitmapDevice(
     override val width: Int,
     override val height: Int,
     override val colorInfo: ColorInfo = ColorInfo(
         ColorType.RGBA_8888,
         AlphaType.PREMUL,
-        ColorSpace.SRGB
+        ColorSpace.Companion.SRGB
     )
 ) : Device {
 
@@ -18,7 +32,7 @@ class RasterDevice(
     override val bitmap: Bitmap = Bitmap(width, height, BitmapConfig.ARGB_8888)
 
     // Current transform matrix
-    private var currentMatrix: Matrix = Matrix.identity()
+    private var currentMatrix: Matrix = Matrix.Companion.identity()
 
     // Current clip bounds
     private var clipBounds: Rect = Rect(0f, 0f, width.toFloat(), height.toFloat())
@@ -28,7 +42,7 @@ class RasterDevice(
 
     init {
         // Initialize with transparent background
-        clear(Color.TRANSPARENT)
+        clear(Color.Companion.TRANSPARENT)
     }
 
     override fun drawRect(rect: Rect, paint: Paint) {
