@@ -41,9 +41,9 @@
 ✅ `attributes.cpp` - Path attributes
 ✅ `aarecteffect.cpp` - Rectangle effects
 ✅ `analytic_gradients.cpp` - Analytic gradient calculations
+✅ `bicubic.cpp` - Bicubic interpolation
 
 ❌ `3d.cpp` - 3D transformations
-❌ `bicubic.cpp` - Bicubic interpolation
 ❌ `bitmapfilters.cpp` - Bitmap filtering
 ❌ `bitmapimage.cpp` - Bitmap image handling
 
