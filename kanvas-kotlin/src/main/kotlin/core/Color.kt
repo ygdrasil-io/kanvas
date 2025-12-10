@@ -1,4 +1,4 @@
-package core
+package com.kanvas.core
 
 /**
  * Represents a color in RGBA format

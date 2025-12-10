@@ -1,8 +1,6 @@
 package com.kanvas.core
 
-import kotlin.math.abs
 import kotlin.math.sqrt
-import core.*
 
 /**
  * Extension function to convert Float to SkScalar
