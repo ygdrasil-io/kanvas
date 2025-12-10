@@ -14,6 +14,7 @@ import com.kanvas.core.PaintStyle
 import com.kanvas.core.Path
 import com.kanvas.core.Rect
 import com.kanvas.core.Shader
+import com.kanvas.core.SurfaceProps
 
 /**
  * Base device implementation for CPU rasterization
@@ -26,7 +27,8 @@ class BitmapDevice(
         ColorType.RGBA_8888,
         AlphaType.PREMUL,
         ColorSpace.Companion.SRGB
-    )
+    ),
+    override val surfaceProps: SurfaceProps = SurfaceProps.default()
 ) : Device {
 
     // Internal bitmap that holds the pixel data
@@ -37,6 +39,9 @@ class BitmapDevice(
 
     // Current clip bounds
     private var clipBounds: Rect = Rect(0f, 0f, width.toFloat(), height.toFloat())
+
+    // Clip stack for save/restore operations
+    private val clipStack: MutableList<Rect> = mutableListOf()
 
     // Current paint properties
     private var currentPaint: Paint? = null
@@ -137,6 +142,123 @@ class BitmapDevice(
      */
     fun setClipBounds(bounds: Rect) {
         clipBounds = bounds.intersect(Rect(0f, 0f, width.toFloat(), height.toFloat()))
+    }
+
+    // ===== Clip Stack Methods =====
+
+    override fun saveClipStack(): Int {
+        // Save current clip bounds to stack
+        clipStack.add(clipBounds.copy())
+        return clipStack.size
+    }
+
+    override fun restoreClipStack(): Int {
+        if (clipStack.isEmpty()) {
+            throw IllegalStateException("Clip stack is empty, cannot restore")
+        }
+        // Restore the most recent clip bounds
+        clipBounds = clipStack.removeAt(clipStack.size - 1)
+        return clipStack.size
+    }
+
+    override fun getClipStackDepth(): Int {
+        return clipStack.size
+    }
+
+    override fun clipRect(rect: Rect, clipOp: Device.ClipOp, doAntiAlias: Boolean) {
+        val deviceBounds = Rect(0f, 0f, width.toFloat(), height.toFloat())
+        val clippedRect = rect.intersect(deviceBounds)
+        
+        when (clipOp) {
+            Device.ClipOp.INTERSECT -> {
+                // Intersect with current clip
+                clipBounds = clipBounds.intersect(clippedRect)
+            }
+            Device.ClipOp.DIFFERENCE -> {
+                // Set difference: current clip minus the parameter
+                // This is a simplified implementation
+                val difference = mutableListOf<Rect>()
+                
+                // Check if there's any area left after removing the clippedRect
+                if (!clipBounds.intersects(clippedRect)) {
+                    // No intersection, keep current clip
+                    return
+                }
+                
+                // For simplicity, we'll handle simple cases
+                // In a full implementation, this would be more complex
+                if (clippedRect.contains(clipBounds)) {
+                    // clippedRect completely contains current clip, result is empty
+                    clipBounds = Rect(0f, 0f, 0f, 0f)
+                } else {
+                    // Partial overlap - keep the non-overlapping parts
+                    // This is simplified - real implementation would handle multiple regions
+                    val newClip = clipBounds.copy()
+                    
+                    // Remove left part if clippedRect starts inside
+                    if (clippedRect.left > clipBounds.left) {
+                        newClip.right = clippedRect.left
+                    }
+                    
+                    // Remove right part if clippedRect ends inside  
+                    if (clippedRect.right < clipBounds.right) {
+                        newClip.left = clippedRect.right
+                        newClip.right = clipBounds.right
+                    }
+                    
+                    // Remove top part if clippedRect starts below
+                    if (clippedRect.top > clipBounds.top) {
+                        newClip.bottom = clippedRect.top
+                    }
+                    
+                    // Remove bottom part if clippedRect ends above
+                    if (clippedRect.bottom < clipBounds.bottom) {
+                        newClip.top = clippedRect.bottom
+                        newClip.bottom = clipBounds.bottom
+                    }
+                    
+                    clipBounds = newClip
+                }
+            }
+        }
+    }
+
+    override fun clipPath(path: Path, clipOp: Device.ClipOp, doAntiAlias: Boolean) {
+        // Simplified path clipping - use path bounds
+        val pathBounds = path.getBounds()
+        val deviceBounds = Rect(0f, 0f, width.toFloat(), height.toFloat())
+        val clippedBounds = pathBounds.intersect(deviceBounds)
+        
+        when (clipOp) {
+            Device.ClipOp.INTERSECT -> {
+                // Intersect with current clip using path bounds
+                clipBounds = clipBounds.intersect(clippedBounds)
+            }
+            Device.ClipOp.DIFFERENCE -> {
+                // Set difference using path bounds (simplified)
+                if (clippedBounds.contains(clipBounds)) {
+                    clipBounds = Rect(0f, 0f, 0f, 0f)
+                } else if (clipBounds.intersects(clippedBounds)) {
+                    // Simplified: keep parts of current clip not overlapped by path
+                    val newClip = clipBounds.copy()
+                    
+                    if (clippedBounds.left > clipBounds.left) {
+                        newClip.right = clippedBounds.left
+                    }
+                    if (clippedBounds.right < clipBounds.right) {
+                        newClip.left = clippedBounds.right
+                    }
+                    if (clippedBounds.top > clipBounds.top) {
+                        newClip.bottom = clippedBounds.top
+                    }
+                    if (clippedBounds.bottom < clipBounds.bottom) {
+                        newClip.top = clippedBounds.bottom
+                    }
+                    
+                    clipBounds = newClip
+                }
+            }
+        }
     }
 
     /**
