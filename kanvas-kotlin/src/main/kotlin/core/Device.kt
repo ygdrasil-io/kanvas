@@ -189,6 +189,55 @@ interface Device {
         DIFFERENCE,  // Replace clip with the set difference of the current clip and the parameter
         INTERSECT    // Replace clip with the intersection of the current clip and the parameter
     }
+
+    /**
+     * Write pixels from a source bitmap to this device at the specified position
+     * Returns true if the operation was successful
+     */
+    fun writePixels(src: Bitmap, x: Int, y: Int): Boolean
+
+    /**
+     * Read pixels from this device into a destination bitmap at the specified position
+     * Returns true if the operation was successful
+     */
+    fun readPixels(dst: Bitmap, x: Int, y: Int): Boolean
+
+    /**
+     * Get direct access to the pixel data of this device
+     * Returns the underlying bitmap that contains the pixel data
+     */
+    fun accessPixels(): Bitmap
+
+    /**
+     * Get read-only access to the pixel data of this device
+     * Returns the underlying bitmap for read-only access
+     */
+    fun peekPixels(): Bitmap
+
+    /**
+     * Replace the current clip with a new rectangular clip
+     */
+    fun replaceClip(rect: Rect)
+
+    /**
+     * Draw an oval within the specified rectangle
+     */
+    fun drawOval(oval: Rect, paint: Paint)
+
+    /**
+     * Draw an arc (portion of an oval)
+     */
+    fun drawArc(arc: Arc, paint: Paint)
+
+    /**
+     * Draw a rounded rectangle
+     */
+    fun drawRRect(rrect: RRect, paint: Paint)
+
+    /**
+     * Draw a paint (fill the entire clip region)
+     */
+    fun drawPaint(paint: Paint)
 }
 
 /**
