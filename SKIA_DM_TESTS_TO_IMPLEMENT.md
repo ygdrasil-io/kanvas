@@ -37,11 +37,11 @@
 ✅ `bigmatrix.cpp` - Large transformation matrices
 ✅ `bitmapcopy.cpp` - Bitmap copying between configurations
 ✅ `all_bitmap_configs.cpp` - All bitmap configurations
+✅ `arithmode.cpp` - Arithmetic blend modes
 
 ❌ `3d.cpp` - 3D transformations
 ❌ `aarecteffect.cpp` - Rectangle effects
 ❌ `analytic_gradients.cpp` - Analytic gradient calculations
-❌ `arithmode.cpp` - Arithmetic blend modes
 ❌ `attributes.cpp` - Path attributes
 ❌ `bicubic.cpp` - Bicubic interpolation
 ❌ `bitmapfilters.cpp` - Bitmap filtering
