@@ -181,6 +181,15 @@ interface Device {
      * Get the current depth of the clip stack
      */
     fun getClipStackDepth(): Int
+    
+    /**
+     * Get the surface associated with this device
+     * This is a convenience method to access the surface that this device is rendering to
+     */
+    fun getSurface(): Surface {
+        // Create a surface that wraps this device
+        return Surface(width, height, colorInfo, surfaceProps)
+    }
 
     /**
      * Clip the current clip region with a rectangle
@@ -251,6 +260,76 @@ interface Device {
 }
 
 /**
+ * Surface class inspired by Skia's SkSurface
+ * Represents a drawing surface that can be rendered to
+ */
+class Surface(
+    val width: Int,
+    val height: Int,
+    val colorInfo: ColorInfo,
+    val surfaceProps: SurfaceProps
+) {
+    private val device: Device
+    
+    init {
+        // Create a device for this surface
+        device = BitmapDevice(width, height, colorInfo, surfaceProps)
+    }
+    
+    /**
+     * Get the device associated with this surface
+     */
+    fun getDevice(): Device {
+        return device
+    }
+    
+    /**
+     * Get a canvas for drawing on this surface
+     */
+    fun getCanvas(): Canvas {
+        // Create a canvas that draws to this surface's device
+        return Canvas(device)
+    }
+    
+    /**
+     * Flush any pending operations
+     */
+    fun flush() {
+        device.flush()
+    }
+    
+    /**
+     * Get the image info for this surface
+     */
+    fun imageInfo(): ColorInfo {
+        return colorInfo
+    }
+    
+
+    
+    /**
+     * Write pixels to this surface
+     */
+    fun writePixels(src: Bitmap, x: Int, y: Int): Boolean {
+        return device.writePixels(src, x, y)
+    }
+    
+    /**
+     * Read pixels from this surface
+     */
+    fun readPixels(dst: Bitmap, x: Int, y: Int): Boolean {
+        return device.readPixels(dst, x, y)
+    }
+    
+    /**
+     * Get the bitmap associated with this surface
+     */
+    fun getBitmap(): Bitmap {
+        return device.bitmap
+    }
+}
+
+/**
  * Device factory methods, similar to Skia's device creation
  */
 object Devices {
@@ -290,6 +369,51 @@ object Devices {
         ColorSpace.SRGB
     ), surfaceProps: SurfaceProps = SurfaceProps.default()): Device {
         return GPUDevice(width, height, colorInfo, surfaceProps)
+    }
+}
+
+/**
+ * Surface factory methods, similar to Skia's surface creation
+ */
+object Surfaces {
+    
+    /**
+     * Create a raster surface for CPU rendering
+     */
+    fun makeRaster(width: Int, height: Int, colorInfo: ColorInfo = ColorInfo(
+        ColorType.RGBA_8888,
+        AlphaType.PREMUL,
+        ColorSpace.SRGB
+    ), surfaceProps: SurfaceProps = SurfaceProps.default()): Surface {
+        return Surface(width, height, colorInfo, surfaceProps)
+    }
+    
+    /**
+     * Create a surface from an existing bitmap
+     */
+    fun makeFromBitmap(bitmap: Bitmap, surfaceProps: SurfaceProps = SurfaceProps.default()): Surface {
+        return Surface(bitmap.getWidth(), bitmap.getHeight(), bitmap.colorInfo, surfaceProps).apply {
+            // Copy existing bitmap content to the surface's device
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    getDevice().bitmap.setPixel(x, y, bitmap.getPixel(x, y))
+                }
+            }
+        }
+    }
+    
+    /**
+     * Create a GPU surface (currently falls back to CPU rendering)
+     * This is a placeholder for future GPU rendering implementation
+     */
+    fun makeGPU(width: Int, height: Int, colorInfo: ColorInfo = ColorInfo(
+        ColorType.RGBA_8888,
+        AlphaType.PREMUL,
+        ColorSpace.SRGB
+    ), surfaceProps: SurfaceProps = SurfaceProps.default()): Surface {
+        // For now, fall back to CPU rendering
+        // TODO: Implement actual GPU surface once GPU rendering is available
+        return Surface(width, height, colorInfo, surfaceProps)
     }
 }
 
