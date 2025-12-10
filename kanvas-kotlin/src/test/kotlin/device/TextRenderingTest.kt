@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 
 /**
@@ -153,7 +152,6 @@ class TextRenderingTest {
     }
     
     @Test
-    @Disabled("Clipping not fully implemented yet")
     fun `test text rendering with clipping`() {
         // Set a small clip region
         device.setClipBounds(Rect(50f, 20f, 150f, 80f))

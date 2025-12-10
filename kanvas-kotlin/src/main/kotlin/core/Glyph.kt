@@ -111,21 +111,65 @@ data class Glyph(
 }
 
 /**
+ * RSXForm représente une transformation de mise à l'échelle et de rotation pour un glyphe.
+ * Correspond à SkRSXform dans Skia.
+ * 
+ * RSXForm = Rotated Scale Transform (transformation d'échelle et de rotation)
+ * C'est une combinaison de mise à l'échelle et de rotation sans cisaillement.
+ * 
+ * @property scaleX Facteur d'échelle horizontal
+ * @property scaleY Facteur d'échelle vertical
+ * @property rotation Rotation en radians
+ * @property tx Translation horizontale
+ * @property ty Translation verticale
+ */
+data class RSXForm(
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val rotation: Float = 0f,  // en radians
+    val tx: Float = 0f,
+    val ty: Float = 0f
+) {
+    companion object {
+        val IDENTITY: RSXForm = RSXForm(1f, 1f, 0f, 0f)
+        
+        /**
+         * Crée un RSXForm à partir d'une mise à l'échelle uniforme et d'une rotation
+         */
+        fun fromScaleRotation(scale: Float, rotation: Float): RSXForm {
+            return RSXForm(scale, scale, rotation, 0f, 0f)
+        }
+    }
+    
+    /**
+     * Vérifie si ce RSXForm est une identité (pas de transformation)
+     */
+    fun isIdentity(): Boolean {
+        return scaleX == 1f && scaleY == 1f && rotation == 0f && tx == 0f && ty == 0f
+    }
+}
+
+/**
  * Classe représentant une séquence de glyphes avec leurs positions.
  * Correspond partiellement à SkGlyphRun dans Skia.
  * 
  * @property font La police utilisée pour ces glyphes
  * @property positions Les positions des glyphes
  * @property glyphs Les glyphes eux-mêmes
+ * @property rsxforms Les transformations RSXForm pour chaque glyphe (optionnel)
  */
 data class GlyphRun(
     val font: Font,
     val positions: List<Point>,
-    val glyphs: List<Glyph>
+    val glyphs: List<Glyph>,
+    val rsxforms: List<RSXForm> = emptyList()
 ) {
     init {
         require(positions.size == glyphs.size) {
             "Positions and glyphs must have the same size"
+        }
+        require(rsxforms.isEmpty() || rsxforms.size == glyphs.size) {
+            "RSXForms must either be empty or have the same size as glyphs"
         }
     }
     
@@ -139,6 +183,29 @@ data class GlyphRun(
      */
     fun getGlyphPosition(index: Int): Pair<Glyph, Point> {
         return Pair(glyphs[index], positions[index])
+    }
+    
+    /**
+     * Retourne la paire (glyphe, position, rsxform) à l'index donné
+     */
+    fun getGlyphPositionRSXForm(index: Int): Triple<Glyph, Point, RSXForm> {
+        return Triple(glyphs[index], positions[index], 
+                     if (rsxforms.isNotEmpty()) rsxforms[index] else RSXForm.IDENTITY)
+    }
+    
+    /**
+     * Vérifie si ce GlyphRun contient des RSXForms (transformations non-identité)
+     * Correspond à la méthode hasRSXForm() dans Skia
+     */
+    fun hasRSXForm(): Boolean {
+        if (rsxforms.isEmpty()) return false
+        
+        for (rsxform in rsxforms) {
+            if (!rsxform.isIdentity()) {
+                return true
+            }
+        }
+        return false
     }
     
     /**

@@ -58,7 +58,7 @@ class BitmapDevice(
     private var currentShader: Shader? = null
     
     // Glyph painter for text rendering
-    private val glyphPainter: GlyphPainter = GlyphPainter.create()
+    private val glyphPainter: GlyphPainter = GlyphPainter()
 
     init {
         // Initialize with transparent background
@@ -173,6 +173,56 @@ class BitmapDevice(
     }
 
     /**
+     * Handle glyph runs with RSXForm by simplifying and redrawing.
+     * Inspired by Skia's simplifyGlyphRunRSXFormAndRedraw method.
+     * 
+     * For now, this converts RSXForm glyphs to path-based rendering.
+     * In the future, this could be optimized with proper RSXForm support.
+     */
+    private fun simplifyGlyphRunRSXFormAndRedraw(glyphRunList: GlyphRunList, paint: Paint) {
+        // Create a temporary paint that forces path-based rendering
+        val tempPaint = paint.copy()
+        // Note: We don't actually modify the paint here since our GlyphPainter
+        // already handles complex transforms by using path-based rendering
+        
+        // Draw each glyph run with RSXForm handling
+        for (glyphRun in glyphRunList) {
+            if (glyphRun.hasRSXForm()) {
+                // Use path-based rendering for glyphs with RSXForm
+                drawGlyphRunWithRSXForm(glyphRun, tempPaint)
+            } else {
+                // Regular rendering for glyphs without RSXForm
+                drawGlyphRun(glyphRun, tempPaint)
+            }
+        }
+    }
+
+    /**
+     * Draw a glyph run that contains RSXForm transformations.
+     * This uses path-based rendering to handle the complex transformations.
+     */
+    private fun drawGlyphRunWithRSXForm(glyphRun: GlyphRun, paint: Paint) {
+        // Apply clip to the glyph run bounds
+        val glyphBounds = glyphRun.getBounds()
+        val clippedBounds = SimpleRect(
+            kotlin.math.max(glyphBounds.left, clipBounds.left),
+            kotlin.math.max(glyphBounds.top, clipBounds.top),
+            kotlin.math.min(glyphBounds.right, clipBounds.right),
+            kotlin.math.min(glyphBounds.bottom, clipBounds.bottom)
+        )
+        
+        // If the glyph run is completely outside the clip, skip rendering
+        if (clippedBounds.isEmpty) return
+        
+        // Apply transform to the glyph run
+        val transformedGlyphRun = applyTransformToGlyphRun(glyphRun)
+        
+        // Use the GlyphPainter to render the glyph run with RSXForm support
+        // The GlyphPainter should detect the complex transforms and use path-based rendering
+        glyphPainter.drawGlyphRun(this, transformedGlyphRun, paint)
+    }
+
+    /**
      * Draw a list of glyph runs on this device.
      * This is the core text rendering method that handles multiple glyph runs efficiently.
      * Inspired by Skia's onDrawGlyphRunList method.
@@ -193,9 +243,16 @@ class BitmapDevice(
         // If the glyph run list is completely outside the clip, skip rendering
         if (clippedBounds.isEmpty) return
         
-        // Draw each glyph run in the list
-        for (glyphRun in glyphRunList) {
-            drawGlyphRun(glyphRun, paint)
+        // Check for RSXForm (rotated/scaled glyphs) - similar to Skia's approach
+        if (glyphRunList.hasRSXForm()) {
+            // RSXForm handling: For now, we simplify by converting to paths
+            // In the future, this could be optimized with proper RSXForm support
+            simplifyGlyphRunRSXFormAndRedraw(glyphRunList, paint)
+        } else {
+            // Regular glyph run rendering (no RSXForm)
+            for (glyphRun in glyphRunList) {
+                drawGlyphRun(glyphRun, paint)
+            }
         }
     }
     
