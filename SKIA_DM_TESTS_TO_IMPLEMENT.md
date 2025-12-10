@@ -28,8 +28,8 @@
 ✅ `destcolor.cpp` - Destination color operations
 ✅ `fillrect_gradient.cpp` - Gradient-filled rectangles
 
-### 🟡 Level 2: Intermediate Features (50% Complete)
-**6/12 tests implemented**
+### 🟡 Level 2: Intermediate Features (75% Complete)
+**9/12 tests implemented**
 
 ✅ `beziers.cpp` - Bézier curve drawing
 ✅ `batchedconvexpaths.cpp` - Batched convex path drawing
@@ -39,10 +39,10 @@
 ✅ `all_bitmap_configs.cpp` - All bitmap configurations
 ✅ `arithmode.cpp` - Arithmetic blend modes
 ✅ `attributes.cpp` - Path attributes
+✅ `aarecteffect.cpp` - Rectangle effects
+✅ `analytic_gradients.cpp` - Analytic gradient calculations
 
 ❌ `3d.cpp` - 3D transformations
-❌ `aarecteffect.cpp` - Rectangle effects
-❌ `analytic_gradients.cpp` - Analytic gradient calculations
 ❌ `bicubic.cpp` - Bicubic interpolation
 ❌ `bitmapfilters.cpp` - Bitmap filtering
 ❌ `bitmapimage.cpp` - Bitmap image handling
