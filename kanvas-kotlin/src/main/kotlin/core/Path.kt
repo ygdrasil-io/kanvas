@@ -265,7 +265,26 @@ class Path {
                         val p0 = if (i > 0 && verbs[i-1] != PathVerb.MOVE && verbs[i-1] != PathVerb.CLOSE) {
                             points[pointIndex - 1]
                         } else {
-                            Point(0f, 0f) // Default start point
+                            // Find the actual start point by looking back through the verbs
+                            var startPoint = Point(0f, 0f)
+                            var j = i - 1
+                            while (j >= 0) {
+                                when (verbs[j]) {
+                                    PathVerb.MOVE -> {
+                                        startPoint = points[j]
+                                        break
+                                    }
+                                    PathVerb.LINE, PathVerb.QUAD, PathVerb.CUBIC, PathVerb.CONIC -> {
+                                        startPoint = points[j]
+                                        break
+                                    }
+                                    else -> {
+                                        // Keep looking back
+                                    }
+                                }
+                                j--
+                            }
+                            startPoint
                         }
                         val p1 = points[pointIndex]
                         val p2 = points[pointIndex + 1]
