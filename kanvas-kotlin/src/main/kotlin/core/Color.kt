@@ -103,4 +103,18 @@ data class Color(val red: Int, val green: Int, val blue: Int, val alpha: Int = 2
     override fun toString(): String {
         return "Color(r=$red, g=$green, b=$blue, a=$alpha)"
     }
+    
+    /**
+     * Linear interpolation between two colors
+     * t = 0 returns this color, t = 1 returns other color
+     */
+    fun lerp(other: Color, t: Float): Color {
+        require(t in 0f..1f) { "Interpolation factor must be between 0 and 1" }
+        return Color(
+            (red + (other.red - red) * t + 0.5f).toInt(),
+            (green + (other.green - green) * t + 0.5f).toInt(),
+            (blue + (other.blue - blue) * t + 0.5f).toInt(),
+            (alpha + (other.alpha - alpha) * t + 0.5f).toInt()
+        )
+    }
 }

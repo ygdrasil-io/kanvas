@@ -13,6 +13,7 @@ import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
 import com.kanvas.core.Path
 import com.kanvas.core.Rect
+import com.kanvas.core.Shader
 
 /**
  * Base device implementation for CPU rasterization
@@ -39,6 +40,9 @@ class BitmapDevice(
 
     // Current paint properties
     private var currentPaint: Paint? = null
+    
+    // Current shader for fill operations
+    private var currentShader: Shader? = null
 
     init {
         // Initialize with transparent background
@@ -254,5 +258,21 @@ class BitmapDevice(
                 bitmap.setPixel(dstX, dstY, finalColor)
             }
         }
+    }
+    
+    // Shader support methods
+    override fun setShader(shader: Shader?) {
+        currentShader = shader
+    }
+    
+    override fun getShader(): Shader? {
+        return currentShader
+    }
+    
+    /**
+     * Apply shader to a color at specific coordinates
+     */
+    private fun applyShader(color: Color, x: Float, y: Float): Color {
+        return currentShader?.applyToColor(color, x, y) ?: color
     }
 }

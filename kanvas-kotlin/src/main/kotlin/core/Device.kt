@@ -38,6 +38,16 @@ interface Device {
     fun drawPath(path: Path, paint: Paint)
     
     /**
+     * Set the current shader for filling operations
+     */
+    fun setShader(shader: Shader?)
+    
+    /**
+     * Get the current shader
+     */
+    fun getShader(): Shader?
+    
+    /**
      * Draw text
      */
     fun drawText(text: String, x: Float, y: Float, paint: Paint)

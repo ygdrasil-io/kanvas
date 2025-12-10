@@ -156,12 +156,7 @@ class Typeface {
     // TODO: Implement typeface loading and management
 }
 
-/**
- * Base class for shaders
- */
-abstract class Shader {
-    abstract fun apply(paint: Paint, matrix: Matrix? = null)
-}
+
 
 /**
  * Base class for color filters
