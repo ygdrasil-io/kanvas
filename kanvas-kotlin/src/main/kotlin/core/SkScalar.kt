@@ -1,6 +1,4 @@
-package core
-
-import com.kanvas.core.Color
+package com.kanvas.core
 
 /**
  * Implementation of Skia's SkScalar and SkFixed types for high-precision calculations.

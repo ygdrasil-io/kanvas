@@ -6,8 +6,8 @@ import com.kanvas.core.Color
 import com.kanvas.core.Paint
 import com.kanvas.core.Path
 import com.kanvas.core.Rect
+import com.kanvas.core.Size
 import com.kanvas.examples.exportBitmapToPNG
-import testing.Size
 import java.io.File
 
 /**
