@@ -1,5 +1,7 @@
 package com.kanvas.core
 
+import core.Font
+
 /**
  * Paint holds the style and color information about how to draw geometries, text and bitmaps.
  */
@@ -61,6 +63,16 @@ class Paint {
         newPaint.isSubpixelText = this.isSubpixelText
         newPaint.isLCDRenderText = this.isLCDRenderText
         return newPaint
+    }
+    
+    /**
+     * Get the font for this paint, creating a default one if none is set.
+     */
+    fun getFont(): Font? {
+        if (typeface != null) {
+            return Font(typeface as core.Typeface, textSize)
+        }
+        return null
     }
     
     override fun toString(): String {

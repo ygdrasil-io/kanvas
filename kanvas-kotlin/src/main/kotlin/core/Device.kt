@@ -1,5 +1,6 @@
 package com.kanvas.core
 
+import core.GlyphRunList
 import device.BitmapDevice
 
 /**
@@ -77,6 +78,13 @@ interface Device {
      * Draw text
      */
     fun drawText(text: String, x: Float, y: Float, paint: Paint)
+
+    /**
+     * Draw a list of glyph runs on this device.
+     * This is the core text rendering method that handles multiple glyph runs efficiently.
+     * Inspired by Skia's onDrawGlyphRunList method.
+     */
+    fun onDrawGlyphRunList(glyphRunList: GlyphRunList, paint: Paint)
     
     /**
      * Draw an image
