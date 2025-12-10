@@ -1,12 +1,6 @@
 package testing
 
-import com.kanvas.core.Bitmap
-import com.kanvas.core.Canvas
-import com.kanvas.core.Color
-import com.kanvas.core.Paint
-import com.kanvas.core.Path
-import com.kanvas.core.Rect
-import com.kanvas.core.Size
+import com.kanvas.core.CanvasFactory
 import com.kanvas.examples.exportBitmapToPNG
 import java.io.File
 
@@ -95,14 +89,14 @@ class TestRunner {
     private fun runTest(test: GM): DrawResult {
         try {
             val size = test.getSize()
-            val canvas = Canvas.createRaster(size.width.toInt(), size.height.toInt())
+            val canvas = CanvasFactory.createRaster(size.width.toInt(), size.height.toInt())
             
             val result = test.draw(canvas)
             
             if (result == DrawResult.OK) {
                 // Export the result as PNG
                 val filename = "$outputDir/${test.getName()}.png"
-                val bitmap = canvas.getBitmap()
+                val bitmap = canvas.getBitmapCopy()
                 exportBitmapToPNG(bitmap, filename)
                 if (verbose) {
                     println("   💾 Exported to: $filename")

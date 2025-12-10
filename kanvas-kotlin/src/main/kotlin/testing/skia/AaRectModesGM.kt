@@ -1,9 +1,13 @@
 package testing.skia
 
-import com.kanvas.core.*
-import testing.GM
-import testing.DrawResult
+import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Color
+import com.kanvas.core.Paint
+import com.kanvas.core.PaintStyle
+import com.kanvas.core.Rect
 import com.kanvas.core.Size
+import testing.DrawResult
+import testing.GM
 
 /**
  * Port of Skia's aarectmodes.cpp test
@@ -33,7 +37,7 @@ class AaRectModesGM : GM() {
         val gAlphaValue = listOf(0xFF, 0x88, 0x88)
     }
     
-    override fun onDraw(canvas: Canvas): DrawResult {
+    override fun onDraw(canvas: CanvasInterface): DrawResult {
         // Create background shader - replica of make_bg_shader() from C++
         val bgPaint = createBackgroundShader()
         
@@ -92,7 +96,7 @@ class AaRectModesGM : GM() {
         }
     }
     
-    private fun drawCell(canvas: Canvas, mode: String, a0: Int, a1: Int): Float {
+    private fun drawCell(canvas: CanvasInterface, mode: String, a0: Int, a1: Int): Float {
         // Replica of drawCell() from C++
         val paint = Paint().apply {
             isAntiAlias = true

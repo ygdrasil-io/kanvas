@@ -1,12 +1,15 @@
 package testing.skia
 
-import com.kanvas.core.*
-import testing.GM
-import testing.DrawResult
+import com.kanvas.core.CanvasInterface
+import com.kanvas.core.Color
+import com.kanvas.core.Paint
+import com.kanvas.core.PaintStyle
+import com.kanvas.core.Path
+import com.kanvas.core.Rect
 import com.kanvas.core.Size
+import testing.DrawResult
+import testing.GM
 import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * Port of Skia's addarc.cpp test
@@ -20,7 +23,7 @@ class AddArcGM : GM() {
     
     override fun getSize(): Size = Size(400f, 300f)
     
-    override fun onDraw(canvas: Canvas): DrawResult {
+    override fun onDraw(canvas: CanvasInterface): DrawResult {
         val size = getSize()
         
         // Set white background
@@ -42,7 +45,7 @@ class AddArcGM : GM() {
         return DrawResult.OK
     }
     
-    private fun testBasicArcs(canvas: Canvas) {
+    private fun testBasicArcs(canvas: CanvasInterface) {
         val strokePaint = Paint().apply {
             color = Color(0, 0, 0xFF, 255) // Blue
             strokeWidth = 3f
@@ -79,7 +82,7 @@ class AddArcGM : GM() {
         canvas.drawText("360° arc (circle)", 40f, 315f, textPaint)
     }
     
-    private fun testArcCombinations(canvas: Canvas) {
+    private fun testArcCombinations(canvas: CanvasInterface) {
         val strokePaint = Paint().apply {
             color = Color(0xFF, 0, 0, 255) // Red
             strokeWidth = 2f
@@ -122,7 +125,7 @@ class AddArcGM : GM() {
         canvas.drawText("Decorative arcs", 320f, 310f, textPaint)
     }
     
-    private fun testFilledArcs(canvas: Canvas) {
+    private fun testFilledArcs(canvas: CanvasInterface) {
         val fillPaint = Paint().apply {
             color = Color(0x88, 0, 0xFF, 180) // Purple with transparency
             style = PaintStyle.FILL
