@@ -204,7 +204,15 @@ This provides a comprehensive roadmap for implementing Skia DM tests in Kanvas, 
 - **Remaining**: 0 ❌
 - **Progress**: 100%
 
+### Level 2 Tests Status
+- **Total Tests**: 12
+- **Implemented**: 1 ✅
+- **Remaining**: 11 ❌
+- **Progress**: 8%
+
 ### Implemented Tests
+
+#### Level 1 Tests
 - ✅ AaClipGM.kt
 - ✅ AaRectModesGM.kt
 - ✅ AaXferModesGM.kt
@@ -226,6 +234,9 @@ This provides a comprehensive roadmap for implementing Skia DM tests in Kanvas, 
 - ✅ DestColorGM.kt (NEW)
 - ✅ FillRectGradientGM.kt (NEW)
 
+#### Level 2 Tests
+- ✅ BeziersGM.kt (NEW) - Bézier curves test
+
 ### APIs Added
 During this implementation phase, the following APIs were added:
 
@@ -236,16 +247,13 @@ During this implementation phase, the following APIs were added:
 5. **Gradient Fill Operations** - Enhanced shader integration for gradient-filled rectangles
 6. **Color Bleeding Tests** - Basic edge handling and color mixing tests
 7. **Line Drawing** - Added `drawLine()` method to Canvas class
+8. **Random Number Generation** - Added `SkRandom` class for generating random values
+9. **Bézier Curve Testing** - Added `BeziersGM` for testing quadratic and cubic Bézier curves
 
 ### Next Steps
-1. Implement Level 2 tests (intermediate features)
+1. Implement remaining Level 2 tests (intermediate features)
 2. Add more advanced path effects and transformations
 3. Implement proper dashing with PathEffect interface
 4. Add visual comparison functionality for test validation
 5. Expand color space support with proper conversions
-
-### Next Steps
-1. Implement missing APIs for remaining Level 1 tests
-2. Add Level 2 tests (intermediate features)
-3. Create test runner to execute all GM tests
-4. Add visual comparison functionality
+6. Implement Level 3 tests (advanced features)
