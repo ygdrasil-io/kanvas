@@ -171,6 +171,49 @@ abstract class ColorFilter {
 }
 
 /**
+ * Factory object for creating color filters
+ */
+object ColorFilters {
+    fun matrix(matrix: FloatArray): ColorFilter {
+        return object : ColorFilter() {
+            override fun apply(color: Color): Color {
+                // Simplified matrix application
+                val r = color.red / 255f
+                val g = color.green / 255f
+                val b = color.blue / 255f
+                val a = color.alpha / 255f
+                
+                // Apply 4x5 matrix (simplified for example)
+                val newR = r * matrix[0] + g * matrix[1] + b * matrix[2] + a * matrix[3] + matrix[4]
+                val newG = r * matrix[5] + g * matrix[6] + b * matrix[7] + a * matrix[8] + matrix[9]
+                val newB = r * matrix[10] + g * matrix[11] + b * matrix[12] + a * matrix[13] + matrix[14]
+                val newA = r * matrix[15] + g * matrix[16] + b * matrix[17] + a * matrix[18] + matrix[19]
+                
+                return Color(
+                    (newR.coerceIn(0f, 1f) * 255).toInt(),
+                    (newG.coerceIn(0f, 1f) * 255).toInt(),
+                    (newB.coerceIn(0f, 1f) * 255).toInt(),
+                    (newA.coerceIn(0f, 1f) * 255).toInt()
+                )
+            }
+        }
+    }
+    
+    fun lighting(mul: Color, add: Color): ColorFilter {
+        return object : ColorFilter() {
+            override fun apply(color: Color): Color {
+                return Color(
+                    (color.red * mul.red / 255 + add.red).coerceIn(0, 255),
+                    (color.green * mul.green / 255 + add.green).coerceIn(0, 255),
+                    (color.blue * mul.blue / 255 + add.blue).coerceIn(0, 255),
+                    color.alpha
+                )
+            }
+        }
+    }
+}
+
+/**
  * Base class for mask filters
  */
 abstract class MaskFilter {
