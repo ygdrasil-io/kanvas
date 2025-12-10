@@ -90,6 +90,7 @@ interface Device {
      * Draw an image
      */
     fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint)
+    fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint, sampling: SamplingOptions)
     
     /**
      * Clear the device with a color

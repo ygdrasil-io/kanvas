@@ -241,6 +241,13 @@ class Canvas(private val device: Device) {
     fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint) {
         device.drawImage(image, src, dst, paint)
     }
+
+    /**
+     * Draws an image with sampling options
+     */
+    fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint, sampling: SamplingOptions) {
+        device.drawImage(image, src, dst, paint, sampling)
+    }
     
     /**
      * Clears the canvas with a color

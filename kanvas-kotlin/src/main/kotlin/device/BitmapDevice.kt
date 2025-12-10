@@ -8,13 +8,16 @@ import com.kanvas.core.Color
 import com.kanvas.core.ColorInfo
 import com.kanvas.core.ColorSpace
 import com.kanvas.core.ColorType
+import com.kanvas.core.CubicResampler
 import com.kanvas.core.Device
+import com.kanvas.core.FilterMode
 import com.kanvas.core.Matrix
 import com.kanvas.core.Paint
 import com.kanvas.core.PaintStyle
 import com.kanvas.core.Path
 import com.kanvas.core.RRect
 import com.kanvas.core.Rect
+import com.kanvas.core.SamplingOptions
 import com.kanvas.core.Shader
 import com.kanvas.core.SurfaceProps
 import core.GlyphPainter
@@ -274,6 +277,10 @@ class BitmapDevice(
     }
 
     override fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint) {
+        drawImage(image, src, dst, paint, SamplingOptions.DEFAULT)
+    }
+
+    override fun drawImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint, sampling: SamplingOptions) {
         // Apply clip to destination
         val clippedDst = dst.intersect(clipBounds)
         if (clippedDst.isEmpty) return
@@ -294,8 +301,8 @@ class BitmapDevice(
             src.top + (dstHeight / transformedDst.height) * srcHeight
         )
 
-        // Rasterize the image
-        rasterizeImage(image, proportionalSrc, transformedDst, paint)
+        // Rasterize the image with sampling options
+        rasterizeImageWithSampling(image, proportionalSrc, transformedDst, paint, sampling)
     }
 
     override fun clear(color: Color) {
@@ -570,7 +577,10 @@ class BitmapDevice(
     }
 
     private fun rasterizeImage(image: Bitmap, src: Rect, dst: Rect, paint: Paint) {
-        // Simple image drawing with nearest-neighbor sampling
+        rasterizeImageWithSampling(image, src, dst, paint, SamplingOptions.DEFAULT)
+    }
+
+    private fun rasterizeImageWithSampling(image: Bitmap, src: Rect, dst: Rect, paint: Paint, sampling: SamplingOptions) {
         val srcLeft = src.left.toInt().coerceAtLeast(0)
         val srcTop = src.top.toInt().coerceAtLeast(0)
         val srcRight = src.right.toInt().coerceAtMost(image.getWidth())
@@ -588,29 +598,139 @@ class BitmapDevice(
 
         if (srcWidth <= 0 || srcHeight <= 0 || dstWidth <= 0 || dstHeight <= 0) return
 
+        when (sampling.filterMode) {
+            FilterMode.NEAREST -> rasterizeWithNearest(image, srcLeft, srcTop, srcWidth, srcHeight, 
+                                                       dstLeft, dstTop, dstWidth, dstHeight, paint)
+            FilterMode.LINEAR -> rasterizeWithLinear(image, srcLeft, srcTop, srcWidth, srcHeight,
+                                                     dstLeft, dstTop, dstWidth, dstHeight, paint)
+            FilterMode.CUBIC -> rasterizeWithCubic(image, srcLeft, srcTop, srcWidth, srcHeight,
+                                                     dstLeft, dstTop, dstWidth, dstHeight, paint, sampling.cubicResampler)
+        }
+    }
+
+    private fun rasterizeWithNearest(image: Bitmap, srcLeft: Int, srcTop: Int, srcWidth: Int, srcHeight: Int,
+                                     dstLeft: Int, dstTop: Int, dstWidth: Int, dstHeight: Int, paint: Paint) {
         for (dy in 0 until dstHeight) {
             for (dx in 0 until dstWidth) {
-                // Calculate source coordinates
+                // Nearest neighbor - simple rounding
                 val sx = srcLeft + (dx * srcWidth / dstWidth)
                 val sy = srcTop + (dy * srcHeight / dstHeight)
 
-                // Get source pixel
-                val srcColor = image.getPixel(sx, sy)
-
-                // Apply paint color filter if any
+                var srcColor = image.getPixel(sx, sy)
                 var finalColor = paint.colorFilter?.apply(srcColor) ?: srcColor
 
-                // Apply shader if available (shaders can modify image colors)
                 if (currentShader != null) {
                     finalColor = applyShader(finalColor, (dstLeft + dx).toFloat(), (dstTop + dy).toFloat())
                 }
 
-                // Set destination pixel
-                val dstX = dstLeft + dx
-                val dstY = dstTop + dy
-                bitmap.setPixel(dstX, dstY, finalColor)
+                bitmap.setPixel(dstLeft + dx, dstTop + dy, finalColor)
             }
         }
+    }
+
+    private fun rasterizeWithLinear(image: Bitmap, srcLeft: Int, srcTop: Int, srcWidth: Int, srcHeight: Int,
+                                    dstLeft: Int, dstTop: Int, dstWidth: Int, dstHeight: Int, paint: Paint) {
+        for (dy in 0 until dstHeight) {
+            for (dx in 0 until dstWidth) {
+                // Calculate source coordinates with fractional parts
+                val srcX = srcLeft + (dx * srcWidth.toFloat() / dstWidth)
+                val srcY = srcTop + (dy * srcHeight.toFloat() / dstHeight)
+
+                val x0 = srcX.toInt()
+                val y0 = srcY.toInt()
+                val x1 = minOf(x0 + 1, srcLeft + srcWidth - 1)
+                val y1 = minOf(y0 + 1, srcTop + srcHeight - 1)
+
+                val dxFrac = srcX - x0
+                val dyFrac = srcY - y0
+
+                // Get the 4 surrounding pixels
+                val c00 = image.getPixel(x0, y0).toArgb()
+                val c01 = image.getPixel(x0, y1).toArgb()
+                val c10 = image.getPixel(x1, y0).toArgb()
+                val c11 = image.getPixel(x1, y1).toArgb()
+
+                // Bilinear interpolation
+                val interpolated = interpolateColors(
+                    interpolateColors(c00, c01, dyFrac),
+                    interpolateColors(c10, c11, dyFrac),
+                    dxFrac
+                )
+
+                var finalColor = paint.colorFilter?.apply(Color.fromArgb(interpolated)) ?: Color.fromArgb(interpolated)
+
+                if (currentShader != null) {
+                    finalColor = applyShader(finalColor, (dstLeft + dx).toFloat(), (dstTop + dy).toFloat())
+                }
+
+                bitmap.setPixel(dstLeft + dx, dstTop + dy, finalColor)
+            }
+        }
+    }
+
+    private fun rasterizeWithCubic(image: Bitmap, srcLeft: Int, srcTop: Int, srcWidth: Int, srcHeight: Int,
+                                   dstLeft: Int, dstTop: Int, dstWidth: Int, dstHeight: Int, paint: Paint, resampler: CubicResampler) {
+        for (dy in 0 until dstHeight) {
+            for (dx in 0 until dstWidth) {
+                // Calculate source coordinates with fractional parts
+                val srcX = srcLeft + (dx * srcWidth.toFloat() / dstWidth)
+                val srcY = srcTop + (dy * srcHeight.toFloat() / dstHeight)
+
+                // Bicubic interpolation uses 4x4 neighborhood
+                val x0 = maxOf(srcLeft, srcX.toInt() - 1)
+                val y0 = maxOf(srcTop, srcY.toInt() - 1)
+
+                val weightsX = resampler.getWeights(srcX - x0)
+                val weightsY = resampler.getWeights(srcY - y0)
+
+                // Get the 16 surrounding pixels (4x4 grid)
+                val colors = Array(4) { Array(4) { 0 } }
+                for (dyOffset in 0 until 4) {
+                    for (dxOffset in 0 until 4) {
+                        val px = minOf(x0 + dxOffset, srcLeft + srcWidth - 1)
+                        val py = minOf(y0 + dyOffset, srcTop + srcHeight - 1)
+                        colors[dyOffset][dxOffset] = image.getPixel(px, py).toArgb()
+                    }
+                }
+
+                // Apply bicubic interpolation
+                var finalColor = 0
+                for (dyOffset in 0 until 4) {
+                    var rowColor = 0
+                    for (dxOffset in 0 until 4) {
+                        rowColor = interpolateColors(rowColor, colors[dyOffset][dxOffset], weightsX[dxOffset])
+                    }
+                    finalColor = interpolateColors(finalColor, rowColor, weightsY[dyOffset])
+                }
+
+                var processedColor = paint.colorFilter?.apply(Color.fromArgb(finalColor)) ?: Color.fromArgb(finalColor)
+
+                if (currentShader != null) {
+                    processedColor = applyShader(processedColor, (dstLeft + dx).toFloat(), (dstTop + dy).toFloat())
+                }
+
+                bitmap.setPixel(dstLeft + dx, dstTop + dy, processedColor)
+            }
+        }
+    }
+
+    private fun interpolateColors(c1: Int, c2: Int, t: Float): Int {
+        val a1 = (c1 shr 24) and 0xFF
+        val r1 = (c1 shr 16) and 0xFF
+        val g1 = (c1 shr 8) and 0xFF
+        val b1 = c1 and 0xFF
+
+        val a2 = (c2 shr 24) and 0xFF
+        val r2 = (c2 shr 16) and 0xFF
+        val g2 = (c2 shr 8) and 0xFF
+        val b2 = c2 and 0xFF
+
+        val a = ((a1 * (1 - t) + a2 * t)).toInt() and 0xFF
+        val r = ((r1 * (1 - t) + r2 * t)).toInt() and 0xFF
+        val g = ((g1 * (1 - t) + g2 * t)).toInt() and 0xFF
+        val b = ((b1 * (1 - t) + b2 * t)).toInt() and 0xFF
+
+        return (a shl 24) or (r shl 16) or (g shl 8) or b
     }
     
     // Shader support methods

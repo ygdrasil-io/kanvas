@@ -119,22 +119,36 @@ class Bitmap(private val width: Int, private val height: Int, private val config
     /**
      * Scales the bitmap to the specified dimensions
      */
-    fun scale(newWidth: Int, newHeight: Int): Bitmap {
-        val scaled = Bitmap(newWidth, newHeight, config)
-        
-        val xRatio = width.toFloat() / newWidth
-        val yRatio = height.toFloat() / newHeight
-        
-        for (y in 0 until newHeight) {
-            for (x in 0 until newWidth) {
-                val srcX = (x * xRatio).toInt().coerceAtMost(width - 1)
-                val srcY = (y * yRatio).toInt().coerceAtMost(height - 1)
-                val color = getPixel(srcX, srcY)
-                scaled.setPixel(x, y, color)
-            }
-        }
-        
-        return scaled
+    /**
+     * Scale the bitmap using the specified sampling options
+     * @param newWidth Target width
+     * @param newHeight Target height
+     * @param sampling Sampling options to use (default: linear)
+     * @return Scaled bitmap
+     */
+    fun scale(newWidth: Int, newHeight: Int, sampling: SamplingOptions = SamplingOptions.DEFAULT): Bitmap {
+        return sampling.applyToBitmap(this, newWidth, newHeight)
+    }
+
+    /**
+     * Scale the bitmap using nearest neighbor sampling (fast, pixelated)
+     */
+    fun scaleNearest(newWidth: Int, newHeight: Int): Bitmap {
+        return scale(newWidth, newHeight, SamplingOptions.nearest())
+    }
+
+    /**
+     * Scale the bitmap using linear sampling (smooth, basic quality)
+     */
+    fun scaleLinear(newWidth: Int, newHeight: Int): Bitmap {
+        return scale(newWidth, newHeight, SamplingOptions.linear())
+    }
+
+    /**
+     * Scale the bitmap using cubic sampling (high quality)
+     */
+    fun scaleCubic(newWidth: Int, newHeight: Int, resampler: CubicResampler = CubicResampler.Mitchell): Bitmap {
+        return scale(newWidth, newHeight, SamplingOptions.cubic(resampler))
     }
     
     /**
