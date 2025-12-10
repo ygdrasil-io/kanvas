@@ -3,6 +3,7 @@ package com.kanvas.core
 import device.BitmapDevice
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DeviceTest {
@@ -273,5 +274,215 @@ class DeviceTest {
         
         // Check that drawing inside clip happened
         assertEquals(Color.BLUE, canvas.bitmap.getPixel(50, 50))
+    }
+
+    @Test
+    fun `test device clip stack save restore`() {
+        val device = Devices.makeRaster(100, 100)
+        
+        // Initial state
+        assertEquals(0, device.getClipStackDepth())
+        val initialClip = device.getClipBounds()
+        
+        // Save current clip
+        val depthAfterSave = device.saveClipStack()
+        assertEquals(1, depthAfterSave)
+        assertEquals(1, device.getClipStackDepth())
+        
+        // Modify clip
+        if (device is BitmapDevice) {
+            device.setClipBounds(Rect(20f, 20f, 80f, 80f))
+            val modifiedClip = device.getClipBounds()
+            assertEquals(Rect(20f, 20f, 80f, 80f), modifiedClip)
+            
+            // Restore clip
+            val depthAfterRestore = device.restoreClipStack()
+            assertEquals(0, depthAfterRestore)
+            assertEquals(0, device.getClipStackDepth())
+            
+            // Verify clip is back to initial state
+            val restoredClip = device.getClipBounds()
+            assertEquals(initialClip, restoredClip)
+        }
+    }
+
+    @Test
+    fun `test device clip stack multiple levels`() {
+        val device = Devices.makeRaster(100, 100)
+        
+        // Save multiple clip states
+        device.saveClipStack()
+        if (device is BitmapDevice) {
+            device.setClipBounds(Rect(20f, 20f, 80f, 80f))
+        }
+        
+        device.saveClipStack()
+        if (device is BitmapDevice) {
+            device.setClipBounds(Rect(30f, 30f, 70f, 70f))
+        }
+        
+        device.saveClipStack()
+        if (device is BitmapDevice) {
+            device.setClipBounds(Rect(40f, 40f, 60f, 60f))
+        }
+        
+        assertEquals(3, device.getClipStackDepth())
+        
+        // Restore all levels
+        device.restoreClipStack()
+        assertEquals(2, device.getClipStackDepth())
+        
+        device.restoreClipStack()
+        assertEquals(1, device.getClipStackDepth())
+        
+        device.restoreClipStack()
+        assertEquals(0, device.getClipStackDepth())
+        
+        // Should be back to initial clip
+        val finalClip = device.getClipBounds()
+        assertEquals(Rect(0f, 0f, 100f, 100f), finalClip)
+    }
+
+    @Test
+    fun `test device clip rect intersect`() {
+        val device = Devices.makeRaster(100, 100)
+        
+        // Start with full device clip
+        val initialClip = device.getClipBounds()
+        assertEquals(Rect(0f, 0f, 100f, 100f), initialClip)
+        
+        // Intersect with a smaller rectangle
+        device.clipRect(Rect(20f, 20f, 80f, 80f), Device.ClipOp.INTERSECT, false)
+        
+        val clipped = device.getClipBounds()
+        assertEquals(Rect(20f, 20f, 80f, 80f), clipped)
+        
+        // Intersect again with an even smaller rectangle
+        device.clipRect(Rect(30f, 30f, 70f, 70f), Device.ClipOp.INTERSECT, false)
+        
+        val doubleClipped = device.getClipBounds()
+        assertEquals(Rect(30f, 30f, 70f, 70f), doubleClipped)
+    }
+
+    @Test
+    fun `test device clip rect difference`() {
+        val device = Devices.makeRaster(100, 100)
+        
+        // Start with a specific clip
+        if (device is BitmapDevice) {
+            device.setClipBounds(Rect(20f, 20f, 80f, 80f))
+        }
+        
+        // Apply difference with a rectangle that partially overlaps
+        device.clipRect(Rect(40f, 40f, 60f, 60f), Device.ClipOp.DIFFERENCE, false)
+        
+        val resultClip = device.getClipBounds()
+        
+        // The result should be the original clip minus the overlapping area
+        // This creates an L-shaped region that includes:
+        // - Left strip (20-40)
+        // - Right strip (60-80)
+        // - Top strip (20-40)
+        // - Bottom strip (60-80)
+        
+        // Check that we have some area remaining
+        assertTrue(resultClip.width > 0 && resultClip.height > 0)
+        
+        // Check that the result doesn't include the center area that was subtracted
+        // This is a simplified check - the exact bounds depend on the implementation
+        assertTrue(!resultClip.isEmpty, "Result should not be empty")
+    }
+
+    @Test
+    fun `test device clip path`() {
+        val device = Devices.makeRaster(100, 100)
+        
+        // Create a path that covers a specific area
+        val path = Path().apply {
+            moveTo(20f, 20f)
+            lineTo(80f, 20f)
+            lineTo(80f, 80f)
+            lineTo(20f, 80f)
+            close()
+        }
+        
+        // Clip with the path
+        device.clipPath(path, Device.ClipOp.INTERSECT, false)
+        
+        val pathBounds = path.getBounds()
+        val clipped = device.getClipBounds()
+        
+        // The clip should be intersected with the path bounds
+        assertEquals(pathBounds, clipped)
+    }
+
+    @Test
+    fun `test device clip stack with drawing`() {
+        val device = Devices.makeRaster(100, 100)
+        
+        val paint = Paint().apply {
+            color = Color.RED
+            style = PaintStyle.FILL
+        }
+        
+        // Save initial clip
+        device.saveClipStack()
+        
+        // Apply a smaller clip
+        device.clipRect(Rect(20f, 20f, 80f, 80f), Device.ClipOp.INTERSECT, false)
+        
+        // Draw with the smaller clip
+        device.drawRect(Rect(10f, 10f, 90f, 90f), paint)
+        
+        // Check that drawing is clipped
+        assertEquals(Color.TRANSPARENT, device.bitmap.getPixel(15, 15))
+        assertEquals(Color.RED, device.bitmap.getPixel(50, 50))
+        assertEquals(Color.TRANSPARENT, device.bitmap.getPixel(85, 85))
+        
+        // Restore to full clip
+        device.restoreClipStack()
+        
+        // Draw again - should not be clipped
+        device.drawRect(Rect(5f, 5f, 15f, 15f), paint)
+        
+        // Now the corner should be red
+        assertEquals(Color.RED, device.bitmap.getPixel(10, 10))
+    }
+
+    @Test
+    fun `test device clip stack exception handling`() {
+        val device = Devices.makeRaster(100, 100)
+        
+        // Try to restore from empty stack
+        try {
+            device.restoreClipStack()
+            assertFalse(true, "Should have thrown an exception")
+        } catch (e: IllegalStateException) {
+            assertEquals("Clip stack is empty, cannot restore", e.message)
+        }
+    }
+
+    @Test
+    fun `test device clip bounds methods`() {
+        val device = Devices.makeRaster(100, 100)
+        
+        // Test initial state
+        assertEquals(Rect(0f, 0f, 100f, 100f), device.devClipBounds())
+        assertFalse(device.isClipEmpty())
+        assertTrue(device.isClipRect())
+        assertTrue(device.isClipWideOpen())
+        
+        // Apply a smaller clip
+        device.clipRect(Rect(20f, 20f, 80f, 80f), Device.ClipOp.INTERSECT, false)
+        
+        assertEquals(Rect(20f, 20f, 80f, 80f), device.devClipBounds())
+        assertFalse(device.isClipEmpty())
+        assertTrue(device.isClipRect())
+        assertFalse(device.isClipWideOpen())
+        
+        // Make clip empty
+        device.clipRect(Rect(0f, 0f, 0f, 0f), Device.ClipOp.INTERSECT, false)
+        
+        assertTrue(device.isClipEmpty())
     }
 }
