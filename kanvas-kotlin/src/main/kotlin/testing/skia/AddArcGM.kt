@@ -3,7 +3,7 @@ package testing.skia
 import com.kanvas.core.*
 import testing.GM
 import testing.DrawResult
-import testing.Size
+import com.kanvas.core.Size
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
