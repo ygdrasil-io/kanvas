@@ -206,9 +206,9 @@ This provides a comprehensive roadmap for implementing Skia DM tests in Kanvas, 
 
 ### Level 2 Tests Status
 - **Total Tests**: 12
-- **Implemented**: 3 ✅
-- **Remaining**: 9 ❌
-- **Progress**: 25%
+- **Implemented**: 4 ✅
+- **Remaining**: 8 ❌
+- **Progress**: 33%
 
 ### Implemented Tests
 
@@ -238,6 +238,7 @@ This provides a comprehensive roadmap for implementing Skia DM tests in Kanvas, 
 - ✅ BeziersGM.kt (NEW) - Bézier curves test
 - ✅ BatchedConvexPathsGM.kt (NEW) - Batched convex paths test
 - ✅ BigRectGM.kt (NEW) - Big rectangle with clipping test
+- ✅ BigMatrixGM.kt (NEW) - Large matrix transformations test
 
 ### APIs Added
 During this implementation phase, the following APIs were added:

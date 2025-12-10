@@ -10,6 +10,7 @@ import testing.skia.ArcOfZorroGM
 import testing.skia.ArcToGM
 import testing.skia.BatchedConvexPathsGM
 import testing.skia.BeziersGM
+import testing.skia.BigMatrixGM
 import testing.skia.BigRectGM
 import testing.skia.BitmapRectGM
 import testing.skia.BleedGM
@@ -56,6 +57,7 @@ fun registerAllTests() {
     registerGM(BeziersGM())  // NEW: Bézier curves test
     registerGM(BatchedConvexPathsGM())  // NEW: Batched convex paths test
     registerGM(BigRectGM())  // NEW: Big rectangle with clipping test
+    registerGM(BigMatrixGM())  // NEW: Large matrix transformations test
     // registerGM(AnalyticGradientsGM())
     // registerGM(ArithModeGM())
     // registerGM(AttributesGM())
@@ -123,12 +125,12 @@ fun getTestImplementationStatus(): Map<String, TestCategoryStatus> {
     
     // Level 2: Intermediate Tests
     val level2Tests = listOf(
-        "BeziersGM", "BatchedConvexPathsGM", "AnalyticGradientsGM", "ArithModeGM", "AttributesGM",
-        "BicubicGM", "BigMatrixGM", "BitmapCopyGM", "BitmapFiltersGM",
+        "BeziersGM", "BatchedConvexPathsGM", "BigMatrixGM", "AnalyticGradientsGM", "ArithModeGM", "AttributesGM",
+        "BicubicGM", "BitmapCopyGM", "BitmapFiltersGM",
         "BitmapImageGM", "BitmapShaderGM", "BitmapTiledGM"
     )
     
-    val level2Implemented = listOf("BeziersGM", "BatchedConvexPathsGM")
+    val level2Implemented = listOf("BeziersGM", "BatchedConvexPathsGM", "BigMatrixGM")
     
     status["Level 2: Intermediate"] = TestCategoryStatus(
         total = level2Tests.size,
