@@ -345,6 +345,24 @@ class Canvas(private val width: Int, private val height: Int) {
                     }
                     i++
                 }
+                PathVerb.CONIC -> {
+                    if (currentPoint != null && i + 1 < path.points.size) {
+                        val controlPoint = path.points[i]
+                        val endPoint = path.points[i + 1]
+                        val conicCount = path.verbs.take(i).count { it == PathVerb.CONIC }
+                        val weight = path.conicWeights[conicCount]
+                        
+                        if (weight == 1.0f) {
+                            // Weight of 1.0 is equivalent to quadratic
+                            drawQuadraticCurve(currentPoint!!, controlPoint, endPoint, paint)
+                        } else {
+                            // Draw conic curve with the specified weight
+                            drawConicCurve(currentPoint!!, controlPoint, endPoint, weight, paint)
+                        }
+                        currentPoint = endPoint
+                        i += 2
+                    }
+                }
                 PathVerb.QUAD -> {
                     if (currentPoint != null && i + 1 < path.points.size) {
                         val controlPoint = path.points[i]
@@ -393,6 +411,45 @@ class Canvas(private val width: Int, private val height: Int) {
             prev = current
         }
     }
+    /**
+     * Draws a conic curve by approximating with line segments
+     * @param weight The conic weight (1.0 = quadratic, other values create different curves)
+     */
+    private fun drawConicCurve(p0: Point, p1: Point, p2: Point, weight: Float, paint: Paint) {
+        // For conic curves, we use rational quadratic Bezier curves
+        // The formula is: P(t) = (1-t)^2 * P0 + 2*(1-t)*t*w*P1 + t^2 * P2
+        //                     -------------------------------------------
+        //                     (1-t)^2 + 2*(1-t)*t*w + t^2
+        
+        val segments = 8
+        var prev = p0
+        
+        for (i in 1..segments) {
+            val t = i.toFloat() / segments
+            val oneMinusT = 1 - t
+            
+            // Calculate denominator
+            val denominator = oneMinusT * oneMinusT + 2 * oneMinusT * t * weight + t * t
+            
+            if (denominator > 0) {
+                // Calculate numerator components
+                val term0 = oneMinusT * oneMinusT * p0.x
+                val term1 = 2 * oneMinusT * t * weight * p1.x
+                val term2 = t * t * p2.x
+                val x = (term0 + term1 + term2) / denominator
+                
+                val term0y = oneMinusT * oneMinusT * p0.y
+                val term1y = 2 * oneMinusT * t * weight * p1.y
+                val term2y = t * t * p2.y
+                val y = (term0y + term1y + term2y) / denominator
+                
+                val current = Point(x, y)
+                drawLineInternal(prev.x, prev.y, current.x, current.y, paint, false)
+                prev = current
+            }
+        }
+    }
+    
     /**
      * Draws a cubic curve by approximating with line segments
      */
