@@ -26,7 +26,12 @@ sealed class Typeface {
          */
         fun makeFromFile(filePath: String): Typeface {
             return try {
-                FileTypeface(File(filePath))
+                val file = File(filePath)
+                if (file.exists() && file.canRead()) {
+                    FileTypeface(file)
+                } else {
+                    EmptyTypeface
+                }
             } catch (e: Exception) {
                 EmptyTypeface
             }
