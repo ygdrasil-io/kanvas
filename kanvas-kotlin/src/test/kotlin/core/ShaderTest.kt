@@ -108,7 +108,7 @@ class ShaderTest {
         bitmap.setPixel(0, 1, Color.BLUE)
         bitmap.setPixel(1, 1, Color.WHITE)
         
-        val shader = Shaders.makeBitmapShader(bitmap)
+        val shader = Shaders.makeBitmapShader(bitmap, TileMode.REPEAT, TileMode.REPEAT)
         
         // Test pixel access
         assertEquals(Color.RED, shader.shade(0f, 0f))

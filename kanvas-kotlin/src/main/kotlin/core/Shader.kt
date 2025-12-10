@@ -73,25 +73,15 @@ class LinearGradientShader(
             TileMode.DECAL -> projection.coerceIn(0f, 1f)
         }
         
-        // Find which color segment we're in using binary search for better performance
-        var low = 0
-        var high = colorPositions.size - 1
-        while (low < high) {
-            val mid = (low + high) / 2
-            if (t <= colorPositions[mid]) {
-                high = mid
-            } else {
-                low = mid + 1
+        // Find which color segment we're in
+        for (i in 0 until colorPositions.size - 1) {
+            if (t <= colorPositions[i + 1]) {
+                val segmentT = (t - colorPositions[i]) / (colorPositions[i + 1] - colorPositions[i])
+                return colors[i].lerp(colors[i + 1], segmentT)
             }
         }
         
-        // Ensure we don't go out of bounds
-        if (low >= colorPositions.size - 1) {
-            return colors.last()
-        }
-        
-        val segmentT = (t - colorPositions[low]) / (colorPositions[low + 1] - colorPositions[low])
-        return colors[low].lerp(colors[low + 1], segmentT)
+        return colors.last()
     }
 }
 
@@ -145,25 +135,15 @@ class RadialGradientShader(
             TileMode.DECAL -> t.coerceIn(0f, 1f)
         }
         
-        // Find which color segment we're in using binary search for better performance
-        var low = 0
-        var high = colorPositions.size - 1
-        while (low < high) {
-            val mid = (low + high) / 2
-            if (t <= colorPositions[mid]) {
-                high = mid
-            } else {
-                low = mid + 1
+        // Find which color segment we're in
+        for (i in 0 until colorPositions.size - 1) {
+            if (t <= colorPositions[i + 1]) {
+                val segmentT = (t - colorPositions[i]) / (colorPositions[i + 1] - colorPositions[i])
+                return colors[i].lerp(colors[i + 1], segmentT)
             }
         }
         
-        // Ensure we don't go out of bounds
-        if (low >= colorPositions.size - 1) {
-            return colors.last()
-        }
-        
-        val segmentT = (t - colorPositions[low]) / (colorPositions[low + 1] - colorPositions[low])
-        return colors[low].lerp(colors[low + 1], segmentT)
+        return colors.last()
     }
 }
 
