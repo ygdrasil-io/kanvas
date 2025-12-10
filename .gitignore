@@ -46,3 +46,4 @@ bin/
 /.idea/
 /depot_tools/
 /skia/
+/int-result/

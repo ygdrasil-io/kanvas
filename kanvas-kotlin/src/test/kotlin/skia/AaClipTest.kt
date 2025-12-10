@@ -46,16 +46,14 @@ class AaClipTest {
             
             // Track similarity scores over time and fail if similarity drops significantly
             val scoreAcceptable = SimilarityTracker.updateScore("AaClipGM", similarity)
-            assertTrue(scoreAcceptable, "Similarity score dropped significantly compared to previous best")
-            
-            // For now, we just log the similarity - we'll set thresholds later
-            assertTrue(similarity >= 0, "Similarity should be calculated")
-            
+
             // Save debug image if similarity is low
-            if (similarity < 80.0) {
+            if (similarity < 98.0) {
                 TestUtils.saveDebugImage(testResult, "aaclip_test_output")
                 println("⚠️  Low similarity - debug image saved")
             }
+
+            assertTrue(scoreAcceptable, "Similarity score dropped significantly compared to previous best")
         } else {
             println("⚠️  No reference image found for aaclip")
             // Save the test output for future reference
