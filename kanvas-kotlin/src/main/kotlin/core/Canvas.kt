@@ -318,6 +318,13 @@ object CanvasFactory {
     fun createWithDevice(device: Device): Canvas {
         return Canvas(device)
     }
+    
+    /**
+     * Create a canvas with a specific surface
+     */
+    fun createWithSurface(surface: Surface): Canvas {
+        return Canvas(surface.getDevice())
+    }
 
     /**
      * Create a canvas from width and height (compatibility constructor)
@@ -325,5 +332,14 @@ object CanvasFactory {
      */
     fun create(width: Int, height: Int): Canvas {
         return CanvasFactory.createRaster(width, height)
+    }
+    
+    /**
+     * Create a canvas with a GPU surface (currently falls back to CPU rendering)
+     * This is a placeholder for future GPU rendering implementation
+     */
+    fun createGPU(width: Int, height: Int): Canvas {
+        val surface = Surfaces.makeGPU(width, height)
+        return CanvasFactory.createWithSurface(surface)
     }
 }
