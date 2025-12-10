@@ -1,5 +1,6 @@
 package testing
 
+import testing.skia.AARectEffectGM
 import testing.skia.AaClipGM
 import testing.skia.AaRectModesGM
 import testing.skia.AaXferModesGM
@@ -7,9 +8,11 @@ import testing.skia.AddArcGM
 import testing.skia.AllBitmapConfigsGM
 import testing.skia.AlphaGradientsGM
 import testing.skia.AlphaImageGM
+import testing.skia.AnalyticGradientsGM
 import testing.skia.ArcOfZorroGM
 import testing.skia.ArcToGM
 import testing.skia.ArithmodeGM
+import testing.skia.AttributesGM
 import testing.skia.BatchedConvexPathsGM
 import testing.skia.BeziersGM
 import testing.skia.BigMatrixGM
@@ -64,9 +67,9 @@ fun registerAllTests() {
     registerGM(BitmapCopyGM())  // NEW: Bitmap copy between configurations test
     registerGM(AllBitmapConfigsGM())  // NEW: All bitmap configurations test
     registerGM(ArithmodeGM())  // NEW: Arithmetic blend modes test
-    // registerGM(AnalyticGradientsGM())
-    // registerGM(ArithModeGM())
-    // registerGM(AttributesGM())
+    registerGM(AttributesGM())  // NEW: Path attributes test
+    registerGM(AARectEffectGM())  // NEW: Anti-aliased rectangle effects test
+    registerGM(AnalyticGradientsGM())  // NEW: Analytic gradients test
     // registerGM(BicubicGM())
     // registerGM(BitmapFiltersGM())
     // registerGM(BitmapImageGM())
@@ -134,7 +137,7 @@ fun getTestImplementationStatus(): Map<String, TestCategoryStatus> {
         "BitmapImageGM", "BitmapShaderGM", "BitmapTiledGM"
     )
     
-    val level2Implemented = listOf("BeziersGM", "BatchedConvexPathsGM", "BigMatrixGM", "BitmapCopyGM", "AllBitmapConfigsGM", "ArithmodeGM")
+    val level2Implemented = listOf("BeziersGM", "BatchedConvexPathsGM", "BigMatrixGM", "BitmapCopyGM", "AllBitmapConfigsGM", "ArithmodeGM", "AttributesGM")
     
     status["Level 2: Intermediate"] = TestCategoryStatus(
         total = level2Tests.size,
