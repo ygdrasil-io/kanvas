@@ -15,6 +15,7 @@ import testing.skia.ArithmodeGM
 import testing.skia.AttributesGM
 import testing.skia.BatchedConvexPathsGM
 import testing.skia.BeziersGM
+import testing.skia.BicubicGM
 import testing.skia.BigMatrixGM
 import testing.skia.BigRectGM
 import testing.skia.BitmapCopyGM
@@ -70,7 +71,7 @@ fun registerAllTests() {
     registerGM(AttributesGM())  // NEW: Path attributes test
     registerGM(AARectEffectGM())  // NEW: Anti-aliased rectangle effects test
     registerGM(AnalyticGradientsGM())  // NEW: Analytic gradients test
-    // registerGM(BicubicGM())
+    registerGM(BicubicGM())  // NEW: Bicubic filtering test
     // registerGM(BitmapFiltersGM())
     // registerGM(BitmapImageGM())
     // registerGM(BitmapShaderGM())
