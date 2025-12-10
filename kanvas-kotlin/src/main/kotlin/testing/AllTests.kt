@@ -19,6 +19,7 @@ import testing.skia.BicubicGM
 import testing.skia.BigMatrixGM
 import testing.skia.BigRectGM
 import testing.skia.BitmapCopyGM
+import testing.skia.BitmapFiltersGM
 import testing.skia.BitmapRectGM
 import testing.skia.BleedGM
 import testing.skia.CircleSizesGM
@@ -72,7 +73,7 @@ fun registerAllTests() {
     registerGM(AARectEffectGM())  // NEW: Anti-aliased rectangle effects test
     registerGM(AnalyticGradientsGM())  // NEW: Analytic gradients test
     registerGM(BicubicGM())  // NEW: Bicubic filtering test
-    // registerGM(BitmapFiltersGM())
+    registerGM(BitmapFiltersGM())  // NEW: Bitmap filtering test
     // registerGM(BitmapImageGM())
     // registerGM(BitmapShaderGM())
     // registerGM(BitmapTiledGM())
