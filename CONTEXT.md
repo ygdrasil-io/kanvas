@@ -223,6 +223,70 @@ Kanvas pourrait devenir une alternative Kotlin-native pour :
 
 En fournissant une implémentation moderne, idiomatique et performante des concepts Skia dans l'écosystème Kotlin.
 
+## 🔧 Architecture des Devices dans Skia
+
+### Types de Devices
+
+Skia utilise une architecture de "devices" pour gérer différents types de rendu :
+
+1. **SkDevice** - Classe de base abstraite pour tous les devices
+2. **Devices CPU** :
+   - SkBitmapDevice (rendu raster sur bitmaps)
+   - SkClipStackDevice (avec gestion de clipping)
+   - SkNoPixelsDevice (pour le suivi sans pixels)
+3. **Devices GPU** :
+   - Device (Ganesh) - Ancien backend GPU
+   - Device (Graphite) - Nouveau backend GPU
+4. **Devices de sortie spécialisés** :
+   - SkSVGDevice (génération SVG)
+   - SkPDFDevice (génération PDF)
+   - SkXPSDevice (génération XPS)
+
+### Backends GPU : Ganesh vs Graphite
+
+#### Ganesh (skgpu v1)
+- **Ancien backend GPU** utilisé en production depuis 2010
+- **Architecture mature** mais complexe
+- **Support multiple** : OpenGL, Vulkan, Metal, Direct3D
+- **Basé sur GrRecordingContext** pour l'enregistrement des commandes
+- **Fichiers** : `skia/src/gpu/ganesh/`
+
+#### Graphite (skgpu v2)
+- **Nouveau backend GPU** développé depuis 2021
+- **Architecture moderne** plus simple et performante
+- **Conçu pour remplacer Ganesh** comme standard futur
+- **Basé sur Recorder** pour une approche plus directe
+- **Fichiers** : `skia/src/gpu/graphite/`
+
+### Relation entre Devices et Backends
+
+```
+SkDevice (Classe de base)
+├── Devices CPU (SkBitmapDevice, etc.)
+└── Devices GPU
+    ├── Device (Ganesh) - héritage direct de SkDevice
+    └── Device (Graphite) - héritage direct de SkDevice
+```
+
+Les deux devices GPU implémentent les méthodes virtuelles de SkDevice mais avec des backends différents :
+- **Ganesh** utilise `GrRecordingContext`
+- **Graphite** utilise `Recorder`
+
+Cette dualité permet à Skia de migrer progressivement vers Graphite tout en maintenant la compatibilité avec Ganesh.
+
+### Comparaison Ganesh vs Graphite
+
+| Aspect | Ganesh | Graphite |
+|--------|--------|----------|
+| Version | v1 (ancien) | v2 (nouveau) |
+| Complexité | Plus complexe | Plus simple |
+| Performance | Bonne | Optimisée |
+| Maintenance | Plus difficile | Plus facile |
+| Futur | Legacy | Standard |
+| Date | 2010 | 2021 |
+
+Les deux backends coexistent actuellement dans Skia pour assurer une transition en douceur vers l'architecture moderne de Graphite.
+
 ## 🚀 Progrès Récent et Fonctionnalités Implémentées
 
 ### Tests Skia GM Implémentés
