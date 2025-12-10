@@ -63,6 +63,7 @@ class LinearGradientShader(
                 val mod = projection % 2f
                 if (mod > 1f) 2f - mod else mod
             }
+            TileMode.DECAL -> projection.coerceIn(0f, 1f)
         }
         
         // Find which color segment we're in
@@ -113,6 +114,7 @@ class RadialGradientShader(
                 val mod = t % 2f
                 if (mod > 1f) 2f - mod else mod
             }
+            TileMode.DECAL -> t.coerceIn(0f, 1f)
         }
         
         // Find which color segment we're in
@@ -156,6 +158,7 @@ class BitmapShader(
                 val mod = u % (2 * width)
                 if (mod > width) 2 * width - mod else mod
             }
+            TileMode.DECAL -> u.coerceIn(0f, width.toFloat() - 1)
         }
         
         v = when (tileModeY) {
@@ -165,6 +168,7 @@ class BitmapShader(
                 val mod = v % (2 * height)
                 if (mod > height) 2 * height - mod else mod
             }
+            TileMode.DECAL -> v.coerceIn(0f, height.toFloat() - 1)
         }
         
         return bitmap.getPixel(u.toInt(), v.toInt())
@@ -173,11 +177,21 @@ class BitmapShader(
 
 /**
  * Tile modes for shader behavior at edges
+ * 
+ * Differences and alignments with Skia:
+ * - CLAMP: Similar to Skia's kClamp_TileMode, clamps values to the [0,1] range.
+ * - REPEAT: Similar to Skia's kRepeat_TileMode, repeats the pattern using modulo operation.
+ * - MIRROR: Similar to Skia's kMirror_TileMode, mirrors the pattern.
+ * - DECAL: Similar to Skia's kDecal_TileMode, clamps values to the [0,1] range but with different edge behavior.
+ * 
+ * Note: The DECAL mode in Kanvas currently behaves identically to CLAMP, as the edge behavior differences
+ * are more complex and may require additional implementation to fully match Skia's behavior.
  */
 enum class TileMode {
     CLAMP,    // Clamp to edge colors
     REPEAT,   // Repeat the pattern
-    MIRROR    // Mirror the pattern
+    MIRROR,   // Mirror the pattern
+    DECAL     // Similar to CLAMP but with different edge behavior (clamps to [0,1] range)
 }
 
 /**
