@@ -2,6 +2,7 @@ package com.kanvas.core
 
 import core.GlyphRunList
 import device.BitmapDevice
+import device.GPUDevice
 
 /**
  * Device interface, inspired by Skia's SkDevice
@@ -278,4 +279,17 @@ object Devices {
             }
         }
     }
+    
+    /**
+     * Create a GPU device (currently a no-op implementation)
+     * This is a placeholder for future GPU rendering implementation
+     */
+    fun makeGPU(width: Int, height: Int, colorInfo: ColorInfo = ColorInfo(
+        ColorType.RGBA_8888,
+        AlphaType.PREMUL,
+        ColorSpace.SRGB
+    ), surfaceProps: SurfaceProps = SurfaceProps.default()): Device {
+        return GPUDevice(width, height, colorInfo, surfaceProps)
+    }
 }
+
