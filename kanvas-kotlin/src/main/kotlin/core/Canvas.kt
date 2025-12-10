@@ -193,6 +193,18 @@ class Canvas(private val device: Device) {
     }
     
     /**
+     * Draws a line between two points
+     */
+    fun drawLine(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint) {
+        // Create a path with the line and draw it
+        val path = Path().apply {
+            moveTo(x1, y1)
+            lineTo(x2, y2)
+        }
+        drawPath(path, paint)
+    }
+
+    /**
      * Draws a circle
      */
     fun drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint) {
