@@ -72,9 +72,10 @@ class TextToGlyphsTest {
         // Bounds should not be empty for non-empty text
         assertFalse(bounds.isEmpty)
         
-        // Bounds should start at origin for this case
+        // Bounds should start at origin horizontally, but may have negative top due to ascender
         assertEquals(0f, bounds.left, 0.01f)
-        assertEquals(0f, bounds.top, 0.01f)
+        // With improved metrics, top can be negative (ascender above baseline)
+        assertTrue(bounds.top <= 0f) // Top should be at or above the baseline
         
         // Bounds should have positive width and height
         assertTrue(bounds.width > 0)

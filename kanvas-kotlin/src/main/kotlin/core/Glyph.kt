@@ -81,12 +81,15 @@ data class Glyph(
         
         /**
          * Crée un glyphe à partir d'un ID et d'une avance
+         * Avec des bounds améliorés basés sur les métriques de police
          */
-        fun createSimple(glyphId: GlyphID, advanceX: Float): Glyph {
+        fun createSimple(glyphId: GlyphID, advanceX: Float, fontMetrics: FontMetrics? = null): Glyph {
+            val ascent = fontMetrics?.ascent ?: 0f
+            val descent = fontMetrics?.descent ?: 1f
             return Glyph(
                 id = glyphId,
                 advanceX = advanceX,
-                bounds = SimpleRect(0f, 0f, advanceX, 1f) // Bounds approximatifs
+                bounds = SimpleRect(0f, -ascent, advanceX, descent)
             )
         }
     }

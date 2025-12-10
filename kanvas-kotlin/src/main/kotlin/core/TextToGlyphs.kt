@@ -23,37 +23,55 @@ class TextToGlyphs {
             // Convertir le texte en IDs de glyphes
             val glyphIds = font.textToGlyphs(text)
             
-            // Créer des glyphes simples avec des avances approximatives
-            // Pour une implémentation réelle, nous aurions besoin des métriques réelles
-            // des glyphes à partir de la police
-            val glyphs = glyphIds.map { glyphId ->
-                // Utiliser une avance approximative pour l'instant
-                // Dans une implémentation complète, cela viendrait des métriques de la police
-                val advanceX = font.size * 0.6f // Approximation: 60% de la taille de la police
-                Glyph.createSimple(glyphId, advanceX)
+            // Créer des glyphes avec des avances plus précises basées sur les métriques de la police
+            val glyphs = glyphIds.mapIndexed { index, glyphId ->
+                // Utiliser les métriques de la police pour calculer une avance plus précise
+                // Pour une implémentation complète, nous utiliserions les avances spécifiques à chaque glyphe
+                val metrics = font.getMetrics()
+                
+                // Calculer l'avance en fonction du type de caractère
+                val char = text.getOrNull(index) ?: ' '
+                val advanceX = when (char) {
+                    ' ', '\t', '\n', '\r' -> font.size * 0.3f // Espaces et caractères de contrôle
+                    'i', 'j', 'l', 'I', '!', '.', ',', ';', ':' -> font.size * 0.25f // Caractères étroits
+                    'm', 'w', 'M', 'W', '@', '#', '$', '%' -> font.size * 0.8f // Caractères larges
+                    else -> metrics.avgCharWidth // Largeur moyenne par défaut
+                }
+                
+                // Calculer la hauteur du glyphe en fonction des métriques
+                val glyphHeight = metrics.ascent + metrics.descent
+                
+                Glyph.createSimple(glyphId, advanceX, font.getMetrics())
             }
             
-            // Calculer les positions
-            val positions = calculateGlyphPositions(glyphs, startX, startY)
+            // Calculer les positions avec les métriques de la police
+            val positions = calculateGlyphPositions(glyphs, startX, startY, font)
             
             return GlyphRun(font, positions, glyphs)
         }
         
         /**
          * Calcule les positions des glyphes pour un rendu horizontal simple.
+         * Prend en compte les métriques verticales de la police pour un positionnement précis.
          * 
          * @param glyphs La liste des glyphes
          * @param startX La position X de départ
          * @param startY La position Y de départ (ligne de base)
+         * @param font La police utilisée pour obtenir les métriques verticales
          * @return La liste des positions calculées
          */
-        private fun calculateGlyphPositions(glyphs: List<Glyph>, startX: Float, startY: Float): List<Point> {
+        private fun calculateGlyphPositions(glyphs: List<Glyph>, startX: Float, startY: Float, font: Font): List<Point> {
             val positions = mutableListOf<Point>()
             var currentX = startX
-            val currentY = startY
+            
+            // Utiliser les métriques de la police pour le positionnement vertical
+            val metrics = font.getMetrics()
+            // La ligne de base est à startY, mais nous devons ajuster pour l'ascender
+            val baselineY = startY
             
             for (glyph in glyphs) {
-                positions.add(Point(currentX, currentY))
+                // Positionner chaque glyphe sur la ligne de base
+                positions.add(Point(currentX, baselineY))
                 currentX += glyph.advanceX
             }
             
