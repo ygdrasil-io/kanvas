@@ -192,6 +192,30 @@ interface Device {
     }
 
     /**
+     * Get a canvas for drawing on this device
+     * This creates a canvas that uses this device for rendering operations
+     */
+    fun getCanvas(): Canvas {
+        return Canvas(this)
+    }
+
+    /**
+     * Get the recording context for this device (GPU rendering)
+     * Returns null for CPU-only devices
+     */
+    fun getRecordingContext(): RecordingContext? {
+        return null // Default implementation for CPU devices
+    }
+
+    /**
+     * Get the direct context for this device (GPU rendering)
+     * Returns null for CPU-only devices
+     */
+    fun getDirectContext(): DirectContext? {
+        return null // Default implementation for CPU devices
+    }
+
+    /**
      * Clip the current clip region with a rectangle
      */
     fun clipRect(rect: Rect, clipOp: ClipOp = ClipOp.INTERSECT, doAntiAlias: Boolean = false)
@@ -257,6 +281,13 @@ interface Device {
      * Draw a paint (fill the entire clip region)
      */
     fun drawPaint(paint: Paint)
+
+    /**
+     * Draw a canvas onto this device using the specified paint
+     * This is useful for compositing multiple canvases or for advanced rendering effects
+     * Inspired by Skia's drawCanvas method
+     */
+    fun draw(canvas: Canvas, paint: Paint? = null)
 }
 
 /**
