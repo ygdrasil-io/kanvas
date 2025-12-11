@@ -1,5 +1,12 @@
 package com.kanvas.core
 
+import core.Vector3D
+
+/**
+ * 3D Point for advanced transformations
+ */
+data class Point3D(val x: Float, val y: Float, val z: Float)
+
 /**
  * 4x4 transformation matrix for 2D/3D graphics
  * Inspired by Skia's SkM44
@@ -23,6 +30,100 @@ data class Matrix4x4(
                 m01 = 0f, m11 = 1f, m21 = 0f, m31 = 0f,
                 m02 = 0f, m12 = 0f, m22 = 1f, m32 = 0f,
                 m03 = 0f, m13 = 0f, m23 = 0f, m33 = 1f
+            )
+        }
+        
+        /**
+         * Create a translation matrix (Skia-style static method)
+         */
+        fun Translate(x: Float, y: Float, z: Float = 0f): Matrix4x4 {
+            return translate(x, y, z)
+        }
+        
+        /**
+         * Create a scale matrix (Skia-style static method)
+         */
+        fun Scale(x: Float, y: Float, z: Float = 1f): Matrix4x4 {
+            return scale(x, y, z)
+        }
+        
+        /**
+         * Create a rotation matrix around arbitrary axis (Skia-style)
+         */
+        fun Rotate(axis: Vector3D, radians: Float): Matrix4x4 {
+            // Normalize the axis
+            val normalizedAxis = axis.normalized()
+            val x = normalizedAxis.x
+            val y = normalizedAxis.y
+            val z = normalizedAxis.z
+            val c = kotlin.math.cos(radians.toDouble()).toFloat()
+            val s = kotlin.math.sin(radians.toDouble()).toFloat()
+            val t = 1 - c
+            
+            return Matrix4x4(
+                m00 = t * x * x + c,     m10 = t * x * y - s * z, m20 = t * x * z + s * y, m30 = 0f,
+                m01 = t * x * y + s * z, m11 = t * y * y + c,     m21 = t * y * z - s * x, m31 = 0f,
+                m02 = t * x * z - s * y, m12 = t * y * z + s * x, m22 = t * z * z + c,     m32 = 0f,
+                m03 = 0f,               m13 = 0f,               m23 = 0f,               m33 = 1f
+            )
+        }
+        
+        /**
+         * Create a rotation matrix using pre-computed sin/cos (Skia-style optimization)
+         */
+        fun RotateUnitSinCos(axis: Vector3D, sinAngle: Float, cosAngle: Float): Matrix4x4 {
+            // Normalize the axis
+            val normalizedAxis = axis.normalized()
+            val x = normalizedAxis.x
+            val y = normalizedAxis.y
+            val z = normalizedAxis.z
+            val c = cosAngle
+            val s = sinAngle
+            val t = 1 - c
+            
+            return Matrix4x4(
+                m00 = t * x * x + c,     m10 = t * x * y - s * z, m20 = t * x * z + s * y, m30 = 0f,
+                m01 = t * x * y + s * z, m11 = t * y * y + c,     m21 = t * y * z - s * x, m31 = 0f,
+                m02 = t * x * z - s * y, m12 = t * y * z + s * x, m22 = t * z * z + c,     m32 = 0f,
+                m03 = 0f,               m13 = 0f,               m23 = 0f,               m33 = 1f
+            )
+        }
+        
+        /**
+         * Create a perspective matrix (Skia-style)
+         */
+        fun Perspective(near: Float, far: Float, angle: Float): Matrix4x4 {
+            val f = 1.0f / kotlin.math.tan(angle / 2)
+            val rangeInv = 1.0f / (near - far)
+            
+            return Matrix4x4(
+                m00 = f,                m10 = 0f, m20 = 0f,                          m30 = 0f,
+                m01 = 0f,               m11 = f,  m21 = 0f,                          m31 = 0f,
+                m02 = 0f,               m12 = 0f, m22 = (far + near) * rangeInv,    m32 = 2 * far * near * rangeInv,
+                m03 = 0f,               m13 = 0f, m23 = -1f,                          m33 = 0f
+            )
+        }
+        
+        /**
+         * Create a matrix that maps source rect to destination rect (Skia-style)
+         */
+        fun RectToRect(src: Rect, dst: Rect): Matrix4x4 {
+            if (src.isEmpty) {
+                return identity()
+            } else if (dst.isEmpty) {
+                return scale(0f, 0f, 0f)
+            }
+            
+            val sx = dst.width / src.width
+            val sy = dst.height / src.height
+            val tx = dst.left - src.left * sx
+            val ty = dst.top - src.top * sy
+            
+            return Matrix4x4(
+                m00 = sx,  m10 = 0f, m20 = 0f, m30 = tx,
+                m01 = 0f,  m11 = sy, m21 = 0f, m31 = ty,
+                m02 = 0f,  m12 = 0f, m22 = 1f, m32 = 0f,
+                m03 = 0f,  m13 = 0f, m23 = 0f, m33 = 1f
             )
         }
         
@@ -81,31 +182,94 @@ data class Matrix4x4(
     /**
      * Multiply this matrix by another matrix (this * other)
      */
-    fun multiply(other: Matrix4x4): Matrix4x4 {
+    /**
+     * Matrix multiplication operator (Skia-style: this * other)
+     */
+    operator fun times(other: Matrix4x4): Matrix4x4 {
+        val otherMatrix = other
         return Matrix4x4(
             // First column
-            m00 * other.m00 + m10 * other.m01 + m20 * other.m02 + m30 * other.m03,
-            m00 * other.m10 + m10 * other.m11 + m20 * other.m12 + m30 * other.m13,
-            m00 * other.m20 + m10 * other.m21 + m20 * other.m22 + m30 * other.m23,
-            m00 * other.m30 + m10 * other.m31 + m20 * other.m32 + m30 * other.m33,
+            m00 * otherMatrix.m00 + m10 * otherMatrix.m01 + m20 * otherMatrix.m02 + m30 * otherMatrix.m03,
+            m00 * otherMatrix.m10 + m10 * otherMatrix.m11 + m20 * otherMatrix.m12 + m30 * otherMatrix.m13,
+            m00 * otherMatrix.m20 + m10 * otherMatrix.m21 + m20 * otherMatrix.m22 + m30 * otherMatrix.m23,
+            m00 * otherMatrix.m30 + m10 * otherMatrix.m31 + m20 * otherMatrix.m32 + m30 * otherMatrix.m33,
             
             // Second column
-            m01 * other.m00 + m11 * other.m01 + m21 * other.m02 + m31 * other.m03,
-            m01 * other.m10 + m11 * other.m11 + m21 * other.m12 + m31 * other.m13,
-            m01 * other.m20 + m11 * other.m21 + m21 * other.m22 + m31 * other.m23,
-            m01 * other.m30 + m11 * other.m31 + m21 * other.m32 + m31 * other.m33,
+            m01 * otherMatrix.m00 + m11 * otherMatrix.m01 + m21 * otherMatrix.m02 + m31 * otherMatrix.m03,
+            m01 * otherMatrix.m10 + m11 * otherMatrix.m11 + m21 * otherMatrix.m12 + m31 * otherMatrix.m13,
+            m01 * otherMatrix.m20 + m11 * otherMatrix.m21 + m21 * otherMatrix.m22 + m31 * otherMatrix.m23,
+            m01 * otherMatrix.m30 + m11 * otherMatrix.m31 + m21 * otherMatrix.m32 + m31 * otherMatrix.m33,
             
             // Third column
-            m02 * other.m00 + m12 * other.m01 + m22 * other.m02 + m32 * other.m03,
-            m02 * other.m10 + m12 * other.m11 + m22 * other.m12 + m32 * other.m13,
-            m02 * other.m20 + m12 * other.m21 + m22 * other.m22 + m32 * other.m23,
-            m02 * other.m30 + m12 * other.m31 + m22 * other.m32 + m32 * other.m33,
+            m02 * otherMatrix.m00 + m12 * otherMatrix.m01 + m22 * otherMatrix.m02 + m32 * otherMatrix.m03,
+            m02 * otherMatrix.m10 + m12 * otherMatrix.m11 + m22 * otherMatrix.m12 + m32 * otherMatrix.m13,
+            m02 * otherMatrix.m20 + m12 * otherMatrix.m21 + m22 * otherMatrix.m22 + m32 * otherMatrix.m23,
+            m02 * otherMatrix.m30 + m12 * otherMatrix.m31 + m22 * otherMatrix.m32 + m32 * otherMatrix.m33,
             
             // Fourth column
-            m03 * other.m00 + m13 * other.m01 + m23 * other.m02 + m33 * other.m03,
-            m03 * other.m10 + m13 * other.m11 + m23 * other.m12 + m33 * other.m13,
-            m03 * other.m20 + m13 * other.m21 + m23 * other.m22 + m33 * other.m23,
-            m03 * other.m30 + m13 * other.m31 + m23 * other.m32 + m33 * other.m33
+            m03 * otherMatrix.m00 + m13 * otherMatrix.m01 + m23 * otherMatrix.m02 + m33 * otherMatrix.m03,
+            m03 * otherMatrix.m10 + m13 * otherMatrix.m11 + m23 * otherMatrix.m12 + m33 * otherMatrix.m13,
+            m03 * otherMatrix.m20 + m13 * otherMatrix.m21 + m23 * otherMatrix.m22 + m33 * otherMatrix.m23,
+            m03 * otherMatrix.m30 + m13 * otherMatrix.m31 + m23 * otherMatrix.m32 + m33 * otherMatrix.m33
+        )
+    }
+    
+    /**
+     * Set this matrix to the concatenation of two matrices (Skia-style)
+     */
+    fun setConcat(a: Matrix4x4, b: Matrix4x4): Matrix4x4 {
+        return a.times(b)
+    }
+    
+    /**
+     * Pre-concatenate with a 3x3 matrix (Skia-style)
+     */
+    fun preConcat(matrix: Matrix): Matrix4x4 {
+        // Convert 3x3 matrix to 4x4
+        val m44 = fromMatrix3x3(matrix)
+        return m44.times(this)
+    }
+    
+    /**
+     * Get the matrix as a row-major array (Skia-style)
+     */
+    fun getRowMajor(): FloatArray {
+        return floatArrayOf(
+            m00, m01, m02, m03,
+            m10, m11, m12, m13,
+            m20, m21, m22, m23,
+            m30, m31, m32, m33
+        )
+    }
+    
+    /**
+     * Check if matrix has perspective (Skia-style)
+     */
+    fun hasPerspective(): Boolean {
+        // Check if the last row is not [0, 0, 0, 1]
+        return m03 != 0f || m13 != 0f || m23 != 0f || m33 != 1f
+    }
+    
+    /**
+     * Get the maximum scale factor (Skia-style)
+     */
+    fun getMaxScale(): Float {
+        // Calculate the scale factors for each axis
+        val scaleX = kotlin.math.sqrt(m00 * m00 + m10 * m10 + m20 * m20)
+        val scaleY = kotlin.math.sqrt(m01 * m01 + m11 * m11 + m21 * m21)
+        val scaleZ = kotlin.math.sqrt(m02 * m02 + m12 * m12 + m22 * m22)
+        return kotlin.math.max(kotlin.math.max(scaleX, scaleY), scaleZ)
+    }
+    
+    /**
+     * Transpose this matrix (Skia-style)
+     */
+    fun transpose(): Matrix4x4 {
+        return Matrix4x4(
+            m00 = m00, m10 = m01, m20 = m02, m30 = m03,
+            m01 = m10, m11 = m11, m21 = m12, m31 = m13,
+            m02 = m20, m12 = m21, m22 = m22, m32 = m23,
+            m03 = m30, m13 = m31, m23 = m32, m33 = m33
         )
     }
     
@@ -201,8 +365,3 @@ data class Matrix4x4(
                 "[${m03}, ${m13}, ${m23}, ${m33}])"
     }
 }
-
-/**
- * 3D Point for advanced transformations
- */
-data class Point3D(val x: Float, val y: Float, val z: Float)

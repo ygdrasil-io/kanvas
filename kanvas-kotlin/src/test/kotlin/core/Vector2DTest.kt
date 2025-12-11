@@ -198,9 +198,9 @@ class Vector2DTest {
         val v3 = Vector2D(1f, 1f)
         val v4 = Vector2D(4f, 5f)
         
-        val expectedDist = sqrt(32f) // sqrt((3^2 + 4^2))
+        val expectedDist = 5f // sqrt((3^2 + 4^2)) = sqrt(25) = 5
         assertEquals(expectedDist, Vector2D.distance(v3, v4))
-        assertEquals(32f, Vector2D.distanceSquared(v3, v4))
+        assertEquals(25f, Vector2D.distanceSquared(v3, v4))
     }
     
     @Test

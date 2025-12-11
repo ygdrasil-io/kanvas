@@ -175,9 +175,9 @@ class Vector3DTest {
         val v3 = Vector3D(1f, 1f, 1f)
         val v4 = Vector3D(4f, 5f, 6f)
         
-        val expectedDist = sqrt(27f) // sqrt((3^2 + 4^2 + 5^2))
+        val expectedDist = sqrt(50f) // sqrt((3^2 + 4^2 + 5^2))
         assertEquals(expectedDist, Vector3D.distance(v3, v4))
-        assertEquals(27f, Vector3D.distanceSquared(v3, v4))
+        assertEquals(50f, Vector3D.distanceSquared(v3, v4))
     }
     
     @Test
