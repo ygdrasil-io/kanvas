@@ -45,7 +45,49 @@
 ✅ `bitmapfilters.cpp` - Bitmap filtering
 ✅ `bitmapimage.cpp` - Bitmap image handling
 
-❌ `3d.cpp` - 3D transformations
+🔧 `3d.cpp` - 3D transformations (Requires infrastructure - see todo list)
+
+#### 📋 3D Infrastructure Requirements
+
+The `3d.cpp` test requires significant 3D infrastructure that is not yet implemented in Kanvas:
+
+**Missing Components:**
+- ✅ Matrix4x4 class (basic structure exists)
+- ❌ Vector3D class with vector operations
+- ❌ Matrix4x4.invert() - functional implementation
+- ❌ Matrix4x4.Perspective() - perspective projection
+- ❌ Matrix4x4.LookAt() - camera view matrix
+- ❌ Matrix4x4.Rotate() - 3D rotation around arbitrary axis
+- ❌ PictureRecorder/Picture system for recording and playback
+- ❌ Canvas.drawPicture() method
+
+**Estimated Effort:** 2-4 weeks of development
+
+**Priority:** High (blocks Level 2 completion and advanced 3D features)
+
+#### 🔧 Implementation Roadmap
+
+1. **Phase 1: Core 3D Math** (Tasks 20-24)
+   - Implement Vector3D class with full vector operations
+   - Fix Matrix4x4.invert() with proper algorithm
+   - Add perspective projection matrix creation
+   - Implement LookAt camera matrix
+   - Add 3D rotation around arbitrary axes
+
+2. **Phase 2: Picture System** (Tasks 25-26)
+   - Design and implement PictureRecorder
+   - Add Picture playback functionality
+   - Integrate with Canvas drawing system
+
+3. **Phase 3: Testing & Integration** (Tasks 27-28)
+   - Create simplified 3D test with current capabilities
+   - Validate all 3D math operations
+   - Test picture recording/playback
+
+4. **Phase 4: Full Implementation** (Task 29)
+   - Implement complete 3d.cpp test
+   - Ensure compatibility with Skia reference
+   - Add comprehensive test coverage
 
 ### 🔴 Level 3: Advanced Features (0% Complete)
 **0/10 tests implemented**
