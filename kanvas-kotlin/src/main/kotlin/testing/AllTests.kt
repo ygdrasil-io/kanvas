@@ -32,6 +32,7 @@ import testing.skia.CubicPathsGM
 import testing.skia.DashingGM
 import testing.skia.DestColorGM
 import testing.skia.FillRectGradientGM
+import testing.skia.Sk3DGM
 
 /**
  * Central registration point for all Skia GM tests
@@ -76,6 +77,7 @@ fun registerAllTests() {
     registerGM(BicubicGM())  // NEW: Bicubic filtering test
     registerGM(BitmapFiltersGM())  // NEW: Bitmap filtering test
     registerGM(BitmapImageGM())  // NEW: Bitmap image loading test
+    registerGM(Sk3DGM())
     // registerGM(BitmapShaderGM())
     // registerGM(BitmapTiledGM())
     

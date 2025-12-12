@@ -90,6 +90,28 @@ data class Matrix4x4(
         }
         
         /**
+         * Create a look-at matrix (view matrix) - Skia-style
+         */
+        fun LookAt(eye: Vector3D, center: Vector3D, up: Vector3D): Matrix4x4 {
+            // Calculate forward vector
+            val forward = (center - eye).normalized()
+            
+            // Calculate side vector
+            val side = forward.cross(up.normalized()).normalized()
+            
+            // Calculate new up vector
+            val newUp = side.cross(forward)
+            
+            // Create view matrix
+            return Matrix4x4(
+                m00 = side.x,    m10 = side.y,    m20 = side.z,    m30 = -side.dot(eye),
+                m01 = newUp.x,   m11 = newUp.y,   m21 = newUp.z,   m31 = -newUp.dot(eye),
+                m02 = -forward.x, m12 = -forward.y, m22 = -forward.z, m32 = forward.dot(eye),
+                m03 = 0f,        m13 = 0f,        m23 = 0f,        m33 = 1f
+            )
+        }
+        
+        /**
          * Create a perspective matrix (Skia-style)
          */
         fun Perspective(near: Float, far: Float, angle: Float): Matrix4x4 {
