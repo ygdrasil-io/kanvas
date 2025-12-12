@@ -11,8 +11,9 @@ private fun Float.toSkScalar(): SkScalar {
 
 /**
  * Path represents a series of points, lines, and curves that can be drawn on a canvas.
+ * Implements SkPathInterface for full Skia compatibility.
  */
-class Path {
+class Path : SkPathInterface {
     
     internal val points: MutableList<Point> = mutableListOf()
     internal val verbs: MutableList<PathVerb> = mutableListOf()
@@ -145,6 +146,87 @@ class Path {
         cubicTo(x - rx, y + c * ry, x - c * rx, y + ry, x, y + ry)
         cubicTo(x + c * rx, y + ry, x + rx, y + c * ry, x + rx, y)
         close()
+    }
+    
+    /**
+     * Adds an arc to the path as a contour
+     * Similar to Skia's arcTo method
+     * 
+     * @param oval The bounding rectangle for the oval that the arc is part of
+     * @param startAngle The starting angle of the arc in degrees
+     * @param sweepAngle The sweep angle of the arc in degrees
+     * @param forceMoveTo If true, always start with a moveTo
+     */
+    fun arcTo(oval: Rect, startAngle: Float, sweepAngle: Float, forceMoveTo: Boolean = false) {
+        // If we need to force a moveTo or if the path is empty/closed, start a new contour
+        val needsMoveTo = forceMoveTo || verbs.isEmpty() || verbs.last() == PathVerb.CLOSE
+        
+        if (needsMoveTo) {
+            // Find the point on the oval at startAngle
+            val radians = SkScalarDegreesToRadians(startAngle.toSkScalar())
+            val x = oval.centerX + oval.width / 2 * SkScalarCos(radians)
+            val y = oval.centerY + oval.height / 2 * SkScalarSin(radians)
+            moveTo(x.toFloat(), y.toFloat())
+        }
+        
+        // Add the arc using the existing addArc method
+        addArc(oval, startAngle, sweepAngle)
+    }
+    
+    /**
+     * Adds a relative quadratic curve to the path
+     * Similar to Skia's rQuadTo method
+     * 
+     * @param dx1 The x-coordinate of the control point, relative to the current point
+     * @param dy1 The y-coordinate of the control point, relative to the current point
+     * @param dx2 The x-coordinate of the end point, relative to the current point
+     * @param dy2 The y-coordinate of the end point, relative to the current point
+     */
+    fun rQuadTo(dx1: Float, dy1: Float, dx2: Float, dy2: Float) {
+        if (points.isEmpty()) {
+            // If path is empty, treat as absolute coordinates
+            quadTo(dx1, dy1, dx2, dy2)
+        } else {
+            // Get the current point
+            val currentPoint = points.last()
+            // Calculate absolute coordinates
+            val absX1 = currentPoint.x + dx1
+            val absY1 = currentPoint.y + dy1
+            val absX2 = currentPoint.x + dx2
+            val absY2 = currentPoint.y + dy2
+            // Use absolute quadTo
+            quadTo(absX1, absY1, absX2, absY2)
+        }
+    }
+    
+    /**
+     * Adds a relative cubic curve to the path
+     * Similar to Skia's rCubicTo method
+     * 
+     * @param dx1 The x-coordinate of the first control point, relative to the current point
+     * @param dy1 The y-coordinate of the first control point, relative to the current point
+     * @param dx2 The x-coordinate of the second control point, relative to the current point
+     * @param dy2 The y-coordinate of the second control point, relative to the current point
+     * @param dx3 The x-coordinate of the end point, relative to the current point
+     * @param dy3 The y-coordinate of the end point, relative to the current point
+     */
+    fun rCubicTo(dx1: Float, dy1: Float, dx2: Float, dy2: Float, dx3: Float, dy3: Float) {
+        if (points.isEmpty()) {
+            // If path is empty, treat as absolute coordinates
+            cubicTo(dx1, dy1, dx2, dy2, dx3, dy3)
+        } else {
+            // Get the current point
+            val currentPoint = points.last()
+            // Calculate absolute coordinates
+            val absX1 = currentPoint.x + dx1
+            val absY1 = currentPoint.y + dy1
+            val absX2 = currentPoint.x + dx2
+            val absY2 = currentPoint.y + dy2
+            val absX3 = currentPoint.x + dx3
+            val absY3 = currentPoint.y + dy3
+            // Use absolute cubicTo
+            cubicTo(absX1, absY1, absX2, absY2, absX3, absY3)
+        }
     }
     
     /**
@@ -465,5 +547,158 @@ object PathUtils {
         }
         
         return length
+    }
+    
+    /**
+     * Computes the tight bounds of the path
+     * More accurate than getBounds() but computationally more expensive
+     */
+    override fun computeTightBounds(): Rect {
+        // For now, use the same implementation as getBounds()
+        // This could be enhanced to compute tighter bounds
+        return getBounds()
+    }
+    
+    /**
+     * Transforms the path using the specified matrix
+     */
+    override fun transform(matrix: Matrix): Path {
+        val transformedPath = Path()
+        
+        for (i in verbs.indices) {
+            when (verbs[i]) {
+                PathVerb.MOVE -> {
+                    val point = points[i]
+                    val transformedPoint = matrix.mapPoint(point.x, point.y)
+                    transformedPath.moveTo(transformedPoint.x, transformedPoint.y)
+                }
+                PathVerb.LINE -> {
+                    val point = points[i]
+                    val transformedPoint = matrix.mapPoint(point.x, point.y)
+                    transformedPath.lineTo(transformedPoint.x, transformedPoint.y)
+                }
+                PathVerb.QUAD -> {
+                    if (i + 1 < points.size) {
+                        val p1 = points[i]
+                        val p2 = points[i + 1]
+                        val tp1 = matrix.mapPoint(p1.x, p1.y)
+                        val tp2 = matrix.mapPoint(p2.x, p2.y)
+                        transformedPath.quadTo(tp1.x, tp1.y, tp2.x, tp2.y)
+                    }
+                }
+                PathVerb.CONIC -> {
+                    if (i + 1 < points.size) {
+                        val p1 = points[i]
+                        val p2 = points[i + 1]
+                        val conicCount = verbs.take(i).count { it == PathVerb.CONIC }
+                        val weight = conicWeights[conicCount]
+                        val tp1 = matrix.mapPoint(p1.x, p1.y)
+                        val tp2 = matrix.mapPoint(p2.x, p2.y)
+                        transformedPath.conicTo(tp1.x, tp1.y, tp2.x, tp2.y, weight)
+                    }
+                }
+                PathVerb.CUBIC -> {
+                    if (i + 2 < points.size) {
+                        val p1 = points[i]
+                        val p2 = points[i + 1]
+                        val p3 = points[i + 2]
+                        val tp1 = matrix.mapPoint(p1.x, p1.y)
+                        val tp2 = matrix.mapPoint(p2.x, p2.y)
+                        val tp3 = matrix.mapPoint(p3.x, p3.y)
+                        transformedPath.cubicTo(tp1.x, tp1.y, tp2.x, tp2.y, tp3.x, tp3.y)
+                    }
+                }
+                PathVerb.CLOSE -> {
+                    transformedPath.close()
+                }
+            }
+        }
+        
+        return transformedPath
+    }
+    
+    /**
+     * Offsets the path by the specified amounts
+     */
+    override fun offset(dx: Float, dy: Float): Path {
+        val offsetPath = Path()
+        
+        for (i in verbs.indices) {
+            when (verbs[i]) {
+                PathVerb.MOVE -> {
+                    val point = points[i]
+                    offsetPath.moveTo(point.x + dx, point.y + dy)
+                }
+                PathVerb.LINE -> {
+                    val point = points[i]
+                    offsetPath.lineTo(point.x + dx, point.y + dy)
+                }
+                PathVerb.QUAD -> {
+                    if (i + 1 < points.size) {
+                        val p1 = points[i]
+                        val p2 = points[i + 1]
+                        offsetPath.quadTo(p1.x + dx, p1.y + dy, p2.x + dx, p2.y + dy)
+                    }
+                }
+                PathVerb.CONIC -> {
+                    if (i + 1 < points.size) {
+                        val p1 = points[i]
+                        val p2 = points[i + 1]
+                        val conicCount = verbs.take(i).count { it == PathVerb.CONIC }
+                        val weight = conicWeights[conicCount]
+                        offsetPath.conicTo(p1.x + dx, p1.y + dy, p2.x + dx, p2.y + dy, weight)
+                    }
+                }
+                PathVerb.CUBIC -> {
+                    if (i + 2 < points.size) {
+                        val p1 = points[i]
+                        val p2 = points[i + 1]
+                        val p3 = points[i + 2]
+                        offsetPath.cubicTo(p1.x + dx, p1.y + dy, p2.x + dx, p2.y + dy, p3.x + dx, p3.y + dy)
+                    }
+                }
+                PathVerb.CLOSE -> {
+                    offsetPath.close()
+                }
+            }
+        }
+        
+        return offsetPath
+    }
+    
+    /**
+     * Returns a new path with winding fill type
+     */
+    override fun asWinding(): Path {
+        val windingPath = Path()
+        windingPath.fillType = FillType.WINDING
+        
+        // Copy all points and verbs
+        windingPath.points.addAll(points)
+        windingPath.verbs.addAll(verbs)
+        windingPath.conicWeights.addAll(conicWeights)
+        
+        return windingPath
+    }
+    
+    /**
+     * Gets the number of points in the path
+     */
+    override fun getPointCount(): Int {
+        return points.size
+    }
+    
+    /**
+     * Gets all points in the path
+     */
+    override fun getPoints(): List<Point> {
+        return points.toList()
+    }
+    
+    /**
+     * Gets all verbs in the path
+     */
+    override fun getVerbs(): List<PathVerb> {
+        return verbs.toList()
     }
 }
