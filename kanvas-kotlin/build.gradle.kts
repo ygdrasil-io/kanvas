@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm") version "2.3.0-RC2"
+    kotlin("jvm")
     id("application")
     id("io.kotest") version "6.0.3"
 }
