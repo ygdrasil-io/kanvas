@@ -2627,6 +2627,90 @@ public open class SkMatrix public constructor() {
   /**
    * C++ original:
    * ```cpp
+   * SkMatrix& SkMatrix::setConcat(const SkMatrix& a, const SkMatrix& b) {
+   *     TypeMask aType = a.getType();
+   *     TypeMask bType = b.getType();
+   *
+   *     if (a.isTriviallyIdentity()) {
+   *         *this = b;
+   *     } else if (b.isTriviallyIdentity()) {
+   *         *this = a;
+   *     } else if (only_scale_and_translate(aType | bType)) {
+   *         this->setScaleTranslate(a.fMat[kMScaleX] * b.fMat[kMScaleX],
+   *                                 a.fMat[kMScaleY] * b.fMat[kMScaleY],
+   *                                 a.fMat[kMScaleX] * b.fMat[kMTransX] + a.fMat[kMTransX],
+   *                                 a.fMat[kMScaleY] * b.fMat[kMTransY] + a.fMat[kMTransY]);
+   *     } else {
+   *         SkMatrix tmp;
+   *
+   *         if ((aType | bType) & kPerspective_Mask) {
+   *             tmp.fMat[kMScaleX] = rowcol3(&a.fMat[0], &b.fMat[0]);
+   *             tmp.fMat[kMSkewX]  = rowcol3(&a.fMat[0], &b.fMat[1]);
+   *             tmp.fMat[kMTransX] = rowcol3(&a.fMat[0], &b.fMat[2]);
+   *             tmp.fMat[kMSkewY]  = rowcol3(&a.fMat[3], &b.fMat[0]);
+   *             tmp.fMat[kMScaleY] = rowcol3(&a.fMat[3], &b.fMat[1]);
+   *             tmp.fMat[kMTransY] = rowcol3(&a.fMat[3], &b.fMat[2]);
+   *             tmp.fMat[kMPersp0] = rowcol3(&a.fMat[6], &b.fMat[0]);
+   *             tmp.fMat[kMPersp1] = rowcol3(&a.fMat[6], &b.fMat[1]);
+   *             tmp.fMat[kMPersp2] = rowcol3(&a.fMat[6], &b.fMat[2]);
+   *
+   *             tmp.setTypeMask(kUnknown_Mask);
+   *         } else {
+   *             tmp.fMat[kMScaleX] = muladdmul(a.fMat[kMScaleX],
+   *                                            b.fMat[kMScaleX],
+   *                                            a.fMat[kMSkewX],
+   *                                            b.fMat[kMSkewY]);
+   *
+   *             tmp.fMat[kMSkewX]  = muladdmul(a.fMat[kMScaleX],
+   *                                            b.fMat[kMSkewX],
+   *                                            a.fMat[kMSkewX],
+   *                                            b.fMat[kMScaleY]);
+   *
+   *             tmp.fMat[kMTransX] = muladdmul(a.fMat[kMScaleX],
+   *                                            b.fMat[kMTransX],
+   *                                            a.fMat[kMSkewX],
+   *                                            b.fMat[kMTransY]) + a.fMat[kMTransX];
+   *
+   *             tmp.fMat[kMSkewY]  = muladdmul(a.fMat[kMSkewY],
+   *                                            b.fMat[kMScaleX],
+   *                                            a.fMat[kMScaleY],
+   *                                            b.fMat[kMSkewY]);
+   *
+   *             tmp.fMat[kMScaleY] = muladdmul(a.fMat[kMSkewY],
+   *                                            b.fMat[kMSkewX],
+   *                                            a.fMat[kMScaleY],
+   *                                            b.fMat[kMScaleY]);
+   *
+   *             tmp.fMat[kMTransY] = muladdmul(a.fMat[kMSkewY],
+   *                                            b.fMat[kMTransX],
+   *                                            a.fMat[kMScaleY],
+   *                                            b.fMat[kMTransY]) + a.fMat[kMTransY];
+   *
+   *             tmp.fMat[kMPersp0] = 0;
+   *             tmp.fMat[kMPersp1] = 0;
+   *             tmp.fMat[kMPersp2] = 1;
+   *             //SkDebugf("Concat mat non-persp type: %d\n", tmp.getType());
+   *             //SkASSERT(!(tmp.getType() & kPerspective_Mask));
+   *             tmp.setTypeMask(kUnknown_Mask | kOnlyPerspectiveValid_Mask);
+   *         }
+   *         *this = tmp;
+   *     }
+   *     return *this;
+   * }
+   * ```
+   */
+  public fun preScale(
+    sx: SkScalar,
+    sy: SkScalar,
+    px: SkScalar,
+    py: SkScalar,
+  ): SkMatrix {
+    TODO("Implement preScale")
+  }
+
+  /**
+   * C++ original:
+   * ```cpp
    * SkMatrix& SkMatrix::preTranslate(SkScalar dx, SkScalar dy) {
    *     const unsigned mask = this->getType();
    *
@@ -3451,6 +3535,22 @@ public open class SkMatrix public constructor() {
    */
   public fun getMinScale(): Int {
     TODO("Implement getMinScale")
+  }
+
+  /**
+   * C++ original:
+   * ```cpp
+   * void SkMatrix::dump() const {
+   *     SkString str;
+   *     str.appendf("[%8.4f %8.4f %8.4f][%8.4f %8.4f %8.4f][%8.4f %8.4f %8.4f]",
+   *              fMat[0], fMat[1], fMat[2], fMat[3], fMat[4], fMat[5],
+   *              fMat[6], fMat[7], fMat[8]);
+   *     SkDebugf("%s\n", str.c_str());
+   * }
+   * ```
+   */
+  public fun getMaxScale(): Int {
+    TODO("Implement getMaxScale")
   }
 
   /**
