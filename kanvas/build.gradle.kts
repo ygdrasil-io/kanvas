@@ -17,6 +17,19 @@ dependencies {
 
 kotlin {
     jvmToolchain(25)
+    sourceSets {
+        val main by getting {
+            kotlin.srcDir("src/generated/foundation")
+            kotlin.srcDir("src/generated/maths")
+            kotlin.srcDir("src/generated/undefined")
+            //kotlin.srcDir("src/generated/utils")
+            kotlin.srcDir("src/generated/gpu")
+            //kotlin.srcDir("src/generated/core")
+            //kotlin.srcDir("src/generated/tests")
+            //kotlin.srcDir("src/generated/modules")
+            kotlin.srcDir("src/ganesh")
+        }
+    }
 }
 
 application {
