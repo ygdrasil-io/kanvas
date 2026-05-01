@@ -242,7 +242,7 @@ public open class SkIPoint public constructor(
    * ```
    */
   public override fun equals(other: Any?): Boolean {
-    TODO("Implement equals")
+    return other is SkIPoint && this.x() == other.x() && this.y() == other.y()
   }
 
   public companion object {
@@ -255,7 +255,7 @@ public open class SkIPoint public constructor(
      * ```
      */
     public fun make(x: Int, y: Int): SkIPoint {
-      TODO("Implement make")
+      return Companion.make(x, y)
     }
   }
 }

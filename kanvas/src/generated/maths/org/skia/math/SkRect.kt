@@ -1029,7 +1029,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun tl(): Int {
-    TODO("Implement tl")
+    return fLeft.toInt()
   }
 
   /**
@@ -1039,7 +1039,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun tr(): Int {
-    TODO("Implement tr")
+    return tr()
   }
 
   /**
@@ -1049,7 +1049,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun bl(): Int {
-    TODO("Implement bl")
+    return bottom().toInt()
   }
 
   /**
@@ -1059,7 +1059,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun br(): Int {
-    TODO("Implement br")
+    return fRight.toInt()
   }
 
   /**
