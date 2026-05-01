@@ -2117,7 +2117,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun rc(r: Int, c: Int): Int {
-    TODO("Implement rc")
+    return r * 3 + c
   }
 
   /**
@@ -2131,7 +2131,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getScaleX(): Int {
-    TODO("Implement getScaleX")
+    return fMat[kMScaleX]
   }
 
   /**

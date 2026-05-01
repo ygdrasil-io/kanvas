@@ -296,7 +296,7 @@ public open class SkPoint3 public constructor(
    * ```
    */
   public operator fun unaryMinus(): SkPoint3 {
-    TODO("Implement unaryMinus")
+    return SkPoint3(fX = -this.fX, fY = -this.fY, fZ = -this.fZ)
   }
 
   /**
@@ -310,7 +310,9 @@ public open class SkPoint3 public constructor(
    * ```
    */
   public operator fun plusAssign(v: SkPoint3) {
-    TODO("Implement plusAssign")
+    this.fX += v.fX
+    this.fY += v.fY
+    this.fZ += v.fZ
   }
 
   /**
@@ -324,7 +326,9 @@ public open class SkPoint3 public constructor(
    * ```
    */
   public operator fun minusAssign(v: SkPoint3) {
-    TODO("Implement minusAssign")
+    fX -= v.fX
+    fY -= v.fY
+    fZ -= v.fZ
   }
 
   /**

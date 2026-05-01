@@ -169,7 +169,7 @@ public data class SkSize public constructor(
      * ```
      */
     public fun make(w: SkScalar, h: SkScalar): SkSize {
-      TODO("Implement make")
+      return Companion.make(w, h)
     }
 
     /**
@@ -191,7 +191,7 @@ public data class SkSize public constructor(
      * ```
      */
     public fun makeEmpty(): SkSize {
-      TODO("Implement makeEmpty")
+      return Companion.makeEmpty()
     }
   }
 }

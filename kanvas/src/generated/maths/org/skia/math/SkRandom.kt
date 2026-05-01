@@ -364,7 +364,14 @@ public data class SkRandom public constructor(
    * ```
    */
   private fun `init`(seed: UInt) {
-    TODO("Implement init")
+    fK = Companion.nextLCG(seed.toUInt()).toInt()
+    if (fK == 0) {
+        fK = Companion.nextLCG(fK.toUInt()).toInt()
+    }
+    fJ = Companion.nextLCG(fK.toUInt()).toInt()
+    if (fJ == 0) {
+        fJ = Companion.nextLCG(fJ.toUInt()).toInt()
+    }
   }
 
   /**
@@ -374,7 +381,7 @@ public data class SkRandom public constructor(
    * ```
    */
   private fun nextUFixed1(): SkFixed {
-    TODO("Implement nextUFixed1")
+    return this.nextU() shr 16
   }
 
   /**
@@ -384,7 +391,7 @@ public data class SkRandom public constructor(
    * ```
    */
   private fun nextSFixed1(): SkFixed {
-    TODO("Implement nextSFixed1")
+    return nextS() shr 15
   }
 
   public companion object {
@@ -403,7 +410,7 @@ public data class SkRandom public constructor(
      * ```
      */
     private fun nextLCG(seed: UInt): Int {
-      TODO("Implement nextLCG")
+      return Companion.nextLCG(seed)
     }
   }
 }
