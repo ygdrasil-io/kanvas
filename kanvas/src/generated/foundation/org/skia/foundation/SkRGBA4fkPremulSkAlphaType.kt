@@ -15,11 +15,11 @@ public data class SkRGBA4fkPremulSkAlphaType public constructor(
   private var fA: Float,
 ) {
   public override operator fun equals(other: Any?): Boolean {
-    TODO("Implement equals")
+    return other is SkRGBA4fkPremulSkAlphaType && fA == other.fA && fR == other.fR && fG == other.fG && fB == other.fB
   }
 
   private operator fun times(scale: Float): SkRGBA4fkPremulSkAlphaType {
-    TODO("Implement times")
+    return SkRGBA4fkPremulSkAlphaType(fR * scale, fG * scale, fB * scale, fA * scale)
   }
 
   private operator fun times(scale: SkRGBA4f): SkRGBA4fkPremulSkAlphaType {
