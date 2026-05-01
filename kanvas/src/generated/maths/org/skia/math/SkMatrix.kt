@@ -2141,7 +2141,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getScaleY(): Int {
-    TODO("Implement getScaleY")
+    return fMat[kMScaleY]
   }
 
   /**
@@ -2151,7 +2151,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getSkewY(): Int {
-    TODO("Implement getSkewY")
+    return fMat[kMSkewY]
   }
 
   /**
@@ -2161,7 +2161,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getSkewX(): Int {
-    TODO("Implement getSkewX")
+    return fMat[kMSkewX]
   }
 
   /**
@@ -2171,7 +2171,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getTranslateX(): Int {
-    TODO("Implement getTranslateX")
+    return fMat[kMTransX]
   }
 
   /**
@@ -2181,7 +2181,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getTranslateY(): Int {
-    TODO("Implement getTranslateY")
+    return fMat[kMTransY].toInt()
   }
 
   /**
@@ -2191,7 +2191,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getPerspX(): Int {
-    TODO("Implement getPerspX")
+    return fMat[kMPersp0]
   }
 
   /**
@@ -2201,7 +2201,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getPerspY(): Int {
-    TODO("Implement getPerspY")
+    return fMat[kMPersp1].toInt()
   }
 
   /**
@@ -2211,7 +2211,8 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun `set`(index: Int, `value`: SkScalar): SkMatrix {
-    TODO("Implement set")
+    this.set(index, value)
+            return this
   }
 
   /**
@@ -2225,7 +2226,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setScaleX(v: SkScalar): SkMatrix {
-    TODO("Implement setScaleX")
+    return this.set(kMScaleX, v)
   }
 
   /**
@@ -2240,7 +2241,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setScaleY(v: SkScalar): SkMatrix {
-    TODO("Implement setScaleY")
+    return this.set(kMScaleY, v)
   }
 
   /**
@@ -2250,7 +2251,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setSkewY(v: SkScalar): SkMatrix {
-    TODO("Implement setSkewY")
+    return this.set(kMSkewY, v)
   }
 
   /**
@@ -2260,7 +2261,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setSkewX(v: SkScalar): SkMatrix {
-    TODO("Implement setSkewX")
+    return this.set(kMSkewX, v)
   }
 
   /**
@@ -2270,7 +2271,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setTranslateX(v: SkScalar): SkMatrix {
-    TODO("Implement setTranslateX")
+    return this.set(kMTransX, v)
   }
 
   /**
@@ -2280,7 +2281,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setTranslateY(v: SkScalar): SkMatrix {
-    TODO("Implement setTranslateY")
+    return set(kMTransY, v)
   }
 
   /**
@@ -2290,7 +2291,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setPerspX(v: SkScalar): SkMatrix {
-    TODO("Implement setPerspX")
+    return this.set(kMPersp0, v)
   }
 
   /**
@@ -2320,7 +2321,7 @@ public open class SkMatrix public constructor() {
     persp1: SkScalar,
     persp2: SkScalar,
   ): SkMatrix {
-    TODO("Implement setAll")
+    return setAll(scaleX, skewX, transX, skewY, scaleY, transY, persp0, persp1, persp2)
   }
 
   /**
@@ -2330,7 +2331,8 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun get9(buffer: Array<SkScalar>) {
-    TODO("Implement get9")
+    buffer as FloatArray
+    System.arraycopy(fMat, 0, buffer, 0, 9)
   }
 
   /**
@@ -2354,7 +2356,8 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun set9(buffer: Array<SkScalar>): SkMatrix {
-    TODO("Implement set9")
+    buffer as FloatArray
+    return setAll(buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7], buffer[8])
   }
 
   /**
@@ -2390,7 +2393,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setTranslate(dx: SkScalar, dy: SkScalar): SkMatrix {
-    TODO("Implement setTranslate")
+    return setTranslate(dx, dy)
   }
 
   /**
@@ -2400,7 +2403,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setTranslate(v: SkVector): SkMatrix {
-    TODO("Implement setTranslate")
+    return this.setTranslate(v.x(), v.y())
   }
 
   /**
@@ -2422,7 +2425,8 @@ public open class SkMatrix public constructor() {
     px: SkScalar,
     py: SkScalar,
   ): SkMatrix {
-    TODO("Implement setScale")
+    this.setScale(sx, sy, px, py)
+    return this
   }
 
   /**
@@ -2432,7 +2436,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setScale(sx: SkScalar, sy: SkScalar): SkMatrix {
-    TODO("Implement setScale")
+    return this.setScale(sx, sy)
   }
 
   /**
@@ -2453,7 +2457,7 @@ public open class SkMatrix public constructor() {
     px: SkScalar,
     py: SkScalar,
   ): SkMatrix {
-    TODO("Implement setRotate")
+    return setRotate(degrees, px, py)
   }
 
   /**
@@ -2489,7 +2493,17 @@ public open class SkMatrix public constructor() {
     px: SkScalar,
     py: SkScalar,
   ): SkMatrix {
-    TODO("Implement setSinCos")
+    return this.setAll(
+        sinValue * px + cosValue * px,
+        sinValue * py + cosValue * py,
+        sinValue,
+        cosValue * px - sinValue * py,
+        cosValue * py + sinValue * px,
+        cosValue,
+        0f,
+        0f,
+        1f
+    )
   }
 
   /**
@@ -2502,7 +2516,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setSinCos(sinValue: SkScalar, cosValue: SkScalar): SkMatrix {
-    TODO("Implement setSinCos")
+    return this.setSinCos(sinValue, cosValue)
   }
 
   /**
@@ -2557,7 +2571,9 @@ public open class SkMatrix public constructor() {
     px: SkScalar,
     py: SkScalar,
   ): SkMatrix {
-    TODO("Implement setSkew")
+    val m = SkMatrix()
+    m.setAll(1f, 0f, kx, 0f, 1f, ky, px, py, 1f)
+    return m
   }
 
   /**
@@ -2581,7 +2597,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setSkew(kx: SkScalar, ky: SkScalar): SkMatrix {
-    TODO("Implement setSkew")
+    return this.setSkew(kx, ky)
   }
 
   /**
@@ -2597,7 +2613,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setConcat(a: SkMatrix, b: SkMatrix): SkMatrix {
-    TODO("Implement setConcat")
+    return a.setConcat(this, b)
   }
 
   /**
@@ -2621,7 +2637,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun preTranslate(dx: SkScalar, dy: SkScalar): SkMatrix {
-    TODO("Implement preTranslate")
+    return this.preConcat(SkMatrix.Companion.translate(dx, dy))
   }
 
   /**
@@ -2705,7 +2721,7 @@ public open class SkMatrix public constructor() {
     px: SkScalar,
     py: SkScalar,
   ): SkMatrix {
-    TODO("Implement preScale")
+    return this.preScale(sx, sy).preTranslate(px - sx * px, py - sy * py)
   }
 
   /**
@@ -2731,7 +2747,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun preScale(sx: SkScalar, sy: SkScalar): SkMatrix {
-    TODO("Implement preScale")
+    return this.preScale(sx, sy)
   }
 
   /**
@@ -2753,7 +2769,7 @@ public open class SkMatrix public constructor() {
     px: SkScalar,
     py: SkScalar,
   ): SkMatrix {
-    TODO("Implement preRotate")
+    return this.preRotate(degrees, px, py)
   }
 
   /**
@@ -2796,7 +2812,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun preRotate(degrees: SkScalar): SkMatrix {
-    TODO("Implement preRotate")
+    return preRotate(degrees)
   }
 
   /**
@@ -2815,7 +2831,7 @@ public open class SkMatrix public constructor() {
     px: SkScalar,
     py: SkScalar,
   ): SkMatrix {
-    TODO("Implement preSkew")
+    return preSkew(kx, ky, px, py)
   }
 
   /**
@@ -2829,7 +2845,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun preSkew(kx: SkScalar, ky: SkScalar): SkMatrix {
-    TODO("Implement preSkew")
+    return this.preSkew(kx, ky)
   }
 
   /**
@@ -2843,7 +2859,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun preConcat(other: SkMatrix): SkMatrix {
-    TODO("Implement preConcat")
+    return this.setConcat(this, other)
   }
 
   /**
@@ -2857,7 +2873,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun postTranslate(dx: SkScalar, dy: SkScalar): SkMatrix {
-    TODO("Implement postTranslate")
+    return this.postTranslate(dx, dy)
   }
 
   /**
@@ -2879,7 +2895,7 @@ public open class SkMatrix public constructor() {
     px: SkScalar,
     py: SkScalar,
   ): SkMatrix {
-    TODO("Implement postScale")
+    return this.postScale(sx, sy, px, py)
   }
 
   /**
@@ -2900,7 +2916,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun postScale(sx: SkScalar, sy: SkScalar): SkMatrix {
-    TODO("Implement postScale")
+    return this.postScale(sx, sy)
   }
 
   /**
@@ -2921,7 +2937,8 @@ public open class SkMatrix public constructor() {
     px: SkScalar,
     py: SkScalar,
   ): SkMatrix {
-    TODO("Implement postRotate")
+    this.postRotate(degrees, px, py)
+    return this
   }
 
   /**
@@ -2938,7 +2955,8 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun postRotate(degrees: SkScalar): SkMatrix {
-    TODO("Implement postRotate")
+    this.postRotate(degrees)
+    return this
   }
 
   /**
@@ -2985,7 +3003,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun postConcat(other: SkMatrix): SkMatrix {
-    TODO("Implement postConcat")
+    return other.postConcat(this)
   }
 
   /**
@@ -3003,7 +3021,12 @@ public open class SkMatrix public constructor() {
     dst: SkRect,
     stf: ScaleToFit,
   ): Boolean {
-    TODO("Implement setRectToRect")
+    return if (Companion.rect2Rect(src, dst, stf) != null) {
+        true
+    } else {
+        reset()
+        false
+    }
   }
 
   /**
@@ -3020,7 +3043,11 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setPolyToPoly(src: SkSpan<SkPoint>, dst: SkSpan<SkPoint>): Boolean {
-    TODO("Implement setPolyToPoly")
+    return if (Companion.polyToPoly(src, dst) != null) {
+        true
+    } else {
+        false
+    }
   }
 
   /**
@@ -3037,7 +3064,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun invert(): SkMatrix? {
-    TODO("Implement invert")
+    return invert()
   }
 
   /**
@@ -3053,7 +3080,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun invert(inverse: SkMatrix?): Boolean {
-    TODO("Implement invert")
+    return invert() != null
   }
 
   /**
@@ -3126,7 +3153,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun asAffine(affine: Array<SkScalar>): Boolean {
-    TODO("Implement asAffine")
+    return affine is FloatArray && this.asAffine(affine)
   }
 
   /**
@@ -3144,7 +3171,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun setAffine(affine: Array<SkScalar>): SkMatrix {
-    TODO("Implement setAffine")
+    return setAll(affine[kAScaleX], affine[kASkewX], affine[kATransX], affine[kASkewY], affine[kAScaleY], affine[kATransY], 0f, 0f, 1f)
   }
 
   /**
@@ -3216,7 +3243,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun mapHomogeneousPoints(dst: SkSpan<SkPoint3>, src: SkSpan<SkPoint3>) {
-    TODO("Implement mapHomogeneousPoints")
+    mapHomogeneousPoints(dst, src)
   }
 
   /**
@@ -3336,7 +3363,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun mapVectors(dst: SkSpan<SkVector>, src: SkSpan<SkVector>) {
-    TODO("Implement mapVectors")
+    mapVectors(dst, src)
   }
 
   /**
@@ -3405,7 +3432,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun mapRect(dst: SkRect?, src: SkRect): Boolean {
-    TODO("Implement mapRect")
+    return mapRect(dst, src) ?: false
   }
 
   /**
@@ -3478,7 +3505,18 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun mapRectScaleTranslate(dst: SkRect?, src: SkRect) {
-    TODO("Implement mapRectScaleTranslate")
+    if (dst == null || src.isEmpty()) return
+    if (this.isScaleTranslate()) {
+        dst.fLeft = this.getScaleX() * src.fLeft + this.getTranslateX()
+        dst.fTop = this.getScaleY() * src.fTop + this.getTranslateY()
+        dst.fRight = this.getScaleX() * src.fRight + this.getTranslateX()
+        dst.fBottom = this.getScaleY() * src.fBottom + this.getTranslateY()
+    } else {
+        dst.fLeft = this.getScaleX() * src.fLeft + this.getSkewX() * src.fTop + this.getTranslateX()
+        dst.fTop = this.getSkewY() * src.fLeft + this.getScaleY() * src.fTop + this.getTranslateY()
+        dst.fRight = this.getScaleX() * src.fRight + this.getSkewX() * src.fBottom + this.getTranslateX()
+        dst.fBottom = this.getSkewY() * src.fRight + this.getScaleY() * src.fBottom + this.getTranslateY()
+    }
   }
 
   /**
@@ -3491,7 +3529,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun mapRadius(radius: SkScalar): Int {
-    TODO("Implement mapRadius")
+    return mapRadius(radius).toInt()
   }
 
   /**
@@ -3512,7 +3550,23 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun dump() {
-    TODO("Implement dump")
+    System.out.println("identity: " + this.isTriviallyIdentity())
+    System.out.println("translate: " + this.getTranslateX() + ", " + this.getTranslateY())
+    System.out.println("scale: " + this.getScaleX() + ", " + this.getScaleY())
+    System.out.println("skew: " + this.getSkewX() + ", " + this.getSkewY())
+    System.out.println("persp0: " + this.getPerspX())
+    System.out.println("persp1: " + this.getPerspY())
+    System.out.println("kMScaleX: " + this.fMat[0])
+    System.out.println("kMSkewX: " + this.fMat[1])
+    System.out.println("kMTransX: " + this.fMat[2])
+    System.out.println("kMSkewY: " + this.fMat[3])
+    System.out.println("kMScaleY: " + this.fMat[4])
+    System.out.println("kMTransY: " + this.fMat[5])
+    System.out.println("kMPersp0: " + this.fMat[6])
+    System.out.println("kMPersp1: " + this.fMat[7])
+    System.out.println("kMPersp2: " + this.fMat[8])
+    System.out.println("kRectStaysRect_Mask: " + (this.fTypeMask and 0x10))
+    System.out.println("kUnknown_Mask: " + (this.fTypeMask and 0x80))
   }
 
   /**
@@ -3534,7 +3588,14 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getMinScale(): Int {
-    TODO("Implement getMinScale")
+    return if (hasPerspective()) -1 else {
+      val sx = getScaleX().toInt()
+      val sy = getScaleY().toInt()
+      val kx = getSkewY().toInt()
+      val ky = getSkewX().toInt()
+      val scale = kotlin.math.sqrt((sx * sx + kx * kx + ky * ky + sy * sy).toDouble()).toInt()
+      if (scale == Int.MAX_VALUE || scale == Int.MIN_VALUE) -1 else scale
+    }
   }
 
   /**
@@ -3550,7 +3611,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   public fun getMaxScale(): Int {
-    TODO("Implement getMaxScale")
+    return if (hasPerspective()) -1 else kotlin.math.max(getScaleX().toDouble(), getScaleY().toDouble()).toInt()
   }
 
   /**
@@ -3631,7 +3692,8 @@ public open class SkMatrix public constructor() {
     tx: SkScalar,
     ty: SkScalar,
   ) {
-    TODO("Implement setScaleTranslate")
+    this.setScale(sx, sy)
+    this.setTranslate(tx, ty)
   }
 
   /**
@@ -3665,7 +3727,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   private fun computePerspectiveTypeMask(): UByte {
-    TODO("Implement computePerspectiveTypeMask")
+    return computePerspectiveTypeMask().toUByte()
   }
 
   /**
@@ -3734,7 +3796,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   private fun setTypeMask(mask: Int) {
-    TODO("Implement setTypeMask")
+    this.setTypeMask(mask)
   }
 
   /**
@@ -3757,7 +3819,8 @@ public open class SkMatrix public constructor() {
    * ```
    */
   private fun orTypeMask(mask: Int) {
-    TODO("Implement orTypeMask")
+    orTypeMask(mask)
+    this.fTypeMask = this.fTypeMask or mask
   }
 
   /**
@@ -3773,7 +3836,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   private fun clearTypeMask(mask: Int) {
-    TODO("Implement clearTypeMask")
+    this.clearTypeMask(mask.toInt() and SkMatrix.kAllMasks)
   }
 
   /**
@@ -3786,7 +3849,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   private fun getPerspectiveTypeMaskOnly(): TypeMask {
-    TODO("Implement getPerspectiveTypeMaskOnly")
+    return getPerspectiveTypeMaskOnly()
   }
 
   /**
@@ -3800,7 +3863,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   private fun isTriviallyIdentity(): Boolean {
-    TODO("Implement isTriviallyIdentity")
+    return !isTriviallyIdentity()
   }
 
   /**
@@ -3816,7 +3879,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   private fun updateTranslateMask() {
-    TODO("Implement updateTranslateMask")
+    updateTranslateMask()
   }
 
   /**
@@ -3847,7 +3910,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   private fun getMapPtsProc(): SkMatrixMapPtsProc {
-    TODO("Implement getMapPtsProc")
+    return Companion.getMapPtsProc(this.getType())
   }
 
   /**
@@ -3877,7 +3940,7 @@ public open class SkMatrix public constructor() {
    * ```
    */
   private fun readFromMemory(buffer: Unit?, length: ULong): ULong {
-    TODO("Implement readFromMemory")
+    return readFromMemory(buffer, length)
   }
 
   /**
@@ -3986,7 +4049,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun scale(sx: SkScalar, sy: SkScalar): SkMatrix {
-      TODO("Implement scale")
+      return Companion.scale(sx, sy)
     }
 
     /**
@@ -4000,7 +4063,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun translate(dx: SkScalar, dy: SkScalar): SkMatrix {
-      TODO("Implement translate")
+      return Companion.translate(dx, dy)
     }
 
     /**
@@ -4010,7 +4073,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun translate(t: SkVector): SkMatrix {
-      TODO("Implement translate")
+      return Companion.translate(t.x(), t.y())
     }
 
     /**
@@ -4050,7 +4113,7 @@ public open class SkMatrix public constructor() {
       tx: Float,
       ty: Float,
     ): SkMatrix {
-      TODO("Implement scaleTranslate")
+      return Companion.scaleTranslate(sx, sy, tx, ty)
     }
 
     /**
@@ -4064,7 +4127,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun rotateDeg(deg: SkScalar): SkMatrix {
-      TODO("Implement rotateDeg")
+      return Companion.rotateDeg(deg)
     }
 
     /**
@@ -4078,7 +4141,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun rotateDeg(deg: SkScalar, pt: SkPoint): SkMatrix {
-      TODO("Implement rotateDeg")
+      return Companion.rotateDeg(deg, pt)
     }
 
     /**
@@ -4104,7 +4167,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun skew(kx: SkScalar, ky: SkScalar): SkMatrix {
-      TODO("Implement skew")
+      return Companion.skew(kx, ky)
     }
 
     /**
@@ -4130,7 +4193,7 @@ public open class SkMatrix public constructor() {
       pers1: SkScalar,
       pers2: SkScalar,
     ): SkMatrix {
-      TODO("Implement makeAll")
+      return Companion.makeAll(scaleX, skewX, transX, skewY, scaleY, transY, pers0, pers1, pers2)
     }
 
     /**
@@ -4184,7 +4247,7 @@ public open class SkMatrix public constructor() {
       dst: SkRect,
       stf: ScaleToFit = TODO(),
     ): SkMatrix? {
-      TODO("Implement rect2Rect")
+      return Companion.rect2Rect(src, dst, stf)
     }
 
     /**
@@ -4279,7 +4342,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun polyToPoly(src: SkSpan<SkPoint>, dst: SkSpan<SkPoint>): SkMatrix? {
-      TODO("Implement polyToPoly")
+      return Companion.polyToPoly(src, dst)
     }
 
     /**
@@ -4296,7 +4359,12 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun setAffineIdentity(affine: Array<SkScalar>) {
-      TODO("Implement setAffineIdentity")
+      affine[0] = 1f
+      affine[1] = 0f
+      affine[2] = 0f
+      affine[3] = 0f
+      affine[4] = 1f
+      affine[5] = 0f
     }
 
     /**
@@ -4310,7 +4378,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun i(): SkMatrix {
-      TODO("Implement i")
+      return Companion.i()
     }
 
     /**
@@ -4327,7 +4395,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun invalidMatrix(): SkMatrix {
-      TODO("Implement invalidMatrix")
+      return Companion.invalidMatrix()
     }
 
     /**
@@ -4341,7 +4409,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     public fun concat(a: SkMatrix, b: SkMatrix): SkMatrix {
-      TODO("Implement concat")
+      return Companion.concat(a, b)
     }
 
     /**
@@ -4385,7 +4453,44 @@ public open class SkMatrix public constructor() {
       invDet: Double,
       isPersp: Boolean,
     ) {
-      TODO("Implement computeInv")
+      dst as FloatArray
+      src as FloatArray
+      val invDetScaled = invDet.toFloat()
+      if (isPersp) {
+          val det = src[6] * (src[0] * src[4] - src[1] * src[3]) -
+                    src[7] * (src[0] * src[5] - src[2] * src[3]) +
+                    src[8] * (src[1] * src[5] - src[2] * src[4])
+          if (det == 0f) {
+              dst.fill(0f)
+              return
+          }
+          val s = invDetScaled / det
+          dst[0] = (src[4] * src[8] - src[5] * src[7]) * s
+          dst[1] = (src[2] * src[7] - src[1] * src[8]) * s
+          dst[2] = (src[1] * src[5] - src[2] * src[4]) * s
+          dst[3] = (src[5] * src[6] - src[3] * src[8]) * s
+          dst[4] = (src[0] * src[8] - src[2] * src[6]) * s
+          dst[5] = (src[2] * src[3] - src[0] * src[5]) * s
+          dst[6] = (src[3] * src[7] - src[4] * src[6]) * s
+          dst[7] = (src[1] * src[6] - src[0] * src[7]) * s
+          dst[8] = (src[0] * src[4] - src[1] * src[3]) * s
+      } else {
+          val det = src[0] * src[4] - src[1] * src[3]
+          if (det == 0f) {
+              dst.fill(0f)
+              return
+          }
+          val s = invDetScaled / det
+          dst[0] = src[4] * s
+          dst[1] = -src[1] * s
+          dst[2] = (src[1] * src[5] - src[2] * src[4]) * s
+          dst[3] = -src[3] * s
+          dst[4] = src[0] * s
+          dst[5] = (src[2] * src[3] - src[0] * src[5]) * s
+          dst[6] = 0f
+          dst[7] = 0f
+          dst[8] = invDetScaled
+      }
     }
 
     /**
@@ -4422,7 +4527,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     private fun poly2Proc(srcPt: Array<SkPoint>, dst: SkMatrix?): Boolean {
-      TODO("Implement poly2Proc")
+      return Companion.poly2Proc(srcPt, dst)
     }
 
     /**
@@ -4446,7 +4551,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     private fun poly3Proc(srcPt: Array<SkPoint>, dst: SkMatrix?): Boolean {
-      TODO("Implement poly3Proc")
+      return Companion.poly3Proc(srcPt, dst)
     }
 
     /**
@@ -4510,7 +4615,7 @@ public open class SkMatrix public constructor() {
      * ```
      */
     private fun poly4Proc(srcPt: Array<SkPoint>, dst: SkMatrix?): Boolean {
-      TODO("Implement poly4Proc")
+      return Companion.poly4Proc(srcPt, dst)
     }
 
     /**
@@ -4531,7 +4636,13 @@ public open class SkMatrix public constructor() {
       src: Array<SkPoint>,
       count: Int,
     ) {
-      TODO("Implement identityPts")
+      m.reset()
+      val count = src.size
+      var i = 0
+      while (i < count) {
+          dst[i] = src[i]
+          i++
+      }
     }
 
     /**
@@ -4572,7 +4683,7 @@ public open class SkMatrix public constructor() {
       src: Array<SkPoint>,
       count: Int,
     ) {
-      TODO("Implement transPts")
+      Companion.transPts(m, dst, src, count)
     }
 
     /**
@@ -4634,7 +4745,7 @@ public open class SkMatrix public constructor() {
       param2: Array<SkPoint>,
       count: Int,
     ) {
-      TODO("Implement scaleTransPts")
+      Companion.scaleTransPts(param0, dst, param2, count)
     }
 
     /**
@@ -4671,7 +4782,7 @@ public open class SkMatrix public constructor() {
       src: Array<SkPoint>,
       count: Int,
     ) {
-      TODO("Implement perspPts")
+      Companion.perspPts(m, dst, src, count)
     }
 
     /**
@@ -4716,7 +4827,7 @@ public open class SkMatrix public constructor() {
       src: Array<SkPoint>,
       count: Int,
     ) {
-      TODO("Implement affineVpts")
+      Companion.affineVpts(m, dst, src, count)
     }
   }
 }
