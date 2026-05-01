@@ -4,6 +4,7 @@ import kotlin.Array
 import kotlin.Boolean
 import kotlin.Float
 import kotlin.Int
+import kotlin.String
 import org.skia.foundation.SkSpan
 
 /**
@@ -1650,6 +1651,48 @@ public open class SkRect public constructor(
    */
   public fun asScalars(): Float {
     TODO("Implement asScalars")
+  }
+
+  /**
+   * C++ original:
+   * ```cpp
+   * void SkRect::dump(bool asHex) const {
+   *     SkDebugf("%s\n", this->dumpToString(asHex).c_str());
+   * }
+   * ```
+   */
+  public fun dump(asHex: Boolean) {
+    TODO("Implement dump")
+  }
+
+  /**
+   * C++ original:
+   * ```cpp
+   * SkString SkRect::dumpToString(bool asHex) const {
+   *     SkScalarAsStringType asType = asHex ? kHex_SkScalarAsStringType : kDec_SkScalarAsStringType;
+   *
+   *     SkString line;
+   *     if (asHex) {
+   *         SkString tmp;
+   *         line.printf( "SkRect::MakeLTRB(%s, /* %f */\n", set_scalar(&tmp, fLeft, asType), fLeft);
+   *         line.appendf("                 %s, /* %f */\n", set_scalar(&tmp, fTop, asType), fTop);
+   *         line.appendf("                 %s, /* %f */\n", set_scalar(&tmp, fRight, asType), fRight);
+   *         line.appendf("                 %s  /* %f */);", set_scalar(&tmp, fBottom, asType), fBottom);
+   *     } else {
+   *         SkString strL, strT, strR, strB;
+   *         SkAppendScalarDec(&strL, fLeft);
+   *         SkAppendScalarDec(&strT, fTop);
+   *         SkAppendScalarDec(&strR, fRight);
+   *         SkAppendScalarDec(&strB, fBottom);
+   *         line.printf("SkRect::MakeLTRB(%s, %s, %s, %s);",
+   *                     strL.c_str(), strT.c_str(), strR.c_str(), strB.c_str());
+   *     }
+   *     return line;
+   * }
+   * ```
+   */
+  public fun dumpToString(asHex: Boolean): String {
+    TODO("Implement dumpToString")
   }
 
   /**
