@@ -183,8 +183,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun assign(rand: SkRandom) {
-    fK = rand.fK
-    fJ = rand.fJ
+    TODO("Implement assign")
   }
 
   /**
@@ -198,7 +197,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun nextU(): Int {
-    return (((fK shl 16) or (fK ushr 16)) + fJ).toInt()
+    TODO("Implement nextU")
   }
 
   /**
@@ -208,7 +207,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun nextS(): Int {
-    return this.nextU()
+    TODO("Implement nextS")
   }
 
   /**
@@ -234,7 +233,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun nextRangeF(min: Float, max: Float): Float {
-    return min + this.nextF() * (max - min)
+    TODO("Implement nextRangeF")
   }
 
   /**
@@ -247,7 +246,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun nextBits(bitCount: UInt): Int {
-    return this.nextU() ushr (32 - bitCount.toInt())
+    TODO("Implement nextBits")
   }
 
   /**
@@ -265,7 +264,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun nextRangeU(min: UInt, max: UInt): Int {
-    return nextRangeU(min, max).toInt()
+    TODO("Implement nextRangeU")
   }
 
   /**
@@ -278,7 +277,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun nextULessThan(count: UInt): Int {
-    return nextRangeU(0u, count - 1u).toInt()
+    TODO("Implement nextULessThan")
   }
 
   /**
@@ -300,7 +299,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun nextRangeScalar(min: SkScalar, max: SkScalar): SkScalar {
-    return nextUScalar1() * (max - min) + min
+    TODO("Implement nextRangeScalar")
   }
 
   /**
@@ -320,7 +319,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun nextBool(): Boolean {
-    return this.nextU() >= 0x80000000
+    TODO("Implement nextBool")
   }
 
   /**
@@ -333,7 +332,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun nextBiasedBool(fractionTrue: SkScalar): Boolean {
-    return nextUScalar1() <= fractionTrue
+    TODO("Implement nextBiasedBool")
   }
 
   /**
@@ -343,8 +342,7 @@ public data class SkRandom public constructor(
    * ```
    */
   public fun setSeed(seed: UInt) {
-    init(seed)
-        Companion.nextLCG(seed)
+    TODO("Implement setSeed")
   }
 
   /**
@@ -364,14 +362,7 @@ public data class SkRandom public constructor(
    * ```
    */
   private fun `init`(seed: UInt) {
-    fK = Companion.nextLCG(seed.toUInt()).toInt()
-    if (fK == 0) {
-        fK = Companion.nextLCG(fK.toUInt()).toInt()
-    }
-    fJ = Companion.nextLCG(fK.toUInt()).toInt()
-    if (fJ == 0) {
-        fJ = Companion.nextLCG(fJ.toUInt()).toInt()
-    }
+    TODO("Implement init")
   }
 
   /**
@@ -381,7 +372,7 @@ public data class SkRandom public constructor(
    * ```
    */
   private fun nextUFixed1(): SkFixed {
-    return this.nextU() shr 16
+    TODO("Implement nextUFixed1")
   }
 
   /**
@@ -391,7 +382,7 @@ public data class SkRandom public constructor(
    * ```
    */
   private fun nextSFixed1(): SkFixed {
-    return nextS() shr 15
+    TODO("Implement nextSFixed1")
   }
 
   public companion object {
@@ -410,7 +401,7 @@ public data class SkRandom public constructor(
      * ```
      */
     private fun nextLCG(seed: UInt): Int {
-      return Companion.nextLCG(seed)
+      TODO("Implement nextLCG")
     }
   }
 }

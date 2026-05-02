@@ -77,7 +77,7 @@ public data class SkSize public constructor(
    * ```
    */
   public fun isZero(): Boolean {
-    return fWidth == 0 && fHeight == 0
+    TODO("Implement isZero")
   }
 
   /**
@@ -87,7 +87,7 @@ public data class SkSize public constructor(
    * ```
    */
   public fun isEmpty(): Boolean {
-    return fWidth <= 0 || fHeight <= 0
+    TODO("Implement isEmpty")
   }
 
   /**
@@ -97,8 +97,7 @@ public data class SkSize public constructor(
    * ```
    */
   public fun setEmpty() {
-    this.fWidth = 0
-    this.fHeight = 0
+    TODO("Implement setEmpty")
   }
 
   /**
@@ -108,7 +107,7 @@ public data class SkSize public constructor(
    * ```
    */
   public fun width(): Int {
-    return fWidth
+    TODO("Implement width")
   }
 
   /**
@@ -118,7 +117,7 @@ public data class SkSize public constructor(
    * ```
    */
   public fun height(): Int {
-    return fHeight
+    TODO("Implement height")
   }
 
   /**
@@ -128,7 +127,7 @@ public data class SkSize public constructor(
    * ```
    */
   public override fun equals(other: Any?): Boolean {
-    return other is SkSize && fWidth == other.fWidth && fHeight == other.fHeight
+    TODO("Implement equals")
   }
 
   /**
@@ -169,7 +168,7 @@ public data class SkSize public constructor(
      * ```
      */
     public fun make(w: SkScalar, h: SkScalar): SkSize {
-      return Companion.make(w, h)
+      TODO("Implement make")
     }
 
     /**
@@ -191,7 +190,7 @@ public data class SkSize public constructor(
      * ```
      */
     public fun makeEmpty(): SkSize {
-      return Companion.makeEmpty()
+      TODO("Implement makeEmpty")
     }
   }
 }

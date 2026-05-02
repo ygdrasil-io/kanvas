@@ -883,7 +883,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun isEmpty(): Boolean {
-    return !(left() < right() && top() < bottom())
+    TODO("Implement isEmpty")
   }
 
   /**
@@ -893,7 +893,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun isSorted(): Boolean {
-    return fLeft <= fRight && fTop <= fBottom
+    TODO("Implement isSorted")
   }
 
   /**
@@ -915,7 +915,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun x(): Float {
-    return fLeft
+    TODO("Implement x")
   }
 
   /**
@@ -925,7 +925,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun y(): Float {
-    return y()
+    TODO("Implement y")
   }
 
   /**
@@ -935,7 +935,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun left(): Float {
-    return this.left()
+    TODO("Implement left")
   }
 
   /**
@@ -945,7 +945,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun top(): Float {
-    return top()
+    TODO("Implement top")
   }
 
   /**
@@ -955,7 +955,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun right(): Float {
-    return right()
+    TODO("Implement right")
   }
 
   /**
@@ -965,7 +965,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun bottom(): Float {
-    return fBottom
+    TODO("Implement bottom")
   }
 
   /**
@@ -975,7 +975,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun width(): Float {
-    return fRight - fLeft
+    TODO("Implement width")
   }
 
   /**
@@ -985,7 +985,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun height(): Float {
-    return bottom() - top()
+    TODO("Implement height")
   }
 
   /**
@@ -1029,7 +1029,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun tl(): Int {
-    return fLeft.toInt()
+    TODO("Implement tl")
   }
 
   /**
@@ -1039,7 +1039,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun tr(): Int {
-    return tr()
+    TODO("Implement tr")
   }
 
   /**
@@ -1049,7 +1049,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun bl(): Int {
-    return bottom().toInt()
+    TODO("Implement bl")
   }
 
   /**
@@ -1059,7 +1059,7 @@ public open class SkRect public constructor(
    * ```
    */
   public fun br(): Int {
-    return fRight.toInt()
+    TODO("Implement br")
   }
 
   /**

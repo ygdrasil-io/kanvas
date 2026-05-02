@@ -92,8 +92,7 @@ public data class SkSpan<T> public constructor(
    * ```
    */
   public fun assign(that: SkSpan<T>) {
-    this.fPtr = that.fPtr
-    this.fSize = that.fSize
+    TODO("Implement assign")
   }
 
   /**
@@ -105,7 +104,7 @@ public data class SkSpan<T> public constructor(
    * ```
    */
   public operator fun `get`(i: ULong): T {
-    return this[i]
+    TODO("Implement get")
   }
 
   /**
@@ -115,7 +114,7 @@ public data class SkSpan<T> public constructor(
    * ```
    */
   public fun front(): T {
-    return fPtr
+    TODO("Implement front")
   }
 
   /**
@@ -125,7 +124,7 @@ public data class SkSpan<T> public constructor(
    * ```
    */
   public fun back(): T {
-    return this[fSize - 1u]
+    TODO("Implement back")
   }
 
   /**
@@ -135,7 +134,7 @@ public data class SkSpan<T> public constructor(
    * ```
    */
   public fun begin(): T {
-    return fPtr
+    TODO("Implement begin")
   }
 
   /**
@@ -165,7 +164,7 @@ public data class SkSpan<T> public constructor(
    * ```
    */
   public fun rend(): Any {
-    return rbegin()
+    TODO("Implement rend")
   }
 
   /**
@@ -175,7 +174,7 @@ public data class SkSpan<T> public constructor(
    * ```
    */
   public fun `data`(): T {
-    return this.begin()
+    TODO("Implement data")
   }
 
   /**
@@ -185,7 +184,7 @@ public data class SkSpan<T> public constructor(
    * ```
    */
   public fun size(): ULong {
-    return fSize
+    TODO("Implement size")
   }
 
   /**
@@ -195,7 +194,7 @@ public data class SkSpan<T> public constructor(
    * ```
    */
   public fun empty(): Boolean {
-    return empty()
+    TODO("Implement empty")
   }
 
   /**

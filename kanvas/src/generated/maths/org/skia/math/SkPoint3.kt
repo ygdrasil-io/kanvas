@@ -168,7 +168,7 @@ public open class SkPoint3 public constructor(
    * ```
    */
   public fun x(): Int {
-    return fX
+    TODO("Implement x")
   }
 
   /**
@@ -188,7 +188,7 @@ public open class SkPoint3 public constructor(
    * ```
    */
   public fun z(): Int {
-    return fZ
+    TODO("Implement z")
   }
 
   /**
@@ -266,7 +266,7 @@ public open class SkPoint3 public constructor(
    * ```
    */
   public fun makeScale(scale: SkScalar): SkPoint3 {
-    return Companion.make(scale * fX, scale * fY, scale * fZ)
+    TODO("Implement makeScale")
   }
 
   /**
@@ -296,7 +296,7 @@ public open class SkPoint3 public constructor(
    * ```
    */
   public operator fun unaryMinus(): SkPoint3 {
-    return SkPoint3(fX = -this.fX, fY = -this.fY, fZ = -this.fZ)
+    TODO("Implement unaryMinus")
   }
 
   /**
@@ -310,9 +310,7 @@ public open class SkPoint3 public constructor(
    * ```
    */
   public operator fun plusAssign(v: SkPoint3) {
-    this.fX += v.fX
-    this.fY += v.fY
-    this.fZ += v.fZ
+    TODO("Implement plusAssign")
   }
 
   /**
@@ -326,9 +324,7 @@ public open class SkPoint3 public constructor(
    * ```
    */
   public operator fun minusAssign(v: SkPoint3) {
-    fX -= v.fX
-    fY -= v.fY
-    fZ -= v.fZ
+    TODO("Implement minusAssign")
   }
 
   /**
