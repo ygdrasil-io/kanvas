@@ -432,7 +432,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun x(): Float {
-    return fX
+    TODO("Implement x")
   }
 
   /**
@@ -442,7 +442,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun y(): Float {
-    return fY
+    TODO("Implement y")
   }
 
   /**
@@ -452,7 +452,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun isZero(): Boolean {
-    return fX == 0f && fY == 0f
+    TODO("Implement isZero")
   }
 
   /**
@@ -465,8 +465,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun `set`(x: Float, y: Float) {
-    this.fX = x
-    this.fY = y
+    TODO("Implement set")
   }
 
   /**
@@ -479,8 +478,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun iset(x: Int, y: Int) {
-    this.fX = x.toFloat()
-    this.fY = y.toFloat()
+    TODO("Implement iset")
   }
 
   /**
@@ -493,8 +491,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun iset(p: SkIPoint) {
-    this.fX = p.fX.toFloat()
-    this.fY = p.fY.toFloat()
+    TODO("Implement iset")
   }
 
   /**
@@ -507,8 +504,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun setAbs(pt: SkPoint) {
-    this.fX = kotlin.math.abs(pt.x())
-    this.fY = kotlin.math.abs(pt.y())
+    TODO("Implement setAbs")
   }
 
   /**
@@ -521,8 +517,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun offset(dx: Float, dy: Float) {
-    fX += dx
-    fY += dy
+    TODO("Implement offset")
   }
 
   /**
@@ -532,7 +527,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun length(): Float {
-    return Companion.length(fX, fY)
+    TODO("Implement length")
   }
 
   /**
@@ -542,7 +537,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun distanceToOrigin(): Float {
-    return this.length()
+    TODO("Implement distanceToOrigin")
   }
 
   /**
@@ -554,15 +549,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun normalize(): Boolean {
-    val length = Companion.length(fX, fY)
-            return if (length > 0) {
-                val scale = 1.0f / length
-                fX *= scale
-                fY *= scale
-                true
-            } else {
-                false
-            }
+    TODO("Implement normalize")
   }
 
   /**
@@ -574,14 +561,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun setNormalize(x: Float, y: Float): Boolean {
-    val length = Companion.length(x, y)
-    if (length == 0f) {
-        set(0f, 0f)
-        return false
-    }
-    val scale = 1f / length
-    set(x * scale, y * scale)
-    return true
+    TODO("Implement setNormalize")
   }
 
   /**
@@ -593,15 +573,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun setLength(length: Float): Boolean {
-    val oldLength = this.length()
-    if (oldLength.isNaN() || oldLength <= 0) {
-        this.set(0f, 0f)
-        return false
-    }
-    val scale = length / oldLength
-    this.fX *= scale
-    this.fY *= scale
-    return true
+    TODO("Implement setLength")
   }
 
   /**
@@ -617,7 +589,7 @@ public open class SkPoint public constructor(
     y: Float,
     length: Float,
   ): Boolean {
-    return setLength(this.x(), this.y(), length)
+    TODO("Implement setLength")
   }
 
   /**
@@ -630,7 +602,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun scale(scale: Float, dst: SkPoint?) {
-    dst?.let { it.fX = fX * scale; it.fY = fY * scale }
+    TODO("Implement scale")
   }
 
   /**
@@ -640,7 +612,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun scale(`value`: Float) {
-    this.scale(value, this)
+    TODO("Implement scale")
   }
 
   /**
@@ -653,8 +625,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun negate() {
-    this.fX = -this.fX
-    this.fY = -this.fY
+    TODO("Implement negate")
   }
 
   /**
@@ -666,7 +637,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public operator fun unaryMinus(): SkPoint {
-    return Companion.make(-fX, -fY)
+    TODO("Implement unaryMinus")
   }
 
   /**
@@ -679,8 +650,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public operator fun plusAssign(v: SkVector) {
-    this.fX += v.fX
-    this.fY += v.fY
+    TODO("Implement plusAssign")
   }
 
   /**
@@ -693,7 +663,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public operator fun minusAssign(v: SkVector) {
-    this.fX -= v.x(); this.fY -= v.y()
+    TODO("Implement minusAssign")
   }
 
   /**
@@ -705,7 +675,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public operator fun times(scale: Float): SkPoint {
-    return SkPoint.make(this.x() * scale, this.y() * scale)
+    TODO("Implement times")
   }
 
   /**
@@ -719,8 +689,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public operator fun timesAssign(scale: Float) {
-    this.fX *= scale
-    this.fY *= scale
+    TODO("Implement timesAssign")
   }
 
   /**
@@ -732,7 +701,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun isFinite(): Boolean {
-    return fX.isFinite() && fY.isFinite()
+    TODO("Implement isFinite")
   }
 
   /**
@@ -744,8 +713,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public override fun equals(other: Any?): Boolean {
-    if (other !is org.skia.math.SkPoint) return false
-    return this.fX == other.fX && this.fY == other.fY
+    TODO("Implement equals")
   }
 
   /**
@@ -757,7 +725,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun cross(vec: SkVector): Float {
-    return Companion.crossProduct(this, vec)
+    TODO("Implement cross")
   }
 
   /**
@@ -769,7 +737,7 @@ public open class SkPoint public constructor(
    * ```
    */
   public fun dot(vec: SkVector): Float {
-    return Companion.dotProduct(this, vec)
+    TODO("Implement dot")
   }
 
   public companion object {
@@ -782,7 +750,7 @@ public open class SkPoint public constructor(
      * ```
      */
     public fun make(x: Float, y: Float): SkPoint {
-      return Companion.make(x, y)
+      TODO("Implement make")
     }
 
     /**
@@ -798,7 +766,7 @@ public open class SkPoint public constructor(
       count: Int,
       offset: SkVector,
     ) {
-      Companion.offset(points, count, offset)
+      TODO("Implement offset")
     }
 
     /**
@@ -817,7 +785,7 @@ public open class SkPoint public constructor(
       dx: Float,
       dy: Float,
     ) {
-      Companion.offset(points, count, dx, dy)
+      TODO("Implement offset")
     }
 
     /**
@@ -852,7 +820,7 @@ public open class SkPoint public constructor(
      * ```
      */
     public fun normalize(vec: SkVector?): Float {
-      return Companion.normalize(vec?.let { SkVector.make(it.fX, it.fY) })
+      TODO("Implement normalize")
     }
 
     /**
@@ -864,7 +832,7 @@ public open class SkPoint public constructor(
      * ```
      */
     public fun distance(a: SkPoint, b: SkPoint): Float {
-      return Companion.length(a.x() - b.x(), a.y() - b.y())
+      TODO("Implement distance")
     }
 
     /**
@@ -876,7 +844,7 @@ public open class SkPoint public constructor(
      * ```
      */
     public fun dotProduct(a: SkVector, b: SkVector): Float {
-      return Companion.dotProduct(a, b)
+      TODO("Implement dotProduct")
     }
 
     /**
@@ -888,7 +856,7 @@ public open class SkPoint public constructor(
      * ```
      */
     public fun crossProduct(a: SkVector, b: SkVector): Float {
-      return Companion.crossProduct(a, b)
+      TODO("Implement crossProduct")
     }
   }
 }

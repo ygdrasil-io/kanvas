@@ -605,7 +605,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun top(): Int {
-    return fTop
+    TODO("Implement top")
   }
 
   /**
@@ -615,7 +615,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun right(): Int {
-    return fRight
+    TODO("Implement right")
   }
 
   /**
@@ -625,7 +625,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun bottom(): Int {
-    return bottom()
+    TODO("Implement bottom")
   }
 
   /**
@@ -635,7 +635,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun x(): Int {
-    return fLeft
+    TODO("Implement x")
   }
 
   /**
@@ -645,7 +645,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun y(): Int {
-    return this.fTop
+    TODO("Implement y")
   }
 
   /**
@@ -665,7 +665,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun width(): Int {
-    return fRight - fLeft
+    TODO("Implement width")
   }
 
   /**
@@ -675,7 +675,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun height(): Int {
-    return fBottom - fTop
+    TODO("Implement height")
   }
 
   /**
@@ -695,7 +695,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun width64(): Long {
-    return (this.fRight.toLong() - this.fLeft.toLong())
+    TODO("Implement width64")
   }
 
   /**
@@ -705,7 +705,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun height64(): Long {
-    return (bottom() - top()).toLong()
+    TODO("Implement height64")
   }
 
   /**
@@ -715,7 +715,7 @@ public open class SkIRect public constructor(
    * ```
    */
   public fun isEmpty64(): Boolean {
-    return fRight <= fLeft || fBottom <= fTop
+    TODO("Implement isEmpty64")
   }
 
   /**

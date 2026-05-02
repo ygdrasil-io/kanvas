@@ -60,8 +60,7 @@ public data class SkISize public constructor(
    * ```
    */
   public fun `set`(w: Int, h: Int) {
-    this.fWidth = w
-    this.fHeight = h
+    TODO("Implement set")
   }
 
   /**
@@ -71,7 +70,7 @@ public data class SkISize public constructor(
    * ```
    */
   public fun isZero(): Boolean {
-    return fWidth == 0 && fHeight == 0
+    TODO("Implement isZero")
   }
 
   /**
@@ -81,7 +80,7 @@ public data class SkISize public constructor(
    * ```
    */
   public fun isEmpty(): Boolean {
-    return fWidth <= 0 || fHeight <= 0
+    TODO("Implement isEmpty")
   }
 
   /**
@@ -91,8 +90,7 @@ public data class SkISize public constructor(
    * ```
    */
   public fun setEmpty() {
-    fWidth = 0
-    fHeight = 0
+    TODO("Implement setEmpty")
   }
 
   /**
@@ -102,7 +100,7 @@ public data class SkISize public constructor(
    * ```
    */
   public fun width(): Int {
-    return fWidth
+    TODO("Implement width")
   }
 
   /**
@@ -112,7 +110,7 @@ public data class SkISize public constructor(
    * ```
    */
   public fun height(): Int {
-    return fHeight
+    TODO("Implement height")
   }
 
   /**
@@ -122,7 +120,7 @@ public data class SkISize public constructor(
    * ```
    */
   public fun area(): Long {
-    return fWidth.toLong() * fHeight.toLong()
+    TODO("Implement area")
   }
 
   /**
@@ -132,8 +130,7 @@ public data class SkISize public constructor(
    * ```
    */
   public override fun equals(other: Any?): Boolean {
-    if (other !is SkISize) return false
-    return this.fWidth == other.fWidth && this.fHeight == other.fHeight
+    TODO("Implement equals")
   }
 
   public companion object {
@@ -144,7 +141,7 @@ public data class SkISize public constructor(
      * ```
      */
     public fun make(w: Int, h: Int): SkISize {
-      return Companion.make(w, h)
+      TODO("Implement make")
     }
 
     /**
@@ -154,7 +151,7 @@ public data class SkISize public constructor(
      * ```
      */
     public fun makeEmpty(): SkISize {
-      return Companion.makeEmpty()
+      TODO("Implement makeEmpty")
     }
   }
 }

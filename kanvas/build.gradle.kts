@@ -1,6 +1,7 @@
 plugins {
     id("buildsrc.convention.kotlin-jvm")
     id("application")
+    id("org.jetbrains.kotlinx.atomicfu") version "0.32.1"
 }
 
 repositories {

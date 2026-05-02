@@ -94,7 +94,7 @@ public data class SkRSXform public constructor(
    * ```
    */
   public fun rectStaysRect(): Boolean {
-    return fSCos == 0 || fSSin == 0
+    TODO("Implement rectStaysRect")
   }
 
   /**
@@ -107,10 +107,7 @@ public data class SkRSXform public constructor(
    * ```
    */
   public fun setIdentity() {
-    fSCos = 1
-    fSSin = 0
-    fTx = 0
-    fTy = 0
+    TODO("Implement setIdentity")
   }
 
   /**
@@ -166,10 +163,7 @@ public data class SkRSXform public constructor(
     height: SkScalar,
     quad: Array<SkPoint>,
   ) {
-    quad[0].set(fSCos * width + fTx, fSSin * height + fTy)
-    quad[1].set(-fSSin * width + fTx, fSCos * height + fTy)
-    quad[2].set(-fSCos * width + fTx, -fSSin * height + fTy)
-    quad[3].set(fSSin * width + fTx, -fSCos * height + fTy)
+    TODO("Implement toQuad")
   }
 
   /**
@@ -207,10 +201,7 @@ public data class SkRSXform public constructor(
     height: SkScalar,
     strip: Array<SkPoint>,
   ) {
-    strip[0] = SkPoint.Companion.make(0f, 0f)
-    strip[1] = SkPoint.Companion.make(width, 0f)
-    strip[2] = SkPoint.Companion.make(0f, height)
-    strip[3] = SkPoint.Companion.make(width, height)
+    TODO("Implement toTriStrip")
   }
 
   public companion object {
@@ -229,7 +220,7 @@ public data class SkRSXform public constructor(
       tx: SkScalar,
       ty: SkScalar,
     ): SkRSXform {
-      return Companion.make(scos, ssin, tx, ty)
+      TODO("Implement make")
     }
 
     /**
@@ -251,7 +242,7 @@ public data class SkRSXform public constructor(
       ax: SkScalar,
       ay: SkScalar,
     ): SkRSXform {
-      return Companion.makeFromRadians(scale, radians, tx, ty, ax, ay)
+      TODO("Implement makeFromRadians")
     }
   }
 }

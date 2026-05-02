@@ -168,7 +168,7 @@ public open class SkIPoint public constructor(
    * ```
    */
   public fun y(): Int {
-    return fY
+    TODO("Implement y")
   }
 
   /**
@@ -178,7 +178,7 @@ public open class SkIPoint public constructor(
    * ```
    */
   public fun isZero(): Boolean {
-    return (fX or fY) == 0
+    TODO("Implement isZero")
   }
 
   /**
@@ -191,8 +191,7 @@ public open class SkIPoint public constructor(
    * ```
    */
   public fun `set`(x: Int, y: Int) {
-    this.fX = x
-    this.fY = y
+    TODO("Implement set")
   }
 
   /**
@@ -204,7 +203,7 @@ public open class SkIPoint public constructor(
    * ```
    */
   public operator fun unaryMinus(): SkIPoint {
-    return SkIPoint.Companion.make(-x(), -y())
+    TODO("Implement unaryMinus")
   }
 
   /**
@@ -242,7 +241,7 @@ public open class SkIPoint public constructor(
    * ```
    */
   public override fun equals(other: Any?): Boolean {
-    return other is SkIPoint && this.x() == other.x() && this.y() == other.y()
+    TODO("Implement equals")
   }
 
   public companion object {
@@ -255,7 +254,7 @@ public open class SkIPoint public constructor(
      * ```
      */
     public fun make(x: Int, y: Int): SkIPoint {
-      return Companion.make(x, y)
+      TODO("Implement make")
     }
   }
 }
