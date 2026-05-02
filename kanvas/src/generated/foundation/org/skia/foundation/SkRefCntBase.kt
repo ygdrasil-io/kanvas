@@ -97,7 +97,7 @@ public open class SkRefCntBase public constructor() {
    * mutable std::atomic<int32_t> fRefCnt
    * ```
    */
-  private var fRefCnt: AtomicInt = TODO("Initialize fRefCnt")
+  private val fRefCnt: AtomicInt = TODO("Initialize fRefCnt")
 
   /**
    * C++ original:
