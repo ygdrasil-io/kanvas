@@ -14,20 +14,19 @@ class SimpleRectTest {
         val rendered = TestUtils.runGmTest(gm)
         val reference = TestUtils.loadReferenceBitmap(gm.name())
         assertNotNull(reference, "Missing reference image simplerect.png")
-        // SimpleRectGM is a stress test, not a structural one. Skia uses its own
-        // SkRandom and ToolUtils::color_to_565; without a bit-compatible RNG,
-        // every one of the 10 000 rects lands at a different position with a
-        // different colour, so even with maximal channel tolerance the match
-        // tops out at ~75% (purely whitespace agreement). We track topology
-        // only — Phase 5+ revisits this once SkRandom matches upstream.
-        val similarity = TestUtils.compareBitmaps(rendered, reference!!, tolerance = 192)
-        if (similarity < 70.0) {
+        // SkRandom is bit-compatible with Skia, so every one of the 10 000
+        // rects lands at the same position and same RGB565-quantised colour
+        // as the reference. The remaining diff is the wide-gamut colour
+        // shift that also affects BigRectGM — so we use the same per-channel
+        // tolerance.
+        val similarity = TestUtils.compareBitmaps(rendered, reference!!, tolerance = 160)
+        if (similarity < 99.0) {
             TestUtils.saveDebugImage(rendered, "${gm.name()}-rendered")
             TestUtils.saveDebugImage(reference, "${gm.name()}-reference")
         }
         val accepted = SimilarityTracker.updateScore("SimpleRectGM", similarity)
         assertTrue(accepted, "SimpleRectGM regressed below tolerance")
-        assertTrue(similarity >= 70.0,
-            "SimpleRectGM similarity ${"%.2f".format(similarity)}% < 70.0% (Phase 1 floor, t=192)")
+        assertTrue(similarity >= 99.0,
+            "SimpleRectGM similarity ${"%.2f".format(similarity)}% < 99.0% (Phase 1 floor, t=160)")
     }
 }

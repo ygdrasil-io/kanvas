@@ -65,7 +65,7 @@ L'objectif : **bootstrapper un nouveau module `:kanvas-skia` qui compile et fait
 - [x] `SkBitmapDevice.kt` : raster non-AA rect (FILL + STROKE w∈{0, ≥1}) + SrcOver compositing. Règle de pixel-center via `floor(c+0.5)` (= `SkScalarRoundToInt`). Hairline AA-off via `floor(c)` aligné sur `SkScan::HairLineRgn`.
 
 ### Tools
-- [x] `SkRandom.kt` : LCG (compat Skia non visée — voir SimpleRectGM).
+- [x] `SkRandom.kt` : port bit-compatible de [Skia](https://github.com/google/skia/blob/main/include/utils/SkRandom.h) (multiply-with-carry à deux flux, bit-trick IEEE 754 pour `nextF`, init LCG sur `kMul=1664525, kAdd=1013904223`). Les GMs random-driven (à commencer par SimpleRectGM) consomment exactement la même séquence que la référence.
 
 ### Tests GM
 - [x] `tests/BigRectGM.kt` : hand-port intégral.
@@ -80,7 +80,7 @@ La référence `bigrect.png` (et toute la collection `original-888/`) embarque u
 
 ### Vérification Phase 1
 - [x] `BigRectGM` ≥ 99% vs `bigrect.png` à `tolerance=160` — **résultat : 99.51%**.
-- [x] `SimpleRectGM` ≥ 70% à `tolerance=192` (RNG divergent — seuil topologique uniquement) — **résultat : 74.45%**.
+- [x] `SimpleRectGM` ≥ 99% à `tolerance=160` (positions et couleurs RGB565 bit-identiques avec Skia grâce au port fidèle de SkRandom) — **résultat : 100.00%**.
 - [x] **Pass count cumulé : 2 GM.**
 
 ---

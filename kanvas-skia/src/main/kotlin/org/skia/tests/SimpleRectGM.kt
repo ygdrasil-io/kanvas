@@ -31,9 +31,12 @@ import org.skia.tools.SkRandom
  * }
  * ```
  *
- * Note: SkRandom is not bit-compatible with Skia's, so the 10 000 random
- * rects fall in different positions / colours than the reference. Test
- * threshold is therefore 95% rather than 99%.
+ * `SkRandom` is a bit-compatible port of upstream Skia, and `colorToRGB565`
+ * mirrors `ToolUtils::color_to_565`, so the 10 000 rects land at exactly the
+ * same positions and colours as the reference — the test reaches 100%
+ * pixel-exact match without colour tolerance because none of the random
+ * colours collide with the wide-gamut blue / red shifts that affect
+ * `BigRectGM`.
  */
 public class SimpleRectGM : GM() {
     override fun getName(): String = "simplerect"
