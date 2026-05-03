@@ -179,10 +179,10 @@ Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsG
 - [x] 5 tests end-to-end `SkBitmapDeviceStrokeTest` (line, rect, L-shape miter, kStrokeAndFill, translation).
 - [x] Aucune régression sur les 6 GMs existants.
 
-### Phase 3e — GM ports stroke-on-path
+### Phase 3e — GM ports stroke-on-path (en cours)
 
-- [ ] Hand-port `tests/ConvexPathsGM.kt` (fill seulement, drop l'entry skbug.40040207 qui exige `path.transform(matrix)`).
-- [ ] Hand-port `tests/ArcToGM.kt` (nécessite `arcTo(p1, p2, radius)` + variant SVG).
+- [x] Hand-port `tests/ConvexPathsGM.kt` (fill seulement, 35+ paths). L'entry skbug.40040207 utilise pure scale + translate dans sa matrice — appliquée inline au build du path (pas besoin de `SkPath.transform(SkMatrix)` encore). **Score : 99.68%** à `tolerance=1`. Tous les verbs (line/quad/conic/cubic/arc), toutes les factories (Rect/Circle/Oval/RRect/Line/Polygon), 4096-point polyline, paths dégénérés (point line/quad/cubic, moveTo-only).
+- [ ] Hand-port `tests/ArcToGM.kt` (nécessite `arcTo(p1, p2, radius)` ✅ Phase 3f + variant SVG endpoint, encore manquant).
 - [ ] Hand-port `tests/CubicPathGM.kt`.
 
 ### Phase 3d — GM harvest (existing API surface only) ✅
@@ -325,7 +325,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3b    | 5        | Path/Builder split + Bézier verbs + arcTo/addArc + flattening | ✅ |
 | 3c    | 5        | Path stroker (kButt + kMiter, no GM ports yet) | ✅ |
 | 3d    | 11       | GM harvest sur l'API existante (5 crbug + bitmaprect_rounding) | ✅ |
-| 3e    | ~14      | Stroke-on-path GM ports (ArcToGM, ConvexPathsGM, ...) | ⬜ |
+| 3e    | 12       | Stroke-on-path GM ports — `ConvexPathsGM` ✅ ; ArcToGM/CubicPathGM TODO | 🔄 |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
