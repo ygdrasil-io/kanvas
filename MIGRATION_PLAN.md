@@ -182,8 +182,9 @@ Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsG
 ### Phase 3e — GM ports stroke-on-path (en cours)
 
 - [x] Hand-port `tests/ConvexPathsGM.kt` (fill seulement, 35+ paths). L'entry skbug.40040207 utilise pure scale + translate dans sa matrice — appliquée inline au build du path (pas besoin de `SkPath.transform(SkMatrix)` encore). **Score : 99.68%** à `tolerance=1`. Tous les verbs (line/quad/conic/cubic/arc), toutes les factories (Rect/Circle/Oval/RRect/Line/Polygon), 4096-point polyline, paths dégénérés (point line/quad/cubic, moveTo-only).
+- [x] Hand-port `tests/ArcOfZorroGM.kt` (200 stroked open arcs avec width=35, layout boustrophedon, BG `0xCCCCCC`). Premier vrai stress du stroker (Phase 3c) sur des courbes : chaque arc est 1-2 cubic Béziers stroked en bande de 35 px. Ajout de `SkCanvas.drawArc(rect, startAngleDeg, sweepAngleDeg, useCenter, paint)` (path = arcTo + optional moveTo-to-centre + close pour pie slice). **Score : 99.56%** à `tolerance=1`. Bonus learning : un BG color non-trivial nécessite `drawPaint` au début (eraseColor skip le colorspace transform — voir le commentaire dans `TestUtils.runGmTest`).
 - [ ] Hand-port `tests/ArcToGM.kt` (nécessite `arcTo(p1, p2, radius)` ✅ Phase 3f + variant SVG endpoint, encore manquant).
-- [ ] Hand-port `tests/CubicPathGM.kt`.
+- [ ] Hand-port `tests/CubicPathGM.kt` (nécessite caps/joins étendus, fill rules inverses, drawString — déféré).
 
 ### Phase 3d — GM harvest (existing API surface only) ✅
 
@@ -325,7 +326,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3b    | 5        | Path/Builder split + Bézier verbs + arcTo/addArc + flattening | ✅ |
 | 3c    | 5        | Path stroker (kButt + kMiter, no GM ports yet) | ✅ |
 | 3d    | 11       | GM harvest sur l'API existante (5 crbug + bitmaprect_rounding) | ✅ |
-| 3e    | 12       | Stroke-on-path GM ports — `ConvexPathsGM` ✅ ; ArcToGM/CubicPathGM TODO | 🔄 |
+| 3e    | 13       | Stroke-on-path GM ports — `ConvexPathsGM` + `ArcOfZorroGM` ✅ ; ArcToGM/CubicPathGM TODO | 🔄 |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
