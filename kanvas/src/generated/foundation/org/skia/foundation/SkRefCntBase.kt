@@ -99,12 +99,6 @@ public open class SkRefCntBase public constructor() {
    */
   private val fRefCnt: AtomicInt = TODO("Initialize fRefCnt")
 
-  /**
-   * C++ original:
-   * ```cpp
-   * SkRefCntBase() : fRefCnt(1) {}
-   * ```
-   */
   public constructor(param0: SkRefCntBase) : this() {
     TODO("Implement constructor")
   }

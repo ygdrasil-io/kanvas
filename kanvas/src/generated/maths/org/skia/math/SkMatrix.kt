@@ -1910,12 +1910,6 @@ public open class SkMatrix public constructor() {
    */
   private var fTypeMask: Int = TODO("Initialize fTypeMask")
 
-  /**
-   * C++ original:
-   * ```cpp
-   * constexpr SkMatrix() : SkMatrix(1,0,0, 0,1,0, 0,0,1, kIdentity_Mask | kRectStaysRect_Mask) {}
-   * ```
-   */
   public constructor(
     sx: SkScalar,
     kx: SkScalar,
