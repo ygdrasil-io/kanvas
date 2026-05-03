@@ -184,15 +184,20 @@ Le stub Phase D (`NotImplementedError`) est remplacé par `skcmsPrimariesToXYZD5
 
 C'est la grosse pièce. ~1500 lignes C++ dans `skcms.cc:600-1500` à porter.
 
-### Étape F1 — Types `skcms_ICCProfile` (et amis)
+### Étape F1 — Types `skcms_ICCProfile` (et amis) — ✅
 
-Cf. `skcms_public.h:160-323`.
+Créés sous [kanvas-skia/src/main/kotlin/org/skia/skcms/](kanvas-skia/src/main/kotlin/org/skia/skcms/) :
 
-- [ ] `SkcmsICCProfile` data class — `buffer`, `size`, `data_color_space`, `pcs`, `tag_count`, `trc[3]`, `toXYZD50`, `A2B`, `B2A`, `CICP`, `has_*` flags.
-- [ ] `SkcmsCurve` — `parametric: SkcmsTransferFunction` OU `table_8` / `table_16`.
-- [ ] `SkcmsCICP` — `color_primaries`, `transfer_characteristics`, `matrix_coefficients`, `video_full_range_flag`.
-- [ ] `SkcmsA2B`, `SkcmsB2A` — LUT 3D et associated curves. Phase F4 (différé).
-- [ ] `SkcmsSignature` enum (data color spaces : 'RGB ', 'GRAY', 'CMYK', 'XYZ ').
+- [x] [SkcmsSignature.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsSignature.kt) — enum 25 entrées (RGB/CMYK/Gray/XYZ/Lab/CIELUV/HSV/2CLR..15CLR) + `fromValue(Int)` lookup.
+- [x] [SkcmsCICP.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsCICP.kt) — data class 4 fields (colorPrimaries, transferCharacteristics, matrixCoefficients, videoFullRangeFlag).
+- [x] [SkcmsCurve.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsCurve.kt) — sealed class avec `Parametric(SkcmsTransferFunction)` et `Table(tableEntries, table8, table16)`. Validations stricts (XOR exclusif sur table8/table16, tableEntries > 0). `equals`/`hashCode` content-based.
+- [x] [SkcmsMatrix3x4.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsMatrix3x4.kt) — pour les ICC v4 A2B/B2A "M" matrices.
+- [x] [SkcmsA2B.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsA2B.kt) + [SkcmsB2A.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsB2A.kt) — data shape complete, `EMPTY` sentinel. Equals/hash throw (Phase F4).
+- [x] [SkcmsICCProfile.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsICCProfile.kt) — toutes les fields upstream avec defaults pour `has*` flags.
+
+**Tests** [SkcmsTypesTest](kanvas-skia/src/test/kotlin/org/skia/skcms/SkcmsTypesTest.kt) — 8 nouveaux : valeurs ASCII bigendian de SkcmsSignature, fromValue lookup, SkcmsCICP construction, SkcmsCurve.Parametric/Table validations, SkcmsCurve.Table content-equality, SkcmsMatrix3x4 equals + dimension check, SkcmsICCProfile defaults all-flags-false.
+
+**Résultat** : 245 tests verts (237 + 8), 0 régression.
 
 ### Étape F2 — `skcms_Parse` (header v2/v4)
 
