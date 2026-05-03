@@ -139,17 +139,30 @@ Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsG
 - [x] Pas de régression sur Phase 0/1/2.
 - [x] **Pass count cumulé : 5 GM.**
 
-### Phase 3b — cubics, splitter `SkPath`/`SkPathBuilder`, `CubicPathGM` (TBD)
+### Phase 3b — Path subsystem buildout (no GM ports yet) ✅
 
-- [ ] Ajouter `cubicTo` (flatten adaptatif, ou subdivision récursive) à `SkPath`.
-- [ ] Optionnel : scinder `SkPath` (immutable, returned by `detach()`) / `SkPathBuilder` (mutable, fluent).
-- [ ] Hand-port `tests/CubicPathGM.kt` ou un GM cubic de scope similaire.
+**But** : élargir la surface du subsystem path, sans GM port associé. Les futurs GMs (Phase 3c et Phase 4) hériteront d'une API stable.
 
-### Phase 3c — arcs, stroker, `ArcToGM`, `ConvexPathsGM`, etc.
+- [x] Splitter `SkPath` (immutable, parallel-array storage) / `SkPathBuilder` (mutable, fluent).
+- [x] Verbs Bézier complets stockés tels quels : `kQuad` (2 points), `kConic` (2 points + weight), `kCubic` (3 points). `quadTo` ne fait plus de flatten au build (le rasterizer s'en charge).
+- [x] `conicTo` : poids ≤ 0 → fallback line, poids = 1 → collapse en `kQuad`, sinon vrai `kConic` avec weight stocké.
+- [x] `arcTo(rect, startDeg, sweepDeg, forceMoveTo)` + `addArc(...)` : conversion en cubics via approximation Hugues (`k = (4/3) * tan(θ/4)`). Sweep découpé en segments ≤ 90°. Sweep nul → moveTo/lineTo dégénéré sans cubic.
+- [x] Factories `SkPath.Rect`, `SkPath.Circle`, `SkPath.Oval`, `SkPath.Line`, `SkPath.Polygon` (avec `fillType` / `isVolatile` args).
+- [x] Builder helpers : `addRect`, `addOval` (4 cubics, kappa = `(4/3)·(√2 − 1)`), `addCircle`, `addPolygon`, `addPath`, `setFillType`.
+- [x] `SkPathDirection` enum (`kCW` / `kCCW`).
+- [x] `detach()` reset complet du builder vers état vide ; `snapshot()` copy sans reset.
+- [x] Étendre `SkBitmapDevice.buildEdges` : flattening adaptatif De Casteljau pour `kQuad` / `kCubic` (chord ≤ 0.25 px en device space, profondeur max 18) ; flattening uniform-t (32 steps) pour `kConic`.
+- [x] Refactor `ConcavePathsGM` pour utiliser `SkPathBuilder`.
 
-- [ ] `arcTo` + `addArc` (conversion en cubic Béziers, max-error bounded).
+#### Vérification Phase 3b
+- [x] 21 tests unitaires sur `SkPathBuilder` (verbs, factories, arc, conic, detach/snapshot, addPath).
+- [x] 6 tests rasterizer end-to-end (rect, circle, quadTo, even-odd hole, cubic teardrop, addArc 360°).
+- [x] Aucune régression sur les 5 GMs existants.
+
+### Phase 3c — Path stroker + GM ports
+
 - [ ] Stroker path → fill path (`kButt_Cap` + `kMiter_Join` only).
-- [ ] Hand-port `tests/ArcToGM.kt`, `tests/ConvexPathsGM.kt`.
+- [ ] Hand-port `tests/ArcToGM.kt`, `tests/ConvexPathsGM.kt`, `tests/CubicPathGM.kt` selon faisabilité.
 
 ---
 
@@ -269,8 +282,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 2     | 4        | Rect AA (coverage analytique axis-aligned) | ✅ |
 | S3    | +1       | `drawImageRect` axis-aligned (parallèle, +`DrawBitmapRect3`) | ✅ |
 | 3a    | 5        | SkPath line-only + scanline fill AA + scale CTM | ✅ |
-| 3b    | ~7       | Cubic Béziers + Path/Builder split | ⬜ |
-| 3c    | ~10      | Arcs + path stroker | ⬜ |
+| 3b    | 5        | Path/Builder split + Bézier verbs + arcTo/addArc + flattening | ✅ |
+| 3c    | ~8       | Path stroker + GM ports (ArcToGM, ConvexPathsGM, ...) | ⬜ |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
