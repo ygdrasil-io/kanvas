@@ -107,21 +107,24 @@ Créé [kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpacePriv.kt](kan
 
 ---
 
-## Phase C — Modifiers `makeLinearGamma` / `makeSRGBGamma` / `makeColorSpin` (XS)
+## Phase C — Modifiers `makeLinearGamma` / `makeSRGBGamma` / `makeColorSpin` (XS) — ✅
 
-**But** : symétrie API. Composition simple.
+Ajouté à [kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt) :
 
-À porter dans [kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt) (cf. `SkColorSpace.cpp:270-294`) :
+- [x] `makeLinearGamma()`: short-circuit si déjà linéaire, sinon `makeRGB(kLinear, toXYZD50)` (qui re-snap au singleton si gamut == kSRGB grâce à Phase B).
+- [x] `makeSRGBGamma()`: symétrique sur `kSRGB`.
+- [x] `makeColorSpin()`: `concat(toXYZD50, spin)` avec `spin = {{0,0,1},{1,0,0},{0,1,0}}`.
 
-- [ ] `makeLinearGamma()`: `if (gammaIsLinear()) return this; else return makeRGB(kLinear, toXYZD50)`.
-- [ ] `makeSRGBGamma()`: idem avec `kSRGB`.
-- [ ] `makeColorSpin()`: concat avec spin matrix `{{0,0,1},{1,0,0},{0,1,0}}`. Utilisé pour les tests Skia (transformations sévères).
+**Tests** [kanvas-skia/src/test/kotlin/org/skia/foundation/SkColorSpaceModifiersTest.kt](kanvas-skia/src/test/kotlin/org/skia/foundation/SkColorSpaceModifiersTest.kt) — 9 nouveaux tests :
+- [x] `makeSRGB().makeLinearGamma() === makeSRGBLinear()` (snap singleton via Phase B).
+- [x] `makeSRGBLinear().makeLinearGamma() === makeSRGBLinear()` (idempotent).
+- [x] `Rec2020.makeLinearGamma()` garde le gamut, TF → linéaire.
+- [x] Symétrique pour `makeSRGBGamma`.
+- [x] `makeColorSpin()` 3× retourne au matrix-équivalent original (spin³ = identité).
+- [x] `makeColorSpin()` 1× ≠ original (`Equals` retourne false).
+- [x] `makeColorSpin().toXYZD50` permute les colonnes : col0=col1_orig, col1=col2_orig, col2=col0_orig.
 
-**Tests** :
-- [ ] `makeSRGB().makeLinearGamma() === makeSRGBLinear()` (snap singleton).
-- [ ] `makeSRGBLinear().makeSRGBGamma() === makeSRGB()`.
-- [ ] `makeColorSpin()` 3× retourne au point de départ (RGB → GBR → BRG → RGB).
-- [ ] `makeColorSpin().toXYZD50` = `toXYZD50 · spin`.
+**Résultat** : 189 tests verts (180 + 9), 0 régression.
 
 ---
 
