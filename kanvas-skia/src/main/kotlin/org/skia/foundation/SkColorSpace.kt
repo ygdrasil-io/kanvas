@@ -6,6 +6,7 @@ import org.skia.skcms.SkcmsMatrix3x3
 import org.skia.skcms.SkcmsTFType
 import org.skia.skcms.SkcmsTransferFunction
 import org.skia.skcms.classify
+import org.skia.skcms.skcmsMatrix3x3Concat
 import org.skia.skcms.skcmsTransferFunctionInvert
 
 /**
@@ -50,6 +51,41 @@ public class SkColorSpace private constructor(
 
     public fun hash(): Long =
         (transferFnHash.toLong() shl 32) or (toXYZD50Hash.toLong() and 0xFFFFFFFFL)
+
+    /**
+     * Returns a colorspace with the same gamut as this one but a linear
+     * gamma. Mirror of upstream
+     * [SkColorSpace.cpp:270-275](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkColorSpace.cpp).
+     */
+    public fun makeLinearGamma(): SkColorSpace {
+        if (gammaIsLinear()) return this
+        return makeRGB(SkNamedTransferFn.kLinear, toXYZD50)!!
+    }
+
+    /**
+     * Returns a colorspace with the same gamut as this one but the sRGB
+     * transfer function. Mirror of upstream `SkColorSpace.cpp:277-282`.
+     */
+    public fun makeSRGBGamma(): SkColorSpace {
+        if (gammaCloseToSRGB()) return this
+        return makeRGB(SkNamedTransferFn.kSRGB, toXYZD50)!!
+    }
+
+    /**
+     * Returns a colorspace with the same TF but with the primary colors
+     * rotated (RGB → GBR when applied to a source). Used by Skia for
+     * testing — three applications return the original. Mirror of
+     * `SkColorSpace.cpp:284-294`.
+     */
+    public fun makeColorSpin(): SkColorSpace {
+        val spin = SkcmsMatrix3x3.of(
+            0f, 0f, 1f,
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+        )
+        val spun = skcmsMatrix3x3Concat(toXYZD50, spin)
+        return SkColorSpace(transferFn, spun)
+    }
 
     private fun computeLazyDst(): LazyDst {
         val invMat = org.skia.skcms.skcmsMatrix3x3Invert(toXYZD50)
