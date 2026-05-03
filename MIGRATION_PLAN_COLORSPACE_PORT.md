@@ -80,26 +80,30 @@ Modifié [kanvas-skia/src/main/kotlin/org/skia/core/SkColorSpaceXformSteps.kt](k
 
 ---
 
-## Phase B — Snap quasi-sRGB dans `MakeRGB` (XS)
+## Phase B — Snap quasi-sRGB dans `MakeRGB` (XS) — ✅
 
-**But** : Permettre à `MakeRGB(tf, mat)` de coller au singleton sRGB même quand `tf` arrive d'un parser ICC avec du bruit s15Fixed16.
+Créé [kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpacePriv.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpacePriv.kt) :
 
-À porter de [`SkColorSpacePriv.h:21-65`](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkColorSpacePriv.h) :
+- [x] `colorSpaceAlmostEqual` — tolérance `0.01f` pour matrices.
+- [x] `transferFnAlmostEqual` — tolérance `0.001f` pour TFs.
+- [x] `xyzAlmostEqual(mA, mB)` — cell-by-cell.
+- [x] `isAlmostSRGB(tf)` — 7 comparaisons.
+- [x] `isAlmost2Dot2(tf)` — `a=1, b=0, e=0, g≈2.2, d≤0`.
+- [x] `isAlmostLinear(tf)` — deux formes (exponentielle `g≈1, d≤0` OU linéaire `c≈1, d≥1`).
+- [x] **`SkColorSpace.makeRGB` rewired** : snap par `isAlmost*` + `xyzAlmostEqual` au lieu d'égalité exacte. Mirror `SkColorSpace.cpp:136-159`.
 
-- [ ] `colorSpaceAlmostEqual(a, b: Float): Boolean` — tolérance `0.01f`, pour matrices.
-- [ ] `transferFnAlmostEqual(a, b: Float): Boolean` — tolérance `0.001f`, pour TFs (plus strict, ICC offre 16 bits de précision).
-- [ ] `xyzAlmostEqual(mA, mB)` — élément par élément avec `colorSpaceAlmostEqual`.
-- [ ] `isAlmostSRGB(tf)` — 7 comparaisons strictes.
-- [ ] `isAlmost2Dot2(tf)` — formule alternative (a=1, b=0, e=0, g≈2.2, d≤0).
-- [ ] `isAlmostLinear(tf)` — deux formes : exponentielle (g≈1) ou linéaire (c≈1, d≥1).
-- [ ] **Modifier `SkColorSpace.makeRGB`** ([SkColorSpace.kt:78-88](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt:78)) : remplacer le snap par égalité exacte par le snap par `is_almost_*`. Mirror `SkColorSpace.cpp:144-156`.
+**Tests** [kanvas-skia/src/test/kotlin/org/skia/foundation/SkColorSpacePrivTest.kt](kanvas-skia/src/test/kotlin/org/skia/foundation/SkColorSpacePrivTest.kt) — 12 nouveaux tests :
+- [x] `colorSpaceAlmostEqual` accepte 0.005, refuse 0.02.
+- [x] `isAlmostSRGB` accepte exact, accepte perturbé `0.0005`, refuse `kLinear`.
+- [x] `isAlmost2Dot2` accepte exact, refuse `2.4`-power.
+- [x] `isAlmostLinear` accepte les 2 formes, refuse `kSRGB`/`k2Dot2`.
+- [x] `makeRGB(kSRGB-perturbé, kSRGB-gamut-perturbé) === makeSRGB()` (singleton snap).
+- [x] `makeRGB(kLinear-perturbé, kSRGB-gamut) === makeSRGBLinear()`.
+- [x] `makeRGB(kSRGB-perturbé, kRec2020-gamut)` produit instance fraîche dont `gammaCloseToSRGB() == true`.
+- [x] `makeRGB(kSRGB+0.005, kSRGB-gamut)` (TF tolérance 0.001 dépassée) ne snap pas.
+- [x] **Régression** : 5 GMs gardent leurs scores (BigRect 95.53%, etc.).
 
-**Tests** :
-- [ ] `MakeRGB(kSRGB-perturbé-0.0005, kSRGB-gamut-perturbé-0.005)` → `=== makeSRGB()` (singleton).
-- [ ] `MakeRGB(kSRGB-perturbé-0.005, kSRGB-gamut)` → instance fraîche (TF tolérance `0.001` non franchie pour `0.005` = NaN, instance fraîche → mais ah on snape sur 0.001 donc à 0.005 = pas snap).
-  - Plus précisément : tester `Math.abs(diff) >= 0.001 → not snap`.
-- [ ] `gammaCloseToSRGB()` retourne `true` après snap, alors qu'avant Phase B elle retournait `false`.
-- [ ] Regression : pas d'impact sur les 5 GMs (ils utilisent les singletons exacts).
+**Résultat** : 180 tests verts (168 + 12), 0 régression. Le snap fonctionne — un TF/gamut bruité par s15Fixed16 (ce que produira le parser ICC en Phase F) est désormais snappé sur le singleton.
 
 ---
 
