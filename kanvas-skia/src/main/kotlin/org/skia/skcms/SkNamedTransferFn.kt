@@ -149,4 +149,28 @@ public object SkNamedTransferFn {
             public const val kCicpIdApplicationDefined: Int = 2
         }
     }
+
+    /**
+     * Lookup table for CICP id → transfer function. Mirrors upstream
+     * `cicp_table` in `SkColorSpace.cpp:93-107`.
+     */
+    private val cicpTable: List<Pair<CicpId, SkcmsTransferFunction>> = listOf(
+        CicpId.kRec709 to kRec709,
+        CicpId.kRec470SystemM to kRec470SystemM,
+        CicpId.kRec470SystemBG to kRec470SystemBG,
+        CicpId.kRec601 to kRec601,
+        CicpId.kSMPTE_ST_240 to kSMPTE_ST_240,
+        CicpId.kLinear to kLinear,
+        CicpId.kIEC61966_2_4 to kIEC61966_2_4,
+        CicpId.kIEC61966_2_1 to kIEC61966_2_1,
+        CicpId.kRec2020_10bit to kRec2020_10bit,
+        CicpId.kRec2020_12bit to kRec2020_12bit,
+        CicpId.kPQ to kPQ,
+        CicpId.kSMPTE_ST_428_1 to kSMPTE_ST_428_1,
+        CicpId.kHLG to kHLG,
+    )
+
+    /** `CicpId → TF`. Returns `null` if the id is not in the table. */
+    public fun getCicp(id: CicpId): SkcmsTransferFunction? =
+        cicpTable.firstOrNull { it.first == id }?.second
 }

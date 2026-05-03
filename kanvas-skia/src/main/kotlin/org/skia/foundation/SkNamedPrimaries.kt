@@ -80,4 +80,55 @@ public object SkNamedPrimaries {
             public const val kCicpIdApplicationDefined: Int = 2
         }
     }
+
+    /**
+     * Lookup table for CICP id → primaries. Mirrors the upstream
+     * `cicp_table` in `SkColorSpace.cpp:38-50`. Entries with a fast-path
+     * matrix (kRec709/kSRGB-gamut, kRec2020/kRec2020-gamut,
+     * kSMPTE_EG_432_1/kDisplayP3) bypass `skcms_PrimariesToXYZD50`.
+     */
+    private data class TableEntry(
+        val cicpId: CicpId,
+        val primaries: SkColorSpacePrimaries,
+        val toXYZD50: org.skia.skcms.SkcmsMatrix3x3? = null,
+    )
+
+    private val cicpTable: List<TableEntry> = listOf(
+        TableEntry(CicpId.kRec709, kRec709, org.skia.skcms.SkNamedGamut.kSRGB),
+        TableEntry(CicpId.kRec470SystemM, kRec470SystemM),
+        TableEntry(CicpId.kRec470SystemBG, kRec470SystemBG),
+        TableEntry(CicpId.kRec601, kRec601),
+        TableEntry(CicpId.kSMPTE_ST_240, kSMPTE_ST_240),
+        TableEntry(CicpId.kGenericFilm, kGenericFilm),
+        TableEntry(CicpId.kRec2020, kRec2020, org.skia.skcms.SkNamedGamut.kRec2020),
+        TableEntry(CicpId.kSMPTE_ST_428_1, kSMPTE_ST_428_1),
+        TableEntry(CicpId.kSMPTE_RP_431_2, kSMPTE_RP_431_2),
+        TableEntry(CicpId.kSMPTE_EG_432_1, kSMPTE_EG_432_1, org.skia.skcms.SkNamedGamut.kDisplayP3),
+        TableEntry(CicpId.kITU_T_H273_Value22, kITU_T_H273_Value22),
+    )
+
+    /**
+     * `CicpId → toXYZD50` matrix. Returns `null` if the id is not in the
+     * table or the primaries don't yield a valid matrix.
+     */
+    public fun getCicp(primaries: CicpId): org.skia.skcms.SkcmsMatrix3x3? {
+        for (entry in cicpTable) {
+            if (entry.cicpId != primaries) continue
+            entry.toXYZD50?.let { return it }
+            entry.primaries.toXYZD50()?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Reverse lookup: a `toXYZD50` matrix → its CICP id, or `null` if no
+     * standard primary matches within `xyzAlmostEqual` tolerance.
+     */
+    public fun getCicpFromMatrix(m: org.skia.skcms.SkcmsMatrix3x3): CicpId? {
+        for (entry in cicpTable) {
+            val cand = entry.primaries.toXYZD50() ?: continue
+            if (xyzAlmostEqual(m, cand)) return entry.cicpId
+        }
+        return null
+    }
 }

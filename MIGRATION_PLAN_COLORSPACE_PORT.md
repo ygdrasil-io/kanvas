@@ -152,44 +152,29 @@ Le port précédent a déjà `kSRGB`, `kAdobeRGB`, `kDisplayP3`, `kRec2020`, `kX
 
 ---
 
-## Phase E — Infrastructure CICP + `MakeCICP` (M)
+## Phase E — Infrastructure CICP + `MakeCICP` (M) — ✅
 
-**But** : table-driven lookup des primaires et TF par CICP id ; constructeur `MakeCICP`.
+### Opérations skcms ([Skcms.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt))
+- [x] `skcmsMv3Mul(m, v)` — 3x3 · 3-vector.
+- [x] `skcmsAdaptToXYZD50(wx, wy)` — Bradford adaptation, ~30 lignes incluant matrices Bradford. Mirror `skcms.cc:1826-1865`.
+- [x] `skcmsPrimariesToXYZD50(rx, ry, gx, gy, bx, by, wx, wy)` — primaires + WP → toXYZD50 matrix. Mirror `skcms.cc:1867-1909`.
 
-### `skcms_PrimariesToXYZD50` — porter
+### Lookup tables CICP
+- [x] [SkNamedPrimaries.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkNamedPrimaries.kt) ajoute `getCicp(primaries: CicpId)` et `getCicpFromMatrix(m)` — table de 11 entrées avec fast-path pour `kRec709 → kSRGB-gamut`, `kRec2020 → kRec2020-gamut`, `kSMPTE_EG_432_1 → kDisplayP3-gamut` (renvoie l'instance singleton, pas un re-calcul). Mirror `SkColorSpace.cpp:30-82`.
+- [x] [SkNamedTransferFn.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkNamedTransferFn.kt) ajoute `getCicp(id: CicpId)` — table de 13 entrées. Mirror `SkColorSpace.cpp:112-120`.
 
-`skcms.cc:1867-1909`. Convertit (rxy, gxy, bxy, wxy) → matrice toXYZD50.
+### `SkColorSpace.makeCICP` ([SkColorSpace.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt))
+- [x] Combine `SkNamedTransferFn.getCicp` + `SkNamedPrimaries.getCicp` + `makeRGB`. Mirror `SkColorSpace.cpp:161-174`. Retourne `null` si une des lookups échoue (typique : PQ/HLG TF, qui sont Invalid jusqu'à Phase I).
 
-- [ ] Construit `primaries` 3x3 = `{{rx,gx,bx},{ry,gy,by},{1-rx-ry, 1-gx-gy, 1-bx-by}}`.
-- [ ] Inverse cette matrice.
-- [ ] Multiplie par `(wx/wy, 1, (1-wx-wy)/wy)`.
-- [ ] Construit `toXYZ` diagonale puis multiplie par `primaries`.
-- [ ] Bradford-adapte au D50 via `skcms_AdaptToXYZD50`.
+### `SkColorSpacePrimaries.toXYZD50` activé
+Le stub Phase D (`NotImplementedError`) est remplacé par `skcmsPrimariesToXYZD50` réel.
 
-### `skcms_AdaptToXYZD50` — porter
+**Tests** — 22 nouveaux :
+- [x] [SkcmsPrimariesTest](kanvas-skia/src/test/kotlin/org/skia/skcms/SkcmsPrimariesTest.kt) — 8 tests : `mv3Mul` identity et reject vector-non-3, `adaptToXYZD50` D50→identity et D65→non-identity, primariesToXYZD50 sRGB→~kSRGB-gamut et Rec.2020→~kRec2020-gamut (tolérance 0.01), reject inputs out-of-range.
+- [x] [SkColorSpaceCicpTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkColorSpaceCicpTest.kt) — 13 tests : `SkColorSpacePrimaries.toXYZD50()` actif, `getCicp` fast-paths (kRec709→kSRGB, kRec2020→kRec2020, kSMPTE_EG_432_1→kDisplayP3), `getCicp` non-fast-path, `getCicpFromMatrix` recover, `getCicpFromMatrix` returns null pour matrice random, `getCicp` TF (kSRGB, kLinear, kPQ), **`makeCICP(kRec709, kIEC61966_2_1)` snap au sRGB singleton** (preuve que la chaîne CICP→TF/gamut→makeRGB→singleton snap fonctionne), `makeCICP(kRec2020, kRec2020_10bit)`, `makeCICP(kRec2020, kPQ)` retourne null (PQ Invalid jusqu'à Phase I).
+- [x] [SkNamedPrimariesTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkNamedPrimariesTest.kt) — `toXYZD50` test mis à jour : retourne maintenant un matrix valide (au lieu de `NotImplementedError`).
 
-`skcms.cc:1826-1865`. Bradford chromatic adaptation. ~30 lignes incluant les matrices Bradford constantes.
-
-### `SkNamedPrimaries::GetCicp` / `GetCicpFromMatrix`
-
-`SkColorSpace.cpp:30-82`. Table de 11 entrées CICP. Mapping bidirectionnel CicpId ↔ matrix.
-
-- [ ] `GetCicp(primaries: CicpId, out: SkcmsMatrix3x3): Boolean`.
-- [ ] `GetCicpFromMatrix(m: SkcmsMatrix3x3, out: CicpId): Boolean` — utilise `xyzAlmostEqual`.
-- [ ] Fast-path pour `kRec709 → kSRGB`, `kRec2020 → kRec2020`, `kSMPTE_EG_432_1 → kDisplayP3`.
-
-### `SkNamedTransferFn::GetCicp`
-
-`SkColorSpace.cpp:112-120`. Table de 13 entrées TF.
-
-### `SkColorSpace.MakeCICP`
-
-`SkColorSpace.cpp:161-174`. Combine les deux GetCicp et appelle MakeRGB.
-
-**Tests** :
-- [ ] `MakeCICP(kRec709, kIEC61966_2_4) === makeSRGB()`.
-- [ ] `MakeCICP(kRec2020, kSMPTE_ST_240).toXYZD50` ≈ kRec2020-gamut.
-- [ ] `MakeCICP(kRec2020, ?)` avec ID invalide → `null`.
+**Résultat** : 225 tests verts (203 + 22), 0 régression sur GMs.
 
 ---
 

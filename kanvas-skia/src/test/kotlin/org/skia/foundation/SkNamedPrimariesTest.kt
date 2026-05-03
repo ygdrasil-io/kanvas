@@ -54,12 +54,14 @@ class SkNamedPrimariesTest {
     }
 
     @Test
-    fun `toXYZD50 throws NotImplementedError until Phase E`() {
-        try {
-            SkNamedPrimaries.kRec709.toXYZD50()
-            org.junit.jupiter.api.fail("expected NotImplementedError")
-        } catch (e: NotImplementedError) {
-            // OK
-        }
+    fun `toXYZD50 returns a 3x3 matrix for kRec709 (Phase E activated)`() {
+        // Phase E ports skcmsPrimariesToXYZD50; the matrix produced for
+        // kRec709 must be near-identical to SkNamedGamut.kSRGB.
+        val m = SkNamedPrimaries.kRec709.toXYZD50()
+        org.junit.jupiter.api.Assertions.assertNotNull(m)
+        org.junit.jupiter.api.Assertions.assertTrue(
+            xyzAlmostEqual(org.skia.skcms.SkNamedGamut.kSRGB, m!!),
+            "kRec709 primaries should produce ~kSRGB-gamut matrix"
+        )
     }
 }
