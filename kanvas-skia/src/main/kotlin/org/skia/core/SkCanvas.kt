@@ -5,6 +5,7 @@ import org.skia.foundation.SkColor
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
@@ -180,6 +181,40 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     public fun drawRRect(rrect: SkRRect, paint: SkPaint) {
         if (rrect.isEmpty()) return
         drawPath(SkPath.RRect(rrect), paint)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawArc(oval, startAngleDeg, sweepAngleDeg, useCenter, paint)`.
+     *
+     * - When `useCenter = false`, an open arc curve is drawn — `paint`'s
+     *   stroke caps are visible at the two ends.
+     * - When `useCenter = true`, a closed pie-slice contour is drawn:
+     *   `arc + lineTo(centre) + close`. Filled or stroked the same as any
+     *   other closed path.
+     *
+     * Sweep = 0 is a no-op (Skia degenerates similarly).
+     */
+    public fun drawArc(
+        oval: SkRect,
+        startAngleDeg: SkScalar,
+        sweepAngleDeg: SkScalar,
+        useCenter: Boolean,
+        paint: SkPaint,
+    ) {
+        if (sweepAngleDeg == 0f) return
+        val builder = SkPathBuilder()
+        if (useCenter) {
+            // Pie slice: centre, then arc, then close.
+            val cx = (oval.left + oval.right) * 0.5f
+            val cy = (oval.top + oval.bottom) * 0.5f
+            builder.moveTo(cx, cy)
+            builder.arcTo(oval, startAngleDeg, sweepAngleDeg, forceMoveTo = false)
+            builder.close()
+        } else {
+            // Open curve, no centre.
+            builder.arcTo(oval, startAngleDeg, sweepAngleDeg, forceMoveTo = true)
+        }
+        drawPath(builder.detach(), paint)
     }
 
     /**
