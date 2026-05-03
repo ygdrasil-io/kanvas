@@ -2,6 +2,9 @@ package org.skia.testing
 
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorSpace
+import org.skia.skcms.SkNamedGamut
+import org.skia.skcms.SkNamedTransferFn
 import org.skia.tests.GM
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferUShort
@@ -13,13 +16,31 @@ public object TestUtils {
     private const val REFERENCE_DIR: String = "original-888"
 
     /**
+     * Color space the Skia DM reference PNGs in `original-888/` are encoded
+     * with. See [colorspace-fingerprint.md](../resources/colorspace-fingerprint.md)
+     * for the full ICC dump. Rendering GM tests into a bitmap with this
+     * color space lets us compare against the references at single-ulp
+     * tolerance instead of the worst-case ~150 we used before SkColorSpace
+     * was wired up.
+     */
+    public val DM_REFERENCE_COLOR_SPACE: SkColorSpace =
+        SkColorSpace.makeRGB(SkNamedTransferFn.kRec2020, SkNamedGamut.kRec2020)!!
+
+    /**
      * Render a GM into a freshly allocated bitmap of the GM's preferred size,
-     * filled with `gm.bgColor()` before `onDraw` runs. Mirrors Skia's
-     * `gm.cpp` test runner (which clears to `getBGColor()` between draws).
+     * in the DM reference colorspace, filled with `gm.bgColor()` before
+     * `onDraw` runs. Mirrors Skia's `gm.cpp` test runner with `--config 8888`
+     * and the "DM unified Rec.2020" working color space.
+     *
+     * The bg color is sRGB-encoded (per the SkColor convention). When it is
+     * black or white — both profile-invariant — a raw fill is bit-identical
+     * to going through the device. ScaledRectsGM-style non-trivial bg
+     * colors will need an xformed eraseColor; we add it when a GM in scope
+     * demands it.
      */
     public fun runGmTest(gm: GM): SkBitmap {
         val size = gm.size()
-        val bitmap = SkBitmap(size.width, size.height)
+        val bitmap = SkBitmap(size.width, size.height, DM_REFERENCE_COLOR_SPACE)
         bitmap.eraseColor(gm.bgColor())
         val canvas = SkCanvas(bitmap)
         gm.draw(canvas)

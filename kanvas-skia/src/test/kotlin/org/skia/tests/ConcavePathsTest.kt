@@ -14,16 +14,17 @@ class ConcavePathsTest {
         val rendered = TestUtils.runGmTest(gm)
         val reference = TestUtils.loadReferenceBitmap(gm.name())
         assertNotNull(reference, "Missing reference image concavepaths.png")
-        // tolerance=160 keeps the same envelope used since Phase 1 to absorb
-        // the wide-gamut working-space shift in the reference PNGs.
-        val similarity = TestUtils.compareBitmaps(rendered, reference!!, tolerance = 160)
-        if (similarity < 90.0) {
+        // Rendered in the DM reference colorspace. Path scanline+4×4 SS
+        // produces ~99% bit-exact at t=1; the residual ~1% is sub-ulp coverage
+        // rounding on AA edges (closes to 100% at t=128).
+        val similarity = TestUtils.compareBitmaps(rendered, reference!!, tolerance = 1)
+        if (similarity < 98.0) {
             TestUtils.saveDebugImage(rendered, "${gm.name()}-rendered")
             TestUtils.saveDebugImage(reference, "${gm.name()}-reference")
         }
         val accepted = SimilarityTracker.updateScore("ConcavePathsGM", similarity)
         assertTrue(accepted, "ConcavePathsGM regressed below ratchet")
-        assertTrue(similarity >= 90.0,
-            "ConcavePathsGM similarity ${"%.2f".format(similarity)}% < 90.0% (Phase 3 floor, t=160)")
+        assertTrue(similarity >= 98.0,
+            "ConcavePathsGM similarity ${"%.2f".format(similarity)}% < 98.0% (t=1 floor)")
     }
 }
