@@ -147,8 +147,8 @@ public abstract class SkRasterHandleAllocator public constructor() {
     public fun makeCanvas(
       param0: SkRasterHandleAllocator?,
       param1: SkImageInfo,
-      rec: Rec? = null,
-      props: SkSurfaceProps? = null,
+      rec: Rec? = TODO(),
+      props: SkSurfaceProps? = TODO(),
     ): Int {
       TODO("Implement makeCanvas")
     }

@@ -158,7 +158,7 @@ public open class SkShader public constructor() : SkFlattenable() {
    * }
    * ```
    */
-  public fun makeWithWorkingColorSpace(inputCS: SkSp<SkColorSpace>, outputCS: SkSp<SkColorSpace> = null): Int {
+  public fun makeWithWorkingColorSpace(inputCS: SkSp<SkColorSpace>, outputCS: SkSp<SkColorSpace> = TODO()): Int {
     TODO("Implement makeWithWorkingColorSpace")
   }
 }

@@ -178,8 +178,8 @@ public data class SkLatticeIter public constructor(
   public fun next(
     src: SkIRect?,
     dst: SkRect?,
-    isFixedColor: Boolean? = null,
-    fixedColor: SkColor? = null,
+    isFixedColor: Boolean? = TODO(),
+    fixedColor: SkColor? = TODO(),
   ): Boolean {
     TODO("Implement next")
   }
@@ -201,8 +201,8 @@ public data class SkLatticeIter public constructor(
   public fun next(
     src: SkRect?,
     dst: SkRect?,
-    isFixedColor: Boolean? = null,
-    fixedColor: SkColor? = null,
+    isFixedColor: Boolean? = TODO(),
+    fixedColor: SkColor? = TODO(),
   ): Boolean {
     TODO("Implement next")
   }

@@ -435,7 +435,7 @@ public open class SkResourceCache public constructor(
    * }
    * ```
    */
-  public open fun add(rec: Rec?, payload: Unit? = null) {
+  public open fun add(rec: Rec?, payload: Unit? = TODO()) {
     TODO("Implement add")
   }
 
@@ -691,7 +691,7 @@ public open class SkResourceCache public constructor(
    * }
    * ```
    */
-  private fun purgeAsNeeded(forcePurge: Boolean = false) {
+  private fun purgeAsNeeded(forcePurge: Boolean = TODO()) {
     TODO("Implement purgeAsNeeded")
   }
 
@@ -980,7 +980,7 @@ public open class SkResourceCache public constructor(
      * }
      * ```
      */
-    private fun add(rec: Rec?, payload: Unit? = null) {
+    private fun add(rec: Rec?, payload: Unit? = TODO()) {
       TODO("Implement add")
     }
 

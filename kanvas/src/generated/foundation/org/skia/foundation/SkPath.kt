@@ -1788,8 +1788,8 @@ public abstract class SkPath public constructor(
    */
   public fun isRect(
     rect: SkRect?,
-    isClosed: Boolean? = null,
-    direction: SkPathDirection? = null,
+    isClosed: Boolean? = TODO(),
+    direction: SkPathDirection? = TODO(),
   ): Boolean {
     TODO("Implement isRect")
   }
@@ -2456,7 +2456,7 @@ public abstract class SkPath public constructor(
       verbs: SkSpan<SkPathVerb>,
       conics: SkSpan<SkScalar>,
       ft: SkPathFillType,
-      isVolatile: Boolean = false,
+      isVolatile: Boolean = TODO(),
     ): SkPath {
       TODO("Implement raw")
     }
@@ -2474,7 +2474,7 @@ public abstract class SkPath public constructor(
       r: SkRect,
       ft: SkPathFillType,
       dir: SkPathDirection = TODO(),
-      startIndex: UInt = 0u,
+      startIndex: UInt = TODO(),
     ): SkPath {
       TODO("Implement rect")
     }
@@ -2491,7 +2491,7 @@ public abstract class SkPath public constructor(
     public fun rect(
       r: SkRect,
       direction: SkPathDirection = TODO(),
-      startIndex: UInt = 0u,
+      startIndex: UInt = TODO(),
     ): SkPath {
       TODO("Implement rect")
     }
@@ -2622,7 +2622,7 @@ public abstract class SkPath public constructor(
       pts: SkSpan<SkPoint>,
       isClosed: Boolean,
       fillType: SkPathFillType = TODO(),
-      isVolatile: Boolean = false,
+      isVolatile: Boolean = TODO(),
     ): SkPath {
       TODO("Implement polygon")
     }
@@ -2657,7 +2657,7 @@ public abstract class SkPath public constructor(
       verbs: SkSpan<UByte>,
       conics: SkSpan<SkScalar>,
       fillType: SkPathFillType,
-      isVolatile: Boolean = false,
+      isVolatile: Boolean = TODO(),
     ): SkPath {
       TODO("Implement make")
     }
@@ -2824,7 +2824,7 @@ public abstract class SkPath public constructor(
     private fun readFromMemory(
       buffer: Unit?,
       length: ULong,
-      bytesRead: ULong? = null,
+      bytesRead: ULong? = TODO(),
     ): SkPath? {
       TODO("Implement readFromMemory")
     }

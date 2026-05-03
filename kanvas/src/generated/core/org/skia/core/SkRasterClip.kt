@@ -606,7 +606,7 @@ public data class SkRasterClip public constructor(
    *     }
    * ```
    */
-  private fun updateCacheAndReturnNonEmpty(detectAARect: Boolean = true): Boolean {
+  private fun updateCacheAndReturnNonEmpty(detectAARect: Boolean = TODO()): Boolean {
     TODO("Implement updateCacheAndReturnNonEmpty")
   }
 

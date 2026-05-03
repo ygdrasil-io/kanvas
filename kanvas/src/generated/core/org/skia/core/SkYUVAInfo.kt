@@ -490,7 +490,7 @@ public data class SkYUVAInfo public constructor(
    * }
    * ```
    */
-  public fun computeTotalBytes(rowBytes: Array<ULong>, planeSizes: Array<ULong> = null): ULong {
+  public fun computeTotalBytes(rowBytes: Array<ULong>, planeSizes: Array<ULong> = TODO()): ULong {
     TODO("Implement computeTotalBytes")
   }
 

@@ -47,7 +47,7 @@ public open class SkMaskFilter : SkFlattenable() {
     public fun makeBlur(
       style: SkBlurStyle,
       sigma: SkScalar,
-      respectCTM: Boolean = true,
+      respectCTM: Boolean = TODO(),
     ): Int {
       TODO("Implement makeBlur")
     }
@@ -66,7 +66,7 @@ public open class SkMaskFilter : SkFlattenable() {
     public fun deserialize(
       `data`: Unit?,
       size: ULong,
-      procs: SkDeserialProcs? = null,
+      procs: SkDeserialProcs? = TODO(),
     ): Int {
       TODO("Implement deserialize")
     }

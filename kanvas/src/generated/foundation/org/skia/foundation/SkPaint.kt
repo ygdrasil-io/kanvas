@@ -900,7 +900,7 @@ public data class SkPaint public constructor(
    * }
    * ```
    */
-  public fun setColor(color: SkColor4f, colorSpace: SkColorSpace? = null) {
+  public fun setColor(color: SkColor4f, colorSpace: SkColorSpace? = TODO()) {
     TODO("Implement setColor")
   }
 
@@ -915,7 +915,7 @@ public data class SkPaint public constructor(
    * }
    * ```
    */
-  public fun setColor4f(color: SkColor4f, colorSpace: SkColorSpace? = null) {
+  public fun setColor4f(color: SkColor4f, colorSpace: SkColorSpace? = TODO()) {
     TODO("Implement setColor4f")
   }
 

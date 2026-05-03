@@ -314,7 +314,7 @@ public abstract class SkSpecialImage public constructor(
     y: SkScalar,
     sampling: SkSamplingOptions,
     paint: SkPaint?,
-    strict: Boolean = true,
+    strict: Boolean = TODO(),
   ) {
     TODO("Implement draw")
   }
@@ -400,7 +400,7 @@ public abstract class SkSpecialImage public constructor(
     tileMode: SkTileMode,
     sampling: SkSamplingOptions,
     lm: SkMatrix,
-    strict: Boolean = true,
+    strict: Boolean = TODO(),
   ): SkSp<SkShader> {
     TODO("Implement asShader")
   }

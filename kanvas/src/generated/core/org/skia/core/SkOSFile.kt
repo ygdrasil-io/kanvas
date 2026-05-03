@@ -35,15 +35,15 @@ public open class SkOSFile {
   public open class Iter public constructor() {
     private var fSelf: Int = TODO("Initialize fSelf")
 
-    public constructor(path: CharArray, suffix: CharArray = null) : this() {
+    public constructor(path: CharArray, suffix: CharArray = TODO()) : this() {
       TODO("Implement constructor")
     }
 
-    public fun reset(path: CharArray, suffix: CharArray = null) {
+    public fun reset(path: CharArray, suffix: CharArray = TODO()) {
       TODO("Implement reset")
     }
 
-    public fun next(name: String?, getDir: Boolean = false): Boolean {
+    public fun next(name: String?, getDir: Boolean = TODO()): Boolean {
       TODO("Implement next")
     }
 

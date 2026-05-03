@@ -2180,7 +2180,7 @@ public open class SkPictureRecord public constructor(
    * }
    * ```
    */
-  protected fun recordRestore(fillInSkips: Boolean = true) {
+  protected fun recordRestore(fillInSkips: Boolean = TODO()) {
     TODO("Implement recordRestore")
   }
 

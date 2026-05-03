@@ -210,7 +210,7 @@ public abstract class SkRTree public constructor() : SkBBoxHierarchy() {
    * Branch bulkLoad(std::vector<Branch>* branches, int level = 0)
    * ```
    */
-  private abstract fun bulkLoad(branches: List<Branch>?, level: Int = 0): Branch
+  private abstract fun bulkLoad(branches: List<Branch>?, level: Int = TODO()): Branch
 
   /**
    * C++ original:

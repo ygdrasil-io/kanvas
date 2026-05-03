@@ -202,7 +202,7 @@ public open class SkPointPriv {
       pt: SkPoint,
       a: SkPoint,
       b: SkPoint,
-      side: Side? = null,
+      side: Side? = TODO(),
     ): SkScalar {
       TODO("Implement distanceToLineBetweenSqd")
     }
@@ -220,7 +220,7 @@ public open class SkPointPriv {
       pt: SkPoint,
       a: SkPoint,
       b: SkPoint,
-      side: Side? = null,
+      side: Side? = TODO(),
     ): SkScalar {
       TODO("Implement distanceToLineBetween")
     }

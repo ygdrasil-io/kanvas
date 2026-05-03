@@ -275,7 +275,7 @@ public abstract class SkPathEffectBase public constructor() : SkPathEffect() {
     public fun deserialize(
       `data`: Unit?,
       size: ULong,
-      procs: SkDeserialProcs? = null,
+      procs: SkDeserialProcs? = TODO(),
     ): SkSp<SkPathEffect> {
       TODO("Implement deserialize")
     }

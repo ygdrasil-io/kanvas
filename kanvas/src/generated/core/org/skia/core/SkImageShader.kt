@@ -743,7 +743,7 @@ public open class SkImageShader public constructor(
       tmy: SkTileMode,
       options: SkSamplingOptions,
       localMatrix: SkMatrix?,
-      clampAsIfUnpremul: Boolean = false,
+      clampAsIfUnpremul: Boolean = TODO(),
     ): SkSp<SkShader> {
       TODO("Implement make")
     }
@@ -826,7 +826,7 @@ public open class SkImageShader public constructor(
       tmy: SkTileMode,
       options: SkSamplingOptions,
       localMatrix: SkMatrix?,
-      clampAsIfUnpremul: Boolean = false,
+      clampAsIfUnpremul: Boolean = TODO(),
     ): SkSp<SkShader> {
       TODO("Implement makeSubset")
     }

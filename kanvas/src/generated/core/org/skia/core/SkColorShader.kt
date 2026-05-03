@@ -80,7 +80,7 @@ public open class SkColorShader public constructor(
    *     }
    * ```
    */
-  public override fun isConstant(color: SkColor4f? = null): Boolean {
+  public override fun isConstant(color: SkColor4f? = TODO()): Boolean {
     TODO("Implement isConstant")
   }
 

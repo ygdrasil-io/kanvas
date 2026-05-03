@@ -1239,7 +1239,7 @@ public abstract class FillBounds public constructor(
    *     }
    * ```
    */
-  private abstract fun adjustForSaveLayerPaints(rect: SkRect?, savesToIgnore: Int = 0): Boolean
+  private abstract fun adjustForSaveLayerPaints(rect: SkRect?, savesToIgnore: Int = TODO()): Boolean
 
   public data class SaveBounds public constructor(
     public var controlOps: Int,

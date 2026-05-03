@@ -1192,7 +1192,7 @@ public data class SkPathBuilder public constructor(
    *     }
    * ```
    */
-  public fun snapshot(mx: SkMatrix? = null): Int {
+  public fun snapshot(mx: SkMatrix? = TODO()): Int {
     TODO("Implement snapshot")
   }
 
@@ -1215,7 +1215,7 @@ public data class SkPathBuilder public constructor(
    * }
    * ```
    */
-  public fun detach(mx: SkMatrix? = null): Int {
+  public fun detach(mx: SkMatrix? = TODO()): Int {
     TODO("Implement detach")
   }
 

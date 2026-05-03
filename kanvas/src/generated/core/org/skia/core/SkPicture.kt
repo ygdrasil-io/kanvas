@@ -290,7 +290,7 @@ public abstract class SkPicture public constructor() : SkRefCnt() {
    * virtual void playback(SkCanvas* canvas, AbortCallback* callback = nullptr) const = 0
    * ```
    */
-  protected abstract fun playback(canvas: SkCanvas?, callback: AbortCallback? = null)
+  protected abstract fun playback(canvas: SkCanvas?, callback: AbortCallback? = TODO())
 
   /**
    * C++ original:
@@ -320,7 +320,7 @@ public abstract class SkPicture public constructor() : SkRefCnt() {
    * }
    * ```
    */
-  protected fun serialize(procs: SkSerialProcs? = null): Int {
+  protected fun serialize(procs: SkSerialProcs? = TODO()): Int {
     TODO("Implement serialize")
   }
 
@@ -332,7 +332,7 @@ public abstract class SkPicture public constructor() : SkRefCnt() {
    * }
    * ```
    */
-  protected fun serialize(stream: SkWStream?, procs: SkSerialProcs? = null) {
+  protected fun serialize(stream: SkWStream?, procs: SkSerialProcs? = TODO()) {
     TODO("Implement serialize")
   }
 
@@ -342,7 +342,7 @@ public abstract class SkPicture public constructor() : SkRefCnt() {
    * virtual int approximateOpCount(bool nested = false) const = 0
    * ```
    */
-  protected abstract fun approximateOpCount(nested: Boolean = false): Int
+  protected abstract fun approximateOpCount(nested: Boolean = TODO()): Int
 
   /**
    * C++ original:
@@ -429,7 +429,7 @@ public abstract class SkPicture public constructor() : SkRefCnt() {
     stream: SkWStream?,
     procsPtr: SkSerialProcs?,
     typefaces: SkRefCntSet?,
-    textBlobsOnly: Boolean = false,
+    textBlobsOnly: Boolean = TODO(),
   ) {
     TODO("Implement serialize")
   }
@@ -482,7 +482,7 @@ public abstract class SkPicture public constructor() : SkRefCnt() {
      * }
      * ```
      */
-    public fun makeFromStream(stream: SkStream?, procs: SkDeserialProcs? = null): Int {
+    public fun makeFromStream(stream: SkStream?, procs: SkDeserialProcs? = TODO()): Int {
       TODO("Implement makeFromStream")
     }
 
@@ -498,7 +498,7 @@ public abstract class SkPicture public constructor() : SkRefCnt() {
      * }
      * ```
      */
-    public fun makeFromData(`data`: SkData?, procs: SkDeserialProcs? = null): Int {
+    public fun makeFromData(`data`: SkData?, procs: SkDeserialProcs? = TODO()): Int {
       TODO("Implement makeFromData")
     }
 
@@ -518,7 +518,7 @@ public abstract class SkPicture public constructor() : SkRefCnt() {
     public fun makeFromData(
       `data`: Unit?,
       size: ULong,
-      procs: SkDeserialProcs? = null,
+      procs: SkDeserialProcs? = TODO(),
     ): Int {
       TODO("Implement makeFromData")
     }

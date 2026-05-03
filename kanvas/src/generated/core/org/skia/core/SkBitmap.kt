@@ -1618,7 +1618,7 @@ public abstract class SkBitmap public constructor() {
    *     }
    * ```
    */
-  public abstract fun setInfo(imageInfo: SkImageInfo, rowBytes: ULong = 0u): Boolean
+  public abstract fun setInfo(imageInfo: SkImageInfo, rowBytes: ULong = TODO()): Boolean
 
   /**
    * C++ original:
@@ -1775,7 +1775,7 @@ public abstract class SkBitmap public constructor() {
   public fun tryAllocN32Pixels(
     width: Int,
     height: Int,
-    isOpaque: Boolean = false,
+    isOpaque: Boolean = TODO(),
   ): Boolean {
     TODO("Implement tryAllocN32Pixels")
   }
@@ -1793,7 +1793,7 @@ public abstract class SkBitmap public constructor() {
   public fun allocN32Pixels(
     width: Int,
     height: Int,
-    isOpaque: Boolean = false,
+    isOpaque: Boolean = TODO(),
   ) {
     TODO("Implement allocN32Pixels")
   }
@@ -2484,7 +2484,7 @@ public abstract class SkBitmap public constructor() {
     tmx: SkTileMode,
     tmy: SkTileMode,
     param2: SkSamplingOptions,
-    localMatrix: SkMatrix? = null,
+    localMatrix: SkMatrix? = TODO(),
   ): Int {
     TODO("Implement makeShader")
   }
@@ -2522,7 +2522,7 @@ public abstract class SkBitmap public constructor() {
    * sk_sp<SkShader> makeShader(const SkSamplingOptions& sampling, const SkMatrix& lm) const
    * ```
    */
-  public fun makeShader(sampling: SkSamplingOptions, lm: SkMatrix? = null): Int {
+  public fun makeShader(sampling: SkSamplingOptions, lm: SkMatrix? = TODO()): Int {
     TODO("Implement makeShader")
   }
 

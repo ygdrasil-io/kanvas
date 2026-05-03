@@ -2799,7 +2799,7 @@ public open class SkCanvas public constructor() {
   public constructor(
     width: Int,
     height: Int,
-    props: SkSurfaceProps? = null,
+    props: SkSurfaceProps? = TODO(),
   ) : this() {
     TODO("Implement constructor")
   }
@@ -2945,7 +2945,7 @@ public open class SkCanvas public constructor() {
    * }
    * ```
    */
-  public fun makeSurface(info: SkImageInfo, props: SkSurfaceProps? = null): Int {
+  public fun makeSurface(info: SkImageInfo, props: SkSurfaceProps? = TODO()): Int {
     TODO("Implement makeSurface")
   }
 
@@ -3031,7 +3031,7 @@ public open class SkCanvas public constructor() {
   public fun accessTopLayerPixels(
     info: SkImageInfo?,
     rowBytes: ULong?,
-    origin: SkIPoint? = null,
+    origin: SkIPoint? = TODO(),
   ) {
     TODO("Implement accessTopLayerPixels")
   }
@@ -3514,7 +3514,7 @@ public open class SkCanvas public constructor() {
    *     }
    * ```
    */
-  private fun clipRect(rect: SkRect, doAntiAlias: Boolean = false) {
+  private fun clipRect(rect: SkRect, doAntiAlias: Boolean = TODO()) {
     TODO("Implement clipRect")
   }
 
@@ -3621,7 +3621,7 @@ public open class SkCanvas public constructor() {
    *     }
    * ```
    */
-  private fun clipRRect(rrect: SkRRect, doAntiAlias: Boolean = false) {
+  private fun clipRRect(rrect: SkRRect, doAntiAlias: Boolean = TODO()) {
     TODO("Implement clipRRect")
   }
 
@@ -3682,7 +3682,7 @@ public open class SkCanvas public constructor() {
    *     }
    * ```
    */
-  private fun clipPath(path: SkPath, doAntiAlias: Boolean = false) {
+  private fun clipPath(path: SkPath, doAntiAlias: Boolean = TODO()) {
     TODO("Implement clipPath")
   }
 
@@ -4233,7 +4233,7 @@ public open class SkCanvas public constructor() {
     x: SkScalar,
     y: SkScalar,
     param3: SkSamplingOptions,
-    param4: SkPaint? = null,
+    param4: SkPaint? = TODO(),
   ) {
     TODO("Implement drawImage")
   }
@@ -4252,7 +4252,7 @@ public open class SkCanvas public constructor() {
     x: SkScalar,
     y: SkScalar,
     sampling: SkSamplingOptions,
-    paint: SkPaint? = null,
+    paint: SkPaint? = TODO(),
   ) {
     TODO("Implement drawImage")
   }
@@ -4286,7 +4286,7 @@ public open class SkCanvas public constructor() {
     param0: SkImage?,
     dst: SkRect,
     param2: SkSamplingOptions,
-    param3: SkPaint? = null,
+    param3: SkPaint? = TODO(),
   ) {
     TODO("Implement drawImageRect")
   }
@@ -4325,7 +4325,7 @@ public open class SkCanvas public constructor() {
     image: SkSp<SkImage>,
     dst: SkRect,
     sampling: SkSamplingOptions,
-    paint: SkPaint? = null,
+    paint: SkPaint? = TODO(),
   ) {
     TODO("Implement drawImageRect")
   }
@@ -4356,7 +4356,7 @@ public open class SkCanvas public constructor() {
     center: SkIRect,
     dst: SkRect,
     filter: SkFilterMode,
-    paint: SkPaint? = null,
+    paint: SkPaint? = TODO(),
   ) {
     TODO("Implement drawImageNine")
   }
@@ -4394,7 +4394,7 @@ public open class SkCanvas public constructor() {
     lattice: Lattice,
     dst: SkRect,
     filter: SkFilterMode,
-    paint: SkPaint? = null,
+    paint: SkPaint? = TODO(),
   ) {
     TODO("Implement drawImageLattice")
   }
@@ -4492,7 +4492,7 @@ public open class SkCanvas public constructor() {
     dstClips: Array<SkPoint>,
     preViewMatrices: Array<SkMatrix>,
     sampling: SkSamplingOptions,
-    paint: SkPaint? = null,
+    paint: SkPaint? = TODO(),
     constraint: SrcRectConstraint = TODO(),
   ) {
     TODO("Implement experimentalDrawEdgeAAImageSet")
@@ -4876,7 +4876,7 @@ public open class SkCanvas public constructor() {
    * }
    * ```
    */
-  private fun drawDrawable(drawable: SkDrawable?, matrix: SkMatrix? = null) {
+  private fun drawDrawable(drawable: SkDrawable?, matrix: SkMatrix? = TODO()) {
     TODO("Implement drawDrawable")
   }
 
@@ -6226,7 +6226,7 @@ public open class SkCanvas public constructor() {
    * }
    * ```
    */
-  private fun predrawNotify(willOverwritesEntireSurface: Boolean = false): Boolean {
+  private fun predrawNotify(willOverwritesEntireSurface: Boolean = TODO()): Boolean {
     TODO("Implement predrawNotify")
   }
 
@@ -6305,7 +6305,7 @@ public open class SkCanvas public constructor() {
    * }
    * ```
    */
-  private fun aboutToDraw(paint: SkPaint, rawBounds: SkRect? = null): AutoLayerForImageFilter? {
+  private fun aboutToDraw(paint: SkPaint, rawBounds: SkRect? = TODO()): AutoLayerForImageFilter? {
     TODO("Implement aboutToDraw")
   }
 
@@ -6566,7 +6566,7 @@ public open class SkCanvas public constructor() {
   private fun internalQuickReject(
     bounds: SkRect,
     paint: SkPaint,
-    matrix: SkMatrix? = null,
+    matrix: SkMatrix? = TODO(),
   ): Boolean {
     TODO("Implement internalQuickReject")
   }
@@ -6613,7 +6613,7 @@ public open class SkCanvas public constructor() {
   private fun internalSaveLayer(
     rec: SaveLayerRec,
     strategy: SaveLayerStrategy,
-    coverageOnly: Boolean = false,
+    coverageOnly: Boolean = TODO(),
   ) {
     TODO("Implement internalSaveLayer")
   }
@@ -7000,9 +7000,9 @@ public open class SkCanvas public constructor() {
     paint: SkPaint,
     compat: DeviceCompatibleWithFilter,
     filterColorInfo: SkColorInfo,
-    scaleFactor: SkScalar = 1.f,
+    scaleFactor: SkScalar = TODO(),
     srcTileMode: SkTileMode = TODO(),
-    srcIsCoverageLayer: Boolean = false,
+    srcIsCoverageLayer: Boolean = TODO(),
   ) {
     TODO("Implement internalDrawDeviceWithFilter")
   }
@@ -7286,7 +7286,7 @@ public open class SkCanvas public constructor() {
    * virtual SkPaintFilterCanvas* internal_private_asPaintFilterCanvas() const { return nullptr; }
    * ```
    */
-  private fun computeDeviceClipBounds(outsetForAA: Boolean = true): Int {
+  private fun computeDeviceClipBounds(outsetForAA: Boolean = TODO()): Int {
     TODO("Implement computeDeviceClipBounds")
   }
 
@@ -7557,7 +7557,7 @@ public open class SkCanvas public constructor() {
       info: SkImageInfo,
       pixels: Unit?,
       rowBytes: ULong,
-      props: SkSurfaceProps? = null,
+      props: SkSurfaceProps? = TODO(),
     ): SkCanvas? {
       TODO("Implement makeRasterDirect")
     }

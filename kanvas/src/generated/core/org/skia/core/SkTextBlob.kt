@@ -401,7 +401,7 @@ public class SkTextBlob public constructor(
   public override fun getIntercepts(
     bounds: Array<SkScalar>,
     intervals: Array<SkScalar>,
-    paint: SkPaint? = null,
+    paint: SkPaint? = TODO(),
   ): Int {
     TODO("Implement getIntercepts")
   }

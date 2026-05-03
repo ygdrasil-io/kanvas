@@ -1695,7 +1695,7 @@ public open class SkPathPriv {
     private fun isNestedFillRects(
       raw: SkPathRaw,
       rect: Array<SkRect>,
-      dirs: Array<SkPathDirection> = null,
+      dirs: Array<SkPathDirection> = TODO(),
     ): Boolean {
       TODO("Implement isNestedFillRects")
     }
@@ -1713,7 +1713,7 @@ public open class SkPathPriv {
     private fun isNestedFillRects(
       path: SkPath,
       rect: Array<SkRect>,
-      dirs: Array<SkPathDirection> = null,
+      dirs: Array<SkPathDirection> = TODO(),
     ): Boolean {
       TODO("Implement isNestedFillRects")
     }

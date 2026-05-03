@@ -196,7 +196,7 @@ public data class SkSp<T> public constructor(
    *     }
    * ```
    */
-  public fun reset(ptr: T = null) {
+  public fun reset(ptr: T = TODO()) {
     TODO("Implement reset")
   }
 

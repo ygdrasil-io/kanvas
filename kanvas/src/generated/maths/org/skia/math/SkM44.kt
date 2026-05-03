@@ -587,7 +587,7 @@ public abstract class SkM44 public constructor(
   public abstract fun setTranslate(
     x: SkScalar,
     y: SkScalar,
-    z: SkScalar = 0,
+    z: SkScalar = TODO(),
   ): SkM44
 
   /**
@@ -605,7 +605,7 @@ public abstract class SkM44 public constructor(
   public fun setScale(
     x: SkScalar,
     y: SkScalar,
-    z: SkScalar = 1,
+    z: SkScalar = TODO(),
   ): SkM44 {
     TODO("Implement setScale")
   }
@@ -884,7 +884,7 @@ public abstract class SkM44 public constructor(
   public abstract fun preTranslate(
     x: SkScalar,
     y: SkScalar,
-    z: SkScalar = 0,
+    z: SkScalar = TODO(),
   ): SkM44
 
   /**
@@ -905,7 +905,7 @@ public abstract class SkM44 public constructor(
   public abstract fun postTranslate(
     x: SkScalar,
     y: SkScalar,
-    z: SkScalar = 0,
+    z: SkScalar = TODO(),
   ): SkM44
 
   /**
@@ -1062,7 +1062,7 @@ public abstract class SkM44 public constructor(
     public fun translate(
       x: SkScalar,
       y: SkScalar,
-      z: SkScalar = 0,
+      z: SkScalar = TODO(),
     ): SkM44 {
       TODO("Implement translate")
     }
@@ -1081,7 +1081,7 @@ public abstract class SkM44 public constructor(
     public fun scale(
       x: SkScalar,
       y: SkScalar,
-      z: SkScalar = 1,
+      z: SkScalar = TODO(),
     ): SkM44 {
       TODO("Implement scale")
     }

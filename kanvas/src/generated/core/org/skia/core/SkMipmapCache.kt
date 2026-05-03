@@ -31,7 +31,7 @@ public open class SkMipmapCache {
      * }
      * ```
      */
-    public fun findAndRef(desc: SkBitmapCacheDesc, localCache: SkResourceCache? = null): SkMipmap {
+    public fun findAndRef(desc: SkBitmapCacheDesc, localCache: SkResourceCache? = TODO()): SkMipmap {
       TODO("Implement findAndRef")
     }
 
@@ -54,7 +54,7 @@ public open class SkMipmapCache {
      * }
      * ```
      */
-    public fun addAndRef(image: SkImageBase?, localCache: SkResourceCache? = null): SkMipmap {
+    public fun addAndRef(image: SkImageBase?, localCache: SkResourceCache? = TODO()): SkMipmap {
       TODO("Implement addAndRef")
     }
   }

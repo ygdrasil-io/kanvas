@@ -122,7 +122,7 @@ public open class SkMemoryStream public constructor() : SkStreamMemory() {
   public constructor(
     `data`: Unit?,
     length: ULong,
-    copyData: Boolean = false,
+    copyData: Boolean = TODO(),
   ) : this() {
     TODO("Implement constructor")
   }
@@ -149,7 +149,7 @@ public open class SkMemoryStream public constructor() : SkStreamMemory() {
   public open fun setMemory(
     `data`: Unit?,
     length: ULong,
-    copyData: Boolean = false,
+    copyData: Boolean = TODO(),
   ) {
     TODO("Implement setMemory")
   }

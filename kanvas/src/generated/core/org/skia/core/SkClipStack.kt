@@ -626,7 +626,7 @@ public data class SkClipStack public constructor(
   private fun getBounds(
     canvFiniteBound: SkRect?,
     boundType: BoundsType?,
-    isIntersectionOfRects: Boolean? = null,
+    isIntersectionOfRects: Boolean? = TODO(),
   ) {
     TODO("Implement getBounds")
   }
@@ -948,7 +948,7 @@ public data class SkClipStack public constructor(
     maxWidth: Int,
     maxHeight: Int,
     devBounds: SkRect?,
-    isIntersectionOfRects: Boolean? = null,
+    isIntersectionOfRects: Boolean? = TODO(),
   ) {
     TODO("Implement getConservativeBounds")
   }

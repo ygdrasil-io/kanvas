@@ -146,7 +146,7 @@ public data class SkPictureRecorder public constructor(
    * SkCanvas* beginRecording(const SkRect& bounds, SkBBHFactory* bbhFactory = nullptr)
    * ```
    */
-  public fun beginRecording(bounds: SkRect, bbhFactory: SkBBHFactory? = null): SkCanvas {
+  public fun beginRecording(bounds: SkRect, bbhFactory: SkBBHFactory? = TODO()): SkCanvas {
     TODO("Implement beginRecording")
   }
 
@@ -162,7 +162,7 @@ public data class SkPictureRecorder public constructor(
   public fun beginRecording(
     width: SkScalar,
     height: SkScalar,
-    bbhFactory: SkBBHFactory? = null,
+    bbhFactory: SkBBHFactory? = TODO(),
   ): SkCanvas {
     TODO("Implement beginRecording")
   }

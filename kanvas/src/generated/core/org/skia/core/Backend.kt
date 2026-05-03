@@ -85,7 +85,7 @@ public abstract class Backend public constructor(
   public abstract fun makeDevice(
     size: SkISize,
     param1: SkSp<SkColorSpace>,
-    props: SkSurfaceProps? = null,
+    props: SkSurfaceProps? = TODO(),
   ): SkSp<SkDevice>
 
   /**

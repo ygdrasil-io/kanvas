@@ -1404,7 +1404,7 @@ public abstract class SkDevice public constructor(
     param0: SkVertices?,
     param1: SkSp<SkBlender>,
     param2: SkPaint,
-    skipColorXform: Boolean = false,
+    skipColorXform: Boolean = TODO(),
   )
 
   /**
@@ -1886,7 +1886,7 @@ public abstract class SkDevice public constructor(
    * sk_sp<SkSpecialImage> SkDevice::snapSpecial(const SkIRect&, bool forceCopy) { return nullptr; }
    * ```
    */
-  public open fun snapSpecial(subset: SkIRect, forceCopy: Boolean = false): SkSp<SkSpecialImage> {
+  public open fun snapSpecial(subset: SkIRect, forceCopy: Boolean = TODO()): SkSp<SkSpecialImage> {
     TODO("Implement snapSpecial")
   }
 

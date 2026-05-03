@@ -68,7 +68,7 @@ public open class SkMaskCache {
       style: SkBlurStyle,
       rrect: SkRRect,
       mask: SkTLazy<SkMask>?,
-      localCache: SkResourceCache? = null,
+      localCache: SkResourceCache? = TODO(),
     ): SkCachedData {
       TODO("Implement findAndRef")
     }
@@ -98,7 +98,7 @@ public open class SkMaskCache {
       style: SkBlurStyle,
       rects: SkSpan<SkRect>,
       mask: SkTLazy<SkMask>?,
-      localCache: SkResourceCache? = null,
+      localCache: SkResourceCache? = TODO(),
     ): SkCachedData {
       TODO("Implement findAndRef")
     }
@@ -120,7 +120,7 @@ public open class SkMaskCache {
       rrect: SkRRect,
       mask: SkMask,
       `data`: SkCachedData?,
-      localCache: SkResourceCache? = null,
+      localCache: SkResourceCache? = TODO(),
     ) {
       TODO("Implement add")
     }
@@ -145,7 +145,7 @@ public open class SkMaskCache {
       rects: SkSpan<SkRect>,
       mask: SkMask,
       `data`: SkCachedData?,
-      localCache: SkResourceCache? = null,
+      localCache: SkResourceCache? = TODO(),
     ) {
       TODO("Implement add")
     }

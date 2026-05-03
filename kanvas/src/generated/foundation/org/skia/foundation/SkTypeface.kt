@@ -445,7 +445,7 @@ import org.skia.math.SkRect
  */
 public abstract class SkTypeface public constructor(
   style: SkFontStyle,
-  isFixedPitch: Boolean = false,
+  isFixedPitch: Boolean = TODO(),
 ) : SkWeakRefCnt() {
   /**
    * C++ original:

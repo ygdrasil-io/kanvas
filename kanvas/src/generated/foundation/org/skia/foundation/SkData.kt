@@ -1,6 +1,5 @@
 package org.skia.foundation
 
-import FILE
 import kotlin.Any
 import kotlin.Boolean
 import kotlin.Byte
@@ -548,7 +547,7 @@ public class SkData public constructor(
      * }
      * ```
      */
-    public override fun makeFromFILE(f: FILE?): Int {
+    public override fun makeFromFILE(f: Any?): Int {
       TODO("Implement makeFromFILE")
     }
 

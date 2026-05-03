@@ -298,7 +298,7 @@ public abstract class SkRectPriv {
       m: SkMatrix,
       a: SkIRect,
       b: SkIRect,
-      tol: Float = 0.f,
+      tol: Float = TODO(),
     ): Boolean {
       TODO("Implement quadContainsRect")
     }
@@ -315,7 +315,7 @@ public abstract class SkRectPriv {
       m: SkM44,
       a: SkRect,
       b: SkRect,
-      tol: Float = 0.f,
+      tol: Float = TODO(),
     ): Boolean {
       TODO("Implement quadContainsRect")
     }
@@ -379,7 +379,7 @@ public abstract class SkRectPriv {
       m: SkM44,
       a: SkRect,
       b: SkRect,
-      tol: Float = 0.f,
+      tol: Float = TODO(),
     ): Int4 {
       TODO("Implement quadContainsRectMask")
     }

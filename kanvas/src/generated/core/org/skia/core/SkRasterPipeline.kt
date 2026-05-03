@@ -213,7 +213,7 @@ public open class SkRasterPipeline public constructor(
    * }
    * ```
    */
-  public fun append(op: SkRasterPipelineOp, ctx: Unit? = null) {
+  public fun append(op: SkRasterPipelineOp, ctx: Unit? = TODO()) {
     TODO("Implement append")
   }
 

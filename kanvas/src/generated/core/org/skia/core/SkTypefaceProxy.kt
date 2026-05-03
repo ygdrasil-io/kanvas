@@ -124,7 +124,7 @@ import org.skia.utils.SkStrikeClient
 public open class SkTypefaceProxy public constructor(
   prototype: SkTypefaceProxyPrototype,
   manager: SkSp<SkStrikeClient.DiscardableHandleManager>,
-  isLogging: Boolean = true,
+  isLogging: Boolean = TODO(),
 ) : SkTypeface(TODO(), TODO()) {
   /**
    * C++ original:
@@ -188,7 +188,7 @@ public open class SkTypefaceProxy public constructor(
     isFixedPitch: Boolean,
     glyphMaskNeedsCurrentColor: Boolean,
     manager: SkSp<SkStrikeClient.DiscardableHandleManager>,
-    isLogging: Boolean = true,
+    isLogging: Boolean = TODO(),
   ) : this() {
     TODO("Implement constructor")
   }

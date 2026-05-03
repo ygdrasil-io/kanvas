@@ -56,7 +56,7 @@ public abstract class AdditiveBlitter : SkBlitter() {
    * virtual SkBlitter* getRealBlitter(bool forceRealBlitter = false) = 0
    * ```
    */
-  public abstract fun getRealBlitter(forceRealBlitter: Boolean = false): SkBlitter
+  public abstract fun getRealBlitter(forceRealBlitter: Boolean = TODO()): SkBlitter
 
   /**
    * C++ original:

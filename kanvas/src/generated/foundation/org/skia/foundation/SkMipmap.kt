@@ -335,7 +335,7 @@ public open class SkMipmap public constructor(
     public fun build(
       src: SkPixmap,
       fact: SkDiscardableFactoryProc,
-      computeContents: Boolean = true,
+      computeContents: Boolean = TODO(),
     ): SkMipmap {
       TODO("Implement build")
     }

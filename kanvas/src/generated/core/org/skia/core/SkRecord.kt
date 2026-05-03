@@ -256,7 +256,7 @@ public open class SkRecord public constructor() : SkRefCnt() {
    *     }
    * ```
    */
-  public fun <T> alloc(count: ULong = 1u): T {
+  public fun <T> alloc(count: ULong = TODO()): T {
     TODO("Implement alloc")
   }
 

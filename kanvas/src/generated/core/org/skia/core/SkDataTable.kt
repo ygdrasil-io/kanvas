@@ -257,7 +257,7 @@ public open class SkDataTable public constructor() : SkRefCnt() {
    * }
    * ```
    */
-  public fun at(index: Int, size: ULong? = null) {
+  public fun at(index: Int, size: ULong? = TODO()) {
     TODO("Implement at")
   }
 
@@ -270,7 +270,7 @@ public open class SkDataTable public constructor() : SkRefCnt() {
    *     }
    * ```
    */
-  public fun <T> atT(index: Int, size: ULong? = null): T {
+  public fun <T> atT(index: Int, size: ULong? = TODO()): T {
     TODO("Implement atT")
   }
 

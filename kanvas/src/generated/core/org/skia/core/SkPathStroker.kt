@@ -377,7 +377,7 @@ public data class SkPathStroker public constructor(
    * }
    * ```
    */
-  public fun lineTo(currPt: SkPoint, iter: SkPathIter? = null) {
+  public fun lineTo(currPt: SkPoint, iter: SkPathIter? = TODO()) {
     TODO("Implement lineTo")
   }
 

@@ -246,8 +246,8 @@ import org.skia.math.SkScalar
  * ```
  */
 public abstract class SkWriter32 public constructor(
-  `external`: Unit? = null,
-  externalBytes: ULong = 0u,
+  `external`: Unit? = TODO(),
+  externalBytes: ULong = TODO(),
 ) : SkNoncopyable() {
   /**
    * C++ original:
@@ -325,7 +325,7 @@ public abstract class SkWriter32 public constructor(
    *     }
    * ```
    */
-  public abstract fun reset(`external`: Unit? = null, externalBytes: ULong = 0u)
+  public abstract fun reset(`external`: Unit? = TODO(), externalBytes: ULong = TODO())
 
   /**
    * C++ original:

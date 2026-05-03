@@ -352,7 +352,7 @@ public abstract class SkSurfaceBase public constructor(
    * virtual sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subset = nullptr) { return nullptr; }
    * ```
    */
-  public open fun onNewImageSnapshot(subset: SkIRect? = null): SkSp<SkImage> {
+  public open fun onNewImageSnapshot(subset: SkIRect? = TODO()): SkSp<SkImage> {
     TODO("Implement onNewImageSnapshot")
   }
 

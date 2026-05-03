@@ -720,8 +720,8 @@ public abstract class SkSurface public constructor(
     backendTexture: GrBackendTexture,
     origin: GrSurfaceOrigin,
     mode: ContentChangeMode = TODO(),
-    param3: SkSurfaceTextureReleaseProc = null,
-    param4: SkSurfaceReleaseContext = null,
+    param3: SkSurfaceTextureReleaseProc = TODO(),
+    param4: SkSurfaceReleaseContext = TODO(),
   ): Boolean
 
   /**
@@ -849,7 +849,7 @@ public abstract class SkSurface public constructor(
     canvas: SkCanvas?,
     x: SkScalar,
     y: SkScalar,
-    paint: SkPaint? = null,
+    paint: SkPaint? = TODO(),
   ) {
     TODO("Implement draw")
   }
@@ -1083,7 +1083,7 @@ public abstract class SkSurface public constructor(
   public fun wait(
     numSemaphores: Int,
     waitSemaphores: GrBackendSemaphore?,
-    deleteSemaphoresAfterWait: Boolean = true,
+    deleteSemaphoresAfterWait: Boolean = TODO(),
   ): Boolean {
     TODO("Implement wait")
   }
