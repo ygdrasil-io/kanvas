@@ -36,15 +36,18 @@ public object SkNamedTransferFn {
         g = 2.2f, a = 1f, b = 0f, c = 0f, d = 0f, e = 0f, f = 0f,
     )
 
-    /** BT.2020 OETF. Constants pulled from the ICC profile in the DM
-     *  reference PNGs (cf. `colorspace-fingerprint.md`); upstream Skia
-     *  ships these truncated to 6 decimals. */
+    /** BT.2020 OETF. Aligned with upstream Skia
+     *  [SkColorSpace.h:130-131](file:///Users/chaos/workspace/kanvas-forge/skia-main/include/core/SkColorSpace.h)
+     *  (6 decimal places). The Phase B snap absorbs the ~5e-7 divergence
+     *  with the s15Fixed16-decoded values from the reference PNG ICC
+     *  profile, so `makeRGB(parsed-from-PNG, kRec2020-gamut)` still snaps
+     *  to a single canonical singleton. */
     public val kRec2020: SkcmsTransferFunction = SkcmsTransferFunction(
-        g = 2.22221961f,
-        a = 0.909672439f,
-        b = 0.0903276134f,
-        c = 0.222222447f,
-        d = 0.0812428713f,
+        g = 2.22222f,
+        a = 0.909672f,
+        b = 0.0903276f,
+        c = 0.222222f,
+        d = 0.0812429f,
         e = 0f, f = 0f,
     )
 
