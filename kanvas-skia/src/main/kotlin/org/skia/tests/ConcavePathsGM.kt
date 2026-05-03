@@ -3,6 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
 import org.skia.math.SkISize
 
@@ -13,10 +14,9 @@ import org.skia.math.SkISize
  * paths drawn with `paint.setAntiAlias(true)` and `kFill_Style`. The fill
  * rule is `kWinding` by default; a handful of sub-tests pass it explicitly.
  *
- * The three monotone-with-quadratic sub-tests exercise the new `quadTo`
- * verb which `SkPath` flattens into 16 line segments — sufficient to keep
- * the AA edge under 0.1 pixel of error at the sub-test scale (≤ 60 px
- * radius).
+ * Three monotone-with-quadratic sub-tests exercise [SkPathBuilder.quadTo].
+ * In Phase 3b the verb is preserved as `kQuad` and adaptively flattened
+ * to a 0.25-pixel chord error inside `SkBitmapDevice.buildEdges`.
  */
 public class ConcavePathsGM : GM() {
     override fun getName(): String = "concavepaths"
@@ -66,9 +66,9 @@ public class ConcavePathsGM : GM() {
         return Array(coords.size / 2) { i -> coords[i * 2] to coords[i * 2 + 1] }
     }
 
-    private fun draw(c: SkCanvas, p: SkPaint, x: Float, y: Float, build: SkPath.() -> Unit) {
+    private fun draw(c: SkCanvas, p: SkPaint, x: Float, y: Float, build: SkPathBuilder.() -> Unit) {
         c.save(); c.translate(x, y)
-        c.drawPath(SkPath().apply(build), p)
+        c.drawPath(SkPathBuilder().apply(build).detach(), p)
         c.restore()
     }
 
