@@ -78,6 +78,63 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     }
 
     /**
+     * Mirrors Skia's `SkBitmapDevice::drawPaint`. Fills every pixel inside
+     * [clip] with `paint.color`, composited via SrcOver. The clip is
+     * integer-aligned in device coords, so per-pixel coverage is binary —
+     * no AA bookkeeping needed regardless of `paint.isAntiAlias`.
+     */
+    public fun drawPaint(clip: SkIRect, paint: SkPaint) {
+        val color = transformPaintColor(paint.color)
+        if (SkColorGetA(color) == 0) return
+        val l = clip.left.coerceAtLeast(0)
+        val t = clip.top.coerceAtLeast(0)
+        val r = clip.right.coerceAtMost(width)
+        val b = clip.bottom.coerceAtMost(height)
+        for (y in t until b) {
+            for (x in l until r) blend(x, y, color)
+        }
+    }
+
+    /**
+     * Composite `src`'s pixels onto this device, with `src`'s `(0, 0)`
+     * landing at this device's `(originX, originY)`, intersecting writes
+     * with [clip] (in this device's coords). Source pixels are SrcOver-
+     * blended through `paint?.alpha` — when `paint` is null or fully
+     * opaque, the per-pixel alpha is taken straight from `src`.
+     *
+     * Used by `SkCanvas.restore` to flatten a `saveLayer`'s offscreen
+     * device back into its parent. Pre-condition: `src` and this device
+     * share the same color space, so no per-pixel xform is needed (the
+     * canvas seeds the layer device with the parent's color space).
+     */
+    public fun compositeFrom(
+        src: SkBitmapDevice,
+        originX: Int,
+        originY: Int,
+        clip: SkIRect,
+        paint: SkPaint?,
+    ) {
+        val paintAlpha = paint?.color?.let { SkColorGetA(it) } ?: 0xFF
+        if (paintAlpha == 0) return
+        val l = maxOf(clip.left, originX, 0)
+        val t = maxOf(clip.top, originY, 0)
+        val r = minOf(clip.right, originX + src.width, width)
+        val b = minOf(clip.bottom, originY + src.height, height)
+        if (l >= r || t >= b) return
+        val srcPixels = src.bitmap.pixels
+        val srcW = src.width
+        for (y in t until b) {
+            val srcRowBase = (y - originY) * srcW
+            for (x in l until r) {
+                val sample = srcPixels[srcRowBase + (x - originX)]
+                val effective = if (paintAlpha == 0xFF) sample else applyAlpha(sample, paintAlpha)
+                if (effective ushr 24 == 0) continue
+                blend(x, y, effective)
+            }
+        }
+    }
+
+    /**
      * Draw `image` into the supplied **device-space** `devDst` rect, sampling
      * the image-space `src` sub-rectangle. The canvas has already applied its
      * CTM to produce `devDst`; the device only needs to perform the inverse
