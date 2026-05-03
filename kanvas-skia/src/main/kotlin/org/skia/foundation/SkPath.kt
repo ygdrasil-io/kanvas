@@ -49,6 +49,55 @@ public class SkPath internal constructor(
 
     public fun isEmpty(): Boolean = verbs.isEmpty()
 
+    /**
+     * **Fast bounds** — axis-aligned bounding box of every control point
+     * stored in [coords]. Mirrors Skia's `SkPath::getBounds()`.
+     *
+     * For paths made entirely of `kMove` and `kLine` verbs this is exact;
+     * curves' control points may extend slightly beyond the actual curve,
+     * so the box is always a *conservative* (i.e. ≥) bound. Tight curve
+     * bounds (Skia's `computeTightBounds()`) requires solving Bézier
+     * derivative roots and is deferred to a follow-up.
+     *
+     * Empty path → an empty rect at the origin.
+     */
+    public fun computeBounds(): SkRect {
+        if (coords.isEmpty()) return SkRect.MakeLTRB(0f, 0f, 0f, 0f)
+        var minX = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        var i = 0
+        while (i < coords.size) {
+            val x = coords[i]; val y = coords[i + 1]
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+            i += 2
+        }
+        return SkRect.MakeLTRB(minX, minY, maxX, maxY)
+    }
+
+    /**
+     * Translated copy. Mirrors Skia's `SkPath::makeOffset(dx, dy)` —
+     * verbs and conic weights are preserved untouched, only point
+     * coordinates shift. Returns `this` when both deltas are zero
+     * (no allocation).
+     */
+    public fun makeOffset(dx: SkScalar, dy: SkScalar): SkPath {
+        if (dx == 0f && dy == 0f) return this
+        val n = coords.size
+        val out = FloatArray(n)
+        var i = 0
+        while (i < n) {
+            out[i] = coords[i] + dx
+            out[i + 1] = coords[i + 1] + dy
+            i += 2
+        }
+        return SkPath(verbs, out, conicWeights, fillType)
+    }
+
     public companion object {
         /** Closed rectangular contour. */
         public fun Rect(

@@ -4,10 +4,12 @@ import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.math.tan
 // SkRRect lives in the same `org.skia.foundation` package — no import needed.
 
@@ -116,6 +118,39 @@ public class SkPathBuilder public constructor() {
         }
     }
 
+    // ----------------------------------------------------------------
+    // Relative variants — origin at the current pen position.
+    // Mirror Skia's `r*` family. SVG path data emits these heavily, so
+    // the convenience matters even though every relative call is just
+    // `(lastX + dx, lastY + dy)` re-routed to the absolute primitive.
+    // ----------------------------------------------------------------
+
+    public fun rMoveTo(dx: SkScalar, dy: SkScalar): SkPathBuilder =
+        moveTo(lastX + dx, lastY + dy)
+
+    public fun rLineTo(dx: SkScalar, dy: SkScalar): SkPathBuilder =
+        lineTo(lastX + dx, lastY + dy)
+
+    public fun rQuadTo(
+        dx1: SkScalar, dy1: SkScalar, dx2: SkScalar, dy2: SkScalar,
+    ): SkPathBuilder =
+        quadTo(lastX + dx1, lastY + dy1, lastX + dx2, lastY + dy2)
+
+    public fun rConicTo(
+        dx1: SkScalar, dy1: SkScalar, dx2: SkScalar, dy2: SkScalar, w: SkScalar,
+    ): SkPathBuilder =
+        conicTo(lastX + dx1, lastY + dy1, lastX + dx2, lastY + dy2, w)
+
+    public fun rCubicTo(
+        dx1: SkScalar, dy1: SkScalar,
+        dx2: SkScalar, dy2: SkScalar,
+        dx3: SkScalar, dy3: SkScalar,
+    ): SkPathBuilder = cubicTo(
+        lastX + dx1, lastY + dy1,
+        lastX + dx2, lastY + dy2,
+        lastX + dx3, lastY + dy3,
+    )
+
     /**
      * Append an elliptical arc spanning `sweepAngleDeg` starting at
      * `startAngleDeg`, both measured from the centre of `oval`. Mirrors
@@ -160,6 +195,89 @@ public class SkPathBuilder public constructor() {
     ): SkPathBuilder = apply {
         if (sweepAngleDeg == 0f) return@apply
         emitArc(oval, startAngleDeg, sweepAngleDeg, forceMoveTo = true)
+    }
+
+    /**
+     * **Tangent arc** (PostScript-style `arct`). Mirrors Skia's
+     * `SkPathBuilder::arcTo(SkPoint p1, SkPoint p2, SkScalar radius)`.
+     *
+     * Given the current pen position `P0`, append a circular arc of
+     * the given `radius` that is tangent to the line segment `P0→p1`
+     * at one end and tangent to `p1→p2` at the other. The arc replaces
+     * the sharp corner at `p1`. A straight `lineTo` is emitted from
+     * the current point to the first tangent point if necessary.
+     *
+     * Degenerate cases:
+     *  - No current contour → emits `moveTo(p1)` and returns.
+     *  - `radius ≤ 0`, the three points are collinear, or any of the
+     *    `P0→p1` / `p1→p2` segments has zero length → emits `lineTo(p1)`
+     *    and returns. This matches Skia's behaviour.
+     *
+     * Math: with `θ` = angle at `p1` between `p1→P0` and `p1→p2`,
+     *
+     * ```
+     * d  = radius / tan(θ/2)              (distance from p1 to tangent points)
+     * T0 = p1 + d · û1                    (tangent on the P0→p1 line)
+     * T1 = p1 + d · û2                    (tangent on the p1→p2 line)
+     * C  = p1 + radius · (û1 + û2) / sin θ  (centre of the arc circle)
+     * ```
+     *
+     * The shorter arc from `T0` to `T1` around `C` (always ≤ π) is the
+     * tangent arc. We delegate to the existing oval `arcTo` to emit the
+     * cubic-Bézier approximation.
+     */
+    public fun arcTo(
+        x1: SkScalar, y1: SkScalar,
+        x2: SkScalar, y2: SkScalar,
+        radius: SkScalar,
+    ): SkPathBuilder = apply {
+        if (!hasContour) { moveTo(x1, y1); return@apply }
+        if (radius <= 0f) { lineTo(x1, y1); return@apply }
+
+        val p0x = lastX; val p0y = lastY
+        val v1x = p0x - x1; val v1y = p0y - y1
+        val v2x = x2 - x1;  val v2y = y2 - y1
+        val len1 = sqrt((v1x * v1x + v1y * v1y).toDouble()).toFloat()
+        val len2 = sqrt((v2x * v2x + v2y * v2y).toDouble()).toFloat()
+        if (len1 < 1e-6f || len2 < 1e-6f) { lineTo(x1, y1); return@apply }
+
+        val u1x = v1x / len1; val u1y = v1y / len1
+        val u2x = v2x / len2; val u2y = v2y / len2
+        val cosTheta = (u1x * u2x + u1y * u2y).coerceIn(-1f, 1f)
+        // Collinear (or near-anti-parallel — tangent arc undefined).
+        if (cosTheta > 0.9999f || cosTheta < -0.9999f) {
+            lineTo(x1, y1)
+            return@apply
+        }
+
+        // Half-angle identities, valid for cosθ in (-1, 1).
+        val cosHalf = sqrt(((1.0 + cosTheta) * 0.5).coerceAtLeast(0.0)).toFloat()
+        val sinHalf = sqrt(((1.0 - cosTheta) * 0.5).coerceAtLeast(0.0)).toFloat()
+        val tanHalf = sinHalf / cosHalf
+        val sinTheta = 2f * sinHalf * cosHalf
+
+        val d = radius / tanHalf
+        val t0x = x1 + d * u1x; val t0y = y1 + d * u1y
+        val t1x = x1 + d * u2x; val t1y = y1 + d * u2y
+        val cx = x1 + radius * (u1x + u2x) / sinTheta
+        val cy = y1 + radius * (u1y + u2y) / sinTheta
+
+        if (t0x != lastX || t0y != lastY) lineTo(t0x, t0y)
+
+        val startRad = atan2((t0y - cy).toDouble(), (t0x - cx).toDouble())
+        val endRad = atan2((t1y - cy).toDouble(), (t1x - cx).toDouble())
+        var sweepRad = endRad - startRad
+        // Normalise to (-π, π] — tangent arc is always the shorter arc.
+        while (sweepRad > PI) sweepRad -= 2.0 * PI
+        while (sweepRad < -PI) sweepRad += 2.0 * PI
+
+        val rect = SkRect.MakeLTRB(cx - radius, cy - radius, cx + radius, cy + radius)
+        arcTo(
+            rect,
+            (startRad * 180.0 / PI).toFloat(),
+            (sweepRad * 180.0 / PI).toFloat(),
+            forceMoveTo = false,
+        )
     }
 
     public fun addRect(
@@ -422,7 +540,11 @@ public class SkPathBuilder public constructor() {
         val firstY = (cy + ry * sin(startRad)).toFloat()
         if (forceMoveTo || !hasContour) {
             moveTo(firstX, firstY)
-        } else if (lastX != firstX || lastY != firstY) {
+        } else if (abs(lastX - firstX) > ARC_JOIN_EPS || abs(lastY - firstY) > ARC_JOIN_EPS) {
+            // Tolerance comparison instead of bit-exact: tangent arcTo and any
+            // chained arcTo accumulate ~1 ULP of float error in the centre and
+            // start-point reconstruction. A sub-pixel epsilon preserves the
+            // visual no-op behaviour without false-positive lineTo verbs.
             lineTo(firstX, firstY)
         }
 
@@ -446,5 +568,7 @@ public class SkPathBuilder public constructor() {
     private companion object {
         /** `(4/3) * (sqrt(2) - 1)` — Hugues' constant for 90° cubic-Bézier circle approximation. */
         const val OVAL_KAPPA: Float = 0.5522847498307933f
+        /** Sub-pixel tolerance for "current point already on the arc start" check in [emitArc]. */
+        const val ARC_JOIN_EPS: Float = 1e-4f
     }
 }
