@@ -28,10 +28,16 @@ public object SimilarityTracker {
     /**
      * Record a new score for the test. Returns true if the test passes
      * (improved score, or drop within tolerance), false on a significant drop.
+     *
+     * Also pushes the score into [TestReport] so the run-level markdown
+     * summary stays in sync — even for tests that don't opt into the
+     * detailed comparison pipeline.
      */
     public fun updateScore(testName: String, newScore: Double): Boolean {
         ensureLoaded()
         val previous = getPreviousScore(testName)
+
+        TestReport.recordScore(testName, newScore, previous)
 
         if (previous == null || newScore > previous) {
             scores.setProperty(testName, newScore.toString())
