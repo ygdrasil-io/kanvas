@@ -5,6 +5,7 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.IntArray
 import org.skia.foundation.SkAlpha
+import org.skia.foundation.SkMaskBuilder
 import org.skia.math.SkFixed
 import org.skia.math.SkIRect
 

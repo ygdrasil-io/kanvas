@@ -2,6 +2,8 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkRegion
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 import org.skia.math.SkScalar

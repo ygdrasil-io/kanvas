@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkSamplingOptions
 
 /**
  * C++ original:

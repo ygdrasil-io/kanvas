@@ -5,9 +5,19 @@ import kotlin.Int
 import kotlin.String
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkDescriptor
+import org.skia.foundation.SkFontArguments
+import org.skia.foundation.SkFontDescriptor
+import org.skia.foundation.SkFontStyle
+import org.skia.foundation.SkFontTableTag
 import org.skia.foundation.SkGlyphID
+import org.skia.foundation.SkScalerContextEffects
+import org.skia.foundation.SkScalerContextRec
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
+import org.skia.foundation.SkTypeface
+import org.skia.foundation.SkTypefaceID
+import org.skia.foundation.SkUnichar
 import org.skia.utils.SkStrikeClient
 
 /**

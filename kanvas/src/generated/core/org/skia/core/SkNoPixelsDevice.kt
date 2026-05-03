@@ -2,9 +2,16 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRegion
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.math.SkIRect
+import org.skia.math.SkM44
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
 import org.skia.utils.Slug
@@ -111,7 +118,7 @@ public open class SkNoPixelsDevice public constructor(
     bounds: SkIRect,
     props: SkSurfaceProps,
     colorSpace: SkSp<SkColorSpace>,
-  ) : super(TODO(), TODO()) {
+  ) : this(TODO(), TODO()) {
     TODO("Implement constructor")
   }
 

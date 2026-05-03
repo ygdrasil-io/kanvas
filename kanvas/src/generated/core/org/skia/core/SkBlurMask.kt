@@ -4,6 +4,9 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.UByte
 import kotlin.UInt
+import org.skia.foundation.SkMask
+import org.skia.foundation.SkMaskBuilder
+import org.skia.foundation.SkRRect
 import org.skia.math.SkIVector
 import org.skia.math.SkRect
 import org.skia.math.SkScalar

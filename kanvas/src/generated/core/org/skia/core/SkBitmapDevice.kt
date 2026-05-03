@@ -5,6 +5,14 @@ import kotlin.Float
 import kotlin.Int
 import kotlin.Unit
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRegion
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.math.SkIRect
@@ -195,7 +203,7 @@ public class SkBitmapDevice public constructor(
    *                    void* externalHandle = nullptr)
    * ```
    */
-  public constructor(recorder: RecorderImpl?, bitmap: SkBitmap) : super(TODO(), TODO()) {
+  public constructor(recorder: RecorderImpl?, bitmap: SkBitmap) : this(TODO(), TODO()) {
     TODO("Implement constructor")
   }
 
@@ -252,7 +260,7 @@ public class SkBitmapDevice public constructor(
     bitmap: SkBitmap,
     surfaceProps: SkSurfaceProps,
     hndl: SkRasterHandleAllocatorHandle,
-  ) : super(TODO(), TODO()) {
+  ) : this(TODO(), TODO()) {
     TODO("Implement constructor")
   }
 

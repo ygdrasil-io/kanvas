@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.Unit
+import org.skia.foundation.SkImageInfo
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix
 import undefined.Handle

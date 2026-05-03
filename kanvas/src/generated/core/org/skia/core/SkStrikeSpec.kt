@@ -3,7 +3,12 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.String
+import org.skia.foundation.SkAutoDescriptor
+import org.skia.foundation.SkDescriptor
+import org.skia.foundation.SkFont
+import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkTypeface
 import org.skia.math.SkMatrix
 
 /**

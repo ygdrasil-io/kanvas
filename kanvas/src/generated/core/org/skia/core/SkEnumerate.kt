@@ -309,9 +309,5 @@ public open class SkEnumerate<Iter, C> public constructor(
     public override operator fun equals(other: Any?): Boolean {
       TODO("Implement equals")
     }
-
-    public operator fun times(): Int {
-      TODO("Implement times")
-    }
   }
 }

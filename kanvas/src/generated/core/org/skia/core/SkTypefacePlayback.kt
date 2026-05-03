@@ -4,6 +4,7 @@ import kotlin.Int
 import kotlin.ULong
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkTypeface
 
 /**
  * C++ original:

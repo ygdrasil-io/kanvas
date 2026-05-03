@@ -1,6 +1,7 @@
 package org.skia.core
 
 import kotlin.UInt
+import org.skia.foundation.SkFont
 import org.skia.math.SkPoint
 
 /**

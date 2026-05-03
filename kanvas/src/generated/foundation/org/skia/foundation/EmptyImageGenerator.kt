@@ -1,8 +1,5 @@
 package org.skia.foundation
 
-import org.skia.core.SkImageGenerator
-import org.skia.core.SkImageInfo
-
 /**
  * C++ original:
  * ```cpp

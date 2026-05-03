@@ -4,6 +4,7 @@ import kotlin.Boolean
 import kotlin.Float
 import kotlin.Int
 import kotlin.String
+import org.skia.foundation.SkData
 
 /**
  * C++ original:

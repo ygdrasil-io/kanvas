@@ -18,7 +18,7 @@ public open class TypedMatrix public constructor() : SkMatrix() {
    * TypedMatrix() {}
    * ```
    */
-  public constructor(matrix: SkMatrix) : super(TODO()) {
+  public constructor(matrix: SkMatrix) : this(TODO()) {
     TODO("Implement constructor")
   }
 }

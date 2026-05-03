@@ -5,6 +5,8 @@ import kotlin.Array
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.Unit
+import org.skia.foundation.SkData
+import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkSp
 
 /**

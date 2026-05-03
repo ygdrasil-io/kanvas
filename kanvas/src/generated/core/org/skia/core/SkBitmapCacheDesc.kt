@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Int
 import kotlin.UInt
+import org.skia.foundation.SkImage
 import org.skia.math.SkIRect
 
 /**

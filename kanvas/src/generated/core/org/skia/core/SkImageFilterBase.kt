@@ -4,6 +4,8 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.UInt
 import org.skia.foundation.SkFlattenable
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkWriteBuffer

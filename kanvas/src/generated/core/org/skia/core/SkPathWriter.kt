@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkPath
 import org.skia.math.SkPoint
 import org.skia.math.SkScalar
 import org.skia.memory.SkTDArray

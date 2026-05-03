@@ -64,7 +64,7 @@ public open class SkSynchronizedResourceCache public constructor(
    *  : SkResourceCache(fact) {}
    * ```
    */
-  public constructor(byteLimit: ULong) : super(TODO()) {
+  public constructor(byteLimit: ULong) : this(TODO()) {
     TODO("Implement constructor")
   }
 

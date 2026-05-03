@@ -4,6 +4,8 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import org.skia.codec.Options
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkWStream
 
 /**
  * C++ original:

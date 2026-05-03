@@ -2,7 +2,13 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkYUVColorSpace
 import org.skia.gpu.ReadPixelsCallback
 import org.skia.gpu.ReadPixelsContext
 import org.skia.gpu.Recorder
@@ -228,7 +234,7 @@ public abstract class SkSurfaceBase public constructor(
    *         : SkSurface(width, height, props) {}
    * ```
    */
-  public constructor(info: SkImageInfo, props: SkSurfaceProps?) : super(TODO(), TODO()) {
+  public constructor(info: SkImageInfo, props: SkSurfaceProps?) : this(TODO(), TODO()) {
     TODO("Implement constructor")
   }
 

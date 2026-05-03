@@ -4,6 +4,7 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkWStream
 
 /**
  * C++ original:

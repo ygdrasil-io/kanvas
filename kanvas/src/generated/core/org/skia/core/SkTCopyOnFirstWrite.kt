@@ -167,14 +167,4 @@ public data class SkTCopyOnFirstWrite<T> public constructor(
   public fun `get`(): T {
     TODO("Implement get")
   }
-
-  /**
-   * C++ original:
-   * ```cpp
-   * const T* get() const { return fObj; }
-   * ```
-   */
-  public operator fun times(): T {
-    TODO("Implement times")
-  }
 }

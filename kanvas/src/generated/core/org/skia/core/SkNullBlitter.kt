@@ -4,6 +4,7 @@ import kotlin.Array
 import kotlin.Int
 import kotlin.ShortArray
 import org.skia.foundation.SkAlpha
+import org.skia.foundation.SkMask
 import org.skia.math.SkIRect
 
 /**

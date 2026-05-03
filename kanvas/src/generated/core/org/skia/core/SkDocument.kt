@@ -1,6 +1,7 @@
 package org.skia.core
 
 import org.skia.foundation.SkRefCnt
+import org.skia.foundation.SkWStream
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 

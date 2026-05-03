@@ -1,6 +1,7 @@
 package org.skia.core
 
 import kotlin.Int
+import org.skia.foundation.SkPixmap
 import org.skia.foundation.U8CPU
 
 /**

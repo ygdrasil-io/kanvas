@@ -6,7 +6,17 @@ import kotlin.CharArray
 import kotlin.Float
 import kotlin.Int
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkData
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageFilter
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkRRect
 import org.skia.foundation.SkRefCnt
+import org.skia.foundation.SkRegion
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.gpu.Recorder
@@ -14,6 +24,7 @@ import org.skia.gpu.ganesh.GrRecordingContext
 import org.skia.math.SkIPoint
 import org.skia.math.SkIRect
 import org.skia.math.SkISize
+import org.skia.math.SkM44
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
 import org.skia.math.SkRSXform

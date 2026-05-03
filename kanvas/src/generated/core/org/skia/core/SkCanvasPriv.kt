@@ -5,6 +5,8 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkImageFilter
+import org.skia.foundation.SkPaint
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkWriteBuffer
 import org.skia.math.SkRect

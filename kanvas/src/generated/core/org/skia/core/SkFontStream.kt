@@ -3,7 +3,9 @@ package org.skia.core
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkFontTableTag
 import org.skia.foundation.SkSpan
+import org.skia.foundation.SkStream
 
 /**
  * C++ original:

@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import org.skia.effects.SkRuntimeEffect
+import org.skia.foundation.SkData
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp

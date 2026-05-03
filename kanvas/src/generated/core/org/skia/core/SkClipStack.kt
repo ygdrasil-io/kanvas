@@ -4,6 +4,8 @@ import kotlin.Any
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.UInt
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSp
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix
@@ -1451,7 +1453,7 @@ public data class SkClipStack public constructor(
   }
 
   public open class B2TIter public constructor() : org.skia.core.Iter() {
-    public constructor(stack: SkClipStack) : super(TODO(), TODO()) {
+    public constructor(stack: SkClipStack) : this(TODO(), TODO()) {
       TODO("Implement constructor")
     }
 

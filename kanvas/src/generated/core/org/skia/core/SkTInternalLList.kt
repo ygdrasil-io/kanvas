@@ -649,10 +649,6 @@ public data class SkTInternalLList<T> public constructor(
       TODO("Implement equals")
     }
 
-    public operator fun times(): T {
-      TODO("Implement times")
-    }
-
     public operator fun inc() {
       TODO("Implement inc")
     }

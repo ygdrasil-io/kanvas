@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.UInt
 import kotlin.ULong
+import org.skia.foundation.SkImageFilter
 import org.skia.pdf.Key
 import undefined.SkMutex
 

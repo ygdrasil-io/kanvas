@@ -99,10 +99,6 @@ public open class BlockIterfalseTrue public constructor(
       TODO("Implement equals")
     }
 
-    public operator fun times(): Int {
-      TODO("Implement times")
-    }
-
     public operator fun inc(): undefined.Item {
       TODO("Implement inc")
     }

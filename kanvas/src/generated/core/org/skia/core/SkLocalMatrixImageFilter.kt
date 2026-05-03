@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Any
 import kotlin.Int
 import org.skia.foundation.SkFlattenable
+import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkWriteBuffer

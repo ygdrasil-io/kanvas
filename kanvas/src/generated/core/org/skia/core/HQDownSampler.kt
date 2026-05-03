@@ -1,5 +1,8 @@
 package org.skia.core
 
+import org.skia.foundation.SkMipmapDownSampler
+import org.skia.foundation.SkPixmap
+
 /**
  * C++ original:
  * ```cpp

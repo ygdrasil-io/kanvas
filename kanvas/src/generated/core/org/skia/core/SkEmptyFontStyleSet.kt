@@ -2,7 +2,10 @@ package org.skia.core
 
 import kotlin.Int
 import kotlin.String
+import org.skia.foundation.SkFontStyle
+import org.skia.foundation.SkFontStyleSet
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkTypeface
 
 /**
  * C++ original:

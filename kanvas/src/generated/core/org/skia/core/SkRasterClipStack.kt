@@ -2,6 +2,10 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkNoncopyable
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSp
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix

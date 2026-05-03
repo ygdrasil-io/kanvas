@@ -1,6 +1,7 @@
 package org.skia.core
 
 import kotlin.Boolean
+import org.skia.foundation.SkDescriptor
 import org.skia.foundation.SkRefCnt
 
 /**

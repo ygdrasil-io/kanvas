@@ -5,6 +5,11 @@ import kotlin.Int
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkData
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkMipmap
+import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkSp
 import org.skia.gpu.ganesh.GrDirectContext
 import org.skia.math.SkIRect
@@ -119,7 +124,7 @@ public open class SkImageRaster public constructor(
    * }
    * ```
    */
-  public constructor(bm: SkBitmap, bitmapMayBeMutable: Boolean = false) : super(TODO(), TODO()) {
+  public constructor(bm: SkBitmap, bitmapMayBeMutable: Boolean = false) : this(TODO(), TODO()) {
     TODO("Implement constructor")
   }
 

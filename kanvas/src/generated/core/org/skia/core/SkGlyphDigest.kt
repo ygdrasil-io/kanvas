@@ -6,6 +6,7 @@ import kotlin.Short
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.UShort
+import org.skia.foundation.SkMask
 
 /**
  * C++ original:

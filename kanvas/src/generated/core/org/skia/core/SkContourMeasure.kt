@@ -398,10 +398,6 @@ public open class SkContourMeasure public constructor(
   public data class ForwardVerbIterator public constructor(
     private var skSpan: undefined.ForwardVerbIterator,
   ) {
-    public operator fun times(): undefined.VerbMeasure {
-      TODO("Implement times")
-    }
-
     public operator fun inc(): undefined.ForwardVerbIterator {
       TODO("Implement inc")
     }

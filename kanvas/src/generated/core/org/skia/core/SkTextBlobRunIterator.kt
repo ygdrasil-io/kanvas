@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Char
 import kotlin.UInt
+import org.skia.foundation.SkFont
 import org.skia.foundation.SkGlyphID
 import org.skia.math.SkPoint
 import org.skia.math.SkRSXform

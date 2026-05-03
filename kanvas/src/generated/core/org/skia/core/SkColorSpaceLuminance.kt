@@ -1,6 +1,7 @@
 package org.skia.core
 
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkNoncopyable
 import org.skia.foundation.U8CPU
 import org.skia.math.SkScalar
 

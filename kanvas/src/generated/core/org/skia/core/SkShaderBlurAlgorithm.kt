@@ -6,11 +6,14 @@ import kotlin.Float
 import kotlin.Int
 import org.skia.effects.SkRuntimeEffect
 import org.skia.effects.SkRuntimeEffectBuilder
+import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.math.SkIRect
 import org.skia.math.SkISize
 import org.skia.math.SkSize
+import org.skia.math.SkV2
+import org.skia.math.SkV4
 
 /**
  * C++ original:

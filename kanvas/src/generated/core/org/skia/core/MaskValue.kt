@@ -1,5 +1,7 @@
 package org.skia.core
 
+import org.skia.foundation.SkMask
+
 /**
  * C++ original:
  * ```cpp

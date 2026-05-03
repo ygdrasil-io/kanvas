@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
+import org.skia.foundation.SkNoncopyable
 import org.skia.foundation.SkSp
 import org.skia.math.SkRect
 import undefined.AbortCallback

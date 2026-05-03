@@ -3,10 +3,16 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.UInt
+import org.skia.foundation.SkData
 import org.skia.foundation.SkDeserialProcs
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPath
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSerialProcs
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkStream
+import org.skia.foundation.SkWStream
 import org.skia.foundation.SkWriteBuffer
 import org.skia.utils.Slug
 

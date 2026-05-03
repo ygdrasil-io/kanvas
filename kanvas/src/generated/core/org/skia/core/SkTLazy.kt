@@ -195,19 +195,6 @@ public data class SkTLazy<T> public constructor(
    * bool isValid() const { return fValue.has_value(); }
    * ```
    */
-  public operator fun times(): T {
-    TODO("Implement times")
-  }
-
-  /**
-   * C++ original:
-   * ```cpp
-   * T* get() {
-   *         SkASSERT(fValue.has_value());
-   *         return &fValue.value();
-   *     }
-   * ```
-   */
   public fun getMaybeNull(): T {
     TODO("Implement getMaybeNull")
   }

@@ -4,6 +4,7 @@ import Base
 import kotlin.Boolean
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkData
 import org.skia.foundation.SkSp
 import org.skia.gpu.ganesh.GrDirectContext
 

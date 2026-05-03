@@ -3,7 +3,11 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.UInt
+import org.skia.foundation.SkColorInfo
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRefCnt
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
 import org.skia.gpu.ganesh.GrRecordingContext
 import org.skia.gpu.ganesh.SkAlphaType

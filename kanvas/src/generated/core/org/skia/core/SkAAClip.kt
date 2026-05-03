@@ -4,6 +4,9 @@ import kotlin.Array
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.UByte
+import org.skia.foundation.SkMaskBuilder
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkRegion
 import org.skia.math.SkIRect
 import org.skia.math.SkRect
 import undefined.RunHead
