@@ -87,6 +87,50 @@ public class SkColorSpace private constructor(
         return SkColorSpace(transferFn, spun)
     }
 
+    /**
+     * Serialize this colorspace to a fresh byte buffer. Same wire format
+     * as upstream `SkColorSpace::serialize` (`SkColorSpace.cpp:441-445`):
+     * `[4-byte ColorSpaceHeader][7 floats TF][9 floats matrix]`, total
+     * 68 bytes, little-endian.
+     */
+    public fun serialize(): ByteArray {
+        val out = ByteArray(SERIALIZED_SIZE)
+        writeToMemory(out)
+        return out
+    }
+
+    /**
+     * Write the serialized representation to [memory]. Mirror of
+     * `SkColorSpace::writeToMemory` (`SkColorSpace.cpp:427-439`). Returns
+     * the number of bytes written (always 68). Pass `null` to query the
+     * required size without writing.
+     */
+    public fun writeToMemory(memory: ByteArray?): Int {
+        if (memory == null) return SERIALIZED_SIZE
+        require(memory.size >= SERIALIZED_SIZE) {
+            "serialize buffer too small: ${memory.size} < $SERIALIZED_SIZE"
+        }
+
+        // ColorSpaceHeader: version=1, 3 reserved bytes (0).
+        memory[0] = SERIALIZED_VERSION
+        memory[1] = 0
+        memory[2] = 0
+        memory[3] = 0
+
+        // 7 floats TF, little-endian.
+        var off = 4
+        for (f in floatArrayOf(transferFn.g, transferFn.a, transferFn.b,
+            transferFn.c, transferFn.d, transferFn.e, transferFn.f)) {
+            writeFloatLE(memory, off, f); off += 4
+        }
+        // 9 floats matrix, row-major, little-endian.
+        for (r in 0 until 3) for (c in 0 until 3) {
+            writeFloatLE(memory, off, toXYZD50.vals[r][c]); off += 4
+        }
+
+        return SERIALIZED_SIZE
+    }
+
     private fun computeLazyDst(): LazyDst {
         val invMat = org.skia.skcms.skcmsMatrix3x3Invert(toXYZD50)
             ?: org.skia.skcms.skcmsMatrix3x3Invert(SkNamedGamut.kSRGB)!!
@@ -157,6 +201,58 @@ public class SkColorSpace private constructor(
             if (a === b) return true
             if (a == null || b == null) return false
             return a.hash() == b.hash()
+        }
+
+        /**
+         * Deserialize a colorspace from a buffer produced by [serialize].
+         * Returns `null` if the buffer is malformed (wrong version, too
+         * short) or if the resulting (TF, gamut) pair is rejected by
+         * [makeRGB]. Mirror of `SkColorSpace::Deserialize`
+         * (`SkColorSpace.cpp:447-470`).
+         */
+        public fun deserialize(data: ByteArray, length: Int = data.size): SkColorSpace? {
+            if (length < SERIALIZED_SIZE) return null
+            if (data[0] != SERIALIZED_VERSION) return null
+
+            var off = 4
+            val tf = SkcmsTransferFunction(
+                g = readFloatLE(data, off + 0),
+                a = readFloatLE(data, off + 4),
+                b = readFloatLE(data, off + 8),
+                c = readFloatLE(data, off + 12),
+                d = readFloatLE(data, off + 16),
+                e = readFloatLE(data, off + 20),
+                f = readFloatLE(data, off + 24),
+            )
+            off += 28
+
+            val mat = Array(3) { FloatArray(3) }
+            for (r in 0 until 3) for (c in 0 until 3) {
+                mat[r][c] = readFloatLE(data, off); off += 4
+            }
+            return makeRGB(tf, SkcmsMatrix3x3(mat))
+        }
+
+        /** Wire-format size in bytes: 4-byte header + 7+9 little-endian floats. */
+        public const val SERIALIZED_SIZE: Int = 4 + 16 * 4
+
+        /** Wire-format version byte. Currently `1`; older versions are rejected. */
+        public const val SERIALIZED_VERSION: Byte = 1
+
+        private fun writeFloatLE(buf: ByteArray, off: Int, value: Float) {
+            val bits = value.toRawBits()
+            buf[off] = (bits and 0xFF).toByte()
+            buf[off + 1] = ((bits ushr 8) and 0xFF).toByte()
+            buf[off + 2] = ((bits ushr 16) and 0xFF).toByte()
+            buf[off + 3] = ((bits ushr 24) and 0xFF).toByte()
+        }
+
+        private fun readFloatLE(buf: ByteArray, off: Int): Float {
+            val bits = (buf[off].toInt() and 0xFF) or
+                ((buf[off + 1].toInt() and 0xFF) shl 8) or
+                ((buf[off + 2].toInt() and 0xFF) shl 16) or
+                ((buf[off + 3].toInt() and 0xFF) shl 24)
+            return Float.fromBits(bits)
         }
 
         private fun hashFloats(vararg xs: Float): Int {
