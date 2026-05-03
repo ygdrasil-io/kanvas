@@ -193,8 +193,8 @@ public abstract class SkStrikeCache public constructor() : StrikeForGPUCacheInte
    */
   public fun createStrike(
     strikeSpec: SkStrikeSpec,
-    maybeMetrics: SkFontMetrics? = null,
-    pinner: SkStrikePinner? = null,
+    maybeMetrics: SkFontMetrics? = TODO(),
+    pinner: SkStrikePinner? = TODO(),
   ): SkSp<SkStrike> {
     TODO("Implement createStrike")
   }
@@ -251,7 +251,7 @@ public abstract class SkStrikeCache public constructor() : StrikeForGPUCacheInte
    * }
    * ```
    */
-  public abstract fun purgePinned(minBytesNeeded: ULong = 0u)
+  public abstract fun purgePinned(minBytesNeeded: ULong = TODO())
 
   /**
    * C++ original:
@@ -394,8 +394,8 @@ public abstract class SkStrikeCache public constructor() : StrikeForGPUCacheInte
    */
   private fun internalCreateStrike(
     strikeSpec: SkStrikeSpec,
-    maybeMetrics: SkFontMetrics? = null,
-    pinner: SkStrikePinner? = null,
+    maybeMetrics: SkFontMetrics? = TODO(),
+    pinner: SkStrikePinner? = TODO(),
   ): SkSp<SkStrike> {
     TODO("Implement internalCreateStrike")
   }
@@ -525,7 +525,7 @@ public abstract class SkStrikeCache public constructor() : StrikeForGPUCacheInte
    * }
    * ```
    */
-  private abstract fun internalPurge(minBytesNeeded: ULong = 0u, checkPinners: Boolean = false): ULong
+  private abstract fun internalPurge(minBytesNeeded: ULong = TODO(), checkPinners: Boolean = TODO()): ULong
 
   /**
    * C++ original:

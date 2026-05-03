@@ -313,7 +313,7 @@ public data class SkStrokeRec public constructor(
    * }
    * ```
    */
-  public fun setStrokeStyle(width: SkScalar, strokeAndFill: Boolean = false) {
+  public fun setStrokeStyle(width: SkScalar, strokeAndFill: Boolean = TODO()) {
     TODO("Implement setStrokeStyle")
   }
 

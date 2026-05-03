@@ -306,7 +306,7 @@ public abstract class SkShaderBase public constructor() : SkShader() {
    * virtual bool isConstant(SkColor4f* color = nullptr) const { return false; }
    * ```
    */
-  public open fun isConstant(color: SkColor4f? = null): Boolean {
+  public open fun isConstant(color: SkColor4f? = TODO()): Boolean {
     TODO("Implement isConstant")
   }
 
@@ -327,7 +327,7 @@ public abstract class SkShaderBase public constructor() : SkShader() {
    *     }
    * ```
    */
-  public open fun asGradient(info: GradientInfo? = null, localMatrix: SkMatrix? = null): GradientType {
+  public open fun asGradient(info: GradientInfo? = TODO(), localMatrix: SkMatrix? = TODO()): GradientType {
     TODO("Implement asGradient")
   }
 
@@ -555,7 +555,7 @@ public abstract class SkShaderBase public constructor() : SkShader() {
     private fun deserialize(
       `data`: Unit?,
       size: ULong,
-      procs: SkDeserialProcs? = null,
+      procs: SkDeserialProcs? = TODO(),
     ): SkSp<SkShaderBase> {
       TODO("Implement deserialize")
     }

@@ -126,7 +126,7 @@ public open class SkImageFilter : SkFlattenable() {
     src: SkIRect,
     ctm: SkMatrix,
     direction: MapDirection,
-    inputRect: SkIRect? = null,
+    inputRect: SkIRect? = TODO(),
   ): Int {
     TODO("Implement filterBounds")
   }
@@ -277,7 +277,7 @@ public open class SkImageFilter : SkFlattenable() {
     public fun deserialize(
       `data`: Unit?,
       size: ULong,
-      procs: SkDeserialProcs? = null,
+      procs: SkDeserialProcs? = TODO(),
     ): Int {
       TODO("Implement deserialize")
     }

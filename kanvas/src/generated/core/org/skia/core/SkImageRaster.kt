@@ -124,7 +124,7 @@ public open class SkImageRaster public constructor(
    * }
    * ```
    */
-  public constructor(bm: SkBitmap, bitmapMayBeMutable: Boolean = false) : this(TODO(), TODO()) {
+  public constructor(bm: SkBitmap, bitmapMayBeMutable: Boolean = TODO()) : this(TODO(), TODO()) {
     TODO("Implement constructor")
   }
 

@@ -1,10 +1,10 @@
 package org.skia.foundation
 
+import kotlin.Any
 import kotlin.Boolean
 import kotlin.CharArray
 import kotlin.ULong
 import kotlin.Unit
-import undefined.FILE
 
 /**
  * C++ original:
@@ -39,7 +39,7 @@ public open class SkFILEWStream public constructor(
    * FILE* fFILE
    * ```
    */
-  private var fFILE: FILE? = TODO("Initialize fFILE")
+  private var fFILE: Any? = TODO("Initialize fFILE")
 
   /**
    * C++ original:

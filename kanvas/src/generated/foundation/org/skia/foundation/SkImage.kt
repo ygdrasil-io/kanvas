@@ -824,7 +824,7 @@ public abstract class SkImage public constructor(
     tmx: SkTileMode,
     tmy: SkTileMode,
     param2: SkSamplingOptions,
-    localMatrix: SkMatrix? = null,
+    localMatrix: SkMatrix? = TODO(),
   ): Int {
     TODO("Implement makeShader")
   }
@@ -862,7 +862,7 @@ public abstract class SkImage public constructor(
    *                                const SkMatrix* lm = nullptr) const
    * ```
    */
-  public fun makeShader(sampling: SkSamplingOptions, lm: SkMatrix? = null): Int {
+  public fun makeShader(sampling: SkSamplingOptions, lm: SkMatrix? = TODO()): Int {
     TODO("Implement makeShader")
   }
 
@@ -877,7 +877,7 @@ public abstract class SkImage public constructor(
     tmx: SkTileMode,
     tmy: SkTileMode,
     param2: SkSamplingOptions,
-    localMatrix: SkMatrix? = null,
+    localMatrix: SkMatrix? = TODO(),
   ): Int {
     TODO("Implement makeRawShader")
   }
@@ -915,7 +915,7 @@ public abstract class SkImage public constructor(
    *                                   const SkMatrix* lm = nullptr) const
    * ```
    */
-  public fun makeRawShader(sampling: SkSamplingOptions, lm: SkMatrix? = null): Int {
+  public fun makeRawShader(sampling: SkSamplingOptions, lm: SkMatrix? = TODO()): Int {
     TODO("Implement makeRawShader")
   }
 
@@ -1327,7 +1327,7 @@ public abstract class SkImage public constructor(
    * }
    * ```
    */
-  protected fun makeNonTextureImage(dContext: GrDirectContext? = null): Int {
+  protected fun makeNonTextureImage(dContext: GrDirectContext? = TODO()): Int {
     TODO("Implement makeNonTextureImage")
   }
 

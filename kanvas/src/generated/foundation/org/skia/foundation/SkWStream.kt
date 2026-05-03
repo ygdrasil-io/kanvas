@@ -212,7 +212,7 @@ public abstract class SkWStream public constructor() {
    * }
    * ```
    */
-  public abstract fun writeBigDecAsText(dec: Long, minDigits: Int = 0): Boolean
+  public abstract fun writeBigDecAsText(dec: Long, minDigits: Int = TODO()): Boolean
 
   /**
    * C++ original:
@@ -225,7 +225,7 @@ public abstract class SkWStream public constructor() {
    * }
    * ```
    */
-  public abstract fun writeHexAsText(hex: UInt, minDigits: Int = 0): Boolean
+  public abstract fun writeHexAsText(hex: UInt, minDigits: Int = TODO()): Boolean
 
   /**
    * C++ original:

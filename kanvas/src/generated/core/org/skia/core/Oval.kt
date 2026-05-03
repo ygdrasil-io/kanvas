@@ -36,7 +36,7 @@ public open class Oval public constructor(
   public constructor(
     r: SkRect,
     dir: SkPathDirection = TODO(),
-    index: UInt = 1u,
+    index: UInt = TODO(),
   ) : this() {
     TODO("Implement constructor")
   }

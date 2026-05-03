@@ -68,7 +68,7 @@ public data class SkBlitterClipper public constructor(
   public fun apply(
     blitter: SkBlitter?,
     clip: SkRegion?,
-    bounds: SkIRect? = null,
+    bounds: SkIRect? = TODO(),
   ): SkBlitter {
     TODO("Implement apply")
   }

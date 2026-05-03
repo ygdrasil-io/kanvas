@@ -436,7 +436,7 @@ import undefined.BlockIter
 public abstract class SkBlockAllocator public constructor(
   policy: GrowthPolicy,
   blockIncrementBytes: ULong,
-  additionalPreallocBytes: ULong = 0u,
+  additionalPreallocBytes: ULong = TODO(),
 ) : SkNoncopyable() {
   /**
    * C++ original:

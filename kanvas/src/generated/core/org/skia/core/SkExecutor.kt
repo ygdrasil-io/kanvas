@@ -123,7 +123,7 @@ public abstract class SkExecutor public constructor() {
      * }
      * ```
      */
-    public fun makeFIFOThreadPool(threads: Int = 0, allowBorrowing: Boolean = true): SkExecutor? {
+    public fun makeFIFOThreadPool(threads: Int = TODO(), allowBorrowing: Boolean = TODO()): SkExecutor? {
       TODO("Implement makeFIFOThreadPool")
     }
 
@@ -138,7 +138,7 @@ public abstract class SkExecutor public constructor() {
      * }
      * ```
      */
-    public fun makeLIFOThreadPool(threads: Int = 0, allowBorrowing: Boolean = true): SkExecutor? {
+    public fun makeLIFOThreadPool(threads: Int = TODO(), allowBorrowing: Boolean = TODO()): SkExecutor? {
       TODO("Implement makeLIFOThreadPool")
     }
 
@@ -157,8 +157,8 @@ public abstract class SkExecutor public constructor() {
      */
     public fun makeMultiListFIFOThreadPool(
       numWorkLists: Int,
-      threads: Int = 0,
-      allowBorrowing: Boolean = true,
+      threads: Int = TODO(),
+      allowBorrowing: Boolean = TODO(),
     ): SkExecutor? {
       TODO("Implement makeMultiListFIFOThreadPool")
     }
@@ -178,8 +178,8 @@ public abstract class SkExecutor public constructor() {
      */
     public fun makeMultiListLIFOThreadPool(
       numWorkLists: Int,
-      threads: Int = 0,
-      allowBorrowing: Boolean = true,
+      threads: Int = TODO(),
+      allowBorrowing: Boolean = TODO(),
     ): SkExecutor? {
       TODO("Implement makeMultiListLIFOThreadPool")
     }

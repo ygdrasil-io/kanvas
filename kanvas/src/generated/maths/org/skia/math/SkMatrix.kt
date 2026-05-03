@@ -3583,7 +3583,7 @@ public open class SkMatrix public constructor() {
    * }
    * ```
    */
-  public fun decomposeScale(scale: SkSize?, remaining: SkMatrix? = null): Boolean {
+  public fun decomposeScale(scale: SkSize?, remaining: SkMatrix? = TODO()): Boolean {
     TODO("Implement decomposeScale")
   }
 

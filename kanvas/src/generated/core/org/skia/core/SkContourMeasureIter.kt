@@ -86,7 +86,7 @@ public data class SkContourMeasureIter public constructor(
   public fun reset(
     path: SkPath,
     forceClosed: Boolean,
-    resScale: SkScalar = 1,
+    resScale: SkScalar = TODO(),
   ) {
     TODO("Implement reset")
   }

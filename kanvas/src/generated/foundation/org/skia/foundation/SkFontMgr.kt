@@ -208,7 +208,7 @@ public abstract class SkFontMgr : SkRefCnt() {
    * }
    * ```
    */
-  public abstract fun makeFromData(`data`: SkSp<SkData>, ttcIndex: Int = 0): Int
+  public abstract fun makeFromData(`data`: SkSp<SkData>, ttcIndex: Int = TODO()): Int
 
   /**
    * C++ original:
@@ -216,7 +216,7 @@ public abstract class SkFontMgr : SkRefCnt() {
    * sk_sp<SkTypeface> makeFromStream(std::unique_ptr<SkStreamAsset>, int ttcIndex = 0) const
    * ```
    */
-  public abstract fun makeFromStream(param0: SkStreamAsset?, ttcIndex: Int = 0): Int
+  public abstract fun makeFromStream(param0: SkStreamAsset?, ttcIndex: Int = TODO()): Int
 
   /**
    * C++ original:
@@ -239,7 +239,7 @@ public abstract class SkFontMgr : SkRefCnt() {
    * }
    * ```
    */
-  public abstract fun makeFromFile(path: CharArray, ttcIndex: Int = 0): Int
+  public abstract fun makeFromFile(path: CharArray, ttcIndex: Int = TODO()): Int
 
   /**
    * C++ original:

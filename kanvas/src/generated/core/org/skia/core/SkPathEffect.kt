@@ -196,7 +196,7 @@ public open class SkPathEffect public constructor() : SkFlattenable() {
     public fun deserialize(
       `data`: Unit?,
       size: ULong,
-      procs: SkDeserialProcs? = null,
+      procs: SkDeserialProcs? = TODO(),
     ): Int {
       TODO("Implement deserialize")
     }

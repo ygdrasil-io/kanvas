@@ -316,7 +316,7 @@ public data class SkStrikeSpec public constructor(
      * }
      * ```
      */
-    public fun makeCanonicalized(font: SkFont, paint: SkPaint? = null): Int {
+    public fun makeCanonicalized(font: SkFont, paint: SkPaint? = TODO()): Int {
       TODO("Implement makeCanonicalized")
     }
 
@@ -336,7 +336,7 @@ public data class SkStrikeSpec public constructor(
      */
     public fun makeWithNoDevice(
       font: SkFont,
-      paint: SkPaint? = null,
+      paint: SkPaint? = TODO(),
       flags: SkScalerContextFlags = TODO(),
     ): SkStrikeSpec {
       TODO("Implement makeWithNoDevice")

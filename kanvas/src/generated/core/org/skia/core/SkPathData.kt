@@ -732,7 +732,7 @@ public abstract class SkPathData public constructor(
     public override fun rect(
       r: SkRect,
       dir: SkPathDirection = TODO(),
-      startIndex: UInt = 0u,
+      startIndex: UInt = TODO(),
     ): SkSp<SkPathData> {
       TODO("Implement rect")
     }
@@ -755,7 +755,7 @@ public abstract class SkPathData public constructor(
     public override fun oval(
       r: SkRect,
       dir: SkPathDirection = TODO(),
-      startIndex: UInt = 1u,
+      startIndex: UInt = TODO(),
     ): SkSp<SkPathData> {
       TODO("Implement oval")
     }

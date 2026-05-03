@@ -283,7 +283,7 @@ public data class SkPictureData public constructor(
     stream: SkWStream?,
     procs: SkSerialProcs,
     topLevelTypeFaceSet: SkRefCntSet?,
-    textBlobsOnly: Boolean = false,
+    textBlobsOnly: Boolean = TODO(),
   ) {
     TODO("Implement serialize")
   }

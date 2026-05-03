@@ -94,7 +94,7 @@ public open class SkSynchronizedResourceCache public constructor(
    * }
    * ```
    */
-  public override fun add(rec: Rec?, payload: Unit? = null) {
+  public override fun add(rec: Rec?, payload: Unit? = TODO()) {
     TODO("Implement add")
   }
 

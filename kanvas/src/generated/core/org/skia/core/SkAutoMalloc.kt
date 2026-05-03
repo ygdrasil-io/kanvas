@@ -69,7 +69,7 @@ import org.skia.foundation.SkNoncopyable
  * ```
  */
 public abstract class SkAutoMalloc public constructor(
-  size: ULong = 0u,
+  size: ULong = TODO(),
 ) : SkNoncopyable() {
   /**
    * C++ original:
@@ -99,7 +99,7 @@ public abstract class SkAutoMalloc public constructor(
    *     }
    * ```
    */
-  public abstract fun reset(size: ULong = 0u, shrink: OnShrink = TODO())
+  public abstract fun reset(size: ULong = TODO(), shrink: OnShrink = TODO())
 
   /**
    * C++ original:

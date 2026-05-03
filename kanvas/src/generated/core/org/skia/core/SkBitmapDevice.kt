@@ -191,7 +191,7 @@ public class SkBitmapDevice public constructor(
   public constructor(
     bitmap: SkBitmap,
     surfaceProps: SkSurfaceProps,
-    externalHandle: Unit? = null,
+    externalHandle: Unit? = TODO(),
   ) : this() {
     TODO("Implement constructor")
   }
@@ -843,7 +843,7 @@ public class SkBitmapDevice public constructor(
    * }
    * ```
    */
-  public override fun snapSpecial(bounds: SkIRect, forceCopy: Boolean = false): SkSp<SkSpecialImage> {
+  public override fun snapSpecial(bounds: SkIRect, forceCopy: Boolean = TODO()): SkSp<SkSpecialImage> {
     TODO("Implement snapSpecial")
   }
 
@@ -1108,7 +1108,7 @@ public class SkBitmapDevice public constructor(
     public fun create(
       origInfo: SkImageInfo,
       surfaceProps: SkSurfaceProps,
-      allocator: SkRasterHandleAllocator? = null,
+      allocator: SkRasterHandleAllocator? = TODO(),
     ): SkSp<SkBitmapDevice> {
       TODO("Implement create")
     }

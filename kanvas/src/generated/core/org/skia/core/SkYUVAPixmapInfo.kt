@@ -275,7 +275,7 @@ public data class SkYUVAPixmapInfo public constructor(
    * const SkImageInfo& planeInfo(int i) const { return fPlaneInfos[static_cast<size_t>(i)]; }
    * ```
    */
-  private fun computeTotalBytes(planeSizes: Array<ULong> = null): ULong {
+  private fun computeTotalBytes(planeSizes: Array<ULong> = TODO()): ULong {
     TODO("Implement computeTotalBytes")
   }
 

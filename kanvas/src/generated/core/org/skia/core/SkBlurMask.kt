@@ -198,7 +198,7 @@ public open class SkBlurMask {
       dst: SkMaskBuilder?,
       src: SkRect,
       style: SkBlurStyle,
-      margin: SkIVector? = null,
+      margin: SkIVector? = TODO(),
       createMode: SkMaskBuilder.CreateMode = TODO(),
     ): Boolean {
       TODO("Implement blurRect")
@@ -218,7 +218,7 @@ public open class SkBlurMask {
       dst: SkMaskBuilder?,
       src: SkRRect,
       param3: SkBlurStyle,
-      margin: SkIVector? = null,
+      margin: SkIVector? = TODO(),
       createMode: SkMaskBuilder.CreateMode = TODO(),
     ): Boolean {
       TODO("Implement blurRRect")
@@ -409,7 +409,7 @@ public open class SkBlurMask {
       src: SkMask,
       sigma: SkScalar,
       style: SkBlurStyle,
-      margin: SkIVector? = null,
+      margin: SkIVector? = TODO(),
     ): Boolean {
       TODO("Implement boxBlur")
     }
@@ -580,7 +580,7 @@ public open class SkBlurMask {
       dst: SkMaskBuilder?,
       src: SkMask,
       style: SkBlurStyle,
-      margin: SkIVector? = null,
+      margin: SkIVector? = TODO(),
     ): Boolean {
       TODO("Implement blurGroundTruth")
     }

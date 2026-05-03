@@ -114,7 +114,7 @@ public data class SkOpContourBuilder public constructor(
   public fun addCurve(
     verb: SkPathVerb,
     pts: Array<SkPoint>,
-    weight: SkScalar = 1,
+    weight: SkScalar = TODO(),
   ) {
     TODO("Implement addCurve")
   }

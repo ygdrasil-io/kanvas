@@ -1041,7 +1041,7 @@ public abstract class SkFont public constructor() {
     text: Unit?,
     byteLength: ULong,
     encoding: SkTextEncoding,
-    bounds: SkRect? = null,
+    bounds: SkRect? = TODO(),
   ): Int {
     TODO("Implement measureText")
   }
@@ -1236,7 +1236,7 @@ public abstract class SkFont public constructor() {
   public abstract fun getXPos(
     glyphs: SkSpan<SkGlyphID>,
     xpos: SkSpan<SkScalar>,
-    origin: SkScalar = 0,
+    origin: SkScalar = TODO(),
   )
 
   /**
@@ -1261,7 +1261,7 @@ public abstract class SkFont public constructor() {
     pos: SkSpan<SkPoint>,
     top: SkScalar,
     bottom: SkScalar,
-    paintPtr: SkPaint? = null,
+    paintPtr: SkPaint? = TODO(),
   ): Int {
     TODO("Implement getIntercepts")
   }

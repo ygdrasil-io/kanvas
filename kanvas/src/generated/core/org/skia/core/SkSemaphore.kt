@@ -91,7 +91,7 @@ public data class SkSemaphore public constructor(
    * }
    * ```
    */
-  public fun signal(n: Int = 1) {
+  public fun signal(n: Int = TODO()) {
     TODO("Implement signal")
   }
 

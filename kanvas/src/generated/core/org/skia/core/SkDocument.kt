@@ -109,7 +109,7 @@ public abstract class SkDocument public constructor(
   public fun beginPage(
     width: SkScalar,
     height: SkScalar,
-    content: SkRect? = null,
+    content: SkRect? = TODO(),
   ): SkCanvas {
     TODO("Implement beginPage")
   }

@@ -172,7 +172,7 @@ public abstract class SkBinaryWriteBuffer public constructor(
    *     }
    * ```
    */
-  public abstract fun reset(storage: Unit? = null, storageSize: ULong = 0u)
+  public abstract fun reset(storage: Unit? = TODO(), storageSize: ULong = TODO())
 
   /**
    * C++ original:

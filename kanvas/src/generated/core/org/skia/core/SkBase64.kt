@@ -117,7 +117,7 @@ public open class SkBase64 {
       src: Unit?,
       length: ULong,
       dst: Unit?,
-      encode: String? = null,
+      encode: String? = TODO(),
     ): Int {
       TODO("Implement encode")
     }

@@ -2044,7 +2044,7 @@ public open class SkPixmap public constructor() {
    * bool erase(const SkColor4f& color, const SkIRect* subset = nullptr) const
    * ```
    */
-  public fun erase(color: SkColor4f, subset: SkIRect? = null): Boolean {
+  public fun erase(color: SkColor4f, subset: SkIRect? = TODO()): Boolean {
     TODO("Implement erase")
   }
 }

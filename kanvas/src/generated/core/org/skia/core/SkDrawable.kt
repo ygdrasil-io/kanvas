@@ -185,7 +185,7 @@ public abstract class SkDrawable public constructor() : SkFlattenable() {
    * }
    * ```
    */
-  public fun draw(canvas: SkCanvas?, matrix: SkMatrix? = null) {
+  public fun draw(canvas: SkCanvas?, matrix: SkMatrix? = TODO()) {
     TODO("Implement draw")
   }
 
@@ -433,7 +433,7 @@ public abstract class SkDrawable public constructor() : SkFlattenable() {
     public fun deserialize(
       `data`: Unit?,
       size: ULong,
-      procs: SkDeserialProcs? = null,
+      procs: SkDeserialProcs? = TODO(),
     ): Int {
       TODO("Implement deserialize")
     }

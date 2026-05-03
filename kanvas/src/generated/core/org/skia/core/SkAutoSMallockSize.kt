@@ -179,7 +179,7 @@ public open class SkAutoSMallockSize public constructor() : SkNoncopyable() {
   public fun reset(
     size: ULong,
     shrink: SkAutoMalloc.OnShrink = TODO(),
-    didChangeAlloc: Boolean? = null,
+    didChangeAlloc: Boolean? = TODO(),
   ) {
     TODO("Implement reset")
   }

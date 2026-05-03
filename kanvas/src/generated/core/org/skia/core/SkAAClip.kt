@@ -246,7 +246,7 @@ public data class SkAAClip public constructor(
   public fun setPath(
     path: SkPath,
     bounds: SkIRect,
-    doAA: Boolean = true,
+    doAA: Boolean = TODO(),
   ): Boolean {
     TODO("Implement setPath")
   }
@@ -625,7 +625,7 @@ public data class SkAAClip public constructor(
    * }
    * ```
    */
-  public fun debug(compressY: Boolean = false) {
+  public fun debug(compressY: Boolean = TODO()) {
     TODO("Implement debug")
   }
 
@@ -891,7 +891,7 @@ public data class SkAAClip public constructor(
    * }
    * ```
    */
-  private fun findRow(y: Int, lastYForRow: Int? = null): Int {
+  private fun findRow(y: Int, lastYForRow: Int? = TODO()): Int {
     TODO("Implement findRow")
   }
 
@@ -921,7 +921,7 @@ public data class SkAAClip public constructor(
   private fun findX(
     `data`: Array<UByte>,
     x: Int,
-    initialCount: Int? = null,
+    initialCount: Int? = TODO(),
   ): Int {
     TODO("Implement findX")
   }

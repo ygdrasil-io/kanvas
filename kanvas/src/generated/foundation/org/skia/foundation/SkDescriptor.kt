@@ -177,7 +177,7 @@ public open class SkDescriptor public constructor() : SkNoncopyable() {
   public fun addEntry(
     tag: UInt,
     length: ULong,
-    `data`: Unit? = null,
+    `data`: Unit? = TODO(),
   ) {
     TODO("Implement addEntry")
   }

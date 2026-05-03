@@ -131,7 +131,7 @@ public abstract class SkFlattenable public constructor() : SkRefCnt() {
    * }
    * ```
    */
-  public fun serialize(procs: SkSerialProcs? = null): Int {
+  public fun serialize(procs: SkSerialProcs? = TODO()): Int {
     TODO("Implement serialize")
   }
 
@@ -153,7 +153,7 @@ public abstract class SkFlattenable public constructor() : SkRefCnt() {
   public fun serialize(
     memory: Unit?,
     memorySize: ULong,
-    procs: SkSerialProcs? = null,
+    procs: SkSerialProcs? = TODO(),
   ): ULong {
     TODO("Implement serialize")
   }
@@ -256,7 +256,7 @@ public abstract class SkFlattenable public constructor() : SkRefCnt() {
       type: Type,
       `data`: Unit?,
       length: ULong,
-      procs: SkDeserialProcs? = null,
+      procs: SkDeserialProcs? = TODO(),
     ): Int {
       TODO("Implement deserialize")
     }

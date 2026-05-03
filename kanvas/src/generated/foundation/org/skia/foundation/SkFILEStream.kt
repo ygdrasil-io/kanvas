@@ -1,12 +1,12 @@
 package org.skia.foundation
 
+import kotlin.Any
 import kotlin.Boolean
 import kotlin.CharArray
 import kotlin.Int
 import kotlin.Long
 import kotlin.ULong
 import kotlin.Unit
-import undefined.FILE
 
 /**
  * C++ original:
@@ -83,7 +83,7 @@ import undefined.FILE
  * ```
  */
 public open class SkFILEStream public constructor(
-  path: CharArray = null,
+  path: CharArray = TODO(),
 ) : SkStreamAsset() {
   /**
    * C++ original:
@@ -91,7 +91,7 @@ public open class SkFILEStream public constructor(
    * std::shared_ptr<FILE> fFILE
    * ```
    */
-  private var fFILE: FILE = TODO("Initialize fFILE")
+  private var fFILE: Any = TODO("Initialize fFILE")
 
   /**
    * C++ original:
@@ -125,7 +125,7 @@ public open class SkFILEStream public constructor(
    * { }
    * ```
    */
-  public constructor(`file`: FILE?) : this() {
+  public constructor(`file`: Any?) : this() {
     TODO("Implement constructor")
   }
 
@@ -135,7 +135,7 @@ public open class SkFILEStream public constructor(
    * explicit SkFILEStream(FILE* file)
    * ```
    */
-  public constructor(`file`: FILE?, size: ULong) : this() {
+  public constructor(`file`: Any?, size: ULong) : this() {
     TODO("Implement constructor")
   }
 
@@ -146,7 +146,7 @@ public open class SkFILEStream public constructor(
    * ```
    */
   public constructor(
-    `file`: FILE,
+    `file`: Any,
     end: ULong,
     start: ULong,
   ) : this() {
@@ -160,7 +160,7 @@ public open class SkFILEStream public constructor(
    * ```
    */
   public constructor(
-    `file`: FILE,
+    `file`: Any,
     end: ULong,
     start: ULong,
     current: ULong,
@@ -175,7 +175,7 @@ public open class SkFILEStream public constructor(
    * ```
    */
   public constructor(
-    `file`: FILE?,
+    `file`: Any?,
     size: ULong,
     start: ULong,
   ) : this() {
