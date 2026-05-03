@@ -4,6 +4,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
+| ArcOfZorroGM | 99.56% | = | 1 | 995,621 / 1,000,000 | 0, 214, 236, 228 | 0, 62, 80, 75 |
 | BigRectGM | 95.53% | = | 1 | 38,811 / 40,625 | 0, 212, 242, 13 | 0, 31, 25, 3 |
 | BitmapRectRoundingGM | 100.00% | = | 1 | 307,200 / 307,200 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ClipStrokeRectGM | 100.00% | = | 1 | 80,000 / 80,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
