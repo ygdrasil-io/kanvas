@@ -6,8 +6,8 @@ import org.skia.math.SkScalar
 /**
  * Immutable path. Built with [SkPathBuilder] and produced via
  * [SkPathBuilder.detach] or via the static factories below
- * (`Rect` / `Circle` / `Oval` / `Line` / `Polygon`), which mirror
- * Skia 4.x.
+ * (`Rect` / `Circle` / `Oval` / `RRect` / `Line` / `Polygon`), which
+ * mirror Skia 4.x.
  *
  * Storage layout — mirrors upstream Skia, parallel arrays:
  *   - `verbs[i]` records the verb kind.
@@ -67,6 +67,22 @@ public class SkPath internal constructor(
             rect: SkRect,
             dir: SkPathDirection = SkPathDirection.kCW,
         ): SkPath = SkPathBuilder().addOval(rect, dir).detach()
+
+        /**
+         * Closed rounded-rectangle contour. Mirrors Skia's
+         * `SkPath::RRect(const SkRRect&, SkPathDirection)`.
+         *
+         * If [rrect] has type [SkRRect.Type.kEmpty_Type], the returned
+         * path is empty; if it's [SkRRect.Type.kRect_Type] or
+         * [SkRRect.Type.kOval_Type], the path collapses to the appropriate
+         * specialised contour. Otherwise the four corners are emitted as
+         * cubic Béziers with the same kappa approximation used by
+         * [SkPathBuilder.addOval].
+         */
+        public fun RRect(
+            rrect: SkRRect,
+            dir: SkPathDirection = SkPathDirection.kCW,
+        ): SkPath = SkPathBuilder().addRRect(rrect, dir).detach()
 
         /** Single line segment from `a` to `b`, no close. */
         public fun Line(

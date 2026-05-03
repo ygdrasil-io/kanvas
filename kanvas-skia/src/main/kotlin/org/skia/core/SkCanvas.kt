@@ -5,6 +5,7 @@ import org.skia.foundation.SkColor
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
 import org.skia.math.SkRect
@@ -109,6 +110,35 @@ public open class SkCanvas(public val device: SkBitmapDevice) {
     public fun drawPath(path: SkPath, paint: SkPaint) {
         val s = top
         device.drawPath(path, s.sx, s.sy, s.tx, s.ty, s.clip, paint)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawOval`. Emits an elliptical contour via
+     * [SkPath.Oval] and routes through [drawPath]. Convenience wrapper —
+     * the stand-alone path can be reused if the same oval is drawn many
+     * times.
+     */
+    public fun drawOval(oval: SkRect, paint: SkPaint) {
+        drawPath(SkPath.Oval(oval), paint)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawCircle`. Convenience wrapper around
+     * [SkPath.Circle] + [drawPath].
+     */
+    public fun drawCircle(cx: SkScalar, cy: SkScalar, radius: SkScalar, paint: SkPaint) {
+        if (radius <= 0f) return
+        drawPath(SkPath.Circle(cx, cy, radius), paint)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawRRect`. Routes through [SkPath.RRect],
+     * which dispatches on [SkRRect.Type] to the right cubic-Bézier or
+     * straight-line contour. Empty rrects are a no-op.
+     */
+    public fun drawRRect(rrect: SkRRect, paint: SkPaint) {
+        if (rrect.isEmpty()) return
+        drawPath(SkPath.RRect(rrect), paint)
     }
 
     /**
