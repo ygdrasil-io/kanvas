@@ -13,6 +13,7 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
+import org.skia.foundation.SkStroker
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
 import org.skia.math.SkRect
@@ -202,8 +203,16 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     }
 
     /**
-     * Phase 3a: fill a polygon path. Only `kFill_Style` is implemented;
-     * stroke-on-path requires the path stroker (Phase 3b/c).
+     * Fill or stroke a path under the current CTM `(sx, sy, tx, ty)`.
+     *
+     * Phase 3a: kFill_Style with line-only paths and a 4×4 supersampled
+     * scanline rasterizer.
+     * Phase 3b: full Bézier verbs (quad/conic/cubic) flattened in device
+     * space inside [buildEdges] before the scanline walk.
+     * Phase 3c: kStroke_Style and kStrokeAndFill_Style — the stroker
+     * ([SkStroker]) converts the source-space path into a filled outline
+     * path, which is then rasterized via the same fill pipeline. Source
+     * space stroke means the stroke width scales with the CTM.
      *
      * The path's verbs are interpreted in source space and transformed via
      * `(sx, sy, tx, ty)` as edges are emitted, so `dev = (sx*x + tx, sy*y + ty)`.
@@ -218,16 +227,34 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         clip: SkIRect, paint: SkPaint,
     ) {
         if (path.isEmpty()) return
-        if (paint.style != SkPaint.Style.kFill_Style) {
-            // Stroke-on-path arrives with the stroker in a later slice.
-            return
-        }
         val color = transformPaintColor(paint.color)
         val baseA = SkColorGetA(color)
         if (baseA == 0) return
+        val supers = if (paint.isAntiAlias) 4 else 1
+
+        when (paint.style) {
+            SkPaint.Style.kFill_Style ->
+                fillPath(path, sx, sy, tx, ty, clip, color, baseA, supers)
+            SkPaint.Style.kStroke_Style -> {
+                val outline = SkStroker.fromPaint(paint).stroke(path)
+                if (outline.isEmpty()) return
+                fillPath(outline, sx, sy, tx, ty, clip, color, baseA, supers)
+            }
+            SkPaint.Style.kStrokeAndFill_Style -> {
+                fillPath(path, sx, sy, tx, ty, clip, color, baseA, supers)
+                val outline = SkStroker.fromPaint(paint).stroke(path)
+                if (outline.isEmpty()) return
+                fillPath(outline, sx, sy, tx, ty, clip, color, baseA, supers)
+            }
+        }
+    }
+
+    private fun fillPath(
+        path: SkPath, sx: Float, sy: Float, tx: Float, ty: Float,
+        clip: SkIRect, color: SkColor, baseA: Int, supers: Int,
+    ) {
         val edges = buildEdges(path, sx, sy, tx, ty)
         if (edges.isEmpty()) return
-        val supers = if (paint.isAntiAlias) 4 else 1
         scanFillPath(edges, path.fillType, clip, color, baseA, supers)
     }
 

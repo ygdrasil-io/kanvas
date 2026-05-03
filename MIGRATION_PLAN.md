@@ -159,10 +159,31 @@ Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsG
 - [x] 6 tests rasterizer end-to-end (rect, circle, quadTo, even-odd hole, cubic teardrop, addArc 360°).
 - [x] Aucune régression sur les 5 GMs existants.
 
-### Phase 3c — Path stroker + GM ports
+### Phase 3c — Path stroker (no GM ports yet) ✅
 
-- [ ] Stroker path → fill path (`kButt_Cap` + `kMiter_Join` only).
-- [ ] Hand-port `tests/ArcToGM.kt`, `tests/ConvexPathsGM.kt`, `tests/CubicPathGM.kt` selon faisabilité.
+**But** : ouvrir le rasterizer aux paths `kStroke_Style` / `kStrokeAndFill_Style`. Sans cette pièce, tous les GMs qui font `paint.setStyle(kStroke_Style)` sur un path sont bloqués.
+
+- [x] Étendre `SkPaint` avec les enums `Cap` (kButt/kRound/kSquare) et `Join` (kMiter/kRound/kBevel) + propriétés `strokeCap`, `strokeJoin`, `strokeMiter` (default 4f, comme Skia).
+- [x] Créer `SkStroker` (org.skia.foundation) — convertit un `SkPath` source en outline path filable. Algo :
+  - Flatten chaque verb (line/quad/conic/cubic) en polyline source-space (mêmes constantes flatness/depth que `SkBitmapDevice.buildEdges`).
+  - Per-segment unit normals (left = CCW perpendicular).
+  - Walk vertex par vertex, miter formula `M − P = halfW / (1 + cos) · (n_prev + n_next)`. Bevel fallback si `|M − P| > miterLimit · halfW`.
+  - Closed contour → 2 sub-contours (outer side as-is + inner side reversed) — winding fill peint la bande.
+  - Open contour → 1 closed contour : `left + butt_cap_end + reverse(right) + butt_cap_start`.
+- [x] Phase 3c implémente **`kButt_Cap` + `kMiter_Join` (avec bevel fallback)** seulement. Round/Square caps + Round/Bevel-only joins reportés.
+- [x] Wirer `SkBitmapDevice.drawPath` : kStroke / kStrokeAndFill délèguent au stroker, le résultat est rasterisé via la même pipeline fill.
+- [x] `strokeWidth ≤ 0` → fallback width=1 (hairline). Une vraie hairline path scan-line viendra plus tard.
+
+#### Vérification Phase 3c
+- [x] 10 tests unitaires `SkStrokerTest` (empty, width=0, line→rect, closed rect→ring, miter, bevel fallback, quad, fillType).
+- [x] 5 tests end-to-end `SkBitmapDeviceStrokeTest` (line, rect, L-shape miter, kStrokeAndFill, translation).
+- [x] Aucune régression sur les 6 GMs existants.
+
+### Phase 3d — GM ports stroke-on-path
+
+- [ ] Hand-port `tests/ConvexPathsGM.kt` (fill seulement, drop l'entry skbug.40040207 qui exige `path.transform(matrix)`).
+- [ ] Hand-port `tests/ArcToGM.kt` (nécessite `arcTo(p1, p2, radius)` + variant SVG).
+- [ ] Hand-port `tests/CubicPathGM.kt`.
 
 ---
 
@@ -283,7 +304,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | S3    | +1       | `drawImageRect` axis-aligned (parallèle, +`DrawBitmapRect3`) | ✅ |
 | 3a    | 5        | SkPath line-only + scanline fill AA + scale CTM | ✅ |
 | 3b    | 5        | Path/Builder split + Bézier verbs + arcTo/addArc + flattening | ✅ |
-| 3c    | ~8       | Path stroker + GM ports (ArcToGM, ConvexPathsGM, ...) | ⬜ |
+| 3c    | 5        | Path stroker (kButt + kMiter, no GM ports yet) | ✅ |
+| 3d    | ~8       | Stroke-on-path GM ports (ArcToGM, ConvexPathsGM, ...) | ⬜ |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
