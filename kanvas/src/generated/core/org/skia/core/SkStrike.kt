@@ -5,6 +5,7 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import org.skia.foundation.SkDescriptor
+import org.skia.foundation.SkDrawable
 import org.skia.foundation.SkGlyphID
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkReadBuffer

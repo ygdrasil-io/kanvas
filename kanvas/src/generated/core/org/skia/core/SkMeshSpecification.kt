@@ -5,6 +5,7 @@ import kotlin.String
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.collections.List
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkNVRefCnt
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan

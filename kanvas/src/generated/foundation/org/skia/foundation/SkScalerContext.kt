@@ -8,7 +8,6 @@ import kotlin.ULong
 import kotlin.UShort
 import kotlin.Unit
 import org.skia.core.SkAxisAlignment
-import org.skia.core.SkDrawable
 import org.skia.core.SkFontMetrics
 import org.skia.core.SkGlyph
 import org.skia.core.SkMaskFilter

@@ -6,6 +6,7 @@ import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkDeserialProcs
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkSp

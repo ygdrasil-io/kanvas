@@ -4,6 +4,8 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.UInt
 import org.skia.foundation.SkColorInfo
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRefCnt

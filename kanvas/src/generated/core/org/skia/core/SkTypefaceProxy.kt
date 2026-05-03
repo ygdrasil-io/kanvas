@@ -8,6 +8,7 @@ import kotlin.Unit
 import org.skia.foundation.SkDescriptor
 import org.skia.foundation.SkFontArguments
 import org.skia.foundation.SkFontDescriptor
+import org.skia.foundation.SkFontParameters
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkFontTableTag
 import org.skia.foundation.SkGlyphID

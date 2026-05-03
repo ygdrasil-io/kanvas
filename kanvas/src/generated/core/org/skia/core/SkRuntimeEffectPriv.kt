@@ -8,6 +8,7 @@ import kotlin.Int
 import kotlin.UInt
 import kotlin.ULong
 import org.skia.effects.SkRuntimeEffect
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkData
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp

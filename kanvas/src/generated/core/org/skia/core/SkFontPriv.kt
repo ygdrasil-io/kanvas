@@ -8,6 +8,7 @@ import kotlin.Unit
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkGlyphID
 import org.skia.foundation.SkReadBuffer
+import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkUnichar
 import org.skia.foundation.SkWriteBuffer
 import org.skia.math.SkMatrix

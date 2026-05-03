@@ -5,6 +5,7 @@ import kotlin.Float
 import kotlin.Int
 import kotlin.ULong
 import org.skia.effects.SkGradient
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkSpan
 import org.skia.foundation.SkWriteBuffer
 import org.skia.gpu.Interpolation

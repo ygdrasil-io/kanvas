@@ -8,7 +8,6 @@ import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
 import org.skia.core.SkFontMetrics
-import org.skia.core.SkTextEncoding
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
 import org.skia.math.SkScalar

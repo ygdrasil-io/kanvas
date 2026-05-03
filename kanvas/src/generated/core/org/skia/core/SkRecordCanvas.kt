@@ -7,6 +7,7 @@ import kotlin.Int
 import kotlin.ULong
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkData
+import org.skia.foundation.SkDrawable
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint

@@ -5,6 +5,7 @@ import kotlin.Int
 import kotlin.UInt
 import org.skia.foundation.SkData
 import org.skia.foundation.SkDeserialProcs
+import org.skia.foundation.SkDrawable
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath

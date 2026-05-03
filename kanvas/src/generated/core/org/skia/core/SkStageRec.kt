@@ -1,5 +1,7 @@
 package org.skia.core
 
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.math.SkRect
 import org.skia.memory.SkArenaAlloc
 import undefined.SkColor4f

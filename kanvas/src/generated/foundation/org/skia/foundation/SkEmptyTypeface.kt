@@ -5,8 +5,6 @@ import kotlin.Int
 import kotlin.String
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.core.SkDrawable
-import org.skia.core.SkFontParameters
 import org.skia.math.SkRect
 
 /**

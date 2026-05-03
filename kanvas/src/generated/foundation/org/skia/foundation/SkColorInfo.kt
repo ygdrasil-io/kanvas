@@ -3,8 +3,6 @@ package org.skia.foundation
 import kotlin.Any
 import kotlin.Boolean
 import kotlin.Int
-import org.skia.core.SkColorSpace
-import org.skia.core.SkColorType
 
 /**
  * C++ original:

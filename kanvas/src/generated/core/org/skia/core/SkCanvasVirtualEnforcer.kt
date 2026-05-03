@@ -6,6 +6,7 @@ import kotlin.CharArray
 import kotlin.ULong
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkData
+import org.skia.foundation.SkDrawable
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect

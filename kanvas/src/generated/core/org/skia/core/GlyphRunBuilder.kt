@@ -10,6 +10,7 @@ import org.skia.foundation.SkFont
 import org.skia.foundation.SkGlyphID
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSpan
+import org.skia.foundation.SkTextEncoding
 import org.skia.math.SkPoint
 import org.skia.math.SkRSXform
 import org.skia.math.SkRect

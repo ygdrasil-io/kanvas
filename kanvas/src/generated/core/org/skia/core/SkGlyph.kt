@@ -8,6 +8,7 @@ import kotlin.Short
 import kotlin.ULong
 import kotlin.UShort
 import kotlin.Unit
+import org.skia.foundation.SkDrawable
 import org.skia.foundation.SkGlyphID
 import org.skia.foundation.SkMask
 import org.skia.foundation.SkPath

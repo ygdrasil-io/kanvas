@@ -9,6 +9,8 @@ import kotlin.ULong
 import kotlin.Unit
 import org.skia.effects.SkRuntimeEffect
 import org.skia.foundation.SkAlpha
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkDeserialProcs
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkNoncopyable

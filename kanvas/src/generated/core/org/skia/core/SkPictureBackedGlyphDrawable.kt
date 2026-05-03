@@ -1,6 +1,7 @@
 package org.skia.core
 
 import kotlin.ULong
+import org.skia.foundation.SkDrawable
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkWriteBuffer

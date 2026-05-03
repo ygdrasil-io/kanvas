@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Int
 import kotlin.ULong
+import org.skia.foundation.SkDrawable
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp

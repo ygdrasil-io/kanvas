@@ -2,6 +2,8 @@ package org.skia.core
 
 import kotlin.Boolean
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkWriteBuffer

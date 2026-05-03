@@ -15,6 +15,7 @@ import org.skia.foundation.SkNVRefCnt
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSerialProcs
 import org.skia.foundation.SkSpan
+import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTypeface
 import org.skia.math.SkPoint
 import org.skia.math.SkRSXform
