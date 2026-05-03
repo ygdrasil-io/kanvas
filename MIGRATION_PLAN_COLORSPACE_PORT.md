@@ -255,24 +255,32 @@ Aujourd'hui [TestUtils.kt:83-115](kanvas-skia/src/test/kotlin/org/skia/testing/T
 
 ---
 
-## Phase G — Sérialisation `SkColorSpace` (S)
+## Phase G — Sérialisation `SkColorSpace` (S) — ✅
 
-**But** : `serialize` / `Deserialize` / `writeToMemory` pour cache & cross-process.
+Ajouté à [SkColorSpace.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt) :
 
-Cf. `SkColorSpace.cpp:411-470`.
+- [x] `SERIALIZED_SIZE = 68` (4-byte header + 7 TF + 9 matrix floats), `SERIALIZED_VERSION = 1`.
+- [x] `writeToMemory(memory: ByteArray?): Int` — `null` retourne la taille requise. Mirror `SkColorSpace.cpp:427-439`.
+- [x] `serialize(): ByteArray` — alloue + writeToMemory. Mirror `:441-445`.
+- [x] `deserialize(data, length)` — valide header v1 + version byte, lit 16 floats little-endian, appelle `makeRGB` (qui re-snap au singleton via Phase B). Mirror `:447-470`.
+- [x] Helpers privés `writeFloatLE` / `readFloatLE` — IEEE 754 raw-bits, byte order LE comme upstream sur ARM/x86.
 
-- [ ] `ColorSpaceHeader` data class : 4 octets `(version=1, reserved0=0, reserved1=0, reserved2=0)`.
-- [ ] `writeToMemory(memory: ByteArray?): Int` — header (4) + 7 floats TF (28) + 9 floats matrix (36) = **68 octets**.
-- [ ] `serialize(): ByteArray` — alloue + writeToMemory.
-- [ ] `Deserialize(data: ByteArray, length: Int): SkColorSpace?` — valide header v1, lit 16 floats, `MakeRGB`.
+**Tests** [SkColorSpaceSerializeTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkColorSpaceSerializeTest.kt) — 12 nouveaux :
+- [x] `SERIALIZED_SIZE == 68`, header version=1, reserved bytes=0.
+- [x] `writeToMemory(null)` retourne 68.
+- [x] `writeToMemory(ByteArray(64))` rejette (`IllegalArgumentException`).
+- [x] **Round-trip sRGB → singleton (`assertSame`)** — preuve que `makeRGB` snap fonctionne après deserialize.
+- [x] Round-trip sRGB-linear → singleton.
+- [x] Round-trip Rec.2020 → fresh instance avec hash égal.
+- [x] Round-trip `makeColorSpin()` → fresh instance avec hash égal.
+- [x] `deserialize(ByteArray(67))` → null.
+- [x] `deserialize` avec version=99 → null.
+- [x] `deserialize` accepte un buffer plus grand que 68 (excess ignoré).
+- [x] **Wire-format check** : float `g` à offset 4 == `2.4f.toRawBits()`.
 
-**Tests** :
-- [ ] Round-trip : `serialize` / `Deserialize` (sRGB) → singleton.
-- [ ] Round-trip Rec.2020.
-- [ ] Deserialize buffer trop court → null.
-- [ ] Deserialize avec version != 1 → null.
+**Résultat** : 237 tests verts (225 + 12), 0 régression.
 
-**Bonus** : permet d'écrire un chunk iCCP minimal (sans aller jusqu'à un vrai profil ICC) pour les debug images. Mais le format custom 68-octets n'est pas un ICC valide ; vrai PNG-iCCP-write nécessite Phase F (ICC v4 emit), beaucoup plus de boulot. **Différé** comme Phase 7 du plan #2.
+**Note** : ce format 68-octets n'est PAS un profil ICC valide. Pour écrire un chunk iCCP standard dans un PNG il faut Phase F (ICC v4 emit), encore différé.
 
 ---
 
