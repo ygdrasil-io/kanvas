@@ -5,8 +5,6 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.core.SkColorSpace
-import org.skia.core.SkColorType
 import org.skia.math.SkISize
 
 /**

@@ -1,5 +1,7 @@
 package org.skia.core
 
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkSp
 import org.skia.math.SkIRect

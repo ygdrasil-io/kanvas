@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkSpan
 import org.skia.gpu.ganesh.SkAlphaType
 import org.skia.sksl.Program

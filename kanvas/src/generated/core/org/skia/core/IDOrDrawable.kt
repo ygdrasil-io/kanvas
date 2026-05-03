@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkDrawable
 import org.skia.foundation.SkGlyphID
 
 /**

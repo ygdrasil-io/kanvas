@@ -2,6 +2,8 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo

@@ -4,6 +4,7 @@ import Validator
 import kotlin.Array
 import kotlin.Boolean
 import kotlin.UInt
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSp

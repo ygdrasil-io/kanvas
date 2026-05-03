@@ -7,8 +7,6 @@ import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
 import org.skia.core.SkBitmap
-import org.skia.core.SkColorSpace
-import org.skia.core.SkColorType
 import org.skia.core.SkRecorder
 import org.skia.core.SkSurfaceProps
 import org.skia.core.SkTileMode

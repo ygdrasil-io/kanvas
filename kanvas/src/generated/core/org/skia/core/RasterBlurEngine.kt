@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkColorType
 import org.skia.math.SkSize
 import undefined.Algorithm
 

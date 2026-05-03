@@ -8,6 +8,7 @@ import kotlin.Pair
 import kotlin.ULong
 import kotlin.Unit
 import kotlin.bitset
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPixmap
 import undefined.PlaneConfig
 

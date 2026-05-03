@@ -3,7 +3,6 @@ package org.skia.foundation
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.core.SkTextEncoding
 
 /**
  * C++ original:

@@ -8,7 +8,6 @@ import kotlin.UInt
 import org.skia.core.SkBlendMode
 import org.skia.core.SkBlender
 import org.skia.core.SkColorFilter
-import org.skia.core.SkColorSpace
 import org.skia.core.SkMaskFilter
 import org.skia.core.SkPathEffect
 import org.skia.core.SkShader

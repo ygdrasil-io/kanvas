@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Float
 import kotlin.Int
+import org.skia.foundation.SkColorType
 import org.skia.math.SkSize
 import undefined.Algorithm
 

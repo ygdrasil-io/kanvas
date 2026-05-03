@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Float
 import kotlin.Int
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp

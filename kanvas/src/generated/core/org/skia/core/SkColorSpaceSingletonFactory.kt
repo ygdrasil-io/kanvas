@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkColorSpace
 import org.skia.modules.SkcmsMatrix3x3
 import org.skia.modules.SkcmsTransferFunction
 

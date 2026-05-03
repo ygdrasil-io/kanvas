@@ -1,4 +1,3 @@
 package org.skia.foundation
 
-class UIntHash {
-}
+class UIntHash

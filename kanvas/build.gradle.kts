@@ -20,6 +20,7 @@ kotlin {
     jvmToolchain(25)
     sourceSets {
         val main by getting {
+            kotlin.srcDir("src/tmp")
             kotlin.srcDir("src/fix")
             kotlin.srcDir("src/generated/foundation")
             kotlin.srcDir("src/generated/maths")

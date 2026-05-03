@@ -7,8 +7,6 @@ import kotlin.Int
 import kotlin.String
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.core.SkFontParameters
-import org.skia.core.SkTextEncoding
 import org.skia.core.SkWeakRefCnt
 import org.skia.math.SkRect
 

@@ -6,7 +6,9 @@ import kotlin.CharArray
 import kotlin.Float
 import kotlin.Int
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkData
+import org.skia.foundation.SkDrawable
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageInfo
