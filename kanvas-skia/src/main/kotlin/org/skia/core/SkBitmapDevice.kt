@@ -22,6 +22,15 @@ import kotlin.math.floor as kFloor
 private fun floor(v: Float): Int = kFloor(v.toDouble()).toInt()
 private fun ceil(v: Float): Int = kCeil(v.toDouble()).toInt()
 
+/** Chord-error tolerance (in device-space pixels) for Bézier flattening. */
+private const val PATH_FLATNESS: Float = 0.25f
+/** Squared tolerance — used to compare against `cross² / chord²` without `sqrt`. */
+private const val PATH_FLATNESS_SQ: Float = PATH_FLATNESS * PATH_FLATNESS
+/** Recursion depth bound for adaptive subdivision (2^18 safety net). */
+private const val PATH_MAX_DEPTH: Int = 18
+/** Number of uniform-`t` segments for conic flattening. */
+private const val CONIC_STEPS: Int = 32
+
 /**
  * Skia's non-AA rect rasterization rule: pixel N is covered iff
  * `rect.{l,t} - 0.5 < N ≤ rect.{r,b} - 0.5` (top-exclusive, bottom-inclusive),
@@ -451,59 +460,195 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val dir: Int,  // +1 if y0<y1 originally, -1 if y0>y1
     )
 
+    /**
+     * Walk the path's verb stream, transform every point to device space
+     * via `(sx, sy, tx, ty)`, flatten Bézier curves into line segments,
+     * and emit one `Edge` per non-horizontal segment.
+     *
+     * Curves are flattened in device space to a fixed 0.25-pixel chord
+     * tolerance via recursive De Casteljau subdivision (adaptive). Conics
+     * fall back to 32-step parametric flattening — they are rare and the
+     * uniform stepping keeps the geometry simple.
+     */
     private fun buildEdges(
         path: SkPath, sx: Float, sy: Float, tx: Float, ty: Float,
     ): List<Edge> {
         val out = ArrayList<Edge>(path.verbs.size)
-        var px = 0f; var py = 0f          // current source-space point
-        var cx = 0f; var cy = 0f          // contour-start source-space point
+        var px = 0f; var py = 0f          // current device-space point
+        var cx = 0f; var cy = 0f          // contour-start device-space point
         var hasContour = false
-        var i = 0
+        var coordIdx = 0
+        var weightIdx = 0
         val coords = path.coords
+        val weights = path.conicWeights
         for (verb in path.verbs) {
             when (verb) {
                 SkPath.Verb.kMove -> {
                     if (hasContour) {
-                        // Implicit close: edge from last point back to contour start.
-                        addEdge(out, px, py, cx, cy, sx, sy, tx, ty)
+                        addEdge(out, px, py, cx, cy)  // implicit close
                     }
-                    val x = coords[i++]; val y = coords[i++]
+                    val x = coords[coordIdx++] * sx + tx
+                    val y = coords[coordIdx++] * sy + ty
                     px = x; py = y
                     cx = x; cy = y
                     hasContour = true
                 }
                 SkPath.Verb.kLine -> {
-                    val x = coords[i++]; val y = coords[i++]
-                    addEdge(out, px, py, x, y, sx, sy, tx, ty)
+                    val x = coords[coordIdx++] * sx + tx
+                    val y = coords[coordIdx++] * sy + ty
+                    addEdge(out, px, py, x, y)
                     px = x; py = y
+                }
+                SkPath.Verb.kQuad -> {
+                    val x1 = coords[coordIdx++] * sx + tx
+                    val y1 = coords[coordIdx++] * sy + ty
+                    val x2 = coords[coordIdx++] * sx + tx
+                    val y2 = coords[coordIdx++] * sy + ty
+                    flattenQuad(out, px, py, x1, y1, x2, y2, depth = 0)
+                    px = x2; py = y2
+                }
+                SkPath.Verb.kConic -> {
+                    val x1 = coords[coordIdx++] * sx + tx
+                    val y1 = coords[coordIdx++] * sy + ty
+                    val x2 = coords[coordIdx++] * sx + tx
+                    val y2 = coords[coordIdx++] * sy + ty
+                    val w = weights[weightIdx++]
+                    flattenConic(out, px, py, x1, y1, x2, y2, w)
+                    px = x2; py = y2
+                }
+                SkPath.Verb.kCubic -> {
+                    val x1 = coords[coordIdx++] * sx + tx
+                    val y1 = coords[coordIdx++] * sy + ty
+                    val x2 = coords[coordIdx++] * sx + tx
+                    val y2 = coords[coordIdx++] * sy + ty
+                    val x3 = coords[coordIdx++] * sx + tx
+                    val y3 = coords[coordIdx++] * sy + ty
+                    flattenCubic(out, px, py, x1, y1, x2, y2, x3, y3, depth = 0)
+                    px = x3; py = y3
                 }
                 SkPath.Verb.kClose -> {
                     if (hasContour) {
-                        addEdge(out, px, py, cx, cy, sx, sy, tx, ty)
-                        // After close, the next moveTo starts a new contour. The
-                        // current point conceptually returns to the contour start.
+                        addEdge(out, px, py, cx, cy)
                         px = cx; py = cy
                         hasContour = false
                     }
                 }
             }
         }
-        if (hasContour) {
-            addEdge(out, px, py, cx, cy, sx, sy, tx, ty)
-        }
+        if (hasContour) addEdge(out, px, py, cx, cy)
         return out
     }
 
+    /** Add a non-horizontal device-space line segment as an oriented `Edge`. */
     private fun addEdge(
         out: MutableList<Edge>,
-        x0: Float, y0: Float, x1: Float, y1: Float,
-        sx: Float, sy: Float, tx: Float, ty: Float,
+        dx0: Float, dy0: Float, dx1: Float, dy1: Float,
     ) {
-        val dx0 = x0 * sx + tx; val dy0 = y0 * sy + ty
-        val dx1 = x1 * sx + tx; val dy1 = y1 * sy + ty
-        if (dy0 == dy1) return  // horizontal: no scanline crossings
+        if (dy0 == dy1) return
         if (dy0 < dy1) out.add(Edge(dx0, dy0, dx1, dy1, +1))
         else out.add(Edge(dx1, dy1, dx0, dy0, -1))
+    }
+
+    /**
+     * Recursive De Casteljau subdivision of a quadratic Bézier. Stops
+     * when the control point is within [PATH_FLATNESS] of the chord, or
+     * when [PATH_MAX_DEPTH] subdivisions have been performed (safety
+     * bound — typically 4–6 levels suffice).
+     */
+    private fun flattenQuad(
+        out: MutableList<Edge>,
+        x0: Float, y0: Float,
+        x1: Float, y1: Float,
+        x2: Float, y2: Float,
+        depth: Int,
+    ) {
+        if (depth >= PATH_MAX_DEPTH || quadIsFlat(x0, y0, x1, y1, x2, y2)) {
+            addEdge(out, x0, y0, x2, y2)
+            return
+        }
+        val m01x = (x0 + x1) * 0.5f; val m01y = (y0 + y1) * 0.5f
+        val m12x = (x1 + x2) * 0.5f; val m12y = (y1 + y2) * 0.5f
+        val mx = (m01x + m12x) * 0.5f; val my = (m01y + m12y) * 0.5f
+        flattenQuad(out, x0, y0, m01x, m01y, mx, my, depth + 1)
+        flattenQuad(out, mx, my, m12x, m12y, x2, y2, depth + 1)
+    }
+
+    private fun quadIsFlat(
+        x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float,
+    ): Boolean {
+        // Twice the perpendicular distance × |chord| = |cross product|. Comparing
+        // squared values avoids a sqrt per call.
+        val dx = x2 - x0; val dy = y2 - y0
+        val chord2 = dx * dx + dy * dy
+        if (chord2 < 1e-12f) return true       // degenerate chord
+        val cross = (x1 - x0) * dy - (y1 - y0) * dx
+        // distance² = cross² / chord²; flat iff distance ≤ tolerance.
+        return (cross * cross) <= PATH_FLATNESS_SQ * chord2
+    }
+
+    /**
+     * Recursive De Casteljau subdivision of a cubic Bézier. Stops when
+     * both control points are within [PATH_FLATNESS] of the chord, or at
+     * the depth bound.
+     */
+    private fun flattenCubic(
+        out: MutableList<Edge>,
+        x0: Float, y0: Float,
+        x1: Float, y1: Float,
+        x2: Float, y2: Float,
+        x3: Float, y3: Float,
+        depth: Int,
+    ) {
+        if (depth >= PATH_MAX_DEPTH || cubicIsFlat(x0, y0, x1, y1, x2, y2, x3, y3)) {
+            addEdge(out, x0, y0, x3, y3)
+            return
+        }
+        val m01x = (x0 + x1) * 0.5f; val m01y = (y0 + y1) * 0.5f
+        val m12x = (x1 + x2) * 0.5f; val m12y = (y1 + y2) * 0.5f
+        val m23x = (x2 + x3) * 0.5f; val m23y = (y2 + y3) * 0.5f
+        val m012x = (m01x + m12x) * 0.5f; val m012y = (m01y + m12y) * 0.5f
+        val m123x = (m12x + m23x) * 0.5f; val m123y = (m12y + m23y) * 0.5f
+        val mx = (m012x + m123x) * 0.5f; val my = (m012y + m123y) * 0.5f
+        flattenCubic(out, x0, y0, m01x, m01y, m012x, m012y, mx, my, depth + 1)
+        flattenCubic(out, mx, my, m123x, m123y, m23x, m23y, x3, y3, depth + 1)
+    }
+
+    private fun cubicIsFlat(
+        x0: Float, y0: Float, x1: Float, y1: Float,
+        x2: Float, y2: Float, x3: Float, y3: Float,
+    ): Boolean {
+        val dx = x3 - x0; val dy = y3 - y0
+        val chord2 = dx * dx + dy * dy
+        if (chord2 < 1e-12f) return true
+        val c1 = (x1 - x0) * dy - (y1 - y0) * dx
+        val c2 = (x2 - x0) * dy - (y2 - y0) * dx
+        val maxCross2 = maxOf(c1 * c1, c2 * c2)
+        return maxCross2 <= PATH_FLATNESS_SQ * chord2
+    }
+
+    /**
+     * Conic flattening via uniform parametric stepping. Skia uses
+     * adaptive splitting based on tangent error; for the path GMs we
+     * touch in Phase 3b, 32 steps keep visible chord error well below
+     * 0.25 px even at radii of a few hundred pixels.
+     */
+    private fun flattenConic(
+        out: MutableList<Edge>,
+        x0: Float, y0: Float, x1: Float, y1: Float,
+        x2: Float, y2: Float, w: Float,
+    ) {
+        val n = CONIC_STEPS
+        var prevX = x0; var prevY = y0
+        for (k in 1..n) {
+            val t = k.toFloat() / n
+            val u = 1f - t
+            val numW = u * u + 2f * u * t * w + t * t
+            val numX = u * u * x0 + 2f * u * t * w * x1 + t * t * x2
+            val numY = u * u * y0 + 2f * u * t * w * y1 + t * t * y2
+            val px = numX / numW; val py = numY / numW
+            addEdge(out, prevX, prevY, px, py)
+            prevX = px; prevY = py
+        }
     }
 
     private fun scanFillPath(
