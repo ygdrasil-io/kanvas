@@ -185,9 +185,10 @@ Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsG
 - [ ] Faire dialoguer le rasterizer rect/path avec le shader (couleur source par pixel).
 
 ### Bitmap-shader
-- [ ] `SkImage` + `SkBitmap.makeShader()`.
-- [ ] `SkSamplingOptions` (nearest + bilinéaire).
-- [ ] `SkTileMode` (clamp / repeat / mirror).
+- [x] `SkImage` + `SkBitmap.asImage()` (basic immutable wrap, parallel-tracked, voir « Travaux parallèles »).
+- [x] `SkSamplingOptions` + `SkFilterMode` + `SkMipmapMode` (kNearest, kLinear ; mipmap reporté). Parallel-tracked.
+- [x] `SkTileMode` enum déclaré (kClamp / kRepeat / kMirror / kDecal) — clamp seulement utilisé par `drawImageRect` ; les autres arrivent avec `makeShader()`.
+- [ ] `SkBitmap.makeShader()` (vraie source par-pixel pour le rasterizer rect/path).
 
 ### Undefined
 - [ ] Résoudre `undefined.SkColor4f` → `data class SkColor4f(r,g,b,a: Float)` + `toSkColor(): Int`.
@@ -225,6 +226,19 @@ Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsG
 
 ---
 
+## Travaux parallèles (hors numérotation de phases)
+
+Pour réduire le chemin critique pendant que les phases « lourdes » (color-management, paths complets) avancent, on ouvre des slices indépendantes qui ne touchent pas les mêmes fichiers.
+
+### S3 — `drawImage` / `drawImageRect` axis-aligned
+- [x] Foundation : `SkImage`, `SkSamplingOptions`, `SkFilterMode`, `SkMipmapMode`, `SkTileMode`. Couleurs additionnelles (`SK_ColorYELLOW`, `CYAN`, `MAGENTA`, `GRAY`, `LTGRAY`, `DKGRAY`).
+- [x] `SkCanvas.drawImage(image, x, y, sampling, paint)` + `drawImageRect(image, src, dst, sampling, paint, constraint)` ; `SrcRectConstraint` enum (`kStrict` / `kFast`).
+- [x] `SkBitmapDevice.drawImageRect` : mapping inverse `dst → src` per-pixel, sampling **nearest** et **linear** (bilinéaire), clamp aux bords de l'image, modulation alpha par paint, composition via `blend()` existant.
+- [x] Hand-port `tests/DrawBitmapRect3.kt` (`3x3bitmaprect`) — **100.00%** à `tolerance=160`.
+- [ ] À suivre (follow-ups) : `BitmapRectRounding` (drawImage + scale CTM), `DrawBitmapRect2` (drawImage à origin + drawImageRect en grille), `BitmapPremulGM` (alpha non-opaques).
+
+---
+
 ## Explicitement reporté
 
 - [ ] **GPU** (`org.skia.gpu.*`, Ganesh, Graphite). Stripper les hooks GPU de la `GM` base class.
@@ -253,6 +267,7 @@ Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsG
 | 0     | 0        | Bootstrap module + harness | ✅ |
 | 1     | 2        | Rect non-AA, paint, color, device | ✅ |
 | 2     | 4        | Rect AA (coverage analytique axis-aligned) | ✅ |
+| S3    | +1       | `drawImageRect` axis-aligned (parallèle, +`DrawBitmapRect3`) | ✅ |
 | 3a    | 5        | SkPath line-only + scanline fill AA + scale CTM | ✅ |
 | 3b    | ~7       | Cubic Béziers + Path/Builder split | ⬜ |
 | 3c    | ~10      | Arcs + path stroker | ⬜ |
