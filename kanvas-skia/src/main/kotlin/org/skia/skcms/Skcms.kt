@@ -122,6 +122,95 @@ public fun skcmsMatrix3x3Concat(a: SkcmsMatrix3x3, b: SkcmsMatrix3x3): SkcmsMatr
 }
 
 /**
+ * Multiply 3x3 matrix by a 3-vector. Mirrors the local `mv_mul` helper at
+ * [skcms.cc:1817-1823](file:///Users/chaos/workspace/kanvas-forge/skia-main/modules/skcms/skcms.cc).
+ */
+public fun skcmsMv3Mul(m: SkcmsMatrix3x3, v: FloatArray): FloatArray {
+    require(v.size == 3) { "expected 3-vector, got ${v.size}" }
+    return FloatArray(3) { row ->
+        m.vals[row][0] * v[0] + m.vals[row][1] * v[1] + m.vals[row][2] * v[2]
+    }
+}
+
+/**
+ * Bradford chromatic adaptation matrix from white point `(wx, wy)` to D50.
+ *
+ * Output is the 3x3 transform that takes a `D_X` XYZ vector to its `D50`
+ * equivalent. Mirrors `skcms_AdaptToXYZD50` upstream (skcms.cc:1826-1865).
+ *
+ * Returns `null` if the white point is not in `[0, 1]`.
+ */
+public fun skcmsAdaptToXYZD50(wx: Float, wy: Float): SkcmsMatrix3x3? {
+    if (wx !in 0f..1f || wy !in 0f..1f) return null
+
+    // Assumes Y = 1.
+    val wXYZ = floatArrayOf(wx / wy, 1f, (1f - wx - wy) / wy)
+    val wXYZD50 = floatArrayOf(0.96422f, 1.0f, 0.82521f)
+
+    val xyzToLms = SkcmsMatrix3x3.of(
+         0.8951f,  0.2664f, -0.1614f,
+        -0.7502f,  1.7135f,  0.0367f,
+         0.0389f, -0.0685f,  1.0296f,
+    )
+    val lmsToXyz = SkcmsMatrix3x3.of(
+         0.9869929f, -0.1470543f, 0.1599627f,
+         0.4323053f,  0.5183603f, 0.0492912f,
+        -0.0085287f,  0.0400428f, 0.9684867f,
+    )
+
+    val srcCone = skcmsMv3Mul(xyzToLms, wXYZ)
+    val dstCone = skcmsMv3Mul(xyzToLms, wXYZD50)
+
+    val coneScale = SkcmsMatrix3x3.of(
+        dstCone[0] / srcCone[0], 0f, 0f,
+        0f, dstCone[1] / srcCone[1], 0f,
+        0f, 0f, dstCone[2] / srcCone[2],
+    )
+    val tmp = skcmsMatrix3x3Concat(coneScale, xyzToLms)
+    return skcmsMatrix3x3Concat(lmsToXyz, tmp)
+}
+
+/**
+ * Convert chromaticity primaries + white point to a 3x3 matrix mapping
+ * RGB to D50 XYZ. Mirrors `skcms_PrimariesToXYZD50` upstream
+ * (skcms.cc:1867-1909). Returns `null` on out-of-range inputs or singular
+ * primaries matrix.
+ */
+public fun skcmsPrimariesToXYZD50(
+    rx: Float, ry: Float,
+    gx: Float, gy: Float,
+    bx: Float, by: Float,
+    wx: Float, wy: Float,
+): SkcmsMatrix3x3? {
+    if (rx !in 0f..1f || ry !in 0f..1f ||
+        gx !in 0f..1f || gy !in 0f..1f ||
+        bx !in 0f..1f || by !in 0f..1f ||
+        wx !in 0f..1f || wy !in 0f..1f) return null
+
+    val primaries = SkcmsMatrix3x3.of(
+        rx, gx, bx,
+        ry, gy, by,
+        1f - rx - ry, 1f - gx - gy, 1f - bx - by,
+    )
+    val primariesInv = skcmsMatrix3x3Invert(primaries) ?: return null
+
+    val wXYZ = floatArrayOf(wx / wy, 1f, (1f - wx - wy) / wy)
+    val xyzScale = skcmsMv3Mul(primariesInv, wXYZ)
+
+    val toXYZ = skcmsMatrix3x3Concat(
+        primaries,
+        SkcmsMatrix3x3.of(
+            xyzScale[0], 0f, 0f,
+            0f, xyzScale[1], 0f,
+            0f, 0f, xyzScale[2],
+        ),
+    )
+
+    val dxToD50 = skcmsAdaptToXYZD50(wx, wy) ?: return null
+    return skcmsMatrix3x3Concat(dxToD50, toXYZ)
+}
+
+/**
  * Invert a 3x3 matrix in double precision then narrow to float. Mirrors
  * `skcms_Matrix3x3_invert` upstream — important to use doubles for the
  * intermediate determinant or wide-gamut profiles lose precision.
