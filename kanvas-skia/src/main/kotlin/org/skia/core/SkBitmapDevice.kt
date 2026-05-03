@@ -10,9 +10,11 @@ import org.skia.foundation.SkColorSetARGB
 import org.skia.foundation.SkPaint
 import org.skia.math.SkIRect
 import org.skia.math.SkRect
+import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
 
 private fun floor(v: Float): Int = kFloor(v.toDouble()).toInt()
+private fun ceil(v: Float): Int = kCeil(v.toDouble()).toInt()
 
 /**
  * Skia's non-AA rect rasterization rule: pixel N is covered iff
@@ -23,10 +25,12 @@ private fun floor(v: Float): Int = kFloor(v.toDouble()).toInt()
 private fun pixelEdge(c: Float): Int = kFloor(c.toDouble() + 0.5).toInt()
 
 /**
- * CPU raster device. Phase 1: non-AA rect fill and stroke, SrcOver compositing.
- * Receives device-space coordinates from `SkCanvas`; the canvas owns the matrix
- * and clip stacks and is responsible for transforming and clipping into the
- * `clip` rect passed here.
+ * CPU raster device. Phase 1: non-AA rect fill and stroke. Phase 2: adds
+ * analytic AA coverage for axis-aligned rects (`paint.isAntiAlias = true`).
+ *
+ * Receives device-space coordinates from `SkCanvas`; the canvas owns the
+ * matrix and clip stacks and is responsible for transforming and clipping
+ * into the `clip` rect passed here.
  */
 public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
@@ -36,6 +40,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     public fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
 
     public fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+        if (paint.isAntiAlias) drawRectAA(rect, clip, paint) else drawRectNonAA(rect, clip, paint)
+    }
+
+    // --------------------------------------------------------------------
+    // Non-AA path (Phase 1) — unchanged.
+    // --------------------------------------------------------------------
+
+    private fun drawRectNonAA(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         when (paint.style) {
             SkPaint.Style.kFill_Style -> fillRect(rect, clip, paint.color)
             SkPaint.Style.kStroke_Style -> strokeRect(rect, paint.strokeWidth, clip, paint.color)
@@ -100,6 +112,114 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             }
         }
     }
+
+    // --------------------------------------------------------------------
+    // AA path (Phase 2) — analytic axis-aligned coverage.
+    //
+    // For an axis-aligned rect, per-pixel coverage decomposes into the
+    // product of 1-D overlaps along each axis. This is *exact* (no
+    // supersampling artefact) and matches Skia's `SkScan::AntiFillRect`
+    // closely on integer/fractional axis-aligned boundaries.
+    // --------------------------------------------------------------------
+
+    private fun drawRectAA(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+        when (paint.style) {
+            SkPaint.Style.kFill_Style -> fillRectAA(rect, clip, paint.color)
+            SkPaint.Style.kStroke_Style -> strokeRectAA(rect, paint.strokeWidth, clip, paint.color)
+            SkPaint.Style.kStrokeAndFill_Style -> {
+                fillRectAA(rect, clip, paint.color)
+                strokeRectAA(rect, paint.strokeWidth, clip, paint.color)
+            }
+        }
+    }
+
+    private fun fillRectAA(rect: SkRect, clip: SkIRect, color: SkColor) {
+        if (rect.right <= rect.left || rect.bottom <= rect.top) return
+        val baseA = SkColorGetA(color)
+        if (baseA == 0) return
+        val rgb = color and 0x00FFFFFF
+        val ix0 = floor(rect.left).coerceAtLeast(clip.left)
+        val iy0 = floor(rect.top).coerceAtLeast(clip.top)
+        val ix1 = ceil(rect.right).coerceAtMost(clip.right)
+        val iy1 = ceil(rect.bottom).coerceAtMost(clip.bottom)
+        for (y in iy0 until iy1) {
+            val cy = covAxis(rect.top, rect.bottom, y)
+            if (cy <= 0f) continue
+            for (x in ix0 until ix1) {
+                val cx = covAxis(rect.left, rect.right, x)
+                if (cx <= 0f) continue
+                val effA = scaleAlpha(baseA, cx * cy)
+                if (effA == 0) continue
+                blend(x, y, (effA shl 24) or rgb)
+            }
+        }
+    }
+
+    /**
+     * AA stroke = AA fill of (outer rect minus inner rect). Hairline
+     * (`strokeWidth <= 0`) renders as a 1-pixel-wide AA frame — for
+     * axis-aligned rects this lights up the same pixel set as Skia's
+     * `SkScan::AntiHairLineRgn` with matching coverage at half-integer edges.
+     */
+    private fun strokeRectAA(rect: SkRect, strokeWidth: Float, clip: SkIRect, color: SkColor) {
+        val w = if (strokeWidth <= 0f) 1f else strokeWidth
+        val half = w * 0.5f
+        val ol = rect.left - half
+        val ot = rect.top - half
+        val or = rect.right + half
+        val ob = rect.bottom + half
+        val il = rect.left + half
+        val it = rect.top + half
+        val ir = rect.right - half
+        val ib = rect.bottom - half
+        val innerEmpty = ir <= il || ib <= it
+        if (or <= ol || ob <= ot) return
+        val baseA = SkColorGetA(color)
+        if (baseA == 0) return
+        val rgb = color and 0x00FFFFFF
+        val ix0 = floor(ol).coerceAtLeast(clip.left)
+        val iy0 = floor(ot).coerceAtLeast(clip.top)
+        val ix1 = ceil(or).coerceAtMost(clip.right)
+        val iy1 = ceil(ob).coerceAtMost(clip.bottom)
+        for (y in iy0 until iy1) {
+            val outerCY = covAxis(ot, ob, y)
+            if (outerCY <= 0f) continue
+            val innerCY = if (innerEmpty) 0f else covAxis(it, ib, y)
+            for (x in ix0 until ix1) {
+                val outerCX = covAxis(ol, or, x)
+                if (outerCX <= 0f) continue
+                val innerCX = if (innerEmpty) 0f else covAxis(il, ir, x)
+                val cov = outerCX * outerCY - innerCX * innerCY
+                if (cov <= 0f) continue
+                val effA = scaleAlpha(baseA, cov)
+                if (effA == 0) continue
+                blend(x, y, (effA shl 24) or rgb)
+            }
+        }
+    }
+
+    /** Overlap in pixels between `[lo, hi)` and the unit cell `[pixel, pixel+1)`, clamped to `[0, 1]`. */
+    private fun covAxis(lo: Float, hi: Float, pixel: Int): Float {
+        val cov = minOf(hi, (pixel + 1).toFloat()) - maxOf(lo, pixel.toFloat())
+        return when {
+            cov >= 1f -> 1f
+            cov <= 0f -> 0f
+            else -> cov
+        }
+    }
+
+    private fun scaleAlpha(baseA: Int, coverage: Float): Int {
+        val a = (baseA * coverage + 0.5f).toInt()
+        return when {
+            a < 0 -> 0
+            a > 255 -> 255
+            else -> a
+        }
+    }
+
+    // --------------------------------------------------------------------
+    // Hairline / span helpers (Phase 1).
+    // --------------------------------------------------------------------
 
     private fun drawHLine(x0: Int, x1: Int, y: Int, clip: SkIRect, color: SkColor) {
         if (y < clip.top || y >= clip.bottom) return

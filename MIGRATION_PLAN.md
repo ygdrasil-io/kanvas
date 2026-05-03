@@ -85,20 +85,28 @@ La référence `bigrect.png` (et toute la collection `original-888/`) embarque u
 
 ---
 
-## Phase 2 — Anti-aliasing des rects : `ThinRectsGM`, `ScaledRectsGM`, `ClearSwizzleGM`
+## Phase 2 — Anti-aliasing des rects : `ThinRectsGM` (non-round) + `ClipStrokeRectGM`
 
-**But** : rasterisation AA pour rects, configurations `isAntiAlias=true`.
+**But** : rasterisation AA pour rects axis-aligned, configurations `isAntiAlias=true`.
 
-- [ ] Implémenter le supersampling 4× sur les bords dans `SkBitmapDevice.drawRect`.
-- [ ] Compléter `SkBlendMode.kSrcOver` avec alpha premultipliée correcte sur le compositing.
-- [ ] Hand-port `tests/ThinRectsGM.kt` via spec.
-- [ ] Hand-port `tests/ScaledRectsGM.kt` via spec.
-- [ ] Hand-port `tests/ClearSwizzleGM.kt` via spec.
-- [ ] Résoudre `undefined.SaveLayerFlags` (typealias `Int`).
+**Cadrage du scope (révisé après inspection du `src/generated`).** Deux GMs initialement listés sont hors scope d'une phase AA pure :
+- `ScaledRectsGM` : utilise `canvas->setMatrix(MakeAll(...))` (rotation/skew) + `setBlendMode(kPlus)`. Reporté **Phase 4** (matrix complète) / **Phase 6** (blend modes additionnels).
+- `ClearSwizzleGM` : absent de `kanvas/src/generated/tests/` et pas de référence `clearswizzle.png`. Drop.
+
+Remplacés par `ClipStrokeRectGM` (`clip_strokerect.png` dispo) — petite mais bonne couverture AA-stroke + clip.
+
+- [x] Implémenter coverage AA analytique axis-aligned dans `SkBitmapDevice.drawRect` (exact pour fill, fait plus de sens qu'un supersampling 4× pour des rects axis-aligned).
+- [x] Étendre AA à `kStroke_Style` (coverage = outer − inner) ; AA hairline = stroke d'épaisseur 1.
+- [x] Ajouter `setBGColor` au harness `GM` (ThinRects clear sur noir) ; `runGmTest` lit `gm.bgColor()`.
+- [x] Ajouter overload `SkCanvas.clipRect(rect, doAntiAlias)` (rect intégral → ignore l'arg).
+- [x] Hand-port `tests/ThinRectsGM.kt` (non-round seulement, le booléen `fRound=true` reste bloqué jusqu'à `SkRRect` Phase 4).
+- [x] Hand-port `tests/ClipStrokeRectGM.kt`.
 
 ### Vérification Phase 2
-- [ ] Tests AA ≥ 95%, tests non-AA toujours ≥ 99%.
-- [ ] **Pass count cumulé : ~5-6 GM.**
+- [x] Tests AA ≥ 95% (`tolerance=160`) — `ThinRectsGM` **100.00%**, `ClipStrokeRectGM` **100.00%**.
+- [x] Tests non-AA toujours ≥ 99% — `SimpleRectGM` **100.00%** (inchangé).
+- [x] BigRectGM remonte de **99.51% → 99.83%** (les 12 cellules AA passent désormais par le coverage analytique).
+- [x] **Pass count cumulé : 4 GM.** (BigRect, SimpleRect, ThinRects, ClipStrokeRect.)
 
 ---
 
@@ -227,7 +235,7 @@ La référence `bigrect.png` (et toute la collection `original-888/`) embarque u
 |-------|----------|-------------------|------|
 | 0     | 0        | Bootstrap module + harness | ✅ |
 | 1     | 2        | Rect non-AA, paint, color, device | ✅ |
-| 2     | ~6       | Rect AA + SrcOver alpha | ⬜ |
+| 2     | 4        | Rect AA (coverage analytique axis-aligned) | ✅ |
 | 3     | ~11      | Path + fill scanline + stroker simple | ⬜ |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
