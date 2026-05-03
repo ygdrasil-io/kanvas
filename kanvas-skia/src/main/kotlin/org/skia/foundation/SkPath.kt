@@ -1,122 +1,95 @@
 package org.skia.foundation
 
+import org.skia.math.SkRect
 import org.skia.math.SkScalar
 
 /**
- * Mutable path. Phase 3a covers a polygon-only subset for the rasterizer
- * (`moveTo`, `lineTo`, `close`); higher-order verbs (`quadTo` here, `cubicTo`
- * and `conicTo` in later slices) are **flattened on the fly** into line
- * segments by the path builder, so the persisted verb stream stays
- * line-only and `SkBitmapDevice.drawPath` does not yet need to know about
- * Béziers.
+ * Immutable path. Built with [SkPathBuilder] and produced via
+ * [SkPathBuilder.detach] or via the static factories below
+ * (`Rect` / `Circle` / `Oval` / `Line` / `Polygon`), which mirror
+ * Skia 4.x.
  *
- * The verb stream uses a parallel-array layout: `verbs[i]` records the verb
- * kind, and successive `(x, y)` pairs consumed from `coords` reconstruct
- * the geometry — same structural model as upstream Skia.
+ * Storage layout — mirrors upstream Skia, parallel arrays:
+ *   - `verbs[i]` records the verb kind.
+ *   - `coords` is a flat sequence of `(x, y)` pairs, consumed
+ *     left-to-right as verbs are walked. The number of points each
+ *     verb consumes is encoded in [Verb.pointCount].
+ *   - `conicWeights[j]` carries the weight of the j-th `kConic`
+ *     verb, in occurrence order.
+ *
+ * Walk pattern (used by `SkBitmapDevice.buildEdges`):
+ * ```
+ * var coordIdx = 0; var weightIdx = 0
+ * for (verb in path.verbs) {
+ *     when (verb) {
+ *         kMove  -> { px = coords[coordIdx++]; py = coords[coordIdx++] }
+ *         kLine  -> { ...; px = coords[coordIdx++]; py = coords[coordIdx++] }
+ *         kQuad  -> { c1; end (4 floats consumed) }
+ *         kConic -> { c1; end (4 floats); w = weights[weightIdx++] }
+ *         kCubic -> { c1; c2; end (6 floats consumed) }
+ *         kClose -> { /* 0 points */ }
+ *     }
+ * }
+ * ```
  */
-public class SkPath public constructor() {
-    public enum class Verb {
-        kMove,  // 1 point
-        kLine,  // 1 point
-        kClose, // 0 points
-    }
-
-    internal val verbs: MutableList<Verb> = mutableListOf()
-    /** Flat (x, y) pairs. */
-    internal val coords: MutableList<SkScalar> = mutableListOf()
-
-    /** Current pen position — used by curve verbs that need a start point. */
-    private var lastX: SkScalar = 0f
-    private var lastY: SkScalar = 0f
-    /** Start of the current contour — `close` rewinds the pen here. */
-    private var contourX: SkScalar = 0f
-    private var contourY: SkScalar = 0f
-
-    public var fillType: SkPathFillType = SkPathFillType.kWinding
-
-    public fun moveTo(x: SkScalar, y: SkScalar): SkPath = apply {
-        verbs.add(Verb.kMove); coords.add(x); coords.add(y)
-        lastX = x; lastY = y
-        contourX = x; contourY = y
-    }
-
-    public fun lineTo(x: SkScalar, y: SkScalar): SkPath = apply {
-        verbs.add(Verb.kLine); coords.add(x); coords.add(y)
-        lastX = x; lastY = y
-    }
-
-    /**
-     * Quadratic Bézier from the current point through control `(x1, y1)`
-     * to `(x2, y2)`, flattened into `segments` line segments. The default
-     * of 16 keeps sub-pixel error well under 0.1 px for the curve scales
-     * used by the path GMs (radii up to a few hundred pixels). Adaptive
-     * flattening, with proper tangent-error bounds, can be revisited if a
-     * GM exposes visible facetting.
-     */
-    public fun quadTo(
-        x1: SkScalar, y1: SkScalar, x2: SkScalar, y2: SkScalar,
-        segments: Int = 16,
-    ): SkPath = apply {
-        val px = lastX
-        val py = lastY
-        for (i in 1..segments) {
-            val t = i.toFloat() / segments
-            val u = 1f - t
-            val nx = u * u * px + 2f * u * t * x1 + t * t * x2
-            val ny = u * u * py + 2f * u * t * y1 + t * t * y2
-            lineTo(nx, ny)
-        }
-    }
-
-    public fun close(): SkPath = apply {
-        verbs.add(Verb.kClose)
-        lastX = contourX; lastY = contourY
-    }
-
-    /**
-     * Append a polygon contour (one `moveTo` + `N-1` `lineTo`s, optionally
-     * followed by `close`). Mirrors `SkPathBuilder::addPolygon`. Multiple
-     * `addPolygon` calls produce a single path with several sub-contours,
-     * which is exactly what `SkBitmapDevice.drawPath` expects to fill.
-     */
-    public fun addPolygon(
-        points: Array<Pair<SkScalar, SkScalar>>,
-        isClosed: Boolean,
-    ): SkPath = apply {
-        if (points.isEmpty()) return@apply
-        moveTo(points[0].first, points[0].second)
-        for (i in 1 until points.size) lineTo(points[i].first, points[i].second)
-        if (isClosed) close()
+public class SkPath internal constructor(
+    internal val verbs: Array<Verb>,
+    internal val coords: FloatArray,
+    internal val conicWeights: FloatArray,
+    public val fillType: SkPathFillType,
+) {
+    public enum class Verb(public val pointCount: Int) {
+        kMove(1),
+        kLine(1),
+        kQuad(2),    // control + end
+        kConic(2),   // control + end (with weight in conicWeights)
+        kCubic(3),   // 2 controls + end
+        kClose(0),
     }
 
     public fun isEmpty(): Boolean = verbs.isEmpty()
 
-    public fun setFillType(t: SkPathFillType): SkPath = apply { fillType = t }
-
     public companion object {
+        /** Closed rectangular contour. */
+        public fun Rect(
+            rect: SkRect,
+            dir: SkPathDirection = SkPathDirection.kCW,
+        ): SkPath = SkPathBuilder().addRect(rect, dir).detach()
+
+        /** Closed circular contour, axis-aligned. */
+        public fun Circle(
+            cx: SkScalar, cy: SkScalar, r: SkScalar,
+            dir: SkPathDirection = SkPathDirection.kCW,
+        ): SkPath = SkPathBuilder().addCircle(cx, cy, r, dir).detach()
+
+        /** Closed elliptical contour, axis-aligned. */
+        public fun Oval(
+            rect: SkRect,
+            dir: SkPathDirection = SkPathDirection.kCW,
+        ): SkPath = SkPathBuilder().addOval(rect, dir).detach()
+
+        /** Single line segment from `a` to `b`, no close. */
+        public fun Line(
+            a: Pair<SkScalar, SkScalar>,
+            b: Pair<SkScalar, SkScalar>,
+        ): SkPath = SkPathBuilder()
+            .moveTo(a.first, a.second)
+            .lineTo(b.first, b.second)
+            .detach()
+
         /**
-         * Build a polygon path: a single contour through `points`. If
-         * `isClosed` is true an explicit `close` verb is emitted; otherwise
-         * the rasterizer treats the contour as implicitly closed via the
-         * standard winding/even-odd fill semantics. Mirrors Skia's
-         * `SkPath::Polygon`.
-         *
-         * The `fillType` argument lets callers select winding vs even-odd
-         * up-front; `isVolatile` is the upstream perf hint and is ignored.
+         * Polygon contour: a single contour through `points`. If
+         * `isClosed` is true an explicit `close` verb is emitted at the
+         * end. Mirrors Skia's `SkPath::Polygon`.
          */
         public fun Polygon(
             points: Array<Pair<SkScalar, SkScalar>>,
             isClosed: Boolean,
             fillType: SkPathFillType = SkPathFillType.kWinding,
             @Suppress("UNUSED_PARAMETER") isVolatile: Boolean = false,
-        ): SkPath {
-            val p = SkPath()
-            p.fillType = fillType
-            if (points.isEmpty()) return p
-            p.moveTo(points[0].first, points[0].second)
-            for (i in 1 until points.size) p.lineTo(points[i].first, points[i].second)
-            if (isClosed) p.close()
-            return p
-        }
+        ): SkPath = SkPathBuilder()
+            .setFillType(fillType)
+            .addPolygon(points, isClosed)
+            .detach()
     }
 }
