@@ -1,7 +1,6 @@
 package org.skia.testing
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.tests.GM
 import java.awt.image.BufferedImage
@@ -15,12 +14,13 @@ public object TestUtils {
 
     /**
      * Render a GM into a freshly allocated bitmap of the GM's preferred size,
-     * filled white before `onDraw` runs. Mirrors Skia's `gm.cpp` test runner.
+     * filled with `gm.bgColor()` before `onDraw` runs. Mirrors Skia's
+     * `gm.cpp` test runner (which clears to `getBGColor()` between draws).
      */
     public fun runGmTest(gm: GM): SkBitmap {
         val size = gm.size()
         val bitmap = SkBitmap(size.width, size.height)
-        bitmap.eraseColor(SK_ColorWHITE)
+        bitmap.eraseColor(gm.bgColor())
         val canvas = SkCanvas(bitmap)
         gm.draw(canvas)
         return bitmap

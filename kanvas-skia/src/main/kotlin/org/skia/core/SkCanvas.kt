@@ -56,6 +56,17 @@ public open class SkCanvas(public val device: SkBitmapDevice) {
         )
     }
 
+    /**
+     * Mirrors Skia's `SkCanvas::clipRect(rect, doAntiAlias)`. The Phase 2
+     * targets (`ClipStrokeRectGM`, `clipped_thinrect`) only clip with
+     * integer-aligned rects, where AA-clip and pixel-aligned clip produce
+     * identical pixel-aligned output. A true AA-clip would require a
+     * per-pixel coverage mask in `SkBitmapDevice`; deferred to later phases.
+     */
+    public fun clipRect(rect: SkRect, doAntiAlias: Boolean) {
+        clipRect(rect)
+    }
+
     public fun drawRect(rect: SkRect, paint: SkPaint) {
         val s = top
         val devRect = SkRect.MakeLTRB(
