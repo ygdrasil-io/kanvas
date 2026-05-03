@@ -110,29 +110,46 @@ Remplacés par `ClipStrokeRectGM` (`clip_strokerect.png` dispo) — petite mais 
 
 ---
 
-## Phase 3 — Paths, fills, strokes simples : `ConcavePathsGM`, `ConvexPathsGM`, `CubicPathsGM`, `AddArcGM`, `ArcToGM`
+## Phase 3 — Paths, fills, strokes simples
 
-**But** : porter `SkPath` + scanline fill + stroker basique.
+**But initial** : porter `SkPath` + scanline fill + stroker basique pour `ConvexPathsGM`, `ConcavePathsGM`, `CubicPathsGM`, `AddArcGM`, `ArcToGM`.
 
-### Path
-- [ ] Hand-port [kanvas/src/main/kotlin/core/Path.kt](kanvas/src/main/kotlin/core/Path.kt) → `org.skia.foundation.SkPath`.
-- [ ] Scinder en `SkPath` / `SkPathBuilder` / `SkPathFillType`.
-- [ ] Résoudre `undefined.SkPathFillType` (enum `kWinding`, `kEvenOdd`, `kInverseWinding`, `kInverseEvenOdd`).
+**Cadrage révisé après inspection des `.cpp` upstream.** Le périmètre des 5 GMs ciblés est très hétérogène :
 
-### Rasterizer
-- [ ] Implémenter scanline fill (even-odd / non-zero) dans `SkBitmapDevice.drawPath`.
-- [ ] Stroker trapézoïdal : `kButt_Cap` + `kMiter_Join` uniquement (round/bevel reportés).
+| GM                | Verbs requis        | CTM requis                  | Slice cible    |
+|-------------------|---------------------|-----------------------------|----------------|
+| ConcavePathsGM    | line + quad         | translate + 1× `scale`      | **3a** ✅       |
+| ConvexPathsGM     | line + quad + cubic | translate + `scale` + `setMatrix` | 3b/3c    |
+| CubicPathsGM      | cubic-heavy         | (à valider)                 | 3c             |
+| AddArcGM          | addArc              | translate + `scale` + `rotate` | Phase 4 (rotate) |
+| ArcToGM           | arcTo (5 variantes) | possible scale              | 3c             |
 
-### Tests GM
-- [ ] Hand-port `tests/ConvexPathsGM.kt`.
-- [ ] Hand-port `tests/ConcavePathsGM.kt`.
-- [ ] Hand-port `tests/CubicPathsGM.kt`.
-- [ ] Hand-port `tests/AddArcGM.kt`.
-- [ ] Hand-port `tests/ArcToGM.kt`.
+Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsGM` est l'unique cible de **Phase 3a**.
 
-### Vérification Phase 3
-- [ ] Tests path ≥ 90%.
-- [ ] **Pass count cumulé : ~11 GM.**
+### Phase 3a — `SkPath` line-only + scanline fill AA + scale CTM + `ConcavePathsGM` ✅
+
+- [x] Créer `org.skia.foundation.SkPath` (mutable, verbs `kMove/kLine/kClose`) + `SkPathFillType` enum (`kWinding`, `kEvenOdd`, +inverse stub) + factory `Polygon` + `addPolygon`.
+- [x] `quadTo` flatten naïf (16 segments) — la pipeline reste line-only, `SkBitmapDevice` n'a pas encore besoin de connaître les Béziers. Cubic/conic en 3b/3c.
+- [x] Étendre `SkCanvas` : CTM `(sx, sy, tx, ty)` (translate+scale, pas encore rotate/skew), `scale()`, `drawPath()`.
+- [x] Implémenter `SkBitmapDevice.drawPath` (fill seulement, AA via 4×4 supersampling scanline). Walk crossings triées, winding/even-odd, accumulation de coverage par pixel.
+- [x] Hand-port `tests/ConcavePathsGM.kt` (29 sous-tests).
+
+#### Vérification Phase 3a
+- [x] `ConcavePathsGM` ≥ 90% (tolerance=160) — **résultat : 100.00%**.
+- [x] Pas de régression sur Phase 0/1/2 (BigRect 99.83%, SimpleRect / ThinRects / ClipStrokeRect 100%).
+- [x] **Pass count cumulé : 5 GM.**
+
+### Phase 3b — cubics, splitter `SkPath`/`SkPathBuilder`, `CubicPathGM` (TBD)
+
+- [ ] Ajouter `cubicTo` (flatten adaptatif, ou subdivision récursive) à `SkPath`.
+- [ ] Optionnel : scinder `SkPath` (immutable, returned by `detach()`) / `SkPathBuilder` (mutable, fluent).
+- [ ] Hand-port `tests/CubicPathGM.kt` ou un GM cubic de scope similaire.
+
+### Phase 3c — arcs, stroker, `ArcToGM`, `ConvexPathsGM`, etc.
+
+- [ ] `arcTo` + `addArc` (conversion en cubic Béziers, max-error bounded).
+- [ ] Stroker path → fill path (`kButt_Cap` + `kMiter_Join` only).
+- [ ] Hand-port `tests/ArcToGM.kt`, `tests/ConvexPathsGM.kt`.
 
 ---
 
@@ -236,7 +253,9 @@ Remplacés par `ClipStrokeRectGM` (`clip_strokerect.png` dispo) — petite mais 
 | 0     | 0        | Bootstrap module + harness | ✅ |
 | 1     | 2        | Rect non-AA, paint, color, device | ✅ |
 | 2     | 4        | Rect AA (coverage analytique axis-aligned) | ✅ |
-| 3     | ~11      | Path + fill scanline + stroker simple | ⬜ |
+| 3a    | 5        | SkPath line-only + scanline fill AA + scale CTM | ✅ |
+| 3b    | ~7       | Cubic Béziers + Path/Builder split | ⬜ |
+| 3c    | ~10      | Arcs + path stroker | ⬜ |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
