@@ -1,18 +1,15 @@
 package org.skia.foundation
 
 import org.skia.skcms.SkcmsMatrix3x3
+import org.skia.skcms.skcmsPrimariesToXYZD50
 
 /**
  * Bit-compatible port of `SkColorSpacePrimaries`
  * ([include/core/SkColorSpace.h:25-40](file:///Users/chaos/workspace/kanvas-forge/skia-main/include/core/SkColorSpace.h)).
  *
  * Describes a color gamut by its three primary chromaticities (xy) plus a
- * white point (xy). Used as input to `skcms_PrimariesToXYZD50` to derive
- * the 3x3 matrix Skia stores in `SkNamedGamut`.
- *
- * The `toXYZD50` method is added in Phase E of
- * MIGRATION_PLAN_COLORSPACE_PORT.md (it depends on `skcms_PrimariesToXYZD50`
- * and `skcms_AdaptToXYZD50`, both Phase E ports).
+ * white point (xy). [toXYZD50] derives the 3x3 matrix Skia stores in
+ * `SkNamedGamut`.
  */
 public data class SkColorSpacePrimaries(
     public val fRX: Float,
@@ -25,11 +22,12 @@ public data class SkColorSpacePrimaries(
     public val fWY: Float,
 ) {
     /**
-     * Phase E will wire this to `skcms_PrimariesToXYZD50`. Until then,
-     * unsupported.
+     * Convert these primaries + white point into a `toXYZD50` matrix.
+     * Returns `null` if any input is out of `[0, 1]` or the primaries
+     * matrix is singular. Mirrors upstream
+     * `SkColorSpacePrimaries::toXYZD50` (`SkColorSpace.cpp:124-126`),
+     * which delegates to `skcms_PrimariesToXYZD50`.
      */
     public fun toXYZD50(): SkcmsMatrix3x3? =
-        throw NotImplementedError(
-            "SkColorSpacePrimaries.toXYZD50() requires skcms_PrimariesToXYZD50 (Phase E)"
-        )
+        skcmsPrimariesToXYZD50(fRX, fRY, fGX, fGY, fBX, fBY, fWX, fWY)
 }

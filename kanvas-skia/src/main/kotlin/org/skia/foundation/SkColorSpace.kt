@@ -106,6 +106,22 @@ public class SkColorSpace private constructor(
         public fun makeSRGBLinear(): SkColorSpace = sRGBLinearSingleton
 
         /**
+         * Create an `SkColorSpace` from CICP code points (ITU-T H.273
+         * tables 2 and 3). Returns `null` if either id is not in the
+         * supported tables, or if `MakeRGB` rejects the resulting
+         * combination. Mirrors upstream
+         * `SkColorSpace::MakeCICP` (`SkColorSpace.cpp:161-174`).
+         */
+        public fun makeCICP(
+            colorPrimaries: SkNamedPrimaries.CicpId,
+            transferCharacteristics: SkNamedTransferFn.CicpId,
+        ): SkColorSpace? {
+            val trfn = SkNamedTransferFn.getCicp(transferCharacteristics) ?: return null
+            val toXYZD50 = SkNamedPrimaries.getCicp(colorPrimaries) ?: return null
+            return makeRGB(trfn, toXYZD50)
+        }
+
+        /**
          * `MakeRGB(tf, mat)`. Returns `null` if `tf` is not a valid sRGBish
          * transfer function. Snaps quasi-standard inputs to the matching
          * `SkNamedTransferFn::k*` so `gammaCloseToSRGB()` (memcmp-style
