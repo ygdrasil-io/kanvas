@@ -11,6 +11,8 @@ import org.skia.math.SkIRect
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import org.skia.math.SkScalarRoundToInt
+import kotlin.math.ceil as kCeil
+import kotlin.math.floor as kFloor
 
 /**
  * Phase 1+2 canvas with Phase 3 extensions. The CTM now supports
@@ -23,34 +25,73 @@ import org.skia.math.SkScalarRoundToInt
  * sequential calls compose like `M_new = M_old @ Local` — matching Skia's
  * `SkCanvas::translate` / `SkCanvas::scale`.
  */
-public open class SkCanvas(public val device: SkBitmapDevice) {
+public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     public constructor(bitmap: SkBitmap) : this(SkBitmapDevice(bitmap))
 
+    /** The root (backing) device. Layers push their own devices on the stack. */
+    public val device: SkBitmapDevice = rootDevice
+
     public val bitmap: SkBitmap get() = device.bitmap
 
+    /**
+     * One stack entry per `save` / `saveLayer`. Carries the active CTM
+     * (translate + scale) and clip in **current device coordinates**, plus
+     * the device that draws land in. For a non-layer `save` the device is
+     * the same as the parent state's; for `saveLayer` it's a fresh
+     * offscreen device whose `(0, 0)` maps to `(layerOriginX, layerOriginY)`
+     * in the parent state's device.
+     */
     private data class State(
         var sx: SkScalar,
         var sy: SkScalar,
         var tx: SkScalar,
         var ty: SkScalar,
         var clip: SkIRect,
+        var device: SkBitmapDevice,
+        /** Non-null iff this state was opened by `saveLayer`. */
+        var layer: Layer? = null,
+    )
+
+    /**
+     * Bookkeeping for an active offscreen layer. On `restore` of the
+     * matching state, the layer's bitmap is composited back into
+     * [parentDevice] at `(originX, originY)` using [paint] (alpha and
+     * SrcOver — full blend modes are out of scope).
+     */
+    private data class Layer(
+        val parentDevice: SkBitmapDevice,
+        val originX: Int,
+        val originY: Int,
+        val paint: SkPaint?,
     )
 
     private val stack: ArrayDeque<State> = ArrayDeque<State>().apply {
-        addLast(State(1f, 1f, 0f, 0f, device.deviceClipBounds()))
+        addLast(State(1f, 1f, 0f, 0f, rootDevice.deviceClipBounds(), rootDevice))
     }
 
     private val top: State get() = stack.last()
 
     public fun save(): Int {
         val s = top
-        stack.addLast(State(s.sx, s.sy, s.tx, s.ty, s.clip.copy()))
+        stack.addLast(State(s.sx, s.sy, s.tx, s.ty, s.clip.copy(), s.device))
         return stack.size - 2
     }
 
     public fun restore() {
-        if (stack.size > 1) stack.removeLast()
+        if (stack.size <= 1) return
+        val popped = stack.removeLast()
+        val layer = popped.layer ?: return
+        // Composite the layer's bitmap back into the parent device using the
+        // layer's paint (color modulates alpha, SrcOver is the only blend
+        // mode in scope). The parent state is now `top`.
+        layer.parentDevice.compositeFrom(
+            popped.device,
+            layer.originX,
+            layer.originY,
+            top.clip,
+            layer.paint,
+        )
     }
 
     public fun translate(dx: SkScalar, dy: SkScalar) {
@@ -97,7 +138,7 @@ public open class SkCanvas(public val device: SkBitmapDevice) {
         val r = rect.right * s.sx + s.tx
         val b = rect.bottom * s.sy + s.ty
         val devRect = SkRect.MakeLTRB(minOf(l, r), minOf(t, b), maxOf(l, r), maxOf(t, b))
-        device.drawRect(devRect, s.clip, paint)
+        s.device.drawRect(devRect, s.clip, paint)
     }
 
     /**
@@ -109,7 +150,7 @@ public open class SkCanvas(public val device: SkBitmapDevice) {
      */
     public fun drawPath(path: SkPath, paint: SkPaint) {
         val s = top
-        device.drawPath(path, s.sx, s.sy, s.tx, s.ty, s.clip, paint)
+        s.device.drawPath(path, s.sx, s.sy, s.tx, s.ty, s.clip, paint)
     }
 
     /**
@@ -184,12 +225,115 @@ public open class SkCanvas(public val device: SkBitmapDevice) {
         val r = dst.right * s.sx + s.tx
         val b = dst.bottom * s.sy + s.ty
         val devDst = SkRect.MakeLTRB(minOf(l, r), minOf(t, b), maxOf(l, r), maxOf(t, b))
-        device.drawImageRect(image, src, devDst, sampling, paint, constraint, s.clip)
+        s.device.drawImageRect(image, src, devDst, sampling, paint, constraint, s.clip)
     }
 
     public fun drawColor(color: SkColor) {
         bitmap.eraseColor(color)
     }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawPaint`. Fills the **current clip** with
+     * `paint.color` via SrcOver. The CTM is irrelevant — `drawPaint` is
+     * "infinite rect" semantics, so the only bound is the clip.
+     *
+     * Phase-2-2026 scope: only honours `paint.color` (sRGB-encoded ARGB).
+     * `paint.isAntiAlias` is ignored — the clip rect is integer-aligned in
+     * device coordinates, so analytic edge coverage would emit zero
+     * fractional contribution and we can take the cheap solid-fill path
+     * straight to [SkBitmapDevice.drawPaint].
+     */
+    public fun drawPaint(paint: SkPaint) {
+        val s = top
+        s.device.drawPaint(s.clip, paint)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::saveLayer(bounds, paint)`. Allocates an
+     * offscreen bitmap-backed device matching the device-space projection of
+     * [bounds] (intersected with the current clip), then redirects all
+     * subsequent draws into it until the matching [restore] composites the
+     * layer back onto the parent device using [paint] (alpha modulation +
+     * SrcOver — no full blend mode dispatch in this slice).
+     *
+     * When [bounds] is null, the layer matches the entire current clip.
+     * The CTM and clip on the new state are translated so source-space
+     * coordinates land in the same place in the offscreen device that they
+     * would have in the parent device, except shifted by `(-originX, -originY)`.
+     */
+    public fun saveLayer(bounds: SkRect?, paint: SkPaint?): Int {
+        val s = top
+        // Project `bounds` into current device space, then intersect with the
+        // current clip. A null `bounds` ⇒ "whole clip".
+        val layerBounds: SkIRect = if (bounds == null) {
+            s.clip
+        } else {
+            val l = bounds.left * s.sx + s.tx
+            val t = bounds.top * s.sy + s.ty
+            val r = bounds.right * s.sx + s.tx
+            val b = bounds.bottom * s.sy + s.ty
+            SkIRect.MakeLTRB(
+                maxOf(s.clip.left, kFloor(minOf(l, r).toDouble()).toInt()),
+                maxOf(s.clip.top, kFloor(minOf(t, b).toDouble()).toInt()),
+                minOf(s.clip.right, kCeil(maxOf(l, r).toDouble()).toInt()),
+                minOf(s.clip.bottom, kCeil(maxOf(t, b).toDouble()).toInt()),
+            )
+        }
+
+        // Empty layer ⇒ degenerate to a plain `save` with an empty clip so
+        // subsequent draws are silently dropped (matches Skia's `nothingToDraw`
+        // bailout — we just intersect to (0,0,0,0) to avoid allocating a 0×0
+        // bitmap, which `SkBitmap` doesn't accept).
+        val w = layerBounds.right - layerBounds.left
+        val h = layerBounds.bottom - layerBounds.top
+        if (w <= 0 || h <= 0) {
+            stack.addLast(State(
+                s.sx, s.sy, s.tx, s.ty,
+                SkIRect.MakeLTRB(s.clip.left, s.clip.top, s.clip.left, s.clip.top),
+                s.device,
+                layer = null,
+            ))
+            return stack.size - 2
+        }
+
+        val layerBitmap = SkBitmap(w, h, s.device.bitmap.colorSpace).also { it.eraseColor(0) }
+        val layerDevice = SkBitmapDevice(layerBitmap)
+        val originX = layerBounds.left
+        val originY = layerBounds.top
+
+        // Layer-local CTM: translate by `-origin` so a source point that used
+        // to land at parent device `(px, py)` now lands at layer coords
+        // `(px - originX, py - originY)`.
+        val newState = State(
+            sx = s.sx,
+            sy = s.sy,
+            tx = s.tx - originX,
+            ty = s.ty - originY,
+            clip = SkIRect.MakeLTRB(
+                maxOf(0, s.clip.left - originX),
+                maxOf(0, s.clip.top - originY),
+                minOf(w, s.clip.right - originX),
+                minOf(h, s.clip.bottom - originY),
+            ),
+            device = layerDevice,
+            layer = Layer(s.device, originX, originY, paint),
+        )
+        stack.addLast(newState)
+        return stack.size - 2
+    }
+
+    /** Convenience overload mirroring `SkCanvas::saveLayer()`. */
+    public fun saveLayer(): Int = saveLayer(null, null)
+
+    /**
+     * Mirrors Skia's `SkCanvas::saveLayer(bounds, paint, flags)`. The
+     * [flags] field is accepted for API compatibility but ignored —
+     * `kInitWithPrevious_SaveLayerFlag` and friends are out of scope for the
+     * current slice, since they require backdrop sampling against the parent
+     * device which the raster path doesn't yet expose.
+     */
+    public fun saveLayer(bounds: SkRect?, paint: SkPaint?, flags: SaveLayerFlags): Int =
+        saveLayer(bounds, paint)
 
     public val width: Int get() = device.width
     public val height: Int get() = device.height
