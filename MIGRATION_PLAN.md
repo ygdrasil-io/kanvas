@@ -75,7 +75,7 @@ L'objectif : **bootstrapper un nouveau module `:kanvas-skia` qui compile et fait
 - [x] `BigRectTest.kt` : run + compare avec tolérance + ratchet.
 - [x] `SimpleRectTest.kt` : idem.
 
-### Découverte hors-plan → résolue par [MIGRATION_PLAN_COLORSPACE.md](MIGRATION_PLAN_COLORSPACE.md)
+### Découverte hors-plan → résolue par [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md)
 Les références `original-888/*.png` embarquent un profil ICC **Rec.2020** (`"DM unified Rec.2020"` per le tEXt chunk) — sRGB pur bleu y arrive à `(43, 13, 242)`. Le plan #2 a porté `skcms` + `SkColorSpace` + `SkColorSpaceXformSteps`, et `TestUtils.runGmTest` rend désormais directement dans le profil Rec.2020. Tolérance descendue de 160 à **1** sur tous les GMs Phase 1-3a.
 
 ### Vérification Phase 1 (post-colorspace)
@@ -288,7 +288,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 
-**Bonus** : [MIGRATION_PLAN_COLORSPACE.md](MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a.
+**Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
 
 > Au-delà : reprendre [SKIA_DM_TESTS_TO_IMPLEMENT.md](SKIA_DM_TESTS_TO_IMPLEMENT.md) Level 2 par catégories (bitmap operations, transformations avancées, effects), en gardant la même mécanique slice-vertical.
 
