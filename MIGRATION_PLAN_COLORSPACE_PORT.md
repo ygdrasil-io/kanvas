@@ -4,7 +4,7 @@
 
 ## Contexte
 
-[MIGRATION_PLAN_COLORSPACE.md](MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ a livré :
+[archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ a livré :
 - skcms minimal (TF eval/invert + matrix concat/invert) — sRGBish only.
 - `SkColorSpace` minimal (singletons, MakeRGB, Equals, hash).
 - `SkColorSpaceXformSteps` (apply scalaire) — sans OOTF.
