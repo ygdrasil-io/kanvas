@@ -33,10 +33,11 @@ class SkColorSpaceXformStepsTest {
             SkColorSpace.makeSRGB(), SkAlphaType.kOpaque,
             SkColorSpace.makeSRGBLinear(), SkAlphaType.kOpaque,
         )
-        // Same gamut, only TF differs: linearize then encode-via-identity.
+        // Same gamut, only TF differs: linearize, then no encode (Phase A
+        // Opt 3 skips the identity encode because dst is linear).
         assertTrue(steps.flags.linearize)
         assertFalse(steps.flags.gamutTransform)
-        assertTrue(steps.flags.encode)
+        assertFalse(steps.flags.encode)
 
         val rgba = floatArrayOf(0.5f, 0.5f, 0.5f, 1f)
         steps.apply(rgba)
