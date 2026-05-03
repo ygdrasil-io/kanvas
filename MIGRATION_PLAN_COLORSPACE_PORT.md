@@ -128,47 +128,27 @@ Ajouté à [kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt](kan
 
 ---
 
-## Phase D — Constantes nommées complètes (S)
+## Phase D — Constantes nommées complètes (S) — ✅
 
-**But** : importer toutes les TFs et tous les gamuts standards de `SkColorSpace.h:121-263`.
+### `SkNamedTransferFn` — ajouts
+- [x] `kRec709`, `kRec470SystemM`, `kRec470SystemBG`, `kRec601` (= kRec709), `kSMPTE_ST_240`.
+- [x] `kIEC61966_2_4` (= kRec709), `kIEC61966_2_1` (= kSRGB), `kRec2020_10bit` / `kRec2020_12bit` (= kRec709), `kSMPTE_ST_428_1`.
+- [x] `kPQ`, `kHLG` (sentinelles HDR — classify=Invalid jusqu'à Phase I).
+- [x] `kProPhotoRGB`, `kA98RGB` (= k2Dot2).
+- [x] `CicpId` enum (ITU-T H.273 Table 3) avec `kSRGB` alias et `kCicpIdApplicationDefined = 2`.
 
-### `SkNamedTransferFn` — ajouter
-- [ ] `kRec709` = `{2.4, 1, 0, 0, 0, 0, 0}`
-- [ ] `kRec470SystemM` = `{2.2, 1, 0, 0, 0, 0, 0}`
-- [ ] `kRec470SystemBG` = `{2.8, 1, 0, 0, 0, 0, 0}`
-- [ ] `kRec601` = `kRec709` (alias)
-- [ ] `kSMPTE_ST_240` = `{2.222222222, 0.899626676, 0.100373324, 0.25, 0.091286342, 0, 0}`
-- [ ] `kIEC61966_2_4` = `kRec709` (alias)
-- [ ] `kIEC61966_2_1` = `kSRGB` (alias)
-- [ ] `kRec2020_10bit` = `kRec709` (alias)
-- [ ] `kRec2020_12bit` = `kRec709` (alias)
-- [ ] `kPQ` = `{-5, 203, 0, 0, 0, 0, 0}` (sentinelle)
-- [ ] `kSMPTE_ST_428_1` = `{2.6, 1.034080527699, 0, 0, 0, 0, 0}`
-- [ ] `kHLG` = `{-6, 203, 1000, 1.2, 0, 0, 0}` (sentinelle)
-- [ ] `kProPhotoRGB` = `{1.8, 1, 0, 0, 0, 0, 0}`
-- [ ] `kA98RGB` = `k2Dot2` (alias)
+### `SkColorSpacePrimaries` + `SkNamedPrimaries` — nouveau
+- [x] `SkColorSpacePrimaries` data class avec 4 paires xy (R, G, B, white point) dans [kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpacePrimaries.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpacePrimaries.kt). `toXYZD50()` → `NotImplementedError` jusqu'à Phase E.
+- [x] [kanvas-skia/src/main/kotlin/org/skia/foundation/SkNamedPrimaries.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkNamedPrimaries.kt) avec 11 constantes + `CicpId` enum (ITU-T H.273 Table 2) + `kCicpIdApplicationDefined = 2`.
 
-### `SkNamedTransferFn::CicpId` — créer enum (`SkColorSpace.h:190-212`)
-- [ ] Valeurs ITU-T H.273 : kRec709=1, kRec470SystemM=4, …, kHLG=18.
-- [ ] `kSRGB = kIEC61966_2_1 = 13`.
+### `SkNamedGamut` — déjà complet
+Le port précédent a déjà `kSRGB`, `kAdobeRGB`, `kDisplayP3`, `kRec2020`, `kXYZ`. Précision `kRec2020` à finaliser en Phase J.
 
-### `SkNamedPrimaries` — créer namespace
-- [ ] `SkColorSpacePrimaries` data class avec 4 paires xy (R, G, B, white point).
-- [ ] Constantes : `kRec709`, `kRec470SystemM`, `kRec470SystemBG`, `kRec601`, `kSMPTE_ST_240`, `kGenericFilm`, `kRec2020`, `kSMPTE_ST_428_1`, `kSMPTE_RP_431_2`, `kSMPTE_EG_432_1`, `kITU_T_H273_Value22`, `kProPhotoRGB`. (cf. `SkColorSpace.h:42-119`)
-- [ ] `CicpId` enum identique à `SkNamedTransferFn::CicpId` mais pour les primaires.
-- [ ] `SkColorSpacePrimaries.toXYZD50(out)` qui appelle `skcms_PrimariesToXYZD50` (à porter en Phase E).
+**Tests** — 14 nouveaux :
+- [x] [SkNamedTransferFnConstantsTest](kanvas-skia/src/test/kotlin/org/skia/skcms/SkNamedTransferFnConstantsTest.kt) — 8 tests : classify sRGBish pour 16 TFs, classify Invalid pour PQ/HLG, alias identités, valeurs CicpId, kSRGB=kIEC61966_2_1, eval kRec709(0.5)≈0.1895^2.4, round-trip kSMPTE_ST_240.
+- [x] [SkNamedPrimariesTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkNamedPrimariesTest.kt) — 6 tests : valeurs xy canoniques pour kRec709/kRec2020, alias `kSMPTE_ST_240 === kRec601`, valeurs CicpId, `kCicpIdApplicationDefined = 2`, `toXYZD50()` throws (Phase E).
 
-### `SkNamedGamut` — vérifier complétude
-- [ ] `kAdobeRGB` (déjà présent) ✓
-- [ ] `kDisplayP3` ✓
-- [ ] `kRec2020` — voir Phase J
-- [ ] `kXYZ` ✓
-- [ ] Manque `kSRGB` (déjà présent) ✓
-
-**Tests** :
-- [ ] `SkNamedTransferFnConstantsTest` — chaque constante a le bon classify type (Invalid pour PQ/HLG car non-supporté avant Phase I, sinon sRGBish).
-- [ ] `SkNamedPrimariesTest` — pour `kRec709`, `toXYZD50()` produit `kSRGB-gamut` à `xyzAlmostEqual` près.
-- [ ] CicpId enum : valeurs numériques exactes pour interop.
+**Résultat** : 203 tests verts (189 + 14), 0 régression.
 
 ---
 
