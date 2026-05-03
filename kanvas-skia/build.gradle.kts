@@ -1,7 +1,5 @@
 plugins {
     id("buildsrc.convention.kotlin-jvm")
-    id("application")
-    id("org.jetbrains.kotlinx.atomicfu") version "0.32.1"
 }
 
 repositories {
@@ -10,19 +8,15 @@ repositories {
 
 dependencies {
     implementation(kotlin("stdlib"))
-    
-    // Testing dependencies
-    testImplementation(kotlin("test"))
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
 
-kotlin {
-    jvmToolchain(25)
-}
-
-tasks {
+sourceSets {
     test {
-        useJUnitPlatform()
+        resources.srcDir("../kanvas/src/test/resources")
     }
 }
 
