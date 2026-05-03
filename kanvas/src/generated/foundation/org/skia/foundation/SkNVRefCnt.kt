@@ -65,6 +65,12 @@ public open class SkNVRefCnt<Derived> public constructor() {
    */
   private val fRefCnt: AtomicInt = TODO("Initialize fRefCnt")
 
+  /**
+   * C++ original:
+   * ```cpp
+   * SkNVRefCnt() : fRefCnt(1) {}
+   * ```
+   */
   public constructor(param0: SkNVRefCnt<Derived>) : this() {
     TODO("Implement constructor")
   }
