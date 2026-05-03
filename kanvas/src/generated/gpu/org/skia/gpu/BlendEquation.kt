@@ -1,0 +1,25 @@
+package org.skia.gpu
+
+public enum class BlendEquation {
+  kAdd,
+  kSubtract,
+  kReverseSubtract,
+  kScreen,
+  kOverlay,
+  kDarken,
+  kLighten,
+  kColorDodge,
+  kColorBurn,
+  kHardLight,
+  kSoftLight,
+  kDifference,
+  kExclusion,
+  kMultiply,
+  kHSLHue,
+  kHSLSaturation,
+  kHSLColor,
+  kHSLLuminosity,
+  kIllegal,
+  kFirstAdvanced,
+  kLast,
+}

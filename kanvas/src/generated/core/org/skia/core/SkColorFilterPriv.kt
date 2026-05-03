@@ -4,8 +4,8 @@ import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkSp
 import org.skia.gpu.ganesh.SkAlphaType
-import org.skia.modules.SkcmsMatrix3x3
-import org.skia.modules.SkcmsTransferFunction
+import org.skia.skcms.SkcmsMatrix3x3
+import org.skia.skcms.SkcmsTransferFunction
 
 /**
  * C++ original:

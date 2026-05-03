@@ -10,7 +10,7 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
 import org.skia.math.SkMatrix
 import org.skia.memory.SkArenaAlloc
-import org.skia.modules.SkcmsTransferFunction
+import org.skia.skcms.SkcmsTransferFunction
 import undefined.SkColor4f
 
 /**

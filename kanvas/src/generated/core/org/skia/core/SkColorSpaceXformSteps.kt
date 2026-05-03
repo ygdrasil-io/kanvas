@@ -3,7 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.FloatArray
 import kotlin.UInt
-import org.skia.modules.SkcmsTransferFunction
+import org.skia.skcms.SkcmsTransferFunction
 
 /**
  * C++ original:
