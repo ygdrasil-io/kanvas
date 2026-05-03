@@ -2,7 +2,7 @@ package org.skia.foundation
 
 import kotlin.Boolean
 import kotlin.Float
-import org.skia.modules.SkcmsMatrix3x3
+import org.skia.skcms.SkcmsMatrix3x3
 
 /**
  * C++ original:

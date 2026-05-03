@@ -7,9 +7,9 @@ import kotlin.Int
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.modules.SkcmsICCProfile
-import org.skia.modules.SkcmsMatrix3x3
-import org.skia.modules.SkcmsTransferFunction
+import org.skia.skcms.SkcmsICCProfile
+import org.skia.skcms.SkcmsMatrix3x3
+import org.skia.skcms.SkcmsTransferFunction
 
 /**
  * C++ original:

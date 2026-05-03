@@ -1,7 +1,7 @@
 package org.skia.core
 
 import org.skia.foundation.CicpId
-import org.skia.modules.SkcmsTransferFunction
+import org.skia.skcms.SkcmsTransferFunction
 
 /**
  * C++ original:
