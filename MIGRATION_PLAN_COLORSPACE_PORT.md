@@ -51,24 +51,32 @@ XS = ~30 lignes. S = ~200 lignes. M = ~500 lignes. L = ~1500 lignes. XL = >5000.
 
 ---
 
-## Phase A — Optimisations `SkColorSpaceXformSteps` (XS)
+## Phase A — Optimisations `SkColorSpaceXformSteps` (XS) — ✅
 
-**But** : porter les 4 chemins fast-path Skia manquants. Réduit le drift float pour α≠1 et économise des cycles.
+Modifié [kanvas-skia/src/main/kotlin/org/skia/core/SkColorSpaceXformSteps.kt](kanvas-skia/src/main/kotlin/org/skia/core/SkColorSpaceXformSteps.kt) :
 
-À modifier dans [kanvas-skia/src/main/kotlin/org/skia/core/SkColorSpaceXformSteps.kt](kanvas-skia/src/main/kotlin/org/skia/core/SkColorSpaceXformSteps.kt) :
+- [x] **Opt 1 : hint `dstAT==Opaque → srcAT`** — Skia `SkColorSpaceXformSteps.cpp:45-47`.
+- [x] **Opt 2 : early-return `src==dst`** — `:54-57`. Tous flags `false` par défaut quand hash et alpha identiques.
+- [x] **Opt 3 : `linearize`/`encode` conditionnels TF** — `:99-104`, `:129-134`. `linearize = (srcTrfn != kLinear)`, `encode = (dstTrfn != kLinear)`. Économise 6 appels `pow` identité par pixel dans le cas Linear↔Linear.
+- [x] **Opt 4a : linearize+encode même TF** — `:181-200`. Cancel quand seul l'alpha change (round-trip TF identité).
+- [x] **Opt 4b : unpremul+premul cancel** — `:202-210`. Cancel quand `linearize` et `encode` sont off (élimine le drift float du round-trip α).
 
-- [ ] **Hint `dstAT==Opaque → srcAT`** — Skia `SkColorSpaceXformSteps.cpp:45-47`. Si `dstAT == kOpaque` on bascule `dstAT = srcAT` avant de calculer les flags. Affecte le calcul de `unpremul`/`premul` dans le cas Premul→Opaque.
-- [ ] **Early-return `src==dst`** — `:54-57`. `if (src.hash() == dst.hash() && srcAT == dstAT) return;` (tous flags `false` par défaut).
-- [ ] **`linearize`/`encode` conditionnels TF** — `:99-104`, `:129-134`. `linearize = (srcTrfn != kLinear)`, `encode = (dstTrfn != kLinear)`. Évite 6 appels `pow` identité par pixel dans le cas Linear↔Linear (ou Linear↔Wide).
-- [ ] **Optimisation 2 : linearize+encode même TF** — `:181-200`. Si seul le gamut change, supprimer linearize+encode (le TF s'annule mathématiquement par le pin `inv(eval)` mais coûte 6 `pow`).
-- [ ] **Optimisation 3 : unpremul+premul cancel** — `:202-210`. Si rien de non-linéaire entre les deux, supprimer les deux.
+**Tests** [kanvas-skia/src/test/kotlin/org/skia/core/SkColorSpaceXformStepsOptTest.kt](kanvas-skia/src/test/kotlin/org/skia/core/SkColorSpaceXformStepsOptTest.kt) — 11 nouveaux tests :
+- [x] Opt 1 : `Premul + Opaque-dst` → identity (via re-écriture en Premul→Premul → Opt 2).
+- [x] Opt 2 : `same CS + same alpha` (3 cas Opaque/Premul/Unpremul) → identity.
+- [x] Opt 2 : `same CS + alpha differ` → seul unpremul OU premul fire.
+- [x] Opt 3 : `Linear → Linear different gamut` → linearize=encode=false, gamut=true.
+- [x] Opt 3 : `sRGB → Linear different gamut` → linearize=true, encode=false.
+- [x] Opt 3 : `Linear → sRGB different gamut` → linearize=false, encode=true.
+- [x] Opt 4a : `same TF same gamut + alpha differ` (sRGB Premul → sRGB Unpremul) → linearize=encode=false, seul unpremul fire.
+- [x] Opt 4b : `Linear → Linear different gamut + Premul→Premul` → unpremul=premul=false (gamut transform reste).
+- [x] **Bit-stable α≠1** : `sRGB Premul → sRGB Premul` à α∈{0.5, 0.25, 0.75, 0.001, 1} = identité bit-à-bit.
+- [x] α preservation `Linear Premul → Linear-different-gamut Premul`.
+- [x] Régression : `(43, 13, 241)` toujours produit pour sRGB pur bleu → Rec.2020.
 
-**Tests** :
-- [ ] `XformStepsOptTest` — pour chaque chemin, vérifier `flags.isIdentity` quand attendu.
-- [ ] **Test α≠1** : sRGB premul (0.5, 0.25, 0.5, 0.5) → sRGB premul = identité bit-stable (le drift unpremul→premul disparaît avec opt 3).
-- [ ] Regression : les 5 GMs existants gardent leurs scores.
+**Test pré-existant à corriger** : [SkColorSpaceXformStepsTest.kt:39](kanvas-skia/src/test/kotlin/org/skia/core/SkColorSpaceXformStepsTest.kt:39) asserait `encode=true` pour sRGB → sRGB-linear. Avec Opt 3, `encode=false` (dst est linear). Test mis à jour.
 
-**Vérification** : pas de baisse de similarité, idéalement BigRectGM remonte légèrement (cycles évités = arrondis évités).
+**Résultat** : 168 tests verts (157 existants + 11 nouveaux), 0 régression. Scores GMs identiques (BigRect 95.53%, SimpleRect/ClipStrokeRect/DrawBitmapRect3 100%, ConcavePaths 98.86%, ThinRects 92.10%).
 
 ---
 

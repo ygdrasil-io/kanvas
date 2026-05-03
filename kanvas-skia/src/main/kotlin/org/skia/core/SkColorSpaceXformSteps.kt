@@ -1,16 +1,27 @@
 package org.skia.core
 
 import org.skia.foundation.SkColorSpace
+import org.skia.skcms.SkNamedTransferFn
 import org.skia.skcms.SkcmsTransferFunction
 import org.skia.skcms.skcmsMatrix3x3Concat
 import org.skia.skcms.skcmsTransferFunctionEval
 
 /**
  * Bit-compatible port of `SkColorSpaceXformSteps`. Phase 3 supports only
- * sRGBish transfer functions and no OOTF (HDR is out of scope).
+ * sRGBish transfer functions and no OOTF (HDR is out of scope, deferred to
+ * MIGRATION_PLAN_COLORSPACE_PORT.md Phase I).
  *
  * Build once per draw, call [apply] per pixel. Matches upstream `apply(float*)`
  * exactly except for the omitted OOTF branches.
+ *
+ * Phase A of the port plan adds the four constructor optimizations Skia ships:
+ * 1. Opaque-output hint (`dstAT == kOpaque → dstAT = srcAT`).
+ * 2. Early-return when `src == dst` and alpha types match.
+ * 3. `linearize` / `encode` skipped when the corresponding TF is already
+ *    linear (saves 6 `pow` calls per pixel in Linear↔Linear gamut transforms).
+ * 4. `linearize+encode` cancellation when only the gamut changes and TFs are
+ *    identical, and `unpremul+premul` cancellation when no non-linear op
+ *    runs between them (avoids an `a, /a, *a` round-trip that drifts float).
  */
 public class SkColorSpaceXformSteps(
     src: SkColorSpace,
@@ -29,38 +40,64 @@ public class SkColorSpaceXformSteps(
     public val srcToDstMatrix: FloatArray
 
     init {
-        val gamutTransform = src.toXYZD50Hash != dst.toXYZD50Hash
-        val transferDiffer = src.transferFnHash != dst.transferFnHash
-        val needLinearizeEncode = gamutTransform || transferDiffer
+        // Opt 1: opaque outputs are treated as the same alpha type as the
+        // source input. Upstream comment: "we'd really like to have a good
+        // way of explaining why we think this is useful." (SkColorSpaceXformSteps.cpp:45-47)
+        val effectiveDstAT = if (dstAT == SkAlphaType.kOpaque) srcAT else dstAT
 
-        // Match upstream SkColorSpaceXformSteps: unpremul/premul depend only
-        // on the alpha types, independent of color work. They cancel out
-        // automatically when both run (premul → unpremul → premul, identity
-        // modulo float precision).
-        flags = Flags(
-            unpremul = (srcAT == SkAlphaType.kPremul),
-            linearize = needLinearizeEncode,
-            gamutTransform = gamutTransform,
-            encode = needLinearizeEncode,
-            premul = (dstAT == SkAlphaType.kPremul),
-        )
+        var unpremul = false
+        var linearize = false
+        var gamutTransform = false
+        var encode = false
+        var premul = false
+        var packedMatrix: FloatArray = IDENTITY_MATRIX
 
-        // src → dst matrix (in row-major terms): dst.fromXYZD50 * src.toXYZD50
-        // Then transposed to column-major for the apply() consumer.
-        srcToDstMatrix = if (gamutTransform) {
-            val rowMajor = skcmsMatrix3x3Concat(dst.fromXYZD50, src.toXYZD50)
-            // Pack as column-major:
-            //   column 0 = (m[0][0], m[1][0], m[2][0])
-            //   column 1 = (m[0][1], m[1][1], m[2][1])
-            //   column 2 = (m[0][2], m[1][2], m[2][2])
-            floatArrayOf(
-                rowMajor.vals[0][0], rowMajor.vals[1][0], rowMajor.vals[2][0],
-                rowMajor.vals[0][1], rowMajor.vals[1][1], rowMajor.vals[2][1],
-                rowMajor.vals[0][2], rowMajor.vals[1][2], rowMajor.vals[2][2],
-            )
-        } else {
-            floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
+        // Opt 2: early-return when src and dst color spaces and alpha types
+        // are identical. Leaves all flags `false` (identity pipeline).
+        if (src.hash() != dst.hash() || srcAT != effectiveDstAT) {
+            gamutTransform = src.toXYZD50Hash != dst.toXYZD50Hash
+
+            // Opt 3: linearize is only useful when src TF is non-linear;
+            // encode is only useful when dst TF is non-linear. Saves 3
+            // identity TF evals per pixel each in Linear↔Linear cases.
+            linearize = src.transferFn != SkNamedTransferFn.kLinear
+            encode = dst.transferFn != SkNamedTransferFn.kLinear
+
+            unpremul = srcAT == SkAlphaType.kPremul
+            premul = srcAT != SkAlphaType.kOpaque && effectiveDstAT == SkAlphaType.kPremul
+
+            // Opt 4a: linearize+encode same TF and no gamut → both cancel.
+            // Mathematically the round-trip is identity (the inv pin in
+            // skcmsTransferFunctionInvert guarantees `inv(eval(1)) == 1`),
+            // but it costs 6 `pow` calls per pixel.
+            if (linearize && encode && !gamutTransform &&
+                src.transferFnHash == dst.transferFnHash) {
+                linearize = false
+                encode = false
+            }
+
+            // Opt 4b: unpremul+premul with no non-linear op between → both
+            // cancel. Without this, a c/=a; c*=a round-trip drifts float
+            // by up to 1 ulp on partial alphas.
+            if (unpremul && premul && !linearize && !encode) {
+                unpremul = false
+                premul = false
+            }
+
+            if (gamutTransform) {
+                // src → dst matrix (in row-major terms): dst.fromXYZD50 * src.toXYZD50.
+                // Then transposed to column-major for the apply() consumer.
+                val rowMajor = skcmsMatrix3x3Concat(dst.fromXYZD50, src.toXYZD50)
+                packedMatrix = floatArrayOf(
+                    rowMajor.vals[0][0], rowMajor.vals[1][0], rowMajor.vals[2][0],
+                    rowMajor.vals[0][1], rowMajor.vals[1][1], rowMajor.vals[2][1],
+                    rowMajor.vals[0][2], rowMajor.vals[1][2], rowMajor.vals[2][2],
+                )
+            }
         }
+
+        flags = Flags(unpremul, linearize, gamutTransform, encode, premul)
+        srcToDstMatrix = packedMatrix
     }
 
     /**
@@ -110,6 +147,11 @@ public class SkColorSpaceXformSteps(
         /** True when this is the no-op pipeline. */
         public val isIdentity: Boolean
             get() = !unpremul && !linearize && !gamutTransform && !encode && !premul
+    }
+
+    public companion object {
+        private val IDENTITY_MATRIX: FloatArray =
+            floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
     }
 }
 
