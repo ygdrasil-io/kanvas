@@ -68,31 +68,91 @@ public object TestUtils {
 
     /**
      * Per-channel tolerance similarity between two `SkBitmap`s, in percent (0..100).
-     * A pixel matches when every channel diff is within `tolerance`.
+     * Thin wrapper kept for legacy call sites — new code should prefer
+     * [compareBitmapsDetailed], which exposes pixel counts, max diff per
+     * channel, and mean diff across mismatching pixels.
      *
-     * Skia GM references ship with the `Google/Skia` ICC profile and a working
-     * colour space that maps sRGB primaries non-trivially: pure `0xFF0000FF`
-     * lands as `~0xFF2B0DF2` in the reference, with a per-channel offset of up
-     * to ~64 even when rasterisation is structurally correct. Pixel-exact
-     * compare on these references therefore caps far below 100%; upstream
-     * Skia gold uses a tolerance of its own. Default 64 here matches the
-     * worst-case channel shift observed on `bigrect.png`.
+     * Now that GMs render into [DM_REFERENCE_COLOR_SPACE], pure colours land
+     * within 1 ulp of the reference instead of ~150; `tolerance = 1` is the
+     * default for the current crop of GM tests, with rasteriser-quality
+     * residuals modelled by per-test thresholds.
      */
-    public fun compareBitmaps(a: SkBitmap, b: SkBitmap, tolerance: Int = 0): Double {
-        if (a.width != b.width || a.height != b.height) return 0.0
+    public fun compareBitmaps(a: SkBitmap, b: SkBitmap, tolerance: Int = 0): Double =
+        compareBitmapsDetailed(a, b, tolerance).similarity
+
+    /**
+     * Per-channel tolerance similarity, returning pixel counts and per-channel
+     * statistics on the mismatching pixels. A pixel matches when every channel
+     * diff is `<= tolerance`. Mean diff is averaged over mismatching pixels
+     * only (so it doesn't get diluted to zero by a sea of perfect matches).
+     */
+    public fun compareBitmapsDetailed(a: SkBitmap, b: SkBitmap, tolerance: Int = 0): BitmapComparison {
+        if (a.width != b.width || a.height != b.height) {
+            return BitmapComparison(
+                similarity = 0.0,
+                totalPixels = 0,
+                matchingPixels = 0,
+                tolerance = tolerance,
+                maxChannelDiff = ChannelDiff(0, 0, 0, 0),
+                meanMismatchDiff = ChannelDiff(0, 0, 0, 0),
+            )
+        }
         val total = a.width * a.height
         var matching = 0
+        var maxA = 0; var maxR = 0; var maxG = 0; var maxB = 0
+        var sumA = 0L; var sumR = 0L; var sumG = 0L; var sumB = 0L
         for (i in 0 until total) {
-            val pa = a.pixels[i]; val pb = b.pixels[i]
+            val pa = a.pixels[i]
+            val pb = b.pixels[i]
             if (pa == pb) { matching++; continue }
-            if (tolerance == 0) continue
             val dA = kotlin.math.abs(((pa ushr 24) and 0xFF) - ((pb ushr 24) and 0xFF))
             val dR = kotlin.math.abs(((pa ushr 16) and 0xFF) - ((pb ushr 16) and 0xFF))
             val dG = kotlin.math.abs(((pa ushr 8) and 0xFF) - ((pb ushr 8) and 0xFF))
             val dB = kotlin.math.abs((pa and 0xFF) - (pb and 0xFF))
-            if (maxOf(dA, dR, dG, dB) <= tolerance) matching++
+            if (maxOf(dA, maxOf(dR, maxOf(dG, dB))) <= tolerance) {
+                matching++
+            } else {
+                if (dA > maxA) maxA = dA
+                if (dR > maxR) maxR = dR
+                if (dG > maxG) maxG = dG
+                if (dB > maxB) maxB = dB
+                sumA += dA; sumR += dR; sumG += dG; sumB += dB
+            }
         }
-        return matching.toDouble() / total.toDouble() * 100.0
+        val similarity = matching.toDouble() / total.toDouble() * 100.0
+        val mismatched = total - matching
+        val mean = if (mismatched == 0) ChannelDiff(0, 0, 0, 0) else ChannelDiff(
+            a = (sumA / mismatched).toInt(),
+            r = (sumR / mismatched).toInt(),
+            g = (sumG / mismatched).toInt(),
+            b = (sumB / mismatched).toInt(),
+        )
+        return BitmapComparison(
+            similarity = similarity,
+            totalPixels = total,
+            matchingPixels = matching,
+            tolerance = tolerance,
+            maxChannelDiff = ChannelDiff(maxA, maxR, maxG, maxB),
+            meanMismatchDiff = mean,
+        )
+    }
+
+    /**
+     * Save a `rendered ｜ diff ｜ reference` triptych at
+     * `build/debug-images/<name>-comparison.png`. Replaces the
+     * "two separate files" debug pattern: one image, easy to scan visually,
+     * with the diff panel highlighting mismatches in magenta proportional
+     * to severity beyond `comparison.tolerance`.
+     */
+    public fun saveComparisonImage(
+        rendered: SkBitmap,
+        reference: SkBitmap,
+        comparison: BitmapComparison,
+        name: String,
+    ) {
+        val dir = File("build/debug-images").apply { mkdirs() }
+        val triptych = DiffImage.buildTriptych(rendered, reference, comparison.tolerance, comparison)
+        ImageIO.write(triptych, "png", File(dir, "$name-comparison.png"))
     }
 
     public fun bitmapToBufferedImage(bitmap: SkBitmap): BufferedImage {
