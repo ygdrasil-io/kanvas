@@ -179,11 +179,30 @@ Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsG
 - [x] 5 tests end-to-end `SkBitmapDeviceStrokeTest` (line, rect, L-shape miter, kStrokeAndFill, translation).
 - [x] Aucune régression sur les 6 GMs existants.
 
-### Phase 3d — GM ports stroke-on-path
+### Phase 3e — GM ports stroke-on-path
 
 - [ ] Hand-port `tests/ConvexPathsGM.kt` (fill seulement, drop l'entry skbug.40040207 qui exige `path.transform(matrix)`).
 - [ ] Hand-port `tests/ArcToGM.kt` (nécessite `arcTo(p1, p2, radius)` + variant SVG).
 - [ ] Hand-port `tests/CubicPathGM.kt`.
+
+### Phase 3d — GM harvest (existing API surface only) ✅
+
+**But** : valider que l'infrastructure Phase 1 → 3b couvre plus que les quelques GMs hand-pickés. Aucune modification d'API ; chaque GM est purement un test de plus.
+
+GMs portés :
+
+| GM                      | Verbs / API           | Fill rule  | Score à `tolerance=1` |
+|-------------------------|-----------------------|------------|------------------------|
+| `crbug_887103`          | line-only path × 3 contours | `kWinding`  | **99.82%** |
+| `crbug_908646`          | line-only path, holes | `kEvenOdd`  | **99.56%** |
+| `crbug_913349`          | line-only path, sliver | `kWinding`  | **99.76%** |
+| `crbug_884166`          | line-only path, near-vertical sliver | `kWinding`  | **98.98%** |
+| `crbug_788500`          | line + cubic verb     | `kEvenOdd`  | **99.93%** |
+| `bitmaprect_rounding`   | drawRect + drawImageRect + sub-pixel `scale(0.9, 0.9)` | n/a | **100.00%** |
+
+Chacun a un seuil floor adapté à son score (ratchet ≥ score - 1%). Tous : `tolerance=1`, rendu en colorspace Rec.2020.
+
+**Pass count cumulé : 11 GM** (5 précédents + 6 ports).
 
 ---
 
@@ -305,7 +324,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3a    | 5        | SkPath line-only + scanline fill AA + scale CTM | ✅ |
 | 3b    | 5        | Path/Builder split + Bézier verbs + arcTo/addArc + flattening | ✅ |
 | 3c    | 5        | Path stroker (kButt + kMiter, no GM ports yet) | ✅ |
-| 3d    | ~8       | Stroke-on-path GM ports (ArcToGM, ConvexPathsGM, ...) | ⬜ |
+| 3d    | 11       | GM harvest sur l'API existante (5 crbug + bitmaprect_rounding) | ✅ |
+| 3e    | ~14      | Stroke-on-path GM ports (ArcToGM, ConvexPathsGM, ...) | ⬜ |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
