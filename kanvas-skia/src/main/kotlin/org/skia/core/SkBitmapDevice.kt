@@ -7,6 +7,7 @@ import org.skia.foundation.SkColorGetB
 import org.skia.foundation.SkColorGetG
 import org.skia.foundation.SkColorGetR
 import org.skia.foundation.SkColorSetARGB
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
@@ -44,10 +45,23 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     public val width: Int get() = bitmap.width
     public val height: Int get() = bitmap.height
 
+    /**
+     * Source-space colors entering the device are sRGB-encoded (that's the
+     * SkColor convention). Build a one-shot xform that brings them into the
+     * bitmap's color space. When the bitmap is sRGB, this is the identity
+     * pipeline (`flags.isIdentity == true`) and [transformPaintColor] is a
+     * no-op.
+     */
+    private val xformSteps: SkColorSpaceXformSteps = SkColorSpaceXformSteps(
+        src = SkColorSpace.makeSRGB(), srcAT = SkAlphaType.kUnpremul,
+        dst = bitmap.colorSpace,      dstAT = SkAlphaType.kUnpremul,
+    )
+
     public fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
 
     public fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
-        if (paint.isAntiAlias) drawRectAA(rect, clip, paint) else drawRectNonAA(rect, clip, paint)
+        val devPaint = inDeviceColorSpace(paint)
+        if (devPaint.isAntiAlias) drawRectAA(rect, clip, devPaint) else drawRectNonAA(rect, clip, devPaint)
     }
 
     /**
@@ -71,13 +85,41 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             // Stroke-on-path arrives with the stroker in a later slice.
             return
         }
-        val color = paint.color
+        val color = transformPaintColor(paint.color)
         val baseA = SkColorGetA(color)
         if (baseA == 0) return
         val edges = buildEdges(path, sx, sy, tx, ty)
         if (edges.isEmpty()) return
         val supers = if (paint.isAntiAlias) 4 else 1
         scanFillPath(edges, path.fillType, clip, color, baseA, supers)
+    }
+
+    /**
+     * Return a [paint] copy with its `color` transformed from sRGB into the
+     * bitmap's color space. Identity-fast-path when no xform is needed.
+     */
+    private fun inDeviceColorSpace(paint: SkPaint): SkPaint {
+        if (xformSteps.flags.isIdentity) return paint
+        return paint.copy().also { it.color = transformPaintColor(it.color) }
+    }
+
+    /**
+     * sRGB-encoded `SkColor` → device-encoded `SkColor`. Short-circuits to
+     * identity when the bitmap is sRGB (no float work).
+     */
+    private fun transformPaintColor(c: SkColor): SkColor {
+        if (xformSteps.flags.isIdentity) return c
+        val a = SkColorGetA(c)
+        val r = SkColorGetR(c)
+        val g = SkColorGetG(c)
+        val b = SkColorGetB(c)
+        val rgba = floatArrayOf(r / 255f, g / 255f, b / 255f, a / 255f)
+        xformSteps.apply(rgba)
+        val outR = (rgba[0] * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outG = (rgba[1] * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outB = (rgba[2] * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outA = (rgba[3] * 255f + 0.5f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(outA, outR, outG, outB)
     }
 
     // --------------------------------------------------------------------

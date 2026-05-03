@@ -14,18 +14,19 @@ class ThinRectsTest {
         val rendered = TestUtils.runGmTest(gm)
         val reference = TestUtils.loadReferenceBitmap(gm.name())
         assertNotNull(reference, "Missing reference image thinrects.png")
-        // Wide-gamut working space: same colour shift as BigRect/SimpleRect
-        // (cf. Phase 1 note in MIGRATION_PLAN.md). tolerance=160 covers the
-        // worst-case per-channel offset; AA coverage adds further sub-pixel
-        // diff but stays inside the same envelope.
-        val similarity = TestUtils.compareBitmaps(rendered, reference!!, tolerance = 160)
-        if (similarity < 95.0) {
+        // Rendered in the DM reference colorspace so most pixels match
+        // bit-exactly. The residual ~8% at t=1 is the AA coverage→alpha
+        // quantization rounding (the gap closes to ~2% at t=16, ~0% at t=32).
+        // Reproducing Skia's exact `SkScan_Antihair.cpp` rounding is an
+        // optimization for a later slice.
+        val similarity = TestUtils.compareBitmaps(rendered, reference!!, tolerance = 1)
+        if (similarity < 92.0) {
             TestUtils.saveDebugImage(rendered, "${gm.name()}-rendered")
             TestUtils.saveDebugImage(reference, "${gm.name()}-reference")
         }
         val accepted = SimilarityTracker.updateScore("ThinRectsGM", similarity)
         assertTrue(accepted, "ThinRectsGM regressed below ratchet")
-        assertTrue(similarity >= 95.0,
-            "ThinRectsGM similarity ${"%.2f".format(similarity)}% < 95.0% (Phase 2 floor, t=160)")
+        assertTrue(similarity >= 92.0,
+            "ThinRectsGM similarity ${"%.2f".format(similarity)}% < 92.0% (t=1 floor)")
     }
 }
