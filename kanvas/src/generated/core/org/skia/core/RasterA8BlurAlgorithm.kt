@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Float
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkTileMode
 import org.skia.math.SkIRect
 import org.skia.math.SkSize
 

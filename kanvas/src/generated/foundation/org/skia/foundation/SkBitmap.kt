@@ -1,4 +1,4 @@
-package org.skia.core
+package org.skia.foundation
 
 import kotlin.Any
 import kotlin.Boolean
@@ -9,16 +9,7 @@ import kotlin.UInt
 import kotlin.ULong
 import kotlin.UShort
 import kotlin.Unit
-import org.skia.foundation.SkColor
-import org.skia.foundation.SkColorSpace
-import org.skia.foundation.SkColorType
-import org.skia.foundation.SkImageInfo
-import org.skia.foundation.SkPaint
-import org.skia.foundation.SkPixmap
-import org.skia.foundation.SkSamplingOptions
-import org.skia.foundation.SkSp
-import org.skia.foundation.U8CPU
-import org.skia.gpu.ganesh.SkAlphaType
+import org.skia.core.SkPixelRef
 import org.skia.math.SkIPoint
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix

@@ -5,6 +5,8 @@ import kotlin.Boolean
 import kotlin.CharArray
 import kotlin.Int
 import kotlin.ULong
+import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkBlender
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkData
 import org.skia.foundation.SkDrawable
@@ -13,9 +15,12 @@ import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRecorder
 import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
 import org.skia.math.SkM44
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint

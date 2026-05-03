@@ -1,4 +1,4 @@
-package org.skia.core
+package org.skia.foundation
 
 public enum class SkBlendModeCoeff {
   kZero,

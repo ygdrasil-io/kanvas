@@ -5,6 +5,7 @@ import kotlin.Int
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkReadBuffer
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkWriteBuffer
 import org.skia.gpu.ganesh.SkAlphaType

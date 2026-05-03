@@ -7,8 +7,10 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkRecorder
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkYUVColorSpace
 import org.skia.gpu.ReadPixelsCallback
 import org.skia.gpu.ReadPixelsContext

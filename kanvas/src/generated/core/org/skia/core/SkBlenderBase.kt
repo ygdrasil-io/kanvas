@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import org.skia.effects.SkRuntimeEffect
+import org.skia.foundation.SkBlender
 import org.skia.foundation.SkFlattenable
 
 public typealias SkBlendModeBlenderINHERITED = SkBlenderBase

@@ -5,12 +5,14 @@ import kotlin.Int
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkData
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkMipmap
 import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkRecorder
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkYUVColorSpace
 import org.skia.gpu.GrImageContext

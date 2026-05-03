@@ -7,7 +7,9 @@ import kotlin.UInt
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkRecorder
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
 import org.skia.math.SkIRect
 import org.skia.math.SkISize
 import org.skia.math.SkMatrix

@@ -5,12 +5,6 @@ import kotlin.Float
 import kotlin.Int
 import kotlin.UByte
 import kotlin.UInt
-import org.skia.core.SkBlendMode
-import org.skia.core.SkBlender
-import org.skia.core.SkColorFilter
-import org.skia.core.SkMaskFilter
-import org.skia.core.SkPathEffect
-import org.skia.core.SkShader
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import undefined.SkColor4f

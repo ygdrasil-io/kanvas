@@ -11,6 +11,7 @@ import org.skia.effects.SkRuntimeEffect
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkData
 import org.skia.foundation.SkReadBuffer
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.foundation.SkWriteBuffer

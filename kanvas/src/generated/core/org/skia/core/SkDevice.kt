@@ -5,6 +5,8 @@ import kotlin.Boolean
 import kotlin.CharArray
 import kotlin.Float
 import kotlin.Int
+import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkBlender
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkData
@@ -14,13 +16,17 @@ import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPixelGeometry
 import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRecorder
 import org.skia.foundation.SkRefCnt
 import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
+import org.skia.foundation.SkSurfaceProps
 import org.skia.gpu.Recorder
 import org.skia.gpu.ganesh.GrRecordingContext
 import org.skia.math.SkIPoint

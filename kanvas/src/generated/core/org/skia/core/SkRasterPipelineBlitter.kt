@@ -11,6 +11,7 @@ import org.skia.foundation.SkAlpha
 import org.skia.foundation.SkMask
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkShader
 import org.skia.foundation.U8CPU
 import org.skia.math.SkIRect
 import org.skia.memory.SkArenaAlloc

@@ -1,11 +1,10 @@
-package org.skia.core
+package org.skia.foundation
 
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.foundation.SkDeserialProcs
-import org.skia.foundation.SkFlattenable
+import org.skia.core.SkBlurStyle
 import org.skia.math.SkScalar
 
 /**

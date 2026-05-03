@@ -11,6 +11,9 @@ import kotlin.String
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkBlender
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkColorInfo
 import org.skia.foundation.SkColorSpace
@@ -25,11 +28,15 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRecorder
 import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
+import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkTextEncoding
+import org.skia.foundation.SkTileMode
 import org.skia.foundation.U8CPU
 import org.skia.gpu.Recorder
 import org.skia.gpu.ganesh.GrRecordingContext

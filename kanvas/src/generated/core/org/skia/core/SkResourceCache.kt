@@ -7,6 +7,7 @@ import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
 import org.skia.`external`.Hash
+import org.skia.foundation.SkCachedData
 import undefined.RecKey
 import undefined.SkDiscardableMemory
 

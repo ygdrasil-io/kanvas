@@ -1,13 +1,11 @@
-package org.skia.core
+package org.skia.foundation
 
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.foundation.SkDeserialProcs
-import org.skia.foundation.SkFlattenable
-import org.skia.foundation.SkPath
-import org.skia.foundation.SkSp
+import org.skia.core.SkPathBuilder
+import org.skia.core.SkStrokeRec
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 
@@ -202,5 +200,3 @@ public open class SkPathEffect public constructor() : SkFlattenable() {
     }
   }
 }
-
-public typealias SkPathEffectBaseINHERITED = SkPathEffect

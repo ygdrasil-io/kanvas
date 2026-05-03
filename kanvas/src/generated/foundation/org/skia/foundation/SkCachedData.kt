@@ -1,11 +1,10 @@
-package org.skia.core
+package org.skia.foundation
 
 import kotlin.Any
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.foundation.SkNoncopyable
 import undefined.SkDiscardableMemory
 import undefined.SkMutex
 

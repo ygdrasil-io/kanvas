@@ -8,6 +8,7 @@ import kotlin.Unit
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkReadBuffer
+import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkWriteBuffer
 import org.skia.math.SkRect
 import org.skia.math.SkScalar

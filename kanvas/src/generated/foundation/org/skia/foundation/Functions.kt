@@ -1006,3 +1006,51 @@ public fun isLeadingSurrogateUTF16(c: UShort): Boolean {
 public fun isTrailingSurrogateUTF16(c: UShort): Boolean {
   TODO("Implement isTrailingSurrogateUTF16")
 }
+
+/**
+ * C++ original:
+ * ```cpp
+ * static inline bool SkPixelGeometryIsRGB(SkPixelGeometry geo) {
+ *     return kRGB_H_SkPixelGeometry == geo || kRGB_V_SkPixelGeometry == geo;
+ * }
+ * ```
+ */
+public fun skPixelGeometryIsRGB(geo: SkPixelGeometry): Boolean {
+  TODO("Implement skPixelGeometryIsRGB")
+}
+
+/**
+ * C++ original:
+ * ```cpp
+ * static inline bool SkPixelGeometryIsBGR(SkPixelGeometry geo) {
+ *     return kBGR_H_SkPixelGeometry == geo || kBGR_V_SkPixelGeometry == geo;
+ * }
+ * ```
+ */
+public fun skPixelGeometryIsBGR(geo: SkPixelGeometry): Boolean {
+  TODO("Implement skPixelGeometryIsBGR")
+}
+
+/**
+ * C++ original:
+ * ```cpp
+ * static inline bool SkPixelGeometryIsH(SkPixelGeometry geo) {
+ *     return kRGB_H_SkPixelGeometry == geo || kBGR_H_SkPixelGeometry == geo;
+ * }
+ * ```
+ */
+public fun skPixelGeometryIsH(geo: SkPixelGeometry): Boolean {
+  TODO("Implement skPixelGeometryIsH")
+}
+
+/**
+ * C++ original:
+ * ```cpp
+ * static inline bool SkPixelGeometryIsV(SkPixelGeometry geo) {
+ *     return kRGB_V_SkPixelGeometry == geo || kBGR_V_SkPixelGeometry == geo;
+ * }
+ * ```
+ */
+public fun skPixelGeometryIsV(geo: SkPixelGeometry): Boolean {
+  TODO("Implement skPixelGeometryIsV")
+}

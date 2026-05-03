@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Float
 import kotlin.Int
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkMipmap
 import org.skia.foundation.SkNoncopyable

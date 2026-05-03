@@ -3,8 +3,10 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Float
 import org.skia.effects.SkColorFilterBase
+import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkReadBuffer
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkWriteBuffer
 import org.skia.tests.ShaderType

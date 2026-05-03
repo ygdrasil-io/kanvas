@@ -4,6 +4,7 @@ import kotlin.Boolean
 import kotlin.Int
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
 import org.skia.memory.SkArenaAlloc
 import undefined.SkColor4f

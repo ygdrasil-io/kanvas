@@ -2,6 +2,7 @@ package org.skia.core
 
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkSurfaceProps
 import org.skia.math.SkMatrix
 
 /**

@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkMatrix

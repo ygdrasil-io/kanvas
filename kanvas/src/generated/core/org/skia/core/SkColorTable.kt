@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Array
 import kotlin.Int
 import kotlin.UByte
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkRefCnt
 import org.skia.foundation.SkWriteBuffer

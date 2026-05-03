@@ -2,6 +2,7 @@ package org.skia.core
 
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
 
 /**

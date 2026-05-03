@@ -9,13 +9,8 @@ import kotlin.UByte
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.core.SkBlender
-import org.skia.core.SkColorFilter
 import org.skia.core.SkLegacyFQ
-import org.skia.core.SkMaskFilter
-import org.skia.core.SkPathEffect
 import org.skia.core.SkPicturePriv
-import org.skia.core.SkShader
 import org.skia.core.THashMap
 import org.skia.math.SkIRect
 import org.skia.math.SkM44

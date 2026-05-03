@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkSurfaceProps
 import org.skia.gpu.SubRunControl
 
 /**
