@@ -8,7 +8,10 @@ import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkReadBuffer
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
+import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkWriteBuffer
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect

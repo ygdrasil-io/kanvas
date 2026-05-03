@@ -10,10 +10,7 @@ import kotlin.Unit
 import org.skia.core.SkAxisAlignment
 import org.skia.core.SkFontMetrics
 import org.skia.core.SkGlyph
-import org.skia.core.SkMaskFilter
 import org.skia.core.SkPackedGlyphID
-import org.skia.core.SkPathEffect
-import org.skia.core.SkSurfaceProps
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 import org.skia.math.SkScalar

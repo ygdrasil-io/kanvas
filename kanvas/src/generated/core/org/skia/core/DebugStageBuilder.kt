@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Int
 import kotlin.collections.List
+import org.skia.foundation.SkBitmap
 import Args as Args_
 import undefined.Args as UndefinedArgs
 

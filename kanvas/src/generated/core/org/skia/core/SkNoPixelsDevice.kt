@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkBlender
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
@@ -9,8 +10,10 @@ import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
+import org.skia.foundation.SkSurfaceProps
 import org.skia.math.SkIRect
 import org.skia.math.SkM44
 import org.skia.math.SkPoint

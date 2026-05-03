@@ -1,4 +1,8 @@
-package org.skia.core
+package org.skia.foundation
+
+import org.skia.core.Recorder
+import org.skia.core.SkCanvas
+import org.skia.core.SkSurface
 
 /**
  * C++ original:

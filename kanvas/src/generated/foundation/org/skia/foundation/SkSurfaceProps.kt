@@ -1,4 +1,4 @@
-package org.skia.core
+package org.skia.foundation
 
 import kotlin.Any
 import kotlin.Boolean

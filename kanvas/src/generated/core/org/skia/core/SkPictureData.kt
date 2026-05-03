@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.UInt
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkData
 import org.skia.foundation.SkDeserialProcs
 import org.skia.foundation.SkDrawable

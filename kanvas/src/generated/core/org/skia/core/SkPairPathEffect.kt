@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkPathEffect
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkWriteBuffer
 

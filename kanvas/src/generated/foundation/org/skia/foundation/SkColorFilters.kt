@@ -1,4 +1,4 @@
-package org.skia.core
+package org.skia.foundation
 
 import SkColor4f
 import kotlin.Array
@@ -6,10 +6,8 @@ import kotlin.Float
 import kotlin.FloatArray
 import kotlin.Int
 import kotlin.UByte
+import org.skia.core.SkColorTable
 import org.skia.effects.SkColorMatrix
-import org.skia.foundation.SkColor
-import org.skia.foundation.SkColorSpace
-import org.skia.foundation.SkSp
 
 /**
  * C++ original:

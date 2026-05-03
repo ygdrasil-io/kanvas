@@ -2,9 +2,11 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkCachedData
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkMask
 import org.skia.foundation.SkMaskBuilder
+import org.skia.foundation.SkMaskFilter
 import org.skia.foundation.SkNoncopyable
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect

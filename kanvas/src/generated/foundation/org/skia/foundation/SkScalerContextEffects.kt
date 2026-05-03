@@ -1,8 +1,5 @@
 package org.skia.foundation
 
-import org.skia.core.SkMaskFilter
-import org.skia.core.SkPathEffect
-
 /**
  * C++ original:
  * ```cpp

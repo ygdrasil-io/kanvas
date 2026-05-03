@@ -10,7 +10,10 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRefCnt
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
+import org.skia.foundation.SkTileMode
 import org.skia.gpu.ganesh.GrRecordingContext
 import org.skia.gpu.ganesh.SkAlphaType
 import org.skia.math.SkIRect

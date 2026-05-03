@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkSp
 import org.skia.gpu.ganesh.SkAlphaType

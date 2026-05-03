@@ -12,6 +12,7 @@ import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkRefCnt
 import org.skia.foundation.SkSerialProcs
 import org.skia.foundation.SkStream
+import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkWStream
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect

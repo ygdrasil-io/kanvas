@@ -2,9 +2,13 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.ULong
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
+import org.skia.foundation.SkTileMode
 import org.skia.math.SkIRect
 import org.skia.math.SkISize
 import org.skia.math.SkMatrix

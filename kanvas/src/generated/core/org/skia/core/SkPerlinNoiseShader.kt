@@ -6,6 +6,7 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.UByte
 import kotlin.UShort
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp

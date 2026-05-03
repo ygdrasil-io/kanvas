@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathEffect
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp
 import org.skia.math.SkMatrix

@@ -5,6 +5,7 @@ import kotlin.Boolean
 import kotlin.CharArray
 import kotlin.Int
 import kotlin.ULong
+import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkData
 import org.skia.foundation.SkDrawable

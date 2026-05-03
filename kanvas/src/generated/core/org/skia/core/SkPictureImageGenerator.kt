@@ -9,6 +9,7 @@ import org.skia.foundation.SkImageGenerator
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
 import org.skia.math.SkMatrix
 
 /**

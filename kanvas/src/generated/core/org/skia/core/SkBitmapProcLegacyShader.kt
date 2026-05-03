@@ -2,6 +2,7 @@ package org.skia.core
 
 import ContextRec
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkTileMode
 import org.skia.memory.SkArenaAlloc
 
 /**

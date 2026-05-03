@@ -6,8 +6,11 @@ import kotlin.String
 import org.skia.foundation.SkAutoDescriptor
 import org.skia.foundation.SkDescriptor
 import org.skia.foundation.SkFont
+import org.skia.foundation.SkMaskFilter
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPathEffect
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkTypeface
 import org.skia.math.SkMatrix
 

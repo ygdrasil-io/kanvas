@@ -15,7 +15,10 @@ import org.skia.foundation.SkDeserialProcs
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkNoncopyable
 import org.skia.foundation.SkPMColor
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
+import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkWriteBuffer
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint

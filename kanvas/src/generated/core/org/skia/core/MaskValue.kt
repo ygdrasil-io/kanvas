@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkCachedData
 import org.skia.foundation.SkMask
 
 /**

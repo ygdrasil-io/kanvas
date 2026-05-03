@@ -4,6 +4,8 @@ import kotlin.Boolean
 import kotlin.Float
 import kotlin.Int
 import kotlin.Unit
+import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkBlender
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
@@ -11,10 +13,13 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRecorder
 import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
+import org.skia.foundation.SkSurfaceProps
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint

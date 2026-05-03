@@ -7,6 +7,7 @@ import kotlin.Unit
 import org.skia.foundation.SkDeserialProcs
 import org.skia.foundation.SkFlattenable
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathEffect
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.math.SkMatrix

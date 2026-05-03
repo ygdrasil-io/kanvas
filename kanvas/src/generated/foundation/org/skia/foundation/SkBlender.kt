@@ -1,7 +1,6 @@
-package org.skia.core
+package org.skia.foundation
 
 import kotlin.Int
-import org.skia.foundation.SkFlattenable
 
 /**
  * C++ original:

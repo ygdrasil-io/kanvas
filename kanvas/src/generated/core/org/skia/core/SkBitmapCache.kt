@@ -1,6 +1,7 @@
 package org.skia.core
 
 import kotlin.Boolean
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPixmap
 import Rec as Rec_

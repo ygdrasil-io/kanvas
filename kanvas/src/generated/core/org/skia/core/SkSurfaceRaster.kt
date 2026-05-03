@@ -4,12 +4,15 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkRecorder
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkSurfaceProps
 import org.skia.math.SkIRect
 import org.skia.math.SkScalar
 import undefined.ContentChangeMode
