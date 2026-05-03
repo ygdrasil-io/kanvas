@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
+import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
 class ClipStrokeRectTest {
@@ -16,14 +17,14 @@ class ClipStrokeRectTest {
         assertNotNull(reference, "Missing reference image clip_strokerect.png")
         // Rendered in the DM reference colorspace; matches bit-exactly within
         // 1 ulp per channel.
-        val similarity = TestUtils.compareBitmaps(rendered, reference!!, tolerance = 1)
-        if (similarity < 99.0) {
-            TestUtils.saveDebugImage(rendered, "${gm.name()}-rendered")
-            TestUtils.saveDebugImage(reference, "${gm.name()}-reference")
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
+        TestReport.recordDetailed("ClipStrokeRectGM", comparison)
+        if (comparison.similarity < 99.0) {
+            TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
         }
-        val accepted = SimilarityTracker.updateScore("ClipStrokeRectGM", similarity)
+        val accepted = SimilarityTracker.updateScore("ClipStrokeRectGM", comparison.similarity)
         assertTrue(accepted, "ClipStrokeRectGM regressed below ratchet")
-        assertTrue(similarity >= 99.0,
-            "ClipStrokeRectGM similarity ${"%.2f".format(similarity)}% < 99.0% (t=1 floor)")
+        assertTrue(comparison.similarity >= 99.0,
+            "ClipStrokeRectGM similarity ${"%.2f".format(comparison.similarity)}% < 99.0% (t=1 floor)")
     }
 }
