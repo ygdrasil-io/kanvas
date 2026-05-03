@@ -21,3 +21,4 @@ class GrSurfaceProxy
 class Budgeted
 class SkPathFirstDirection
 class SurfaceContext
+class GrBackendSemaphore

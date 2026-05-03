@@ -6,6 +6,9 @@ import kotlin.Int
 import kotlin.UByte
 import kotlin.UInt
 import kotlin.ULong
+import org.skia.core.SkData
+import org.skia.core.SkImage
+import org.skia.core.SkMipmap
 import org.skia.math.SkScalar
 
 /**
@@ -221,6 +224,161 @@ public fun toBytesRGBA() {
  */
 public fun fromBytesRGBA(c: UInt) {
   TODO("Implement fromBytesRGBA")
+}
+
+/**
+ * C++ original:
+ * ```cpp
+ * static sk_sp<SkImage> MakeEmptyImage(int width, int height) {
+ *         return SkImages::DeferredFromGenerator(
+ *                 std::make_unique<EmptyImageGenerator>(SkImageInfo::MakeN32Premul(width, height)));
+ *     }
+ * ```
+ */
+public fun makeEmptyImage(width: Int, height: Int): SkSp<SkImage> {
+  TODO("Implement makeEmptyImage")
+}
+
+/**
+ * C++ original:
+ * ```cpp
+ * static sk_sp<SkImage> deserialize_image(sk_sp<SkData> data, SkDeserialProcs dProcs,
+ *                                         std::optional<SkAlphaType> alphaType) {
+ *     sk_sp<SkImage> image;
+ *     if (dProcs.fImageDataProc) {
+ *         image = dProcs.fImageDataProc(data, alphaType, dProcs.fImageCtx);
+ *     } else if (dProcs.fImageProc) {
+ * #if !defined(SK_LEGACY_DESERIAL_IMAGE_PROC)
+ *         image = dProcs.fImageProc(data->data(), data->size(), dProcs.fImageCtx);
+ * #else
+ *         image = dProcs.fImageProc(data->data(), data->size(), alphaType, dProcs.fImageCtx);
+ * #endif
+ *     }
+ *     return image;
+ * }
+ * ```
+ */
+public fun deserializeImage(
+  `data`: SkSp<SkData>,
+  dProcs: SkDeserialProcs,
+  alphaType: SkAlphaType?,
+): SkSp<SkImage> {
+  TODO("Implement deserializeImage")
+}
+
+/**
+ * C++ original:
+ * ```cpp
+ * static sk_sp<SkImage> add_mipmaps(sk_sp<SkImage> img, sk_sp<SkData> data,
+ *                                   SkDeserialProcs dProcs, std::optional<SkAlphaType> alphaType) {
+ *     SkMipmapBuilder builder(img->imageInfo());
+ *
+ *     SkReadBuffer buffer(data->data(), data->size());
+ *     int count = buffer.read32();
+ *     if (builder.countLevels() != count) {
+ *         return img;
+ *     }
+ *     for (int i = 0; i < count; ++i) {
+ *         size_t size = buffer.read32();
+ *         const void* ptr = buffer.skip(size);
+ *         if (!ptr) {
+ *             return img;
+ *         }
+ *         // This use of SkData::MakeWithoutCopy is safe because the image goes
+ *         // out of scope after we read the pixels from it, so we are sure the
+ *         // data (from buffer) outlives the image.
+ *         sk_sp<SkImage> mip = deserialize_image(SkData::MakeWithoutCopy(ptr, size), dProcs,
+ *                                                alphaType);
+ *         if (!mip) {
+ *             return img;
+ *         }
+ *
+ *         SkPixmap pm = builder.level(i);
+ *         if (mip->dimensions() != pm.dimensions()) {
+ *             return img;
+ *         }
+ *         if (!mip->readPixels(nullptr, pm, 0, 0)) {
+ *             return img;
+ *         }
+ *     }
+ *     if (!buffer.isValid()) {
+ *         return img;
+ *     }
+ *     sk_sp<SkImage> raster = img->makeRasterImage(nullptr);
+ *     if (!raster) {
+ *         return img;
+ *     }
+ *     sk_sp<SkImage> rasterWithMips = builder.attachTo(raster);
+ *     SkASSERT(rasterWithMips); // attachTo should never return null
+ *     return rasterWithMips;
+ * }
+ * ```
+ */
+public fun addMipmaps(
+  img: SkSp<SkImage>,
+  `data`: SkSp<SkData>,
+  dProcs: SkDeserialProcs,
+  alphaType: SkAlphaType?,
+): SkSp<SkImage> {
+  TODO("Implement addMipmaps")
+}
+
+/**
+ * C++ original:
+ * ```cpp
+ * static sk_sp<const SkData> serialize_image(const SkImage* image, SkSerialProcs procs) {
+ *     sk_sp<const SkData> data;
+ *     if (procs.fImageProc) {
+ *         data = procs.fImageProc(const_cast<SkImage*>(image), procs.fImageCtx);
+ *     }
+ *     if (data) {
+ *         return data;
+ *     }
+ *     // Check to see if the image's source was an encoded block of data.
+ *     // If so, just use that.
+ *     data = image->refEncodedData();
+ *     if (data) {
+ *         return data;
+ *     }
+ *     return nullptr;
+ * }
+ * ```
+ */
+public fun serializeImage(image: SkImage?, procs: SkSerialProcs): SkSp<SkData> {
+  TODO("Implement serializeImage")
+}
+
+/**
+ * C++ original:
+ * ```cpp
+ * static sk_sp<SkData> serialize_mipmap(const SkMipmap* mipmap, SkSerialProcs procs) {
+ *     /*  Format
+ *         count_levels:32
+ *         for each level, starting with the biggest (index 0 in our iterator)
+ *             encoded_size:32
+ *             encoded_data (padded)
+ *     */
+ *     const int count = mipmap->countLevels();
+ *
+ *     // This buffer does not need procs because it is just writing SkDatas
+ *     SkBinaryWriteBuffer buffer({});
+ *     buffer.write32(count);
+ *     for (int i = 0; i < count; ++i) {
+ *         SkMipmap::Level level;
+ *         if (mipmap->getLevel(i, &level)) {
+ *             sk_sp<SkImage> levelImage = SkImages::RasterFromPixmap(level.fPixmap, nullptr, nullptr);
+ *             sk_sp<const SkData> levelData = serialize_image(levelImage.get(), procs);
+ *             buffer.writeDataAsByteArray(levelData.get());
+ *         } else {
+ *             return nullptr;
+ *         }
+ *     }
+ *     return buffer.snapshotAsData();
+ * }
+ * ```
+ */
+public fun serializeMipmap(mipmap: SkMipmap?, procs: SkSerialProcs): SkSp<SkData> {
+  TODO("Implement serializeMipmap")
 }
 
 /**

@@ -223,3 +223,5 @@ public data class SkSp<T> public constructor(
     TODO("Implement swap")
   }
 }
+
+public typealias SkFlattenableFactory = (SkReadBuffer) -> SkSp<SkFlattenable>
