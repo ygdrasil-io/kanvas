@@ -2,8 +2,10 @@ package org.skia.core
 
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
@@ -107,6 +109,52 @@ public open class SkCanvas(public val device: SkBitmapDevice) {
     public fun drawPath(path: SkPath, paint: SkPaint) {
         val s = top
         device.drawPath(path, s.sx, s.sy, s.tx, s.ty, s.clip, paint)
+    }
+
+    /**
+     * Draw `image` at device-space position `(x, y)`, sampled with
+     * `sampling`. Mirrors Skia's `SkCanvas::drawImage(image, x, y, sampling, paint)`.
+     */
+    public fun drawImage(
+        image: SkImage,
+        x: SkScalar,
+        y: SkScalar,
+        sampling: SkSamplingOptions = SkSamplingOptions.Default,
+        paint: SkPaint? = null,
+    ) {
+        val w = image.width.toFloat()
+        val h = image.height.toFloat()
+        drawImageRect(
+            image,
+            SkRect.MakeWH(w, h),
+            SkRect.MakeXYWH(x, y, w, h),
+            sampling,
+            paint,
+            SrcRectConstraint.kFast,
+        )
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawImageRect(image, src, dst, sampling, paint, constraint)`.
+     * The `dst` rect is transformed via the current CTM; the `src` rect is
+     * passed through unchanged (it's an image-space sub-rectangle, not a
+     * geometry to transform).
+     */
+    public fun drawImageRect(
+        image: SkImage,
+        src: SkRect,
+        dst: SkRect,
+        sampling: SkSamplingOptions = SkSamplingOptions.Default,
+        paint: SkPaint? = null,
+        constraint: SrcRectConstraint = SrcRectConstraint.kStrict,
+    ) {
+        val s = top
+        val l = dst.left * s.sx + s.tx
+        val t = dst.top * s.sy + s.ty
+        val r = dst.right * s.sx + s.tx
+        val b = dst.bottom * s.sy + s.ty
+        val devDst = SkRect.MakeLTRB(minOf(l, r), minOf(t, b), maxOf(l, r), maxOf(t, b))
+        device.drawImageRect(image, src, devDst, sampling, paint, constraint, s.clip)
     }
 
     public fun drawColor(color: SkColor) {
