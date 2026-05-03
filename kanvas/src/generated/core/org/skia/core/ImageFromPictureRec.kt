@@ -4,6 +4,7 @@ import kotlin.Boolean
 import kotlin.Char
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkImage
 import org.skia.foundation.SkSp
 import org.skia.pdf.Key
 import undefined.SkDiscardableMemory

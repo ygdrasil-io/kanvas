@@ -6,6 +6,8 @@ import kotlin.Float
 import kotlin.Int
 import kotlin.UInt
 import kotlin.ULong
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.math.SkMatrix

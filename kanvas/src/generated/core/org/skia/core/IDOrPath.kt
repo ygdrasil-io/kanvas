@@ -1,6 +1,7 @@
 package org.skia.core
 
 import org.skia.foundation.SkGlyphID
+import org.skia.foundation.SkPath
 
 /**
  * C++ original:

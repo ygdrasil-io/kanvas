@@ -2,6 +2,8 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
 import org.skia.math.SkIPoint
 import org.skia.math.SkIRect

@@ -79,7 +79,7 @@ public class SkLinearGradient public constructor(
    * SkLinearGradient(SkReadBuffer& buffer)
    * ```
    */
-  public constructor(pts: Array<SkPoint>, desc: SkGradient) : super(TODO(), TODO()) {
+  public constructor(pts: Array<SkPoint>, desc: SkGradient) : this(TODO(), TODO()) {
     TODO("Implement constructor")
   }
 

@@ -2,6 +2,8 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkImageGenerator
+import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkNVRefCnt
 import org.skia.foundation.SkSp
 import undefined.SkMutex

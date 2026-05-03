@@ -5,7 +5,10 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.ShortArray
 import org.skia.foundation.SkAlpha
+import org.skia.foundation.SkMask
 import org.skia.foundation.SkPMColor
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPixmap
 import org.skia.math.SkIRect
 
 /**

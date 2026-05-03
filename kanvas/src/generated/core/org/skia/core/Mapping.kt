@@ -1,7 +1,9 @@
 package org.skia.core
 
 import kotlin.Boolean
+import org.skia.foundation.SkImageFilter
 import org.skia.math.SkIPoint
+import org.skia.math.SkM44
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
 

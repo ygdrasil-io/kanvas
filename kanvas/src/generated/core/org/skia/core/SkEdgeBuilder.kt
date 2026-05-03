@@ -7,6 +7,7 @@ import kotlin.Int
 import kotlin.String
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkPath
 import org.skia.math.SkIRect
 import org.skia.math.SkPoint
 import org.skia.math.SkRect

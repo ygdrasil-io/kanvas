@@ -3,7 +3,15 @@ package org.skia.core
 import kotlin.CharArray
 import kotlin.Int
 import kotlin.String
+import org.skia.foundation.SkData
+import org.skia.foundation.SkFontArguments
+import org.skia.foundation.SkFontMgr
+import org.skia.foundation.SkFontStyle
+import org.skia.foundation.SkFontStyleSet
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkStreamAsset
+import org.skia.foundation.SkTypeface
+import org.skia.foundation.SkUnichar
 
 /**
  * C++ original:

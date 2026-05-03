@@ -5,6 +5,9 @@ import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
 import org.skia.codec.Options
+import org.skia.foundation.SkImageGenerator
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSp
 import org.skia.math.SkMatrix
 

@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Float
 import org.skia.math.SkIRect
+import org.skia.math.SkM44
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
 import org.skia.math.SkRect

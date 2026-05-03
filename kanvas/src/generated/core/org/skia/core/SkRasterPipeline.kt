@@ -6,6 +6,7 @@ import kotlin.FloatArray
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkImageInfo
 import org.skia.math.SkMatrix
 import org.skia.memory.SkArenaAlloc
 import org.skia.modules.SkcmsTransferFunction

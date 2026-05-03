@@ -2,6 +2,8 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPixmap
 
 /**
  * C++ original:

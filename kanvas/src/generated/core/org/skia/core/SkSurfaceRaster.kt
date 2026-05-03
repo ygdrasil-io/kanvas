@@ -4,6 +4,11 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
 import org.skia.math.SkIRect
 import org.skia.math.SkScalar
@@ -140,7 +145,7 @@ public open class SkSurfaceRaster public constructor(
     info: SkImageInfo,
     pr: SkSp<SkPixelRef>,
     props: SkSurfaceProps?,
-  ) : super(TODO(), TODO(), TODO()) {
+  ) : this(TODO(), TODO(), TODO()) {
     TODO("Implement constructor")
   }
 
@@ -190,7 +195,7 @@ public open class SkSurfaceRaster public constructor(
     releaseProc: Unit,
     context: Unit?,
     props: SkSurfaceProps?,
-  ) : super(TODO(), TODO()) {
+  ) : this(TODO(), TODO()) {
     TODO("Implement constructor")
   }
 

@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Int
 import kotlin.Unit
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkTypeface
 
 /**
  * C++ original:

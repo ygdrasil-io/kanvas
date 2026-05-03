@@ -5,6 +5,11 @@ import kotlin.Boolean
 import kotlin.CharArray
 import kotlin.ULong
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkData
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRegion
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
 import org.skia.math.SkRect

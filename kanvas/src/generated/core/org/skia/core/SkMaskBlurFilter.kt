@@ -2,6 +2,8 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Double
+import org.skia.foundation.SkMask
+import org.skia.foundation.SkMaskBuilder
 import org.skia.math.SkIPoint
 
 /**

@@ -7,6 +7,7 @@ import kotlin.ULong
 import kotlin.Unit
 import org.skia.foundation.SkDeserialProcs
 import org.skia.foundation.SkFlattenable
+import org.skia.foundation.SkImageInfo
 import org.skia.gpu.ganesh.GrBackendApi
 import org.skia.gpu.ganesh.GrBackendDrawableInfo
 import org.skia.math.SkIRect

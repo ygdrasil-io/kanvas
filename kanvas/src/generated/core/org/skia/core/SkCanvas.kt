@@ -12,8 +12,19 @@ import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkColorInfo
+import org.skia.foundation.SkData
+import org.skia.foundation.SkFont
 import org.skia.foundation.SkGlyphID
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPMColor
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRegion
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.foundation.U8CPU
@@ -21,6 +32,7 @@ import org.skia.gpu.Recorder
 import org.skia.gpu.ganesh.GrRecordingContext
 import org.skia.math.SkIPoint
 import org.skia.math.SkIRect
+import org.skia.math.SkM44
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
 import org.skia.math.SkRSXform

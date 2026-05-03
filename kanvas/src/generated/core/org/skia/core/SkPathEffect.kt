@@ -6,6 +6,7 @@ import kotlin.ULong
 import kotlin.Unit
 import org.skia.foundation.SkDeserialProcs
 import org.skia.foundation.SkFlattenable
+import org.skia.foundation.SkPath
 import org.skia.foundation.SkSp
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect

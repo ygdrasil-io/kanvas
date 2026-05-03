@@ -485,7 +485,7 @@ public data class SkDeque public constructor(
   }
 
   public open class F2BIter public constructor() : org.skia.core.Iter() {
-    public constructor(d: SkDeque) : super(TODO(), TODO()) {
+    public constructor(d: SkDeque) : this(TODO(), TODO()) {
       TODO("Implement constructor")
     }
 

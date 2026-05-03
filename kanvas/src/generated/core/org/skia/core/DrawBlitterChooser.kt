@@ -1,6 +1,7 @@
 package org.skia.core
 
 import kotlin.Any
+import org.skia.foundation.SkPaint
 import org.skia.memory.SkArenaAlloc
 
 public typealias DrawBlitterChooser = (

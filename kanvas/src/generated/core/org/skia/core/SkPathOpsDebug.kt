@@ -5,6 +5,7 @@ import kotlin.Char
 import kotlin.Int
 import kotlin.String
 import kotlin.ULong
+import org.skia.foundation.SkPath
 import org.skia.memory.SkTDArray
 
 /**

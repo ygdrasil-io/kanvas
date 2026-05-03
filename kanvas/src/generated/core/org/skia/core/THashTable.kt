@@ -881,10 +881,6 @@ public open class THashTable<T, K, Traits> public constructor() {
 
     protected var fSlot: Int = TODO("Initialize fSlot")
 
-    public operator fun times(): SlotVal {
-      TODO("Implement times")
-    }
-
     public fun `get`(): SlotVal {
       TODO("Implement get")
     }
@@ -918,10 +914,6 @@ public open class THashTable<T, K, Traits> public constructor() {
   ) {
     public fun assign(that: org.skia.sksl.Slot) {
       TODO("Implement assign")
-    }
-
-    public operator fun times(): T {
-      TODO("Implement times")
     }
 
     public fun emplace(v: T, h: UInt): org.skia.sksl.Slot {

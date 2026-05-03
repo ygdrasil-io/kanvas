@@ -7,6 +7,8 @@ import kotlin.Int
 import kotlin.String
 import kotlin.UInt
 import kotlin.ULong
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSpan
 import org.skia.math.SkMatrix
 import org.skia.math.SkPathDirection

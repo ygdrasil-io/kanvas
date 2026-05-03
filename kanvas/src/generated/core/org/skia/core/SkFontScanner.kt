@@ -5,6 +5,10 @@ import VariationPosition
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.String
+import org.skia.foundation.SkFontArguments
+import org.skia.foundation.SkFontStyle
+import org.skia.foundation.SkNoncopyable
+import org.skia.foundation.SkStreamAsset
 
 /**
  * C++ original:

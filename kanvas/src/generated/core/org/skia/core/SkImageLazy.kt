@@ -5,6 +5,10 @@ import kotlin.Int
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkData
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkSp
 import org.skia.gpu.ganesh.GrDirectContext
 import org.skia.math.SkIRect

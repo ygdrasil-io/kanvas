@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkSp
 
 /**

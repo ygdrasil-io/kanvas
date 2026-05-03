@@ -1,5 +1,7 @@
 package org.skia.core
 
+import org.skia.foundation.SkMask
+import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSpan
 import org.skia.math.SkRect
 import org.skia.math.SkScalar

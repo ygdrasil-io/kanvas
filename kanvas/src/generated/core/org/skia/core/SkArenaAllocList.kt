@@ -140,10 +140,6 @@ public data class SkArenaAllocList<T> public constructor(
       TODO("Implement inc")
     }
 
-    public operator fun times(): T {
-      TODO("Implement times")
-    }
-
     public fun `get`(): T {
       TODO("Implement get")
     }

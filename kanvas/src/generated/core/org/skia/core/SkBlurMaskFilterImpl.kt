@@ -3,6 +3,10 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import org.skia.foundation.SkFlattenable
+import org.skia.foundation.SkMask
+import org.skia.foundation.SkMaskBuilder
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkRRect
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan

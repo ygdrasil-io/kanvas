@@ -1,6 +1,8 @@
 package org.skia.core
 
 import kotlin.Int
+import org.skia.foundation.SkNoncopyable
+import org.skia.foundation.SkPaint
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 

@@ -3,6 +3,7 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
+import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkRefCnt
 import org.skia.foundation.SkSp
 

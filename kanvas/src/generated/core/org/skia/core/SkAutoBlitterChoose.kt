@@ -1,5 +1,7 @@
 package org.skia.core
 
+import org.skia.foundation.SkNoncopyable
+import org.skia.foundation.SkPaint
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 

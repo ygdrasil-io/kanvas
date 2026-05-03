@@ -2,7 +2,9 @@ package org.skia.core
 
 import kotlin.UInt
 import kotlin.ULong
+import org.skia.foundation.SkNoncopyable
 import org.skia.foundation.SkReadBuffer
+import org.skia.math.SkM44
 
 /**
  * C++ original:

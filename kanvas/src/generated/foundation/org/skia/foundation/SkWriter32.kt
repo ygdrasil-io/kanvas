@@ -5,14 +5,6 @@ import kotlin.Int
 import kotlin.String
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.core.SkData
-import org.skia.core.SkNoncopyable
-import org.skia.core.SkPath
-import org.skia.core.SkRRect
-import org.skia.core.SkRegion
-import org.skia.core.SkSamplingOptions
-import org.skia.core.SkStream
-import org.skia.core.SkWStream
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint

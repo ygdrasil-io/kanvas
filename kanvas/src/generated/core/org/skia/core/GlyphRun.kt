@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Char
 import kotlin.Int
+import org.skia.foundation.SkFont
 import org.skia.foundation.SkGlyphID
 import org.skia.foundation.SkSpan
 import org.skia.math.SkPoint

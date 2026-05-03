@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkSp
 
 /**

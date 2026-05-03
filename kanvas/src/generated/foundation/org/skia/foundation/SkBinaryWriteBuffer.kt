@@ -6,19 +6,10 @@ import kotlin.String
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
-import org.skia.core.SkData
 import org.skia.core.SkFactorySet
-import org.skia.core.SkImage
-import org.skia.core.SkM44
-import org.skia.core.SkPaint
-import org.skia.core.SkPath
 import org.skia.core.SkRefCntSet
-import org.skia.core.SkRegion
-import org.skia.core.SkSamplingOptions
-import org.skia.core.SkStream
-import org.skia.core.SkTypeface
-import org.skia.core.SkWStream
 import org.skia.math.SkIRect
+import org.skia.math.SkM44
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
 import org.skia.math.SkPoint3
@@ -145,7 +136,7 @@ public abstract class SkBinaryWriteBuffer public constructor(
     storage: Unit?,
     storageSize: ULong,
     p: SkSerialProcs,
-  ) : super(TODO()) {
+  ) : this(TODO()) {
     TODO("Implement constructor")
   }
 

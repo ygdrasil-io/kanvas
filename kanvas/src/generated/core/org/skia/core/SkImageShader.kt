@@ -3,9 +3,12 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Float
 import org.skia.foundation.SkFlattenable
+import org.skia.foundation.SkImage
 import org.skia.foundation.SkReadBuffer
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkWriteBuffer
+import org.skia.math.SkM44
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 import org.skia.memory.SkArenaAlloc

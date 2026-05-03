@@ -6,6 +6,7 @@ import kotlin.Long
 import kotlin.ULong
 import kotlin.Unit
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkStreamAsset
 
 /**
  * C++ original:

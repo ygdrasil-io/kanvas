@@ -3,6 +3,8 @@ package org.skia.core
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.UInt
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPath
 import org.skia.math.SkScalar
 
 /**

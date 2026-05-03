@@ -9,10 +9,13 @@ import kotlin.ULong
 import kotlin.Unit
 import kotlinx.atomicfu.AtomicRef
 import org.skia.foundation.SkDeserialProcs
+import org.skia.foundation.SkFont
 import org.skia.foundation.SkGlyphID
 import org.skia.foundation.SkNVRefCnt
+import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSerialProcs
 import org.skia.foundation.SkSpan
+import org.skia.foundation.SkTypeface
 import org.skia.math.SkPoint
 import org.skia.math.SkRSXform
 import org.skia.math.SkRect

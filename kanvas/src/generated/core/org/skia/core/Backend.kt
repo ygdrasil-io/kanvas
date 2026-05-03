@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkImage
 import org.skia.foundation.SkRefCnt
 import org.skia.foundation.SkSp
 import org.skia.math.SkIRect

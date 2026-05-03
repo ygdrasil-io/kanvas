@@ -1,5 +1,7 @@
 package org.skia.core
 
+import org.skia.foundation.SkPath
+
 /**
  * C++ original:
  * ```cpp
@@ -16,7 +18,7 @@ public open class PreCachedPath public constructor() : SkPath() {
    * PreCachedPath() {}
    * ```
    */
-  public constructor(path: SkPath) : super(TODO()) {
+  public constructor(path: SkPath) : this(TODO()) {
     TODO("Implement constructor")
   }
 }

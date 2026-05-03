@@ -5,6 +5,7 @@ import kotlin.Int
 import kotlin.String
 import kotlin.UInt
 import kotlin.ULong
+import org.skia.foundation.SkFont
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
 import org.skia.math.SkScalar

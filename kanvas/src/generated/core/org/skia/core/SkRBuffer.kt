@@ -7,6 +7,7 @@ import kotlin.UByte
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkNoncopyable
 
 /**
  * C++ original:

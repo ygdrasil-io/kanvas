@@ -3,6 +3,7 @@ package org.skia.core
 import `SkWriteBuffer&buffer`
 import kotlin.Boolean
 import kotlin.Int
+import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkReadBuffer
 
 /**

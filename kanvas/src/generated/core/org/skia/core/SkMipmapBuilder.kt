@@ -1,6 +1,9 @@
 package org.skia.core
 
 import kotlin.Int
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkMipmap
+import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkSp
 
 /**

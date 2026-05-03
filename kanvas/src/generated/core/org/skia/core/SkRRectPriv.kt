@@ -2,6 +2,7 @@ package org.skia.core
 
 import kotlin.Boolean
 import kotlin.Float
+import org.skia.foundation.SkRRect
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
 import org.skia.math.SkVector

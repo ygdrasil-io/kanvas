@@ -1,5 +1,7 @@
 package org.skia.core
 
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkMatrix
 import org.skia.memory.SkArenaAlloc
 

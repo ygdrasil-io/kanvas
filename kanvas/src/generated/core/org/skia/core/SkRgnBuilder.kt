@@ -5,6 +5,7 @@ import kotlin.Boolean
 import kotlin.Int
 import kotlin.ShortArray
 import org.skia.foundation.SkAlpha
+import org.skia.foundation.SkRegionRunType
 import org.skia.math.SkIRect
 
 /**

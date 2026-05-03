@@ -8,6 +8,7 @@ import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
 import org.skia.foundation.SkNVRefCnt
+import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.math.SkMatrix

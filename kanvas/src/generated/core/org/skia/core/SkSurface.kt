@@ -5,8 +5,13 @@ import kotlin.Int
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkRefCnt
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkYUVColorSpace
 import org.skia.gpu.Recorder
 import org.skia.gpu.RescaleGamma
 import org.skia.gpu.RescaleMode

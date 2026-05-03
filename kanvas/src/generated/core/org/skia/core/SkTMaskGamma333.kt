@@ -220,5 +220,3 @@ public open class SkTMaskGamma333 public constructor() : SkRefCnt() {
     }
   }
 }
-
-public typealias SkMaskGamma = SkTMaskGamma333

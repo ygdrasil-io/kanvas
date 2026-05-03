@@ -2,7 +2,11 @@ package org.skia.core
 
 import kotlin.Int
 import kotlin.Unit
+import org.skia.foundation.SkDescriptor
+import org.skia.foundation.SkScalerContext
+import org.skia.foundation.SkScalerContextEffects
 import org.skia.foundation.SkSp
+import org.skia.foundation.SkTypeface
 import org.skia.memory.SkArenaAlloc
 import org.skia.utils.SkStrikeClient
 import undefined.GlyphMetrics

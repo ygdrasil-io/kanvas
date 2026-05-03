@@ -7,6 +7,7 @@ import kotlin.IntArray
 import kotlin.String
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkWStream
 
 /**
  * C++ original:

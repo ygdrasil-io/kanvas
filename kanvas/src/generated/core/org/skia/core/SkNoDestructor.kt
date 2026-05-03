@@ -84,16 +84,6 @@ public data class SkNoDestructor<T> public constructor(
    * const T& operator*() const { return *get(); }
    * ```
    */
-  public operator fun times(): T {
-    TODO("Implement times")
-  }
-
-  /**
-   * C++ original:
-   * ```cpp
-   * T& operator*() { return *get(); }
-   * ```
-   */
   public fun `get`(): T {
     TODO("Implement get")
   }

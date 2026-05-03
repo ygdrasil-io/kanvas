@@ -7,6 +7,7 @@ import kotlin.Short
 import kotlin.String
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkNoncopyable
 import org.skia.math.SkScalar
 
 /**

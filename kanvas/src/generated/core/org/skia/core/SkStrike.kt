@@ -4,8 +4,11 @@ import kotlin.Array
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.ULong
+import org.skia.foundation.SkDescriptor
 import org.skia.foundation.SkGlyphID
+import org.skia.foundation.SkPath
 import org.skia.foundation.SkReadBuffer
+import org.skia.foundation.SkScalerContext
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkSpan
 import org.skia.foundation.SkWriteBuffer

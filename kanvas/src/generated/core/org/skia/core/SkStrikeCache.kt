@@ -6,6 +6,7 @@ import kotlin.Int
 import kotlin.UInt
 import kotlin.ULong
 import kotlin.Unit
+import org.skia.foundation.SkDescriptor
 import org.skia.foundation.SkSp
 import undefined.SkMutex
 

@@ -1,6 +1,7 @@
 package org.skia.core
 
 import kotlin.Int
+import org.skia.foundation.SkDescriptor
 import org.skia.foundation.SkReadBuffer
 import org.skia.foundation.SkSp
 import org.skia.foundation.SkWriteBuffer

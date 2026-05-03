@@ -6,6 +6,10 @@ import kotlin.Int
 import kotlin.ShortArray
 import kotlin.ULong
 import org.skia.foundation.SkAlpha
+import org.skia.foundation.SkMask
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSp
 import org.skia.foundation.U8CPU
 import org.skia.math.SkIRect

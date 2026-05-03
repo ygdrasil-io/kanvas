@@ -157,7 +157,7 @@ public data class SkSp<T> public constructor(
    *     }
    * ```
    */
-  public fun <U> assign(that: SkSp<U>) {
+  public fun assign(that: SkSp<T>) {
     TODO("Implement assign")
   }
 
@@ -170,8 +170,8 @@ public data class SkSp<T> public constructor(
    *     }
    * ```
    */
-  public fun times(): T {
-    TODO("Implement times")
+  public fun <T> assign(that: SkSp<U>) {
+    TODO("Implement assign")
   }
 
   /**
@@ -196,7 +196,7 @@ public data class SkSp<T> public constructor(
    *     }
    * ```
    */
-  public fun reset(ptr: T? = null) {
+  public fun reset(ptr: T = null) {
     TODO("Implement reset")
   }
 

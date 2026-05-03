@@ -10,6 +10,10 @@ import kotlin.ULong
 import kotlin.UShort
 import kotlin.Unit
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSp
 import org.skia.foundation.U8CPU
 import org.skia.gpu.ganesh.SkAlphaType
