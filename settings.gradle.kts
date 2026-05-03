@@ -19,3 +19,4 @@ plugins {
 
 
 include(":kanvas")
+include(":kanvas-skia")
