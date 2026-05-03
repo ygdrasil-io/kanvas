@@ -35,6 +35,13 @@ public class SkBitmap(
 
     public fun size(): SkISize = SkISize.Make(width, height)
 
+    /**
+     * Snapshot this bitmap into an immutable [SkImage]. Mirrors Skia's
+     * `SkBitmap::asImage()` — the returned image owns a copy of the pixels,
+     * so subsequent edits to this bitmap don't leak into the image.
+     */
+    public fun asImage(): SkImage = SkImage.Make(this)
+
     public companion object {
         public fun Make(w: Int, h: Int): SkBitmap = SkBitmap(w, h)
         public fun Make(w: Int, h: Int, colorSpace: SkColorSpace): SkBitmap =
