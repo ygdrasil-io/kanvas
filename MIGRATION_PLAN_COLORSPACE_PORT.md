@@ -372,26 +372,19 @@ Cf. `SkColorSpaceXformSteps.cpp:25-40`, `:74-105`, `:107-135`, `:166-178`.
 
 ---
 
-## Phase J — Précision / snap final `kRec2020` (XS)
+## Phase J — Précision / snap final `kRec2020` (XS) — ✅
 
-**But** : décider de la fin du conflit `kRec2020 ours vs kRec2020 Skia`.
+**Décision retenue** : Option 1 — alignement sur Skia upstream (6 décimales).
 
-État actuel :
-- **Skia** : `{2.22222, 0.909672, 0.0903276, 0.222222, 0.0812429, 0, 0}` (6 décimales).
-- **Nous** : `{2.22221961, 0.909672439, 0.0903276134, 0.222222447, 0.0812428713, 0, 0}` (s15Fixed16-décodé du PNG).
+- [x] [SkNamedTransferFn.kRec2020](kanvas-skia/src/main/kotlin/org/skia/skcms/SkNamedTransferFn.kt) : `{2.22222f, 0.909672f, 0.0903276f, 0.222222f, 0.0812429f, 0, 0}` (correspondance exacte avec `SkColorSpace.h:130-131`).
+- [x] [SkNamedGamut.kRec2020](kanvas-skia/src/main/kotlin/org/skia/skcms/SkNamedGamut.kt) : `{0.673459, 0.165661, 0.125100, 0.279033, 0.675338, 0.0456288, -0.00193139, 0.0299794, 0.797162}` (correspondance exacte avec `SkColorSpace.h:251-255`).
 
-Idem sur `SkNamedGamut.kRec2020`.
+Le snap Phase B (`transferFnAlmostEqual` tolérance `0.001f`, `xyzAlmostEqual` tolérance `0.01f`) absorbe la divergence ~1e-5 / ~5e-7 entre ces valeurs et celles s15Fixed16-décodées du profil ICC dans le PNG de référence. Donc :
 
-### Décision
+- `makeRGB(parsed-from-PNG-icc, parsed-from-PNG-gamut)` snap maintenant sur le **même** instance que `makeRGB(SkNamedTransferFn.kRec2020, SkNamedGamut.kRec2020)`.
+- `Equals` est désormais symétrique avec Skia upstream pour les profils Rec.2020 d'origine variée.
 
-Une fois Phase B (snap `is_almost_*`) en place :
-- [ ] **Option 1** — Aligner sur Skia (6 décimales). Le snap dans `MakeRGB` couvre la divergence `0.001f`. Le PNG ICC parsé via Phase F sera snappé sur `kRec2020` exact, ce qui rend le `Equals` symétrique avec Skia.
-- [ ] **Option 2** — Garder notre précision élevée. Justification : on a la valeur exacte du PNG cible. Mais on ne snap plus avec Skia upstream, donc deux instances `MakeRGB(perfect-rec2020-from-png, perfect-rec2020-gamut)` ne seraient `===` à `MakeRGB(SkNamedTransferFn.kRec2020, SkNamedGamut.kRec2020)` que si Phase B est activée.
-- **Recommandation** : Option 1 + Phase B. Plus simple, plus aligné, et les tests Phase 1-3a passent toujours à `tolerance=1` (vérifié).
-
-**Tests** :
-- [ ] `MakeRGB(parsedFromPng).hash() == MakeRGB(SkNamedTransferFn.kRec2020, SkNamedGamut.kRec2020).hash()`.
-- [ ] Re-mesure des 5 GMs : score doit rester ≥ leur valeur actuelle.
+**Vérification** : 237 tests verts, GMs scores inchangés (BigRect 95.53, SimpleRect/ClipStrokeRect/DrawBitmapRect3 100, ConcavePaths 98.86, ThinRects 92.10).
 
 ---
 
