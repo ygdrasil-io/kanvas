@@ -1,0 +1,500 @@
+# Plan #3 — Portage complet de la pipeline color space Skia
+
+> Plan de complétion. Les divergences listées dans l'analyse `kanvas-skia ↔ skia-main` (cf. PR #6 review thread) sont consolidées en phases livrables. Chaque phase = un commit / une PR contre `from-skia`. Branche : `claude/colorspace-completion`. Worktree : `/Users/chaos/worktree/kanvas/colorspace-completion`.
+
+## Contexte
+
+[MIGRATION_PLAN_COLORSPACE.md](MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ a livré :
+- skcms minimal (TF eval/invert + matrix concat/invert) — sRGBish only.
+- `SkColorSpace` minimal (singletons, MakeRGB, Equals, hash).
+- `SkColorSpaceXformSteps` (apply scalaire) — sans OOTF.
+- Wiring dans `SkBitmap` + `SkBitmapDevice` + `TestUtils`.
+- 5 GMs Phase 1-3a passent à `tolerance=1`.
+
+Reste pour la *vraie* parité avec Skia (cf. analyse de divergence) :
+
+1. **HDR** — PQ, HLG, PQish, HLGish, HLGinvish dans skcms (classify, eval, invert) + branches OOTF dans `XformSteps`.
+2. **ICC parsing** — `skcms_Parse` (header v2/v4, tags rXYZ/gXYZ/bXYZ/wtpt, paramètric et table TRCs, A2B/B2A LUTs, CICP), `SkColorSpace.Make(profile)`.
+3. **CICP** — `SkColorSpacePrimaries`, `SkNamedPrimaries::*`, `SkNamedTransferFn::CicpId`, `MakeCICP`.
+4. **Sérialisation** — `serialize` / `Deserialize` / `writeToMemory` (16 floats + version header).
+5. **Modifiers** — `makeLinearGamma`, `makeSRGBGamma`, `makeColorSpin`.
+6. **Hash bit-compat** — `SkChecksum::Hash32` (Mum-style).
+7. **Snap dans `MakeRGB`** — `is_almost_srgb` / `is_almost_2dot2` / `is_almost_linear`, `xyz_almost_equal`.
+8. **Optimisations `SkColorSpaceXformSteps`** — early-return src==dst, linearize/encode skip-if-linear, unpremul+premul cancel, `dstAT==Opaque → srcAT` hint.
+9. **Constantes nommées manquantes** — kRec709, kRec601, kSMPTE_*, kPQ, kHLG, kIEC*, kProPhotoRGB, kA98RGB ; SkNamedPrimaries::kRec709/kRec2020/etc.
+10. **Précision `kRec2020`** — décider : matcher Skia (6 décimales) ou garder précision PNG ICC (snap nécessaire pour rester equal au singleton).
+11. **`apply(SkRasterPipeline*)`** — différé (hors scope colorspace, dépend du raster pipeline JIT).
+
+## Trois décisions architecturales préalables
+
+1. **Garder le port à la main.** Pas d'activation des fichiers `kanvas/src/generated/skcms/`. Trop de stubs (`Functions.kt` 154 KB), package `undefined.*` à résoudre. On porte chaque fonction depuis `modules/skcms/skcms.cc` upstream à la main, en gardant le commentaire C++ d'origine en KDoc comme spec.
+2. **Hash bit-compat = optionnel.** `SkChecksum::Hash32` est utilisé par Skia pour comparer rapidement deux `SkColorSpace`. Notre FNV-1a est correct intra-impl mais incompatible si on cherche à matcher des hashs externes (cache disque, sérialisation, PRDeserialize qui suppose hash stable). Phase H (priorité basse) — uniquement si un test concret le réclame.
+3. **HDR avant ou après ICC ?** ICC parsing est requis pour lire des PNGs avec profils non-Rec.2020 (à venir : `BitmapRectGM`, `EncodeGM`). HDR est requis pour les GMs PQ/HLG (peu nombreux, plus tard). **Ordre retenu** : ICC d'abord (Phase F), HDR après (Phase I).
+
+## Trajectoire — 11 phases ordonnées
+
+| Phase | Slice | Effort | Bloque quoi ? |
+|-------|-------|--------|----------------|
+| A | Optimisations XformSteps | XS | Drift float résiduel ; cycles gâchés |
+| B | `is_almost_*` snap dans `MakeRGB` | XS | `Equals`/singleton-snap pour ICC parse |
+| C | Modifiers (`makeLinearGamma` etc.) | XS | Symétrie API |
+| D | Constantes nommées TF + Gamut | S | CICP table, ICC parse fallback |
+| E | CICP infra (`SkColorSpacePrimaries`, `MakeCICP`) | M | ICC parse path |
+| F | ICC parsing (`skcms_Parse`, `Make(profile)`) | **L** | Lecture PNG iCCP arbitraire |
+| G | Sérialisation (`serialize`/`Deserialize`/`writeToMemory`) | S | Cache/persistance |
+| H | Hash bit-compat (`SkChecksum::Hash32`) | XS | Interop hash externe (rarement utile) |
+| I | HDR (PQ + HLG dans classify/eval/invert + OOTF dans XformSteps) | **L** | GMs HDR (kHDR_blue, etc.) |
+| J | Précision/snap finalisation `kRec2020` | XS | Cohérence test/ratchet |
+| K | `apply(SkRasterPipeline*)` | XL | **Différé** — dépend du raster pipeline JIT, hors scope colorspace |
+
+XS = ~30 lignes. S = ~200 lignes. M = ~500 lignes. L = ~1500 lignes. XL = >5000.
+
+---
+
+## Phase A — Optimisations `SkColorSpaceXformSteps` (XS)
+
+**But** : porter les 4 chemins fast-path Skia manquants. Réduit le drift float pour α≠1 et économise des cycles.
+
+À modifier dans [kanvas-skia/src/main/kotlin/org/skia/core/SkColorSpaceXformSteps.kt](kanvas-skia/src/main/kotlin/org/skia/core/SkColorSpaceXformSteps.kt) :
+
+- [ ] **Hint `dstAT==Opaque → srcAT`** — Skia `SkColorSpaceXformSteps.cpp:45-47`. Si `dstAT == kOpaque` on bascule `dstAT = srcAT` avant de calculer les flags. Affecte le calcul de `unpremul`/`premul` dans le cas Premul→Opaque.
+- [ ] **Early-return `src==dst`** — `:54-57`. `if (src.hash() == dst.hash() && srcAT == dstAT) return;` (tous flags `false` par défaut).
+- [ ] **`linearize`/`encode` conditionnels TF** — `:99-104`, `:129-134`. `linearize = (srcTrfn != kLinear)`, `encode = (dstTrfn != kLinear)`. Évite 6 appels `pow` identité par pixel dans le cas Linear↔Linear (ou Linear↔Wide).
+- [ ] **Optimisation 2 : linearize+encode même TF** — `:181-200`. Si seul le gamut change, supprimer linearize+encode (le TF s'annule mathématiquement par le pin `inv(eval)` mais coûte 6 `pow`).
+- [ ] **Optimisation 3 : unpremul+premul cancel** — `:202-210`. Si rien de non-linéaire entre les deux, supprimer les deux.
+
+**Tests** :
+- [ ] `XformStepsOptTest` — pour chaque chemin, vérifier `flags.isIdentity` quand attendu.
+- [ ] **Test α≠1** : sRGB premul (0.5, 0.25, 0.5, 0.5) → sRGB premul = identité bit-stable (le drift unpremul→premul disparaît avec opt 3).
+- [ ] Regression : les 5 GMs existants gardent leurs scores.
+
+**Vérification** : pas de baisse de similarité, idéalement BigRectGM remonte légèrement (cycles évités = arrondis évités).
+
+---
+
+## Phase B — Snap quasi-sRGB dans `MakeRGB` (XS)
+
+**But** : Permettre à `MakeRGB(tf, mat)` de coller au singleton sRGB même quand `tf` arrive d'un parser ICC avec du bruit s15Fixed16.
+
+À porter de [`SkColorSpacePriv.h:21-65`](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkColorSpacePriv.h) :
+
+- [ ] `colorSpaceAlmostEqual(a, b: Float): Boolean` — tolérance `0.01f`, pour matrices.
+- [ ] `transferFnAlmostEqual(a, b: Float): Boolean` — tolérance `0.001f`, pour TFs (plus strict, ICC offre 16 bits de précision).
+- [ ] `xyzAlmostEqual(mA, mB)` — élément par élément avec `colorSpaceAlmostEqual`.
+- [ ] `isAlmostSRGB(tf)` — 7 comparaisons strictes.
+- [ ] `isAlmost2Dot2(tf)` — formule alternative (a=1, b=0, e=0, g≈2.2, d≤0).
+- [ ] `isAlmostLinear(tf)` — deux formes : exponentielle (g≈1) ou linéaire (c≈1, d≥1).
+- [ ] **Modifier `SkColorSpace.makeRGB`** ([SkColorSpace.kt:78-88](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt:78)) : remplacer le snap par égalité exacte par le snap par `is_almost_*`. Mirror `SkColorSpace.cpp:144-156`.
+
+**Tests** :
+- [ ] `MakeRGB(kSRGB-perturbé-0.0005, kSRGB-gamut-perturbé-0.005)` → `=== makeSRGB()` (singleton).
+- [ ] `MakeRGB(kSRGB-perturbé-0.005, kSRGB-gamut)` → instance fraîche (TF tolérance `0.001` non franchie pour `0.005` = NaN, instance fraîche → mais ah on snape sur 0.001 donc à 0.005 = pas snap).
+  - Plus précisément : tester `Math.abs(diff) >= 0.001 → not snap`.
+- [ ] `gammaCloseToSRGB()` retourne `true` après snap, alors qu'avant Phase B elle retournait `false`.
+- [ ] Regression : pas d'impact sur les 5 GMs (ils utilisent les singletons exacts).
+
+---
+
+## Phase C — Modifiers `makeLinearGamma` / `makeSRGBGamma` / `makeColorSpin` (XS)
+
+**But** : symétrie API. Composition simple.
+
+À porter dans [kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt) (cf. `SkColorSpace.cpp:270-294`) :
+
+- [ ] `makeLinearGamma()`: `if (gammaIsLinear()) return this; else return makeRGB(kLinear, toXYZD50)`.
+- [ ] `makeSRGBGamma()`: idem avec `kSRGB`.
+- [ ] `makeColorSpin()`: concat avec spin matrix `{{0,0,1},{1,0,0},{0,1,0}}`. Utilisé pour les tests Skia (transformations sévères).
+
+**Tests** :
+- [ ] `makeSRGB().makeLinearGamma() === makeSRGBLinear()` (snap singleton).
+- [ ] `makeSRGBLinear().makeSRGBGamma() === makeSRGB()`.
+- [ ] `makeColorSpin()` 3× retourne au point de départ (RGB → GBR → BRG → RGB).
+- [ ] `makeColorSpin().toXYZD50` = `toXYZD50 · spin`.
+
+---
+
+## Phase D — Constantes nommées complètes (S)
+
+**But** : importer toutes les TFs et tous les gamuts standards de `SkColorSpace.h:121-263`.
+
+### `SkNamedTransferFn` — ajouter
+- [ ] `kRec709` = `{2.4, 1, 0, 0, 0, 0, 0}`
+- [ ] `kRec470SystemM` = `{2.2, 1, 0, 0, 0, 0, 0}`
+- [ ] `kRec470SystemBG` = `{2.8, 1, 0, 0, 0, 0, 0}`
+- [ ] `kRec601` = `kRec709` (alias)
+- [ ] `kSMPTE_ST_240` = `{2.222222222, 0.899626676, 0.100373324, 0.25, 0.091286342, 0, 0}`
+- [ ] `kIEC61966_2_4` = `kRec709` (alias)
+- [ ] `kIEC61966_2_1` = `kSRGB` (alias)
+- [ ] `kRec2020_10bit` = `kRec709` (alias)
+- [ ] `kRec2020_12bit` = `kRec709` (alias)
+- [ ] `kPQ` = `{-5, 203, 0, 0, 0, 0, 0}` (sentinelle)
+- [ ] `kSMPTE_ST_428_1` = `{2.6, 1.034080527699, 0, 0, 0, 0, 0}`
+- [ ] `kHLG` = `{-6, 203, 1000, 1.2, 0, 0, 0}` (sentinelle)
+- [ ] `kProPhotoRGB` = `{1.8, 1, 0, 0, 0, 0, 0}`
+- [ ] `kA98RGB` = `k2Dot2` (alias)
+
+### `SkNamedTransferFn::CicpId` — créer enum (`SkColorSpace.h:190-212`)
+- [ ] Valeurs ITU-T H.273 : kRec709=1, kRec470SystemM=4, …, kHLG=18.
+- [ ] `kSRGB = kIEC61966_2_1 = 13`.
+
+### `SkNamedPrimaries` — créer namespace
+- [ ] `SkColorSpacePrimaries` data class avec 4 paires xy (R, G, B, white point).
+- [ ] Constantes : `kRec709`, `kRec470SystemM`, `kRec470SystemBG`, `kRec601`, `kSMPTE_ST_240`, `kGenericFilm`, `kRec2020`, `kSMPTE_ST_428_1`, `kSMPTE_RP_431_2`, `kSMPTE_EG_432_1`, `kITU_T_H273_Value22`, `kProPhotoRGB`. (cf. `SkColorSpace.h:42-119`)
+- [ ] `CicpId` enum identique à `SkNamedTransferFn::CicpId` mais pour les primaires.
+- [ ] `SkColorSpacePrimaries.toXYZD50(out)` qui appelle `skcms_PrimariesToXYZD50` (à porter en Phase E).
+
+### `SkNamedGamut` — vérifier complétude
+- [ ] `kAdobeRGB` (déjà présent) ✓
+- [ ] `kDisplayP3` ✓
+- [ ] `kRec2020` — voir Phase J
+- [ ] `kXYZ` ✓
+- [ ] Manque `kSRGB` (déjà présent) ✓
+
+**Tests** :
+- [ ] `SkNamedTransferFnConstantsTest` — chaque constante a le bon classify type (Invalid pour PQ/HLG car non-supporté avant Phase I, sinon sRGBish).
+- [ ] `SkNamedPrimariesTest` — pour `kRec709`, `toXYZD50()` produit `kSRGB-gamut` à `xyzAlmostEqual` près.
+- [ ] CicpId enum : valeurs numériques exactes pour interop.
+
+---
+
+## Phase E — Infrastructure CICP + `MakeCICP` (M)
+
+**But** : table-driven lookup des primaires et TF par CICP id ; constructeur `MakeCICP`.
+
+### `skcms_PrimariesToXYZD50` — porter
+
+`skcms.cc:1867-1909`. Convertit (rxy, gxy, bxy, wxy) → matrice toXYZD50.
+
+- [ ] Construit `primaries` 3x3 = `{{rx,gx,bx},{ry,gy,by},{1-rx-ry, 1-gx-gy, 1-bx-by}}`.
+- [ ] Inverse cette matrice.
+- [ ] Multiplie par `(wx/wy, 1, (1-wx-wy)/wy)`.
+- [ ] Construit `toXYZ` diagonale puis multiplie par `primaries`.
+- [ ] Bradford-adapte au D50 via `skcms_AdaptToXYZD50`.
+
+### `skcms_AdaptToXYZD50` — porter
+
+`skcms.cc:1826-1865`. Bradford chromatic adaptation. ~30 lignes incluant les matrices Bradford constantes.
+
+### `SkNamedPrimaries::GetCicp` / `GetCicpFromMatrix`
+
+`SkColorSpace.cpp:30-82`. Table de 11 entrées CICP. Mapping bidirectionnel CicpId ↔ matrix.
+
+- [ ] `GetCicp(primaries: CicpId, out: SkcmsMatrix3x3): Boolean`.
+- [ ] `GetCicpFromMatrix(m: SkcmsMatrix3x3, out: CicpId): Boolean` — utilise `xyzAlmostEqual`.
+- [ ] Fast-path pour `kRec709 → kSRGB`, `kRec2020 → kRec2020`, `kSMPTE_EG_432_1 → kDisplayP3`.
+
+### `SkNamedTransferFn::GetCicp`
+
+`SkColorSpace.cpp:112-120`. Table de 13 entrées TF.
+
+### `SkColorSpace.MakeCICP`
+
+`SkColorSpace.cpp:161-174`. Combine les deux GetCicp et appelle MakeRGB.
+
+**Tests** :
+- [ ] `MakeCICP(kRec709, kIEC61966_2_4) === makeSRGB()`.
+- [ ] `MakeCICP(kRec2020, kSMPTE_ST_240).toXYZD50` ≈ kRec2020-gamut.
+- [ ] `MakeCICP(kRec2020, ?)` avec ID invalide → `null`.
+
+---
+
+## Phase F — ICC parsing (L)
+
+**But** : `SkColorSpace.Make(skcms_ICCProfile)` peut consommer un profil ICC parsé.
+
+C'est la grosse pièce. ~1500 lignes C++ dans `skcms.cc:600-1500` à porter.
+
+### Étape F1 — Types `skcms_ICCProfile` (et amis)
+
+Cf. `skcms_public.h:160-323`.
+
+- [ ] `SkcmsICCProfile` data class — `buffer`, `size`, `data_color_space`, `pcs`, `tag_count`, `trc[3]`, `toXYZD50`, `A2B`, `B2A`, `CICP`, `has_*` flags.
+- [ ] `SkcmsCurve` — `parametric: SkcmsTransferFunction` OU `table_8` / `table_16`.
+- [ ] `SkcmsCICP` — `color_primaries`, `transfer_characteristics`, `matrix_coefficients`, `video_full_range_flag`.
+- [ ] `SkcmsA2B`, `SkcmsB2A` — LUT 3D et associated curves. Phase F4 (différé).
+- [ ] `SkcmsSignature` enum (data color spaces : 'RGB ', 'GRAY', 'CMYK', 'XYZ ').
+
+### Étape F2 — `skcms_Parse` (header v2/v4)
+
+Cf. `skcms.cc:540-1100` (`Parse` + `parse_*`).
+
+- [ ] Validation header ICC 128 octets : magic 'acsp', version, device class, color space, PCS, illuminant XYZ.
+- [ ] Lecture tag table (`tag_count` × 12 octets : signature + offset + length).
+- [ ] Pour chaque tag : signature switch.
+  - [ ] `'rXYZ'` / `'gXYZ'` / `'bXYZ'` / `'wtpt'` : 20 octets, type='XYZ ', lit 3 floats s15Fixed16.
+  - [ ] `'rTRC'` / `'gTRC'` / `'bTRC'` / `'kTRC'` : type='para' (paramétrique 0/1/2/3/4 → 1/3/4/5/7 floats) ou type='curv' (LUT, 0=linear / 1=gamma / N=table). Phase F2 supporte para uniquement, table déférée à F3.
+  - [ ] `'cprt'` / `'desc'` : ignorer.
+  - [ ] `'cicp'` : 4 octets (color_primaries, transfer_characteristics, matrix_coefficients, full_range_flag).
+  - [ ] `'A2B0'` / `'A2B1'` / `'A2B2'` / `'B2A0'` etc. : F4.
+- [ ] Calcule `has_trc`, `has_toXYZD50`, `has_A2B`, `has_B2A`, `has_CICP`.
+
+### Étape F3 — Curve LUT support
+
+Cf. `skcms.cc:471-499` (`evalCurve`).
+
+- [ ] `SkcmsCurve.tableEntries` + `table_16`/`table_8`.
+- [ ] `evalCurve(curve, x)` : interpole linéairement entre 2 entrées de table.
+- [ ] `skcmsTRCsAreApproximateInverse(profile, invTf): Boolean` (fallback dans `Make`).
+- [ ] `skcmsAreApproximateInverses(curve, invTf): Boolean` — `MaxRoundtripError < 1/512`.
+
+### Étape F4 — A2B/B2A LUT (différé)
+
+ICC v4 multi-dimensional LUT (3D 17×17×17 typique). Ce sont les profils CMYK et certains RGB exotiques. **Reporté** sauf si un PNG de référence l'exige (improbable).
+
+### Étape F5 — `SkColorSpace.Make(profile)`
+
+Cf. `SkColorSpace.cpp:331-407`.
+
+- [ ] Fast-path `skcms_ApproximatelyEqualProfiles(profile, sRGB) → makeSRGB()`.
+- [ ] Fast-path CICP : si `kRec709 + kIEC61966_2_4` → makeSRGB.
+- [ ] Sinon : tente CICP, puis `profile.toXYZD50`, puis `profile.trc[0..2].parametric` (s'ils matchent), sinon fallback `kSRGB` si TRCs ≈ inverse sRGB.
+- [ ] Retourne `null` si rien ne se résout.
+
+### Étape F6 — Helpers manquants
+
+- [ ] `skcms_sRGB_profile()` — singleton du profil sRGB de référence (96 octets, parsable).
+- [ ] `skcms_sRGB_Inverse_TransferFunction()` — inversed kSRGB.
+- [ ] `skcms_ApproximatelyEqualProfiles(a, b)` — compare TFs et matrix avec tolérance.
+
+### Étape F7 — Wiring `TestUtils.loadReferenceBitmap`
+
+Aujourd'hui [TestUtils.kt:83-115](kanvas-skia/src/test/kotlin/org/skia/testing/TestUtils.kt) lit les PNGs en bypassant le profil ICC. Avec F1-F6 :
+
+- [ ] `loadReferenceBitmap(name)` : lit le chunk iCCP, parse, construit `SkColorSpace.Make(profile)`, retourne un `SkBitmap` avec ce CS.
+- [ ] `compareBitmaps(a, b)` peut maintenant garantir que les deux sont dans le même CS — ou xform si différents.
+- [ ] **Effet de bord** : on n'a plus besoin de hardcoder `DM_REFERENCE_COLOR_SPACE` dans `runGmTest` — on peut lire le CS du PNG attendu et matcher dynamiquement.
+
+**Tests** :
+- [ ] `SkcmsParseTest` — parse un profil sRGB v4 connu, vérifie tags.
+- [ ] `SkcmsParseRec2020Test` — parse le profil de `bigrect.png` (déjà extrait dans `colorspace-fingerprint.md`), vérifie matrix + TF.
+- [ ] `SkColorSpaceMakeTest` — `Make(parsed_sRGB) === makeSRGB()`.
+- [ ] `SkColorSpaceMakeTest.parsedRec2020EqualsKnown` — match avec `MakeRGB(kRec2020, kRec2020-gamut)`.
+- [ ] **Test bout-en-bout** : `loadReferenceBitmap("bigrect")` retourne un bitmap dont `colorSpace == DM_REFERENCE_COLOR_SPACE`.
+
+**Risque** : ICC v2 vs v4. Skia DM produit du v4. F1-F2 doivent gérer les deux versions (header byte 8). Plan B : v4 only, accepter de ne pas pouvoir lire un PNG v2.
+
+---
+
+## Phase G — Sérialisation `SkColorSpace` (S)
+
+**But** : `serialize` / `Deserialize` / `writeToMemory` pour cache & cross-process.
+
+Cf. `SkColorSpace.cpp:411-470`.
+
+- [ ] `ColorSpaceHeader` data class : 4 octets `(version=1, reserved0=0, reserved1=0, reserved2=0)`.
+- [ ] `writeToMemory(memory: ByteArray?): Int` — header (4) + 7 floats TF (28) + 9 floats matrix (36) = **68 octets**.
+- [ ] `serialize(): ByteArray` — alloue + writeToMemory.
+- [ ] `Deserialize(data: ByteArray, length: Int): SkColorSpace?` — valide header v1, lit 16 floats, `MakeRGB`.
+
+**Tests** :
+- [ ] Round-trip : `serialize` / `Deserialize` (sRGB) → singleton.
+- [ ] Round-trip Rec.2020.
+- [ ] Deserialize buffer trop court → null.
+- [ ] Deserialize avec version != 1 → null.
+
+**Bonus** : permet d'écrire un chunk iCCP minimal (sans aller jusqu'à un vrai profil ICC) pour les debug images. Mais le format custom 68-octets n'est pas un ICC valide ; vrai PNG-iCCP-write nécessite Phase F (ICC v4 emit), beaucoup plus de boulot. **Différé** comme Phase 7 du plan #2.
+
+---
+
+## Phase H — Hash bit-compat `SkChecksum::Hash32` (XS)
+
+**But** : `SkColorSpace.hash()` retourne une valeur identique à upstream Skia.
+
+À porter de [`src/core/SkChecksum.h`](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkChecksum.h) :
+
+- [ ] `SkChecksum.hash32(data: ByteArray, len: Int, seed: Int = 0): Int` — Mum hash variant. Spec : `hash_fn` dans `src/opts/SkOpts_*.cpp`.
+- [ ] Adapter les conversions float → byte pour matcher l'ordre mémoire C++ (little-endian sur ARM/x86).
+- [ ] Remplacer `hashFloats` dans [SkColorSpace.kt:96-104](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt:96).
+
+**Tests** :
+- [ ] Cross-check avec Skia : `MakeSRGB().transferFnHash` == valeur connue Skia (à extraire).
+- [ ] Stabilité : bit-rotation préservée, hash identique entre runs.
+
+**Justification** : sans ça, `serialize`/`Deserialize` est OK (pas de hash dans le format), `Equals` est OK (intra-impl). Utile uniquement pour interop avec un cache Skia externe (peu probable). **Priorité basse**.
+
+---
+
+## Phase I — Support HDR (PQ + HLG) (L)
+
+**But** : couvrir les TF sentinel-encoded (`g < 0`) dans skcms et activer les branches OOTF dans `XformSteps`. Débloque `SkColorSpace::MakeCICP(kRec2020, kPQ)` et les GMs HDR (encore inexistants dans nos refs mais existent upstream).
+
+### Étape I1 — Support sentinelle dans `classify`
+
+Cf. `skcms.cc:135-191`.
+
+- [ ] Branche `tf.g < 0` dans `classify` : extrait `enum_g = -tf.g.toInt()`, switch sur `skcms_TFType_PQ/HLG/PQish/HLGish/HLGinvish`.
+- [ ] Soundness : PQ exige `b=c=d=e=f=0`, HLG exige `d=e=f=0`.
+- [ ] Sentinel marker : `TFKind_marker(kind: SkcmsTFType): Float = -kind.ordinal.toFloat()`.
+
+### Étape I2 — `eval` pour PQ / PQish / HLG / HLGish / HLGinvish
+
+Cf. `skcms.cc:259-295`.
+
+- [ ] `case PQ` : Reinhard-style formula avec constantes c1, c2, c3, m1, m2 (BT.2100 PQ EOTF).
+- [ ] `case PQish` : `pow((A + B*x^C) / (D + E*x^C), F)`. Lit `pq` struct via memcpy from `tf.a`.
+- [ ] `case HLG` : split `x ≤ 0.5` linéaire vs power. Constantes BT.2100 HLG OETF.
+- [ ] `case HLGish` : multipliée par `K = K_minus_1 + 1`.
+- [ ] `case HLGinvish` : variante avec params inversés.
+- [ ] Helper struct `TF_PQish(A, B, C, D, E, F: Float)` et `TF_HLGish(R, G, a, b, c, K_minus_1: Float)` avec layout mémoire identique aux 6 derniers floats du TF.
+
+### Étape I3 — `invert` pour PQish / HLGish / HLGinvish
+
+Cf. `skcms.cc:1992-2007`.
+
+- [ ] `PQish → PQish` avec params transformés `{-A, D, 1/F, B, -E, 1/C}`.
+- [ ] `HLGish ↔ HLGinvish` avec `{1/R, 1/G, 1/a, b, c, K_minus_1}`.
+- [ ] PQ et HLG ne sont pas invertibles → `null`.
+
+### Étape I4 — `SkNamedTransferFn` constructeurs HDR
+
+Cf. `skcms.cc:212-248`.
+
+- [ ] `skcmsTransferFunctionMakePQish(A, B, C, D, E, F)`.
+- [ ] `skcmsTransferFunctionMakeScaledHLGish(K, R, G, a, b, c)`.
+- [ ] `skcmsTransferFunctionMakeHLGish(R, G, a, b, c)` = `MakeScaledHLGish(1, ...)`.
+- [ ] `skcmsTransferFunctionMakePQ(hdrRefWhite)`.
+- [ ] `skcmsTransferFunctionMakeHLG(hdrRefWhite, peakLuminance, systemGamma)`.
+
+### Étape I5 — OOTF dans `SkColorSpaceXformSteps`
+
+Cf. `SkColorSpaceXformSteps.cpp:25-40`, `:74-105`, `:107-135`, `:166-178`.
+
+- [ ] Champs `fSrcOotf: FloatArray(4)` et `fDstOotf: FloatArray(4)` dans `Flags` étendus.
+- [ ] `setOotfY(cs, out)` : calcule Y luminance coefficients depuis le gamut transform vers Rec.2020.
+- [ ] Branche PQ src : `scaleFactor *= 10000 / srcTrfn.a`, set `srcTF` à `kPQish` standard.
+- [ ] Branche HLG src : `scaleFactor *= srcTrfn.b / srcTrfn.a`, set `srcTF` à `kHLGish` scalé par 1/12.
+- [ ] Si HLG `srcTrfn.c != 1` : active `srcOotf`, calcule coefficients Y.
+- [ ] Symétrie pour dst.
+- [ ] `optimization 1` : si `srcOotf && dstOotf && !gamutTransform` et gammas réciproques → annuler les deux.
+- [ ] Étendre `apply()` avec branches `srcOotf` / `dstOotf` (Y-luminance scaling avant et après gamut transform).
+
+### Étape I6 — Constantes de référence
+
+- [ ] `kPQ`, `kHLG` dans `SkNamedTransferFn` (déjà listées en Phase D, mais Phase D les insère sans support eval/invert ; Phase I active le support).
+
+**Tests** :
+- [ ] Round-trip PQ : `eval(kPQish, x)` puis `eval(invert(kPQish), y)` ≈ x dans `[0, 1]`.
+- [ ] HLG idem.
+- [ ] sRGB → PQ Rec.2020 sur (0,0,1) — comparer à une valeur connue Skia.
+- [ ] OOTF cancel : sRGB+OOTF → sRGB+OOTF même CS = identité (via opt 1).
+
+**Risque** : HDR dépend de `pow` haute précision. JVM `Math.pow` est fine, mais comportement sur extrêmes (`x` proche 1, `pow(x, 0.45)` etc.) peut diverger sub-ulp avec `powf_` Skia.
+
+**Effort** : ~600 lignes. C'est le plus gros slice après ICC parsing. Pas requis tant qu'on n'a pas de GMs HDR à valider.
+
+---
+
+## Phase J — Précision / snap final `kRec2020` (XS)
+
+**But** : décider de la fin du conflit `kRec2020 ours vs kRec2020 Skia`.
+
+État actuel :
+- **Skia** : `{2.22222, 0.909672, 0.0903276, 0.222222, 0.0812429, 0, 0}` (6 décimales).
+- **Nous** : `{2.22221961, 0.909672439, 0.0903276134, 0.222222447, 0.0812428713, 0, 0}` (s15Fixed16-décodé du PNG).
+
+Idem sur `SkNamedGamut.kRec2020`.
+
+### Décision
+
+Une fois Phase B (snap `is_almost_*`) en place :
+- [ ] **Option 1** — Aligner sur Skia (6 décimales). Le snap dans `MakeRGB` couvre la divergence `0.001f`. Le PNG ICC parsé via Phase F sera snappé sur `kRec2020` exact, ce qui rend le `Equals` symétrique avec Skia.
+- [ ] **Option 2** — Garder notre précision élevée. Justification : on a la valeur exacte du PNG cible. Mais on ne snap plus avec Skia upstream, donc deux instances `MakeRGB(perfect-rec2020-from-png, perfect-rec2020-gamut)` ne seraient `===` à `MakeRGB(SkNamedTransferFn.kRec2020, SkNamedGamut.kRec2020)` que si Phase B est activée.
+- **Recommandation** : Option 1 + Phase B. Plus simple, plus aligné, et les tests Phase 1-3a passent toujours à `tolerance=1` (vérifié).
+
+**Tests** :
+- [ ] `MakeRGB(parsedFromPng).hash() == MakeRGB(SkNamedTransferFn.kRec2020, SkNamedGamut.kRec2020).hash()`.
+- [ ] Re-mesure des 5 GMs : score doit rester ≥ leur valeur actuelle.
+
+---
+
+## Phase K — `apply(SkRasterPipeline*)` (XL — différé)
+
+**But** : émettre la pipeline color comme une chaîne d'opcodes `SkRasterPipelineOp` au lieu d'appeler `apply(rgba)` scalaire par pixel.
+
+Cf. `SkColorSpaceXformSteps.cpp:267-275`.
+
+- Dépend de **`SkRasterPipeline`** qui est un sous-système séparé (3000+ lignes), JIT scalaire avec un large opcode table.
+- **Hors scope** du plan colorspace. À aborder dans un plan dédié `MIGRATION_PLAN_RASTER_PIPELINE.md` quand le rendu nécessite la perf JIT.
+
+---
+
+## Critères de complétude
+
+À la fin du plan (Phases A-J, hors I et K) :
+
+- [ ] `SkColorSpace` API surface = 95% Skia (manque : `apply(SkRasterPipeline*)`, vrai write-PNG-iCCP).
+- [ ] `MakeRGB` snap aussi serré que Skia.
+- [ ] ICC parser opérationnel sur tout PNG v4 standard.
+- [ ] `Make(profile)` fonctionne pour profils sRGB / Rec.2020 / Adobe RGB / Display P3 / ProPhoto / et toute table-CICP standard.
+- [ ] Fidélité numérique sur les 5 GMs existants : ≥ état actuel à `tolerance=1`.
+- [ ] Optionnel **Phase I** (HDR) : 100% surface skcms, `MakeCICP(kRec2020, kPQ)` fonctionne.
+
+## Fichiers critiques à créer
+
+```
+kanvas-skia/src/main/kotlin/org/skia/skcms/
+  SkcmsCurve.kt                          # F1
+  SkcmsCICP.kt                           # F1
+  SkcmsICCProfile.kt                     # F1
+  SkcmsSignature.kt                      # F1
+  SkcmsA2B.kt + SkcmsB2A.kt              # F1 (stubs, F4 active)
+  SkcmsParse.kt                          # F2
+  SkcmsAdaptToXYZD50.kt                  # E
+  SkcmsPrimariesToXYZD50.kt              # E
+  TFPQish.kt + TFHLGish.kt               # I (struct mémoire)
+
+kanvas-skia/src/main/kotlin/org/skia/foundation/
+  SkColorSpacePrimaries.kt               # D
+  SkNamedPrimaries.kt                    # D
+  SkColorSpacePriv.kt                    # B (is_almost_*)
+
+kanvas-skia/src/main/kotlin/org/skia/util/
+  SkChecksum.kt                          # H
+
+kanvas-skia/src/test/kotlin/org/skia/skcms/
+  SkcmsParseTest.kt                      # F
+  SkcmsHDRTest.kt                        # I
+  SkcmsCicpTest.kt                       # E
+
+kanvas-skia/src/test/kotlin/org/skia/foundation/
+  SkColorSpaceMakeTest.kt                # F
+  SkColorSpaceModifiersTest.kt           # C
+  SkColorSpaceSerializeTest.kt           # G
+  SkColorSpaceCicpTest.kt                # E
+
+kanvas-skia/src/test/kotlin/org/skia/core/
+  SkColorSpaceXformStepsOptTest.kt       # A
+  SkColorSpaceXformStepsHDRTest.kt       # I
+```
+
+## Sources de référence
+
+- [`skia-main/include/core/SkColorSpace.h`](file:///Users/chaos/workspace/kanvas-forge/skia-main/include/core/SkColorSpace.h) — surface publique complète.
+- [`skia-main/src/core/SkColorSpace.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkColorSpace.cpp) — Make, MakeCICP, Make(profile), modifiers, serialize.
+- [`skia-main/src/core/SkColorSpacePriv.h`](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkColorSpacePriv.h) — helpers `is_almost_*`.
+- [`skia-main/src/core/SkColorSpaceXformSteps.{h,cpp}`](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkColorSpaceXformSteps.cpp) — XformSteps complet avec OOTF.
+- [`skia-main/modules/skcms/skcms.cc`](file:///Users/chaos/workspace/kanvas-forge/skia-main/modules/skcms/skcms.cc) — 3141 lignes, contient ICC parse, classify, eval, invert, matrix ops, primaries, AdaptToXYZD50.
+- [`skia-main/modules/skcms/src/skcms_public.h`](file:///Users/chaos/workspace/kanvas-forge/skia-main/modules/skcms/src/skcms_public.h) — types publics.
+- [`skia-main/src/core/SkChecksum.h`](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkChecksum.h) — hash bit-compat.
+
+## Vérification end-to-end (par phase)
+
+Identique aux plans précédents :
+1. `./gradlew :kanvas-skia:compileKotlin` compile sans erreur.
+2. `./gradlew :kanvas-skia:test` réussit tous les tests existants + nouveaux.
+3. Scores dans `kanvas-skia/test-similarity-scores.properties` ≥ valeur précédente (jamais chuter > 1%).
+4. Une fois Phase F mergée : `loadReferenceBitmap` lit le profil ICC du PNG et tightens le tolerance à 0 (l'objectif final).
+
+## Ordre de PRs recommandé
+
+1. **PR Phase A + B + C** — petits patches, peuvent passer ensemble (~150 lignes total).
+2. **PR Phase D + E** — constantes + CICP (~400 lignes).
+3. **PR Phase F1-F2** — types ICC + parser header/tags paramétric (~600 lignes).
+4. **PR Phase F3+F5** — curve LUT + Make(profile) (~400 lignes).
+5. **PR Phase F7** — wiring `loadReferenceBitmap` sur ICC parser (~50 lignes, bénéfice énorme : tolerance 1→0).
+6. **PR Phase G** — sérialisation (~150 lignes).
+7. **PR Phase J** — clean-up précisions kRec2020 (~30 lignes).
+8. **PR Phase H** — hash bit-compat (optionnel, ~80 lignes).
+9. **PR Phase I** — HDR complet (~600 lignes, en dernier — pas de bloquant aujourd'hui).
+
+À chaque PR : commit unique par phase, tests verts, similarity scores maintenus.
