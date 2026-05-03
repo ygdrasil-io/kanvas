@@ -9,6 +9,7 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.tan
+// SkRRect lives in the same `org.skia.foundation` package — no import needed.
 
 /**
  * Mutable, fluent path builder. Mirrors Skia's `SkPathBuilder` 4.x API.
@@ -214,6 +215,105 @@ public class SkPathBuilder public constructor() {
         cx: SkScalar, cy: SkScalar, r: SkScalar,
         dir: SkPathDirection = SkPathDirection.kCW,
     ): SkPathBuilder = addOval(SkRect.MakeLTRB(cx - r, cy - r, cx + r, cy + r), dir)
+
+    /**
+     * Append a rounded rectangle contour. Mirrors Skia's
+     * `SkPathBuilder::addRRect(rrect, dir)`. Defers to [addRect] / [addOval]
+     * when the [SkRRect.Type] degenerates and otherwise emits 4 lines + 4
+     * cubic-Bézier corners using the same kappa approximation as [addOval].
+     *
+     * **Note**: Skia's optional `startIndex` parameter is not yet exposed —
+     * the contour always starts at the top-left corner's end-of-arc on the
+     * top edge (`(left + tlRx, top)`), then proceeds in the requested
+     * direction. None of the Phase 4 GMs we plan to port care about
+     * `startIndex`; will be added if needed.
+     */
+    public fun addRRect(
+        rrect: SkRRect,
+        dir: SkPathDirection = SkPathDirection.kCW,
+    ): SkPathBuilder = apply {
+        when (rrect.getType()) {
+            SkRRect.Type.kEmpty_Type -> return@apply
+            SkRRect.Type.kRect_Type -> { addRect(rrect.rect(), dir); return@apply }
+            SkRRect.Type.kOval_Type -> { addOval(rrect.rect(), dir); return@apply }
+            SkRRect.Type.kSimple_Type,
+            SkRRect.Type.kNinePatch_Type,
+            SkRRect.Type.kComplex_Type -> emitRRectCorners(rrect, dir)
+        }
+    }
+
+    private fun emitRRectCorners(rrect: SkRRect, dir: SkPathDirection) {
+        val rect = rrect.rect()
+        val tl = rrect.radii(SkRRect.Corner.kUpperLeft_Corner)
+        val tr = rrect.radii(SkRRect.Corner.kUpperRight_Corner)
+        val br = rrect.radii(SkRRect.Corner.kLowerRight_Corner)
+        val bl = rrect.radii(SkRRect.Corner.kLowerLeft_Corner)
+        val k = OVAL_KAPPA
+        val l = rect.left; val t = rect.top
+        val r = rect.right; val b = rect.bottom
+
+        if (dir == SkPathDirection.kCW) {
+            moveTo(l + tl.fX, t)
+            lineTo(r - tr.fX, t)
+            // Top-right corner: (r - tr.fX, t) → (r, t + tr.fY).
+            cubicTo(
+                r - tr.fX * (1f - k), t,
+                r, t + tr.fY * (1f - k),
+                r, t + tr.fY,
+            )
+            lineTo(r, b - br.fY)
+            // Bottom-right corner: (r, b - br.fY) → (r - br.fX, b).
+            cubicTo(
+                r, b - br.fY * (1f - k),
+                r - br.fX * (1f - k), b,
+                r - br.fX, b,
+            )
+            lineTo(l + bl.fX, b)
+            // Bottom-left corner: (l + bl.fX, b) → (l, b - bl.fY).
+            cubicTo(
+                l + bl.fX * (1f - k), b,
+                l, b - bl.fY * (1f - k),
+                l, b - bl.fY,
+            )
+            lineTo(l, t + tl.fY)
+            // Top-left corner: (l, t + tl.fY) → (l + tl.fX, t).
+            cubicTo(
+                l, t + tl.fY * (1f - k),
+                l + tl.fX * (1f - k), t,
+                l + tl.fX, t,
+            )
+        } else {
+            moveTo(l + tl.fX, t)
+            // Top-left corner reversed: (l + tl.fX, t) → (l, t + tl.fY).
+            cubicTo(
+                l + tl.fX * (1f - k), t,
+                l, t + tl.fY * (1f - k),
+                l, t + tl.fY,
+            )
+            lineTo(l, b - bl.fY)
+            // Bottom-left corner reversed: (l, b - bl.fY) → (l + bl.fX, b).
+            cubicTo(
+                l, b - bl.fY * (1f - k),
+                l + bl.fX * (1f - k), b,
+                l + bl.fX, b,
+            )
+            lineTo(r - br.fX, b)
+            // Bottom-right corner reversed: (r - br.fX, b) → (r, b - br.fY).
+            cubicTo(
+                r - br.fX * (1f - k), b,
+                r, b - br.fY * (1f - k),
+                r, b - br.fY,
+            )
+            lineTo(r, t + tr.fY)
+            // Top-right corner reversed: (r, t + tr.fY) → (r - tr.fX, t).
+            cubicTo(
+                r, t + tr.fY * (1f - k),
+                r - tr.fX * (1f - k), t,
+                r - tr.fX, t,
+            )
+        }
+        close()
+    }
 
     /**
      * Append a polygon contour (one `moveTo` + `N-1` `lineTo`s, optionally
