@@ -14,10 +14,16 @@ public fun SkColorGetB(c: SkColor): Int = c and 0xFF
 
 public const val SK_ColorTRANSPARENT: SkColor = 0x00000000
 public const val SK_ColorBLACK: SkColor = 0xFF000000.toInt()
+public const val SK_ColorDKGRAY: SkColor = 0xFF444444.toInt()
+public const val SK_ColorGRAY: SkColor = 0xFF888888.toInt()
+public const val SK_ColorLTGRAY: SkColor = 0xFFCCCCCC.toInt()
 public const val SK_ColorWHITE: SkColor = 0xFFFFFFFF.toInt()
 public const val SK_ColorRED: SkColor = 0xFFFF0000.toInt()
 public const val SK_ColorGREEN: SkColor = 0xFF00FF00.toInt()
 public const val SK_ColorBLUE: SkColor = 0xFF0000FF.toInt()
+public const val SK_ColorYELLOW: SkColor = 0xFFFFFF00.toInt()
+public const val SK_ColorCYAN: SkColor = 0xFF00FFFF.toInt()
+public const val SK_ColorMAGENTA: SkColor = 0xFFFF00FF.toInt()
 
 /**
  * Quantize an opaque ARGB color to RGB565 precision (5-6-5 bits) and return

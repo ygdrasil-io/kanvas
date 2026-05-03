@@ -8,9 +8,12 @@ import org.skia.foundation.SkColorGetG
 import org.skia.foundation.SkColorGetR
 import org.skia.foundation.SkColorSetARGB
 import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkFilterMode
+import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
+import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
 import org.skia.math.SkRect
 import kotlin.math.ceil as kCeil
@@ -62,6 +65,131 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     public fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val devPaint = inDeviceColorSpace(paint)
         if (devPaint.isAntiAlias) drawRectAA(rect, clip, devPaint) else drawRectNonAA(rect, clip, devPaint)
+    }
+
+    /**
+     * Draw `image` into the supplied **device-space** `devDst` rect, sampling
+     * the image-space `src` sub-rectangle. The canvas has already applied its
+     * CTM to produce `devDst`; the device only needs to perform the inverse
+     * `dst → src` mapping per pixel and sample.
+     *
+     * Pixel coverage uses the same top-exclusive / bottom-inclusive rule as
+     * the non-AA rect path (`pixelEdge`); AA edges of `devDst` are not
+     * fractionally covered (matches Skia's default `drawImageRect` behaviour
+     * when `paint` lacks `setAntiAlias(true)`).
+     *
+     * Supported [SkFilterMode]s : `kNearest`, `kLinear`. Mipmap and bicubic
+     * sampling are out of scope. Out-of-range sample coordinates are clamped
+     * to the image edge texels — Skia's `kClamp` tile mode and the default
+     * behaviour under both [SrcRectConstraint] variants for axis-aligned
+     * mappings without filter overflow.
+     */
+    public fun drawImageRect(
+        image: SkImage,
+        src: SkRect,
+        devDst: SkRect,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+        constraint: SrcRectConstraint,
+        clip: SkIRect,
+    ) {
+        if (devDst.right <= devDst.left || devDst.bottom <= devDst.top) return
+        if (src.right <= src.left || src.bottom <= src.top) return
+        if (image.width <= 0 || image.height <= 0) return
+
+        val ix0 = pixelEdge(devDst.left).coerceAtLeast(clip.left)
+        val iy0 = pixelEdge(devDst.top).coerceAtLeast(clip.top)
+        val ix1 = pixelEdge(devDst.right).coerceAtMost(clip.right)
+        val iy1 = pixelEdge(devDst.bottom).coerceAtMost(clip.bottom)
+        if (ix0 >= ix1 || iy0 >= iy1) return
+
+        val devW = devDst.right - devDst.left
+        val devH = devDst.bottom - devDst.top
+        val srcW = src.right - src.left
+        val srcH = src.bottom - src.top
+        val scaleX = srcW / devW
+        val scaleY = srcH / devH
+
+        val paintAlpha = paint?.color?.let { SkColorGetA(it) } ?: 0xFF
+        if (paintAlpha == 0) return
+        val maxX = image.width - 1
+        val maxY = image.height - 1
+
+        // [SkImage] currently has no `colorSpace` property, so by convention
+        // image pixels are sRGB-encoded (same as SkColor). The device's
+        // [xformSteps] (sRGB → bitmap.colorSpace) is reused here: we
+        // pre-convert the entire image into device-space pixels once, then
+        // sample from that buffer in the inner loop. Cheap because images
+        // tend to have far fewer pixels than the dst rect.
+        val devPixels = imagePixelsInDeviceColorSpace(image)
+
+        when (sampling.filter) {
+            SkFilterMode.kNearest -> {
+                for (py in iy0 until iy1) {
+                    val srcYc = src.top + (py + 0.5f - devDst.top) * scaleY
+                    val iy = floor(srcYc).coerceIn(0, maxY)
+                    for (px in ix0 until ix1) {
+                        val srcXc = src.left + (px + 0.5f - devDst.left) * scaleX
+                        val ix = floor(srcXc).coerceIn(0, maxX)
+                        val sample = applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
+                        if (sample ushr 24 == 0) continue
+                        blend(px, py, sample)
+                    }
+                }
+            }
+            SkFilterMode.kLinear -> {
+                for (py in iy0 until iy1) {
+                    val srcYf = src.top + (py + 0.5f - devDst.top) * scaleY - 0.5f
+                    val iy0i = floor(srcYf).coerceIn(0, maxY)
+                    val iy1i = (iy0i + 1).coerceAtMost(maxY)
+                    val fy = (srcYf - floor(srcYf).toFloat()).coerceIn(0f, 1f)
+                    for (px in ix0 until ix1) {
+                        val srcXf = src.left + (px + 0.5f - devDst.left) * scaleX - 0.5f
+                        val ix0i = floor(srcXf).coerceIn(0, maxX)
+                        val ix1i = (ix0i + 1).coerceAtMost(maxX)
+                        val fx = (srcXf - floor(srcXf).toFloat()).coerceIn(0f, 1f)
+                        val c00 = devPixels[iy0i * image.width + ix0i]
+                        val c10 = devPixels[iy0i * image.width + ix1i]
+                        val c01 = devPixels[iy1i * image.width + ix0i]
+                        val c11 = devPixels[iy1i * image.width + ix1i]
+                        val sample = applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
+                        if (sample ushr 24 == 0) continue
+                        blend(px, py, sample)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Pre-convert all `image` pixels from sRGB into the bitmap's color space.
+     * Identity-fast-path returns the underlying buffer when the device is
+     * sRGB (no allocation, no per-pixel float work).
+     */
+    private fun imagePixelsInDeviceColorSpace(image: SkImage): IntArray {
+        if (xformSteps.flags.isIdentity) return image.pixels
+        val out = IntArray(image.width * image.height)
+        for (i in out.indices) out[i] = transformPaintColor(image.pixels[i])
+        return out
+    }
+
+    /** Modulate `src.alpha` by `paintAlpha / 255`, leaving RGB unchanged. */
+    private fun applyAlpha(src: SkColor, paintAlpha: Int): SkColor {
+        if (paintAlpha == 0xFF) return src
+        val sa = SkColorGetA(src)
+        val newA = (sa * paintAlpha + 127) / 255
+        return (src and 0x00FFFFFF) or (newA shl 24)
+    }
+
+    /** Bilinear interpolation in non-premultiplied ARGB; matches Skia for opaque samples. */
+    private fun bilerpARGB(c00: SkColor, c10: SkColor, c01: SkColor, c11: SkColor, fx: Float, fy: Float): SkColor {
+        val ifx = 1f - fx; val ify = 1f - fy
+        val w00 = ifx * ify; val w10 = fx * ify; val w01 = ifx * fy; val w11 = fx * fy
+        val a = (SkColorGetA(c00) * w00 + SkColorGetA(c10) * w10 + SkColorGetA(c01) * w01 + SkColorGetA(c11) * w11 + 0.5f).toInt().coerceIn(0, 255)
+        val r = (SkColorGetR(c00) * w00 + SkColorGetR(c10) * w10 + SkColorGetR(c01) * w01 + SkColorGetR(c11) * w11 + 0.5f).toInt().coerceIn(0, 255)
+        val g = (SkColorGetG(c00) * w00 + SkColorGetG(c10) * w10 + SkColorGetG(c01) * w01 + SkColorGetG(c11) * w11 + 0.5f).toInt().coerceIn(0, 255)
+        val b = (SkColorGetB(c00) * w00 + SkColorGetB(c10) * w10 + SkColorGetB(c01) * w01 + SkColorGetB(c11) * w11 + 0.5f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(a, r, g, b)
     }
 
     /**
