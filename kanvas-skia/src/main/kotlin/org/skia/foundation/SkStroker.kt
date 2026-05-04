@@ -74,15 +74,32 @@ public class SkStroker private constructor(
     public val cap: SkPaint.Cap,
     public val join: SkPaint.Join,
     public val miterLimit: SkScalar,
+    /**
+     * CTM-driven flattening hint. The stroker's polyline IS the outline
+     * vertex sequence, so its chord error is visible in the stroke shape
+     * and the rasterizer can't compensate later. A `resScale` of `1f`
+     * keeps source-space chord error ≤ [FLATNESS]; a `resScale` of e.g.
+     * `1000f` (under `scale(1000, 1000)`) tightens the source-space
+     * tolerance to `FLATNESS / resScale`, so device-space chord error
+     * stays below 0.25 px regardless of CTM magnitude.
+     */
+    public val resScale: SkScalar,
 ) {
     private val halfW: Float = width * 0.5f
+
+    /** `FLATNESS_SQ / resScale²` — pre-computed to avoid the divide per call. */
+    private val flatnessSq: Float = FLATNESS_SQ / (resScale * resScale)
+
+    /** Conic step count, scaled with `√resScale` to keep chord error bounded. */
+    private val conicSteps: Int = max(CONIC_STEPS, ceil(CONIC_STEPS * sqrt(resScale)).toInt())
+        .coerceAtMost(MAX_CONIC_STEPS)
 
     public fun stroke(src: SkPath): SkPath {
         if (src.isEmpty() || width <= 0f) {
             return SkPathBuilder().setFillType(SkPathFillType.kWinding).detach()
         }
         val out = SkPathBuilder().setFillType(SkPathFillType.kWinding)
-        for (contour in flattenContours(src)) {
+        for (contour in flattenContours(src, flatnessSq, conicSteps)) {
             strokeContour(out, contour)
         }
         return out.detach()
@@ -295,22 +312,28 @@ public class SkStroker private constructor(
     }
 
     public companion object {
-        public fun fromPaint(paint: SkPaint): SkStroker = SkStroker(
+        public fun fromPaint(paint: SkPaint, resScale: SkScalar = 1f): SkStroker = SkStroker(
             width = if (paint.strokeWidth <= 0f) 1f else paint.strokeWidth,
             cap = paint.strokeCap,
             join = paint.strokeJoin,
             miterLimit = paint.strokeMiter,
+            resScale = resScale,
         )
 
-        // Flattening tolerance lives in source space here — the rasterizer
-        // re-flattens to 0.25 px in device space anyway (so the stroker's
-        // outline is filled accurately even when the CTM scales by ≠ 1×).
-        // 0.25 source-space units is a tight floor that still keeps
-        // recursion shallow.
+        // Flattening tolerance — interpretable as a target chord error of
+        // 0.25 device-space pixels. With `resScale = 1f` (no CTM scale) it
+        // is also the source-space tolerance; with `resScale > 1f` (CTM
+        // scaling up) the source-space tolerance shrinks to keep device-
+        // space chord error bounded. The stroker's polyline IS the outline
+        // vertex sequence — the rasterizer can't re-smooth a polyline, so
+        // this resolution awareness is essential when the CTM blows the
+        // path up by orders of magnitude (e.g. `Strokes4GM` at 1000×).
         internal const val FLATNESS: Float = 0.25f
         internal const val FLATNESS_SQ: Float = FLATNESS * FLATNESS
         internal const val MAX_DEPTH: Int = 18
         internal const val CONIC_STEPS: Int = 32
+        /** Cap on conic step count under heavy `resScale` (avoids OOM). */
+        internal const val MAX_CONIC_STEPS: Int = 4096
         /** `(4/3)·(√2 − 1)` — kappa for 90° cubic-Bézier arc approximation. */
         internal const val ROUND_KAPPA: Float = 0.5522847498307933f
         /** Round-join arc segments per quarter-turn (~22.5° step). */
@@ -339,11 +362,19 @@ internal class FloatArrayList(initialCapacity: Int = 16) {
 
 /**
  * Walk [path]'s verb stream and produce a list of polyline contours.
- * Béziers are flattened in source space using the same recursive De
- * Casteljau approach as `SkBitmapDevice.buildEdges` (kept in lockstep so
- * stroker output and direct fill share visual fidelity).
+ * Béziers are flattened in source space using recursive De Casteljau
+ * subdivision, with chord-error threshold [flatnessSq] (= `FLATNESS_SQ /
+ * resScale²`); conics are stepped uniformly with [conicSteps] segments.
+ *
+ * The chord error of the resulting polyline IS the visible stroke shape
+ * error — the rasterizer flattens straight-line input no further. Pass
+ * the CTM scale to the stroker so it can pre-tighten this tolerance.
  */
-internal fun flattenContours(path: SkPath): List<Polyline> {
+internal fun flattenContours(
+    path: SkPath,
+    flatnessSq: Float,
+    conicSteps: Int,
+): List<Polyline> {
     val out = ArrayList<Polyline>()
     var current = ArrayList<Float>()
     var hasContour = false
@@ -374,21 +405,21 @@ internal fun flattenContours(path: SkPath): List<Polyline> {
             SkPath.Verb.kQuad -> {
                 val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
                 val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
-                flattenQuad(current, px, py, x1, y1, x2, y2, 0)
+                flattenQuad(current, px, py, x1, y1, x2, y2, 0, flatnessSq)
                 px = x2; py = y2
             }
             SkPath.Verb.kConic -> {
                 val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
                 val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
                 val w = weights[weightIdx++]
-                flattenConic(current, px, py, x1, y1, x2, y2, w)
+                flattenConic(current, px, py, x1, y1, x2, y2, w, conicSteps)
                 px = x2; py = y2
             }
             SkPath.Verb.kCubic -> {
                 val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
                 val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
                 val x3 = coords[coordIdx++]; val y3 = coords[coordIdx++]
-                flattenCubic(current, px, py, x1, y1, x2, y2, x3, y3, 0)
+                flattenCubic(current, px, py, x1, y1, x2, y2, x3, y3, 0, flatnessSq)
                 px = x3; py = y3
             }
             SkPath.Verb.kClose -> {
@@ -404,25 +435,27 @@ private fun flattenQuad(
     out: ArrayList<Float>,
     x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float,
     depth: Int,
+    flatnessSq: Float,
 ) {
-    if (depth >= SkStroker.MAX_DEPTH || isQuadFlat(x0, y0, x1, y1, x2, y2)) {
+    if (depth >= SkStroker.MAX_DEPTH || isQuadFlat(x0, y0, x1, y1, x2, y2, flatnessSq)) {
         out.add(x2); out.add(y2); return
     }
     val m01x = (x0 + x1) * 0.5f; val m01y = (y0 + y1) * 0.5f
     val m12x = (x1 + x2) * 0.5f; val m12y = (y1 + y2) * 0.5f
     val mx = (m01x + m12x) * 0.5f; val my = (m01y + m12y) * 0.5f
-    flattenQuad(out, x0, y0, m01x, m01y, mx, my, depth + 1)
-    flattenQuad(out, mx, my, m12x, m12y, x2, y2, depth + 1)
+    flattenQuad(out, x0, y0, m01x, m01y, mx, my, depth + 1, flatnessSq)
+    flattenQuad(out, mx, my, m12x, m12y, x2, y2, depth + 1, flatnessSq)
 }
 
 private fun isQuadFlat(
     x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float,
+    flatnessSq: Float,
 ): Boolean {
     val dx = x2 - x0; val dy = y2 - y0
     val chord2 = dx * dx + dy * dy
     if (chord2 < 1e-12f) return true
     val cross = (x1 - x0) * dy - (y1 - y0) * dx
-    return (cross * cross) <= SkStroker.FLATNESS_SQ * chord2
+    return (cross * cross) <= flatnessSq * chord2
 }
 
 private fun flattenCubic(
@@ -430,8 +463,10 @@ private fun flattenCubic(
     x0: Float, y0: Float, x1: Float, y1: Float,
     x2: Float, y2: Float, x3: Float, y3: Float,
     depth: Int,
+    flatnessSq: Float,
 ) {
-    if (depth >= SkStroker.MAX_DEPTH || isCubicFlat(x0, y0, x1, y1, x2, y2, x3, y3)) {
+    if (depth >= SkStroker.MAX_DEPTH ||
+        isCubicFlat(x0, y0, x1, y1, x2, y2, x3, y3, flatnessSq)) {
         out.add(x3); out.add(y3); return
     }
     val m01x = (x0 + x1) * 0.5f; val m01y = (y0 + y1) * 0.5f
@@ -440,13 +475,14 @@ private fun flattenCubic(
     val m012x = (m01x + m12x) * 0.5f; val m012y = (m01y + m12y) * 0.5f
     val m123x = (m12x + m23x) * 0.5f; val m123y = (m12y + m23y) * 0.5f
     val mx = (m012x + m123x) * 0.5f; val my = (m012y + m123y) * 0.5f
-    flattenCubic(out, x0, y0, m01x, m01y, m012x, m012y, mx, my, depth + 1)
-    flattenCubic(out, mx, my, m123x, m123y, m23x, m23y, x3, y3, depth + 1)
+    flattenCubic(out, x0, y0, m01x, m01y, m012x, m012y, mx, my, depth + 1, flatnessSq)
+    flattenCubic(out, mx, my, m123x, m123y, m23x, m23y, x3, y3, depth + 1, flatnessSq)
 }
 
 private fun isCubicFlat(
     x0: Float, y0: Float, x1: Float, y1: Float,
     x2: Float, y2: Float, x3: Float, y3: Float,
+    flatnessSq: Float,
 ): Boolean {
     val dx = x3 - x0; val dy = y3 - y0
     val chord2 = dx * dx + dy * dy
@@ -454,15 +490,16 @@ private fun isCubicFlat(
     val c1 = (x1 - x0) * dy - (y1 - y0) * dx
     val c2 = (x2 - x0) * dy - (y2 - y0) * dx
     val maxCross2 = maxOf(c1 * c1, c2 * c2)
-    return maxCross2 <= SkStroker.FLATNESS_SQ * chord2
+    return maxCross2 <= flatnessSq * chord2
 }
 
 private fun flattenConic(
     out: ArrayList<Float>,
     x0: Float, y0: Float, x1: Float, y1: Float,
     x2: Float, y2: Float, w: Float,
+    conicSteps: Int,
 ) {
-    val n = SkStroker.CONIC_STEPS
+    val n = conicSteps
     for (k in 1..n) {
         val t = k.toFloat() / n
         val u = 1f - t
