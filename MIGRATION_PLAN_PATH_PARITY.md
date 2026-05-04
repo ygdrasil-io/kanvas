@@ -37,36 +37,66 @@ Petite, isolée, sans dépendance rasterizer.
 - Si **un** GM régresse, on le note dans la PR — la cause sera nécessairement
   un `close()` suivi d'un verbe non-`moveTo` qu'on ne voyait pas.
 
-### Phase 2 — alignement verb-stream (déféré)
+### Phase 2 — alignement verb-stream (✅ implémenté)
 
-Plus risqué : le rasterizer (`SkBitmapDevice.buildEdges`) et le stroker
-(`SkStroker`) gèrent déjà `kConic`, donc passer `addOval`/`addRRect`/
-`arcTo` en conics est techniquement possible. Mais :
+Le rasterizer (`SkBitmapDevice.buildEdges`) et le stroker (`SkStroker`)
+gèrent `kConic`, donc le passage de `addOval` / `addRRect` / `arcTo` en
+conics se fait sans toucher au pipeline de rendu. Conic = représentation
+**exacte** de l'ellipse, vs ~0.027 % de chord error pour l'approximation
+kappa cubique.
 
-- l'approximation cubique kappa actuelle est dans la tolérance pixel des
-  tests existants (`MAX_DROP_PERCENT = 1 %`),
-- changer la représentation casse `assertArrayEquals(verbs, …)` dans
-  `SkPathBuilderTest`,
-- la tolerance numérique du rasterizer conic-vs-cubic peut décaler des
-  pixels en bord d'arc.
+Tous les sous-points implémentés :
 
-Donc **Phase 2 = pas dans cette PR**. Sera ouverte quand un GM upstream
-exigera le verb-stream conic exact (`isOval`, `isRRect`, sérialisation, …).
+1. ✅ `addOval(rect, dir)` → `kMove + 4 × kConic + kClose`, weight `√2/2`,
+   contrôles aux coins de la bbox, ends aux cardinaux de l'oval. Mirrors
+   `src/core/SkPathRawShapes.cpp:48-86`.
+2. ✅ `addCircle` — délègue à `addOval`, aucun changement direct.
+3. ✅ `addRRect` → `kMove + (kLine, kConic) × 4 + kClose`, weight `√2/2`
+   aux coins. Préserve le `startIndex = 0` du port (différent du `6/7`
+   de Skia 4.x — divergence reportée en Phase 3).
+4. ✅ `arcTo(rect, start, sweep, forceMoveTo)` / `addArc` → conics par
+   sous-arc ≤ 90°, weight = `cos(θ/2)`, contrôle = intersection des
+   tangentes (formule unit-circle scaled).
+5. ✅ `arcTo(p1, p2, r)` PostScript → 1 lineTo + 1 conicTo, algorithme
+   Skia exact (cf. `src/core/SkPathBuilder.cpp:477-511`). `weight =
+   sqrt(0.5 + 0.5·cosh)`.
 
-Ordre prévu si Phase 2 ouverte :
+**Impact GM mesuré** : 10 GMs améliorent, 0 régresse. Diff complet :
 
-1. `addOval(rect, dir)` → `kMove + 4 × kConic + kClose`, weight `√2/2`.
-2. `addCircle` → délègue déjà à `addOval`. Aucun changement direct.
-3. `addRRect` → `kMove + (kLine, kConic) × 4 + kClose`, weight `√2/2` aux coins.
-4. `arcTo(rect, …)` → conics via `SkConic::BuildUnitArc` (jusqu'à 4 conics).
-5. `arcTo(p1, p2, r)` PostScript → 1 line + 1 conic (cf. `SkPathBuilder.h:638`).
+| GM | Avant | Après | Δ |
+|---|---|---|---|
+| ArcOfZorroGM | 99.562 | 99.732 | +0.170 |
+| CircleSizesGM | 94.495 | 94.629 | +0.134 |
+| PathInteriorGM | 98.532 | 98.618 | +0.086 |
+| ArcCircleGapGM | 98.995 | 99.029 | +0.034 |
+| DRRectGM | 98.489 | 98.520 | +0.031 |
+| LargeCircleGM | 99.053 | 99.083 | +0.030 |
+| Strokes4GM | 99.964 | 99.986 | +0.022 |
+| Bug593049GM | 99.924 | 99.930 | +0.006 |
+| RoundRectGM | 96.264 | 96.270 | +0.006 |
+| PathArcToSkbug9077GM | 98.388 | 98.390 | +0.002 |
 
-Tests existants à mettre à jour :
-- `addOval emits 4 cubic Bezier arcs with the kappa approximation`
-- `addCircle delegates to addOval centred on the given point`
-- `addArc emits cubic segments matching the start point on the ellipse`
-- `addArc splits sweeps wider than 90 degrees into multiple cubics`
+Suite complète `:kanvas-skia:test` : **627 tests, 0 failure**.
+
+Tests unitaires mis à jour pour les nouveaux verb streams :
+- `addOval emits 4 conic Bezier arcs with weight sqrt2 over 2`
+- `conic addOval lands cardinal points exactly on the ellipse`
+- `addCircle delegates to addOval centred on the given point` (assert
+  `kConic` au lieu de `kCubic`)
+- `simple rrect emits moveTo plus 4 line-conic pairs plus close`
+- `simple rrect CCW starts at the same point as CW` (CCW first verb =
+  `kConic`)
+- `rrect conics carry the bbox corner as control and the next edge
+  cardinal as end`
+- `complex rrect with per-corner radii uses each corner's own radii`
+  (indices recalculés pour conic = 4 floats)
+- `addArc emits conic segments matching the start point on the ellipse`
+- `addArc splits sweeps wider than 90 degrees into multiple conics`
 - `arcTo without forceMoveTo joins to the existing contour via lineTo`
+- `tangent arcTo on a 90 degree corner inserts a lineTo to T0 then a
+  conic arc`
+- `tangent arcTo after close repeats the last contour's start, then
+  arcs` (dernier verbe = `kConic`)
 
 ### Phase 3 — surface API à compléter (à la demande)
 
