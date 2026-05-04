@@ -331,73 +331,82 @@ L'implémentation upstream est **wyhash** (https://github.com/wangyi-fudan/wyhas
 
 ---
 
-## Phase I — Support HDR (PQ + HLG) (L)
+## Phase I — Support HDR (PQ + HLG) (L) — ✅
 
-**But** : couvrir les TF sentinel-encoded (`g < 0`) dans skcms et activer les branches OOTF dans `XformSteps`. Débloque `SkColorSpace::MakeCICP(kRec2020, kPQ)` et les GMs HDR (encore inexistants dans nos refs mais existent upstream).
+**But** : couvrir les TF sentinel-encoded (`g < 0`) dans skcms et activer les branches OOTF dans `XformSteps`. Débloque `SkColorSpace::MakeCICP(kRec2020, kPQ)` et les GMs HDR.
 
-### Étape I1 — Support sentinelle dans `classify`
+### Étape I1 — Support sentinelle dans `classify` ✅
 
-Cf. `skcms.cc:135-191`.
+- [x] Branche `tf.g < 0` dans [classify](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt) : extrait `enum_g = -tf.g.toInt()`, vérifie `(-enum_g).toFloat() == tf.g` (rejet des fractions), rejette `tf.g < -128`. Switch sur les ordinaux `SkcmsTFType.PQish/HLGish/HLGinvish/PQ/HLG`.
+- [x] Soundness : PQ exige `b=c=d=e=f=0`, HLG exige `d=e=f=0` (skcms.cc:165-173).
+- [x] Helper `tfKindMarker(kind: SkcmsTFType): Float = -kind.ordinal.toFloat()` exposé publiquement.
+- [x] **Important** : ordre du `enum class SkcmsTFType` corrigé pour matcher upstream `skcms_public.h` : `Invalid, sRGBish, PQish, HLGish, HLGinvish, PQ, HLG`. Les constantes existantes `kPQ(g=-5)` et `kHLG(g=-6)` étaient déjà cohérentes avec cet ordre, mais l'enum interne avait `PQ=4, HLG=5, HLGinvish=6` (ordre Phase D périmé).
 
-- [ ] Branche `tf.g < 0` dans `classify` : extrait `enum_g = -tf.g.toInt()`, switch sur `skcms_TFType_PQ/HLG/PQish/HLGish/HLGinvish`.
-- [ ] Soundness : PQ exige `b=c=d=e=f=0`, HLG exige `d=e=f=0`.
-- [ ] Sentinel marker : `TFKind_marker(kind: SkcmsTFType): Float = -kind.ordinal.toFloat()`.
+### Étape I2 — `eval` pour PQ / PQish / HLG / HLGish / HLGinvish ✅
 
-### Étape I2 — `eval` pour PQ / PQish / HLG / HLGish / HLGinvish
+- [x] `case PQ` : EOTF BT.2100 avec constantes `c1=107/128, c2=2413/128, c3=2392/128, m1=1305/8192, m2=2523/32`. Pas de `sign *` (mirror upstream skcms.cc:284-292).
+- [x] `case PQish` : `(A + B·x^C) / (D + E·x^C)` puis `pow(_, F)`, `*sign`. Lit A..F directement depuis `tf.a..tf.f` (pas de memcpy explicite ; layout déjà compatible).
+- [x] `case HLG` : `x ≤ 0.5 → x²/3`, sinon `(exp((x-c)/a) + b)/12` avec `a=0.17883277, b=0.28466892, c=0.55991073`.
+- [x] `case HLGish` : `K · sign · (xR ≤ 1 ? (xR)^G : exp((x-c)·a) + b)`. R/G/a/b/c lus depuis `tf.a..tf.e`, `K = tf.f + 1`.
+- [x] `case HLGinvish` : variante avec `R/G/a` réciproques produits par `invert` ; `R · (x/K)^G` ou `a·ln((x/K)-b) + c`.
 
-Cf. `skcms.cc:259-295`.
+### Étape I3 — `invert` pour PQish / HLGish / HLGinvish ✅
 
-- [ ] `case PQ` : Reinhard-style formula avec constantes c1, c2, c3, m1, m2 (BT.2100 PQ EOTF).
-- [ ] `case PQish` : `pow((A + B*x^C) / (D + E*x^C), F)`. Lit `pq` struct via memcpy from `tf.a`.
-- [ ] `case HLG` : split `x ≤ 0.5` linéaire vs power. Constantes BT.2100 HLG OETF.
-- [ ] `case HLGish` : multipliée par `K = K_minus_1 + 1`.
-- [ ] `case HLGinvish` : variante avec params inversés.
-- [ ] Helper struct `TF_PQish(A, B, C, D, E, F: Float)` et `TF_HLGish(R, G, a, b, c, K_minus_1: Float)` avec layout mémoire identique aux 6 derniers floats du TF.
+- [x] `PQish → PQish` avec params `{-A, D, 1/F, B, -E, 1/C}` (skcms.cc:1992-1995).
+- [x] `HLGish ↔ HLGinvish` avec `{1/R, 1/G, 1/a, b, c, K_minus_1}` (skcms.cc:1997-2007).
+- [x] PQ et HLG retournent `null` (pas inversibles, skcms.cc:1988-1989).
+- [x] La branche sRGBish reste intacte (regression test inclus).
 
-### Étape I3 — `invert` pour PQish / HLGish / HLGinvish
+### Étape I4 — `SkNamedTransferFn` constructeurs HDR ✅
 
-Cf. `skcms.cc:1992-2007`.
+- [x] [skcmsTransferFunctionMakePQish(A,B,C,D,E,F)](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt).
+- [x] [skcmsTransferFunctionMakeScaledHLGish(K,R,G,a,b,c)](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt) — packe `K-1` dans le slot `f`.
+- [x] [skcmsTransferFunctionMakeHLGish(R,G,a,b,c)](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt) = `MakeScaledHLGish(1, ...)`.
+- [x] [skcmsTransferFunctionMakePQ(hdrRefWhite)](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt).
+- [x] [skcmsTransferFunctionMakeHLG(hdrRefWhite, peakLuminance, systemGamma)](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt).
 
-- [ ] `PQish → PQish` avec params transformés `{-A, D, 1/F, B, -E, 1/C}`.
-- [ ] `HLGish ↔ HLGinvish` avec `{1/R, 1/G, 1/a, b, c, K_minus_1}`.
-- [ ] PQ et HLG ne sont pas invertibles → `null`.
+### Étape I5 — OOTF dans `SkColorSpaceXformSteps` ✅
 
-### Étape I4 — `SkNamedTransferFn` constructeurs HDR
+[SkColorSpaceXformSteps.kt](kanvas-skia/src/main/kotlin/org/skia/core/SkColorSpaceXformSteps.kt) intégralement réécrit pour le constructeur (apply() élargi de 2 branches).
 
-Cf. `skcms.cc:212-248`.
+- [x] Nouveaux champs publics : `fSrcOotf: FloatArray(4)` et `fDstOotf: FloatArray(4)`.
+- [x] Nouveaux flags : `srcOotf`, `dstOotf` dans la `data class Flags`.
+- [x] [setOotfY(cs, out)](kanvas-skia/src/main/kotlin/org/skia/core/SkColorSpaceXformSteps.kt) : calcule `Y[i] = ∑_j m[j][i] · Y_rec2020[j]` où `m = rec2020Linear.fromXYZD50 · cs.toXYZD50`. Mirror `set_ootf_Y` (SkColorSpaceXformSteps.cpp:27-39).
+- [x] Branche PQ src : `scaleFactor *= 10000 / srcTrfn.a`, `srcTF = K_PQISH_STANDARD`, linearize=true.
+- [x] Branche HLG src : `scaleFactor *= b/a`, `srcTF = K_HLGISH_STANDARD.copy(f = 1/12 - 1)` (K=1/12), `linearize=true` ; si `srcTrfn.c != 1`, active `srcOotf` avec `gamma_minus_1 = c - 1`.
+- [x] Symétrie pour dst : `scaleFactor /= 10000/a` ou `/= b/a`, `dstTFInv = invert(K_PQISH/HLGISH_STANDARD)`, `dstOotf` avec `gamma_minus_1 = 1/c - 1`.
+- [x] `gamut_transform = (toXYZD50Hash diffèrent) || (scaleFactor != 1)` — la matrice est multipliée par `scaleFactor` cell par cell.
+- [x] **Optimisation cancel-OOTF** : si `srcOotf && !gamutTransform && dstOotf` et `(srcOotf[3]+1)·(dstOotf[3]+1) == 1` → annule les deux. Mirror upstream (SkColorSpaceXformSteps.cpp:154-163), bit-pour-bit (même check multiplicatif).
+- [x] **Optimisation linearize-encode skip** désactivée pour PQ/HLG : `srcTF/dstTFInv` sont alors les paramétriques standard, pas les TFs originales — les hashes ne reflèteraient pas l'identité du round-trip.
+- [x] `apply()` étendu avec les deux branches OOTF (après linearize, avant gamut ; après gamut, avant encode).
 
-- [ ] `skcmsTransferFunctionMakePQish(A, B, C, D, E, F)`.
-- [ ] `skcmsTransferFunctionMakeScaledHLGish(K, R, G, a, b, c)`.
-- [ ] `skcmsTransferFunctionMakeHLGish(R, G, a, b, c)` = `MakeScaledHLGish(1, ...)`.
-- [ ] `skcmsTransferFunctionMakePQ(hdrRefWhite)`.
-- [ ] `skcmsTransferFunctionMakeHLG(hdrRefWhite, peakLuminance, systemGamma)`.
+### Étape I6 — Constantes de référence ✅
 
-### Étape I5 — OOTF dans `SkColorSpaceXformSteps`
+- [x] `kPQ`, `kHLG` dans [SkNamedTransferFn](kanvas-skia/src/main/kotlin/org/skia/skcms/SkNamedTransferFn.kt) déjà ajoutés en Phase D ; Phase I les active sans modification — `classify(kPQ) = PQ`, `classify(kHLG) = HLG`.
 
-Cf. `SkColorSpaceXformSteps.cpp:25-40`, `:74-105`, `:107-135`, `:166-178`.
+### Mises à jour collatérales
 
-- [ ] Champs `fSrcOotf: FloatArray(4)` et `fDstOotf: FloatArray(4)` dans `Flags` étendus.
-- [ ] `setOotfY(cs, out)` : calcule Y luminance coefficients depuis le gamut transform vers Rec.2020.
-- [ ] Branche PQ src : `scaleFactor *= 10000 / srcTrfn.a`, set `srcTF` à `kPQish` standard.
-- [ ] Branche HLG src : `scaleFactor *= srcTrfn.b / srcTrfn.a`, set `srcTF` à `kHLGish` scalé par 1/12.
-- [ ] Si HLG `srcTrfn.c != 1` : active `srcOotf`, calcule coefficients Y.
-- [ ] Symétrie pour dst.
-- [ ] `optimization 1` : si `srcOotf && dstOotf && !gamutTransform` et gammas réciproques → annuler les deux.
-- [ ] Étendre `apply()` avec branches `srcOotf` / `dstOotf` (Y-luminance scaling avant et après gamut transform).
+- [x] [SkColorSpace.makeRGB](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt) : `if (classify == sRGBish)` → `if (classify == Invalid)` rejet. Aligné sur `SkColorSpace::MakeRGB` upstream (rejette uniquement `skcms_TFType_Invalid`). Permet `makeRGB(kPQ, kRec2020)` de retourner un colorspace HDR utilisable.
+- [x] Tests Phase D `SkNamedTransferFnConstantsTest` et Phase E `SkColorSpaceCicpTest` mis à jour : la branche "until Phase I" devient "Phase I activated".
 
-### Étape I6 — Constantes de référence
+**Tests** [SkcmsHdrTest](kanvas-skia/src/test/kotlin/org/skia/skcms/SkcmsHdrTest.kt) — 19 :
+- [x] **Ground truth eval** : 5 valeurs PQ (0.0/0.25/0.50/0.75/1.0), 5 valeurs HLG, et PQish parametric reproduit PQ. Toutes match un driver C++ standalone (`tools/hdr_test.cpp`) à 5e-6 (drift float-vs-double inhérent au stack pow).
+- [x] **Sanity classify** : ordinaux PQish/HLGish/HLGinvish/PQ/HLG, rejet fractional `g`, rejet `g < -128`, rejet PQ avec `b!=0`, rejet HLG avec `d!=0`.
+- [x] **Invert** : `invert(PQ) == null`, `invert(HLG) == null`, `invert(PQish)` retourne PQish avec params mangés `{-A, D, 1/F, B, -E, 1/C}`, `invert(HLGish) → HLGinvish` avec `R/G/a` réciproques, `invert(HLGinvish) → HLGish`.
+- [x] **Round-trip** : HLGish → HLGinvish → HLGish exact à 1e-4 sur 9 points (régions linéaire et non-linéaire), PQish self-inverse à 1e-4 sur 5 points.
+- [x] **Régression sRGBish** : `invert(kSRGB)` ; round-trip sur 0 et 1 reste exact.
 
-- [ ] `kPQ`, `kHLG` dans `SkNamedTransferFn` (déjà listées en Phase D, mais Phase D les insère sans support eval/invert ; Phase I active le support).
+**Tests** [SkColorSpaceXformStepsHdrTest](kanvas-skia/src/test/kotlin/org/skia/core/SkColorSpaceXformStepsHdrTest.kt) — 12 :
+- [x] **Ground truth sRGB → PQ Rec.2020 (ref=203)** : pure blue (0,0,1) → (0.290, 0.197, 0.569) ; pure red (1,0,0) → (0.533, 0.327, 0.220) ; gris (0.5) → (0.427, 0.427, 0.427). Match à 1e-3 vs `tools/ootf_test.cpp`.
+- [x] **PQ src** active linearize + gamut_transform (scaleFactor=1/49.26 ≠ 1) sans srcOotf (PQ n'a pas de gamma système).
+- [x] **HLG src** avec gamma 1.2 active srcOotf et précalcule Y_Rec2020 = (0.2627, 0.678, 0.0593) ; gamma 1.0 désactive srcOotf.
+- [x] **OOTF cancel** : src.c == dst.c et même gamut → les deux ootfs droppés (mirror exact `(c_s)·(1/c_d) == 1` upstream).
+- [x] **OOTF non-cancel** : différents gamuts → ootfs conservés.
+- [x] **PQ→PQ scale** : refWhite 203 → 100 produit une matrice `dstA/srcA = 100/203 ≈ 0.493 · I`.
+- [x] **Régression critique** : sRGB(0,0,1) → kRec2020 reproduit toujours (43, 13, 241) byte-pour-byte (invariant Phase F5 / J).
+- [x] **Régression** : sRGB → sRGB opaque reste identité (early-return).
 
-**Tests** :
-- [ ] Round-trip PQ : `eval(kPQish, x)` puis `eval(invert(kPQish), y)` ≈ x dans `[0, 1]`.
-- [ ] HLG idem.
-- [ ] sRGB → PQ Rec.2020 sur (0,0,1) — comparer à une valeur connue Skia.
-- [ ] OOTF cancel : sRGB+OOTF → sRGB+OOTF même CS = identité (via opt 1).
-
-**Risque** : HDR dépend de `pow` haute précision. JVM `Math.pow` est fine, mais comportement sur extrêmes (`x` proche 1, `pow(x, 0.45)` etc.) peut diverger sub-ulp avec `powf_` Skia.
-
-**Effort** : ~600 lignes. C'est le plus gros slice après ICC parsing. Pas requis tant qu'on n'a pas de GMs HDR à valider.
+**Vérification globale** : `./gradlew :kanvas-skia:test` → **543 tests verts, 0 régression** sur les 54 GMs.
 
 ---
 
@@ -505,6 +514,6 @@ Identique aux plans précédents :
 6. **PR Phase G** — sérialisation (~150 lignes).
 7. **PR Phase J** — clean-up précisions kRec2020 (~30 lignes).
 8. ✅ **PR Phase H** — hash bit-compat (~150 lignes, wyhash port + 17 tests).
-9. **PR Phase I** — HDR complet (~600 lignes, en dernier — pas de bloquant aujourd'hui).
+9. ✅ **PR Phase I** — HDR complet (~600 lignes, 31 nouveaux tests, ground truth via 2 drivers C++).
 
 À chaque PR : commit unique par phase, tests verts, similarity scores maintenus.

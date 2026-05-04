@@ -137,14 +137,15 @@ class SkColorSpaceCicpTest {
     }
 
     @Test
-    fun `makeCICP kRec709 plus kPQ returns a colorspace with kPQ TF`() {
-        // PQ TF currently classifies as Invalid (Phase I activates HDR).
-        // Therefore makeCICP should return null, since makeRGB rejects the
-        // PQ TF until Phase I.
+    fun `makeCICP kRec2020 plus kPQ returns a usable PQ colorspace`() {
+        // Phase I activated PQ classification. makeCICP routes PQ → makeRGB
+        // → keeps the kPQ singleton TF and the Rec.2020 gamut, no snap.
         val cs = SkColorSpace.makeCICP(
             SkNamedPrimaries.CicpId.kRec2020,
             SkNamedTransferFn.CicpId.kPQ,
         )
-        assertNull(cs, "PQ TF is Invalid until Phase I; makeCICP must return null")
+        org.junit.jupiter.api.Assertions.assertNotNull(cs, "Phase I: PQ is now valid")
+        assertSame(SkNamedTransferFn.kPQ, cs!!.transferFn)
+        assertSame(SkNamedGamut.kRec2020, cs.toXYZD50)
     }
 }
