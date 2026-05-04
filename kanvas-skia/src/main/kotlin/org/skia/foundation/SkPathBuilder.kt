@@ -50,7 +50,16 @@ public class SkPathBuilder public constructor() {
     public fun setFillType(t: SkPathFillType): SkPathBuilder = apply { fillType = t }
 
     public fun moveTo(x: SkScalar, y: SkScalar): SkPathBuilder = apply {
-        verbs.add(SkPath.Verb.kMove); coords.add(x); coords.add(y)
+        // Mirrors SkPathBuilder.cpp:136-156 — if the previous verb is also a
+        // move, replace its point in place. Each contour can carry at most
+        // one move verb (the last one specified).
+        if (verbs.isNotEmpty() && verbs.last() == SkPath.Verb.kMove) {
+            val n = coords.size
+            coords[n - 2] = x
+            coords[n - 1] = y
+        } else {
+            verbs.add(SkPath.Verb.kMove); coords.add(x); coords.add(y)
+        }
         lastX = x; lastY = y
         contourX = x; contourY = y
         hasContour = true
@@ -231,7 +240,12 @@ public class SkPathBuilder public constructor() {
         x2: SkScalar, y2: SkScalar,
         radius: SkScalar,
     ): SkPathBuilder = apply {
-        if (!hasContour) { moveTo(x1, y1); return@apply }
+        // On a *truly* empty builder we keep the port's legacy fast-path
+        // (moveTo(p1) and bail) — pinned by `tangent arcTo on empty path`.
+        // After close() the builder is non-empty: defer to ensureContour,
+        // which now emits the implicit moveTo to the last contour start.
+        if (verbs.isEmpty()) { moveTo(x1, y1); return@apply }
+        ensureContour()
         if (radius <= 0f) { lineTo(x1, y1); return@apply }
 
         val p0x = lastX; val p0y = lastY
@@ -507,10 +521,21 @@ public class SkPathBuilder public constructor() {
 
     /**
      * Skia's convention is that `lineTo` / `quadTo` / `cubicTo` etc. on
-     * an empty contour implicitly emit a `moveTo(0, 0)`. We preserve it.
+     * an empty contour implicitly emit a move:
+     *  - empty builder → `moveTo(0, 0)`
+     *  - last verb is `kClose` → `moveTo(<start of just-closed contour>)`
+     *
+     * Mirrors `SkPathBuilder.h:1011-1018` (`ensureMove`).
      */
     private fun ensureContour() {
-        if (!hasContour) moveTo(0f, 0f)
+        if (hasContour) return
+        if (verbs.isNotEmpty() && verbs.last() == SkPath.Verb.kClose) {
+            // [contourX, contourY] still holds the start of the contour we just
+            // closed — close() doesn't reset it, only flips hasContour.
+            moveTo(contourX, contourY)
+        } else {
+            moveTo(0f, 0f)
+        }
     }
 
     private fun ovalPointAt(oval: SkRect, angleDeg: SkScalar): Pair<SkScalar, SkScalar> {
