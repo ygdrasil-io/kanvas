@@ -246,11 +246,15 @@ public class SkColorSpace private constructor(
         }
 
         /**
-         * `MakeRGB(tf, mat)`. Returns `null` if `tf` is not a valid sRGBish
-         * transfer function. Snaps quasi-standard inputs to the matching
-         * `SkNamedTransferFn::k*` so `gammaCloseToSRGB()` (memcmp-style
-         * exact compare) and pointer-equality stay correct even for inputs
-         * that arrive from an ICC parser with s15Fixed16 truncation noise.
+         * `MakeRGB(tf, mat)`. Returns `null` if `tf` is `Invalid`. Snaps
+         * quasi-standard sRGBish inputs to the matching `SkNamedTransferFn::k*`
+         * so `gammaCloseToSRGB()` (memcmp-style exact compare) and
+         * pointer-equality stay correct even for inputs that arrive from an
+         * ICC parser with s15Fixed16 truncation noise. PQ / HLG / PQish /
+         * HLGish / HLGinvish pass through verbatim — Phase I of the
+         * colorspace port plan activated those classifications, and
+         * `SkColorSpaceXformSteps` consumes them via the dedicated HDR
+         * branches.
          *
          * Mirrors upstream
          * [SkColorSpace.cpp:136-159](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkColorSpace.cpp).
@@ -259,7 +263,7 @@ public class SkColorSpace private constructor(
             transferFn: SkcmsTransferFunction,
             toXYZ: SkcmsMatrix3x3,
         ): SkColorSpace? {
-            if (classify(transferFn) != SkcmsTFType.sRGBish) return null
+            if (classify(transferFn) == SkcmsTFType.Invalid) return null
 
             // Quasi-sRGB → snap to kSRGB (and the kSRGB singleton if the
             // gamut also matches kSRGB).
