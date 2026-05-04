@@ -97,22 +97,73 @@ Hors scope (par phase) :
 
 L'architecture interne reste alignée sur Skia : `SkTypeface` est un abstrait, l'impl AWT (`AwtTypeface`) en est une réalisation parmi d'autres. Si on veut un FreeType backend plus tard, on ajoute `FreetypeTypeface` sans toucher l'API publique.
 
+## Contrainte de design : façade Skia, implémentation AWT
+
+**Règle d'or** : **toute API publique exposée doit reproduire fidèlement la surface Skia upstream** (noms de classes, noms de méthodes, signatures, énumérations, valeurs par défaut). On ne renomme pas, on ne simplifie pas, on ne « kotlinise » pas l'API. Si Skia expose `SkFont::setEdging(Edging)`, on expose `SkFont.setEdging(edging: Edging)` — pas `SkFont.edging = ...` même si c'est plus idiomatique en Kotlin.
+
+**Justification** : permet de droper les fichiers générés (`kanvas/src/generated/tests/.../*.kt`) sans modification, même mécanique que pour `GM.getISize()` en Phase 0. Garde aussi la possibilité future de ports automatisés (`.cpp` → `.kt`) sans transformations.
+
+**Implémentation** : pour le backend texte spécifiquement, **toute la logique de rendu/mesure passe par `java.awt.*`** (Font, GlyphVector, FontMetrics, Shape, PathIterator). C'est un choix pragmatique de portabilité JVM-pure ; **ce n'est pas l'implémentation Skia**.
+
+### Convention de documentation (obligatoire dans chaque fichier impl)
+
+Chaque fichier `.kt` qui *contient de la logique AWT* (par opposition à un simple data class qui mirroir une struct Skia) doit porter en tête de fichier le bloc suivant, en toutes lettres :
+
+```kotlin
+/**
+ * **NOTE D'IMPLÉMENTATION** — Ce fichier expose la surface API Skia
+ * (`SkFont` / `SkTypeface` / `SkFontMetrics` / …) mais l'implémentation
+ * sous-jacente repose sur **`java.awt.Font` + `java.awt.font.GlyphVector`**,
+ * pas sur le moteur de fontes natif Skia (FreeType + SkScalerContext).
+ *
+ * Conséquences :
+ *  - Les métriques peuvent diverger de 1-2 ulps des valeurs upstream.
+ *  - Le rasterizer AA des glyphes est celui d'AWT (relayé via SkPath →
+ *    notre scanline-fill 4×4), pas le rasterizer FreeType de Skia.
+ *  - `SkFont.Edging.kSubpixelAntiAlias` est dégradé silencieusement vers
+ *    `kAntiAlias` (cf. MIGRATION_PLAN_TEXT.md §R3).
+ *
+ * Si un jour on remplace AWT par FreeType+JNI ou par un rasterizer custom,
+ * **seul ce fichier (et ses pairs `Awt*.kt`) doit changer** — l'API publique
+ * reste figée sur la signature Skia.
+ */
+```
+
+Sur les fichiers qui sont de purs *value types* miroir d'une struct Skia (`SkFontMetrics`, `SkTextEncoding`, …) on se contente d'une référence Javadoc à la définition upstream sans le bloc d'avertissement, puisqu'ils ne contiennent pas d'implémentation AWT.
+
+### Découpage de packages
+
+| Package | Rôle | Backend ? |
+|---------|------|-----------|
+| `org.skia.foundation` | API publique : `SkFont`, `SkTypeface`, `SkFontMetrics`, `SkTextEncoding`, `SkFont.Edging` | indépendant |
+| `org.skia.foundation.awt` (interne) | Impls AWT : `AwtTypeface`, `AwtGlyphRasterizer`, helpers | AWT-spécifique |
+| `org.skia.tools` | `ToolUtils.DefaultPortableTypeface()` etc. | délègue à `awt.*` |
+
+L'API publique (`org.skia.foundation`) est en théorie *backend-agnostic*. Tout fichier sous `org.skia.foundation.awt` porte le bloc d'avertissement ci-dessus en tête.
+
 ## Slices T1 → T5
 
 ### Slice T1 — API stub : `SkFont` / `SkTypeface` / `drawString` no-op
 
 **But** : permettre la **compilation** et l'**exécution** sans crash des GMs textuels existants. Le texte ne s'affiche pas mais le test ne plante plus.
 
-**API ajoutée** :
-- `SkTypeface` (classe abstraite, marker singleton `SkTypeface.makeDefault()` retourne un singleton vide).
-- `SkFont` (data class : `typeface`, `size = 12f`, `edging = Edging.kAntiAlias`, `isSubpixel = false`).
-- `SkFont.Edging` (enum : `kAlias`, `kAntiAlias`, `kSubpixelAntiAlias`).
-- `SkCanvas.drawString(text: String, x: SkScalar, y: SkScalar, font: SkFont, paint: SkPaint)` — **no-op**.
-- `SkCanvas.drawSimpleText(...)`, `drawTextBlob` (si nécessaire) — no-op.
+**API ajoutée (surface Skia fidèle, package `org.skia.foundation`)** :
+- `SkTypeface` — classe ouverte (pas data class : Skia la traite comme polymorphique). Méthodes minimales : `getFontStyle(): SkFontStyle` (renvoie `Normal` par défaut), `MakeDefault()` companion qui retourne un singleton vide.
+- `SkFontStyle` — data class miroir : `weight`, `width`, `slant` + companion `Normal`/`Bold`/`Italic`/`BoldItalic`.
+- `SkFont` — classe (mutable, comme Skia) avec setters/getters typed : `setTypeface(t: SkTypeface)` / `getTypeface(): SkTypeface`, `setSize(s: SkScalar)` / `getSize(): SkScalar`, `setEdging(e: Edging)` / `getEdging(): Edging`, `setSubpixel(b: Boolean)` / `isSubpixel(): Boolean`. Constructeurs : `SkFont()`, `SkFont(typeface)`, `SkFont(typeface, size)`, `SkFont(other)` (copy).
+- `SkFont.Edging` — enum imbriqué `kAlias` / `kAntiAlias` / `kSubpixelAntiAlias`.
+- `SkTextEncoding` — enum `kUTF8` / `kUTF16` / `kUTF32` / `kGlyphID` (pour signature compat plus tard).
+- `SkCanvas.drawString(text: String, x: SkScalar, y: SkScalar, font: SkFont, paint: SkPaint)` — **no-op** dans T1.
+- `SkCanvas.drawSimpleText(text, byteLength, encoding, x, y, font, paint)` — **no-op**, signature qui mirroir l'upstream pour les futures slices.
 - `org.skia.tools.ToolUtils.DefaultPortableTypeface(): SkTypeface` — retourne le singleton.
 - `org.skia.tools.ToolUtils.DefaultPortableFont(size: SkScalar = 12f): SkFont` — convenience.
 
-**Tests** : un test unitaire qui instancie `SkFont`/`SkTypeface` et appelle `drawString` sans crash.
+**Implémentation interne (T1 minimal)** :
+- Aucun fichier `org.skia.foundation.awt.*` créé en T1 — pas encore de logique AWT.
+- `SkFont` / `SkTypeface` ont des bodies vides ou triviaux, sans `import java.awt.*`.
+- **Pas besoin du bloc d'avertissement T1** puisqu'aucun fichier ne contient d'AWT.
+
+**Tests** : un test unitaire qui instancie `SkFont`/`SkTypeface`, exerce les ctors copy/Skia-like, et appelle `drawString` sans crash.
 
 **GMs débloqués** : aucun directement (le texte ne s'affiche pas, donc les zones de label restent BG). Mais ça permet de **porter** les GMs textuels sans erreur de compilation.
 
@@ -129,20 +180,22 @@ L'architecture interne reste alignée sur Skia : `SkTypeface` est un abstrait, l
 
 **But** : implémenter `SkFont.measureText` et `SkFont.getMetrics` via AWT (`FontMetrics`, `Font.getStringBounds`). `drawString` reste no-op mais maintenant les GMs qui calculent un layout autour du texte (centrage, cellules redimensionnées en fonction du texte) auront les bonnes coordonnées.
 
-**API ajoutée** :
-- `SkFont.measureText(text: String, encoding: SkTextEncoding = kUTF8): SkScalar`
-- `SkFont.getMetrics(metrics: SkFontMetrics)` (retourne ascent, descent, top, bottom, leading)
-- `SkFontMetrics` data class.
-- `SkTextEncoding` enum.
+**API ajoutée (surface Skia fidèle, `org.skia.foundation`)** :
+- `SkFont.measureText(text: String, byteLength: Int = text.length, encoding: SkTextEncoding = SkTextEncoding.kUTF8, bounds: SkRect? = null): SkScalar` — signature mirroir de `SkFont::measureText` upstream.
+- `SkFont.getMetrics(metrics: SkFontMetrics): SkScalar` — retourne `recommendedLineSpacing`, remplit `metrics`. Mirroir Skia.
+- `SkFontMetrics` — data class (mutable via `var` pour matcher le pattern out-param Skia) : `top`, `ascent`, `descent`, `bottom`, `leading`, `avgCharWidth`, `maxCharWidth`, `xMin`, `xMax`, `xHeight`, `capHeight`, `underlineThickness`, `underlinePosition`, `strikeoutThickness`, `strikeoutPosition`. Pas de bloc d'avertissement (pure data).
 
-**Backend AWT** :
-- `AwtTypeface` lazy-load un `java.awt.Font` (par défaut `new Font(Font.SANS_SERIF, Font.PLAIN, 1)` puis `deriveFont(size)`).
-- `FontRenderContext` configurable (anti-aliasing, fractional metrics) — on l'aligne sur Skia AA par défaut.
+**Backend AWT (nouveau package interne `org.skia.foundation.awt`)** :
+- `AwtTypeface : SkTypeface` — sous-classe interne. Lazy-load un `java.awt.Font` (par défaut `Font.SANS_SERIF, Font.PLAIN, 1` puis `deriveFont(size)`).
+- `AwtFontMetricsCalculator` — helper qui mappe `java.awt.font.LineMetrics` + `FontMetrics` vers `SkFontMetrics`.
+- **`FontRenderContext` configuré une fois** (`anti-aliasing=ON`, `fractional-metrics=ON`) pour cohérence inter-OS.
+- **Bloc d'avertissement obligatoire** en tête de chaque fichier sous `org.skia.foundation.awt.*`.
 
 **GMs débloqués** : ceux qui calculent leur layout via `measureText`. Score-wise : pas de gain, juste de la cohérence de mise en page.
 
 **Critères de réussite** :
 - [ ] `measureText` et `getMetrics` retournent des valeurs cohérentes (smoke tests : `measureText("XX") ≈ 2 × measureText("X")` à ~5 % près).
+- [ ] Tous les fichiers `org.skia.foundation.awt.*` portent le bloc d'avertissement.
 - [ ] 65 + nouveaux GMs — 0 régression.
 
 **Effort estimé** : 1 slice modéré (~250 lignes + tests).
@@ -166,9 +219,16 @@ L'architecture interne reste alignée sur Skia : `SkTypeface` est un abstrait, l
 - Pas de hinting custom (on hérite du hinter AWT). Suffisant pour `tolerance = 8` ou plus.
 - Pas de subpixel AA (kSubpixelAntiAlias dégradé en kAntiAlias).
 
-**API ajoutée** :
-- `SkCanvas.drawString(text, x, y, font, paint)` — vrai rendu.
-- `SkFont.getPath(glyphId, out: SkPath)` (helper interne).
+**API ajoutée (surface Skia fidèle)** :
+- `SkCanvas.drawString(text, x, y, font, paint)` — vrai rendu (signature inchangée depuis T1).
+- `SkFont.getPath(glyphId: UShort, path: SkPath): Boolean` — mirroir `SkFont::getPath` upstream, retourne `true` si le glyph a un path.
+- `SkFont.unicharsToGlyphs(uni: IntArray, count: Int, glyphs: ShortArray)` — mirroir `SkFont::unicharsToGlyphs`, optionnel selon les besoins T3.
+
+**Implémentation interne (`org.skia.foundation.awt.*`)** :
+- `AwtGlyphRasterizer` — orchestre `GlyphVector.getGlyphOutline` → `PathIterator` → `SkPath`.
+- `AwtPathConverter` — helper pur qui convertit un `java.awt.Shape` en `SkPath` (`SEG_MOVETO`/`SEG_LINETO`/`SEG_QUADTO`/`SEG_CUBICTO`/`SEG_CLOSE`).
+- **Bloc d'avertissement obligatoire** dans tous les nouveaux fichiers AWT.
+- `SkCanvas.drawString` lui-même reste dans `org.skia.core` mais **délègue** à un helper interne `org.skia.foundation.awt.AwtGlyphRasterizer.drawString(canvas, text, x, y, font, paint)`. La logique AWT n'apparaît jamais dans `org.skia.core.SkCanvas` — elle reste cantonnée au sous-package `awt`.
 
 **GMs débloqués (estimation)** :
 - `XfermodesGM` (29 modes en grille, labels = noms des modes) — déjà 80% si labels divergent légèrement, avec texte ça devrait grimper à >90%.
@@ -179,6 +239,7 @@ L'architecture interne reste alignée sur Skia : `SkTypeface` est un abstrait, l
 **Critères de réussite** :
 - [ ] Un GM minimal de smoke test (`HelloWorldGM` interne) qui dessine un texte sur fond blanc et obtient ≥ 80 % de match contre une référence dessinée manuellement (pas upstream — référence interne).
 - [ ] Port d'un GM upstream qui exerce drawString minimalement (par ex. `crbug_788500` ou similar) — score à au moins 70 %.
+- [ ] Aucun `import java.awt.*` dans `org.skia.core.*` ou `org.skia.foundation.*` (hors sous-package `awt`).
 - [ ] 0 régression sur les 65 GMs existants.
 
 **Effort estimé** : 1 slice modéré-élevé (~400 lignes Kotlin + tests + 1-2 GM ports).
@@ -280,7 +341,8 @@ L'architecture interne reste alignée sur Skia : `SkTypeface` est un abstrait, l
 
 ## Décisions finales (à valider avant de démarrer T1)
 
-- [ ] **Backend = AWT** pour T1-T3. FreeType reporté.
+- [x] **Backend = AWT** pour T1-T5 (validé par utilisateur). FreeType reporté.
+- [x] **Façade Skia obligatoire** : tout le code public utilise les noms et signatures Skia. Le code AWT vit isolé sous `org.skia.foundation.awt.*` avec bloc d'avertissement en tête. (validé)
 - [ ] **Polices portables = T4**, pas avant. T1-T3 utilisent une font système quelconque.
 - [ ] **`tolerance` par défaut sur GMs textuels = 8** (au lieu de 1) pour absorber les drifts AWT vs FreeType. À documenter par test.
 - [ ] **`kSubpixelAntiAlias` = downgrade à `kAntiAlias`** pendant tout T1-T4. Subpixel correct = follow-up T5.
