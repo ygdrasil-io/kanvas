@@ -184,6 +184,17 @@ public class SkBitmap(
 
     public fun asImage(): SkImage = SkImage.Make(this)
 
+    /**
+     * Mirrors Skia's `SkBitmap::makeShader(tmx, tmy, sampling, localMatrix)`.
+     * Phase 5g — see [SkBitmapShader] for the sampling rules.
+     */
+    public fun makeShader(
+        tileX: SkTileMode = SkTileMode.kClamp,
+        tileY: SkTileMode = SkTileMode.kClamp,
+        sampling: SkSamplingOptions = SkSamplingOptions.Default,
+        localMatrix: org.skia.math.SkMatrix = org.skia.math.SkMatrix.Identity,
+    ): SkShader = SkBitmapShader(asImage(), tileX, tileY, sampling, localMatrix)
+
     public companion object {
         public fun Make(w: Int, h: Int): SkBitmap = SkBitmap(w, h)
         public fun Make(w: Int, h: Int, colorSpace: SkColorSpace): SkBitmap =

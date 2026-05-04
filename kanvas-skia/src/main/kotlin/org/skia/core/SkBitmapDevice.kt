@@ -98,20 +98,71 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
     /**
      * Mirrors Skia's `SkBitmapDevice::drawPaint`. Fills every pixel inside
-     * [clip] with `paint.color`, composited via SrcOver. The clip is
-     * integer-aligned in device coords, so per-pixel coverage is binary —
-     * no AA bookkeeping needed regardless of `paint.isAntiAlias`.
+     * [clip] with `paint.color` (or [paint.shader]'s output, when present),
+     * composited via [paint.blendMode]. The clip is integer-aligned in
+     * device coords, so per-pixel coverage is binary — no AA bookkeeping
+     * needed regardless of `paint.isAntiAlias`.
+     *
+     * [ctm] is the current canvas matrix; only used when [paint] has a
+     * shader (the shader's `setupForDraw` needs it to compute the
+     * `device → local` transform).
      */
-    public fun drawPaint(clip: SkIRect, paint: SkPaint) {
-        val color = transformPaintColor(paint.color)
+    public fun drawPaint(ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
         val mode = paint.blendMode
-        // For modes that produce non-trivial output even when src.alpha == 0
-        // (e.g. kClear, kDstIn, kDstATop) we cannot short-circuit on alpha.
-        if (SkColorGetA(color) == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         val l = clip.left.coerceAtLeast(0)
         val t = clip.top.coerceAtLeast(0)
         val r = clip.right.coerceAtMost(width)
         val b = clip.bottom.coerceAtMost(height)
+        if (l >= r || t >= b) return
+
+        val shader = paint.shader
+        if (shader != null) {
+            // Shader path. paint.alpha modulates the shader output (Skia's
+            // semantics: shaderColor * paint.alpha). With kSrcOver + F16 we
+            // take a pure premul-float path that mirrors the Phase 6b
+            // shader path in [scanFillPath] (no per-pixel byte conversion).
+            shader.setupForDraw(ctm, xformSteps)
+            val paintAlphaF = SkColorGetA(paint.color) / 255f
+            if (paintAlphaF == 0f && !modeAffectsZeroAlphaSrc(mode)) return
+            val rowWidth = r - l
+            val isF16 = bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm
+            val useF16 = isF16 && mode == SkBlendMode.kSrcOver
+            if (useF16) {
+                val rowF16 = FloatArray(rowWidth * 4)
+                for (y in t until b) {
+                    shader.shadeRowF16(l, y, rowWidth, rowF16)
+                    for (xOff in 0 until rowWidth) {
+                        val si = xOff * 4
+                        val sa = rowF16[si + 3] * paintAlphaF
+                        if (sa <= 0f) continue
+                        val sr = rowF16[si]     * paintAlphaF
+                        val sg = rowF16[si + 1] * paintAlphaF
+                        val sb = rowF16[si + 2] * paintAlphaF
+                        blendF16Premul(l + xOff, y, sr, sg, sb, sa)
+                    }
+                }
+            } else {
+                val row = IntArray(rowWidth)
+                val paintAlpha = SkColorGetA(paint.color)
+                for (y in t until b) {
+                    shader.shadeRow(l, y, rowWidth, row)
+                    for (xOff in 0 until rowWidth) {
+                        val src = row[xOff]
+                        val srcA = SkColorGetA(src)
+                        if (srcA == 0) continue
+                        val effA = if (paintAlpha == 0xFF) srcA
+                            else (srcA * paintAlpha + 127) / 255
+                        if (effA == 0) continue
+                        blend(l + xOff, y, (effA shl 24) or (src and 0x00FFFFFF), mode)
+                    }
+                }
+            }
+            return
+        }
+
+        // Solid-colour path (Phase 1).
+        val color = transformPaintColor(paint.color)
+        if (SkColorGetA(color) == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         for (y in t until b) {
             for (x in l until r) blend(x, y, color, mode)
         }
@@ -318,10 +369,13 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val baseA: Int
         if (shader != null) {
             // Shader supplies per-pixel colour. Set it up once for this draw,
-            // then the rasterizer modulates each shaded pixel by AA coverage.
+            // then the rasterizer modulates each shaded pixel by AA coverage
+            // *and* by `paint.alpha` (matches Skia's
+            // "shaderColor.alpha *= paint.alpha" semantics — Phase 5g).
             shader.setupForDraw(ctm, xformSteps)
             color = 0    // unused — per-pixel colour comes from the shader
-            baseA = 255
+            baseA = SkColorGetA(paint.color)  // paint.alpha modulator
+            if (baseA == 0 && !modeAffectsZeroAlphaSrc(paint.blendMode)) return
         } else {
             color = transformPaintColor(paint.color)
             baseA = SkColorGetA(color)
@@ -942,10 +996,15 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             // the precision F16 storage promises for gradient draws.
             if (shaderRowF16 != null) {
                 shader!!.shadeRowF16(clip.left, py, rowWidth, shaderRowF16)
+                // Phase 5g: paint.alpha modulates the shader output (Skia's
+                // `shaderColor *= paint.alpha` semantics). Folded into the
+                // coverage multiplier so the inner loop stays a single mul.
+                val baseAF = baseA / 255f
                 for (xOff in 0 until rowWidth) {
                     val samples = coverage[xOff]
                     if (samples == 0) continue
-                    val cov = if (samples >= maxSamples) 1f else samples * invMaxSamples
+                    val covRaw = if (samples >= maxSamples) 1f else samples * invMaxSamples
+                    val cov = covRaw * baseAF
                     val si = xOff * 4
                     val sa = shaderRowF16[si + 3] * cov
                     if (sa <= 0f) continue
@@ -971,6 +1030,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 // 8-bit shader path: same code as before (also covers the
                 // F16-bitmap-with-non-SrcOver-mode case, where we accept the
                 // round-trip rather than expand the F16 mode dispatch).
+                // Phase 5g: paint.alpha is folded into the per-pixel
+                // alpha modulation as `srcA * samples * baseA / (maxSamples * 255)`.
                 shader.shadeRow(clip.left, py, rowWidth, shaderRow)
                 for (xOff in 0 until rowWidth) {
                     val samples = coverage[xOff]
@@ -978,8 +1039,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     val src = shaderRow[xOff]
                     val srcA = SkColorGetA(src)
                     if (srcA == 0) continue
-                    val effA = if (samples >= maxSamples) srcA
-                        else (srcA * samples + maxSamples / 2) / maxSamples
+                    val effA = if (samples >= maxSamples && baseA == 255) srcA
+                        else (srcA * samples * baseA + (maxSamples * 255) / 2) / (maxSamples * 255)
                     if (effA == 0) continue
                     val srcRgb = src and 0x00FFFFFF
                     blend(clip.left + xOff, py, (effA shl 24) or srcRgb, mode)

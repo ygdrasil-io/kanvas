@@ -549,9 +549,42 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 - **`StrokeRectAnisotropicGM` / `strokerect_anisotropic_5408`** — strokes sous `scale(0.03, 2)` ; le stroker fast-path remplit l'intérieur du rect au lieu de laisser la cavité centrale. Anisotropic stroke specialisation manque dans le rasterizer rect — déférable à un correctif rasterizer dédié.
 - **`AddArcMeasGM`** — `SkPathMeasure` requis pour positionner les rayons rouges.
 - **`ArcToGM`** — `arcTo(xy, angle, ArcSize, dir, xy)` (SVG-style) absent de notre `SkPathBuilder`.
-- **`BigMatrixGM`** — bitmap shader requis (Phase 5e).
+- **`BigMatrixGM`** — bitmap shader requis (Phase 5g).
 - **`Crbug1073670GM`** — texte (`drawString` + SkFont).
 - **`Crbug1113794GM`** — `SkDashPathEffect`.
+
+### Phase 5g — `SkBitmapShader` (infrastructure) ✅
+
+**But** : ajouter le shader image (`SkBitmap.makeShader` / `SkImage.makeShader`) requis par `BigMatrixGM`, `TilemodesAlphaGM`, `BitmapShaderGM`, `TinyBitmapGM` et la grande famille des GMs *bitmap-shader-driven*. Cette phase ship **l'infrastructure seule** ; les ports GM sont déférés parce qu'ils exposent un drift de pipeline indépendant du shader (BG colorspace + composition encoded vs linear).
+
+#### API ajoutée
+
+- [x] **`SkBitmapShader`** — hérite de `SkShader` (Phase 5a). Stocke une `SkImage` source, deux `SkTileMode` (X/Y), un `SkSamplingOptions` (kNearest / kLinear), un `localMatrix`. `setupForDraw` pré-transforme **une fois** chaque pixel source en working colour space (deux tables : 8-bit pour `shadeRow`, premul-float pour `shadeRowF16`). Les deux paths suivent les mêmes règles d'échantillonnage (centre-pixel, half-integer).
+- [x] **`SkBitmap.makeShader(tileX, tileY, sampling, localMatrix)`** — factory. Snapshot la bitmap via `asImage()` puis instancie `SkBitmapShader`.
+- [x] **`SkImage.makeShader(tileX, tileY, sampling, localMatrix)`** — même factory directement sur `SkImage`.
+- [x] **`SkSamplingOptions`** — déjà présent depuis le slice `drawImageRect`.
+
+#### Refactor
+
+- [x] **`SkBitmapDevice.drawPaint(ctm, clip, paint)`** — accepte un CTM et reroute via le shader path quand `paint.shader != null`. F16+SrcOver fast path utilise `shadeRowF16` directement → `blendF16Premul` (zéro byte-quantize). Fallback 8-bit pour les autres configurations.
+- [x] **`SkCanvas.drawPaint(paint)`** — passe le CTM courant au device.
+- [x] **`SkBitmapDevice.drawPath` shader path** : `baseA` est désormais `SkColorGetA(paint.color)` (et non plus `255`), pour que `paint.alpha` modulate la sortie shader (Skia : `shaderColor.alpha *= paint.alpha`).
+- [x] **`scanFillPath`** : les deux branches shader (F16 et 8-bit) folde `baseA / 255f` (Phase 5g) dans le multiplicateur de couverture.
+
+#### Tests
+
+- [x] **`SkBitmapShaderTest.kt`** — 7 tests unitaires : tile modes (kClamp / kRepeat / kMirror / kDecal), filter modes (kNearest direct + checkerboard 2×2 ; kLinear couvert par les sites bilerp internes), `shadeRowF16` premul-float, `localMatrix` scale.
+
+#### GMs déférés (port pour Phase 5h+)
+
+`TinyBitmapGM`, `BigMatrixGM`, `TilemodesAlphaGM`, `BitmapShaderGM` exposent une combinaison BG-color + shader + paint.alpha qui dérive de la référence à cause d'un détail orthogonal au shader : le compositeur fait du SrcOver en **encoded** Rec.2020 alors qu'upstream Skia compose en **linear** Rec.2020 dans son raster pipeline F16. Le mismatch n'est visible qu'avec des sources/dest translucides ; les 64 GMs déjà portés (qui sont opaques sur opaques ou sources premul opaques sur BG opaque + transparent) ne le voient pas.
+
+Quand on portera ces GMs, on aura besoin soit d'un `eraseColor`-via-`drawPaint` xformé bit-pour-bit comme upstream, soit de basculer le storage F16 en linear-premul (et n'encoder qu'à la sortie 8-bit / PNG). Slice indépendant.
+
+#### Vérification Phase 5g
+- [x] Aucune régression sur les 64 GMs précédents.
+- [x] 7 tests unitaires `SkBitmapShader` verts.
+- [x] **Pass count cumulé : 64 GM** (infrastructure ; pas de nouveau GM porté dans ce slice).
 
 ### Phase 6a — F16 working-space rasterizer (infra) ✅
 
@@ -789,7 +822,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 6a    | 64       | F16 working-space rasterizer (infra : SkBitmap F16, blendF16 SrcOver, I/O 16-bit) | ✅ |
 | 6b    | 64       | F16 shaders (`shadeRowF16` premul-float gradient + scanline-fill float coverage) — pipeline F16 désormais pur de bout en bout pour `kSrcOver` | ✅ |
 | 6c    | 64       | F16 solid-colour AA (`colorToF16Premul` + float coverage dans fillRectAA/strokeRectAA/scanFillPath) — 11 GMs en hausse, 0 régression | ✅ |
-| 5g    | ~67      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
+| 5g    | 64       | `SkBitmapShader` infra (`SkBitmap.makeShader`/`SkImage.makeShader` + `shadeRowF16`) + `SkCanvas.drawPaint` shader-aware + paint.alpha modulation. Ports GM déférés (BG xform + linear-premul compositing requis). | ✅ |
+| 5h    | 64+      | Linear-premul F16 storage (via `eraseColor` xformé) ⇒ port `TinyBitmap`, `BigMatrix`, `BitmapShader`, `TilemodesAlpha` | ⬜ |
 | 6     | ~70      | 19 blend modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).

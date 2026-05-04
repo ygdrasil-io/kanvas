@@ -349,12 +349,14 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     /**
      * Mirrors Skia's `SkCanvas::drawPaint`. Fills the current clip with
-     * `paint.color` via SrcOver. The CTM is irrelevant — `drawPaint` is
-     * "infinite rect" semantics, so the only bound is the clip.
+     * `paint.color` (or `paint.shader`, if set) via the paint's blend mode.
+     * `drawPaint` has "infinite rect" semantics, so the only spatial bound
+     * is the clip; the CTM affects the shader's local-to-device mapping
+     * only (and is a no-op for solid-colour paints).
      */
     public fun drawPaint(paint: SkPaint) {
         val s = top
-        s.device.drawPaint(s.clip, paint)
+        s.device.drawPaint(s.matrix, s.clip, paint)
     }
 
     /**
