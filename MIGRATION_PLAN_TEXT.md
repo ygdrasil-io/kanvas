@@ -246,22 +246,96 @@ L'API publique (`org.skia.foundation`) est en théorie *backend-agnostic*. Tout 
 
 ---
 
-### Slice T4 — Polices portables Skia upstream
+### Slice T4 — Polices portables Skia upstream (Liberation, option A)
 
-**But** : charger les mêmes TTF que Skia DM (`Roboto-Regular.ttf`, `DejaVuSans.ttf`, etc.) via `Font.createFont(TRUETYPE_FONT, file)` pour matcher la *forme* des glyphes upstream. Le rasterizer reste AWT donc le bit-exact n'est toujours pas garanti, mais on s'en rapproche significativement.
+**But** : remplacer la fallback platform-default sans-serif (T1-T3) par la **même famille de polices que Skia DM utilise** pour générer les images de référence, de sorte que la *forme* des glyphes converge vers l'upstream.
+
+#### Investigation upstream — quelles polices DM utilise vraiment
+
+> Note : le plan v1 disait « Roboto / DejaVu » — **incorrect**. L'investigation des sources `skia-main/tools/fonts/{FontToolUtils.cpp, TestFontMgr.cpp, TestTypeface.cpp, test_font_index.inc}` (faite après T3) donne le pipeline réel :
+>
+> ```
+> ToolUtils::DefaultPortableTypeface()
+>   → CreatePortableTypeface(nullptr, FontStyle())
+>     → portableFontMgr->legacyMakeTypeface(nullptr, ...)
+>       → TestFontMgr (tools/fonts/TestFontMgr.cpp)
+>         → TestTypeface::Typefaces() (tools/fonts/TestTypeface.cpp)
+>           → données dans test_font_*.inc
+>             ↳ Liberation Sans / Liberation Mono / Liberation Serif
+> ```
+>
+> Le default (par `gDefaultFontIndex = 4`) est **Liberation Sans Regular**.
+
+3 familles disponibles upstream :
+| Famille upstream | Source réelle |
+|---|---|
+| `monospace` / `Toy Liberation Mono` | Liberation Mono (Regular/Bold/Italic/BoldItalic) |
+| `sans-serif` / `Toy Liberation Sans` | **Liberation Sans** ← `DefaultPortableTypeface` |
+| `serif` / `Toy Liberation Serif` | Liberation Serif (Regular/Bold/Italic/BoldItalic) |
+
+**Subtilité majeure** : upstream **ne charge pas** le `.ttf` à runtime. Les outlines sont **pré-extraites** dans des fichiers `.inc` C++ statiques (`test_font_sans_serif.inc` ≈ 408 KB de données points/verbs) générées une fois par `create_test_font.cpp`. Le runtime itère directement sur ces arrays via un `SkTestFont` custom — aucune dépendance FreeType pour ces typefaces.
+
+#### Option A (T4 — adoptée pour la première itération)
+
+Embed les **TTF Liberation officiels** (Red Hat, OFL) dans `kanvas-skia/src/main/resources/fonts/` et les charger via AWT.
 
 **Travail** :
-- Copier `skia-main/resources/fonts/{Roboto-Regular,DejaVuSans.subset,Liberation*}.ttf` dans `kanvas-skia/src/main/resources/fonts/`.
-- Implémenter un `PortableFontMgr` qui maps `family name` → `font file` selon le mapping Skia DM (`SkFontMgr_Custom`).
-- `ToolUtils.DefaultPortableTypeface` charge `Roboto-Regular.ttf` (ou son équivalent) en cache.
+- Télécharger les 12 TTF Liberation : `LiberationSans-{Regular,Bold,Italic,BoldItalic}.ttf`, idem pour Mono et Serif. Source officielle : github.com/liberationfonts/liberation-fonts (releases).
+- Les copier dans `kanvas-skia/src/main/resources/fonts/`.
+- Implémenter `LiberationFontMgr` (interne, sous `org.skia.foundation.awt`) qui mappe `(family, style)` → ressource TTF, charge via `Font.createFont(TRUETYPE_FONT, classloader.getResourceAsStream(...))`.
+- `ToolUtils.DefaultPortableTypeface()` route vers `LiberationFontMgr.getDefault()` (Liberation Sans Regular).
+- Stratégie de cache : un `AwtTypeface` par `(family, style)`, créé lazy une seule fois.
 
-**GMs débloqués (incrémental sur T3)** : tous les GMs qui utilisent `DefaultPortableTypeface` — la majorité. Les scores sur les GMs label-heavy devraient grimper de 5-15 % par rapport à T3 (mêmes formes de glyphes).
+**Bénéfices** :
+- ✅ **Forme des glyphes ≈ upstream** : on rasterise les mêmes outlines vectoriels que `test_font_sans_serif.inc` exposait à FreeType (les `.inc` ont été générés depuis ces mêmes TTF).
+- ✅ Effort minimal (~150 lignes Kotlin + 12 TTF, ~600 KB total).
+- ✅ Pas de Kotlin custom typeface, AwtTypeface fait tout le boulot.
 
-**Critères de réussite** :
-- [ ] Les TTF embarqués chargent sans erreur en classpath.
-- [ ] Score sur 1-2 GMs textual-heavy déjà portés en T3 grimpe de ≥ 5 %.
+**Limites résiduelles (drift attendu)** :
+- ⚠️ **Rasterizer AA différent** : AWT ≠ FreeType (utilisé par DM). 1-2 ulp de drift sur les bords AA.
+- ⚠️ **Hinting AWT** appliqué (TT instructions interprétées différemment), peut décaler le placement subpixel d'un glyphe par rapport à l'upstream.
+- ⚠️ **Scaler context** : Skia utilise son `SkScalerContext` qui choisit hinting/subpixel selon `font.edging`. AWT applique son propre policy via `RenderingHints` et `FontRenderContext`. Les deux divergent dans les cas limites.
 
-**Effort estimé** : 1 slice moyen (~150 lignes Kotlin + ressources).
+→ Cumul → **forme correcte, pixels pas bit-exact**. Acceptable pour les GMs où le texte est annotation (tolerance ≥ 8 absorbe). Insuffisant pour `bigtext` / `coloremoji` where le glyphe est le sujet du test.
+
+**Critères de réussite (T4 option A)** :
+- [ ] Les 12 TTF Liberation chargent sans erreur en classpath.
+- [ ] `LiberationFontMgr.matchFamilyStyle("sans-serif", Normal)` retourne `LiberationSans-Regular`.
+- [ ] `ToolUtils.DefaultPortableTypeface()` est `LiberationSans-Regular`.
+- [ ] Score d'un GM textual-heavy (porté en T3) grimpe de ≥ 5 % par rapport à la fallback platform-default.
+- [ ] Aucun import `java.awt.*` hors `org.skia.foundation.awt.*` (contrainte design inchangée).
+
+**Effort estimé** : 1 slice moyen (~150 lignes Kotlin + 12 TTF embarqués + tests).
+
+#### Option B (à terme — reportée)
+
+Porter les données vectorielles `test_font_*.inc` (1.2 MB de points/verbs C++) en Kotlin et construire un `SkTestTypeface` custom qui les expose **sans passer par AWT pour le rendu**. La rasterisation reste celle d'AWT (notre scanline-fill 4×4 via `drawPath`), mais les **outlines sont bit-exact upstream**.
+
+**Pourquoi B est la cible long-terme** :
+- ✅ **Bit-exact glyph outlines** vs upstream — élimine le drift de hinting et de scaler context. Le drift résiduel ne provient plus que du rasterizer scanline-fill (mêmes outlines, donc même points de coverage).
+- ✅ Bypass d'AWT pour la résolution outline → indépendance du moteur de fontes JVM.
+- ✅ Permet de viser `tolerance ≤ 4` voire `≤ 1` sur les GMs `bigtext` family.
+- ✅ Dette technique réduite : seule la couche rasterizer reste à aligner pour viser le bit-exact total.
+
+**Pourquoi pas tout de suite** :
+- 📦 **1.2 MB de données** à porter (~3 × 408 KB de points/verbs/widths/charcodes/metrics par famille).
+- 🔨 Custom typeface = nouveau type de `SkTypeface` (`SkTestTypeface`) qui ne dérive pas d'AwtTypeface — duplique les hooks `makeTextPath` / `measureTextInternal` / `getMetricsInternal`.
+- ⏳ ROI déclenché seulement quand on s'attaque aux `bigtext`-family GMs (post-T5).
+
+**Travail estimé pour B** :
+- Script Python qui parse `test_font_*.inc` → généré Kotlin `data class TestFontData(points: FloatArray, verbs: IntArray, charCodes: IntArray, widths: FloatArray, metrics: SkFontMetrics)`.
+- Embed les 3 fichiers générés (~1.2 MB de Kotlin compilé, sera lazy-loaded au premier accès).
+- `SkTestTypeface : SkTypeface` qui surroute `makeTextPath` en itérant points/verbs directement (skip `Font.createGlyphVector` / `Shape` / `PathIterator`).
+- `LiberationFontMgr` switch entre AwtTypeface (option A) et SkTestTypeface (option B) selon un flag (par défaut B en CI, A en dev local pour rapidité de boot).
+
+**Effort estimé pour B** : 1 slice élevé (~600 lignes Kotlin générées + ~200 lignes infra + tests). À planifier quand un GM textual-content concrete réclame une fidélité que l'option A ne peut pas atteindre.
+
+#### Trajectoire option A → option B
+
+1. **T4** = option A. Liberation TTF embedded, AWT rasterise. Couvre 80-90 % du cas d'usage GMs (text en annotation).
+2. **Tx future (post-T5)** = option B. Génération du Kotlin depuis les `.inc`, switch interne sur `LiberationFontMgr`. Active automatiquement pour les GMs `bigtext` family, opt-in ailleurs. **Aucune API publique ne change** — c'est une swap d'implémentation derrière `SkTypeface`. Les utilisateurs (`SkCanvas.drawString`) ne voient rien.
+
+Le bloc d'avertissement KDoc en tête des fichiers AWT mentionne déjà cette possibilité ("Si on remplace AWT par FreeType+JNI ou par un rasterizer custom, **seul ce fichier doit changer**"). Option B = le « rasterizer custom » de cette promesse, juste limité à la couche outline lookup (le rasterizer scanline reste partagé).
 
 ---
 
@@ -285,7 +359,8 @@ L'API publique (`org.skia.foundation`) est en théorie *backend-agnostic*. Tout 
 | T1 | 0 | infra mais no-op rendu |
 | T2 | 0–5 | layout-aware GMs ; encore vide visuellement |
 | T3 | 40–60 | premier vrai rendu glyphe ; gros débloquage |
-| T4 | 40–80 | polices portable ⇒ scores plus hauts sur les déjà-portés |
+| T4 (option A — Liberation TTF) | 40–90 | forme de glyphes ≈ upstream, drift résiduel sur bords AA / hinting |
+| Tx future (option B — `.inc` ports) | 90–130 | bit-exact outlines ; déblocage des `bigtext`-family GMs |
 | T5 | 80–130 | optimisation + finesse AA, scores plats sur déjà-portés |
 
 > Les nombres exacts dépendent du seuil de `tolerance` qu'on accepte pour les GMs où le texte n'est pas le sujet central. Avec `tolerance = 8`, beaucoup plus passent ; à `tolerance = 1`, c'est plus serré.
@@ -300,8 +375,8 @@ L'API publique (`org.skia.foundation`) est en théorie *backend-agnostic*. Tout 
 
 ### R2 — Polices système pour `Font.SANS_SERIF` etc. varient par OS
 
-- Probabilité : élevée (macOS = San Francisco, Linux = DejaVu, Windows = Arial).
-- Mitigation : T4 résout en chargeant les TTF Skia. Avant T4, considérer T1-T3 comme "smoke-only" pour les scores et ne pas paniquer sur des deltas.
+- Probabilité : élevée (macOS = San Francisco, Linux = DejaVu Sans, Windows = Arial).
+- Mitigation : **T4 option A** (Liberation TTF embedded) résout — `Font.createFont(TRUETYPE_FONT, …)` instancie une police indépendante de l'OS, identique d'une machine à l'autre. Avant T4, considérer T1-T3 comme "smoke-only" pour les scores et ne pas paniquer sur des deltas inter-OS.
 
 ### R3 — Subpixel AA divergence
 
@@ -315,15 +390,17 @@ L'API publique (`org.skia.foundation`) est en théorie *backend-agnostic*. Tout 
 
 ### R5 — Coût mémoire des polices embarquées
 
-- Roboto-Regular.ttf ≈ 170 KB, DejaVuSans.subset.ttf ≈ 200 KB. Total < 1 MB pour les ~5 polices nécessaires. Négligeable.
+- Liberation TTF (option A — T4) : `LiberationSans-Regular.ttf` ≈ 130 KB, multipliée par 12 (4 styles × 3 familles) ≈ **600-700 KB** classpath. Lazy-loaded → coût RAM résiduel ≪ 100 KB une fois en mémoire. Négligeable.
+- Données `.inc` portées (option B — futur) : ≈ 1.2 MB de Kotlin généré (points/verbs/charcodes/widths/metrics × 3 familles). Lazy-loaded au premier accès via `SkTestTypeface.Make`. Acceptable pour un module de test/référence.
 
 ## Trajectoire suggérée
 
-1. **T1** ASAP — débloque la compilation, faible risque, faible effort.
-2. **T2** dans la foulée si on veut porter un GM avec layout texte précoce.
-3. **T3** = le slice à fort impact. À planifier avec ~1-2 jours de buffer.
-4. **T4** quand on commence à porter les `XfermodesGM` family — apporte le pixel-fidelity vs upstream.
+1. **T1** ✅ livré (PR #48) — débloque la compilation.
+2. **T2** ✅ livré (PR #48, fusionné avec T1) — `measureText` / `getMetrics` AWT-backed.
+3. **T3** ✅ livré (PR #49) — vrai rendu glyphe via `GlyphVector` → `SkPath` → `drawPath`.
+4. **T4 (option A)** = next. Liberation TTF embedded, bypass de la fallback platform-default sans-serif. Effort modéré, gros gain de stabilité inter-OS.
 5. **T5** opportuniste, quand un GM spécifique nécessite glyph cache ou subpixel.
+6. **Tx future (option B)** = porter les `test_font_*.inc` → bit-exact outlines. À planifier quand un GM textual-content concret le réclame (probablement après les premiers ports `bigtext`-family).
 
 ## Parallélisme avec le `MIGRATION_PLAN.md` principal
 
@@ -335,15 +412,20 @@ L'API publique (`org.skia.foundation`) est en théorie *backend-agnostic*. Tout 
 
 - [`skia-main/include/core/SkFont.h`](file:///Users/chaos/workspace/kanvas-forge/skia-main/include/core/SkFont.h) — API publique, ~250 lignes, lisible.
 - [`skia-main/include/core/SkTypeface.h`](file:///Users/chaos/workspace/kanvas-forge/skia-main/include/core/SkTypeface.h) — définition + idée de l'abstraction.
-- [`skia-main/tools/fonts/FontToolUtils.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/FontToolUtils.cpp) — le `MakePortableFontMgr`, les helpers DM-spécifiques. **Important** pour T4.
-- [`skia-main/resources/fonts/`](file:///Users/chaos/workspace/kanvas-forge/skia-main/resources/fonts/) — les TTF à embarquer pour T4.
+- [`skia-main/tools/fonts/FontToolUtils.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/FontToolUtils.cpp) — `DefaultPortableTypeface()` → `MakePortableFontMgr` → `legacyMakeTypeface(nullptr)`. **Pivot** de T4.
+- [`skia-main/tools/fonts/TestFontMgr.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/TestFontMgr.cpp) — `MakePortableFontMgr` retourne un `FontMgr` qui sert les typefaces de `TestTypeface::Typefaces()` (PAS de chargement TTF runtime).
+- [`skia-main/tools/fonts/test_font_index.inc`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/test_font_index.inc) — la liste des 12 sub-fonts (Liberation Mono / Sans / Serif × 4 styles), avec `gDefaultFontIndex = 4` → **Liberation Sans Regular** est le `DefaultPortableTypeface`.
+- [`skia-main/tools/fonts/test_font_sans_serif.inc`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/test_font_sans_serif.inc) (408 KB) / `test_font_monospace.inc` / `test_font_serif.inc` — données vectorielles pré-extraites (points/verbs/charcodes/widths/metrics). **Cible du portage option B**.
+- [`skia-main/tools/fonts/create_test_font.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/create_test_font.cpp) — outil qui a généré les `.inc` à partir des TTF Liberation. Utile pour comprendre le format des arrays portés.
+- **TTF Liberation officiels** (à télécharger pour T4 option A) : [github.com/liberationfonts/liberation-fonts/releases](https://github.com/liberationfonts/liberation-fonts/releases) — licence OFL, redistribution OK.
 - Sample upstream à étudier : [`gm/aaxfermodes.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/gm/aaxfermodes.cpp) — utilise typique `SkFont.setTypeface` + `drawString`.
 
-## Décisions finales (à valider avant de démarrer T1)
+## Décisions finales
 
 - [x] **Backend = AWT** pour T1-T5 (validé par utilisateur). FreeType reporté.
 - [x] **Façade Skia obligatoire** : tout le code public utilise les noms et signatures Skia. Le code AWT vit isolé sous `org.skia.foundation.awt.*` avec bloc d'avertissement en tête. (validé)
-- [ ] **Polices portables = T4**, pas avant. T1-T3 utilisent une font système quelconque.
-- [ ] **`tolerance` par défaut sur GMs textuels = 8** (au lieu de 1) pour absorber les drifts AWT vs FreeType. À documenter par test.
+- [x] **Slice T1 + T2 fusionnés** dans PR #48 (validé par utilisateur, livré).
+- [x] **Polices portables = T4 option A** (Liberation TTF embedded). Skia DM utilise Liberation Sans/Mono/Serif (pas Roboto/DejaVu — investigation upstream après T3 a corrigé l'hypothèse initiale). Validé.
+- [x] **Option B reportée** : porter les `test_font_*.inc` pour bit-exact outlines, post-T5, opportuniste. Validé.
+- [ ] **`tolerance` par défaut sur GMs textuels = 8** (au lieu de 1) pour absorber les drifts AWT vs FreeType. À documenter par test, à confirmer au premier port de GM textual-content.
 - [ ] **`kSubpixelAntiAlias` = downgrade à `kAntiAlias`** pendant tout T1-T4. Subpixel correct = follow-up T5.
-- [ ] **Slice T1 + T2 fusionnés ?** Petit ; à voir si on les combine en un seul PR pour simplifier (dépend si on veut juste compiler ou si on veut déjà mesurer).
