@@ -24,12 +24,16 @@ public class SkRadialGradient internal constructor(
 
     private val xformedColors: IntArray = IntArray(srcColors.size)
 
+    /** Phase 6b — float-premul stops for the F16 raster path. */
+    private val xformedColorsF16: FloatArray = FloatArray(srcColors.size * 4)
+
     /** Cached `1 / radius` to avoid the divide per pixel. */
     private var invRadius: Float = 0f
 
     override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
         super.setupForDraw(canvasCtm, xform)
         transformStopColors(srcColors, xformedColors, xform)
+        transformStopColorsF16(srcColors, xformedColorsF16, xform)
         invRadius = if (radius <= 0f) 0f else 1f / radius
     }
 
@@ -54,6 +58,40 @@ public class SkRadialGradient internal constructor(
             val ry = ly - center.fY
             val t = length(rx, ry) * invRadius
             dst[i] = lookupStop(t, positions, xformedColors, tileMode)
+            lx += stepX
+            ly += stepY
+        }
+    }
+
+    override fun shadeRowF16(devX: Int, devY: Int, count: Int, dst: FloatArray) {
+        require(dst.size >= count * 4) { "dst too small: ${dst.size} < ${count * 4}" }
+        val inv = deviceToLocal
+        if (inv == null || invRadius == 0f) {
+            var di = 0
+            for (i in 0 until count) {
+                dst[di]     = xformedColorsF16[0]
+                dst[di + 1] = xformedColorsF16[1]
+                dst[di + 2] = xformedColorsF16[2]
+                dst[di + 3] = xformedColorsF16[3]
+                di += 4
+            }
+            return
+        }
+
+        val x0 = devX + 0.5f
+        val y0 = devY + 0.5f
+        var lx = inv.sx * x0 + inv.kx * y0 + inv.tx
+        var ly = inv.ky * x0 + inv.sy * y0 + inv.ty
+        val stepX = inv.sx
+        val stepY = inv.ky
+
+        var di = 0
+        for (i in 0 until count) {
+            val rx = lx - center.fX
+            val ry = ly - center.fY
+            val t = length(rx, ry) * invRadius
+            lookupStopF16(t, positions, xformedColorsF16, tileMode, dst, di)
+            di += 4
             lx += stepX
             ly += stepY
         }
