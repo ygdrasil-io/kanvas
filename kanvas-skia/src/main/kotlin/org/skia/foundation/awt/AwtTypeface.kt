@@ -2,11 +2,13 @@ package org.skia.foundation.awt
 
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkFontStyle
+import org.skia.foundation.SkPath
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTypeface
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import java.awt.Font
+import java.awt.geom.AffineTransform
 import java.awt.font.FontRenderContext
 
 /**
@@ -74,6 +76,53 @@ internal class AwtTypeface internal constructor(
             bounds.bottom = (vb.y + vb.height).toFloat()
         }
         return advance
+    }
+
+    /**
+     * Mirrors the path that [org.skia.core.SkCanvas.drawString] takes
+     * (T3): build an [SkPath] containing every glyph in [text], pre-
+     * positioned so the baseline lands at `(x, y)` in source coords. The
+     * returned path is then routed through `drawPath`, which applies the
+     * canvas CTM and the existing AA scanline-fill + blend-mode pipeline.
+     *
+     * Implementation:
+     *  1. derive the AWT `Font` at the requested [size] / [scaleX] /
+     *     [skewX] (skewX = horizontal shear);
+     *  2. `Font.createGlyphVector(FRC, text)` lays out glyphs on the
+     *     baseline;
+     *  3. `GlyphVector.getOutline(x, y)` returns a `Shape` already
+     *     translated to baseline `(x, y)`;
+     *  4. [AwtPathConverter.shapeToSkPath] walks the AWT `PathIterator`
+     *     and emits the equivalent `moveTo` / `lineTo` / `quadTo` /
+     *     `cubicTo` / `close` verb stream into an [SkPath].
+     *
+     * Returns `null` for empty input — callers (notably `SkCanvas.drawString`)
+     * treat that as a fast-path no-op.
+     */
+    override fun makeTextPath(
+        text: String,
+        x: SkScalar,
+        y: SkScalar,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): SkPath? {
+        if (text.isEmpty()) return null
+        val sized = baseFont.deriveFont(size)
+        // scaleX scales the x-axis only; skewX horizontally shears
+        // (glyph x ← x + skewX·y). Skia's convention matches AWT's
+        // `AffineTransform.shear(shx, shy)`.
+        val font = if (scaleX == 1f && skewX == 0f) {
+            sized
+        } else {
+            val tx = AffineTransform()
+            if (scaleX != 1f) tx.scale(scaleX.toDouble(), 1.0)
+            if (skewX != 0f) tx.shear(skewX.toDouble(), 0.0)
+            sized.deriveFont(tx)
+        }
+        val gv = font.createGlyphVector(FRC, text)
+        val outline = gv.getOutline(x, y)
+        return AwtPathConverter.shapeToSkPath(outline)
     }
 
     /**
