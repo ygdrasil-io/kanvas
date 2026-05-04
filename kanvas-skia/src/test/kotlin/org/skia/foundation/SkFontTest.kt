@@ -1,0 +1,239 @@
+package org.skia.foundation
+
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotSame
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+import org.skia.core.SkBitmapDevice
+import org.skia.core.SkCanvas
+import org.skia.foundation.awt.AwtTypeface
+import org.skia.math.SkRect
+import org.skia.tools.ToolUtils
+
+/**
+ * Slice T1 + T2 — covers the no-op rendering surface (`drawString`) and
+ * the AWT-backed measurement surface (`measureText`, `getMetrics`). Real
+ * glyph rasterisation lands in T3.
+ */
+class SkFontTest {
+
+    // ---------- T1: API construction ---------------------------------------
+
+    @Test
+    fun `default ctor produces empty typeface size 12 upright`() {
+        val f = SkFont()
+        assertEquals(12f, f.size)
+        assertEquals(1f, f.scaleX)
+        assertEquals(0f, f.skewX)
+        assertEquals(SkFont.Edging.kAntiAlias, f.edging)
+        assertFalse(f.isSubpixel)
+        // typeface defaults to MakeEmpty()
+        assertEquals(SkTypeface.MakeEmpty(), f.typeface)
+    }
+
+    @Test
+    fun `ctor with typeface and size`() {
+        val tf = SkTypeface.MakeEmpty()
+        val f = SkFont(tf, 24f)
+        assertEquals(tf, f.typeface)
+        assertEquals(24f, f.size)
+    }
+
+    @Test
+    fun `ctor with typeface size scaleX skewX`() {
+        val tf = SkTypeface.MakeEmpty()
+        val f = SkFont(tf, 32f, 0.5f, 0.25f)
+        assertEquals(0.5f, f.scaleX)
+        assertEquals(0.25f, f.skewX)
+    }
+
+    @Test
+    fun `copy ctor mirrors all properties`() {
+        val f = SkFont(SkTypeface.MakeEmpty(), 20f, 1.5f, 0.2f).also {
+            it.edging = SkFont.Edging.kAlias
+            it.isSubpixel = true
+            it.isLinearMetrics = true
+            it.isEmbolden = true
+            it.isBaselineSnap = true
+        }
+        val g = SkFont(f)
+        assertNotSame(f, g)
+        assertEquals(f.size, g.size)
+        assertEquals(f.scaleX, g.scaleX)
+        assertEquals(f.skewX, g.skewX)
+        assertEquals(f.edging, g.edging)
+        assertEquals(f.isSubpixel, g.isSubpixel)
+        assertEquals(f.isLinearMetrics, g.isLinearMetrics)
+        assertEquals(f.isEmbolden, g.isEmbolden)
+        assertEquals(f.isBaselineSnap, g.isBaselineSnap)
+    }
+
+    @Test
+    fun `setters mutate in place mirroring SkFont's mutable upstream surface`() {
+        val f = SkFont()
+        f.size = 50f
+        f.scaleX = 2f
+        f.skewX = -0.3f
+        f.edging = SkFont.Edging.kSubpixelAntiAlias
+        f.isSubpixel = true
+
+        assertEquals(50f, f.size)
+        assertEquals(2f, f.scaleX)
+        assertEquals(-0.3f, f.skewX)
+        assertEquals(SkFont.Edging.kSubpixelAntiAlias, f.edging)
+        assertTrue(f.isSubpixel)
+    }
+
+    // ---------- T1: SkCanvas drawString / drawSimpleText no-op -------------
+
+    @Test
+    fun `drawString and drawSimpleText do not mutate the bitmap T1 stub`() {
+        // Build a small canvas filled with red, then "draw" some text on it
+        // — pixels must be unchanged because T1 is a no-op stub.
+        val bm = SkBitmap(8, 8)
+        bm.eraseColor(0xFFFF0000.toInt())
+        val before = bm.pixels.copyOf()
+
+        val canvas = SkCanvas(bm)
+        val font = SkFont(SkTypeface.MakeEmpty(), 16f)
+        val paint = SkPaint(0xFF000000.toInt())
+
+        canvas.drawString("hello", 0f, 0f, font, paint)
+        canvas.drawSimpleText("hello", 5, SkTextEncoding.kUTF8, 0f, 0f, font, paint)
+
+        assertEquals(before.toList(), bm.pixels.toList())
+    }
+
+    // ---------- T1: ToolUtils helpers --------------------------------------
+
+    @Test
+    fun `DefaultPortableTypeface is non-null and stable across calls`() {
+        val a = ToolUtils.DefaultPortableTypeface()
+        val b = ToolUtils.DefaultPortableTypeface()
+        // Singleton today (T4 may load from TTF resource — still a singleton).
+        assertEquals(a, b)
+    }
+
+    @Test
+    fun `DefaultPortableFont returns SkFont with portable typeface and given size`() {
+        val f = ToolUtils.DefaultPortableFont(18f)
+        assertEquals(18f, f.size)
+        assertEquals(ToolUtils.DefaultPortableTypeface(), f.typeface)
+    }
+
+    @Test
+    fun `DefaultPortableFont default size is 12 matching upstream`() {
+        assertEquals(12f, ToolUtils.DefaultPortableFont().size)
+    }
+
+    // ---------- T2: measureText with AWT-backed typeface -------------------
+
+    @Test
+    fun `measureText returns 0 for empty string regardless of typeface`() {
+        val f = ToolUtils.DefaultPortableFont(16f)
+        assertEquals(0f, f.measureText(""))
+    }
+
+    @Test
+    fun `measureText returns 0 on empty typeface T1 fallback`() {
+        val f = SkFont(SkTypeface.MakeEmpty(), 16f)
+        assertEquals(0f, f.measureText("X"))
+    }
+
+    @Test
+    fun `measureText is monotonic with string length AWT backend`() {
+        val f = ToolUtils.DefaultPortableFont(20f)
+        val w1 = f.measureText("X")
+        val w2 = f.measureText("XX")
+        val w3 = f.measureText("XXXXXXXX")
+        assertTrue(w1 > 0f, "single char must have positive advance, got $w1")
+        assertTrue(w2 > w1, "two X must be wider than one (got $w1, $w2)")
+        assertTrue(w3 > w2, "eight X must be wider than two (got $w2, $w3)")
+    }
+
+    @Test
+    fun `measureText scales roughly linearly with font size`() {
+        val text = "ABCDEFGH"
+        val w12 = ToolUtils.DefaultPortableFont(12f).measureText(text)
+        val w24 = ToolUtils.DefaultPortableFont(24f).measureText(text)
+        // 24pt ≈ 2 × 12pt within ~10% tolerance (AWT subpixel + hinting drift).
+        val ratio = w24 / w12
+        assertTrue(ratio in 1.8f..2.2f, "expected ratio ~2 for size 12→24, got $ratio")
+    }
+
+    @Test
+    fun `measureText fills tight visual bounds when bounds out-param is provided`() {
+        val f = ToolUtils.DefaultPortableFont(40f)
+        val bounds = SkRect.MakeEmpty()
+        val advance = f.measureText("Hello", bounds = bounds)
+        assertTrue(advance > 0f)
+        // Visual bbox of "Hello" with a 40pt font: expect height in roughly [10, 50] pixels
+        // (cap-height area, no descenders), width comparable to advance.
+        assertTrue(bounds.width > 0f, "width must be positive, got ${bounds.width}")
+        assertTrue(bounds.height > 0f, "height must be positive, got ${bounds.height}")
+        assertTrue(bounds.height < 60f, "visual height should be < 60 for a 40pt font, got ${bounds.height}")
+    }
+
+    // ---------- T2: getMetrics ---------------------------------------------
+
+    @Test
+    fun `getMetrics on empty typeface zeros everything`() {
+        val f = SkFont(SkTypeface.MakeEmpty(), 16f)
+        val m = SkFontMetrics()
+        // Pre-fill to detect zeroing.
+        m.fAscent = 999f; m.fDescent = 999f; m.fFlags = 999
+        val spacing = f.getMetrics(m)
+        assertEquals(0f, spacing)
+        assertEquals(0f, m.fAscent)
+        assertEquals(0f, m.fDescent)
+        assertEquals(0, m.fFlags)
+    }
+
+    @Test
+    fun `getMetrics ascent is negative descent positive AWT backend`() {
+        val f = ToolUtils.DefaultPortableFont(20f)
+        val m = SkFontMetrics()
+        val spacing = f.getMetrics(m)
+        // Skia y-down: ascent is above baseline → negative, descent below → positive.
+        assertTrue(m.fAscent < 0f, "fAscent must be negative (Skia y-down), got ${m.fAscent}")
+        assertTrue(m.fDescent > 0f, "fDescent must be positive, got ${m.fDescent}")
+        assertTrue(m.fLeading >= 0f, "fLeading must be non-negative, got ${m.fLeading}")
+        assertTrue(spacing > 0f, "recommended line spacing must be positive, got $spacing")
+    }
+
+    @Test
+    fun `getMetrics scales with font size`() {
+        val small = SkFontMetrics().also { ToolUtils.DefaultPortableFont(10f).getMetrics(it) }
+        val big = SkFontMetrics().also { ToolUtils.DefaultPortableFont(40f).getMetrics(it) }
+        // 4× the size → ~4× the descent magnitude (within hinting noise).
+        val ratio = big.fDescent / small.fDescent
+        assertTrue(ratio in 3f..5f, "expected fDescent ratio ~4 for 10→40pt, got $ratio")
+    }
+
+    @Test
+    fun `getMetrics sets underline and strikeout valid flags AWT backend`() {
+        val f = ToolUtils.DefaultPortableFont(20f)
+        val m = SkFontMetrics()
+        f.getMetrics(m)
+        assertTrue((m.fFlags and SkFontMetrics.kUnderlineThicknessIsValid_Flag) != 0)
+        assertTrue((m.fFlags and SkFontMetrics.kUnderlinePositionIsValid_Flag) != 0)
+        assertTrue((m.fFlags and SkFontMetrics.kStrikeoutThicknessIsValid_Flag) != 0)
+        assertTrue((m.fFlags and SkFontMetrics.kStrikeoutPositionIsValid_Flag) != 0)
+    }
+
+    @Test
+    fun `getSpacing returns same value as getMetrics ignoring out`() {
+        val f = ToolUtils.DefaultPortableFont(22f)
+        val m = SkFontMetrics()
+        val byOut = f.getMetrics(m)
+        val convenience = f.getSpacing()
+        assertEquals(byOut, convenience)
+    }
+
+    @Test
+    fun `AwtTypeface DEFAULT singleton stable`() {
+        // Internal-visibility check that the cache works.
+        assertEquals(AwtTypeface.DEFAULT, AwtTypeface.DEFAULT)
+    }
+}

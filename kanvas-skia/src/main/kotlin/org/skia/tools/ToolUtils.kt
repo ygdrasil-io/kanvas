@@ -5,6 +5,10 @@ import org.skia.foundation.SkColorGetB
 import org.skia.foundation.SkColorGetG
 import org.skia.foundation.SkColorGetR
 import org.skia.foundation.SkColorSetARGB
+import org.skia.foundation.SkFont
+import org.skia.foundation.SkTypeface
+import org.skia.foundation.awt.AwtTypeface
+import org.skia.math.SkScalar
 import kotlin.math.floor
 
 /**
@@ -94,4 +98,24 @@ public object ToolUtils {
      */
     private fun skScalarRoundToInt(x: Float): Int =
         floor(x + 0.5f).toInt()
+
+    /**
+     * Mirrors `ToolUtils::DefaultPortableTypeface()` (`tools/fonts/FontToolUtils.cpp`).
+     *
+     * Upstream returns a typeface backed by the bundled `Roboto-Regular.ttf`
+     * via `MakePortableFontMgr`. We don't ship those TTFs yet (planned for
+     * T4 — see `MIGRATION_PLAN_TEXT.md`); for T1-T3 this falls back to the
+     * platform default sans-serif accessed through `java.awt.Font`. Glyph
+     * shapes will therefore differ from upstream but layout-wise (advance
+     * widths, line spacing) the result is internally consistent.
+     */
+    public fun DefaultPortableTypeface(): SkTypeface = AwtTypeface.DEFAULT
+
+    /**
+     * Mirrors `ToolUtils::DefaultPortableFont()`. Convenience wrapper —
+     * a [SkFont] using [DefaultPortableTypeface] at the requested size
+     * (default 12pt, matching upstream). Edging defaults to `kAntiAlias`.
+     */
+    public fun DefaultPortableFont(size: SkScalar = 12f): SkFont =
+        SkFont(DefaultPortableTypeface(), size)
 }
