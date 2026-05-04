@@ -25,6 +25,14 @@ public class SkPaint() {
      */
     public var shader: SkShader? = null
 
+    /**
+     * Phase 6 entry: compositing rule used by the device when this paint's
+     * pixels land on the destination. Defaults to [SkBlendMode.kSrcOver]
+     * (the Skia default). Only a 9-mode subset is implemented in
+     * `SkBitmapDevice.blend()` — see [SkBlendMode] for the list.
+     */
+    public var blendMode: SkBlendMode = SkBlendMode.kSrcOver
+
     public constructor(color: SkColor) : this() {
         this.color = color
     }
@@ -38,5 +46,6 @@ public class SkPaint() {
         it.strokeMiter = strokeMiter
         it.isAntiAlias = isAntiAlias
         it.shader = shader
+        it.blendMode = blendMode
     }
 }
