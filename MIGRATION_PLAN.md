@@ -447,6 +447,28 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 - **`SkLinearGradient` / `SkRadialGradient` row-9 unsorted-stops fidelity** — match upstream's exact unsorted-binary-search behaviour pour FillrectGradientGM rangée 9.
 - **F16 lerp** — passer le rasterizer à F16 working-space pour matcher l'exactitude upstream (~5 % de diff résiduelle sur les gradient lerps).
 
+### Phase 5b — GM harvest gradient (33 → 36) ✅
+
+**But** : récolter les GMs gradient portables sur l'API existante `SkLinearGradient` + `SkRadialGradient` Phase 5a. Trois ports :
+
+| GM                       | Référence                  | Score      | Notes |
+|--------------------------|----------------------------|------------|-------|
+| AnalyticGradientShaderGM | `analytic_gradients.png` 1024×512 | **62.53%** | 8×4 grid de linear gradients hardstops, 2 → 16 stops par cellule. Stress du binary-search sur duplicate-positions. |
+| ClampedGradientsGM       | `clamped_gradients.png` 640×510 | **94.37%** | Single radial gradient (R/G/B/W/K), centre hors rect, kClamp. |
+| HardstopGradientShaderGM | `hardstop_gradients.png` 512×512 | **29.03%** | 8×3 grid avec **kClamp + kRepeat + kMirror** sur des layouts de stops variés. Premier stress des 3 tile modes. Score bas — accumulation de drift 8-bit-vs-16-bit + dither upstream sur des cellules à plusieurs périodes. Visuellement quasi-identique. |
+
+#### Vérification Phase 5b
+- [x] Aucune nouvelle API (purs ports sur l'API Phase 5a).
+- [x] Aucune régression sur les 33 GMs Phase 0–5a.
+- [x] **Pass count cumulé : 36 GM.**
+
+#### Reportés Phase 5c+
+
+- **F16 working-space rasterizer** — adresserait l'écart `HardstopGradient` 29 % et `AnalyticGradient` 62 % (lerp précis vs 8-bit byte).
+- **Image shader** (`SkBitmap.makeShader()`) — débloque BitmapRectGM, Hairlines, ShaderPathGM.
+- **AlphaGradientsGM** — nécessite SkColor4f stops + flag `inPremul=kNo` (lerp en straight-alpha).
+- **DegenerateGradientGM** — bloqué par `drawString`.
+
 ---
 
 ## Phase 6 — Blend modes complets : `AAXfermodesGM`, `XfermodesGM`, `DestColorGM`, `AndroidBlendModesGM`
@@ -524,7 +546,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 4b    | 27       | `SkMatrix` + rotate/skew/concat CTM, `SkPath.makeTransform` ⇒ OvalGM, RoundRectGM | ✅ |
 | 4c    | 32       | GM harvest (ClippedCubic2/ClipCubic/Strokes2/StrokeCircle/AddArc) — 0 nouvelle API | ✅ |
 | 5a    | 33       | `SkShader` + `SkLinearGradient` + `SkRadialGradient` + `SkMatrix.invert` ⇒ FillrectGradientGM, Oval/RoundRect gradient row | ✅ |
-| 5b    | ~36      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM/GradientGM | ⬜ |
+| 5b    | 36       | GM harvest gradient (Analytic/Clamped/Hardstop) + premier stress kRepeat/kMirror | ✅ |
+| 5c    | ~40      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
