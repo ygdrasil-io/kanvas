@@ -484,6 +484,23 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 - [x] Aucune régression sur les 36 GMs Phase 0–5b.
 - [x] **Pass count cumulé : 39 GM.**
 
+### Phase 5d — GM harvest path/conic/oval (39 → 44) ✅
+
+**But** : récolter les GMs path-only sur l'API Phase 0–5c. 0 nouvelle API.
+
+| GM             | Référence                  | Score      | Notes |
+|----------------|----------------------------|------------|-------|
+| PathInteriorGM | `pathinterior.png` 770×770 | **98.53%** | 64 paths donut (rect/rrect outer + inner, CW/CCW, winding/even-odd, inset-first/second). Patrouille `setBGColor` via `drawPaint` — eraseColor skip le colorspace transform sur BG `0xDDDDDD`. |
+| ConicPathsGM   | `conicpaths.png` 920×960   | **95.54%** | 10 conic paths × 8 cells (alpha × AA × style) + giant-circle. Stress complet de `conicTo` + `rConicTo` sur tous les poids (0.5 / 0.999 / 2 / √2/2). |
+| ArcCircleGapGM | `arccirclegap.png` 250×250 | **98.99%** | Stroked circle + tangent arcTo overlapping. Régression Skia sur les sub-pixel gaps. |
+| LargeCircleGM  | `largecircle.png` 250×250  | **99.05%** | Large stroked circle (radius=1097) avec AA. Régression coverage sur large radii. |
+| LargeOvalsGM   | `largeovals.png` 250×250   | **97.80%** | 5000×4000 ovals sous AA + rotate(1°), kStroke + kStrokeAndFill. |
+
+#### Vérification Phase 5d
+- [x] Aucune nouvelle API.
+- [x] Aucune régression sur les 39 GMs Phase 0–5c.
+- [x] **Pass count cumulé : 44 GM.**
+
 ---
 
 ## Phase 6 — Blend modes complets : `AAXfermodesGM`, `XfermodesGM`, `DestColorGM`, `AndroidBlendModesGM`
@@ -563,7 +580,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 5a    | 33       | `SkShader` + `SkLinearGradient` + `SkRadialGradient` + `SkMatrix.invert` ⇒ FillrectGradientGM, Oval/RoundRect gradient row | ✅ |
 | 5b    | 36       | GM harvest gradient (Analytic/Clamped/Hardstop) + premier stress kRepeat/kMirror | ✅ |
 | 5c    | 39       | GM harvest path/stroke (ScaledStrokes/StrokeRects/NonClosedPaths) — 0 nouvelle API | ✅ |
-| 5d    | ~42      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
+| 5d    | 44       | GM harvest path/conic/oval (PathInterior/ConicPaths/ArcCircleGap/LargeCircle/LargeOvals) — 0 nouvelle API | ✅ |
+| 5e    | ~47      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
