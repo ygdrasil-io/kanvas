@@ -16,22 +16,12 @@ import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkStroker
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
+import org.skia.math.SkMatrix
 import org.skia.math.SkRect
-import kotlin.math.abs
 import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
-import kotlin.math.max as kMax
 
 private fun floor(v: Float): Int = kFloor(v.toDouble()).toInt()
-
-/**
- * Resolution-scale hint for [SkStroker]: `max(|sx|, |sy|)`. The stroker's
- * polyline becomes the outline vertex sequence directly, so under heavy
- * CTM scale (e.g. `Strokes4GM` at 1000×) the source-space chord error
- * tolerance must shrink in lockstep — otherwise a few-cubic circle gets
- * flattened to a polygon visible at device-space resolution.
- */
-private fun ctmResScale(sx: Float, sy: Float): Float = kMax(abs(sx), abs(sy)).coerceAtLeast(1f)
 private fun ceil(v: Float): Int = kCeil(v.toDouble()).toInt()
 
 /** Chord-error tolerance (in device-space pixels) for Bézier flattening. */
@@ -291,7 +281,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      */
     public fun drawPath(
         path: SkPath,
-        sx: Float, sy: Float, tx: Float, ty: Float,
+        ctm: SkMatrix,
         clip: SkIRect, paint: SkPaint,
     ) {
         if (path.isEmpty()) return
@@ -299,29 +289,30 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val baseA = SkColorGetA(color)
         if (baseA == 0) return
         val supers = if (paint.isAntiAlias) 4 else 1
+        val resScale = ctm.computeMaxScale().coerceAtLeast(1f)
 
         when (paint.style) {
             SkPaint.Style.kFill_Style ->
-                fillPath(path, sx, sy, tx, ty, clip, color, baseA, supers)
+                fillPath(path, ctm, clip, color, baseA, supers)
             SkPaint.Style.kStroke_Style -> {
-                val outline = SkStroker.fromPaint(paint, ctmResScale(sx, sy)).stroke(path)
+                val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
                 if (outline.isEmpty()) return
-                fillPath(outline, sx, sy, tx, ty, clip, color, baseA, supers)
+                fillPath(outline, ctm, clip, color, baseA, supers)
             }
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillPath(path, sx, sy, tx, ty, clip, color, baseA, supers)
-                val outline = SkStroker.fromPaint(paint, ctmResScale(sx, sy)).stroke(path)
+                fillPath(path, ctm, clip, color, baseA, supers)
+                val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
                 if (outline.isEmpty()) return
-                fillPath(outline, sx, sy, tx, ty, clip, color, baseA, supers)
+                fillPath(outline, ctm, clip, color, baseA, supers)
             }
         }
     }
 
     private fun fillPath(
-        path: SkPath, sx: Float, sy: Float, tx: Float, ty: Float,
+        path: SkPath, ctm: SkMatrix,
         clip: SkIRect, color: SkColor, baseA: Int, supers: Int,
     ) {
-        val edges = buildEdges(path, sx, sy, tx, ty)
+        val edges = buildEdges(path, ctm)
         if (edges.isEmpty()) return
         scanFillPath(edges, path.fillType, clip, color, baseA, supers)
     }
@@ -566,8 +557,15 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * uniform stepping keeps the geometry simple.
      */
     private fun buildEdges(
-        path: SkPath, sx: Float, sy: Float, tx: Float, ty: Float,
+        path: SkPath, ctm: SkMatrix,
     ): List<Edge> {
+        // Cache the matrix scalars in locals to avoid property lookups inside
+        // the hot loop. Mapping `(x, y)` to device space is `ctm.mapXY(x, y)`,
+        // which expands to `(sx*x + kx*y + tx, ky*x + sy*y + ty)`. Skew terms
+        // `kx` and `ky` are zero for axis-aligned matrices (the Phase 0–3 fast
+        // path), but the JIT will fold them out when constant-zero anyway.
+        val ax = ctm.sx; val bx = ctm.kx; val cx0 = ctm.tx
+        val ay = ctm.ky; val by = ctm.sy; val cy0 = ctm.ty
         val out = ArrayList<Edge>(path.verbs.size)
         var px = 0f; var py = 0f          // current device-space point
         var cx = 0f; var cy = 0f          // contour-start device-space point
@@ -582,42 +580,44 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     if (hasContour) {
                         addEdge(out, px, py, cx, cy)  // implicit close
                     }
-                    val x = coords[coordIdx++] * sx + tx
-                    val y = coords[coordIdx++] * sy + ty
+                    val sx0 = coords[coordIdx++]; val sy0 = coords[coordIdx++]
+                    val x = ax * sx0 + bx * sy0 + cx0
+                    val y = ay * sx0 + by * sy0 + cy0
                     px = x; py = y
                     cx = x; cy = y
                     hasContour = true
                 }
                 SkPath.Verb.kLine -> {
-                    val x = coords[coordIdx++] * sx + tx
-                    val y = coords[coordIdx++] * sy + ty
+                    val sx0 = coords[coordIdx++]; val sy0 = coords[coordIdx++]
+                    val x = ax * sx0 + bx * sy0 + cx0
+                    val y = ay * sx0 + by * sy0 + cy0
                     addEdge(out, px, py, x, y)
                     px = x; py = y
                 }
                 SkPath.Verb.kQuad -> {
-                    val x1 = coords[coordIdx++] * sx + tx
-                    val y1 = coords[coordIdx++] * sy + ty
-                    val x2 = coords[coordIdx++] * sx + tx
-                    val y2 = coords[coordIdx++] * sy + ty
+                    val sx1 = coords[coordIdx++]; val sy1 = coords[coordIdx++]
+                    val sx2 = coords[coordIdx++]; val sy2 = coords[coordIdx++]
+                    val x1 = ax * sx1 + bx * sy1 + cx0; val y1 = ay * sx1 + by * sy1 + cy0
+                    val x2 = ax * sx2 + bx * sy2 + cx0; val y2 = ay * sx2 + by * sy2 + cy0
                     flattenQuad(out, px, py, x1, y1, x2, y2, depth = 0)
                     px = x2; py = y2
                 }
                 SkPath.Verb.kConic -> {
-                    val x1 = coords[coordIdx++] * sx + tx
-                    val y1 = coords[coordIdx++] * sy + ty
-                    val x2 = coords[coordIdx++] * sx + tx
-                    val y2 = coords[coordIdx++] * sy + ty
+                    val sx1 = coords[coordIdx++]; val sy1 = coords[coordIdx++]
+                    val sx2 = coords[coordIdx++]; val sy2 = coords[coordIdx++]
                     val w = weights[weightIdx++]
+                    val x1 = ax * sx1 + bx * sy1 + cx0; val y1 = ay * sx1 + by * sy1 + cy0
+                    val x2 = ax * sx2 + bx * sy2 + cx0; val y2 = ay * sx2 + by * sy2 + cy0
                     flattenConic(out, px, py, x1, y1, x2, y2, w)
                     px = x2; py = y2
                 }
                 SkPath.Verb.kCubic -> {
-                    val x1 = coords[coordIdx++] * sx + tx
-                    val y1 = coords[coordIdx++] * sy + ty
-                    val x2 = coords[coordIdx++] * sx + tx
-                    val y2 = coords[coordIdx++] * sy + ty
-                    val x3 = coords[coordIdx++] * sx + tx
-                    val y3 = coords[coordIdx++] * sy + ty
+                    val sx1 = coords[coordIdx++]; val sy1 = coords[coordIdx++]
+                    val sx2 = coords[coordIdx++]; val sy2 = coords[coordIdx++]
+                    val sx3 = coords[coordIdx++]; val sy3 = coords[coordIdx++]
+                    val x1 = ax * sx1 + bx * sy1 + cx0; val y1 = ay * sx1 + by * sy1 + cy0
+                    val x2 = ax * sx2 + bx * sy2 + cx0; val y2 = ay * sx2 + by * sy2 + cy0
+                    val x3 = ax * sx3 + bx * sy3 + cx0; val y3 = ay * sx3 + by * sy3 + cy0
                     flattenCubic(out, px, py, x1, y1, x2, y2, x3, y3, depth = 0)
                     px = x3; py = y3
                 }
