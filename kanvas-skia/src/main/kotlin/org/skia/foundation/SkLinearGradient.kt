@@ -28,6 +28,14 @@ public class SkLinearGradient internal constructor(
     private val xformedColors: IntArray = IntArray(srcColors.size)
 
     /**
+     * Phase 6b — float-premul stops in the bitmap's working colour space.
+     * 4 floats per source stop, built once per draw in [setupForDraw]. Used
+     * by [shadeRowF16] for the F16 raster path; bypasses the 8-bit byte
+     * quantization that [xformedColors] necessarily incurs.
+     */
+    private val xformedColorsF16: FloatArray = FloatArray(srcColors.size * 4)
+
+    /**
      * Inverse-length-squared direction vector. For a line from `p0` to
      * `p1`, the parametric `t` at point `p` is `((p − p0) · (p1 − p0)) /
      * |p1 − p0|²`. We pre-compute `(p1 − p0) / |p1 − p0|²` so each pixel
@@ -42,6 +50,7 @@ public class SkLinearGradient internal constructor(
     override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
         super.setupForDraw(canvasCtm, xform)
         transformStopColors(srcColors, xformedColors, xform)
+        transformStopColorsF16(srcColors, xformedColorsF16, xform)
         val dx = p1.fX - p0.fX
         val dy = p1.fY - p0.fY
         val lenSq = dx * dx + dy * dy
@@ -76,6 +85,39 @@ public class SkLinearGradient internal constructor(
         for (i in 0 until count) {
             val t = (lx - p0.fX) * invLenSqDirX + (ly - p0.fY) * invLenSqDirY
             dst[i] = lookupStop(t, positions, xformedColors, tileMode)
+            lx += stepX
+            ly += stepY
+        }
+    }
+
+    override fun shadeRowF16(devX: Int, devY: Int, count: Int, dst: FloatArray) {
+        require(dst.size >= count * 4) { "dst too small: ${dst.size} < ${count * 4}" }
+        val inv = deviceToLocal
+        if (inv == null) {
+            // Singular total matrix — degenerate to first stop.
+            var di = 0
+            for (i in 0 until count) {
+                dst[di]     = xformedColorsF16[0]
+                dst[di + 1] = xformedColorsF16[1]
+                dst[di + 2] = xformedColorsF16[2]
+                dst[di + 3] = xformedColorsF16[3]
+                di += 4
+            }
+            return
+        }
+
+        val x0 = devX + 0.5f
+        val y0 = devY + 0.5f
+        var lx = inv.sx * x0 + inv.kx * y0 + inv.tx
+        var ly = inv.ky * x0 + inv.sy * y0 + inv.ty
+        val stepX = inv.sx
+        val stepY = inv.ky
+
+        var di = 0
+        for (i in 0 until count) {
+            val t = (lx - p0.fX) * invLenSqDirX + (ly - p0.fY) * invLenSqDirY
+            lookupStopF16(t, positions, xformedColorsF16, tileMode, dst, di)
+            di += 4
             lx += stepX
             ly += stepY
         }
