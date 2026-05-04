@@ -184,6 +184,19 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
+     * Mirrors Skia's `SkCanvas::drawLine(x0, y0, x1, y1, paint)`. Emits a
+     * 2-point open path (`moveTo` + `lineTo`) and routes through [drawPath].
+     * The paint's stroke style is taken at face value — `kFill_Style` produces
+     * a degenerate (zero-area) fill that rasterizes to nothing, matching
+     * Skia's behaviour. `kStroke_Style` exercises [SkStroker] with caps but
+     * no joins (single segment, two endpoints).
+     */
+    public fun drawLine(x0: SkScalar, y0: SkScalar, x1: SkScalar, y1: SkScalar, paint: SkPaint) {
+        val path = SkPathBuilder().moveTo(x0, y0).lineTo(x1, y1).detach()
+        drawPath(path, paint)
+    }
+
+    /**
      * Mirrors Skia's `SkCanvas::drawArc(oval, startAngleDeg, sweepAngleDeg, useCenter, paint)`.
      *
      * - When `useCenter = false`, an open arc curve is drawn — `paint`'s
