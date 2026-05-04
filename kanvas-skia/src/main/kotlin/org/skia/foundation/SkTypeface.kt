@@ -54,6 +54,28 @@ public open class SkTypeface protected constructor() {
     }
 
     /**
+     * Internal hook for [org.skia.core.SkCanvas.drawString] — produces an
+     * [SkPath] containing the outlines of every glyph in [text], pre-
+     * positioned so that the text baseline aligns with `(x, y)` in the
+     * caller's coordinate space. The canvas's CTM is **not** applied here;
+     * `drawString` later routes the returned path through `drawPath` which
+     * does the CTM mapping.
+     *
+     * Base class returns `null` (no glyphs to draw — the canvas treats
+     * this as a no-op). Concrete typefaces (`AwtTypeface`) override.
+     *
+     * `internal` because the public API is [org.skia.core.SkCanvas.drawString].
+     */
+    internal open fun makeTextPath(
+        text: String,
+        x: SkScalar,
+        y: SkScalar,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): SkPath? = null
+
+    /**
      * Internal hook for [SkFont.getMetrics] — base class fills [metrics]
      * with zeros and returns 0 (the recommended line spacing).
      */

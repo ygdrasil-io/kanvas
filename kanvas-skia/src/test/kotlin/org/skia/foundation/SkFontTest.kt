@@ -85,12 +85,12 @@ class SkFontTest {
         assertTrue(f.isSubpixel)
     }
 
-    // ---------- T1: SkCanvas drawString / drawSimpleText no-op -------------
+    // ---------- T3: SkCanvas drawString rendering --------------------------
 
     @Test
-    fun `drawString and drawSimpleText do not mutate the bitmap T1 stub`() {
-        // Build a small canvas filled with red, then "draw" some text on it
-        // — pixels must be unchanged because T1 is a no-op stub.
+    fun `drawString with empty typeface is a no-op T3 base SkTypeface returns null path`() {
+        // The base SkTypeface (returned by MakeEmpty) has no glyph engine,
+        // so makeTextPath() returns null and drawString must do nothing.
         val bm = SkBitmap(8, 8)
         bm.eraseColor(0xFFFF0000.toInt())
         val before = bm.pixels.copyOf()
@@ -103,6 +103,108 @@ class SkFontTest {
         canvas.drawSimpleText("hello", 5, SkTextEncoding.kUTF8, 0f, 0f, font, paint)
 
         assertEquals(before.toList(), bm.pixels.toList())
+    }
+
+    @Test
+    fun `drawString with empty string is no-op even on AWT typeface`() {
+        val bm = SkBitmap(16, 16)
+        bm.eraseColor(0xFFFFFFFF.toInt())
+        val before = bm.pixels.copyOf()
+        val canvas = SkCanvas(bm)
+        val font = ToolUtils.DefaultPortableFont(20f)
+        val paint = SkPaint(0xFF000000.toInt())
+        canvas.drawString("", 0f, 0f, font, paint)
+        canvas.drawSimpleText("", 0, SkTextEncoding.kUTF8, 0f, 0f, font, paint)
+        assertEquals(before.toList(), bm.pixels.toList())
+    }
+
+    @Test
+    fun `drawString with AWT typeface paints non-zero pixels onto white canvas`() {
+        // Sanity: drawing black text on a white BG must leave at least one
+        // pixel that isn't pure white.
+        val bm = SkBitmap(80, 40)
+        bm.eraseColor(0xFFFFFFFF.toInt())
+        val canvas = SkCanvas(bm)
+        val font = ToolUtils.DefaultPortableFont(24f)
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = true }
+
+        canvas.drawString("Hello", 4f, 28f, font, paint)
+
+        val anyNonWhite = bm.pixels.any { it != 0xFFFFFFFF.toInt() }
+        assertTrue(anyNonWhite, "drawString must paint at least one non-white pixel")
+    }
+
+    @Test
+    fun `drawString respects baseline y position`() {
+        // Text drawn at baseline y=10 should leave pixels in row band [3..15]
+        // (typical 24pt cap-height ~16-18px above baseline). Text drawn at
+        // baseline y=70 should leave pixels far below — verifying the y
+        // parameter actually positions the path.
+        fun rowsTouchedAtBaseline(yBase: Float): IntRange {
+            val bm = SkBitmap(80, 80)
+            bm.eraseColor(0xFFFFFFFF.toInt())
+            val canvas = SkCanvas(bm)
+            val font = ToolUtils.DefaultPortableFont(24f)
+            val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = true }
+            canvas.drawString("X", 5f, yBase, font, paint)
+            var min = bm.height; var max = -1
+            for (row in 0 until bm.height) {
+                for (col in 0 until bm.width) {
+                    if (bm.pixels[row * bm.width + col] != 0xFFFFFFFF.toInt()) {
+                        if (row < min) min = row
+                        if (row > max) max = row
+                    }
+                }
+            }
+            return min..max
+        }
+        val low = rowsTouchedAtBaseline(20f)
+        val high = rowsTouchedAtBaseline(70f)
+        assertTrue(low.last < high.first, "low band $low must be entirely above high band $high")
+    }
+
+    @Test
+    fun `drawString honours paint color`() {
+        val bm = SkBitmap(60, 40)
+        bm.eraseColor(0xFFFFFFFF.toInt())
+        val canvas = SkCanvas(bm)
+        val font = ToolUtils.DefaultPortableFont(28f)
+        // Solid red, AA off → glyph interior pixels should be exactly red.
+        val paint = SkPaint(0xFFFF0000.toInt()).also { it.isAntiAlias = false }
+
+        canvas.drawString("X", 4f, 30f, font, paint)
+
+        val red = 0xFFFF0000.toInt()
+        val white = 0xFFFFFFFF.toInt()
+        val anyRed = bm.pixels.any { it == red }
+        val anyOther = bm.pixels.any { it != red && it != white }
+        assertTrue(anyRed, "AA-off rendering must produce solid-red interior pixels")
+        assertEquals(false, anyOther, "AA-off must produce only paint or BG colour")
+    }
+
+    @Test
+    fun `drawString respects the canvas CTM`() {
+        // Translate before drawString — the painted region should shift.
+        fun touchedColMin(translateX: Float): Int {
+            val bm = SkBitmap(120, 40)
+            bm.eraseColor(0xFFFFFFFF.toInt())
+            val canvas = SkCanvas(bm)
+            canvas.translate(translateX, 0f)
+            val font = ToolUtils.DefaultPortableFont(20f)
+            val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = true }
+            canvas.drawString("A", 0f, 25f, font, paint)
+            for (col in 0 until bm.width) {
+                for (row in 0 until bm.height) {
+                    if (bm.pixels[row * bm.width + col] != 0xFFFFFFFF.toInt()) return col
+                }
+            }
+            return -1
+        }
+        val a = touchedColMin(5f)
+        val b = touchedColMin(50f)
+        assertTrue(a in 0..20, "small translate → glyph near left, got col=$a")
+        assertTrue(b in 40..70, "large translate → glyph shifted right, got col=$b")
+        assertTrue(b > a + 30, "translate must shift glyph by ~45 pixels (got $a → $b)")
     }
 
     // ---------- T1: ToolUtils helpers --------------------------------------
