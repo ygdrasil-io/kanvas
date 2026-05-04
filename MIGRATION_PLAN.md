@@ -523,6 +523,36 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 - [x] Aucune régression sur les 44 GMs Phase 0–5d.
 - [x] **Pass count cumulé : 54 GM.**
 
+### Phase 5f — GM harvest mixed (55 → 64) ✅
+
+**But** : récolter une 9-pack supplémentaire de GMs portables sur l'API Phase 0–5d. 0 nouvelle API. (Originalement 10 ports ; `Crbug640176GM` a été déduppé contre la Phase 5e qui l'a porté en parallèle. Baseline passée de 54 → 55 par le merge parallèle de la Phase 6 entry qui a apporté `ScaledRectsGM`.)
+
+| GM                              | Référence                                  | Score       | Notes |
+|---------------------------------|--------------------------------------------|-------------|-------|
+| BeziersGM                       | `beziers.png` 400×800                      | **94.91%**  | 10 quad + 10 cubic stroked AA paths random ; SkRandom bit-compatible avec upstream. Premier stress simultané `quadTo` + `cubicTo` aléatoires sur stroker AA. |
+| HardstopGradientsManyGM         | `hardstop_gradients_many.png` 1000×2000    | **15.28%**  | 100 lignes de gradient linéaire blue↔white avec 1→100 hardstops par ligne. Score visuellement identique mais drift 8-bit-vs-f32 lerp sur ~200 stops/ligne, similaire à `HardstopGradientShaderGM` (29 %). |
+| TestGradientGM                  | `testgradient.png` 800×800                 | **98.05%**  | Mix multi-primitive : linear gradient sur rect partiel + filled oval + circle + stroked roundrect dans un seul pass. |
+| ThinStrokedRectsGM              | `thinstrokedrects.png` 240×320             | **88.87%**  | Sub-pixel strokes (0.5, 0.25, 0.125, hairline=0) sur fond noir + scale(0.5) inset. Stress des coverage masks sub-pixel. |
+| BatchedConvexPathsGM            | `batchedconvexpaths.png` 512×512           | **34.93%**  | 10 polygones convexes cubic-only translucides α=0.3 empilés sur fond noir. Score dominé par la dérive SrcOver 8-bit (max diff 26/255, visuellement identique). |
+| ShallowGradientLinearNoditherGM | `shallow_gradient_linear_nodither.png` 800² | **100.00%** | Single linear gradient 0xFF555555→0xFF444444 (2 greys quasi-identiques). Pas de dither, parfait byte-for-byte. |
+| ShallowGradientRadialNoditherGM | `shallow_gradient_radial_nodither.png` 800² | **100.00%** | Pareil, version radiale (centre canvas, radius w/2). Premier GM radial à passer 100 %. |
+| B119394958GM                    | `b_119394958.png` 100×100                  | **90.57%**  | Bug Android repro : drawCircle filled + drawCircle stroke + drawArc kRound_Cap mêlés. Premier round-cap arc dans le harvest. |
+| Crbug1086705GM                  | `crbug_1086705.png` 200×200                | **99.93%**  | 700-vertex polygone autour d'un cercle de rayon 2, stroke=5 (la stroke s'auto-intersecte). Smoke test pour la déduplication de vertex. |
+
+#### Vérification Phase 5f
+- [x] Aucune nouvelle API.
+- [x] Aucune régression sur les 55 GMs Phase 0–5e + Phase 6 entry.
+- [x] **Pass count cumulé : 64 GM.** (9 nouveaux ports.)
+
+#### Reportés Phase 5f+
+
+- **`StrokeRectAnisotropicGM` / `strokerect_anisotropic_5408`** — strokes sous `scale(0.03, 2)` ; le stroker fast-path remplit l'intérieur du rect au lieu de laisser la cavité centrale. Anisotropic stroke specialisation manque dans le rasterizer rect — déférable à un correctif rasterizer dédié.
+- **`AddArcMeasGM`** — `SkPathMeasure` requis pour positionner les rayons rouges.
+- **`ArcToGM`** — `arcTo(xy, angle, ArcSize, dir, xy)` (SVG-style) absent de notre `SkPathBuilder`.
+- **`BigMatrixGM`** — bitmap shader requis (Phase 5e).
+- **`Crbug1073670GM`** — texte (`drawString` + SkFont).
+- **`Crbug1113794GM`** — `SkDashPathEffect`.
+
 ---
 
 ## Phase 6 — Blend modes complets : `AAXfermodesGM`, `XfermodesGM`, `DestColorGM`, `AndroidBlendModesGM`
@@ -634,9 +664,10 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 5c    | 39       | GM harvest path/stroke (ScaledStrokes/StrokeRects/NonClosedPaths) — 0 nouvelle API | ✅ |
 | 5d    | 44       | GM harvest path/conic/oval (PathInterior/ConicPaths/ArcCircleGap/LargeCircle/LargeOvals) — 0 nouvelle API | ✅ |
 | 5e    | 54       | DEF_SIMPLE_GM regression harvest (10 small bug GMs) — 0 nouvelle API | ✅ |
-| 5f    | ~57      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
 | 6 entry | 55     | `SkBlendMode` enum + 9-mode dispatch slice (`kClear/kSrc/kDst/kSrcOver/kDstOver/kSrcIn/kDstIn/kPlus/kModulate/kScreen`) + ScaledRectsGM 87.79% | ✅ |
-| 6     | ~58      | 19 modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
+| 5f    | 64       | GM harvest mixed (Beziers/HardstopMany/TestGradient/ThinStroked/BatchedConvex/ShallowLin/ShallowRad/B119394958/Crbug1086705) — 0 nouvelle API | ✅ |
+| 5g    | ~67      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
+| 6     | ~70      | 19 modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
 
