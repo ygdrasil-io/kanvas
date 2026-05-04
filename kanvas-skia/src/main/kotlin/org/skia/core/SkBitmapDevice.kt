@@ -1206,13 +1206,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         SkBlendMode.kDarken,
         SkBlendMode.kLighten,
         SkBlendMode.kDifference,
-        SkBlendMode.kExclusion -> blendSeparable(src, dst, mode)
+        SkBlendMode.kExclusion,
+        SkBlendMode.kOverlay,
+        SkBlendMode.kHardLight,
+        SkBlendMode.kColorDodge,
+        SkBlendMode.kColorBurn,
+        SkBlendMode.kSoftLight -> blendSeparable(src, dst, mode)
         else -> throw NotImplementedError(
             "SkBlendMode.$mode is not implemented yet (see MIGRATION_PLAN.md). " +
                 "Implemented: kClear, kSrc, kDst, kSrcOver, kDstOver, kSrcIn, " +
                 "kDstIn, kSrcOut, kDstOut, kSrcATop, kDstATop, kXor, kPlus, " +
                 "kModulate, kScreen, kMultiply, kDarken, kLighten, kDifference, " +
-                "kExclusion."
+                "kExclusion, kOverlay, kHardLight, kColorDodge, kColorBurn, " +
+                "kSoftLight."
         )
     }
 
@@ -1510,6 +1516,13 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * and `d` are already premultiplied (i.e. `unpremul · alpha`); the
      * caller's `sa` / `da` give the operand alphas needed for the modes
      * that subtract `s*da` or `d*sa`.
+     *
+     * Phase 6 covers all 15 separable modes upstream: 5 simple
+     * (kMultiply / kDarken / kLighten / kDifference / kExclusion) and
+     * 5 complex (kOverlay / kHardLight / kColorDodge / kColorBurn /
+     * kSoftLight). Each formula is the W3C Compositing Level 1 blend
+     * function `B(Cb, Cs)` rewritten in premul space, plus the
+     * SrcOver-style `(1-sa)*dc + (1-da)*sc` carrier terms.
      */
     private fun sepChannel(s: Float, d: Float, sa: Float, da: Float, mode: SkBlendMode): Float = when (mode) {
         // `rc = (1-sa)*dc + (1-da)*sc + sc*dc` — standard premul Multiply.
@@ -1528,7 +1541,127 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // `rc = sc + dc - 2*sc*dc`. Like Difference but doesn't depend on
         // alpha; identical to Screen at sc + dc small, but symmetric.
         SkBlendMode.kExclusion -> s + d - 2f * s * d
-        else -> error("sepChannel called with non-separable-simple mode: $mode")
+        // HardLight: `B(Cb, Cs) = if Cs ≤ 0.5: 2*Cb*Cs else 1-2*(1-Cb)*(1-Cs)`,
+        // expressed in premul as a conditional on `2*sc ≤ sa`. Picks
+        // either Multiply (when src is dark) or Screen (when src is light)
+        // — equivalent to shining a hard spotlight from `s` onto `d`.
+        SkBlendMode.kHardLight -> hardLightChannel(s, d, sa, da)
+        // Overlay = HardLight with operands swapped (W3C: `Overlay(Cb, Cs)
+        // = HardLight(Cs, Cb)`). The conditional moves to `2*dc ≤ da`,
+        // but the body terms stay the same — Overlay applies the harder
+        // contrast based on the **dst's** brightness.
+        SkBlendMode.kOverlay -> hardLightChannel(d, s, da, sa)
+        // ColorDodge: brightens dst toward white based on src.
+        SkBlendMode.kColorDodge -> colorDodgeChannel(s, d, sa, da)
+        // ColorBurn: darkens dst toward black based on src.
+        SkBlendMode.kColorBurn -> colorBurnChannel(s, d, sa, da)
+        // SoftLight: gentler version of HardLight; never produces fully
+        // saturated output. Uses the W3C-canonical Pegtop formulation.
+        SkBlendMode.kSoftLight -> softLightChannel(s, d, sa, da)
+        else -> error("sepChannel called with non-separable mode: $mode")
+    }
+
+    /**
+     * HardLight per-channel in premul space:
+     * ```
+     * B = if 2*sc ≤ sa: 2*sc*dc
+     *     else        : sa*da - 2*(da-dc)*(sa-sc)
+     * rc = (1-sa)*dc + (1-da)*sc + B
+     * ```
+     */
+    private fun hardLightChannel(s: Float, d: Float, sa: Float, da: Float): Float {
+        val carrier = (1f - sa) * d + (1f - da) * s
+        val body = if (2f * s <= sa) {
+            2f * s * d
+        } else {
+            sa * da - 2f * (da - d) * (sa - s)
+        }
+        return carrier + body
+    }
+
+    /**
+     * ColorDodge per-channel in premul space. Skia's branch structure
+     * (matches `SkBlendMode_RasterPipeline.cpp::colorDodge`):
+     *
+     * ```
+     * if dc == 0:                 rc = sc * (1 - da)             // black dst stays black
+     * elif sc ≥ sa:               rc = sa * da + sc * (1-da) + dc * (1-sa)
+     * else:                       rc = min(da, dc * sa / (sa - sc)) * sa
+     *                                  + sc * (1-da) + dc * (1-sa)
+     * ```
+     *
+     * The last branch can produce divide-by-near-zero when `sa - sc` is
+     * tiny but non-zero; we keep the literal Skia formulation since the
+     * `min(da, …)` clamp absorbs the overflow.
+     */
+    private fun colorDodgeChannel(s: Float, d: Float, sa: Float, da: Float): Float {
+        if (d <= 0f) return s * (1f - da)
+        if (s >= sa) return sa * da + s * (1f - da) + d * (1f - sa)
+        val ratio = d * sa / (sa - s)
+        val n = if (ratio < da) ratio else da
+        return n * sa + s * (1f - da) + d * (1f - sa)
+    }
+
+    /**
+     * ColorBurn per-channel in premul space. Mirror of ColorDodge — burn
+     * darkens dst toward black based on src:
+     *
+     * ```
+     * if dc ≥ da:                 rc = sa * da + sc * (1-da) + dc * (1-sa)
+     * elif sc ≤ 0:                rc = dc * (1 - sa)
+     * else:                       rc = (da - min(da, (da-dc) * sa / sc)) * sa
+     *                                  + sc * (1-da) + dc * (1-sa)
+     * ```
+     */
+    private fun colorBurnChannel(s: Float, d: Float, sa: Float, da: Float): Float {
+        if (d >= da) return sa * da + s * (1f - da) + d * (1f - sa)
+        if (s <= 0f) return d * (1f - sa)
+        val ratio = (da - d) * sa / s
+        val n = if (ratio < da) ratio else da
+        return (da - n) * sa + s * (1f - da) + d * (1f - sa)
+    }
+
+    /**
+     * SoftLight per-channel in premul space. Direct port of Skia's
+     * raster-pipeline implementation (`SkRasterPipeline_opts.h`):
+     *
+     * ```
+     * m  = (da > 0) ? dc / da : 0           // unpremul Cb
+     * s2 = 2 * sc                           // premul 2*Cs
+     * if 2*sc ≤ sa:                          // dark src
+     *     B = dc * (sa + (s2 - sa) * (1 - m))
+     * else if 4*dc ≤ da:                     // light src + dark dst
+     *     B = dc*sa + da * (s2 - sa) * ((4*dc/da) * (4*dc/da + 1) * (4*dc/da - 1) + 7*dc/da - 1)
+     * else:                                  // light src + bright dst
+     *     B = dc*sa + da * (s2 - sa) * (sqrt(dc/da) - dc/da)
+     * rc = sc * (1 - da) + dc * (1 - sa) + B
+     * ```
+     *
+     * The middle branch's `4*dc/da * (4*dc/da + 1) * (4*dc/da - 1) + 7*dc/da - 1`
+     * is a cubic polynomial in `m = dc/da` that approximates `m^3 - 4*m`-ish
+     * shape used by the W3C Pegtop softlight. We keep it as written.
+     */
+    private fun softLightChannel(s: Float, d: Float, sa: Float, da: Float): Float {
+        val carrier = s * (1f - da) + d * (1f - sa)
+        if (2f * s <= sa) {
+            // Dark src: pull dst toward black proportional to (sa - 2*sc).
+            val m = if (da > 0f) d / da else 0f
+            val body = d * (sa + (2f * s - sa) * (1f - m))
+            return carrier + body
+        }
+        // Light src — two sub-branches based on dst brightness.
+        val m = if (da > 0f) d / da else 0f
+        val correction = if (4f * d <= da) {
+            // Dark dst: cubic approximation.
+            val mm = 4f * m  // 4 * dc/da
+            mm * (mm + 1f) * (mm - 1f) + 7f * m - 1f
+        } else {
+            // Bright dst: sqrt-based.
+            val sqm = kotlin.math.sqrt(m)
+            sqm - m
+        }
+        val body = d * sa + da * (2f * s - sa) * correction
+        return carrier + body
     }
 
     /**
