@@ -408,35 +408,44 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 
 ---
 
-## Phase 5 — Gradients et bitmap-shaders : `FillrectGradientGM`, `AlphaGradientsGM`, `GradientGM`, `BitmapRectGM`
+## Phase 5 — Gradients et bitmap-shaders
 
-**But** : introduire l'infrastructure `SkShader` (linear, radial, image).
+**But** : introduire l'infrastructure `SkShader` (linear, radial, image), faire dialoguer le rasterizer avec le shader (couleur source par pixel).
 
-### Shader
-- [ ] Porter [kanvas/src/main/kotlin/core/Shader.kt](kanvas/src/main/kotlin/core/Shader.kt) → `org.skia.foundation.SkShader`.
-- [ ] `SkLinearGradient`.
-- [ ] `SkRadialGradient`.
-- [ ] Faire dialoguer le rasterizer rect/path avec le shader (couleur source par pixel).
+### Phase 5a — SkShader + SkLinearGradient + SkRadialGradient ✅
 
-### Bitmap-shader
-- [x] `SkImage` + `SkBitmap.asImage()` (basic immutable wrap, parallel-tracked, voir « Travaux parallèles »).
-- [x] `SkSamplingOptions` + `SkFilterMode` + `SkMipmapMode` (kNearest, kLinear ; mipmap reporté). Parallel-tracked.
-- [x] `SkTileMode` enum déclaré (kClamp / kRepeat / kMirror / kDecal) — clamp seulement utilisé par `drawImageRect` ; les autres arrivent avec `makeShader()`.
-- [ ] `SkBitmap.makeShader()` (vraie source par-pixel pour le rasterizer rect/path).
+#### API ajoutée
 
-### Undefined
-- [ ] Résoudre `undefined.SkColor4f` → `data class SkColor4f(r,g,b,a: Float)` + `toSkColor(): Int`.
-- [ ] Résoudre `undefined.SamplingOptions`.
+- [x] **`org.skia.foundation.SkShader`** : abstract base avec `setupForDraw(canvasCtm, xform)` (cache `(ctm·localMatrix).invert()` + pré-transforme les stops du shader vers la working colourspace) et `shadeRow(devX, devY, count, dst)` (remplit `dst` avec une couleur per-pixel device-space).
+- [x] **`org.skia.foundation.SkLinearGradient`** : interpolation le long du segment `p0 → p1` en local space. Tile modes : `kClamp` / `kRepeat` / `kMirror` / `kDecal`. Lerp entre stops en **prémultiplié byte** (lerp straight-alpha sursature les couleurs translucides).
+- [x] **`org.skia.foundation.SkRadialGradient`** : interpolation par distance euclidienne au centre, divisée par `radius`. Mêmes tile modes.
+- [x] **`SkPaint.shader: SkShader?`** — `null` par défaut. Quand non-null, `paint.color` est ignoré (mirror Skia).
+- [x] **`SkMatrix.invert()`** : inverse affine 2×3 via le déterminant en double précision. Renvoie `null` pour les matrices singulières (callers retombent sur la première stop du shader).
 
-### Tests GM
-- [ ] Hand-port `tests/FillrectGradientGM.kt`.
-- [ ] Hand-port `tests/AlphaGradientsGM.kt`.
-- [ ] Hand-port `tests/GradientGM.kt`.
-- [ ] Hand-port `tests/BitmapRectGM.kt`.
+#### Refactor
 
-### Vérification Phase 5
-- [ ] Tests ≥ 85%.
-- [ ] **Pass count cumulé : ~24 GM.**
+- [x] `SkBitmapDevice.drawPath` détecte `paint.shader != null` et appelle `shader.setupForDraw(ctm, xformSteps)` avant la fillPath. La rasterisation appelle `shader.shadeRow` une fois par row, puis module chaque pixel par la coverage AA et SrcOver-blende.
+- [x] `SkCanvas.drawRect` route par `drawPath(SkPath.Rect(rect))` quand `paint.shader != null` (la fast-path `SkBitmapDevice.drawRect` axis-aligned reste pour les solid colours).
+
+#### GMs portés / mis à jour
+
+| GM                | Référence                  | Score      | Notes |
+|-------------------|----------------------------|------------|-------|
+| FillrectGradientGM | `fillrect_gradient.png` 120×540 | **68.18%** | 9 rangées de stops × linear/radial. Précision 8-bit lerp + dernière rangée "unsorted stops" intentionnellement différente upstream. |
+| OvalGM (mise à jour) | `ovals.png` 1200×900     | **94.68%** ↑ 0.24 | La rangée radial-gradient (column 0) utilise vraiment le `SkRadialGradient` (vs solide en Phase 4). |
+| RoundRectGM (mise à jour) | `roundrects.png` 1200×900 | **96.26%** ↑ 0.39 | Idem. |
+
+#### Vérification Phase 5a
+- [x] 4 unit tests `SkLinearGradientTest` (endpoints, interpolation milieu, kClamp, non-identity xform).
+- [x] Aucune régression sur les 32 GMs Phase 0–4c.
+- [x] **Pass count cumulé : 33 GM** (ajout `FillrectGradientGM`).
+
+#### Reportés Phase 5b+
+
+- **`AlphaGradientsGM`**, **`GradientGM`**, **`gradients.png`** — autres permutations gradient ; portables maintenant.
+- **`SkBitmap.makeShader()`** (image shader) — bloquera `BitmapRectGM`, `Hairlines`, etc. Refactor moyen : sampler avec inverse-CTM + tile modes.
+- **`SkLinearGradient` / `SkRadialGradient` row-9 unsorted-stops fidelity** — match upstream's exact unsorted-binary-search behaviour pour FillrectGradientGM rangée 9.
+- **F16 lerp** — passer le rasterizer à F16 working-space pour matcher l'exactitude upstream (~5 % de diff résiduelle sur les gradient lerps).
 
 ---
 
@@ -514,7 +523,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 4a    | 25       | `drawDRRect` + ToolUtils + 7 GMs (CircleSizes/SmallArc/ManyCircles/ManyRRects/FillCircle/DRRect/RRect) | ✅ |
 | 4b    | 27       | `SkMatrix` + rotate/skew/concat CTM, `SkPath.makeTransform` ⇒ OvalGM, RoundRectGM | ✅ |
 | 4c    | 32       | GM harvest (ClippedCubic2/ClipCubic/Strokes2/StrokeCircle/AddArc) — 0 nouvelle API | ✅ |
-| 5     | ~40      | Gradients linéaire/radial + image shader | ⬜ |
+| 5a    | 33       | `SkShader` + `SkLinearGradient` + `SkRadialGradient` + `SkMatrix.invert` ⇒ FillrectGradientGM, Oval/RoundRect gradient row | ✅ |
+| 5b    | ~36      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM/GradientGM | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
