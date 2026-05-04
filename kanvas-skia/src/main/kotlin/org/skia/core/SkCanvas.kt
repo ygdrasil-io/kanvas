@@ -365,49 +365,68 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * Mirrors Skia's `SkCanvas::drawString(const char[], SkScalar, SkScalar,
      * const SkFont&, const SkPaint&)` (SkCanvas.h:1861).
      *
-     * **T1/T2 status — no-op stub.** The text is **not rendered** at this
-     * stage of the migration. The method exists so that GMs which call
-     * `canvas->drawString(...)` for cell labels compile and run without
-     * crashing; the corresponding pixels stay at the background colour.
+     * **T3 status — real glyph rendering** via the existing path-fill
+     * pipeline. Pipeline:
+     *  1. dispatch to `font.typeface.makeTextPath(...)` — for the AWT
+     *     backend this builds an [SkPath] from `GlyphVector.getOutline()`
+     *     positioned so that the baseline lands at `(x, y)` in source
+     *     coords (no CTM applied yet);
+     *  2. delegate to [drawPath], which applies the current CTM and runs
+     *     the standard scanline-fill (AA per `paint.isAntiAlias`) +
+     *     `paint.shader` + `paint.blendMode` machinery.
      *
-     * T3 will replace this body with a real path:
-     *  1. resolve glyph outlines via `AwtGlyphRasterizer` (`org.skia.foundation.awt`),
-     *  2. transform by the font's baseline `(x, y)` + the active CTM,
-     *  3. route through [drawPath] using the existing scanline-fill +
-     *     blend-mode pipeline.
+     * The base [SkTypeface] returns `null`, which we treat as a no-op
+     * (matches the empty-typeface case from T1 plus protects callers
+     * that pass `SkTypeface.MakeEmpty()`).
      *
-     * Until then, see `MIGRATION_PLAN_TEXT.md` §T1 / §T3.
+     * Limitations (cf. `MIGRATION_PLAN_TEXT.md` §T3):
+     *  - `font.edging == kSubpixelAntiAlias` is downgraded to
+     *    `kAntiAlias` silently — the path-fill rasteriser only does
+     *    coverage AA, not LCD subpixel AA.
+     *  - No glyph mask cache yet (T5).
      */
     public open fun drawString(
         str: String,
-        @Suppress("UNUSED_PARAMETER") x: SkScalar,
-        @Suppress("UNUSED_PARAMETER") y: SkScalar,
-        @Suppress("UNUSED_PARAMETER") font: SkFont,
-        @Suppress("UNUSED_PARAMETER") paint: SkPaint,
+        x: SkScalar,
+        y: SkScalar,
+        font: SkFont,
+        paint: SkPaint,
     ) {
-        // Intentional no-op (T1/T2). See KDoc.
-        @Suppress("UNUSED_EXPRESSION") str
+        if (str.isEmpty()) return
+        val path = font.typeface.makeTextPath(
+            str, x, y, font.size, font.scaleX, font.skewX,
+        ) ?: return
+        // Glyph fills are AA whenever the font asks for it. Skia's
+        // `paint.isAntiAlias` is independent — we honour it by ANDing
+        // with the font edging: if either says "alias", we go alias.
+        // For T3 we keep paint.isAntiAlias as the source of truth and
+        // let drawPath decide; future slices may refine.
+        drawPath(path, paint)
     }
 
     /**
      * Mirrors Skia's `SkCanvas::drawSimpleText(const void*, size_t,
      * SkTextEncoding, SkScalar, SkScalar, const SkFont&, const SkPaint&)`
-     * (SkCanvas.h:1834). Same no-op semantics as [drawString] until T3.
+     * (SkCanvas.h:1834). Same rendering pipeline as [drawString]; the
+     * `byteLength` and `encoding` parameters are honoured in the sense
+     * that T3 only supports `SkTextEncoding.kUTF8` and bounded substring
+     * lengths (kUTF16/32/GlyphID accept the call but treat the input as
+     * UTF-8 — see plan §T1).
      *
-     * @param byteLength number of bytes (UTF-8) or code units (UTF-16/32)
-     *                   to consider in [text].
+     * @param byteLength number of bytes / code units to consider in [text].
      */
     public open fun drawSimpleText(
         text: String,
-        @Suppress("UNUSED_PARAMETER") byteLength: Int,
+        byteLength: Int,
         @Suppress("UNUSED_PARAMETER") encoding: SkTextEncoding,
-        @Suppress("UNUSED_PARAMETER") x: SkScalar,
-        @Suppress("UNUSED_PARAMETER") y: SkScalar,
-        @Suppress("UNUSED_PARAMETER") font: SkFont,
-        @Suppress("UNUSED_PARAMETER") paint: SkPaint,
+        x: SkScalar,
+        y: SkScalar,
+        font: SkFont,
+        paint: SkPaint,
     ) {
-        // Intentional no-op (T1/T2). See [drawString] KDoc.
-        @Suppress("UNUSED_EXPRESSION") text
+        if (text.isEmpty() || byteLength == 0) return
+        val sub = if (byteLength >= text.length) text else text.substring(0, byteLength)
+        drawString(sub, x, y, font, paint)
     }
 
     /**
