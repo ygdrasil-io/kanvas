@@ -302,6 +302,118 @@ class SkBlendModeTest {
         assertEquals(SK_ColorMAGENTA, blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kScreen))
     }
 
+    // ====================================================================
+    // Phase 6 Porter-Duff completion: kSrcOut, kDstOut, kSrcATop, kDstATop, kXor.
+    // ====================================================================
+
+    @Test
+    fun `kSrcOut opaque dst clears`() {
+        // s*(1-da) with da=255 ⇒ 0.
+        assertEquals(0, blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kSrcOut))
+    }
+
+    @Test
+    fun `kSrcOut transparent dst keeps src`() {
+        // s*(1-da) with da=0 ⇒ s.
+        val out = blend(SK_ColorRED, 0, SkBlendMode.kSrcOut)
+        assertARGB(SK_ColorRED, out, tolerance = 0, label = "kSrcOut red over transparent")
+    }
+
+    @Test
+    fun `kSrcOut half-alpha dst gives half-alpha src`() {
+        // sa=255, da=128 ⇒ outA = 255 * 127 / 255 = 127.
+        val out = blend(SK_ColorRED, argb(128, 0, 0, 255), SkBlendMode.kSrcOut)
+        assertARGB(argb(127, 255, 0, 0), out, tolerance = 1, label = "kSrcOut red over 50% blue")
+    }
+
+    @Test
+    fun `kDstOut opaque src clears`() {
+        // d*(1-sa) with sa=255 ⇒ 0.
+        assertEquals(0, blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kDstOut))
+    }
+
+    @Test
+    fun `kDstOut transparent src keeps dst`() {
+        // d*(1-sa) with sa=0 ⇒ d.
+        val out = blend(0, SK_ColorBLUE, SkBlendMode.kDstOut)
+        assertARGB(SK_ColorBLUE, out, tolerance = 0, label = "kDstOut transparent over blue")
+    }
+
+    @Test
+    fun `kDstOut half-alpha src gives half-alpha dst`() {
+        // sa=128, da=255 ⇒ outA = 255 * 127 / 255 = 127.
+        val out = blend(argb(128, 255, 0, 0), SK_ColorBLUE, SkBlendMode.kDstOut)
+        assertARGB(argb(127, 0, 0, 255), out, tolerance = 1, label = "kDstOut 50% red over blue")
+    }
+
+    @Test
+    fun `kSrcATop opaque src on opaque dst replaces RGB keeps alpha`() {
+        // outA = da = 255, RGB = src.
+        val out = blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kSrcATop)
+        assertARGB(SK_ColorRED, out, tolerance = 0, label = "kSrcATop opaque-on-opaque")
+    }
+
+    @Test
+    fun `kSrcATop transparent dst clears`() {
+        // outA = da = 0.
+        assertEquals(0, blend(SK_ColorRED, 0, SkBlendMode.kSrcATop))
+    }
+
+    @Test
+    fun `kSrcATop half-alpha src lerps RGB and keeps dst alpha`() {
+        // sa=128, da=255 ⇒ outA = 255, outRGB = lerp(dst, src, 128/255) ≈ 50% mix.
+        // R: (255*128 + 0*127)/255 = 128
+        // B: (0*128 + 255*127)/255 = 127
+        val out = blend(argb(128, 255, 0, 0), SK_ColorBLUE, SkBlendMode.kSrcATop)
+        assertARGB(argb(255, 128, 0, 127), out, tolerance = 1, label = "kSrcATop 50% red atop blue")
+    }
+
+    @Test
+    fun `kDstATop is symmetric to kSrcATop`() {
+        // kDstATop(a, b) == kSrcATop(b, a) by definition.
+        val a = argb(200, 200, 50, 100)
+        val b = argb(150, 80, 200, 30)
+        assertEquals(blend(b, a, SkBlendMode.kSrcATop), blend(a, b, SkBlendMode.kDstATop))
+    }
+
+    @Test
+    fun `kXor opaque-on-opaque clears`() {
+        // s*(1-da) + d*(1-sa) with sa=da=255 ⇒ 0.
+        assertEquals(0, blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kXor))
+    }
+
+    @Test
+    fun `kXor transparent dst keeps src`() {
+        val out = blend(SK_ColorRED, 0, SkBlendMode.kXor)
+        assertARGB(SK_ColorRED, out, tolerance = 0, label = "kXor red over transparent")
+    }
+
+    @Test
+    fun `kXor transparent src keeps dst`() {
+        val out = blend(0, SK_ColorBLUE, SkBlendMode.kXor)
+        assertARGB(SK_ColorBLUE, out, tolerance = 0, label = "kXor transparent over blue")
+    }
+
+    @Test
+    fun `kXor half-alpha src and opaque dst yields half-alpha dst`() {
+        // sa=128, da=255 ⇒ outA = (128*0 + 255*127)/255 = 127.
+        // outRgb_premul = sr*128*0 + dr*255*127 = dr * 32385.
+        // outRgb = outRgb_premul / (outA*255) = dr*32385/(127*255) = dr*32385/32385 = dr.
+        val out = blend(argb(128, 255, 0, 0), SK_ColorBLUE, SkBlendMode.kXor)
+        assertARGB(argb(127, 0, 0, 255), out, tolerance = 1, label = "kXor 50% red over blue")
+    }
+
+    @Test
+    fun `kXor half-alpha both gives mixed half-alpha colour`() {
+        // sa=128, da=128. outA = (128*127 + 128*127)/255 = 32512/255 ≈ 127.
+        // outRgb_premul.r = 255*128*127 + 0*128*127 = 4143120
+        // outRgb.r = 4143120 / (127*255) = 4143120 / 32385 ≈ 127.91 ⇒ 128.
+        // outRgb_premul.b = 0*128*127 + 255*128*127 = 4143120 ⇒ 128.
+        // So result is half-alpha magenta ≈ argb(127, 128, 0, 128).
+        val out = blend(argb(128, 255, 0, 0), argb(128, 0, 0, 255), SkBlendMode.kXor)
+        assertARGB(argb(127, 128, 0, 128), out, tolerance = 2, label = "kXor 50%×50%")
+    }
+
     // ---------- Unimplemented modes throw -------------------------------
 
     @Test
