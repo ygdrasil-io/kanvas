@@ -813,8 +813,17 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val coverage = IntArray(rowWidth)
         val crossX = FloatArray(edges.size)
         val crossDir = IntArray(edges.size)
-        // Shader output buffer (only allocated when needed).
-        val shaderRow: IntArray? = if (shader != null) IntArray(rowWidth) else null
+        // Phase 6b — when the bitmap is F16 *and* we have a shader *and*
+        // the blend mode is SrcOver, the rasterizer takes a float-precision
+        // path: float coverage, float-premul shader output, direct
+        // compositing into [SkBitmap.pixelsF16] without any byte-quantization
+        // step. For other configurations we keep the 8-bit shader path
+        // (and the existing F16 → byte → F16 round-trip in [blend]).
+        val isF16 = bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm
+        val useF16ShaderPath = shader != null && isF16 && mode == SkBlendMode.kSrcOver
+        val shaderRow: IntArray? = if (shader != null && !useF16ShaderPath) IntArray(rowWidth) else null
+        val shaderRowF16: FloatArray? = if (useF16ShaderPath) FloatArray(rowWidth * 4) else null
+        val invMaxSamples = 1f / maxSamples.toFloat()
 
         for (py in py0 until py1) {
             // Reset coverage row.
@@ -848,14 +857,30 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 }
             }
 
-            // Shader path: ask the shader for one colour per device pixel
-            // across the entire clip row, then modulate by coverage. We
-            // could narrow this to the actually-covered span, but a single
-            // shadeRow call per row is simple and the inner `samples == 0`
-            // check below skips the per-pixel compositing for transparent
-            // pixels — only the shader's matrix/lookup work happens for
-            // pixels that ultimately don't draw.
-            if (shader != null && shaderRow != null) {
+            // Phase 6b: F16 shader path — pure float precision end-to-end.
+            // shadeRowF16 returns premultiplied floats already in the
+            // bitmap's working colour space, coverage modulates as a float
+            // multiplier, and [blendF16Premul] composites without ever
+            // touching an 8-bit byte. This is the only path that delivers
+            // the precision F16 storage promises for gradient draws.
+            if (shaderRowF16 != null) {
+                shader!!.shadeRowF16(clip.left, py, rowWidth, shaderRowF16)
+                for (xOff in 0 until rowWidth) {
+                    val samples = coverage[xOff]
+                    if (samples == 0) continue
+                    val cov = if (samples >= maxSamples) 1f else samples * invMaxSamples
+                    val si = xOff * 4
+                    val sa = shaderRowF16[si + 3] * cov
+                    if (sa <= 0f) continue
+                    val sr = shaderRowF16[si]     * cov
+                    val sg = shaderRowF16[si + 1] * cov
+                    val sb = shaderRowF16[si + 2] * cov
+                    blendF16Premul(clip.left + xOff, py, sr, sg, sb, sa)
+                }
+            } else if (shader != null && shaderRow != null) {
+                // 8-bit shader path: same code as before (also covers the
+                // F16-bitmap-with-non-SrcOver-mode case, where we accept the
+                // round-trip rather than expand the F16 mode dispatch).
                 shader.shadeRow(clip.left, py, rowWidth, shaderRow)
                 for (xOff in 0 until rowWidth) {
                     val samples = coverage[xOff]
@@ -1212,5 +1237,23 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         pixels[i + 1] = outG
         pixels[i + 2] = outB
         pixels[i + 3] = outA
+    }
+
+    /**
+     * Phase 6b — pure premul-float SrcOver. The src tuple is already in
+     * `[0, 1]` premultiplied (coverage already folded in by the caller),
+     * matching the bitmap's storage convention exactly. No byte conversion
+     * happens anywhere in this function — the only multiplications are the
+     * two `[0, 1]` premul lerps.
+     */
+    private fun blendF16Premul(x: Int, y: Int, sr: Float, sg: Float, sb: Float, sa: Float) {
+        if (sa <= 0f) return
+        val pixels = bitmap.pixelsF16
+        val i = (y * bitmap.width + x) * 4
+        val invSa = 1f - sa
+        pixels[i]     = sr + pixels[i]     * invSa
+        pixels[i + 1] = sg + pixels[i + 1] * invSa
+        pixels[i + 2] = sb + pixels[i + 2] * invSa
+        pixels[i + 3] = sa + pixels[i + 3] * invSa
     }
 }

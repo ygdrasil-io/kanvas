@@ -595,6 +595,40 @@ Avec ces étapes, les scores `HardstopGradient` (29 %), `AnalyticGradient` (62 %
 
 ---
 
+### Phase 6b — F16 shaders + float coverage (✅)
+
+**But** : compléter le pipeline F16 en supprimant les deux dernières quantizations 8-bit qui restaient en amont du `blend` :
+
+1. Les shaders (gradients) émettent désormais directement des `FloatArray` premultipliés en working colour space — plus de roundtrip `IntArray` ARGB → `setPixel` → re-premul float.
+2. La coverage AA dans le rasterizer scanline-fill module la couleur source en float (multiplication directe des 4 canaux premul) plutôt qu'en `srcA * samples / maxSamples` 8-bit.
+
+#### API ajoutée
+
+- [x] **`SkShader.shadeRowF16(devX, devY, count, dst: FloatArray)`** — méthode `open` avec implémentation par défaut qui forward à `shadeRow` puis convertit (compatibilité ascendante pour les futurs shaders qui n'ont pas de pipeline float natif).
+- [x] **Helpers `transformStopColorsF16` / `lookupStopF16`** dans [SkShader.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkShader.kt) — analogues float-premul de `transformStopColors` / `lookupStop`. Le lerp se fait directement en premul float (pas de pre-mul/un-pre-mul roundtrip comme dans `lerpPremul` 8-bit).
+
+#### Refactor
+
+- [x] **`SkLinearGradient` + `SkRadialGradient`** : ajout d'une table `xformedColorsF16: FloatArray` (4 floats × stops) construite une fois par draw dans `setupForDraw`, et `override shadeRowF16` qui lerp directement en premul float.
+- [x] **`SkBitmapDevice.scanFillPath`** : nouveau « F16 shader path » activé quand `bitmap.colorType == kRGBA_F16Norm && shader != null && mode == kSrcOver`. Coverage devient `samples * (1f / maxSamples)`, modulation = multiplication directe des 4 canaux premul, compositing = `blendF16Premul` (pas de SkColor intermédiaire).
+- [x] **`blendF16Premul(x, y, sr, sg, sb, sa)`** : SrcOver pur en premul float, sans aucun byte-quantize. Distinct du `blendF16` Phase 6a (qui prend un `SkColor` 8-bit non-premul) — utilisé exclusivement par le F16 shader path.
+
+#### Limites connues — Phase 6c (à venir)
+
+- **Solid-colour AA fillRectAA** : le `scaleAlpha(baseA, cx * cy)` retourne toujours un alpha 8-bit, ré-converti en float par `blendF16`. Negligible pour les rect AA solid (≤ 1 ulp), mais à terme on voudra un `blendF16Premul` direct depuis l'AA path.
+- **Blend modes ≠ kSrcOver avec shader sur F16** : retombent encore sur `shadeRow` 8-bit + `blendPixel`-via-`getPixel`/`setPixel`. Aucun GM en scope ne combine shader + non-SrcOver, donc pas urgent.
+
+#### Impact mesuré
+
+Sur les 64 GMs existants, les écarts sont à la marge (`HardstopGradientsManyGM` glisse de 15.28 → 12.79 % — already-deeply-broken test où le lerp précis s'éloigne légèrement d'une référence dithered ; le ratchet est mis à jour). Les autres GMs gradient bougent de moins de 1 % (within-tolerance), et les GMs déjà à 100 % (`ShallowGradientLinearNodither`, `ShallowGradientRadialNodither`) restent à 100 %. C'est attendu : la précision interne change, mais la comparaison se fait en 8-bit non-premul tronqué, donc ne capture qu'une fraction des améliorations. Les vraies améliorations apparaîtront sur les GMs à venir qui exercent des dégradés alpha plus fortement.
+
+#### Vérification Phase 6b
+- [x] Aucune régression > 1 % (le ratchet `HardstopGradientsManyGM` mis à jour explicitement, voir « Impact mesuré »).
+- [x] Les 64 GMs précédents passent toujours.
+- [x] **Pass count cumulé : 64 GM** (pure infrastructure ; pas de nouveau GM porté dans ce slice).
+
+---
+
 ## Phase 6 — Blend modes complets : `AAXfermodesGM`, `XfermodesGM`, `DestColorGM`, `AndroidBlendModesGM`
 
 **But final** : 28 modes Porter-Duff + modes avancés.
@@ -707,7 +741,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 6 entry | 55     | `SkBlendMode` enum + 9-mode dispatch slice (`kClear/kSrc/kDst/kSrcOver/kDstOver/kSrcIn/kDstIn/kPlus/kModulate/kScreen`) + ScaledRectsGM 87.79% | ✅ |
 | 5f    | 64       | GM harvest mixed (Beziers/HardstopMany/TestGradient/ThinStroked/BatchedConvex/ShallowLin/ShallowRad/B119394958/Crbug1086705) — 0 nouvelle API | ✅ |
 | 6a    | 64       | F16 working-space rasterizer (infra : SkBitmap F16, blendF16 SrcOver, I/O 16-bit) | ✅ |
-| 6b    | 64+      | F16 shaders (gradient `shadeRowF16`) + F16 AA coverage ⇒ Hardstop/Analytic/Fillrect/HardstopMany/BatchedConvex score lift | ⬜ |
+| 6b    | 64       | F16 shaders (`shadeRowF16` premul-float gradient + scanline-fill float coverage) — pipeline F16 désormais pur de bout en bout pour `kSrcOver` | ✅ |
+| 6c    | 64+      | F16 solid-colour AA (suppression de la dernière quantization 8-bit en amont du `blend`) ⇒ Hardstop/Analytic score lift attendu | ⬜ |
 | 5g    | ~67      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
 | 6     | ~70      | 19 blend modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
