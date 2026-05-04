@@ -10,22 +10,30 @@ import org.skia.foundation.SkPathDirection
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
+import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
-import org.skia.math.SkScalarRoundToInt
 import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
 
 /**
- * Phase 1+2 canvas with Phase 3 extensions. The CTM now supports
- * **translate + uniform/non-uniform scale** in addition to clipping —
- * still no rotation/skew, which arrive in a later phase.
+ * The CTM is now a full 2 × 3 [SkMatrix] (Phase 4b — `rotate` / `skew` /
+ * `concat` / `setMatrix` are real, not stubs). A source point `(x, y)` lands
+ * at device coordinates `M.mapXY(x, y)`. Phase 1–3's `translate` and `scale`
+ * helpers continue to work; under the hood they call [SkMatrix.preTranslate]
+ * / [SkMatrix.preScale] on the active state's matrix.
  *
- * The state matrix is `M = | sx 0 tx ; 0 sy ty ; 0 0 1 |`. A source point
- * `(x, y)` lands at device coordinates `(sx*x + tx, sy*y + ty)`. New
- * `translate` / `scale` calls post-multiply by their local transform, so
- * sequential calls compose like `M_new = M_old @ Local` — matching Skia's
- * `SkCanvas::translate` / `SkCanvas::scale`.
+ * **Clip semantics under non-axis-aligned matrices** (i.e. `kx ≠ 0` or
+ * `ky ≠ 0`): the device clip is the *axis-aligned bounding box* of the
+ * rotated `clipRect` projected through the matrix. This is conservative —
+ * pixels just outside the rotated quad but inside its bbox aren't masked
+ * out — but matches all upstream GMs in our scope which never combine a
+ * rotated CTM with `clipRect`. A true rotated AA clip is deferred to a
+ * later phase.
+ *
+ * **`drawRect` under non-axis-aligned matrices**: re-routed through
+ * [drawPath] (4-vertex polygon). The fast path through [SkBitmapDevice.drawRect]
+ * stays for axis-aligned matrices, which covers every Phase 0–3 GM.
  */
 public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
@@ -38,17 +46,11 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     /**
      * One stack entry per `save` / `saveLayer`. Carries the active CTM
-     * (translate + scale) and clip in **current device coordinates**, plus
-     * the device that draws land in. For a non-layer `save` the device is
-     * the same as the parent state's; for `saveLayer` it's a fresh
-     * offscreen device whose `(0, 0)` maps to `(layerOriginX, layerOriginY)`
-     * in the parent state's device.
+     * matrix and the clip in **current device coordinates**, plus the device
+     * that draws land in.
      */
     private data class State(
-        var sx: SkScalar,
-        var sy: SkScalar,
-        var tx: SkScalar,
-        var ty: SkScalar,
+        var matrix: SkMatrix,
         var clip: SkIRect,
         var device: SkBitmapDevice,
         /** Non-null iff this state was opened by `saveLayer`. */
@@ -69,14 +71,17 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     )
 
     private val stack: ArrayDeque<State> = ArrayDeque<State>().apply {
-        addLast(State(1f, 1f, 0f, 0f, rootDevice.deviceClipBounds(), rootDevice))
+        addLast(State(SkMatrix.Identity, rootDevice.deviceClipBounds(), rootDevice))
     }
 
     private val top: State get() = stack.last()
 
+    /** Read-only access to the current CTM. */
+    public fun getTotalMatrix(): SkMatrix = top.matrix
+
     public fun save(): Int {
         val s = top
-        stack.addLast(State(s.sx, s.sy, s.tx, s.ty, s.clip.copy(), s.device))
+        stack.addLast(State(s.matrix, s.clip.copy(), s.device))
         return stack.size - 2
     }
 
@@ -98,36 +103,70 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     public fun translate(dx: SkScalar, dy: SkScalar) {
         val s = top
-        s.tx += s.sx * dx
-        s.ty += s.sy * dy
+        s.matrix = s.matrix.preTranslate(dx, dy)
     }
 
     public fun scale(kx: SkScalar, ky: SkScalar) {
         val s = top
-        s.sx *= kx
-        s.sy *= ky
+        s.matrix = s.matrix.preScale(kx, ky)
+    }
+
+    /** Mirrors Skia's `SkCanvas::rotate(deg)` — pre-concat with a rotation around the origin. */
+    public fun rotate(deg: SkScalar) {
+        val s = top
+        s.matrix = s.matrix.preRotate(deg)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::rotate(deg, px, py)` — pre-concat with a
+     * rotation around an arbitrary pivot point.
+     */
+    public fun rotate(deg: SkScalar, px: SkScalar, py: SkScalar) {
+        val s = top
+        s.matrix = s.matrix.preRotate(deg, px, py)
+    }
+
+    /** Mirrors Skia's `SkCanvas::skew(sx, sy)` — pre-concat with a skew. */
+    public fun skew(sx: SkScalar, sy: SkScalar) {
+        val s = top
+        s.matrix = s.matrix.preSkew(sx, sy)
+    }
+
+    /** Mirrors Skia's `SkCanvas::concat(SkMatrix)` — pre-concat with `mat`. */
+    public fun concat(mat: SkMatrix) {
+        val s = top
+        s.matrix = s.matrix.preConcat(mat)
+    }
+
+    /** Mirrors Skia's `SkCanvas::setMatrix(SkMatrix)` — replaces the CTM wholesale. */
+    public fun setMatrix(mat: SkMatrix) {
+        val s = top
+        s.matrix = mat
+    }
+
+    /** Mirrors Skia's `SkCanvas::resetMatrix()`. */
+    public fun resetMatrix() {
+        val s = top
+        s.matrix = SkMatrix.Identity
     }
 
     public fun clipRect(rect: SkRect) {
         val s = top
-        val l = rect.left * s.sx + s.tx
-        val t = rect.top * s.sy + s.ty
-        val r = rect.right * s.sx + s.tx
-        val b = rect.bottom * s.sy + s.ty
+        // Under non-axis-aligned matrices the rotated clip becomes a quad —
+        // we approximate with its axis-aligned bbox (conservative).
+        val devRect = s.matrix.mapRect(rect)
         s.clip = SkIRect.MakeLTRB(
-            maxOf(s.clip.left, SkScalarRoundToInt(minOf(l, r))),
-            maxOf(s.clip.top, SkScalarRoundToInt(minOf(t, b))),
-            minOf(s.clip.right, SkScalarRoundToInt(maxOf(l, r))),
-            minOf(s.clip.bottom, SkScalarRoundToInt(maxOf(t, b))),
+            maxOf(s.clip.left, kFloor(devRect.left.toDouble()).toInt()),
+            maxOf(s.clip.top, kFloor(devRect.top.toDouble()).toInt()),
+            minOf(s.clip.right, kCeil(devRect.right.toDouble()).toInt()),
+            minOf(s.clip.bottom, kCeil(devRect.bottom.toDouble()).toInt()),
         )
     }
 
     /**
-     * Mirrors Skia's `SkCanvas::clipRect(rect, doAntiAlias)`. The Phase 2/3
-     * targets only clip with integer-aligned rects (under translate-only
-     * CTM), where AA-clip and pixel-aligned clip produce identical
-     * pixel-aligned output. A true AA-clip would require a per-pixel
-     * coverage mask; deferred to later phases.
+     * Mirrors Skia's `SkCanvas::clipRect(rect, doAntiAlias)`. AA-clip
+     * support is deferred to a later phase — for now both call paths emit
+     * pixel-aligned clips.
      */
     public fun clipRect(rect: SkRect, doAntiAlias: Boolean) {
         clipRect(rect)
@@ -135,12 +174,18 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     public fun drawRect(rect: SkRect, paint: SkPaint) {
         val s = top
-        val l = rect.left * s.sx + s.tx
-        val t = rect.top * s.sy + s.ty
-        val r = rect.right * s.sx + s.tx
-        val b = rect.bottom * s.sy + s.ty
-        val devRect = SkRect.MakeLTRB(minOf(l, r), minOf(t, b), maxOf(l, r), maxOf(t, b))
-        s.device.drawRect(devRect, s.clip, paint)
+        if (s.matrix.isAxisAligned) {
+            // Fast path: pre-compute the device-space rect and route through
+            // SkBitmapDevice.drawRect. Equivalent to the pre-Phase-4b code.
+            val (x0, y0) = s.matrix.mapXY(rect.left, rect.top)
+            val (x1, y1) = s.matrix.mapXY(rect.right, rect.bottom)
+            val devRect = SkRect.MakeLTRB(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
+            s.device.drawRect(devRect, s.clip, paint)
+        } else {
+            // Rotated / skewed: drop to drawPath so the rasterizer sees a
+            // proper 4-vertex polygon instead of an axis-aligned rect.
+            drawPath(SkPath.Rect(rect), paint)
+        }
     }
 
     /**
@@ -152,7 +197,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      */
     public fun drawPath(path: SkPath, paint: SkPaint) {
         val s = top
-        s.device.drawPath(path, s.sx, s.sy, s.tx, s.ty, s.clip, paint)
+        s.device.drawPath(path, s.matrix, s.clip, paint)
     }
 
     /**
@@ -200,12 +245,6 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * single path with the outer ring in [SkPathDirection.kCW] and the inner
      * ring in [SkPathDirection.kCCW], which the default `kWinding` fill rule
      * paints as the band between them.
-     *
-     * Edge cases:
-     *  - [outer] empty ⇒ no-op.
-     *  - [inner] empty ⇒ degenerates to [drawRRect] of [outer].
-     *  - [inner] not contained in [outer] ⇒ the winding fill still resolves
-     *    correctly (overlapping regions cancel) — matches Skia.
      */
     public fun drawDRRect(outer: SkRRect, inner: SkRRect, paint: SkPaint) {
         if (outer.isEmpty()) return
@@ -222,10 +261,6 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     /**
      * Mirrors Skia's `SkCanvas::drawLine(x0, y0, x1, y1, paint)`. Emits a
      * 2-point open path (`moveTo` + `lineTo`) and routes through [drawPath].
-     * The paint's stroke style is taken at face value — `kFill_Style` produces
-     * a degenerate (zero-area) fill that rasterizes to nothing, matching
-     * Skia's behaviour. `kStroke_Style` exercises [SkStroker] with caps but
-     * no joins (single segment, two endpoints).
      */
     public fun drawLine(x0: SkScalar, y0: SkScalar, x1: SkScalar, y1: SkScalar, paint: SkPaint) {
         val path = SkPathBuilder().moveTo(x0, y0).lineTo(x1, y1).detach()
@@ -234,14 +269,6 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     /**
      * Mirrors Skia's `SkCanvas::drawArc(oval, startAngleDeg, sweepAngleDeg, useCenter, paint)`.
-     *
-     * - When `useCenter = false`, an open arc curve is drawn — `paint`'s
-     *   stroke caps are visible at the two ends.
-     * - When `useCenter = true`, a closed pie-slice contour is drawn:
-     *   `arc + lineTo(centre) + close`. Filled or stroked the same as any
-     *   other closed path.
-     *
-     * Sweep = 0 is a no-op (Skia degenerates similarly).
      */
     public fun drawArc(
         oval: SkRect,
@@ -291,9 +318,10 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     /**
      * Mirrors Skia's `SkCanvas::drawImageRect(image, src, dst, sampling, paint, constraint)`.
-     * The `dst` rect is transformed via the current CTM; the `src` rect is
-     * passed through unchanged (it's an image-space sub-rectangle, not a
-     * geometry to transform).
+     * Under axis-aligned matrices the dst rect is mapped through the CTM to
+     * an axis-aligned device rect (current code path). Under non-axis-aligned
+     * matrices the call is dropped — true rotated `drawImageRect` would need
+     * texture-space sampling with an inverse matrix (deferred).
      */
     public fun drawImageRect(
         image: SkImage,
@@ -304,11 +332,13 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         constraint: SrcRectConstraint = SrcRectConstraint.kStrict,
     ) {
         val s = top
-        val l = dst.left * s.sx + s.tx
-        val t = dst.top * s.sy + s.ty
-        val r = dst.right * s.sx + s.tx
-        val b = dst.bottom * s.sy + s.ty
-        val devDst = SkRect.MakeLTRB(minOf(l, r), minOf(t, b), maxOf(l, r), maxOf(t, b))
+        if (!s.matrix.isAxisAligned) {
+            // TODO(phase 4b+) rotated drawImageRect — needs sampler with inverse CTM.
+            return
+        }
+        val (x0, y0) = s.matrix.mapXY(dst.left, dst.top)
+        val (x1, y1) = s.matrix.mapXY(dst.right, dst.bottom)
+        val devDst = SkRect.MakeLTRB(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
         s.device.drawImageRect(image, src, devDst, sampling, paint, constraint, s.clip)
     }
 
@@ -317,15 +347,9 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
-     * Mirrors Skia's `SkCanvas::drawPaint`. Fills the **current clip** with
+     * Mirrors Skia's `SkCanvas::drawPaint`. Fills the current clip with
      * `paint.color` via SrcOver. The CTM is irrelevant — `drawPaint` is
      * "infinite rect" semantics, so the only bound is the clip.
-     *
-     * Phase-2-2026 scope: only honours `paint.color` (sRGB-encoded ARGB).
-     * `paint.isAntiAlias` is ignored — the clip rect is integer-aligned in
-     * device coordinates, so analytic edge coverage would emit zero
-     * fractional contribution and we can take the cheap solid-fill path
-     * straight to [SkBitmapDevice.drawPaint].
      */
     public fun drawPaint(paint: SkPaint) {
         val s = top
@@ -334,33 +358,29 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     /**
      * Mirrors Skia's `SkCanvas::saveLayer(bounds, paint)`. Allocates an
-     * offscreen bitmap-backed device matching the device-space projection of
+     * offscreen bitmap-backed device matching the device-space bbox of
      * [bounds] (intersected with the current clip), then redirects all
      * subsequent draws into it until the matching [restore] composites the
      * layer back onto the parent device using [paint] (alpha modulation +
      * SrcOver — no full blend mode dispatch in this slice).
      *
-     * When [bounds] is null, the layer matches the entire current clip.
-     * The CTM and clip on the new state are translated so source-space
-     * coordinates land in the same place in the offscreen device that they
-     * would have in the parent device, except shifted by `(-originX, -originY)`.
+     * Under non-axis-aligned matrices the bounds bbox is the bounding box
+     * of the rotated quad (conservative). Layer-local CTM is the parent
+     * matrix post-translated by `(-originX, -originY)` so source-space
+     * coordinates land in the same place as before, just shifted by the
+     * layer origin.
      */
     public fun saveLayer(bounds: SkRect?, paint: SkPaint?): Int {
         val s = top
-        // Project `bounds` into current device space, then intersect with the
-        // current clip. A null `bounds` ⇒ "whole clip".
         val layerBounds: SkIRect = if (bounds == null) {
             s.clip
         } else {
-            val l = bounds.left * s.sx + s.tx
-            val t = bounds.top * s.sy + s.ty
-            val r = bounds.right * s.sx + s.tx
-            val b = bounds.bottom * s.sy + s.ty
+            val devBounds = s.matrix.mapRect(bounds)
             SkIRect.MakeLTRB(
-                maxOf(s.clip.left, kFloor(minOf(l, r).toDouble()).toInt()),
-                maxOf(s.clip.top, kFloor(minOf(t, b).toDouble()).toInt()),
-                minOf(s.clip.right, kCeil(maxOf(l, r).toDouble()).toInt()),
-                minOf(s.clip.bottom, kCeil(maxOf(t, b).toDouble()).toInt()),
+                maxOf(s.clip.left, kFloor(devBounds.left.toDouble()).toInt()),
+                maxOf(s.clip.top, kFloor(devBounds.top.toDouble()).toInt()),
+                minOf(s.clip.right, kCeil(devBounds.right.toDouble()).toInt()),
+                minOf(s.clip.bottom, kCeil(devBounds.bottom.toDouble()).toInt()),
             )
         }
 
@@ -372,7 +392,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         val h = layerBounds.bottom - layerBounds.top
         if (w <= 0 || h <= 0) {
             stack.addLast(State(
-                s.sx, s.sy, s.tx, s.ty,
+                s.matrix,
                 SkIRect.MakeLTRB(s.clip.left, s.clip.top, s.clip.left, s.clip.top),
                 s.device,
                 layer = null,
@@ -385,14 +405,15 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         val originX = layerBounds.left
         val originY = layerBounds.top
 
-        // Layer-local CTM: translate by `-origin` so a source point that used
-        // to land at parent device `(px, py)` now lands at layer coords
-        // `(px - originX, py - originY)`.
+        // Layer-local CTM: the parent matrix post-translated by `-origin`,
+        // so a source point that used to land at parent device `(px, py)`
+        // now lands at layer coords `(px - originX, py - originY)`.
+        val layerMatrix = s.matrix.copy(
+            tx = s.matrix.tx - originX,
+            ty = s.matrix.ty - originY,
+        )
         val newState = State(
-            sx = s.sx,
-            sy = s.sy,
-            tx = s.tx - originX,
-            ty = s.ty - originY,
+            matrix = layerMatrix,
             clip = SkIRect.MakeLTRB(
                 maxOf(0, s.clip.left - originX),
                 maxOf(0, s.clip.top - originY),
@@ -411,10 +432,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     /**
      * Mirrors Skia's `SkCanvas::saveLayer(bounds, paint, flags)`. The
-     * [flags] field is accepted for API compatibility but ignored —
-     * `kInitWithPrevious_SaveLayerFlag` and friends are out of scope for the
-     * current slice, since they require backdrop sampling against the parent
-     * device which the raster path doesn't yet expose.
+     * [flags] field is accepted for API compatibility but ignored.
      */
     public fun saveLayer(bounds: SkRect?, paint: SkPaint?, flags: SaveLayerFlags): Int =
         saveLayer(bounds, paint)
