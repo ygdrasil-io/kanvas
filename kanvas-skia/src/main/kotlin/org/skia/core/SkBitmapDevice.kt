@@ -17,10 +17,21 @@ import org.skia.foundation.SkStroker
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
 import org.skia.math.SkRect
+import kotlin.math.abs
 import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
+import kotlin.math.max as kMax
 
 private fun floor(v: Float): Int = kFloor(v.toDouble()).toInt()
+
+/**
+ * Resolution-scale hint for [SkStroker]: `max(|sx|, |sy|)`. The stroker's
+ * polyline becomes the outline vertex sequence directly, so under heavy
+ * CTM scale (e.g. `Strokes4GM` at 1000×) the source-space chord error
+ * tolerance must shrink in lockstep — otherwise a few-cubic circle gets
+ * flattened to a polygon visible at device-space resolution.
+ */
+private fun ctmResScale(sx: Float, sy: Float): Float = kMax(abs(sx), abs(sy)).coerceAtLeast(1f)
 private fun ceil(v: Float): Int = kCeil(v.toDouble()).toInt()
 
 /** Chord-error tolerance (in device-space pixels) for Bézier flattening. */
@@ -293,13 +304,13 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             SkPaint.Style.kFill_Style ->
                 fillPath(path, sx, sy, tx, ty, clip, color, baseA, supers)
             SkPaint.Style.kStroke_Style -> {
-                val outline = SkStroker.fromPaint(paint).stroke(path)
+                val outline = SkStroker.fromPaint(paint, ctmResScale(sx, sy)).stroke(path)
                 if (outline.isEmpty()) return
                 fillPath(outline, sx, sy, tx, ty, clip, color, baseA, supers)
             }
             SkPaint.Style.kStrokeAndFill_Style -> {
                 fillPath(path, sx, sy, tx, ty, clip, color, baseA, supers)
-                val outline = SkStroker.fromPaint(paint).stroke(path)
+                val outline = SkStroker.fromPaint(paint, ctmResScale(sx, sy)).stroke(path)
                 if (outline.isEmpty()) return
                 fillPath(outline, sx, sy, tx, ty, clip, color, baseA, supers)
             }

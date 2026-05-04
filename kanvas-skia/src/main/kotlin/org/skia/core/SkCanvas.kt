@@ -184,6 +184,16 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
+     * Mirrors Skia's `SkCanvas::drawRoundRect(rect, rx, ry, paint)`. Builds a
+     * uniform-corner [SkRRect] via [SkRRect.MakeRectXY] and routes through
+     * [drawRRect]. Convenience wrapper — the stand-alone rrect can be reused
+     * if the same shape is drawn many times.
+     */
+    public fun drawRoundRect(rect: SkRect, rx: SkScalar, ry: SkScalar, paint: SkPaint) {
+        drawRRect(SkRRect.MakeRectXY(rect, rx, ry), paint)
+    }
+
+    /**
      * Mirrors Skia's `SkCanvas::drawLine(x0, y0, x1, y1, paint)`. Emits a
      * 2-point open path (`moveTo` + `lineTo`) and routes through [drawPath].
      * The paint's stroke style is taken at face value — `kFill_Style` produces
