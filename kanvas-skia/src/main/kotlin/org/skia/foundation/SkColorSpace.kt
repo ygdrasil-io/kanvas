@@ -25,14 +25,21 @@ public class SkColorSpace private constructor(
     public val transferFn: SkcmsTransferFunction,
     public val toXYZD50: SkcmsMatrix3x3,
 ) {
-    public val transferFnHash: Int = hashFloats(
-        transferFn.g, transferFn.a, transferFn.b, transferFn.c,
-        transferFn.d, transferFn.e, transferFn.f,
+    /**
+     * Bit-compatible with upstream Skia
+     * (`SkColorSpace.cpp:132-133`) : `Hash32(&fTransferFn, 7*sizeof(float))`.
+     * Floats are serialized to little-endian bytes — matches `memcpy`
+     * memory order on x86 / ARM, which is the only configuration Skia
+     * runs in. Phase H of `MIGRATION_PLAN_COLORSPACE_PORT.md`.
+     */
+    public val transferFnHash: Int = SkChecksum.hash32(
+        floatsToBytes(transferFn.g, transferFn.a, transferFn.b, transferFn.c,
+            transferFn.d, transferFn.e, transferFn.f)
     )
     public val toXYZD50Hash: Int = run {
         val xs = FloatArray(9)
         for (r in 0 until 3) for (c in 0 until 3) xs[r * 3 + c] = toXYZD50.vals[r][c]
-        hashFloats(*xs)
+        SkChecksum.hash32(floatsToBytes(*xs))
     }
 
     /**
@@ -328,14 +335,17 @@ public class SkColorSpace private constructor(
             return Float.fromBits(bits)
         }
 
-        private fun hashFloats(vararg xs: Float): Int {
-            // Match the C++ `SkOpts::hash_fn` only loosely — what we need is
-            // stability and low collision rate, not bit-equality with skia.
-            var h = 0x811C9DC5.toInt()
-            for (x in xs) {
-                h = (h xor x.toRawBits()) * 0x01000193
+        private fun floatsToBytes(vararg xs: Float): ByteArray {
+            val out = ByteArray(xs.size * 4)
+            for (i in xs.indices) {
+                val bits = xs[i].toRawBits()
+                val o = i * 4
+                out[o] = (bits and 0xFF).toByte()
+                out[o + 1] = ((bits ushr 8) and 0xFF).toByte()
+                out[o + 2] = ((bits ushr 16) and 0xFF).toByte()
+                out[o + 3] = ((bits ushr 24) and 0xFF).toByte()
             }
-            return h
+            return out
         }
 
         private val sRGBSingleton: SkColorSpace =
