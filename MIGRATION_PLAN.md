@@ -921,7 +921,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 ## Explicitement reporté
 
 - [ ] **GPU** (`org.skia.gpu.*`, Ganesh, Graphite). Stripper les hooks GPU de la `GM` base class.
-- [ ] **Texte & polices** (`SkFont`, `SkTypeface`, `*TextGM`, `*EmojiGM`). `drawText` → `UnsupportedOperationException`.
+- [ ] **Texte & polices** (`SkFont`, `SkTypeface`, `drawString`, `*TextGM`, `*EmojiGM`). Side plan dédié : voir [MIGRATION_PLAN_TEXT.md](MIGRATION_PLAN_TEXT.md) — décomposé en T1..T5, débloque ~80-130 GMs upstream.
 - [ ] **Image filters & blurs** (`*BlurGM*`, `ImageFilters*GM`). Graphe d'évaluation séparé.
 - [ ] **Codecs** (`EncodeGM`, etc.). `javax.imageio` suffit pour charger les références.
 - [ ] **Modules** (`org.skia.modules.*` : Skottie, Paragraph, SVG). Migration parallèle après raster ≥ 90%.
