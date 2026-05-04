@@ -1,5 +1,6 @@
 package org.skia.foundation
 
+import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 
@@ -93,6 +94,30 @@ public class SkPath internal constructor(
         while (i < n) {
             out[i] = coords[i] + dx
             out[i + 1] = coords[i + 1] + dy
+            i += 2
+        }
+        return SkPath(verbs, out, conicWeights, fillType)
+    }
+
+    /**
+     * Apply [m] to every control point, returning a new [SkPath]. Verbs and
+     * conic weights are preserved as-is — Bézier control points transform
+     * naturally under affine maps. Mirrors Skia's `SkPath::transform(SkMatrix)`
+     * for the affine case.
+     *
+     * Identity matrix → returns `this` (no allocation).
+     */
+    public fun makeTransform(m: SkMatrix): SkPath {
+        if (m.isIdentity) return this
+        val n = coords.size
+        val out = FloatArray(n)
+        val sx = m.sx; val kx = m.kx; val tx = m.tx
+        val ky = m.ky; val sy = m.sy; val ty = m.ty
+        var i = 0
+        while (i < n) {
+            val x = coords[i]; val y = coords[i + 1]
+            out[i] = sx * x + kx * y + tx
+            out[i + 1] = ky * x + sy * y + ty
             i += 2
         }
         return SkPath(verbs, out, conicWeights, fillType)

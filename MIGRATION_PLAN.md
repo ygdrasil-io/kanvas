@@ -343,15 +343,49 @@ Le data model `SkRRect` (incl. `setRectRadii`/`setRectXY`/`setOval`/`setEmpty`/`
 
 ---
 
-### Phase 4b — SkMatrix + rotate/skew CTM (à venir)
+### Phase 4b — SkMatrix + rotate/skew CTM ✅
 
-**But** : passer le CTM stack de `(sx, sy, tx, ty)` à une vraie matrice affine 2×3. Débloque OvalGM, RoundRectGM (sans le gradient), le helper `canvas.rotate(deg)` / `skew` / `concat`, et `SkPath.transform(SkMatrix)` (qui à son tour débloquera la fix `StrokeRectAnisotropicGM` reportée Phase 3i).
+**But** : passer le CTM stack de `(sx, sy, tx, ty)` à une vraie matrice affine 2×3. Débloque OvalGM, RoundRectGM (sans le gradient), `canvas.rotate/skew/concat/setMatrix`, et `SkPath.makeTransform(SkMatrix)`.
 
-- [ ] `SkMatrix` data class : 6-scalaire matrice affine (`a, b, c, d, e, f`) avec `mapPoint`, `mapRect`, `concat`, `Identity`/`MakeTrans`/`MakeScale`/`MakeRotate`/`MakeSkew`.
-- [ ] `SkCanvas.rotate(deg)`, `skew(sx, sy)`, `concat(SkMatrix)`, `setMatrix(SkMatrix)`.
-- [ ] Mettre à jour `SkBitmapDevice.drawPath` / `drawRect` / `drawImageRect` pour consommer une `SkMatrix` au lieu du quadruplet.
-- [ ] `SkPath.transform(SkMatrix)` (ou `makeTransform`) — généralisation de `makeOffset` / l'inline-transform de `ConvexPathsGM`.
-- [ ] Hand-port `OvalGM` (au moins les rangs sans gradient), `RoundRectGM`.
+#### API ajoutée
+
+- [x] **`org.skia.math.SkMatrix`** : data class affine 2×3 (`sx, kx, tx, ky, sy, ty`) avec :
+  - factories `Identity`, `MakeTrans`, `MakeScale`, `MakeRotate(deg)`, `MakeRotate(deg, px, py)`, `MakeSkew`, `MakeAll`, `concat(a, b)` ;
+  - opérations `mapXY(x, y)`, `mapRect(SkRect)` (bbox du quad transformé), `preConcat`/`postConcat`, `preTranslate`/`preScale`/`preRotate`/`preSkew` ;
+  - `isIdentity`, `isAxisAligned` ;
+  - `computeMaxScale()` — plus grande valeur singulière (utilisée par `SkStroker.resScale`).
+- [x] **`SkCanvas.rotate(deg)` / `rotate(deg, px, py)` / `skew(sx, sy)` / `concat(matrix)` / `setMatrix(matrix)` / `resetMatrix()`** + `getTotalMatrix()` accessor.
+- [x] **`SkPath.makeTransform(matrix)`** : applique la matrice à chaque control point. Verbs et conic weights inchangés. Identity → fast-path qui renvoie `this`.
+
+#### Refactor
+
+- [x] `SkCanvas.State` : remplace les 4 scalaires `(sx, sy, tx, ty)` par un seul `matrix: SkMatrix`. `translate`/`scale` réduisent à `matrix.preTranslate`/`preScale`.
+- [x] `SkBitmapDevice.drawPath(path, ctm: SkMatrix, clip, paint)` (anciennement `(path, sx, sy, tx, ty, ...)`). `buildEdges` cache les 6 scalaires de la matrice en locales et applique `(sx*x + kx*y + tx, ky*x + sy*y + ty)` à chaque control point.
+- [x] **`drawRect` sous CTM rotated/skewed** : route via `drawPath(SkPath.Rect(rect))` (la fast-path `SkBitmapDevice.drawRect` axis-aligned reste pour `matrix.isAxisAligned`).
+- [x] **`drawImageRect` sous CTM rotated** : drop pour l'instant (TODO — sampler avec inverse CTM, déféré).
+- [x] **`clipRect` sous CTM rotated** : utilise la bbox axis-aligned du quad transformé (conservatif). Aucun GM en scope ne combine `clipRect` + rotate.
+- [x] **`SkStroker.resScale`** : alimenté par `ctm.computeMaxScale().coerceAtLeast(1f)` au lieu de `max(|sx|, |sy|)`.
+- [x] **`saveLayer`** : layer-local CTM = parent matrix avec `tx -= originX, ty -= originY` (préserve le mapping source → device-shifted-by-origin sous CTM arbitraire).
+
+#### GMs portés
+
+| GM          | Référence              | Score      | Notes |
+|-------------|------------------------|------------|-------|
+| OvalGM      | `ovals.png` 1200×900   | **94.44%** | 5 paints × 8 matrices (incl. rotate 60°/90°, skew 2,3) + 6 special rows. |
+| RoundRectGM | `roundrects.png` 1200×900 | **95.87%** | Même structure + 7 special rows (strokes-and-radii, OOO rect, etc.). |
+
+Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** (`SkShader` pas encore exposé) ; le `SkRandom` reste en lockstep avec upstream donc les couleurs sur les autres rangées matchent à l'identique.
+
+#### Vérification Phase 4b
+- [x] **22 unit tests `SkMatrixTest`** couvrant Identity, factories, point/rect mapping, pre-* composition, computeMaxScale (rotation pure → 1, scale pur → max abs scale, rotated scale → scale magnitude, NaN-safe), `isAxisAligned`.
+- [x] **Aucune régression** sur les 25 GMs Phase 0–4a (le refactor `(sx,sy,tx,ty) → SkMatrix` est backwards-compatible parce que `SkMatrix.Identity` se comporte exactement comme l'ancien quadruplet `(1, 1, 0, 0)`).
+- [x] **Pass count cumulé : 27 GM.**
+
+#### GMs reportés ultérieurement (Phase 4c+)
+
+- **`StrokeRectAnisotropicGM`** — débloqué techniquement par `SkPath.makeTransform`, à re-attaquer en Phase 4c (transformer le path vers device space *avant* de stroker, pour un stroke device-space sous CTM non-uniforme).
+- **OvalGM/RoundRectGM gradient row** — Phase 5 (`SkShader`).
+- **BlurCirclesGM, RRectBlurGM, DashCircleGM** — mask filters / dashes / drawString hors scope.
 
 ---
 
@@ -459,7 +493,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3h    | 14       | `SkCanvas.drawLine` + `TeenyStrokesGM` (stroker sous CTM scales extrêmes) | ✅ |
 | 3i    | 18       | Stroker `resScale` fix + 4 GMs (Strokes4/ClippedCubic/StLouisArch/Strokes) ⇒ **Phase 3 close** | ✅ |
 | 4a    | 25       | `drawDRRect` + ToolUtils + 7 GMs (CircleSizes/SmallArc/ManyCircles/ManyRRects/FillCircle/DRRect/RRect) | ✅ |
-| 4b    | ~27      | `SkMatrix` + rotate/skew CTM ⇒ OvalGM, RoundRectGM | ⬜ |
+| 4b    | 27       | `SkMatrix` + rotate/skew/concat CTM, `SkPath.makeTransform` ⇒ OvalGM, RoundRectGM | ✅ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 
