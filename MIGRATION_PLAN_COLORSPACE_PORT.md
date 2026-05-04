@@ -245,9 +245,41 @@ Activée pour compléter la surface skcms. Les PNGs DM utilisent uniquement des 
 
 **Vérification globale** : `./gradlew :kanvas-skia:test` → 565 tests verts, 0 régression sur les 54 GMs.
 
-### Étape F4 — A2B/B2A LUT — différé
+### Étape F4 — A2B/B2A LUT — ✅
 
-Idem F3 — pas requis par les profils SDR RGB cibles.
+Activée pour clore la surface skcms. Pas de GM consommateur (les profils SDR RGB cibles n'utilisent pas de LUT multi-dim), mais l'algorithme de référence est porté pour que les structures `SkcmsA2B` / `SkcmsB2A` (Phase F1) ne soient plus du poids mort, et qu'un futur consommateur (CMYK, raster pipeline) puisse plug directement.
+
+#### CLUT N-dim ([SkcmsA2BEval.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsA2BEval.kt))
+
+- [x] `skcmsClut(inputChannels, outputChannels, gridPoints, grid8/grid16, values)` — port scalaire de `clut(...)` (Transform_inl.h:685-764). Supporte 1-4 dimensions d'entrée, 3 ou 4 canaux de sortie ; lecture big-endian uint16 pour `grid16`. Layout ICC : premier canal d'entrée varie le plus lentement (`ix = R*(gp[1]*gp[2]) + G*gp[2] + B` pour un cube RGB).
+- [x] Interpolation 2^dim coins via index/weight pré-calculés ; mirror exact de l'algorithme upstream (combo de bits sélectionne lo/hi par dimension).
+- [x] Helper `sampleClut(ix, outputChannels, ...)` mirror de `sample_clut_8` / `sample_clut_16`.
+
+#### Pipelines A2B / B2A
+
+- [x] `evalA2b(a2b, values)` : input curves → clamp [0,1] → CLUT → matrix curves → 3x4 matrice → output curves. CMYK input force `alpha = 1` après le CLUT (mirror skcms.cc:2860 STAGE clut_A2B). Mirror skcms.cc:2859-2887.
+- [x] `evalB2a(b2a, values)` : input curves → matrix + matrix curves → CLUT → output curves. Mirror skcms.cc:2912-2925.
+
+#### Equality content-aware
+
+- [x] [SkcmsA2B.equals/hashCode](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsA2B.kt) : remplace les stubs `UnsupportedOperationException` (Phase F1) par une comparaison structurelle sur tous les champs (curves arrays, grid8/16, gridPoints, matrix, channels).
+- [x] [SkcmsB2A.equals/hashCode](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsB2A.kt) : idem.
+
+**Tests** [SkcmsA2BEvalTest](kanvas-skia/src/test/kotlin/org/skia/skcms/SkcmsA2BEvalTest.kt) — 13 :
+- [x] **CLUT 1D ground truth** : ramp `[0, 64, 128, 255]` → 6 valeurs match le driver C++ (`tools/clut_test.cpp`) à 1e-5.
+- [x] **CLUT 3D identité 2x2x2** : 4 points (corners + midpoints) sortent exactement les coordonnées d'entrée (ICC layout R-slowest validé).
+- [x] **CLUT 3D big-endian uint16** : même cube avec `grid16` retourne les mêmes valeurs à 1e-5 (validation byte-swap).
+- [x] **CLUT 4D CMYK** : cube 2^4 avec approximation `(1-c)(1-k)` retourne les valeurs attendues sur 4 points.
+- [x] **evalA2b identité** : input curves linéaires + CLUT identité = identité globale.
+- [x] **evalA2b input curves first** : courbes 2.0-power appliquées avant le CLUT identité → `0.5 → 0.25`.
+- [x] **evalA2b matrice 3x4** : skip CLUT, valide la permutation `(R, G, B) → (B, G+0.1, R)` via une matrice de swap.
+- [x] **evalA2b CMYK** : `alpha = 1` après le CLUT pour 4-input.
+- [x] **evalB2a** : pipeline inverse identité (input curves → matrice identité → CLUT → output curves) = identité globale.
+- [x] **A2B/B2A equality** : content-equal instances `==`, grid8 différent `≠`, channels différents `≠`, deux EMPTY sont égaux.
+
+**Vérification globale** : `./gradlew :kanvas-skia:test` → 592 tests verts, 0 régression sur les 54 GMs.
+
+**Note** : le parser ICC (Phase F2) ne lit toujours pas les tags `mAB` / `mBA` ; les structures A2B/B2A doivent être construites manuellement aujourd'hui. Un futur slice peut activer le parsing si un consommateur en a besoin.
 
 ### Étape F5 — `SkColorSpace.Make(profile)` — ✅
 
