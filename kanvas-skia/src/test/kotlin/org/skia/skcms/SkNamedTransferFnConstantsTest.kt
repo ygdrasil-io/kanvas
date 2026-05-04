@@ -36,10 +36,11 @@ class SkNamedTransferFnConstantsTest {
     }
 
     @Test
-    fun `PQ and HLG sentinel TFs classify as Invalid until Phase I`() {
-        // g < 0 — without HDR support these are flagged Invalid.
-        assertEquals(SkcmsTFType.Invalid, classify(SkNamedTransferFn.kPQ))
-        assertEquals(SkcmsTFType.Invalid, classify(SkNamedTransferFn.kHLG))
+    fun `PQ and HLG sentinel TFs classify as their HDR kind`() {
+        // Phase I activated: g=-4 → PQ (a=ref-white, b..f=0),
+        // g=-5 → HLG (a=ref-white, b=peak luminance, c=system gamma).
+        assertEquals(SkcmsTFType.PQ, classify(SkNamedTransferFn.kPQ))
+        assertEquals(SkcmsTFType.HLG, classify(SkNamedTransferFn.kHLG))
     }
 
     @Test
