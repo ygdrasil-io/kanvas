@@ -10,12 +10,12 @@ import org.skia.math.SkVector
 /**
  * RRect-specific path-builder tests. Cover the type-dispatch table
  * (`kEmpty` / `kRect` / `kOval` / rounded variants), the verb stream
- * shape (`moveTo` + 4×(`lineTo` + `cubicTo`) + `close`), and the
+ * shape (`moveTo` + 4×(`lineTo` + `kConic`) + `close`), and the
  * direction symmetry (CW / CCW share start point and final close).
  */
 class SkPathBuilderRRectTest {
 
-    private val OVAL_KAPPA: Float = 0.5522847498307933f
+    private val OVAL_CONIC_WEIGHT: Float = 0.707106781f
 
     @Test
     fun `empty rrect produces empty path`() {
@@ -43,20 +43,24 @@ class SkPathBuilderRRectTest {
     }
 
     @Test
-    fun `simple rrect emits moveTo plus 4 line-cubic pairs plus close`() {
+    fun `simple rrect emits moveTo plus 4 line-conic pairs plus close (Skia parity)`() {
         // Uniform 10-pixel corner radii on a 100×60 rect.
         val rrect = SkRRect.MakeRectXY(SkRect.MakeLTRB(0f, 0f, 100f, 60f), 10f, 10f)
         val p = SkPathBuilder().addRRect(rrect).detach()
-        // 1 move + 4 (line + cubic) + 1 close = 10 verbs.
+        // Mirrors gRRectVerbs_LineStart in src/core/SkPathRawShapes.cpp:90-97
+        // (1 move + 4 (line + conic) + 1 close = 10 verbs).
         val expected = arrayOf(
             SkPath.Verb.kMove,
-            SkPath.Verb.kLine, SkPath.Verb.kCubic,   // top edge + TR corner
-            SkPath.Verb.kLine, SkPath.Verb.kCubic,   // right edge + BR corner
-            SkPath.Verb.kLine, SkPath.Verb.kCubic,   // bottom edge + BL corner
-            SkPath.Verb.kLine, SkPath.Verb.kCubic,   // left edge + TL corner
+            SkPath.Verb.kLine, SkPath.Verb.kConic,   // top edge + TR corner
+            SkPath.Verb.kLine, SkPath.Verb.kConic,   // right edge + BR corner
+            SkPath.Verb.kLine, SkPath.Verb.kConic,   // bottom edge + BL corner
+            SkPath.Verb.kLine, SkPath.Verb.kConic,   // left edge + TL corner
             SkPath.Verb.kClose,
         )
         assertArrayEquals(expected, p.verbs)
+        // 4 conic weights, all √2/2.
+        assertEquals(4, p.conicWeights.size)
+        for (w in p.conicWeights) assertEquals(OVAL_CONIC_WEIGHT, w, 1e-4f)
     }
 
     @Test
@@ -77,30 +81,28 @@ class SkPathBuilderRRectTest {
         val ccw = SkPathBuilder().addRRect(rrect, SkPathDirection.kCCW).detach()
         assertEquals(cw.coords[0], ccw.coords[0])
         assertEquals(cw.coords[1], ccw.coords[1])
-        // CW: next verb is lineTo (top edge); CCW: next verb is cubicTo (TL corner reversed).
+        // CW: next verb is lineTo (top edge); CCW: next verb is conicTo (TL corner reversed).
         assertEquals(SkPath.Verb.kLine, cw.verbs[1])
-        assertEquals(SkPath.Verb.kCubic, ccw.verbs[1])
+        assertEquals(SkPath.Verb.kConic, ccw.verbs[1])
     }
 
     @Test
-    fun `rrect cubics use the kappa approximation for the corner radii`() {
+    fun `rrect conics carry the bbox corner as control and the next edge cardinal as end`() {
         val rrect = SkRRect.MakeRectXY(SkRect.MakeLTRB(0f, 0f, 100f, 60f), 10f, 20f)
         val p = SkPathBuilder().addRRect(rrect).detach()
         // After moveTo(10, 0), top edge ends at (90, 0). Verify the first
-        // cubic (top-right corner) emits the expected control points.
-        // Cubic: P1 = (right - rx*(1-k), top)        = (100 - 10*(1-k), 0)
-        //        P2 = (right, top + ry*(1-k))        = (100,         20*(1-k))
-        //        P3 = (right, top + ry)              = (100, 20)
-        val k = OVAL_KAPPA
-        // Skip move (2 floats) + line (2 floats) → cubic starts at coord index 4.
-        // Cubic consumes 6 floats: (P1.x, P1.y, P2.x, P2.y, P3.x, P3.y).
-        val cubicStart = 4
-        assertEquals(100f - 10f * (1f - k), p.coords[cubicStart],     1e-4f)
-        assertEquals(0f,                     p.coords[cubicStart + 1], 1e-4f)
-        assertEquals(100f,                   p.coords[cubicStart + 2], 1e-4f)
-        assertEquals(20f * (1f - k),         p.coords[cubicStart + 3], 1e-4f)
-        assertEquals(100f,                   p.coords[cubicStart + 4], 1e-4f)
-        assertEquals(20f,                    p.coords[cubicStart + 5], 1e-4f)
+        // conic (top-right corner): control at (right, top) = (100, 0),
+        // end at (right, top + ry) = (100, 20). Per Skia's
+        // SkPathRawShapes::set_as_rrect (LineStart variant).
+        // Skip move (2 floats) + line (2 floats) → conic starts at coord index 4.
+        // Conic consumes 4 floats: (Pc.x, Pc.y, Pe.x, Pe.y).
+        val conicStart = 4
+        assertEquals(100f, p.coords[conicStart],     1e-4f)
+        assertEquals(0f,   p.coords[conicStart + 1], 1e-4f)
+        assertEquals(100f, p.coords[conicStart + 2], 1e-4f)
+        assertEquals(20f,  p.coords[conicStart + 3], 1e-4f)
+        // Weight is √2/2.
+        assertEquals(OVAL_CONIC_WEIGHT, p.conicWeights[0], 1e-4f)
     }
 
     @Test
@@ -120,10 +122,12 @@ class SkPathBuilderRRectTest {
         // First lineTo end is (right - trRx, top) = (90, 0).
         assertEquals(90f, p.coords[2], 1e-4f)
         assertEquals(0f,  p.coords[3], 1e-4f)
-        // First cubic ends at (right, top + trRy) = (100, 10).
-        // Cubic emits 6 floats; P3 lives at offsets 8..9 from coord index 0.
-        assertEquals(100f, p.coords[8], 1e-4f)
-        assertEquals(10f,  p.coords[9], 1e-4f)
+        // First conic: control = (right, top) = (100, 0), end = (right, top + trRy) = (100, 10).
+        // Conic emits 4 floats (control then end); end lives at offsets 6..7.
+        assertEquals(100f, p.coords[4], 1e-4f)
+        assertEquals(0f,   p.coords[5], 1e-4f)
+        assertEquals(100f, p.coords[6], 1e-4f)
+        assertEquals(10f,  p.coords[7], 1e-4f)
     }
 
     @Test

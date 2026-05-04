@@ -120,27 +120,34 @@ class SkPathExtrasTest {
     }
 
     @Test
-    fun `tangent arcTo on a 90 degree corner inserts a lineTo to T0 then a cubic arc`() {
+    fun `tangent arcTo on a 90 degree corner inserts a lineTo to T0 then a conic arc (Skia parity)`() {
         // L-shape (0,0) → (10,0) → (10,10) with radius 2.
-        // For a right angle: tan(45°)=1, so d = r/tan(45°) = 2.
-        // T0 = (10,0) + 2*(-1,0) = (8, 0).
-        // T1 = (10,0) + 2*(0,1) = (10, 2).
-        // C  = (10,0) + 2*(-1,1)/1 = (8, 2). [sinθ=1]
+        // For a right angle: cosh = 0, sinh = 1.
+        // dist = |r * (1 - 0) / 1| = 2.
+        // T0 = (10,0) - 2 * (1, 0) = (8, 0).
+        // T1 = (10,0) + 2 * (0, 1) = (10, 2).
+        // weight = sqrt(0.5 + 0) = √2/2 ≈ 0.7071.
         val p = SkPathBuilder()
             .moveTo(0f, 0f)
             .arcTo(10f, 0f, 10f, 10f, 2f)
             .detach()
-        // Expected: moveTo(0,0), lineTo(8,0) (joining to T0),
-        // then 1 cubicTo (90° fits in a single ≤90° arc segment).
+        // Mirrors src/core/SkPathBuilder.cpp:477-511 — exactly 1 line + 1 conic.
         assertEquals(SkPath.Verb.kMove, p.verbs[0])
         assertEquals(SkPath.Verb.kLine, p.verbs[1])
         assertEquals(8f, p.coords[2], 1e-3f)
         assertEquals(0f, p.coords[3], 1e-3f)
-        assertEquals(SkPath.Verb.kCubic, p.verbs[2])
-        // Cubic ends at T1 = (10, 2).
-        val cubicEndIdx = 4 + 2 * 2  // 1 move + 1 line + 2 cubic-controls = 8 floats consumed
-        assertEquals(10f, p.coords[cubicEndIdx], 1e-3f)
-        assertEquals(2f, p.coords[cubicEndIdx + 1], 1e-3f)
+        assertEquals(SkPath.Verb.kConic, p.verbs[2])
+        assertEquals(3, p.verbs.size)
+        // Conic control = p1 = (10, 0); end = T1 = (10, 2).
+        // Coords: move(2) + line(2) + conic(control(2) + end(2)) = 8 floats.
+        assertEquals(10f, p.coords[4], 1e-3f)
+        assertEquals(0f,  p.coords[5], 1e-3f)
+        assertEquals(10f, p.coords[6], 1e-3f)
+        assertEquals(2f,  p.coords[7], 1e-3f)
+        // Weight = √2/2.
+        val expectedWeight = kotlin.math.sqrt(2.0).toFloat() * 0.5f
+        assertEquals(1, p.conicWeights.size)
+        assertEquals(expectedWeight, p.conicWeights[0], 1e-4f)
     }
 
     @Test
