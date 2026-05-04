@@ -876,6 +876,33 @@ Ajout des 4 modes HSL — `kHue`, `kSaturation`, `kColor`, `kLuminosity` — qui
 - [x] **Pass count cumulé : 65 GM**.
 - [x] **🎉 Modes Skia couverts : 29 / 29 (100 %)** — Phase 6 close.
 
+### Phase 5h — Linear-premul F16 storage (❌ explored, reverted)
+
+**Hypothèse de départ** : le drift constant de `TinyBitmapGM` (rendered `(214, 177, 167)` vs reference `(204, 162, 158)`) viendrait de ce que le buffer F16 stocke des valeurs **encoded** Rec.2020 alors que Skia upstream compose en **linear** Rec.2020. Refactor : stocker en linear-premul, encoder seulement à la sortie 8-bit / PNG.
+
+**Refactor tenté** :
+- `SkBitmap.eraseColor` / `setPixel` / `getPixel` : linearize sur F16 write, encode sur F16 read (xforms lazy via `colorSpace.makeLinearGamma()`).
+- `SkBitmapDevice` : nouveau `linearXformSteps` (sRGB → linear-{gamut}), `colorToF16Premul` et `blendF16` appliquent le xform complet ; `inDeviceColorSpace` skippe le xform 8-bit pour F16 (évite la quantization 8-bit avant le passage en linear) ; nouveau fast-path F16↔F16 dans `compositeFrom` qui SrcOver-blend en linear-premul direct.
+- `SkShader.setupForDraw` : nouvelle signature avec `linearXform` séparé pour les tables F16. `SkLinearGradient` / `SkRadialGradient` / `SkBitmapShader` produisent `xformedColorsF16` / `xformedPixelsF16` en linear-premul.
+- `TestUtils.bufferedImageToBitmap` : linearize à la lecture 16-bit PNG.
+
+**Résultats mesurés** :
+- ⚠ **0 amélioration** sur les 65 GMs. Aucun GM ne gagne en pixel-similarity.
+- ⚠ **3 régressions** sur des GMs gradient déjà cassés (`AnalyticGradientShaderGM` 62.73→59.65, `FillrectGradientGM` 68.18→66.85, `HardstopGradientsManyGM` 12.79→10.65) — le lerp en linear-Rec.2020 produit des intermédiaires différents du lerp en encoded-Rec.2020 que Skia utilise par défaut pour `SkGradientShader::Interpolation::ColorSpace::kDestination`.
+- ⚠ **2 GMs sous tolerance mineure mais sous le hard-floor du test** (`StrokeCircleGM` 90.37→89.95 < 90 % floor, `AnalyticGradientShaderGM` 59.65 < 60 % floor) — ces tests ont des `assertTrue(similarity >= X)` qui cassent.
+
+**Diagnostic** :
+- Skia DM ne fait *pas* tout le compositing en linear. Le raster pipeline F16 reste **par défaut en encoded-{dst}** quand `dst.colorType == kRGBA_F16Norm` avec un colorspace non-linéaire — on l'observe en confrontant nos résultats à la référence 16-bit Rec.2020.
+- Les gradient shaders interpolent toujours en *encoded* sauf si on opt-in `Interpolation::ColorSpace::kSRGBLinear`.
+- Le drift original de `TinyBitmap` n'était donc pas dû à "encoded vs linear" — c'était autre chose (paint.alpha modulation order, BG eraseColor sans xform, ou un bug ailleurs dans le shader path) qu'on n'a pas isolé.
+
+**Décision** : revert intégral du refactor. Le post-mortem vaut le code temporaire.
+
+**Pistes pour reprendre Phase 5h** (si on y revient un jour) :
+- D'abord re-porter `TinyBitmapGM` en l'état actuel et **diagnostiquer pixel-par-pixel** d'où vient le drift, plutôt que de présupposer la cause.
+- Considérer `SkColorSpace.makeSRGB()` comme working space pour les GMs (au lieu de Rec.2020) — beaucoup de GMs upstream sont rendus avec un working space sRGB-linear, et on pourrait peut-être matcher en passant à `SkColorSpace.makeSRGBLinear()`.
+- Étudier le code Skia `SkRasterPipeline` pour voir exactement quels modes appliquent linearize/encode dans le pipeline (probablement seulement quand l'alpha-type force la conversion).
+
 ---
 
 ## Travaux parallèles (hors numérotation de phases)
@@ -947,7 +974,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 6 sepS | 65      | Phase 6 separable simple : `kMultiply`/`kDarken`/`kLighten`/`kDifference`/`kExclusion` via helper float-premul + 14 tests unitaires (61 total). Pas de port GM ce slice. | ✅ |
 | 6 sepC | 65      | Phase 6 separable complexe : `kOverlay`/`kHardLight`/`kColorDodge`/`kColorBurn`/`kSoftLight` (4 helpers privés, branches conditionnelles, port direct Skia raster pipeline) + 13 tests (74 total). 25 / 29 modes Skia. | ✅ |
 | 6 HSL | 65       | Phase 6 HSL : `kHue`/`kSaturation`/`kColor`/`kLuminosity` (`blendHSL` + helpers W3C `lum`/`sat`/`setLum`/`setSat`/`clipColor`) + 7 tests + smoke 29 modes (81 total). **🎉 29 / 29 modes Skia. Phase 6 close.** | ✅ |
-| 5h    | 65+      | Linear-premul F16 storage (via `eraseColor` xformé) ⇒ port `TinyBitmap`, `BigMatrix`, `BitmapShader`, `TilemodesAlpha` | ⬜ |
+| 5h    | n/a      | Linear-premul F16 storage — **explored, reverted**. Voir post-mortem ci-dessous. | ❌ reverted |
 | 6     | ~70      | 19 blend modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
