@@ -843,6 +843,39 @@ Même rationale qu'en Phase 6 separable simple : `xfermodes` upstream et `androi
 - [x] 13 nouveaux tests unitaires verts.
 - [x] **Pass count cumulé : 65 GM**. **Modes Skia couverts : 25 / 29 (86 %)** ; reste 4 HSL.
 
+### Phase 6 HSL — clôture Phase 6 ✅
+
+Ajout des 4 modes HSL — `kHue`, `kSaturation`, `kColor`, `kLuminosity` — qui terminent la couverture de tous les `SkBlendMode` upstream (29/29). Ces modes opèrent sur la **tuple RGB entière** (pas par-canal comme les modes separable) parce que la luminance et la saturation se définissent globalement, donc ils ne réutilisent pas `sepChannel` et reçoivent leur propre dispatcher `blendHSL`.
+
+#### Modes ajoutés
+- [x] `kHue` — `SetLum(SetSat(Cs, Sat(Cb)), Lum(Cb))`. Donne au résultat la *teinte* de src, mais la *saturation* et la *luminance* de dst.
+- [x] `kSaturation` — `SetLum(SetSat(Cb, Sat(Cs)), Lum(Cb))`. Saturation de src, teinte + lum de dst.
+- [x] `kColor` — `SetLum(Cs, Lum(Cb))`. Chrominance complète de src (teinte+sat), luminance de dst. Le mode "colorier" : ajoute la couleur du src au-dessus du dst sans changer sa brillance.
+- [x] `kLuminosity` — `SetLum(Cb, Lum(Cs))`. Symétrique du précédent : chrominance de dst, brillance dictée par src.
+
+#### API ajoutée
+
+- [x] **`SkBitmapDevice.blendHSL(src, dst, mode)`** — dispatcher en premul-float `[0, sa*da]`, appliquant la formule HSL puis ajoutant le carrier `sc*(1-da) + dc*(1-sa)`.
+- [x] **`lum3(r, g, b)`** — luminance pondérée Skia : `0.3*R + 0.59*G + 0.11*B`.
+- [x] **`sat3(r, g, b)`** — saturation = `max - min`.
+- [x] **`setLum(rgb, alpha, newLum)`** — shift uniforme + `clipColor`. Mute en place.
+- [x] **`setSat(rgb, newSat)`** — rescale `(value - min)` par `newSat / spread` ; le min collapse à 0, le max devient `newSat`. Mute en place.
+- [x] **`clipColor(rgb, alpha)`** — pull-toward-luminance pour replier dans `[0, alpha]`.
+
+#### Tests unitaires
+
+- [x] **`SkBlendModeTest.kt`** : +7 cas HSL pinning les comportements canoniques (Hue/Saturation sur grey = identity, Color = src-tinted, Luminosity preserves dst chrominance, blue→white via Luminosity hits clipColor saturation branch). Plus un **smoke test** vérifiant que les 29 modes dispatchent sans throw `NotImplementedError`. **81 tests passent au total** (74 + 7).
+
+#### Pas de port GM ce slice (cohérent)
+
+`xfermodes`/`androidblendmodes`/`lcdblendmodes` upstream ont besoin de `drawString`/`SkFont` — hors scope. Une fois qu'on aura le text rendering, ces GMs deviendront des stress-tests bout-en-bout pour les 29 modes.
+
+#### Vérification Phase 6 HSL — clôture
+- [x] 65 GMs précédents — 0 régression, scores inchangés.
+- [x] 7 nouveaux tests unitaires HSL + smoke test 29 modes verts.
+- [x] **Pass count cumulé : 65 GM**.
+- [x] **🎉 Modes Skia couverts : 29 / 29 (100 %)** — Phase 6 close.
+
 ---
 
 ## Travaux parallèles (hors numérotation de phases)
@@ -913,7 +946,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 6 PD  | 65       | Phase 6 Porter-Duff completion : 5 derniers modes (`kSrcOut`/`kDstOut`/`kSrcATop`/`kDstATop`/`kXor`) + 15 tests unitaires + `AaRectModesGM` 80.30 % (12 modes en grille avec `bm.makeShader` + `saveLayer`) | ✅ |
 | 6 sepS | 65      | Phase 6 separable simple : `kMultiply`/`kDarken`/`kLighten`/`kDifference`/`kExclusion` via helper float-premul + 14 tests unitaires (61 total). Pas de port GM ce slice. | ✅ |
 | 6 sepC | 65      | Phase 6 separable complexe : `kOverlay`/`kHardLight`/`kColorDodge`/`kColorBurn`/`kSoftLight` (4 helpers privés, branches conditionnelles, port direct Skia raster pipeline) + 13 tests (74 total). 25 / 29 modes Skia. | ✅ |
-| 6 HSL | 65+      | Phase 6 HSL : `kHue`/`kSaturation`/`kColor`/`kLuminosity` (helpers luminosity/saturation/clipColor) — clôt Phase 6 (29/29 modes). | ⬜ |
+| 6 HSL | 65       | Phase 6 HSL : `kHue`/`kSaturation`/`kColor`/`kLuminosity` (`blendHSL` + helpers W3C `lum`/`sat`/`setLum`/`setSat`/`clipColor`) + 7 tests + smoke 29 modes (81 total). **🎉 29 / 29 modes Skia. Phase 6 close.** | ✅ |
 | 5h    | 65+      | Linear-premul F16 storage (via `eraseColor` xformé) ⇒ port `TinyBitmap`, `BigMatrix`, `BitmapShader`, `TilemodesAlpha` | ⬜ |
 | 6     | ~70      | 19 blend modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
