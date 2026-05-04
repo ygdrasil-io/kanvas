@@ -17,4 +17,5 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | Crbug913349GM | 99.76% | = | 1 | 299,277 / 300,000 | 0, 41, 41, 41 | 0, 14, 14, 14 |
 | DrawBitmapRect3 | 100.00% | = | 1 | 307,200 / 307,200 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | SimpleRectGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| TeenyStrokesGM | 99.39% | = | 1 | 318,042 / 320,000 | 0, 61, 45, 45 | 0, 10, 9, 9 |
 | ThinRectsGM | 92.10% | = | 1 | 70,736 / 76,800 | 0, 18, 17, 17 | 0, 12, 13, 11 |
