@@ -305,24 +305,53 @@ Le stroker Phase 3c flattenait les Béziers en source space avec une tolérance 
 
 ---
 
-## Phase 4 — Cercles, ovals, RRects : `CircleSizesGM`, `RRectGM`, `RoundRectGM`, `DRRectGM`
+## Phase 4 — Cercles, ovals, RRects, DRRects
 
-**But** : remplacer les fallbacks circle→rect actuels ([Canvas.kt:213](kanvas/src/main/kotlin/core/Canvas.kt:213), [221](kanvas/src/main/kotlin/core/Canvas.kt:221)) par de vraies courbes.
+**But initial du plan** : remplacer les fallbacks `circle → rect` par de vraies courbes Bézier. **Déjà fait pendant la Phase 3** — `drawCircle`, `drawOval`, `drawRRect`, `drawRoundRect`, `drawArc` tous wired via `SkPath.RRect/Oval/Circle` + cubics avec kappa. La Phase 4 est donc concentrée sur l'API restante (`drawDRRect`, palette quantisée 565) et le portage des GMs spécifiques.
 
-- [ ] `SkCanvas.drawCircle` : émet `SkPath` avec courbes coniques (cf. [Arc.kt](kanvas/src/main/kotlin/core/Arc.kt)).
-- [ ] `SkCanvas.drawOval` : idem.
-- [ ] `SkCanvas.drawRRect` : idem.
-- [ ] Porter [kanvas/src/main/kotlin/core/RRect.kt](kanvas/src/main/kotlin/core/RRect.kt) → `SkRRect`.
+### Phase 4a — drawDRRect + 7 GM ports ✅
 
-### Tests GM
-- [ ] Hand-port `tests/CircleSizesGM.kt`.
-- [ ] Hand-port `tests/RRectGM.kt`.
-- [ ] Hand-port `tests/RoundRectGM.kt`.
-- [ ] Hand-port `tests/DRRectGM.kt`.
+#### API ajoutée
 
-### Vérification Phase 4
-- [ ] Tests ≥ 92%.
-- [ ] **Pass count cumulé : ~16 GM.**
+- [x] **`SkCanvas.drawDRRect(outer, inner, paint)`** : émet un seul path avec l'outer en `kCW` et l'inner en `kCCW`. Le winding fill peint la bande entre les deux. Edge cases : outer vide ⇒ no-op ; inner vide ⇒ délègue à `drawRRect(outer, paint)`.
+- [x] **`org.skia.tools.ToolUtils.kt`** : helpers `skHSVToColor(hsv, alpha)` et `colorTo565(SkColor)`. Ports bit-compatibles de `src/core/SkColor.cpp:SkHSVToColor` et `tools/ToolUtils.cpp:color_to_565` — la quantisation 565 est essentielle pour matcher les références capturées depuis un backbuffer 16-bit (manycircles, manyrrects, fillcircle, rrect tous l'utilisent indirectement via `gen_color`).
+
+Le data model `SkRRect` (incl. `setRectRadii`/`setRectXY`/`setOval`/`setEmpty`/`MakeRectRadii` + type classification avec radii-clamp) **existait déjà** depuis l'introduction d'`SkRRect` — il ne manquait plus que l'API canvas pour faire dialoguer les rrects per-corner avec le rasterizer.
+
+#### GMs portés
+
+| GM            | Référence              | Score      | Notes |
+|---------------|------------------------|------------|-------|
+| CircleSizesGM | `circle_sizes.png` 128² | **94.48%** | Grid 4×4 cercles `r=1..16`. crbug 772953 fixture. |
+| SmallArcGM    | `smallarc.png` 762²    | **99.80%** | Cubic stroked à 120 px sous `scale(8, 8)`. Stresse `resScale`. |
+| ManyCirclesGM | `manycircles.png` 800×600 | **97.32%** | 10 000 ovals AA, couleurs `gen_color` 565-quantisées. |
+| ManyRRectsGM  | `manyrrects.png` 800×300 | **88.33%** | 7 000 rrects 4×4 `MakeRectXY(1, 1)`. AA-corner drift sub-5px. |
+| FillCircleGM  | `fillcircle.png` 520²  | **95.28%** | Cercles concentriques sous `scale(20, 20)`. `fRotate=0` (rotate sauté). |
+| DRRectGM      | `drrect.png` 640×480   | **98.48%** | 4 outer types × 5 inner types (incl. empty) = 20 donuts. Premier vrai stress de `drawDRRect`. |
+| RRectGM       | `rrect.png` 820×710    | **89.20%** | 4 inset procs × 4 rrect types × 13 d-values = 208 stroked rrects. Hairline `strokeWidth=0` retombe sur width=1. |
+
+#### Vérification Phase 4a
+- [x] 7 nouveaux tests JUnit, tous verts au floor 80–90 %.
+- [x] Aucune régression sur les 18 GMs Phase 3.
+- [x] **Pass count cumulé : 25 GM.**
+
+#### GMs Phase 4 reportés (dépendances en attente)
+
+- **OvalGM** (`ovals.png`), **RoundRectGM** (`roundrects.png`) — utilisent `canvas->rotate(90)`, `setSkew(2,3)`, `concat(matrix)`. Bloqués par l'absence de `SkMatrix` / rotate-skew CTM. Cible Phase 4b.
+- **RoundRectGM** utilise aussi un radial gradient — bloqué Phase 5.
+- **BlurCirclesGM**, **RRectBlurGM**, **DashCircleGM** — bloqués par mask filters / dashes / `drawString`.
+
+---
+
+### Phase 4b — SkMatrix + rotate/skew CTM (à venir)
+
+**But** : passer le CTM stack de `(sx, sy, tx, ty)` à une vraie matrice affine 2×3. Débloque OvalGM, RoundRectGM (sans le gradient), le helper `canvas.rotate(deg)` / `skew` / `concat`, et `SkPath.transform(SkMatrix)` (qui à son tour débloquera la fix `StrokeRectAnisotropicGM` reportée Phase 3i).
+
+- [ ] `SkMatrix` data class : 6-scalaire matrice affine (`a, b, c, d, e, f`) avec `mapPoint`, `mapRect`, `concat`, `Identity`/`MakeTrans`/`MakeScale`/`MakeRotate`/`MakeSkew`.
+- [ ] `SkCanvas.rotate(deg)`, `skew(sx, sy)`, `concat(SkMatrix)`, `setMatrix(SkMatrix)`.
+- [ ] Mettre à jour `SkBitmapDevice.drawPath` / `drawRect` / `drawImageRect` pour consommer une `SkMatrix` au lieu du quadruplet.
+- [ ] `SkPath.transform(SkMatrix)` (ou `makeTransform`) — généralisation de `makeOffset` / l'inline-transform de `ConvexPathsGM`.
+- [ ] Hand-port `OvalGM` (au moins les rangs sans gradient), `RoundRectGM`.
 
 ---
 
@@ -429,7 +458,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3g    | 13       | Stroker caps & joins étendus (kSquare/kRound caps, kBevel/kRound joins) | ✅ |
 | 3h    | 14       | `SkCanvas.drawLine` + `TeenyStrokesGM` (stroker sous CTM scales extrêmes) | ✅ |
 | 3i    | 18       | Stroker `resScale` fix + 4 GMs (Strokes4/ClippedCubic/StLouisArch/Strokes) ⇒ **Phase 3 close** | ✅ |
-| 4     | ~21      | Circle / Oval / RRect via path | ⬜ |
+| 4a    | 25       | `drawDRRect` + ToolUtils + 7 GMs (CircleSizes/SmallArc/ManyCircles/ManyRRects/FillCircle/DRRect/RRect) | ✅ |
+| 4b    | ~27      | `SkMatrix` + rotate/skew CTM ⇒ OvalGM, RoundRectGM | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 

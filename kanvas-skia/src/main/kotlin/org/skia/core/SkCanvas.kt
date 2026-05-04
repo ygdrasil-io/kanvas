@@ -6,6 +6,7 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
+import org.skia.foundation.SkPathDirection
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
@@ -191,6 +192,31 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      */
     public fun drawRoundRect(rect: SkRect, rx: SkScalar, ry: SkScalar, paint: SkPaint) {
         drawRRect(SkRRect.MakeRectXY(rect, rx, ry), paint)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawDRRect(outer, inner, paint)` — fills the
+     * "donut" between the [outer] and [inner] rounded rectangles. Built as a
+     * single path with the outer ring in [SkPathDirection.kCW] and the inner
+     * ring in [SkPathDirection.kCCW], which the default `kWinding` fill rule
+     * paints as the band between them.
+     *
+     * Edge cases:
+     *  - [outer] empty ⇒ no-op.
+     *  - [inner] empty ⇒ degenerates to [drawRRect] of [outer].
+     *  - [inner] not contained in [outer] ⇒ the winding fill still resolves
+     *    correctly (overlapping regions cancel) — matches Skia.
+     */
+    public fun drawDRRect(outer: SkRRect, inner: SkRRect, paint: SkPaint) {
+        if (outer.isEmpty()) return
+        if (inner.isEmpty()) {
+            drawRRect(outer, paint)
+            return
+        }
+        val builder = SkPathBuilder()
+            .addRRect(outer, SkPathDirection.kCW)
+            .addRRect(inner, SkPathDirection.kCCW)
+        drawPath(builder.detach(), paint)
     }
 
     /**
