@@ -4,13 +4,11 @@ import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
-import kotlin.math.tan
 // SkRRect lives in the same `org.skia.foundation` package — no import needed.
 
 /**
@@ -208,90 +206,71 @@ public class SkPathBuilder public constructor() {
 
     /**
      * **Tangent arc** (PostScript-style `arct`). Mirrors Skia's
-     * `SkPathBuilder::arcTo(SkPoint p1, SkPoint p2, SkScalar radius)`.
+     * `SkPathBuilder::arcTo(SkPoint p1, SkPoint p2, SkScalar radius)`
+     * (`src/core/SkPathBuilder.cpp:477-511`).
      *
      * Given the current pen position `P0`, append a circular arc of
      * the given `radius` that is tangent to the line segment `P0→p1`
      * at one end and tangent to `p1→p2` at the other. The arc replaces
-     * the sharp corner at `p1`. A straight `lineTo` is emitted from
-     * the current point to the first tangent point if necessary.
+     * the sharp corner at `p1`. Emits at most one `lineTo` (to the
+     * first tangent point) followed by exactly one `conicTo` — matching
+     * the upstream verb-stream guarantee.
      *
-     * Degenerate cases:
-     *  - No current contour → emits `moveTo(p1)` and returns.
-     *  - `radius ≤ 0`, the three points are collinear, or any of the
-     *    `P0→p1` / `p1→p2` segments has zero length → emits `lineTo(p1)`
-     *    and returns. This matches Skia's behaviour.
+     * Degenerate cases (all match Skia):
+     *  - Empty builder → `moveTo(p1)` and return (port-legacy fast-path,
+     *    pinned by `tangent arcTo on empty path`).
+     *  - `radius == 0` → `lineTo(p1)`.
+     *  - `P0 == p1` or `p1 == p2` (`befored`/`afterd` denormalised), or
+     *    `sinh ≈ 0` (collinear) → `lineTo(p1)`.
      *
-     * Math: with `θ` = angle at `p1` between `p1→P0` and `p1→p2`,
-     *
+     * Math (in double precision):
      * ```
-     * d  = radius / tan(θ/2)              (distance from p1 to tangent points)
-     * T0 = p1 + d · û1                    (tangent on the P0→p1 line)
-     * T1 = p1 + d · û2                    (tangent on the p1→p2 line)
-     * C  = p1 + radius · (û1 + û2) / sin θ  (centre of the arc circle)
+     * cosh = before · after          (between unit vectors P0→p1 and p1→p2)
+     * sinh = before × after
+     * d    = |radius * (1 - cosh) / sinh|     (distance from p1 to tangent points)
+     * T0   = p1 - d · before                  (first tangent point)
+     * T1   = p1 + d · after                   (second tangent point)
+     * weight = sqrt(0.5 + 0.5·cosh) = cos(arc-sweep / 2)
      * ```
-     *
-     * The shorter arc from `T0` to `T1` around `C` (always ≤ π) is the
-     * tangent arc. We delegate to the existing oval `arcTo` to emit the
-     * cubic-Bézier approximation.
      */
     public fun arcTo(
         x1: SkScalar, y1: SkScalar,
         x2: SkScalar, y2: SkScalar,
         radius: SkScalar,
     ): SkPathBuilder = apply {
-        // On a *truly* empty builder we keep the port's legacy fast-path
-        // (moveTo(p1) and bail) — pinned by `tangent arcTo on empty path`.
-        // After close() the builder is non-empty: defer to ensureContour,
-        // which now emits the implicit moveTo to the last contour start.
+        // Empty-builder fast path preserved (port-legacy behaviour).
         if (verbs.isEmpty()) { moveTo(x1, y1); return@apply }
         ensureContour()
-        if (radius <= 0f) { lineTo(x1, y1); return@apply }
+        if (radius == 0f) { lineTo(x1, y1); return@apply }
 
-        val p0x = lastX; val p0y = lastY
-        val v1x = p0x - x1; val v1y = p0y - y1
-        val v2x = x2 - x1;  val v2y = y2 - y1
-        val len1 = sqrt((v1x * v1x + v1y * v1y).toDouble()).toFloat()
-        val len2 = sqrt((v2x * v2x + v2y * v2y).toDouble()).toFloat()
-        if (len1 < 1e-6f || len2 < 1e-6f) { lineTo(x1, y1); return@apply }
-
-        val u1x = v1x / len1; val u1y = v1y / len1
-        val u2x = v2x / len2; val u2y = v2y / len2
-        val cosTheta = (u1x * u2x + u1y * u2y).coerceIn(-1f, 1f)
-        // Collinear (or near-anti-parallel — tangent arc undefined).
-        if (cosTheta > 0.9999f || cosTheta < -0.9999f) {
-            lineTo(x1, y1)
-            return@apply
+        val p0x = lastX.toDouble(); val p0y = lastY.toDouble()
+        val bx = x1.toDouble() - p0x; val by = y1.toDouble() - p0y
+        val ax = x2.toDouble() - x1.toDouble(); val ay = y2.toDouble() - y1.toDouble()
+        val blen = sqrt(bx * bx + by * by)
+        val alen = sqrt(ax * ax + ay * ay)
+        if (!blen.isFinite() || !alen.isFinite() || blen == 0.0 || alen == 0.0) {
+            lineTo(x1, y1); return@apply
+        }
+        val ubx = bx / blen; val uby = by / blen
+        val uax = ax / alen; val uay = ay / alen
+        val cosh = ubx * uax + uby * uay
+        val sinh = ubx * uay - uby * uax
+        // Skia uses `SkScalarNearlyZero` ≈ 1/4096 = 0.000244 — collinear bail.
+        if (!cosh.isFinite() || !sinh.isFinite() || abs(sinh) < 1.0 / 4096.0) {
+            lineTo(x1, y1); return@apply
         }
 
-        // Half-angle identities, valid for cosθ in (-1, 1).
-        val cosHalf = sqrt(((1.0 + cosTheta) * 0.5).coerceAtLeast(0.0)).toFloat()
-        val sinHalf = sqrt(((1.0 - cosTheta) * 0.5).coerceAtLeast(0.0)).toFloat()
-        val tanHalf = sinHalf / cosHalf
-        val sinTheta = 2f * sinHalf * cosHalf
-
-        val d = radius / tanHalf
-        val t0x = x1 + d * u1x; val t0y = y1 + d * u1y
-        val t1x = x1 + d * u2x; val t1y = y1 + d * u2y
-        val cx = x1 + radius * (u1x + u2x) / sinTheta
-        val cy = y1 + radius * (u1y + u2y) / sinTheta
+        val dist = abs(radius.toDouble() * (1.0 - cosh) / sinh)
+        val t0x = (x1.toDouble() - dist * ubx).toFloat()
+        val t0y = (y1.toDouble() - dist * uby).toFloat()
+        val t1x = (x1.toDouble() + dist * uax).toFloat()
+        val t1y = (y1.toDouble() + dist * uay).toFloat()
 
         if (t0x != lastX || t0y != lastY) lineTo(t0x, t0y)
-
-        val startRad = atan2((t0y - cy).toDouble(), (t0x - cx).toDouble())
-        val endRad = atan2((t1y - cy).toDouble(), (t1x - cx).toDouble())
-        var sweepRad = endRad - startRad
-        // Normalise to (-π, π] — tangent arc is always the shorter arc.
-        while (sweepRad > PI) sweepRad -= 2.0 * PI
-        while (sweepRad < -PI) sweepRad += 2.0 * PI
-
-        val rect = SkRect.MakeLTRB(cx - radius, cy - radius, cx + radius, cy + radius)
-        arcTo(
-            rect,
-            (startRad * 180.0 / PI).toFloat(),
-            (sweepRad * 180.0 / PI).toFloat(),
-            forceMoveTo = false,
-        )
+        // Conic weight = cos(arc-sweep / 2). Half-angle identity:
+        //   cos²(α/2) = (1 + cos α) / 2  →  weight = sqrt(0.5 + 0.5·cosh).
+        val weight = sqrt(0.5 + cosh * 0.5).toFloat()
+        conicTo(x1, y1, t1x, t1y, weight)
     }
 
     public fun addRect(
@@ -312,10 +291,17 @@ public class SkPathBuilder public constructor() {
     }
 
     /**
-     * Append an axis-aligned ellipse contour as 4 cubic Béziers per the
-     * standard `(4/3) * (sqrt(2) - 1) ≈ 0.5523` approximation. Visual
-     * error stays under ~0.027 % of the radius, indistinguishable from
-     * the analytic ellipse at typical pixel scales.
+     * Append an axis-aligned ellipse contour as `kMove + 4 × kConic + kClose`,
+     * each conic representing a 90° quarter-ellipse with weight `√2/2`.
+     * Mirrors `SkPathRawShapes::Oval` (`src/core/SkPathRawShapes.cpp:48-86`)
+     * — the conic representation is exact for the analytical ellipse
+     * (vs. the cubic kappa approximation, which carries ~0.027 % chord
+     * error). Conic control points coincide with the bounding-rect
+     * corners; conic ends are the cardinal points of the oval.
+     *
+     * Uses the `startIndex = 1` convention from Skia 4.x (default
+     * `addOval(oval, dir)`), which begins the contour at
+     * `(oval.right, oval.centerY())`.
      */
     public fun addOval(
         oval: SkRect,
@@ -323,22 +309,22 @@ public class SkPathBuilder public constructor() {
     ): SkPathBuilder = apply {
         val cx = (oval.left + oval.right) * 0.5f
         val cy = (oval.top + oval.bottom) * 0.5f
-        val rx = (oval.right - oval.left) * 0.5f
-        val ry = (oval.bottom - oval.top) * 0.5f
-        val k = OVAL_KAPPA
-        val kx = k * rx
-        val ky = k * ry
-        moveTo(cx + rx, cy)
+        val l = oval.left; val t = oval.top
+        val r = oval.right; val b = oval.bottom
+        val w = OVAL_CONIC_WEIGHT
+        moveTo(r, cy)
         if (dir == SkPathDirection.kCW) {
-            cubicTo(cx + rx, cy + ky, cx + kx, cy + ry, cx, cy + ry)
-            cubicTo(cx - kx, cy + ry, cx - rx, cy + ky, cx - rx, cy)
-            cubicTo(cx - rx, cy - ky, cx - kx, cy - ry, cx, cy - ry)
-            cubicTo(cx + kx, cy - ry, cx + rx, cy - ky, cx + rx, cy)
+            // right → bottom: control at (R, B), end at (cx, B).
+            conicTo(r, b, cx, b, w)
+            conicTo(l, b, l, cy, w)
+            conicTo(l, t, cx, t, w)
+            conicTo(r, t, r, cy, w)
         } else {
-            cubicTo(cx + rx, cy - ky, cx + kx, cy - ry, cx, cy - ry)
-            cubicTo(cx - kx, cy - ry, cx - rx, cy - ky, cx - rx, cy)
-            cubicTo(cx - rx, cy + ky, cx - kx, cy + ry, cx, cy + ry)
-            cubicTo(cx + kx, cy + ry, cx + rx, cy + ky, cx + rx, cy)
+            // right → top: control at (R, T), end at (cx, T).
+            conicTo(r, t, cx, t, w)
+            conicTo(l, t, l, cy, w)
+            conicTo(l, b, cx, b, w)
+            conicTo(r, b, r, cy, w)
         }
         close()
     }
@@ -380,69 +366,41 @@ public class SkPathBuilder public constructor() {
         val tr = rrect.radii(SkRRect.Corner.kUpperRight_Corner)
         val br = rrect.radii(SkRRect.Corner.kLowerRight_Corner)
         val bl = rrect.radii(SkRRect.Corner.kLowerLeft_Corner)
-        val k = OVAL_KAPPA
+        val w = OVAL_CONIC_WEIGHT
         val l = rect.left; val t = rect.top
         val r = rect.right; val b = rect.bottom
 
+        // Mirrors SkPathRawShapes::set_as_rrect / gRRectVerbs_LineStart with
+        // start at the top-left corner's end-of-arc on the top edge: each
+        // corner becomes a single conic with control at the bbox corner
+        // and weight √2/2 (same as the oval).
         if (dir == SkPathDirection.kCW) {
             moveTo(l + tl.fX, t)
             lineTo(r - tr.fX, t)
-            // Top-right corner: (r - tr.fX, t) → (r, t + tr.fY).
-            cubicTo(
-                r - tr.fX * (1f - k), t,
-                r, t + tr.fY * (1f - k),
-                r, t + tr.fY,
-            )
+            // Top-right corner: control (r, t), end (r, t + tr.fY).
+            conicTo(r, t, r, t + tr.fY, w)
             lineTo(r, b - br.fY)
-            // Bottom-right corner: (r, b - br.fY) → (r - br.fX, b).
-            cubicTo(
-                r, b - br.fY * (1f - k),
-                r - br.fX * (1f - k), b,
-                r - br.fX, b,
-            )
+            // Bottom-right corner: control (r, b), end (r - br.fX, b).
+            conicTo(r, b, r - br.fX, b, w)
             lineTo(l + bl.fX, b)
-            // Bottom-left corner: (l + bl.fX, b) → (l, b - bl.fY).
-            cubicTo(
-                l + bl.fX * (1f - k), b,
-                l, b - bl.fY * (1f - k),
-                l, b - bl.fY,
-            )
+            // Bottom-left corner: control (l, b), end (l, b - bl.fY).
+            conicTo(l, b, l, b - bl.fY, w)
             lineTo(l, t + tl.fY)
-            // Top-left corner: (l, t + tl.fY) → (l + tl.fX, t).
-            cubicTo(
-                l, t + tl.fY * (1f - k),
-                l + tl.fX * (1f - k), t,
-                l + tl.fX, t,
-            )
+            // Top-left corner: control (l, t), end (l + tl.fX, t).
+            conicTo(l, t, l + tl.fX, t, w)
         } else {
             moveTo(l + tl.fX, t)
-            // Top-left corner reversed: (l + tl.fX, t) → (l, t + tl.fY).
-            cubicTo(
-                l + tl.fX * (1f - k), t,
-                l, t + tl.fY * (1f - k),
-                l, t + tl.fY,
-            )
+            // Top-left corner reversed: control (l, t), end (l, t + tl.fY).
+            conicTo(l, t, l, t + tl.fY, w)
             lineTo(l, b - bl.fY)
-            // Bottom-left corner reversed: (l, b - bl.fY) → (l + bl.fX, b).
-            cubicTo(
-                l, b - bl.fY * (1f - k),
-                l + bl.fX * (1f - k), b,
-                l + bl.fX, b,
-            )
+            // Bottom-left corner reversed: control (l, b), end (l + bl.fX, b).
+            conicTo(l, b, l + bl.fX, b, w)
             lineTo(r - br.fX, b)
-            // Bottom-right corner reversed: (r - br.fX, b) → (r, b - br.fY).
-            cubicTo(
-                r - br.fX * (1f - k), b,
-                r, b - br.fY * (1f - k),
-                r, b - br.fY,
-            )
+            // Bottom-right corner reversed: control (r, b), end (r, b - br.fY).
+            conicTo(r, b, r, b - br.fY, w)
             lineTo(r, t + tr.fY)
-            // Top-right corner reversed: (r, t + tr.fY) → (r - tr.fX, t).
-            cubicTo(
-                r, t + tr.fY * (1f - k),
-                r - tr.fX * (1f - k), t,
-                r - tr.fX, t,
-            )
+            // Top-right corner reversed: control (r, t), end (r - tr.fX, t).
+            conicTo(r, t, r - tr.fX, t, w)
         }
         close()
     }
@@ -551,6 +509,17 @@ public class SkPathBuilder public constructor() {
         oval: SkRect, startAngleDeg: SkScalar, sweepAngleDeg: SkScalar,
         forceMoveTo: Boolean,
     ) {
+        // Conic decomposition of an elliptic arc — Skia parity.
+        //
+        // Each ≤ 90° sub-arc of an ellipse is exactly representable as a single
+        // rational conic Bézier (`SkConic::BuildUnitArc`). For sub-angle θ on
+        // the unit circle:
+        //   - start = (cos t1, sin t1), end = (cos t2, sin t2)
+        //   - control = (cos m / cos(θ/2), sin m / cos(θ/2))   m = (t1+t2)/2
+        //   - weight  = cos(θ/2)
+        // Scale x by rx, y by ry to lift to the source ellipse and translate
+        // by (cx, cy). With nSegs = ceil(|sweep| / 90°), each segment's
+        // half-angle is ≤ 45°, so cos(θ/2) ≥ √2/2 — always positive.
         val cx = (oval.left + oval.right) * 0.5f
         val cy = (oval.top + oval.bottom) * 0.5f
         val rx = (oval.right - oval.left) * 0.5f
@@ -559,7 +528,10 @@ public class SkPathBuilder public constructor() {
         val sweepRad = sweepAngleDeg.toDouble() * PI / 180.0
         val nSegs = max(1, ceil(abs(sweepRad) / (PI / 2.0)).toInt())
         val segAngle = sweepRad / nSegs
-        val k = (4.0 / 3.0) * tan(segAngle / 4.0)
+        val halfAngle = segAngle * 0.5
+        val cosHalf = cos(halfAngle)
+        val invCosHalf = 1.0 / cosHalf
+        val weight = cosHalf.toFloat()
 
         val firstX = (cx + rx * cos(startRad)).toFloat()
         val firstY = (cy + ry * sin(startRad)).toFloat()
@@ -575,17 +547,13 @@ public class SkPathBuilder public constructor() {
 
         var theta = startRad
         for (i in 0 until nSegs) {
-            val t1 = theta
             val t2 = theta + segAngle
-            val cosT1 = cos(t1); val sinT1 = sin(t1)
-            val cosT2 = cos(t2); val sinT2 = sin(t2)
-            val p1x = cx + rx * (cosT1 - k * sinT1).toFloat()
-            val p1y = cy + ry * (sinT1 + k * cosT1).toFloat()
-            val p2x = cx + rx * (cosT2 + k * sinT2).toFloat()
-            val p2y = cy + ry * (sinT2 - k * cosT2).toFloat()
-            val p3x = cx + rx * cosT2.toFloat()
-            val p3y = cy + ry * sinT2.toFloat()
-            cubicTo(p1x, p1y, p2x, p2y, p3x, p3y)
+            val mid = theta + halfAngle
+            val ctrlX = (cx + rx * (cos(mid) * invCosHalf)).toFloat()
+            val ctrlY = (cy + ry * (sin(mid) * invCosHalf)).toFloat()
+            val endX = (cx + rx * cos(t2)).toFloat()
+            val endY = (cy + ry * sin(t2)).toFloat()
+            conicTo(ctrlX, ctrlY, endX, endY, weight)
             theta = t2
         }
     }
@@ -593,6 +561,12 @@ public class SkPathBuilder public constructor() {
     private companion object {
         /** `(4/3) * (sqrt(2) - 1)` — Hugues' constant for 90° cubic-Bézier circle approximation. */
         const val OVAL_KAPPA: Float = 0.5522847498307933f
+        /**
+         * `√2/2` — conic weight for a 90° quarter-circle/ellipse.
+         * Matches Skia's `SK_ScalarRoot2Over2` (`include/core/SkScalar.h:23`),
+         * used by `SkPathRawShapes::Oval` / `RRect`.
+         */
+        const val OVAL_CONIC_WEIGHT: Float = 0.707106781f
         /** Sub-pixel tolerance for "current point already on the arc start" check in [emitArc]. */
         const val ARC_JOIN_EPS: Float = 1e-4f
     }

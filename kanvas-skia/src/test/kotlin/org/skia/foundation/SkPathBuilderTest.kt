@@ -131,33 +131,37 @@ class SkPathBuilderTest {
     }
 
     @Test
-    fun `addOval emits 4 cubic Bezier arcs with the kappa approximation`() {
+    fun `addOval emits 4 conic Bezier arcs with weight sqrt2 over 2 (Skia parity)`() {
         val p = SkPathBuilder().addOval(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
-        // 1 move + 4 cubic + 1 close.
+        // 1 move + 4 conic + 1 close — matches SkPathRawShapes::Oval verb stream.
         assertArrayEquals(
             arrayOf(
                 SkPath.Verb.kMove,
-                SkPath.Verb.kCubic, SkPath.Verb.kCubic, SkPath.Verb.kCubic, SkPath.Verb.kCubic,
+                SkPath.Verb.kConic, SkPath.Verb.kConic, SkPath.Verb.kConic, SkPath.Verb.kConic,
                 SkPath.Verb.kClose,
             ),
             p.verbs,
         )
-        // The contour begins at (cx + rx, cy) = (10, 5).
+        // The contour begins at (right, centerY) = (10, 5).
         assertEquals(10f, p.coords[0], 1e-4f)
         assertEquals(5f, p.coords[1], 1e-4f)
+        // 4 conic weights, all √2/2.
+        assertEquals(4, p.conicWeights.size)
+        val expectedWeight = kotlin.math.sqrt(2.0).toFloat() * 0.5f
+        for (w in p.conicWeights) assertEquals(expectedWeight, w, 1e-4f)
     }
 
     @Test
     fun `addCircle delegates to addOval centred on the given point`() {
         val p = SkPathBuilder().addCircle(5f, 5f, 5f).detach()
-        // First point of contour at (cx + r, cy) = (10, 5).
+        // First point of contour at (right, centerY) = (10, 5).
         assertEquals(10f, p.coords[0], 1e-4f)
         assertEquals(5f, p.coords[1], 1e-4f)
-        assertEquals(SkPath.Verb.kCubic, p.verbs[1])
+        assertEquals(SkPath.Verb.kConic, p.verbs[1])
     }
 
     @Test
-    fun `addArc emits cubic segments matching the start point on the ellipse`() {
+    fun `addArc emits conic segments matching the start point on the ellipse (Skia parity)`() {
         val rect = SkRect.MakeLTRB(0f, 0f, 100f, 100f)
         val startDeg = 30f
         val sweepDeg = 60f
@@ -171,21 +175,27 @@ class SkPathBuilderTest {
         val expectedY = (cy + ry * sin(theta)).toFloat()
         assertEquals(expectedX, p.coords[0], 1e-3f)
         assertEquals(expectedY, p.coords[1], 1e-3f)
-        // 60° sweep fits in a single ≤90° segment → exactly one cubic.
-        assertEquals(SkPath.Verb.kCubic, p.verbs[1])
+        // 60° sweep fits in a single ≤90° segment → exactly one conic.
+        assertEquals(SkPath.Verb.kConic, p.verbs[1])
         assertEquals(2, p.verbs.size)
+        // Weight is cos(sweep/2) = cos(30°) ≈ 0.866.
+        assertEquals(1, p.conicWeights.size)
+        assertEquals(kotlin.math.cos(PI / 6.0).toFloat(), p.conicWeights[0], 1e-4f)
     }
 
     @Test
-    fun `addArc splits sweeps wider than 90 degrees into multiple cubics`() {
-        // 270° sweep → ceil(270/90) = 3 cubics.
+    fun `addArc splits sweeps wider than 90 degrees into multiple conics`() {
+        // 270° sweep → ceil(270/90) = 3 conics.
         val p = SkPathBuilder()
             .addArc(SkRect.MakeLTRB(0f, 0f, 100f, 100f), 0f, 270f)
             .detach()
         assertEquals(SkPath.Verb.kMove, p.verbs[0])
-        // 1 move + 3 cubic.
+        // 1 move + 3 conic.
         assertEquals(4, p.verbs.size)
-        assertTrue(p.verbs.drop(1).all { it == SkPath.Verb.kCubic })
+        assertTrue(p.verbs.drop(1).all { it == SkPath.Verb.kConic })
+        // Each segment is 90° → weight = cos(45°) = √2/2.
+        val expectedWeight = kotlin.math.sqrt(2.0).toFloat() * 0.5f
+        for (w in p.conicWeights) assertEquals(expectedWeight, w, 1e-4f)
     }
 
     @Test
@@ -194,10 +204,10 @@ class SkPathBuilderTest {
             .moveTo(0f, 0f)
             .arcTo(SkRect.MakeLTRB(0f, 0f, 100f, 100f), 0f, 90f, forceMoveTo = false)
             .detach()
-        // Sequence: move, line (join to (100, 50)), cubic.
+        // Sequence: move, line (join to (100, 50)), conic.
         assertEquals(SkPath.Verb.kMove, p.verbs[0])
         assertEquals(SkPath.Verb.kLine, p.verbs[1])
-        assertEquals(SkPath.Verb.kCubic, p.verbs[2])
+        assertEquals(SkPath.Verb.kConic, p.verbs[2])
     }
 
     @Test
@@ -314,26 +324,29 @@ class SkPathBuilderTest {
         //                + line-to-T0(2) + cubic(6) → implicit move at idx 6..7.
         assertEquals(20f, p.coords[6], 1e-4f)
         assertEquals(20f, p.coords[7], 1e-4f)
-        // Arc must actually emit downstream geometry (line + cubic), not
-        // bail out as the legacy port did. Tangent arcTo: 1 lineTo + 1 cubic.
+        // Arc must actually emit downstream geometry (line + conic), not
+        // bail out as the legacy port did. Tangent arcTo (Skia parity):
+        // exactly 1 lineTo + 1 conicTo.
         assertEquals(SkPath.Verb.kLine, p.verbs[5])
-        assertEquals(SkPath.Verb.kCubic, p.verbs[6])
+        assertEquals(SkPath.Verb.kConic, p.verbs[6])
     }
 
     @Test
-    fun `cubic addOval approximates a circle within sub-pixel error`() {
-        // Sample 64 points along the cubic-approximation of a unit circle and
-        // verify each lies within the kappa-bound of 0.027 % of the radius.
+    fun `conic addOval lands cardinal points exactly on the ellipse`() {
+        // Verb stream: move(rx, 0), conic(.., 0, ry), conic(.., -rx, 0), …
+        // Coords: idx 0..1 = move (rx, 0); first conic stores (control, end) =
+        //   ((rx, ry), (0, ry)) → end at idx 4..5; second conic ends at idx 8..9.
         val rx = 100f; val ry = 100f
         val rect = SkRect.MakeLTRB(-rx, -ry, rx, ry)
         val p = SkPathBuilder().addOval(rect).detach()
-        // The cubic Béziers' endpoints land exactly on the analytical ellipse;
-        // check the first two end points of cubic verbs (the cardinal points).
-        // Verb stream: move(rx, 0), cubic(.., .., 0, ry), cubic(.., .., -rx, 0), ...
-        // Coords: idx 0..1 = move (rx, 0); cubic 1 ends at idx 6..7 = (0, ry).
+        // Move at (rx, 0).
         assertEquals(rx, p.coords[0], 1e-4f)
         assertEquals(0f, p.coords[1], 1e-4f)
-        assertEquals(0f, p.coords[6], 1e-4f)
-        assertEquals(ry, p.coords[7], 1e-4f)
+        // First conic ends at (0, ry).
+        assertEquals(0f, p.coords[4], 1e-4f)
+        assertEquals(ry, p.coords[5], 1e-4f)
+        // Second conic ends at (-rx, 0).
+        assertEquals(-rx, p.coords[8], 1e-4f)
+        assertEquals(0f, p.coords[9], 1e-4f)
     }
 }
