@@ -249,6 +249,78 @@ class SkPathBuilderTest {
     }
 
     @Test
+    fun `consecutive moveTo collapse into a single move verb (Skia parity)`() {
+        // Mirrors SkPathBuilder.cpp:136-156 — second moveTo replaces the
+        // previous one rather than appending another kMove.
+        val p = SkPathBuilder()
+            .moveTo(1f, 2f)
+            .moveTo(10f, 20f)
+            .lineTo(30f, 40f)
+            .detach()
+        assertArrayEquals(
+            arrayOf(SkPath.Verb.kMove, SkPath.Verb.kLine),
+            p.verbs,
+        )
+        // The single retained move must carry the *last* point.
+        assertArrayEquals(floatArrayOf(10f, 20f, 30f, 40f), p.coords)
+    }
+
+    @Test
+    fun `lineTo after close repeats the last contour's start (Skia parity)`() {
+        // Mirrors SkPathBuilder.h:1011-1018 — ensureMove after a kClose
+        // emits an implicit moveTo to the *last* move point, not to (0, 0).
+        val p = SkPathBuilder()
+            .moveTo(10f, 10f)
+            .lineTo(20f, 10f)
+            .close()
+            .lineTo(30f, 30f)
+            .detach()
+        assertArrayEquals(
+            arrayOf(
+                SkPath.Verb.kMove, SkPath.Verb.kLine, SkPath.Verb.kClose,
+                SkPath.Verb.kMove, SkPath.Verb.kLine,
+            ),
+            p.verbs,
+        )
+        // Coords layout: [moveTo(10,10), lineTo(20,10), implicit moveTo, lineTo(30,30)]
+        //                = [10, 10, 20, 10, 10, 10, 30, 30] — 8 floats total.
+        // The implicit moveTo after close must land on (10, 10), the start
+        // of the just-closed contour.
+        assertEquals(10f, p.coords[4])
+        assertEquals(10f, p.coords[5])
+        assertEquals(30f, p.coords[6])
+        assertEquals(30f, p.coords[7])
+    }
+
+    @Test
+    fun `tangent arcTo after close repeats the last contour's start, then arcs`() {
+        // Regression mirror of `path_arcto_skbug_9077` GM (gm/pathfill.cpp).
+        // Sequence: moveTo, lineTo×3, close, arcTo(p1, p2, r) — the arcTo
+        // must be preceded by an implicit moveTo to (20, 20), not (0, 0).
+        val p = SkPathBuilder()
+            .moveTo(20f, 20f)
+            .lineTo(100f, 20f)
+            .lineTo(100f, 60f)
+            .close()
+            .arcTo(130f, 150f, 180f, 160f, 60f)
+            .detach()
+        // Expected verb prefix: kMove, kLine, kLine, kClose, kMove, ...
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.Verb.kClose, p.verbs[3])
+        assertEquals(SkPath.Verb.kMove, p.verbs[4])
+        // The implicit moveTo's point must equal the just-closed contour
+        // start (20, 20), not the arc's first tangent point.
+        // Coords layout: 1×move(2) + 2×line(2+2) + 0×close + implicit move(2)
+        //                + line-to-T0(2) + cubic(6) → implicit move at idx 6..7.
+        assertEquals(20f, p.coords[6], 1e-4f)
+        assertEquals(20f, p.coords[7], 1e-4f)
+        // Arc must actually emit downstream geometry (line + cubic), not
+        // bail out as the legacy port did. Tangent arcTo: 1 lineTo + 1 cubic.
+        assertEquals(SkPath.Verb.kLine, p.verbs[5])
+        assertEquals(SkPath.Verb.kCubic, p.verbs[6])
+    }
+
+    @Test
     fun `cubic addOval approximates a circle within sub-pixel error`() {
         // Sample 64 points along the cubic-approximation of a unit circle and
         // verify each lies within the kappa-bound of 0.027 % of the radius.
