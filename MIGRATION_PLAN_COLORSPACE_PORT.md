@@ -271,9 +271,25 @@ Ajouté à [SkColorSpace.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkC
 - [x] TRCs disagree → null.
 - [x] CICP fast-path : `(kRec709, kIEC61966_2_1)` snap au sRGB singleton (preuve que CICP override fonctionne).
 
-### Étape F6 — Helpers manquants — différé
+### Étape F6 — Helpers manquants — ✅
 
-`skcms_sRGB_profile()` / `skcms_ApproximatelyEqualProfiles` / `skcms_TRCs_AreApproximateInverse` — non requis par la chaîne de F5 ni par F7. À porter le jour où un profil ICC bizarre nécessite ces fallbacks.
+[SkcmsKnownProfiles.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsKnownProfiles.kt) ajoute :
+
+- [x] `skcmsSrgbProfile` — singleton ICC profile sRGB, 3 TRCs paramétriques `kSRGB` + matrice `kSRGB-gamut`. Mirror skcms.cc:1511-1607.
+- [x] `skcmsXyzd50Profile` — singleton identité, 3 TRCs `kLinear` + matrice IDENTITY. Mirror skcms.cc:1609-1705.
+- [x] `skcmsSrgbTransferFunction()` — accesseur trivial retournant `SkNamedTransferFn.kSRGB`. Mirror skcms.cc:1707-1709.
+- [x] `skcmsApproximatelyEqualProfiles(a, b)` — variante structurelle (au lieu du `skcms_Transform` byte-comparison upstream, qui requiert le pipeline complet — territoire Phase K). Couvre : identité (`a === b`), TRCs paramétriques égales `transferFnAlmostEqual` (tol 0.001), Tables byte-égales, gamut `xyzAlmostEqual` (tol 0.01), CMYK ≠ RGB, faux pour cross-type Parametric vs Table.
+
+`skcmsTRCsAreApproximateInverse` était déjà livré en F3 (placement réajusté).
+
+**Tests** [SkcmsKnownProfilesTest](kanvas-skia/src/test/kotlin/org/skia/skcms/SkcmsKnownProfilesTest.kt) — 14 :
+- [x] Sanity sur la shape de `skcmsSrgbProfile` (3 TRCs identiques `kSRGB`, matrice `kSRGB-gamut`, flags) et `skcmsXyzd50Profile` (linéaire + identity).
+- [x] **Round-trip via `SkColorSpace.make`** : `make(skcmsSrgbProfile)` snap au singleton (`assertSame(makeSRGB(), ...)` — preuve que F2/F5/F6 + Phase B s'enchaînent correctement).
+- [x] `skcmsSrgbTransferFunction() === kSRGB`.
+- [x] **Approximate-equal positifs** : profile === lui-même, profile rebuilt avec mêmes TF/gamut, profile avec bruit sub-tolérance (TF perturbé de 0.0005).
+- [x] **Approximate-equal négatifs** : gamuts différents (sRGB vs Rec.2020), TFs différents (sRGB vs Rec.2020), Parametric vs Table cross-type, CMYK vs RGB, profile sans TRC, profile sans toXYZD50.
+
+**Vérification globale** : `./gradlew :kanvas-skia:test` → 579 tests verts, 0 régression sur les 54 GMs.
 
 ### Étape F7 — Wiring `TestUtils.loadReferenceBitmap` — ✅
 
