@@ -7,7 +7,7 @@ import org.skia.foundation.SkColorGetR
 import org.skia.foundation.SkColorSetARGB
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkTypeface
-import org.skia.foundation.awt.AwtTypeface
+import org.skia.foundation.awt.LiberationFontMgr
 import org.skia.math.SkScalar
 import kotlin.math.floor
 
@@ -100,16 +100,28 @@ public object ToolUtils {
         floor(x + 0.5f).toInt()
 
     /**
-     * Mirrors `ToolUtils::DefaultPortableTypeface()` (`tools/fonts/FontToolUtils.cpp`).
+     * Mirrors `ToolUtils::DefaultPortableTypeface()`
+     * (`tools/fonts/FontToolUtils.cpp`).
      *
-     * Upstream returns a typeface backed by the bundled `Roboto-Regular.ttf`
-     * via `MakePortableFontMgr`. We don't ship those TTFs yet (planned for
-     * T4 — see `MIGRATION_PLAN_TEXT.md`); for T1-T3 this falls back to the
-     * platform default sans-serif accessed through `java.awt.Font`. Glyph
-     * shapes will therefore differ from upstream but layout-wise (advance
-     * widths, line spacing) the result is internally consistent.
+     * Upstream returns the typeface at index `gDefaultFontIndex = 4` in
+     * `tools/fonts/test_font_index.inc` — that's **Liberation Sans Regular**
+     * (the `.inc` was generated from the upstream Liberation TTF by
+     * `tools/fonts/create_test_font.cpp`).
+     *
+     * **T4 (option A — currently active)**: we ship the Liberation TTFs
+     * as classpath resources under `kanvas-skia/src/main/resources/fonts/
+     * liberation/` and load them through AWT (`Font.createFont(TRUETYPE_FONT,
+     * …)`), routed via [LiberationFontMgr]. Glyph outlines are identical
+     * to upstream; pixel-level fidelity still drifts on AA edges because
+     * AWT's scaler/hinting differs from FreeType (~1-2 ulp).
+     *
+     * **Tx future (option B — deferred)**: port the `test_font_*.inc` data
+     * to Kotlin and build an `SkTestTypeface` that iterates the embedded
+     * points/verbs directly, bypassing AWT for outline lookup. That would
+     * make outlines bit-exact upstream. Triggered by `bigtext`-family GMs.
+     * See `MIGRATION_PLAN_TEXT.md` §T4 for details.
      */
-    public fun DefaultPortableTypeface(): SkTypeface = AwtTypeface.DEFAULT
+    public fun DefaultPortableTypeface(): SkTypeface = LiberationFontMgr.getDefault()
 
     /**
      * Mirrors `ToolUtils::DefaultPortableFont()`. Convenience wrapper —
