@@ -239,6 +239,18 @@ Chacun a un seuil floor adapté à son score (ratchet ≥ score - 1%). Tous : `t
 - [x] Aucune régression sur les Phase 3a-3f tests ni sur les 13 GMs cumulés.
 - [x] Pas de nouveau GM port — débloqué pour 3h+ (DrawCaps, ArcToGM partiel, CubicPathGM partiel).
 
+### Phase 3h — `drawLine` + TeenyStrokesGM ✅
+
+**But** : exposer `SkCanvas.drawLine` (single-segment stroked path) et porter `TeenyStrokesGM` — cinq paires de lignes sous des CTM scales massifs (20000× → 500000×) appariés avec des stroke widths microscopiques. Le résultat **device-space** est invariant (5 px de stroke partout) — la GM stresse la robustesse numérique du stroker quand il calcule la géométrie offset en user space puis laisse le scanline rasterizer la transformer.
+
+- [x] **`SkCanvas.drawLine(x0, y0, x1, y1, paint)`** : émet un path 2-points `moveTo` + `lineTo` et délègue à `drawPath`. Sous `kStroke_Style`, le stroker produit deux caps mais aucun join (segment unique).
+- [x] **TeenyStrokesGM** (port de `gm/strokes.cpp:TeenyStrokesGM`) : 400×800, scales `5e-5` à `2e-6`. `99.39%` similarité @ tolerance=1.
+
+#### Vérification Phase 3h
+- [x] `TeenyStrokesGM` ≥ 95% (rendu obtenu : 99.39%).
+- [x] Aucune régression sur les 13 GMs cumulés (toujours verts).
+- [x] **Pass count cumulé : 14 GM.**
+
 ---
 
 ## Phase 4 — Cercles, ovals, RRects : `CircleSizesGM`, `RRectGM`, `RoundRectGM`, `DRRectGM`
@@ -363,6 +375,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3e    | 13       | Stroke-on-path GM ports — `ConvexPathsGM` + `ArcOfZorroGM` ✅ ; ArcToGM/CubicPathGM TODO | 🔄 |
 | 3f    | 13       | Path API extras (relative verbs, tangent arcTo, computeBounds, makeOffset) | ✅ |
 | 3g    | 13       | Stroker caps & joins étendus (kSquare/kRound caps, kBevel/kRound joins) | ✅ |
+| 3h    | 14       | `SkCanvas.drawLine` + `TeenyStrokesGM` (stroker sous CTM scales extrêmes) | ✅ |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
