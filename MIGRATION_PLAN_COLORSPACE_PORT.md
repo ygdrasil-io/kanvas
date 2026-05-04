@@ -222,9 +222,28 @@ Créés sous [kanvas-skia/src/main/kotlin/org/skia/skcms/](kanvas-skia/src/main/
 - [x] `toXYZD50` matche `kRec2020-gamut` au xyzAlmostEqual (tol 0.01).
 - [x] Erreurs : truncated buffer, wrong magic, illuminant non-D50, version > 4 → null.
 
-### Étape F3 — Curve LUT support — différé
+### Étape F3 — Curve LUT support — ✅
 
-Les PNGs DM utilisent tous des courbes paramétriques (`'para'`), pas des tables (`'curv'` avec ≥2 entries). Le SkcmsCurve.Table est défini en F1 mais `evalCurve` ne sera implémenté qu'au premier GM qui consomme un profil avec table LUT.
+Activée pour compléter la surface skcms. Les PNGs DM utilisent uniquement des courbes paramétriques, donc cette phase n'a pas de GM consommateur immédiat ; mais sans elle, tout profil ICC avec une table TRC reste inexploitable côté `SkColorSpace.make(profile)`.
+
+- [x] [evalCurve(curve, x)](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt) — dispatch sealed-class. `Parametric` → `skcmsTransferFunctionEval`. `Table` → clamp x à `[0,1]`, lerp entre les entrées `lo`/`hi` ; lecture big-endian uint16 par byte-swap manuel pour `table16`. Mirror `eval_curve` (skcms.cc:302-326).
+- [x] [minus1Ulp](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt) — décrément bit-à-bit via `Float.fromBits(x.toRawBits() - 1)` (mirror skcms.cc:113-119). Garantit que `(int)minus_1_ulp(ix + 1) == int(ix)` quand `ix` est exactement un entier — point critique pour ne pas déborder l'index aux frontières.
+- [x] [skcmsMaxRoundtripError(curve, invTf)](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt) — grid `max(table_entries, 256)`, mirror skcms.cc:328-338.
+- [x] [skcmsAreApproximateInverses(curve, invTf)](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt) — seuil `1/512`, mirror skcms.cc:340-342.
+- [x] [skcmsTRCsAreApproximateInverse(profile, invTf)](kanvas-skia/src/main/kotlin/org/skia/skcms/Skcms.kt) — vérifie les 3 TRCs R/G/B ; retourne false si le profil n'a pas de TRC. Mirror skcms.cc:1799-1808.
+
+**Tests** [SkcmsCurveLutTest](kanvas-skia/src/test/kotlin/org/skia/skcms/SkcmsCurveLutTest.kt) — 15 :
+- [x] **`minus1Ulp`** : `1.0 → 0.99999994`, frontière `ix=3.0 → lo=hi=3`.
+- [x] **Parametric eval** : délégation à `skcmsTransferFunctionEval` (équivalence sur `kSRGB(0.5)`), identité sur `kLinear` pour 5 valeurs.
+- [x] **Table8 ground truth** : 7 valeurs (`0/0.10/0.25/0.40/0.50/0.75/1.0`) sur `[0, 64, 128, 255]` matchent le driver C++ (`tools/curve_lut_test.cpp`) à 1e-6.
+- [x] **Table8 clamping** : `eval(-0.5) = 0` et `eval(1.5) = 1`.
+- [x] **Table16 big-endian** : 6 valeurs sur `[0x0000, 0x4000, 0x8000, 0xFFFF]` (`0.25 → 0.1875`, `1/3 → 0.25`, etc.) matchent le driver à 1e-6.
+- [x] **Byte-swap discrimination** : `Table16([0x00, 0x01, 0xFF, 0xFF])` retourne `1/65535 ≈ 1.5e-5` (lecture LE donnerait `256/65535 ≈ 0.004` — diffère de 256x).
+- [x] **AreApproximateInverses** : sRGB curve vs `invert(kSRGB)` ✓ ; Linear self-inverse ✓ ; sRGB curve vs `invert(k2Dot2)` ✗.
+- [x] **256-entry table8 round-trip** : encoder sRGB sampled puis décodage par `kSRGB` reste sous `1/64` (quantization 8-bit), strictement > 0.
+- [x] **TRCs check** : false sans TRC, true sur 3× sRGB parametric, false si une TRC diverge (k2Dot2 mélangée).
+
+**Vérification globale** : `./gradlew :kanvas-skia:test` → 565 tests verts, 0 régression sur les 54 GMs.
 
 ### Étape F4 — A2B/B2A LUT — différé
 

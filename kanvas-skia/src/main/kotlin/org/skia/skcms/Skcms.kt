@@ -285,6 +285,112 @@ public fun skcmsTransferFunctionInvert(src: SkcmsTransferFunction): SkcmsTransfe
 }
 
 /**
+ * Float bit-decrement (one ULP toward zero on positive inputs). Mirror
+ * of `minus_1_ulp` in `skcms.cc:113-119`. Used by [evalCurve] to compute
+ * the `hi` table index for the lerp in a way that matches Skia exactly.
+ */
+internal fun minus1Ulp(x: Float): Float =
+    Float.fromBits(x.toRawBits() - 1)
+
+/**
+ * Evaluate an [SkcmsCurve] at `x`. Mirror of `eval_curve` in
+ * `skcms.cc:302-326`.
+ *
+ * - [SkcmsCurve.Parametric] delegates to [skcmsTransferFunctionEval].
+ * - [SkcmsCurve.Table] linearly interpolates between adjacent table
+ *   entries. `table8` entries are read directly; `table16` entries are
+ *   stored big-endian in ICC profiles, so we byte-swap each read pair.
+ *   The hi index uses the `minus_1_ulp(ix + 1)` trick so the floor of a
+ *   value that's "exactly an integer + epsilon" rounds the same way Skia
+ *   rounds it, even at the table boundaries.
+ *
+ * Phase F3 of `MIGRATION_PLAN_COLORSPACE_PORT.md`. Activates the
+ * `SkcmsCurve.Table` evaluation path that Phase F1 stubbed out.
+ */
+public fun evalCurve(curve: SkcmsCurve, x: Float): Float = when (curve) {
+    is SkcmsCurve.Parametric -> skcmsTransferFunctionEval(curve.parametric, x)
+    is SkcmsCurve.Table -> {
+        val n = curve.tableEntries
+        val clamped = if (x < 0f) 0f else if (x > 1f) 1f else x
+        val ix = clamped * (n - 1).toFloat()
+        val lo = ix.toInt()
+        val hi = (minus1Ulp(ix + 1f)).toInt()
+        val t = ix - lo.toFloat()
+
+        val l: Float
+        val h: Float
+        val table8 = curve.table8
+        if (table8 != null) {
+            l = (table8[lo].toInt() and 0xFF) * (1f / 255f)
+            h = (table8[hi].toInt() and 0xFF) * (1f / 255f)
+        } else {
+            // table16 is big-endian, 2 bytes per entry. Byte-swap each
+            // pair to recover the uint16, then normalize by 65535.
+            val t16 = curve.table16!!
+            val v0 = ((t16[2 * lo].toInt() and 0xFF) shl 8) or
+                (t16[2 * lo + 1].toInt() and 0xFF)
+            val v1 = ((t16[2 * hi].toInt() and 0xFF) shl 8) or
+                (t16[2 * hi + 1].toInt() and 0xFF)
+            l = v0 * (1f / 65535f)
+            h = v1 * (1f / 65535f)
+        }
+        l + (h - l) * t
+    }
+}
+
+/**
+ * Maximum round-trip error of `inv_tf(curve(x))` against `x` over an
+ * evenly-spaced grid. Mirror of `skcms_MaxRoundtripError` in
+ * `skcms.cc:328-338`. The grid size is `max(table_entries, 256)` for
+ * Table curves, and 256 for parametric — large enough that a sampled
+ * inverse mismatch shows up.
+ */
+public fun skcmsMaxRoundtripError(curve: SkcmsCurve, invTf: SkcmsTransferFunction): Float {
+    val tableEntries = curve.tableEntries
+    val n = if (tableEntries > 256) tableEntries else 256
+    val dx = 1f / (n - 1).toFloat()
+    var err = 0f
+    for (i in 0 until n) {
+        val x = i.toFloat() * dx
+        val y = evalCurve(curve, x)
+        val backX = skcmsTransferFunctionEval(invTf, y)
+        val diff = kotlin.math.abs(x - backX)
+        if (diff > err) err = diff
+    }
+    return err
+}
+
+/**
+ * Returns true when `inv_tf` is an approximate inverse of `curve`,
+ * meaning the round-trip error stays below `1/512`. Mirror of
+ * `skcms_AreApproximateInverses` in `skcms.cc:340-342`. Used by ICC
+ * profile heuristics to decide whether a parametric inverse can stand
+ * in for a sampled LUT.
+ */
+public fun skcmsAreApproximateInverses(
+    curve: SkcmsCurve,
+    invTf: SkcmsTransferFunction,
+): Boolean = skcmsMaxRoundtripError(curve, invTf) < (1f / 512f)
+
+/**
+ * Convenience for the per-channel inverse check on R/G/B TRCs of an
+ * ICC profile. Mirror of `skcms_TRCs_AreApproximateInverse` in
+ * `skcms.cc:1799-1808`. Returns false for profiles without a TRC tag.
+ */
+public fun skcmsTRCsAreApproximateInverse(
+    profile: SkcmsICCProfile,
+    invTf: SkcmsTransferFunction,
+): Boolean {
+    if (!profile.hasTrc) return false
+    val r = profile.trc[0] ?: return false
+    val g = profile.trc[1] ?: return false
+    val b = profile.trc[2] ?: return false
+    return skcmsAreApproximateInverses(r, invTf) &&
+        skcmsAreApproximateInverses(g, invTf) &&
+        skcmsAreApproximateInverses(b, invTf)
+}
+
+/**
  * Concatenate two 3x3 matrices: `m = a * b`. Mirrors `skcms_Matrix3x3_concat`
  * upstream (row-major, naive triple loop, float precision).
  */
