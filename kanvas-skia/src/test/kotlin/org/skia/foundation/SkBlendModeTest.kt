@@ -414,12 +414,128 @@ class SkBlendModeTest {
         assertARGB(argb(127, 128, 0, 128), out, tolerance = 2, label = "kXor 50%×50%")
     }
 
+    // ====================================================================
+    // Phase 6 separable (simple): kMultiply, kDarken, kLighten,
+    // kDifference, kExclusion. Formulas operate in premul-float; tests
+    // use opaque-on-opaque + at least one fractional-alpha case per mode.
+    // ====================================================================
+
+    @Test
+    fun `kMultiply opaque white acts as identity`() {
+        // Premul: (1-1)*d + (1-1)*1 + 1*d = d. Just the dst RGB.
+        val out = blend(SK_ColorWHITE, SK_ColorBLUE, SkBlendMode.kMultiply)
+        assertARGB(SK_ColorBLUE, out, tolerance = 1, label = "kMultiply white over blue")
+    }
+
+    @Test
+    fun `kMultiply opaque black yields zero RGB`() {
+        // Premul: (1-1)*d + (1-1)*0 + 0*d = 0 — black RGB, alpha = 1.
+        val out = blend(SK_ColorBLACK, SK_ColorBLUE, SkBlendMode.kMultiply)
+        assertARGB(SK_ColorBLACK, out, tolerance = 1, label = "kMultiply black over blue")
+    }
+
+    @Test
+    fun `kMultiply red times green is dark green-red`() {
+        // sc = (1, 0, 0) premul ; dc = (0, 1, 0) premul. With sa=da=1:
+        // rc.r = 0 + 0 + 1*0 = 0
+        // rc.g = 0 + 0 + 0*1 = 0
+        // rc.b = 0 — all zero. Result is opaque black.
+        val out = blend(SK_ColorRED, SK_ColorGREEN, SkBlendMode.kMultiply)
+        assertARGB(SK_ColorBLACK, out, tolerance = 1, label = "kMultiply red×green")
+    }
+
+    @Test
+    fun `kDarken opaque white preserves dst`() {
+        // sc=1, dc=d. Premul: rc = 1 + d - max(1*1, d*1) = 1 + d - 1 = d.
+        val out = blend(SK_ColorWHITE, SK_ColorBLUE, SkBlendMode.kDarken)
+        assertARGB(SK_ColorBLUE, out, tolerance = 1, label = "kDarken white over blue")
+    }
+
+    @Test
+    fun `kDarken opaque black returns black`() {
+        // sc=0, dc=d. rc = 0 + d - max(0, d*1) = 0. Black RGB.
+        val out = blend(SK_ColorBLACK, SK_ColorBLUE, SkBlendMode.kDarken)
+        assertARGB(SK_ColorBLACK, out, tolerance = 1, label = "kDarken black over blue")
+    }
+
+    @Test
+    fun `kDarken commutative on opaque inputs`() {
+        // Darken should be symmetric in src/dst when both are opaque.
+        val a = argb(255, 200, 50, 100)
+        val b = argb(255, 80, 200, 30)
+        assertEquals(blend(b, a, SkBlendMode.kDarken), blend(a, b, SkBlendMode.kDarken))
+    }
+
+    @Test
+    fun `kLighten opaque white returns white`() {
+        // sc=1, dc=d. rc = 1 + d - min(1*1, d*1) = 1 + d - d = 1.
+        val out = blend(SK_ColorWHITE, SK_ColorBLUE, SkBlendMode.kLighten)
+        assertARGB(SK_ColorWHITE, out, tolerance = 1, label = "kLighten white over blue")
+    }
+
+    @Test
+    fun `kLighten opaque black preserves dst`() {
+        // sc=0, dc=d. rc = 0 + d - min(0, d) = d.
+        val out = blend(SK_ColorBLACK, SK_ColorBLUE, SkBlendMode.kLighten)
+        assertARGB(SK_ColorBLUE, out, tolerance = 1, label = "kLighten black over blue")
+    }
+
+    @Test
+    fun `kDifference of identical opaque colours is zero`() {
+        // rc = c + c - 2*min(c, c) = 2c - 2c = 0.
+        val out = blend(SK_ColorRED, SK_ColorRED, SkBlendMode.kDifference)
+        assertARGB(SK_ColorBLACK, out, tolerance = 1, label = "kDifference red on red")
+    }
+
+    @Test
+    fun `kDifference opaque black preserves dst`() {
+        // sc=0, rc = 0 + d - 2*min(0, d) = d.
+        val out = blend(SK_ColorBLACK, SK_ColorBLUE, SkBlendMode.kDifference)
+        assertARGB(SK_ColorBLUE, out, tolerance = 1, label = "kDifference black over blue")
+    }
+
+    @Test
+    fun `kDifference white on blue inverts`() {
+        // sc=(1,1,1), dc=(0,0,1). rc = 1 + d - 2*min(1, d).
+        // min(1, 0) = 0, min(1, 1) = 1.
+        // r: 1 + 0 - 0 = 1; g: same = 1; b: 1 + 1 - 2 = 0.
+        // Result: yellow (255, 255, 0).
+        val out = blend(SK_ColorWHITE, SK_ColorBLUE, SkBlendMode.kDifference)
+        assertARGB(argb(255, 255, 255, 0), out, tolerance = 1, label = "kDifference white on blue")
+    }
+
+    @Test
+    fun `kExclusion of identical opaque colours is darker`() {
+        // rc = c + c - 2*c*c. For c=1: rc = 2 - 2 = 0; for c=0.5: rc = 1 - 0.5 = 0.5.
+        // Red (1,0,0): r = 0; g = 0; b = 0 → black.
+        val out = blend(SK_ColorRED, SK_ColorRED, SkBlendMode.kExclusion)
+        assertARGB(SK_ColorBLACK, out, tolerance = 1, label = "kExclusion red on red")
+    }
+
+    @Test
+    fun `kExclusion white on blue gives yellow`() {
+        // sc=(1,1,1), dc=(0,0,1). rc = s + d - 2*s*d.
+        // r: 1 + 0 - 0 = 1; g: 1 + 0 - 0 = 1; b: 1 + 1 - 2 = 0.
+        val out = blend(SK_ColorWHITE, SK_ColorBLUE, SkBlendMode.kExclusion)
+        assertARGB(argb(255, 255, 255, 0), out, tolerance = 1, label = "kExclusion white on blue")
+    }
+
+    @Test
+    fun `kExclusion of mid grey on itself yields half grey`() {
+        // c = 0.5. rc = 0.5 + 0.5 - 2*0.5*0.5 = 1 - 0.5 = 0.5 → 128.
+        val mid = argb(255, 128, 128, 128)
+        val out = blend(mid, mid, SkBlendMode.kExclusion)
+        assertARGB(argb(255, 128, 128, 128), out, tolerance = 2, label = "kExclusion 50%×50%")
+    }
+
     // ---------- Unimplemented modes throw -------------------------------
 
     @Test
     fun `unimplemented mode throws NotImplementedError`() {
         try {
-            blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kDarken)
+            // kOverlay is the next simple-separable to land; until then
+            // it still throws.
+            blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kOverlay)
             assert(false) { "expected NotImplementedError" }
         } catch (_: NotImplementedError) {
             // expected
