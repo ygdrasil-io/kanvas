@@ -79,9 +79,17 @@ public data class SkMatrix(
         // Closed form: keeps numerical precision (no accumulating Identity multiplies).
         copy(tx = tx + sx * dx + kx * dy, ty = ty + ky * dx + sy * dy)
 
-    /** `M.preScale(kx_, ky_)` ≡ `M · Scale(kx_, ky_)`. */
-    public fun preScale(kx_: SkScalar, ky_: SkScalar): SkMatrix =
-        copy(sx = sx * kx_, kx = kx * ky_, ky = ky * kx_, sy = sy * ky_)
+    /** `M.preScale(sx_, sy_)` ≡ `M · Scale(sx_, sy_)`. */
+    public fun preScale(sx_: SkScalar, sy_: SkScalar): SkMatrix =
+        copy(sx = sx * sx_, kx = kx * sy_, ky = ky * sx_, sy = sy * sy_)
+
+    /**
+     * `M.preScale(sx_, sy_, px, py)` ≡ `M · S(sx_, sy_, px, py)` where the
+     * scale leaves the pivot `(px, py)` fixed: `T(px, py) · Scale · T(-px, -py)`.
+     * Mirrors Skia's [`SkMatrix::preScale(sx, sy, px, py)`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L319).
+     */
+    public fun preScale(sx_: SkScalar, sy_: SkScalar, px: SkScalar, py: SkScalar): SkMatrix =
+        if (sx_ == 1f && sy_ == 1f) this else preConcat(MakeScale(sx_, sy_, px, py))
 
     /**
      * `M.preRotate(deg)` ≡ `M · Rotate(deg)` around the origin.
@@ -93,9 +101,16 @@ public data class SkMatrix(
     public fun preRotate(deg: SkScalar, px: SkScalar, py: SkScalar): SkMatrix =
         preConcat(MakeRotate(deg, px, py))
 
-    /** `M.preSkew(sx_, sy_)` ≡ `M · Skew(sx_, sy_)`. */
-    public fun preSkew(sx_: SkScalar, sy_: SkScalar): SkMatrix =
-        preConcat(MakeSkew(sx_, sy_))
+    /** `M.preSkew(kx_, ky_)` ≡ `M · Skew(kx_, ky_)`. */
+    public fun preSkew(kx_: SkScalar, ky_: SkScalar): SkMatrix =
+        preConcat(MakeSkew(kx_, ky_))
+
+    /**
+     * `M.preSkew(kx_, ky_, px, py)` ≡ `M · Skew(kx_, ky_, px, py)` where the
+     * skew leaves the pivot `(px, py)` fixed.
+     */
+    public fun preSkew(kx_: SkScalar, ky_: SkScalar, px: SkScalar, py: SkScalar): SkMatrix =
+        preConcat(MakeSkew(kx_, ky_, px, py))
 
     /**
      * Maximum scale factor of the matrix in any direction — the largest
@@ -121,33 +136,36 @@ public data class SkMatrix(
 
     /**
      * Inverse of this affine matrix, or `null` if the linear part is
-     * singular (`det == 0`). Mirrors Skia's `SkMatrix::invert`.
+     * singular or near-singular. Mirrors Skia's `SkMatrix::invert` +
+     * `sk_inv_determinant` (src/core/SkMatrix.cpp).
      *
      * For the 2 × 2 linear part `[[sx, kx], [ky, sy]]` with determinant
      * `det = sx·sy − kx·ky`, the inverse linear part is
      * `(1/det) · [[sy, −kx], [−ky, sx]]`. The translate component of the
      * inverse is `−inverseLinear · (tx, ty)`.
      *
-     * The intermediate determinant is computed in double-precision so a
-     * matrix that's close to singular but not exactly zero (e.g. a near-
-     * degenerate gradient under heavy CTM scale) inverts cleanly without
-     * spurious `NaN`s.
+     * The determinant is computed in double-precision then compared to
+     * `SK_ScalarNearlyZero³` (≈ 1.46e-11). A matrix whose `|det|` falls
+     * below that returns `null` to avoid producing finite-but-garbage
+     * inverse values; this matches Skia's behaviour where a near-degenerate
+     * matrix is treated as singular.
      *
      * Used by [SkShader] implementations to map device-space pixel coords
      * back into the shader's local coordinate system (where the gradient
      * geometry was defined).
      */
     public fun invert(): SkMatrix? {
-        val det = sx.toDouble() * sy.toDouble() - kx.toDouble() * ky.toDouble()
-        if (det == 0.0) return null
+        val det = sx.toDouble() * sy - kx.toDouble() * ky
+        if (kotlin.math.abs(det.toFloat()) <= SK_DetNearlyZero) return null
         val invDet = 1.0 / det
         val isx = (sy.toDouble() * invDet).toFloat()
         val ikx = (-kx.toDouble() * invDet).toFloat()
         val iky = (-ky.toDouble() * invDet).toFloat()
         val isy = (sx.toDouble() * invDet).toFloat()
-        // Inverse translate: -inverseLinear · (tx, ty).
-        val itx = -(isx * tx + ikx * ty)
-        val ity = -(iky * tx + isy * ty)
+        // Inverse translate via dcross_dscale to keep double precision through the
+        // cross product (matches Skia's ComputeInv, src/core/SkMatrix.cpp).
+        val itx = dcrossDscale(kx, ty, sy, tx, invDet)
+        val ity = dcrossDscale(ky, tx, sx, ty, invDet)
         return SkMatrix(sx = isx, kx = ikx, tx = itx, ky = iky, sy = isy, ty = ity)
     }
 
@@ -163,19 +181,50 @@ public data class SkMatrix(
         public fun MakeScale(s: SkScalar): SkMatrix = MakeScale(s, s)
 
         /**
+         * Scale around a pivot `(px, py)`, equivalent to
+         * `T(px, py) · S(sx, sy) · T(-px, -py)`. Closed form mirrors
+         * Skia's [`SkMatrix::setScale(sx, sy, px, py)`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L300):
+         * `tx = px - sx*px`, `ty = py - sy*py`.
+         */
+        public fun MakeScale(sx: SkScalar, sy: SkScalar, px: SkScalar, py: SkScalar): SkMatrix =
+            if (sx == 1f && sy == 1f) Identity
+            else SkMatrix(sx = sx, kx = 0f, tx = px - sx * px, ky = 0f, sy = sy, ty = py - sy * py)
+
+        /**
          * Rotation matrix around the origin, angle in **degrees** (Skia's
          * convention). Positive angle is clockwise in screen-space (y-down).
          *
-         * Trigonometric values use `kotlin.math.{sin, cos}` which are the
-         * IEEE-754 single-precision approximations on the JVM — bit-equivalent
-         * to upstream's `sk_float_sin/cos` to within 1 ULP.
+         * `sin` and `cos` results within `SK_ScalarSinCosNearlyZero` of zero
+         * are snapped to exactly `0f` (mirrors Skia's
+         * `SkScalarSinSnapToZero` / `SkScalarCosSnapToZero`,
+         * include/core/SkScalar.h). This guarantees that `MakeRotate(90)`,
+         * `MakeRotate(180)`, etc. produce bit-exact axis-aligned matrices,
+         * so [isAxisAligned] returns `true` for cardinal angles instead of
+         * tripping over a `~6e-8` cosine residue.
          */
         public fun MakeRotate(deg: SkScalar): SkMatrix {
             val rad = deg.toDouble() * PI / 180.0
-            val s = sin(rad).toFloat()
-            val c = cos(rad).toFloat()
-            return SkMatrix(sx = c, kx = -s, ky = s, sy = c)
+            val s = snapToZero(sin(rad).toFloat())
+            val c = snapToZero(cos(rad).toFloat())
+            // Avoid `-0f` from `-s` when `s` was snapped to `+0f`: explicit
+            // negation that preserves the positive-zero representation.
+            val negS = if (s == 0f) 0f else -s
+            return SkMatrix(sx = c, kx = negS, ky = s, sy = c)
         }
+
+        /** Skia include/core/SkScalar.h: `1f / (1 << 16)` ≈ 1.526e-5. */
+        private const val SK_ScalarSinCosNearlyZero: Float = 1.0f / (1 shl 16)
+
+        private fun snapToZero(v: Float): Float =
+            if (kotlin.math.abs(v) <= SK_ScalarSinCosNearlyZero) 0f else v
+
+        /**
+         * Singular-determinant threshold for [invert]. Skia compares
+         * `|det|` (cast back to float) against `SK_ScalarNearlyZero³`
+         * with `SK_ScalarNearlyZero = 1f / (1 << 12)`. Cube ≈ 1.4552e-11.
+         * See `sk_inv_determinant` in src/core/SkMatrix.cpp.
+         */
+        private const val SK_DetNearlyZero: Float = 1.4551915e-11f
 
         /** Rotation around a pivot point. */
         public fun MakeRotate(deg: SkScalar, px: SkScalar, py: SkScalar): SkMatrix {
@@ -187,17 +236,40 @@ public data class SkMatrix(
             SkMatrix(kx = kx, ky = ky)
 
         /**
+         * Skew around a pivot `(px, py)`, equivalent to
+         * `T(px, py) · Skew(kx, ky) · T(-px, -py)`. Closed form mirrors
+         * Skia's [`SkMatrix::setSkew(sx, sy, px, py)`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L492):
+         * `tx = -kx*py`, `ty = -ky*px`.
+         */
+        public fun MakeSkew(kx: SkScalar, ky: SkScalar, px: SkScalar, py: SkScalar): SkMatrix =
+            SkMatrix(sx = 1f, kx = kx, tx = -kx * py, ky = ky, sy = 1f, ty = -ky * px)
+
+        /**
          * Matrix multiply: returns `a · b`. A point `p` is mapped first by
          * `b`, then by `a`: `(a · b).map(p) == a.map(b.map(p))`.
+         *
+         * Each `a*b + c*d` cross-term is promoted to `double` before the
+         * final round to `float`, mirroring Skia's `muladdmul`
+         * (src/core/SkMatrix.cpp), so a long chain of `concat` accumulates
+         * at most ~1 ulp of error per step instead of the ~2 ulp a naive
+         * float fma can produce on adversarial inputs.
          */
         public fun concat(a: SkMatrix, b: SkMatrix): SkMatrix = SkMatrix(
-            sx = a.sx * b.sx + a.kx * b.ky,
-            kx = a.sx * b.kx + a.kx * b.sy,
-            tx = a.sx * b.tx + a.kx * b.ty + a.tx,
-            ky = a.ky * b.sx + a.sy * b.ky,
-            sy = a.ky * b.kx + a.sy * b.sy,
-            ty = a.ky * b.tx + a.sy * b.ty + a.ty,
+            sx = muladdmul(a.sx, b.sx, a.kx, b.ky),
+            kx = muladdmul(a.sx, b.kx, a.kx, b.sy),
+            tx = muladdmul(a.sx, b.tx, a.kx, b.ty) + a.tx,
+            ky = muladdmul(a.ky, b.sx, a.sy, b.ky),
+            sy = muladdmul(a.ky, b.kx, a.sy, b.sy),
+            ty = muladdmul(a.ky, b.tx, a.sy, b.ty) + a.ty,
         )
+
+        /** Skia src/core/SkMatrix.cpp:603 — `(double)a*b + (double)c*d`, then round. */
+        private fun muladdmul(a: Float, b: Float, c: Float, d: Float): Float =
+            (a.toDouble() * b + c.toDouble() * d).toFloat()
+
+        /** Skia src/core/SkMatrix.cpp `ComputeInv` — `(a*b - c*d) * scale` in double. */
+        private fun dcrossDscale(a: Float, b: Float, c: Float, d: Float, scale: Double): Float =
+            ((a.toDouble() * b - c.toDouble() * d) * scale).toFloat()
 
         /**
          * `MakeAll(sx, kx, tx, ky, sy, ty)` — verbatim row-major construction
