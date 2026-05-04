@@ -219,6 +219,26 @@ Chacun a un seuil floor adapté à son score (ratchet ≥ score - 1%). Tous : `t
 - [x] 15 tests unitaires `SkPathExtrasTest` (5 verbs relatifs, 5 tangent arcTo dont cas dégénérés et géométrie centre/T0, 3 computeBounds, 3 makeOffset).
 - [x] Aucune régression sur les Phase 3a/b/c/d/e tests ni sur les 13 GMs cumulés.
 
+### Phase 3g — Stroker caps & joins étendus ✅
+
+**But** : compléter le stroker (Phase 3c, kButt + kMiter only) avec **kSquare_Cap, kRound_Cap, kBevel_Join, kRound_Join**. Indépendant des PR de GM ports — débloquera ArcToGM (kRound_Cap utilisé), CubicPathGM (toutes les permutations), DrawCaps, EmptyStrokeGM, etc.
+
+- [x] **`kBevel_Join`** : `emitJoin` dispatche sur `paint.strokeJoin`. Pour bevel, on émet directement les deux endpoints offset (skip miter). Le miter qui dépasse `miterLimit · halfW` retombe toujours en bevel (comportement Phase 3c préservé).
+- [x] **`kSquare_Cap`** (open contours) : étend `left[end]` et `right[end]` de `halfW` le long de la tangente du dernier segment. Bbox grandit de `halfW` à chaque extrémité (vs kButt qui s'arrête à l'endpoint).
+- [x] **`kRound_Cap`** (open contours) : 2 cubic Béziers par cap (start + end), kappa = `(4/3)·(√2 − 1)`. La demi-disque va de `+halfW·n` via `±halfW·t` (outward) à `−halfW·n`. Bbox identique à kSquare mais profil arrondi.
+- [x] **`kRound_Join`** : arc circulaire de `+halfW·n_prev` à `+halfW·n_next` autour du vertex, ligne-flatten à ~22.5° par segment (8 segments / quart de tour). Pas de cubics dans la sortie — la polyline accumulée s'émet en `lineTo` à la fin. Sweep direction par cross-product.
+- [x] **Antiparallèles 180°** : tous les joins fallback en bevel (pas de miter ni d'arc valide).
+
+#### Vérification Phase 3g
+- [x] 9 tests unitaires `SkStrokerCapsJoinsTest` :
+  - kSquare_Cap : bbox étendue par halfW, kButt comparison.
+  - kRound_Cap : 2 cubics par cap, bbox = kSquare bbox.
+  - kBevel_Join : extra vertex per side (vs miter single point).
+  - kMiter > limit fallback bevel.
+  - kRound_Join : ~16 line segments per 90° corner (vs 1 vertex pour miter), closed rect → 2 sub-contours avec arcs.
+- [x] Aucune régression sur les Phase 3a-3f tests ni sur les 13 GMs cumulés.
+- [x] Pas de nouveau GM port — débloqué pour 3h+ (DrawCaps, ArcToGM partiel, CubicPathGM partiel).
+
 ---
 
 ## Phase 4 — Cercles, ovals, RRects : `CircleSizesGM`, `RRectGM`, `RoundRectGM`, `DRRectGM`
@@ -342,6 +362,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3d    | 11       | GM harvest sur l'API existante (5 crbug + bitmaprect_rounding) | ✅ |
 | 3e    | 13       | Stroke-on-path GM ports — `ConvexPathsGM` + `ArcOfZorroGM` ✅ ; ArcToGM/CubicPathGM TODO | 🔄 |
 | 3f    | 13       | Path API extras (relative verbs, tangent arcTo, computeBounds, makeOffset) | ✅ |
+| 3g    | 13       | Stroker caps & joins étendus (kSquare/kRound caps, kBevel/kRound joins) | ✅ |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
