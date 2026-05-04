@@ -205,6 +205,20 @@ Chacun a un seuil floor adapté à son score (ratchet ≥ score - 1%). Tous : `t
 
 **Pass count cumulé : 11 GM** (5 précédents + 6 ports).
 
+### Phase 3f — Path API extras (no GM ports yet) ✅
+
+**But** : combler les manques `SkPathBuilder`/`SkPath` listés dans l'audit pour débloquer les futurs hand-ports (notamment `ArcToGM` qui consomme le tangent `arcTo`, et `ConvexPathsGM` qui veut `path.transform`/`makeOffset`). Indépendant de Phase 3c et 3d, parallèle à 3e (stroke-on-path GM ports).
+
+- [x] **Verbs relatifs** sur `SkPathBuilder` : `rMoveTo`, `rLineTo`, `rQuadTo`, `rConicTo`, `rCubicTo`. Wrappers triviaux qui re-routent vers les primitives absolues avec `(lastX + dx, lastY + dy)`. Mirroirs Skia, utiles pour SVG path data.
+- [x] **Tangent `arcTo(x1, y1, x2, y2, radius)`** (PostScript-style `arct`). Mirror Skia. Calcul classique : `θ` = angle au coin `p1` entre `p1→P0` et `p1→p2`, `d = r/tan(θ/2)`, tangent points `T0 = p1 + d·û1`, `T1 = p1 + d·û2`, centre `C = p1 + r·(û1+û2)/sin θ`. Sweep court (≤ π) délégué à l'existing `arcTo(oval, startDeg, sweepDeg, false)`. Cas dégénérés (radius nul, segments collinéaires/zéro-length) → `lineTo(p1)` (comme Skia).
+- [x] **`emitArc` epsilon fix** : la comparaison stricte `lastX != firstX` rejetait des décalages d'~1 ULP causés par l'accumulation float dans le tangent arcTo, déclenchant un `lineTo` parasite. Remplacé par `abs(...) > 1e-4f`. Sub-pixel — n'affecte aucun cas légitime, débloque le tangent arcTo en chaîne.
+- [x] **`SkPath.computeBounds()`** : bbox des control points (Skia's "fast bounds"). Conservatif pour les Béziers (les control points peuvent dépasser la curve). `computeTightBounds()` = roots des dérivées Bézier, déféré.
+- [x] **`SkPath.makeOffset(dx, dy)`** : copie translatée. Fast-path identité quand `(dx, dy) == (0, 0)` (renvoie `this`). Verbs et conic weights conservés tels quels.
+
+#### Vérification Phase 3f
+- [x] 15 tests unitaires `SkPathExtrasTest` (5 verbs relatifs, 5 tangent arcTo dont cas dégénérés et géométrie centre/T0, 3 computeBounds, 3 makeOffset).
+- [x] Aucune régression sur les Phase 3a/b/c/d/e tests ni sur les 13 GMs cumulés.
+
 ---
 
 ## Phase 4 — Cercles, ovals, RRects : `CircleSizesGM`, `RRectGM`, `RoundRectGM`, `DRRectGM`
@@ -327,6 +341,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3c    | 5        | Path stroker (kButt + kMiter, no GM ports yet) | ✅ |
 | 3d    | 11       | GM harvest sur l'API existante (5 crbug + bitmaprect_rounding) | ✅ |
 | 3e    | 13       | Stroke-on-path GM ports — `ConvexPathsGM` + `ArcOfZorroGM` ✅ ; ArcToGM/CubicPathGM TODO | 🔄 |
+| 3f    | 13       | Path API extras (relative verbs, tangent arcTo, computeBounds, makeOffset) | ✅ |
 | 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
