@@ -6,6 +6,7 @@ import org.skia.foundation.SkColorGetG
 import org.skia.foundation.SkColorGetR
 import org.skia.foundation.SkColorSetARGB
 import org.skia.foundation.SkFont
+import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkTypeface
 import org.skia.foundation.awt.LiberationFontMgr
 import org.skia.math.SkScalar
@@ -98,6 +99,24 @@ public object ToolUtils {
      */
     private fun skScalarRoundToInt(x: Float): Int =
         floor(x + 0.5f).toInt()
+
+    /**
+     * Mirrors `ToolUtils::CreatePortableTypeface(name, style)`
+     * (`tools/fonts/FontToolUtils.cpp:203`).
+     *
+     * Resolves a portable typeface by family name (substring match
+     * upstream — `"ono"` → Mono, `"ans"` → Sans, `"erif"` → Serif —
+     * with default Sans for `null` or unrecognised names) and style
+     * (collapsed to one of Liberation's 4 styles per family).
+     *
+     * Identical resolution rules to upstream's
+     * `MakePortableFontMgr()->legacyMakeTypeface(name, style)` for the
+     * portable family set (Mono / Sans / Serif). Aliases like "Arial",
+     * "Courier New", "Times" map to the closest Liberation family
+     * (Sans / Mono / Serif respectively).
+     */
+    public fun CreatePortableTypeface(name: String?, style: SkFontStyle): SkTypeface =
+        LiberationFontMgr.matchFamilyStyle(name, style)
 
     /**
      * Mirrors `ToolUtils::DefaultPortableTypeface()`
