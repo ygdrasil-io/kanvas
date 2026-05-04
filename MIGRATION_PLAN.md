@@ -179,12 +179,12 @@ Phase 3 est donc tranchée en sous-phases livrées séparément ; `ConcavePathsG
 - [x] 5 tests end-to-end `SkBitmapDeviceStrokeTest` (line, rect, L-shape miter, kStrokeAndFill, translation).
 - [x] Aucune régression sur les 6 GMs existants.
 
-### Phase 3e — GM ports stroke-on-path (en cours)
+### Phase 3e — GM ports stroke-on-path ✅ (cible atteinte ; suite reportée)
 
 - [x] Hand-port `tests/ConvexPathsGM.kt` (fill seulement, 35+ paths). L'entry skbug.40040207 utilise pure scale + translate dans sa matrice — appliquée inline au build du path (pas besoin de `SkPath.transform(SkMatrix)` encore). **Score : 99.68%** à `tolerance=1`. Tous les verbs (line/quad/conic/cubic/arc), toutes les factories (Rect/Circle/Oval/RRect/Line/Polygon), 4096-point polyline, paths dégénérés (point line/quad/cubic, moveTo-only).
 - [x] Hand-port `tests/ArcOfZorroGM.kt` (200 stroked open arcs avec width=35, layout boustrophedon, BG `0xCCCCCC`). Premier vrai stress du stroker (Phase 3c) sur des courbes : chaque arc est 1-2 cubic Béziers stroked en bande de 35 px. Ajout de `SkCanvas.drawArc(rect, startAngleDeg, sweepAngleDeg, useCenter, paint)` (path = arcTo + optional moveTo-to-centre + close pour pie slice). **Score : 99.56%** à `tolerance=1`. Bonus learning : un BG color non-trivial nécessite `drawPaint` au début (eraseColor skip le colorspace transform — voir le commentaire dans `TestUtils.runGmTest`).
-- [ ] Hand-port `tests/ArcToGM.kt` (nécessite `arcTo(p1, p2, radius)` ✅ Phase 3f + variant SVG endpoint, encore manquant).
-- [ ] Hand-port `tests/CubicPathGM.kt` (nécessite caps/joins étendus, fill rules inverses, drawString — déféré).
+- [ ] Hand-port `tests/ArcToGM.kt` — **reporté Phase 4+** : nécessite le variant SVG endpoint d'`arcTo(rx, ry, xAxisRotate, largeArc, sweep, x, y)`, ~150 LOC math.
+- [ ] Hand-port `tests/CubicPathGM.kt` — **reporté Phase 4+** : nécessite `kInverseWinding` / `kInverseEvenOdd` fill rules dans le rasterizer + `drawString` (text harness pas encore en scope).
 
 ### Phase 3d — GM harvest (existing API surface only) ✅
 
@@ -250,6 +250,58 @@ Chacun a un seuil floor adapté à son score (ratchet ≥ score - 1%). Tous : `t
 - [x] `TeenyStrokesGM` ≥ 95% (rendu obtenu : 99.39%).
 - [x] Aucune régression sur les 13 GMs cumulés (toujours verts).
 - [x] **Pass count cumulé : 14 GM.**
+
+### Phase 3i — Stroker `resScale` + GM batch (clôture Phase 3) ✅
+
+**But** : refermer Phase 3 d'un seul coup avec un dernier batch de GMs path/stroker portables sur l'API existante, plus le bug fix structurel `resScale` qui manquait à `SkStroker`.
+
+#### Fix structurel — `SkStroker.resScale`
+
+Le stroker Phase 3c flattenait les Béziers en source space avec une tolérance fixe `FLATNESS = 0.25`. Sa polyline est **directement** la séquence de sommets de l'outline path — le rasterizer ne peut pas re-lisser des `lineTo`. Sous CTM scale élevée (`Strokes4GM` à 1000×), un cercle de 4 cubic Béziers se flattenait à ~4 chord segments, transformés ensuite en polygone plate au rasterizer. Visuellement : un cercle stroked devient un quadrilatère stroked.
+
+- [x] **Nouveau paramètre `resScale: Float = 1f`** sur `SkStroker.fromPaint(paint, resScale)`. La tolérance source-space devient `FLATNESS / resScale` ⇒ erreur de chord ≤ 0.25 px **device-space** quel que soit le CTM.
+- [x] **Conic stepping adaptatif** : `conicSteps = ceil(CONIC_STEPS · √resScale)`, plafonné à `MAX_CONIC_STEPS = 4096` pour éviter une explosion sous CTM extrême.
+- [x] `SkBitmapDevice.drawPath` calcule `resScale = max(|sx|, |sy|).coerceAtLeast(1f)` et le passe au stroker. Floor à 1f : on n'élargit jamais la tolérance source-space en cas de zoom-out CTM.
+- [x] 3 unit tests `SkStrokerResScaleTest` :
+  - `resScale=1f` → polyline grossière (< 30 verbs sur un quart de cercle 1-unité).
+  - `resScale=1000f` → polyline ≥ 4× plus fine.
+  - `fromPaint(paint)` ≡ `fromPaint(paint, 1f)` (default param fidèle).
+
+#### GMs portés
+
+- [x] **`Strokes4GM`** (`gm/strokes.cpp:Strokes4GM`, ref `strokes_zoomed.png` 400×800). `drawCircle(0, 2, 1.97)` stroke `0.055` sous `scale(1000, 1000)`. **Score : 99.96%** @ tolerance=1 (88.28% avant le fix `resScale`). Inverse exact de TeenyStrokesGM — l'union des deux couvre 9 ordres de grandeur de CTM.
+- [x] **`ClippedCubicGM`** (`gm/clippedcubic.cpp`, ref `clippedcubic.png` 1240×390). 3×3 grid d'un cubic auto-intersectant clippé sur sa bbox + translate `(dx, dy) ∈ {-1, 0, +1}` px — stresse l'arithmétique clip-edge sur courbe. **Score : 99.97%** @ tolerance=1.
+- [x] **`StLouisArchGM`** (`gm/stlouisarch.cpp`, ref `stlouisarch.png` 256×256). 6 paths hairline-stroked sous `scale(1, -1)` + translate (flip Y) : trois types de courbes (quad, cubic, conic) plus une variante dégénérée plate de chacune. Note : notre hairline `strokeWidth=0` retombe sur `strokeWidth=1` (pas de hairline scan-line dédiée encore), donc coverage élargi d'1 px. **Score : 94.50%** @ tolerance=1.
+- [x] **`StrokesGM`** (`gm/strokes.cpp:StrokesGM`, ref `strokes_round.png` 400×800). 50 paires `drawOval` + `drawRoundRect` random per pane (AA off / AA on), + `clipRect` 2px inset. `SkCanvas.drawRoundRect(rect, rx, ry, paint)` ajouté en convenience. **Score : 92.34%** @ tolerance=1.
+
+#### GMs explicitement reportés (Phase 4+)
+
+- **`StrokeRectAnisotropicGM`** : nécessite stroking-en-device-space (ou path-transform-avant-stroke) pour le CTM non-uniforme `scale(0.03, 2.0)`. Notre stroke source-space donne des bords verticaux squashés à 0.3 px que le rasterizer affiche tout de même comme un trait plein (les sub-samples retombent dans la bande). Refactor non-trivial.
+- **`BatchedConvexPathsGM`** : 10 polygones translucides stackés. Différence pixel-à-pixel max=26 (visuel quasi-identique) mais 65 % des pixels diffèrent par > 1 ULP — accumulation de précision 8-bit dans le compositing (Skia compose en F16). Architectural — ne sera pas adressable sans une pipeline F16/working-space.
+
+#### Vérification Phase 3i
+- [x] 4 nouveaux GM : Strokes4 99.96, ClippedCubic 99.97, StLouisArch 94.50, Strokes 92.34. Tous ≥ floor 90 % (sauf StLouisArch à 80 % pour absorber le hairline fallback).
+- [x] 3 unit tests `SkStrokerResScaleTest`, tous verts.
+- [x] Aucune régression sur les 14 GMs cumulés.
+- [x] **Pass count cumulé : 18 GM** (+1 nouveau API `drawRoundRect`).
+
+---
+
+## Phase 3 — Récap final
+
+| Slice | Surface | Pass count |
+|-------|---------|------------|
+| 3a | SkPath line-only + scanline fill AA + scale CTM | 5 |
+| 3b | Path/Builder split + Bézier verbs + arcTo/addArc | 5 |
+| 3c | Path stroker (kButt + kMiter) | 5 |
+| 3d | GM harvest (5 crbug + bitmaprect_rounding) | 11 |
+| 3e | ConvexPathsGM + ArcOfZorroGM ; ArcToGM/CubicPathGM reportés | 13 |
+| 3f | Path API extras (relative verbs, tangent arcTo, computeBounds, makeOffset) | 13 |
+| 3g | Stroker caps & joins (kSquare/kRound caps, kBevel/kRound joins) | 13 |
+| 3h | drawLine + TeenyStrokesGM | 14 |
+| 3i | resScale fix + 4 GMs (Strokes4, ClippedCubic, StLouisArch, Strokes) | 18 |
+
+**Phase 3 close.** Surface stroker complète (caps & joins matrix, resScale CTM-aware), `drawLine` / `drawArc` / `drawRoundRect` / `drawCircle` / `drawOval` / `drawRRect` exposés, scanline fill AA + clipRect axis-aligned. Reportés en bloc à Phase 4+ : SVG arcTo endpoint variant, inverse fill rules, hairline path scan-line, stroking-en-device-space sous CTM non-uniforme, F16 compositing pour translucides.
 
 ---
 
@@ -376,7 +428,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3f    | 13       | Path API extras (relative verbs, tangent arcTo, computeBounds, makeOffset) | ✅ |
 | 3g    | 13       | Stroker caps & joins étendus (kSquare/kRound caps, kBevel/kRound joins) | ✅ |
 | 3h    | 14       | `SkCanvas.drawLine` + `TeenyStrokesGM` (stroker sous CTM scales extrêmes) | ✅ |
-| 4     | ~16      | Circle / Oval / RRect via path | ⬜ |
+| 3i    | 18       | Stroker `resScale` fix + 4 GMs (Strokes4/ClippedCubic/StLouisArch/Strokes) ⇒ **Phase 3 close** | ✅ |
+| 4     | ~21      | Circle / Oval / RRect via path | ⬜ |
 | 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 
