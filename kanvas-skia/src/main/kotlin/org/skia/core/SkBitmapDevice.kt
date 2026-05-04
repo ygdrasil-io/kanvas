@@ -389,6 +389,28 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         return SkColorSetARGB(outA, outR, outG, outB)
     }
 
+    /**
+     * Phase 6c: working-space `SkColor` (8-bit non-premul ARGB) →
+     * premultiplied float quartet `(sr, sg, sb, sa) ∈ [0, 1]`. The colour
+     * passed in **must** already be in the bitmap's working colour space
+     * (the rasterizer entry points all run their input through
+     * [inDeviceColorSpace] / [transformPaintColor] first).
+     *
+     * Used by the F16 + SrcOver solid-colour fast paths in [fillRectAA],
+     * [strokeRectAA] and [scanFillPath]. Calling this once per draw and
+     * then applying coverage as a float multiplier lets the rasterizer
+     * skip the 8-bit `scaleAlpha(baseA, coverage)` round-to-nearest that
+     * would otherwise happen at every covered pixel.
+     */
+    private fun colorToF16Premul(c: SkColor, out: FloatArray) {
+        require(out.size >= 4)
+        val a = SkColorGetA(c) / 255f
+        out[0] = SkColorGetR(c) / 255f * a
+        out[1] = SkColorGetG(c) / 255f * a
+        out[2] = SkColorGetB(c) / 255f * a
+        out[3] = a
+    }
+
     // --------------------------------------------------------------------
     // Non-AA path (Phase 1) — unchanged.
     // --------------------------------------------------------------------
@@ -485,11 +507,38 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         if (rect.right <= rect.left || rect.bottom <= rect.top) return
         val baseA = SkColorGetA(color)
         if (baseA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
-        val rgb = color and 0x00FFFFFF
         val ix0 = floor(rect.left).coerceAtLeast(clip.left)
         val iy0 = floor(rect.top).coerceAtLeast(clip.top)
         val ix1 = ceil(rect.right).coerceAtMost(clip.right)
         val iy1 = ceil(rect.bottom).coerceAtMost(clip.bottom)
+
+        // Phase 6c — F16 + kSrcOver fast path: keep coverage as a float
+        // multiplier all the way to the per-pixel premul-float SrcOver.
+        // Eliminates the last 8-bit quantization in front of the F16 buffer
+        // (the legacy `scaleAlpha(baseA, cx * cy)` step rounded coverage to
+        // 1/255 before blending; now we go straight from the float coverage
+        // computation to the F16 store).
+        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm &&
+            mode == SkBlendMode.kSrcOver) {
+            val src = FloatArray(4)
+            colorToF16Premul(color, src)
+            val sr = src[0]; val sg = src[1]; val sb = src[2]; val sa = src[3]
+            for (y in iy0 until iy1) {
+                val cy = covAxis(rect.top, rect.bottom, y)
+                if (cy <= 0f) continue
+                for (x in ix0 until ix1) {
+                    val cx = covAxis(rect.left, rect.right, x)
+                    if (cx <= 0f) continue
+                    val cov = cx * cy
+                    blendF16Premul(x, y, sr * cov, sg * cov, sb * cov, sa * cov)
+                }
+            }
+            return
+        }
+
+        // Legacy 8-bit path (also covers the F16 + non-SrcOver case where
+        // we'd need a per-mode float dispatch — out of scope for Phase 6c).
+        val rgb = color and 0x00FFFFFF
         for (y in iy0 until iy1) {
             val cy = covAxis(rect.top, rect.bottom, y)
             if (cy <= 0f) continue
@@ -524,11 +573,35 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         if (or <= ol || ob <= ot) return
         val baseA = SkColorGetA(color)
         if (baseA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
-        val rgb = color and 0x00FFFFFF
         val ix0 = floor(ol).coerceAtLeast(clip.left)
         val iy0 = floor(ot).coerceAtLeast(clip.top)
         val ix1 = ceil(or).coerceAtMost(clip.right)
         val iy1 = ceil(ob).coerceAtMost(clip.bottom)
+
+        // Phase 6c — F16 + kSrcOver fast path (see [fillRectAA] for the
+        // rationale).
+        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm &&
+            mode == SkBlendMode.kSrcOver) {
+            val src = FloatArray(4)
+            colorToF16Premul(color, src)
+            val sr = src[0]; val sg = src[1]; val sb = src[2]; val sa = src[3]
+            for (y in iy0 until iy1) {
+                val outerCY = covAxis(ot, ob, y)
+                if (outerCY <= 0f) continue
+                val innerCY = if (innerEmpty) 0f else covAxis(it, ib, y)
+                for (x in ix0 until ix1) {
+                    val outerCX = covAxis(ol, or, x)
+                    if (outerCX <= 0f) continue
+                    val innerCX = if (innerEmpty) 0f else covAxis(il, ir, x)
+                    val cov = outerCX * outerCY - innerCX * innerCY
+                    if (cov <= 0f) continue
+                    blendF16Premul(x, y, sr * cov, sg * cov, sb * cov, sa * cov)
+                }
+            }
+            return
+        }
+
+        val rgb = color and 0x00FFFFFF
         for (y in iy0 until iy1) {
             val outerCY = covAxis(ot, ob, y)
             if (outerCY <= 0f) continue
@@ -813,16 +886,20 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val coverage = IntArray(rowWidth)
         val crossX = FloatArray(edges.size)
         val crossDir = IntArray(edges.size)
-        // Phase 6b — when the bitmap is F16 *and* we have a shader *and*
-        // the blend mode is SrcOver, the rasterizer takes a float-precision
-        // path: float coverage, float-premul shader output, direct
-        // compositing into [SkBitmap.pixelsF16] without any byte-quantization
-        // step. For other configurations we keep the 8-bit shader path
-        // (and the existing F16 → byte → F16 round-trip in [blend]).
+        // Phase 6b/6c — when the bitmap is F16 *and* the blend mode is
+        // SrcOver, the rasterizer takes a float-precision path: float
+        // coverage, float-premul source (from a shader's `shadeRowF16` or
+        // a once-per-draw `colorToF16Premul` for solid colours), direct
+        // compositing into [SkBitmap.pixelsF16] without any byte-
+        // quantization step. For other configurations we keep the 8-bit
+        // path (and the existing F16 → byte → F16 round-trip in [blend]).
         val isF16 = bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm
-        val useF16ShaderPath = shader != null && isF16 && mode == SkBlendMode.kSrcOver
+        val useF16Path = isF16 && mode == SkBlendMode.kSrcOver
+        val useF16ShaderPath = shader != null && useF16Path
+        val useF16SolidPath = shader == null && useF16Path
         val shaderRow: IntArray? = if (shader != null && !useF16ShaderPath) IntArray(rowWidth) else null
         val shaderRowF16: FloatArray? = if (useF16ShaderPath) FloatArray(rowWidth * 4) else null
+        val solidF16: FloatArray? = if (useF16SolidPath) FloatArray(4).also { colorToF16Premul(color, it) } else null
         val invMaxSamples = 1f / maxSamples.toFloat()
 
         for (py in py0 until py1) {
@@ -876,6 +953,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     val sg = shaderRowF16[si + 1] * cov
                     val sb = shaderRowF16[si + 2] * cov
                     blendF16Premul(clip.left + xOff, py, sr, sg, sb, sa)
+                }
+            } else if (solidF16 != null) {
+                // Phase 6c: F16 solid-colour path. Source premul-float is
+                // computed once at draw setup (no per-pixel byte → float
+                // unpack), coverage stays in float, the SrcOver blend lands
+                // straight in [SkBitmap.pixelsF16].
+                val sr0 = solidF16[0]; val sg0 = solidF16[1]
+                val sb0 = solidF16[2]; val sa0 = solidF16[3]
+                for (xOff in 0 until rowWidth) {
+                    val samples = coverage[xOff]
+                    if (samples == 0) continue
+                    val cov = if (samples >= maxSamples) 1f else samples * invMaxSamples
+                    blendF16Premul(clip.left + xOff, py, sr0 * cov, sg0 * cov, sb0 * cov, sa0 * cov)
                 }
             } else if (shader != null && shaderRow != null) {
                 // 8-bit shader path: same code as before (also covers the
