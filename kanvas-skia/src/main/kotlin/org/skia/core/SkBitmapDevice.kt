@@ -1202,11 +1202,17 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         SkBlendMode.kPlus -> blendPlus(src, dst)
         SkBlendMode.kModulate -> blendModulate(src, dst)
         SkBlendMode.kScreen -> blendScreen(src, dst)
+        SkBlendMode.kMultiply,
+        SkBlendMode.kDarken,
+        SkBlendMode.kLighten,
+        SkBlendMode.kDifference,
+        SkBlendMode.kExclusion -> blendSeparable(src, dst, mode)
         else -> throw NotImplementedError(
             "SkBlendMode.$mode is not implemented yet (see MIGRATION_PLAN.md). " +
                 "Implemented: kClear, kSrc, kDst, kSrcOver, kDstOver, kSrcIn, " +
                 "kDstIn, kSrcOut, kDstOut, kSrcATop, kDstATop, kXor, kPlus, " +
-                "kModulate, kScreen."
+                "kModulate, kScreen, kMultiply, kDarken, kLighten, kDifference, " +
+                "kExclusion."
         )
     }
 
@@ -1453,6 +1459,76 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val outG = ((pg + outA / 2) / outA).coerceIn(0, 0xFF)
         val outB = ((pb + outA / 2) / outA).coerceIn(0, 0xFF)
         return SkColorSetARGB(outA, outR, outG, outB)
+    }
+
+    // --------------------------------------------------------------------
+    // Phase 6 separable modes (simple): kMultiply, kDarken, kLighten,
+    // kDifference, kExclusion. Formulas operate in **premultiplied
+    // float** [0, 1] — Skia's reference compositor. Each takes (src,
+    // dst) as 8-bit non-premul SkColor, premultiplies internally,
+    // computes the per-channel result in float, and stores back as 8-bit
+    // non-premul. Output alpha = SrcOver alpha = `sa + da*(1-sa)` for
+    // every separable mode.
+    //
+    // Going through float (instead of integer fixed-point as the Phase 6
+    // entry / Porter-Duff completion modes do) keeps the formulas
+    // readable and avoids accuracy traps on multi-multiplication chains
+    // like kMultiply. The 8-bit accuracy budget (≤ 1 ulp at fractional
+    // alpha) is preserved.
+    // --------------------------------------------------------------------
+
+    private fun blendSeparable(src: SkColor, dst: SkColor, mode: SkBlendMode): SkColor {
+        val sa = SkColorGetA(src) / 255f
+        val da = SkColorGetA(dst) / 255f
+        val sr = SkColorGetR(src) / 255f * sa
+        val sg = SkColorGetG(src) / 255f * sa
+        val sb = SkColorGetB(src) / 255f * sa
+        val dr = SkColorGetR(dst) / 255f * da
+        val dg = SkColorGetG(dst) / 255f * da
+        val db = SkColorGetB(dst) / 255f * da
+
+        // SrcOver alpha — shared by every separable mode in Skia.
+        val oa = sa + da * (1f - sa)
+        if (oa <= 0f) return 0
+
+        // Apply the per-mode per-channel formula to (sX, dX, sa, da).
+        val orPm = sepChannel(sr, dr, sa, da, mode)
+        val ogPm = sepChannel(sg, dg, sa, da, mode)
+        val obPm = sepChannel(sb, db, sa, da, mode)
+
+        // Un-premultiply by oa and quantize.
+        val invOa = 1f / oa
+        val outA = (oa * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outR = (orPm * invOa * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outG = (ogPm * invOa * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outB = (obPm * invOa * 255f + 0.5f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(outA, outR, outG, outB)
+    }
+
+    /**
+     * Per-channel separable formula in premul-float `[0, 1]`. Inputs `s`
+     * and `d` are already premultiplied (i.e. `unpremul · alpha`); the
+     * caller's `sa` / `da` give the operand alphas needed for the modes
+     * that subtract `s*da` or `d*sa`.
+     */
+    private fun sepChannel(s: Float, d: Float, sa: Float, da: Float, mode: SkBlendMode): Float = when (mode) {
+        // `rc = (1-sa)*dc + (1-da)*sc + sc*dc` — standard premul Multiply.
+        // Note that this is **not** simply `s*d`: that variant ("Modulate"
+        // in Skia) discards the (1-sa)*dc and (1-da)*sc terms and is
+        // already covered by [blendModulate].
+        SkBlendMode.kMultiply -> (1f - sa) * d + (1f - da) * s + s * d
+        // `rc = sc + dc - max(sc*da, dc*sa)`. Picks the darker of the two
+        // operand colours, weighted by the other's alpha.
+        SkBlendMode.kDarken -> s + d - maxOf(s * da, d * sa)
+        // `rc = sc + dc - min(sc*da, dc*sa)`.
+        SkBlendMode.kLighten -> s + d - minOf(s * da, d * sa)
+        // `rc = sc + dc - 2 * min(sc*da, dc*sa)`. Symmetric absolute
+        // difference of the two operands' colours; equal colours cancel.
+        SkBlendMode.kDifference -> s + d - 2f * minOf(s * da, d * sa)
+        // `rc = sc + dc - 2*sc*dc`. Like Difference but doesn't depend on
+        // alpha; identical to Screen at sc + dc small, but symmetric.
+        SkBlendMode.kExclusion -> s + d - 2f * s * d
+        else -> error("sepChannel called with non-separable-simple mode: $mode")
     }
 
     /**
