@@ -688,16 +688,97 @@ class SkBlendModeTest {
         assertARGB(argb(255, 181, 181, 181), out, tolerance = 3, label = "kSoftLight white on 50% grey")
     }
 
-    // ---------- Unimplemented modes throw -------------------------------
+    // ====================================================================
+    // Phase 6 HSL: kHue, kSaturation, kColor, kLuminosity. These work on
+    // the whole RGB tuple (not per-channel) and use the W3C SetLum /
+    // SetSat / clipColor helpers. All formulas tested with sa=da=1 so
+    // the premul / non-premul distinction is invisible.
+    // ====================================================================
 
     @Test
-    fun `unimplemented mode throws NotImplementedError`() {
-        try {
-            // The 4 HSL modes are the only ones still throwing.
-            blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kHue)
-            assert(false) { "expected NotImplementedError" }
-        } catch (_: NotImplementedError) {
-            // expected
+    fun `kHue on a grey dst is identity`() {
+        // Grey dst has Sat = 0, so SetSat(src, 0) zeroes out the source's
+        // chrominance entirely. Then SetLum brings the result back to dst's
+        // luminance — i.e. dst itself.
+        val grey = argb(255, 128, 128, 128)
+        val out = blend(SK_ColorRED, grey, SkBlendMode.kHue)
+        assertARGB(grey, out, tolerance = 2, label = "kHue red on 50% grey")
+    }
+
+    @Test
+    fun `kSaturation on a grey dst is identity`() {
+        // Same reason as kHue on grey: SetSat(grey, _) collapses to 0,
+        // then SetLum restores grey.
+        val grey = argb(255, 128, 128, 128)
+        val out = blend(SK_ColorRED, grey, SkBlendMode.kSaturation)
+        assertARGB(grey, out, tolerance = 2, label = "kSaturation red on 50% grey")
+    }
+
+    @Test
+    fun `kColor red on grey gives red-tinted output at grey luminance`() {
+        // SetLum(red, Lum(grey=0.5)). Lum(red) = 0.3, diff = 0.2.
+        // (red+0.2) = (1.2, 0.2, 0.2). mx=1.2 > 1 → clip:
+        //   factor = (1-0.5)/(1.2-0.5) = 5/7 ≈ 0.714
+        //   r = 0.5 + (1.2-0.5)*0.714 = 1.0
+        //   g = 0.5 + (0.2-0.5)*0.714 ≈ 0.286 → 73
+        //   b ≈ 0.286 → 73
+        // Final: (255, 73, 73).
+        val grey = argb(255, 128, 128, 128)
+        val out = blend(SK_ColorRED, grey, SkBlendMode.kColor)
+        assertARGB(argb(255, 255, 73, 73), out, tolerance = 3, label = "kColor red on 50% grey")
+    }
+
+    @Test
+    fun `kLuminosity red on grey lowers grey to red's luminance`() {
+        // SetLum(grey=0.5, Lum(red=0.3)). diff = -0.2.
+        // (0.3, 0.3, 0.3). mn=mx=0.3, no clip. Result: 0.3 → 77.
+        val grey = argb(255, 128, 128, 128)
+        val out = blend(SK_ColorRED, grey, SkBlendMode.kLuminosity)
+        assertARGB(argb(255, 77, 77, 77), out, tolerance = 2, label = "kLuminosity red on 50% grey")
+    }
+
+    @Test
+    fun `kColor preserves dst luminance, takes src chrominance`() {
+        // src = blue (Lum = 0.11), dst = mid-grey (Lum = 0.5).
+        // SetLum(blue, 0.5). Lum(blue) = 0.11, diff = 0.39.
+        // (0.39, 0.39, 1.39). mx=1.39 > 1, clip:
+        //   factor = (1-0.5)/(1.39-0.5) = 0.5/0.89 ≈ 0.562
+        //   r = g = 0.5 + (0.39-0.5)*0.562 ≈ 0.5 - 0.062 = 0.438 → 112
+        //   b = 0.5 + (1.39-0.5)*0.562 = 0.5 + 0.5 = 1.0 → 255
+        // Final: (112, 112, 255).
+        val grey = argb(255, 128, 128, 128)
+        val out = blend(SK_ColorBLUE, grey, SkBlendMode.kColor)
+        assertARGB(argb(255, 112, 112, 255), out, tolerance = 3, label = "kColor blue on 50% grey")
+    }
+
+    @Test
+    fun `kLuminosity preserves dst chrominance, takes src luminance`() {
+        // src = white (Lum = 1), dst = blue (Lum = 0.11).
+        // SetLum(blue, 1). Lum(blue) = 0.11, diff = 0.89.
+        // (0.89, 0.89, 1.89). mx=1.89 > 1, clip:
+        //   factor = (1-1)/(1.89-1) = 0/0.89 = 0
+        //   r = g = 1 + (0.89-1)*0 = 1
+        //   b = 1 + (1.89-1)*0 = 1
+        // Final: white. (Pushing a saturated colour to lum=1 makes it white.)
+        val out = blend(SK_ColorWHITE, SK_ColorBLUE, SkBlendMode.kLuminosity)
+        assertARGB(SK_ColorWHITE, out, tolerance = 2, label = "kLuminosity white on blue")
+    }
+
+    @Test
+    fun `kColor on transparent dst clears`() {
+        // da=0 ⇒ a=sa*da=0 ⇒ body is in [0,0] = always 0. Carrier:
+        //   sc*(1-da) + dc*(1-sa) = sc*1 + 0 = sc.
+        // oa = sa+da*(1-sa) = sa. Un-premul: sc/sa = (255,0,0)/255 = red.
+        val out = blend(SK_ColorRED, 0, SkBlendMode.kColor)
+        assertARGB(SK_ColorRED, out, tolerance = 2, label = "kColor red on transparent")
+    }
+
+    @Test
+    fun `all 29 modes are dispatched without throwing`() {
+        // Sanity smoke: with all 29 modes implemented, blendPixel must not
+        // throw NotImplementedError for any value of the SkBlendMode enum.
+        for (m in SkBlendMode.entries) {
+            blend(argb(128, 200, 100, 50), argb(180, 60, 200, 100), m)
         }
     }
 }
