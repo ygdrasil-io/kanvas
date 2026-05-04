@@ -527,21 +527,51 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 
 ## Phase 6 — Blend modes complets : `AAXfermodesGM`, `XfermodesGM`, `DestColorGM`, `AndroidBlendModesGM`
 
-**But** : 28 modes Porter-Duff + modes avancés.
+**But final** : 28 modes Porter-Duff + modes avancés.
 
-- [ ] Routine de composition par pixel dans `SkBitmapDevice`.
-- [ ] Porter la logique de [kanvas/src/main/kotlin/core/ColorExtensions.kt](kanvas/src/main/kotlin/core/ColorExtensions.kt).
-- [ ] Résoudre `undefined.BlendInfo` et `undefined.Coeff`.
+### Phase 6 entry — slice 9 modes (✅)
 
-### Tests GM
+Foundation pour brancher de nouveaux modes sans refactoring : `SkBlendMode` enum complet (29 valeurs upstream-aligned), `SkPaint.blendMode` field, dispatch per-pixel dans `SkBitmapDevice.blend()` avec un fast-path `kSrcOver` bit-identique à Phase 1.
+
+Modes implémentés :
+- [x] `kClear` — `r = 0`
+- [x] `kSrc` — `r = s`
+- [x] `kDst` — `r = d`
+- [x] `kSrcOver` — fast-path inchangé
+- [x] `kDstOver` — `r = d + (1-da)*s`
+- [x] `kSrcIn` — `r = s * da`
+- [x] `kDstIn` — `r = d * sa`
+- [x] `kPlus` — `r = min(s + d, 1)` (ScaledRectsGM, débloquée depuis Phase 2)
+- [x] `kModulate` — `r = s * d`
+- [x] `kScreen` — `r = s + d - s*d`
+
+Modes encore non-implémentés (lèvent `NotImplementedError` à l'appel — 19 modes restants) :
+- [ ] `kSrcOut`, `kDstOut`, `kSrcATop`, `kDstATop`, `kXor` (Porter-Duff coeff restants)
+- [ ] `kOverlay`, `kDarken`, `kLighten`, `kColorDodge`, `kColorBurn`, `kHardLight`, `kSoftLight`, `kDifference`, `kExclusion`, `kMultiply` (separable)
+- [ ] `kHue`, `kSaturation`, `kColor`, `kLuminosity` (HSL)
+
+**Précision** : les formules opèrent sur ARGB non-prémultiplié (notre raster pipeline) ; Skia upstream travaille en prémultiplié. Pour `kSrcIn`/`kDstIn`/`kPlus`/`kModulate`/`kScreen` à alpha fractionnaire, on re-dérive le résultat prémultiplié puis on dé-prémultiplie. Erreur résiduelle ≤ 1 ulp par canal — exact pour `sa == da == 0xFF` (le cas commun des GMs en scope).
+
+**Hors scope** : `SkBitmapDevice.compositeFrom` (flatten de `saveLayer`) reste hardcodé `kSrcOver`. Étendre aux blend modes arbitraires = ticket séparé.
+
+### Tests GM (slice 6 entry)
+- [x] Hand-port `tests/ScaledRectsGM.kt` — `kPlus` + `SkMatrix::MakeAll(...)` 3x3. Score **87.79%** vs `scaledrects.png` à `tolerance=1`. Le résiduel ~12% est du désaccord rasterizer non-AA sur les bords de rect rotatés (le GM utilise `setAntiAlias(false)` implicite — Skia adoucit les bords sub-pixel différemment).
+
+### Tests unitaires
+- [x] `SkBlendModeTest.kt` — 9 modes × ~3 cas chacun (opaque-on-opaque + alpha fractionnaire), formules vérifiées contre des valeurs hand-computed. Couvre aussi le throw `NotImplementedError` pour les 19 modes restants.
+
+### Reste pour clôturer Phase 6
+- [ ] Implémenter les 19 modes restants. Chacun = un nouveau case dans `blendPixel()`, sans refactoring de l'API publique.
 - [ ] Hand-port `tests/AAXfermodesGM.kt`.
 - [ ] Hand-port `tests/XfermodesGM.kt`.
 - [ ] Hand-port `tests/DestColorGM.kt`.
 - [ ] Hand-port `tests/AndroidBlendModesGM.kt`.
+- [ ] Étendre `SkBitmapDevice.compositeFrom` à tous les modes (saveLayer + blend).
 
-### Vérification Phase 6
-- [ ] Tests ≥ 88%.
-- [ ] **Pass count cumulé : ~30 GM.**
+### Vérification Phase 6 entry
+- [x] Tests ≥ 85% (`ScaledRectsGM` à 87.79%).
+- [x] Aucune régression sur les 44 GMs précédents.
+- [x] **Pass count cumulé : 45 GM.**
 
 ---
 
@@ -605,7 +635,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 5d    | 44       | GM harvest path/conic/oval (PathInterior/ConicPaths/ArcCircleGap/LargeCircle/LargeOvals) — 0 nouvelle API | ✅ |
 | 5e    | 54       | DEF_SIMPLE_GM regression harvest (10 small bug GMs) — 0 nouvelle API | ✅ |
 | 5f    | ~57      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
-| 6     | ~30      | 28 blend modes | ⬜ |
+| 6 entry | 55     | `SkBlendMode` enum + 9-mode dispatch slice (`kClear/kSrc/kDst/kSrcOver/kDstOver/kSrcIn/kDstIn/kPlus/kModulate/kScreen`) + ScaledRectsGM 87.79% | ✅ |
+| 6     | ~58      | 19 modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
 

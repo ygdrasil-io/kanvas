@@ -1,6 +1,7 @@
 package org.skia.core
 
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkColorGetA
 import org.skia.foundation.SkColorGetB
@@ -80,6 +81,22 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     }
 
     /**
+     * `true` when the blend mode produces a non-`dst` output for a fully
+     * transparent source colour (e.g. [SkBlendMode.kClear], [SkBlendMode.kDstIn]
+     * with `sa == 0` zeroes dst). Callers normally short-circuit when
+     * `src.alpha == 0` to avoid touching covered pixels at all; for these
+     * modes the device must still walk the spans and apply the blend.
+     */
+    private fun modeAffectsZeroAlphaSrc(mode: SkBlendMode): Boolean = when (mode) {
+        SkBlendMode.kClear,
+        SkBlendMode.kSrc,
+        SkBlendMode.kSrcIn,
+        SkBlendMode.kDstIn,
+        SkBlendMode.kModulate -> true
+        else -> false
+    }
+
+    /**
      * Mirrors Skia's `SkBitmapDevice::drawPaint`. Fills every pixel inside
      * [clip] with `paint.color`, composited via SrcOver. The clip is
      * integer-aligned in device coords, so per-pixel coverage is binary —
@@ -87,13 +104,16 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      */
     public fun drawPaint(clip: SkIRect, paint: SkPaint) {
         val color = transformPaintColor(paint.color)
-        if (SkColorGetA(color) == 0) return
+        val mode = paint.blendMode
+        // For modes that produce non-trivial output even when src.alpha == 0
+        // (e.g. kClear, kDstIn, kDstATop) we cannot short-circuit on alpha.
+        if (SkColorGetA(color) == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         val l = clip.left.coerceAtLeast(0)
         val t = clip.top.coerceAtLeast(0)
         val r = clip.right.coerceAtMost(width)
         val b = clip.bottom.coerceAtMost(height)
         for (y in t until b) {
-            for (x in l until r) blend(x, y, color)
+            for (x in l until r) blend(x, y, color, mode)
         }
     }
 
@@ -131,7 +151,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 val sample = srcPixels[srcRowBase + (x - originX)]
                 val effective = if (paintAlpha == 0xFF) sample else applyAlpha(sample, paintAlpha)
                 if (effective ushr 24 == 0) continue
-                blend(x, y, effective)
+                // Phase 6 entry: saveLayer flatten remains hardcoded SrcOver
+                // (per CLAUDE.md — extending it to arbitrary blend modes is a
+                // separate ticket).
+                blend(x, y, effective, SkBlendMode.kSrcOver)
             }
         }
     }
@@ -181,6 +204,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
         val paintAlpha = paint?.color?.let { SkColorGetA(it) } ?: 0xFF
         if (paintAlpha == 0) return
+        val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
         val maxX = image.width - 1
         val maxY = image.height - 1
 
@@ -202,7 +226,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val ix = floor(srcXc).coerceIn(0, maxX)
                         val sample = applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
                         if (sample ushr 24 == 0) continue
-                        blend(px, py, sample)
+                        blend(px, py, sample, mode)
                     }
                 }
             }
@@ -223,7 +247,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val c11 = devPixels[iy1i * image.width + ix1i]
                         val sample = applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
                         if (sample ushr 24 == 0) continue
-                        blend(px, py, sample)
+                        blend(px, py, sample, mode)
                     }
                 }
             }
@@ -299,24 +323,28 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         } else {
             color = transformPaintColor(paint.color)
             baseA = SkColorGetA(color)
-            if (baseA == 0) return
+            // Modes that produce a non-trivial output for transparent src
+            // (e.g. kClear, kDstIn) must still walk covered pixels even when
+            // the paint colour has alpha 0.
+            if (baseA == 0 && !modeAffectsZeroAlphaSrc(paint.blendMode)) return
         }
         val supers = if (paint.isAntiAlias) 4 else 1
         val resScale = ctm.computeMaxScale().coerceAtLeast(1f)
+        val mode = paint.blendMode
 
         when (paint.style) {
             SkPaint.Style.kFill_Style ->
-                fillPath(path, ctm, clip, color, baseA, supers, shader)
+                fillPath(path, ctm, clip, color, baseA, supers, shader, mode)
             SkPaint.Style.kStroke_Style -> {
                 val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
                 if (outline.isEmpty()) return
-                fillPath(outline, ctm, clip, color, baseA, supers, shader)
+                fillPath(outline, ctm, clip, color, baseA, supers, shader, mode)
             }
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillPath(path, ctm, clip, color, baseA, supers, shader)
+                fillPath(path, ctm, clip, color, baseA, supers, shader, mode)
                 val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
                 if (outline.isEmpty()) return
-                fillPath(outline, ctm, clip, color, baseA, supers, shader)
+                fillPath(outline, ctm, clip, color, baseA, supers, shader, mode)
             }
         }
     }
@@ -324,11 +352,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     private fun fillPath(
         path: SkPath, ctm: SkMatrix,
         clip: SkIRect, color: SkColor, baseA: Int, supers: Int,
-        shader: SkShader?,
+        shader: SkShader?, mode: SkBlendMode,
     ) {
         val edges = buildEdges(path, ctm)
         if (edges.isEmpty()) return
-        scanFillPath(edges, path.fillType, clip, color, baseA, supers, shader)
+        scanFillPath(edges, path.fillType, clip, color, baseA, supers, shader, mode)
     }
 
     /**
@@ -364,29 +392,30 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     // --------------------------------------------------------------------
 
     private fun drawRectNonAA(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+        val mode = paint.blendMode
         when (paint.style) {
-            SkPaint.Style.kFill_Style -> fillRect(rect, clip, paint.color)
-            SkPaint.Style.kStroke_Style -> strokeRect(rect, paint.strokeWidth, clip, paint.color)
+            SkPaint.Style.kFill_Style -> fillRect(rect, clip, paint.color, mode)
+            SkPaint.Style.kStroke_Style -> strokeRect(rect, paint.strokeWidth, clip, paint.color, mode)
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillRect(rect, clip, paint.color)
-                strokeRect(rect, paint.strokeWidth, clip, paint.color)
+                fillRect(rect, clip, paint.color, mode)
+                strokeRect(rect, paint.strokeWidth, clip, paint.color, mode)
             }
         }
     }
 
-    private fun fillRect(rect: SkRect, clip: SkIRect, color: SkColor) {
+    private fun fillRect(rect: SkRect, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
         val l = pixelEdge(rect.left).coerceAtLeast(clip.left)
         val t = pixelEdge(rect.top).coerceAtLeast(clip.top)
         val r = pixelEdge(rect.right).coerceAtMost(clip.right)
         val b = pixelEdge(rect.bottom).coerceAtMost(clip.bottom)
         for (y in t until b) {
             for (x in l until r) {
-                blend(x, y, color)
+                blend(x, y, color, mode)
             }
         }
     }
 
-    private fun strokeRect(rect: SkRect, strokeWidth: Float, clip: SkIRect, color: SkColor) {
+    private fun strokeRect(rect: SkRect, strokeWidth: Float, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
         if (strokeWidth <= 0f) {
             // Hairline: 1px-wide outline. Skia's AA-off hairline snaps the
             // outline to floor-style integer coords (matches `SkScan::HairLineRgn`).
@@ -394,10 +423,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             val t = floor(rect.top)
             val r = floor(rect.right)
             val b = floor(rect.bottom)
-            drawHLine(l, r + 1, t, clip, color)         // top edge
-            drawHLine(l, r + 1, b, clip, color)         // bottom edge
-            drawVLine(l, t + 1, b, clip, color)         // left edge
-            drawVLine(r, t + 1, b, clip, color)         // right edge
+            drawHLine(l, r + 1, t, clip, color, mode)         // top edge
+            drawHLine(l, r + 1, b, clip, color, mode)         // bottom edge
+            drawVLine(l, t + 1, b, clip, color, mode)         // left edge
+            drawVLine(r, t + 1, b, clip, color, mode)         // right edge
             return
         }
 
@@ -423,7 +452,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         for (y in ot until ob) {
             for (x in ol until or) {
                 if (innerEmpty || x < il || x >= ir || y < it || y >= ib) {
-                    blend(x, y, color)
+                    blend(x, y, color, mode)
                 }
             }
         }
@@ -439,20 +468,21 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     // --------------------------------------------------------------------
 
     private fun drawRectAA(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+        val mode = paint.blendMode
         when (paint.style) {
-            SkPaint.Style.kFill_Style -> fillRectAA(rect, clip, paint.color)
-            SkPaint.Style.kStroke_Style -> strokeRectAA(rect, paint.strokeWidth, clip, paint.color)
+            SkPaint.Style.kFill_Style -> fillRectAA(rect, clip, paint.color, mode)
+            SkPaint.Style.kStroke_Style -> strokeRectAA(rect, paint.strokeWidth, clip, paint.color, mode)
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillRectAA(rect, clip, paint.color)
-                strokeRectAA(rect, paint.strokeWidth, clip, paint.color)
+                fillRectAA(rect, clip, paint.color, mode)
+                strokeRectAA(rect, paint.strokeWidth, clip, paint.color, mode)
             }
         }
     }
 
-    private fun fillRectAA(rect: SkRect, clip: SkIRect, color: SkColor) {
+    private fun fillRectAA(rect: SkRect, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
         if (rect.right <= rect.left || rect.bottom <= rect.top) return
         val baseA = SkColorGetA(color)
-        if (baseA == 0) return
+        if (baseA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         val rgb = color and 0x00FFFFFF
         val ix0 = floor(rect.left).coerceAtLeast(clip.left)
         val iy0 = floor(rect.top).coerceAtLeast(clip.top)
@@ -466,7 +496,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 if (cx <= 0f) continue
                 val effA = scaleAlpha(baseA, cx * cy)
                 if (effA == 0) continue
-                blend(x, y, (effA shl 24) or rgb)
+                blend(x, y, (effA shl 24) or rgb, mode)
             }
         }
     }
@@ -477,7 +507,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * axis-aligned rects this lights up the same pixel set as Skia's
      * `SkScan::AntiHairLineRgn` with matching coverage at half-integer edges.
      */
-    private fun strokeRectAA(rect: SkRect, strokeWidth: Float, clip: SkIRect, color: SkColor) {
+    private fun strokeRectAA(rect: SkRect, strokeWidth: Float, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
         val w = if (strokeWidth <= 0f) 1f else strokeWidth
         val half = w * 0.5f
         val ol = rect.left - half
@@ -491,7 +521,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val innerEmpty = ir <= il || ib <= it
         if (or <= ol || ob <= ot) return
         val baseA = SkColorGetA(color)
-        if (baseA == 0) return
+        if (baseA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         val rgb = color and 0x00FFFFFF
         val ix0 = floor(ol).coerceAtLeast(clip.left)
         val iy0 = floor(ot).coerceAtLeast(clip.top)
@@ -509,7 +539,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 if (cov <= 0f) continue
                 val effA = scaleAlpha(baseA, cov)
                 if (effA == 0) continue
-                blend(x, y, (effA shl 24) or rgb)
+                blend(x, y, (effA shl 24) or rgb, mode)
             }
         }
     }
@@ -763,7 +793,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     private fun scanFillPath(
         edges: List<Edge>, fillType: SkPathFillType, clip: SkIRect,
         color: SkColor, baseA: Int, supers: Int,
-        shader: SkShader?,
+        shader: SkShader?, mode: SkBlendMode,
     ) {
         val maxSamples = supers * supers
         var yMin = Float.POSITIVE_INFINITY
@@ -835,7 +865,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         else (srcA * samples + maxSamples / 2) / maxSamples
                     if (effA == 0) continue
                     val srcRgb = src and 0x00FFFFFF
-                    blend(clip.left + xOff, py, (effA shl 24) or srcRgb)
+                    blend(clip.left + xOff, py, (effA shl 24) or srcRgb, mode)
                 }
             } else {
                 // Solid-colour path (Phase 1–4).
@@ -845,7 +875,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     val effA = if (samples >= maxSamples) baseA
                         else (baseA * samples + maxSamples / 2) / maxSamples
                     if (effA == 0) continue
-                    blend(clip.left + xOff, py, (effA shl 24) or rgb)
+                    blend(clip.left + xOff, py, (effA shl 24) or rgb, mode)
                 }
             }
         }
@@ -898,41 +928,249 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     // Hairline / span helpers (Phase 1).
     // --------------------------------------------------------------------
 
-    private fun drawHLine(x0: Int, x1: Int, y: Int, clip: SkIRect, color: SkColor) {
+    private fun drawHLine(x0: Int, x1: Int, y: Int, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
         if (y < clip.top || y >= clip.bottom) return
         val l = x0.coerceAtLeast(clip.left)
         val r = x1.coerceAtMost(clip.right)
-        for (x in l until r) blend(x, y, color)
+        for (x in l until r) blend(x, y, color, mode)
     }
 
-    private fun drawVLine(x: Int, y0: Int, y1: Int, clip: SkIRect, color: SkColor) {
+    private fun drawVLine(x: Int, y0: Int, y1: Int, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
         if (x < clip.left || x >= clip.right) return
         val t = y0.coerceAtLeast(clip.top)
         val b = y1.coerceAtMost(clip.bottom)
-        for (y in t until b) blend(x, y, color)
+        for (y in t until b) blend(x, y, color, mode)
     }
 
-    /** Source-Over compositing in non-premultiplied ARGB8888. */
-    private fun blend(x: Int, y: Int, src: SkColor) {
-        val sa = SkColorGetA(src)
-        if (sa == 0xFF) {
-            bitmap.setPixel(x, y, src)
+    /**
+     * Per-pixel blend dispatch. The 9-mode slice from Phase 6 entry, plus
+     * the historic SrcOver fast path. Operates on **non-premultiplied** ARGB
+     * inputs and outputs.
+     *
+     * Skia's reference raster pipeline runs in premultiplied alpha space.
+     * We re-derive the canonical premul formula on the fly and decompose
+     * the result back into non-premul. This is exact when both operands
+     * are fully opaque (the common case for the GMs in scope) and incurs
+     * a small residual error (≤1 ulp per channel in the worst case) at
+     * fractional alpha — see the `SkBlendModeTest` cases for partial-alpha
+     * inputs.
+     *
+     * Modes outside the 9-mode slice throw [NotImplementedError]. Adding
+     * one is purely a [blendPixel] case; no caller-side change is needed.
+     */
+    private fun blend(x: Int, y: Int, src: SkColor, mode: SkBlendMode) {
+        // SrcOver fast path — same code as Phase 1 had — preserved bit-for-bit.
+        if (mode == SkBlendMode.kSrcOver) {
+            val sa = SkColorGetA(src)
+            if (sa == 0xFF) {
+                bitmap.setPixel(x, y, src)
+                return
+            }
+            if (sa == 0) return
+            val dst = bitmap.getPixel(x, y)
+            val da = SkColorGetA(dst)
+            val invSa = 255 - sa
+            val outA = sa + (da * invSa + 127) / 255
+            if (outA == 0) {
+                bitmap.setPixel(x, y, 0)
+                return
+            }
+            val sr = SkColorGetR(src); val sg = SkColorGetG(src); val sb = SkColorGetB(src)
+            val dr = SkColorGetR(dst); val dg = SkColorGetG(dst); val db = SkColorGetB(dst)
+            val outR = (sr * sa + dr * da * invSa / 255 + outA / 2) / outA
+            val outG = (sg * sa + dg * da * invSa / 255 + outA / 2) / outA
+            val outB = (sb * sa + db * da * invSa / 255 + outA / 2) / outA
+            bitmap.setPixel(x, y, SkColorSetARGB(outA, outR, outG, outB))
             return
         }
-        if (sa == 0) return
+
         val dst = bitmap.getPixel(x, y)
+        val out = blendPixel(src, dst, mode)
+        bitmap.setPixel(x, y, out)
+    }
+
+    /**
+     * Pure function (no bitmap I/O) computing `mode(src, dst)` in
+     * non-premultiplied ARGB. Exposed at package level so unit tests can
+     * verify blend formulas independently of the rasterizer.
+     *
+     * SrcOver is included for completeness; the rasterizer keeps an inlined
+     * fast path in [blend]. All formulas operate on the full 8-bit ARGB
+     * tuple `[a r g b] ∈ [0, 255]`.
+     */
+    internal fun blendPixel(src: SkColor, dst: SkColor, mode: SkBlendMode): SkColor = when (mode) {
+        SkBlendMode.kClear -> 0
+        SkBlendMode.kSrc -> src
+        SkBlendMode.kDst -> dst
+        SkBlendMode.kSrcOver -> blendSrcOver(src, dst)
+        SkBlendMode.kDstOver -> blendDstOver(src, dst)
+        SkBlendMode.kSrcIn -> blendSrcIn(src, dst)
+        SkBlendMode.kDstIn -> blendDstIn(src, dst)
+        SkBlendMode.kPlus -> blendPlus(src, dst)
+        SkBlendMode.kModulate -> blendModulate(src, dst)
+        SkBlendMode.kScreen -> blendScreen(src, dst)
+        else -> throw NotImplementedError(
+            "SkBlendMode.$mode is not implemented in the Phase 6 entry slice " +
+                "(see MIGRATION_PLAN.md). Implemented: kClear, kSrc, kDst, kSrcOver, " +
+                "kDstOver, kSrcIn, kDstIn, kPlus, kModulate, kScreen."
+        )
+    }
+
+    // ----- 9-mode slice implementations ---------------------------------
+    //
+    // All operate on non-premul ARGB tuples. Skia's reference uses premul,
+    // so for modes that combine alpha and colour non-trivially (kSrcIn,
+    // kDstIn) we mirror the premul formula exactly: pre-multiply src & dst
+    // by their alphas, run the formula, post-divide by the result alpha.
+    // For modes that don't multiply colour by the *other* operand's alpha
+    // (kPlus, kModulate, kScreen) the non-premul formula is bit-equivalent
+    // to the premul one when both inputs are fully opaque, with a sub-ulp
+    // discrepancy at fractional alpha — same accuracy budget as our
+    // existing kSrcOver path.
+    // --------------------------------------------------------------------
+
+    private fun blendSrcOver(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src)
+        if (sa == 0xFF) return src
+        if (sa == 0) return dst
         val da = SkColorGetA(dst)
         val invSa = 255 - sa
         val outA = sa + (da * invSa + 127) / 255
-        if (outA == 0) {
-            bitmap.setPixel(x, y, 0)
-            return
-        }
+        if (outA == 0) return 0
         val sr = SkColorGetR(src); val sg = SkColorGetG(src); val sb = SkColorGetB(src)
         val dr = SkColorGetR(dst); val dg = SkColorGetG(dst); val db = SkColorGetB(dst)
         val outR = (sr * sa + dr * da * invSa / 255 + outA / 2) / outA
         val outG = (sg * sa + dg * da * invSa / 255 + outA / 2) / outA
         val outB = (sb * sa + db * da * invSa / 255 + outA / 2) / outA
-        bitmap.setPixel(x, y, SkColorSetARGB(outA, outR, outG, outB))
+        return SkColorSetARGB(outA, outR, outG, outB)
+    }
+
+    /** `r = d + (1-da)*s` — symmetric to SrcOver with src/dst swapped. */
+    private fun blendDstOver(src: SkColor, dst: SkColor): SkColor = blendSrcOver(dst, src)
+
+    /**
+     * `r = s * da` (premul). In non-premul, this becomes
+     * `out.rgb = src.rgb` and `out.alpha = src.alpha * dst.alpha`. The dst
+     * colour is replaced by the src colour, masked by dst's alpha.
+     */
+    private fun blendSrcIn(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src)
+        val da = SkColorGetA(dst)
+        val outA = (sa * da + 127) / 255
+        if (outA == 0) return 0
+        return (outA shl 24) or (src and 0x00FFFFFF)
+    }
+
+    /**
+     * `r = d * sa` (premul). In non-premul, dst colour is preserved and
+     * its alpha is masked by src's alpha.
+     */
+    private fun blendDstIn(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src)
+        val da = SkColorGetA(dst)
+        val outA = (sa * da + 127) / 255
+        if (outA == 0) return 0
+        return (outA shl 24) or (dst and 0x00FFFFFF)
+    }
+
+    /**
+     * `r = min(s + d, 1)` (premul). Used by `ScaledRectsGM` (deferred
+     * since Phase 2). Saturating channel-wise add of premultiplied colours.
+     *
+     * For non-premul inputs this is equivalent when both are opaque (the
+     * GM case). For fractional alpha we compute the premul sum then
+     * un-premul; alpha is a separate saturating add.
+     */
+    private fun blendPlus(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src); val da = SkColorGetA(dst)
+        if (sa == 0) return dst
+        if (da == 0) return src
+        if (sa == 0xFF && da == 0xFF) {
+            // Common ScaledRects-style case: opaque + opaque, no alpha math.
+            val r = (SkColorGetR(src) + SkColorGetR(dst)).coerceAtMost(0xFF)
+            val g = (SkColorGetG(src) + SkColorGetG(dst)).coerceAtMost(0xFF)
+            val b = (SkColorGetB(src) + SkColorGetB(dst)).coerceAtMost(0xFF)
+            return SkColorSetARGB(0xFF, r, g, b)
+        }
+        val outA = (sa + da).coerceAtMost(0xFF)
+        // Fall back to premul math at fractional alpha so the result is
+        // exact w.r.t. Skia's pipeline.
+        val sr = SkColorGetR(src) * sa; val sg = SkColorGetG(src) * sa; val sb = SkColorGetB(src) * sa
+        val dr = SkColorGetR(dst) * da; val dg = SkColorGetG(dst) * da; val db = SkColorGetB(dst) * da
+        val pr = (sr + dr).coerceAtMost(255 * 255)
+        val pg = (sg + dg).coerceAtMost(255 * 255)
+        val pb = (sb + db).coerceAtMost(255 * 255)
+        // Un-premultiply by outA. With outA > 0 this is safe.
+        val outR = (pr + outA / 2) / outA
+        val outG = (pg + outA / 2) / outA
+        val outB = (pb + outA / 2) / outA
+        return SkColorSetARGB(outA, outR.coerceIn(0, 0xFF), outG.coerceIn(0, 0xFF), outB.coerceIn(0, 0xFF))
+    }
+
+    /**
+     * `r = s * d` (premul). Skia comment: per-component multiply of
+     * **premultiplied** colours. In non-premul ARGB this becomes
+     * `out.rgb = (s.rgb * sa) * (d.rgb * da) / out.alpha` with
+     * `out.alpha = sa * da`. Equivalent to `out.rgb = s.rgb * d.rgb` only
+     * when both alphas are opaque — otherwise dst's alpha leaks into the
+     * colour. We keep the formula explicit so the test suite can pin both
+     * cases.
+     */
+    private fun blendModulate(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src); val da = SkColorGetA(dst)
+        if (sa == 0 || da == 0) return 0
+        if (sa == 0xFF && da == 0xFF) {
+            val r = (SkColorGetR(src) * SkColorGetR(dst) + 127) / 255
+            val g = (SkColorGetG(src) * SkColorGetG(dst) + 127) / 255
+            val b = (SkColorGetB(src) * SkColorGetB(dst) + 127) / 255
+            return SkColorSetARGB(0xFF, r, g, b)
+        }
+        val outA = (sa * da + 127) / 255
+        if (outA == 0) return 0
+        // Premul colour: (sr * sa) * (dr * da) / 255² gives the premul
+        // result; un-premul by outA.
+        val sr = SkColorGetR(src); val sg = SkColorGetG(src); val sb = SkColorGetB(src)
+        val dr = SkColorGetR(dst); val dg = SkColorGetG(dst); val db = SkColorGetB(dst)
+        val pr = sr * sa * dr * da
+        val pg = sg * sa * dg * da
+        val pb = sb * sa * db * da
+        // Divide by 255² then un-premul by outA. Combine into a single
+        // (outA * 255²) divisor to keep it integer.
+        val divisor = outA * 255 * 255
+        val outR = ((pr + divisor / 2) / divisor).coerceIn(0, 0xFF)
+        val outG = ((pg + divisor / 2) / divisor).coerceIn(0, 0xFF)
+        val outB = ((pb + divisor / 2) / divisor).coerceIn(0, 0xFF)
+        return SkColorSetARGB(outA, outR, outG, outB)
+    }
+
+    /**
+     * `r = s + d - s*d` (premul). With both operands opaque this is the
+     * non-premul Screen formula directly. Alpha follows SrcOver.
+     */
+    private fun blendScreen(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src); val da = SkColorGetA(dst)
+        if (sa == 0) return dst
+        if (da == 0) return src
+        val outA = sa + da - (sa * da + 127) / 255
+        if (outA == 0) return 0
+        if (sa == 0xFF && da == 0xFF) {
+            val sr = SkColorGetR(src); val sg = SkColorGetG(src); val sb = SkColorGetB(src)
+            val dr = SkColorGetR(dst); val dg = SkColorGetG(dst); val db = SkColorGetB(dst)
+            val r = sr + dr - (sr * dr + 127) / 255
+            val g = sg + dg - (sg * dg + 127) / 255
+            val b = sb + db - (sb * db + 127) / 255
+            return SkColorSetARGB(0xFF, r, g, b)
+        }
+        // Premul math at fractional alpha: outRGB = sr*sa + dr*da - (sr*sa*dr*da)/255,
+        // then un-premul by outA.
+        val sr = SkColorGetR(src) * sa; val sg = SkColorGetG(src) * sa; val sb = SkColorGetB(src) * sa
+        val dr = SkColorGetR(dst) * da; val dg = SkColorGetG(dst) * da; val db = SkColorGetB(dst) * da
+        val pr = sr + dr - (sr * dr + 127 * 255) / (255 * 255)
+        val pg = sg + dg - (sg * dg + 127 * 255) / (255 * 255)
+        val pb = sb + db - (sb * db + 127 * 255) / (255 * 255)
+        val outR = ((pr + outA / 2) / outA).coerceIn(0, 0xFF)
+        val outG = ((pg + outA / 2) / outA).coerceIn(0, 0xFF)
+        val outB = ((pb + outA / 2) / outA).coerceIn(0, 0xFF)
+        return SkColorSetARGB(outA, outR, outG, outB)
     }
 }
