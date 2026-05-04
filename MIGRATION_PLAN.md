@@ -786,6 +786,37 @@ Suite de la Phase 6 entry : ajout des 5 derniers modes Porter-Duff coefficient (
 - [x] 47 tests unitaires `SkBlendMode` verts.
 - [x] **Pass count cumulé : 65 GM.**
 
+### Phase 6 separable (simple) ✅
+
+Ajout des 5 modes separable « simples » (formules en une ligne en premul-float). Il reste 5 modes separable complexes (`kOverlay`, `kHardLight`, `kColorDodge`, `kColorBurn`, `kSoftLight`) + 4 HSL pour clôturer Phase 6.
+
+#### Modes ajoutés
+- [x] `kMultiply` — `rc = (1-sa)*dc + (1-da)*sc + sc*dc`. ⚠ Skia distingue *Multiply* (cette formule, premul-aware) de *Modulate* (`s*d` direct, déjà implémenté Phase 6 entry).
+- [x] `kDarken` — `rc = sc + dc - max(sc*da, dc*sa)`. Sélectionne le plus sombre des deux opérandes pondérés.
+- [x] `kLighten` — `rc = sc + dc - min(sc*da, dc*sa)`. Symétrique.
+- [x] `kDifference` — `rc = sc + dc - 2*min(sc*da, dc*sa)`. Différence absolue ; couleurs identiques s'annulent.
+- [x] `kExclusion` — `rc = sc + dc - 2*sc*dc`. Différence sans dépendance d'alpha.
+
+L'alpha de sortie est SrcOver (`oa = sa + da*(1-sa)`) pour tous les modes separable, conformément à la convention Skia.
+
+#### API ajoutée
+
+- [x] **`SkBitmapDevice.blendSeparable(src, dst, mode)`** — dispatcher : convertit une fois en float premul, applique la formule per-canal via `sepChannel`, dépremultiplie + quantize 8-bit.
+- [x] **`SkBitmapDevice.sepChannel(s, d, sa, da, mode)`** — formule par canal en premul-float `[0, 1]`.
+
+#### Tests unitaires
+
+- [x] **`SkBlendModeTest.kt`** : +14 cas couvrant les 5 nouveaux modes (opaque-on-opaque, opaque-on-black-or-white, deux cas symétriques par mode). 61 tests passent au total (47 anciens + 14 nouveaux).
+
+#### Pas de port GM ce slice
+
+Tous les GMs upstream qui exercent ces modes (`androidblendmodes`, `lcdblendmodes`, `xfermodes`, etc.) nécessitent `drawString`/`SkFont` (hors scope) ou bien ont dejà été couverts par un GM précédent (`aarectmodes` couvre les Porter-Duff). Le port d'un GM dédié sera fait quand on aura aussi les 5 modes complexes (`kOverlay`/etc.) — `XfermodesGM` upstream couvre les 29 modes ensemble en grille.
+
+#### Vérification Phase 6 separable simple
+- [x] 65 GMs précédents — 0 régression, scores inchangés.
+- [x] 14 nouveaux tests unitaires verts.
+- [x] **Pass count cumulé : 65 GM** (infrastructure ; pas de nouveau port GM).
+
 ---
 
 ## Travaux parallèles (hors numérotation de phases)
@@ -854,6 +885,9 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 6c    | 64       | F16 solid-colour AA (`colorToF16Premul` + float coverage dans fillRectAA/strokeRectAA/scanFillPath) — 11 GMs en hausse, 0 régression | ✅ |
 | 5g    | 64       | `SkBitmapShader` infra (`SkBitmap.makeShader`/`SkImage.makeShader` + `shadeRowF16`) + `SkCanvas.drawPaint` shader-aware + paint.alpha modulation. Ports GM déférés (BG xform + linear-premul compositing requis). | ✅ |
 | 6 PD  | 65       | Phase 6 Porter-Duff completion : 5 derniers modes (`kSrcOut`/`kDstOut`/`kSrcATop`/`kDstATop`/`kXor`) + 15 tests unitaires + `AaRectModesGM` 80.30 % (12 modes en grille avec `bm.makeShader` + `saveLayer`) | ✅ |
+| 6 sepS | 65      | Phase 6 separable simple : `kMultiply`/`kDarken`/`kLighten`/`kDifference`/`kExclusion` via helper float-premul + 14 tests unitaires (61 total). Pas de port GM ce slice. | ✅ |
+| 6 sepC | 65+     | Phase 6 separable complexe : `kOverlay`/`kHardLight`/`kColorDodge`/`kColorBurn`/`kSoftLight` (formules par-canal avec branches conditionnelles) | ⬜ |
+| 6 HSL | 65+      | Phase 6 HSL : `kHue`/`kSaturation`/`kColor`/`kLuminosity` (helpers luminosity/saturation/clipColor) | ⬜ |
 | 5h    | 65+      | Linear-premul F16 storage (via `eraseColor` xformé) ⇒ port `TinyBitmap`, `BigMatrix`, `BitmapShader`, `TilemodesAlpha` | ⬜ |
 | 6     | ~70      | 19 blend modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
