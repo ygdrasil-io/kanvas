@@ -1,9 +1,5 @@
 package org.skia.math
 
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * 2D affine transformation matrix — port of Skia's `SkMatrix` restricted to
@@ -130,8 +126,8 @@ public data class SkMatrix(
         val sumSq = a * a + b * b + c * c + d * d
         val diffHalf = ((a * a + c * c) - (b * b + d * d)) * 0.5f
         val cross = a * b + c * d
-        val sigmaMaxSq = 0.5f * sumSq + sqrt(diffHalf * diffHalf + cross * cross)
-        return sqrt(sigmaMaxSq)
+        val sigmaMaxSq = 0.5f * sumSq + SkScalarSqrt(diffHalf * diffHalf + cross * cross)
+        return SkScalarSqrt(sigmaMaxSq)
     }
 
     /**
@@ -156,7 +152,7 @@ public data class SkMatrix(
      */
     public fun invert(): SkMatrix? {
         val det = sx.toDouble() * sy - kx.toDouble() * ky
-        if (kotlin.math.abs(det.toFloat()) <= SK_DetNearlyZero) return null
+        if (SkScalarNearlyZero(det.toFloat(), SK_DetNearlyZero)) return null
         val invDet = 1.0 / det
         val isx = (sy.toDouble() * invDet).toFloat()
         val ikx = (-kx.toDouble() * invDet).toFloat()
@@ -203,28 +199,23 @@ public data class SkMatrix(
          * tripping over a `~6e-8` cosine residue.
          */
         public fun MakeRotate(deg: SkScalar): SkMatrix {
-            val rad = deg.toDouble() * PI / 180.0
-            val s = snapToZero(sin(rad).toFloat())
-            val c = snapToZero(cos(rad).toFloat())
+            val rad = SkDegreesToRadians(deg)
+            val s = SkScalarSinSnapToZero(rad)
+            val c = SkScalarCosSnapToZero(rad)
             // Avoid `-0f` from `-s` when `s` was snapped to `+0f`: explicit
             // negation that preserves the positive-zero representation.
             val negS = if (s == 0f) 0f else -s
             return SkMatrix(sx = c, kx = negS, ky = s, sy = c)
         }
 
-        /** Skia include/core/SkScalar.h: `1f / (1 << 16)` ≈ 1.526e-5. */
-        private const val SK_ScalarSinCosNearlyZero: Float = 1.0f / (1 shl 16)
-
-        private fun snapToZero(v: Float): Float =
-            if (kotlin.math.abs(v) <= SK_ScalarSinCosNearlyZero) 0f else v
-
         /**
          * Singular-determinant threshold for [invert]. Skia compares
          * `|det|` (cast back to float) against `SK_ScalarNearlyZero³`
-         * with `SK_ScalarNearlyZero = 1f / (1 << 12)`. Cube ≈ 1.4552e-11.
-         * See `sk_inv_determinant` in src/core/SkMatrix.cpp.
+         * (cube of `1f / (1 << 12)` = ≈ 1.4552e-11). See `sk_inv_determinant`
+         * in src/core/SkMatrix.cpp.
          */
-        private const val SK_DetNearlyZero: Float = 1.4551915e-11f
+        private const val SK_DetNearlyZero: Float =
+            SK_ScalarNearlyZero * SK_ScalarNearlyZero * SK_ScalarNearlyZero
 
         /** Rotation around a pivot point. */
         public fun MakeRotate(deg: SkScalar, px: SkScalar, py: SkScalar): SkMatrix {
