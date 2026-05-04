@@ -166,6 +166,79 @@ public class SkColorSpace private constructor(
         }
 
         /**
+         * Build an `SkColorSpace` from a parsed [org.skia.skcms.SkcmsICCProfile].
+         * Mirrors upstream
+         * [SkColorSpace.cpp:331-407](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkColorSpace.cpp),
+         * with the Phase F2 subset (no A2B / B2A LUT, no
+         * `skcms_TRCs_AreApproximateInverse` fallback).
+         *
+         * Resolution order for the gamut and TF:
+         *  - If the profile has a CICP tag and it indexes a known
+         *    [SkNamedPrimaries.CicpId], use that. Otherwise fall back to
+         *    the profile's `toXYZD50` matrix.
+         *  - If the profile has a CICP tag and it indexes a known
+         *    [SkNamedTransferFn.CicpId], use that. Otherwise look at the
+         *    three TRC curves: they must all be parametric and bit-equal
+         *    (the typical SDR profile authoring case).
+         *  - Then call [makeRGB], which snaps to a singleton if the
+         *    inputs are quasi-standard.
+         *
+         * Returns `null` if neither a valid TF nor a usable matrix can be
+         * resolved. Curve-table TRCs (LUT-only profiles) are deferred to
+         * Phase F3.
+         */
+        public fun make(profile: org.skia.skcms.SkcmsICCProfile): SkColorSpace? {
+            val useCicp = profile.hasCICP &&
+                profile.cicp.matrixCoefficients == 0 &&
+                profile.cicp.videoFullRangeFlag == 1
+            val cicpPrimaries = profile.cicp.colorPrimaries
+            val cicpTrfn = profile.cicp.transferCharacteristics
+
+            // 1) Resolve the toXYZD50 matrix.
+            var toXYZD50: SkcmsMatrix3x3? = null
+            if (useCicp) {
+                val pid = SkNamedPrimaries.CicpId.entries
+                    .firstOrNull { it.value == cicpPrimaries }
+                if (pid != null) {
+                    toXYZD50 = SkNamedPrimaries.getCicp(pid)
+                } else if (cicpPrimaries != SkNamedPrimaries.CicpId.kCicpIdApplicationDefined) {
+                    // Unknown CICP id and not "application-defined": reject.
+                    return null
+                }
+            }
+            if (toXYZD50 == null && profile.hasToXYZD50) {
+                toXYZD50 = profile.toXYZD50
+            }
+            if (toXYZD50 == null) return null
+
+            // 2) Resolve the transfer function.
+            var trfn: SkcmsTransferFunction? = null
+            if (useCicp) {
+                val tid = SkNamedTransferFn.CicpId.entries
+                    .firstOrNull { it.value == cicpTrfn }
+                if (tid != null) {
+                    trfn = SkNamedTransferFn.getCicp(tid)
+                } else if (cicpTrfn != SkNamedTransferFn.CicpId.kCicpIdApplicationDefined) {
+                    return null
+                }
+            }
+            if (trfn == null && profile.hasTrc) {
+                // All three TRCs must be Parametric and bit-equal. LUT-only
+                // profiles are out of scope for Phase F2.
+                val a = profile.trc[0] as? org.skia.skcms.SkcmsCurve.Parametric
+                val b = profile.trc[1] as? org.skia.skcms.SkcmsCurve.Parametric
+                val c = profile.trc[2] as? org.skia.skcms.SkcmsCurve.Parametric
+                if (a != null && b != null && c != null &&
+                    a.parametric == b.parametric && a.parametric == c.parametric) {
+                    trfn = a.parametric
+                }
+            }
+            if (trfn == null) return null
+
+            return makeRGB(trfn, toXYZD50)
+        }
+
+        /**
          * `MakeRGB(tf, mat)`. Returns `null` if `tf` is not a valid sRGBish
          * transfer function. Snaps quasi-standard inputs to the matching
          * `SkNamedTransferFn::k*` so `gammaCloseToSRGB()` (memcmp-style
