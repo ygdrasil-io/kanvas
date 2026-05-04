@@ -629,6 +629,52 @@ Sur les 64 GMs existants, les écarts sont à la marge (`HardstopGradientsManyGM
 
 ---
 
+### Phase 6c — F16 solid-colour AA (✅)
+
+**But** : supprimer la **dernière** quantization 8-bit qui restait en amont du blend dans les rasterizers AA solid-color (le `scaleAlpha(baseA, coverage) → Int` du fillRectAA / strokeRectAA / scanFillPath solid path). La couleur du paint est désormais convertie une seule fois par draw en premul-float (working space) et la coverage est multipliée comme un float pur tout au long du chemin pixel.
+
+#### API ajoutée
+
+- [x] **`SkBitmapDevice.colorToF16Premul(c: SkColor, out: FloatArray)`** — helper privé : working-space `SkColor` 8-bit → 4 floats `(sr, sg, sb, sa)` premultipliés. Le paint colour est déjà passé par `inDeviceColorSpace` / `transformPaintColor` au site appelant, donc cette conversion ne ré-applique **pas** le xform colour-space — c'est une pure conversion 8-bit non-premul → float-premul.
+
+#### Refactor
+
+- [x] **`SkBitmapDevice.fillRectAA`** : nouvelle branche fast-path quand `bitmap.colorType == kRGBA_F16Norm && mode == kSrcOver`. Précompute `(sr, sg, sb, sa)` une fois, puis `blendF16Premul(x, y, sr*cov, sg*cov, sb*cov, sa*cov)` par pixel — coverage `cov = cx * cy` reste en float jusqu'au store F16.
+- [x] **`SkBitmapDevice.strokeRectAA`** : même refactor (coverage `cov = outerCX * outerCY - innerCX * innerCY`).
+- [x] **`SkBitmapDevice.scanFillPath`** : ajout d'une 4e branche `useF16SolidPath` (à côté du `useF16ShaderPath` Phase 6b et des deux paths 8-bit). `solidF16: FloatArray?` est précomputé une fois par draw via `colorToF16Premul`, la boucle interne est `cov = samples * invMaxSamples` (float) puis `blendF16Premul(...)`.
+
+#### Impact mesuré
+
+11 GMs en **hausse**, 0 régression sur les 64 GMs existants. Améliorations entre +0.001 % et +0.013 % — petites en absolu, mais elles confirment que la coverage AA float élimine une vraie quantization. Les GMs qui bougent sont tous ceux du `scanFillPath` solid-color avec AA fractionnaire significatif :
+
+| GM | avant | après | delta |
+|---|---|---|---|
+| `Crbug884166GM` | 98.984 % | 98.998 % | +0.013 |
+| `ScaledStrokesGM` | 96.101 % | 96.110 % | +0.009 |
+| `ConcavePathsGM` | 98.860 % | 98.872 % | +0.012 |
+| `Crbug640176GM` | 99.7024 % | 99.7056 % | +0.003 |
+| `NonClosedPathsGM` | 96.820 % | 96.824 % | +0.003 |
+| `Strokes2GM` | 91.353 % | 91.356 % | +0.003 |
+| `DRRectGM` | 98.487 % | 98.489 % | +0.002 |
+| `Crbug913349GM` | 99.759 % | 99.761 % | +0.002 |
+| `ConicPathsGM` | 95.5421 % | 95.5444 % | +0.002 |
+| `FillCircleGM` | 95.3158 % | 95.3162 % | +0.0004 |
+
+Les `RectAA` (axis-aligned rects) ne bougent pas sensiblement parce que leur coverage est rarement fractionnaire — c'est sur les paths courbes / strokes qu'on gagne.
+
+#### Limites connues — Phase 6 follow-ups
+
+- **Path solid-color non-AA** (`fillPath` → `scanFillPath` avec `supers=1`) : avec `maxSamples=1`, `samples ∈ {0, 1}` et `cov ∈ {0, 1}` — pas de quantization à supprimer. Déjà optimal en Phase 6c (coverage entière = coverage flottante quand `samples = maxSamples`).
+- **drawPaint, fillRect, strokeRect, hairlines** (paths non-AA solid color) : la coverage est binaire, ils utilisent `blendF16` (qui ne quantize plus depuis Phase 6a). Aucun changement Phase 6c utile ici.
+- **Blend modes ≠ kSrcOver** : restent sur le path 8-bit. Attendu — les modes non-SrcOver demandent un dispatch par mode dans le compositor F16, slice indépendant.
+
+#### Vérification Phase 6c
+- [x] 11 GMs en hausse, 0 régression. Le ratchet enregistre les nouveaux scores.
+- [x] Les 64 GMs précédents passent toujours.
+- [x] **Pass count cumulé : 64 GM** (infrastructure ; pas de nouveau GM porté).
+
+---
+
 ## Phase 6 — Blend modes complets : `AAXfermodesGM`, `XfermodesGM`, `DestColorGM`, `AndroidBlendModesGM`
 
 **But final** : 28 modes Porter-Duff + modes avancés.
@@ -742,7 +788,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 5f    | 64       | GM harvest mixed (Beziers/HardstopMany/TestGradient/ThinStroked/BatchedConvex/ShallowLin/ShallowRad/B119394958/Crbug1086705) — 0 nouvelle API | ✅ |
 | 6a    | 64       | F16 working-space rasterizer (infra : SkBitmap F16, blendF16 SrcOver, I/O 16-bit) | ✅ |
 | 6b    | 64       | F16 shaders (`shadeRowF16` premul-float gradient + scanline-fill float coverage) — pipeline F16 désormais pur de bout en bout pour `kSrcOver` | ✅ |
-| 6c    | 64+      | F16 solid-colour AA (suppression de la dernière quantization 8-bit en amont du `blend`) ⇒ Hardstop/Analytic score lift attendu | ⬜ |
+| 6c    | 64       | F16 solid-colour AA (`colorToF16Premul` + float coverage dans fillRectAA/strokeRectAA/scanFillPath) — 11 GMs en hausse, 0 régression | ✅ |
 | 5g    | ~67      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
 | 6     | ~70      | 19 blend modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
