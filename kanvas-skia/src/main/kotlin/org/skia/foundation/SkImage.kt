@@ -19,6 +19,17 @@ public class SkImage internal constructor(
     public fun peekPixel(x: Int, y: Int): SkColor =
         if (x in 0 until width && y in 0 until height) pixels[y * width + x] else 0
 
+    /**
+     * Mirrors Skia's `SkImage::makeShader(tmx, tmy, sampling, localMatrix)`.
+     * Phase 5g — see [SkBitmapShader] for the sampling rules.
+     */
+    public fun makeShader(
+        tileX: SkTileMode = SkTileMode.kClamp,
+        tileY: SkTileMode = SkTileMode.kClamp,
+        sampling: SkSamplingOptions = SkSamplingOptions.Default,
+        localMatrix: org.skia.math.SkMatrix = org.skia.math.SkMatrix.Identity,
+    ): SkShader = SkBitmapShader(this, tileX, tileY, sampling, localMatrix)
+
     public companion object {
         /**
          * Snapshot the bitmap into a new immutable [SkImage]. The pixel
