@@ -401,7 +401,11 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
             return stack.size - 2
         }
 
-        val layerBitmap = SkBitmap(w, h, s.device.bitmap.colorSpace).also { it.eraseColor(0) }
+        // Inherit the parent's `colorType` so multi-layer composition stays
+        // in the same precision regime — under an F16 root, layers are F16
+        // too; otherwise both sides remain 8888.
+        val layerBitmap = SkBitmap(w, h, s.device.bitmap.colorSpace, s.device.bitmap.colorType)
+            .also { it.eraseColor(0) }
         val layerDevice = SkBitmapDevice(layerBitmap)
         val originX = layerBounds.left
         val originY = layerBounds.top
