@@ -501,6 +501,28 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 - [x] Aucune régression sur les 39 GMs Phase 0–5c.
 - [x] **Pass count cumulé : 44 GM.**
 
+### Phase 5e — DEF_SIMPLE_GM regression harvest (44 → 54) ✅
+
+**But** : récolter 10 `DEF_SIMPLE_GM` Skia upstream — chacun est un test de régression < 30 lignes pour un bug spécifique. 0 nouvelle API.
+
+| GM                    | Référence                       | Score      | Stress |
+|-----------------------|---------------------------------|------------|--------|
+| Crbug640176GM         | `crbug_640176.png` 250×250      | **99.70%** | conicTo weight ≈ cos(15°), sub-ulp coords. |
+| RotatedCubicPathGM    | `rotatedcubicpath.png` 200×200  | **99.40%** | cubic fill axis-aligned + rotated 90°. |
+| Bug593049GM           | `bug593049.png` 300×300         | **99.92%** | arcTo half-arc + kRound_Cap stroke. |
+| LongWavyLineGM        | `longwavyline.png` 512×512      | **99.52%** | 1000 quads spanning x=−10000..10000. |
+| CubicStrokeGM         | `CubicStroke.png` 384×384       | **98.28%** | 3 near-equal stroke widths (1.0720/0.21/0.22). |
+| ZeroLineStrokeGM      | `zerolinestroke.png` 90×120     | **93.75%** | Zero-length lines + kRound_Cap. |
+| Skbug12244GM          | `skbug12244.png` 150×150        | **99.55%** | Pre-stroked triangle outline drawn as fill. |
+| PathArcToSkbug9077GM  | `path_arcto_skbug_9077.png` 200×200 | **97.96%** | lineTo + close + tangent arcTo. |
+| PathSkbug11859GM      | `path_skbug_11859.png` 512×512  | **99.77%** | Multi-subpath fill near edge under scale(2,2). |
+| PathSkbug11886GM      | `path_skbug_11886.png` 256×256  | **99.22%** | Cubic with extreme y-displacement. |
+
+#### Vérification Phase 5e
+- [x] Aucune nouvelle API (purs ports sur l'API Phase 0–5d).
+- [x] Aucune régression sur les 44 GMs Phase 0–5d.
+- [x] **Pass count cumulé : 54 GM.**
+
 ---
 
 ## Phase 6 — Blend modes complets : `AAXfermodesGM`, `XfermodesGM`, `DestColorGM`, `AndroidBlendModesGM`
@@ -581,7 +603,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 5b    | 36       | GM harvest gradient (Analytic/Clamped/Hardstop) + premier stress kRepeat/kMirror | ✅ |
 | 5c    | 39       | GM harvest path/stroke (ScaledStrokes/StrokeRects/NonClosedPaths) — 0 nouvelle API | ✅ |
 | 5d    | 44       | GM harvest path/conic/oval (PathInterior/ConicPaths/ArcCircleGap/LargeCircle/LargeOvals) — 0 nouvelle API | ✅ |
-| 5e    | ~47      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
+| 5e    | 54       | DEF_SIMPLE_GM regression harvest (10 small bug GMs) — 0 nouvelle API | ✅ |
+| 5f    | ~57      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
