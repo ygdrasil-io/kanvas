@@ -108,9 +108,9 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         s.matrix = s.matrix.preTranslate(dx, dy)
     }
 
-    public fun scale(kx: SkScalar, ky: SkScalar) {
+    public fun scale(sx: SkScalar, sy: SkScalar) {
         val s = top
-        s.matrix = s.matrix.preScale(kx, ky)
+        s.matrix = s.matrix.preScale(sx, sy)
     }
 
     /** Mirrors Skia's `SkCanvas::rotate(deg)` — pre-concat with a rotation around the origin. */

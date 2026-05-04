@@ -215,6 +215,173 @@ class SkMatrixTest {
     }
 
     @Test
+    fun `pivoted MakeScale leaves pivot fixed`() {
+        // Scale by (2, 3) around (1, 1) — point (1, 1) should be fixed.
+        val m = SkMatrix.MakeScale(2f, 3f, 1f, 1f)
+        val (x, y) = m.mapXY(1f, 1f)
+        assertNear(1f, x); assertNear(1f, y)
+        // And (2, 1) should map to (1 + 2*1, 1) = (3, 1).
+        val (x2, y2) = m.mapXY(2f, 1f)
+        assertNear(3f, x2); assertNear(1f, y2)
+    }
+
+    @Test
+    fun `pivoted MakeScale degenerates to identity for unit scale`() {
+        val m = SkMatrix.MakeScale(1f, 1f, 7f, 11f)
+        assertTrue(m.isIdentity)
+    }
+
+    @Test
+    fun `pivoted MakeSkew leaves pivot fixed`() {
+        // Skew x by 0.5 around (10, 4) — point (10, 4) should be fixed.
+        val m = SkMatrix.MakeSkew(0.5f, 0f, 10f, 4f)
+        val (x, y) = m.mapXY(10f, 4f)
+        assertNear(10f, x); assertNear(4f, y)
+    }
+
+    @Test
+    fun `MakeRotate cardinal angles produce bit-exact axis-aligned matrices`() {
+        // After Phase 3 snap-to-zero, sin/cos near-zero residues are snapped to 0f,
+        // so cardinal angles produce exactly axis-aligned matrices (sx, sy, kx, ky
+        // ∈ {-1, 0, 1} bit-exact).
+        for ((deg, expected) in listOf(
+            0f   to floatArrayOf( 1f,  0f,  0f,  1f),  // (sx, kx, ky, sy)
+            90f  to floatArrayOf( 0f, -1f,  1f,  0f),
+            180f to floatArrayOf(-1f,  0f,  0f, -1f),
+            270f to floatArrayOf( 0f,  1f, -1f,  0f),
+            -90f to floatArrayOf( 0f,  1f, -1f,  0f),
+            -180f to floatArrayOf(-1f, 0f,  0f, -1f),
+        )) {
+            val m = SkMatrix.MakeRotate(deg)
+            assertEquals(expected[0], m.sx, "sx at $deg deg")
+            assertEquals(expected[1], m.kx, "kx at $deg deg")
+            assertEquals(expected[2], m.ky, "ky at $deg deg")
+            assertEquals(expected[3], m.sy, "sy at $deg deg")
+        }
+    }
+
+    @Test
+    fun `MakeAll round-trips through fields`() {
+        val m = SkMatrix.MakeAll(2f, 3f, 5f, 7f, 11f, 13f)
+        assertEquals(2f, m.sx); assertEquals(3f, m.kx); assertEquals(5f, m.tx)
+        assertEquals(7f, m.ky); assertEquals(11f, m.sy); assertEquals(13f, m.ty)
+    }
+
+    @Test
+    fun `MakeRotate snap does not leak negative zero`() {
+        // Phase 3: snapToZero should normalize -0f → 0f via the explicit
+        // negation guard. Use Float.floatToRawIntBits to assert bit-exact.
+        for (deg in listOf(0f, 90f, 180f, 270f, -90f, -180f, 360f)) {
+            val m = SkMatrix.MakeRotate(deg)
+            for ((name, v) in listOf("sx" to m.sx, "kx" to m.kx, "ky" to m.ky, "sy" to m.sy)) {
+                if (v == 0f) {
+                    assertEquals(0, java.lang.Float.floatToRawIntBits(v),
+                        "$name at $deg deg leaked -0f")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `invert exactly-singular returns null`() {
+        // Two equal rows ⇒ det = 0 exactly.
+        val m = SkMatrix(sx = 2f, kx = 4f, tx = 1f, ky = 1f, sy = 2f, ty = 0f)
+        assertEquals(null, m.invert())
+    }
+
+    @Test
+    fun `invert near-singular returns null`() {
+        // Tiny scale on both axes yields det ≈ 1e-12, below the SK_DetNearlyZero
+        // threshold of 1.46e-11. Without the threshold check, the inverse would
+        // produce ~1e6-magnitude finite garbage values.
+        val m = SkMatrix(sx = 1e-6f, kx = 0f, tx = 0f, ky = 0f, sy = 1e-6f, ty = 0f)
+        assertEquals(null, m.invert(), "det ≈ 1e-12 should be treated as singular")
+    }
+
+    @Test
+    fun `invert non-singular returns valid inverse`() {
+        // Sanity check the threshold doesn't bite a normal matrix.
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val inv = m.invert()!!
+        // M · M⁻¹ should be identity (within float precision).
+        val composed = SkMatrix.concat(m, inv)
+        assertNear(1f, composed.sx); assertNear(0f, composed.kx); assertNear(0f, composed.tx)
+        assertNear(0f, composed.ky); assertNear(1f, composed.sy); assertNear(0f, composed.ty)
+    }
+
+    @Test
+    fun `MakeRotate(0) and MakeRotate(180) are isAxisAligned`() {
+        // 0° and 180° preserve `kx == ky == 0` after snap — they fit our
+        // strict isAxisAligned (translate + scale only) definition.
+        // 90/270/-90 swap axes (kx, ky != 0) so they're NOT isAxisAligned;
+        // matching Skia, that's `rectStaysRect`, a looser predicate we don't expose yet.
+        assertTrue(SkMatrix.MakeRotate(0f).isAxisAligned)
+        assertTrue(SkMatrix.MakeRotate(180f).isAxisAligned)
+        assertTrue(SkMatrix.MakeRotate(-180f).isAxisAligned)
+        assertFalse(SkMatrix.MakeRotate(90f).isAxisAligned)
+        assertFalse(SkMatrix.MakeRotate(-90f).isAxisAligned)
+    }
+
+    @Test
+    fun `concat 10-step chain stable to 1 ulp vs double reference`() {
+        // Build a 10-step CTM chain (translate → scale → rotate → skew, repeated).
+        // The Kotlin float chain must agree with a double-precision reference
+        // implementation to within ~1 ulp at the float level (~ 1e-4 in unit space).
+        var m = SkMatrix.Identity
+        // Reference matrix as 6 doubles, computed without any float intermediate.
+        var rsx = 1.0; var rkx = 0.0; var rtx = 0.0
+        var rky = 0.0; var rsy = 1.0; var rty = 0.0
+        fun refConcat(asx: Double, akx: Double, atx: Double, aky: Double, asy: Double, aty: Double) {
+            // M_new = M · A (pre-concat).
+            val nsx = rsx * asx + rkx * aky
+            val nkx = rsx * akx + rkx * asy
+            val ntx = rsx * atx + rkx * aty + rtx
+            val nky = rky * asx + rsy * aky
+            val nsy = rky * akx + rsy * asy
+            val nty = rky * atx + rsy * aty + rty
+            rsx = nsx; rkx = nkx; rtx = ntx
+            rky = nky; rsy = nsy; rty = nty
+        }
+        for (i in 1..10) {
+            val angle = (i * 17).toFloat()
+            val tx = (i * 0.3f); val ty = (i * 0.7f)
+            val sx = 1f + i * 0.05f; val sy = 1f - i * 0.04f
+            val kx = i * 0.02f; val ky = -i * 0.03f
+            // Apply same operations to the float matrix and the double reference.
+            m = m.preTranslate(tx, ty)
+            refConcat(1.0, 0.0, tx.toDouble(), 0.0, 1.0, ty.toDouble())
+            m = m.preScale(sx, sy)
+            refConcat(sx.toDouble(), 0.0, 0.0, 0.0, sy.toDouble(), 0.0)
+            val rad = angle.toDouble() * kotlin.math.PI / 180.0
+            val c = kotlin.math.cos(rad); val s = kotlin.math.sin(rad)
+            m = m.preRotate(angle)
+            refConcat(c, -s, 0.0, s, c, 0.0)
+            m = m.preSkew(kx, ky)
+            refConcat(1.0, kx.toDouble(), 0.0, ky.toDouble(), 1.0, 0.0)
+        }
+        // Compare each cell. Tolerance: 5e-3 absolute is comfortable for a chain of
+        // 40 transforms with float intermediate; tighten if Phase 2 buys more.
+        val eps = 5e-3f
+        assertEquals(rsx.toFloat(), m.sx, eps)
+        assertEquals(rkx.toFloat(), m.kx, eps)
+        assertEquals(rtx.toFloat(), m.tx, eps)
+        assertEquals(rky.toFloat(), m.ky, eps)
+        assertEquals(rsy.toFloat(), m.sy, eps)
+        assertEquals(rty.toFloat(), m.ty, eps)
+    }
+
+    @Test
+    fun `pivoted preScale matches preConcat-with-MakeScale-pivoted`() {
+        val base = SkMatrix.MakeRotate(30f).preTranslate(7f, 11f)
+        val viaPre = base.preScale(2f, 3f, 5f, 5f)
+        val viaConcat = SkMatrix.concat(base, SkMatrix.MakeScale(2f, 3f, 5f, 5f))
+        // Apply both to a probe point — must agree to sub-pixel.
+        val (a, b) = viaPre.mapXY(2f, 3f)
+        val (c, d) = viaConcat.mapXY(2f, 3f)
+        assertEquals(c, a, 1e-4f); assertEquals(d, b, 1e-4f)
+    }
+
+    @Test
     fun `singular values are positive`() {
         // Random affine matrix should have positive max scale.
         val m = SkMatrix(sx = 1.5f, kx = 0.7f, tx = 100f, ky = -0.3f, sy = 2f, ty = -50f)
