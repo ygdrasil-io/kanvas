@@ -305,21 +305,29 @@ Ajouté à [SkColorSpace.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkC
 
 ---
 
-## Phase H — Hash bit-compat `SkChecksum::Hash32` (XS)
+## Phase H — Hash bit-compat `SkChecksum::Hash32` (XS) — ✅
 
-**But** : `SkColorSpace.hash()` retourne une valeur identique à upstream Skia.
+**But** : `SkColorSpace.transferFnHash` / `toXYZD50Hash` retournent des valeurs identiques à upstream Skia (`SkColorSpace.cpp:132-133`).
 
-À porter de [`src/core/SkChecksum.h`](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkChecksum.h) :
+L'implémentation upstream est **wyhash** (https://github.com/wangyi-fudan/wyhash) — pas Mum hash : la spec dans le plan original était périmée. Source : [`src/core/SkChecksum.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkChecksum.cpp).
 
-- [ ] `SkChecksum.hash32(data: ByteArray, len: Int, seed: Int = 0): Int` — Mum hash variant. Spec : `hash_fn` dans `src/opts/SkOpts_*.cpp`.
-- [ ] Adapter les conversions float → byte pour matcher l'ordre mémoire C++ (little-endian sur ARM/x86).
-- [ ] Remplacer `hashFloats` dans [SkColorSpace.kt:96-104](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt:96).
+- [x] [SkChecksum.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkChecksum.kt) — port complet de wyhash. Utilise `Math.unsignedMultiplyHigh` (Java 18+, on est sur JVM 25) pour le `_wymum` 128-bit. Secrets `WYP0..3` identiques à upstream. `hash32` zero-extend le seed uint32 → uint64 puis tronque le résultat 64 → 32 bits comme Skia.
+- [x] `SkColorSpace.transferFnHash` / `toXYZD50Hash` réécrits : floats → 28 / 36 bytes little-endian via un helper local `floatsToBytes`, puis `SkChecksum.hash32(bytes)`. Mirror de `Hash32(&fTransferFn, 7*sizeof(float))` byte-pour-byte.
+- [x] L'ancien `hashFloats` (FNV-1a) supprimé.
 
-**Tests** :
-- [ ] Cross-check avec Skia : `MakeSRGB().transferFnHash` == valeur connue Skia (à extraire).
-- [ ] Stabilité : bit-rotation préservée, hash identique entre runs.
+**Tests** [SkChecksumTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkChecksumTest.kt) — 11 :
+- [x] **Ground truth** : 7 cross-checks contre la sortie d'un binaire C++ standalone qui ré-instancie wyhash avec les mêmes secrets — `empty`, len-1/2/3 (branche `_wyr3`), len-4 (`_wyr4`), `"hello world"` (len-11), 64 bytes (loop `i > 48`).
+- [x] **Seed honoré** : `hash32(data, seed=0) != hash32(data, seed=1)`.
+- [x] **Length honorée** : `hash32(data, length=4) == hash32(data[..4])`.
+- [x] **Stabilité** : 3 appels successifs → même valeur.
+- [x] **Hash64 cohérent** : `hash32` == low-32-bits de `hash64`.
 
-**Justification** : sans ça, `serialize`/`Deserialize` est OK (pas de hash dans le format), `Equals` est OK (intra-impl). Utile uniquement pour interop avec un cache Skia externe (peu probable). **Priorité basse**.
+**Tests** [SkColorSpaceHashTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkColorSpaceHashTest.kt) — 6 :
+- [x] **Cross-check Skia** : sRGB transferFnHash = `0x105632bd`, sRGB toXYZD50Hash = `0x7910144c`, Linear TF = `0x70e19594`, Rec.2020 TF = `0xef6bae87`, Rec.2020 matrix = `0x9ebacc71`. Toutes les 5 valeurs viennent du driver C++ standalone qui mirror exactement `SkChecksum.cpp`.
+- [x] **Equals stable** : sRGB == sRGB, sRGBLinear == sRGBLinear, sRGB ≠ sRGBLinear.
+- [x] **Rec.2020 ≠ sRGB** sur les deux hashes (sanity).
+
+**Vérification globale** : `./gradlew :kanvas-skia:test` → 415 tests, 0 échec, 0 régression sur les 44 GMs.
 
 ---
 
@@ -496,7 +504,7 @@ Identique aux plans précédents :
 5. **PR Phase F7** — wiring `loadReferenceBitmap` sur ICC parser (~50 lignes, bénéfice énorme : tolerance 1→0).
 6. **PR Phase G** — sérialisation (~150 lignes).
 7. **PR Phase J** — clean-up précisions kRec2020 (~30 lignes).
-8. **PR Phase H** — hash bit-compat (optionnel, ~80 lignes).
+8. ✅ **PR Phase H** — hash bit-compat (~150 lignes, wyhash port + 17 tests).
 9. **PR Phase I** — HDR complet (~600 lignes, en dernier — pas de bloquant aujourd'hui).
 
 À chaque PR : commit unique par phase, tests verts, similarity scores maintenus.
