@@ -119,6 +119,38 @@ public data class SkMatrix(
         return sqrt(sigmaMaxSq)
     }
 
+    /**
+     * Inverse of this affine matrix, or `null` if the linear part is
+     * singular (`det == 0`). Mirrors Skia's `SkMatrix::invert`.
+     *
+     * For the 2 × 2 linear part `[[sx, kx], [ky, sy]]` with determinant
+     * `det = sx·sy − kx·ky`, the inverse linear part is
+     * `(1/det) · [[sy, −kx], [−ky, sx]]`. The translate component of the
+     * inverse is `−inverseLinear · (tx, ty)`.
+     *
+     * The intermediate determinant is computed in double-precision so a
+     * matrix that's close to singular but not exactly zero (e.g. a near-
+     * degenerate gradient under heavy CTM scale) inverts cleanly without
+     * spurious `NaN`s.
+     *
+     * Used by [SkShader] implementations to map device-space pixel coords
+     * back into the shader's local coordinate system (where the gradient
+     * geometry was defined).
+     */
+    public fun invert(): SkMatrix? {
+        val det = sx.toDouble() * sy.toDouble() - kx.toDouble() * ky.toDouble()
+        if (det == 0.0) return null
+        val invDet = 1.0 / det
+        val isx = (sy.toDouble() * invDet).toFloat()
+        val ikx = (-kx.toDouble() * invDet).toFloat()
+        val iky = (-ky.toDouble() * invDet).toFloat()
+        val isy = (sx.toDouble() * invDet).toFloat()
+        // Inverse translate: -inverseLinear · (tx, ty).
+        val itx = -(isx * tx + ikx * ty)
+        val ity = -(iky * tx + isy * ty)
+        return SkMatrix(sx = isx, kx = ikx, tx = itx, ky = iky, sy = isy, ty = ity)
+    }
+
     public companion object {
         public val Identity: SkMatrix = SkMatrix()
 

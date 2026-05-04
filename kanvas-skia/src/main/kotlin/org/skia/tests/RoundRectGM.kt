@@ -20,12 +20,11 @@ import org.skia.tools.ToolUtils
  * super-skinny / super-short / radial-gradient / strokes-and-radii / OOO /
  * stroke-bigger-than-radius).
  *
- * Reference image: `roundrects.png`, 1200 × 900, BG = black.
+ * The radial-gradient row at column 0 (half-row offset) uses the new
+ * Phase 5a [SkRadialGradient] (3-stop blue / red / green, radius 20,
+ * `kClamp` tile mode), matching upstream.
  *
- * **Caveat — radial-gradient row dropped.** Same as in [OvalGM]: Phase 4b
- * doesn't yet expose `SkPaint.setShader` / `SkShader`, so we render solid
- * colours where upstream had a 3-stop radial gradient. Visual diverges in
- * the gradient column.
+ * Reference image: `roundrects.png`, 1200 × 900, BG = black.
  */
 public class RoundRectGM : GM() {
 
@@ -150,12 +149,22 @@ public class RoundRectGM : GM() {
             c.restore()
         }
 
-        // Radial-gradient row (column 0, half-row offset). Solid colour
-        // fallback — shader infrastructure not yet exposed.
+        // Radial-gradient row (column 0, half-row offset). Phase 5a — 3-stop
+        // blue / red / green radial gradient at the local origin, radius 20,
+        // kClamp.
+        val gradient = org.skia.foundation.SkRadialGradient.Make(
+            org.skia.math.SkPoint(0f, 0f), 20f,
+            intArrayOf(0xFF0000FF.toInt(), 0xFFFF0000.toInt(), 0xFF00FF00.toInt()),
+            floatArrayOf(0f, 0.5f, 1f),
+            org.skia.foundation.SkTileMode.kClamp,
+        )
         for (i in paints.indices) {
             c.save()
             c.translate(kXStart + 0.25f, kYStart + kYStep * i + 0.75f + 0.5f * kYStep)
-            val paint = paints[i]().apply { color = genColor(rand) }
+            val paint = paints[i]().apply {
+                color = genColor(rand)
+                shader = gradient
+            }
             c.drawRect(kRect, rectPaint)
             c.drawRRect(circleRRect, paint)
             c.restore()

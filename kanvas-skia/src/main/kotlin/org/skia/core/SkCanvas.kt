@@ -174,16 +174,17 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     public fun drawRect(rect: SkRect, paint: SkPaint) {
         val s = top
-        if (s.matrix.isAxisAligned) {
-            // Fast path: pre-compute the device-space rect and route through
-            // SkBitmapDevice.drawRect. Equivalent to the pre-Phase-4b code.
+        if (s.matrix.isAxisAligned && paint.shader == null) {
+            // Fast path: solid colour, axis-aligned CTM. Pre-compute the
+            // device rect and route through SkBitmapDevice's hard-edge /
+            // analytic-AA rect rasterizer.
             val (x0, y0) = s.matrix.mapXY(rect.left, rect.top)
             val (x1, y1) = s.matrix.mapXY(rect.right, rect.bottom)
             val devRect = SkRect.MakeLTRB(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
             s.device.drawRect(devRect, s.clip, paint)
         } else {
-            // Rotated / skewed: drop to drawPath so the rasterizer sees a
-            // proper 4-vertex polygon instead of an axis-aligned rect.
+            // Either rotated/skewed CTM (4-vertex polygon) or shader-driven
+            // colour (per-pixel scanline path). Both go through drawPath.
             drawPath(SkPath.Rect(rect), paint)
         }
     }
