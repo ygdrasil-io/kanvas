@@ -469,6 +469,21 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 - **AlphaGradientsGM** — nécessite SkColor4f stops + flag `inPremul=kNo` (lerp en straight-alpha).
 - **DegenerateGradientGM** — bloqué par `drawString`.
 
+### Phase 5c — GM harvest path/stroke (36 → 39) ✅
+
+**But** : récolter les GMs non-gradient portables sur l'API existante. 0 nouvelle API.
+
+| GM                 | Référence                      | Score      | Notes |
+|--------------------|--------------------------------|------------|-------|
+| ScaledStrokesGM    | `scaledstrokes.png` 640×320    | **96.10%** | 4 scales × 4 shapes (path/circle/rect/line) × 2 panes AA on/off. |
+| StrokeRectsGM      | `strokerects.png` 800×800      | **92.16%** | 4 panes × 100 random rects (AA × strokeWidth 0/3). Hairline (`strokeWidth=0` + non-AA) retombe sur width=1 → drift sur cette pane. |
+| NonClosedPathsGM   | `nonclosedpaths.png` 1220×1920 | **96.82%** | 216 stroked permutations (3 closure types × 2 styles × 3 caps × 3 joins × 4 widths) + 3 fill cells. Le plus gros stress de tous les caps/joins simultanément. |
+
+#### Vérification Phase 5c
+- [x] Aucune nouvelle API (purs ports sur l'API Phase 0–5b).
+- [x] Aucune régression sur les 36 GMs Phase 0–5b.
+- [x] **Pass count cumulé : 39 GM.**
+
 ---
 
 ## Phase 6 — Blend modes complets : `AAXfermodesGM`, `XfermodesGM`, `DestColorGM`, `AndroidBlendModesGM`
@@ -547,7 +562,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 4c    | 32       | GM harvest (ClippedCubic2/ClipCubic/Strokes2/StrokeCircle/AddArc) — 0 nouvelle API | ✅ |
 | 5a    | 33       | `SkShader` + `SkLinearGradient` + `SkRadialGradient` + `SkMatrix.invert` ⇒ FillrectGradientGM, Oval/RoundRect gradient row | ✅ |
 | 5b    | 36       | GM harvest gradient (Analytic/Clamped/Hardstop) + premier stress kRepeat/kMirror | ✅ |
-| 5c    | ~40      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
+| 5c    | 39       | GM harvest path/stroke (ScaledStrokes/StrokeRects/NonClosedPaths) — 0 nouvelle API | ✅ |
+| 5d    | ~42      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
