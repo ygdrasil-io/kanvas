@@ -4,6 +4,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
+| AaRectModesGM | 80.30% | = | 1 | 246,677 / 307,200 | 0, 209, 230, 31 | 0, 25, 21, 7 |
 | AddArcGM | 91.91% | -0.00% | 1 | 994,130 / 1,081,600 | 0, 78, 101, 103 | 0, 8, 9, 9 |
 | AnalyticGradientShaderGM | 62.21% | -0.52% | 1 | 326,160 / 524,288 | 0, 198, 234, 198 | 0, 9, 9, 7 |
 | ArcCircleGapGM | 99.00% | = | 1 | 61,872 / 62,500 | 0, 117, 111, 123 | 0, 35, 31, 38 |

@@ -1194,13 +1194,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         SkBlendMode.kDstOver -> blendDstOver(src, dst)
         SkBlendMode.kSrcIn -> blendSrcIn(src, dst)
         SkBlendMode.kDstIn -> blendDstIn(src, dst)
+        SkBlendMode.kSrcOut -> blendSrcOut(src, dst)
+        SkBlendMode.kDstOut -> blendDstOut(src, dst)
+        SkBlendMode.kSrcATop -> blendSrcATop(src, dst)
+        SkBlendMode.kDstATop -> blendDstATop(src, dst)
+        SkBlendMode.kXor -> blendXor(src, dst)
         SkBlendMode.kPlus -> blendPlus(src, dst)
         SkBlendMode.kModulate -> blendModulate(src, dst)
         SkBlendMode.kScreen -> blendScreen(src, dst)
         else -> throw NotImplementedError(
-            "SkBlendMode.$mode is not implemented in the Phase 6 entry slice " +
-                "(see MIGRATION_PLAN.md). Implemented: kClear, kSrc, kDst, kSrcOver, " +
-                "kDstOver, kSrcIn, kDstIn, kPlus, kModulate, kScreen."
+            "SkBlendMode.$mode is not implemented yet (see MIGRATION_PLAN.md). " +
+                "Implemented: kClear, kSrc, kDst, kSrcOver, kDstOver, kSrcIn, " +
+                "kDstIn, kSrcOut, kDstOut, kSrcATop, kDstATop, kXor, kPlus, " +
+                "kModulate, kScreen."
         )
     }
 
@@ -1259,6 +1265,93 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val outA = (sa * da + 127) / 255
         if (outA == 0) return 0
         return (outA shl 24) or (dst and 0x00FFFFFF)
+    }
+
+    // ----- Phase 6 Porter-Duff completion: kSrcOut, kDstOut, kSrcATop,
+    // kDstATop, kXor. Like kSrcIn / kDstIn, alpha is the only thing that
+    // really changes for the "Out" pair (RGB of the surviving operand is
+    // preserved); ATop/Xor combine both operands' RGB and need a premul
+    // round-trip to be exact.
+    // --------------------------------------------------------------------
+
+    /**
+     * `r = s * (1 - da)` (premul). The visible part of src that lies
+     * **outside** the dst. RGB of src is preserved; alpha = `sa*(1-da)`.
+     */
+    private fun blendSrcOut(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src)
+        val da = SkColorGetA(dst)
+        val outA = (sa * (255 - da) + 127) / 255
+        if (outA == 0) return 0
+        return (outA shl 24) or (src and 0x00FFFFFF)
+    }
+
+    /**
+     * `r = d * (1 - sa)` (premul). The visible part of dst that lies
+     * **outside** the src. RGB of dst preserved; alpha = `da*(1-sa)`.
+     */
+    private fun blendDstOut(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src)
+        val da = SkColorGetA(dst)
+        val outA = (da * (255 - sa) + 127) / 255
+        if (outA == 0) return 0
+        return (outA shl 24) or (dst and 0x00FFFFFF)
+    }
+
+    /**
+     * `r = s * da + d * (1 - sa)` (premul). Source over dst, masked by
+     * dst's alpha — paint *inside* the existing dst silhouette only.
+     * Result alpha is exactly [da] (the source can never extend dst's
+     * silhouette under ATop), and RGB is `lerp(dst, src, sa/255)` — the
+     * standard "ATop" formula collapses cleanly when alpha is factored
+     * out symbolically.
+     */
+    private fun blendSrcATop(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src)
+        val da = SkColorGetA(dst)
+        if (da == 0) return 0
+        if (sa == 0) return dst
+        if (sa == 0xFF) {
+            // Source replaces dst RGB inside dst's silhouette. Alpha = da.
+            return (da shl 24) or (src and 0x00FFFFFF)
+        }
+        val sr = SkColorGetR(src); val sg = SkColorGetG(src); val sb = SkColorGetB(src)
+        val dr = SkColorGetR(dst); val dg = SkColorGetG(dst); val db = SkColorGetB(dst)
+        val invSa = 255 - sa
+        val outR = ((sr * sa + dr * invSa + 127) / 255).coerceIn(0, 255)
+        val outG = ((sg * sa + dg * invSa + 127) / 255).coerceIn(0, 255)
+        val outB = ((sb * sa + db * invSa + 127) / 255).coerceIn(0, 255)
+        return SkColorSetARGB(da, outR, outG, outB)
+    }
+
+    /** `r = d * sa + s * (1 - da)` (premul). Symmetric of [blendSrcATop]. */
+    private fun blendDstATop(src: SkColor, dst: SkColor): SkColor = blendSrcATop(dst, src)
+
+    /**
+     * `r = s * (1 - da) + d * (1 - sa)` (premul). The "exclusive or" of
+     * coverage — pixels covered by exactly one of src / dst. Both alphas
+     * non-trivial and the RGB combine, so we do the full premul round-
+     * trip to stay exact at fractional alpha.
+     */
+    private fun blendXor(src: SkColor, dst: SkColor): SkColor {
+        val sa = SkColorGetA(src); val da = SkColorGetA(dst)
+        if (sa == 0) return blendDstOut(src, dst)  // simplifies to dst*(1-sa) when sa=0 ⇒ dst
+        if (da == 0) return blendSrcOut(src, dst)  // mirrored
+        val sr = SkColorGetR(src); val sg = SkColorGetG(src); val sb = SkColorGetB(src)
+        val dr = SkColorGetR(dst); val dg = SkColorGetG(dst); val db = SkColorGetB(dst)
+        val invSa = 255 - sa
+        val invDa = 255 - da
+        // outA = sa*(1-da)/255 + da*(1-sa)/255  (premul)
+        val outA = (sa * invDa + da * invSa + 127) / 255
+        if (outA == 0) return 0
+        // outRgb_premul = sr*sa*(1-da)/255 + dr*da*(1-sa)/255  (each term
+        // is the premul colour weighted by the *other* operand's complementary
+        // alpha). Un-premul by outA at the end.
+        val divisor = outA * 255
+        val outR = ((sr * sa * invDa + dr * da * invSa + divisor / 2) / divisor).coerceIn(0, 255)
+        val outG = ((sg * sa * invDa + dg * da * invSa + divisor / 2) / divisor).coerceIn(0, 255)
+        val outB = ((sb * sa * invDa + db * da * invSa + divisor / 2) / divisor).coerceIn(0, 255)
+        return SkColorSetARGB(outA, outR, outG, outB)
     }
 
     /**

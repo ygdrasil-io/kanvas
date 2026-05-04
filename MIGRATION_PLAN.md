@@ -728,8 +728,8 @@ Modes implémentés :
 - [x] `kModulate` — `r = s * d`
 - [x] `kScreen` — `r = s + d - s*d`
 
-Modes encore non-implémentés (lèvent `NotImplementedError` à l'appel — 19 modes restants) :
-- [ ] `kSrcOut`, `kDstOut`, `kSrcATop`, `kDstATop`, `kXor` (Porter-Duff coeff restants)
+Modes encore non-implémentés (lèvent `NotImplementedError` à l'appel — 14 modes restants) :
+- [x] ~~`kSrcOut`, `kDstOut`, `kSrcATop`, `kDstATop`, `kXor` (Porter-Duff coeff restants)~~ — **portés Phase 6 Porter-Duff completion** ; voir section dédiée.
 - [ ] `kOverlay`, `kDarken`, `kLighten`, `kColorDodge`, `kColorBurn`, `kHardLight`, `kSoftLight`, `kDifference`, `kExclusion`, `kMultiply` (separable)
 - [ ] `kHue`, `kSaturation`, `kColor`, `kLuminosity` (HSL)
 
@@ -755,6 +755,36 @@ Modes encore non-implémentés (lèvent `NotImplementedError` à l'appel — 19 
 - [x] Tests ≥ 85% (`ScaledRectsGM` à 87.79%).
 - [x] Aucune régression sur les 44 GMs précédents.
 - [x] **Pass count cumulé : 45 GM.**
+
+### Phase 6 Porter-Duff completion ✅
+
+Suite de la Phase 6 entry : ajout des 5 derniers modes Porter-Duff coefficient (les modes "Out", "ATop" et "Xor"). Le slice complète la famille des 12 modes Porter-Duff classiques ; il reste 14 modes (10 separable + 4 HSL) à porter.
+
+#### Modes ajoutés
+- [x] `kSrcOut` — `r = s * (1-da)`. RGB de src préservé, alpha = `sa*(1-da)`.
+- [x] `kDstOut` — `r = d * (1-sa)`. Symétrique de `kSrcOut`.
+- [x] `kSrcATop` — `r = s*da + d*(1-sa)`. Alpha de sortie = `da` (Skia : la source ne peut pas étendre la silhouette de dst sous ATop). RGB = `lerp(dst, src, sa/255)` après simplification symbolique.
+- [x] `kDstATop` — `r = d*sa + s*(1-da)`. Réutilise `blendSrcATop` avec opérandes swappés.
+- [x] `kXor` — `r = s*(1-da) + d*(1-sa)`. Recouvre les pixels couverts par exactement un des deux opérandes ; à alpha fractionnaire, formule premul puis dé-premul comme les autres modes Porter-Duff non-triviaux.
+
+#### Tests unitaires
+
+- [x] **`SkBlendModeTest.kt`** : +15 cas couvrant les 5 nouveaux modes (opaque-on-opaque, opaque-on-transparent, transparent-on-opaque, et au moins un cas alpha fractionnaire par mode). 47 tests passent au total (32 anciens + 15 nouveaux).
+
+#### Tests GM
+
+- [x] **Hand-port `tests/AaRectModesGM.kt`** (`aarectmodes` upstream) — exerce les 12 modes Porter-Duff coefficient en grille 12 × 4 (12 modes × 4 configurations alpha). Score **80.30 %** vs `aarectmodes.png` à `tolerance=1`. Le résiduel 20 % est principalement dû à :
+  - Drift `saveLayer`-flatten existant (chaque cellule passe par un layer transparent) — connu sur `ArcOfZorroGM`, `PathInteriorGM`.
+  - Subtilités d'AA sur les ovales (rasterizer scanline 4×4 supersampling vs Skia analytique).
+  - Modes complexes (`kXor` notamment) accumulent les arrondis 8-bit sur les paths AA partiellement couverts.
+
+  C'est le premier GM portant qui exerce un saveLayer + 12 modes ; `tolerance=1` à 80 % est une bonne ligne de base. Les follow-ups séparés (linear-premul F16 storage, AA analytique pour ovales) lifteront ce score sans toucher aux blend modes.
+
+#### Vérification Phase 6 Porter-Duff
+- [x] 64 GMs précédents — 0 régression.
+- [x] 1 nouveau GM (`AaRectModesGM` à 80.30 %).
+- [x] 47 tests unitaires `SkBlendMode` verts.
+- [x] **Pass count cumulé : 65 GM.**
 
 ---
 
@@ -823,7 +853,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 6b    | 64       | F16 shaders (`shadeRowF16` premul-float gradient + scanline-fill float coverage) — pipeline F16 désormais pur de bout en bout pour `kSrcOver` | ✅ |
 | 6c    | 64       | F16 solid-colour AA (`colorToF16Premul` + float coverage dans fillRectAA/strokeRectAA/scanFillPath) — 11 GMs en hausse, 0 régression | ✅ |
 | 5g    | 64       | `SkBitmapShader` infra (`SkBitmap.makeShader`/`SkImage.makeShader` + `shadeRowF16`) + `SkCanvas.drawPaint` shader-aware + paint.alpha modulation. Ports GM déférés (BG xform + linear-premul compositing requis). | ✅ |
-| 5h    | 64+      | Linear-premul F16 storage (via `eraseColor` xformé) ⇒ port `TinyBitmap`, `BigMatrix`, `BitmapShader`, `TilemodesAlpha` | ⬜ |
+| 6 PD  | 65       | Phase 6 Porter-Duff completion : 5 derniers modes (`kSrcOut`/`kDstOut`/`kSrcATop`/`kDstATop`/`kXor`) + 15 tests unitaires + `AaRectModesGM` 80.30 % (12 modes en grille avec `bm.makeShader` + `saveLayer`) | ✅ |
+| 5h    | 65+      | Linear-premul F16 storage (via `eraseColor` xformé) ⇒ port `TinyBitmap`, `BigMatrix`, `BitmapShader`, `TilemodesAlpha` | ⬜ |
 | 6     | ~70      | 19 blend modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
