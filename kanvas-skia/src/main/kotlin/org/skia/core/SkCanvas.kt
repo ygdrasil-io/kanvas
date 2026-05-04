@@ -2,6 +2,7 @@ package org.skia.core
 
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
@@ -9,6 +10,7 @@ import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathDirection
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkTextEncoding
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
@@ -357,6 +359,55 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     public fun drawPaint(paint: SkPaint) {
         val s = top
         s.device.drawPaint(s.matrix, s.clip, paint)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawString(const char[], SkScalar, SkScalar,
+     * const SkFont&, const SkPaint&)` (SkCanvas.h:1861).
+     *
+     * **T1/T2 status — no-op stub.** The text is **not rendered** at this
+     * stage of the migration. The method exists so that GMs which call
+     * `canvas->drawString(...)` for cell labels compile and run without
+     * crashing; the corresponding pixels stay at the background colour.
+     *
+     * T3 will replace this body with a real path:
+     *  1. resolve glyph outlines via `AwtGlyphRasterizer` (`org.skia.foundation.awt`),
+     *  2. transform by the font's baseline `(x, y)` + the active CTM,
+     *  3. route through [drawPath] using the existing scanline-fill +
+     *     blend-mode pipeline.
+     *
+     * Until then, see `MIGRATION_PLAN_TEXT.md` §T1 / §T3.
+     */
+    public open fun drawString(
+        str: String,
+        @Suppress("UNUSED_PARAMETER") x: SkScalar,
+        @Suppress("UNUSED_PARAMETER") y: SkScalar,
+        @Suppress("UNUSED_PARAMETER") font: SkFont,
+        @Suppress("UNUSED_PARAMETER") paint: SkPaint,
+    ) {
+        // Intentional no-op (T1/T2). See KDoc.
+        @Suppress("UNUSED_EXPRESSION") str
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawSimpleText(const void*, size_t,
+     * SkTextEncoding, SkScalar, SkScalar, const SkFont&, const SkPaint&)`
+     * (SkCanvas.h:1834). Same no-op semantics as [drawString] until T3.
+     *
+     * @param byteLength number of bytes (UTF-8) or code units (UTF-16/32)
+     *                   to consider in [text].
+     */
+    public open fun drawSimpleText(
+        text: String,
+        @Suppress("UNUSED_PARAMETER") byteLength: Int,
+        @Suppress("UNUSED_PARAMETER") encoding: SkTextEncoding,
+        @Suppress("UNUSED_PARAMETER") x: SkScalar,
+        @Suppress("UNUSED_PARAMETER") y: SkScalar,
+        @Suppress("UNUSED_PARAMETER") font: SkFont,
+        @Suppress("UNUSED_PARAMETER") paint: SkPaint,
+    ) {
+        // Intentional no-op (T1/T2). See [drawString] KDoc.
+        @Suppress("UNUSED_EXPRESSION") text
     }
 
     /**
