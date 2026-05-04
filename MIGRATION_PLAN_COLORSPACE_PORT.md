@@ -199,64 +199,80 @@ Créés sous [kanvas-skia/src/main/kotlin/org/skia/skcms/](kanvas-skia/src/main/
 
 **Résultat** : 245 tests verts (237 + 8), 0 régression.
 
-### Étape F2 — `skcms_Parse` (header v2/v4)
+### Étape F2 — `skcms_Parse` (header v2/v4) — ✅
 
-Cf. `skcms.cc:540-1100` (`Parse` + `parse_*`).
+[kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsParse.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsParse.kt) (~280 lignes) :
 
-- [ ] Validation header ICC 128 octets : magic 'acsp', version, device class, color space, PCS, illuminant XYZ.
-- [ ] Lecture tag table (`tag_count` × 12 octets : signature + offset + length).
-- [ ] Pour chaque tag : signature switch.
-  - [ ] `'rXYZ'` / `'gXYZ'` / `'bXYZ'` / `'wtpt'` : 20 octets, type='XYZ ', lit 3 floats s15Fixed16.
-  - [ ] `'rTRC'` / `'gTRC'` / `'bTRC'` / `'kTRC'` : type='para' (paramétrique 0/1/2/3/4 → 1/3/4/5/7 floats) ou type='curv' (LUT, 0=linear / 1=gamma / N=table). Phase F2 supporte para uniquement, table déférée à F3.
-  - [ ] `'cprt'` / `'desc'` : ignorer.
-  - [ ] `'cicp'` : 4 octets (color_primaries, transfer_characteristics, matrix_coefficients, full_range_flag).
-  - [ ] `'A2B0'` / `'A2B1'` / `'A2B2'` / `'B2A0'` etc. : F4.
-- [ ] Calcule `has_trc`, `has_toXYZD50`, `has_A2B`, `has_B2A`, `has_CICP`.
+- [x] Helpers `readBigU16` / `readBigU32` / `readBigFixed` (s15.16 fixed-point).
+- [x] Validation header 132 octets : `'acsp'` signature, taille ≤ buffer, version ≤ 4, illuminant ~D50.
+- [x] Walk tag table (`tag_count × 12` octets) avec validation offset+size.
+- [x] [SkcmsICCTag.kt](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsICCTag.kt) data class.
+- [x] `'rXYZ'` / `'gXYZ'` / `'bXYZ'` (XYZ type) → matrice `toXYZD50` row-major.
+- [x] `'kTRC'` (Gray) / `'rTRC'` / `'gTRC'` / `'bTRC'` :
+  - [x] type=`'para'` : 5 variantes function_type (kG/kGAB/kGABC/kGABCD/kGABCDEF), valide via `classify == sRGBish`.
+  - [x] type=`'curv'` : 0/1/N entries → linear / gamma / `SkcmsCurve.Table` (slice du buffer).
+- [x] `'cicp'` : 4 octets (colorPrimaries, transferCharacteristics, matrixCoefficients, videoFullRangeFlag).
+- [x] `'A2B0/1/2'` / `'B2A0/1/2'` : différés Phase F4.
+- [x] [SkcmsTagSignature](kanvas-skia/src/main/kotlin/org/skia/skcms/SkcmsSignature.kt) constants : `acsp`, `curv`, `para`, `rTRC/gTRC/bTRC/kTRC`, `rXYZ/gXYZ/bXYZ`, `WTPT`, `CHAD`, `CICP`, `A2B0..2`, `B2A0..2`.
 
-### Étape F3 — Curve LUT support
+**Tests** [SkcmsParseTest](kanvas-skia/src/test/kotlin/org/skia/skcms/SkcmsParseTest.kt) — 10 nouveaux :
+- [x] readBig{U16, U32, Fixed} byte-swap.
+- [x] **Parse réel** : extraction iCCP de `bigrect.png`, puis `skcmsParse(profileBytes)` → profile non-null avec 9 tags, `dataColorSpace=RGB`, `pcs=XYZ`, `hasTrc + hasToXYZD50`.
+- [x] TRC parsée matche `kRec2020` au transferFnAlmostEqual (tol 0.001).
+- [x] `toXYZD50` matche `kRec2020-gamut` au xyzAlmostEqual (tol 0.01).
+- [x] Erreurs : truncated buffer, wrong magic, illuminant non-D50, version > 4 → null.
 
-Cf. `skcms.cc:471-499` (`evalCurve`).
+### Étape F3 — Curve LUT support — différé
 
-- [ ] `SkcmsCurve.tableEntries` + `table_16`/`table_8`.
-- [ ] `evalCurve(curve, x)` : interpole linéairement entre 2 entrées de table.
-- [ ] `skcmsTRCsAreApproximateInverse(profile, invTf): Boolean` (fallback dans `Make`).
-- [ ] `skcmsAreApproximateInverses(curve, invTf): Boolean` — `MaxRoundtripError < 1/512`.
+Les PNGs DM utilisent tous des courbes paramétriques (`'para'`), pas des tables (`'curv'` avec ≥2 entries). Le SkcmsCurve.Table est défini en F1 mais `evalCurve` ne sera implémenté qu'au premier GM qui consomme un profil avec table LUT.
 
-### Étape F4 — A2B/B2A LUT (différé)
+### Étape F4 — A2B/B2A LUT — différé
 
-ICC v4 multi-dimensional LUT (3D 17×17×17 typique). Ce sont les profils CMYK et certains RGB exotiques. **Reporté** sauf si un PNG de référence l'exige (improbable).
+Idem F3 — pas requis par les profils SDR RGB cibles.
 
-### Étape F5 — `SkColorSpace.Make(profile)`
+### Étape F5 — `SkColorSpace.Make(profile)` — ✅
 
-Cf. `SkColorSpace.cpp:331-407`.
+Ajouté à [SkColorSpace.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColorSpace.kt) companion :
 
-- [ ] Fast-path `skcms_ApproximatelyEqualProfiles(profile, sRGB) → makeSRGB()`.
-- [ ] Fast-path CICP : si `kRec709 + kIEC61966_2_4` → makeSRGB.
-- [ ] Sinon : tente CICP, puis `profile.toXYZD50`, puis `profile.trc[0..2].parametric` (s'ils matchent), sinon fallback `kSRGB` si TRCs ≈ inverse sRGB.
-- [ ] Retourne `null` si rien ne se résout.
+- [x] `make(profile: SkcmsICCProfile): SkColorSpace?` — algorithme de résolution CICP-priorité-puis-fallback :
+  - useCicp si `hasCICP && matrixCoefficients=0 && videoFullRangeFlag=1`.
+  - toXYZD50 : `SkNamedPrimaries.getCicp(cicpPrimaries)` puis fallback `profile.toXYZD50`.
+  - TF : `SkNamedTransferFn.getCicp(cicpTrfn)` puis fallback `profile.trc[0..2].parametric` (les 3 doivent être bit-egales).
+  - `makeRGB(tf, toXYZD50)` (re-snap au singleton via Phase B).
+  - Retourne null si CICP id inconnu et pas application-defined, ou si pas de TF/matrix usable.
+- [x] LUT-only TRCs (Phase F3) → `null` (curve.parametric cast échoue).
+- [x] **Pas porté** : `skcms_ApproximatelyEqualProfiles` fast-path pour sRGB (Phase F6 — non requis car la chaîne CICP/TRC + Phase B snap couvre le cas).
+- [x] **Pas porté** : `skcms_TRCs_AreApproximateInverse` fallback (Phase F6 — non requis pour les profils paramétriques propres).
 
-### Étape F6 — Helpers manquants
+**Tests** [SkColorSpaceMakeProfileTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkColorSpaceMakeProfileTest.kt) — 6 nouveaux :
+- [x] **Profile Rec.2020 réel (`bigrect.png`)** → SkColorSpace structurellement équivalent à canonical : TF dans 0.001, matrix dans 0.01, **et** xform sRGB(0,0,1) reproduit `(43, 13, 241)` 8-bit.
+- [x] Profile sRGB synthétique → `makeSRGB()` singleton (assertSame).
+- [x] Profile sRGB-linéaire synthétique → `makeSRGBLinear()` singleton.
+- [x] No-TRC → null.
+- [x] TRCs disagree → null.
+- [x] CICP fast-path : `(kRec709, kIEC61966_2_1)` snap au sRGB singleton (preuve que CICP override fonctionne).
 
-- [ ] `skcms_sRGB_profile()` — singleton du profil sRGB de référence (96 octets, parsable).
-- [ ] `skcms_sRGB_Inverse_TransferFunction()` — inversed kSRGB.
-- [ ] `skcms_ApproximatelyEqualProfiles(a, b)` — compare TFs et matrix avec tolérance.
+### Étape F6 — Helpers manquants — différé
 
-### Étape F7 — Wiring `TestUtils.loadReferenceBitmap`
+`skcms_sRGB_profile()` / `skcms_ApproximatelyEqualProfiles` / `skcms_TRCs_AreApproximateInverse` — non requis par la chaîne de F5 ni par F7. À porter le jour où un profil ICC bizarre nécessite ces fallbacks.
 
-Aujourd'hui [TestUtils.kt:83-115](kanvas-skia/src/test/kotlin/org/skia/testing/TestUtils.kt) lit les PNGs en bypassant le profil ICC. Avec F1-F6 :
+### Étape F7 — Wiring `TestUtils.loadReferenceBitmap` — ✅
 
-- [ ] `loadReferenceBitmap(name)` : lit le chunk iCCP, parse, construit `SkColorSpace.Make(profile)`, retourne un `SkBitmap` avec ce CS.
-- [ ] `compareBitmaps(a, b)` peut maintenant garantir que les deux sont dans le même CS — ou xform si différents.
-- [ ] **Effet de bord** : on n'a plus besoin de hardcoder `DM_REFERENCE_COLOR_SPACE` dans `runGmTest` — on peut lire le CS du PNG attendu et matcher dynamiquement.
+Modifié [TestUtils.kt](kanvas-skia/src/test/kotlin/org/skia/testing/TestUtils.kt) :
 
-**Tests** :
-- [ ] `SkcmsParseTest` — parse un profil sRGB v4 connu, vérifie tags.
-- [ ] `SkcmsParseRec2020Test` — parse le profil de `bigrect.png` (déjà extrait dans `colorspace-fingerprint.md`), vérifie matrix + TF.
-- [ ] `SkColorSpaceMakeTest` — `Make(parsed_sRGB) === makeSRGB()`.
-- [ ] `SkColorSpaceMakeTest.parsedRec2020EqualsKnown` — match avec `MakeRGB(kRec2020, kRec2020-gamut)`.
-- [ ] **Test bout-en-bout** : `loadReferenceBitmap("bigrect")` retourne un bitmap dont `colorSpace == DM_REFERENCE_COLOR_SPACE`.
+- [x] Helper `extractIccProfile(pngBytes)` — walk PNG chunks, inflate iCCP via `java.util.zip.Inflater`.
+- [x] `loadReferenceColorSpace(name): SkColorSpace?` — extract + parse + make. Best-effort, retourne null si pas d'iCCP ou parse échoue.
+- [x] `loadReferenceBitmap(name)` tag le bitmap retourné avec le CS parsé (ou sRGB par défaut).
+- [x] `bufferedImageToBitmap(img, colorSpace)` accepte le CS (default sRGB).
 
-**Risque** : ICC v2 vs v4. Skia DM produit du v4. F1-F2 doivent gérer les deux versions (header byte 8). Plan B : v4 only, accepter de ne pas pouvoir lire un PNG v2.
+**Tests** [LoadReferenceColorSpaceTest](kanvas-skia/src/test/kotlin/org/skia/testing/LoadReferenceColorSpaceTest.kt) — 3 nouveaux :
+- [x] **Sanity check** : 5 PNGs sondés (bigrect, simplerect, thinrects, concavepaths, clip_strokerect) → tous retournent un CS dont la matrice match `DM_REFERENCE_COLOR_SPACE.toXYZD50` à `xyzAlmostEqual` près. Confirme que tous nos GMs partagent le même profil (assertion documentaire).
+- [x] `loadReferenceBitmap("bigrect").colorSpace.toXYZD50 ≈ DM_REFERENCE_COLOR_SPACE.toXYZD50`.
+- [x] `loadReferenceColorSpace("does-not-exist") == null`.
+
+**Tolérance non-modifiée** : les 5 GMs gardent leurs `tolerance = 1` thresholds. Le payoff "tolerance 1 → 0" théorique nécessite d'aligner notre rendu sur les valeurs s15Fixed16 du PNG (et non kRec2020 canonique 6 décimales). C'est une inversion de stratégie qu'on garderait pour un slice ultérieur dédié — gain marginal vs complexité.
+
+**Note résiduelle** : `compareBitmaps` ne fait pas encore de xform si les deux bitmaps sont dans des CS différents. Aujourd'hui les bitmaps rendu et référence sont structurellement dans le même CS (même `xyzAlmostEqual`), donc OK. À ajouter quand un GM utilisera un profil source ≠ DM Rec.2020.
 
 ---
 
