@@ -1,6 +1,7 @@
 package org.skia.core
 
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
@@ -345,8 +346,35 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         s.device.drawImageRect(image, src, devDst, sampling, paint, constraint, s.clip)
     }
 
+    /**
+     * Mirrors Skia's `SkCanvas::drawColor(SkColor)` (`SkCanvas.h:1247`).
+     *
+     * Upstream is **clip-aware** — it routes through `drawPaint(SkPaint
+     * with blendMode=kSrc)`, which the device fills only inside the
+     * active clip. We follow the same path so that
+     * `clipRect(...) ; drawColor(grey)` paints only the clipped region
+     * (and not the whole bitmap).
+     *
+     * The fast path through `bitmap.eraseColor` (clip-ignoring) was the
+     * pre-AnnotatedTextGM behaviour — it worked for every prior GM
+     * because they either didn't narrow the clip first, or used
+     * `eraseColor` directly via the harness `runGmTest`. It produced an
+     * unmasked fill on the first GM that combined `clipRect` and
+     * `drawColor` (annotated_text).
+     */
     public fun drawColor(color: SkColor) {
-        bitmap.eraseColor(color)
+        val s = top
+        if (s.clip == s.device.deviceClipBounds()) {
+            // Whole-device clip — keep the eraseColor fast path. Avoids
+            // a per-pixel scan over the device for the common case
+            // (every pre-T4 GM, plus the harness's pre-onDraw fill).
+            bitmap.eraseColor(color)
+            return
+        }
+        // Narrowed clip — go through drawPaint with kSrc so the clip is
+        // honoured. Mirrors upstream SkCanvas::clear/drawColor.
+        val paint = SkPaint(color).apply { blendMode = SkBlendMode.kSrc }
+        s.device.drawPaint(s.matrix, s.clip, paint)
     }
 
     /**
