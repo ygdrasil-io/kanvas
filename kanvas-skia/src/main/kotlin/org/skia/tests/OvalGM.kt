@@ -21,14 +21,11 @@ import org.skia.tools.ToolUtils
  * rect, hairline-stroked) then the oval itself. Cells use deterministic
  * 565-quantised HSV colours from a bit-compatible [SkRandom].
  *
- * Reference image: `ovals.png`, 1200 × 900, BG = black.
+ * The radial-gradient row at column 0 (half-row offset) uses the new
+ * Phase 5a [SkRadialGradient] (3-stop blue / red / green, radius 20,
+ * `kClamp` tile mode), matching upstream.
  *
- * **Caveat — radial-gradient row dropped.** Upstream renders one
- * extra row at column 0 with a 3-stop radial gradient as the oval's
- * shader. Phase 4b doesn't yet expose `SkPaint.setShader` / `SkShader` —
- * we draw a solid-colour oval (just the LTGRAY outline + a single hue)
- * in those cells, leaving the score below 100 % around column 0 of the
- * special rows.
+ * Reference image: `ovals.png`, 1200 × 900, BG = black.
  */
 public class OvalGM : GM() {
 
@@ -168,16 +165,29 @@ public class OvalGM : GM() {
             c.restore()
         }
 
-        // Radial-gradient row (column 0, half-row offset). Upstream sets a
-        // RadialGradient shader; we drop the shader and render solid-colour
-        // ovals to keep the rand in lockstep — visual will diverge here.
+        // Radial-gradient row (column 0, half-row offset). Phase 5a — 3-stop
+        // blue / red / green radial gradient at the local origin, radius 20,
+        // kClamp. The gradient is built once and shared across all 5 paints
+        // (the shader's per-draw `setupForDraw` re-prepares it for each).
+        val gradient = org.skia.foundation.SkRadialGradient.Make(
+            org.skia.math.SkPoint(0f, 0f), 20f,
+            intArrayOf(0xFF0000FF.toInt(), 0xFFFF0000.toInt(), 0xFF00FF00.toInt()),
+            floatArrayOf(0f, 0.5f, 1f),
+            org.skia.foundation.SkTileMode.kClamp,
+        )
         for (i in paints.indices) {
             c.save()
             c.translate(
                 kXStart + 0.25f,
                 kYStart + kYStep * i + 0.75f + 0.5f * kYStep,
             )
-            val paint = paints[i]().apply { color = genColor(rand) }
+            // genColor(rand) is still consumed even when we don't use it for
+            // the paint colour — keeps rand in lockstep with upstream for
+            // the rows after this one (reflected-oval).
+            val paint = paints[i]().apply {
+                color = genColor(rand)
+                shader = gradient
+            }
             c.drawRect(kOval, rectPaint)
             c.drawOval(kOval, paint)
             c.restore()

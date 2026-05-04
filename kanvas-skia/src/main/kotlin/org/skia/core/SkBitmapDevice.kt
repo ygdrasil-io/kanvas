@@ -13,6 +13,7 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkStroker
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
@@ -285,25 +286,37 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         clip: SkIRect, paint: SkPaint,
     ) {
         if (path.isEmpty()) return
-        val color = transformPaintColor(paint.color)
-        val baseA = SkColorGetA(color)
-        if (baseA == 0) return
+
+        val shader = paint.shader
+        val color: SkColor
+        val baseA: Int
+        if (shader != null) {
+            // Shader supplies per-pixel colour. Set it up once for this draw,
+            // then the rasterizer modulates each shaded pixel by AA coverage.
+            shader.setupForDraw(ctm, xformSteps)
+            color = 0    // unused — per-pixel colour comes from the shader
+            baseA = 255
+        } else {
+            color = transformPaintColor(paint.color)
+            baseA = SkColorGetA(color)
+            if (baseA == 0) return
+        }
         val supers = if (paint.isAntiAlias) 4 else 1
         val resScale = ctm.computeMaxScale().coerceAtLeast(1f)
 
         when (paint.style) {
             SkPaint.Style.kFill_Style ->
-                fillPath(path, ctm, clip, color, baseA, supers)
+                fillPath(path, ctm, clip, color, baseA, supers, shader)
             SkPaint.Style.kStroke_Style -> {
                 val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
                 if (outline.isEmpty()) return
-                fillPath(outline, ctm, clip, color, baseA, supers)
+                fillPath(outline, ctm, clip, color, baseA, supers, shader)
             }
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillPath(path, ctm, clip, color, baseA, supers)
+                fillPath(path, ctm, clip, color, baseA, supers, shader)
                 val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
                 if (outline.isEmpty()) return
-                fillPath(outline, ctm, clip, color, baseA, supers)
+                fillPath(outline, ctm, clip, color, baseA, supers, shader)
             }
         }
     }
@@ -311,10 +324,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     private fun fillPath(
         path: SkPath, ctm: SkMatrix,
         clip: SkIRect, color: SkColor, baseA: Int, supers: Int,
+        shader: SkShader?,
     ) {
         val edges = buildEdges(path, ctm)
         if (edges.isEmpty()) return
-        scanFillPath(edges, path.fillType, clip, color, baseA, supers)
+        scanFillPath(edges, path.fillType, clip, color, baseA, supers, shader)
     }
 
     /**
@@ -749,6 +763,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     private fun scanFillPath(
         edges: List<Edge>, fillType: SkPathFillType, clip: SkIRect,
         color: SkColor, baseA: Int, supers: Int,
+        shader: SkShader?,
     ) {
         val maxSamples = supers * supers
         var yMin = Float.POSITIVE_INFINITY
@@ -766,6 +781,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val coverage = IntArray(rowWidth)
         val crossX = FloatArray(edges.size)
         val crossDir = IntArray(edges.size)
+        // Shader output buffer (only allocated when needed).
+        val shaderRow: IntArray? = if (shader != null) IntArray(rowWidth) else null
 
         for (py in py0 until py1) {
             // Reset coverage row.
@@ -798,14 +815,38 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     }
                 }
             }
-            // Emit the row.
-            for (xOff in 0 until rowWidth) {
-                val samples = coverage[xOff]
-                if (samples == 0) continue
-                val effA = if (samples >= maxSamples) baseA
-                    else (baseA * samples + maxSamples / 2) / maxSamples
-                if (effA == 0) continue
-                blend(clip.left + xOff, py, (effA shl 24) or rgb)
+
+            // Shader path: ask the shader for one colour per device pixel
+            // across the entire clip row, then modulate by coverage. We
+            // could narrow this to the actually-covered span, but a single
+            // shadeRow call per row is simple and the inner `samples == 0`
+            // check below skips the per-pixel compositing for transparent
+            // pixels — only the shader's matrix/lookup work happens for
+            // pixels that ultimately don't draw.
+            if (shader != null && shaderRow != null) {
+                shader.shadeRow(clip.left, py, rowWidth, shaderRow)
+                for (xOff in 0 until rowWidth) {
+                    val samples = coverage[xOff]
+                    if (samples == 0) continue
+                    val src = shaderRow[xOff]
+                    val srcA = SkColorGetA(src)
+                    if (srcA == 0) continue
+                    val effA = if (samples >= maxSamples) srcA
+                        else (srcA * samples + maxSamples / 2) / maxSamples
+                    if (effA == 0) continue
+                    val srcRgb = src and 0x00FFFFFF
+                    blend(clip.left + xOff, py, (effA shl 24) or srcRgb)
+                }
+            } else {
+                // Solid-colour path (Phase 1–4).
+                for (xOff in 0 until rowWidth) {
+                    val samples = coverage[xOff]
+                    if (samples == 0) continue
+                    val effA = if (samples >= maxSamples) baseA
+                        else (baseA * samples + maxSamples / 2) / maxSamples
+                    if (effA == 0) continue
+                    blend(clip.left + xOff, py, (effA shl 24) or rgb)
+                }
             }
         }
     }

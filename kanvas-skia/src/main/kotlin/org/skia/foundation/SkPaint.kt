@@ -18,6 +18,13 @@ public class SkPaint() {
     public var strokeMiter: Float = 4f
     public var isAntiAlias: Boolean = false
 
+    /**
+     * Phase 5a: a [SkShader] (linear / radial gradient, future bitmap
+     * shader) that supplies the source colour per pixel. When non-`null`,
+     * [color] is ignored (matches Skia's `SkPaint::setShader`).
+     */
+    public var shader: SkShader? = null
+
     public constructor(color: SkColor) : this() {
         this.color = color
     }
@@ -30,5 +37,6 @@ public class SkPaint() {
         it.strokeJoin = strokeJoin
         it.strokeMiter = strokeMiter
         it.isAntiAlias = isAntiAlias
+        it.shader = shader
     }
 }
