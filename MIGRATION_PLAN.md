@@ -383,9 +383,28 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 
 #### GMs reportés ultérieurement (Phase 4c+)
 
-- **`StrokeRectAnisotropicGM`** — débloqué techniquement par `SkPath.makeTransform`, à re-attaquer en Phase 4c (transformer le path vers device space *avant* de stroker, pour un stroke device-space sous CTM non-uniforme).
+- **`StrokeRectAnisotropicGM`** — débloqué techniquement par `SkPath.makeTransform`, à re-attaquer plus tard (transformer le path vers device space *avant* de stroker, pour un stroke device-space sous CTM non-uniforme).
 - **OvalGM/RoundRectGM gradient row** — Phase 5 (`SkShader`).
 - **BlurCirclesGM, RRectBlurGM, DashCircleGM** — mask filters / dashes / drawString hors scope.
+
+### Phase 4c — GM harvest post-SkMatrix ✅
+
+**But** : récolter les GMs qui sont devenus portables une fois `SkMatrix` + `rotate/skew/concat` + `SkPath.makeTransform` exposés en Phase 4b. Pas de nouvelle API — tirage de 5 GMs upstream sur l'API existante.
+
+#### GMs portés
+
+| GM             | Référence                  | Score      | Notes |
+|----------------|----------------------------|------------|-------|
+| ClippedCubic2GM | `clippedcubic2.png` 1240×390 | **99.96%** | Cubic + sa variante "flipped" via `makeTransform({sx=0, kx=1, ky=1, sy=0})`. |
+| ClipCubicGM    | `clipcubic.png` 400×410      | **98.72%** | Cubic vertical + variante 90°-rotated via `MakeRotate(90, W/2, H/2)` + `makeTransform`. |
+| Strokes2GM     | `strokes_poly.png` 400×800   | **91.33%** | 25 polylines empilées avec `rotate(15°, SW/2, SH/2)` cumulatif (rotate-pivot stress). |
+| StrokeCircleGM | `strokecircle.png` 520×520   | **90.37%** | Ovals concentriques sous `scale(20, 20)` ; `rotate(0)` no-op (static dump fRotate=0). |
+| AddArcGM       | `addarc.png` 1040×1040       | **91.91%** | Arcs concentriques `345°` AA-stroked avec couleurs/angles random — stress addArc + flatness. |
+
+#### Vérification Phase 4c
+- [x] Aucune nouvelle API Kotlin ajoutée — purs ports basés sur Phase 4b.
+- [x] Aucune régression sur les 27 GMs Phase 0–4b.
+- [x] **Pass count cumulé : 32 GM.**
 
 ---
 
@@ -494,7 +513,8 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 3i    | 18       | Stroker `resScale` fix + 4 GMs (Strokes4/ClippedCubic/StLouisArch/Strokes) ⇒ **Phase 3 close** | ✅ |
 | 4a    | 25       | `drawDRRect` + ToolUtils + 7 GMs (CircleSizes/SmallArc/ManyCircles/ManyRRects/FillCircle/DRRect/RRect) | ✅ |
 | 4b    | 27       | `SkMatrix` + rotate/skew/concat CTM, `SkPath.makeTransform` ⇒ OvalGM, RoundRectGM | ✅ |
-| 5     | ~24      | Gradients linéaire/radial + image shader | ⬜ |
+| 4c    | 32       | GM harvest (ClippedCubic2/ClipCubic/Strokes2/StrokeCircle/AddArc) — 0 nouvelle API | ✅ |
+| 5     | ~40      | Gradients linéaire/radial + image shader | ⬜ |
 | 6     | ~30      | 28 blend modes | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
