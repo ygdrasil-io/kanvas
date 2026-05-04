@@ -1212,14 +1212,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         SkBlendMode.kColorDodge,
         SkBlendMode.kColorBurn,
         SkBlendMode.kSoftLight -> blendSeparable(src, dst, mode)
-        else -> throw NotImplementedError(
-            "SkBlendMode.$mode is not implemented yet (see MIGRATION_PLAN.md). " +
-                "Implemented: kClear, kSrc, kDst, kSrcOver, kDstOver, kSrcIn, " +
-                "kDstIn, kSrcOut, kDstOut, kSrcATop, kDstATop, kXor, kPlus, " +
-                "kModulate, kScreen, kMultiply, kDarken, kLighten, kDifference, " +
-                "kExclusion, kOverlay, kHardLight, kColorDodge, kColorBurn, " +
-                "kSoftLight."
-        )
+        SkBlendMode.kHue,
+        SkBlendMode.kSaturation,
+        SkBlendMode.kColor,
+        SkBlendMode.kLuminosity -> blendHSL(src, dst, mode)
     }
 
     // ----- 9-mode slice implementations ---------------------------------
@@ -1662,6 +1658,155 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         }
         val body = d * sa + da * (2f * s - sa) * correction
         return carrier + body
+    }
+
+    // --------------------------------------------------------------------
+    // Phase 6 HSL: kHue, kSaturation, kColor, kLuminosity. These modes
+    // operate on the whole RGB tuple at once (not per-channel), so they
+    // need their own dispatcher that doesn't fit the [sepChannel] shape.
+    //
+    // Formulas (W3C Compositing Level 1, in non-premul):
+    //   Hue       (Cs, Cb) = SetLum(SetSat(Cs, Sat(Cb)), Lum(Cb))
+    //   Saturation(Cs, Cb) = SetLum(SetSat(Cb, Sat(Cs)), Lum(Cb))
+    //   Color     (Cs, Cb) = SetLum(Cs, Lum(Cb))
+    //   Luminosity(Cs, Cb) = SetLum(Cb, Lum(Cs))
+    //
+    // Skia's premul implementation scales the operands by the *other*
+    // operand's alpha so both work in `[0, sa*da]`, applies the formula,
+    // and uses `sa*da` as the upper clip bound. The result is the B body
+    // in premul space; carrier = `sc*(1-da) + dc*(1-sa)` is added after.
+    // --------------------------------------------------------------------
+
+    private fun blendHSL(src: SkColor, dst: SkColor, mode: SkBlendMode): SkColor {
+        val sa = SkColorGetA(src) / 255f
+        val da = SkColorGetA(dst) / 255f
+        val sr = SkColorGetR(src) / 255f * sa
+        val sg = SkColorGetG(src) / 255f * sa
+        val sb = SkColorGetB(src) / 255f * sa
+        val dr = SkColorGetR(dst) / 255f * da
+        val dg = SkColorGetG(dst) / 255f * da
+        val db = SkColorGetB(dst) / 255f * da
+
+        val oa = sa + da * (1f - sa)
+        if (oa <= 0f) return 0
+
+        // Scale src by da and dst by sa so both live in `[0, sa*da]`.
+        val a = sa * da
+        val srA = sr * da; val sgA = sg * da; val sbA = sb * da
+        val drA = dr * sa; val dgA = dg * sa; val dbA = db * sa
+
+        // Compute the B body for each HSL mode in `[0, sa*da]` space.
+        val body = FloatArray(3)
+        when (mode) {
+            SkBlendMode.kHue -> {
+                // SetLum(SetSat(Cs', Sat(Cb')), a, Lum(Cb')).
+                body[0] = srA; body[1] = sgA; body[2] = sbA
+                setSat(body, sat3(drA, dgA, dbA))
+                setLum(body, a, lum3(drA, dgA, dbA))
+            }
+            SkBlendMode.kSaturation -> {
+                // SetLum(SetSat(Cb', Sat(Cs')), a, Lum(Cb')).
+                body[0] = drA; body[1] = dgA; body[2] = dbA
+                setSat(body, sat3(srA, sgA, sbA))
+                setLum(body, a, lum3(drA, dgA, dbA))
+            }
+            SkBlendMode.kColor -> {
+                // SetLum(Cs', a, Lum(Cb')).
+                body[0] = srA; body[1] = sgA; body[2] = sbA
+                setLum(body, a, lum3(drA, dgA, dbA))
+            }
+            SkBlendMode.kLuminosity -> {
+                // SetLum(Cb', a, Lum(Cs')).
+                body[0] = drA; body[1] = dgA; body[2] = dbA
+                setLum(body, a, lum3(srA, sgA, sbA))
+            }
+            else -> error("blendHSL called with non-HSL mode: $mode")
+        }
+
+        // Add the SrcOver-style carrier: oc = sc*(1-da) + dc*(1-sa) + B.
+        val orPm = sr * (1f - da) + dr * (1f - sa) + body[0]
+        val ogPm = sg * (1f - da) + dg * (1f - sa) + body[1]
+        val obPm = sb * (1f - da) + db * (1f - sa) + body[2]
+
+        val invOa = 1f / oa
+        val outA = (oa * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outR = (orPm * invOa * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outG = (ogPm * invOa * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outB = (obPm * invOa * 255f + 0.5f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(outA, outR, outG, outB)
+    }
+
+    /** Luminance: `0.3*R + 0.59*G + 0.11*B` (Skia's coefficients). */
+    private fun lum3(r: Float, g: Float, b: Float): Float =
+        r * 0.3f + g * 0.59f + b * 0.11f
+
+    /** Saturation: `max(R, G, B) - min(R, G, B)` (channel-spread). */
+    private fun sat3(r: Float, g: Float, b: Float): Float =
+        maxOf(r, maxOf(g, b)) - minOf(r, minOf(g, b))
+
+    /**
+     * In-place: shift `rgb`'s luminance to [newLum] (uniform additive shift),
+     * then [clipColor] back into `[0, alpha]` while preserving the new
+     * luminance. Used by every HSL mode to lock the result's luminance to
+     * either dst's (Hue/Saturation/Color) or src's (Luminosity).
+     */
+    private fun setLum(rgb: FloatArray, alpha: Float, newLum: Float) {
+        val diff = newLum - lum3(rgb[0], rgb[1], rgb[2])
+        rgb[0] += diff
+        rgb[1] += diff
+        rgb[2] += diff
+        clipColor(rgb, alpha)
+    }
+
+    /**
+     * In-place: scale `rgb`'s spread to [newSat] while preserving channel
+     * order. The smallest channel collapses to 0, the largest becomes
+     * `newSat`, and the middle scales proportionally — same behaviour as
+     * the W3C `SetSat` algorithm without the explicit min/mid/max sort
+     * (since the same factor applied to `(value - min)` gives the right
+     * answer regardless of ordering).
+     */
+    private fun setSat(rgb: FloatArray, newSat: Float) {
+        val r = rgb[0]; val g = rgb[1]; val b = rgb[2]
+        val mn = minOf(r, minOf(g, b))
+        val mx = maxOf(r, maxOf(g, b))
+        val s = mx - mn
+        if (s > 0f) {
+            val factor = newSat / s
+            rgb[0] = (r - mn) * factor
+            rgb[1] = (g - mn) * factor
+            rgb[2] = (b - mn) * factor
+        } else {
+            rgb[0] = 0f; rgb[1] = 0f; rgb[2] = 0f
+        }
+    }
+
+    /**
+     * In-place: clip `rgb` into `[0, alpha]` while preserving its
+     * luminance. If a channel underflows to negative, we pull all three
+     * toward `lum`; if a channel overflows past `alpha`, we push all
+     * three toward `lum`. Mirrors Skia's `SkBlendMode_RasterPipeline.cpp::clipColor`.
+     */
+    private fun clipColor(rgb: FloatArray, alpha: Float) {
+        val l = lum3(rgb[0], rgb[1], rgb[2])
+        var r = rgb[0]; var g = rgb[1]; var b = rgb[2]
+        val mn = minOf(r, minOf(g, b))
+        val mx = maxOf(r, maxOf(g, b))
+        if (mn < 0f) {
+            val denom = l - mn
+            val factor = if (denom > 0f) l / denom else 0f
+            r = l + (r - l) * factor
+            g = l + (g - l) * factor
+            b = l + (b - l) * factor
+        }
+        if (mx > alpha) {
+            val denom = mx - l
+            val factor = if (denom > 0f) (alpha - l) / denom else 0f
+            r = l + (r - l) * factor
+            g = l + (g - l) * factor
+            b = l + (b - l) * factor
+        }
+        rgb[0] = r; rgb[1] = g; rgb[2] = b
     }
 
     /**
