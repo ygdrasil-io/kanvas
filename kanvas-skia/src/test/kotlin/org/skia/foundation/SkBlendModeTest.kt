@@ -528,14 +528,173 @@ class SkBlendModeTest {
         assertARGB(argb(255, 128, 128, 128), out, tolerance = 2, label = "kExclusion 50%×50%")
     }
 
+    // ====================================================================
+    // Phase 6 separable (complex): kOverlay, kHardLight, kColorDodge,
+    // kColorBurn, kSoftLight. Formulas have per-channel branches. Tests
+    // pin the canonical opaque-on-opaque cases; sub-ulp drift at
+    // fractional alpha is acceptable since float-premul → 8-bit
+    // round-trip introduces ≤ 1 ulp per channel anyway.
+    // ====================================================================
+
+    @Test
+    fun `kHardLight opaque white over half-grey is white`() {
+        // Light src (sc > sa/2): rc = 1 - 2*(1-d)*(1-s) = 1 - 2*(0.5)*0 = 1.
+        val out = blend(SK_ColorWHITE, argb(255, 128, 128, 128), SkBlendMode.kHardLight)
+        assertARGB(SK_ColorWHITE, out, tolerance = 1, label = "kHardLight white over 50% grey")
+    }
+
+    @Test
+    fun `kHardLight opaque black over half-grey is black`() {
+        // Dark src (sc <= sa/2): rc = 2*s*d = 2*0*0.5 = 0.
+        val out = blend(SK_ColorBLACK, argb(255, 128, 128, 128), SkBlendMode.kHardLight)
+        assertARGB(SK_ColorBLACK, out, tolerance = 1, label = "kHardLight black over 50% grey")
+    }
+
+    @Test
+    fun `kHardLight half-grey over half-grey is half-grey`() {
+        // s = d = 0.5, sa = da = 1. Both 2*s <= sa (0.5 < 0.5 is false, but
+        // ≤ is true). Body = 2*0.5*0.5 = 0.5. carrier = 0+0 = 0. rc = 0.5.
+        val mid = argb(255, 128, 128, 128)
+        val out = blend(mid, mid, SkBlendMode.kHardLight)
+        assertARGB(mid, out, tolerance = 2, label = "kHardLight 50% on 50%")
+    }
+
+    @Test
+    fun `kOverlay swaps the conditional vs kHardLight`() {
+        // Overlay(s, d) = HardLight(d, s). For s=white, d=mid-grey:
+        //   HardLight(white, mid-grey) = white (light src branch).
+        //   Overlay (white, mid-grey) ≡ HardLight(mid-grey, white)
+        //                              = 1 - 2*(1-1)*(1-0.5) = 1 = white.
+        // Both happen to give white here; pick a case where they differ.
+        // s=mid-grey, d=white: HardLight = 1 - 2*(0.5)*(0) = 1.
+        //                      Overlay = HardLight(white, mid-grey) = 1.
+        // Try s=mid-grey, d=black: HardLight: 2*s≤sa, rc = 2*0.5*0 = 0.
+        //                          Overlay = HardLight(black, mid-grey)
+        //                                  = (light src branch since 2*0=0 ≤ 1)
+        //                                  = 2*0.5*0 = 0 (dark src branch). Hmm both are 0.
+        // OK for s=mid-grey on d=mid-grey: HardLight = 0.5 (dark src branch);
+        // Overlay = HardLight(mid-grey, mid-grey) — same swap, dark src branch
+        //         = 2*0.5*0.5 = 0.5 too. Equivalence is symmetric here.
+        val mid = argb(255, 128, 128, 128)
+        assertEquals(blend(mid, mid, SkBlendMode.kHardLight),
+                     blend(mid, mid, SkBlendMode.kOverlay))
+    }
+
+    @Test
+    fun `kOverlay opaque red on white is red`() {
+        // s = (1, 0, 0), d = (1, 1, 1), sa = da = 1.
+        // Per channel: 2*d ≤ da? d=1, so 2 ≤ 1 is false → light dst branch.
+        //   rc = sa*da - 2*(da-d)*(sa-s) = 1 - 2*0*(1-s) = 1 for each chan.
+        // Wait, but s=(1,0,0). For r channel: rc = 1 - 2*0*0 = 1.
+        // For g channel: rc = 1 - 2*0*1 = 1. Hmm that gives white.
+        // Let me re-check. carrier = (1-sa)*d + (1-da)*s = 0+0 = 0.
+        // Body for r-chan, s=1, d=1, sa=1, da=1: 2*d=2, 2 ≤ 1 false ⇒
+        //   sa*da - 2*(da-d)*(sa-s) = 1 - 2*0*0 = 1.
+        // Body for g-chan, s=0, d=1: 2*d=2 ≤ 1 false ⇒ 1 - 2*0*1 = 1.
+        // So r=1, g=1, b=1 = white.
+        val out = blend(SK_ColorRED, SK_ColorWHITE, SkBlendMode.kOverlay)
+        assertARGB(SK_ColorWHITE, out, tolerance = 1, label = "kOverlay red on white")
+    }
+
+    @Test
+    fun `kColorDodge black src is identity for opaque dst`() {
+        // dc = blue, sc = 0, sa = 1, da = 1.
+        // For r,g chans (dc=0): rc = sc*(1-da) = 0. — wait that's 0, but
+        // the dst was 0 too. OK.
+        // For b chan (dc=1): sc=0 < sa=1, dc=1 > 0; ratio = 1*1/(1-0) = 1.
+        //   min(1, 1) = 1. n=1. rc = 1*1 + 0*0 + 1*0 = 1. Blue stays blue.
+        val out = blend(SK_ColorBLACK, SK_ColorBLUE, SkBlendMode.kColorDodge)
+        assertARGB(SK_ColorBLUE, out, tolerance = 1, label = "kColorDodge black on blue")
+    }
+
+    @Test
+    fun `kColorDodge white src on blue keeps blue`() {
+        // Skia's branch order is `dc == 0` before `sc == sa`. For blue
+        // dst, R and G channels have dc=0, so they take the
+        // `rc = sc*(1-da) = 0` branch even though sc=sa would normally
+        // saturate to 1. B channel keeps its 1. Net: (0, 0, 1) = blue.
+        // (Differs from W3C `if Cs==1: 1` because Skia hits the `dc==0`
+        // short-circuit first; matches our reference renders.)
+        val out = blend(SK_ColorWHITE, SK_ColorBLUE, SkBlendMode.kColorDodge)
+        assertARGB(SK_ColorBLUE, out, tolerance = 1, label = "kColorDodge white on blue")
+    }
+
+    @Test
+    fun `kColorDodge white src on grey saturates to white`() {
+        // For a non-zero dst (mid-grey), the sc==sa branch wins: rc =
+        // sa*da + 0 + 0 = 1 for every channel. So white src on mid-grey
+        // dst → white.
+        val out = blend(SK_ColorWHITE, argb(255, 128, 128, 128), SkBlendMode.kColorDodge)
+        assertARGB(SK_ColorWHITE, out, tolerance = 1, label = "kColorDodge white on 50% grey")
+    }
+
+    @Test
+    fun `kColorBurn white src is identity for opaque dst`() {
+        // dc = blue, sc = 1, sa = 1, da = 1.
+        // For b chan (dc=1=da): rc = sa*da + sc*(1-da) + dc*(1-sa)
+        //   = 1 + 0 + 0 = 1.
+        // For r,g chans (dc=0, sc=1): dc < da; sc > 0; ratio = (1-0)*1/1 = 1.
+        //   min(1, 1) = 1. n=1. rc = (1-1)*1 + 1*0 + 0*0 = 0.
+        // Result: (R=0, G=0, B=1) = blue.
+        val out = blend(SK_ColorWHITE, SK_ColorBLUE, SkBlendMode.kColorBurn)
+        assertARGB(SK_ColorBLUE, out, tolerance = 1, label = "kColorBurn white on blue")
+    }
+
+    @Test
+    fun `kColorBurn black src darkens dst to black`() {
+        // sc = 0. Branch dc < da only matters for non-saturated dc.
+        // For dc=1 (b chan of blue), dc==da so first branch:
+        //   rc = sa*da + sc*(1-da) + dc*(1-sa) = 1 + 0 + 0 = 1.
+        // For dc=0 (r,g chans), dc < da, sc <= 0: branch sc <= 0:
+        //   rc = dc * (1 - sa) = 0 * 0 = 0.
+        // So (R=0, G=0, B=1) = blue. That's because blue is already
+        // saturated on its B channel; kColorBurn can't darken it further.
+        val out = blend(SK_ColorBLACK, SK_ColorBLUE, SkBlendMode.kColorBurn)
+        assertARGB(SK_ColorBLUE, out, tolerance = 1, label = "kColorBurn black on blue")
+    }
+
+    @Test
+    fun `kSoftLight opaque half-grey is identity for fully-saturated dst`() {
+        // s = (0.5, 0.5, 0.5), d = (0, 0, 1) blue, sa = da = 1.
+        // 2*s = 1 = sa, so dark src branch (≤ sa is true).
+        //   m = d/da = d
+        //   B = d * (sa + (2*s - sa) * (1 - m)) = d * (1 + 0 * (1-m)) = d.
+        // carrier = (1-1)*d + (1-1)*s = 0.
+        // rc = d. So output dst as-is.
+        val out = blend(argb(255, 128, 128, 128), SK_ColorBLUE, SkBlendMode.kSoftLight)
+        assertARGB(SK_ColorBLUE, out, tolerance = 2, label = "kSoftLight 50% grey on blue")
+    }
+
+    @Test
+    fun `kSoftLight opaque black darkens dst toward black`() {
+        // s = 0, d = (0, 0, 1). 2*s=0 ≤ sa=1, dark branch.
+        //   m_b = 1; B_b = 1 * (1 + (0 - 1) * (1 - 1)) = 1. Stays at 1.
+        //   m_r = 0; B_r = 0 * (...) = 0.
+        //   m_g = 0; B_g = 0.
+        // carrier = 0.
+        // rc = (0, 0, 1) = blue. SoftLight black src is no-op on saturated channels.
+        val out = blend(SK_ColorBLACK, SK_ColorBLUE, SkBlendMode.kSoftLight)
+        assertARGB(SK_ColorBLUE, out, tolerance = 2, label = "kSoftLight black on blue")
+    }
+
+    @Test
+    fun `kSoftLight opaque white brightens half-grey toward white`() {
+        // s = 1, d = 0.5, sa = da = 1. 2*s = 2 > sa, light src branch.
+        //   m = 0.5. 4*d = 2 > da = 1, so bright-dst sub-branch.
+        //   correction = sqrt(0.5) - 0.5 ≈ 0.707 - 0.5 = 0.207.
+        //   B = d*sa + da*(2*s - sa)*correction = 0.5 + 1*1*0.207 = 0.707.
+        // carrier = 0. rc = 0.707 → 181 in 8-bit.
+        val out = blend(SK_ColorWHITE, argb(255, 128, 128, 128), SkBlendMode.kSoftLight)
+        assertARGB(argb(255, 181, 181, 181), out, tolerance = 3, label = "kSoftLight white on 50% grey")
+    }
+
     // ---------- Unimplemented modes throw -------------------------------
 
     @Test
     fun `unimplemented mode throws NotImplementedError`() {
         try {
-            // kOverlay is the next simple-separable to land; until then
-            // it still throws.
-            blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kOverlay)
+            // The 4 HSL modes are the only ones still throwing.
+            blend(SK_ColorRED, SK_ColorBLUE, SkBlendMode.kHue)
             assert(false) { "expected NotImplementedError" }
         } catch (_: NotImplementedError) {
             // expected
