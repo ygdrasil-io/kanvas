@@ -553,6 +553,46 @@ Les deux GMs ont une rangée "radial gradient" qu'on rend en **couleur solide** 
 - **`Crbug1073670GM`** — texte (`drawString` + SkFont).
 - **`Crbug1113794GM`** — `SkDashPathEffect`.
 
+### Phase 6a — F16 working-space rasterizer (infra) ✅
+
+**But** : remplacer le pipeline de compositing 8-bit non-premultiplié par un pipeline F16 (32-bit float per channel, premultiplié) — la même précision qu'utilise Skia upstream pour son rendu de référence. Étape 1/2 : l'infrastructure (storage, blend, I/O). Étape 2 : les producteurs de couleur (shaders, AA coverage) — déférée Phase 6b.
+
+(Cette phase rebase sur la Phase 5f mergée en parallèle ; le baseline passe de 54 → 64 GMs et l'intégration avec le 9-mode dispatch SkBlendMode ajouté par la Phase 6 entry est gérée dans le `blend(x, y, src, mode)` — F16 fast path ne couvre que `kSrcOver` pour l'instant ; les autres modes retombent sur le path 8-bit via `getPixel`/`setPixel`.)
+
+#### API ajoutée
+
+- [x] **`SkColorType`** — enum existante : on active `kRGBA_F16Norm` (déjà déclaré, non-utilisé jusqu'ici).
+- [x] **`SkBitmap` polymorphique** — `colorType` paramètre constructeur. Stockage :
+  - `pixels8888: IntArray` pour `kRGBA_8888` (legacy).
+  - `pixelsF16: FloatArray` pour `kRGBA_F16Norm` (4 floats/pixel, **premultipliés**, `[0, 1]`).
+  - `getPixel`/`setPixel` (SkColor 8-bit non-premul) dispatchent et convertissent à la volée.
+  - Nouveaux accesseurs `getPixelF16(x, y, FloatArray)` / `setPixelF16(x, y, r, g, b, a)` pour le travail interne sans roundtrip 8-bit.
+- [x] **`SkBitmap.eraseColor`** — gère les deux formats (premul + conversion pour F16).
+
+#### Refactor
+
+- [x] **`SkBitmapDevice.blend(x, y, src, mode)`** : dispatch — `kSrcOver + F16` route vers `blendF16` (SrcOver en `[0, 1]` premul direct) ; `kSrcOver + 8888` reste l'inline fast path Phase 1 ; les autres modes (Phase 6 entry's 9-mode slice) retombent sur le path générique `blendPixel(src, dst, mode)` puis `setPixel`.
+- [x] **`SkCanvas.saveLayer`** : le bitmap layer hérite du `colorType` du parent.
+- [x] **`SkBitmapDevice.compositeFrom`** : passe par `bitmap.getPixel(x, y)` (color-type-aware) au lieu de `srcPixels[i]` (raw IntArray).
+- [x] **`TestUtils.runGmTest`** : crée des bitmaps F16 par défaut.
+- [x] **`TestUtils.bufferedImageToBitmap`** : si l'image PNG est 16-bit-per-channel (DataBufferUShort), construit un bitmap F16 en préservant les 16 bits ; sinon stays 8-bit.
+- [x] **`TestUtils.compareBitmapsDetailed`** : si l'un des bitmaps est F16, lit chaque pixel via `getPixel(x, y)` (8-bit non-premul) puis compare comme avant. Préserve la sémantique 8-bit du ratchet existant.
+- [x] **`TestUtils.bitmapToBufferedImage`** + **`DiffImage.buildDiffPanel`** : F16-aware via `getPixel`.
+
+#### Limites connues — Phase 6b (à venir)
+
+L'infra F16 est en place mais le pipeline reste 8-bit AVANT le `blend` :
+- **Shaders** (gradients) émettent toujours `IntArray` SkColor (`shader.shadeRow(..., dst: IntArray)`). Le passage à `FloatArray` est nécessaire pour que les lookups de gradient bénéficient vraiment du F16.
+- **AA coverage modulation** (`effA = baseA * samples / maxSamples`) reste en 8-bit. Float ferait disparaître le quantization sur les bords AA.
+- **Blend modes ≠ kSrcOver** ne bénéficient pas encore du fast-path F16 ; ils passent par `getPixel`/`setPixel` qui font le roundtrip 8-bit.
+
+Avec ces étapes, les scores `HardstopGradient` (29 %), `AnalyticGradient` (62 %), `FillrectGradient` (68 %), `HardstopGradientsMany` (15 %), `BatchedConvexPaths` (35 %) devraient grimper sensiblement. Pour Phase 6a, les scores restent essentiellement inchangés (compositing F16-précis mais inputs déjà quantisés en 8-bit) — c'est attendu et documenté.
+
+#### Vérification Phase 6a
+- [x] Aucune régression sur les 64 GMs Phase 0–5f (tous +/−0.5 % within-tolerance).
+- [x] L'infra F16 (storage / blend / I/O / comparison) est solide pour Phase 6b qui ne touchera plus que les producteurs de couleur (shaders + AA coverage).
+- [x] **Pass count cumulé : 64 GM** (no new GMs in this phase — pure infrastructure).
+
 ---
 
 ## Phase 6 — Blend modes complets : `AAXfermodesGM`, `XfermodesGM`, `DestColorGM`, `AndroidBlendModesGM`
@@ -666,8 +706,10 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 | 5e    | 54       | DEF_SIMPLE_GM regression harvest (10 small bug GMs) — 0 nouvelle API | ✅ |
 | 6 entry | 55     | `SkBlendMode` enum + 9-mode dispatch slice (`kClear/kSrc/kDst/kSrcOver/kDstOver/kSrcIn/kDstIn/kPlus/kModulate/kScreen`) + ScaledRectsGM 87.79% | ✅ |
 | 5f    | 64       | GM harvest mixed (Beziers/HardstopMany/TestGradient/ThinStroked/BatchedConvex/ShallowLin/ShallowRad/B119394958/Crbug1086705) — 0 nouvelle API | ✅ |
+| 6a    | 64       | F16 working-space rasterizer (infra : SkBitmap F16, blendF16 SrcOver, I/O 16-bit) | ✅ |
+| 6b    | 64+      | F16 shaders (gradient `shadeRowF16`) + F16 AA coverage ⇒ Hardstop/Analytic/Fillrect/HardstopMany/BatchedConvex score lift | ⬜ |
 | 5g    | ~67      | Image shader (`SkBitmap.makeShader`) + AlphaGradientsGM | ⬜ |
-| 6     | ~70      | 19 modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
+| 6     | ~70      | 19 blend modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [MIGRATION_PLAN_COLORSPACE_PORT.md](MIGRATION_PLAN_COLORSPACE_PORT.md).
 

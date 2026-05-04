@@ -56,21 +56,24 @@ internal object DiffImage {
         val w = a.width
         val h = a.height
         val pixels = IntArray(w * h)
-        for (i in 0 until w * h) {
-            val pa = a.pixels[i]
-            val pb = b.pixels[i]
-            val dA = abs(((pa ushr 24) and 0xFF) - ((pb ushr 24) and 0xFF))
-            val dR = abs(((pa ushr 16) and 0xFF) - ((pb ushr 16) and 0xFF))
-            val dG = abs(((pa ushr 8) and 0xFF) - ((pb ushr 8) and 0xFF))
-            val dB = abs((pa and 0xFF) - (pb and 0xFF))
-            val maxD = maxOf(dA, maxOf(dR, maxOf(dG, dB)))
-            pixels[i] = if (maxD <= tolerance) {
-                MATCHING_COLOR
-            } else {
-                // Bright magenta intensity proportional to severity beyond
-                // tolerance; saturates at maxD - tolerance >= 64.
-                val sev = min(255, (maxD - tolerance) * 4)
-                (0xFF000000.toInt()) or (sev shl 16) or sev
+        // Phase 6 — read both bitmaps via the colorType-aware accessor so
+        // F16 ↔ F16 (or mixed) comparisons render the diff panel correctly
+        // instead of crashing on the empty `pixels8888` array.
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val pa = a.getPixel(x, y)
+                val pb = b.getPixel(x, y)
+                val dA = abs(((pa ushr 24) and 0xFF) - ((pb ushr 24) and 0xFF))
+                val dR = abs(((pa ushr 16) and 0xFF) - ((pb ushr 16) and 0xFF))
+                val dG = abs(((pa ushr 8) and 0xFF) - ((pb ushr 8) and 0xFF))
+                val dB = abs((pa and 0xFF) - (pb and 0xFF))
+                val maxD = maxOf(dA, maxOf(dR, maxOf(dG, dB)))
+                pixels[y * w + x] = if (maxD <= tolerance) {
+                    MATCHING_COLOR
+                } else {
+                    val sev = min(255, (maxD - tolerance) * 4)
+                    (0xFF000000.toInt()) or (sev shl 16) or sev
+                }
             }
         }
         val img = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
