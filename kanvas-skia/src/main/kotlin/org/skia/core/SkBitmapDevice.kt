@@ -143,12 +143,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val r = minOf(clip.right, originX + src.width, width)
         val b = minOf(clip.bottom, originY + src.height, height)
         if (l >= r || t >= b) return
-        val srcPixels = src.bitmap.pixels
-        val srcW = src.width
+        // Read source pixels via the colorType-aware [SkBitmap.getPixel]
+        // accessor so this composite works for both 8888-only and F16-only
+        // layer pairs (and any future colorType combos). Slightly slower
+        // than the historical raw-IntArray walk, but only matters when a
+        // GM uses `saveLayer` heavily — none in scope do.
         for (y in t until b) {
-            val srcRowBase = (y - originY) * srcW
             for (x in l until r) {
-                val sample = srcPixels[srcRowBase + (x - originX)]
+                val sample = src.bitmap.getPixel(x - originX, y - originY)
                 val effective = if (paintAlpha == 0xFF) sample else applyAlpha(sample, paintAlpha)
                 if (effective ushr 24 == 0) continue
                 // Phase 6 entry: saveLayer flatten remains hardcoded SrcOver
@@ -943,22 +945,32 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     }
 
     /**
-     * Per-pixel blend dispatch. The 9-mode slice from Phase 6 entry, plus
-     * the historic SrcOver fast path. Operates on **non-premultiplied** ARGB
-     * inputs and outputs.
+     * Per-pixel blend dispatch. Combines:
+     *  - the **F16 SrcOver fast path** (Phase 6a) when the bitmap is
+     *    `kRGBA_F16Norm`, doing premultiplied-float compositing without
+     *    any byte-quantization roundtrip,
+     *  - the **8-bit SrcOver fast path** (Phase 1) when the bitmap is
+     *    `kRGBA_8888` and `mode == kSrcOver`,
+     *  - the **generic 9-mode dispatch** (Phase 6 entry) for all other
+     *    blend modes.
      *
-     * Skia's reference raster pipeline runs in premultiplied alpha space.
-     * We re-derive the canonical premul formula on the fly and decompose
-     * the result back into non-premul. This is exact when both operands
-     * are fully opaque (the common case for the GMs in scope) and incurs
-     * a small residual error (≤1 ulp per channel in the worst case) at
-     * fractional alpha — see the `SkBlendModeTest` cases for partial-alpha
-     * inputs.
-     *
-     * Modes outside the 9-mode slice throw [NotImplementedError]. Adding
-     * one is purely a [blendPixel] case; no caller-side change is needed.
+     * The generic dispatch operates on **non-premultiplied** ARGB inputs
+     * and outputs; for F16 bitmaps it reads / writes via the colour-type-
+     * aware `getPixel` / `setPixel` accessors, which convert to / from
+     * premul float internally. That round-trip costs precision (~1 ulp
+     * per channel at fractional alpha) but only for the non-SrcOver modes
+     * the GMs in scope barely exercise; full F16 support for the rest of
+     * the 9-mode slice is a Phase 6b task.
      */
     private fun blend(x: Int, y: Int, src: SkColor, mode: SkBlendMode) {
+        // Phase 6a — F16 SrcOver fast path. Premul float compositing
+        // straight in [SkBitmap.pixelsF16] with no byte-quantization
+        // roundtrip on every blend.
+        if (mode == SkBlendMode.kSrcOver &&
+            bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm) {
+            blendF16(x, y, src)
+            return
+        }
         // SrcOver fast path — same code as Phase 1 had — preserved bit-for-bit.
         if (mode == SkBlendMode.kSrcOver) {
             val sa = SkColorGetA(src)
@@ -1172,5 +1184,33 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val outG = ((pg + outA / 2) / outA).coerceIn(0, 0xFF)
         val outB = ((pb + outA / 2) / outA).coerceIn(0, 0xFF)
         return SkColorSetARGB(outA, outR, outG, outB)
+    }
+
+    /**
+     * Source-Over compositing in **premultiplied float** (`F16Norm` path).
+     * Both src and dst are kept in `[0, 1]` premultiplied space, so the
+     * formula reduces to `out = src + dst * (1 − srcA)` per channel — no
+     * unpremul / repremul roundtrip and no byte quantization until the
+     * pixel ultimately leaves the bitmap (PNG output).
+     */
+    private fun blendF16(x: Int, y: Int, src: SkColor) {
+        val sa = SkColorGetA(src)
+        if (sa == 0) return
+        val saF = sa / 255f
+        val srF = SkColorGetR(src) / 255f * saF
+        val sgF = SkColorGetG(src) / 255f * saF
+        val sbF = SkColorGetB(src) / 255f * saF
+
+        val pixels = bitmap.pixelsF16
+        val i = (y * bitmap.width + x) * 4
+        val invSa = 1f - saF
+        val outR = srF + pixels[i] * invSa
+        val outG = sgF + pixels[i + 1] * invSa
+        val outB = sbF + pixels[i + 2] * invSa
+        val outA = saF + pixels[i + 3] * invSa
+        pixels[i] = outR
+        pixels[i + 1] = outG
+        pixels[i + 2] = outB
+        pixels[i + 3] = outA
     }
 }
