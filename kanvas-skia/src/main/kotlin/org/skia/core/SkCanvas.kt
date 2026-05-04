@@ -350,6 +350,14 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
+     * Mirrors Skia's `SkCanvas::clear(SkColor)` (`SkCanvas.h:1263`) —
+     * a thin wrapper around [drawColor] that exists for source-level
+     * compatibility with upstream code (so direct ports of `.cpp` GMs
+     * can keep their `canvas->clear(...)` calls verbatim).
+     */
+    public fun clear(color: SkColor): Unit = drawColor(color)
+
+    /**
      * Mirrors Skia's `SkCanvas::drawPaint`. Fills the current clip with
      * `paint.color` (or `paint.shader`, if set) via the paint's blend mode.
      * `drawPaint` has "infinite rect" semantics, so the only spatial bound
