@@ -28,6 +28,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | Bug593049GM | 99.93% | = | 1 | 89,937 / 90,000 | 0, 255, 255, 255 | 0, 255, 255, 255 |
 | Bug6083GM | 95.48% | = | 1 | 4,774 / 5,000 | 0, 19, 52, 48 | 0, 11, 23, 19 |
 | Bug615686GM | 98.57% | -0.01% | 1 | 61,609 / 62,500 | 0, 255, 255, 255 | 0, 53, 52, 52 |
+| Bug6783GM | 98.66% | = | 1 | 246,655 / 250,000 | 0, 207, 241, 166 | 0, 29, 18, 40 |
 | Bug6987GM | 99.47% | = | 1 | 39,787 / 40,000 | 0, 26, 25, 25 | 0, 11, 10, 10 |
 | Bug7792GM | 100.00% | = | 1 | 639,975 / 640,000 | 0, 255, 255, 255 | 0, 255, 255, 255 |
 | ChromeGradText1GM | 100.00% | = | 1 | 240,000 / 240,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
@@ -49,7 +50,11 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ColorWheelNativeGM | 99.75% | = | 8 | 3,575 / 3,584 | 0, 198, 198, 198 | 0, 98, 98, 127 |
 | ConcavePathsGM | 98.85% | -0.02% | 1 | 296,549 / 300,000 | 0, 64, 65, 65 | 0, 13, 12, 12 |
 | ConicPathsGM | 95.54% | -0.00% | 1 | 843,806 / 883,200 | 0, 255, 255, 255 | 0, 11, 11, 11 |
+| ConicalGradients2ptEdgeGM | 92.88% | = | 1 | 635,850 / 684,600 | 0, 63, 43, 46 | 0, 32, 20, 11 |
+| ConicalGradients2ptEdgeNoDitherGM | 92.88% | = | 1 | 635,853 / 684,600 | 0, 63, 43, 46 | 0, 32, 20, 11 |
 | ConicalGradients2ptInsideGM | 82.35% | = | 1 | 563,761 / 684,600 | 0, 63, 43, 46 | 0, 32, 21, 12 |
+| ConicalGradients2ptOutsideGM | 90.06% | = | 1 | 616,546 / 684,600 | 0, 255, 255, 255 | 0, 64, 73, 61 |
+| ConicalGradients2ptOutsideNoDitherGM | 90.06% | = | 1 | 616,564 / 684,600 | 0, 255, 255, 255 | 0, 64, 73, 61 |
 | ConjoinedPolygonsGM | 99.23% | -0.02% | 1 | 158,766 / 160,000 | 0, 34, 33, 33 | 0, 11, 10, 10 |
 | ConvexLineOnlyPathsFillGM | 95.10% | -0.03% | 1 | 249,308 / 262,144 | 0, 86, 85, 85 | 0, 13, 12, 12 |
 | ConvexLineOnlyPathsStrokeAndFillGM | 94.30% | -0.04% | 1 | 247,209 / 262,144 | 0, 255, 255, 255 | 0, 15, 15, 15 |
@@ -110,6 +115,8 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | PathSkbug11886GM | 99.22% | -0.01% | 1 | 65,024 / 65,536 | 0, 129, 129, 129 | 0, 35, 35, 35 |
 | PerlinNoiseGM | 49.92% | = | 1 | 68,087 / 136,400 | 0, 50, 17, 18 | 0, 7, 6, 6 |
 | PerlinNoiseRotatedGM | 70.94% | = | 1 | 49,941 / 70,400 | 0, 58, 57, 57 | 0, 7, 7, 7 |
+| PictureCullRectGM | 86.11% | = | 1 | 12,400 / 14,400 | 0, 29, 44, 3 | 0, 25, 18, 2 |
+| PictureGM | 28.15% | = | 1 | 15,200 / 54,000 | 0, 53, 43, 38 | 0, 30, 18, 21 |
 | PolygonsGM | 86.05% | = | 1 | 824,024 / 957,600 | 0, 63, 113, 83 | 0, 7, 5, 4 |
 | QuadCapGM | 99.77% | -0.01% | 1 | 39,909 / 40,000 | 0, 83, 82, 82 | 0, 19, 20, 20 |
 | QuadClosePathGM | 87.03% | -0.02% | 1 | 420,877 / 483,600 | 0, 206, 161, 239 | 0, 92, 74, 106 |
@@ -122,8 +129,12 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | RoundRectGM | 96.27% | = | 1 | 1,039,733 / 1,080,000 | 0, 192, 245, 242 | 0, 20, 18, 19 |
 | ScaledRectsGM | 87.79% | = | 1 | 7,192 / 8,192 | 0, 36, 7, 11 | 0, 36, 7, 11 |
 | ScaledStrokesGM | 96.03% | -0.03% | 1 | 196,665 / 204,800 | 0, 255, 255, 255 | 0, 129, 128, 128 |
+| ShallowGradientConicalDitherGM | 99.99% | = | 1 | 639,965 / 640,000 | 0, 2, 2, 2 | 0, 1, 1, 1 |
+| ShallowGradientConicalNoDitherGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ShallowGradientLinearNoditherGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ShallowGradientRadialNoditherGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| ShallowGradientSweepDitherGM | 99.99% | = | 1 | 639,929 / 640,000 | 0, 2, 2, 2 | 0, 1, 1, 1 |
+| ShallowGradientSweepNoDitherGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | SimpleRectGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | SimpleShapesAaGM | 65.01% | -0.01% | 1 | 162,518 / 250,000 | 0, 33, 31, 32 | 0, 5, 5, 5 |
 | SimpleShapesBwGM | 65.55% | = | 1 | 163,874 / 250,000 | 0, 129, 133, 137 | 0, 5, 5, 5 |
