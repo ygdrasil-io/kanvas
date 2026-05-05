@@ -23,8 +23,8 @@ class QuadPathTest {
         val accepted = SimilarityTracker.updateScore("QuadPathGM", comparison.similarity)
         assertTrue(accepted, "QuadPathGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 70.0,
-            "QuadPathGM similarity ${"%.2f".format(comparison.similarity)}% < 70.0% floor",
+            comparison.similarity >= 86.0,
+            "QuadPathGM similarity ${"%.2f".format(comparison.similarity)}% < 86.0% floor",
         )
     }
 
@@ -42,8 +42,8 @@ class QuadPathTest {
         val accepted = SimilarityTracker.updateScore("QuadClosePathGM", comparison.similarity)
         assertTrue(accepted, "QuadClosePathGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 70.0,
-            "QuadClosePathGM similarity ${"%.2f".format(comparison.similarity)}% < 70.0% floor",
+            comparison.similarity >= 86.0,
+            "QuadClosePathGM similarity ${"%.2f".format(comparison.similarity)}% < 86.0% floor",
         )
     }
 }

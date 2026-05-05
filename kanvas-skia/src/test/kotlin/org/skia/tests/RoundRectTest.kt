@@ -25,7 +25,7 @@ class RoundRectTest {
         }
         val accepted = SimilarityTracker.updateScore("RoundRectGM", comparison.similarity)
         assertTrue(accepted, "RoundRectGM regressed below ratchet")
-        assertTrue(comparison.similarity >= 75.0,
-            "RoundRectGM similarity ${"%.2f".format(comparison.similarity)}% < 75.0% (gradient column missing)")
+        assertTrue(comparison.similarity >= 95.0,
+            "RoundRectGM similarity ${"%.2f".format(comparison.similarity)}% < 95.0% (gradient column missing)")
     }
 }

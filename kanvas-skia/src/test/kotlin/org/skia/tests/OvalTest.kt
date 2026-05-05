@@ -26,7 +26,7 @@ class OvalTest {
         }
         val accepted = SimilarityTracker.updateScore("OvalGM", comparison.similarity)
         assertTrue(accepted, "OvalGM regressed below ratchet")
-        assertTrue(comparison.similarity >= 75.0,
-            "OvalGM similarity ${"%.2f".format(comparison.similarity)}% < 75.0% (gradient column missing)")
+        assertTrue(comparison.similarity >= 93.0,
+            "OvalGM similarity ${"%.2f".format(comparison.similarity)}% < 93.0% (gradient column missing)")
     }
 }

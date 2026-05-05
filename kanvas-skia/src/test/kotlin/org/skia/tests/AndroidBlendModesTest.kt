@@ -23,8 +23,8 @@ class AndroidBlendModesTest {
         val accepted = SimilarityTracker.updateScore("AndroidBlendModesGM", comparison.similarity)
         assertTrue(accepted, "AndroidBlendModesGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 50.0,
-            "AndroidBlendModesGM similarity ${"%.2f".format(comparison.similarity)}% < 50.0% floor",
+            comparison.similarity >= 95.0,
+            "AndroidBlendModesGM similarity ${"%.2f".format(comparison.similarity)}% < 95.0% floor",
         )
     }
 }
