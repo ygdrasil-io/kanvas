@@ -189,12 +189,26 @@ Total: ~65 lines prod + ~100 lines test, 5 commits.
 - [x] **Phase 2b — Mapping API expansion** (kanvas#77): `mapXY(SkPoint)`, `mapVector`, `mapPoints` (bulk + in-place + 4 fast paths), `mapVectors`, `mapRectScaleTranslate`, `mapRadius`.
 - [x] **Phase 3b — Function-style accessors + det + array exchange + RectToRect + decomposition** (this PR): `getScaleX/Y` / `getSkewX/Y` / `getTranslateX/Y` / `getPerspX/Y`, `det()` / `det2x2()`, `get9` / `MakeFrom9` / `asAffine` / `MakeFromAffine` (with `kM*` / `kA*` index constants), `MakeRectToRect(src, dst, ScaleToFit)` + `ScaleToFit` enum, `getMaxScale` / `getMinScale` / `getMinMaxScales` (full eigenvalue solver), `decomposeScale` (Pair-returning).
 
+## Phase 4 — Perspective, RSXform, PolyToPoly (this PR)
+
+`SkMatrix` is now a full 3×3 transform — no longer restricted to the affine sub-group.
+
+- **Storage**: 9-tuple `(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2)`. Default-constructed identity has `persp = (0, 0, 1)` so existing affine traffic is bit-equivalent.
+- **`computeTypeMask`**: detects perspective and short-circuits to `kORableMasks` (identical to Skia).
+- **`concat`**: dispatches to a full 3×3 `rowcol3` multiply when either input has perspective; affine fast path unchanged.
+- **`mapXY` / `mapPoints`**: homogeneous divide (`x/w, y/w`) when `hasPerspective()`. Affine fast path unchanged.
+- **`invert`**: cofactor matrix in double precision (`invertPerspective`). Affine fast path unchanged.
+- **`det()` / `det2x2()`**: 3×3 cofactor expansion vs upper 2×2.
+- **`MakePerspective(p0, p1)`**: factory for pure perspective.
+- **`MakeAll(9-arg)`**: full row-major construction.
+- **`MakeFrom9` / `get9`**: handle arbitrary perspective row.
+- **`asAffine`**: returns `false` (and leaves buffer untouched) when perspective is present.
+- **`mapHomogeneousPoints(SkPoint3[], SkPoint[], count)`**: bulk map without perspective divide. New [`SkPoint3.kt`](kanvas-skia/src/main/kotlin/org/skia/math/SkPoint3.kt) primitive added.
+- **`MakeRSXform(scos, ssin, tx, ty)`** + 6-arg pivoted overload: rotate-scale-translate composite. Mirrors `SkMatrix::setRSXform`.
+- **`MakePolyToPoly(src[], dst[])`**: 0/1/2/3/4-point fit (perspective for 4 points). Internal `Poly2Proc` / `Poly3Proc` / `Poly4Proc` mirror Skia line-by-line.
+
 ## Still hors-scope (porter à la demande)
 
-- Perspective (`kMPersp0/1/2`, `mapHomogeneousPoints`, `setPerspective`).
-- `setPolyToPoly` (4-point affine fit).
-- `setRSXform` (rotation-scale-translate composite — for `drawTextRSXform`).
 - Setters on instance (`setScaleX/Y`, `setRotate`, `setTranslate`, `setSinCos`, etc.) — our port is immutable; use factories or `copy()`.
 - Serialization (`writeToMemory` / `readFromMemory`).
 - `dump` / `dumpHex` / `dumpToString`.
-- `mapPointsToHomogeneous` / `SkPoint3` overloads.
