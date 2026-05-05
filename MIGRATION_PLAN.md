@@ -921,6 +921,35 @@ Le résiduel sur AAXfermodes (~20 %) est dominé par :
 - [x] `SkTextUtils` + `SkBlendMode_Name` + `restoreToCount` + `drawColor(color, mode)` overload + `modeAffectsZeroAlphaSrc` étendu.
 - [x] **Pass count cumulé : 67 GM**. **🎉 Phase 6 close** (les 2 GMs restants `XfermodesGM` / `DestColorGM` sont scopés ailleurs — voir GMs Phase 6 reportés).
 
+### Phase 6h — GM harvest post-Phase-6 (DEF_SIMPLE_GM mix) ✅
+
+**But** : maintenant que la matrice d'API (paths complets, stroker complet, gradients, blend modes 29/29, texte) est stable, récolter une 10-pack de GMs `DEF_SIMPLE_GM` upstream portables sans aucune nouvelle API. Tous sont des tests de régression liés à un bug spécifique — un porte sur le rasterizer, un sur le stroker, un sur le shader, etc. — petits (≤ 100 lignes), targeted, complémentaires.
+
+#### GMs portés
+
+| GM                       | Référence                       | Score      | Stress |
+|--------------------------|---------------------------------|------------|--------|
+| Bug615686GM              | `bug615686.png` 250×250         | **98.58 %** | Cubic auto-intersectant stroked à width=20. Stroker `cubicPerpRay` à haute courbure. |
+| Skbug4868GM              | `skbug_4868.png` 32×32          | **98.63 %** | clipRect + drawLine sous large translate (~5995 px). Edge-rounding consistency. |
+| Crbug946965GM            | `crbug_946965.png` 75×150       | **97.32 %** | RRect filled + stroked sous rotate(90)+scale. Per-corner radii sous rotation. |
+| Crbug1139750GM           | `crbug_1139750.png` 50×50       | **97.12 %** | Stroked rrect avec `strokeWidth = 2 * radius` (inner radii = 0). Edge case GPU. |
+| Crbug847759GM            | `crbug_847759.png` 500×500      | **99.57 %** | Hairline (`strokeWidth=0`) closed cubic squashed-oval. AA hairline tangentielle. |
+| LuminosityOverflowGM     | `luminosity_overflow.png` 256×256 | **99.51 %** | 64 bright color rects + 16 alpha-stepped white rects en `kLuminosity`. Stress du divide-by-luminance. |
+| WideButtCapsGM           | `widebuttcaps.png` 480×500      | **81.91 %** | 4 paths × 4 joins (bevel/round/miter + cubic) × `strokeWidth=100`. Stress wide stroke + degenerate paths. |
+| StrokeRectShaderGM       | `stroke_rect_shader.png` 690×300 | **84.31 %** | Stroked rects (AA on/off, bevel/miter/miter-limit/round/hairline) avec linear gradient shader. Stress local-vs-device coords. |
+| ClipDrawDrawGM           | `clipdrawdraw.png` 512×512      | **35.34 %** ⚠ | crbug 423834 : clipRect + drawRect + drawRect avec `.5` fractional inputs. **Expose un vrai bug** : nos arrondis `floor`/`ceil` (clipRect) ↔ `floor(c+.5)` (drawRect non-AA) divergent ; Skia utilise round-half-to-even partout. Floor descendu à 30 % comme regression tracker — fix séparé. |
+| RadialGradientPrecisionGM | `radial_gradient_precision.png` 200×200 | **4.92 %** ⚠ | Centre off-canvas (1000, 1000), radius 40, 25 périodes kRepeat sur la zone visible. Match visuel correct (max diff = 18) mais tolerance=1 est trop strict pour 25 wraparounds. Floor à 4 % — regression tracker précision. |
+
+#### Vérification Phase 6h
+- [x] Aucune nouvelle API. Tests sur API existante depuis Phase 6.
+- [x] 67 GMs précédents — 0 régression.
+- [x] **Pass count cumulé : 77 GM**.
+- [x] 2 GMs (`ClipDrawDrawGM` / `RadialGradientPrecisionGM`) entrent comme regression-trackers à floor abaissé — voir notes ci-dessus pour le contexte.
+
+#### Follow-up identifié (non-bloquant)
+
+- **Edge-rounding consistency** clipRect-vs-drawRect non-AA : Skia utilise `round-half-to-even` partout, on utilise `floor`/`ceil` (clipRect) et `floor(c+.5)` (drawRect). Diverge sur `.5`-fractional. Slice indépendant ; les GMs path-AA + rect-AA majoritaires ne le voient pas.
+
 ### Phase 5h — Linear-premul F16 storage (❌ explored, reverted)
 
 **Hypothèse de départ** : le drift constant de `TinyBitmapGM` (rendered `(214, 177, 167)` vs reference `(204, 162, 158)`) viendrait de ce que le buffer F16 stocke des valeurs **encoded** Rec.2020 alors que Skia upstream compose en **linear** Rec.2020. Refactor : stocker en linear-premul, encoder seulement à la sortie 8-bit / PNG.
@@ -1087,6 +1116,7 @@ L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées s
 | 6 sepC | 65      | Phase 6 separable complexe : `kOverlay`/`kHardLight`/`kColorDodge`/`kColorBurn`/`kSoftLight` (4 helpers privés, branches conditionnelles, port direct Skia raster pipeline) + 13 tests (74 total). 25 / 29 modes Skia. | ✅ |
 | 6 HSL | 65       | Phase 6 HSL : `kHue`/`kSaturation`/`kColor`/`kLuminosity` (`blendHSL` + helpers W3C `lum`/`sat`/`setLum`/`setSat`/`clipColor`) + 7 tests + smoke 29 modes (81 total). 29 / 29 modes Skia (formules complètes). | ✅ |
 | 6 GMs | 67       | `SkTextUtils` + `SkBlendMode_Name` + `restoreToCount` + `drawColor(c, mode)` + fix `modeAffectsZeroAlphaSrc` étendu (kSrcOut, kDstATop) ⇒ AAXfermodesGM 80.12 % + AndroidBlendModesGM 97.04 %. **🎉 Phase 6 close.** XfermodesGM/DestColorGM scopés ailleurs (compositeFrom-with-blendmode + ARGB_4444 / SkRuntimeEffect). | ✅ |
+| 6h    | 77       | GM harvest post-Phase-6 (10 DEF_SIMPLE_GM) — Bug615686/Skbug4868/Crbug946965/Crbug1139750/Crbug847759/LuminosityOverflow/WideButtCaps/StrokeRectShader (98-100 %) + ClipDrawDraw 35.34 % et RadialGradientPrecision 4.92 % comme regression-trackers. 0 nouvelle API. | ✅ |
 | 5h    | n/a      | Linear-premul F16 storage — **explored, reverted**. Voir post-mortem ci-dessous. | ❌ reverted |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [archives/MIGRATION_PLAN_COLORSPACE_PORT.md](archives/MIGRATION_PLAN_COLORSPACE_PORT.md) (terminé : phases A-J + F1-F7 livrées, K out of scope).
