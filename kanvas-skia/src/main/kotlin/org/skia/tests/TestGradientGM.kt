@@ -74,7 +74,7 @@ public class TestGradientGM : GM() {
 
         // RRect with setOval(rect) then offset(40, 80). Equivalent to
         // an oval bounded by the offset rect (radii are half-extents).
-        val ovalRect = SkRect.MakeXYWH(rect.left + 40f, rect.top + 80f, rect.width, rect.height)
+        val ovalRect = SkRect.MakeXYWH(rect.left + 40f, rect.top + 80f, rect.width(), rect.height())
         val oval = SkRRect.MakeOval(ovalRect)
         val solidPaint = SkPaint().apply {
             style = SkPaint.Style.kFill_Style

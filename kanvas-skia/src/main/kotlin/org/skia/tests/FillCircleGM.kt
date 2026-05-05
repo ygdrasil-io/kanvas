@@ -51,7 +51,7 @@ public class FillCircleGM : GM() {
         // bookkeeping anyway so the rand consumption stays in lockstep.
         @Suppress("UNUSED_VARIABLE")
         var sign = 1f
-        while (r.width > strokeWidth * 2f) {
+        while (r.width() > strokeWidth * 2f) {
             c.save()
             // Upstream: canvas.rotate(fRotate * sign) — fRotate=0 → no-op.
             paint.color = ToolUtils.colorTo565(rand.nextU() or (0xFF shl 24))

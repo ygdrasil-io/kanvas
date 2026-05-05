@@ -48,7 +48,7 @@ public class AddArcGM : GM() {
         val rand = SkRandom()
 
         var sign = 1f
-        while (r.width > paint.strokeWidth * 3f) {
+        while (r.width() > paint.strokeWidth * 3f) {
             paint.color = ToolUtils.colorTo565(rand.nextU() or 0xFF000000.toInt())
             val startAngle = rand.nextUScalar1() * 360f
             // fRotate=0 in static dump; the speed-scaled offset is zero.

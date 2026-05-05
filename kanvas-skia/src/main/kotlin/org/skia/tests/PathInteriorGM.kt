@@ -50,7 +50,7 @@ public class PathInteriorGM : GM() {
         c.translate(8.5f, 8.5f)
 
         val rect = SkRect.MakeLTRB(0f, 0f, 80f, 80f)
-        val rad = rect.width / 8f
+        val rad = rect.width() / 8f
 
         var i = 0
         for (insetFirst in 0..1) {
@@ -79,8 +79,8 @@ public class PathInteriorGM : GM() {
                                     builder.addRect(r, innerDir)
                                 }
 
-                                val dx = (i / 8) * rect.width * 6f / 5f
-                                val dy = (i % 8) * rect.height * 6f / 5f
+                                val dx = (i / 8) * rect.width() * 6f / 5f
+                                val dy = (i % 8) * rect.height() * 6f / 5f
                                 i++
                                 show(c, builder.detach().makeOffset(dx, dy))
                             }
@@ -103,8 +103,8 @@ public class PathInteriorGM : GM() {
     }
 
     private fun inset(r: SkRect): SkRect {
-        val ix = r.width / 8f
-        val iy = r.height / 8f
+        val ix = r.width() / 8f
+        val iy = r.height() / 8f
         return SkRect.MakeLTRB(r.left + ix, r.top + iy, r.right - ix, r.bottom - iy)
     }
 }
