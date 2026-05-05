@@ -4,6 +4,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkColor4f
+import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkColorGetA
 import org.skia.foundation.SkColorGetB
 import org.skia.foundation.SkColorGetG
@@ -178,8 +179,9 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             return
         }
 
-        // Solid-colour path (Phase 1).
-        val color = transformPaintColor(paint.color)
+        // Solid-colour path (Phase 1). Phase 7a — apply colour filter
+        // after the colour-space xform, before the per-pixel blend.
+        val color = applyColorFilter(paint.colorFilter, transformPaintColor(paint.color))
         if (SkColorGetA(color) == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         for (y in t until b) {
             for (x in l until r) blend(x, y, color, mode)
@@ -285,7 +287,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val scaleY = srcH / devH
 
         val paintAlpha = paint?.alpha ?: 0xFF
-        if (paintAlpha == 0) return
+        val colorFilter = paint?.colorFilter
+        // When [paintAlpha] is 0 the (paint-multiplied) src is fully
+        // transparent. We can still short-circuit unless the colour
+        // filter would produce a non-trivial output for that
+        // transparent input — without an `affectsTransparentBlack`
+        // hint on [SkColorFilter] we conservatively skip the
+        // short-circuit when a filter is present.
+        if (paintAlpha == 0 && colorFilter == null) return
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
         val maxX = image.width - 1
         val maxY = image.height - 1
@@ -302,7 +311,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // (e.g. kClear, kSrc, kSrcIn, kSrcOut, kDstIn, kDstATop, kModulate),
         // we must still call `blend` on transparent samples — otherwise the
         // covered pixel keeps its dst value instead of being zeroed.
-        val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
+        // Same argument when a colour filter is present : we don't know
+        // a priori whether it produces a non-trivial output for transparent
+        // input, so we skip the short-circuit.
+        val mustBlendZero = modeAffectsZeroAlphaSrc(mode) || colorFilter != null
         when (sampling.filter) {
             SkFilterMode.kNearest -> {
                 for (py in iy0 until iy1) {
@@ -311,7 +323,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     for (px in ix0 until ix1) {
                         val srcXc = src.left + (px + 0.5f - devDst.left) * scaleX
                         val ix = floor(srcXc).coerceIn(0, maxX)
-                        val sample = applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
+                        var sample = applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
+                        if (colorFilter != null) sample = colorFilter.filterColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
                         blend(px, py, sample, mode)
                     }
@@ -332,7 +345,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val c10 = devPixels[iy0i * image.width + ix1i]
                         val c01 = devPixels[iy1i * image.width + ix0i]
                         val c11 = devPixels[iy1i * image.width + ix1i]
-                        val sample = applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
+                        var sample = applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
+                        if (colorFilter != null) sample = colorFilter.filterColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
                         blend(px, py, sample, mode)
                     }
@@ -417,7 +431,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         } else {
             // Slice 2.2: float-precision colour-space xform — `setAlphaf`
             // sub-byte precision survives the sRGB→working-space step.
-            color4f = transformPaintColor(paint.color4f)
+            // Phase 7a: apply [SkPaint.colorFilter] right after the
+            // colour-space xform, before alpha quantisation. Skia's
+            // canonical pipeline order : `paint.color → xform →
+            // colorFilter → blend`.
+            color4f = applyColorFilter(paint.colorFilter, transformPaintColor(paint.color4f))
             baseA = (color4f.fA * 255f + 0.5f).toInt().coerceIn(0, 255)
             // Modes that produce a non-trivial output for transparent src
             // (e.g. kClear, kDstIn) must still walk covered pixels even when
@@ -460,14 +478,48 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
     /**
      * Return a [paint] copy with its colour transformed from sRGB into the
-     * bitmap's color space. Identity-fast-path when no xform is needed.
-     * Slice 2.2: routes through the float overloads so `setAlphaf(x)`
-     * precision survives the colour-space xform.
+     * bitmap's color space and the colour filter applied (when present and
+     * the paint has no shader — for shader paths the filter has to be
+     * applied per-pixel after the shader runs, see the TODO in
+     * [scanFillPath] / [drawPaint] shader branches). Identity-fast-path
+     * when no xform and no filter are needed. Slice 2.2: routes through
+     * the float overloads so `setAlphaf(x)` precision survives the
+     * colour-space xform.
+     *
+     * Phase 7a — when [SkPaint.colorFilter] is non-null and the paint has
+     * no shader, the filter is applied to the (xformed) `color4f` and the
+     * filter slot is cleared on the returned copy. Downstream code reads
+     * a filter-baked colour and never re-applies the filter.
      */
     private fun inDeviceColorSpace(paint: SkPaint): SkPaint {
-        if (xformSteps.flags.isIdentity) return paint
-        return paint.copy().also { it.setColor4f(transformPaintColor(it.color4f)) }
+        val needsXform = !xformSteps.flags.isIdentity
+        val cf = paint.colorFilter
+        val solidWithFilter = paint.shader == null && cf != null
+        if (!needsXform && !solidWithFilter) return paint
+        return paint.copy().also { p ->
+            var c = p.color4f
+            if (needsXform) c = transformPaintColor(c)
+            if (solidWithFilter) {
+                c = cf!!.filterColor4f(c)
+                p.colorFilter = null  // baked into c
+            }
+            p.setColor4f(c)
+        }
     }
+
+    /**
+     * Phase 7a — apply [SkPaint.colorFilter] (if any) to a single
+     * source colour in the bitmap's working colour space. Used by
+     * `drawPath` and `drawPaint` solid branches that don't go through
+     * [inDeviceColorSpace] (those entry points run their own xform
+     * inline). Identity-fast-path when [filter] is `null`.
+     */
+    private fun applyColorFilter(filter: SkColorFilter?, c: SkColor4f): SkColor4f =
+        filter?.filterColor4f(c) ?: c
+
+    /** [SkColor]-flavoured counterpart of [applyColorFilter]. */
+    private fun applyColorFilter(filter: SkColorFilter?, c: SkColor): SkColor =
+        filter?.filterColor(c) ?: c
 
     /**
      * sRGB-encoded `SkColor` → device-encoded `SkColor`. Short-circuits to
