@@ -48,6 +48,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ColorWheelNativeGM | 99.75% | = | 8 | 3,575 / 3,584 | 0, 198, 198, 198 | 0, 98, 98, 127 |
 | ConcavePathsGM | 98.85% | -0.02% | 1 | 296,549 / 300,000 | 0, 64, 65, 65 | 0, 13, 12, 12 |
 | ConicPathsGM | 95.54% | -0.00% | 1 | 843,806 / 883,200 | 0, 255, 255, 255 | 0, 11, 11, 11 |
+| ConicalGradients2ptInsideGM | 21.79% | = | 1 | 149,161 / 684,600 | 0, 63, 43, 46 | 0, 10, 7, 5 |
 | ConjoinedPolygonsGM | 99.23% | -0.02% | 1 | 158,766 / 160,000 | 0, 34, 33, 33 | 0, 11, 10, 10 |
 | ConvexLineOnlyPathsFillGM | 95.10% | -0.03% | 1 | 249,308 / 262,144 | 0, 86, 85, 85 | 0, 13, 12, 12 |
 | ConvexLineOnlyPathsStrokeAndFillGM | 94.30% | -0.04% | 1 | 247,209 / 262,144 | 0, 255, 255, 255 | 0, 15, 15, 15 |
