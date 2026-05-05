@@ -153,5 +153,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | TrickyCubicStrokesLargeRadiusGM | 98.38% | -0.02% | 1 | 32,237 / 32,768 | 0, 77, 76, 76 | 0, 23, 22, 22 |
 | TrickyCubicStrokesRoundCapsGM | 97.95% | = | 1 | 979,508 / 1,000,000 | 0, 244, 246, 249 | 0, 106, 100, 103 |
 | WideButtCapsGM | 81.90% | = | 1 | 196,569 / 240,000 | 0, 244, 246, 249 | 0, 179, 186, 187 |
+| XfermodesGM | 78.51% | = | 1 | 890,545 / 1,134,300 | 0, 89, 84, 172 | 0, 7, 5, 41 |
 | ZeroControlStrokeGM | 99.48% | = | 1 | 318,344 / 320,000 | 0, 53, 196, 237 | 0, 8, 24, 26 |
 | ZeroLineStrokeGM | 93.75% | = | 1 | 10,125 / 10,800 | 0, 255, 255, 255 | 0, 203, 203, 203 |
