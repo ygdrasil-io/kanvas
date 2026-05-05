@@ -86,14 +86,20 @@ Status : planned. Goal : preserve `setAlphaf` / `setColor4f` precision end-to-en
 
 **Expected GM impact** : zero. All existing call-sites set colour via `paint.color = X` (byte path) — they go through the same `FromColor` / `toSkColor` round-trip and produce identical bytes downstream.
 
-### Slice 2.2 — Plumb float colour into the F16 raster pipeline
+### Slice 2.2 — Plumb float colour into the F16 raster pipeline ✅
 
 - Add `colorToF16Premul(SkColor4f, FloatArray)` overload to `SkBitmapDevice` that reads the float value directly: `out[3] = c.fA; out[0] = c.fR * c.fA; …`.
-- Re-route the `useF16SolidPath` callers (lines ~599, ~661, ~998 today) to the new overload, passing `paint.color4f` instead of `paint.color`.
-- `transformPaintColor` gains an `SkColor4f` overload symmetrically.
+- Re-route the `useF16SolidPath` callers (`fillRectAA`, `strokeRectAA`, `scanFillPath`) to the new overload, passing `paint.color4f` instead of `paint.color`.
+- `transformPaintColor` gains an `SkColor4f → SkColor4f` overload symmetrically; `inDeviceColorSpace` switches to it (no more byte round-trip in the colour-space xform).
+- `fillPath` / `scanFillPath` signatures take `SkColor4f`; the legacy 8-bit fall-through computes the byte form lazily.
 - AAA / hairline / non-F16 paths stay on the byte path (they already truncate regardless; rewriting them buys nothing).
 
-**Expected GM impact** : `BatchedConvexPathsGM` 34.94 % → ≥ 85 %. Risk of ±0.1 % drift on tests sitting at rounding boundaries; ratchet system catches regressions.
+**Measured GM impact** (post-implementation):
+- `BatchedConvexPathsGM` : 34.94 % → 34.94 % (+0.01 % only). **The audit hypothesis was wrong** — alpha-precision drift is NOT the dominant error source. The systematic ~25/255 max diff against the reference is consistent with a different blend-math discrepancy (possibly working-space vs linear-space compositing for translucent stacking, see Phase 5h post-mortem at `MIGRATION_PLAN.md` line ~1104, which already showed that linear-premul F16 storage delivered 0 GM improvements). Slice 2.2 is therefore a **precision iso-with-Skia improvement**, not a `BatchedConvexPaths` unblocker.
+- Iso side-effect : restored `paint.setAlphaf(0.3f)` in the `BatchedConvexPathsGM` Kotlin port to match upstream `gm/batchedconvexpaths.cpp` (the previous port hard-coded byte 77 as a workaround for the precision lossage that this slice eliminates).
+- ±0.01 to ±0.12 % drift on ~6 GMs (e.g. `Bug5099GM` -0.12 %, `BeziersGM` -0.02 %, `B119394958GM` -0.01 %; `AddArcGM` +0.01 %, `ArcToGM` +0.00 %). All within the 1 % ratchet tolerance — no test fails. Drift comes from the F16 path now keeping float precision longer (instead of byte-rounding before blend), which produces slightly different — but not uniformly better/worse — final pixel values vs. the upstream-rendered references.
+
+**Outcome** : the storage half of the SkPaint parity track is iso. The compositing-math half (working-space vs linear-space SrcOver in the F16 buffer) is a separate track and does not block on `SkPaint` shape — see [`Phase 5h`](MIGRATION_PLAN.md) for prior exploration.
 
 ### Slice 2.3 — Plumb float alpha through shader modulation
 
@@ -149,8 +155,14 @@ Open these only if Phase 2 closes leave residual divergences material to GM scor
 
 ## Closeout target (when Phase 2 completes)
 
-- `BatchedConvexPathsGM` ≥ 85 %.
-- Zero regression on the 75+ GM suite (per-test ratchet enforced).
-- New unit tests on `SkPaint`: `setAlphaf` round-trip preserves float precision; `setColor4f` round-trip preserves all 4 channels at full float precision.
-- Cross-link this plan from `MIGRATION_PLAN.md` recap section.
+- `SkPaint` storage iso with Skia (`fColor4f` source of truth) — **delivered by Slice 2.1**.
+- F16 raster pipeline reads colour without a byte round-trip (precision iso) — **delivered by Slice 2.2**.
+- Honour `setStrokeWidth(<0)` / `setStrokeMiter(<0)` rejection — Slice 2.3.
+- `setColor(SkColor4f, SkColorSpace?)` colour-space xform via `SkColorSpaceXformSteps` — Slice 2.5.
+- `nothingToDraw` parity with `kDst` — Slice 2.6.
+- All ratchets pass (1 % drop tolerance); no test fails.
+- New unit tests on `SkPaint`: `setAlphaf` round-trip preserves float precision; `setColor4f` round-trip preserves all 4 channels at full float precision — **delivered by Slice 2.1**.
+- Cross-link this plan from `MIGRATION_PLAN.md` recap section — **delivered by Phase 1**.
 - Archive to `archives/MIGRATION_PLAN_PAINT_PARITY.md` once closed.
+
+**`BatchedConvexPathsGM` ≥ 85 %** is **not** a Phase 2 target — Slice 2.2 demonstrated that alpha precision is not the dominant error source. The remaining drift requires a separate compositing-math investigation (working-space vs linear-space SrcOver), out of scope for SkPaint parity.
