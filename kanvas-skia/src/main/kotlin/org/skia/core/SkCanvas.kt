@@ -80,9 +80,9 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     private val top: State get() = stack.last()
 
     /** Read-only access to the current CTM. */
-    public fun getTotalMatrix(): SkMatrix = top.matrix
+    public open fun getTotalMatrix(): SkMatrix = top.matrix
 
-    public fun save(): Int {
+    public open fun save(): Int {
         val s = top
         stack.addLast(State(s.matrix, s.clip.copy(), s.device))
         return stack.size - 2
@@ -94,19 +94,19 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * Each [save] / [saveLayer] increments the count by 1; each [restore]
      * decrements it (down to 1 minimum).
      */
-    public fun getSaveCount(): Int = stack.size
+    public open fun getSaveCount(): Int = stack.size
 
     /**
      * Mirrors Skia's `SkCanvas::restoreToCount(int)`. Pops save-stack frames
      * until [getSaveCount] == [saveCount]. A value `<= 1` collapses every
      * pending [save] / [saveLayer] (root state is preserved).
      */
-    public fun restoreToCount(saveCount: Int) {
+    public open fun restoreToCount(saveCount: Int) {
         val target = saveCount.coerceAtLeast(1)
         while (stack.size > target) restore()
     }
 
-    public fun restore() {
+    public open fun restore() {
         if (stack.size <= 1) return
         val popped = stack.removeLast()
         val layer = popped.layer ?: return
@@ -122,18 +122,18 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         )
     }
 
-    public fun translate(dx: SkScalar, dy: SkScalar) {
+    public open fun translate(dx: SkScalar, dy: SkScalar) {
         val s = top
         s.matrix = s.matrix.preTranslate(dx, dy)
     }
 
-    public fun scale(sx: SkScalar, sy: SkScalar) {
+    public open fun scale(sx: SkScalar, sy: SkScalar) {
         val s = top
         s.matrix = s.matrix.preScale(sx, sy)
     }
 
     /** Mirrors Skia's `SkCanvas::rotate(deg)` — pre-concat with a rotation around the origin. */
-    public fun rotate(deg: SkScalar) {
+    public open fun rotate(deg: SkScalar) {
         val s = top
         s.matrix = s.matrix.preRotate(deg)
     }
@@ -142,31 +142,31 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * Mirrors Skia's `SkCanvas::rotate(deg, px, py)` — pre-concat with a
      * rotation around an arbitrary pivot point.
      */
-    public fun rotate(deg: SkScalar, px: SkScalar, py: SkScalar) {
+    public open fun rotate(deg: SkScalar, px: SkScalar, py: SkScalar) {
         val s = top
         s.matrix = s.matrix.preRotate(deg, px, py)
     }
 
     /** Mirrors Skia's `SkCanvas::skew(sx, sy)` — pre-concat with a skew. */
-    public fun skew(sx: SkScalar, sy: SkScalar) {
+    public open fun skew(sx: SkScalar, sy: SkScalar) {
         val s = top
         s.matrix = s.matrix.preSkew(sx, sy)
     }
 
     /** Mirrors Skia's `SkCanvas::concat(SkMatrix)` — pre-concat with `mat`. */
-    public fun concat(mat: SkMatrix) {
+    public open fun concat(mat: SkMatrix) {
         val s = top
         s.matrix = s.matrix.preConcat(mat)
     }
 
     /** Mirrors Skia's `SkCanvas::setMatrix(SkMatrix)` — replaces the CTM wholesale. */
-    public fun setMatrix(mat: SkMatrix) {
+    public open fun setMatrix(mat: SkMatrix) {
         val s = top
         s.matrix = mat
     }
 
     /** Mirrors Skia's `SkCanvas::resetMatrix()`. */
-    public fun resetMatrix() {
+    public open fun resetMatrix() {
         val s = top
         s.matrix = SkMatrix.Identity
     }
@@ -188,7 +188,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * approximate with its axis-aligned bbox (conservative) using the
      * same rounding.
      */
-    public fun clipRect(rect: SkRect) {
+    public open fun clipRect(rect: SkRect) {
         clipRect(rect, doAntiAlias = false)
     }
 
@@ -205,7 +205,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      *   `clipRect(rect, true)` (or `clipRect(rect)` from before the fix
      *   landed) keep their pixel output.
      */
-    public fun clipRect(rect: SkRect, doAntiAlias: Boolean) {
+    public open fun clipRect(rect: SkRect, doAntiAlias: Boolean) {
         val s = top
         val devRect = s.matrix.mapRect(rect)
         s.clip = if (doAntiAlias) {
@@ -228,7 +228,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         }
     }
 
-    public fun drawRect(rect: SkRect, paint: SkPaint) {
+    public open fun drawRect(rect: SkRect, paint: SkPaint) {
         val s = top
         if (s.matrix.isAxisAligned && paint.shader == null) {
             // Fast path: solid colour, axis-aligned CTM. Pre-compute the
@@ -252,7 +252,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * current CTM, so callers continue to express geometry in source
      * coordinates.
      */
-    public fun drawPath(path: SkPath, paint: SkPaint) {
+    public open fun drawPath(path: SkPath, paint: SkPaint) {
         val s = top
         s.device.drawPath(path, s.matrix, s.clip, paint)
     }
@@ -263,7 +263,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * the stand-alone path can be reused if the same oval is drawn many
      * times.
      */
-    public fun drawOval(oval: SkRect, paint: SkPaint) {
+    public open fun drawOval(oval: SkRect, paint: SkPaint) {
         drawPath(SkPath.Oval(oval), paint)
     }
 
@@ -271,7 +271,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * Mirrors Skia's `SkCanvas::drawCircle`. Convenience wrapper around
      * [SkPath.Circle] + [drawPath].
      */
-    public fun drawCircle(cx: SkScalar, cy: SkScalar, radius: SkScalar, paint: SkPaint) {
+    public open fun drawCircle(cx: SkScalar, cy: SkScalar, radius: SkScalar, paint: SkPaint) {
         if (radius <= 0f) return
         drawPath(SkPath.Circle(cx, cy, radius), paint)
     }
@@ -281,7 +281,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * which dispatches on [SkRRect.Type] to the right cubic-Bézier or
      * straight-line contour. Empty rrects are a no-op.
      */
-    public fun drawRRect(rrect: SkRRect, paint: SkPaint) {
+    public open fun drawRRect(rrect: SkRRect, paint: SkPaint) {
         if (rrect.isEmpty()) return
         drawPath(SkPath.RRect(rrect), paint)
     }
@@ -292,7 +292,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * [drawRRect]. Convenience wrapper — the stand-alone rrect can be reused
      * if the same shape is drawn many times.
      */
-    public fun drawRoundRect(rect: SkRect, rx: SkScalar, ry: SkScalar, paint: SkPaint) {
+    public open fun drawRoundRect(rect: SkRect, rx: SkScalar, ry: SkScalar, paint: SkPaint) {
         drawRRect(SkRRect.MakeRectXY(rect, rx, ry), paint)
     }
 
@@ -303,7 +303,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * ring in [SkPathDirection.kCCW], which the default `kWinding` fill rule
      * paints as the band between them.
      */
-    public fun drawDRRect(outer: SkRRect, inner: SkRRect, paint: SkPaint) {
+    public open fun drawDRRect(outer: SkRRect, inner: SkRRect, paint: SkPaint) {
         if (outer.isEmpty()) return
         if (inner.isEmpty()) {
             drawRRect(outer, paint)
@@ -319,7 +319,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * Mirrors Skia's `SkCanvas::drawLine(x0, y0, x1, y1, paint)`. Emits a
      * 2-point open path (`moveTo` + `lineTo`) and routes through [drawPath].
      */
-    public fun drawLine(x0: SkScalar, y0: SkScalar, x1: SkScalar, y1: SkScalar, paint: SkPaint) {
+    public open fun drawLine(x0: SkScalar, y0: SkScalar, x1: SkScalar, y1: SkScalar, paint: SkPaint) {
         val path = SkPathBuilder().moveTo(x0, y0).lineTo(x1, y1).detach()
         drawPath(path, paint)
     }
@@ -327,7 +327,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     /**
      * Mirrors Skia's `SkCanvas::drawArc(oval, startAngleDeg, sweepAngleDeg, useCenter, paint)`.
      */
-    public fun drawArc(
+    public open fun drawArc(
         oval: SkRect,
         startAngleDeg: SkScalar,
         sweepAngleDeg: SkScalar,
@@ -354,7 +354,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * Draw `image` at device-space position `(x, y)`, sampled with
      * `sampling`. Mirrors Skia's `SkCanvas::drawImage(image, x, y, sampling, paint)`.
      */
-    public fun drawImage(
+    public open fun drawImage(
         image: SkImage,
         x: SkScalar,
         y: SkScalar,
@@ -380,7 +380,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * matrices the call is dropped — true rotated `drawImageRect` would need
      * texture-space sampling with an inverse matrix (deferred).
      */
-    public fun drawImageRect(
+    public open fun drawImageRect(
         image: SkImage,
         src: SkRect,
         dst: SkRect,
@@ -408,7 +408,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * Whole-clip + `kSrc` is fast-pathed through `bitmap.eraseColor` (no
      * per-pixel scan); every other case routes through `drawPaint`.
      */
-    public fun drawColor(color: SkColor, mode: SkBlendMode = SkBlendMode.kSrcOver) {
+    public open fun drawColor(color: SkColor, mode: SkBlendMode = SkBlendMode.kSrcOver) {
         val s = top
         if (mode == SkBlendMode.kSrc && s.clip == s.device.deviceClipBounds()) {
             bitmap.eraseColor(color)
@@ -423,7 +423,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * `drawColor` with [SkBlendMode.kSrc]. Wipes the clip to [color]
      * regardless of the existing destination.
      */
-    public fun clear(color: SkColor): Unit = drawColor(color, SkBlendMode.kSrc)
+    public open fun clear(color: SkColor): Unit = drawColor(color, SkBlendMode.kSrc)
 
     /**
      * Mirrors Skia's `SkCanvas::drawPaint`. Fills the current clip with
@@ -432,7 +432,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * is the clip; the CTM affects the shader's local-to-device mapping
      * only (and is a no-op for solid-colour paints).
      */
-    public fun drawPaint(paint: SkPaint) {
+    public open fun drawPaint(paint: SkPaint) {
         val s = top
         s.device.drawPaint(s.matrix, s.clip, paint)
     }
@@ -517,7 +517,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * coordinates land in the same place as before, just shifted by the
      * layer origin.
      */
-    public fun saveLayer(bounds: SkRect?, paint: SkPaint?): Int {
+    public open fun saveLayer(bounds: SkRect?, paint: SkPaint?): Int {
         val s = top
         val layerBounds: SkIRect = if (bounds == null) {
             s.clip
@@ -579,15 +579,15 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /** Convenience overload mirroring `SkCanvas::saveLayer()`. */
-    public fun saveLayer(): Int = saveLayer(null, null)
+    public open fun saveLayer(): Int = saveLayer(null, null)
 
     /**
      * Mirrors Skia's `SkCanvas::saveLayer(bounds, paint, flags)`. The
      * [flags] field is accepted for API compatibility but ignored.
      */
-    public fun saveLayer(bounds: SkRect?, paint: SkPaint?, flags: SaveLayerFlags): Int =
+    public open fun saveLayer(bounds: SkRect?, paint: SkPaint?, flags: SaveLayerFlags): Int =
         saveLayer(bounds, paint)
 
-    public val width: Int get() = device.width
-    public val height: Int get() = device.height
+    public open val width: Int get() = device.width
+    public open val height: Int get() = device.height
 }
