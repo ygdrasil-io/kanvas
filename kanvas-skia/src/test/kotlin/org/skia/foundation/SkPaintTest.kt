@@ -317,4 +317,59 @@ class SkPaintTest {
         assertEquals(0.123456f, p.color4f.fR)
         assertEquals(0.30f, p.color4f.fA)
     }
+
+    // ─── Slice 2.6: nothingToDraw parity with Skia ─────────────────────
+
+    @Test
+    fun `nothingToDraw kDst is always true regardless of alpha`() {
+        val p = SkPaint()
+        // r = d for every src — even fully opaque src is a no-op against kDst.
+        p.alpha = 0xFF
+        p.blendMode = SkBlendMode.kDst
+        assertTrue(p.nothingToDraw())
+        p.alpha = 0
+        assertTrue(p.nothingToDraw())
+        // Even with a shader: kDst still ignores src entirely.
+        p.shader = object : SkShader() {
+            override fun shadeRow(x: Int, y: Int, count: Int, out: IntArray) {}
+        }
+        p.alpha = 0xFF
+        assertTrue(p.nothingToDraw())
+    }
+
+    @Test
+    fun `nothingToDraw kXor with alpha-zero is NOT a no-op (iso Skia)`() {
+        // Slice 2.6 alignment: Skia's SkPaint.cpp passthrough list
+        // does NOT include kXor, so `paint.alpha=0 + kXor` falls
+        // through to false. Our previous list erroneously included it.
+        val p = SkPaint()
+        p.alpha = 0
+        p.blendMode = SkBlendMode.kXor
+        assertFalse(p.nothingToDraw())
+    }
+
+    @Test
+    fun `nothingToDraw passthrough list matches Skia exactly`() {
+        // Skia's SkPaint::nothingToDraw alpha=0 list: kSrcOver, kSrcATop,
+        // kDstOut, kDstOver, kPlus.
+        val p = SkPaint()
+        p.alpha = 0
+        for (mode in listOf(
+            SkBlendMode.kSrcOver, SkBlendMode.kSrcATop,
+            SkBlendMode.kDstOut, SkBlendMode.kDstOver, SkBlendMode.kPlus,
+        )) {
+            p.blendMode = mode
+            assertTrue(p.nothingToDraw(), "alpha=0 + $mode should be no-op")
+        }
+        // Modes outside the passthrough list (and ≠ kDst) ⇒ not a no-op
+        // even at alpha 0 (kSrc / kSrcIn / kSrcOut / kClear / kModulate
+        // all produce non-trivial output for transparent src).
+        for (mode in listOf(
+            SkBlendMode.kSrc, SkBlendMode.kSrcIn,
+            SkBlendMode.kSrcOut, SkBlendMode.kClear, SkBlendMode.kModulate,
+        )) {
+            p.blendMode = mode
+            assertFalse(p.nothingToDraw(), "alpha=0 + $mode should NOT be no-op")
+        }
+    }
 }
