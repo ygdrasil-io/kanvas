@@ -76,6 +76,49 @@ public open class SkTypeface protected constructor() {
     ): SkPath? = null
 
     /**
+     * Internal hook for [SkFont.getPath] — produces the outline of a
+     * single glyph (identified by its font-local glyph ID) pre-scaled
+     * to [size] and transformed by [scaleX] / [skewX]. Origin at
+     * `(0, 0)` (caller is expected to translate as needed).
+     *
+     * Returns `null` if the glyph has no path (e.g. zero-width or the
+     * base [MakeEmpty] typeface). Concrete typefaces override.
+     */
+    internal open fun getGlyphPathInternal(
+        glyphId: Int,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): SkPath? = null
+
+    /**
+     * Internal hook for [SkFont.unicharsToGlyphs] — resolves each
+     * Unicode code point in [unichars] to a font-local glyph ID.
+     *
+     * Base class fills [glyphs] with zeros (the upstream "missing
+     * glyph" / `.notdef` index). Concrete typefaces override.
+     */
+    internal open fun unicharsToGlyphsInternal(
+        unichars: IntArray,
+        count: Int,
+        glyphs: ShortArray,
+    ) {
+        for (i in 0 until count) glyphs[i] = 0
+    }
+
+    /**
+     * Internal hook for [SkFont.getWidth] — advance width of a single
+     * glyph in source coords at the given size/scaleX/skewX. Base
+     * class returns 0.
+     */
+    internal open fun getGlyphWidthInternal(
+        glyphId: Int,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): SkScalar = 0f
+
+    /**
      * Internal hook for [SkFont.getMetrics] — base class fills [metrics]
      * with zeros and returns 0 (the recommended line spacing).
      */

@@ -427,5 +427,5 @@ Le bloc d'avertissement KDoc en tête des fichiers AWT mentionne déjà cette po
 - [x] **Slice T1 + T2 fusionnés** dans PR #48 (validé par utilisateur, livré).
 - [x] **Polices portables = T4 option A** (Liberation TTF embedded). Skia DM utilise Liberation Sans/Mono/Serif (pas Roboto/DejaVu — investigation upstream après T3 a corrigé l'hypothèse initiale). Validé.
 - [x] **Option B reportée** : porter les `test_font_*.inc` pour bit-exact outlines, post-T5, opportuniste. Validé.
-- [ ] **`tolerance` par défaut sur GMs textuels = 8** (au lieu de 1) pour absorber les drifts AWT vs FreeType. À documenter par test, à confirmer au premier port de GM textual-content.
-- [ ] **`kSubpixelAntiAlias` = downgrade à `kAntiAlias`** pendant tout T1-T4. Subpixel correct = follow-up T5.
+- [x] **`tolerance` par défaut sur GMs textuels = 8**. Confirmé empiriquement sur 4 GMs portés (`BigTextGM` 98.20%, `ColorWheelNativeGM` 99.75%, `Crbug1073670GM` 72.52%, `AnnotatedTextGM` 99.90%). Formalisé en `TestUtils.TEXTUAL_GM_TOLERANCE = 8` (slice de bouclage).
+- [x] **`kSubpixelAntiAlias` = downgrade à `kAntiAlias`** : path-fill rasteriser fait coverage AA seulement, jamais LCD subpixel. Comportement *de facto* depuis T3, formalisé par un commentaire explicite dans `AwtTypeface.makeTextPath` (slice de bouclage). Subpixel correct reste un follow-up T5+.

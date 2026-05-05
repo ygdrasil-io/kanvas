@@ -20,6 +20,28 @@ public object TestUtils {
     private const val REFERENCE_DIR: String = "original-888"
 
     /**
+     * Default per-channel similarity tolerance for **textual GMs**.
+     *
+     * Empirically validated across the four post-T4 textual ports
+     * (`BigTextGM` 98.20%, `ColorWheelNativeGM` 99.75%,
+     * `Crbug1073670GM` 72.52%, `AnnotatedTextGM` 99.90%): with
+     * Liberation TTFs feeding both rasterisers, the dominant
+     * pixel-level drift between us and upstream is the AWT-vs-FreeType
+     * AA edge difference (~1-2 ulps on 8-bit) plus minor scaler /
+     * hinting offsets. Tolerance = 8 absorbs this drift on bordering
+     * pixels while staying tight enough to catch genuine rendering
+     * regressions.
+     *
+     * Cf. `MIGRATION_PLAN_TEXT.md` §"Décisions finales" — was the last
+     * open decision in the text plan; this constant closes it.
+     *
+     * Non-textual GMs continue to use the per-test tolerance picked
+     * to match each rasteriser's behaviour (e.g. `0` for axis-aligned
+     * rect, `1` for solid-colour AA rect, etc.).
+     */
+    public const val TEXTUAL_GM_TOLERANCE: Int = 8
+
+    /**
      * Color space the Skia DM reference PNGs in `original-888/` are encoded
      * with. See [colorspace-fingerprint.md](../resources/colorspace-fingerprint.md)
      * for the full ICC dump. Rendering GM tests into a bitmap with this
