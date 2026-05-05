@@ -177,4 +177,149 @@ class SkRRectTest {
         assertEquals(a.hashCode(), b.hashCode())
         assertNotEquals(a, c)
     }
+
+    // ── Iso-alignment with Skia ─────────────────────────────────────────
+
+    @Test
+    fun `offset translates rect leaves radii unchanged`() {
+        val a = SkRRect.MakeRectXY(rect(0f, 0f, 10f, 10f), 2f, 3f)
+        a.offset(5f, 7f)
+        assertEquals(SkRect.MakeLTRB(5f, 7f, 15f, 17f), a.rect())
+        assertEquals(SkPoint(2f, 3f), a.getSimpleRadii())
+    }
+
+    @Test
+    fun `makeOffset returns a copy untouched source`() {
+        val a = SkRRect.MakeRectXY(rect(0f, 0f, 10f, 10f), 2f, 3f)
+        val b = a.makeOffset(5f, 7f)
+        assertEquals(SkRect.MakeLTRB(5f, 7f, 15f, 17f), b.rect())
+        assertEquals(SkRect.MakeLTRB(0f, 0f, 10f, 10f), a.rect())
+    }
+
+    @Test
+    fun `inset shrinks bounds and radii`() {
+        val a = SkRRect.MakeRectXY(rect(0f, 0f, 100f, 100f), 20f, 20f)
+        a.inset(5f, 5f)
+        assertEquals(SkRect.MakeLTRB(5f, 5f, 95f, 95f), a.rect())
+        // 20 - 5 = 15, both axes
+        assertEquals(SkPoint(15f, 15f), a.getSimpleRadii())
+    }
+
+    @Test
+    fun `outset is the inverse of inset for non-degenerate cases`() {
+        val a = SkRRect.MakeRectXY(rect(0f, 0f, 100f, 100f), 20f, 20f)
+        a.inset(5f, 5f)
+        a.outset(5f, 5f)
+        assertEquals(SkRect.MakeLTRB(0f, 0f, 100f, 100f), a.rect())
+    }
+
+    @Test
+    fun `inset that collapses width yields kEmpty_Type`() {
+        val a = SkRRect.MakeRectXY(rect(0f, 0f, 10f, 10f), 2f, 2f)
+        a.inset(20f, 0f)
+        assertTrue(a.isEmpty())
+    }
+
+    @Test
+    fun `inset preserves zero radii (square corners stay square)`() {
+        // Skia's inset only subtracts dx/dy from non-zero radii. A
+        // square corner should remain square after inset.
+        val r = rect(0f, 0f, 100f, 100f)
+        val radii = arrayOf<SkVector>(
+            SkPoint(0f, 0f),    // UL: square
+            SkPoint(20f, 20f),  // UR: rounded
+            SkPoint(20f, 20f),  // LR: rounded
+            SkPoint(0f, 0f),    // LL: square
+        )
+        val a = SkRRect.MakeRectRadii(r, radii)
+        a.inset(5f, 5f)
+        assertEquals(SkPoint(0f, 0f), a.radii(SkRRect.Corner.kUpperLeft_Corner))
+        assertEquals(SkPoint(15f, 15f), a.radii(SkRRect.Corner.kUpperRight_Corner))
+    }
+
+    @Test
+    fun `contains rect inside fully rounded outer`() {
+        val outer = SkRRect.MakeRectXY(rect(0f, 0f, 100f, 100f), 10f, 10f)
+        // Centered rect well inside the corner curves — should be contained.
+        assertTrue(outer.contains(rect(20f, 20f, 80f, 80f)))
+    }
+
+    @Test
+    fun `contains rect that pokes into rounded corner is rejected`() {
+        val outer = SkRRect.MakeRectXY(rect(0f, 0f, 100f, 100f), 50f, 50f)
+        // A square rect spanning the full outer bounds will hit each
+        // corner's rounded arc — not contained.
+        assertFalse(outer.contains(rect(0f, 0f, 100f, 100f)))
+    }
+
+    @Test
+    fun `contains rect on plain SkRect-type rrect short-circuits`() {
+        val outer = SkRRect.MakeRect(rect(0f, 0f, 100f, 100f))
+        assertTrue(outer.contains(rect(10f, 10f, 90f, 90f)))
+        assertFalse(outer.contains(rect(50f, 50f, 110f, 90f)))
+    }
+
+    @Test
+    fun `getBounds is alias for rect`() {
+        val a = SkRRect.MakeRectXY(rect(1f, 2f, 9f, 8f), 1f, 1f)
+        assertEquals(a.rect(), a.getBounds())
+    }
+
+    @Test
+    fun `setRectXY non-finite radii falls back to plain rect`() {
+        val rr = SkRRect()
+        rr.setRectXY(rect(0f, 0f, 10f, 10f), Float.NaN, 5f)
+        assertTrue(rr.isRect())
+        assertEquals(SkPoint(0f, 0f), rr.getSimpleRadii())
+    }
+
+    @Test
+    fun `setRectRadii non-finite radii falls back to plain rect`() {
+        val rr = SkRRect()
+        rr.setRectRadii(rect(0f, 0f, 10f, 10f), arrayOf(
+            SkPoint(2f, 2f), SkPoint(2f, 2f),
+            SkPoint(2f, Float.POSITIVE_INFINITY), SkPoint(2f, 2f),
+        ))
+        assertTrue(rr.isRect())
+    }
+
+    @Test
+    fun `setRectXY too-large radii scale down and stay simple`() {
+        // Rect is 10x10 but radii are 8 each — sum 16 > 10, so scaleRadii
+        // applies factor 10/16 = 0.625 → radii become 5,5 → kSimple_Type.
+        val rr = SkRRect.MakeRectXY(rect(0f, 0f, 10f, 10f), 8f, 8f)
+        // Skia's setRectXY does the scale inline before falling through.
+        // After scale, rx == 5 == w/2, ry == 5 == h/2 ⇒ should report kOval_Type.
+        assertTrue(rr.isOval(), "radii saturating to half-side should mark kOval, got ${rr.getType()}")
+    }
+
+    @Test
+    fun `isValid catches manual mismatches`() {
+        // A correctly built rrect is valid.
+        val good = SkRRect.MakeRectXY(rect(0f, 0f, 10f, 10f), 2f, 3f)
+        assertTrue(good.isValid())
+        assertTrue(SkRRect.MakeEmpty().isValid())
+        assertTrue(SkRRect.MakeRect(rect(0f, 0f, 10f, 10f)).isValid())
+        assertTrue(SkRRect.MakeOval(rect(0f, 0f, 10f, 10f)).isValid())
+    }
+
+    @Test
+    fun `AreRectAndRadiiValid rejects out-of-bounds radii`() {
+        val r = rect(0f, 0f, 10f, 10f)
+        assertTrue(SkRRect.AreRectAndRadiiValid(r, arrayOf(
+            SkPoint(2f, 2f), SkPoint(2f, 2f), SkPoint(2f, 2f), SkPoint(2f, 2f),
+        )))
+        // Negative radius rejected
+        assertFalse(SkRRect.AreRectAndRadiiValid(r, arrayOf(
+            SkPoint(-1f, 2f), SkPoint(2f, 2f), SkPoint(2f, 2f), SkPoint(2f, 2f),
+        )))
+        // Radius > side rejected
+        assertFalse(SkRRect.AreRectAndRadiiValid(r, arrayOf(
+            SkPoint(20f, 2f), SkPoint(2f, 2f), SkPoint(2f, 2f), SkPoint(2f, 2f),
+        )))
+        // Non-finite rect rejected
+        assertFalse(SkRRect.AreRectAndRadiiValid(rect(0f, 0f, Float.NaN, 10f), arrayOf(
+            SkPoint(2f, 2f), SkPoint(2f, 2f), SkPoint(2f, 2f), SkPoint(2f, 2f),
+        )))
+    }
 }
