@@ -1,5 +1,7 @@
 package org.skia.foundation
 
+import org.skia.math.SkMatrix
+import org.skia.math.SkPoint
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import kotlin.math.PI
@@ -43,7 +45,61 @@ public class SkPathBuilder public constructor() {
     /** True between `moveTo` and the next `close` or end-of-builder. */
     private var hasContour: Boolean = false
 
+    /**
+     * Build with [fillType] set up front. Mirrors
+     * `SkPathBuilder::SkPathBuilder(SkPathFillType)`
+     * (`include/core/SkPathBuilder.h:51`).
+     */
+    public constructor(fillType: SkPathFillType) : this() {
+        this.fillType = fillType
+    }
+
+    /**
+     * Build a copy of [path]: replays every verb / weight from the source
+     * and inherits its [fillType]. Mirrors
+     * `SkPathBuilder::SkPathBuilder(const SkPath& path)`
+     * (`include/core/SkPathBuilder.h:59`).
+     */
+    public constructor(path: SkPath) : this() {
+        this.fillType = path.fillType
+        addPath(path)
+    }
+
     public fun isEmpty(): Boolean = verbs.isEmpty()
+
+    /**
+     * Number of points stored in the builder so far. Mirrors
+     * `SkPathBuilder::countPoints` (`include/core/SkPathBuilder.h:951`).
+     */
+    public fun countPoints(): Int = coords.size / 2
+
+    /**
+     * Last point on the builder's pen (the latest non-`kClose` endpoint),
+     * or `null` if no points have been emitted. Mirrors
+     * `SkPathBuilder::getLastPt` (`include/core/SkPathBuilder.h:928`).
+     */
+    public fun getLastPt(): SkPoint? {
+        if (coords.isEmpty()) return null
+        val n = coords.size
+        return SkPoint(coords[n - 2], coords[n - 1])
+    }
+
+    /**
+     * Reset the builder to empty state — clears verbs / coords / weights
+     * and resets [fillType] to `kWinding`. Returns `this` for chaining.
+     * Mirrors `SkPathBuilder::reset` (`include/core/SkPathBuilder.h:159`).
+     *
+     * Identical to the side-effect of [detach], but exposed as a
+     * standalone op for callers that want to reuse the builder without
+     * materialising a path.
+     */
+    public fun reset(): SkPathBuilder = apply {
+        verbs.clear(); coords.clear(); conicWeights.clear()
+        fillType = SkPathFillType.kWinding
+        lastX = 0f; lastY = 0f
+        contourX = 0f; contourY = 0f
+        hasContour = false
+    }
 
     public fun setFillType(t: SkPathFillType): SkPathBuilder = apply { fillType = t }
 
@@ -146,6 +202,30 @@ public class SkPathBuilder public constructor() {
             hasContour = false
         }
     }
+
+    /**
+     * Append `lineTo` for each point in [pts] (no leading `moveTo` —
+     * uses the current pen). Mirrors `SkPathBuilder::polylineTo`
+     * (`include/core/SkPathBuilder.h:381`).
+     */
+    public fun polylineTo(pts: Array<Pair<SkScalar, SkScalar>>): SkPathBuilder = apply {
+        if (pts.isEmpty()) return@apply
+        ensureContour()
+        for (p in pts) {
+            verbs.add(SkPath.Verb.kLine)
+            coords.add(p.first); coords.add(p.second)
+            lastX = p.first; lastY = p.second
+        }
+    }
+
+    /**
+     * Equivalent to `moveTo(a).lineTo(b)`. Mirrors
+     * `SkPathBuilder::addLine` (`include/core/SkPathBuilder.h:689-691`).
+     */
+    public fun addLine(
+        ax: SkScalar, ay: SkScalar,
+        bx: SkScalar, by: SkScalar,
+    ): SkPathBuilder = moveTo(ax, ay).lineTo(bx, by)
 
     // ----------------------------------------------------------------
     // Relative variants — origin at the current pen position.
@@ -479,11 +559,7 @@ public class SkPathBuilder public constructor() {
      */
     public fun detach(): SkPath {
         val path = snapshot()
-        verbs.clear(); coords.clear(); conicWeights.clear()
-        fillType = SkPathFillType.kWinding
-        lastX = 0f; lastY = 0f
-        contourX = 0f; contourY = 0f
-        hasContour = false
+        reset()
         return path
     }
 
@@ -494,6 +570,109 @@ public class SkPathBuilder public constructor() {
         conicWeights = conicWeights.toFloatArray(),
         fillType = fillType,
     )
+
+    /**
+     * Performance hint: pre-allocate space for [extraPtCount] additional
+     * coords (= 2 * point count), [extraVerbCount] verbs and
+     * [extraConicCount] conic weights. Mirrors
+     * `SkPathBuilder::incReserve` (`include/core/SkPathBuilder.h:874`).
+     *
+     * Backed by `java.util.ArrayList::ensureCapacity`. Sub-1 hints are
+     * silently dropped — Skia's contract.
+     */
+    public fun incReserve(
+        extraPtCount: Int,
+        extraVerbCount: Int = extraPtCount,
+        extraConicCount: Int = 0,
+    ): SkPathBuilder = apply {
+        if (extraPtCount > 0) coords.ensureCapacity(coords.size + 2 * extraPtCount)
+        if (extraVerbCount > 0) verbs.ensureCapacity(verbs.size + extraVerbCount)
+        if (extraConicCount > 0) conicWeights.ensureCapacity(conicWeights.size + extraConicCount)
+    }
+
+    /**
+     * Translate every stored point by `(dx, dy)`. Mutates the builder.
+     * Mirrors `SkPathBuilder::offset`
+     * (`include/core/SkPathBuilder.h:891`, `src/core/SkPathBuilder.cpp:769-774`).
+     *
+     * Updates pen position [lastX]/[lastY] and contour-start
+     * [contourX]/[contourY] in lockstep so subsequent verbs and
+     * `close()` keep the right reference.
+     */
+    public fun offset(dx: SkScalar, dy: SkScalar): SkPathBuilder = apply {
+        if (dx == 0f && dy == 0f) return@apply
+        var i = 0
+        while (i < coords.size) {
+            coords[i] = coords[i] + dx
+            coords[i + 1] = coords[i + 1] + dy
+            i += 2
+        }
+        lastX += dx; lastY += dy
+        contourX += dx; contourY += dy
+    }
+
+    /**
+     * Apply [m] to every stored point. Mutates the builder. Mirrors
+     * `SkPathBuilder::transform` (`include/core/SkPathBuilder.h:899`)
+     * for the affine case — verb stream and conic weights stay
+     * untouched (Bézier control points transform naturally under
+     * affine maps). Identity matrix is a no-op.
+     *
+     * Perspective matrices are *not* supported here (Skia tessellates
+     * curves to handle them); use the immutable [SkPath.makeTransform]
+     * which has the same affine-only limitation, or wait for a
+     * dedicated perspective path-flattening slice.
+     */
+    public fun transform(m: SkMatrix): SkPathBuilder = apply {
+        if (m.isIdentity) return@apply
+        val sx = m.sx; val kx = m.kx; val tx = m.tx
+        val ky = m.ky; val sy = m.sy; val ty = m.ty
+        var i = 0
+        while (i < coords.size) {
+            val x = coords[i]; val y = coords[i + 1]
+            coords[i] = sx * x + kx * y + tx
+            coords[i + 1] = ky * x + sy * y + ty
+            i += 2
+        }
+        val nlx = sx * lastX + kx * lastY + tx
+        val nly = ky * lastX + sy * lastY + ty
+        val ncx = sx * contourX + kx * contourY + tx
+        val ncy = ky * contourX + sy * contourY + ty
+        lastX = nlx; lastY = nly
+        contourX = ncx; contourY = ncy
+    }
+
+    /**
+     * Replace the point at `coords[2*index]/coords[2*index + 1]` with
+     * `(p.fX, p.fY)`. Out-of-range indices are silently ignored. Mirrors
+     * `SkPathBuilder::setPoint` (`include/core/SkPathBuilder.h:936`).
+     *
+     * Use sparingly — mutating a stored point can desynchronise the pen
+     * (`lastX`/`lastY`) from the verb-stream tail. Callers that need a
+     * consistent pen state should also call [setLastPt].
+     */
+    public fun setPoint(index: Int, p: SkPoint): SkPathBuilder = apply {
+        val flat = index * 2
+        if (flat < 0 || flat + 1 >= coords.size) return@apply
+        coords[flat] = p.fX
+        coords[flat + 1] = p.fY
+    }
+
+    /**
+     * Set the last point on the builder. If the builder is empty, emit
+     * `moveTo(x, y)`. Otherwise overwrite the trailing coord pair and
+     * keep the pen position aligned. Mirrors `SkPathBuilder::setLastPt`
+     * (`include/core/SkPathBuilder.h:944`).
+     */
+    public fun setLastPt(x: SkScalar, y: SkScalar): SkPathBuilder = apply {
+        if (coords.isEmpty()) {
+            moveTo(x, y); return@apply
+        }
+        val n = coords.size
+        coords[n - 2] = x
+        coords[n - 1] = y
+        lastX = x; lastY = y
+    }
 
     // ----------------------------------------------------------------
     // Internals.
