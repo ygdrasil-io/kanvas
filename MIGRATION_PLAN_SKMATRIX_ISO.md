@@ -182,3 +182,19 @@ Total: ~65 lines prod + ~100 lines test, 5 commits.
 - [x] Phase 3 — sin/cos snap-to-zero
 - [x] Phase 4 — Near-singular det threshold
 - [x] Phase 5 — Behavioural parity tests
+
+## Follow-up phases (post-baseline)
+
+- [x] **Phase 1b — TypeMask system** (kanvas#77): `fTypeMask` cache, `getType()`, `isIdentity` / `isTranslate` / `isScaleTranslate` / `rectStaysRect` / `hasPerspective` / `isSimilarity(tol)` / `preservesRightAngles(tol)` / `cheapEqualTo`.
+- [x] **Phase 2b — Mapping API expansion** (kanvas#77): `mapXY(SkPoint)`, `mapVector`, `mapPoints` (bulk + in-place + 4 fast paths), `mapVectors`, `mapRectScaleTranslate`, `mapRadius`.
+- [x] **Phase 3b — Function-style accessors + det + array exchange + RectToRect + decomposition** (this PR): `getScaleX/Y` / `getSkewX/Y` / `getTranslateX/Y` / `getPerspX/Y`, `det()` / `det2x2()`, `get9` / `MakeFrom9` / `asAffine` / `MakeFromAffine` (with `kM*` / `kA*` index constants), `MakeRectToRect(src, dst, ScaleToFit)` + `ScaleToFit` enum, `getMaxScale` / `getMinScale` / `getMinMaxScales` (full eigenvalue solver), `decomposeScale` (Pair-returning).
+
+## Still hors-scope (porter à la demande)
+
+- Perspective (`kMPersp0/1/2`, `mapHomogeneousPoints`, `setPerspective`).
+- `setPolyToPoly` (4-point affine fit).
+- `setRSXform` (rotation-scale-translate composite — for `drawTextRSXform`).
+- Setters on instance (`setScaleX/Y`, `setRotate`, `setTranslate`, `setSinCos`, etc.) — our port is immutable; use factories or `copy()`.
+- Serialization (`writeToMemory` / `readFromMemory`).
+- `dump` / `dumpHex` / `dumpToString`.
+- `mapPointsToHomogeneous` / `SkPoint3` overloads.
