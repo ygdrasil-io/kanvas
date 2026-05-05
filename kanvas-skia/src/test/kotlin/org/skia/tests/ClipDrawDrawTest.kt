@@ -22,15 +22,17 @@ class ClipDrawDrawTest {
         }
         val accepted = SimilarityTracker.updateScore("ClipDrawDrawGM", comparison.similarity)
         assertTrue(accepted, "ClipDrawDrawGM regressed below tolerance")
-        // Score floor lowered to 30 % — the GM is specifically designed to
-        // detect 1-px clip/drawRect edge-rounding mismatches, and our
-        // rasterizer currently rounds clipRect via `floor`/`ceil` (outward)
-        // while non-AA drawRect rounds via `floor(c + 0.5)`. The two diverge
-        // on `.5`-fractional inputs, which is exactly what the GM probes —
-        // the reference shows zero remnants because Skia uses matching
-        // half-to-even rounding everywhere. Tracking this as a separate
-        // rasterizer-edge consistency follow-up; the test at this floor
-        // catches further regressions without blocking on the fix.
+        // Score floor at 30 % — geometry is correct (the original `clipRect`
+        // vs non-AA `drawRect` edge-rounding mismatch was fixed by aligning
+        // both on round-half-up = `SkScalarRoundToInt`), so the rendered
+        // image shows zero 1-px remnants and matches the reference's white-
+        // rect outlines exactly. The remaining ~65 % of pixels still carry a
+        // sub-tolerance ≤ 6-byte offset on the BG (`0xCCCCCC` light grey)
+        // because `runGmTest` initialises the device via
+        // `bitmap.eraseColor(bgColor)` which skips the sRGB → Rec.2020
+        // xform that Skia's DM applies via `canvas->clear(bgColor)`.
+        // Independent harness fix — score floor here just keeps the
+        // regression tracker alive past the geometric fix.
         assertTrue(
             comparison.similarity >= 30.0,
             "ClipDrawDrawGM similarity ${"%.2f".format(comparison.similarity)}% < 30.0% floor",

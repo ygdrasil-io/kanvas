@@ -950,6 +950,33 @@ Le résiduel sur AAXfermodes (~20 %) est dominé par :
 
 - **Edge-rounding consistency** clipRect-vs-drawRect non-AA : Skia utilise `round-half-to-even` partout, on utilise `floor`/`ceil` (clipRect) et `floor(c+.5)` (drawRect). Diverge sur `.5`-fractional. Slice indépendant ; les GMs path-AA + rect-AA majoritaires ne le voient pas.
 
+### Phase 6i — Edge-rounding consistency (clipRect non-AA) ✅
+
+**But** : le follow-up identifié à la fin de Phase 6h. Aligner `clipRect` non-AA sur la convention Skia (`round-half-up` = `SkScalarRoundToInt` per component) plutôt que `floor`/`ceil` (outward), pour qu'un `clipRect(rect)` consommé par un `drawRect(rect)` non-AA produise des bords pixel-aligned identiques (cf. crbug 423834).
+
+#### Refactor
+
+- [x] **`SkCanvas.clipRect(rect)`** délègue désormais à `clipRect(rect, doAntiAlias = false)`, qui utilise `floor(c + 0.5)` per component (matches `SkBitmapDevice.pixelEdge`).
+- [x] **`SkCanvas.clipRect(rect, doAntiAlias = true)`** garde l'ancien comportement `floor(min)` / `ceil(max)` (outward bbox) pour préserver la couverture AA fractionnaire au bord du clip — c'est la sémantique attendue quand un path AA traverse la limite du `clipRect`.
+- [x] La doc précise les deux régimes ; les callers existants (qui appellent `clipRect(rect)`) basculent automatiquement sur le non-AA aligné.
+
+#### Impact mesuré
+
+| GM                | Avant   | Après   | Δ |
+|-------------------|---------|---------|---|
+| AAXfermodesGM     | 80.12 % | **84.73 %** | +4.61 |
+| Skbug4868GM       | 98.63 % | **99.32 %** | +0.69 |
+| ClipDrawDrawGM    | 35.34 % | **35.38 %** | +0.04 (géométrie corrigée — voir ci-dessous) |
+
+`ClipDrawDrawGM` : la géométrie est désormais correcte (zéro 1-px-remnant entre `clipRect` et `drawRect`), mais ~65 % des pixels gardent un drift sub-tolérance ≤ 6-byte sur le BG `0xCCCCCC`. Cause distincte : `runGmTest` initialise le device via `bitmap.eraseColor(bgColor)` qui skip le xform sRGB → Rec.2020 que Skia DM applique via `canvas->clear(bgColor)`. Fix harness séparé.
+
+Aucune régression sur les 75 autres GMs.
+
+#### Vérification Phase 6i
+- [x] 78 GMs Phase 0-6h — 0 régression. 2 GMs sensibles aux clipRects sub-pixel grimpent.
+- [x] La sémantique `clipRect(rect, true)` (AA outward) reste disponible pour les futurs callers AA-aware.
+- [x] **Pass count cumulé : 78 GM** (inchangé — pas de nouveau port, pure correction rasterizer).
+
 ### Phase 5h — Linear-premul F16 storage (❌ explored, reverted)
 
 **Hypothèse de départ** : le drift constant de `TinyBitmapGM` (rendered `(214, 177, 167)` vs reference `(204, 162, 158)`) viendrait de ce que le buffer F16 stocke des valeurs **encoded** Rec.2020 alors que Skia upstream compose en **linear** Rec.2020. Refactor : stocker en linear-premul, encoder seulement à la sortie 8-bit / PNG.
@@ -1117,6 +1144,7 @@ L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées s
 | 6 HSL | 65       | Phase 6 HSL : `kHue`/`kSaturation`/`kColor`/`kLuminosity` (`blendHSL` + helpers W3C `lum`/`sat`/`setLum`/`setSat`/`clipColor`) + 7 tests + smoke 29 modes (81 total). 29 / 29 modes Skia (formules complètes). | ✅ |
 | 6 GMs | 67       | `SkTextUtils` + `SkBlendMode_Name` + `restoreToCount` + `drawColor(c, mode)` + fix `modeAffectsZeroAlphaSrc` étendu (kSrcOut, kDstATop) ⇒ AAXfermodesGM 80.12 % + AndroidBlendModesGM 97.04 %. **🎉 Phase 6 close.** XfermodesGM/DestColorGM scopés ailleurs (compositeFrom-with-blendmode + ARGB_4444 / SkRuntimeEffect). | ✅ |
 | 6h    | 77       | GM harvest post-Phase-6 (10 DEF_SIMPLE_GM) — Bug615686/Skbug4868/Crbug946965/Crbug1139750/Crbug847759/LuminosityOverflow/WideButtCaps/StrokeRectShader (98-100 %) + ClipDrawDraw 35.34 % et RadialGradientPrecision 4.92 % comme regression-trackers. 0 nouvelle API. | ✅ |
+| 6i    | 77       | Edge-rounding consistency : `clipRect` non-AA passe de `floor`/`ceil` à `round-half-up` (matches `SkScalarRoundToInt` + non-AA `pixelEdge`). AA flavour préservée via `clipRect(rect, true)`. AAXfermodesGM 80.12 → 84.73 (+4.6), Skbug4868 98.63 → 99.32 (+0.7), ClipDrawDraw géométrie corrigée. | ✅ |
 | 5h    | n/a      | Linear-premul F16 storage — **explored, reverted**. Voir post-mortem ci-dessous. | ❌ reverted |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [archives/MIGRATION_PLAN_COLORSPACE_PORT.md](archives/MIGRATION_PLAN_COLORSPACE_PORT.md) (terminé : phases A-J + F1-F7 livrées, K out of scope).
