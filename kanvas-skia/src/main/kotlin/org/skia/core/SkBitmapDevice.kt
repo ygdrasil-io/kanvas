@@ -416,6 +416,16 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // an initial-inside seed for inverse rules; see [scanFillPath]).
         if (path.isEmpty() && !path.fillType.isInverse()) return
 
+        // Phase 7c — when a mask filter (e.g. Gaussian blur) is set,
+        // route through the offscreen-mask pipeline instead of the
+        // direct rasteriser. Shader paths through the mask filter are
+        // out of scope for this slice (use the solid-paint route).
+        val maskFilter = paint.maskFilter
+        if (maskFilter != null && paint.shader == null) {
+            drawPathWithMaskFilter(path, ctm, clip, paint, maskFilter)
+            return
+        }
+
         val shader = paint.shader
         val color4f: SkColor4f
         val baseA: Int
@@ -459,6 +469,122 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
                 if (outline.isEmpty()) return
                 fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode)
+            }
+        }
+    }
+
+    /**
+     * Phase 7c — render [path] with a non-null [maskFilter] (currently
+     * Gaussian blur via [org.skia.foundation.SkBlurMaskFilter]).
+     *
+     * Strategy : rasterise the (possibly stroked) path into a temporary
+     * 8-bit alpha mask sized at the path's device-space bounds expanded
+     * by the filter's [SkMaskFilter.margin]. Apply the filter to that
+     * buffer. Then walk the buffer pixel-by-pixel and blend the paint's
+     * colour modulated by the mask alpha onto the device.
+     *
+     * Reuses the existing rasteriser by recursing into a fresh
+     * [SkBitmapDevice] over a temporary [SkBitmap]. The recursion
+     * guard is the `paint.maskFilter == null` clear we apply to the
+     * inner paint, so the inner `drawPath` doesn't re-enter this
+     * branch.
+     *
+     * **Limitations** :
+     *  - Shader paints aren't supported (the shader output is per-pixel
+     *    in the device, so sampling it through a blurred mask would
+     *    require a more complex two-pass pipeline). Solid paints only.
+     *  - Inverse fill types fall back to the unfiltered path (the mask
+     *    bounds are the *outside* of the path, conceptually unbounded).
+     */
+    private fun drawPathWithMaskFilter(
+        path: SkPath, ctm: SkMatrix, clip: SkIRect,
+        paint: SkPaint, maskFilter: org.skia.foundation.SkMaskFilter,
+    ) {
+        if (path.fillType.isInverse()) return  // out of scope for this slice
+        val mode = paint.blendMode
+        val effectiveColor = applyColorFilter(paint.colorFilter,
+            transformPaintColor(paint.color))
+        val paintA = SkColorGetA(effectiveColor)
+        if (paintA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
+
+        // 1. Path's source-space bounds → device-space bbox. Expand for
+        //    stroke (post-CTM) + filter margin + 1 px safety for the AA
+        //    rasteriser's edge inflation.
+        val srcBounds = path.computeBounds()
+        val devBounds = ctm.mapRect(srcBounds)
+        val scale = ctm.computeMaxScale().coerceAtLeast(1f)
+        val strokeExpand = if (paint.style != SkPaint.Style.kFill_Style) {
+            (paint.strokeWidth * scale * 0.5f) + 1f
+        } else 1f
+        val margin = maskFilter.margin()
+        var ml = floor(devBounds.left - strokeExpand).toInt() - margin
+        var mt = floor(devBounds.top - strokeExpand).toInt() - margin
+        var mr = ceil(devBounds.right + strokeExpand).toInt() + margin
+        var mb = ceil(devBounds.bottom + strokeExpand).toInt() + margin
+
+        // 2. Intersect with current clip + device bounds.
+        ml = maxOf(ml, clip.left, 0)
+        mt = maxOf(mt, clip.top, 0)
+        mr = minOf(mr, clip.right, width)
+        mb = minOf(mb, clip.bottom, height)
+        val maskW = mr - ml
+        val maskH = mb - mt
+        if (maskW <= 0 || maskH <= 0) return
+
+        // 3. Allocate a transparent 8-bit alpha-target bitmap.
+        val maskBitmap = org.skia.foundation.SkBitmap(maskW, maskH).also {
+            it.eraseColor(0)
+        }
+        val maskDevice = SkBitmapDevice(maskBitmap)
+        val maskClip = SkIRect.MakeWH(maskW, maskH)
+
+        // 4. Shift the CTM so the path lands at (-ml, -mt) in mask
+        //    coords. postTranslate has the closed-form fast path for
+        //    affine matrices ; for perspective it falls back to a
+        //    full concat.
+        val maskCtm = ctm.postTranslate(-ml.toFloat(), -mt.toFloat())
+
+        // 5. Rasterise the path into the mask via WHITE + kSrc + the
+        //    paint's stroke params + AA. The recursion guard is the
+        //    cleared maskFilter on the inner paint.
+        val whitePaint = paint.copy().apply {
+            color = org.skia.foundation.SK_ColorWHITE
+            blendMode = SkBlendMode.kSrc
+            this.maskFilter = null
+            shader = null
+            colorFilter = null
+            pathEffect = null
+        }
+        maskDevice.drawPath(path, maskCtm, maskClip, whitePaint)
+
+        // 6. Extract alpha mask to a flat ByteArray.
+        val srcMask = ByteArray(maskW * maskH)
+        for (y in 0 until maskH) {
+            val rowOffset = y * maskW
+            for (x in 0 until maskW) {
+                srcMask[rowOffset + x] =
+                    SkColorGetA(maskBitmap.getPixel(x, y)).toByte()
+            }
+        }
+
+        // 7. Run the mask filter (Gaussian blur). May return [srcMask]
+        //    in place or a fresh buffer ; either way the dimensions
+        //    match.
+        val blurred = maskFilter.filterMask(srcMask, maskW, maskH)
+
+        // 8. Composite : for each mask pixel, src colour = paint colour
+        //    with alpha modulated by the mask, then blend through
+        //    paint.blendMode.
+        val rgb = effectiveColor and 0x00FFFFFF
+        val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
+        for (y in 0 until maskH) {
+            val devY = mt + y
+            for (x in 0 until maskW) {
+                val devX = ml + x
+                val maskA = blurred[y * maskW + x].toInt() and 0xFF
+                val effA = (paintA * maskA + 127) / 255
+                if (effA == 0 && !mustBlendZero) continue
+                blend(devX, devY, (effA shl 24) or rgb, mode)
             }
         }
     }
