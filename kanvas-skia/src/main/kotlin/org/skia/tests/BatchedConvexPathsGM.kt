@@ -86,13 +86,14 @@ public class BatchedConvexPathsGM : GM() {
             // signed Int arithmetic matches the low 32 bits of unsigned
             // C++ integer multiply / add.
             val raw = ((i + 123458383) * 285018463) or 0xff808080.toInt()
-            val rgb24 = raw and 0x00FFFFFF
-            // setAlphaf(0.3f) → 0.3 * 255 ≈ 77 (Skia rounds via `+ 0.5f`).
-            val alpha = 77
-            val paintColor = (alpha shl 24) or rgb24
 
+            // Iso with upstream `gm/batchedconvexpaths.cpp`: setColor +
+            // setAlphaf(0.3f). Slice 2.2 plumbs float-precision colour
+            // through the F16 raster pipeline so 0.3f survives end-to-end
+            // (no longer quantised to 77/255 ≈ 0.30196).
             val paint = SkPaint().apply {
-                color = paintColor
+                color = raw
+                alphaf = 0.3f
                 isAntiAlias = true
             }
             c.drawPath(builder.detach(), paint)
