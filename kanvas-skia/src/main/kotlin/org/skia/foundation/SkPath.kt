@@ -4,6 +4,7 @@ import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
+import org.skia.math.SkVector
 import kotlin.math.abs
 
 /**
@@ -275,77 +276,120 @@ public class SkPath internal constructor(
     }
 
     /**
-     * If this path is the canonical rounded-rect contour
-     * `kMove + (kLine + kConic) × 4 + kClose` produced by
-     * [SkPathBuilder.addRRect], returns the matching [SkRRect]. Otherwise
-     * null.
+     * If this path is a canonical rounded-rect contour produced by
+     * [SkPathBuilder.addRRect] (in either of the two verb-stream variants
+     * — `LineStart`: `kMove + (kLine + kConic) × 4 + kClose`, 10 verbs,
+     * or `ConicStart`: `kMove + (kConic + kLine) × 3 + kConic + kClose`,
+     * 9 verbs), returns the matching [SkRRect]. Otherwise null.
      *
      * The detector skips paths that came in via [SkPathBuilder.addRect]
      * or [SkPathBuilder.addOval] (those are recognised by [isRect] /
      * [isOval]); use the type-specific detectors when the broader query
      * matters.
+     *
+     * Both verb-stream variants are supported regardless of the
+     * `(startIndex, dir)` combination that produced them — the detector
+     * walks the stream, extracts conic control points (= bbox corners)
+     * and cardinal endpoints, then derives per-corner radii from the
+     * nearest cardinals on adjacent edges.
      */
     public fun isRRect(): SkRRect? {
-        if (verbs.size != 10) return null
-        if (verbs[0] != Verb.kMove || verbs[9] != Verb.kClose) return null
-        for (i in 0..3) {
-            if (verbs[1 + i * 2] != Verb.kLine) return null
-            if (verbs[2 + i * 2] != Verb.kConic) return null
+        // 10 verbs = LineStart, 9 verbs = ConicStart.
+        if (verbs.size != 10 && verbs.size != 9) return null
+        if (verbs[0] != Verb.kMove || verbs.last() != Verb.kClose) return null
+        var lineCount = 0; var conicCount = 0
+        for (i in 1 until verbs.size - 1) {
+            when (verbs[i]) {
+                Verb.kLine -> lineCount++
+                Verb.kConic -> conicCount++
+                else -> return null
+            }
         }
+        if (conicCount != 4) return null
+        if (verbs.size == 10 && lineCount != 4) return null
+        if (verbs.size == 9 && lineCount != 3) return null
         if (conicWeights.size != 4) return null
         val w = SQRT2_OVER_2
         for (cw in conicWeights) if (abs(cw - w) > CONIC_WEIGHT_EPS) return null
 
-        // Coords layout per emitRRectCorners (CW direction):
-        //   move(L+tlx, T)             idx 0..1
-        //   line(R-trx, T)             idx 2..3
-        //   conic(R, T → R, T+try)     idx 4..7   (ctrl, end)
-        //   line(R, B-bry)             idx 8..9
-        //   conic(R, B → R-brx, B)     idx 10..13
-        //   line(L+blx, B)             idx 14..15
-        //   conic(L, B → L, B-bly)     idx 16..19
-        //   line(L, T+tly)             idx 20..21
-        //   conic(L, T → L+tlx, T)     idx 22..25
-        if (coords.size != 26) return null
-        // Conic control points are at the bbox corners.
-        val tr = coords[4] to coords[5]
-        val br = coords[10] to coords[11]
-        val bl = coords[16] to coords[17]
-        val tl = coords[22] to coords[23]
-        val r = tr.first; val t = tr.second
-        if (br.first != r || bl.second != br.second) return null
-        val b = br.second
-        if (bl.first != tl.first) return null
-        val l = bl.first
-        if (tl.second != t) return null
+        // Walk the verb stream collecting:
+        //   - 4 conic control points (one per kConic), expected to coincide
+        //     with the bbox corners,
+        //   - all cardinal points (move + every line endpoint + every conic
+        //     endpoint), expected to lie on the bbox edges.
+        val controlX = FloatArray(4); val controlY = FloatArray(4)
+        val cardX = FloatArray(9); val cardY = FloatArray(9)
+        var ci = 0
+        var ck = 0
+        var coordIdx = 0
+        cardX[ck] = coords[0]; cardY[ck] = coords[1]; ck++
+        coordIdx = 2
+        for (i in 1 until verbs.size - 1) {
+            when (verbs[i]) {
+                Verb.kLine -> {
+                    cardX[ck] = coords[coordIdx]; cardY[ck] = coords[coordIdx + 1]; ck++
+                    coordIdx += 2
+                }
+                Verb.kConic -> {
+                    controlX[ci] = coords[coordIdx]
+                    controlY[ci] = coords[coordIdx + 1]
+                    ci++
+                    coordIdx += 2
+                    cardX[ck] = coords[coordIdx]; cardY[ck] = coords[coordIdx + 1]; ck++
+                    coordIdx += 2
+                }
+                else -> return null
+            }
+        }
+        // Bbox = bounding rect of the 4 control points.
+        var l = controlX[0]; var r = controlX[0]
+        var t = controlY[0]; var b = controlY[0]
+        for (i in 1..3) {
+            if (controlX[i] < l) l = controlX[i]
+            if (controlX[i] > r) r = controlX[i]
+            if (controlY[i] < t) t = controlY[i]
+            if (controlY[i] > b) b = controlY[i]
+        }
         if (l >= r || t >= b) return null
-        // Recover per-corner radii from the line endpoints / conic ends.
-        // See `emitRRectCorners` for the source layout — each radius can
-        // be read out of two coords; we read one and cross-check the
-        // other (return null on disagreement).
-        val tlRxFromMove = coords[0] - l
-        val tlRxFromLastConic = coords[24] - l
-        val tlRy = coords[21] - t
-        val trRx = r - coords[2]
-        val trRy = coords[7] - t
-        val brRx = r - coords[12]
-        val brRy = b - coords[9]
-        val blRx = coords[14] - l
-        val blRy = b - coords[19]
-        if (tlRxFromMove < 0f || tlRy < 0f ||
-            trRx < 0f || trRy < 0f ||
-            brRx < 0f || brRy < 0f ||
-            blRx < 0f || blRy < 0f
-        ) return null
-        if (abs(tlRxFromMove - tlRxFromLastConic) > CARDINAL_EPS) return null
+        // Each control must occupy a unique bbox corner.
+        val seenCorner = BooleanArray(4)
+        for (i in 0..3) {
+            val xb = if (controlX[i] == l) 0 else if (controlX[i] == r) 1 else return null
+            val yb = if (controlY[i] == t) 0 else if (controlY[i] == b) 1 else return null
+            val idx = yb * 2 + xb
+            if (seenCorner[idx]) return null
+            seenCorner[idx] = true
+        }
+        // Per-corner radii: smallest distance from the corner to any cardinal
+        // on the adjacent edge in the matching axis (x for the horizontal
+        // edge, y for the vertical edge). For a rrect produced by addRRect,
+        // each edge holds exactly one cardinal at distance = corner radius
+        // (the corner's "after" cardinal on one edge, "before" cardinal on
+        // the other).
+        fun findRadii(cornerX: Float, cornerY: Float): SkVector? {
+            var rx = Float.POSITIVE_INFINITY
+            var ry = Float.POSITIVE_INFINITY
+            for (i in 0 until ck) {
+                val px = cardX[i]; val py = cardY[i]
+                if (py == cornerY && px != cornerX) {
+                    val dx = abs(px - cornerX)
+                    if (dx < rx) rx = dx
+                }
+                if (px == cornerX && py != cornerY) {
+                    val dy = abs(py - cornerY)
+                    if (dy < ry) ry = dy
+                }
+            }
+            if (!rx.isFinite() || !ry.isFinite()) return null
+            return SkVector(rx, ry)
+        }
+        val tlR = findRadii(l, t) ?: return null
+        val trR = findRadii(r, t) ?: return null
+        val brR = findRadii(r, b) ?: return null
+        val blR = findRadii(l, b) ?: return null
         return SkRRect.MakeRectRadii(
             SkRect.MakeLTRB(l, t, r, b),
-            arrayOf(
-                org.skia.math.SkVector(tlRxFromMove, tlRy),
-                org.skia.math.SkVector(trRx, trRy),
-                org.skia.math.SkVector(brRx, brRy),
-                org.skia.math.SkVector(blRx, blRy),
-            ),
+            arrayOf(tlR, trR, brR, blR),
         )
     }
 
@@ -436,6 +480,22 @@ public class SkPath internal constructor(
             dir: SkPathDirection = SkPathDirection.kCW,
         ): SkPath = SkPathBuilder().addRect(rect, dir).detach()
 
+        /**
+         * Closed rectangular contour with explicit [fillType] and
+         * [startIndex] (corner to begin at). Mirrors
+         * `SkPath::Rect(SkRect, SkPathFillType, SkPathDirection, unsigned)`
+         * (`include/core/SkPath.h:89-94`).
+         */
+        public fun Rect(
+            rect: SkRect,
+            fillType: SkPathFillType,
+            dir: SkPathDirection = SkPathDirection.kCW,
+            startIndex: Int = 0,
+        ): SkPath = SkPathBuilder()
+            .setFillType(fillType)
+            .addRect(rect, dir, startIndex)
+            .detach()
+
         /** Closed circular contour, axis-aligned. */
         public fun Circle(
             cx: SkScalar, cy: SkScalar, r: SkScalar,
@@ -449,20 +509,43 @@ public class SkPath internal constructor(
         ): SkPath = SkPathBuilder().addOval(rect, dir).detach()
 
         /**
+         * Closed elliptical contour starting at the cardinal selected by
+         * [startIndex] (`0..3` mapping to top / right / bottom / left CW).
+         * Mirrors `SkPath::Oval(SkRect, SkPathDirection, unsigned)`
+         * (`include/core/SkPath.h:96`).
+         */
+        public fun Oval(
+            rect: SkRect,
+            dir: SkPathDirection,
+            startIndex: Int,
+        ): SkPath = SkPathBuilder().addOval(rect, dir, startIndex).detach()
+
+        /**
          * Closed rounded-rectangle contour. Mirrors Skia's
-         * `SkPath::RRect(const SkRRect&, SkPathDirection)`.
+         * `SkPath::RRect(const SkRRect&, SkPathDirection)`. The four
+         * corners are emitted as quarter-conics with weight `√2/2`.
          *
          * If [rrect] has type [SkRRect.Type.kEmpty_Type], the returned
          * path is empty; if it's [SkRRect.Type.kRect_Type] or
          * [SkRRect.Type.kOval_Type], the path collapses to the appropriate
-         * specialised contour. Otherwise the four corners are emitted as
-         * cubic Béziers with the same kappa approximation used by
-         * [SkPathBuilder.addOval].
+         * specialised contour.
          */
         public fun RRect(
             rrect: SkRRect,
             dir: SkPathDirection = SkPathDirection.kCW,
         ): SkPath = SkPathBuilder().addRRect(rrect, dir).detach()
+
+        /**
+         * Closed rounded-rect contour starting at cardinal [startIndex]
+         * (`0..7` indexed CW from "top edge, just past TL corner").
+         * Mirrors `SkPath::RRect(const SkRRect&, SkPathDirection, unsigned)`
+         * (`include/core/SkPath.h:100`).
+         */
+        public fun RRect(
+            rrect: SkRRect,
+            dir: SkPathDirection,
+            startIndex: Int,
+        ): SkPath = SkPathBuilder().addRRect(rrect, dir, startIndex).detach()
 
         /** Single line segment from `a` to `b`, no close. */
         public fun Line(

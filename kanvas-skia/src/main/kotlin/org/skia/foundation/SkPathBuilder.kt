@@ -378,16 +378,33 @@ public class SkPathBuilder public constructor() {
     public fun addRect(
         rect: SkRect,
         dir: SkPathDirection = SkPathDirection.kCW,
+    ): SkPathBuilder = addRect(rect, dir, startIndex = 0)
+
+    /**
+     * Append a closed rectangular contour (`kMove + 3×kLine + kClose`)
+     * starting at the corner selected by [startIndex] (`0..3`, indexed CW
+     * from top-left) and wound in [dir]. Mirrors
+     * `SkPathBuilder::addRect(SkRect, SkPathDirection, unsigned startIndex)`
+     * (`include/core/SkPathBuilder.h:716`,
+     * `src/core/SkPathBuilder.cpp` `addRect` impl).
+     *
+     * The verb stream length and shape is invariant across `startIndex`;
+     * only the order of corner emission rotates.
+     */
+    public fun addRect(
+        rect: SkRect,
+        dir: SkPathDirection,
+        startIndex: Int,
     ): SkPathBuilder = apply {
-        moveTo(rect.left, rect.top)
-        if (dir == SkPathDirection.kCW) {
-            lineTo(rect.right, rect.top)
-            lineTo(rect.right, rect.bottom)
-            lineTo(rect.left, rect.bottom)
-        } else {
-            lineTo(rect.left, rect.bottom)
-            lineTo(rect.right, rect.bottom)
-            lineTo(rect.right, rect.top)
+        // 4 corners in CW order from top-left.
+        val cornerX = floatArrayOf(rect.left, rect.right, rect.right, rect.left)
+        val cornerY = floatArrayOf(rect.top,  rect.top,   rect.bottom, rect.bottom)
+        val advance = if (dir == SkPathDirection.kCW) 1 else 3
+        var i = ((startIndex % 4) + 4) % 4
+        moveTo(cornerX[i], cornerY[i])
+        repeat(3) {
+            i = (i + advance) % 4
+            lineTo(cornerX[i], cornerY[i])
         }
         close()
     }
@@ -408,25 +425,53 @@ public class SkPathBuilder public constructor() {
     public fun addOval(
         oval: SkRect,
         dir: SkPathDirection = SkPathDirection.kCW,
+    ): SkPathBuilder = addOval(oval, dir, startIndex = 1)
+
+    /**
+     * Append a closed oval contour (`kMove + 4×kConic + kClose`,
+     * each conic a 90° quarter-ellipse with weight `√2/2`) starting at
+     * the cardinal selected by [startIndex] (`0..3` mapping to
+     * top / right / bottom / left of the bounding rect respectively, CW)
+     * and wound in [dir]. Mirrors
+     * `SkPathBuilder::addOval(SkRect, SkPathDirection, unsigned startIndex)`
+     * (`include/core/SkPathBuilder.h:747`, `set_as_oval` in
+     * `src/core/SkPathRawShapes.cpp:66-86`).
+     *
+     * The default `startIndex = 1` reproduces Skia 4.x's legacy default:
+     * the contour begins at `(oval.right, centerY)`.
+     */
+    public fun addOval(
+        oval: SkRect,
+        dir: SkPathDirection,
+        startIndex: Int,
     ): SkPathBuilder = apply {
         val cx = (oval.left + oval.right) * 0.5f
         val cy = (oval.top + oval.bottom) * 0.5f
         val l = oval.left; val t = oval.top
         val r = oval.right; val b = oval.bottom
         val w = OVAL_CONIC_WEIGHT
-        moveTo(r, cy)
-        if (dir == SkPathDirection.kCW) {
-            // right → bottom: control at (R, B), end at (cx, B).
-            conicTo(r, b, cx, b, w)
-            conicTo(l, b, l, cy, w)
-            conicTo(l, t, cx, t, w)
-            conicTo(r, t, r, cy, w)
-        } else {
-            // right → top: control at (R, T), end at (cx, T).
-            conicTo(r, t, cx, t, w)
-            conicTo(l, t, l, cy, w)
-            conicTo(l, b, cx, b, w)
-            conicTo(r, b, r, cy, w)
+
+        // 4 cardinals in CW order: 0 top, 1 right, 2 bottom, 3 left.
+        val ovalX = floatArrayOf(cx, r,  cx, l)
+        val ovalY = floatArrayOf(t,  cy, b,  cy)
+        // 4 bbox corners in CW order from top-left.
+        val cornerX = floatArrayOf(l, r, r, l)
+        val cornerY = floatArrayOf(t, t, b, b)
+
+        // Skia mirrors set_as_oval: ovalIter starts at startIndex; rectIter
+        // starts at startIndex + (CW ? 0 : 1). For CW, the conic control for
+        // the segment from cardinal i → cardinal (i+1)%4 is corner (i+1)%4
+        // (the bbox corner enclosed in that quadrant). For CCW, the segment
+        // is cardinal i → cardinal (i-1)%4 with control at corner i.
+        val advance = if (dir == SkPathDirection.kCW) 1 else 3
+        var ovalIdx = ((startIndex % 4) + 4) % 4
+        var rectIdx = ((startIndex + (if (dir == SkPathDirection.kCW) 0 else 1)) % 4 + 4) % 4
+
+        moveTo(ovalX[ovalIdx], ovalY[ovalIdx])
+        repeat(4) {
+            rectIdx = (rectIdx + advance) % 4
+            ovalIdx = (ovalIdx + advance) % 4
+            conicTo(cornerX[rectIdx], cornerY[rectIdx], ovalX[ovalIdx], ovalY[ovalIdx], w)
         }
         close()
     }
@@ -451,18 +496,52 @@ public class SkPathBuilder public constructor() {
     public fun addRRect(
         rrect: SkRRect,
         dir: SkPathDirection = SkPathDirection.kCW,
+    ): SkPathBuilder = addRRect(rrect, dir, startIndex = 0)
+
+    /**
+     * Append a closed rounded-rect contour starting at the cardinal
+     * selected by [startIndex] (`0..7` indexed CW from "top edge, just
+     * past the TL corner") and wound in [dir]. Mirrors
+     * `SkPathBuilder::addRRect(SkRRect, SkPathDirection, unsigned startIndex)`
+     * (`include/core/SkPathBuilder.h:759`,
+     * `src/core/SkPathRawShapes.cpp:107-160`).
+     *
+     * Verb stream variant depends on the `(startIndex, dir)` parity:
+     * - **LineStart** (`(startIndex & 1) != (dir == kCW)`):
+     *   `kMove + (kLine + kConic) × 4 + kClose` (10 verbs).
+     * - **ConicStart** (`(startIndex & 1) == (dir == kCW)`):
+     *   `kMove + (kConic + kLine) × 3 + kConic + kClose` (9 verbs — the
+     *   trailing line back to the move point is supplied implicitly by
+     *   `close()`).
+     *
+     * **Default `startIndex = 0`** preserves the port's pre-3.5 contour
+     * (top edge, after TL corner). Skia 4.x's `addRRect(rrect, dir)`
+     * default is `6` for CW / `7` for CCW (legacy compatibility) — opt
+     * in by passing the index explicitly.
+     */
+    public fun addRRect(
+        rrect: SkRRect,
+        dir: SkPathDirection,
+        startIndex: Int,
     ): SkPathBuilder = apply {
         when (rrect.getType()) {
             SkRRect.Type.kEmpty_Type -> return@apply
+            // For collapsed types (kRect / kOval), defer to the matching
+            // helper with its *own* default startIndex. Skia 4.x's
+            // SkPathPriv::SimplifyRRect remaps the rrect's index to a new
+            // index on the underlying primitive — that's a Phase 3.5+
+            // refinement; today we keep the pre-3.5 collapse behaviour
+            // (rect: startIndex 0, oval: startIndex 1) so legacy callers
+            // see no shift on their default `addRRect(rrect)` path.
             SkRRect.Type.kRect_Type -> { addRect(rrect.rect(), dir); return@apply }
             SkRRect.Type.kOval_Type -> { addOval(rrect.rect(), dir); return@apply }
             SkRRect.Type.kSimple_Type,
             SkRRect.Type.kNinePatch_Type,
-            SkRRect.Type.kComplex_Type -> emitRRectCorners(rrect, dir)
+            SkRRect.Type.kComplex_Type -> emitRRectCorners(rrect, dir, startIndex)
         }
     }
 
-    private fun emitRRectCorners(rrect: SkRRect, dir: SkPathDirection) {
+    private fun emitRRectCorners(rrect: SkRRect, dir: SkPathDirection, startIndex: Int) {
         val rect = rrect.rect()
         val tl = rrect.radii(SkRRect.Corner.kUpperLeft_Corner)
         val tr = rrect.radii(SkRRect.Corner.kUpperRight_Corner)
@@ -472,37 +551,47 @@ public class SkPathBuilder public constructor() {
         val l = rect.left; val t = rect.top
         val r = rect.right; val b = rect.bottom
 
-        // Mirrors SkPathRawShapes::set_as_rrect / gRRectVerbs_LineStart with
-        // start at the top-left corner's end-of-arc on the top edge: each
-        // corner becomes a single conic with control at the bbox corner
-        // and weight √2/2 (same as the oval).
-        if (dir == SkPathDirection.kCW) {
-            moveTo(l + tl.fX, t)
-            lineTo(r - tr.fX, t)
-            // Top-right corner: control (r, t), end (r, t + tr.fY).
-            conicTo(r, t, r, t + tr.fY, w)
-            lineTo(r, b - br.fY)
-            // Bottom-right corner: control (r, b), end (r - br.fX, b).
-            conicTo(r, b, r - br.fX, b, w)
-            lineTo(l + bl.fX, b)
-            // Bottom-left corner: control (l, b), end (l, b - bl.fY).
-            conicTo(l, b, l, b - bl.fY, w)
-            lineTo(l, t + tl.fY)
-            // Top-left corner: control (l, t), end (l + tl.fX, t).
-            conicTo(l, t, l + tl.fX, t, w)
-        } else {
-            moveTo(l + tl.fX, t)
-            // Top-left corner reversed: control (l, t), end (l, t + tl.fY).
-            conicTo(l, t, l, t + tl.fY, w)
-            lineTo(l, b - bl.fY)
-            // Bottom-left corner reversed: control (l, b), end (l + bl.fX, b).
-            conicTo(l, b, l + bl.fX, b, w)
-            lineTo(r - br.fX, b)
-            // Bottom-right corner reversed: control (r, b), end (r, b - br.fY).
-            conicTo(r, b, r, b - br.fY, w)
-            lineTo(r, t + tr.fY)
-            // Top-right corner reversed: control (r, t), end (r - tr.fX, t).
-            conicTo(r, t, r - tr.fX, t, w)
+        // 8 cardinal points on the bbox edges, indexed CW from "top edge,
+        // just past TL corner". Each odd-indexed point is "before" the next
+        // CW corner; each even-indexed point is "after" the previous corner.
+        //   0 (L+tl.x, T)        1 (R-tr.x, T)       — top edge
+        //   2 (R, T+tr.y)        3 (R, B-br.y)       — right edge
+        //   4 (R-br.x, B)        5 (L+bl.x, B)       — bottom edge
+        //   6 (L, B-bl.y)        7 (L, T+tl.y)       — left edge
+        val cardX = floatArrayOf(l + tl.fX, r - tr.fX, r,        r,        r - br.fX, l + bl.fX, l,        l)
+        val cardY = floatArrayOf(t,         t,         t + tr.fY, b - br.fY, b,        b,         b - bl.fY, t + tl.fY)
+        // 4 bbox corners as conic control points, indexed by the *enclosed*
+        // CW corner (0 = TR, 1 = BR, 2 = BL, 3 = TL). The corner sitting
+        // between cardinals (2k - 1) and (2k) — modulo 8 — is corner k - 1
+        // mod 4 in CW.
+        val cornerX = floatArrayOf(r, r, l, l)
+        val cornerY = floatArrayOf(t, b, b, t)
+
+        val advance = if (dir == SkPathDirection.kCW) 1 else -1
+        val idx0 = ((startIndex % 8) + 8) % 8
+        // In CW, segment idx → (idx + 1) mod 8 is a conic iff idx is odd.
+        // In CCW, segment idx → (idx - 1) mod 8 is a conic iff idx is even.
+        val firstSegmentConic = (idx0 and 1) == if (dir == SkPathDirection.kCW) 1 else 0
+        // LineStart variant emits 8 segments (4 lines + 4 conics, all explicit).
+        // ConicStart variant emits 7 (the trailing line back to idx0 is
+        // implicit via close()).
+        val segments = if (firstSegmentConic) 7 else 8
+
+        moveTo(cardX[idx0], cardY[idx0])
+        var idx = idx0
+        repeat(segments) {
+            val nextIdx = ((idx + advance) % 8 + 8) % 8
+            val isConic = (idx and 1) == if (dir == SkPathDirection.kCW) 1 else 0
+            if (isConic) {
+                // Corner index for the current segment.
+                //   CW : segment idx (odd) → cornerIdx = idx >> 1.
+                //   CCW: segment idx (even) → cornerIdx = nextIdx >> 1.
+                val cornerIdx = if (dir == SkPathDirection.kCW) idx ushr 1 else nextIdx ushr 1
+                conicTo(cornerX[cornerIdx], cornerY[cornerIdx], cardX[nextIdx], cardY[nextIdx], w)
+            } else {
+                lineTo(cardX[nextIdx], cardY[nextIdx])
+            }
+            idx = nextIdx
         }
         close()
     }
