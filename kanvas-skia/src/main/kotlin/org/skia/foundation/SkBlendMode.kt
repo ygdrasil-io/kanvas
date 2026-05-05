@@ -121,3 +121,41 @@ public enum class SkBlendMode {
         public val kSkBlendModeCount: Int = entries.size
     }
 }
+
+/**
+ * Mirrors Skia's `const char* SkBlendMode_Name(SkBlendMode)`
+ * (`src/core/SkBlendMode.cpp`). Returns the canonical CamelCase name
+ * (without the `k` prefix) — used by GM labels (`xfermodes`,
+ * `aaxfermodes`, `androidblendmodes`).
+ */
+public fun SkBlendMode_Name(mode: SkBlendMode): String = when (mode) {
+    SkBlendMode.kClear -> "Clear"
+    SkBlendMode.kSrc -> "Src"
+    SkBlendMode.kDst -> "Dst"
+    SkBlendMode.kSrcOver -> "SrcOver"
+    SkBlendMode.kDstOver -> "DstOver"
+    SkBlendMode.kSrcIn -> "SrcIn"
+    SkBlendMode.kDstIn -> "DstIn"
+    SkBlendMode.kSrcOut -> "SrcOut"
+    SkBlendMode.kDstOut -> "DstOut"
+    SkBlendMode.kSrcATop -> "SrcATop"
+    SkBlendMode.kDstATop -> "DstATop"
+    SkBlendMode.kXor -> "Xor"
+    SkBlendMode.kPlus -> "Plus"
+    SkBlendMode.kModulate -> "Modulate"
+    SkBlendMode.kScreen -> "Screen"
+    SkBlendMode.kOverlay -> "Overlay"
+    SkBlendMode.kDarken -> "Darken"
+    SkBlendMode.kLighten -> "Lighten"
+    SkBlendMode.kColorDodge -> "ColorDodge"
+    SkBlendMode.kColorBurn -> "ColorBurn"
+    SkBlendMode.kHardLight -> "HardLight"
+    SkBlendMode.kSoftLight -> "SoftLight"
+    SkBlendMode.kDifference -> "Difference"
+    SkBlendMode.kExclusion -> "Exclusion"
+    SkBlendMode.kMultiply -> "Multiply"
+    SkBlendMode.kHue -> "Hue"
+    SkBlendMode.kSaturation -> "Saturation"
+    SkBlendMode.kColor -> "Color"
+    SkBlendMode.kLuminosity -> "Luminosity"
+}
