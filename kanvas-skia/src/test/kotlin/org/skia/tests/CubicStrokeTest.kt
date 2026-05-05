@@ -21,7 +21,7 @@ class CubicStrokeTest {
         }
         val accepted = SimilarityTracker.updateScore("CubicStrokeGM", comparison.similarity)
         assertTrue(accepted, "CubicStrokeGM regressed below ratchet")
-        assertTrue(comparison.similarity >= 80.0,
-            "CubicStrokeGM similarity ${"%.2f".format(comparison.similarity)}% < 80.0%")
+        assertTrue(comparison.similarity >= 97.0,
+            "CubicStrokeGM similarity ${"%.2f".format(comparison.similarity)}% < 97.0%")
     }
 }

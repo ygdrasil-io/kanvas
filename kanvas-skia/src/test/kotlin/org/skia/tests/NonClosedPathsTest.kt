@@ -24,7 +24,7 @@ class NonClosedPathsTest {
         }
         val accepted = SimilarityTracker.updateScore("NonClosedPathsGM", comparison.similarity)
         assertTrue(accepted, "NonClosedPathsGM regressed below ratchet")
-        assertTrue(comparison.similarity >= 80.0,
-            "NonClosedPathsGM similarity ${"%.2f".format(comparison.similarity)}% < 80.0% (hairline fallback)")
+        assertTrue(comparison.similarity >= 95.0,
+            "NonClosedPathsGM similarity ${"%.2f".format(comparison.similarity)}% < 95.0% (hairline fallback)")
     }
 }

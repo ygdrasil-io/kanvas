@@ -27,18 +27,18 @@ class Round8Test {
     }
 
     @Test
-    fun `ClipLargeRectGM matches reference`() = runGm(ClipLargeRectGM(), "ClipLargeRectGM", 90.0)
+    fun `ClipLargeRectGM matches reference`() = runGm(ClipLargeRectGM(), "ClipLargeRectGM", 98.0)
 
     @Test
     fun `ThinRoundRectsGM matches reference`() =
-        runGm(ThinRoundRectsGM(), "ThinRoundRectsGM", 80.0)
+        runGm(ThinRoundRectsGM(), "ThinRoundRectsGM", 91.0)
 
     @Test
-    fun `InnerShapesAaGM matches reference`() = runGm(InnerShapesAaGM(), "InnerShapesAaGM", 50.0)
+    fun `InnerShapesAaGM matches reference`() = runGm(InnerShapesAaGM(), "InnerShapesAaGM", 80.0)
 
     @Test
-    fun `InnerShapesBwGM matches reference`() = runGm(InnerShapesBwGM(), "InnerShapesBwGM", 50.0)
+    fun `InnerShapesBwGM matches reference`() = runGm(InnerShapesBwGM(), "InnerShapesBwGM", 81.0)
 
     @Test
-    fun `HairlinesGM matches reference`() = runGm(HairlinesGM(), "HairlinesGM", 80.0)
+    fun `HairlinesGM matches reference`() = runGm(HairlinesGM(), "HairlinesGM", 96.0)
 }

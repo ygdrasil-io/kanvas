@@ -23,8 +23,8 @@ class DRRectSmallInnerTest {
         val accepted = SimilarityTracker.updateScore("DRRectSmallInnerGM", comparison.similarity)
         assertTrue(accepted, "DRRectSmallInnerGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 80.0,
-            "DRRectSmallInnerGM similarity ${"%.2f".format(comparison.similarity)}% < 80.0% floor",
+            comparison.similarity >= 95.0,
+            "DRRectSmallInnerGM similarity ${"%.2f".format(comparison.similarity)}% < 95.0% floor",
         )
     }
 }

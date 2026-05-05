@@ -23,8 +23,8 @@ class ThinConcavePathsTest {
         val accepted = SimilarityTracker.updateScore("ThinConcavePathsGM", comparison.similarity)
         assertTrue(accepted, "ThinConcavePathsGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 70.0,
-            "ThinConcavePathsGM similarity ${"%.2f".format(comparison.similarity)}% < 70.0% floor",
+            comparison.similarity >= 96.0,
+            "ThinConcavePathsGM similarity ${"%.2f".format(comparison.similarity)}% < 96.0% floor",
         )
     }
 }

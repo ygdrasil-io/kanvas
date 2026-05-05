@@ -23,8 +23,8 @@ class Crbug10141204Test {
         val accepted = SimilarityTracker.updateScore("Crbug10141204GM", comparison.similarity)
         assertTrue(accepted, "Crbug10141204GM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 50.0,
-            "Crbug10141204GM similarity ${"%.2f".format(comparison.similarity)}% < 50.0% floor",
+            comparison.similarity >= 99.0,
+            "Crbug10141204GM similarity ${"%.2f".format(comparison.similarity)}% < 99.0% floor",
         )
     }
 }

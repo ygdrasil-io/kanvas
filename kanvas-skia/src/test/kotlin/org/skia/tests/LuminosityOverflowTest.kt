@@ -23,8 +23,8 @@ class LuminosityOverflowTest {
         val accepted = SimilarityTracker.updateScore("LuminosityOverflowGM", comparison.similarity)
         assertTrue(accepted, "LuminosityOverflowGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 70.0,
-            "LuminosityOverflowGM similarity ${"%.2f".format(comparison.similarity)}% < 70.0% floor",
+            comparison.similarity >= 99.0,
+            "LuminosityOverflowGM similarity ${"%.2f".format(comparison.similarity)}% < 99.0% floor",
         )
     }
 }

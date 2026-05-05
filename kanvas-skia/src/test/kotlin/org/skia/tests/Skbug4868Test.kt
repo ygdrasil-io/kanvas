@@ -23,8 +23,8 @@ class Skbug4868Test {
         val accepted = SimilarityTracker.updateScore("Skbug4868GM", comparison.similarity)
         assertTrue(accepted, "Skbug4868GM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 80.0,
-            "Skbug4868GM similarity ${"%.2f".format(comparison.similarity)}% < 80.0% floor",
+            comparison.similarity >= 98.0,
+            "Skbug4868GM similarity ${"%.2f".format(comparison.similarity)}% < 98.0% floor",
         )
     }
 }

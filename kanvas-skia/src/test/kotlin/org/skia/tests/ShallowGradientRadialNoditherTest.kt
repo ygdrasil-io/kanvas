@@ -22,7 +22,7 @@ class ShallowGradientRadialNoditherTest {
         }
         val accepted = SimilarityTracker.updateScore("ShallowGradientRadialNoditherGM", comparison.similarity)
         assertTrue(accepted, "ShallowGradientRadialNoditherGM regressed below ratchet")
-        assertTrue(comparison.similarity >= 50.0,
-            "ShallowGradientRadialNoditherGM similarity ${"%.2f".format(comparison.similarity)}% < 50.0% (t=1 floor)")
+        assertTrue(comparison.similarity >= 99.0,
+            "ShallowGradientRadialNoditherGM similarity ${"%.2f".format(comparison.similarity)}% < 99.0% (t=1 floor)")
     }
 }

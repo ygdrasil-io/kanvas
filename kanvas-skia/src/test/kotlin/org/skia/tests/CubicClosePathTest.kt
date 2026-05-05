@@ -23,8 +23,8 @@ class CubicClosePathTest {
         val accepted = SimilarityTracker.updateScore("CubicClosePathGM", comparison.similarity)
         assertTrue(accepted, "CubicClosePathGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 70.0,
-            "CubicClosePathGM similarity ${"%.2f".format(comparison.similarity)}% < 70.0% floor",
+            comparison.similarity >= 85.0,
+            "CubicClosePathGM similarity ${"%.2f".format(comparison.similarity)}% < 85.0% floor",
         )
     }
 }

@@ -24,7 +24,7 @@ class ClampedGradientsTest {
         }
         val accepted = SimilarityTracker.updateScore("ClampedGradientsGM", comparison.similarity)
         assertTrue(accepted, "ClampedGradientsGM regressed below ratchet")
-        assertTrue(comparison.similarity >= 70.0,
-            "ClampedGradientsGM similarity ${"%.2f".format(comparison.similarity)}% < 70.0%")
+        assertTrue(comparison.similarity >= 93.0,
+            "ClampedGradientsGM similarity ${"%.2f".format(comparison.similarity)}% < 93.0%")
     }
 }
