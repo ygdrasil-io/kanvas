@@ -1004,11 +1004,41 @@ Le résiduel sur `EmptyPath` / `LinePath` / `LineClosePath` (~12-13 %) est domin
 
 #### GMs reportés round 3+
 
-- **`thinconcavepaths`** (550×400) — 9 path-helper functions, ~150 LOC. Portable mais lourd, gardé pour round 3.
+- **`thinconcavepaths`** (550×400) — porté en Phase 6k.
 - **`crbug_947055`** (200×50) — perspective row `[0, 0.0225, 1]` non-affine, hors scope `SkMatrix` (qui est pure 2×3 affine).
 - **`bug339297_as_clip`** — `clipPath(arbitrary)`. À confirmer la dispo de `clipPath` non-rect.
 - **`stroke_rect_shader` / `circle_sizes`** — déjà portés (sub-agent doublons).
-- **`pathreverse`, `cubicpath_shader`, `largeclippedpath_*`, `hugepath`, `hittestpath`, `croppedrects`, `alphagradients`, `gradient_dirty_laundry`, `bug12866`** etc. — bloqués par APIs absentes (`SkPathPriv::ReverseAddPath`, `SkColorConverter`, `clipPath`, surface offscreen, `path.contains`, `SweepGradient`, `SkM44`, etc.).
+- **`pathreverse`, `cubicpath_shader` (porté Phase 6k), `largeclippedpath_*`, `hugepath`, `hittestpath`, `croppedrects`, `alphagradients`, `gradient_dirty_laundry`, `bug12866`** etc. — bloqués par APIs absentes (`SkPathPriv::ReverseAddPath`, `clipPath`, surface offscreen, `path.contains`, `SweepGradient`, `SkM44`, etc.).
+
+### Phase 6k — GM harvest round 3 (93 → 101) ✅
+
+**But** : 3e tirage post-Phase-6, avec une factorisation qui réduit la duplication des matrix-grid GMs (`linepath` family).
+
+#### Factorisation
+
+- [x] **`PathCapsFillsGridGM`** — classe abstraite partagée par les GMs qui rendent un path dans une grille `3 caps × 4 fills (incl. kInverse*) × 3 styles` avec labels. Prend `(name, size, path, title, shader?)` en ctor. Centralise la logique de save/translate/restore qui était dupliquée entre `LinePathGM` (Phase 6j) et les nouveaux `CubicClosePathGM` / `CubicPathShaderGM` / `QuadPathGM` / `QuadClosePathGM`.
+
+`LinePathGM` n'est pas refactorisé pour éviter de toucher du code déjà mergé ; les futurs GMs de cette famille (e.g. quadabspath) hériteront de `PathCapsFillsGridGM`.
+
+#### GMs portés
+
+| GM                    | Référence                            | Score      | Stress |
+|-----------------------|--------------------------------------|------------|--------|
+| ThinConcavePathsGM    | `thinconcavepaths.png` 550×400       | **98.06 %** | 9 familles de paths concaves thin (rect, right-angle, golf-club, barbell, hipster-pants, skinny-snake, etc.) sweep widths 0.05..2 px. AA fill stress. |
+| Crbug1257515GM        | `crbug_1257515.png` 1139×400         | **98.93 %** | 2 polylines stroked sous `translate + scale(2,2)` (red round-cap/join, blue butt+bevel). |
+| Crbug938592GM         | `crbug_938592.png` 500×300           | **99.80 %** | Hard-stop linear gradient mirroré 4 fois via `scale(±1, ±1)`. |
+| StrokeRectsRotatedGM  | `strokerects_rotated.png` 800×800    | **90.74 %** | Variante rotated du `StrokeRectsGM` existant. 100 random rects × 4 panes sous `rotate(45, SW, SH)`. |
+| CubicClosePathGM      | `cubicclosepath.png` 1240×390        | **86.94 %** | Closed cubic dans la grille caps × fills × styles. |
+| CubicPathShaderGM     | `cubicpath_shader.png` 1240×390      | **79.72 %** | Open cubic dans la grille, avec linear gradient (3 stops translucides) au lieu d'un solid color. |
+| QuadPathGM            | `quadpath.png` 1240×390              | **87.27 %** | Open quad dans la grille. |
+| QuadClosePathGM       | `quadclosepath.png` 1240×390         | **87.05 %** | Closed quad dans la grille. |
+
+Le résiduel `~13 %` sur les `*PathGM`s grilles vient des labels texte (AWT-vs-FreeType drift) — même pattern que `LinePathGM` (~87 %). Le score plus bas de `CubicPathShaderGM` (~80 %) ajoute le drift cumulatif 8-bit du linear gradient sur 36 cellules translucides.
+
+#### Vérification Phase 6k
+- [x] 93 GMs précédents — 0 régression.
+- [x] 8 nouveaux ports : tous au-dessus de leur floor.
+- [x] **Pass count cumulé : 101 GM** — premier passage des 100 GMs.
 
 ### Phase 5h — Linear-premul F16 storage (❌ explored, reverted)
 
@@ -1179,6 +1209,7 @@ L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées s
 | 6h    | 77       | GM harvest post-Phase-6 (10 DEF_SIMPLE_GM) — Bug615686/Skbug4868/Crbug946965/Crbug1139750/Crbug847759/LuminosityOverflow/WideButtCaps/StrokeRectShader (98-100 %) + ClipDrawDraw 35.34 % et RadialGradientPrecision 4.92 % comme regression-trackers. 0 nouvelle API. | ✅ |
 | 6i    | 77       | Edge-rounding consistency : `clipRect` non-AA passe de `floor`/`ceil` à `round-half-up` (matches `SkScalarRoundToInt` + non-AA `pixelEdge`). AA flavour préservée via `clipRect(rect, true)`. AAXfermodesGM 80.12 → 84.73 (+4.6), Skbug4868 98.63 → 99.32 (+0.7), ClipDrawDraw géométrie corrigée. | ✅ |
 | 6j    | 93       | GM harvest round 2 (9 DEF_SIMPLE_GM) — Bug5099/Bug6083/Bug6987/Bug339297/Crbug10141204 (95-100 %) + DRRectSmallInner 96.5 % + EmptyPath/LinePath/LineClosePath 87 % (4 fill rules incl. kInverse* × 3 styles × labels). 0 nouvelle API. | ✅ |
+| 6k    | 101      | GM harvest round 3 (8 ports) — ThinConcavePaths 98.1 %, Crbug1257515 98.9 %, Crbug938592 99.8 %, StrokeRectsRotated 90.7 %, CubicClosePath 86.9 %, CubicPathShader 79.7 %, QuadPath 87.3 %, QuadClosePath 87.1 %. Factorisation `PathCapsFillsGridGM` (caps × fills × styles matrix) partagée par 4 GMs. 0 nouvelle API. | ✅ |
 | 5h    | n/a      | Linear-premul F16 storage — **explored, reverted**. Voir post-mortem ci-dessous. | ❌ reverted |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [archives/MIGRATION_PLAN_COLORSPACE_PORT.md](archives/MIGRATION_PLAN_COLORSPACE_PORT.md) (terminé : phases A-J + F1-F7 livrées, K out of scope).
