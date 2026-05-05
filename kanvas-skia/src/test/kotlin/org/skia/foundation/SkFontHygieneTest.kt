@@ -16,7 +16,7 @@ import org.skia.tools.ToolUtils
  * Mono / Serif Liberation styles that previous slices only resolved
  * but never rasterised.
  *
- * Cf. `MIGRATION_PLAN_TEXT.md` — wraps up the text trajectory before
+ * Cf. `MIGRATION_PLAN_TEXT_ARCHIVED.md` — wraps up the text trajectory before
  * the project pivots back to the main plan.
  */
 class SkFontHygieneTest {

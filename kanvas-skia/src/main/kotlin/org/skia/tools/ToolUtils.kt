@@ -138,7 +138,7 @@ public object ToolUtils {
      * to Kotlin and build an `SkTestTypeface` that iterates the embedded
      * points/verbs directly, bypassing AWT for outline lookup. That would
      * make outlines bit-exact upstream. Triggered by `bigtext`-family GMs.
-     * See `MIGRATION_PLAN_TEXT.md` §T4 for details.
+     * See `MIGRATION_PLAN_TEXT_ARCHIVED.md` §T4 for details.
      */
     public fun DefaultPortableTypeface(): SkTypeface = LiberationFontMgr.getDefault()
 

@@ -18,7 +18,7 @@ package org.skia.foundation
  * upstream code (so `font.setHinting(...)` calls compile and execute
  * without crashing) but does not affect rendered pixels.
  *
- * Cf. `MIGRATION_PLAN_TEXT.md` — same family of caveats as
+ * Cf. `MIGRATION_PLAN_TEXT_ARCHIVED.md` — same family of caveats as
  * [SkFont.Edging.kSubpixelAntiAlias] (which we silently downgrade to
  * `kAntiAlias`).
  */
