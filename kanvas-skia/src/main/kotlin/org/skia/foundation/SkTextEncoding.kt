@@ -8,7 +8,7 @@ package org.skia.foundation
  * [kUTF8] meaningfully (the only encoding actually exercised by
  * upstream `drawString` callers); the other variants are accepted
  * for signature compatibility but treated as UTF-8 by the AWT
- * backend (see `MIGRATION_PLAN_TEXT.md` §T1).
+ * backend (see `MIGRATION_PLAN_TEXT_ARCHIVED.md` §T1).
  */
 public enum class SkTextEncoding {
     kUTF8,    // bytes representing UTF-8 (or ASCII)

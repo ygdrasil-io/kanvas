@@ -10,7 +10,7 @@ import org.skia.math.SkScalar
  * scaleX / skewX / edging / hinting flags. Mutable, like upstream — a
  * single `SkFont` instance is reconfigured between draws.
  *
- * **API fidelity (`MIGRATION_PLAN_TEXT.md` §"Contrainte de design")**:
+ * **API fidelity (`MIGRATION_PLAN_TEXT_ARCHIVED.md` §"Contrainte de design")**:
  * we expose `var typeface` / `var size` / `var edging` / `var isSubpixel`
  * etc. rather than explicit `setSize(s)` / `getSize()` methods because
  * Kotlin `var` compiles to identical JVM bytecode (`getX()`/`setX(X)`),

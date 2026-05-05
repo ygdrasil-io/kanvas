@@ -10,7 +10,7 @@ import org.skia.testing.TestUtils
 /**
  * First textual GM port — see [BigTextGM] for the source-spec mapping.
  *
- * **Tolerance choice (= 8)**: per `MIGRATION_PLAN_TEXT.md` §T4, AWT's
+ * **Tolerance choice (= 8)**: per `MIGRATION_PLAN_TEXT_ARCHIVED.md` §T4, AWT's
  * scaler/hinting/AA differs from FreeType's by ~1-2 ulps on glyph
  * edges. With Liberation TTFs feeding both rasterisers, the **outline
  * shape** matches upstream — only the rasterisation step diverges.
@@ -31,7 +31,7 @@ class BigTextTest {
         val reference = TestUtils.loadReferenceBitmap(gm.name())
         assertNotNull(reference, "Missing reference image bigtext.png")
 
-        // T4 default tolerance for textual GMs (cf. MIGRATION_PLAN_TEXT.md).
+        // T4 default tolerance for textual GMs (cf. MIGRATION_PLAN_TEXT_ARCHIVED.md).
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 8)
         TestReport.recordDetailed("BigTextGM", comparison)
         if (comparison.similarity < 95.0) {

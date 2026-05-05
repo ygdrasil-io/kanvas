@@ -415,7 +415,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * (matches the empty-typeface case from T1 plus protects callers
      * that pass `SkTypeface.MakeEmpty()`).
      *
-     * Limitations (cf. `MIGRATION_PLAN_TEXT.md` §T3):
+     * Limitations (cf. `MIGRATION_PLAN_TEXT_ARCHIVED.md` §T3):
      *  - `font.edging == kSubpixelAntiAlias` is downgraded to
      *    `kAntiAlias` silently — the path-fill rasteriser only does
      *    coverage AA, not LCD subpixel AA.
