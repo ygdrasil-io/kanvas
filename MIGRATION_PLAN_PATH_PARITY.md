@@ -98,38 +98,34 @@ Tests unitaires mis à jour pour les nouveaux verb streams :
 - `tangent arcTo after close repeats the last contour's start, then
   arcs` (dernier verbe = `kConic`)
 
-### Phase 3 — surface API à compléter (à la demande)
+### Phase 3 — surface API à compléter
 
-À ouvrir au fur et à mesure des GMs / fonctionnalités portées. Liste non
-exhaustive :
+Phase 3 = additif. Aucun GM n'est strictement bloqué dessus aujourd'hui,
+mais elle prépare l'arrivée de :
+- `ArcToGM` (variantes SVG-arc) → bloque `rArcTo` et `arcTo(r, xRot,
+  ArcSize, sweep, xy)`.
+- `CubicPathGM` (`kInverse*` fill rules) → bloque le rasterizer inverse.
+- les futurs GMs qui utilisent `addPath(matrix, mode)`, `polylineTo`,
+  `setFillType` mutable, etc.
 
-**`SkPath` manquant :**
-- `isOval` / `isRRect` / `isRect` / `isLine` / `isConvex` / `isFinite` /
-  `isLastContourClosed` / `isInverseFillType` / `isVolatile`
-- `setFillType` / `makeFillType` / `toggleInverseFillType` / `makeIsVolatile`
-- `getLastPt` / `countPoints` / `countVerbs` / `getSegmentMasks`
-- `points()/verbs()/conicWeights()` publics (actuellement `internal`)
-- `computeTightBounds`, `conservativelyContainsRect`, `contains`
-- `interpolate` / `makeInterpolate` / `isInterpolatable`
-- `tryMakeTransform` / `tryMakeOffset` / `tryMakeScale` / `makeScale`
-- `swap` / `reset` / `iter()`
-- `Raw(...)`, `Rect(rect, fillType, dir, startIndex)`
-- variantes `kInverse*` côté rasterizer
+#### Sous-tranches indépendantes (chacune une PR séparée)
 
-**`SkPathBuilder` manquant :**
-- constructeurs `(SkPathFillType)` et `(const SkPath&)`
-- `setIsVolatile` / `isVolatile` / `reset` public
-- `polylineTo`, `rArcTo` (SVG-arc), `arcTo(r, xRot, ArcSize, sweep, xy)` (SVG-arc)
-- `incReserve`, `offset`, `transform` (mutent le builder)
-- `isFinite`, `toggleInverseFillType`, `getLastPt`, `setPoint`,
-  `setLastPt`, `countPoints`, `isInverseFillType`
-- `points()/verbs()/conicWeights()` (actuellement absents)
-- `addRaw`, `iter`, `dump`, `dumpToString`, `contains`
-- `addPath(SkPath, dx, dy, mode)` et `addPath(src, matrix, mode)` avec
-  `AddPathMode::kAppend` / `kExtend`
-- `addRect(rect, dir, startIndex)` / `addOval(rect, dir, startIndex)` /
-  `addRRect(rrect, dir, startIndex)` (avec `startIndex` actuellement
-  manquant — le port démarre toujours top-left/right-of-center)
+| Slice | Surface | Risque |
+|-------|---------|--------|
+| 3.1 | **Introspection read-only** : `isLine`/`isRect`/`isOval`/`isRRect`/`isConvex`/`isFinite`/`isLastContourClosed`/`countPoints`/`countVerbs`/`getSegmentMasks`/`getLastPt`/`points()`/`verbs()`/`conicWeights()` publics + `iter()` + `IterRec` | nul (aucune mutation) |
+| 3.2 | **Fill type & volatile** : `setFillType`/`makeFillType`/`toggleInverseFillType`/`makeToggleInverseFillType`/`isInverseFillType`/`makeIsVolatile`/`isVolatile` (tous sur `SkPath`) | nul (aucun rasterizer change) |
+| 3.3 | **Builder ergonomics** : ctor `(SkPathFillType)`/`(SkPath)`, `reset` public, `polylineTo`, `addLine`, `incReserve` (no-op), `offset`/`transform` (mutate), `setIsVolatile`/`isVolatile`, `setPoint`/`setLastPt`, `getLastPt`/`countPoints`/`isInverseFillType` | nul |
+| 3.4 | **`addPath` modes & matrix** : `addPath(src, dx, dy, mode)`, `addPath(src, matrix, mode)`, `AddPathMode::kAppend`/`kExtend` | faible (sémantique nouvelle pour `kExtend`, tests dédiés) |
+| 3.5 | **`startIndex` overloads** : `addRect`/`addOval`/`addRRect` avec `startIndex`, `Rect(rect, fillType, dir, startIndex)`, `Polygon` overloads | faible (les overloads par défaut gardent les valeurs actuelles → pas de régression GM) |
+| 3.6 | **Geometry helpers** : `computeTightBounds`, `conservativelyContainsRect`, `contains`, `tryMakeTransform`/`tryMakeOffset`/`tryMakeScale`, `makeScale`, `IsLineDegenerate`/`IsQuadDegenerate`/`IsCubicDegenerate` | faible (read-only, queries) |
+| 3.7 | **SVG-arc** : `rArcTo(r, xAxisRotate, ArcSize, sweep, dxdy)`, `arcTo(r, xAxisRotate, ArcSize, sweep, xy)` (absolu) | moyen (math nouveau, port direct du code Skia ; débloque `ArcToGM`) |
+| 3.8 | **`kInverse*` fill rules dans rasterizer** : peindre le complément du path à l'intérieur du clip | moyen (1 GM débloqué : `CubicPathGM` ; teste contre la référence) |
+| 3.9 | **Interpolation & raw** : `interpolate`/`makeInterpolate`/`isInterpolatable`, `Raw(...)`, `addRaw`, `swap`/`reset` (sur `SkPath`), `dump`/`dumpToString` | nul (pas de raster, queries / utilities) |
+
+L'ordre est arbitraire ; on traite par PR de petite taille pour rester
+revue-able. 3.1 → 3.2 → 3.3 forment une chaîne naturelle de "surface
+visible vers builder". 3.7 et 3.8 ont une valeur immédiate (un GM
+chacun débloqué). 3.4–3.6 et 3.9 attendent un GM consommateur.
 
 ## Risque résumé
 
@@ -138,11 +134,5 @@ exhaustive :
 - Phase 2 = visuellement neutre mais casse des tests verbe-stream et
   peut décaler 1-2 pixels en bord d'arc.
 - Phase 3 = additif, pas de risque sauf si un nouvel API
-  (`makeFillType`) entre en collision avec un usage existant.
-
-## Plan de cette PR
-
-1. Phase 1.1 — moveTo collapse + test
-2. Phase 1.2 — ensureContour après close + test
-3. Run `gradle test` (kanvas-skia)
-4. Si une similarity régresse, l'inscrire dans la PR avec diagnostic.
+  (`makeFillType`) entre en collision avec un usage existant. Chaque
+  sous-tranche est livrable et testable indépendamment.
