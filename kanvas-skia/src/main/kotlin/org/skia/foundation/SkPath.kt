@@ -53,6 +53,31 @@ public class SkPath internal constructor(
     public fun isEmpty(): Boolean = verbs.isEmpty()
 
     /**
+     * True if [fillType] describes the area *outside* the path (i.e. is
+     * `kInverseWinding` or `kInverseEvenOdd`). Mirrors
+     * `SkPath::isInverseFillType` (`include/core/SkPath.h:273`).
+     */
+    public fun isInverseFillType(): Boolean = fillType.isInverse()
+
+    /**
+     * Return a copy of this path with [newFillType] in place of [fillType];
+     * verb stream and coords are shared (no allocation when the requested
+     * fill type is already the current one). Mirrors `SkPath::makeFillType`
+     * (`include/core/SkPath.h:266`).
+     */
+    public fun makeFillType(newFillType: SkPathFillType): SkPath =
+        if (newFillType == fillType) this
+        else SkPath(verbs, coords, conicWeights, newFillType)
+
+    /**
+     * Return a copy of this path with the inverse bit of [fillType]
+     * toggled. Mirrors `SkPath::makeToggleInverseFillType`
+     * (`include/core/SkPath.h:279`).
+     */
+    public fun makeToggleInverseFillType(): SkPath =
+        SkPath(verbs, coords, conicWeights, fillType.toggleInverse())
+
+    /**
      * True if the last verb is `kClose`. Mirrors `SkPath::isLastContourClosed`
      * (`src/core/SkPath.cpp:148-152`).
      */

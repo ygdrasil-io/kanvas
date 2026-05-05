@@ -47,6 +47,28 @@ public class SkPathBuilder public constructor() {
 
     public fun setFillType(t: SkPathFillType): SkPathBuilder = apply { fillType = t }
 
+    /**
+     * Read the currently configured fill rule. Mirrors
+     * `SkPathBuilder::fillType` (`include/core/SkPathBuilder.h:80`).
+     */
+    public fun fillType(): SkPathFillType = fillType
+
+    /**
+     * True if the configured [fillType] is `kInverseWinding` or
+     * `kInverseEvenOdd`. Mirrors `SkPathBuilder::isInverseFillType`
+     * (`include/core/SkPathBuilder.h:958`).
+     */
+    public fun isInverseFillType(): Boolean = fillType.isInverse()
+
+    /**
+     * Flip the inverse bit of [fillType] in place; returns `this` for
+     * chaining. Mirrors `SkPathBuilder::toggleInverseFillType`
+     * (`include/core/SkPathBuilder.h:909-912`).
+     */
+    public fun toggleInverseFillType(): SkPathBuilder = apply {
+        fillType = fillType.toggleInverse()
+    }
+
     public fun moveTo(x: SkScalar, y: SkScalar): SkPathBuilder = apply {
         // Mirrors SkPathBuilder.cpp:136-156 — if the previous verb is also a
         // move, replace its point in place. Each contour can carry at most
