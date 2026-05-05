@@ -36,6 +36,22 @@ public data class SkMatrix(
     val ty: SkScalar = 0f,
 ) {
     /**
+     * `ScaleToFit` describes how [Companion.MakeRectToRect] maps one
+     * rect to another. Mirrors Skia's enum
+     * ([SkMatrix.h:129](https://github.com/google/skia/blob/main/include/core/SkMatrix.h#L129)).
+     */
+    public enum class ScaleToFit {
+        /** Stretch independently in x and y to fill `dst`. */
+        kFill_ScaleToFit,
+        /** Uniform scale; align to top-left of `dst`. */
+        kStart_ScaleToFit,
+        /** Uniform scale; centre within `dst`. */
+        kCenter_ScaleToFit,
+        /** Uniform scale; align to bottom-right of `dst`. */
+        kEnd_ScaleToFit,
+    }
+
+    /**
      * Cached type mask, computed once at construction. Bit-OR of the
      * `k*_Mask` constants in the companion object. Mirrors Skia's
      * `SkMatrix::computeTypeMask` ([src/core/SkMatrix.cpp:101](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L101))
@@ -141,6 +157,198 @@ public data class SkMatrix(
     public fun cheapEqualTo(other: SkMatrix): Boolean =
         sx == other.sx && kx == other.kx && tx == other.tx &&
             ky == other.ky && sy == other.sy && ty == other.ty
+
+    // ─── Function-style accessors (Skia naming) ──────────────────────────
+
+    /** Mirrors Skia's `SkMatrix::getScaleX()`. Equivalent to direct field [sx] access. */
+    public fun getScaleX(): SkScalar = sx
+    /** Mirrors Skia's `SkMatrix::getScaleY()`. Equivalent to direct field [sy] access. */
+    public fun getScaleY(): SkScalar = sy
+    /** Mirrors Skia's `SkMatrix::getSkewX()`. */
+    public fun getSkewX(): SkScalar = kx
+    /** Mirrors Skia's `SkMatrix::getSkewY()`. */
+    public fun getSkewY(): SkScalar = ky
+    /** Mirrors Skia's `SkMatrix::getTranslateX()`. */
+    public fun getTranslateX(): SkScalar = tx
+    /** Mirrors Skia's `SkMatrix::getTranslateY()`. */
+    public fun getTranslateY(): SkScalar = ty
+
+    /** Always `0` for this affine port (perspective row is hardcoded `[0, 0, 1]`). */
+    public fun getPerspX(): SkScalar = 0f
+    /** Always `0` for this affine port. */
+    public fun getPerspY(): SkScalar = 0f
+
+    /**
+     * Determinant of the upper 2×2 (linear part). Equivalent to
+     * `sx * sy - kx * ky`. Used by [mapRadius] and the inverse algorithm.
+     */
+    public fun det2x2(): SkScalar = sx * sy - kx * ky
+
+    /**
+     * Full determinant. For an affine matrix this equals [det2x2] (the
+     * perspective row contributes a factor of 1).
+     */
+    public fun det(): SkScalar = det2x2()
+
+    // ─── Array exchange ─────────────────────────────────────────────────
+
+    /**
+     * Fill `buffer[0..8]` with the matrix in Skia's row-major 9-tuple
+     * order: `[sx, kx, tx, ky, sy, ty, persp0, persp1, persp2]`. The
+     * perspective row is hardcoded `[0, 0, 1]` for this affine port.
+     *
+     * Mirrors Skia's `SkMatrix::get9` ([SkMatrix.h](https://github.com/google/skia/blob/main/include/core/SkMatrix.h)).
+     */
+    public fun get9(buffer: FloatArray) {
+        require(buffer.size >= 9) { "get9 buffer must have ≥ 9 elements (got ${buffer.size})" }
+        buffer[0] = sx; buffer[1] = kx; buffer[2] = tx
+        buffer[3] = ky; buffer[4] = sy; buffer[5] = ty
+        buffer[6] = 0f; buffer[7] = 0f; buffer[8] = 1f
+    }
+
+    /**
+     * Fill `buffer[0..5]` with the affine 6-tuple in Skia's COLUMN-major
+     * order: `[scaleX, skewY, skewX, scaleY, transX, transY]`. Note the
+     * subtle reordering vs `get9` — Skia stores affine arrays as
+     * `[a, c, b, d, e, f]` where the matrix is `[[a, b, e], [c, d, f]]`.
+     *
+     * Mirrors Skia's [`SkMatrix::asAffine`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L767).
+     * Always returns `true` here (perspective is out of scope).
+     */
+    public fun asAffine(buffer: FloatArray): Boolean {
+        require(buffer.size >= 6) { "asAffine buffer must have ≥ 6 elements (got ${buffer.size})" }
+        buffer[kAScaleX] = sx
+        buffer[kASkewY] = ky
+        buffer[kASkewX] = kx
+        buffer[kAScaleY] = sy
+        buffer[kATransX] = tx
+        buffer[kATransY] = ty
+        return true
+    }
+
+    // ─── Singular values / scale decomposition ──────────────────────────
+
+    /**
+     * Largest singular value of the upper 2×2. For pure scale, returns
+     * `max(|sx|, |sy|)`; for pure rotation, `1`; for any affine
+     * combination, the longest semi-axis of the unit-circle's image.
+     *
+     * Mirrors Skia's [`SkMatrix::getMaxScale`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1451).
+     */
+    public fun getMaxScale(): SkScalar {
+        val results = FloatArray(1)
+        if (computeScaleFactor(scaleKind = SCALE_KIND_MAX, results)) return results[0]
+        return -1f   // unreachable for affine-only port
+    }
+
+    /**
+     * Smallest singular value of the upper 2×2 — matches Skia's `getMinScale`.
+     * Returns `-1` if the matrix has perspective (never the case here).
+     */
+    public fun getMinScale(): SkScalar {
+        val results = FloatArray(1)
+        if (computeScaleFactor(scaleKind = SCALE_KIND_MIN, results)) return results[0]
+        return -1f
+    }
+
+    /**
+     * Fill `scaleFactors[0..1]` with `[min, max]` singular values.
+     * Returns `false` if the matrix has perspective (always succeeds
+     * here).
+     */
+    public fun getMinMaxScales(scaleFactors: FloatArray): Boolean {
+        require(scaleFactors.size >= 2)
+        return computeScaleFactor(scaleKind = SCALE_KIND_BOTH, scaleFactors)
+    }
+
+    /**
+     * Legacy alias kept to avoid breaking pre-Phase-3 callers. Renamed
+     * to [getMaxScale] for Skia parity.
+     */
+    @Deprecated(
+        "Use getMaxScale() for Skia naming parity",
+        ReplaceWith("getMaxScale()"),
+    )
+    public fun computeMaxScale(): SkScalar = getMaxScale()
+
+    /**
+     * Decompose this matrix into a pure scale and a "remaining" rotation
+     * + skew + translate component, such that
+     * `this = remaining · S(scale.fX, scale.fY)`. Returns `null` when
+     * the decomposition fails (perspective, non-finite, or near-singular
+     * scales — matching Skia's `decomposeScale`).
+     *
+     * Result type differs from Skia's out-parameter form because our
+     * `SkMatrix` is immutable: returns a `Pair<SkPoint, SkMatrix>` of
+     * `(scale, remaining)`.
+     *
+     * Mirrors [`SkMatrix::decomposeScale`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1479).
+     */
+    public fun decomposeScale(): Pair<SkPoint, SkMatrix>? {
+        if (hasPerspective()) return null
+        val sxLen = SkPoint.Length(sx, ky)
+        val syLen = SkPoint.Length(kx, sy)
+        if (!sxLen.isFinite() || !syLen.isFinite() ||
+            SkScalarNearlyZero(sxLen) || SkScalarNearlyZero(syLen)
+        ) return null
+        val remaining = preScale(SkScalarInvert(sxLen), SkScalarInvert(syLen))
+        return Pair(SkPoint(sxLen, syLen), remaining)
+    }
+
+    /**
+     * Internal min/max scale solver. Mirrors Skia's `get_scale_factor`
+     * template ([SkMatrix.cpp:1348](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1348)).
+     * The eigenvalues of `MᵀM` are the squared singular values.
+     */
+    private fun computeScaleFactor(scaleKind: Int, results: FloatArray): Boolean {
+        val mask = getType()
+        if (mask == kIdentity_Mask) {
+            results[0] = 1f
+            if (scaleKind == SCALE_KIND_BOTH) results[1] = 1f
+            return true
+        }
+        if (mask and kAffine_Mask == 0) {
+            // Pure scale (and/or translate): singular values are |sx|, |sy|.
+            val ax = SkScalarAbs(sx)
+            val ay = SkScalarAbs(sy)
+            when (scaleKind) {
+                SCALE_KIND_MIN -> results[0] = minOf(ax, ay)
+                SCALE_KIND_MAX -> results[0] = maxOf(ax, ay)
+                else -> {
+                    results[0] = minOf(ax, ay)
+                    results[1] = maxOf(ax, ay)
+                }
+            }
+            return true
+        }
+        // [a b; b c] = MᵀM (computed in float; Skia uses sdot).
+        val a = sx * sx + ky * ky
+        val b = sx * kx + sy * ky
+        val c = kx * kx + sy * sy
+        val bSqd = b * b
+        val first: Float
+        val second: Float
+        if (bSqd <= SK_ScalarNearlyZero * SK_ScalarNearlyZero) {
+            // Already orthogonal — singular values are sqrt(a), sqrt(c).
+            first = minOf(a, c)
+            second = maxOf(a, c)
+        } else {
+            val aMinusC = a - c
+            val aPlusCDiv2 = (a + c) * 0.5f
+            val x = SkScalarSqrt(aMinusC * aMinusC + 4f * bSqd) * 0.5f
+            first = aPlusCDiv2 - x   // smaller eigenvalue
+            second = aPlusCDiv2 + x  // larger eigenvalue
+        }
+        // Floating-point may drive a near-zero negative; Skia clamps to 0.
+        val sFirst = if (!first.isFinite()) return false else if (first < 0f) 0f else first
+        val sSecond = if (!second.isFinite()) return false else if (second < 0f) 0f else second
+        when (scaleKind) {
+            SCALE_KIND_MIN -> results[0] = SkScalarSqrt(sFirst)
+            SCALE_KIND_MAX -> results[0] = SkScalarSqrt(sSecond)
+            else -> { results[0] = SkScalarSqrt(sFirst); results[1] = SkScalarSqrt(sSecond) }
+        }
+        return true
+    }
 
     /** Apply this matrix to a point. */
     public fun mapXY(x: SkScalar, y: SkScalar): Pair<SkScalar, SkScalar> =
@@ -329,28 +537,6 @@ public data class SkMatrix(
         preConcat(MakeSkew(kx_, ky_, px, py))
 
     /**
-     * Maximum scale factor of the matrix in any direction — the largest
-     * singular value. Used by [SkStroker] to compute its CTM-aware
-     * flattening tolerance. For pure scale, returns `max(|sx|, |sy|)`;
-     * for pure rotation, returns `1`; for any affine combination, returns
-     * the longest semi-axis of the unit-circle's image.
-     *
-     * For a 2×2 linear part `[[a, b], [c, d]]`, `σ_max²` is the largest
-     * eigenvalue of `MᵀM = [[a²+c², ab+cd], [ab+cd, b²+d²]]`:
-     * `σ_max² = (a² + b² + c² + d²)/2 + sqrt(((a² + c² − b² − d²)/2)² + (ab + cd)²)`.
-     * Translation components don't contribute to the scale factor and are
-     * ignored.
-     */
-    public fun computeMaxScale(): SkScalar {
-        val a = sx; val b = kx; val c = ky; val d = sy
-        val sumSq = a * a + b * b + c * c + d * d
-        val diffHalf = ((a * a + c * c) - (b * b + d * d)) * 0.5f
-        val cross = a * b + c * d
-        val sigmaMaxSq = 0.5f * sumSq + SkScalarSqrt(diffHalf * diffHalf + cross * cross)
-        return SkScalarSqrt(sigmaMaxSq)
-    }
-
-    /**
      * Inverse of this affine matrix, or `null` if the linear part is
      * singular or near-singular. Mirrors Skia's `SkMatrix::invert` +
      * `sk_inv_determinant` (src/core/SkMatrix.cpp).
@@ -387,6 +573,91 @@ public data class SkMatrix(
 
     public companion object {
         public val Identity: SkMatrix = SkMatrix()
+
+        // ─── 9-element matrix index constants (Skia row-major) ──────────
+        public const val kMScaleX: Int = 0
+        public const val kMSkewX: Int = 1
+        public const val kMTransX: Int = 2
+        public const val kMSkewY: Int = 3
+        public const val kMScaleY: Int = 4
+        public const val kMTransY: Int = 5
+        public const val kMPersp0: Int = 6
+        public const val kMPersp1: Int = 7
+        public const val kMPersp2: Int = 8
+
+        // ─── 6-element affine index constants (Skia COLUMN-major: a, c, b, d, e, f) ──
+        public const val kAScaleX: Int = 0
+        public const val kASkewY: Int = 1
+        public const val kASkewX: Int = 2
+        public const val kAScaleY: Int = 3
+        public const val kATransX: Int = 4
+        public const val kATransY: Int = 5
+
+        // ─── Internal markers for the min/max scale solver ─────────────
+        internal const val SCALE_KIND_MIN: Int = 0
+        internal const val SCALE_KIND_MAX: Int = 1
+        internal const val SCALE_KIND_BOTH: Int = 2
+
+        /**
+         * Build a matrix that maps `src` onto `dst` per the given
+         * [ScaleToFit] mode. Returns `null` if `src` is empty (matches
+         * Skia's `Rect2Rect`).
+         *
+         * Mirrors Skia's [`SkMatrix::Rect2Rect`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L559).
+         */
+        public fun MakeRectToRect(
+            src: SkRect,
+            dst: SkRect,
+            stf: ScaleToFit = ScaleToFit.kFill_ScaleToFit,
+        ): SkMatrix? {
+            if (src.isEmpty) return null
+            var sx = if (src.width() == 0f) Float.POSITIVE_INFINITY else dst.width() / src.width()
+            var sy = if (src.height() == 0f) Float.POSITIVE_INFINITY else dst.height() / src.height()
+            var xLarger = false
+
+            if (stf != ScaleToFit.kFill_ScaleToFit) {
+                if (sx > sy) { xLarger = true; sx = sy } else { sy = sx }
+            }
+
+            var tx = dst.left - src.left * sx
+            var ty = dst.top - src.top * sy
+            if (stf == ScaleToFit.kCenter_ScaleToFit || stf == ScaleToFit.kEnd_ScaleToFit) {
+                var diff = if (xLarger) dst.width() - src.width() * sy
+                else dst.height() - src.height() * sy
+                if (stf == ScaleToFit.kCenter_ScaleToFit) diff *= 0.5f
+                if (xLarger) tx += diff else ty += diff
+            }
+            return SkMatrix(sx = sx, kx = 0f, tx = tx, ky = 0f, sy = sy, ty = ty)
+        }
+
+        /**
+         * Build a matrix from a 9-element row-major buffer. The
+         * perspective row is asserted to be `[0, 0, 1]`. Mirrors Skia's
+         * [`SkMatrix::set9`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L55).
+         */
+        public fun MakeFrom9(buffer: FloatArray): SkMatrix {
+            require(buffer.size >= 9) { "MakeFrom9 expects ≥ 9 elements (got ${buffer.size})" }
+            require(buffer[6] == 0f && buffer[7] == 0f && buffer[8] == 1f) {
+                "MakeFrom9 perspective row must be [0, 0, 1]; got [${buffer[6]}, ${buffer[7]}, ${buffer[8]}]"
+            }
+            return SkMatrix(
+                sx = buffer[kMScaleX], kx = buffer[kMSkewX], tx = buffer[kMTransX],
+                ky = buffer[kMSkewY], sy = buffer[kMScaleY], ty = buffer[kMTransY],
+            )
+        }
+
+        /**
+         * Build a matrix from a 6-element COLUMN-major affine buffer
+         * `[scaleX, skewY, skewX, scaleY, transX, transY]`. Mirrors
+         * Skia's [`SkMatrix::setAffine`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L61).
+         */
+        public fun MakeFromAffine(buffer: FloatArray): SkMatrix {
+            require(buffer.size >= 6) { "MakeFromAffine expects ≥ 6 elements (got ${buffer.size})" }
+            return SkMatrix(
+                sx = buffer[kAScaleX], kx = buffer[kASkewX], tx = buffer[kATransX],
+                ky = buffer[kASkewY], sy = buffer[kAScaleY], ty = buffer[kATransY],
+            )
+        }
 
         // ─── TypeMask constants (mirror Skia's SkMatrix::TypeMask enum) ──
         // [SkMatrix.h:165](https://github.com/google/skia/blob/main/include/core/SkMatrix.h#L165)

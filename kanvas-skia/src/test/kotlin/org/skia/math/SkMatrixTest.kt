@@ -122,16 +122,16 @@ class SkMatrixTest {
 
     @Test
     fun `computeMaxScale of pure scale returns max abs scale`() {
-        assertNear(2f, SkMatrix.MakeScale(2f, 1f).computeMaxScale())
-        assertNear(3f, SkMatrix.MakeScale(1f, 3f).computeMaxScale())
-        assertNear(2f, SkMatrix.MakeScale(-2f, 1f).computeMaxScale())
-        assertNear(5f, SkMatrix.MakeScale(5f, 5f).computeMaxScale())
+        assertNear(2f, SkMatrix.MakeScale(2f, 1f).getMaxScale())
+        assertNear(3f, SkMatrix.MakeScale(1f, 3f).getMaxScale())
+        assertNear(2f, SkMatrix.MakeScale(-2f, 1f).getMaxScale())
+        assertNear(5f, SkMatrix.MakeScale(5f, 5f).getMaxScale())
     }
 
     @Test
     fun `computeMaxScale of pure rotation is 1`() {
         for (deg in listOf(0f, 30f, 45f, 90f, 180f, -135f)) {
-            assertNear(1f, SkMatrix.MakeRotate(deg).computeMaxScale(),
+            assertNear(1f, SkMatrix.MakeRotate(deg).getMaxScale(),
                 msg = "rotation $deg deg max scale")
         }
     }
@@ -140,19 +140,19 @@ class SkMatrixTest {
     fun `computeMaxScale of rotated scale equals scale`() {
         // Rotate then scale: max scale should still be the scale magnitude.
         val m = SkMatrix.MakeRotate(30f).preScale(4f, 4f)
-        assertNear(4f, m.computeMaxScale())
+        assertNear(4f, m.getMaxScale())
     }
 
     @Test
     fun `computeMaxScale of identity is 1`() {
-        assertNear(1f, SkMatrix.Identity.computeMaxScale())
+        assertNear(1f, SkMatrix.Identity.getMaxScale())
     }
 
     @Test
     fun `computeMaxScale never returns NaN for typical inputs`() {
         // Worst case: extreme aspect ratio + skew.
         val m = SkMatrix(sx = 1000f, kx = 0.5f, tx = 0f, ky = 1f, sy = 0.001f, ty = 0f)
-        val s = m.computeMaxScale()
+        val s = m.getMaxScale()
         assertTrue(!s.isNaN() && s > 0f, "got NaN/non-positive scale=$s")
         // Should be at least max(|sx|, |sy|) = 1000.
         assertTrue(s >= 1000f, "expected ≥ 1000, got $s")
@@ -202,7 +202,7 @@ class SkMatrixTest {
         // Singular values should be {k, 1}. computeMaxScale returns k.
         val k = 7f
         val m = SkMatrix.MakeScale(k, 1f).preRotate(90f)
-        assertNear(k, m.computeMaxScale(), eps = 1e-3f)
+        assertNear(k, m.getMaxScale(), eps = 1e-3f)
     }
 
     @Test
@@ -212,7 +212,7 @@ class SkMatrixTest {
         assertEquals(3f, x)
         assertEquals(-4f, y)
         assertTrue(m.isAxisAligned)
-        assertNear(1f, m.computeMaxScale(), msg = "negative-uniform-flip max scale")
+        assertNear(1f, m.getMaxScale(), msg = "negative-uniform-flip max scale")
     }
 
     @Test
@@ -386,7 +386,7 @@ class SkMatrixTest {
     fun `singular values are positive`() {
         // Random affine matrix should have positive max scale.
         val m = SkMatrix(sx = 1.5f, kx = 0.7f, tx = 100f, ky = -0.3f, sy = 2f, ty = -50f)
-        val s = m.computeMaxScale()
+        val s = m.getMaxScale()
         assertTrue(s > 0f, "max scale must be positive (got $s)")
         // Sanity: should be at least norm of first row.
         val rowNorm = sqrt(1.5f * 1.5f + 0.7f * 0.7f)
@@ -625,5 +625,157 @@ class SkMatrixTest {
         for (deg in floatArrayOf(0f, 30f, 90f, 137f)) {
             assertNear(r, SkMatrix.MakeRotate(deg).mapRadius(r), eps = 1e-4f)
         }
+    }
+
+    // ─── Phase 3: function-style accessors + det ─────────────────────────
+
+    @Test
+    fun `function-style accessors mirror direct field access`() {
+        val m = SkMatrix(sx = 2f, kx = 3f, tx = 5f, ky = 7f, sy = 11f, ty = 13f)
+        assertEquals(2f, m.getScaleX()); assertEquals(11f, m.getScaleY())
+        assertEquals(3f, m.getSkewX()); assertEquals(7f, m.getSkewY())
+        assertEquals(5f, m.getTranslateX()); assertEquals(13f, m.getTranslateY())
+        assertEquals(0f, m.getPerspX()); assertEquals(0f, m.getPerspY())
+    }
+
+    @Test
+    fun `det2x2 and det match algebraic value`() {
+        val m = SkMatrix(sx = 2f, kx = 3f, tx = 100f, ky = 5f, sy = 7f, ty = 200f)
+        // sx*sy - kx*ky = 14 - 15 = -1
+        assertEquals(-1f, m.det2x2()); assertEquals(-1f, m.det())
+    }
+
+    // ─── Phase 3: array exchange ─────────────────────────────────────────
+
+    @Test
+    fun `get9 round-trips through MakeFrom9`() {
+        val m = SkMatrix(sx = 2f, kx = 3f, tx = 5f, ky = 7f, sy = 11f, ty = 13f)
+        val buf = FloatArray(9)
+        m.get9(buf)
+        // Row-major: [sx, kx, tx, ky, sy, ty, 0, 0, 1]
+        assertEquals(floatArrayOf(2f, 3f, 5f, 7f, 11f, 13f, 0f, 0f, 1f).toList(), buf.toList())
+        assertEquals(m, SkMatrix.MakeFrom9(buf))
+    }
+
+    @Test
+    fun `MakeFrom9 rejects non-affine perspective row`() {
+        val buf = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0.5f, 0f, 1f)
+        assertThrows(IllegalArgumentException::class.java) { SkMatrix.MakeFrom9(buf) }
+    }
+
+    @Test
+    fun `asAffine round-trips through MakeFromAffine`() {
+        val m = SkMatrix(sx = 2f, kx = 3f, tx = 5f, ky = 7f, sy = 11f, ty = 13f)
+        val buf = FloatArray(6)
+        assertTrue(m.asAffine(buf))
+        // Skia COLUMN-major: [scaleX, skewY, skewX, scaleY, transX, transY] = [2, 7, 3, 11, 5, 13]
+        assertEquals(floatArrayOf(2f, 7f, 3f, 11f, 5f, 13f).toList(), buf.toList())
+        assertEquals(m, SkMatrix.MakeFromAffine(buf))
+    }
+
+    // ─── Phase 3: MakeRectToRect ─────────────────────────────────────────
+
+    @Test
+    fun `MakeRectToRect kFill stretches independently`() {
+        val src = SkRect.MakeLTRB(0f, 0f, 10f, 5f)
+        val dst = SkRect.MakeLTRB(100f, 200f, 300f, 600f)
+        val m = SkMatrix.MakeRectToRect(src, dst, SkMatrix.ScaleToFit.kFill_ScaleToFit)!!
+        // sx = 200/10 = 20, sy = 400/5 = 80
+        assertEquals(20f, m.getScaleX()); assertEquals(80f, m.getScaleY())
+        // Maps src.TL to dst.TL.
+        val tl = m.mapXY(SkPoint(src.left, src.top))
+        assertNear(dst.left, tl.fX); assertNear(dst.top, tl.fY)
+        // Maps src.BR to dst.BR.
+        val br = m.mapXY(SkPoint(src.right, src.bottom))
+        assertNear(dst.right, br.fX); assertNear(dst.bottom, br.fY)
+    }
+
+    @Test
+    fun `MakeRectToRect kCenter uses uniform scale and centres in dst`() {
+        val src = SkRect.MakeLTRB(0f, 0f, 10f, 5f)
+        val dst = SkRect.MakeLTRB(0f, 0f, 200f, 400f)
+        val m = SkMatrix.MakeRectToRect(src, dst, SkMatrix.ScaleToFit.kCenter_ScaleToFit)!!
+        // Uniform scale = min(200/10, 400/5) = min(20, 80) = 20.
+        assertEquals(20f, m.getScaleX()); assertEquals(20f, m.getScaleY())
+        // The mapped src is 200×100, centred in 200×400 ⇒ ty = 150.
+        assertEquals(0f, m.getTranslateX()); assertEquals(150f, m.getTranslateY())
+    }
+
+    @Test
+    fun `MakeRectToRect returns null for empty src`() {
+        assertEquals(null, SkMatrix.MakeRectToRect(
+            SkRect.MakeEmpty(),
+            SkRect.MakeLTRB(0f, 0f, 10f, 10f),
+            SkMatrix.ScaleToFit.kFill_ScaleToFit,
+        ))
+    }
+
+    // ─── Phase 3: getMaxScale / getMinScale / getMinMaxScales ────────────
+
+    @Test
+    fun `getMaxScale matches legacy computeMaxScale on canonical inputs`() {
+        // Pure scale.
+        assertNear(2f, SkMatrix.MakeScale(2f, 1f).getMaxScale())
+        // Rotation only.
+        assertNear(1f, SkMatrix.MakeRotate(45f).getMaxScale())
+        // Identity.
+        assertNear(1f, SkMatrix.Identity.getMaxScale())
+    }
+
+    @Test
+    fun `getMinScale on pure scale returns smaller absolute axis`() {
+        assertNear(1f, SkMatrix.MakeScale(2f, 1f).getMinScale())
+        assertNear(0.5f, SkMatrix.MakeScale(2f, 0.5f).getMinScale())
+    }
+
+    @Test
+    fun `getMinMaxScales returns sorted min and max`() {
+        val s = FloatArray(2)
+        SkMatrix.MakeScale(3f, 2f).getMinMaxScales(s)
+        assertNear(2f, s[0]); assertNear(3f, s[1])
+    }
+
+    @Test
+    fun `getMinMaxScales for rotated scale returns scale axes`() {
+        val s = FloatArray(2)
+        // 45° rotation of an asymmetric scale.
+        val m = SkMatrix.MakeScale(4f, 1f).preRotate(45f)
+        m.getMinMaxScales(s)
+        assertNear(1f, s[0], eps = 1e-3f); assertNear(4f, s[1], eps = 1e-3f)
+    }
+
+    @Test
+    fun `deprecated computeMaxScale forwards to getMaxScale`() {
+        @Suppress("DEPRECATION")
+        assertEquals(SkMatrix.MakeScale(7f, 3f).getMaxScale(),
+            SkMatrix.MakeScale(7f, 3f).computeMaxScale())
+    }
+
+    // ─── Phase 3: decomposeScale ──────────────────────────────────────
+
+    @Test
+    fun `decomposeScale on pure scale returns scale and identity remaining`() {
+        val (scale, remaining) = SkMatrix.MakeScale(3f, 5f).decomposeScale()!!
+        assertNear(3f, scale.fX); assertNear(5f, scale.fY)
+        // Remaining should be identity (within float tolerance).
+        assertNear(1f, remaining.getScaleX(), eps = 1e-5f)
+        assertNear(1f, remaining.getScaleY(), eps = 1e-5f)
+    }
+
+    @Test
+    fun `decomposeScale on rotated scale extracts magnitudes`() {
+        // Rotate then scale: scale magnitudes survive.
+        val m = SkMatrix.MakeScale(3f, 5f).preRotate(45f)
+        val (scale, _) = m.decomposeScale()!!
+        // Skia's decomposeScale uses Length(sx, ky) and Length(kx, sy).
+        // For our 45°-rotated 3×5: row norms ≈ sqrt(3² · cos²45 + 5² · sin²45) ≈ same per axis.
+        // Use round-trip via remaining as sanity.
+        assertTrue(scale.fX > 0f && scale.fY > 0f)
+    }
+
+    @Test
+    fun `decomposeScale fails on near-singular matrix`() {
+        val m = SkMatrix(sx = 1e-10f, kx = 0f, tx = 0f, ky = 0f, sy = 1e-10f, ty = 0f)
+        assertEquals(null, m.decomposeScale())
     }
 }
