@@ -1,6 +1,10 @@
 # Migration plan — `SkPath` / `SkPathBuilder` parity
 
-Status: **draft 1**, scope = aligner le port Kotlin avec `include/core/SkPath.h`,
+> **Status** : ✅ **closed** (archived). 11 PRs delivered, 0 regression
+> across 75+ GMs, 11 GMs improved or unblocked. See the *Closeout
+> recap* section below.
+
+Original scope = aligner le port Kotlin avec `include/core/SkPath.h`,
 `include/core/SkPathBuilder.h`, `src/core/SkPathBuilder.cpp` de Skia 4.x.
 
 ## Goal
@@ -149,3 +153,44 @@ plusieurs sont désormais débloqués :
 - Phase 3 = additif, pas de risque sauf si un nouvel API
   (`makeFillType`) entre en collision avec un usage existant. Chaque
   sous-tranche est livrable et testable indépendamment.
+
+---
+
+## Closeout recap
+
+| PR | Phase / Slice | Surface | Impact GM |
+|----|---------------|---------|-----------|
+| [#53](https://github.com/ygdrasil-io/kanvas/pull/53) | 1 — correctness | `moveTo` collapse + `ensureMove` après `kClose` | `PathArcToSkbug9077GM` 97.96 → 98.39 (+0.43) |
+| [#58](https://github.com/ygdrasil-io/kanvas/pull/58) | 2 — verb-stream | cubic→conic (`addOval` / `addRRect` / `addArc` / tangent `arcTo`) | 10 GMs améliorés (`ArcOfZorro` +0.17, `CircleSizes` +0.13, `PathInterior` +0.09, `DRRect` / `ArcCircleGap` / `LargeCircle` / `Strokes4` / `Bug593049` / `RoundRect` / `PathArcToSkbug9077`) |
+| [#62](https://github.com/ygdrasil-io/kanvas/pull/62) | 3.1 — introspection | `isLine` / `isRect` / `isOval` / `isRRect` / `isFinite` / `isLastContourClosed` / `countPoints` / `countVerbs` / `getSegmentMasks` / `getLastPt` | 0 |
+| [#63](https://github.com/ygdrasil-io/kanvas/pull/63) | 3.2 — fill type | `makeFillType` / `makeToggleInverseFillType` / `isInverseFillType` ; `SkPathFillType.isEvenOdd` / `isInverse` / `toggleInverse` / `convertToNonInverse` ; builder `fillType()` / `toggleInverseFillType` | 0 |
+| [#67](https://github.com/ygdrasil-io/kanvas/pull/67) | 3.3 — builder ergonomics | ctor `(SkPathFillType)` / `(SkPath)`, `reset` public, `polylineTo`, `addLine`, `incReserve`, `offset` / `transform` (mutate), `setPoint` / `setLastPt`, `getLastPt` / `countPoints` | 0 |
+| [#68](https://github.com/ygdrasil-io/kanvas/pull/68) | 3.4 — `addPath` modes | `addPath(src, dx, dy, mode)`, `addPath(src, matrix, mode)`, `AddPathMode::kAppend` / `kExtend` | 0 |
+| [#72](https://github.com/ygdrasil-io/kanvas/pull/72) | 3.5 — `startIndex` overloads | `addRect` / `addOval` / `addRRect` (+ factories) avec `startIndex` ; `isRRect` étendu au verb-stream `ConicStart` | 0 |
+| [#73](https://github.com/ygdrasil-io/kanvas/pull/73) | 3.6 — geometry helpers | `computeTightBounds` (Bézier roots), `tryMakeTransform` / `tryMakeOffset` / `tryMakeScale`, `makeScale`, `IsLineDegenerate` / `IsQuadDegenerate` / `IsCubicDegenerate` | 0 |
+| [#74](https://github.com/ygdrasil-io/kanvas/pull/74) | 3.7 — SVG-arc | `arcTo(rx, ry, xAxisRotateDeg, ArcSize, sweep, x, y)` + `rArcTo(...)` (port direct W3C endpoint-to-conic) | unblocks `ArcToGM` |
+| [#78](https://github.com/ygdrasil-io/kanvas/pull/78) | 3.8 — `kInverse*` rasterizer | `SkBitmapDevice.scanFillPath` itération étendue à `[clip.top, clip.bottom]` + walker unifié + `drawPath` / `fillPath` early-out ajustés | unblocks `CubicPathGM` |
+| [#79](https://github.com/ygdrasil-io/kanvas/pull/79) | 3.9 — interpolation | `isInterpolatable` / `makeInterpolate` / `interpolate` ; `dumpToString` / `dump` | 0 |
+| [#81](https://github.com/ygdrasil-io/kanvas/pull/81) | GM port | `ArcToGM` (port direct upstream `gm/arcto.cpp`) | **95.80 %** au premier shot |
+| [#83](https://github.com/ygdrasil-io/kanvas/pull/83) | GM port | `CubicPathGM` (port direct upstream `gm/cubicpaths.cpp`) | **87.25 %** au premier shot |
+
+**Total** : 13 PRs (11 Phase + 2 GM) ; +150 tests unitaires ; 0 régression GM cumulée.
+
+### Hors-scope (déférés, opt-in à la demande)
+
+- `isConvex` (algorithme convexité / sign-tracking sur cross products)
+- `contains(x, y)` (point-in-path ray-cast winding/even-odd)
+- `conservativelyContainsRect` (dépend de `isConvex`)
+- `points()` / `verbs()` / `conicWeights()` accesseurs publics côté
+  consommateurs externes
+- `iter()` / `IterRec` API d'itération sucrée
+- `Raw(...)` factory + `addRaw` builder helper
+- `swap` / `reset` sur `SkPath` (port immutable)
+- `setFillType` / `setIsVolatile` mutable sur `SkPath` (port immutable)
+- `isVolatile` / `makeIsVolatile` (pas de cache layer consommateur)
+- variant `arcTo(SkPoint r, ...)` (passage par `SkPoint` plutôt que
+  scalars — ergonomie)
+- "expectIntegers" rounding optimisation dans SVG-arc
+
+Ces items s'ouvriront en slice dédiée si un GM ou un consommateur
+externe les requiert. Aucun n'est bloquant aujourd'hui.
