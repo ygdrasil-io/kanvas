@@ -1,6 +1,14 @@
-# MIGRATION_PLAN_TEXT.md — Side plan : rendu de texte (`SkFont` / `SkTypeface` / `drawString`)
+# MIGRATION_PLAN_TEXT_ARCHIVED.md — Side plan : rendu de texte (`SkFont` / `SkTypeface` / `drawString`)
 
-> **Statut** : draft, document only. Aucune ligne de code Kotlin écrite. À valider avant de démarrer la première slice.
+> ## ⚠️ ARCHIVED — TEXT TRAJECTORY COMPLETE
+>
+> **Statut au 2026-05-05** : trajectoire texte **terminée**. T1..T5 livrés, 4 GMs textuels portés (BigText 98.20%, ColorWheelNative 99.75%, Crbug1073670 72.52%, AnnotatedText 99.95%), toutes les décisions plan closes. Ce document est conservé pour la postérité ; il est **renommé `MIGRATION_PLAN_TEXT_ARCHIVED.md`** dans le repo.
+>
+> **Pour le seul travail texte restant** (TTF parser maison, opportuniste, déclenché par un GM bigtext-family), voir [`MIGRATION_PLAN.md` §"TTF parser maison"](MIGRATION_PLAN.md#ttf-parser-maison--slice-future-texte-fidélité-bit-exact).
+>
+> **Option B (`.inc` ports) est officiellement abandonnée** au profit du TTF parser maison — voir §"Slice T4" ci-dessous pour le détail du pivot.
+
+> **Statut** (legacy header) : draft, document only. Aucune ligne de code Kotlin écrite. À valider avant de démarrer la première slice.
 
 ## Contexte
 
@@ -307,35 +315,30 @@ Embed les **TTF Liberation officiels** (Red Hat, OFL) dans `kanvas-skia/src/main
 
 **Effort estimé** : 1 slice moyen (~150 lignes Kotlin + 12 TTF embarqués + tests).
 
-#### Option B (à terme — reportée)
+#### ~~Option B~~ — abandonnée (porter les `.inc` upstream en Kotlin)
 
-Porter les données vectorielles `test_font_*.inc` (1.2 MB de points/verbs C++) en Kotlin et construire un `SkTestTypeface` custom qui les expose **sans passer par AWT pour le rendu**. La rasterisation reste celle d'AWT (notre scanline-fill 4×4 via `drawPath`), mais les **outlines sont bit-exact upstream**.
+> **DÉCISION** (2026-05-05) : abandonnée au profit de l'**option C / TTF parser maison**. Voir [`MIGRATION_PLAN.md` §"TTF parser maison"](MIGRATION_PLAN.md#ttf-parser-maison--slice-future-texte-fidélité-bit-exact) pour le pivot et la trajectoire actualisée.
+>
+> **Raisons du pivot** :
+> - Option B duplique les ressources (~1.2 MB Kotlin généré **en plus** des TTF Liberation déjà embarqués depuis T4, ~4.3 MB classpath).
+> - Option B introduit une toolchain build (script Python générateur depuis `test_font_*.inc`).
+> - Option B est figée sur les 12 sub-fonts pré-extraites — ré-extraire pour de nouveaux fonts upstream nécessite re-runner le générateur.
+> - L'option C (TTF parser maison) atteint **la même fidélité bit-exact** en lisant directement les TTF Liberation déjà embarqués, sans toolchain externe et avec une généralité maximale (n'importe quel TTF → outlines).
+>
+> Les paragraphes suivants décrivent l'option B telle qu'elle était envisagée. Conservés pour traçabilité historique ; **ne plus considérer comme plan actif**.
 
-**Pourquoi B est la cible long-terme** :
-- ✅ **Bit-exact glyph outlines** vs upstream — élimine le drift de hinting et de scaler context. Le drift résiduel ne provient plus que du rasterizer scanline-fill (mêmes outlines, donc même points de coverage).
-- ✅ Bypass d'AWT pour la résolution outline → indépendance du moteur de fontes JVM.
-- ✅ Permet de viser `tolerance ≤ 4` voire `≤ 1` sur les GMs `bigtext` family.
-- ✅ Dette technique réduite : seule la couche rasterizer reste à aligner pour viser le bit-exact total.
+~~Porter les données vectorielles `test_font_*.inc` (1.2 MB de points/verbs C++) en Kotlin et construire un `SkTestTypeface` custom qui les expose **sans passer par AWT pour le rendu**. La rasterisation reste celle d'AWT (notre scanline-fill 4×4 via `drawPath`), mais les **outlines sont bit-exact upstream**.~~
 
-**Pourquoi pas tout de suite** :
-- 📦 **1.2 MB de données** à porter (~3 × 408 KB de points/verbs/widths/charcodes/metrics par famille).
-- 🔨 Custom typeface = nouveau type de `SkTypeface` (`SkTestTypeface`) qui ne dérive pas d'AwtTypeface — duplique les hooks `makeTextPath` / `measureTextInternal` / `getMetricsInternal`.
-- ⏳ ROI déclenché seulement quand on s'attaque aux `bigtext`-family GMs (post-T5).
+~~**Pourquoi B est la cible long-terme** : bit-exact glyph outlines vs upstream — élimine le drift de hinting et de scaler context. Bypass d'AWT pour la résolution outline. Permet de viser `tolerance ≤ 4` voire `≤ 1` sur les GMs `bigtext` family.~~
 
-**Travail estimé pour B** :
-- Script Python qui parse `test_font_*.inc` → généré Kotlin `data class TestFontData(points: FloatArray, verbs: IntArray, charCodes: IntArray, widths: FloatArray, metrics: SkFontMetrics)`.
-- Embed les 3 fichiers générés (~1.2 MB de Kotlin compilé, sera lazy-loaded au premier accès).
-- `SkTestTypeface : SkTypeface` qui surroute `makeTextPath` en itérant points/verbs directement (skip `Font.createGlyphVector` / `Shape` / `PathIterator`).
-- `LiberationFontMgr` switch entre AwtTypeface (option A) et SkTestTypeface (option B) selon un flag (par défaut B en CI, A en dev local pour rapidité de boot).
+~~**Pourquoi pas tout de suite** : 1.2 MB de données à porter ; custom typeface duplique les hooks `makeTextPath` / `measureTextInternal` / `getMetricsInternal` ; ROI déclenché seulement avec `bigtext`-family GMs.~~
 
-**Effort estimé pour B** : 1 slice élevé (~600 lignes Kotlin générées + ~200 lignes infra + tests). À planifier quand un GM textual-content concrete réclame une fidélité que l'option A ne peut pas atteindre.
+#### Trajectoire option A → option C (post-pivot 2026-05-05)
 
-#### Trajectoire option A → option B
+1. **T4** = option A. Liberation TTF embedded, AWT rasterise. Couvre 80-90 % du cas d'usage GMs (text en annotation). ✅ Livré.
+2. **Tx future** = **option C** (TTF parser maison, pas option B). Lire les TTF Liberation déjà embarqués via un parser Kotlin pur (~800-1200 lignes), construire `SkTtfTypeface : SkTypeface` qui implémente `makeTextPath` en itérant les outlines parsées. Bit-exact upstream, généralisable à n'importe quel TTF. **Aucune API publique ne change** — swap interne dans `LiberationFontMgr`.
 
-1. **T4** = option A. Liberation TTF embedded, AWT rasterise. Couvre 80-90 % du cas d'usage GMs (text en annotation).
-2. **Tx future (post-T5)** = option B. Génération du Kotlin depuis les `.inc`, switch interne sur `LiberationFontMgr`. Active automatiquement pour les GMs `bigtext` family, opt-in ailleurs. **Aucune API publique ne change** — c'est une swap d'implémentation derrière `SkTypeface`. Les utilisateurs (`SkCanvas.drawString`) ne voient rien.
-
-Le bloc d'avertissement KDoc en tête des fichiers AWT mentionne déjà cette possibilité ("Si on remplace AWT par FreeType+JNI ou par un rasterizer custom, **seul ce fichier doit changer**"). Option B = le « rasterizer custom » de cette promesse, juste limité à la couche outline lookup (le rasterizer scanline reste partagé).
+Le bloc d'avertissement KDoc en tête des fichiers AWT mentionne déjà cette possibilité ("Si on remplace AWT par FreeType+JNI ou par un rasterizer custom, **seul ce fichier doit changer**"). Option C = le « rasterizer custom » de cette promesse, scope limité à la résolution d'outlines (le rasterizer scanline reste partagé).
 
 ---
 
@@ -366,7 +369,8 @@ Le bloc d'avertissement KDoc en tête des fichiers AWT mentionne déjà cette po
 | T2 | 0–5 | layout-aware GMs ; encore vide visuellement |
 | T3 | 40–60 | premier vrai rendu glyphe ; gros débloquage |
 | T4 (option A — Liberation TTF) | 40–90 | forme de glyphes ≈ upstream, drift résiduel sur bords AA / hinting |
-| Tx future (option B — `.inc` ports) | 90–130 | bit-exact outlines ; déblocage des `bigtext`-family GMs |
+| ~~Tx future (option B — `.inc` ports)~~ — abandonnée | ~~90–130~~ | ~~bit-exact outlines~~ — voir option C ci-dessous |
+| Tx future (**option C — TTF parser maison**) | 90–130 | bit-exact outlines via parsing direct des TTF Liberation embarqués ; détails dans [`MIGRATION_PLAN.md`](MIGRATION_PLAN.md#ttf-parser-maison--slice-future-texte-fidélité-bit-exact) |
 | T5 | 80–130 | optimisation + finesse AA, scores plats sur déjà-portés |
 
 > Les nombres exacts dépendent du seuil de `tolerance` qu'on accepte pour les GMs où le texte n'est pas le sujet central. Avec `tolerance = 8`, beaucoup plus passent ; à `tolerance = 1`, c'est plus serré.
@@ -396,17 +400,19 @@ Le bloc d'avertissement KDoc en tête des fichiers AWT mentionne déjà cette po
 
 ### R5 — Coût mémoire des polices embarquées
 
-- Liberation TTF (option A — T4) : `LiberationSans-Regular.ttf` ≈ 130 KB, multipliée par 12 (4 styles × 3 familles) ≈ **600-700 KB** classpath. Lazy-loaded → coût RAM résiduel ≪ 100 KB une fois en mémoire. Négligeable.
-- Données `.inc` portées (option B — futur) : ≈ 1.2 MB de Kotlin généré (points/verbs/charcodes/widths/metrics × 3 familles). Lazy-loaded au premier accès via `SkTestTypeface.Make`. Acceptable pour un module de test/référence.
+- Liberation TTF (option A — T4) : `LiberationSans-Regular.ttf` ≈ 130 KB, multipliée par 12 (4 styles × 3 familles). Total **~4.3 MB** classpath réel après mesure. Lazy-loaded par AWT à la demande. Négligeable.
+- ~~Données `.inc` portées (option B abandonnée)~~ : ≈ 1.2 MB de Kotlin généré aurait été ajouté. Le pivot vers **option C (TTF parser maison)** élimine ce coût — on lit les TTF Liberation déjà embarqués (T4), donc **aucune ressource additionnelle** vs T4.
 
-## Trajectoire suggérée
+## Trajectoire suggérée (historique — finale au 2026-05-05)
 
 1. **T1** ✅ livré (PR #48) — débloque la compilation.
 2. **T2** ✅ livré (PR #48, fusionné avec T1) — `measureText` / `getMetrics` AWT-backed.
 3. **T3** ✅ livré (PR #49) — vrai rendu glyphe via `GlyphVector` → `SkPath` → `drawPath`.
-4. **T4 (option A)** = next. Liberation TTF embedded, bypass de la fallback platform-default sans-serif. Effort modéré, gros gain de stabilité inter-OS.
-5. **T5** opportuniste, quand un GM spécifique nécessite glyph cache ou subpixel.
-6. **Tx future (option B)** = porter les `test_font_*.inc` → bit-exact outlines. À planifier quand un GM textual-content concret le réclame (probablement après les premiers ports `bigtext`-family).
+4. **T4 (option A)** ✅ livré (PR #51) — Liberation TTF embedded, `LiberationFontMgr` route `DefaultPortableTypeface` vers Liberation Sans Regular.
+5. **T5** ✅ livré (PR #66) — glyph path cache + per-glyph decomposition + subpixel positioning honour.
+6. **Hygiene closing slice** ✅ livré (PR #61) — `getPath` / `unicharsToGlyphs` / `getWidth` / `setHinting` API + Italic/Bold/Mono/Serif rendering tests + 2 décisions plan formellement closes.
+7. ~~**Tx future (option B)**~~ — abandonnée 2026-05-05.
+8. **Tx future (option C — TTF parser maison)** — déclenché par premier GM `bigtext`-family qui réclame tolerance ≤ 1. Détails dans [`MIGRATION_PLAN.md` §"TTF parser maison"](MIGRATION_PLAN.md#ttf-parser-maison--slice-future-texte-fidélité-bit-exact).
 
 ## Parallélisme avec le `MIGRATION_PLAN.md` principal
 
@@ -421,7 +427,7 @@ Le bloc d'avertissement KDoc en tête des fichiers AWT mentionne déjà cette po
 - [`skia-main/tools/fonts/FontToolUtils.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/FontToolUtils.cpp) — `DefaultPortableTypeface()` → `MakePortableFontMgr` → `legacyMakeTypeface(nullptr)`. **Pivot** de T4.
 - [`skia-main/tools/fonts/TestFontMgr.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/TestFontMgr.cpp) — `MakePortableFontMgr` retourne un `FontMgr` qui sert les typefaces de `TestTypeface::Typefaces()` (PAS de chargement TTF runtime).
 - [`skia-main/tools/fonts/test_font_index.inc`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/test_font_index.inc) — la liste des 12 sub-fonts (Liberation Mono / Sans / Serif × 4 styles), avec `gDefaultFontIndex = 4` → **Liberation Sans Regular** est le `DefaultPortableTypeface`.
-- [`skia-main/tools/fonts/test_font_sans_serif.inc`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/test_font_sans_serif.inc) (408 KB) / `test_font_monospace.inc` / `test_font_serif.inc` — données vectorielles pré-extraites (points/verbs/charcodes/widths/metrics). **Cible du portage option B**.
+- [`skia-main/tools/fonts/test_font_sans_serif.inc`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/test_font_sans_serif.inc) (408 KB) / `test_font_monospace.inc` / `test_font_serif.inc` — données vectorielles pré-extraites (points/verbs/charcodes/widths/metrics). **Cible du portage option B abandonnée**. Ces fichiers ont été générés par `create_test_font.cpp` à partir des TTF Liberation ; l'option C (TTF parser maison) lit directement ces TTF, donc ne dépend pas des `.inc`.
 - [`skia-main/tools/fonts/create_test_font.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/tools/fonts/create_test_font.cpp) — outil qui a généré les `.inc` à partir des TTF Liberation. Utile pour comprendre le format des arrays portés.
 - **TTF Liberation officiels** (à télécharger pour T4 option A) : [github.com/liberationfonts/liberation-fonts/releases](https://github.com/liberationfonts/liberation-fonts/releases) — licence OFL, redistribution OK.
 - Sample upstream à étudier : [`gm/aaxfermodes.cpp`](file:///Users/chaos/workspace/kanvas-forge/skia-main/gm/aaxfermodes.cpp) — utilise typique `SkFont.setTypeface` + `drawString`.
@@ -432,6 +438,6 @@ Le bloc d'avertissement KDoc en tête des fichiers AWT mentionne déjà cette po
 - [x] **Façade Skia obligatoire** : tout le code public utilise les noms et signatures Skia. Le code AWT vit isolé sous `org.skia.foundation.awt.*` avec bloc d'avertissement en tête. (validé)
 - [x] **Slice T1 + T2 fusionnés** dans PR #48 (validé par utilisateur, livré).
 - [x] **Polices portables = T4 option A** (Liberation TTF embedded). Skia DM utilise Liberation Sans/Mono/Serif (pas Roboto/DejaVu — investigation upstream après T3 a corrigé l'hypothèse initiale). Validé.
-- [x] **Option B reportée** : porter les `test_font_*.inc` pour bit-exact outlines, post-T5, opportuniste. Validé.
+- [x] ~~**Option B reportée**~~ : abandonnée 2026-05-05 au profit de l'**option C / TTF parser maison** (lire les TTF Liberation déjà embarqués via parser pur Kotlin, ~800-1200 lignes). Option C documentée dans [`MIGRATION_PLAN.md`](MIGRATION_PLAN.md#ttf-parser-maison--slice-future-texte-fidélité-bit-exact). Aucun GM ne réclame option C aujourd'hui ; déclencher dès qu'un GM `bigtext`-family demande tolerance ≤ 1.
 - [x] **`tolerance` par défaut sur GMs textuels = 8**. Confirmé empiriquement sur 4 GMs portés (`BigTextGM` 98.20%, `ColorWheelNativeGM` 99.75%, `Crbug1073670GM` 72.52%, `AnnotatedTextGM` 99.90%). Formalisé en `TestUtils.TEXTUAL_GM_TOLERANCE = 8` (slice de bouclage).
 - [x] **`kSubpixelAntiAlias` = downgrade à `kAntiAlias`** : path-fill rasteriser fait coverage AA seulement, jamais LCD subpixel. Comportement *de facto* depuis T3, formalisé par un commentaire explicite dans `AwtTypeface.makeTextPath` (slice de bouclage). Subpixel correct reste un follow-up T5+.
