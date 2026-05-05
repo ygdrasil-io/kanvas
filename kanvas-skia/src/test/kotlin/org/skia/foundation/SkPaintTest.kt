@@ -241,4 +241,26 @@ class SkPaintTest {
         // Byte alpha goes through 77/255 -> 0.30196f, NOT 0.3f exact.
         assertEquals(77f / 255f, p.alphaf)
     }
+
+    // ─── Slice 2.4: silent-reject of negative stroke width / miter ─────
+
+    @Test
+    fun `strokeWidth silently rejects negative values`() {
+        val p = SkPaint()
+        p.strokeWidth = 5f
+        p.strokeWidth = -1f             // Skia's setStrokeWidth ignores < 0
+        assertEquals(5f, p.strokeWidth) // previous value retained
+        p.strokeWidth = 0f              // 0 (hairline) is accepted
+        assertEquals(0f, p.strokeWidth)
+    }
+
+    @Test
+    fun `strokeMiter silently rejects negative values`() {
+        val p = SkPaint()
+        p.strokeMiter = 8f
+        p.strokeMiter = -2f             // Skia's setStrokeMiter ignores < 0
+        assertEquals(8f, p.strokeMiter) // previous value retained
+        p.strokeMiter = 0f              // 0 accepted (Skia treats < 1 as bevel; < 0 is the only rejection)
+        assertEquals(0f, p.strokeMiter)
+    }
 }
