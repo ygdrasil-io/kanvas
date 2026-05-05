@@ -565,14 +565,33 @@ public data class SkMatrix(
     /** Post-concat: `this = other · this`. Mirrors `SkMatrix::postConcat`. */
     public fun postConcat(other: SkMatrix): SkMatrix = concat(other, this)
 
-    /** `M.preTranslate(dx, dy)` ≡ `M · Translate(dx, dy)`. */
-    public fun preTranslate(dx: SkScalar, dy: SkScalar): SkMatrix =
-        // Closed form: keeps numerical precision (no accumulating Identity multiplies).
-        copy(tx = tx + sx * dx + kx * dy, ty = ty + ky * dx + sy * dy)
+    /**
+     * `M.preTranslate(dx, dy)` ≡ `M · Translate(dx, dy)`. Affine fast
+     * path; perspective dispatches through [preConcat] because
+     * `M · T` also updates the `persp2` row entry. Mirrors Skia's
+     * [`SkMatrix::preTranslate`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L267)
+     * dispatch (mask <= kTranslate / mask & kPerspective / else).
+     */
+    public fun preTranslate(dx: SkScalar, dy: SkScalar): SkMatrix {
+        if (hasPerspective()) return preConcat(MakeTrans(dx, dy))
+        // Closed form for affine: keeps numerical precision (no accumulating
+        // Identity multiplies).
+        return copy(tx = tx + sx * dx + kx * dy, ty = ty + ky * dx + sy * dy)
+    }
 
-    /** `M.preScale(sx_, sy_)` ≡ `M · Scale(sx_, sy_)`. */
+    /**
+     * `M.preScale(sx_, sy_)` ≡ `M · Scale(sx_, sy_)`. Closed-form per-cell
+     * multiply (mirrors Skia's `preScale` ([SkMatrix.cpp:329](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L329))).
+     * The perspective-row updates (`persp0 *= sx_`, `persp1 *= sy_`) are
+     * unconditional — they collapse to no-op on affine matrices (`persp0
+     * = persp1 = 0`) but propagate correctly through perspective matrices.
+     */
     public fun preScale(sx_: SkScalar, sy_: SkScalar): SkMatrix =
-        copy(sx = sx * sx_, kx = kx * sy_, ky = ky * sx_, sy = sy * sy_)
+        copy(
+            sx = sx * sx_, kx = kx * sy_,
+            ky = ky * sx_, sy = sy * sy_,
+            persp0 = persp0 * sx_, persp1 = persp1 * sy_,
+        )
 
     /**
      * `M.preScale(sx_, sy_, px, py)` ≡ `M · S(sx_, sy_, px, py)` where the
@@ -602,6 +621,70 @@ public data class SkMatrix(
      */
     public fun preSkew(kx_: SkScalar, ky_: SkScalar, px: SkScalar, py: SkScalar): SkMatrix =
         preConcat(MakeSkew(kx_, ky_, px, py))
+
+    // ─── post* convenience family (sugar over postConcat) ───────────────
+
+    /**
+     * `M.postTranslate(dx, dy)` ≡ `T(dx, dy) · M`. Affine fast path; for
+     * perspective matrices the closed form would also need to update the
+     * scale columns (since `T · M = [[sx, kx, tx], [ky, sy, ty], [persp0,
+     * persp1, persp2]] + [[dx*persp0, dx*persp1, dx*persp2], ...]`), so
+     * we delegate to [postConcat] there. Mirrors Skia's
+     * [`SkMatrix::postTranslate`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L285).
+     */
+    public fun postTranslate(dx: SkScalar, dy: SkScalar): SkMatrix {
+        if (hasPerspective()) return postConcat(MakeTrans(dx, dy))
+        return copy(tx = tx + dx, ty = ty + dy)
+    }
+
+    /**
+     * `M.postScale(sx_, sy_)` ≡ `S(sx_, sy_) · M`. Closed-form per-cell
+     * multiply (the scale row scales row 0 of M; the y row scales row 1).
+     * Persp row stays untouched. Affine-correct AND perspective-correct
+     * unconditionally. Mirrors Skia's [`SkMatrix::postScale`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L373).
+     */
+    public fun postScale(sx_: SkScalar, sy_: SkScalar): SkMatrix {
+        if (sx_ == 1f && sy_ == 1f) return this
+        return copy(
+            sx = sx * sx_, kx = kx * sx_, tx = tx * sx_,
+            ky = ky * sy_, sy = sy * sy_, ty = ty * sy_,
+        )
+    }
+
+    /**
+     * `M.postScale(sx_, sy_, px, py)` ≡ `S(sx_, sy_, px, py) · M`,
+     * keeping `(px, py)` in *device space* fixed. Mirrors Skia's
+     * [`SkMatrix::postScale`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L364).
+     */
+    public fun postScale(sx_: SkScalar, sy_: SkScalar, px: SkScalar, py: SkScalar): SkMatrix =
+        if (sx_ == 1f && sy_ == 1f) this else postConcat(MakeScale(sx_, sy_, px, py))
+
+    /** `M.postRotate(deg)` ≡ `R(deg) · M`. */
+    public fun postRotate(deg: SkScalar): SkMatrix = postConcat(MakeRotate(deg))
+
+    /**
+     * `M.postRotate(deg, px, py)` ≡ `R(deg, px, py) · M`, where the
+     * rotation is anchored at `(px, py)` in *device space*.
+     */
+    public fun postRotate(deg: SkScalar, px: SkScalar, py: SkScalar): SkMatrix =
+        postConcat(MakeRotate(deg, px, py))
+
+    /** `M.postSkew(kx_, ky_)` ≡ `Skew(kx_, ky_) · M`. */
+    public fun postSkew(kx_: SkScalar, ky_: SkScalar): SkMatrix =
+        postConcat(MakeSkew(kx_, ky_))
+
+    /**
+     * `M.postSkew(kx_, ky_, px, py)` ≡ `Skew(kx_, ky_, px, py) · M`.
+     */
+    public fun postSkew(kx_: SkScalar, ky_: SkScalar, px: SkScalar, py: SkScalar): SkMatrix =
+        postConcat(MakeSkew(kx_, ky_, px, py))
+
+    /**
+     * Kotlin-idiomatic matrix multiply: `a * b ≡ SkMatrix.concat(a, b)`.
+     * A point `p` is mapped first by `b`, then by `a`. Mirrors Skia's
+     * `operator*` on the C++ class.
+     */
+    public operator fun times(other: SkMatrix): SkMatrix = concat(this, other)
 
     /**
      * Inverse of this affine matrix, or `null` if the linear part is
@@ -673,6 +756,12 @@ public data class SkMatrix(
 
     public companion object {
         public val Identity: SkMatrix = SkMatrix()
+
+        /**
+         * Function-form alias for [Identity] matching Skia's static
+         * accessor `SkMatrix::I()` ([SkMatrix.cpp:1464](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1464)).
+         */
+        public fun I(): SkMatrix = Identity
 
         // ─── 9-element matrix index constants (Skia row-major) ──────────
         public const val kMScaleX: Int = 0
@@ -834,6 +923,13 @@ public data class SkMatrix(
 
         public fun MakeTrans(dx: SkScalar, dy: SkScalar): SkMatrix =
             SkMatrix(tx = dx, ty = dy)
+
+        /**
+         * Vector-form `MakeTrans` overload — Skia C++ exposes both
+         * `Translate(SkScalar dx, SkScalar dy)` and `Translate(SkVector v)`
+         * for hand-port readability.
+         */
+        public fun MakeTrans(v: SkVector): SkMatrix = MakeTrans(v.fX, v.fY)
 
         public fun MakeScale(sx: SkScalar, sy: SkScalar): SkMatrix =
             SkMatrix(sx = sx, sy = sy)

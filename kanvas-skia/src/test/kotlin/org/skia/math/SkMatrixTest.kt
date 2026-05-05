@@ -991,4 +991,148 @@ class SkMatrixTest {
         val dst = Array(5) { SkPoint() }
         assertEquals(null, SkMatrix.MakePolyToPoly(src, dst))
     }
+
+    // ─── Phase 5: post* family ──────────────────────────────────────────
+
+    @Test
+    fun `postTranslate affine adds dx dy directly`() {
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val post = m.postTranslate(10f, 20f)
+        // For affine, postTranslate just bumps tx/ty.
+        assertEquals(m.tx + 10f, post.tx); assertEquals(m.ty + 20f, post.ty)
+        // Other fields unchanged.
+        assertEquals(m.sx, post.sx); assertEquals(m.kx, post.kx)
+        assertEquals(m.ky, post.ky); assertEquals(m.sy, post.sy)
+    }
+
+    @Test
+    fun `postTranslate matches T concat M for any matrix`() {
+        // Identity check: postTranslate(a, b) = T(a, b) · M.
+        val m = SkMatrix.MakeRotate(30f).preScale(2f, 3f).preTranslate(5f, 7f)
+        val viaPost = m.postTranslate(11f, 13f)
+        val viaConcat = SkMatrix.concat(SkMatrix.MakeTrans(11f, 13f), m)
+        for ((a, b) in listOf(viaPost.sx to viaConcat.sx, viaPost.kx to viaConcat.kx,
+            viaPost.tx to viaConcat.tx, viaPost.ky to viaConcat.ky,
+            viaPost.sy to viaConcat.sy, viaPost.ty to viaConcat.ty)) {
+            assertNear(b, a, eps = 1e-4f)
+        }
+    }
+
+    @Test
+    fun `postTranslate perspective uses postConcat`() {
+        // For perspective M, postTranslate must dispatch through postConcat
+        // because T · M also affects the persp row terms in column 2.
+        val m = SkMatrix.MakePerspective(0.5f, 0f).preTranslate(2f, 3f)
+        val viaPost = m.postTranslate(11f, 13f)
+        val viaConcat = SkMatrix.concat(SkMatrix.MakeTrans(11f, 13f), m)
+        assertNear(viaConcat.tx, viaPost.tx); assertNear(viaConcat.ty, viaPost.ty)
+        assertNear(viaConcat.persp2, viaPost.persp2, eps = 1e-4f)
+    }
+
+    @Test
+    fun `postScale closed form matches postConcat`() {
+        val m = SkMatrix.MakeRotate(45f).preTranslate(5f, 7f)
+        val viaPost = m.postScale(2f, 3f)
+        val viaConcat = SkMatrix.concat(SkMatrix.MakeScale(2f, 3f), m)
+        assertNear(viaConcat.sx, viaPost.sx, eps = 1e-4f)
+        assertNear(viaConcat.kx, viaPost.kx, eps = 1e-4f)
+        assertNear(viaConcat.tx, viaPost.tx, eps = 1e-4f)
+        assertNear(viaConcat.ky, viaPost.ky, eps = 1e-4f)
+        assertNear(viaConcat.sy, viaPost.sy, eps = 1e-4f)
+        assertNear(viaConcat.ty, viaPost.ty, eps = 1e-4f)
+    }
+
+    @Test
+    fun `postScale unity short-circuit returns same matrix`() {
+        val m = SkMatrix.MakeScale(2f, 3f)
+        // (sx_, sy_) == (1, 1) ⇒ short-circuit.
+        assertEquals(m, m.postScale(1f, 1f))
+    }
+
+    @Test
+    fun `postScale pivoted fixes pivot in device space`() {
+        val m = SkMatrix.MakeTrans(0f, 0f)
+        val post = m.postScale(2f, 3f, 5f, 7f)
+        // Pivot (5, 7) in device space stays at (5, 7).
+        val (x, y) = post.mapXY(5f, 7f)
+        assertNear(5f, x); assertNear(7f, y)
+    }
+
+    @Test
+    fun `postRotate matches R concat M`() {
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val viaPost = m.postRotate(45f)
+        val viaConcat = SkMatrix.concat(SkMatrix.MakeRotate(45f), m)
+        assertNear(viaConcat.sx, viaPost.sx, eps = 1e-4f)
+        assertNear(viaConcat.ty, viaPost.ty, eps = 1e-4f)
+    }
+
+    @Test
+    fun `postRotate pivoted anchors at pivot`() {
+        val m = SkMatrix.Identity
+        val post = m.postRotate(90f, 10f, 20f)
+        // Pivot stays fixed.
+        val (x, y) = post.mapXY(10f, 20f)
+        assertNear(10f, x); assertNear(20f, y)
+    }
+
+    @Test
+    fun `postSkew matches Skew concat M`() {
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val viaPost = m.postSkew(0.5f, 0f)
+        val viaConcat = SkMatrix.concat(SkMatrix.MakeSkew(0.5f, 0f), m)
+        assertNear(viaConcat.sx, viaPost.sx, eps = 1e-4f)
+        assertNear(viaConcat.ty, viaPost.ty, eps = 1e-4f)
+    }
+
+    // ─── Phase 5: perspective-correct pre* ──────────────────────────────
+
+    @Test
+    fun `preTranslate perspective dispatches through preConcat`() {
+        val m = SkMatrix.MakePerspective(0.5f, 0f)
+        val viaPre = m.preTranslate(3f, 5f)
+        val viaConcat = SkMatrix.concat(m, SkMatrix.MakeTrans(3f, 5f))
+        // Includes the persp2 update which the affine fast path would miss.
+        assertNear(viaConcat.tx, viaPre.tx, eps = 1e-4f)
+        assertNear(viaConcat.ty, viaPre.ty, eps = 1e-4f)
+        assertNear(viaConcat.persp2, viaPre.persp2, eps = 1e-4f)
+    }
+
+    @Test
+    fun `preScale perspective propagates to persp0 and persp1`() {
+        // M · S: scales the perspective row's x and y components by sx_ and sy_.
+        val m = SkMatrix.MakePerspective(0.5f, 0.25f)
+        val pre = m.preScale(2f, 3f)
+        assertNear(0.5f * 2f, pre.persp0); assertNear(0.25f * 3f, pre.persp1)
+        // persp2 unchanged on preScale (column 2 of M times scale's column 2 = unchanged).
+        assertEquals(m.persp2, pre.persp2)
+    }
+
+    @Test
+    fun `preScale on affine leaves persp row at (0, 0, 1)`() {
+        val m = SkMatrix.MakeRotate(30f).preTranslate(5f, 7f)
+        val pre = m.preScale(2f, 3f)
+        assertEquals(0f, pre.persp0); assertEquals(0f, pre.persp1); assertEquals(1f, pre.persp2)
+    }
+
+    // ─── Phase 5: cosmetic aliases ──────────────────────────────────────
+
+    @Test
+    fun `I returns Identity`() {
+        assertEquals(SkMatrix.Identity, SkMatrix.I())
+    }
+
+    @Test
+    fun `MakeTrans SkVector overload matches dx dy form`() {
+        val m1 = SkMatrix.MakeTrans(SkVector(5f, 7f))
+        val m2 = SkMatrix.MakeTrans(5f, 7f)
+        assertEquals(m1, m2)
+    }
+
+    @Test
+    fun `operator times equals concat`() {
+        val a = SkMatrix.MakeRotate(30f)
+        val b = SkMatrix.MakeScale(2f, 3f)
+        assertEquals(SkMatrix.concat(a, b), a * b)
+    }
 }
