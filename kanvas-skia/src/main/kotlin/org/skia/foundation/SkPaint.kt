@@ -39,11 +39,27 @@ public class SkPaint() {
     private var fColor4f: SkColor4f = SkColor4f(0f, 0f, 0f, 1f)
 
     public var style: Style = Style.kFill_Style
+
+    /**
+     * Stroke width in pixels. `0f` means **hairline** (always exactly one
+     * device pixel wide). Mirrors Skia's `setStrokeWidth(SkScalar)`
+     * (`src/core/SkPaint.cpp`) — negative values are **silently rejected**
+     * (the field keeps its previous value). Slice 2.4.
+     */
     public var strokeWidth: SkScalar = 0f
+        set(value) { if (value >= 0f) field = value }
+
     public var strokeCap: Cap = Cap.kButt_Cap
     public var strokeJoin: Join = Join.kMiter_Join
-    /** Mirrors Skia's `SkPaint::kDefault_MiterLimit = 4`. */
+
+    /**
+     * Miter limit. Mirrors Skia's `SkPaint::kDefault_MiterLimit = 4` and
+     * `setStrokeMiter(SkScalar)` semantics — negative values are
+     * **silently rejected** (the field keeps its previous value). Slice 2.4.
+     */
     public var strokeMiter: SkScalar = 4f
+        set(value) { if (value >= 0f) field = value }
+
     public var isAntiAlias: Boolean = false
 
     /** Iso-aligned — Skia's `setDither`. Does not currently affect rendering. */
