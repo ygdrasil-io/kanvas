@@ -70,8 +70,8 @@ public class BigTextGM : GM() {
 
         val w = size().width
         val h = size().height
-        val posX = w / 2f - r.centerX
-        val posY = h / 2f - r.centerY
+        val posX = w / 2f - r.centerX()
+        val posY = h / 2f - r.centerY()
 
         paint.color = SK_ColorRED
         c.drawSimpleText("/", 1, SkTextEncoding.kUTF8, posX, posY, font, paint)

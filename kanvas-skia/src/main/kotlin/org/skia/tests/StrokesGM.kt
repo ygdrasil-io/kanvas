@@ -53,7 +53,7 @@ public class StrokesGM : GM() {
                 var r = rndRect(paint, rand)
                 c.drawOval(r, paint)
                 r = rndRect(paint, rand)
-                c.drawRoundRect(r, r.width / 4f, r.height / 4f, paint)
+                c.drawRoundRect(r, r.width() / 4f, r.height() / 4f, paint)
                 rndRect(paint, rand)   // discarded — advances rand state
             }
 

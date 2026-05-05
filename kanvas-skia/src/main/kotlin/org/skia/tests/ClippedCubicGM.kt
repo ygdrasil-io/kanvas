@@ -43,11 +43,11 @@ public class ClippedCubicGM : GM() {
                 c.drawPath(path, paint)
                 c.restore()
 
-                c.translate(bounds.width, 0f)
+                c.translate(bounds.width(), 0f)
                 dx += 1f
             }
             c.restore()
-            c.translate(0f, bounds.height)
+            c.translate(0f, bounds.height())
             dy += 1f
         }
     }
