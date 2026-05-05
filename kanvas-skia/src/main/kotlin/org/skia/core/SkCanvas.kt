@@ -88,6 +88,24 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         return stack.size - 2
     }
 
+    /**
+     * Mirrors Skia's `SkCanvas::getSaveCount()` — returns the depth of the
+     * save stack, where 1 = the implicit root state (empty CTM, full clip).
+     * Each [save] / [saveLayer] increments the count by 1; each [restore]
+     * decrements it (down to 1 minimum).
+     */
+    public fun getSaveCount(): Int = stack.size
+
+    /**
+     * Mirrors Skia's `SkCanvas::restoreToCount(int)`. Pops save-stack frames
+     * until [getSaveCount] == [saveCount]. A value `<= 1` collapses every
+     * pending [save] / [saveLayer] (root state is preserved).
+     */
+    public fun restoreToCount(saveCount: Int) {
+        val target = saveCount.coerceAtLeast(1)
+        while (stack.size > target) restore()
+    }
+
     public fun restore() {
         if (stack.size <= 1) return
         val popped = stack.removeLast()
@@ -347,43 +365,30 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
-     * Mirrors Skia's `SkCanvas::drawColor(SkColor)` (`SkCanvas.h:1247`).
+     * Mirrors Skia's `SkCanvas::drawColor(SkColor, SkBlendMode)`
+     * (`SkCanvas.h:1235`). Fills the active clip with [color] under [mode]
+     * — defaults to `kSrcOver` like upstream. `clear` is the `kSrc` flavour
+     * (see [clear]).
      *
-     * Upstream is **clip-aware** — it routes through `drawPaint(SkPaint
-     * with blendMode=kSrc)`, which the device fills only inside the
-     * active clip. We follow the same path so that
-     * `clipRect(...) ; drawColor(grey)` paints only the clipped region
-     * (and not the whole bitmap).
-     *
-     * The fast path through `bitmap.eraseColor` (clip-ignoring) was the
-     * pre-AnnotatedTextGM behaviour — it worked for every prior GM
-     * because they either didn't narrow the clip first, or used
-     * `eraseColor` directly via the harness `runGmTest`. It produced an
-     * unmasked fill on the first GM that combined `clipRect` and
-     * `drawColor` (annotated_text).
+     * Whole-clip + `kSrc` is fast-pathed through `bitmap.eraseColor` (no
+     * per-pixel scan); every other case routes through `drawPaint`.
      */
-    public fun drawColor(color: SkColor) {
+    public fun drawColor(color: SkColor, mode: SkBlendMode = SkBlendMode.kSrcOver) {
         val s = top
-        if (s.clip == s.device.deviceClipBounds()) {
-            // Whole-device clip — keep the eraseColor fast path. Avoids
-            // a per-pixel scan over the device for the common case
-            // (every pre-T4 GM, plus the harness's pre-onDraw fill).
+        if (mode == SkBlendMode.kSrc && s.clip == s.device.deviceClipBounds()) {
             bitmap.eraseColor(color)
             return
         }
-        // Narrowed clip — go through drawPaint with kSrc so the clip is
-        // honoured. Mirrors upstream SkCanvas::clear/drawColor.
-        val paint = SkPaint(color).apply { blendMode = SkBlendMode.kSrc }
+        val paint = SkPaint(color).apply { blendMode = mode }
         s.device.drawPaint(s.matrix, s.clip, paint)
     }
 
     /**
      * Mirrors Skia's `SkCanvas::clear(SkColor)` (`SkCanvas.h:1263`) —
-     * a thin wrapper around [drawColor] that exists for source-level
-     * compatibility with upstream code (so direct ports of `.cpp` GMs
-     * can keep their `canvas->clear(...)` calls verbatim).
+     * `drawColor` with [SkBlendMode.kSrc]. Wipes the clip to [color]
+     * regardless of the existing destination.
      */
-    public fun clear(color: SkColor): Unit = drawColor(color)
+    public fun clear(color: SkColor): Unit = drawColor(color, SkBlendMode.kSrc)
 
     /**
      * Mirrors Skia's `SkCanvas::drawPaint`. Fills the current clip with

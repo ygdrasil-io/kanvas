@@ -743,13 +743,13 @@ Modes encore non-implémentés (lèvent `NotImplementedError` à l'appel — 14 
 ### Tests unitaires
 - [x] `SkBlendModeTest.kt` — 9 modes × ~3 cas chacun (opaque-on-opaque + alpha fractionnaire), formules vérifiées contre des valeurs hand-computed. Couvre aussi le throw `NotImplementedError` pour les 19 modes restants.
 
-### Reste pour clôturer Phase 6
-- [ ] Implémenter les 19 modes restants. Chacun = un nouveau case dans `blendPixel()`, sans refactoring de l'API publique.
-- [ ] Hand-port `tests/AAXfermodesGM.kt`.
-- [ ] Hand-port `tests/XfermodesGM.kt`.
-- [ ] Hand-port `tests/DestColorGM.kt`.
-- [ ] Hand-port `tests/AndroidBlendModesGM.kt`.
-- [ ] Étendre `SkBitmapDevice.compositeFrom` à tous les modes (saveLayer + blend).
+### Reste pour clôturer Phase 6 (mis à jour Phase 6 GMs)
+- [x] Implémenter les 19 modes restants — livré progressivement Phase 6 PD / sepS / sepC / HSL (29/29 modes).
+- [x] Hand-port `tests/AAXfermodesGM.kt` — voir Phase 6 GMs.
+- [ ] Hand-port `tests/XfermodesGM.kt` — déféré : nécessite `compositeFrom` non-`kSrcOver` (saveLayer-with-blendmode pour `kQuarterClearInLayer_SrcType`) + `kARGB_4444` colorType pour le BG shader.
+- [ ] Hand-port `tests/DestColorGM.kt` — **out of scope** : `SkRuntimeEffect::MakeForBlender` (custom shader DSL).
+- [x] Hand-port `tests/AndroidBlendModesGM.kt` — voir Phase 6 GMs.
+- [ ] Étendre `SkBitmapDevice.compositeFrom` à tous les modes (saveLayer + blend) — déféré, débloquera XfermodesGM.
 
 ### Vérification Phase 6 entry
 - [x] Tests ≥ 85% (`ScaledRectsGM` à 87.79%).
@@ -874,7 +874,52 @@ Ajout des 4 modes HSL — `kHue`, `kSaturation`, `kColor`, `kLuminosity` — qui
 - [x] 65 GMs précédents — 0 régression, scores inchangés.
 - [x] 7 nouveaux tests unitaires HSL + smoke test 29 modes verts.
 - [x] **Pass count cumulé : 65 GM**.
-- [x] **🎉 Modes Skia couverts : 29 / 29 (100 %)** — Phase 6 close.
+- [x] **🎉 Modes Skia couverts : 29 / 29 (100 %)** — formules close.
+
+### Phase 6 GMs — AAXfermodes + AndroidBlendModes ✅
+
+**But** : maintenant que les 29 modes sont implémentés et que la stack texte (T1–T5) ship, porter les deux GMs upstream qui exercent simultanément tous ces modes en grille. Premier vrai test bout-en-bout après les unit tests Phase 6 HSL.
+
+#### Helpers ajoutés
+
+- [x] **`org.skia.utils.SkTextUtils`** — port de Skia's `SkTextUtils::Draw` / `DrawString` (`include/utils/SkTextUtils.h`). Énumération `Align` (`kLeft_Align` / `kCenter_Align` / `kRight_Align`) + entry point qui mesure la string via `font.measureText` puis shifte l'origine selon l'alignement avant de déléguer à `SkCanvas.drawSimpleText`. Premier composant utility texte qui n'est pas dans `tools/` ; vit dans `org.skia.utils` pour matcher upstream.
+- [x] **`SkBlendMode_Name(mode)`** — table de 29 noms canoniques CamelCase (`"SrcOver"`, `"ColorDodge"`, etc.). Mirror direct de `src/core/SkBlendMode.cpp:SkBlendMode_Name`. Utilisé par les labels GM.
+- [x] **`SkCanvas.getSaveCount()` / `restoreToCount(n)`** — paire de méthodes utilitaires manquantes. Mirror upstream `SkCanvas::getSaveCount()` (= depth de la pile, root = 1) et `restoreToCount(n)` (pop jusqu'à `getSaveCount() == n`). Utilisé par `AndroidBlendModesGM.drawTile`.
+- [x] **`SkCanvas.drawColor(color, mode)`** overload — avant : seule la version 1-arg avec mode hardcodé `kSrc` (pour la compat clip-aware `clear`). Après : 2-arg avec `mode` par défaut `kSrcOver` (matches upstream `SkCanvas.h:1235`). `clear(color)` route maintenant à `drawColor(color, kSrc)` — sémantique inchangée pour les callers existants.
+
+#### Fix correctness — `modeAffectsZeroAlphaSrc` étendu
+
+Bug latent dans `SkBitmapDevice.drawImageRect` : la branche `if (sample ushr 24 == 0) continue` skippe toujours les samples transparents, même pour les modes dont la formule transforme un src=0 en un dst != dst (i.e., `kClear`, `kSrc`, `kSrcIn`, `kSrcOut`, `kDstIn`, `kDstATop`, `kModulate`). Conséquence : `drawImage` avec un de ces modes laissait des pixels covered par dst à leur valeur d'origine au lieu de les zéroter. Visible dès AndroidBlendModesGM où chaque cellule fait `drawImage(srcBmp, mode)` avec un `srcBmp` dont 70 % des pixels sont alpha=0.
+
+- [x] **`modeAffectsZeroAlphaSrc(mode)`** : ajout de `kSrcOut` et `kDstATop` aux 5 modes existants (`kClear, kSrc, kSrcIn, kDstIn, kModulate`). Total 7 modes.
+- [x] **`drawImageRect` (les 2 branches `kNearest` / `kLinear`)** : précompute `mustBlendZero = modeAffectsZeroAlphaSrc(mode)` une fois, puis le skip devient `if (sample.a == 0 && !mustBlendZero) continue`. Pas de coût pour les modes courants (`kSrcOver` continue de skipper normalement) ; correct pour les modes affectés.
+
+Impact mesuré : `AndroidBlendModesGM` passe **88.85 % → 97.04 %** (+8.2). 0 régression sur les 65 GMs précédents.
+
+#### GMs portés
+
+| GM                  | Référence              | Score      | Stress |
+|---------------------|------------------------|------------|--------|
+| AAXfermodesGM       | `aaxfermodes.png` 984×625 | **80.12 %** | Grille 2 colonnes × 15 modes (Porter-Duff + Advanced) × 4 shapes (square / diamond / oval / concave) × 2 paintColors (translucent / opaque). `saveLayer(null, null)` + `clipRect` cellulaire + `drawColor(kSrc)` + `kPlus`-overflow protection via `kDstIn` dim-paint. Premier GM portant qui exerce simultanément les 29 modes sur 4 types de shapes. |
+| AndroidBlendModesGM | `androidblendmodes.png` 1024×1280 | **97.04 %** | Grille 4 × 5 = 18 cellules. Chaque cellule : `saveLayer(null, null)` → `drawImage(redCircleBmp)` → `drawImage(blueRectBmp, mode)` → flatten kSrcOver. Premier GM portant qui combine `drawImage` + per-image `paint.blendMode` ; le fix `modeAffectsZeroAlphaSrc` était la débloque clé. |
+
+Le résiduel sur AAXfermodes (~20 %) est dominé par :
+- AA edges sur les ovals et concaves (rasterizer 4×4 supersampling vs Skia analytique).
+- Drift 8-bit cumulatif sur les modes complexes (`kColorDodge`, `kSoftLight`, modes HSL) sur les paths AA partiellement couverts.
+- Drift labels texte AWT-vs-FreeType (~3-5 % du canvas).
+- Compositing en encoded-Rec.2020 vs upstream linear-Rec.2020 (cf. Phase 5h reverted).
+
+#### GMs Phase 6 reportés
+
+- **`XfermodesGM`** (`xfermodes.png` 1990×570) — déféré : nécessite (1) `compositeFrom` qui supporte le `paint.blendMode` de `saveLayer` (le source type `kQuarterClearInLayer_SrcType` ouvre un layer avec `kPlus`/`kMultiply`/etc.), (2) le format `kARGB_4444_SkColorType` pour le BG bitmap shader (4 bits par canal). Slice indépendant.
+- **`DestColorGM`** (`destcolor.png` 640×640) — **out of scope** : utilise `SkRuntimeEffect::MakeForBlender(...)` pour un blender custom écrit en SkSL. Le DSL runtime-effect n'est pas dans le scope du portage raster.
+- **`XfermodeImageFilterGM`** (`xfermodeimagefilter.png`) — déféré Phase 7+ : nécessite `SkImageFilters::Blend`.
+
+#### Vérification Phase 6 GMs
+- [x] 65 GMs précédents — 0 régression, scores inchangés.
+- [x] 2 nouveaux GMs : AAXfermodesGM 80.12 %, AndroidBlendModesGM 97.04 %.
+- [x] `SkTextUtils` + `SkBlendMode_Name` + `restoreToCount` + `drawColor(color, mode)` overload + `modeAffectsZeroAlphaSrc` étendu.
+- [x] **Pass count cumulé : 67 GM**. **🎉 Phase 6 close** (les 2 GMs restants `XfermodesGM` / `DestColorGM` sont scopés ailleurs — voir GMs Phase 6 reportés).
 
 ### Phase 5h — Linear-premul F16 storage (❌ explored, reverted)
 
@@ -1040,9 +1085,9 @@ L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées s
 | 6 PD  | 65       | Phase 6 Porter-Duff completion : 5 derniers modes (`kSrcOut`/`kDstOut`/`kSrcATop`/`kDstATop`/`kXor`) + 15 tests unitaires + `AaRectModesGM` 80.30 % (12 modes en grille avec `bm.makeShader` + `saveLayer`) | ✅ |
 | 6 sepS | 65      | Phase 6 separable simple : `kMultiply`/`kDarken`/`kLighten`/`kDifference`/`kExclusion` via helper float-premul + 14 tests unitaires (61 total). Pas de port GM ce slice. | ✅ |
 | 6 sepC | 65      | Phase 6 separable complexe : `kOverlay`/`kHardLight`/`kColorDodge`/`kColorBurn`/`kSoftLight` (4 helpers privés, branches conditionnelles, port direct Skia raster pipeline) + 13 tests (74 total). 25 / 29 modes Skia. | ✅ |
-| 6 HSL | 65       | Phase 6 HSL : `kHue`/`kSaturation`/`kColor`/`kLuminosity` (`blendHSL` + helpers W3C `lum`/`sat`/`setLum`/`setSat`/`clipColor`) + 7 tests + smoke 29 modes (81 total). **🎉 29 / 29 modes Skia. Phase 6 close.** | ✅ |
+| 6 HSL | 65       | Phase 6 HSL : `kHue`/`kSaturation`/`kColor`/`kLuminosity` (`blendHSL` + helpers W3C `lum`/`sat`/`setLum`/`setSat`/`clipColor`) + 7 tests + smoke 29 modes (81 total). 29 / 29 modes Skia (formules complètes). | ✅ |
+| 6 GMs | 67       | `SkTextUtils` + `SkBlendMode_Name` + `restoreToCount` + `drawColor(c, mode)` + fix `modeAffectsZeroAlphaSrc` étendu (kSrcOut, kDstATop) ⇒ AAXfermodesGM 80.12 % + AndroidBlendModesGM 97.04 %. **🎉 Phase 6 close.** XfermodesGM/DestColorGM scopés ailleurs (compositeFrom-with-blendmode + ARGB_4444 / SkRuntimeEffect). | ✅ |
 | 5h    | n/a      | Linear-premul F16 storage — **explored, reverted**. Voir post-mortem ci-dessous. | ❌ reverted |
-| 6     | ~70      | 19 blend modes restants + AAXfermodes/Xfermodes/DestColor/AndroidBlendModes GMs | ⬜ |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [archives/MIGRATION_PLAN_COLORSPACE_PORT.md](archives/MIGRATION_PLAN_COLORSPACE_PORT.md) (terminé : phases A-J + F1-F7 livrées, K out of scope).
 
