@@ -1,5 +1,6 @@
 package org.skia.foundation
 
+import org.skia.core.SkColorSpaceXformSteps
 import org.skia.math.SkISize
 
 /**
@@ -53,28 +54,96 @@ public class SkBitmap(
      */
     public val pixels: IntArray get() = pixels8888
 
+    /**
+     * Mirrors Skia's `SkBitmap::eraseColor(SkColor)`. The supplied [c]
+     * is interpreted as an sRGB-encoded ARGB integer (Skia's [SkColor]
+     * convention) and converted to this bitmap's [colorSpace] before
+     * being stored. For sRGB destinations the conversion is an
+     * identity no-op and we take the historical fast path; for
+     * non-sRGB destinations (e.g. Rec.2020 — the format the GM test
+     * harness renders into) we apply the [SkColorSpaceXformSteps]
+     * pipeline so the encoded pixel value matches the destination
+     * gamut.
+     *
+     * Pre-fix this method dropped the xform, so a `WHITE` background
+     * filled into a Rec.2020 bitmap stored sRGB-encoded WHITE values
+     * — visually-correct only because WHITE is a colour-space
+     * invariant. Non-trivial backgrounds (e.g. `Crbug947055GM`,
+     * `ClipDrawDrawGM`) would drift, capping their similarity scores.
+     */
     public fun eraseColor(c: SkColor) {
+        // Decode the SkColor as non-premul sRGB float `[0, 1]`.
+        var r = SkColorGetR(c) / 255f
+        var g = SkColorGetG(c) / 255f
+        var b = SkColorGetB(c) / 255f
+        val a = SkColorGetA(c) / 255f
+        // Apply the sRGB → bitmap.colorSpace pipeline. Identity for
+        // sRGB destinations (most callers); non-trivial only for
+        // non-sRGB working spaces.
+        if (!colorSpace.isSRGB()) {
+            val rgba = floatArrayOf(r, g, b, a)
+            xformedSrgbColor(rgba)
+            r = rgba[0]; g = rgba[1]; b = rgba[2]
+            // Note: alpha is unchanged by xformSteps (linearize/gamut/encode
+            // only touch RGB), so we keep the original `a` value instead of
+            // re-reading rgba[3] — saves one float access per fill.
+        }
         when (colorType) {
-            SkColorType.kRGBA_8888 -> pixels8888.fill(c)
+            SkColorType.kRGBA_8888 -> {
+                // Quantize the (potentially xformed) channels back to 8 bits
+                // and pack in non-premul `0xAARRGGBB` form.
+                val ai = (a * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val ri = (r * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val gi = (g * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val bi = (b * 255f + 0.5f).toInt().coerceIn(0, 255)
+                pixels8888.fill(SkColorSetARGB(ai, ri, gi, bi))
+            }
             SkColorType.kRGBA_F16Norm -> {
-                // Convert non-premul SkColor → premul float and fill.
-                val a = SkColorGetA(c) / 255f
-                val r = SkColorGetR(c) / 255f * a
-                val g = SkColorGetG(c) / 255f * a
-                val b = SkColorGetB(c) / 255f * a
+                // Premultiply the (potentially xformed) channels and fill.
+                val pr = (r * a).coerceIn(0f, 1f)
+                val pg = (g * a).coerceIn(0f, 1f)
+                val pb = (b * a).coerceIn(0f, 1f)
+                val pa = a.coerceIn(0f, 1f)
                 var i = 0
                 val n = pixelsF16.size
                 while (i < n) {
-                    pixelsF16[i] = r
-                    pixelsF16[i + 1] = g
-                    pixelsF16[i + 2] = b
-                    pixelsF16[i + 3] = a
+                    pixelsF16[i] = pr
+                    pixelsF16[i + 1] = pg
+                    pixelsF16[i + 2] = pb
+                    pixelsF16[i + 3] = pa
                     i += 4
                 }
             }
             else -> error("SkBitmap.eraseColor unsupported for colorType=$colorType")
         }
     }
+
+    /**
+     * Apply the sRGB → [colorSpace] xform pipeline in place on a
+     * `[r, g, b, a]` non-premul float vector. Lazy-init the steps the
+     * first time we hit this branch — Rec.2020 GMs amortise the cost
+     * over thousands of fills per render.
+     */
+    private fun xformedSrgbColor(rgba: FloatArray) {
+        var steps = eraseColorXformCache
+        if (steps == null) {
+            // SkColorSpaceXformSteps lives in `org.skia.core` and uses its
+            // own `core.SkAlphaType` enum — distinct from this package's
+            // foundation enum (a known duplicate). Both have identical
+            // variants; we resolve to the core one explicitly here.
+            steps = SkColorSpaceXformSteps(
+                SkColorSpace.makeSRGB(),
+                org.skia.core.SkAlphaType.kUnpremul,
+                colorSpace,
+                org.skia.core.SkAlphaType.kUnpremul,
+            )
+            eraseColorXformCache = steps
+        }
+        steps.apply(rgba)
+    }
+
+    @Volatile
+    private var eraseColorXformCache: SkColorSpaceXformSteps? = null
 
     public fun getPixel(x: Int, y: Int): SkColor {
         require(x in 0 until width && y in 0 until height) { "($x, $y) outside ${width}x$height" }
