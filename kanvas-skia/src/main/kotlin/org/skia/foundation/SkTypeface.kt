@@ -73,6 +73,7 @@ public open class SkTypeface protected constructor() {
         size: SkScalar,
         scaleX: SkScalar,
         skewX: SkScalar,
+        isSubpixel: Boolean = false,
     ): SkPath? = null
 
     /**

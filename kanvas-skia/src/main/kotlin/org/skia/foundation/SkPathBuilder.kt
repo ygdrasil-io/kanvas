@@ -451,6 +451,50 @@ public class SkPathBuilder public constructor() {
     }
 
     /**
+     * Append every verb of `path` to this builder, translating each
+     * coordinate pair by `(dx, dy)`. Behaviourally equivalent to
+     * `addPath(path)` followed by a translate of the appended verbs,
+     * but does the translation inline to avoid a second pass.
+     *
+     * Used by the T5 glyph-cache path: cached glyph outlines are stored
+     * with origin `(0, 0)` and re-emitted at `(glyphX, glyphY)` for
+     * each occurrence in a string.
+     */
+    public fun addPathOffset(path: SkPath, dx: SkScalar, dy: SkScalar): SkPathBuilder = apply {
+        if (dx == 0f && dy == 0f) {
+            addPath(path)
+            return@apply
+        }
+        var coordIdx = 0
+        var weightIdx = 0
+        val src = path.coords
+        for (verb in path.verbs) {
+            when (verb) {
+                SkPath.Verb.kMove -> moveTo(src[coordIdx++] + dx, src[coordIdx++] + dy)
+                SkPath.Verb.kLine -> lineTo(src[coordIdx++] + dx, src[coordIdx++] + dy)
+                SkPath.Verb.kQuad -> {
+                    val x1 = src[coordIdx++] + dx; val y1 = src[coordIdx++] + dy
+                    val x2 = src[coordIdx++] + dx; val y2 = src[coordIdx++] + dy
+                    quadTo(x1, y1, x2, y2)
+                }
+                SkPath.Verb.kConic -> {
+                    val x1 = src[coordIdx++] + dx; val y1 = src[coordIdx++] + dy
+                    val x2 = src[coordIdx++] + dx; val y2 = src[coordIdx++] + dy
+                    val w = path.conicWeights[weightIdx++]
+                    conicTo(x1, y1, x2, y2, w)
+                }
+                SkPath.Verb.kCubic -> {
+                    val x1 = src[coordIdx++] + dx; val y1 = src[coordIdx++] + dy
+                    val x2 = src[coordIdx++] + dx; val y2 = src[coordIdx++] + dy
+                    val x3 = src[coordIdx++] + dx; val y3 = src[coordIdx++] + dy
+                    cubicTo(x1, y1, x2, y2, x3, y3)
+                }
+                SkPath.Verb.kClose -> close()
+            }
+        }
+    }
+
+    /**
      * Detach the accumulated verb stream into an immutable [SkPath] and
      * reset the builder to empty (mirrors `SkPathBuilder::detach()` in
      * Skia 4.x). Subsequent calls start a fresh path.

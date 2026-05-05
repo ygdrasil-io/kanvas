@@ -3,6 +3,7 @@ package org.skia.foundation.awt
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTypeface
 import org.skia.math.SkRect
@@ -10,6 +11,7 @@ import org.skia.math.SkScalar
 import java.awt.Font
 import java.awt.geom.AffineTransform
 import java.awt.font.FontRenderContext
+import kotlin.math.floor
 
 /**
  * **NOTE D'IMPLÉMENTATION** — Ce fichier expose la surface API Skia
@@ -33,6 +35,14 @@ internal class AwtTypeface internal constructor(
     private val baseFont: Font,
     public override val fontStyle: SkFontStyle = SkFontStyle.Normal(),
 ) : SkTypeface() {
+
+    /**
+     * T5 — per-typeface cache of single-glyph outline paths keyed by
+     * `(glyphId, size, scaleX, skewX)`. Populated lazily by [makeTextPath]
+     * and [getGlyphPathInternal]. Internal-visibility for tests that
+     * verify hit/miss counts.
+     */
+    internal val glyphPathCache: GlyphPathCache = GlyphPathCache()
 
     /**
      * Mirrors `SkFont::measureText` — returns advance width, optionally
@@ -79,25 +89,28 @@ internal class AwtTypeface internal constructor(
     }
 
     /**
-     * Mirrors the path that [org.skia.core.SkCanvas.drawString] takes
-     * (T3): build an [SkPath] containing every glyph in [text], pre-
-     * positioned so the baseline lands at `(x, y)` in source coords. The
-     * returned path is then routed through `drawPath`, which applies the
-     * canvas CTM and the existing AA scanline-fill + blend-mode pipeline.
+     * T5 — build an [SkPath] containing every glyph in [text] via the
+     * **glyph cache** at [glyphPathCache]. Compared to the T3 single-
+     * GV-shape route, this version:
+     *  1. builds a kerning-aware GV for [text] **only to read positions
+     *     and glyph IDs** — the outline shape is not extracted from the
+     *     full GV;
+     *  2. for each glyph, looks up the cached single-glyph [SkPath]
+     *     (origin `(0, 0)`) keyed by `(glyphId, size, scaleX, skewX)`;
+     *     a cache miss builds it via the same single-glyph GV route as
+     *     [getGlyphPathInternal];
+     *  3. emits each cached path translated to its baseline-relative
+     *     position, with the text origin `(x, y)` snapped to integer
+     *     coords when [isSubpixel] is `false` (mirrors Skia's
+     *     `font.isSubpixel = false` semantics).
      *
-     * Implementation:
-     *  1. derive the AWT `Font` at the requested [size] / [scaleX] /
-     *     [skewX] (skewX = horizontal shear);
-     *  2. `Font.createGlyphVector(FRC, text)` lays out glyphs on the
-     *     baseline;
-     *  3. `GlyphVector.getOutline(x, y)` returns a `Shape` already
-     *     translated to baseline `(x, y)`;
-     *  4. [AwtPathConverter.shapeToSkPath] walks the AWT `PathIterator`
-     *     and emits the equivalent `moveTo` / `lineTo` / `quadTo` /
-     *     `cubicTo` / `close` verb stream into an [SkPath].
+     * Notes on font.edging / font.hinting — neither is consulted here;
+     * see `MIGRATION_PLAN_TEXT.md` §R3 / [SkFontHinting] for the
+     * "stored, not consulted" pattern. The path-fill rasteriser does
+     * coverage AA only.
      *
-     * Returns `null` for empty input — callers (notably `SkCanvas.drawString`)
-     * treat that as a fast-path no-op.
+     * Returns `null` for empty input — callers (notably
+     * `SkCanvas.drawString`) treat that as a fast-path no-op.
      */
     override fun makeTextPath(
         text: String,
@@ -106,36 +119,66 @@ internal class AwtTypeface internal constructor(
         size: SkScalar,
         scaleX: SkScalar,
         skewX: SkScalar,
+        isSubpixel: Boolean,
     ): SkPath? {
-        // Note on `font.edging` — the [SkFont.Edging] value is **not
-        // consulted here**. The path-fill rasteriser routed via
-        // [org.skia.core.SkCanvas.drawString] does coverage AA only
-        // (the existing 4×4 supersampling) and has no LCD-subpixel
-        // mode. So:
-        //  - kAlias            → still produces hard-edge pixels (the
-        //    rasteriser turns AA off when paint.isAntiAlias is false,
-        //    which is what the GM caller sets).
-        //  - kAntiAlias        → coverage AA via the path-fill scanline.
-        //  - kSubpixelAntiAlias → silently downgraded to kAntiAlias.
-        // This is the explicit landing point for the
-        // MIGRATION_PLAN_TEXT.md §R3 "kSubpixelAntiAlias downgrade"
-        // decision. Likewise [SkFont.hinting] is unused — AWT applies
-        // its own hinting policy via FontRenderContext.
         if (text.isEmpty()) return null
-        val sized = baseFont.deriveFont(size)
-        // scaleX scales the x-axis only; skewX horizontally shears
-        // (glyph x ← x + skewX·y). Skia's convention matches AWT's
-        // `AffineTransform.shear(shx, shy)`.
-        val font = if (scaleX == 1f && skewX == 0f) {
-            sized
-        } else {
-            val tx = AffineTransform()
-            if (scaleX != 1f) tx.scale(scaleX.toDouble(), 1.0)
-            if (skewX != 0f) tx.shear(skewX.toDouble(), 0.0)
-            sized.deriveFont(tx)
-        }
+        val font = derivedFont(size, scaleX, skewX)
         val gv = font.createGlyphVector(FRC, text)
-        val outline = gv.getOutline(x, y)
+        val numGlyphs = gv.numGlyphs
+        if (numGlyphs == 0) return null
+
+        // T5 subpixel snap: when font.isSubpixel = false, Skia snaps
+        // each glyph's emit position to the integer pixel grid. We
+        // apply the same rule here — the cached single-glyph paths are
+        // at origin (0, 0), so the snap is just on the per-glyph emit
+        // offset (x + glyphPos.x, y + glyphPos.y).
+        val builder = SkPathBuilder()
+        for (i in 0 until numGlyphs) {
+            val glyphId = gv.getGlyphCode(i)
+            val pos = gv.getGlyphPosition(i)
+            val rawX = x + pos.x.toFloat()
+            val rawY = y + pos.y.toFloat()
+            val ex = if (isSubpixel) rawX else floor(rawX + 0.5f)
+            val ey = if (isSubpixel) rawY else floor(rawY + 0.5f)
+            val glyphPath = glyphPathCache.getOrBuild(
+                glyphId, size, scaleX, skewX,
+            ) { buildGlyphPath(glyphId, size, scaleX, skewX) }
+            if (!glyphPath.isEmpty()) {
+                builder.addPathOffset(glyphPath, ex, ey)
+            }
+        }
+        val out = builder.detach()
+        return if (out.isEmpty()) null else out
+    }
+
+    /**
+     * Derive an AWT `Font` instance at the requested size with optional
+     * scaleX / skewX shear, mirroring the rule used by both
+     * [makeTextPath] and [getGlyphPathInternal] (skewX → AWT
+     * `AffineTransform.shear(shx, 0)`).
+     */
+    private fun derivedFont(size: SkScalar, scaleX: SkScalar, skewX: SkScalar): Font {
+        val sized = baseFont.deriveFont(size)
+        if (scaleX == 1f && skewX == 0f) return sized
+        val tx = AffineTransform()
+        if (scaleX != 1f) tx.scale(scaleX.toDouble(), 1.0)
+        if (skewX != 0f) tx.shear(skewX.toDouble(), 0.0)
+        return sized.deriveFont(tx)
+    }
+
+    /**
+     * Build a single-glyph outline path at origin `(0, 0)` — the
+     * builder used by both [glyphPathCache] and [getGlyphPathInternal].
+     */
+    private fun buildGlyphPath(
+        glyphId: Int,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): SkPath {
+        val font = derivedFont(size, scaleX, skewX)
+        val gv = font.createGlyphVector(FRC, intArrayOf(glyphId))
+        val outline = gv.getOutline(0f, 0f)
         return AwtPathConverter.shapeToSkPath(outline)
     }
 
@@ -154,22 +197,12 @@ internal class AwtTypeface internal constructor(
         scaleX: SkScalar,
         skewX: SkScalar,
     ): SkPath? {
-        val sized = baseFont.deriveFont(size)
-        val font = if (scaleX == 1f && skewX == 0f) {
-            sized
-        } else {
-            val tx = AffineTransform()
-            if (scaleX != 1f) tx.scale(scaleX.toDouble(), 1.0)
-            if (skewX != 0f) tx.shear(skewX.toDouble(), 0.0)
-            sized.deriveFont(tx)
+        // T5: route single-glyph lookups through the same cache that
+        // [makeTextPath] populates. Cache hits between drawString and
+        // getPath callers (rare in practice but free).
+        return glyphPathCache.getOrBuild(glyphId, size, scaleX, skewX) {
+            buildGlyphPath(glyphId, size, scaleX, skewX)
         }
-        val gv = font.createGlyphVector(FRC, intArrayOf(glyphId))
-        val outline = gv.getOutline(0f, 0f)
-        // An empty Shape produces an empty SkPath — caller can detect
-        // via path.isEmpty(). We return a path either way (matches
-        // Skia's convention: getPath returns true even for blank glyphs
-        // like space, since they "have" a path that's just empty).
-        return AwtPathConverter.shapeToSkPath(outline)
     }
 
     /**
