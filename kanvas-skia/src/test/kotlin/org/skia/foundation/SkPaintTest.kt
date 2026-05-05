@@ -263,4 +263,58 @@ class SkPaintTest {
         p.strokeMiter = 0f              // 0 accepted (Skia treats < 1 as bevel; < 0 is the only rejection)
         assertEquals(0f, p.strokeMiter)
     }
+
+    // ─── Slice 2.5: setColor4f colour-space xform ─────────────────────
+
+    @Test
+    fun `setColor4f with null colorSpace assumes sRGB (no xform)`() {
+        val p = SkPaint()
+        val c = SkColor4f(0.5f, 0.4f, 0.3f, 0.7f)
+        p.setColor4f(c, colorSpace = null)
+        // sRGB → sRGB is identity — values stored verbatim (post-pinAlpha).
+        assertEquals(0.5f, p.color4f.fR)
+        assertEquals(0.4f, p.color4f.fG)
+        assertEquals(0.3f, p.color4f.fB)
+        assertEquals(0.7f, p.color4f.fA)
+    }
+
+    @Test
+    fun `setColor4f with sRGB colorSpace is identity`() {
+        val p = SkPaint()
+        val c = SkColor4f(0.5f, 0.4f, 0.3f, 0.7f)
+        p.setColor4f(c, colorSpace = SkColorSpace.makeSRGB())
+        assertEquals(0.5f, p.color4f.fR)
+        assertEquals(0.4f, p.color4f.fG)
+        assertEquals(0.3f, p.color4f.fB)
+        assertEquals(0.7f, p.color4f.fA)
+    }
+
+    @Test
+    fun `setColor4f with Rec2020 colorSpace transforms to sRGB`() {
+        val p = SkPaint()
+        // Linear Rec.2020 source — gamut differs from sRGB, so a
+        // non-trivial colour will be remapped.
+        val rec2020 = SkColorSpace.makeRGB(
+            org.skia.skcms.SkNamedTransferFn.kLinear,
+            org.skia.skcms.SkNamedGamut.kRec2020,
+        )!!
+        val c = SkColor4f(0.5f, 0.4f, 0.3f, 1f)
+        p.setColor4f(c, colorSpace = rec2020)
+        // Alpha is preserved exactly (xform never touches the A channel).
+        assertEquals(1f, p.color4f.fA)
+        // RGB MUST have shifted — Rec.2020-linear (0.5, 0.4, 0.3) is
+        // outside the sRGB primaries' simple identity, so the gamut
+        // matrix produces a different triple.
+        assertNotEquals(0.5f, p.color4f.fR)
+    }
+
+    @Test
+    fun `setColor4f preserves precision through identity xform`() {
+        val p = SkPaint()
+        val c = SkColor4f(0.123456f, 0.654321f, 0.111111f, 0.30f)
+        p.setColor4f(c, colorSpace = SkColorSpace.makeSRGB())
+        // No FloatArray round-trip when steps are identity → exact precision.
+        assertEquals(0.123456f, p.color4f.fR)
+        assertEquals(0.30f, p.color4f.fA)
+    }
 }
