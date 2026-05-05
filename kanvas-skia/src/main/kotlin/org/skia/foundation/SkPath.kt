@@ -6,6 +6,7 @@ import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import org.skia.math.SkVector
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 /**
  * Immutable path. Built with [SkPathBuilder] and produced via
@@ -424,6 +425,108 @@ public class SkPath internal constructor(
     }
 
     /**
+     * **Tight bounds** — true min/max of the actual path geometry,
+     * including curve interiors. Mirrors `SkPath::computeTightBounds`
+     * (`include/core/SkPath.h:542`,
+     * `src/core/SkPathRef.cpp` `ComputePtBounds` impl).
+     *
+     * For each curve segment, internal extrema are found by solving
+     * the parametric derivative `dB/dt = 0`:
+     *  - `kQuad`: linear derivative → at most 1 root per axis
+     *    (`t = (P0 − P1) / (P0 − 2 P1 + P2)`).
+     *  - `kCubic`: quadratic derivative → at most 2 roots per axis,
+     *    solved via the standard discriminant.
+     *  - `kConic`: rational derivative — for the canonical quarter-arc
+     *    conics emitted by `addOval` / `addRRect` / `arcTo` (control
+     *    point at the bbox corner of the arc), the curve never extends
+     *    past the (start, end, control) bbox, so the conservative
+     *    control-point bound is also tight. For arbitrary conics we
+     *    sample 16 uniformly-spaced points on the curve as a fallback —
+     *    error is well below pixel-size for any reasonable weight.
+     *
+     * Empty path → `(0, 0, 0, 0)`. Unlike [computeBounds] this is **not**
+     * cached.
+     */
+    public fun computeTightBounds(): SkRect {
+        if (verbs.isEmpty()) return SkRect.MakeLTRB(0f, 0f, 0f, 0f)
+        var minX = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        fun extend(x: Float, y: Float) {
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+        }
+        var px = 0f; var py = 0f
+        var coordIdx = 0
+        var weightIdx = 0
+        for (verb in verbs) {
+            when (verb) {
+                Verb.kMove -> {
+                    px = coords[coordIdx++]; py = coords[coordIdx++]
+                    extend(px, py)
+                }
+                Verb.kLine -> {
+                    val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
+                    extend(ex, ey)
+                    px = ex; py = ey
+                }
+                Verb.kQuad -> {
+                    val cx = coords[coordIdx++]; val cy = coords[coordIdx++]
+                    val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
+                    extend(ex, ey)
+                    quadExtremum(px, cx, ex)?.let { tX ->
+                        extend(quadAt(px, cx, ex, tX), quadAt(py, cy, ey, tX))
+                    }
+                    quadExtremum(py, cy, ey)?.let { tY ->
+                        extend(quadAt(px, cx, ex, tY), quadAt(py, cy, ey, tY))
+                    }
+                    px = ex; py = ey
+                }
+                Verb.kConic -> {
+                    val cx = coords[coordIdx++]; val cy = coords[coordIdx++]
+                    val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
+                    val w = conicWeights[weightIdx++]
+                    extend(ex, ey)
+                    // Sample 16 uniformly-spaced points along the conic.
+                    // For the quarter-arc conics produced by addOval /
+                    // addRRect / arcTo (control at bbox corner, weight √2/2),
+                    // the curve stays within bbox(start, end, control), so
+                    // the control-point bbox is already a tight bound. The
+                    // sampled fallback handles arbitrary conics.
+                    val n = 16
+                    for (k in 1 until n) {
+                        val t = k.toFloat() / n
+                        val u = 1f - t
+                        val numW = u * u + 2f * u * t * w + t * t
+                        val vx = (u * u * px + 2f * u * t * w * cx + t * t * ex) / numW
+                        val vy = (u * u * py + 2f * u * t * w * cy + t * t * ey) / numW
+                        extend(vx, vy)
+                    }
+                    px = ex; py = ey
+                }
+                Verb.kCubic -> {
+                    val c1x = coords[coordIdx++]; val c1y = coords[coordIdx++]
+                    val c2x = coords[coordIdx++]; val c2y = coords[coordIdx++]
+                    val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
+                    extend(ex, ey)
+                    for (t in cubicExtrema(px, c1x, c2x, ex)) {
+                        extend(cubicAt(px, c1x, c2x, ex, t), cubicAt(py, c1y, c2y, ey, t))
+                    }
+                    for (t in cubicExtrema(py, c1y, c2y, ey)) {
+                        extend(cubicAt(px, c1x, c2x, ex, t), cubicAt(py, c1y, c2y, ey, t))
+                    }
+                    px = ex; py = ey
+                }
+                Verb.kClose -> {}
+            }
+        }
+        return SkRect.MakeLTRB(minX, minY, maxX, maxY)
+    }
+
+    /**
      * Translated copy. Mirrors Skia's `SkPath::makeOffset(dx, dy)` —
      * verbs and conic weights are preserved untouched, only point
      * coordinates shift. Returns `this` when both deltas are zero
@@ -466,6 +569,37 @@ public class SkPath internal constructor(
         return SkPath(verbs, out, conicWeights, fillType)
     }
 
+    /**
+     * Scale-only convenience overload of [makeTransform]. Mirrors
+     * `SkPath::makeScale` (`include/core/SkPath.h:671`).
+     */
+    public fun makeScale(sx: SkScalar, sy: SkScalar): SkPath =
+        makeTransform(SkMatrix.MakeScale(sx, sy))
+
+    /**
+     * Like [makeTransform], but returns `null` if the resulting path
+     * carries any non-finite coord (`NaN`, `±∞`). Mirrors
+     * `SkPath::tryMakeTransform` (`include/core/SkPath.h:638`).
+     */
+    public fun tryMakeTransform(m: SkMatrix): SkPath? {
+        val out = makeTransform(m)
+        return if (out.isFinite()) out else null
+    }
+
+    /**
+     * Translate-only finite-checking variant. Mirrors
+     * `SkPath::tryMakeOffset` (`include/core/SkPath.h:640`).
+     */
+    public fun tryMakeOffset(dx: SkScalar, dy: SkScalar): SkPath? =
+        tryMakeTransform(SkMatrix.MakeTrans(dx, dy))
+
+    /**
+     * Scale-only finite-checking variant. Mirrors `SkPath::tryMakeScale`
+     * (`include/core/SkPath.h:644`).
+     */
+    public fun tryMakeScale(sx: SkScalar, sy: SkScalar): SkPath? =
+        tryMakeTransform(SkMatrix.MakeScale(sx, sy))
+
     public companion object {
         /** `√2/2` — canonical conic weight for a 90° quarter-circle/ellipse. */
         private const val SQRT2_OVER_2: Float = 0.707106781f
@@ -473,6 +607,118 @@ public class SkPath internal constructor(
         private const val CONIC_WEIGHT_EPS: Float = 1e-4f
         /** Tolerance on cardinal-point coincidence during oval / rrect detection. */
         private const val CARDINAL_EPS: Float = 1e-4f
+        /**
+         * `SK_ScalarNearlyZero` from `include/core/SkScalar.h:25` —
+         * `1 / 4096`. Used by the non-exact `Is*Degenerate` predicates.
+         */
+        private const val NEARLY_ZERO: Float = 1f / 4096f
+
+        // -----------------------------------------------------------------
+        // Bézier extremum / evaluation helpers (used by computeTightBounds).
+        // -----------------------------------------------------------------
+
+        /**
+         * Solve `dB/dt = 0` for a 1-D quadratic Bézier on `[P0, P1, P2]`.
+         * Returns the root in `(0, 1)` or `null`. Linear case (denominator
+         * zero) and roots at the endpoints are dropped — they don't add
+         * any extremum beyond what extending the endpoints already covers.
+         */
+        private fun quadExtremum(p0: Float, p1: Float, p2: Float): Float? {
+            val denom = p0 - 2f * p1 + p2
+            if (denom == 0f) return null
+            val t = (p0 - p1) / denom
+            return if (t > 0f && t < 1f) t else null
+        }
+
+        /** Evaluate a 1-D quadratic Bézier at `t`. */
+        private fun quadAt(p0: Float, p1: Float, p2: Float, t: Float): Float {
+            val u = 1f - t
+            return u * u * p0 + 2f * u * t * p1 + t * t * p2
+        }
+
+        /**
+         * Solve `dB/dt = 0` for a 1-D cubic Bézier. Up to 2 roots in
+         * `(0, 1)`, returned as a fresh `FloatArray`. Derivation:
+         *
+         * ```
+         * P'(t) = 3 [(1−t)² A + 2(1−t)t B + t² C]    A = P1−P0, B = P2−P1, C = P3−P2
+         *       = 3 [(A − 2B + C) t² + (2B − 2A) t + A]
+         * ```
+         */
+        private fun cubicExtrema(p0: Float, p1: Float, p2: Float, p3: Float): FloatArray {
+            val a = -p0 + 3f * p1 - 3f * p2 + p3
+            val b = 2f * p0 - 4f * p1 + 2f * p2
+            val c = p1 - p0
+            val out = FloatArray(2)
+            var n = 0
+            if (a == 0f) {
+                if (b != 0f) {
+                    val t = -c / b
+                    if (t > 0f && t < 1f) out[n++] = t
+                }
+            } else {
+                val disc = b * b - 4f * a * c
+                if (disc >= 0f) {
+                    val sd = sqrt(disc.toDouble()).toFloat()
+                    val t1 = (-b - sd) / (2f * a)
+                    val t2 = (-b + sd) / (2f * a)
+                    if (t1 > 0f && t1 < 1f) out[n++] = t1
+                    if (t2 > 0f && t2 < 1f) out[n++] = t2
+                }
+            }
+            return if (n == out.size) out else out.copyOf(n)
+        }
+
+        /** Evaluate a 1-D cubic Bézier at `t`. */
+        private fun cubicAt(p0: Float, p1: Float, p2: Float, p3: Float, t: Float): Float {
+            val u = 1f - t
+            return u * u * u * p0 +
+                3f * u * u * t * p1 +
+                3f * u * t * t * p2 +
+                t * t * t * p3
+        }
+
+        // -----------------------------------------------------------------
+        // Static degeneracy predicates — mirror SkPath::IsLineDegenerate /
+        // IsQuadDegenerate / IsCubicDegenerate (include/core/SkPath.h:381,
+        // 394, 409, src/core/SkPath.cpp:128-146).
+        // -----------------------------------------------------------------
+
+        /**
+         * `true` if the line `[p1, p2]` has effectively zero length.
+         *
+         * - `exact = true` : strict bit-equality of `p1` and `p2`.
+         * - `exact = false`: each axis differs by less than
+         *   `SK_ScalarNearlyZero = 1/4096`.
+         */
+        public fun IsLineDegenerate(p1: SkPoint, p2: SkPoint, exact: Boolean): Boolean =
+            if (exact) p1.fX == p2.fX && p1.fY == p2.fY
+            else nearlyEquals(p1, p2)
+
+        /**
+         * `true` if the three control points `[p1, p2, p3]` collapse to
+         * a single position (zero-length quad).
+         */
+        public fun IsQuadDegenerate(p1: SkPoint, p2: SkPoint, p3: SkPoint, exact: Boolean): Boolean =
+            if (exact) p1.fX == p2.fX && p1.fY == p2.fY && p2.fX == p3.fX && p2.fY == p3.fY
+            else nearlyEquals(p1, p2) && nearlyEquals(p2, p3)
+
+        /**
+         * `true` if the four control points `[p1..p4]` collapse to a
+         * single position (zero-length cubic).
+         */
+        public fun IsCubicDegenerate(
+            p1: SkPoint, p2: SkPoint, p3: SkPoint, p4: SkPoint, exact: Boolean,
+        ): Boolean = if (exact) {
+            p1.fX == p2.fX && p1.fY == p2.fY &&
+                p2.fX == p3.fX && p2.fY == p3.fY &&
+                p3.fX == p4.fX && p3.fY == p4.fY
+        } else {
+            nearlyEquals(p1, p2) && nearlyEquals(p2, p3) && nearlyEquals(p3, p4)
+        }
+
+        private fun nearlyEquals(a: SkPoint, b: SkPoint): Boolean =
+            abs(a.fX - b.fX) < NEARLY_ZERO && abs(a.fY - b.fY) < NEARLY_ZERO
 
         /** Closed rectangular contour. */
         public fun Rect(
