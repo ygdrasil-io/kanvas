@@ -977,6 +977,39 @@ Aucune régression sur les 75 autres GMs.
 - [x] La sémantique `clipRect(rect, true)` (AA outward) reste disponible pour les futurs callers AA-aware.
 - [x] **Pass count cumulé : 78 GM** (inchangé — pas de nouveau port, pure correction rasterizer).
 
+### Phase 6j — GM harvest round 2 (84 → 93) ✅
+
+**But** : second tirage sur l'API existante (Phase 6 + edge-rounding fix). Mêmes contraintes que Phase 6h — pure ports, 0 nouvelle surface. Le sub-agent avait shortlisté 15 candidats ; on en porte 9 (les autres sont reportés round 3 ou ont besoin d'API absente — perspective matrices, `clipPath`, FillPathWithPaint, etc.).
+
+#### GMs portés
+
+| GM                       | Référence                       | Score      | Stress |
+|--------------------------|---------------------------------|------------|--------|
+| Bug5099GM                | `bug5099.png` 50×50             | **95.76 %** | Cubic stroker bug — width=10, near-coincident control points. |
+| Bug6083GM                | `bug6083.png` 100×50            | **95.48 %** | 2 stroked cubics sous translate `(-500, -130)` ; `p2.y` divergent de 0.2. Stresse stabilité numérique sous large translate. |
+| Bug6987GM                | `bug6987.png` 200×200           | **99.47 %** | Triangle stroker `width=0.0001` sous `scale(50000, 50000)`. Stress `SkStroker.resScale` (Phase 3i). |
+| Bug339297GM              | `bug339297.png` 640×480         | **99.14 %** | Cubic sliver à `y ≈ -10⁷`, ramené par `translate(258, +10⁷)`. Précision float coords/CTM. |
+| Crbug10141204GM          | `crbug_10141204.png` 512×512    | **100.00 %** | Stress non-axis-aligned + giant coords + `MakeAll` 6-arg affine ⇒ canvas blue-fill solide. |
+| DRRectSmallInnerGM       | `drrect_small_inner.png` 170×610 | **96.50 %** | DRRect inner shrinks à 0.01 px, oval-on/off-centre. Tessellator divide-by-zero protection. |
+| EmptyPathGM              | `emptypath.png` 600×280         | **87.64 %** | Empty path × 4 fillTypes (incl. `kInverse*`) × 3 styles + labels texte. Premier port qui exerce les fill rules inverses introduits Phase 3.8. |
+| LinePathGM               | `linepath.png` 1240×390         | **87.31 %** | `moveTo(25, 15) + lineTo(75, 15)` non-fermé × 4 fillTypes × 3 styles × 3 cap/join + labels. |
+| LineClosePathGM          | `lineclosepath.png` 1240×390    | **87.27 %** | Sister GM avec `close()` — exerce la stroke de la ligne de fermeture. |
+
+Le résiduel sur `EmptyPath` / `LinePath` / `LineClosePath` (~12-13 %) est dominé par les labels texte AWT-vs-FreeType (chaque cellule a 2-3 strings de 10-15 px) sur grandes surfaces.
+
+#### Vérification Phase 6j
+- [x] 84 GMs précédents — 0 régression.
+- [x] 9 nouveaux ports : Bug5099, Bug6083, Bug6987, Bug339297, Crbug10141204, DRRectSmallInner, EmptyPath, LinePath, LineClosePath. Tous au-dessus de leur floor.
+- [x] **Pass count cumulé : 93 GM**.
+
+#### GMs reportés round 3+
+
+- **`thinconcavepaths`** (550×400) — 9 path-helper functions, ~150 LOC. Portable mais lourd, gardé pour round 3.
+- **`crbug_947055`** (200×50) — perspective row `[0, 0.0225, 1]` non-affine, hors scope `SkMatrix` (qui est pure 2×3 affine).
+- **`bug339297_as_clip`** — `clipPath(arbitrary)`. À confirmer la dispo de `clipPath` non-rect.
+- **`stroke_rect_shader` / `circle_sizes`** — déjà portés (sub-agent doublons).
+- **`pathreverse`, `cubicpath_shader`, `largeclippedpath_*`, `hugepath`, `hittestpath`, `croppedrects`, `alphagradients`, `gradient_dirty_laundry`, `bug12866`** etc. — bloqués par APIs absentes (`SkPathPriv::ReverseAddPath`, `SkColorConverter`, `clipPath`, surface offscreen, `path.contains`, `SweepGradient`, `SkM44`, etc.).
+
 ### Phase 5h — Linear-premul F16 storage (❌ explored, reverted)
 
 **Hypothèse de départ** : le drift constant de `TinyBitmapGM` (rendered `(214, 177, 167)` vs reference `(204, 162, 158)`) viendrait de ce que le buffer F16 stocke des valeurs **encoded** Rec.2020 alors que Skia upstream compose en **linear** Rec.2020. Refactor : stocker en linear-premul, encoder seulement à la sortie 8-bit / PNG.
@@ -1145,6 +1178,7 @@ L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées s
 | 6 GMs | 67       | `SkTextUtils` + `SkBlendMode_Name` + `restoreToCount` + `drawColor(c, mode)` + fix `modeAffectsZeroAlphaSrc` étendu (kSrcOut, kDstATop) ⇒ AAXfermodesGM 80.12 % + AndroidBlendModesGM 97.04 %. **🎉 Phase 6 close.** XfermodesGM/DestColorGM scopés ailleurs (compositeFrom-with-blendmode + ARGB_4444 / SkRuntimeEffect). | ✅ |
 | 6h    | 77       | GM harvest post-Phase-6 (10 DEF_SIMPLE_GM) — Bug615686/Skbug4868/Crbug946965/Crbug1139750/Crbug847759/LuminosityOverflow/WideButtCaps/StrokeRectShader (98-100 %) + ClipDrawDraw 35.34 % et RadialGradientPrecision 4.92 % comme regression-trackers. 0 nouvelle API. | ✅ |
 | 6i    | 77       | Edge-rounding consistency : `clipRect` non-AA passe de `floor`/`ceil` à `round-half-up` (matches `SkScalarRoundToInt` + non-AA `pixelEdge`). AA flavour préservée via `clipRect(rect, true)`. AAXfermodesGM 80.12 → 84.73 (+4.6), Skbug4868 98.63 → 99.32 (+0.7), ClipDrawDraw géométrie corrigée. | ✅ |
+| 6j    | 93       | GM harvest round 2 (9 DEF_SIMPLE_GM) — Bug5099/Bug6083/Bug6987/Bug339297/Crbug10141204 (95-100 %) + DRRectSmallInner 96.5 % + EmptyPath/LinePath/LineClosePath 87 % (4 fill rules incl. kInverse* × 3 styles × labels). 0 nouvelle API. | ✅ |
 | 5h    | n/a      | Linear-premul F16 storage — **explored, reverted**. Voir post-mortem ci-dessous. | ❌ reverted |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [archives/MIGRATION_PLAN_COLORSPACE_PORT.md](archives/MIGRATION_PLAN_COLORSPACE_PORT.md) (terminé : phases A-J + F1-F7 livrées, K out of scope).
