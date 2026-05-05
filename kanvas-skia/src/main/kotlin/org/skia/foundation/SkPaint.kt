@@ -1,5 +1,7 @@
 package org.skia.foundation
 
+import org.skia.core.SkAlphaType
+import org.skia.core.SkColorSpaceXformSteps
 import org.skia.math.SkScalar
 
 /**
@@ -112,14 +114,32 @@ public class SkPaint() {
 
     /**
      * Mirrors Skia's `setColor(const SkColor4f&, SkColorSpace*)`
-     * (`src/core/SkPaint.cpp`). Today the colour-space xform is a stub —
-     * we keep the value as-is and pin alpha to `[0, 1]`. Once
-     * [SkColorSpaceXformSteps.apply] is wired to a `FloatArray` view,
-     * this should call `steps.apply(fColor4f.vec())` (Slice 2.5).
+     * (`src/core/SkPaint.cpp`):
+     *
+     * ```cpp
+     * SkColorSpaceXformSteps steps{colorSpace,          kUnpremul_SkAlphaType,
+     *                              sk_srgb_singleton(), kUnpremul_SkAlphaType};
+     * fColor4f = color.pinAlpha();
+     * steps.apply(fColor4f.vec());
+     * ```
+     *
+     * `colorSpace == null` is treated as sRGB (matches Skia's null-pointer
+     * convention). The xform is skipped when the resulting steps are the
+     * identity pipeline — saves a `FloatArray` allocation when src is sRGB.
+     * Slice 2.5.
      */
     public fun setColor4f(color: SkColor4f, colorSpace: SkColorSpace? = null) {
         fColor4f = color.pinAlpha()
-        // TODO Slice 2.5: apply SkColorSpaceXformSteps(colorSpace -> sRGB).
+        val src = colorSpace ?: SkColorSpace.makeSRGB()
+        val steps = SkColorSpaceXformSteps(
+            src = src, srcAT = SkAlphaType.kUnpremul,
+            dst = SkColorSpace.makeSRGB(), dstAT = SkAlphaType.kUnpremul,
+        )
+        if (!steps.flags.isIdentity) {
+            val rgba = fColor4f.vec()
+            steps.apply(rgba)
+            fColor4f = SkColor4f(rgba[0], rgba[1], rgba[2], rgba[3])
+        }
     }
 
     // ─── Alpha helpers ───────────────────────────────────────────────
