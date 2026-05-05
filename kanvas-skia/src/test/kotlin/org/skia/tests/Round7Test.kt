@@ -28,38 +28,38 @@ class Round7Test {
 
     @Test
     fun `TrickyCubicStrokesLargeRadiusGM matches reference`() =
-        runGm(TrickyCubicStrokesLargeRadiusGM(), "TrickyCubicStrokesLargeRadiusGM", 70.0)
+        runGm(TrickyCubicStrokesLargeRadiusGM(), "TrickyCubicStrokesLargeRadiusGM", 97.0)
 
     @Test
     fun `TrickyCubicStrokesButtMiterGM matches reference`() =
-        runGm(TrickyCubicStrokesButtMiterGM(), "TrickyCubicStrokesButtMiterGM", 50.0)
+        runGm(TrickyCubicStrokesButtMiterGM(), "TrickyCubicStrokesButtMiterGM", 96.0)
 
     @Test
     fun `TrickyCubicStrokesRoundCapsGM matches reference`() =
-        runGm(TrickyCubicStrokesRoundCapsGM(), "TrickyCubicStrokesRoundCapsGM", 50.0)
+        runGm(TrickyCubicStrokesRoundCapsGM(), "TrickyCubicStrokesRoundCapsGM", 96.0)
 
     @Test
-    fun `StringArtGM matches reference`() = runGm(StringArtGM(), "StringArtGM", 70.0)
+    fun `StringArtGM matches reference`() = runGm(StringArtGM(), "StringArtGM", 81.0)
 
     @Test
     fun `ChromeGradText1GM matches reference`() =
-        runGm(ChromeGradText1GM(), "ChromeGradText1GM", 80.0)
+        runGm(ChromeGradText1GM(), "ChromeGradText1GM", 99.0)
 
     @Test
     fun `ChromeGradText2GM matches reference`() =
-        runGm(ChromeGradText2GM(), "ChromeGradText2GM", 70.0)
+        runGm(ChromeGradText2GM(), "ChromeGradText2GM", 98.0)
 
     // SimpleShapes uses paint.alphaf=0.5 + AA — accumulates byte-level
     // drift over 9 RRect/oval shapes at random rotations. Visual layout
     // matches the reference cell-by-cell.
     @Test
-    fun `SimpleShapesAaGM matches reference`() = runGm(SimpleShapesAaGM(), "SimpleShapesAaGM", 60.0)
+    fun `SimpleShapesAaGM matches reference`() = runGm(SimpleShapesAaGM(), "SimpleShapesAaGM", 64.0)
 
     @Test
-    fun `SimpleShapesBwGM matches reference`() = runGm(SimpleShapesBwGM(), "SimpleShapesBwGM", 60.0)
+    fun `SimpleShapesBwGM matches reference`() = runGm(SimpleShapesBwGM(), "SimpleShapesBwGM", 64.0)
 
     @Test
-    fun `GradTextGM matches reference`() = runGm(GradTextGM(), "GradTextGM", 50.0)
+    fun `GradTextGM matches reference`() = runGm(GradTextGM(), "GradTextGM", 84.0)
 
     // The 3 stroked-arc grids (`butt` / `square` / `round` cap) hit the
     // same translucent-overlap drift as `CircularArcsFillGM` (4 grids
@@ -67,13 +67,13 @@ class Round7Test {
     // overlap). Visual layout matches the reference. Floor 30 %.
     @Test
     fun `CircularArcsStrokeButtGM matches reference`() =
-        runGm(CircularArcsStrokeButtGM(), "CircularArcsStrokeButtGM", 30.0)
+        runGm(CircularArcsStrokeButtGM(), "CircularArcsStrokeButtGM", 44.0)
 
     @Test
     fun `CircularArcsStrokeSquareGM matches reference`() =
-        runGm(CircularArcsStrokeSquareGM(), "CircularArcsStrokeSquareGM", 30.0)
+        runGm(CircularArcsStrokeSquareGM(), "CircularArcsStrokeSquareGM", 44.0)
 
     @Test
     fun `CircularArcsStrokeRoundGM matches reference`() =
-        runGm(CircularArcsStrokeRoundGM(), "CircularArcsStrokeRoundGM", 30.0)
+        runGm(CircularArcsStrokeRoundGM(), "CircularArcsStrokeRoundGM", 44.0)
 }

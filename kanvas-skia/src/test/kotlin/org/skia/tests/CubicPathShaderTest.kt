@@ -23,8 +23,8 @@ class CubicPathShaderTest {
         val accepted = SimilarityTracker.updateScore("CubicPathShaderGM", comparison.similarity)
         assertTrue(accepted, "CubicPathShaderGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 60.0,
-            "CubicPathShaderGM similarity ${"%.2f".format(comparison.similarity)}% < 60.0% floor",
+            comparison.similarity >= 78.0,
+            "CubicPathShaderGM similarity ${"%.2f".format(comparison.similarity)}% < 78.0% floor",
         )
     }
 }

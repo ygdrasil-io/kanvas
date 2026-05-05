@@ -50,8 +50,8 @@ class XfermodesTest {
         val accepted = SimilarityTracker.updateScore("XfermodesGM", comparison.similarity)
         assertTrue(accepted, "XfermodesGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 35.0,
-            "XfermodesGM similarity ${"%.2f".format(comparison.similarity)}% < 35% floor",
+            comparison.similarity >= 75.0,
+            "XfermodesGM similarity ${"%.2f".format(comparison.similarity)}% < 75% floor",
         )
     }
 }

@@ -21,7 +21,7 @@ class LargeOvalsTest {
         }
         val accepted = SimilarityTracker.updateScore("LargeOvalsGM", comparison.similarity)
         assertTrue(accepted, "LargeOvalsGM regressed below ratchet")
-        assertTrue(comparison.similarity >= 80.0,
-            "LargeOvalsGM similarity ${"%.2f".format(comparison.similarity)}% < 80.0%")
+        assertTrue(comparison.similarity >= 96.0,
+            "LargeOvalsGM similarity ${"%.2f".format(comparison.similarity)}% < 96.0%")
     }
 }

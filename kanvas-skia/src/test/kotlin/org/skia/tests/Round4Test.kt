@@ -31,31 +31,31 @@ class Round4Test {
     }
 
     @Test
-    fun `B340982297GM matches reference`() = runGm(B340982297GM(), "B340982297GM", 80.0)
+    fun `B340982297GM matches reference`() = runGm(B340982297GM(), "B340982297GM", 93.0)
 
     @Test
-    fun `Bug406747427GM matches reference`() = runGm(Bug406747427GM(), "Bug406747427GM", 80.0)
+    fun `Bug406747427GM matches reference`() = runGm(Bug406747427GM(), "Bug406747427GM", 96.0)
 
     @Test
     fun `PathHugeCrbug800804GM matches reference`() =
-        runGm(PathHugeCrbug800804GM(), "PathHugeCrbug800804GM", 50.0)
+        runGm(PathHugeCrbug800804GM(), "PathHugeCrbug800804GM", 88.0)
 
     @Test
     fun `Crbug996140GM matches reference`() = runGm(Crbug996140GM(), "Crbug996140GM", 70.0)
 
     @Test
     fun `ConjoinedPolygonsGM matches reference`() =
-        runGm(ConjoinedPolygonsGM(), "ConjoinedPolygonsGM", 90.0)
+        runGm(ConjoinedPolygonsGM(), "ConjoinedPolygonsGM", 98.0)
 
-    // FillTypesGM at 50.81% — circles' AA edges diverge sub-tolerance
-    // from upstream's analytic-AA rasterizer (we use 4×4 supersampling).
-    // Inverse fill rules amplify the count of edge pixels.
+    // FillTypesGM lifted from 50.81 % → 99.48 % by Phase 6s `eraseColor`
+    // colorspace xform — the residual sub-tolerance edge drift is now
+    // dominated by the (correct) AA-edge supersampling, not BG bias.
     @Test
-    fun `FillTypesGM matches reference`() = runGm(FillTypesGM(), "FillTypesGM", 45.0)
-
-    @Test
-    fun `PolygonsGM matches reference`() = runGm(PolygonsGM(), "PolygonsGM", 70.0)
+    fun `FillTypesGM matches reference`() = runGm(FillTypesGM(), "FillTypesGM", 98.0)
 
     @Test
-    fun `SmallPathsGM matches reference`() = runGm(SmallPathsGM(), "SmallPathsGM", 80.0)
+    fun `PolygonsGM matches reference`() = runGm(PolygonsGM(), "PolygonsGM", 85.0)
+
+    @Test
+    fun `SmallPathsGM matches reference`() = runGm(SmallPathsGM(), "SmallPathsGM", 96.0)
 }
