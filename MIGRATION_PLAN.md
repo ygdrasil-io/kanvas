@@ -1069,6 +1069,38 @@ Fix architectural : ajouter une branche `if (ctm.hasPerspective())` dans `buildE
 - [x] `FillTypesGM` floor à 45 % — circle AA edge drift × 16 cellules × inverse fills domine ; visuellement le pattern correspond bien.
 - [x] **Pass count cumulé : 109 GM**.
 
+### Phase 6m — Perspective-aware `buildEdges` ✅
+
+**But** : matérialiser le follow-up identifié à la fin de Phase 6l. `SkMatrix` Phase 4 a apporté la math (homogeneous `mapXY`, full 3×3 `concat`, `hasPerspective` predicate, etc.) mais `SkBitmapDevice.buildEdges` continuait à transformer chaque control point via la formule affine `ax*x + bx*y + cx0` — la division homogène n'était pas appliquée.
+
+#### Refactor
+
+- [x] **`SkBitmapDevice.buildEdges(path, ctm)`** : early-out vers `buildEdgesPerspective(path, ctm)` quand `ctm.hasPerspective()`. Le fast path affine reste bit-identique.
+- [x] **`SkBitmapDevice.buildEdgesPerspective(path, ctm)`** : nouveau. Cache les 9 scalaires de la matrice en locales, projette chaque source point `(sx, sy)` via :
+  ```
+  w = persp0*sx + persp1*sy + persp2
+  outX = (mat.sx*sx + mat.kx*sy + mat.tx) / w
+  outY = (mat.ky*sx + mat.sy*sy + mat.ty) / w
+  ```
+  avec un guard `if (w == 0f) invW = 0f` pour éviter `NaN` au point de fuite.
+- [x] **Béziers (`kQuad` / `kConic` / `kCubic`)** : projection puis flattening en device space — approximation. Pour des paths cubic-heavy sous perspective extrême la projection des control points donne une courbe légèrement différente de la projection vraie de la courbe source. Acceptable pour les GMs en scope (un suivi `flatten-then-project` peut venir si on a un GM cubic-perspective concret qui le requiert).
+- [x] **Lines (`kMove` / `kLine` / `kClose`)** : projection point par point — exact (la projection d'une ligne est la ligne entre les projections des endpoints).
+
+#### GM porté
+
+| GM             | Référence              | Score      | Notes |
+|----------------|------------------------|------------|-------|
+| Crbug947055GM  | `crbug_947055.png` 200×50 | **14.56 %** | Geometry correcte (la projection match — le sliver rouge est rendu à la bonne position et taille). Le résiduel ~85 % vient du même drift BG-color-xform que `ClipDrawDrawGM` : `runGmTest` initialise via `bitmap.eraseColor(SK_ColorBLUE)` qui skip le xform sRGB → Rec.2020 que Skia DM applique via `canvas->clear(bgColor)`. Floor à 10 %. |
+
+#### `filltypespersp` exploré, déféré
+
+`FillTypesPerspGM` (835 × 840, 4 fillTypes × perspective × radial gradient × clipRect × cubic Béziers via `addCircle`) a été tenté mais score 6.12 % avec rendu visuellement très différent. La combinaison perspective × cubic-Bézier × clipRect × radial-gradient stressse plusieurs interactions à la fois (clipRect bbox-conservative sous perspective, control-points-then-flatten approximation pour les cercles, perspective-aware shader sampling). Décortiquer chaque drift demande son propre slice. Reporté.
+
+#### Vérification Phase 6m
+- [x] 109 GMs précédents — 0 régression. La branche perspective ne se déclenche que si `ctm.hasPerspective()` ; le fast path affine est inchangé.
+- [x] 1 nouveau port : `Crbug947055GM` 14.56 %. Geometry-correcte ; floor à 10 % (BG drift indépendant).
+- [x] **Pass count cumulé : 110 GM**.
+
 ### Phase 5h — Linear-premul F16 storage (❌ explored, reverted)
 
 **Hypothèse de départ** : le drift constant de `TinyBitmapGM` (rendered `(214, 177, 167)` vs reference `(204, 162, 158)`) viendrait de ce que le buffer F16 stocke des valeurs **encoded** Rec.2020 alors que Skia upstream compose en **linear** Rec.2020. Refactor : stocker en linear-premul, encoder seulement à la sortie 8-bit / PNG.
@@ -1240,6 +1272,7 @@ L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées s
 | 6j    | 93       | GM harvest round 2 (9 DEF_SIMPLE_GM) — Bug5099/Bug6083/Bug6987/Bug339297/Crbug10141204 (95-100 %) + DRRectSmallInner 96.5 % + EmptyPath/LinePath/LineClosePath 87 % (4 fill rules incl. kInverse* × 3 styles × labels). 0 nouvelle API. | ✅ |
 | 6k    | 101      | GM harvest round 3 (8 ports) — ThinConcavePaths 98.1 %, Crbug1257515 98.9 %, Crbug938592 99.8 %, StrokeRectsRotated 90.7 %, CubicClosePath 86.9 %, CubicPathShader 79.7 %, QuadPath 87.3 %, QuadClosePath 87.1 %. Factorisation `PathCapsFillsGridGM` (caps × fills × styles matrix) partagée par 4 GMs. 0 nouvelle API. | ✅ |
 | 6l    | 109      | GM harvest round 4 (8 ports) — B340982297 94.6 %, Bug406747427 98.0 %, ConjoinedPolygons 99.3 %, Crbug996140 74.7 %, FillTypes 50.8 %, PathHugeCrbug800804 89.3 %, Polygons 86.1 %, SmallPaths 97.1 %. 0 nouvelle API. `crbug_947055` (perspective rasterization) reporté — `SkMatrix` Phase 4 a la math mais `buildEdges` ne fait pas la division homogène. | ✅ |
+| 6m    | 110      | Perspective-aware `buildEdges` : nouvelle branche `buildEdgesPerspective` qui projette chaque control point via la division homogène `(sx*x + kx*y + tx)/w` avec `w = persp0*x + persp1*y + persp2`. Lines exactes ; Béziers approximées (project-then-flatten en device space, visuellement-correctes sous perspective modérée). Débloque `Crbug947055GM` (14.6 %, géométrie correcte mais BG drift `eraseColor` skip xform). | ✅ |
 | 5h    | n/a      | Linear-premul F16 storage — **explored, reverted**. Voir post-mortem ci-dessous. | ❌ reverted |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [archives/MIGRATION_PLAN_COLORSPACE_PORT.md](archives/MIGRATION_PLAN_COLORSPACE_PORT.md) (terminé : phases A-J + F1-F7 livrées, K out of scope).

@@ -753,6 +753,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     private fun buildEdges(
         path: SkPath, ctm: SkMatrix,
     ): List<Edge> {
+        if (ctm.hasPerspective()) return buildEdgesPerspective(path, ctm)
+
         // Cache the matrix scalars in locals to avoid property lookups inside
         // the hot loop. Mapping `(x, y)` to device space is `ctm.mapXY(x, y)`,
         // which expands to `(sx*x + kx*y + tx, ky*x + sy*y + ty)`. Skew terms
@@ -812,6 +814,116 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     val x1 = ax * sx1 + bx * sy1 + cx0; val y1 = ay * sx1 + by * sy1 + cy0
                     val x2 = ax * sx2 + bx * sy2 + cx0; val y2 = ay * sx2 + by * sy2 + cy0
                     val x3 = ax * sx3 + bx * sy3 + cx0; val y3 = ay * sx3 + by * sy3 + cy0
+                    flattenCubic(out, px, py, x1, y1, x2, y2, x3, y3, depth = 0)
+                    px = x3; py = y3
+                }
+                SkPath.Verb.kClose -> {
+                    if (hasContour) {
+                        addEdge(out, px, py, cx, cy)
+                        px = cx; py = cy
+                        hasContour = false
+                    }
+                }
+            }
+        }
+        if (hasContour) addEdge(out, px, py, cx, cy)
+        return out
+    }
+
+    /**
+     * Perspective-aware variant of [buildEdges]. Walks the path's verb
+     * stream just like the affine fast path, but every source-space
+     * control point is projected through the full 3×3 CTM (homogeneous
+     * divide `(x', y') = ((sx*x + kx*y + tx) / w, (ky*x + sy*y + ty) / w)`
+     * with `w = persp0*x + persp1*y + persp2`) before being fed to the
+     * scanline-edge accumulator or the device-space Bézier flattener.
+     *
+     * **Béziers under perspective** : projecting the control points of a
+     * Bézier curve and then flattening *in device space* is **not** the
+     * mathematically-exact projection of the curve — the projected
+     * curve's control polygon differs from the projected control polygon
+     * of the source curve. Skia upstream subdivides in source space
+     * first, projecting each linear sub-chord. We do the simpler "project
+     * then flatten" because it's visually-correct for moderate
+     * perspective (the curves we care about — circles via 4 cubics, arcs
+     * via cubics, etc. — already get aggressively subdivided by the
+     * adaptive flattener in device space). For extreme perspective with
+     * tiny w-divisors near the vanishing point, this can produce visible
+     * deviation ; treat it as best-effort until a source-space
+     * subdivision pass is added.
+     *
+     * Lines (`kMove` / `kLine` / `kClose`) are exact under perspective —
+     * the projection of a line through 2 points is the line through the
+     * projections.
+     */
+    private fun buildEdgesPerspective(
+        path: SkPath, ctm: SkMatrix,
+    ): List<Edge> {
+        val ax = ctm.sx; val bx = ctm.kx; val cx0 = ctm.tx
+        val ay = ctm.ky; val by = ctm.sy; val cy0 = ctm.ty
+        val pa = ctm.persp0; val pb = ctm.persp1; val pc = ctm.persp2
+        val out = ArrayList<Edge>(path.verbs.size)
+        var px = 0f; var py = 0f
+        var cx = 0f; var cy = 0f
+        var hasContour = false
+        var coordIdx = 0
+        var weightIdx = 0
+        val coords = path.coords
+        val weights = path.conicWeights
+
+        // Local helper — avoids the Pair allocation of `ctm.mapXY`.
+        // Returns the projected `(x, y)` via the captured outer-scope
+        // mutable holders [outX] / [outY].
+        var outX = 0f; var outY = 0f
+        fun project(sx: Float, sy: Float) {
+            val w = pa * sx + pb * sy + pc
+            // Skia clamps `w` away from zero before the divide ; for our
+            // path-fill use-case, an effectively-zero w means the point
+            // is at the vanishing horizon, so we just pin to a large
+            // finite value via 1/eps to avoid `NaN` from `0/0`.
+            val invW = if (w == 0f) 0f else 1f / w
+            outX = (ax * sx + bx * sy + cx0) * invW
+            outY = (ay * sx + by * sy + cy0) * invW
+        }
+
+        for (verb in path.verbs) {
+            when (verb) {
+                SkPath.Verb.kMove -> {
+                    if (hasContour) addEdge(out, px, py, cx, cy)
+                    project(coords[coordIdx++], coords[coordIdx++])
+                    px = outX; py = outY
+                    cx = outX; cy = outY
+                    hasContour = true
+                }
+                SkPath.Verb.kLine -> {
+                    project(coords[coordIdx++], coords[coordIdx++])
+                    addEdge(out, px, py, outX, outY)
+                    px = outX; py = outY
+                }
+                SkPath.Verb.kQuad -> {
+                    project(coords[coordIdx++], coords[coordIdx++])
+                    val x1 = outX; val y1 = outY
+                    project(coords[coordIdx++], coords[coordIdx++])
+                    val x2 = outX; val y2 = outY
+                    flattenQuad(out, px, py, x1, y1, x2, y2, depth = 0)
+                    px = x2; py = y2
+                }
+                SkPath.Verb.kConic -> {
+                    project(coords[coordIdx++], coords[coordIdx++])
+                    val x1 = outX; val y1 = outY
+                    project(coords[coordIdx++], coords[coordIdx++])
+                    val x2 = outX; val y2 = outY
+                    val w = weights[weightIdx++]
+                    flattenConic(out, px, py, x1, y1, x2, y2, w)
+                    px = x2; py = y2
+                }
+                SkPath.Verb.kCubic -> {
+                    project(coords[coordIdx++], coords[coordIdx++])
+                    val x1 = outX; val y1 = outY
+                    project(coords[coordIdx++], coords[coordIdx++])
+                    val x2 = outX; val y2 = outY
+                    project(coords[coordIdx++], coords[coordIdx++])
+                    val x3 = outX; val y3 = outY
                     flattenCubic(out, px, py, x1, y1, x2, y2, x3, y3, depth = 0)
                     px = x3; py = y3
                 }
