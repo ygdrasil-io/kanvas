@@ -1279,6 +1279,8 @@ L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées s
 
 **Bonus** : [archives/MIGRATION_PLAN_PATH_PARITY.md](archives/MIGRATION_PLAN_PATH_PARITY.md) ✅ — audit iso vs Skia C++ → 11 PRs sur 3 phases (correctness moveTo/ensureMove, verb-stream cubic→conic, surface API complète). 11 GMs améliorés ou débloqués (`PathArcToSkbug9077` +0.43, `ArcOfZorro` +0.17, `CircleSizes` +0.13, `PathInterior` +0.09, `DRRect`/`ArcCircleGap`/`LargeCircle`/`Strokes4`/`Bug593049`/`RoundRect`, plus `ArcToGM` 95.80 % et `CubicPathGM` 87.25 % portés). 0 régression sur 75+ GMs cumulés.
 
+**En cours** : [MIGRATION_PLAN_PAINT_PARITY.md](MIGRATION_PLAN_PAINT_PARITY.md) — audit iso vs Skia C++ déclenché par `BatchedConvexPathsGM` 34.94 % (cause racine : `SkPaint` stocke `SkColor` packed au lieu de `SkColor4f` ⇒ `setAlphaf(0.3f)` quantisé à 77/255). Phase 1 = audit doc-only (cette PR), Phase 2 = refactor stockage float + plumbing F16. Cible : `BatchedConvexPathsGM` ≥ 85 % sans régression.
+
 > Au-delà : reprendre [SKIA_DM_TESTS_TO_IMPLEMENT.md](SKIA_DM_TESTS_TO_IMPLEMENT.md) Level 2 par catégories (bitmap operations, transformations avancées, effects), en gardant la même mécanique slice-vertical.
 
 ---
