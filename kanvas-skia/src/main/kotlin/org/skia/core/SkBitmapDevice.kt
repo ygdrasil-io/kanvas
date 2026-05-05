@@ -138,19 +138,25 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             if (paintAlphaF == 0f && !modeAffectsZeroAlphaSrc(mode)) return
             val rowWidth = r - l
             val isF16 = bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm
-            val useF16 = isF16 && mode == SkBlendMode.kSrcOver
+            // Phase 6s — F16 path covers all 29 modes (was: kSrcOver only).
+            // Non-srcOver modes route through [blendF16PremulMode] which
+            // dispatches inline for Porter-Duff / Plus / Modulate / Screen
+            // and shares the existing pure-float [sepChannel] / [blendHSLF16Body]
+            // helpers for the 14 separable + HSL modes.
+            val useF16 = isF16
             if (useF16) {
                 val rowF16 = FloatArray(rowWidth * 4)
+                val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
                 for (y in t until b) {
                     shader.shadeRowF16(l, y, rowWidth, rowF16)
                     for (xOff in 0 until rowWidth) {
                         val si = xOff * 4
                         val sa = rowF16[si + 3] * paintAlphaF
-                        if (sa <= 0f) continue
+                        if (sa <= 0f && !mustBlendZero) continue
                         val sr = rowF16[si]     * paintAlphaF
                         val sg = rowF16[si + 1] * paintAlphaF
                         val sb = rowF16[si + 2] * paintAlphaF
-                        blendF16Premul(l + xOff, y, sr, sg, sb, sa)
+                        blendF16PremulMode(l + xOff, y, sr, sg, sb, sa, mode)
                     }
                 }
             } else {
@@ -642,11 +648,13 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // computation to the F16 store).
         // Slice 2.2: float colour reaches the F16 path without byte
         // round-trip — `setAlphaf(0.3f)` survives end-to-end.
-        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm &&
-            mode == SkBlendMode.kSrcOver) {
+        // Phase 6s — F16 path covers all 29 modes (was: kSrcOver only).
+        // Non-srcOver modes route through [blendF16PremulMode].
+        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm) {
             val src = FloatArray(4)
             colorToF16Premul(color4f, src)
             val sr = src[0]; val sg = src[1]; val sb = src[2]; val sa = src[3]
+            val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
             for (y in iy0 until iy1) {
                 val cy = covAxis(rect.top, rect.bottom, y)
                 if (cy <= 0f) continue
@@ -654,7 +662,9 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     val cx = covAxis(rect.left, rect.right, x)
                     if (cx <= 0f) continue
                     val cov = cx * cy
-                    blendF16Premul(x, y, sr * cov, sg * cov, sb * cov, sa * cov)
+                    val saCov = sa * cov
+                    if (saCov <= 0f && !mustBlendZero) continue
+                    blendF16PremulMode(x, y, sr * cov, sg * cov, sb * cov, saCov, mode)
                 }
             }
             return
@@ -703,13 +713,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val ix1 = ceil(or).coerceAtMost(clip.right)
         val iy1 = ceil(ob).coerceAtMost(clip.bottom)
 
-        // Phase 6c — F16 + kSrcOver fast path (see [fillRectAA] for the
-        // rationale). Slice 2.2: float colour preserves setAlphaf precision.
-        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm &&
-            mode == SkBlendMode.kSrcOver) {
+        // Phase 6s — F16 path covers all 29 modes (was: kSrcOver only).
+        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm) {
             val src = FloatArray(4)
             colorToF16Premul(color4f, src)
             val sr = src[0]; val sg = src[1]; val sb = src[2]; val sa = src[3]
+            val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
             for (y in iy0 until iy1) {
                 val outerCY = covAxis(ot, ob, y)
                 if (outerCY <= 0f) continue
@@ -720,7 +729,9 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     val innerCX = if (innerEmpty) 0f else covAxis(il, ir, x)
                     val cov = outerCX * outerCY - innerCX * innerCY
                     if (cov <= 0f) continue
-                    blendF16Premul(x, y, sr * cov, sg * cov, sb * cov, sa * cov)
+                    val saCov = sa * cov
+                    if (saCov <= 0f && !mustBlendZero) continue
+                    blendF16PremulMode(x, y, sr * cov, sg * cov, sb * cov, saCov, mode)
                 }
             }
             return
@@ -1157,9 +1168,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // quantization step. For other configurations we keep the 8-bit
         // path (and the existing F16 → byte → F16 round-trip in [blend]).
         val isF16 = bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm
-        val useF16Path = isF16 && mode == SkBlendMode.kSrcOver
+        // Phase 6s — F16 path now covers all 29 modes (was: kSrcOver only).
+        // Non-srcOver modes route through [blendF16PremulMode].
+        val useF16Path = isF16
         val useF16ShaderPath = shader != null && useF16Path
         val useF16SolidPath = shader == null && useF16Path
+        val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
         val shaderRow: IntArray? = if (shader != null && !useF16ShaderPath) IntArray(rowWidth) else null
         val shaderRowF16: FloatArray? = if (useF16ShaderPath) FloatArray(rowWidth * 4) else null
         val solidF16: FloatArray? = if (useF16SolidPath) FloatArray(4).also { colorToF16Premul(color4f, it) } else null
@@ -1226,24 +1240,26 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     val cov = covRaw * baseAF
                     val si = xOff * 4
                     val sa = shaderRowF16[si + 3] * cov
-                    if (sa <= 0f) continue
+                    if (sa <= 0f && !mustBlendZero) continue
                     val sr = shaderRowF16[si]     * cov
                     val sg = shaderRowF16[si + 1] * cov
                     val sb = shaderRowF16[si + 2] * cov
-                    blendF16Premul(clip.left + xOff, py, sr, sg, sb, sa)
+                    blendF16PremulMode(clip.left + xOff, py, sr, sg, sb, sa, mode)
                 }
             } else if (solidF16 != null) {
-                // Phase 6c: F16 solid-colour path. Source premul-float is
-                // computed once at draw setup (no per-pixel byte → float
-                // unpack), coverage stays in float, the SrcOver blend lands
-                // straight in [SkBitmap.pixelsF16].
+                // Phase 6c / 6s: F16 solid-colour path. Source premul-float
+                // is computed once at draw setup (no per-pixel byte → float
+                // unpack), coverage stays in float, the blend lands straight
+                // in [SkBitmap.pixelsF16] for any of the 29 modes.
                 val sr0 = solidF16[0]; val sg0 = solidF16[1]
                 val sb0 = solidF16[2]; val sa0 = solidF16[3]
                 for (xOff in 0 until rowWidth) {
                     val samples = coverage[xOff]
                     if (samples == 0) continue
                     val cov = if (samples >= maxSamples) 1f else samples * invMaxSamples
-                    blendF16Premul(clip.left + xOff, py, sr0 * cov, sg0 * cov, sb0 * cov, sa0 * cov)
+                    val sa = sa0 * cov
+                    if (sa <= 0f && !mustBlendZero) continue
+                    blendF16PremulMode(clip.left + xOff, py, sr0 * cov, sg0 * cov, sb0 * cov, sa, mode)
                 }
             } else if (shader != null && shaderRow != null) {
                 // 8-bit shader path: same code as before (also covers the
@@ -1367,6 +1383,22 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         if (mode == SkBlendMode.kSrcOver &&
             bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm) {
             blendF16(x, y, src)
+            return
+        }
+        // Phase 6s — F16 path for arbitrary blend modes. The src is
+        // unpremul SkColor here ; convert to premul-float once and route
+        // through the unified [blendF16PremulMode] dispatcher so we
+        // never quantise to 8-bit between draws on F16 bitmaps.
+        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm) {
+            val sa = SkColorGetA(src) / 255f
+            // Don't short-circuit on `sa == 0` here — modes like kClear
+            // / kSrcIn must still write to the destination. Callers that
+            // already filtered transparent samples (the rectangle
+            // rasterizers) are fine ; this guard is defensive.
+            val sr = SkColorGetR(src) / 255f * sa
+            val sg = SkColorGetG(src) / 255f * sa
+            val sb = SkColorGetB(src) / 255f * sa
+            blendF16PremulMode(x, y, sr, sg, sb, sa, mode)
             return
         }
         // SrcOver fast path — same code as Phase 1 had — preserved bit-for-bit.
@@ -2075,5 +2107,182 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         pixels[i + 1] = sg + pixels[i + 1] * invSa
         pixels[i + 2] = sb + pixels[i + 2] * invSa
         pixels[i + 3] = sa + pixels[i + 3] * invSa
+    }
+
+    /**
+     * Phase 6s — premul-float blend for arbitrary [SkBlendMode]. Same
+     * input contract as [blendF16Premul] (premultiplied float `[0, 1]`
+     * src) plus a `mode` selector. The result lands directly in the
+     * F16 buffer — no intermediate quantization.
+     *
+     * For [SkBlendMode.kSrcOver] this delegates to the specialised
+     * [blendF16Premul] which is one branch shorter ; every other
+     * mode falls through the unified `when` here.
+     *
+     * Porter-Duff and the simple combinators (Plus / Modulate / Screen)
+     * are inlined as 4-line cases. The 10 separable modes share the
+     * existing pure-float [sepChannel] implementation (originally
+     * factored out for the 8-bit path — same code, no quantization).
+     * The 4 HSL modes delegate to [blendHSLF16Body] which mirrors
+     * [blendHSL]'s pre-existing float-premul body.
+     *
+     * The caller is responsible for early-exiting on `sa == 0` when
+     * the mode does not affect zero-alpha sources (cf.
+     * [modeAffectsZeroAlphaSrc]). We do **not** short-circuit here
+     * because some callers (notably saveLayer-with-blendmode) need
+     * the zero-src path to zero out the destination.
+     */
+    private fun blendF16PremulMode(
+        x: Int, y: Int,
+        sr: Float, sg: Float, sb: Float, sa: Float,
+        mode: SkBlendMode,
+    ) {
+        if (mode == SkBlendMode.kSrcOver) {
+            blendF16Premul(x, y, sr, sg, sb, sa)
+            return
+        }
+        val pixels = bitmap.pixelsF16
+        val i = (y * bitmap.width + x) * 4
+        val dr = pixels[i]
+        val dg = pixels[i + 1]
+        val db = pixels[i + 2]
+        val da = pixels[i + 3]
+
+        var or = 0f; var og = 0f; var ob = 0f; var oa = 0f
+        when (mode) {
+            SkBlendMode.kClear -> { /* zeros */ }
+            SkBlendMode.kSrc -> { or = sr; og = sg; ob = sb; oa = sa }
+            SkBlendMode.kDst -> { or = dr; og = dg; ob = db; oa = da }
+            SkBlendMode.kDstOver -> {
+                val k = 1f - da
+                or = dr + sr * k
+                og = dg + sg * k
+                ob = db + sb * k
+                oa = da + sa * k
+            }
+            SkBlendMode.kSrcIn -> {
+                or = sr * da; og = sg * da; ob = sb * da; oa = sa * da
+            }
+            SkBlendMode.kDstIn -> {
+                or = dr * sa; og = dg * sa; ob = db * sa; oa = da * sa
+            }
+            SkBlendMode.kSrcOut -> {
+                val k = 1f - da
+                or = sr * k; og = sg * k; ob = sb * k; oa = sa * k
+            }
+            SkBlendMode.kDstOut -> {
+                val k = 1f - sa
+                or = dr * k; og = dg * k; ob = db * k; oa = da * k
+            }
+            SkBlendMode.kSrcATop -> {
+                val k = 1f - sa
+                or = sr * da + dr * k
+                og = sg * da + dg * k
+                ob = sb * da + db * k
+                oa = sa * da + da * k  // simplifies to da
+            }
+            SkBlendMode.kDstATop -> {
+                val k = 1f - da
+                or = dr * sa + sr * k
+                og = dg * sa + sg * k
+                ob = db * sa + sb * k
+                oa = da * sa + sa * k  // simplifies to sa
+            }
+            SkBlendMode.kXor -> {
+                val ks = 1f - sa
+                val kd = 1f - da
+                or = sr * kd + dr * ks
+                og = sg * kd + dg * ks
+                ob = sb * kd + db * ks
+                oa = sa * kd + da * ks
+            }
+            SkBlendMode.kPlus -> {
+                or = (sr + dr).coerceAtMost(1f)
+                og = (sg + dg).coerceAtMost(1f)
+                ob = (sb + db).coerceAtMost(1f)
+                oa = (sa + da).coerceAtMost(1f)
+            }
+            SkBlendMode.kModulate -> {
+                or = sr * dr; og = sg * dg; ob = sb * db; oa = sa * da
+            }
+            SkBlendMode.kScreen -> {
+                or = sr + dr - sr * dr
+                og = sg + dg - sg * dg
+                ob = sb + db - sb * db
+                oa = sa + da - sa * da
+            }
+            // Separable modes — pure float-premul algebra already lives in
+            // [sepChannel] (factored out for the 8-bit path; we simply
+            // call it with float operands, no quantization round-trip).
+            SkBlendMode.kMultiply, SkBlendMode.kDarken, SkBlendMode.kLighten,
+            SkBlendMode.kDifference, SkBlendMode.kExclusion,
+            SkBlendMode.kOverlay, SkBlendMode.kHardLight,
+            SkBlendMode.kColorDodge, SkBlendMode.kColorBurn, SkBlendMode.kSoftLight -> {
+                or = sepChannel(sr, dr, sa, da, mode)
+                og = sepChannel(sg, dg, sa, da, mode)
+                ob = sepChannel(sb, db, sa, da, mode)
+                oa = sa + da - sa * da
+            }
+            // HSL modes — delegate to the 3-channel body helper.
+            SkBlendMode.kHue, SkBlendMode.kSaturation,
+            SkBlendMode.kColor, SkBlendMode.kLuminosity -> {
+                val body = FloatArray(3)
+                blendHSLF16Body(sr, sg, sb, sa, dr, dg, db, da, mode, body)
+                // Add the SrcOver carrier `sc*(1-da) + dc*(1-sa) + B`.
+                or = sr * (1f - da) + dr * (1f - sa) + body[0]
+                og = sg * (1f - da) + dg * (1f - sa) + body[1]
+                ob = sb * (1f - da) + db * (1f - sa) + body[2]
+                oa = sa + da - sa * da
+            }
+            SkBlendMode.kSrcOver -> {
+                // Already handled by the early-return above; this branch
+                // is unreachable but kept for `when` exhaustiveness.
+            }
+        }
+
+        pixels[i]     = or.coerceIn(0f, 1f)
+        pixels[i + 1] = og.coerceIn(0f, 1f)
+        pixels[i + 2] = ob.coerceIn(0f, 1f)
+        pixels[i + 3] = oa.coerceIn(0f, 1f)
+    }
+
+    /**
+     * Compute the HSL `body` term in premul-float `[0, sa*da]` space.
+     * Mirrors [blendHSL]'s body computation but writes directly into
+     * the 3-element [out] buffer instead of going through the 8-bit
+     * un-premul-and-quantize path. The caller adds the SrcOver
+     * carrier and writes into the F16 buffer.
+     */
+    private fun blendHSLF16Body(
+        sr: Float, sg: Float, sb: Float, sa: Float,
+        dr: Float, dg: Float, db: Float, da: Float,
+        mode: SkBlendMode,
+        out: FloatArray,
+    ) {
+        // Scale src by da and dst by sa so both live in `[0, sa*da]`.
+        val a = sa * da
+        val srA = sr * da; val sgA = sg * da; val sbA = sb * da
+        val drA = dr * sa; val dgA = dg * sa; val dbA = db * sa
+        when (mode) {
+            SkBlendMode.kHue -> {
+                out[0] = srA; out[1] = sgA; out[2] = sbA
+                setSat(out, sat3(drA, dgA, dbA))
+                setLum(out, a, lum3(drA, dgA, dbA))
+            }
+            SkBlendMode.kSaturation -> {
+                out[0] = drA; out[1] = dgA; out[2] = dbA
+                setSat(out, sat3(srA, sgA, sbA))
+                setLum(out, a, lum3(drA, dgA, dbA))
+            }
+            SkBlendMode.kColor -> {
+                out[0] = srA; out[1] = sgA; out[2] = sbA
+                setLum(out, a, lum3(drA, dgA, dbA))
+            }
+            SkBlendMode.kLuminosity -> {
+                out[0] = drA; out[1] = dgA; out[2] = dbA
+                setLum(out, a, lum3(srA, sgA, sbA))
+            }
+            else -> error("blendHSLF16Body called with non-HSL mode: $mode")
+        }
     }
 }
