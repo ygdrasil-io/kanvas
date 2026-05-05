@@ -3,6 +3,7 @@ package org.skia.core
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkColor4f
 import org.skia.foundation.SkColorGetA
 import org.skia.foundation.SkColorGetB
 import org.skia.foundation.SkColorGetG
@@ -383,7 +384,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         if (path.isEmpty() && !path.fillType.isInverse()) return
 
         val shader = paint.shader
-        val color: SkColor
+        val color4f: SkColor4f
         val baseA: Int
         if (shader != null) {
             // Shader supplies per-pixel colour. Set it up once for this draw,
@@ -391,12 +392,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             // *and* by `paint.alpha` (matches Skia's
             // "shaderColor.alpha *= paint.alpha" semantics — Phase 5g).
             shader.setupForDraw(ctm, xformSteps)
-            color = 0    // unused — per-pixel colour comes from the shader
-            baseA = SkColorGetA(paint.color)  // paint.alpha modulator
+            color4f = SkColor4f(0f, 0f, 0f, 0f)   // unused — per-pixel colour comes from the shader
+            baseA = paint.alpha                    // paint.alpha modulator
             if (baseA == 0 && !modeAffectsZeroAlphaSrc(paint.blendMode)) return
         } else {
-            color = transformPaintColor(paint.color)
-            baseA = SkColorGetA(color)
+            // Slice 2.2: float-precision colour-space xform — `setAlphaf`
+            // sub-byte precision survives the sRGB→working-space step.
+            color4f = transformPaintColor(paint.color4f)
+            baseA = (color4f.fA * 255f + 0.5f).toInt().coerceIn(0, 255)
             // Modes that produce a non-trivial output for transparent src
             // (e.g. kClear, kDstIn) must still walk covered pixels even when
             // the paint colour has alpha 0.
@@ -408,24 +411,24 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
         when (paint.style) {
             SkPaint.Style.kFill_Style ->
-                fillPath(path, ctm, clip, color, baseA, supers, shader, mode)
+                fillPath(path, ctm, clip, color4f, baseA, supers, shader, mode)
             SkPaint.Style.kStroke_Style -> {
                 val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
                 if (outline.isEmpty()) return
-                fillPath(outline, ctm, clip, color, baseA, supers, shader, mode)
+                fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode)
             }
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillPath(path, ctm, clip, color, baseA, supers, shader, mode)
+                fillPath(path, ctm, clip, color4f, baseA, supers, shader, mode)
                 val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
                 if (outline.isEmpty()) return
-                fillPath(outline, ctm, clip, color, baseA, supers, shader, mode)
+                fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode)
             }
         }
     }
 
     private fun fillPath(
         path: SkPath, ctm: SkMatrix,
-        clip: SkIRect, color: SkColor, baseA: Int, supers: Int,
+        clip: SkIRect, color4f: SkColor4f, baseA: Int, supers: Int,
         shader: SkShader?, mode: SkBlendMode,
     ) {
         val edges = buildEdges(path, ctm)
@@ -433,16 +436,18 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // still need to flood the clip (no edges → entire clip is "outside
         // the path" → covered).
         if (edges.isEmpty() && !path.fillType.isInverse()) return
-        scanFillPath(edges, path.fillType, clip, color, baseA, supers, shader, mode)
+        scanFillPath(edges, path.fillType, clip, color4f, baseA, supers, shader, mode)
     }
 
     /**
-     * Return a [paint] copy with its `color` transformed from sRGB into the
+     * Return a [paint] copy with its colour transformed from sRGB into the
      * bitmap's color space. Identity-fast-path when no xform is needed.
+     * Slice 2.2: routes through the float overloads so `setAlphaf(x)`
+     * precision survives the colour-space xform.
      */
     private fun inDeviceColorSpace(paint: SkPaint): SkPaint {
         if (xformSteps.flags.isIdentity) return paint
-        return paint.copy().also { it.color = transformPaintColor(it.color) }
+        return paint.copy().also { it.setColor4f(transformPaintColor(it.color4f)) }
     }
 
     /**
@@ -465,6 +470,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     }
 
     /**
+     * Slice 2.2: float-precision counterpart to [transformPaintColor].
+     * No byte round-trip — the [SkColor4f] enters and leaves the function
+     * as 4 floats, so `setAlphaf(0.3f)` precision is preserved through
+     * the colour-space xform.
+     */
+    private fun transformPaintColor(c: SkColor4f): SkColor4f {
+        if (xformSteps.flags.isIdentity) return c
+        val rgba = c.vec()
+        xformSteps.apply(rgba)
+        return SkColor4f(rgba[0], rgba[1], rgba[2], rgba[3])
+    }
+
+    /**
      * Phase 6c: working-space `SkColor` (8-bit non-premul ARGB) →
      * premultiplied float quartet `(sr, sg, sb, sa) ∈ [0, 1]`. The colour
      * passed in **must** already be in the bitmap's working colour space
@@ -483,6 +501,22 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         out[0] = SkColorGetR(c) / 255f * a
         out[1] = SkColorGetG(c) / 255f * a
         out[2] = SkColorGetB(c) / 255f * a
+        out[3] = a
+    }
+
+    /**
+     * Slice 2.2: float-precision counterpart of [colorToF16Premul]. Reads
+     * directly from [SkColor4f] without going through `SkColorGet{R,G,B,A}`,
+     * so any sub-byte precision set via `paint.setAlphaf` / `setColor4f`
+     * survives all the way to the F16 buffer. Iso with Skia's premul
+     * extraction in `SkRasterPipeline_premul`.
+     */
+    private fun colorToF16Premul(c: SkColor4f, out: FloatArray) {
+        require(out.size >= 4)
+        val a = c.fA
+        out[0] = c.fR * a
+        out[1] = c.fG * a
+        out[2] = c.fB * a
         out[3] = a
     }
 
@@ -569,18 +603,18 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     private fun drawRectAA(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val mode = paint.blendMode
         when (paint.style) {
-            SkPaint.Style.kFill_Style -> fillRectAA(rect, clip, paint.color, mode)
-            SkPaint.Style.kStroke_Style -> strokeRectAA(rect, paint.strokeWidth, clip, paint.color, mode)
+            SkPaint.Style.kFill_Style -> fillRectAA(rect, clip, paint.color4f, mode)
+            SkPaint.Style.kStroke_Style -> strokeRectAA(rect, paint.strokeWidth, clip, paint.color4f, mode)
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillRectAA(rect, clip, paint.color, mode)
-                strokeRectAA(rect, paint.strokeWidth, clip, paint.color, mode)
+                fillRectAA(rect, clip, paint.color4f, mode)
+                strokeRectAA(rect, paint.strokeWidth, clip, paint.color4f, mode)
             }
         }
     }
 
-    private fun fillRectAA(rect: SkRect, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
+    private fun fillRectAA(rect: SkRect, clip: SkIRect, color4f: SkColor4f, mode: SkBlendMode) {
         if (rect.right <= rect.left || rect.bottom <= rect.top) return
-        val baseA = SkColorGetA(color)
+        val baseA = (color4f.fA * 255f + 0.5f).toInt().coerceIn(0, 255)
         if (baseA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         val ix0 = floor(rect.left).coerceAtLeast(clip.left)
         val iy0 = floor(rect.top).coerceAtLeast(clip.top)
@@ -593,10 +627,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // (the legacy `scaleAlpha(baseA, cx * cy)` step rounded coverage to
         // 1/255 before blending; now we go straight from the float coverage
         // computation to the F16 store).
+        // Slice 2.2: float colour reaches the F16 path without byte
+        // round-trip — `setAlphaf(0.3f)` survives end-to-end.
         if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm &&
             mode == SkBlendMode.kSrcOver) {
             val src = FloatArray(4)
-            colorToF16Premul(color, src)
+            colorToF16Premul(color4f, src)
             val sr = src[0]; val sg = src[1]; val sb = src[2]; val sa = src[3]
             for (y in iy0 until iy1) {
                 val cy = covAxis(rect.top, rect.bottom, y)
@@ -613,6 +649,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
         // Legacy 8-bit path (also covers the F16 + non-SrcOver case where
         // we'd need a per-mode float dispatch — out of scope for Phase 6c).
+        val color = color4f.toSkColor()
         val rgb = color and 0x00FFFFFF
         for (y in iy0 until iy1) {
             val cy = covAxis(rect.top, rect.bottom, y)
@@ -633,7 +670,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * axis-aligned rects this lights up the same pixel set as Skia's
      * `SkScan::AntiHairLineRgn` with matching coverage at half-integer edges.
      */
-    private fun strokeRectAA(rect: SkRect, strokeWidth: Float, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
+    private fun strokeRectAA(rect: SkRect, strokeWidth: Float, clip: SkIRect, color4f: SkColor4f, mode: SkBlendMode) {
         val w = if (strokeWidth <= 0f) 1f else strokeWidth
         val half = w * 0.5f
         val ol = rect.left - half
@@ -646,7 +683,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val ib = rect.bottom - half
         val innerEmpty = ir <= il || ib <= it
         if (or <= ol || ob <= ot) return
-        val baseA = SkColorGetA(color)
+        val baseA = (color4f.fA * 255f + 0.5f).toInt().coerceIn(0, 255)
         if (baseA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         val ix0 = floor(ol).coerceAtLeast(clip.left)
         val iy0 = floor(ot).coerceAtLeast(clip.top)
@@ -654,11 +691,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val iy1 = ceil(ob).coerceAtMost(clip.bottom)
 
         // Phase 6c — F16 + kSrcOver fast path (see [fillRectAA] for the
-        // rationale).
+        // rationale). Slice 2.2: float colour preserves setAlphaf precision.
         if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm &&
             mode == SkBlendMode.kSrcOver) {
             val src = FloatArray(4)
-            colorToF16Premul(color, src)
+            colorToF16Premul(color4f, src)
             val sr = src[0]; val sg = src[1]; val sb = src[2]; val sa = src[3]
             for (y in iy0 until iy1) {
                 val outerCY = covAxis(ot, ob, y)
@@ -676,6 +713,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             return
         }
 
+        val color = color4f.toSkColor()
         val rgb = color and 0x00FFFFFF
         for (y in iy0 until iy1) {
             val outerCY = covAxis(ot, ob, y)
@@ -1054,9 +1092,13 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
     private fun scanFillPath(
         edges: List<Edge>, fillType: SkPathFillType, clip: SkIRect,
-        color: SkColor, baseA: Int, supers: Int,
+        color4f: SkColor4f, baseA: Int, supers: Int,
         shader: SkShader?, mode: SkBlendMode,
     ) {
+        // Lazily computed on entry to the legacy 8-bit path. The F16 fast
+        // path consumes [color4f] directly and never pays the byte
+        // round-trip — that's the whole point of Slice 2.2.
+        val color: SkColor by lazy { color4f.toSkColor() }
         val maxSamples = supers * supers
         // Inverse fills paint the complement of the path's interior,
         // clipped to the device clip. Iteration must therefore cover the
@@ -1107,7 +1149,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val useF16SolidPath = shader == null && useF16Path
         val shaderRow: IntArray? = if (shader != null && !useF16ShaderPath) IntArray(rowWidth) else null
         val shaderRowF16: FloatArray? = if (useF16ShaderPath) FloatArray(rowWidth * 4) else null
-        val solidF16: FloatArray? = if (useF16SolidPath) FloatArray(4).also { colorToF16Premul(color, it) } else null
+        val solidF16: FloatArray? = if (useF16SolidPath) FloatArray(4).also { colorToF16Premul(color4f, it) } else null
         val invMaxSamples = 1f / maxSamples.toFloat()
 
         for (py in py0 until py1) {
