@@ -119,6 +119,120 @@ public class SkPath internal constructor(
     public fun countPoints(): Int = coords.size / 2
 
     /**
+     * True iff [other] shares this path's verb stream and conic-weight
+     * sequence — the precondition for [makeInterpolate]. Two paths are
+     * interpolatable when corresponding points can be lerped without
+     * changing verb identity (a `kQuad` against a `kCubic` would
+     * silently re-shape the curve, so we reject it). Mirrors
+     * `SkPath::isInterpolatable` (`include/core/SkPath.h:210`).
+     */
+    public fun isInterpolatable(other: SkPath): Boolean {
+        if (verbs.size != other.verbs.size) return false
+        for (i in verbs.indices) if (verbs[i] != other.verbs[i]) return false
+        if (conicWeights.size != other.conicWeights.size) return false
+        for (i in conicWeights.indices) {
+            if (conicWeights[i] != other.conicWeights[i]) return false
+        }
+        return true
+    }
+
+    /**
+     * Returns a new path whose points are a weighted average of `this`
+     * and [ending]:
+     *
+     * ```
+     * out[i] = this[i] * weight + ending[i] * (1 - weight)
+     * ```
+     *
+     * `weight = 1` reproduces `this`; `weight = 0` reproduces [ending];
+     * values outside `[0, 1]` extrapolate. Verbs and conic weights are
+     * inherited from `this`; the [fillType] is also kept. Returns
+     * `null` (matching Skia's "empty SkPath" sentinel) when the two
+     * paths aren't [isInterpolatable]. Mirrors `SkPath::makeInterpolate`
+     * (`include/core/SkPath.h:232`).
+     */
+    public fun makeInterpolate(ending: SkPath, weight: SkScalar): SkPath? {
+        if (!isInterpolatable(ending)) return null
+        val n = coords.size
+        if (n != ending.coords.size) return null   // defence against drift
+        val out = FloatArray(n)
+        val u = 1f - weight
+        for (i in 0 until n) {
+            out[i] = coords[i] * weight + ending.coords[i] * u
+        }
+        return SkPath(verbs, out, conicWeights, fillType)
+    }
+
+    /**
+     * Kotlin-idiomatic alias for [makeInterpolate]. Mirrors Skia's
+     * out-pointer overload `bool SkPath::interpolate(const SkPath&,
+     * SkScalar, SkPath* out) const` (`include/core/SkPath.h:255`) —
+     * here we surface the result as a nullable return.
+     */
+    public fun interpolate(ending: SkPath, weight: SkScalar): SkPath? =
+        makeInterpolate(ending, weight)
+
+    /**
+     * Text dump of the path's verb stream. One verb per line, control
+     * points / weights inlined. Mirrors `SkPath::dumpToString`
+     * (`include/core/SkPath.h:1085`). Useful for diagnostics; the
+     * format is not stable across Skia versions and shouldn't be
+     * parsed.
+     */
+    public fun dumpToString(): String {
+        val sb = StringBuilder()
+        sb.append("path(fillType=").append(fillType.name).append(", verbs=").append(verbs.size).append(") {\n")
+        var coordIdx = 0
+        var weightIdx = 0
+        for (verb in verbs) {
+            sb.append("  ")
+            when (verb) {
+                Verb.kMove -> {
+                    sb.append("moveTo(")
+                    sb.append(coords[coordIdx++]).append(", ").append(coords[coordIdx++])
+                    sb.append(")\n")
+                }
+                Verb.kLine -> {
+                    sb.append("lineTo(")
+                    sb.append(coords[coordIdx++]).append(", ").append(coords[coordIdx++])
+                    sb.append(")\n")
+                }
+                Verb.kQuad -> {
+                    sb.append("quadTo(")
+                    sb.append(coords[coordIdx++]).append(", ").append(coords[coordIdx++]).append(", ")
+                    sb.append(coords[coordIdx++]).append(", ").append(coords[coordIdx++])
+                    sb.append(")\n")
+                }
+                Verb.kConic -> {
+                    sb.append("conicTo(")
+                    sb.append(coords[coordIdx++]).append(", ").append(coords[coordIdx++]).append(", ")
+                    sb.append(coords[coordIdx++]).append(", ").append(coords[coordIdx++]).append(", w=")
+                    sb.append(conicWeights[weightIdx++])
+                    sb.append(")\n")
+                }
+                Verb.kCubic -> {
+                    sb.append("cubicTo(")
+                    sb.append(coords[coordIdx++]).append(", ").append(coords[coordIdx++]).append(", ")
+                    sb.append(coords[coordIdx++]).append(", ").append(coords[coordIdx++]).append(", ")
+                    sb.append(coords[coordIdx++]).append(", ").append(coords[coordIdx++])
+                    sb.append(")\n")
+                }
+                Verb.kClose -> sb.append("close()\n")
+            }
+        }
+        sb.append("}")
+        return sb.toString()
+    }
+
+    /**
+     * Print [dumpToString] to stderr. Mirrors `SkPath::dump`
+     * (`include/core/SkPath.h:1071`).
+     */
+    public fun dump() {
+        System.err.println(dumpToString())
+    }
+
+    /**
      * Number of verbs in the path. Mirrors `SkPath::countVerbs`
      * (`include/core/SkPath.h:441`).
      */
