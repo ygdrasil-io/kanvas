@@ -50,6 +50,22 @@ public class SkPath internal constructor(
         kClose(0),
     }
 
+    /**
+     * How [SkPathBuilder.addPath] joins the source path to the destination
+     * builder. Mirrors `SkPath::AddPathMode` (`include/core/SkPath.h:617-628`).
+     *
+     * - [kAppend] : copy the source verb stream verbatim. Source contours
+     *   stay separate from the destination's last contour.
+     * - [kExtend] : extend the destination's last contour by replacing the
+     *   source's first `kMove` with a `lineTo` to the (transformed) move
+     *   point. Subsequent contours within the source are appended as-is.
+     *   If the destination is empty, behaves like [kAppend]. If the
+     *   destination's last verb is `kClose`, the implicit move emitted
+     *   by `ensureContour` re-anchors the pen at the just-closed
+     *   contour's start (see Phase 1.2) before the line is drawn.
+     */
+    public enum class AddPathMode { kAppend, kExtend }
+
     public fun isEmpty(): Boolean = verbs.isEmpty()
 
     /**
