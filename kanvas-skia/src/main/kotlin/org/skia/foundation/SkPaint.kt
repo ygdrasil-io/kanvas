@@ -181,22 +181,37 @@ public class SkPaint() {
     public fun isSrcOver(): Boolean = blendMode == SkBlendMode.kSrcOver
 
     /**
-     * Returns `true` when the paint is a no-op draw: alpha 0 + a blend
-     * mode where transparent source produces transparent dest. Mirrors
-     * a subset of Skia's `SkPaint::nothingToDraw`. Conservative: returns
-     * `true` only for the cases we can prove statically; real Skia also
-     * checks color filters / image filters which the Kotlin port does
-     * not yet model.
+     * Returns `true` when the paint is a no-op draw. Iso with Skia's
+     * `SkPaint::nothingToDraw` (`src/core/SkPaint.cpp`):
+     *
+     * - [SkBlendMode.kDst] always returns `true` — `r = d` regardless of
+     *   src or alpha (Slice 2.6).
+     * - [SkBlendMode.kSrcOver], [kSrcATop], [kDstOut], [kDstOver], [kPlus]
+     *   return `true` when `alpha == 0` (transparent premul source ⇒ dst
+     *   unchanged).
+     * - Every other case returns `false`.
+     *
+     * The shader-presence early-out is a port-specific safety net: a
+     * shader can produce non-transparent output regardless of paint
+     * alpha, so we cannot prove the no-op statically. Skia would also
+     * consult `SkColorFilter` / `SkImageFilter` here (`affects_alpha`),
+     * but those subsystems are not yet ported (audit rows C1 / C4).
      */
-    public fun nothingToDraw(): Boolean {
-        if (shader != null) return false
-        if (alpha != 0) return false
-        return when (blendMode) {
-            SkBlendMode.kSrcOver, SkBlendMode.kDstOver, SkBlendMode.kSrcATop,
-            SkBlendMode.kDstOut, SkBlendMode.kXor, SkBlendMode.kPlus,
-            -> true
-            else -> false
+    public fun nothingToDraw(): Boolean = when (blendMode) {
+        // r = d for every src — even a shader's per-pixel output is
+        // ignored. Always a no-op.
+        SkBlendMode.kDst -> true
+        SkBlendMode.kSrcOver, SkBlendMode.kSrcATop,
+        SkBlendMode.kDstOut, SkBlendMode.kDstOver, SkBlendMode.kPlus,
+        -> {
+            // Conservative port-specific safety net: bail when a shader
+            // is present. In principle `shader.alpha * paint.alpha` is
+            // also 0 when `paint.alpha == 0`, but our shader path doesn't
+            // yet model the `affects_alpha` checks Skia performs on
+            // SkColorFilter / SkImageFilter (audit C1 / C4).
+            shader == null && alpha == 0
         }
+        else -> false
     }
 
     // ─── Lifecycle ──────────────────────────────────────────────────
