@@ -1121,6 +1121,8 @@ L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées s
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [archives/MIGRATION_PLAN_COLORSPACE_PORT.md](archives/MIGRATION_PLAN_COLORSPACE_PORT.md) (terminé : phases A-J + F1-F7 livrées, K out of scope).
 
+**Bonus** : [archives/MIGRATION_PLAN_PATH_PARITY.md](archives/MIGRATION_PLAN_PATH_PARITY.md) ✅ — audit iso vs Skia C++ → 11 PRs sur 3 phases (correctness moveTo/ensureMove, verb-stream cubic→conic, surface API complète). 11 GMs améliorés ou débloqués (`PathArcToSkbug9077` +0.43, `ArcOfZorro` +0.17, `CircleSizes` +0.13, `PathInterior` +0.09, `DRRect`/`ArcCircleGap`/`LargeCircle`/`Strokes4`/`Bug593049`/`RoundRect`, plus `ArcToGM` 95.80 % et `CubicPathGM` 87.25 % portés). 0 régression sur 75+ GMs cumulés.
+
 > Au-delà : reprendre [SKIA_DM_TESTS_TO_IMPLEMENT.md](SKIA_DM_TESTS_TO_IMPLEMENT.md) Level 2 par catégories (bitmap operations, transformations avancées, effects), en gardant la même mécanique slice-vertical.
 
 ---
