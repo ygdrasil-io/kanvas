@@ -113,3 +113,28 @@ public class CircularArcsHairlineGM : CircularArcsGM("circular_arcs_hairline") {
         paint.strokeWidth = 0f
     }
 }
+
+/** Stroked `drawArc` grid with `kButt_Cap`. Stroke width left at the
+ *  base 15 px from `CircularArcsGM`. */
+public class CircularArcsStrokeButtGM : CircularArcsGM("circular_arcs_stroke_butt") {
+    override fun configurePaint(paint: SkPaint) {
+        paint.style = SkPaint.Style.kStroke_Style
+        paint.strokeCap = SkPaint.Cap.kButt_Cap
+    }
+}
+
+/** Stroked `drawArc` grid with `kSquare_Cap`. */
+public class CircularArcsStrokeSquareGM : CircularArcsGM("circular_arcs_stroke_square") {
+    override fun configurePaint(paint: SkPaint) {
+        paint.style = SkPaint.Style.kStroke_Style
+        paint.strokeCap = SkPaint.Cap.kSquare_Cap
+    }
+}
+
+/** Stroked `drawArc` grid with `kRound_Cap`. */
+public class CircularArcsStrokeRoundGM : CircularArcsGM("circular_arcs_stroke_round") {
+    override fun configurePaint(paint: SkPaint) {
+        paint.style = SkPaint.Style.kStroke_Style
+        paint.strokeCap = SkPaint.Cap.kRound_Cap
+    }
+}
