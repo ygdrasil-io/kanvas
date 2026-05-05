@@ -1,6 +1,6 @@
 # Migration plan — `SkPaint` parity with Skia C++
 
-**Status** : Phase 1 (audit) — open
+**Status** : ✅ closed (2026-05-05). Phase 1 audit + Phase 2 (6 slices) shipped — see [Closeout recap](#closeout-recap) at the end.
 **Started** : 2026-05-05
 **Trigger** : `BatchedConvexPathsGM` 34.94 % similarity. Investigation traced the drift to alpha precision loss in `SkBitmapDevice.colorToF16Premul` — root cause is **storage**, not raster: our `SkPaint` keeps colour as a packed 32-bit `SkColor` while Skia stores `SkColor4f` (4 floats) as the source of truth. `setAlphaf(0.3f)` therefore quantises to `77/255 ≈ 0.30196` in our port and produces visible drift (max 26/255 per channel) once the F16 working space tries to round-trip back.
 
@@ -166,3 +166,35 @@ Open these only if Phase 2 closes leave residual divergences material to GM scor
 - Archive to `archives/MIGRATION_PLAN_PAINT_PARITY.md` once closed.
 
 **`BatchedConvexPathsGM` ≥ 85 %** is **not** a Phase 2 target — Slice 2.2 demonstrated that alpha precision is not the dominant error source. The remaining drift requires a separate compositing-math investigation (working-space vs linear-space SrcOver), out of scope for SkPaint parity.
+
+---
+
+## Closeout recap
+
+7 PRs across Phase 1 (audit) + Phase 2 (6 slices). 0 ratchet failures. Cumulative behaviour change : **`SkPaint` is now stored as `SkColor4f` and threads float precision through every code path that the Kotlin port supports**.
+
+| PR  | Slice | Branch                              | Summary                                                                                                                    | GM impact                                                                                                |
+| --- | ----- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| #92 | 1     | `claude/paint-parity-phase-1`       | API parity audit (doc-only). Catalogues divergences A1-A5 (storage), B1-B10 (missing API), C1-C5 (out-of-scope filters), D (29 internal consumers). | 0                                                                                                        |
+| #94 | 2.1   | `claude/paint-parity-slice-2.1`     | Storage refactor — private `fColor4f: SkColor4f` becomes source of truth. `var color`/`color4f`/`alpha`/`alphaf` are now computed properties on it. + secondary constructor `SkPaint(SkColor4f, SkColorSpace?)` + `setColor4f(...)` stub. 8 new precision-contract tests. | 0 (behaviour-neutral; bytes round-trip identically)                                                      |
+| #95 | 2.2   | `claude/paint-parity-slice-2.2`     | F16 plumbing — new `colorToF16Premul(SkColor4f, FloatArray)` + `transformPaintColor(SkColor4f) → SkColor4f` overloads; `inDeviceColorSpace`/`fillRectAA`/`strokeRectAA`/`fillPath`/`scanFillPath` switch to `SkColor4f`. **Audit hypothesis (BatchedConvexPaths ≥ 85 %) disproven** — the GM is bottlenecked elsewhere. Restored `setAlphaf(0.3f)` parity in `BatchedConvexPathsGM` port. | `BatchedConvexPathsGM` 34.94 → 34.94 %. ±0.01–0.12 % drift on 6 GMs (within 1 % ratchet). 0 ratchet fails. |
+| #97 | 2.3   | `claude/paint-parity-slice-2.3`     | Shader / composite paths — 5 sites switch from `SkColorGetA(paint.color)` to `paint.alpha` / `paint.alphaf`. The drawPaint shader F16 path now reads float directly. | 0 (no GM exercises shader+setAlphaf precision today)                                                     |
+| #99 | 2.4   | `claude/paint-parity-slice-2.4`     | `setStrokeWidth(<0)` and `setStrokeMiter(<0)` silently rejected (custom property setters). Iso with `src/core/SkPaint.cpp`. 2 new tests. | 0                                                                                                        |
+| #100| 2.5   | `claude/paint-parity-slice-2.5`     | `setColor4f(SkColor4f, SkColorSpace?)` wires `SkColorSpaceXformSteps(srcCS → sRGB)` with identity-pipeline short-circuit. 4 new tests (null/sRGB/Rec.2020/identity precision). | 0 (no GM uses non-sRGB paint colour space today)                                                         |
+| #101| 2.6   | `claude/paint-parity-slice-2.6`     | `nothingToDraw` parity : add `kDst → true` unconditionally; remove `kXor` from the alpha-0 passthrough list (iso Skia). Shader guard scoped to passthrough branch only. 3 new tests. | 0 (no GM exercises kDst draws today)                                                                     |
+
+### Net delivered
+
+- Storage : `SkPaint.fColor4f` is the iso source of truth. `setAlphaf(0.3f)` survives → `paint.alphaf == 0.3f` exactly (was `0.30196f` via byte round-trip).
+- F16 raster pipeline : float-precision colour reaches `blendF16Premul` without any byte intermediary. `transformPaintColor`, `colorToF16Premul`, `inDeviceColorSpace` all have float overloads.
+- API surface : `SkColor4f` constructor, `setColor4f` with colour-space xform, `setStrokeWidth/Miter` silent reject, `nothingToDraw` iso list — all delivered.
+- Shader / composite alpha modulation : direct `paint.alpha` / `paint.alphaf` access (no more `SkColorGetA(paint.color)` in `SkBitmapDevice.kt`).
+- 28 new `SkPaintTest` cases (10 → 38 total). 0 ratchet failure across 141+ GMs.
+
+### What's deferred
+
+- **`BatchedConvexPathsGM` 34.94 %** — root cause is *not* alpha precision. The audit hypothesis was wrong. Likely a working-space vs linear-space SrcOver discrepancy in the F16 raster, but Phase 5h's prior post-mortem already showed that linear-premul F16 storage doesn't help. Needs a separate compositing-math investigation orthogonal to `SkPaint` shape.
+- **`SkColorFilter` / `SkPathEffect` / `SkMaskFilter` / `SkImageFilter`** (audit C1-C4) — massive subsystems; defer to a dedicated plan if a GM needs them.
+- **`SkBlender` polymorphism** (audit C5) — only useful if `SkRuntimeEffect` lands.
+- **`canComputeFastBounds` / `computeFastBounds`** (audit B7) — needed for `quickReject` once it ports. Depends on `SkStrokeRec::GetInflationRadius`.
+- **`SkPaintPriv::Overwrites` / `ShouldDither` / `ComputeLuminanceColor`** (audit B8) — modest perf wins; not blocking any GM.
