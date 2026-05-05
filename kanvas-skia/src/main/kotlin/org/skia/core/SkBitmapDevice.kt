@@ -88,10 +88,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * modes the device must still walk the spans and apply the blend.
      */
     private fun modeAffectsZeroAlphaSrc(mode: SkBlendMode): Boolean = when (mode) {
+        // r = 0
         SkBlendMode.kClear,
+        // r = s — when s premul = 0, dst becomes 0
         SkBlendMode.kSrc,
+        // r = s * da — zeroes dst where src.alpha == 0
         SkBlendMode.kSrcIn,
+        // r = d * sa — zeroes dst where src.alpha == 0
         SkBlendMode.kDstIn,
+        // r = s * (1-da) — zeroes dst where src.alpha == 0
+        SkBlendMode.kSrcOut,
+        // r = d*sa + s*(1-da) — zeroes dst where src.alpha == 0
+        SkBlendMode.kDstATop,
+        // r = s * d — zeroes dst where src is 0
         SkBlendMode.kModulate -> true
         else -> false
     }
@@ -269,6 +278,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // tend to have far fewer pixels than the dst rect.
         val devPixels = imagePixelsInDeviceColorSpace(image)
 
+        // For modes whose formula reduces to a non-`dst` value at sa=0
+        // (e.g. kClear, kSrc, kSrcIn, kSrcOut, kDstIn, kDstATop, kModulate),
+        // we must still call `blend` on transparent samples — otherwise the
+        // covered pixel keeps its dst value instead of being zeroed.
+        val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
         when (sampling.filter) {
             SkFilterMode.kNearest -> {
                 for (py in iy0 until iy1) {
@@ -278,7 +292,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val srcXc = src.left + (px + 0.5f - devDst.left) * scaleX
                         val ix = floor(srcXc).coerceIn(0, maxX)
                         val sample = applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
-                        if (sample ushr 24 == 0) continue
+                        if (sample ushr 24 == 0 && !mustBlendZero) continue
                         blend(px, py, sample, mode)
                     }
                 }
@@ -299,7 +313,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val c01 = devPixels[iy1i * image.width + ix0i]
                         val c11 = devPixels[iy1i * image.width + ix1i]
                         val sample = applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
-                        if (sample ushr 24 == 0) continue
+                        if (sample ushr 24 == 0 && !mustBlendZero) continue
                         blend(px, py, sample, mode)
                     }
                 }
