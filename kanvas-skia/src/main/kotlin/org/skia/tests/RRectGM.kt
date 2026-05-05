@@ -145,10 +145,10 @@ public class RRectGM : GM() {
     private fun inset3(src: SkRRect, dx: Float, dy: Float): SkRRect {
         val r = insetRect(src, dx, dy) ?: return SkRRect()
         val rr = SkRRect()
-        val ow = src.rect().width
-        val oh = src.rect().height
-        val nw = r.width
-        val nh = r.height
+        val ow = src.rect().width()
+        val oh = src.rect().height()
+        val nw = r.width()
+        val nh = r.height()
         val scaled = Array(4) { i ->
             val v = src.radii(idxToCorner(i))
             SkVector(nw * v.fX / ow, nh * v.fY / oh)

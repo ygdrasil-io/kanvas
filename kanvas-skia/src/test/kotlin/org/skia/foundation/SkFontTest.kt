@@ -272,9 +272,9 @@ class SkFontTest {
         assertTrue(advance > 0f)
         // Visual bbox of "Hello" with a 40pt font: expect height in roughly [10, 50] pixels
         // (cap-height area, no descenders), width comparable to advance.
-        assertTrue(bounds.width > 0f, "width must be positive, got ${bounds.width}")
-        assertTrue(bounds.height > 0f, "height must be positive, got ${bounds.height}")
-        assertTrue(bounds.height < 60f, "visual height should be < 60 for a 40pt font, got ${bounds.height}")
+        assertTrue(bounds.width() > 0f, "width must be positive, got ${bounds.width()}")
+        assertTrue(bounds.height() > 0f, "height must be positive, got ${bounds.height()}")
+        assertTrue(bounds.height() < 60f, "visual height should be < 60 for a 40pt font, got ${bounds.height()}")
     }
 
     // ---------- T2: getMetrics ---------------------------------------------

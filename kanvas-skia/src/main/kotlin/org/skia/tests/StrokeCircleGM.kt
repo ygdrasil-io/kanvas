@@ -49,7 +49,7 @@ public class StrokeCircleGM : GM() {
         // to exercise the SkCanvas.rotate dispatch end-to-end.
         val fRotate = 0f
         var sign = 1f
-        while (r.width > paint.strokeWidth * 2f) {
+        while (r.width() > paint.strokeWidth * 2f) {
             c.save()
             c.rotate(fRotate * sign)
             paint.color = ToolUtils.colorTo565(rand.nextU() or 0xFF000000.toInt())
