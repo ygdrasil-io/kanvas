@@ -171,26 +171,61 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         s.matrix = SkMatrix.Identity
     }
 
+    /**
+     * Mirrors Skia's `SkCanvas::clipRect(rect)` (default non-AA).
+     *
+     * Non-AA clipping snaps the device-space rect to integer bounds via
+     * `SkScalarRoundToInt` per component (round-half-up = `floor(c + 0.5)`),
+     * matching Skia's `SkRasterClip::op(rect.round(), ...)`. This makes
+     * the clip pixel-aligned with the non-AA `drawRect` rasterizer (see
+     * `SkBitmapDevice.pixelEdge`) — a sub-pixel-edge `rect` consumed by
+     * both `clipRect` and `drawRect` lands on the same integer pixel rows
+     * and columns, so a `clipRect(r) ; drawRect(bigRect) ; drawRect(r)`
+     * pattern leaves no 1-px remnants (cf. `ClipDrawDrawGM`,
+     * `crbug.com/423834`).
+     *
+     * For non-axis-aligned matrices the rotated clip becomes a quad ; we
+     * approximate with its axis-aligned bbox (conservative) using the
+     * same rounding.
+     */
     public fun clipRect(rect: SkRect) {
-        val s = top
-        // Under non-axis-aligned matrices the rotated clip becomes a quad —
-        // we approximate with its axis-aligned bbox (conservative).
-        val devRect = s.matrix.mapRect(rect)
-        s.clip = SkIRect.MakeLTRB(
-            maxOf(s.clip.left, kFloor(devRect.left.toDouble()).toInt()),
-            maxOf(s.clip.top, kFloor(devRect.top.toDouble()).toInt()),
-            minOf(s.clip.right, kCeil(devRect.right.toDouble()).toInt()),
-            minOf(s.clip.bottom, kCeil(devRect.bottom.toDouble()).toInt()),
-        )
+        clipRect(rect, doAntiAlias = false)
     }
 
     /**
-     * Mirrors Skia's `SkCanvas::clipRect(rect, doAntiAlias)`. AA-clip
-     * support is deferred to a later phase — for now both call paths emit
-     * pixel-aligned clips.
+     * Mirrors Skia's `SkCanvas::clipRect(rect, doAntiAlias)`.
+     *
+     * - **`doAntiAlias = false`** (Skia default) — the clip snaps to integer
+     *   bounds via round-half-up, matching the non-AA `drawRect` rasterizer.
+     * - **`doAntiAlias = true`** — fractional-coverage AA clipping is not
+     *   modelled yet ; we widen the clip outward via `floor(min)` / `ceil(max)`
+     *   so paths that drew AA coverage flowing across the rect's logical
+     *   boundary still get rasterized inside the device clip. This is the
+     *   pre-edge-rounding-fix behaviour ; existing AA-path GMs that called
+     *   `clipRect(rect, true)` (or `clipRect(rect)` from before the fix
+     *   landed) keep their pixel output.
      */
     public fun clipRect(rect: SkRect, doAntiAlias: Boolean) {
-        clipRect(rect)
+        val s = top
+        val devRect = s.matrix.mapRect(rect)
+        s.clip = if (doAntiAlias) {
+            // AA clip — outward bbox preserves fractional edge coverage.
+            SkIRect.MakeLTRB(
+                maxOf(s.clip.left, kFloor(devRect.left.toDouble()).toInt()),
+                maxOf(s.clip.top, kFloor(devRect.top.toDouble()).toInt()),
+                minOf(s.clip.right, kCeil(devRect.right.toDouble()).toInt()),
+                minOf(s.clip.bottom, kCeil(devRect.bottom.toDouble()).toInt()),
+            )
+        } else {
+            // Non-AA clip — round-half-up, matches `pixelEdge` /
+            // `SkScalarRoundToInt` upstream.
+            SkIRect.MakeLTRB(
+                maxOf(s.clip.left, kFloor(devRect.left.toDouble() + 0.5).toInt()),
+                maxOf(s.clip.top, kFloor(devRect.top.toDouble() + 0.5).toInt()),
+                minOf(s.clip.right, kFloor(devRect.right.toDouble() + 0.5).toInt()),
+                minOf(s.clip.bottom, kFloor(devRect.bottom.toDouble() + 0.5).toInt()),
+            )
+        }
     }
 
     public fun drawRect(rect: SkRect, paint: SkPaint) {
