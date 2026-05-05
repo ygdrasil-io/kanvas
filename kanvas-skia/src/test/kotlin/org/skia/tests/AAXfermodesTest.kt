@@ -23,8 +23,8 @@ class AAXfermodesTest {
         val accepted = SimilarityTracker.updateScore("AAXfermodesGM", comparison.similarity)
         assertTrue(accepted, "AAXfermodesGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 50.0,
-            "AAXfermodesGM similarity ${"%.2f".format(comparison.similarity)}% < 50.0% floor",
+            comparison.similarity >= 80.0,
+            "AAXfermodesGM similarity ${"%.2f".format(comparison.similarity)}% < 80.0% floor",
         )
     }
 }

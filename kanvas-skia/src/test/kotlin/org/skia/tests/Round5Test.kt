@@ -27,32 +27,32 @@ class Round5Test {
     }
 
     @Test
-    fun `QuadCapGM matches reference`() = runGm(QuadCapGM(), "QuadCapGM", 80.0)
+    fun `QuadCapGM matches reference`() = runGm(QuadCapGM(), "QuadCapGM", 98.0)
 
     @Test
     fun `TextScaleSkewGM matches reference`() =
-        runGm(TextScaleSkewGM(), "TextScaleSkewGM", 60.0)
+        runGm(TextScaleSkewGM(), "TextScaleSkewGM", 81.0)
 
     @Test
     fun `TextScaleSkewRotateGM matches reference`() =
-        runGm(TextScaleSkewRotateGM(), "TextScaleSkewRotateGM", 50.0)
+        runGm(TextScaleSkewRotateGM(), "TextScaleSkewRotateGM", 83.0)
 
     @Test
-    fun `SquareHairGM matches reference`() = runGm(SquareHairGM(), "SquareHairGM", 70.0)
+    fun `SquareHairGM matches reference`() = runGm(SquareHairGM(), "SquareHairGM", 95.0)
 
     @Test
     fun `ZeroControlStrokeGM matches reference`() =
-        runGm(ZeroControlStrokeGM(), "ZeroControlStrokeGM", 80.0)
+        runGm(ZeroControlStrokeGM(), "ZeroControlStrokeGM", 98.0)
 
     @Test
     fun `HairlineSubdivGM matches reference`() =
-        runGm(HairlineSubdivGM(), "HairlineSubdivGM", 80.0)
+        runGm(HairlineSubdivGM(), "HairlineSubdivGM", 95.0)
 
     @Test
     fun `InnerJoinGeometryGM matches reference`() =
-        runGm(InnerJoinGeometryGM(), "InnerJoinGeometryGM", 70.0)
+        runGm(InnerJoinGeometryGM(), "InnerJoinGeometryGM", 96.0)
 
     @Test
     fun `RectPolyStrokeGM matches reference`() =
-        runGm(RectPolyStrokeGM(), "RectPolyStrokeGM", 80.0)
+        runGm(RectPolyStrokeGM(), "RectPolyStrokeGM", 96.0)
 }

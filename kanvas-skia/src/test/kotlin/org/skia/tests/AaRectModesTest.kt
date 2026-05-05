@@ -23,8 +23,8 @@ class AaRectModesTest {
         val accepted = SimilarityTracker.updateScore("AaRectModesGM", comparison.similarity)
         assertTrue(accepted, "AaRectModesGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 60.0,
-            "AaRectModesGM similarity ${"%.2f".format(comparison.similarity)}% < 60.0% floor",
+            comparison.similarity >= 79.0,
+            "AaRectModesGM similarity ${"%.2f".format(comparison.similarity)}% < 79.0% floor",
         )
     }
 }
