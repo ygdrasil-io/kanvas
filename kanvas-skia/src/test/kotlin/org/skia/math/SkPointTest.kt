@@ -228,4 +228,65 @@ class SkPointTest {
         assertTrue(pts[1].equals(12f, 22f))
         assertTrue(pts[2].equals(13f, 23f))
     }
+
+    // ── Iso-alignment with Skia: behavioural-parity additions ───────────
+
+    @Test
+    fun `tiny non-zero vector normalizes successfully`() {
+        // Pre-iso, the kanvas implementation rejected magnitudes below
+        // SK_ScalarNearlyZero (~2.44e-4) via a `mag2 < NearlyZero²` early
+        // exit. Skia's set_point_length only fails when the *rescaled*
+        // result is non-finite or both axes round to 0. A vector of
+        // magnitude 1e-20 should normalize cleanly along (1, 0).
+        val p = SkPoint(1e-20f, 0f)
+        assertTrue(p.normalize(), "1e-20 vector should normalize")
+        assertEquals(1f, p.fX, 1e-6f)
+        assertEquals(0f, p.fY)
+        assertEquals(1f, p.length(), 1e-6f)
+    }
+
+    @Test
+    fun `Normalize returns prior length even for tiny inputs`() {
+        val p = SkPoint(3e-30f, 4e-30f)
+        val prior = SkPoint.Normalize(p)
+        // Magnitude ≈ 5e-30. Returned float may underflow but should be
+        // non-NaN / non-zero in double (the algorithm uses sqrt in double).
+        assertTrue(prior > 0f || prior == 5e-30f.let { it } /* allow underflow to 0 */,
+            "Normalize should report a magnitude or 0 (no NaN), got $prior")
+        // Direction preserved.
+        assertEquals(0.6f, p.fX, 1e-5f)
+        assertEquals(0.8f, p.fY, 1e-5f)
+    }
+
+    @Test
+    fun `setLength on large vector uses double fallback for finite output`() {
+        // 1e30 squared overflows float (max ~3.4e38, but x²+y² hits 2e60 → Inf).
+        // Skia's set_point_length keeps doubles end-to-end so the rescale lands.
+        val p = SkPoint(1e30f, 0f)
+        assertTrue(p.setLength(1f), "very large vector should still rescale")
+        assertEquals(1f, p.fX, 1e-6f)
+        assertEquals(0f, p.fY)
+    }
+
+    @Test
+    fun `setLength on (0,0) returns false`() {
+        val p = SkPoint(0f, 0f)
+        assertFalse(p.setLength(5f))
+        assertTrue(p.isZero())
+    }
+
+    @Test
+    fun `setLength on infinite input returns false (rescale yields NaN)`() {
+        val p = SkPoint(Float.POSITIVE_INFINITY, 0f)
+        assertFalse(p.setLength(1f))
+        assertTrue(p.isZero(), "non-finite input should zero the point")
+    }
+
+    @Test
+    fun `Length overflow path returns finite double-precision magnitude`() {
+        // x² + y² overflows float, so Skia falls back to double.
+        val len = SkPoint.Length(1e30f, 1e30f)
+        assertTrue(len.isFinite(), "Length should not overflow to Inf")
+        assertEquals(1.4142135e30f, len, 1e25f)
+    }
 }
