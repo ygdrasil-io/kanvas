@@ -97,6 +97,15 @@ public class SkFont(
         typeface.getMetricsInternal(metrics, size)
 
     /**
+     * **Internal** entry point for [org.skia.core.SkCanvas.drawString].
+     * Delegates to the typeface, threading the [isSubpixel] flag so
+     * concrete backends can honour it (e.g. snap glyph origins to
+     * integer device coords when `false`).
+     */
+    internal fun makeTextPath(text: String, x: SkScalar, y: SkScalar): SkPath? =
+        typeface.makeTextPath(text, x, y, size, scaleX, skewX, isSubpixel)
+
+    /**
      * Mirrors Skia's `bool SkFont::getPath(SkGlyphID, SkPath*)`
      * (`SkFont.h` ~line 360). Upstream takes an out-param; we return
      * the path (or `null`) for clean Kotlin idiom — direct ports that
