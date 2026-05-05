@@ -1040,6 +1040,35 @@ Le résiduel `~13 %` sur les `*PathGM`s grilles vient des labels texte (AWT-vs-F
 - [x] 8 nouveaux ports : tous au-dessus de leur floor.
 - [x] **Pass count cumulé : 101 GM** — premier passage des 100 GMs.
 
+### Phase 6l — GM harvest round 4 (101 → 109) ✅
+
+**But** : 4e tirage post-Phase-6, premier après l'arrivée de SkMatrix Phase 4 (perspective + RSXform + PolyToPoly) sur `from-skia`.
+
+#### GMs portés
+
+| GM                       | Référence                       | Score      | Stress |
+|--------------------------|---------------------------------|------------|--------|
+| B340982297GM             | `b_340982297.png` 80×50         | **94.63 %** | 2 paths self-intersecting filled — close-after-cross triangulator regression. |
+| Bug406747427GM           | `bug406747427.png` 400×400      | **97.97 %** | 3 `drawArc` × `kRound_Cap` × stroke widths > radius (50/48/80 px). |
+| ConjoinedPolygonsGM      | `conjoined_polygons.png` 400×400 | **99.25 %** | 7-vertex self-touching bow-tie filled. crbug 1197461. |
+| Crbug996140GM            | `crbug_996140.png` 300×300      | **74.69 %** | Tiny circle (`r = 0.0295`) sous `scale(203, 203)` + translate. arcTo + fill + stroke. |
+| FillTypesGM              | `filltypes.png` 835×840         | **50.81 %** | 2 overlapping circles × 4 fillTypes (incl. `kInverse*`) × 2 scales × 2 AA modes. AA edge drift dominates. |
+| PathHugeCrbug800804GM    | `path_huge_crbug_800804.png` 50×600 | **89.33 %** | 6 stroked lines avec endpoint coords ~ 10²⁰. Hairline scan overflow regression. |
+| PolygonsGM               | `polygons.png` 840×1140         | **86.08 %** | 8 polygones × 3 joins × 3 widths + strokeAndFill + fill, couleurs `SkRandom`. |
+| SmallPathsGM             | `smallpaths.png` 640×512        | **97.09 %** | 11 small paths (triangle/rect/oval/stars/lines/arrow/conic/2×battery/ring) × 4 styles. Premier port qui exerce simultanément addCircle+conicTo+cubicTo+SkPath.Rect/Oval/Line. |
+
+#### GM reporté — perspective rasterization
+
+`crbug_947055` (200×50, perspective row `[0, 0.0225, 1]`) **non porté** : `SkMatrix` Phase 4 a la math (homogeneous mapXY, concat 3×3, etc.), mais notre `SkBitmapDevice.buildEdges` transforme chaque control point via la formule affine `ax*x + bx*y + cx0` directement, sans la division homogène. Le rendu produit le polygone des coins NON-divisés — un trapèze massif au lieu du sliver projeté correct. Score 9.31 %.
+
+Fix architectural : ajouter une branche `if (ctm.hasPerspective())` dans `buildEdges` qui fait `mapXY` avec divide pour chaque coord. Slice indépendant. Une fois en place, `crbug_947055` devient portable + tout autre GM perspective.
+
+#### Vérification Phase 6l
+- [x] 101 GMs précédents — 0 régression.
+- [x] 8 nouveaux ports : tous au-dessus de leur floor (45-90 %, scoring 50-99 %).
+- [x] `FillTypesGM` floor à 45 % — circle AA edge drift × 16 cellules × inverse fills domine ; visuellement le pattern correspond bien.
+- [x] **Pass count cumulé : 109 GM**.
+
 ### Phase 5h — Linear-premul F16 storage (❌ explored, reverted)
 
 **Hypothèse de départ** : le drift constant de `TinyBitmapGM` (rendered `(214, 177, 167)` vs reference `(204, 162, 158)`) viendrait de ce que le buffer F16 stocke des valeurs **encoded** Rec.2020 alors que Skia upstream compose en **linear** Rec.2020. Refactor : stocker en linear-premul, encoder seulement à la sortie 8-bit / PNG.
@@ -1210,6 +1239,7 @@ L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées s
 | 6i    | 77       | Edge-rounding consistency : `clipRect` non-AA passe de `floor`/`ceil` à `round-half-up` (matches `SkScalarRoundToInt` + non-AA `pixelEdge`). AA flavour préservée via `clipRect(rect, true)`. AAXfermodesGM 80.12 → 84.73 (+4.6), Skbug4868 98.63 → 99.32 (+0.7), ClipDrawDraw géométrie corrigée. | ✅ |
 | 6j    | 93       | GM harvest round 2 (9 DEF_SIMPLE_GM) — Bug5099/Bug6083/Bug6987/Bug339297/Crbug10141204 (95-100 %) + DRRectSmallInner 96.5 % + EmptyPath/LinePath/LineClosePath 87 % (4 fill rules incl. kInverse* × 3 styles × labels). 0 nouvelle API. | ✅ |
 | 6k    | 101      | GM harvest round 3 (8 ports) — ThinConcavePaths 98.1 %, Crbug1257515 98.9 %, Crbug938592 99.8 %, StrokeRectsRotated 90.7 %, CubicClosePath 86.9 %, CubicPathShader 79.7 %, QuadPath 87.3 %, QuadClosePath 87.1 %. Factorisation `PathCapsFillsGridGM` (caps × fills × styles matrix) partagée par 4 GMs. 0 nouvelle API. | ✅ |
+| 6l    | 109      | GM harvest round 4 (8 ports) — B340982297 94.6 %, Bug406747427 98.0 %, ConjoinedPolygons 99.3 %, Crbug996140 74.7 %, FillTypes 50.8 %, PathHugeCrbug800804 89.3 %, Polygons 86.1 %, SmallPaths 97.1 %. 0 nouvelle API. `crbug_947055` (perspective rasterization) reporté — `SkMatrix` Phase 4 a la math mais `buildEdges` ne fait pas la division homogène. | ✅ |
 | 5h    | n/a      | Linear-premul F16 storage — **explored, reverted**. Voir post-mortem ci-dessous. | ❌ reverted |
 
 **Bonus** : [archives/MIGRATION_PLAN_COLORSPACE.md](archives/MIGRATION_PLAN_COLORSPACE.md) Phase 0-5 ✅ — `tolerance=1` au lieu de `tolerance=160` sur tous les GMs Phase 1-3a. Suite du portage colorspace dans [archives/MIGRATION_PLAN_COLORSPACE_PORT.md](archives/MIGRATION_PLAN_COLORSPACE_PORT.md) (terminé : phases A-J + F1-F7 livrées, K out of scope).
