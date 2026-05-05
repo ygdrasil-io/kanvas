@@ -16,7 +16,7 @@ import java.awt.Font
  *    mêmes TTF Liberation par `tools/fonts/create_test_font.cpp`).
  *  - Le rasterizer AA / hinting / scaler est celui d'AWT, donc 1-2 ulp
  *    de drift sur les bords AA vs FreeType (cf. plan §T4 option A).
- *  - **Option B** (cf. MIGRATION_PLAN_TEXT_ARCHIVED.md §T4) consistera plus tard
+ *  - **Option B** (cf. archives/MIGRATION_PLAN_TEXT.md §T4) consistera plus tard
  *    à porter directement les `.inc` en Kotlin via un nouveau
  *    `SkTestTypeface : SkTypeface` qui itère points/verbs sans passer
  *    par AWT pour la résolution outline. À ce moment-là, **seul
@@ -128,7 +128,7 @@ internal object LiberationFontMgr {
             ?: error(
                 "Liberation font resource not found: $resource. " +
                     "Expected in kanvas-skia/src/main/resources/fonts/liberation/. " +
-                    "See MIGRATION_PLAN_TEXT_ARCHIVED.md §T4."
+                    "See archives/MIGRATION_PLAN_TEXT.md §T4."
             )
         val font = stream.use { Font.createFont(Font.TRUETYPE_FONT, it) }
 
