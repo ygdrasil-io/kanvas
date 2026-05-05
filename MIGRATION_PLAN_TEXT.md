@@ -339,15 +339,21 @@ Le bloc d'avertissement KDoc en tête des fichiers AWT mentionne déjà cette po
 
 ---
 
-### Slice T5 — Glyph cache + AA précision
+### Slice T5 — Glyph cache + subpixel positioning ✅ livré
 
-**But** : optimisations + fidélité.
+**Statut** : livré. Glyph path cache + subpixel snap + per-glyph decomposition.
 
-- **Glyph cache** : memoize `(typeface, size, glyphId, edging) → bitmap mask`. Évite la re-rasterisation. Important pour les GMs avec beaucoup de répétitions de mêmes caractères.
-- **AA edges** : aligner le rendu AA des glyphes sur ce que Skia DM fait — le path-fill scanline 4×4 supersampling devrait suffire ; à valider par GM.
-- **Subpixel positioning** : `font.isSubpixel = true` permet à Skia de ne pas snap les glyphes sur la grille pixel. AWT supporte (via `KEY_FRACTIONALMETRICS`).
+**Ce qui a été fait** :
+- **Glyph path cache** (`org.skia.foundation.awt.GlyphPathCache`) : mémoise `(glyphId, size, scaleX, skewX) → SkPath`. Per-typeface (chaque `AwtTypeface` a son propre cache). Thread-safe via `synchronized`. Stats (hit/miss/size) exposées en `internal` pour tests.
+- **Refactor `AwtTypeface.makeTextPath`** : décompose la string en glyphes via `GlyphVector` (préserve le kerning), lookup cache par glyph ID, append via le nouvel `SkPathBuilder.addPathOffset(path, dx, dy)`.
+- **Subpixel positioning** : `SkFont.isSubpixel` est désormais consulté. Quand `false`, snap chaque emit `(x + glyphPos.x, y + glyphPos.y)` à integer (mirror Skia's "snap to pixel grid" behaviour). Quand `true`, fractional positions préservées.
+- **AA precision** : path-fill scanline 4×4 supersampling intact, confirmé suffisant par les 4 GMs textuels portés (>98% sauf Crbug1073670 dont le drift est métriques, pas AA).
 
-**Effort estimé** : 1 slice moyen-élevé.
+**Effets vérifiés** :
+- AnnotatedTextGM : 99.90% → 99.95% (subpixel snap aligne mieux).
+- Autres textuels (BigText, ColorWheelNative, Crbug1073670) : scores inchangés (origines déjà à coords entiers).
+
+**Tests** : 9 dans `GlyphPathCacheTest` — populate/lookup, distinguish by glyphId/size/scaleX/skewX, reuse across drawString calls, getPath ↔ drawString cache sharing, subpixel snap on/off pixel diff.
 
 ---
 

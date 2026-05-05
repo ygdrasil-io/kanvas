@@ -429,9 +429,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         paint: SkPaint,
     ) {
         if (str.isEmpty()) return
-        val path = font.typeface.makeTextPath(
-            str, x, y, font.size, font.scaleX, font.skewX,
-        ) ?: return
+        val path = font.makeTextPath(str, x, y) ?: return
         // Glyph fills are AA whenever the font asks for it. Skia's
         // `paint.isAntiAlias` is independent — we honour it by ANDing
         // with the font edging: if either says "alias", we go alias.
