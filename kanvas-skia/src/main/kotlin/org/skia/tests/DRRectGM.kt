@@ -35,8 +35,8 @@ public class DRRectGM : GM() {
             SkVector(10f, 40f),
             SkVector(40f, 40f),
         )
-        val dx = r.width + 16f
-        val dy = r.height + 16f
+        val dx = r.width() + 16f
+        val dy = r.height() + 16f
 
         // Outer rrects: rect / oval / simple / complex.
         val outers = Array(4) { SkRRect() }
