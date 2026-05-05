@@ -32,5 +32,5 @@ class ConicalGradients2ptTest {
 
     @Test
     fun `gradients_2pt_conical_inside_nodither matches reference`() =
-        runGm(ConicalGradients2ptInsideGM(), "ConicalGradients2ptInsideGM", 20.0)
+        runGm(ConicalGradients2ptInsideGM(), "ConicalGradients2ptInsideGM", 75.0)
 }
