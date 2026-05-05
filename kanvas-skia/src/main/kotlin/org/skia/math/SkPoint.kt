@@ -1,23 +1,22 @@
 package org.skia.math
 
-import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * Float 2-D point. Faithful port of Skia's `SkPoint` (which doubles as a
+ * Float 2-D point. Iso-aligned port of Skia's `SkPoint` (which doubles as a
  * displacement / direction vector — see [SkVector] alias).
  *
- * Mirrors the C++ struct semantics:
+ * Mirrors the C++ struct semantics ([include/private/base/SkPoint_impl.h](https://github.com/google/skia/blob/main/include/private/base/SkPoint_impl.h)):
  * - mutable `fX`/`fY` (in-place `set`, `offset`, `scale`, `normalize`, …).
  * - `Make(x, y)` factory.
  * - `Length` / `Normalize` / `Distance` / `DotProduct` / `CrossProduct`
  *   companion helpers.
  * - Operator overloads (`+= -= *= - *`) and value-wise `equals`.
  *
- * For NaN / infinity behaviour, Kotlin's `data class equals` treats
- * `NaN == NaN` as `true` (Java `Float.equals` semantics) — the
- * `equals(x, y)` overload uses raw `==` to match C++ behaviour where
- * `NaN != NaN` is the relevant edge case.
+ * **NaN caveat:** Kotlin's `data class equals` treats `NaN == NaN` as `true`
+ * (`Float.equals` semantics), whereas C++ `operator==` uses IEEE compare
+ * where `NaN == NaN` is `false`. The [equals]`(x, y)` overload uses raw
+ * `==` to match C++ behaviour for the NaN-aware case.
  */
 public data class SkPoint(public var fX: Float = 0f, public var fY: Float = 0f) {
 
@@ -43,8 +42,8 @@ public data class SkPoint(public var fX: Float = 0f, public var fY: Float = 0f) 
     }
 
     public fun setAbs(pt: SkPoint) {
-        fX = abs(pt.fX)
-        fY = abs(pt.fY)
+        fX = SkScalarAbs(pt.fX)
+        fY = SkScalarAbs(pt.fY)
     }
 
     public fun offset(dx: Float, dy: Float) {
@@ -129,13 +128,15 @@ public data class SkPoint(public var fX: Float = 0f, public var fY: Float = 0f) 
 
         /**
          * Euclidean magnitude `sqrt(x² + y²)`, with a double-precision
-         * fallback when `x*x + y*y` overflows / underflows in float space.
-         * Matches Skia's `SkPoint::Length`.
+         * fallback when `x*x + y*y` overflows in float space. Matches
+         * Skia's [`SkPoint::Length`](https://github.com/google/skia/blob/main/src/core/SkPoint.cpp):
+         * the fast path stays in float when `mag²` is finite (cheaper),
+         * the slow path promotes to double on overflow.
          */
         public fun Length(x: Float, y: Float): Float {
             val mag2 = x * x + y * y
             if (mag2.isFinite()) {
-                return sqrt(mag2.toDouble()).toFloat()
+                return SkScalarSqrt(mag2)
             }
             val xx = x.toDouble()
             val yy = y.toDouble()
@@ -158,27 +159,34 @@ public data class SkPoint(public var fX: Float = 0f, public var fY: Float = 0f) 
 
         public fun CrossProduct(a: SkVector, b: SkVector): Float = a.fX * b.fY - a.fY * b.fX
 
-        // Skia's SkScalarNearlyZero threshold (`SK_ScalarNearlyZero = SK_Scalar1 / (1 << 12)`).
-        private const val NearlyZero: Float = 1f / 4096f
-
         /**
          * Shared core for `setLength` / `Normalize`. Returns the original
          * vector length (always positive) when the rescale succeeds, or
-         * `null` when the input is nearly-zero or non-finite (in which
-         * case `pt` is zeroed). Mirrors Skia's `set_point_length<false>`.
+         * `null` when the rescaled coordinates are non-finite or both zero
+         * (in which case `pt` is zeroed). Mirrors Skia's
+         * [`set_point_length<false>`](https://github.com/google/skia/blob/main/src/core/SkPoint.cpp).
+         *
+         * The double-precision intermediate handles both overflow (large
+         * inputs whose `x²+y²` would saturate `float`) and underflow (tiny
+         * inputs where `1/dmag` is finite but the rescale rounds to 0).
+         * The final `(0, 0)` fallback fires only when the rescale itself
+         * fails, not on a magnitude threshold — `(1e-20, 0)` normalises
+         * to `(1, 0)` here, matching upstream.
          */
         private fun setPointLength(pt: SkPoint, x: Float, y: Float, length: Float): Float? {
-            var xx = x.toDouble()
-            var yy = y.toDouble()
-            val mag2 = xx * xx + yy * yy
-            if (mag2 < NearlyZero * NearlyZero || !mag2.isFinite()) {
+            val xx = x.toDouble()
+            val yy = y.toDouble()
+            val dmag = sqrt(xx * xx + yy * yy)
+            // IEEE-754: dmag == 0 ⇒ scale = ±Inf ⇒ x*scale = NaN, caught below.
+            val dscale = length.toDouble() / dmag
+            val nx = (xx * dscale).toFloat()
+            val ny = (yy * dscale).toFloat()
+            if (!nx.isFinite() || !ny.isFinite() || (nx == 0f && ny == 0f)) {
                 pt.set(0f, 0f)
                 return null
             }
-            val mag = sqrt(mag2)
-            val scale = length / mag
-            pt.set((xx * scale).toFloat(), (yy * scale).toFloat())
-            return mag.toFloat()
+            pt.set(nx, ny)
+            return dmag.toFloat()
         }
     }
 }
