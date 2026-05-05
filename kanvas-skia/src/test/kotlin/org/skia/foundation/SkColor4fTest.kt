@@ -1,7 +1,9 @@
 package org.skia.foundation
 
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -87,5 +89,104 @@ class SkColor4fTest {
                 }
             }
         }
+    }
+
+    // ─── Iso-alignment additions ────────────────────────────────────────
+
+    @Test
+    fun `array is the same shape as vec`() {
+        val c = SkColor4f(0.1f, 0.2f, 0.3f, 0.4f)
+        assertArrayEquals(c.vec(), c.array(), 0f)
+    }
+
+    @Test
+    fun `index access returns each channel and rejects out-of-range`() {
+        val c = SkColor4f(0.1f, 0.2f, 0.3f, 0.4f)
+        assertEquals(0.1f, c[0]); assertEquals(0.2f, c[1])
+        assertEquals(0.3f, c[2]); assertEquals(0.4f, c[3])
+        assertThrows(IndexOutOfBoundsException::class.java) { c[4] }
+    }
+
+    @Test
+    fun `isOpaque true only when alpha equals 1`() {
+        assertTrue(SkColor4f.kRed.isOpaque())
+        assertFalse(SkColor4f(1f, 0f, 0f, 0.5f).isOpaque())
+        assertFalse(SkColor4f.kTransparent.isOpaque())
+    }
+
+    @Test
+    fun `times scalar multiplies all channels`() {
+        val c = SkColor4f(0.5f, 0.25f, 0.1f, 1f)
+        assertEquals(SkColor4f(1f, 0.5f, 0.2f, 2f), c * 2f)
+    }
+
+    @Test
+    fun `times other multiplies channelwise`() {
+        val a = SkColor4f(0.5f, 0.5f, 0.5f, 1f)
+        val b = SkColor4f(0.4f, 0.6f, 0.8f, 0.5f)
+        assertEquals(SkColor4f(0.2f, 0.3f, 0.4f, 0.5f), a * b)
+    }
+
+    @Test
+    fun `makeOpaque sets alpha to 1`() {
+        assertEquals(SkColor4f(0.1f, 0.2f, 0.3f, 1f),
+            SkColor4f(0.1f, 0.2f, 0.3f, 0.4f).makeOpaque())
+    }
+
+    @Test
+    fun `pinAlpha clamps alpha to 0-to-1`() {
+        assertEquals(SkColor4f(0.5f, 0.5f, 0.5f, 0f),
+            SkColor4f(0.5f, 0.5f, 0.5f, -2f).pinAlpha())
+        assertEquals(SkColor4f(0.5f, 0.5f, 0.5f, 1f),
+            SkColor4f(0.5f, 0.5f, 0.5f, 5f).pinAlpha())
+    }
+
+    @Test
+    fun `withAlpha and withAlphaByte set alpha`() {
+        val c = SkColor4f(0.1f, 0.2f, 0.3f, 1f)
+        assertEquals(SkColor4f(0.1f, 0.2f, 0.3f, 0.5f), c.withAlpha(0.5f))
+        assertEquals(0.50196f, c.withAlphaByte(128).fA, 1e-4f)
+    }
+
+    @Test
+    fun `premul multiplies RGB by alpha`() {
+        val c = SkColor4f(1f, 0.5f, 0f, 0.5f)
+        assertEquals(SkColor4f(0.5f, 0.25f, 0f, 0.5f), c.premul())
+    }
+
+    @Test
+    fun `unpremul divides RGB by alpha`() {
+        val pm = SkColor4f(0.5f, 0.25f, 0f, 0.5f)
+        val u = pm.unpremul()
+        assertEquals(1f, u.fR, 1e-6f); assertEquals(0.5f, u.fG, 1e-6f)
+        assertEquals(0f, u.fB, 1e-6f); assertEquals(0.5f, u.fA, 1e-6f)
+    }
+
+    @Test
+    fun `unpremul of zero-alpha returns transparent`() {
+        assertEquals(SkColor4f.kTransparent, SkColor4f(1f, 1f, 1f, 0f).unpremul())
+    }
+
+    @Test
+    fun `toBytes_RGBA packs R in MSB`() {
+        // pure red, opaque ⇒ R=FF, G=00, B=00, A=FF
+        assertEquals(0xFF0000FF.toInt(), SkColor4f(1f, 0f, 0f, 1f).toBytes_RGBA())
+    }
+
+    @Test
+    fun `FromBytes_RGBA round-trip with toBytes_RGBA`() {
+        val c = SkColor4f(0.25f, 0.5f, 0.75f, 1f)
+        val round = SkColor4f.FromBytes_RGBA(c.toBytes_RGBA())
+        assertEquals(0.25f, round.fR, 1f / 255f)
+        assertEquals(0.5f, round.fG, 1f / 255f)
+        assertEquals(0.75f, round.fB, 1f / 255f)
+        assertEquals(1f, round.fA, 1f / 255f)
+    }
+
+    @Test
+    fun `FromPMColor decodes a packed PM ARGB`() {
+        val pm = SkPreMultiplyColor(SkColorSetARGB(0x80, 0xFF, 0xFF, 0xFF))
+        val c = SkColor4f.FromPMColor(pm)
+        assertEquals(0.502f, c.fA, 1e-3f)
     }
 }
