@@ -164,4 +164,81 @@ class SkPaintTest {
         val differStyle = SkPaint().also { it.style = SkPaint.Style.kStroke_Style }
         assertNotEquals(SkPaint(), differStyle)
     }
+
+    // ─── Slice 2.1: SkColor4f-backed storage precision contract ────────
+
+    @Test
+    fun `setAlphaf preserves float value exactly (no byte round-trip)`() {
+        val p = SkPaint()
+        p.alphaf = 0.3f
+        // 0.3 quantised to byte would be 76 -> read back 0.298039f.
+        // The new SkColor4f-backed storage keeps the float intact.
+        assertEquals(0.3f, p.alphaf)
+        // Byte alpha still rounds correctly (Skia: round(0.3 * 255) = 77).
+        assertEquals(77, p.alpha)
+    }
+
+    @Test
+    fun `setAlphaf clamps to 0,1`() {
+        val p = SkPaint()
+        p.alphaf = -0.5f
+        assertEquals(0f, p.alphaf)
+        p.alphaf = 1.5f
+        assertEquals(1f, p.alphaf)
+    }
+
+    @Test
+    fun `setColor4f preserves all four channels at full float precision`() {
+        val p = SkPaint()
+        val c = SkColor4f(0.123f, 0.456f, 0.789f, 0.321f)
+        p.setColor4f(c)
+        assertEquals(0.123f, p.color4f.fR)
+        assertEquals(0.456f, p.color4f.fG)
+        assertEquals(0.789f, p.color4f.fB)
+        assertEquals(0.321f, p.color4f.fA)
+    }
+
+    @Test
+    fun `setColor4f pins alpha but leaves RGB untouched`() {
+        val p = SkPaint()
+        // Out-of-gamut RGB stays as-is (HDR / wide-gamut workflows);
+        // alpha is pinned to [0, 1] like Skia's pinAlpha().
+        p.setColor4f(SkColor4f(2f, -0.5f, 1.5f, 1.5f))
+        assertEquals(2f, p.color4f.fR)
+        assertEquals(-0.5f, p.color4f.fG)
+        assertEquals(1.5f, p.color4f.fB)
+        assertEquals(1f, p.color4f.fA)
+    }
+
+    @Test
+    fun `SkColor4f constructor preserves precision`() {
+        val p = SkPaint(SkColor4f(0.1f, 0.2f, 0.3f, 0.4f))
+        assertEquals(0.4f, p.alphaf)
+        assertEquals(0.1f, p.color4f.fR)
+    }
+
+    @Test
+    fun `color4f getter returns a defensive copy`() {
+        val p = SkPaint(SK_ColorRED)
+        val snapshot = p.color4f
+        snapshot.fA = 0f                  // mutate the returned copy
+        assertEquals(1f, p.alphaf)        // internal state unaffected
+    }
+
+    @Test
+    fun `color4f setter copies defensively`() {
+        val p = SkPaint()
+        val source = SkColor4f(1f, 0f, 0f, 1f)
+        p.color4f = source
+        source.fA = 0f                    // mutate after assignment
+        assertEquals(1f, p.alphaf)        // paint kept its own copy
+    }
+
+    @Test
+    fun `byte color setter still quantises (legacy path unchanged)`() {
+        val p = SkPaint()
+        p.color = SkColorSetARGB(77, 255, 0, 0)
+        // Byte alpha goes through 77/255 -> 0.30196f, NOT 0.3f exact.
+        assertEquals(77f / 255f, p.alphaf)
+    }
 }
