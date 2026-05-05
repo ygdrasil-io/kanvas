@@ -1,10 +1,10 @@
-# MIGRATION_PLAN_TEXT_ARCHIVED.md — Side plan : rendu de texte (`SkFont` / `SkTypeface` / `drawString`)
+# MIGRATION_PLAN_TEXT.md — Side plan : rendu de texte (`SkFont` / `SkTypeface` / `drawString`)
 
 > ## ⚠️ ARCHIVED — TEXT TRAJECTORY COMPLETE
 >
-> **Statut au 2026-05-05** : trajectoire texte **terminée**. T1..T5 livrés, 4 GMs textuels portés (BigText 98.20%, ColorWheelNative 99.75%, Crbug1073670 72.52%, AnnotatedText 99.95%), toutes les décisions plan closes. Ce document est conservé pour la postérité ; il est **renommé `MIGRATION_PLAN_TEXT_ARCHIVED.md`** dans le repo.
+> **Statut au 2026-05-05** : trajectoire texte **terminée**. T1..T5 livrés, 4 GMs textuels portés (BigText 98.20%, ColorWheelNative 99.75%, Crbug1073670 72.52%, AnnotatedText 99.95%), toutes les décisions plan closes. Ce document est conservé pour la postérité dans [`archives/`](.).
 >
-> **Pour le seul travail texte restant** (TTF parser maison, opportuniste, déclenché par un GM bigtext-family), voir [`MIGRATION_PLAN.md` §"TTF parser maison"](MIGRATION_PLAN.md#ttf-parser-maison--slice-future-texte-fidélité-bit-exact).
+> **Pour le seul travail texte restant** (TTF parser maison, opportuniste, déclenché par un GM bigtext-family), voir [`MIGRATION_PLAN.md` §"TTF parser maison"](../MIGRATION_PLAN.md#ttf-parser-maison--slice-future-texte-fidélité-bit-exact).
 >
 > **Option B (`.inc` ports) est officiellement abandonnée** au profit du TTF parser maison — voir §"Slice T4" ci-dessous pour le détail du pivot.
 

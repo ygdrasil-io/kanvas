@@ -11,7 +11,7 @@ import org.skia.math.SkScalar
  * CoreText, DirectWrite). We keep the abstraction (open class) but
  * **the only concrete subclass shipped with `:kanvas-skia` is the AWT
  * one** (`org.skia.foundation.awt.AwtTypeface`), which is the unique
- * production-grade backend in T1-T5. See `MIGRATION_PLAN_TEXT_ARCHIVED.md` §
+ * production-grade backend in T1-T5. See `archives/MIGRATION_PLAN_TEXT.md` §
  * "Contrainte de design".
  *
  * The base `SkTypeface` returned by [MakeEmpty] is a no-op stand-in

@@ -25,7 +25,7 @@ import kotlin.math.floor
  *    notre scanline-fill 4×4), pas le rasterizer FreeType de Skia. Pas
  *    encore exercé en T2 — `drawString` reste no-op jusqu'à T3.
  *  - `SkFont.Edging.kSubpixelAntiAlias` est dégradé silencieusement vers
- *    `kAntiAlias` (cf. MIGRATION_PLAN_TEXT_ARCHIVED.md §R3).
+ *    `kAntiAlias` (cf. archives/MIGRATION_PLAN_TEXT.md §R3).
  *
  * Si un jour on remplace AWT par FreeType+JNI ou par un rasterizer custom,
  * **seul ce fichier (et ses pairs `Awt*.kt`) doit changer** — l'API publique
@@ -105,7 +105,7 @@ internal class AwtTypeface internal constructor(
      *     `font.isSubpixel = false` semantics).
      *
      * Notes on font.edging / font.hinting — neither is consulted here;
-     * see `MIGRATION_PLAN_TEXT_ARCHIVED.md` §R3 / [SkFontHinting] for the
+     * see `archives/MIGRATION_PLAN_TEXT.md` §R3 / [SkFontHinting] for the
      * "stored, not consulted" pattern. The path-fill rasteriser does
      * coverage AA only.
      *
