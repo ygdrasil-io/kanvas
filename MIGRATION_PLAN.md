@@ -921,10 +921,77 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 ## Explicitement reporté
 
 - [ ] **GPU** (`org.skia.gpu.*`, Ganesh, Graphite). Stripper les hooks GPU de la `GM` base class.
-- [ ] **Texte & polices** (`SkFont`, `SkTypeface`, `drawString`, `*TextGM`, `*EmojiGM`). Side plan dédié : voir [MIGRATION_PLAN_TEXT.md](MIGRATION_PLAN_TEXT.md) — décomposé en T1..T5, débloque ~80-130 GMs upstream.
+- [x] **Texte & polices** (`SkFont`, `SkTypeface`, `drawString`, `*TextGM`). ✅ **Trajectoire complète** — T1..T5 livrés, 4 GMs textuels portés (BigText, ColorWheelNative, Crbug1073670, AnnotatedText). Plan archivé : voir [MIGRATION_PLAN_TEXT_ARCHIVED.md](MIGRATION_PLAN_TEXT_ARCHIVED.md). Le seul travail texte restant est le **TTF parser maison** ci-dessous (opportuniste).
+- [ ] **TTF parser maison** — voir section dédiée plus bas. Lire `.ttf` directement en pur Kotlin (sans AWT, sans JNI/FreeType) pour des **outlines bit-exact upstream**. Déclenché quand un GM concret réclame tolerance ≤ 1 (typiquement `bigtext`-family où le glyphe **est** le sujet du test, pas un label).
 - [ ] **Image filters & blurs** (`*BlurGM*`, `ImageFilters*GM`). Graphe d'évaluation séparé.
 - [ ] **Codecs** (`EncodeGM`, etc.). `javax.imageio` suffit pour charger les références.
 - [ ] **Modules** (`org.skia.modules.*` : Skottie, Paragraph, SVG). Migration parallèle après raster ≥ 90%.
+
+### TTF parser maison — slice future (texte fidélité bit-exact)
+
+**Contexte**. La trajectoire texte (T1..T5) ship une stack AWT-backed avec scores 98-99% sur 3 des 4 GMs portés. Le drift résiduel (~1-2 ulps sur AA edges + métriques scaler AWT vs FreeType) est suffisant pour les GMs où le texte est **annotation** mais empêche d'atteindre tolerance ≤ 1 sur les GMs où le glyphe **est** le sujet du test.
+
+**Idée**. Porter un parser TTF en pur Kotlin (~800-1200 lignes) qui lit directement les TTF Liberation déjà embarquées (T4, `kanvas-skia/src/main/resources/fonts/liberation/`, ~4.3 MB). Bypass AWT pour la résolution d'outlines ; rasterizer scanline existant pour le fill. Outlines **bit-exact upstream** (mêmes données source que `tools/fonts/test_font_*.inc` upstream a pré-extraites).
+
+**Stratégie comparée à l'option B abandonnée** (porter `test_font_*.inc` en données Kotlin) :
+
+| Critère | Option B (.inc ports — abandonnée) | Option C (TTF parser — future) |
+|---|---|---|
+| Source données | C++ literal arrays portés en Kotlin (~1.2 MB) | TTF Liberation déjà embarqués (~4.3 MB classpath, partagés avec T4) |
+| Toolchain ajoutée | script Python générateur | aucune |
+| Resources additionnelles | +1.2 MB Kotlin | **0** |
+| Code à écrire | ~600-800 lignes + générateur | ~800-1200 lignes pur Kotlin |
+| Réutilisable au-delà de Liberation | non (12 sub-fonts hard-codés) | oui (n'importe quel TTF) |
+| Maintenance long-terme | regen quand fonts changent | code stable, fontes interchangeables |
+| Fidélité outlines | bit-exact upstream | bit-exact upstream |
+
+L'option B était la première proposition mais a été **explicitement abandonnée** au profit de C : pas de duplication de ressources, pas de toolchain externe, scope plus large.
+
+**Scope du parser TTF (Liberation-friendly, minimal)**.
+
+Tables à parser (TrueType, pas OpenType-CFF — Liberation est en TT) :
+| Table | Contenu | Effort |
+|---|---|---|
+| `head` | unitsPerEm, version, glyph ID format | ~30 lignes |
+| `maxp` | nombre de glyphes | ~20 lignes |
+| `cmap` | Unicode → glyph ID (formats 4 + 12 suffisent) | ~200 lignes |
+| `loca` | offsets dans `glyf` | ~30 lignes |
+| `glyf` | outlines points/verbs (simple + composite glyphs) | ~300 lignes |
+| `hmtx` + `hhea` | advance widths, ascent / descent | ~80 lignes |
+| `OS/2` | x-height, cap-height, weight | ~50 lignes |
+| `name` | nom de famille (utile pour `LiberationFontMgr` ré-implémenté) | ~80 lignes |
+
+**Out of scope (consciemment)** :
+- ❌ CFF / CFF2 (outlines PostScript) — c'est OTF, on skip ; Liberation est TT.
+- ❌ Variable fonts (`gvar`/`avar`/`fvar`) — Liberation n'est pas variable.
+- ❌ Color tables (`COLR`/`CBDT`/`sbix`/`SVG`) — pas d'emoji dans le scope GMs.
+- ❌ Bytecode hinting (TT instructions) — on veut les outlines **bruts** non-hintés (= ce que le pipeline path-fill préfère).
+- ❌ GPOS/GSUB (ligatures, contextual substitutions) — pas dans le scope GMs.
+
+**Difficultés réelles documentées** :
+1. **Composite glyphs** — un glyphe peut référencer d'autres avec une transform 2×2 + offset. Récursion + matrice. ~80 lignes.
+2. **`cmap` format 4** (BMP) — segment-based mapping avec `searchRange`/`entrySelector`/`rangeShift` binary search. Spec claire mais pas trivial. ~150 lignes.
+3. **Conversion TTF → SkPath** : points marqués on-curve / off-curve. Deux off-curve consécutifs impliquent un on-curve **implicite** au milieu. ~100 lignes.
+4. **Big-endian** : format entièrement BE, attention aux conversions JVM.
+
+**Architecture proposée** :
+- Nouvelle classe `SkTtfTypeface : SkTypeface` dans `org.skia.foundation` (pur Kotlin, **pas** dans `awt/` puisque sans dépendance AWT).
+- Parser lazy : tables résolues à la demande, glyf-by-glyf seulement quand demandé.
+- `LiberationFontMgr` ajoute un mode "ttf-parser" sélectionnable :
+  - default = `AwtTypeface` (option A actuelle, fast boot)
+  - opt-in = `SkTtfTypeface` (option C, bit-exact, pour GMs `bigtext`-family)
+- Cache d'outlines compatible : `GlyphPathCache` (T5) reste utilisable, juste branché sur `SkTtfTypeface` au lieu d'`AwtTypeface`.
+
+**Trigger** : aucun GM ne le réclame aujourd'hui. Déclencher dès qu'un port `bigtext`-family ou similaire montre un score < 70% au tolerance=8 et que le diagnostic confirme glyph metric drift dominant (vs colourspace, vs autres causes).
+
+**Effort estimé** : 1 slice élevé. Plan possible :
+- PR 1 : header + table directory + `head` + `maxp` + `name` (~150 lignes, infra)
+- PR 2 : `cmap` formats 4 + 12 (~200 lignes)
+- PR 3 : `loca` + `glyf` simple glyphs + outline → SkPath (~300 lignes)
+- PR 4 : composite glyphs (~80 lignes)
+- PR 5 : `hmtx` + `hhea` + `OS/2` + `SkTtfTypeface` integration + `LiberationFontMgr` switch (~250 lignes)
+
+L'effort est concentré mais non-bloquant — les 5 PRs peuvent être livrées sur plusieurs semaines opportunistes.
 
 ---
 
