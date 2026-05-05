@@ -98,34 +98,47 @@ Tests unitaires mis à jour pour les nouveaux verb streams :
 - `tangent arcTo after close repeats the last contour's start, then
   arcs` (dernier verbe = `kConic`)
 
-### Phase 3 — surface API à compléter
+### Phase 3 — surface API à compléter (✅ implémenté, 9/9 slices)
 
-Phase 3 = additif. Aucun GM n'est strictement bloqué dessus aujourd'hui,
-mais elle prépare l'arrivée de :
-- `ArcToGM` (variantes SVG-arc) → bloque `rArcTo` et `arcTo(r, xRot,
-  ArcSize, sweep, xy)`.
-- `CubicPathGM` (`kInverse*` fill rules) → bloque le rasterizer inverse.
+Phase 3 = additif. Aucun GM n'était strictement bloqué dessus, mais
+plusieurs sont désormais débloqués :
+- `ArcToGM` (variantes SVG-arc) → 3.7 ouvre `rArcTo` et
+  `arcTo(rx, ry, xAxisRotate, ArcSize, sweep, x, y)`.
+- `CubicPathGM` (`kInverse*` fill rules) → 3.8 supporte le rasterizer
+  inverse.
 - les futurs GMs qui utilisent `addPath(matrix, mode)`, `polylineTo`,
-  `setFillType` mutable, etc.
+  `startIndex`, etc.
 
-#### Sous-tranches indépendantes (chacune une PR séparée)
+#### Sous-tranches livrées
 
-| Slice | Surface | Risque |
-|-------|---------|--------|
-| 3.1 | **Introspection read-only** : `isLine`/`isRect`/`isOval`/`isRRect`/`isConvex`/`isFinite`/`isLastContourClosed`/`countPoints`/`countVerbs`/`getSegmentMasks`/`getLastPt`/`points()`/`verbs()`/`conicWeights()` publics + `iter()` + `IterRec` | nul (aucune mutation) |
-| 3.2 | **Fill type & volatile** : `setFillType`/`makeFillType`/`toggleInverseFillType`/`makeToggleInverseFillType`/`isInverseFillType`/`makeIsVolatile`/`isVolatile` (tous sur `SkPath`) | nul (aucun rasterizer change) |
-| 3.3 | **Builder ergonomics** : ctor `(SkPathFillType)`/`(SkPath)`, `reset` public, `polylineTo`, `addLine`, `incReserve` (no-op), `offset`/`transform` (mutate), `setIsVolatile`/`isVolatile`, `setPoint`/`setLastPt`, `getLastPt`/`countPoints`/`isInverseFillType` | nul |
-| 3.4 | **`addPath` modes & matrix** : `addPath(src, dx, dy, mode)`, `addPath(src, matrix, mode)`, `AddPathMode::kAppend`/`kExtend` | faible (sémantique nouvelle pour `kExtend`, tests dédiés) |
-| 3.5 | **`startIndex` overloads** : `addRect`/`addOval`/`addRRect` avec `startIndex`, `Rect(rect, fillType, dir, startIndex)`, `Polygon` overloads | faible (les overloads par défaut gardent les valeurs actuelles → pas de régression GM) |
-| 3.6 | **Geometry helpers** : `computeTightBounds`, `conservativelyContainsRect`, `contains`, `tryMakeTransform`/`tryMakeOffset`/`tryMakeScale`, `makeScale`, `IsLineDegenerate`/`IsQuadDegenerate`/`IsCubicDegenerate` | faible (read-only, queries) |
-| 3.7 | **SVG-arc** : `rArcTo(r, xAxisRotate, ArcSize, sweep, dxdy)`, `arcTo(r, xAxisRotate, ArcSize, sweep, xy)` (absolu) | moyen (math nouveau, port direct du code Skia ; débloque `ArcToGM`) |
-| 3.8 | **`kInverse*` fill rules dans rasterizer** : peindre le complément du path à l'intérieur du clip | moyen (1 GM débloqué : `CubicPathGM` ; teste contre la référence) |
-| 3.9 | **Interpolation & raw** : `interpolate`/`makeInterpolate`/`isInterpolatable`, `Raw(...)`, `addRaw`, `swap`/`reset` (sur `SkPath`), `dump`/`dumpToString` | nul (pas de raster, queries / utilities) |
+| Slice | Surface | Risque | Statut |
+|-------|---------|--------|--------|
+| 3.1 | **Introspection read-only** : `isLine`/`isRect`/`isOval`/`isRRect`/`isFinite`/`isLastContourClosed`/`countPoints`/`countVerbs`/`getSegmentMasks`/`getLastPt` | nul | ✅ |
+| 3.2 | **Fill type** : `makeFillType`/`makeToggleInverseFillType`/`isInverseFillType` (sur `SkPath`), `fillType()`/`isInverseFillType`/`toggleInverseFillType` (sur `SkPathBuilder`), helpers `SkPathFillType.isEvenOdd/isInverse/toggleInverse/convertToNonInverse` | nul | ✅ |
+| 3.3 | **Builder ergonomics** : ctor `(SkPathFillType)`/`(SkPath)`, `reset` public, `polylineTo`, `addLine`, `incReserve`, `offset`/`transform` (mutate), `setPoint`/`setLastPt`, `getLastPt`/`countPoints` | nul | ✅ |
+| 3.4 | **`addPath` modes & matrix** : `addPath(src, dx, dy, mode)`, `addPath(src, matrix, mode)`, `AddPathMode::kAppend`/`kExtend` | faible (sémantique `kExtend` + interaction Phase 1.2) | ✅ |
+| 3.5 | **`startIndex` overloads** : `addRect`/`addOval`/`addRRect` avec `startIndex`, `Rect(rect, fillType, dir, startIndex)`/`Oval`/`RRect` factories ; `isRRect` étendu au verb stream `ConicStart` | faible | ✅ |
+| 3.6 | **Geometry helpers** : `computeTightBounds` (Bézier derivative roots), `tryMakeTransform`/`tryMakeOffset`/`tryMakeScale`, `makeScale`, `IsLineDegenerate`/`IsQuadDegenerate`/`IsCubicDegenerate` | faible | ✅ |
+| 3.7 | **SVG-arc** : `arcTo(rx, ry, xAxisRotate, ArcSize, sweep, x, y)` + `rArcTo(...)` ; `ArcSize` enum | moyen (port direct W3C SVG endpoint-to-conic) | ✅ |
+| 3.8 | **`kInverse*` fill rules** dans `SkBitmapDevice.scanFillPath` : itération étendue à `[clip.top, clip.bottom]` + walker unifié + early-out ajustés pour empty paths | moyen (touche le rasterizer, suite GM 0 régression) | ✅ |
+| 3.9 | **Interpolation & dump** : `isInterpolatable`/`makeInterpolate`/`interpolate`, `dumpToString`/`dump` | nul | ✅ |
 
-L'ordre est arbitraire ; on traite par PR de petite taille pour rester
-revue-able. 3.1 → 3.2 → 3.3 forment une chaîne naturelle de "surface
-visible vers builder". 3.7 et 3.8 ont une valeur immédiate (un GM
-chacun débloqué). 3.4–3.6 et 3.9 attendent un GM consommateur.
+#### Reste hors-scope (à ouvrir si un GM le demande)
+
+- `isConvex` (algorithme convexité / sign-tracking sur cross products)
+- `contains(x, y)` (point-in-path ray-cast winding/even-odd)
+- `conservativelyContainsRect` (dépend de `isConvex`)
+- `points()`/`verbs()`/`conicWeights()` accesseurs publics côté
+  consommateurs externes (les arrays sont `internal` ; les détecteurs
+  3.1 couvrent les besoins courants)
+- `iter()` / `IterRec` API d'itération sucrée
+- `Raw(...)` factory + `addRaw` builder helper
+- `swap`/`reset` sur `SkPath` (port immutable)
+- `setFillType` / `setIsVolatile` mutable sur `SkPath` (port immutable)
+- `isVolatile` / `makeIsVolatile` (pas de cache layer consommateur)
+- variant `arcTo(SkPoint r, ...)` (passage par `SkPoint` plutôt que
+  scalars — ergonomie)
+- "expectIntegers" rounding optimisation dans SVG-arc (cf. PR 3.7)
 
 ## Risque résumé
 
