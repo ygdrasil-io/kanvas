@@ -189,7 +189,15 @@ Total: ~65 lines prod + ~100 lines test, 5 commits.
 - [x] **Phase 2b — Mapping API expansion** (kanvas#77): `mapXY(SkPoint)`, `mapVector`, `mapPoints` (bulk + in-place + 4 fast paths), `mapVectors`, `mapRectScaleTranslate`, `mapRadius`.
 - [x] **Phase 3b — Function-style accessors + det + array exchange + RectToRect + decomposition** (this PR): `getScaleX/Y` / `getSkewX/Y` / `getTranslateX/Y` / `getPerspX/Y`, `det()` / `det2x2()`, `get9` / `MakeFrom9` / `asAffine` / `MakeFromAffine` (with `kM*` / `kA*` index constants), `MakeRectToRect(src, dst, ScaleToFit)` + `ScaleToFit` enum, `getMaxScale` / `getMinScale` / `getMinMaxScales` (full eigenvalue solver), `decomposeScale` (Pair-returning).
 
-## Phase 4 — Perspective, RSXform, PolyToPoly (this PR)
+## Phase 5 — post* family + perspective-correct pre* + cosmetic aliases
+
+- `postTranslate` / `postScale` (+ pivoted) / `postRotate` (+ pivoted) / `postSkew` (+ pivoted) — convenience overloads matching Skia's hand-port-friendly API. `postTranslate` and `postScale` use closed-form fast paths; the rest delegate to `postConcat(MakeX(...))`.
+- `preTranslate` and `preScale` updated to be **perspective-correct**: `preTranslate` dispatches to `preConcat` on perspective (Skia's pattern); `preScale` extends its closed form to update `persp0` / `persp1` (no-op on affine, correct on perspective).
+- `I()` static — function-form alias of `Identity` matching `SkMatrix::I()`.
+- `MakeTrans(SkVector)` overload.
+- `operator times` (`a * b`) — Kotlin idiom for `concat(a, b)`.
+
+## Phase 4 — Perspective, RSXform, PolyToPoly
 
 `SkMatrix` is now a full 3×3 transform — no longer restricted to the affine sub-group.
 
