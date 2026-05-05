@@ -32,7 +32,7 @@ public object TestUtils {
      * pixels while staying tight enough to catch genuine rendering
      * regressions.
      *
-     * Cf. `MIGRATION_PLAN_TEXT_ARCHIVED.md` §"Décisions finales" — was the last
+     * Cf. `archives/MIGRATION_PLAN_TEXT.md` §"Décisions finales" — was the last
      * open decision in the text plan; this constant closes it.
      *
      * Non-textual GMs continue to use the per-test tolerance picked

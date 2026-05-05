@@ -1114,7 +1114,7 @@ Pour réduire le chemin critique pendant que les phases « lourdes » (color-man
 ## Explicitement reporté
 
 - [ ] **GPU** (`org.skia.gpu.*`, Ganesh, Graphite). Stripper les hooks GPU de la `GM` base class.
-- [x] **Texte & polices** (`SkFont`, `SkTypeface`, `drawString`, `*TextGM`). ✅ **Trajectoire complète** — T1..T5 livrés, 4 GMs textuels portés (BigText, ColorWheelNative, Crbug1073670, AnnotatedText). Plan archivé : voir [MIGRATION_PLAN_TEXT_ARCHIVED.md](MIGRATION_PLAN_TEXT_ARCHIVED.md). Le seul travail texte restant est le **TTF parser maison** ci-dessous (opportuniste).
+- [x] **Texte & polices** (`SkFont`, `SkTypeface`, `drawString`, `*TextGM`). ✅ **Trajectoire complète** — T1..T5 livrés, 4 GMs textuels portés (BigText, ColorWheelNative, Crbug1073670, AnnotatedText). Plan archivé : voir [archives/MIGRATION_PLAN_TEXT.md](archives/MIGRATION_PLAN_TEXT.md). Le seul travail texte restant est le **TTF parser maison** ci-dessous (opportuniste).
 - [ ] **TTF parser maison** — voir section dédiée plus bas. Lire `.ttf` directement en pur Kotlin (sans AWT, sans JNI/FreeType) pour des **outlines bit-exact upstream**. Déclenché quand un GM concret réclame tolerance ≤ 1 (typiquement `bigtext`-family où le glyphe **est** le sujet du test, pas un label).
 - [ ] **Image filters & blurs** (`*BlurGM*`, `ImageFilters*GM`). Graphe d'évaluation séparé.
 - [ ] **Codecs** (`EncodeGM`, etc.). `javax.imageio` suffit pour charger les références.
