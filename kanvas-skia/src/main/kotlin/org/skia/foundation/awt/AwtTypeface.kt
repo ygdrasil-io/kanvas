@@ -107,6 +107,20 @@ internal class AwtTypeface internal constructor(
         scaleX: SkScalar,
         skewX: SkScalar,
     ): SkPath? {
+        // Note on `font.edging` — the [SkFont.Edging] value is **not
+        // consulted here**. The path-fill rasteriser routed via
+        // [org.skia.core.SkCanvas.drawString] does coverage AA only
+        // (the existing 4×4 supersampling) and has no LCD-subpixel
+        // mode. So:
+        //  - kAlias            → still produces hard-edge pixels (the
+        //    rasteriser turns AA off when paint.isAntiAlias is false,
+        //    which is what the GM caller sets).
+        //  - kAntiAlias        → coverage AA via the path-fill scanline.
+        //  - kSubpixelAntiAlias → silently downgraded to kAntiAlias.
+        // This is the explicit landing point for the
+        // MIGRATION_PLAN_TEXT.md §R3 "kSubpixelAntiAlias downgrade"
+        // decision. Likewise [SkFont.hinting] is unused — AWT applies
+        // its own hinting policy via FontRenderContext.
         if (text.isEmpty()) return null
         val sized = baseFont.deriveFont(size)
         // scaleX scales the x-axis only; skewX horizontally shears
@@ -123,6 +137,94 @@ internal class AwtTypeface internal constructor(
         val gv = font.createGlyphVector(FRC, text)
         val outline = gv.getOutline(x, y)
         return AwtPathConverter.shapeToSkPath(outline)
+    }
+
+    /**
+     * Single-glyph variant of [makeTextPath] — returns the outline of
+     * one glyph (identified by AWT glyph code) at origin `(0, 0)` in
+     * the configured size/scaleX/skewX. Used by [SkFont.getPath].
+     *
+     * AWT `Font.createGlyphVector(frc, glyphCodes: int[])` accepts
+     * font-local glyph IDs directly — same convention as Skia's
+     * `SkGlyphID` for TrueType-backed typefaces.
+     */
+    override fun getGlyphPathInternal(
+        glyphId: Int,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): SkPath? {
+        val sized = baseFont.deriveFont(size)
+        val font = if (scaleX == 1f && skewX == 0f) {
+            sized
+        } else {
+            val tx = AffineTransform()
+            if (scaleX != 1f) tx.scale(scaleX.toDouble(), 1.0)
+            if (skewX != 0f) tx.shear(skewX.toDouble(), 0.0)
+            sized.deriveFont(tx)
+        }
+        val gv = font.createGlyphVector(FRC, intArrayOf(glyphId))
+        val outline = gv.getOutline(0f, 0f)
+        // An empty Shape produces an empty SkPath — caller can detect
+        // via path.isEmpty(). We return a path either way (matches
+        // Skia's convention: getPath returns true even for blank glyphs
+        // like space, since they "have" a path that's just empty).
+        return AwtPathConverter.shapeToSkPath(outline)
+    }
+
+    /**
+     * AWT char→glyph resolution: build a String from the Unicode
+     * code points and ask the AWT Font to lay it out, then read the
+     * glyph indices. Limitation: BMP-only; supplementary plane code
+     * points (≥ U+10000) would need surrogate-pair conversion which
+     * upstream Skia handles via SkUTF::ToUTF16. We don't have a
+     * non-BMP GM in scope yet, so the simple BMP path is sufficient.
+     */
+    override fun unicharsToGlyphsInternal(
+        unichars: IntArray,
+        count: Int,
+        glyphs: ShortArray,
+    ) {
+        if (count == 0) return
+        // Build a String from the code points. CharArray + Char(int)
+        // works for BMP; non-BMP would need 2 UTF-16 code units per
+        // code point, which we'd need to resolve back to single
+        // glyphs after the fact (not supported here — see KDoc).
+        val chars = CharArray(count) { i -> unichars[i].toChar() }
+        val str = String(chars)
+        val gv = baseFont.createGlyphVector(FRC, str)
+        for (i in 0 until count) {
+            // GlyphVector.getGlyphCode returns the AWT Font's notion
+            // of the glyph index, which matches the TrueType glyph
+            // ID for our Liberation TTFs.
+            glyphs[i] = gv.getGlyphCode(i).toShort()
+        }
+    }
+
+    /**
+     * AWT advance width for a single glyph. Reads
+     * `GlyphVector.getGlyphMetrics(0).advance` rather than measuring
+     * a string, because we may be asked about a specific glyph ID
+     * that's not the default glyph for any code point (e.g. a stylistic
+     * alternate).
+     */
+    override fun getGlyphWidthInternal(
+        glyphId: Int,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): SkScalar {
+        val sized = baseFont.deriveFont(size)
+        val font = if (scaleX == 1f && skewX == 0f) {
+            sized
+        } else {
+            val tx = AffineTransform()
+            if (scaleX != 1f) tx.scale(scaleX.toDouble(), 1.0)
+            if (skewX != 0f) tx.shear(skewX.toDouble(), 0.0)
+            sized.deriveFont(tx)
+        }
+        val gv = font.createGlyphVector(FRC, intArrayOf(glyphId))
+        return gv.getGlyphMetrics(0).advance
     }
 
     /**
