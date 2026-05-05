@@ -35,23 +35,209 @@ public data class SkMatrix(
     val sy: SkScalar = 1f,
     val ty: SkScalar = 0f,
 ) {
-    /** Returns true if this matrix is the identity (no scale, skew, or translate). */
-    public val isIdentity: Boolean
-        get() = sx == 1f && kx == 0f && tx == 0f && ky == 0f && sy == 1f && ty == 0f
+    /**
+     * Cached type mask, computed once at construction. Bit-OR of the
+     * `k*_Mask` constants in the companion object. Mirrors Skia's
+     * `SkMatrix::computeTypeMask` ([src/core/SkMatrix.cpp:101](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L101))
+     * specialised for the affine subset (perspective row is hardcoded
+     * `[0, 0, 1]` so `kPerspective_Mask` is never set).
+     *
+     * Body-declared (not a primary-constructor field) so it stays out of
+     * `data class` `equals` / `hashCode` / `copy`.
+     */
+    private val fTypeMask: Int = computeTypeMask(sx, kx, ky, sy, tx, ty)
 
-    /** True if `kx == 0 && ky == 0` — the transform is axis-aligned (translate + scale only). */
-    public val isAxisAligned: Boolean
-        get() = kx == 0f && ky == 0f
+    /**
+     * Public type mask: bit-OR of [kIdentity_Mask] / [kTranslate_Mask] /
+     * [kScale_Mask] / [kAffine_Mask]. [kPerspective_Mask] is never set
+     * for this affine-only port. Mirrors Skia's `SkMatrix::getType`.
+     *
+     * Use the higher-level predicates ([isIdentity], [isTranslate],
+     * [isScaleTranslate], [rectStaysRect]) when you don't need the raw
+     * mask.
+     */
+    public fun getType(): Int = fTypeMask and 0x0F
+
+    /** `true` if no scale, skew, or translation. */
+    public val isIdentity: Boolean
+        get() = getType() == kIdentity_Mask
+
+    /** `true` if the matrix only translates — no scale, skew, or rotation. */
+    public fun isTranslate(): Boolean = (getType() and kTranslate_Mask.inv().and(0x0F)) == 0
+
+    /**
+     * `true` if the matrix is some combination of identity / translate
+     * / scale (no rotation, skew, or perspective). Mirrors Skia's
+     * `SkMatrix::isScaleTranslate`.
+     */
+    public fun isScaleTranslate(): Boolean =
+        (getType() and (kAffine_Mask or kPerspective_Mask)) == 0
+
+    /**
+     * Legacy alias for [isScaleTranslate] kept for the existing kanvas
+     * call sites. Renamed conceptually now that we expose the full
+     * type-mask system; callers writing new code should prefer
+     * [isScaleTranslate] for Skia naming parity.
+     */
+    public val isAxisAligned: Boolean get() = isScaleTranslate()
+
+    /**
+     * `true` if the matrix maps a rect to a rect — identity, scale,
+     * cardinal-angle rotation, mirror, plus optional translation. Mirrors
+     * Skia's `rectStaysRect` ([SkMatrix.h](https://github.com/google/skia/blob/main/include/core/SkMatrix.h)).
+     */
+    public fun rectStaysRect(): Boolean = (fTypeMask and kRectStaysRect_Mask) != 0
+
+    /** Skia uses both names interchangeably. */
+    public fun preservesAxisAlignment(): Boolean = rectStaysRect()
+
+    /** Always `false` in this affine-only port. Mirrors Skia's `hasPerspective`. */
+    public fun hasPerspective(): Boolean = (getType() and kPerspective_Mask) != 0
+
+    /**
+     * `true` if the matrix is a rotation + uniform scale + translate
+     * (a similarity transform). Mirrors Skia's [`SkMatrix::isSimilarity`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L184).
+     */
+    public fun isSimilarity(tol: SkScalar = SK_ScalarNearlyZero): Boolean {
+        val mask = getType()
+        if (mask <= kTranslate_Mask) return true
+        if (mask and kPerspective_Mask != 0) return false
+
+        if (mask and kAffine_Mask == 0) {
+            // No skew — just compare scale magnitudes.
+            return !SkScalarNearlyZero(sx) &&
+                SkScalarNearlyEqual(SkScalarAbs(sx), SkScalarAbs(sy))
+        }
+        // Degenerate 2x2 ⇒ no inverse ⇒ not a similarity.
+        if (isDegenerate2x2(sx, kx, ky, sy)) return false
+
+        // Upper 2x2 is rotation/reflection + uniform scale iff basis vectors are
+        // 90° rotations of each other.
+        return (SkScalarNearlyEqual(sx, sy, tol) && SkScalarNearlyEqual(kx, -ky, tol)) ||
+            (SkScalarNearlyEqual(sx, -sy, tol) && SkScalarNearlyEqual(kx, ky, tol))
+    }
+
+    /**
+     * `true` if the matrix maps perpendicular axes to perpendicular axes
+     * (i.e. preserves right angles). Mirrors Skia's
+     * [`preservesRightAngles`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L213).
+     */
+    public fun preservesRightAngles(tol: SkScalar = SK_ScalarNearlyZero): Boolean {
+        val mask = getType()
+        if (mask <= kTranslate_Mask) return true
+        if (mask and kPerspective_Mask != 0) return false
+        if (isDegenerate2x2(sx, kx, ky, sy)) return false
+        // Upper 2x2 is scale + rotation iff basis vectors are orthogonal.
+        val dot = sx * kx + ky * sy        // (sx, ky) · (kx, sy)
+        return SkScalarNearlyZero(dot, tol * tol)
+    }
+
+    /**
+     * IEEE-strict (NaN-asymmetric) equality, mirroring Skia's
+     * `operator==`. The data-class generated `equals` uses
+     * `Float.equals` (NaN-friendly), so use this when porting hot-path
+     * C++ that relies on the IEEE semantic.
+     */
+    public fun cheapEqualTo(other: SkMatrix): Boolean =
+        sx == other.sx && kx == other.kx && tx == other.tx &&
+            ky == other.ky && sy == other.sy && ty == other.ty
 
     /** Apply this matrix to a point. */
     public fun mapXY(x: SkScalar, y: SkScalar): Pair<SkScalar, SkScalar> =
         Pair(sx * x + kx * y + tx, ky * x + sy * y + ty)
+
+    /** Apply this matrix to a [SkPoint], returning a new mapped point. */
+    public fun mapXY(p: SkPoint): SkPoint =
+        SkPoint(sx * p.fX + kx * p.fY + tx, ky * p.fX + sy * p.fY + ty)
+
+    /**
+     * Apply only the linear part (drop translation) — used for direction
+     * vectors. Mirrors Skia's `SkMatrix::mapVector(dx, dy)`.
+     */
+    public fun mapVector(dx: SkScalar, dy: SkScalar): SkPoint =
+        SkPoint(sx * dx + kx * dy, ky * dx + sy * dy)
+
+    /**
+     * Bulk apply this matrix to `count` source points, writing the
+     * result to `dst`. `dst` and `src` may alias. Type-mask fast paths
+     * mirror Skia's `getMapPtsProc` dispatch:
+     *
+     * - identity → straight copy
+     * - translate-only → `+ (tx, ty)` per point
+     * - scale + translate → `(sx*x + tx, sy*y + ty)` per point
+     * - else → full affine
+     *
+     * Mirrors [`SkMatrix::mapPoints`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L782).
+     */
+    public fun mapPoints(dst: Array<SkPoint>, src: Array<SkPoint>, count: Int) {
+        require(count <= dst.size && count <= src.size) {
+            "mapPoints count=$count exceeds dst.size=${dst.size} or src.size=${src.size}"
+        }
+        when (val type = getType()) {
+            kIdentity_Mask -> {
+                for (i in 0 until count) {
+                    dst[i] = SkPoint(src[i].fX, src[i].fY)
+                }
+            }
+            kTranslate_Mask -> {
+                for (i in 0 until count) {
+                    dst[i] = SkPoint(src[i].fX + tx, src[i].fY + ty)
+                }
+            }
+            else -> if (type and (kAffine_Mask or kPerspective_Mask) == 0) {
+                // Scale + translate (no rotation/skew/perspective).
+                for (i in 0 until count) {
+                    dst[i] = SkPoint(sx * src[i].fX + tx, sy * src[i].fY + ty)
+                }
+            } else {
+                // Full affine.
+                for (i in 0 until count) {
+                    val x = src[i].fX
+                    val y = src[i].fY
+                    dst[i] = SkPoint(sx * x + kx * y + tx, ky * x + sy * y + ty)
+                }
+            }
+        }
+    }
+
+    /** In-place bulk map. Equivalent to `mapPoints(pts, pts, count)`. */
+    public fun mapPoints(pts: Array<SkPoint>, count: Int = pts.size) {
+        mapPoints(pts, pts, count)
+    }
+
+    /**
+     * Bulk apply only the linear part (drop translation) to vectors.
+     * Mirrors Skia's `SkMatrix::mapVectors`.
+     */
+    public fun mapVectors(dst: Array<SkPoint>, src: Array<SkPoint>, count: Int) {
+        require(count <= dst.size && count <= src.size)
+        if (getType() and (kAffine_Mask or kPerspective_Mask or kScale_Mask) == 0) {
+            // Identity or translate-only — vectors are unchanged.
+            for (i in 0 until count) {
+                if (dst !== src || dst[i] !== src[i]) dst[i] = SkPoint(src[i].fX, src[i].fY)
+            }
+        } else {
+            for (i in 0 until count) {
+                val x = src[i].fX
+                val y = src[i].fY
+                dst[i] = SkPoint(sx * x + kx * y, ky * x + sy * y)
+            }
+        }
+    }
+
+    public fun mapVectors(vectors: Array<SkPoint>, count: Int = vectors.size) {
+        mapVectors(vectors, vectors, count)
+    }
 
     /**
      * Apply this matrix to a rect, returning the bounding box of the
      * transformed quad. Equivalent to Skia's `SkMatrix::mapRect`.
      */
     public fun mapRect(r: SkRect): SkRect {
+        // Fast path: scale + translate preserves rect orientation, no
+        // need to map all four corners.
+        if (isScaleTranslate()) return mapRectScaleTranslate(r)
+
         val (x0, y0) = mapXY(r.left, r.top)
         val (x1, y1) = mapXY(r.right, r.top)
         val (x2, y2) = mapXY(r.right, r.bottom)
@@ -62,6 +248,40 @@ public data class SkMatrix(
             maxOf(x0, x1, x2, x3),
             maxOf(y0, y1, y2, y3),
         )
+    }
+
+    /**
+     * Fast-path rect mapping for matrices satisfying [isScaleTranslate].
+     * Maps `(left, top)` and `(right, bottom)` directly; the result is
+     * sorted to handle negative scales (which flip edges).
+     *
+     * Mirrors Skia's [`SkMatrix::mapRectScaleTranslate`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1133).
+     * Caller must verify `isScaleTranslate()` first.
+     */
+    public fun mapRectScaleTranslate(r: SkRect): SkRect {
+        check(isScaleTranslate()) {
+            "mapRectScaleTranslate requires isScaleTranslate matrix; got mask=${getType()}"
+        }
+        val l1 = sx * r.left + tx
+        val r1 = sx * r.right + tx
+        val t1 = sy * r.top + ty
+        val b1 = sy * r.bottom + ty
+        return SkRect.MakeLTRB(minOf(l1, r1), minOf(t1, b1), maxOf(l1, r1), maxOf(t1, b1))
+    }
+
+    /**
+     * Heuristic mapped radius — for a circle with radius `r` mapped by
+     * this matrix, returns the radius of a "representative" circle in
+     * device space. Skia uses the geometric mean of the singular values
+     * for stroke width estimation; we use the same formula
+     * `sqrt(|det|)` derived from `σ_max · σ_min`.
+     *
+     * Mirrors [`SkMatrix::mapRadius`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp).
+     */
+    public fun mapRadius(r: SkScalar): SkScalar {
+        // Skia: mapRadius(r) = r * sqrt(|sx*sy - kx*ky|).
+        val det = SkScalarAbs(sx * sy - kx * ky)
+        return r * SkScalarSqrt(det)
     }
 
     /** Pre-concat: `this = this · other`. Mirrors `SkMatrix::preConcat`. */
@@ -167,6 +387,63 @@ public data class SkMatrix(
 
     public companion object {
         public val Identity: SkMatrix = SkMatrix()
+
+        // ─── TypeMask constants (mirror Skia's SkMatrix::TypeMask enum) ──
+        // [SkMatrix.h:165](https://github.com/google/skia/blob/main/include/core/SkMatrix.h#L165)
+
+        /** No scale, skew, or translate. */
+        public const val kIdentity_Mask: Int = 0
+        /** Translation only. */
+        public const val kTranslate_Mask: Int = 0x01
+        /** Scale (uniform or non-uniform). */
+        public const val kScale_Mask: Int = 0x02
+        /** Skew or rotate. */
+        public const val kAffine_Mask: Int = 0x04
+        /** Perspective — never set in this affine-only port. */
+        public const val kPerspective_Mask: Int = 0x08
+        /**
+         * Internal "rect stays rect" mask — set when the upper 2x2 maps a rect
+         * to a rect (axis-aligned, 90° rotation, or mirror). Skia keeps this
+         * bit out of the public 4-bit subset returned by `getType()`.
+         */
+        internal const val kRectStaysRect_Mask: Int = 0x10
+
+        /**
+         * Compute the type mask for a 6-tuple affine matrix. Mirrors Skia's
+         * `computeTypeMask` ([src/core/SkMatrix.cpp:101](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L101))
+         * with the perspective branch removed.
+         *
+         * The skew-non-zero branch tracks Skia's `(m01 | m10) != 0` short-circuit:
+         * any skew implies `kAffine_Mask | kScale_Mask`, then `rectStaysRect`
+         * holds iff the primary diagonal (`sx`, `sy`) is all zero AND the
+         * secondary diagonal (`kx`, `ky`) is all non-zero — i.e. a 90°-class
+         * rotation. The no-skew branch is simpler: `rectStaysRect` holds iff
+         * the primary diagonal is non-zero (translate / scale / mirror).
+         */
+        internal fun computeTypeMask(
+            sx: Float, kx: Float, ky: Float, sy: Float, tx: Float, ty: Float,
+        ): Int {
+            var mask = 0
+            if (tx != 0f || ty != 0f) mask = mask or kTranslate_Mask
+            if (kx != 0f || ky != 0f) {
+                mask = mask or kAffine_Mask or kScale_Mask
+                // rectStaysRect: primary diagonal both 0, secondary both non-zero.
+                if (sx == 0f && sy == 0f && kx != 0f && ky != 0f) {
+                    mask = mask or kRectStaysRect_Mask
+                }
+            } else {
+                if (sx != 1f || sy != 1f) mask = mask or kScale_Mask
+                // rectStaysRect: primary diagonal both non-zero (secondary already 0).
+                if (sx != 0f && sy != 0f) mask = mask or kRectStaysRect_Mask
+            }
+            return mask
+        }
+
+        /** Skia's `is_degenerate_2x2`. Used by [isSimilarity] / [preservesRightAngles]. */
+        internal fun isDegenerate2x2(sx: Float, kx: Float, ky: Float, sy: Float): Boolean {
+            val perpDot = sx * sy - kx * ky
+            return SkScalarNearlyZero(perpDot, SK_ScalarNearlyZero * SK_ScalarNearlyZero)
+        }
 
         public fun MakeTrans(dx: SkScalar, dy: SkScalar): SkMatrix =
             SkMatrix(tx = dx, ty = dy)

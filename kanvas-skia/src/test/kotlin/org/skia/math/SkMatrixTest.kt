@@ -2,6 +2,7 @@ package org.skia.math
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.math.PI
@@ -390,5 +391,239 @@ class SkMatrixTest {
         // Sanity: should be at least norm of first row.
         val rowNorm = sqrt(1.5f * 1.5f + 0.7f * 0.7f)
         assertTrue(s >= rowNorm * 0.9f, "max scale $s < first-row norm $rowNorm")
+    }
+
+    // ─── Phase 1: type-mask system ──────────────────────────────────────
+
+    @Test
+    fun `getType identity matrix`() {
+        assertEquals(SkMatrix.kIdentity_Mask, SkMatrix.Identity.getType())
+        assertTrue(SkMatrix.Identity.isIdentity)
+        assertTrue(SkMatrix.Identity.rectStaysRect())
+        assertFalse(SkMatrix.Identity.hasPerspective())
+    }
+
+    @Test
+    fun `getType pure translate`() {
+        val m = SkMatrix.MakeTrans(5f, 7f)
+        assertEquals(SkMatrix.kTranslate_Mask, m.getType())
+        assertTrue(m.isTranslate())
+        assertTrue(m.isScaleTranslate())
+        assertTrue(m.rectStaysRect())
+        assertFalse(m.isIdentity)
+    }
+
+    @Test
+    fun `getType pure scale sets translate too when off-origin`() {
+        val pureScale = SkMatrix.MakeScale(2f, 3f)
+        assertEquals(SkMatrix.kScale_Mask, pureScale.getType())
+        assertTrue(pureScale.isScaleTranslate())
+        assertTrue(pureScale.rectStaysRect())
+
+        val pivotScale = SkMatrix.MakeScale(2f, 3f, 1f, 1f)
+        // pivotScale has tx, ty != 0 so kTranslate_Mask is also set.
+        assertEquals(SkMatrix.kScale_Mask or SkMatrix.kTranslate_Mask, pivotScale.getType())
+    }
+
+    @Test
+    fun `getType cardinal rotate sets affine plus rectStaysRect`() {
+        val m = SkMatrix.MakeRotate(90f)
+        // 90° rotation has kx=-1, ky=1, sx=sy=0 — Skia flags as Affine|Scale
+        // and rectStaysRect since the 2x2 swaps axes cleanly.
+        assertEquals(SkMatrix.kAffine_Mask or SkMatrix.kScale_Mask, m.getType())
+        assertFalse(m.isScaleTranslate())   // skew/rotation present
+        assertTrue(m.rectStaysRect(), "90° rotation maps rect to rect")
+    }
+
+    @Test
+    fun `getType arbitrary rotate clears rectStaysRect`() {
+        val m = SkMatrix.MakeRotate(45f)
+        assertEquals(SkMatrix.kAffine_Mask or SkMatrix.kScale_Mask, m.getType())
+        assertFalse(m.rectStaysRect(), "45° rotation does not preserve axis alignment")
+    }
+
+    @Test
+    fun `hasPerspective is always false in this affine port`() {
+        for (m in listOf(
+            SkMatrix.Identity,
+            SkMatrix.MakeTrans(1f, 1f),
+            SkMatrix.MakeScale(2f, 3f),
+            SkMatrix.MakeRotate(45f),
+            SkMatrix.MakeSkew(0.5f, 0.7f),
+        )) {
+            assertFalse(m.hasPerspective(), "hasPerspective should be false for $m")
+        }
+    }
+
+    @Test
+    fun `isSimilarity identity translate uniform-scale rotate`() {
+        assertTrue(SkMatrix.Identity.isSimilarity())
+        assertTrue(SkMatrix.MakeTrans(5f, 7f).isSimilarity())
+        // Uniform scale ⇒ similarity.
+        assertTrue(SkMatrix.MakeScale(2f, 2f).isSimilarity())
+        // Pure rotation ⇒ similarity.
+        assertTrue(SkMatrix.MakeRotate(30f).isSimilarity())
+        // Non-uniform scale ⇒ NOT a similarity.
+        assertFalse(SkMatrix.MakeScale(2f, 3f).isSimilarity())
+        // Skew ⇒ NOT a similarity (preserves neither angle nor uniform scale).
+        assertFalse(SkMatrix.MakeSkew(0.5f, 0f).isSimilarity())
+    }
+
+    @Test
+    fun `preservesRightAngles identity translate scale rotate skew`() {
+        assertTrue(SkMatrix.Identity.preservesRightAngles())
+        assertTrue(SkMatrix.MakeTrans(3f, 5f).preservesRightAngles())
+        // Pure scale (even non-uniform) preserves right angles.
+        assertTrue(SkMatrix.MakeScale(2f, 5f).preservesRightAngles())
+        // Pure rotation preserves right angles.
+        assertTrue(SkMatrix.MakeRotate(30f).preservesRightAngles())
+        // Skew does NOT.
+        assertFalse(SkMatrix.MakeSkew(0.5f, 0f).preservesRightAngles())
+    }
+
+    @Test
+    fun `cheapEqualTo is IEEE-strict on NaN`() {
+        val a = SkMatrix(sx = Float.NaN)
+        val b = SkMatrix(sx = Float.NaN)
+        // data class equals is NaN-friendly...
+        assertEquals(a, b)
+        // ...cheapEqualTo is IEEE-strict (NaN != NaN).
+        assertFalse(a.cheapEqualTo(b))
+        // For finite values, both forms agree.
+        val m = SkMatrix.MakeScale(2f, 3f)
+        assertTrue(m.cheapEqualTo(SkMatrix.MakeScale(2f, 3f)))
+    }
+
+    // ─── Phase 2: mapping API ──────────────────────────────────────────
+
+    @Test
+    fun `mapXY SkPoint overload matches mapXY x y`() {
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val (x, y) = m.mapXY(2f, 3f)
+        val p = m.mapXY(SkPoint(2f, 3f))
+        assertEquals(x, p.fX); assertEquals(y, p.fY)
+    }
+
+    @Test
+    fun `mapVector ignores translation`() {
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(100f, 200f)
+        // Linear part for a (1, 0) vector: (sx, ky) = (2, 0). Translation
+        // dropped — even though tx/ty are large, vector mapping shouldn't add them.
+        val v = m.mapVector(1f, 0f)
+        assertEquals(2f, v.fX); assertEquals(0f, v.fY)
+    }
+
+    @Test
+    fun `mapPoints identity is straight copy`() {
+        val src = arrayOf(SkPoint(1f, 2f), SkPoint(3f, 4f), SkPoint(5f, 6f))
+        val dst = Array(3) { SkPoint(0f, 0f) }
+        SkMatrix.Identity.mapPoints(dst, src, 3)
+        for (i in 0 until 3) {
+            assertEquals(src[i].fX, dst[i].fX); assertEquals(src[i].fY, dst[i].fY)
+        }
+    }
+
+    @Test
+    fun `mapPoints translate adds tx ty`() {
+        val src = arrayOf(SkPoint(1f, 2f), SkPoint(3f, 4f))
+        val dst = Array(2) { SkPoint() }
+        SkMatrix.MakeTrans(10f, 20f).mapPoints(dst, src, 2)
+        assertEquals(11f, dst[0].fX); assertEquals(22f, dst[0].fY)
+        assertEquals(13f, dst[1].fX); assertEquals(24f, dst[1].fY)
+    }
+
+    @Test
+    fun `mapPoints scale-translate fast path`() {
+        val src = arrayOf(SkPoint(1f, 2f), SkPoint(3f, 4f))
+        val dst = Array(2) { SkPoint() }
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        m.mapPoints(dst, src, 2)
+        // Each src point: (2*x + tx_eff, 3*y + ty_eff). preTranslate:
+        // base = MakeScale, then preTranslate ⇒ tx = 2*5 = 10, ty = 3*7 = 21.
+        assertEquals(2 * 1 + 10f, dst[0].fX); assertEquals(3 * 2 + 21f, dst[0].fY)
+        assertEquals(2 * 3 + 10f, dst[1].fX); assertEquals(3 * 4 + 21f, dst[1].fY)
+    }
+
+    @Test
+    fun `mapPoints full affine matches mapXY per point`() {
+        val m = SkMatrix.MakeRotate(30f).preTranslate(5f, 7f)
+        val src = arrayOf(SkPoint(1f, 0f), SkPoint(0f, 1f), SkPoint(2f, 3f))
+        val dst = Array(3) { SkPoint() }
+        m.mapPoints(dst, src, 3)
+        for (i in 0 until 3) {
+            val expected = m.mapXY(src[i])
+            assertNear(expected.fX, dst[i].fX)
+            assertNear(expected.fY, dst[i].fY)
+        }
+    }
+
+    @Test
+    fun `mapPoints in-place overload matches dst-form`() {
+        val pts = arrayOf(SkPoint(1f, 2f), SkPoint(3f, 4f))
+        val src = arrayOf(SkPoint(1f, 2f), SkPoint(3f, 4f))
+        val expected = Array(2) { SkPoint() }
+        val m = SkMatrix.MakeRotate(30f)
+        m.mapPoints(expected, src, 2)
+        m.mapPoints(pts, 2)
+        for (i in 0 until 2) {
+            assertNear(expected[i].fX, pts[i].fX)
+            assertNear(expected[i].fY, pts[i].fY)
+        }
+    }
+
+    @Test
+    fun `mapVectors ignores translation`() {
+        val src = arrayOf(SkPoint(1f, 0f), SkPoint(0f, 1f))
+        val dst = Array(2) { SkPoint() }
+        // Big translate shouldn't show up in vectors.
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(100f, 200f)
+        m.mapVectors(dst, src, 2)
+        assertEquals(2f, dst[0].fX); assertEquals(0f, dst[0].fY)
+        assertEquals(0f, dst[1].fX); assertEquals(3f, dst[1].fY)
+    }
+
+    @Test
+    fun `mapRectScaleTranslate fast path matches mapRect`() {
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val r = SkRect.MakeLTRB(0f, 0f, 10f, 10f)
+        // The general mapRect goes through mapRectScaleTranslate fast path
+        // when isScaleTranslate; verify the explicit call agrees.
+        val fast = m.mapRectScaleTranslate(r)
+        val general = m.mapRect(r)
+        assertTrue(fast.equalsLTRB(general))
+    }
+
+    @Test
+    fun `mapRectScaleTranslate handles negative scale by sorting`() {
+        val m = SkMatrix.MakeScale(-2f, 1f)
+        val r = SkRect.MakeLTRB(1f, 0f, 3f, 5f)
+        // x: -2*1 = -2, -2*3 = -6 ⇒ left=-6, right=-2.
+        val mapped = m.mapRectScaleTranslate(r)
+        assertEquals(-6f, mapped.left); assertEquals(-2f, mapped.right)
+        assertEquals(0f, mapped.top); assertEquals(5f, mapped.bottom)
+    }
+
+    @Test
+    fun `mapRectScaleTranslate throws when not scale-translate`() {
+        val m = SkMatrix.MakeRotate(30f)
+        assertThrows(IllegalStateException::class.java) {
+            m.mapRectScaleTranslate(SkRect.MakeLTRB(0f, 0f, 1f, 1f))
+        }
+    }
+
+    @Test
+    fun `mapRadius equals scale magnitude for pure scale`() {
+        val m = SkMatrix.MakeScale(3f, 4f)
+        // |det| = 12, sqrt = sqrt(12).
+        assertNear(kotlin.math.sqrt(12f) * 5f, m.mapRadius(5f), eps = 1e-4f)
+    }
+
+    @Test
+    fun `mapRadius is invariant under rotation`() {
+        val r = 7f
+        // Pure rotation ⇒ |det| = 1 ⇒ mapRadius(r) = r.
+        for (deg in floatArrayOf(0f, 30f, 90f, 137f)) {
+            assertNear(r, SkMatrix.MakeRotate(deg).mapRadius(r), eps = 1e-4f)
+        }
     }
 }
