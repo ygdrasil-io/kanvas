@@ -6,11 +6,13 @@ import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tan
 // SkRRect lives in the same `org.skia.foundation` package — no import needed.
 
 /**
@@ -30,6 +32,13 @@ import kotlin.math.sqrt
  *   usable).
  */
 public class SkPathBuilder public constructor() {
+
+    /**
+     * Which of the two ellipse arcs (smaller or larger half) connects
+     * the start and end points of an SVG-style [arcTo]. Mirrors
+     * `SkPathBuilder::ArcSize` (`include/core/SkPathBuilder.h:576-579`).
+     */
+    public enum class ArcSize { kSmall_ArcSize, kLarge_ArcSize }
 
     private val verbs: ArrayList<SkPath.Verb> = ArrayList()
     private val coords: ArrayList<SkScalar> = ArrayList()
@@ -374,6 +383,139 @@ public class SkPathBuilder public constructor() {
         val weight = sqrt(0.5 + cosh * 0.5).toFloat()
         conicTo(x1, y1, t1x, t1y, weight)
     }
+
+    /**
+     * **SVG arc, absolute endpoint.** Mirrors
+     * `SkPathBuilder::arcTo(SkPoint r, SkScalar xAxisRotate, ArcSize, SkPathDirection sweep, SkPoint xy)`
+     * (`include/core/SkPathBuilder.h:670`,
+     * `src/core/SkPathBuilder.cpp:519-645`). Implements the SVG
+     * endpoint-to-conic conversion specified in
+     * <https://www.w3.org/TR/SVG/implnote.html#ArcConversionEndpointToCenter>.
+     *
+     * Appends one or more conic Bézier curves connecting the current
+     * pen position to `(x, y)`, tracing an elliptical arc with radii
+     * `(rx, ry)` rotated by `xAxisRotateDeg` about the origin. The
+     * `largeArc` / `sweep` flags pick one of the four possible arcs.
+     *
+     * Degenerate cases (match Skia behaviour):
+     *  - `rx == 0` or `ry == 0` → emit `lineTo(x, y)`.
+     *  - start == end → emit `lineTo(x, y)`.
+     *  - tiny `thetaArc` (< π / 1e6) → emit `lineTo(x, y)`.
+     *
+     * If the supplied radii are too small to span the chord, they are
+     * scaled up uniformly per the SVG spec.
+     */
+    public fun arcTo(
+        rx: SkScalar, ry: SkScalar,
+        xAxisRotateDeg: SkScalar,
+        arcLarge: ArcSize,
+        arcSweep: SkPathDirection,
+        x: SkScalar, y: SkScalar,
+    ): SkPathBuilder = apply {
+        ensureContour()
+        if (rx == 0f || ry == 0f) { lineTo(x, y); return@apply }
+        val startX = lastX; val startY = lastY
+        if (startX == x && startY == y) { lineTo(x, y); return@apply }
+
+        var rxAbs = abs(rx); var ryAbs = abs(ry)
+        val midX = (startX - x) * 0.5f
+        val midY = (startY - y) * 0.5f
+
+        // Rotate(-angle) on the half-chord midpoint vector.
+        val rotMinus = SkMatrix.MakeRotate(-xAxisRotateDeg)
+        val (tmX, tmY) = rotMinus.mapXY(midX, midY)
+
+        val sqRx = rxAbs * rxAbs; val sqRy = ryAbs * ryAbs
+        val sqX = tmX * tmX; val sqY = tmY * tmY
+
+        // Scale radii up if the chord doesn't fit (SVG `OutOfRangeRadii`).
+        var radiiScale = sqX / sqRx + sqY / sqRy
+        if (radiiScale > 1f) {
+            radiiScale = sqrt(radiiScale.toDouble()).toFloat()
+            rxAbs *= radiiScale; ryAbs *= radiiScale
+        }
+
+        // Map start and end to the unit circle: scale(1/rx, 1/ry) ∘ rotate(-angle).
+        var pointTransform = SkMatrix.MakeScale(1f / rxAbs, 1f / ryAbs)
+            .preRotate(-xAxisRotateDeg)
+        val (u0x, u0y) = pointTransform.mapXY(startX, startY)
+        val (u1x, u1y) = pointTransform.mapXY(x, y)
+        val deltaX = u1x - u0x; val deltaY = u1y - u0y
+        val d = deltaX * deltaX + deltaY * deltaY
+
+        // Center offset: perpendicular to the chord, length tied to the
+        // chord-radius ratio. Sign flipped per (sweep, largeArc) parity.
+        val scaleSq = max(1f / d - 0.25f, 0f)
+        var scaleFactor = sqrt(scaleSq.toDouble()).toFloat()
+        if ((arcSweep == SkPathDirection.kCCW) != (arcLarge == ArcSize.kLarge_ArcSize)) {
+            scaleFactor = -scaleFactor
+        }
+        val sdx = deltaX * scaleFactor; val sdy = deltaY * scaleFactor
+        val centerX = (u0x + u1x) * 0.5f - sdy
+        val centerY = (u0y + u1y) * 0.5f + sdx
+
+        val u0xc = (u0x - centerX).toDouble(); val u0yc = (u0y - centerY).toDouble()
+        val u1xc = (u1x - centerX).toDouble(); val u1yc = (u1y - centerY).toDouble()
+        val theta1 = atan2(u0yc, u0xc)
+        val theta2 = atan2(u1yc, u1xc)
+        var thetaArc = theta2 - theta1
+        if (thetaArc < 0 && arcSweep == SkPathDirection.kCW) {
+            thetaArc += 2.0 * PI
+        } else if (thetaArc > 0 && arcSweep != SkPathDirection.kCW) {
+            thetaArc -= 2.0 * PI
+        }
+
+        // Tiny angles produce numerically unstable conics — emit a line
+        // (Skia: skbug.com/40040578). Threshold mirrors upstream.
+        if (abs(thetaArc) < PI / 1_000_000.0) {
+            lineTo(x, y); return@apply
+        }
+
+        // Final transform: rotate(angle) ∘ scale(rx, ry).
+        pointTransform = SkMatrix.MakeRotate(xAxisRotateDeg).preScale(rxAbs, ryAbs)
+
+        // Up to 1/3 of a full turn per segment (≤120°), Skia convention.
+        val segments = ceil(abs(thetaArc) / (2.0 * PI / 3.0)).toInt()
+        val thetaWidth = thetaArc / segments
+        val tParam = tan(0.5 * thetaWidth)
+        if (!tParam.isFinite()) return@apply
+        val w = sqrt(0.5 + cos(thetaWidth) * 0.5).toFloat()
+
+        var startTheta = theta1
+        for (i in 0 until segments) {
+            val endTheta = startTheta + thetaWidth
+            val sinEnd = sin(endTheta)
+            val cosEnd = cos(endTheta)
+            val u1xR = (centerX + cosEnd).toFloat()
+            val u1yR = (centerY + sinEnd).toFloat()
+            // Conic control: tangent extension from the segment end.
+            val u0xR = (u1xR + tParam * sinEnd).toFloat()
+            val u0yR = (u1yR + (-tParam * cosEnd)).toFloat()
+            val (mx0, my0) = pointTransform.mapXY(u0xR, u0yR)
+            val (mx1, my1) = pointTransform.mapXY(u1xR, u1yR)
+            // Snap the final segment's end point exactly to (x, y) to
+            // erase rounding error accumulated through the multi-stage
+            // matrix chain (Skia mirrors this with `fPts.back() = endPt`).
+            val ex = if (i == segments - 1) x else mx1
+            val ey = if (i == segments - 1) y else my1
+            conicTo(mx0, my0, ex, ey, w)
+            startTheta = endTheta
+        }
+    }
+
+    /**
+     * **SVG arc, relative endpoint.** Mirrors
+     * `SkPathBuilder::rArcTo(SkPoint r, SkScalar xAxisRotate, ArcSize, SkPathDirection sweep, SkVector dxdy)`
+     * (`include/core/SkPathBuilder.h:605`). Equivalent to
+     * `arcTo(rx, ry, xAxisRotateDeg, arcLarge, arcSweep, lastX + dx, lastY + dy)`.
+     */
+    public fun rArcTo(
+        rx: SkScalar, ry: SkScalar,
+        xAxisRotateDeg: SkScalar,
+        arcLarge: ArcSize,
+        arcSweep: SkPathDirection,
+        dx: SkScalar, dy: SkScalar,
+    ): SkPathBuilder = arcTo(rx, ry, xAxisRotateDeg, arcLarge, arcSweep, lastX + dx, lastY + dy)
 
     public fun addRect(
         rect: SkRect,
