@@ -2,6 +2,7 @@ package org.skia.math
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -658,9 +659,14 @@ class SkMatrixTest {
     }
 
     @Test
-    fun `MakeFrom9 rejects non-affine perspective row`() {
+    fun `MakeFrom9 accepts arbitrary perspective row`() {
+        // Pre-Phase 4 the constructor asserted [0, 0, 1]; now perspective
+        // is fully supported, so a non-trivial perspective row builds a
+        // perspective matrix that hasPerspective() flags accordingly.
         val buf = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0.5f, 0f, 1f)
-        assertThrows(IllegalArgumentException::class.java) { SkMatrix.MakeFrom9(buf) }
+        val m = SkMatrix.MakeFrom9(buf)
+        assertTrue(m.hasPerspective())
+        assertEquals(0.5f, m.persp0)
     }
 
     @Test
@@ -777,5 +783,212 @@ class SkMatrixTest {
     fun `decomposeScale fails on near-singular matrix`() {
         val m = SkMatrix(sx = 1e-10f, kx = 0f, tx = 0f, ky = 0f, sy = 1e-10f, ty = 0f)
         assertEquals(null, m.decomposeScale())
+    }
+
+    // ─── Phase 4: perspective ────────────────────────────────────────────
+
+    @Test
+    fun `default constructor has identity perspective row`() {
+        val m = SkMatrix()
+        assertEquals(0f, m.persp0); assertEquals(0f, m.persp1); assertEquals(1f, m.persp2)
+        assertFalse(m.hasPerspective())
+    }
+
+    @Test
+    fun `MakePerspective flips hasPerspective and getType`() {
+        val m = SkMatrix.MakePerspective(0.001f, 0.002f)
+        assertTrue(m.hasPerspective())
+        // Skia: perspective ⇒ all type bits set.
+        assertEquals(SkMatrix.kPerspective_Mask, m.getType() and SkMatrix.kPerspective_Mask)
+    }
+
+    @Test
+    fun `mapXY does perspective divide`() {
+        // M = identity but with persp0 = 0.5 ⇒ for input (2, 0):
+        //   px = 2, py = 0, w = 0.5*2 + 0 + 1 = 2 ⇒ output = (1, 0).
+        val m = SkMatrix.MakePerspective(0.5f, 0f)
+        val (x, y) = m.mapXY(2f, 0f)
+        assertNear(1f, x); assertNear(0f, y)
+    }
+
+    @Test
+    fun `mapXY in affine matrix is unchanged`() {
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val (x, y) = m.mapXY(1f, 1f)
+        // Same as before perspective extension: (2*1 + 2*5, 3*1 + 3*7) = (12, 24).
+        assertNear(12f, x); assertNear(24f, y)
+    }
+
+    @Test
+    fun `mapPoints handles perspective branch`() {
+        val m = SkMatrix.MakePerspective(0.5f, 0f)
+        val src = arrayOf(SkPoint(2f, 0f), SkPoint(0f, 4f), SkPoint(2f, 4f))
+        val dst = Array(3) { SkPoint() }
+        m.mapPoints(dst, src, 3)
+        // (2, 0): w=2 ⇒ (1, 0). (0, 4): w=1 ⇒ (0, 4). (2, 4): w=2 ⇒ (1, 2).
+        assertNear(1f, dst[0].fX); assertNear(0f, dst[0].fY)
+        assertNear(0f, dst[1].fX); assertNear(4f, dst[1].fY)
+        assertNear(1f, dst[2].fX); assertNear(2f, dst[2].fY)
+    }
+
+    @Test
+    fun `concat of two perspective matrices builds 3x3 product`() {
+        val a = SkMatrix.MakePerspective(0.5f, 0f)
+        val b = SkMatrix.MakePerspective(0f, 0.25f)
+        val ab = SkMatrix.concat(a, b)
+        // Round-trip via mapXY: (a · b)(p) == a(b(p)).
+        val p = SkPoint(2f, 4f)
+        val direct = ab.mapXY(p)
+        val twoStep = a.mapXY(b.mapXY(p))
+        assertNear(twoStep.fX, direct.fX, eps = 1e-3f)
+        assertNear(twoStep.fY, direct.fY, eps = 1e-3f)
+    }
+
+    @Test
+    fun `invert of perspective matrix round-trips`() {
+        val m = SkMatrix.MakePerspective(0.5f, 0.25f).preTranslate(2f, 3f)
+        val inv = m.invert()!!
+        val composed = SkMatrix.concat(m, inv)
+        // composed should be identity ⇒ map (3, 5) back to (3, 5).
+        val (x, y) = composed.mapXY(3f, 5f)
+        assertNear(3f, x, eps = 1e-3f); assertNear(5f, y, eps = 1e-3f)
+    }
+
+    @Test
+    fun `det collapses to det2x2 on affine`() {
+        val m = SkMatrix.MakeRotate(30f).preScale(2f, 3f)
+        assertNear(m.det2x2(), m.det(), eps = 1e-4f)
+    }
+
+    @Test
+    fun `det differs from det2x2 on perspective with non-zero translate`() {
+        // Need both translate AND perspective for det / det2x2 to diverge:
+        // det(3x3) = sx·(sy·p2 - ty·p1) - kx·(ky·p2 - ty·p0) + tx·(ky·p1 - sy·p0)
+        // With tx=10, persp0=0.5, sy=3 ⇒ extra term = 10·(0 - 3·0.5) = -15.
+        val n = SkMatrix(sx = 2f, kx = 0f, tx = 10f, ky = 0f, sy = 3f, ty = 0f, persp0 = 0.5f)
+        // det2x2 = 2·3 - 0·0 = 6
+        assertEquals(6f, n.det2x2())
+        // det = 2·3 - 0 + 10·(-1.5) = -9
+        assertEquals(-9f, n.det())
+        assertNotEquals(n.det2x2(), n.det())
+    }
+
+    @Test
+    fun `mapHomogeneousPoints identity returns w=1`() {
+        val src = arrayOf(SkPoint(2f, 3f), SkPoint(5f, 7f))
+        val dst = Array(2) { SkPoint3() }
+        SkMatrix.Identity.mapHomogeneousPoints(dst, src, 2)
+        assertEquals(SkPoint3(2f, 3f, 1f), dst[0])
+        assertEquals(SkPoint3(5f, 7f, 1f), dst[1])
+    }
+
+    @Test
+    fun `mapHomogeneousPoints affine returns w=1 with mapped xy`() {
+        val src = arrayOf(SkPoint(1f, 0f))
+        val dst = Array(1) { SkPoint3() }
+        val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        m.mapHomogeneousPoints(dst, src, 1)
+        assertEquals(1f, dst[0].fZ)
+        // mapped xy = (2*1 + 2*5, 3*0 + 3*7) = (12, 21).
+        assertNear(12f, dst[0].fX); assertNear(21f, dst[0].fY)
+    }
+
+    @Test
+    fun `mapHomogeneousPoints perspective returns un-divided w`() {
+        val src = arrayOf(SkPoint(2f, 4f))
+        val dst = Array(1) { SkPoint3() }
+        val m = SkMatrix.MakePerspective(0.5f, 0f)
+        m.mapHomogeneousPoints(dst, src, 1)
+        // w = 0.5*2 + 0*4 + 1 = 2; xy unchanged from input.
+        assertNear(2f, dst[0].fX); assertNear(4f, dst[0].fY); assertNear(2f, dst[0].fZ)
+    }
+
+    // ─── Phase 4: MakeRSXform ────────────────────────────────────────────
+
+    @Test
+    fun `MakeRSXform identity yields identity matrix`() {
+        val m = SkMatrix.MakeRSXform(scos = 1f, ssin = 0f, tx = 0f, ty = 0f)
+        assertTrue(m.isIdentity)
+    }
+
+    @Test
+    fun `MakeRSXform 90 deg rotation maps (1, 0) to (0, 1) plus translate`() {
+        // 90° rotation: scos = 0, ssin = 1. Plus translation (10, 20).
+        val m = SkMatrix.MakeRSXform(scos = 0f, ssin = 1f, tx = 10f, ty = 20f)
+        val (x, y) = m.mapXY(1f, 0f)
+        assertNear(10f, x); assertNear(21f, y)   // (0, 1) + (10, 20)
+    }
+
+    @Test
+    fun `MakeRSXform with uniform scale 2 doubles vector lengths`() {
+        // 0° rotation, scale 2. scos = 2, ssin = 0.
+        val m = SkMatrix.MakeRSXform(scos = 2f, ssin = 0f, tx = 0f, ty = 0f)
+        val (x, y) = m.mapXY(1f, 0f)
+        assertNear(2f, x); assertNear(0f, y)
+    }
+
+    // ─── Phase 4: MakePolyToPoly ─────────────────────────────────────────
+
+    @Test
+    fun `MakePolyToPoly empty returns identity`() {
+        val m = SkMatrix.MakePolyToPoly(emptyArray(), emptyArray())!!
+        assertTrue(m.isIdentity)
+    }
+
+    @Test
+    fun `MakePolyToPoly 1 point is pure translate`() {
+        val m = SkMatrix.MakePolyToPoly(
+            arrayOf(SkPoint(0f, 0f)),
+            arrayOf(SkPoint(5f, 7f)),
+        )!!
+        assertTrue(m.isTranslate())
+        assertEquals(5f, m.tx); assertEquals(7f, m.ty)
+    }
+
+    @Test
+    fun `MakePolyToPoly 4 points unit square to skewed quad maps corners`() {
+        // Source: unit square with corners (0,0), (1,0), (1,1), (0,1).
+        val src = arrayOf(
+            SkPoint(0f, 0f), SkPoint(1f, 0f), SkPoint(1f, 1f), SkPoint(0f, 1f),
+        )
+        // Destination: a skewed quad.
+        val dst = arrayOf(
+            SkPoint(10f, 20f), SkPoint(110f, 30f), SkPoint(120f, 130f), SkPoint(20f, 120f),
+        )
+        val m = SkMatrix.MakePolyToPoly(src, dst)!!
+        for (i in 0 until 4) {
+            val mapped = m.mapXY(src[i])
+            assertNear(dst[i].fX, mapped.fX, eps = 1e-2f, msg = "corner $i x")
+            assertNear(dst[i].fY, mapped.fY, eps = 1e-2f, msg = "corner $i y")
+        }
+    }
+
+    @Test
+    fun `MakePolyToPoly 3 points is general affine`() {
+        // 3 non-collinear points.
+        val src = arrayOf(SkPoint(0f, 0f), SkPoint(1f, 0f), SkPoint(0f, 1f))
+        val dst = arrayOf(SkPoint(10f, 20f), SkPoint(40f, 25f), SkPoint(15f, 70f))
+        val m = SkMatrix.MakePolyToPoly(src, dst)!!
+        assertFalse(m.hasPerspective(), "3-point fit should be affine")
+        for (i in 0 until 3) {
+            val mapped = m.mapXY(src[i])
+            assertNear(dst[i].fX, mapped.fX, eps = 1e-3f)
+            assertNear(dst[i].fY, mapped.fY, eps = 1e-3f)
+        }
+    }
+
+    @Test
+    fun `MakePolyToPoly mismatched sizes returns null`() {
+        assertEquals(null, SkMatrix.MakePolyToPoly(
+            arrayOf(SkPoint(0f, 0f)),
+            arrayOf(SkPoint(1f, 1f), SkPoint(2f, 2f)),
+        ))
+    }
+
+    @Test
+    fun `MakePolyToPoly more than 4 points returns null`() {
+        val src = Array(5) { SkPoint() }
+        val dst = Array(5) { SkPoint() }
+        assertEquals(null, SkMatrix.MakePolyToPoly(src, dst))
     }
 }

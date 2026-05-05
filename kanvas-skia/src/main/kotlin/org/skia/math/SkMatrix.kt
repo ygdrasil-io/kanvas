@@ -2,17 +2,19 @@ package org.skia.math
 
 
 /**
- * 2D affine transformation matrix — port of Skia's `SkMatrix` restricted to
- * the affine sub-group (no perspective). Stored row-major as a 2 × 3 matrix:
+ * 2D transformation matrix — full 3 × 3 port of Skia's `SkMatrix`.
+ * Stored row-major:
  *
  * ```
- * [ sx  kx  tx ]   [ x ]   [ sx·x + kx·y + tx ]
- * [ ky  sy  ty ] · [ y ] = [ ky·x + sy·y + ty ]
- *                  [ 1 ]
+ * [ sx      kx      tx     ]   [ x ]   [ sx·x + kx·y + tx     ]
+ * [ ky      sy      ty     ] · [ y ] = [ ky·x + sy·y + ty     ]   →  divide by w
+ * [ persp0  persp1  persp2 ]   [ 1 ]   [ p0·x + p1·y + p2 = w ]
  * ```
  *
- * Naming follows Skia's `SkMatrix::kMScaleX/kMSkewX/kMTransX/kMSkewY/kMScaleY/kMTransY`:
- * `sx` is the scale-X coefficient, `kx` is the skew-X coefficient, etc.
+ * The default-constructed matrix is the identity (no scale, skew,
+ * translate, or perspective). The 6 affine fields mirror Skia's
+ * `kMScaleX / kMSkewX / kMTransX / kMSkewY / kMScaleY / kMTransY`;
+ * the 3 perspective fields mirror `kMPersp0 / kMPersp1 / kMPersp2`.
  *
  * Operations come in two flavours mirroring Skia's `pre*` / `post*` split:
  *  - **`pre*` (default for `canvas.translate/scale/rotate/skew/concat`)**:
@@ -22,10 +24,11 @@ package org.skia.math
  *  - **`post*`**: `M = L · M` — the local transform is applied to the
  *    *device* coords after the prior CTM.
  *
- * Perspective is out of scope: callers attempting `setPerspective`
- * arithmetic should use a different abstraction. `SkMatrix` here covers
- * Identity / Translate / Scale / Rotate / Skew and any composition
- * thereof, which is what every GM in scope uses.
+ * Perspective semantics: when `(persp0, persp1, persp2) != (0, 0, 1)`,
+ * [mapXY] / [mapPoints] perform the homogeneous divide; [concat] uses
+ * a full 3×3 multiply; [invert] uses the cofactor matrix. Affine
+ * fast paths kick in when [hasPerspective] is `false`, so the cost
+ * of the perspective fields is zero on existing affine traffic.
  */
 public data class SkMatrix(
     val sx: SkScalar = 1f,
@@ -34,6 +37,9 @@ public data class SkMatrix(
     val ky: SkScalar = 0f,
     val sy: SkScalar = 1f,
     val ty: SkScalar = 0f,
+    val persp0: SkScalar = 0f,
+    val persp1: SkScalar = 0f,
+    val persp2: SkScalar = 1f,
 ) {
     /**
      * `ScaleToFit` describes how [Companion.MakeRectToRect] maps one
@@ -61,7 +67,7 @@ public data class SkMatrix(
      * Body-declared (not a primary-constructor field) so it stays out of
      * `data class` `equals` / `hashCode` / `copy`.
      */
-    private val fTypeMask: Int = computeTypeMask(sx, kx, ky, sy, tx, ty)
+    private val fTypeMask: Int = computeTypeMask(sx, kx, ky, sy, tx, ty, persp0, persp1, persp2)
 
     /**
      * Public type mask: bit-OR of [kIdentity_Mask] / [kTranslate_Mask] /
@@ -174,9 +180,9 @@ public data class SkMatrix(
     public fun getTranslateY(): SkScalar = ty
 
     /** Always `0` for this affine port (perspective row is hardcoded `[0, 0, 1]`). */
-    public fun getPerspX(): SkScalar = 0f
-    /** Always `0` for this affine port. */
-    public fun getPerspY(): SkScalar = 0f
+    public fun getPerspX(): SkScalar = persp0
+    /** Returns `kMPersp1` (`persp1`). */
+    public fun getPerspY(): SkScalar = persp1
 
     /**
      * Determinant of the upper 2×2 (linear part). Equivalent to
@@ -185,17 +191,20 @@ public data class SkMatrix(
     public fun det2x2(): SkScalar = sx * sy - kx * ky
 
     /**
-     * Full determinant. For an affine matrix this equals [det2x2] (the
-     * perspective row contributes a factor of 1).
+     * Full 3×3 determinant via cofactor expansion along the first row.
+     * For an affine matrix (perspective row `[0, 0, 1]`) this collapses
+     * to [det2x2].
      */
-    public fun det(): SkScalar = det2x2()
+    public fun det(): SkScalar =
+        sx * (sy * persp2 - ty * persp1) -
+            kx * (ky * persp2 - ty * persp0) +
+            tx * (ky * persp1 - sy * persp0)
 
     // ─── Array exchange ─────────────────────────────────────────────────
 
     /**
      * Fill `buffer[0..8]` with the matrix in Skia's row-major 9-tuple
-     * order: `[sx, kx, tx, ky, sy, ty, persp0, persp1, persp2]`. The
-     * perspective row is hardcoded `[0, 0, 1]` for this affine port.
+     * order: `[sx, kx, tx, ky, sy, ty, persp0, persp1, persp2]`.
      *
      * Mirrors Skia's `SkMatrix::get9` ([SkMatrix.h](https://github.com/google/skia/blob/main/include/core/SkMatrix.h)).
      */
@@ -203,7 +212,7 @@ public data class SkMatrix(
         require(buffer.size >= 9) { "get9 buffer must have ≥ 9 elements (got ${buffer.size})" }
         buffer[0] = sx; buffer[1] = kx; buffer[2] = tx
         buffer[3] = ky; buffer[4] = sy; buffer[5] = ty
-        buffer[6] = 0f; buffer[7] = 0f; buffer[8] = 1f
+        buffer[6] = persp0; buffer[7] = persp1; buffer[8] = persp2
     }
 
     /**
@@ -212,11 +221,13 @@ public data class SkMatrix(
      * subtle reordering vs `get9` — Skia stores affine arrays as
      * `[a, c, b, d, e, f]` where the matrix is `[[a, b, e], [c, d, f]]`.
      *
+     * Returns `false` (and leaves `buffer` untouched) when this matrix
+     * has perspective — the affine 6-tuple cannot represent it.
      * Mirrors Skia's [`SkMatrix::asAffine`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L767).
-     * Always returns `true` here (perspective is out of scope).
      */
     public fun asAffine(buffer: FloatArray): Boolean {
         require(buffer.size >= 6) { "asAffine buffer must have ≥ 6 elements (got ${buffer.size})" }
+        if (hasPerspective()) return false
         buffer[kAScaleX] = sx
         buffer[kASkewY] = ky
         buffer[kASkewX] = kx
@@ -224,6 +235,39 @@ public data class SkMatrix(
         buffer[kATransX] = tx
         buffer[kATransY] = ty
         return true
+    }
+
+    /**
+     * Bulk map source points to homogeneous output (no perspective
+     * divide). `dst[i] = (sx*x + kx*y + tx, ky*x + sy*y + ty,
+     * persp0*x + persp1*y + persp2)`. Mirrors Skia's
+     * [`SkMatrix::mapPointsToHomogeneous`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1080).
+     */
+    public fun mapHomogeneousPoints(
+        dst: Array<SkPoint3>,
+        src: Array<SkPoint>,
+        count: Int = src.size,
+    ) {
+        require(count <= dst.size && count <= src.size)
+        if (isIdentity) {
+            for (i in 0 until count) dst[i] = SkPoint3(src[i].fX, src[i].fY, 1f)
+        } else if (hasPerspective()) {
+            for (i in 0 until count) {
+                val x = src[i].fX
+                val y = src[i].fY
+                dst[i] = SkPoint3(
+                    sx * x + kx * y + tx,
+                    ky * x + sy * y + ty,
+                    persp0 * x + persp1 * y + persp2,
+                )
+            }
+        } else {
+            for (i in 0 until count) {
+                val x = src[i].fX
+                val y = src[i].fY
+                dst[i] = SkPoint3(sx * x + kx * y + tx, ky * x + sy * y + ty, 1f)
+            }
+        }
     }
 
     // ─── Singular values / scale decomposition ──────────────────────────
@@ -350,13 +394,24 @@ public data class SkMatrix(
         return true
     }
 
-    /** Apply this matrix to a point. */
-    public fun mapXY(x: SkScalar, y: SkScalar): Pair<SkScalar, SkScalar> =
-        Pair(sx * x + kx * y + tx, ky * x + sy * y + ty)
+    /**
+     * Apply this matrix to a point. With perspective, returns the
+     * homogeneous-divided result `(x/w, y/w)`.
+     */
+    public fun mapXY(x: SkScalar, y: SkScalar): Pair<SkScalar, SkScalar> {
+        val px = sx * x + kx * y + tx
+        val py = ky * x + sy * y + ty
+        if (!hasPerspective()) return Pair(px, py)
+        val w = persp0 * x + persp1 * y + persp2
+        val invW = if (w != 0f) 1f / w else 0f
+        return Pair(px * invW, py * invW)
+    }
 
     /** Apply this matrix to a [SkPoint], returning a new mapped point. */
-    public fun mapXY(p: SkPoint): SkPoint =
-        SkPoint(sx * p.fX + kx * p.fY + tx, ky * p.fX + sy * p.fY + ty)
+    public fun mapXY(p: SkPoint): SkPoint {
+        val (x, y) = mapXY(p.fX, p.fY)
+        return SkPoint(x, y)
+    }
 
     /**
      * Apply only the linear part (drop translation) — used for direction
@@ -397,12 +452,24 @@ public data class SkMatrix(
                 for (i in 0 until count) {
                     dst[i] = SkPoint(sx * src[i].fX + tx, sy * src[i].fY + ty)
                 }
-            } else {
-                // Full affine.
+            } else if (type and kPerspective_Mask == 0) {
+                // Full affine, no perspective.
                 for (i in 0 until count) {
                     val x = src[i].fX
                     val y = src[i].fY
                     dst[i] = SkPoint(sx * x + kx * y + tx, ky * x + sy * y + ty)
+                }
+            } else {
+                // Perspective: full 3×3 with homogeneous divide.
+                for (i in 0 until count) {
+                    val x = src[i].fX
+                    val y = src[i].fY
+                    val w = persp0 * x + persp1 * y + persp2
+                    val invW = if (w != 0f) 1f / w else 0f
+                    dst[i] = SkPoint(
+                        (sx * x + kx * y + tx) * invW,
+                        (ky * x + sy * y + ty) * invW,
+                    )
                 }
             }
         }
@@ -557,6 +624,7 @@ public data class SkMatrix(
      * geometry was defined).
      */
     public fun invert(): SkMatrix? {
+        if (hasPerspective()) return invertPerspective()
         val det = sx.toDouble() * sy - kx.toDouble() * ky
         if (SkScalarNearlyZero(det.toFloat(), SK_DetNearlyZero)) return null
         val invDet = 1.0 / det
@@ -569,6 +637,38 @@ public data class SkMatrix(
         val itx = dcrossDscale(kx, ty, sy, tx, invDet)
         val ity = dcrossDscale(ky, tx, sx, ty, invDet)
         return SkMatrix(sx = isx, kx = ikx, tx = itx, ky = iky, sy = isy, ty = ity)
+    }
+
+    /**
+     * Full 3×3 cofactor inverse for perspective matrices. Mirrors
+     * Skia's `ComputeInv` perspective branch
+     * ([SkMatrix.cpp:792](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L792)).
+     * The det is computed in double; each cofactor is `(a*b - c*d)*invDet`
+     * via [dcrossDscale] to preserve precision.
+     */
+    private fun invertPerspective(): SkMatrix? {
+        // 3x3 determinant via cofactor expansion along the first row.
+        val a = sy.toDouble() * persp2 - ty.toDouble() * persp1
+        val b = ty.toDouble() * persp0 - ky.toDouble() * persp2
+        val c = ky.toDouble() * persp1 - sy.toDouble() * persp0
+        val det = sx.toDouble() * a + kx.toDouble() * b + tx.toDouble() * c
+        if (SkScalarNearlyZero(det.toFloat(), SK_DetNearlyZero)) return null
+        val invDet = 1.0 / det
+        // Adjugate (transpose of cofactor matrix), each entry scaled by invDet.
+        val isx = dcrossDscale(sy, persp2, ty, persp1, invDet)
+        val ikx = dcrossDscale(tx, persp1, kx, persp2, invDet)
+        val itx = dcrossDscale(kx, ty, tx, sy, invDet)
+        val iky = dcrossDscale(ty, persp0, ky, persp2, invDet)
+        val isy = dcrossDscale(sx, persp2, tx, persp0, invDet)
+        val ity = dcrossDscale(tx, ky, sx, ty, invDet)
+        val ip0 = dcrossDscale(ky, persp1, sy, persp0, invDet)
+        val ip1 = dcrossDscale(kx, persp0, sx, persp1, invDet)
+        val ip2 = dcrossDscale(sx, sy, kx, ky, invDet)
+        return SkMatrix(
+            sx = isx, kx = ikx, tx = itx,
+            ky = iky, sy = isy, ty = ity,
+            persp0 = ip0, persp1 = ip1, persp2 = ip2,
+        )
     }
 
     public companion object {
@@ -632,19 +732,26 @@ public data class SkMatrix(
 
         /**
          * Build a matrix from a 9-element row-major buffer. The
-         * perspective row is asserted to be `[0, 0, 1]`. Mirrors Skia's
+         * perspective row is taken verbatim — pass `[0, 0, 1]` for an
+         * affine matrix. Mirrors Skia's
          * [`SkMatrix::set9`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L55).
          */
         public fun MakeFrom9(buffer: FloatArray): SkMatrix {
             require(buffer.size >= 9) { "MakeFrom9 expects ≥ 9 elements (got ${buffer.size})" }
-            require(buffer[6] == 0f && buffer[7] == 0f && buffer[8] == 1f) {
-                "MakeFrom9 perspective row must be [0, 0, 1]; got [${buffer[6]}, ${buffer[7]}, ${buffer[8]}]"
-            }
             return SkMatrix(
                 sx = buffer[kMScaleX], kx = buffer[kMSkewX], tx = buffer[kMTransX],
                 ky = buffer[kMSkewY], sy = buffer[kMScaleY], ty = buffer[kMTransY],
+                persp0 = buffer[kMPersp0], persp1 = buffer[kMPersp1], persp2 = buffer[kMPersp2],
             )
         }
+
+        /**
+         * Build a matrix that applies pure perspective with the given
+         * x/y biases (`persp2 = 1`). Mirrors Skia's `SkMatrix::setAll`
+         * with the perspective row `[p0, p1, 1]`.
+         */
+        public fun MakePerspective(p0: SkScalar, p1: SkScalar): SkMatrix =
+            SkMatrix(persp0 = p0, persp1 = p1)
 
         /**
          * Build a matrix from a 6-element COLUMN-major affine buffer
@@ -693,7 +800,16 @@ public data class SkMatrix(
          */
         internal fun computeTypeMask(
             sx: Float, kx: Float, ky: Float, sy: Float, tx: Float, ty: Float,
+            persp0: Float, persp1: Float, persp2: Float,
         ): Int {
+            // Perspective short-circuit: once perspective is on, Skia ORs all
+            // bits including kRectStaysRect_Mask. Match that to keep mask
+            // monotonic with respect to type-decay (an affine portion of a
+            // perspective matrix shouldn't claim to preserve axis alignment).
+            if (persp0 != 0f || persp1 != 0f || persp2 != 1f) {
+                return kTranslate_Mask or kScale_Mask or kAffine_Mask or kPerspective_Mask or
+                    kRectStaysRect_Mask
+            }
             var mask = 0
             if (tx != 0f || ty != 0f) mask = mask or kTranslate_Mask
             if (kx != 0f || ky != 0f) {
@@ -787,24 +903,50 @@ public data class SkMatrix(
          * Matrix multiply: returns `a · b`. A point `p` is mapped first by
          * `b`, then by `a`: `(a · b).map(p) == a.map(b.map(p))`.
          *
+         * Dispatches between the affine 6-cell formula and a full 3×3
+         * `rowcol3` multiply when either input has perspective (mirrors
+         * Skia's setConcat short-circuit, src/core/SkMatrix.cpp:615).
          * Each `a*b + c*d` cross-term is promoted to `double` before the
-         * final round to `float`, mirroring Skia's `muladdmul`
-         * (src/core/SkMatrix.cpp), so a long chain of `concat` accumulates
-         * at most ~1 ulp of error per step instead of the ~2 ulp a naive
-         * float fma can produce on adversarial inputs.
+         * final round to `float` via `muladdmul`, matching Skia's
+         * precision-tightening trick.
          */
-        public fun concat(a: SkMatrix, b: SkMatrix): SkMatrix = SkMatrix(
-            sx = muladdmul(a.sx, b.sx, a.kx, b.ky),
-            kx = muladdmul(a.sx, b.kx, a.kx, b.sy),
-            tx = muladdmul(a.sx, b.tx, a.kx, b.ty) + a.tx,
-            ky = muladdmul(a.ky, b.sx, a.sy, b.ky),
-            sy = muladdmul(a.ky, b.kx, a.sy, b.sy),
-            ty = muladdmul(a.ky, b.tx, a.sy, b.ty) + a.ty,
-        )
+        public fun concat(a: SkMatrix, b: SkMatrix): SkMatrix {
+            if (a.hasPerspective() || b.hasPerspective()) {
+                // Full 3×3 multiply via rowcol3.
+                return SkMatrix(
+                    sx = rowcol3(a.sx, a.kx, a.tx, b.sx, b.ky, b.persp0),
+                    kx = rowcol3(a.sx, a.kx, a.tx, b.kx, b.sy, b.persp1),
+                    tx = rowcol3(a.sx, a.kx, a.tx, b.tx, b.ty, b.persp2),
+                    ky = rowcol3(a.ky, a.sy, a.ty, b.sx, b.ky, b.persp0),
+                    sy = rowcol3(a.ky, a.sy, a.ty, b.kx, b.sy, b.persp1),
+                    ty = rowcol3(a.ky, a.sy, a.ty, b.tx, b.ty, b.persp2),
+                    persp0 = rowcol3(a.persp0, a.persp1, a.persp2, b.sx, b.ky, b.persp0),
+                    persp1 = rowcol3(a.persp0, a.persp1, a.persp2, b.kx, b.sy, b.persp1),
+                    persp2 = rowcol3(a.persp0, a.persp1, a.persp2, b.tx, b.ty, b.persp2),
+                )
+            }
+            // Affine fast path: perspective row stays at default (0, 0, 1).
+            return SkMatrix(
+                sx = muladdmul(a.sx, b.sx, a.kx, b.ky),
+                kx = muladdmul(a.sx, b.kx, a.kx, b.sy),
+                tx = muladdmul(a.sx, b.tx, a.kx, b.ty) + a.tx,
+                ky = muladdmul(a.ky, b.sx, a.sy, b.ky),
+                sy = muladdmul(a.ky, b.kx, a.sy, b.sy),
+                ty = muladdmul(a.ky, b.tx, a.sy, b.ty) + a.ty,
+            )
+        }
 
         /** Skia src/core/SkMatrix.cpp:603 — `(double)a*b + (double)c*d`, then round. */
         private fun muladdmul(a: Float, b: Float, c: Float, d: Float): Float =
             (a.toDouble() * b + c.toDouble() * d).toFloat()
+
+        /**
+         * Skia src/core/SkMatrix.cpp:607 — `a*b + c*d + e*f`, computed in
+         * float (Skia uses native float `rowcol3`; the leading two terms
+         * dominate, third is small). Used by the perspective concat path.
+         */
+        private fun rowcol3(a: Float, b: Float, c: Float, d: Float, e: Float, f: Float): Float =
+            a * d + b * e + c * f
 
         /** Skia src/core/SkMatrix.cpp `ComputeInv` — `(a*b - c*d) * scale` in double. */
         private fun dcrossDscale(a: Float, b: Float, c: Float, d: Float, scale: Double): Float =
@@ -814,11 +956,179 @@ public data class SkMatrix(
          * `MakeAll(sx, kx, tx, ky, sy, ty)` — verbatim row-major construction
          * for callers that have all six scalars to hand (typically test
          * fixtures or hand-translated `SkMatrix::MakeAll(...)` from C++).
+         * Perspective row defaults to `[0, 0, 1]` (affine matrix).
          */
         public fun MakeAll(
             sx: SkScalar, kx: SkScalar, tx: SkScalar,
             ky: SkScalar, sy: SkScalar, ty: SkScalar,
         ): SkMatrix = SkMatrix(sx, kx, tx, ky, sy, ty)
+
+        /**
+         * 9-argument `MakeAll` — full row-major 3×3 construction. Mirrors
+         * Skia's `SkMatrix::MakeAll(scaleX, skewX, transX, skewY, scaleY,
+         * transY, pers0, pers1, pers2)` ([SkMatrix.h](https://github.com/google/skia/blob/main/include/core/SkMatrix.h)).
+         */
+        public fun MakeAll(
+            sx: SkScalar, kx: SkScalar, tx: SkScalar,
+            ky: SkScalar, sy: SkScalar, ty: SkScalar,
+            p0: SkScalar, p1: SkScalar, p2: SkScalar,
+        ): SkMatrix = SkMatrix(sx, kx, tx, ky, sy, ty, p0, p1, p2)
+
+        // ─── RSXform factory ─────────────────────────────────────────────
+
+        /**
+         * Build the matrix that corresponds to a Skia `SkRSXform`:
+         * rotation + uniform scale + translation, optionally pivoted
+         * around `(anchorX, anchorY)`. `scos` and `ssin` are
+         * `cos(angle) * scale` and `sin(angle) * scale`. Mirrors
+         * Skia's [`SkMatrix::setRSXform`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L424).
+         */
+        public fun MakeRSXform(
+            scos: SkScalar, ssin: SkScalar, tx: SkScalar, ty: SkScalar,
+        ): SkMatrix = SkMatrix(
+            sx = scos, kx = -ssin, tx = tx,
+            ky = ssin, sy = scos, ty = ty,
+        )
+
+        /**
+         * Pivoted `MakeRSXform`: applies rotation + scale around
+         * `(anchor.x, anchor.y)` then translates by `(tx, ty)`. Equivalent
+         * to `T(tx, ty) · R(scos, ssin) · T(-anchorX, -anchorY)`.
+         * Mirrors Skia's `SkRSXform::toQuad` style construction.
+         */
+        public fun MakeRSXform(
+            scos: SkScalar, ssin: SkScalar,
+            anchorX: SkScalar, anchorY: SkScalar,
+            tx: SkScalar, ty: SkScalar,
+        ): SkMatrix = SkMatrix(
+            sx = scos, kx = -ssin, tx = tx + (-scos * anchorX - -ssin * -anchorY),
+            ky = ssin, sy = scos, ty = ty + (-ssin * anchorX - scos * anchorY),
+        )
+
+        // ─── Polygon-to-polygon factory ─────────────────────────────────
+
+        /**
+         * Build a matrix that maps `src[0..count-1]` onto `dst[0..count-1]`,
+         * with `count` in `0..4`. Returns `null` if the mapping doesn't
+         * exist (degenerate source) or sizes mismatch / exceed 4.
+         *
+         *  - 0 points → identity.
+         *  - 1 point → translate.
+         *  - 2 points → rotate-scale-translate (uniform scale).
+         *  - 3 points → general affine (no perspective needed).
+         *  - 4 points → general projective (perspective).
+         *
+         * Algorithm mirrors Skia's
+         * [`SkMatrix::PolyToPoly`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1306):
+         * build `srcMap` from src, invert, build `dstMap` from dst,
+         * return `dstMap · srcMap⁻¹`.
+         */
+        public fun MakePolyToPoly(src: Array<SkPoint>, dst: Array<SkPoint>): SkMatrix? {
+            if (src.size != dst.size || src.size > 4) return null
+            return when (src.size) {
+                0 -> Identity
+                1 -> MakeTrans(dst[0].fX - src[0].fX, dst[0].fY - src[0].fY)
+                2, 3, 4 -> {
+                    val srcMap = polyToMap(src) ?: return null
+                    val srcInv = srcMap.invert() ?: return null
+                    val dstMap = polyToMap(dst) ?: return null
+                    concat(dstMap, srcInv)
+                }
+                else -> null
+            }
+        }
+
+        /** Dispatcher for [Poly2Proc] / [Poly3Proc] / [Poly4Proc]. */
+        private fun polyToMap(pts: Array<SkPoint>): SkMatrix? = when (pts.size) {
+            2 -> Poly2Proc(pts)
+            3 -> Poly3Proc(pts)
+            4 -> Poly4Proc(pts)
+            else -> null
+        }
+
+        /**
+         * Mirrors Skia's `Poly2Proc` ([SkMatrix.cpp:1214](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1214)):
+         * the 2-point fit is rotate-scale-translate built so that the
+         * basis maps `(0, 0) → src[0]` and `(1, 0) → src[1]`.
+         */
+        private fun Poly2Proc(p: Array<SkPoint>): SkMatrix = SkMatrix(
+            sx = p[1].fY - p[0].fY,
+            kx = p[1].fX - p[0].fX,
+            tx = p[0].fX,
+            ky = p[0].fX - p[1].fX,
+            sy = p[1].fY - p[0].fY,
+            ty = p[0].fY,
+        )
+
+        /** Mirrors Skia's `Poly3Proc` ([SkMatrix.cpp:1230](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1230)). */
+        private fun Poly3Proc(p: Array<SkPoint>): SkMatrix = SkMatrix(
+            sx = p[2].fX - p[0].fX,
+            kx = p[1].fX - p[0].fX,
+            tx = p[0].fX,
+            ky = p[2].fY - p[0].fY,
+            sy = p[1].fY - p[0].fY,
+            ty = p[0].fY,
+        )
+
+        /**
+         * Mirrors Skia's `Poly4Proc` ([SkMatrix.cpp:1246](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1246)).
+         * Solves for the perspective coefficients `a1`, `a2` such that
+         * the four corners `p[0..3]` are mapped to `(0,0), (1,0), (1,1),
+         * (0,1)` (the unit square). Returns `null` on degenerate input
+         * (Skia's `checkForZero(denom)` short-circuit).
+         */
+        private fun Poly4Proc(p: Array<SkPoint>): SkMatrix? {
+            val x0 = p[2].fX - p[0].fX
+            val y0 = p[2].fY - p[0].fY
+            val x1 = p[2].fX - p[1].fX
+            val y1 = p[2].fY - p[1].fY
+            val x2 = p[2].fX - p[3].fX
+            val y2 = p[2].fY - p[3].fY
+
+            val a1: Float
+            // |x2| > |y2| ?
+            val xLargerThanYIn2 =
+                if (x2 > 0f) (if (y2 > 0f) x2 > y2 else x2 > -y2)
+                else (if (y2 > 0f) -x2 > y2 else x2 < y2)
+            if (xLargerThanYIn2) {
+                val denom = (x1 * y2) / x2 - y1
+                if (checkForZero(denom)) return null
+                a1 = (((x0 - x1) * y2 / x2) - y0 + y1) / denom
+            } else {
+                val denom = x1 - (y1 * x2) / y2
+                if (checkForZero(denom)) return null
+                a1 = (x0 - x1 - ((y0 - y1) * x2) / y2) / denom
+            }
+
+            val a2: Float
+            val xLargerThanYIn1 =
+                if (x1 > 0f) (if (y1 > 0f) x1 > y1 else x1 > -y1)
+                else (if (y1 > 0f) -x1 > y1 else x1 < y1)
+            if (xLargerThanYIn1) {
+                val denom = y2 - (x2 * y1) / x1
+                if (checkForZero(denom)) return null
+                a2 = (y0 - y2 - ((x0 - x2) * y1) / x1) / denom
+            } else {
+                val denom = (y2 * x1) / y1 - x2
+                if (checkForZero(denom)) return null
+                a2 = (((y0 - y2) * x1) / y1 - x0 + x2) / denom
+            }
+
+            return SkMatrix(
+                sx = a2 * p[3].fX + p[3].fX - p[0].fX,
+                kx = a1 * p[1].fX + p[1].fX - p[0].fX,
+                tx = p[0].fX,
+                ky = a2 * p[3].fY + p[3].fY - p[0].fY,
+                sy = a1 * p[1].fY + p[1].fY - p[0].fY,
+                ty = p[0].fY,
+                persp0 = a2,
+                persp1 = a1,
+                persp2 = 1f,
+            )
+        }
+
+        /** Skia's `checkForZero` — `x*x == 0` (catches subnormals). */
+        private fun checkForZero(x: Float): Boolean = x * x == 0f
     }
 }
 
