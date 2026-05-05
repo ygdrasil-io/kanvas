@@ -22,9 +22,12 @@ import org.skia.math.SkScalar
  * of round-tripping through a packed byte (which would quantise to
  * `77/255 ≈ 0.30196`). See [MIGRATION_PLAN_PAINT_PARITY.md] Phase 2.
  *
- * **Out of scope** (not yet ported): `SkColorFilter`, `SkPathEffect`,
- * `SkMaskFilter`, `SkImageFilter`, `SkBlender`. Stroker honours the
- * full Cap/Join enum.
+ * **Phase 7a** : effect slots ([colorFilter] / [maskFilter] /
+ * [imageFilter] / [pathEffect]) added to the paint. [colorFilter] is
+ * fully wired through the rasterizer ; the other three carry abstract
+ * base classes only and are silent no-ops at draw time until their
+ * respective slices land (see the per-class docstrings for the
+ * roadmap). `SkBlender` remains out of scope.
  */
 public class SkPaint() {
     public enum class Style { kFill_Style, kStroke_Style, kStrokeAndFill_Style }
@@ -78,6 +81,38 @@ public class SkPaint() {
      * Phase 6 entry: compositing rule. Defaults to [SkBlendMode.kSrcOver].
      */
     public var blendMode: SkBlendMode = SkBlendMode.kSrcOver
+
+    /**
+     * Phase 7a — colour-filter slot. When non-`null`, the rasterizer
+     * applies this filter to every source colour after the shader (or
+     * paint colour) is sampled and before the [blendMode] composite.
+     * See [SkColorFilter] for the canonical pipeline order.
+     */
+    public var colorFilter: SkColorFilter? = null
+
+    /**
+     * Phase 7a — mask-filter slot. **Currently a no-op at draw time** ;
+     * setting this is accepted by the API surface so client GMs can be
+     * ported without churn, but the rasterizer ignores it until the
+     * blur slice lands. See [SkMaskFilter].
+     */
+    public var maskFilter: SkMaskFilter? = null
+
+    /**
+     * Phase 7a — image-filter slot. **Currently a no-op at draw time** ;
+     * setting this is accepted by the API surface so client GMs can be
+     * ported without churn, but the rasterizer ignores it until the
+     * image-filter slice lands. See [SkImageFilter].
+     */
+    public var imageFilter: SkImageFilter? = null
+
+    /**
+     * Phase 7a — path-effect slot. **Currently a no-op at draw time** ;
+     * setting this is accepted by the API surface so client GMs can be
+     * ported without churn, but the rasterizer ignores it until the
+     * dash / corner / discrete slice lands. See [SkPathEffect].
+     */
+    public var pathEffect: SkPathEffect? = null
 
     /** Mirrors Skia's `SkPaint(SkColor)` (kept as a Kotlin convenience). */
     public constructor(color: SkColor) : this() { this.color = color }
@@ -228,6 +263,10 @@ public class SkPaint() {
         isDither = false
         shader = null
         blendMode = SkBlendMode.kSrcOver
+        colorFilter = null
+        maskFilter = null
+        imageFilter = null
+        pathEffect = null
     }
 
     public fun copy(): SkPaint = SkPaint().also {
@@ -241,6 +280,12 @@ public class SkPaint() {
         it.isDither = isDither
         it.shader = shader
         it.blendMode = blendMode
+        // Effect slots are reference-shared (filters are immutable —
+        // see SkColorFilter docstring) so a shallow copy is correct.
+        it.colorFilter = colorFilter
+        it.maskFilter = maskFilter
+        it.imageFilter = imageFilter
+        it.pathEffect = pathEffect
     }
 
     // ─── Equality ───────────────────────────────────────────────────
@@ -257,7 +302,11 @@ public class SkPaint() {
             isAntiAlias == other.isAntiAlias &&
             isDither == other.isDither &&
             shader === other.shader &&
-            blendMode == other.blendMode
+            blendMode == other.blendMode &&
+            colorFilter === other.colorFilter &&
+            maskFilter === other.maskFilter &&
+            imageFilter === other.imageFilter &&
+            pathEffect === other.pathEffect
     }
 
     override fun hashCode(): Int {
@@ -271,6 +320,10 @@ public class SkPaint() {
         result = 31 * result + isDither.hashCode()
         result = 31 * result + (shader?.hashCode() ?: 0)
         result = 31 * result + blendMode.hashCode()
+        result = 31 * result + (colorFilter?.hashCode() ?: 0)
+        result = 31 * result + (maskFilter?.hashCode() ?: 0)
+        result = 31 * result + (imageFilter?.hashCode() ?: 0)
+        result = 31 * result + (pathEffect?.hashCode() ?: 0)
         return result
     }
 }
