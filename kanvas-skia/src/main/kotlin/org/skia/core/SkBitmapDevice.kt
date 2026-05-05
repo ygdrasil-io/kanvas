@@ -376,7 +376,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         ctm: SkMatrix,
         clip: SkIRect, paint: SkPaint,
     ) {
-        if (path.isEmpty()) return
+        // Empty paths are a no-op — except under kInverse* fill rules,
+        // where the empty interior means the *entire* clip is filled.
+        // We let the scanline walker handle it (extended iteration plus
+        // an initial-inside seed for inverse rules; see [scanFillPath]).
+        if (path.isEmpty() && !path.fillType.isInverse()) return
 
         val shader = paint.shader
         val color: SkColor
@@ -425,7 +429,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         shader: SkShader?, mode: SkBlendMode,
     ) {
         val edges = buildEdges(path, ctm)
-        if (edges.isEmpty()) return
+        // No edges + non-inverse fill = nothing to draw. Inverse fills
+        // still need to flood the clip (no edges → entire clip is "outside
+        // the path" → covered).
+        if (edges.isEmpty() && !path.fillType.isInverse()) return
         scanFillPath(edges, path.fillType, clip, color, baseA, supers, shader, mode)
     }
 
@@ -939,15 +946,36 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         shader: SkShader?, mode: SkBlendMode,
     ) {
         val maxSamples = supers * supers
-        var yMin = Float.POSITIVE_INFINITY
-        var yMax = Float.NEGATIVE_INFINITY
-        for (e in edges) {
-            if (e.y0 < yMin) yMin = e.y0
-            if (e.y1 > yMax) yMax = e.y1
+        // Inverse fills paint the complement of the path's interior,
+        // clipped to the device clip. Iteration must therefore cover the
+        // *entire* clip vertically — rows above the topmost edge and
+        // below the bottommost edge contribute full-coverage spans.
+        // Non-inverse fills can stay restricted to the path's y-range
+        // (the existing fast path).
+        val isInverse = fillType.isInverse()
+        val py0: Int
+        val py1: Int
+        if (isInverse) {
+            py0 = clip.top
+            py1 = clip.bottom
+        } else {
+            var yMin = Float.POSITIVE_INFINITY
+            var yMax = Float.NEGATIVE_INFINITY
+            for (e in edges) {
+                if (e.y0 < yMin) yMin = e.y0
+                if (e.y1 > yMax) yMax = e.y1
+            }
+            py0 = floor(yMin).coerceAtLeast(clip.top)
+            py1 = ceil(yMax).coerceAtMost(clip.bottom)
         }
-        val py0 = floor(yMin).coerceAtLeast(clip.top)
-        val py1 = ceil(yMax).coerceAtMost(clip.bottom)
         if (py0 >= py1) return
+        // Whether the implicit "left of the first crossing" region is
+        // already inside the fill set. For inverse rules at winding 0
+        // the region is filled (the path's outside); for non-inverse
+        // it isn't.
+        val initialInside = isInside(0, fillType)
+        val clipLeftF = clip.left.toFloat()
+        val clipRightF = clip.right.toFloat()
         val rgb = color and 0x00FFFFFF
         val rowWidth = clip.right - clip.left
         if (rowWidth <= 0) return
@@ -984,12 +1012,16 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         n++
                     }
                 }
-                if (n == 0) continue
-                sortCrossings(crossX, crossDir, n)
-                // Walk crossings, emitting spans where the fill rule is true.
+                // Non-inverse fast path: no edges → no fill in this subrow.
+                if (n == 0 && !initialInside) continue
+                if (n > 0) sortCrossings(crossX, crossDir, n)
+                // Walk crossings, emitting spans where the fill rule says
+                // "inside the fill set". For inverse rules `initialInside`
+                // is true, so the region left of the first crossing is
+                // already filled and we seed `spanStart = clip.left`.
                 var winding = 0
-                var inside = false
-                var spanStart = 0f
+                var inside = initialInside
+                var spanStart = if (initialInside) clipLeftF else 0f
                 for (j in 0 until n) {
                     val before = inside
                     winding += crossDir[j]
@@ -999,6 +1031,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     } else if (before && !inside) {
                         addSpanCoverage(spanStart, crossX[j], clip, supers, coverage)
                     }
+                }
+                // Trailing span — for inverse fills with no crossings (or
+                // an even number of them) the right portion of the clip
+                // remains in the fill set and needs to be flushed.
+                if (inside) {
+                    addSpanCoverage(spanStart, clipRightF, clip, supers, coverage)
                 }
             }
 
@@ -1111,9 +1149,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     private fun isInside(winding: Int, fillType: SkPathFillType): Boolean = when (fillType) {
         SkPathFillType.kWinding -> winding != 0
         SkPathFillType.kEvenOdd -> (winding and 1) != 0
-        SkPathFillType.kInverseWinding,
-        SkPathFillType.kInverseEvenOdd ->
-            error("Inverse fill types are not implemented in Phase 3a")
+        // Inverse rules fill the *complement* of the corresponding
+        // non-inverse rule, clipped to the device clip. The scanline walker
+        // only needs the truth value here — the iteration extension is
+        // handled in [scanFillPath].
+        SkPathFillType.kInverseWinding -> winding == 0
+        SkPathFillType.kInverseEvenOdd -> (winding and 1) == 0
     }
 
     // --------------------------------------------------------------------
