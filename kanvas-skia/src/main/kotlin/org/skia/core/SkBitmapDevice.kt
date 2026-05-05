@@ -183,14 +183,21 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     /**
      * Composite `src`'s pixels onto this device, with `src`'s `(0, 0)`
      * landing at this device's `(originX, originY)`, intersecting writes
-     * with [clip] (in this device's coords). Source pixels are SrcOver-
-     * blended through `paint?.alpha` — when `paint` is null or fully
-     * opaque, the per-pixel alpha is taken straight from `src`.
+     * with [clip] (in this device's coords). Source pixels are blended
+     * through `paint?.blendMode` (defaults to [SkBlendMode.kSrcOver])
+     * after multiplying by `paint?.alpha`.
      *
      * Used by `SkCanvas.restore` to flatten a `saveLayer`'s offscreen
-     * device back into its parent. Pre-condition: `src` and this device
-     * share the same color space, so no per-pixel xform is needed (the
-     * canvas seeds the layer device with the parent's color space).
+     * device back into its parent. For modes whose formula evaluates to
+     * a non-`dst` value at `sa == 0` (e.g. [SkBlendMode.kClear],
+     * [SkBlendMode.kSrcIn], [SkBlendMode.kDstIn], [SkBlendMode.kSrcOut],
+     * [SkBlendMode.kDstATop], [SkBlendMode.kModulate]), transparent
+     * source pixels inside the layer extent still trigger a blend so
+     * the destination is zeroed where the layer carries no coverage.
+     *
+     * Pre-condition: `src` and this device share the same color space,
+     * so no per-pixel xform is needed (the canvas seeds the layer
+     * device with the parent's color space).
      */
     public fun compositeFrom(
         src: SkBitmapDevice,
@@ -200,7 +207,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         paint: SkPaint?,
     ) {
         val paintAlpha = paint?.alpha ?: 0xFF
-        if (paintAlpha == 0) return
+        val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
+        // For "normal" modes (kSrcOver et al.), a fully transparent paint
+        // alpha makes every src contribution vanish, so we can short-circuit
+        // entirely. Modes like kClear / kSrcIn still need to walk the layer
+        // bounds (they zero dst regardless of src alpha), so we let those
+        // through and rely on the inner-loop guard.
+        val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
+        if (paintAlpha == 0 && !mustBlendZero) return
         val l = maxOf(clip.left, originX, 0)
         val t = maxOf(clip.top, originY, 0)
         val r = minOf(clip.right, originX + src.width, width)
@@ -215,11 +229,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             for (x in l until r) {
                 val sample = src.bitmap.getPixel(x - originX, y - originY)
                 val effective = if (paintAlpha == 0xFF) sample else applyAlpha(sample, paintAlpha)
-                if (effective ushr 24 == 0) continue
-                // Phase 6 entry: saveLayer flatten remains hardcoded SrcOver
-                // (per CLAUDE.md — extending it to arbitrary blend modes is a
-                // separate ticket).
-                blend(x, y, effective, SkBlendMode.kSrcOver)
+                if (effective ushr 24 == 0 && !mustBlendZero) continue
+                blend(x, y, effective, mode)
             }
         }
     }

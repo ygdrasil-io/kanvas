@@ -35,8 +35,33 @@ public class SkImage internal constructor(
          * Snapshot the bitmap into a new immutable [SkImage]. The pixel
          * buffer is copied — subsequent edits to the source bitmap don't
          * leak into the image.
+         *
+         * The snapshot is always 8888 (Skia's `SkSurface::makeImageSnapshot()`
+         * default contract — the snapshot's working precision is
+         * implementation-defined; we pick 8888 to keep the [SkImage]
+         * surface uniform and to match what every consumer downstream
+         * ([SkBitmapShader] in particular) reads from `image.pixels`).
+         * For F16 source bitmaps this means a per-pixel quantization
+         * via [SkBitmap.getPixel] — same path the live `bitmap.getPixel`
+         * accessor takes, so a snapshot stays bit-identical to the
+         * live `bitmap.getPixel(x, y)` view.
          */
-        public fun Make(bitmap: SkBitmap): SkImage =
-            SkImage(bitmap.width, bitmap.height, bitmap.pixels.copyOf())
+        public fun Make(bitmap: SkBitmap): SkImage {
+            val w = bitmap.width
+            val h = bitmap.height
+            val out = when (bitmap.colorType) {
+                SkColorType.kRGBA_8888 -> bitmap.pixels.copyOf()
+                else -> {
+                    // Walk via the colorType-aware accessor so F16 (and any
+                    // future colorType) snapshots correctly through to 8888.
+                    val a = IntArray(w * h)
+                    for (y in 0 until h) {
+                        for (x in 0 until w) a[y * w + x] = bitmap.getPixel(x, y)
+                    }
+                    a
+                }
+            }
+            return SkImage(w, h, out)
+        }
     }
 }

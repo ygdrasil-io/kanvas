@@ -242,6 +242,68 @@ class SkCanvasInternalsTest {
     }
 
     @Test
+    fun `saveLayer with paint blendMode kSrc replaces destination`() {
+        // kSrc: out = src. Layer paints opaque GREEN. Restore via paint.blendMode=kSrc
+        // must overwrite the WHITE background entirely inside the layer bounds.
+        val bitmap = render(8, 8, bg = SK_ColorWHITE) {
+            val layerPaint = SkPaint(SK_ColorBLACK).apply {
+                blendMode = org.skia.foundation.SkBlendMode.kSrc
+            }
+            saveLayer(null, layerPaint)
+            drawPaint(SkPaint(SK_ColorGREEN))
+            restore()
+        }
+        for (y in 0 until 8) {
+            for (x in 0 until 8) {
+                assertColorEquals(SK_ColorGREEN, bitmap.getPixel(x, y), msg = "($x,$y)")
+            }
+        }
+    }
+
+    @Test
+    fun `saveLayer with paint blendMode kPlus adds layer onto destination`() {
+        // kPlus: out = clamp(src + dst). Layer is opaque RED (255,0,0,255) over
+        // a background of dark BLUE (0,0,128,255). After kPlus composite the
+        // result is (255, 0, 128, 255).
+        val bg = SkColorSetARGB(0xFF, 0, 0, 0x80)
+        val bitmap = render(8, 8, bg = bg) {
+            val layerPaint = SkPaint(SK_ColorBLACK).apply {
+                blendMode = org.skia.foundation.SkBlendMode.kPlus
+            }
+            saveLayer(null, layerPaint)
+            drawPaint(SkPaint(SK_ColorRED))
+            restore()
+        }
+        val expected = SkColorSetARGB(0xFF, 0xFF, 0, 0x80)
+        for (y in 0 until 8) {
+            for (x in 0 until 8) {
+                assertColorEquals(expected, bitmap.getPixel(x, y), msg = "($x,$y)")
+            }
+        }
+    }
+
+    @Test
+    fun `saveLayer with paint blendMode kClear zeroes destination inside layer bounds`() {
+        // kClear: out = 0 — even where the layer carries no coverage. We still
+        // zero only inside the layer bounds; pixels outside remain WHITE.
+        val bitmap = render(10, 10, bg = SK_ColorWHITE) {
+            val layerPaint = SkPaint(SK_ColorBLACK).apply {
+                blendMode = org.skia.foundation.SkBlendMode.kClear
+            }
+            saveLayer(SkRect.MakeLTRB(2f, 2f, 8f, 8f), layerPaint)
+            // Don't draw inside the layer at all — kClear must still zero the
+            // destination within the layer bounds at restore.
+            restore()
+        }
+        for (y in 0 until 10) {
+            for (x in 0 until 10) {
+                val expected = if (x in 2 until 8 && y in 2 until 8) SK_ColorTRANSPARENT else SK_ColorWHITE
+                assertColorEquals(expected, bitmap.getPixel(x, y), msg = "($x,$y)")
+            }
+        }
+    }
+
+    @Test
     fun `saveLayer with three-args overload accepts a flags argument`() {
         // The flags overload is the API-compatibility surface; we just
         // confirm it accepts `0` and degrades to the no-flags semantics.
