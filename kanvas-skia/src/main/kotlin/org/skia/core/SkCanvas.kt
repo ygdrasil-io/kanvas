@@ -58,6 +58,13 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         var device: SkBitmapDevice,
         /** Non-null iff this state was opened by `saveLayer`. */
         var layer: Layer? = null,
+        /**
+         * Phase 7q `clipPath` / `clipRRect` alpha mask, sized exactly
+         * `clip.width() × clip.height()`. `0xFF` = fully inside the clip
+         * region ; `0` = fully outside ; intermediate values = AA partial
+         * coverage. `null` = pure rectangular clip.
+         */
+        var clipMask: ByteArray? = null,
     )
 
     /**
@@ -84,7 +91,9 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     public open fun save(): Int {
         val s = top
-        stack.addLast(State(s.matrix, s.clip.copy(), s.device))
+        // ClipMask shared by reference — clipPath/RRect always allocates a
+        // fresh mask before AND-ing in, so the parent's stays untouched.
+        stack.addLast(State(s.matrix, s.clip.copy(), s.device, clipMask = s.clipMask))
         return stack.size - 2
     }
 
@@ -228,6 +237,110 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         }
     }
 
+    // ─── Phase 7q — clipPath / clipRRect (alpha-mask path clipping) ──────
+
+    /**
+     * Mirrors Skia's `SkCanvas::clipPath(path, doAntiAlias)`. Restricts
+     * subsequent draws to the inside of [path] (or its complement when
+     * `path.fillType` is `kInverse*`). Implementation : rasterise the path
+     * into an 8-bit alpha coverage mask sized to the path's device-space
+     * bounding box (intersected with the current clip), then bind it on
+     * the active state's [State.clipMask]. The per-pixel write paths
+     * (`blend`, `blendF16Premul`, `blendF16PremulMode`) modulate src.alpha
+     * by the mask coverage. If a clip mask is already active, the new
+     * path's mask is byte-wise AND-ed (multiplied) with the existing one
+     * — clip stacks compose as path intersection.
+     */
+    public open fun clipPath(path: SkPath, doAntiAlias: Boolean = false) {
+        val s = top
+        val pathBoundsDev = if (path.fillType.isInverse()) {
+            SkRect.MakeLTRB(
+                s.clip.left.toFloat(), s.clip.top.toFloat(),
+                s.clip.right.toFloat(), s.clip.bottom.toFloat(),
+            )
+        } else {
+            s.matrix.mapRect(path.computeBounds())
+        }
+
+        val newClipBbox = SkIRect.MakeLTRB(
+            maxOf(s.clip.left, kFloor(pathBoundsDev.left.toDouble()).toInt()),
+            maxOf(s.clip.top, kFloor(pathBoundsDev.top.toDouble()).toInt()),
+            minOf(s.clip.right, kCeil(pathBoundsDev.right.toDouble()).toInt()),
+            minOf(s.clip.bottom, kCeil(pathBoundsDev.bottom.toDouble()).toInt()),
+        )
+        val w = newClipBbox.right - newClipBbox.left
+        val h = newClipBbox.bottom - newClipBbox.top
+        if (w <= 0 || h <= 0) {
+            s.clip = SkIRect.MakeLTRB(s.clip.left, s.clip.top, s.clip.left, s.clip.top)
+            s.clipMask = null
+            return
+        }
+
+        // Rasterise the path into an alpha bitmap of size (w × h) placed
+        // at device origin (newClipBbox.left, newClipBbox.top).
+        val maskBitmap = SkBitmap(w, h).also { it.eraseColor(0) }
+        val maskDevice = SkBitmapDevice(maskBitmap)
+        val maskClip = SkIRect.MakeWH(w, h)
+        val maskCtm = s.matrix.postTranslate(
+            -newClipBbox.left.toFloat(), -newClipBbox.top.toFloat(),
+        )
+        val whitePaint = SkPaint().apply {
+            color = org.skia.foundation.SK_ColorWHITE
+            blendMode = SkBlendMode.kSrc
+            isAntiAlias = doAntiAlias
+        }
+        maskDevice.drawPath(path, maskCtm, maskClip, whitePaint)
+
+        // Extract alpha channel into a flat ByteArray.
+        val pathMask = ByteArray(w * h)
+        for (y in 0 until h) {
+            val row = y * w
+            for (x in 0 until w) {
+                pathMask[row + x] =
+                    org.skia.foundation.SkColorGetA(maskBitmap.getPixel(x, y)).toByte()
+            }
+        }
+
+        // AND with the existing clipMask (if any) — clip stacks compose
+        // via intersection.
+        val parentMask = s.clipMask
+        if (parentMask != null) {
+            val parentL = s.clip.left
+            val parentT = s.clip.top
+            val parentW = s.clip.right - s.clip.left
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    val absX = newClipBbox.left + x
+                    val absY = newClipBbox.top + y
+                    val pIdx = (absY - parentT) * parentW + (absX - parentL)
+                    if (pIdx in 0 until parentMask.size) {
+                        val pCov = parentMask[pIdx].toInt() and 0xFF
+                        val newCov = pathMask[y * w + x].toInt() and 0xFF
+                        pathMask[y * w + x] = ((pCov * newCov + 127) / 255).toByte()
+                    } else {
+                        pathMask[y * w + x] = 0
+                    }
+                }
+            }
+        }
+
+        s.clip = newClipBbox
+        s.clipMask = pathMask
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::clipRRect(rrect, doAntiAlias)`. Delegates
+     * to [clipPath] via [SkPath.RRect].
+     */
+    public open fun clipRRect(rrect: SkRRect, doAntiAlias: Boolean = false) {
+        clipPath(SkPath.RRect(rrect), doAntiAlias)
+    }
+
+    /** Bind the active state's clipMask onto the device before each draw. */
+    private fun bindClip(s: State) {
+        s.device.setActiveClip(s.clipMask, s.clip)
+    }
+
     public open fun drawRect(rect: SkRect, paint: SkPaint) {
         val s = top
         // Fast path requires : axis-aligned CTM, no shader, no path
@@ -244,6 +357,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
             val (x0, y0) = s.matrix.mapXY(rect.left, rect.top)
             val (x1, y1) = s.matrix.mapXY(rect.right, rect.bottom)
             val devRect = SkRect.MakeLTRB(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
+            bindClip(s)
             s.device.drawRect(devRect, s.clip, paint)
         } else {
             // Either rotated/skewed CTM (4-vertex polygon), shader-driven
@@ -261,6 +375,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      */
     public open fun drawPath(path: SkPath, paint: SkPaint) {
         val s = top
+        bindClip(s)
         s.device.drawPath(path, s.matrix, s.clip, paint)
     }
 
@@ -403,6 +518,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         val (x0, y0) = s.matrix.mapXY(dst.left, dst.top)
         val (x1, y1) = s.matrix.mapXY(dst.right, dst.bottom)
         val devDst = SkRect.MakeLTRB(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
+        bindClip(s)
         s.device.drawImageRect(image, src, devDst, sampling, paint, constraint, s.clip)
     }
 
@@ -422,6 +538,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
             return
         }
         val paint = SkPaint(color).apply { blendMode = mode }
+        bindClip(s)
         s.device.drawPaint(s.matrix, s.clip, paint)
     }
 
@@ -441,6 +558,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      */
     public open fun drawPaint(paint: SkPaint) {
         val s = top
+        bindClip(s)
         s.device.drawPaint(s.matrix, s.clip, paint)
     }
 

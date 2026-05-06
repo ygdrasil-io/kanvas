@@ -77,6 +77,37 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
     public fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
 
+    // ─── Phase 7q — clipPath / clipRRect alpha-mask plumbing ──────────────
+    private var activeClipMask: ByteArray? = null
+    private var activeClipMaskLeft: Int = 0
+    private var activeClipMaskTop: Int = 0
+    private var activeClipMaskWidth: Int = 0
+
+    /** Bind the active clip mask before the next draw call. Called by SkCanvas. */
+    internal fun setActiveClip(mask: ByteArray?, bounds: SkIRect) {
+        activeClipMask = mask
+        if (mask != null) {
+            activeClipMaskLeft = bounds.left
+            activeClipMaskTop = bounds.top
+            activeClipMaskWidth = bounds.right - bounds.left
+        } else {
+            activeClipMaskLeft = 0
+            activeClipMaskTop = 0
+            activeClipMaskWidth = 0
+        }
+    }
+
+    /** Clip-mask coverage at device pixel `(x, y)` ; 255 if no mask, 0 outside bounds. */
+    private fun clipCoverage(x: Int, y: Int): Int {
+        val mask = activeClipMask ?: return 255
+        val mx = x - activeClipMaskLeft
+        val my = y - activeClipMaskTop
+        if (mx < 0 || my < 0 || mx >= activeClipMaskWidth) return 0
+        val idx = my * activeClipMaskWidth + mx
+        if (idx < 0 || idx >= mask.size) return 0
+        return mask[idx].toInt() and 0xFF
+    }
+
     public fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val devPaint = inDeviceColorSpace(paint)
         if (devPaint.isAntiAlias) drawRectAA(rect, clip, devPaint) else drawRectNonAA(rect, clip, devPaint)
@@ -1583,25 +1614,35 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * the GMs in scope barely exercise; full F16 support for the rest of
      * the 9-mode slice is a Phase 6b task.
      */
-    private fun blend(x: Int, y: Int, src: SkColor, mode: SkBlendMode) {
-        // Phase 6a — F16 SrcOver fast path. Premul float compositing
-        // straight in [SkBitmap.pixelsF16] with no byte-quantization
-        // roundtrip on every blend.
+    private fun blend(x: Int, y: Int, srcIn: SkColor, mode: SkBlendMode) {
+        // Phase 7q — clipPath / clipRRect alpha-mask modulation. When a
+        // non-rect clip is active we modulate `src.alpha` by the mask
+        // coverage at this pixel before any blend dispatch.
+        val src: SkColor
+        if (activeClipMask != null) {
+            val cov = clipCoverage(x, y)
+            if (cov == 0) {
+                if (!modeAffectsZeroAlphaSrc(mode)) return
+                src = SkColorSetARGB(0, 0, 0, 0)
+            } else if (cov == 255) {
+                src = srcIn
+            } else {
+                val newA = (SkColorGetA(srcIn) * cov + 127) / 255
+                src = SkColorSetARGB(newA, SkColorGetR(srcIn), SkColorGetG(srcIn), SkColorGetB(srcIn))
+            }
+        } else {
+            src = srcIn
+        }
+
+        // Phase 6a — F16 SrcOver fast path.
         if (mode == SkBlendMode.kSrcOver &&
             bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm) {
             blendF16(x, y, src)
             return
         }
-        // Phase 6s — F16 path for arbitrary blend modes. The src is
-        // unpremul SkColor here ; convert to premul-float once and route
-        // through the unified [blendF16PremulMode] dispatcher so we
-        // never quantise to 8-bit between draws on F16 bitmaps.
+        // Phase 6s — F16 path for arbitrary blend modes.
         if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm) {
             val sa = SkColorGetA(src) / 255f
-            // Don't short-circuit on `sa == 0` here — modes like kClear
-            // / kSrcIn must still write to the destination. Callers that
-            // already filtered transparent samples (the rectangle
-            // rasterizers) are fine ; this guard is defensive.
             val sr = SkColorGetR(src) / 255f * sa
             val sg = SkColorGetG(src) / 255f * sa
             val sb = SkColorGetB(src) / 255f * sa
@@ -2278,8 +2319,17 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * pixel ultimately leaves the bitmap (PNG output).
      */
     private fun blendF16(x: Int, y: Int, src: SkColor) {
-        val sa = SkColorGetA(src)
+        var sa = SkColorGetA(src)
         if (sa == 0) return
+        // Phase 7q — clip-mask alpha modulation.
+        if (activeClipMask != null) {
+            val cov = clipCoverage(x, y)
+            if (cov == 0) return
+            if (cov != 255) {
+                sa = (sa * cov + 127) / 255
+                if (sa == 0) return
+            }
+        }
         val saF = sa / 255f
         val srF = SkColorGetR(src) / 255f * saF
         val sgF = SkColorGetG(src) / 255f * saF
@@ -2305,8 +2355,23 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * happens anywhere in this function — the only multiplications are the
      * two `[0, 1]` premul lerps.
      */
-    private fun blendF16Premul(x: Int, y: Int, sr: Float, sg: Float, sb: Float, sa: Float) {
-        if (sa <= 0f) return
+    private fun blendF16Premul(x: Int, y: Int, srIn: Float, sgIn: Float, sbIn: Float, saIn: Float) {
+        if (saIn <= 0f) return
+        // Phase 7q — clip-mask coverage modulation in premul-float.
+        val sr: Float; val sg: Float; val sb: Float; val sa: Float
+        if (activeClipMask != null) {
+            val cov = clipCoverage(x, y)
+            if (cov == 0) return
+            if (cov == 255) {
+                sr = srIn; sg = sgIn; sb = sbIn; sa = saIn
+            } else {
+                val k = cov / 255f
+                sr = srIn * k; sg = sgIn * k; sb = sbIn * k; sa = saIn * k
+                if (sa <= 0f) return
+            }
+        } else {
+            sr = srIn; sg = sgIn; sb = sbIn; sa = saIn
+        }
         val pixels = bitmap.pixelsF16
         val i = (y * bitmap.width + x) * 4
         val invSa = 1f - sa
@@ -2341,11 +2406,39 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      */
     private fun blendF16PremulMode(
         x: Int, y: Int,
-        sr: Float, sg: Float, sb: Float, sa: Float,
+        srIn: Float, sgIn: Float, sbIn: Float, saIn: Float,
         mode: SkBlendMode,
     ) {
+        // Phase 7q — clip-mask modulation in premul-float space.
+        val sr: Float; val sg: Float; val sb: Float; val sa: Float
+        if (activeClipMask != null) {
+            val cov = clipCoverage(x, y)
+            if (cov == 0) {
+                if (!modeAffectsZeroAlphaSrc(mode)) return
+                sr = 0f; sg = 0f; sb = 0f; sa = 0f
+            } else if (cov == 255) {
+                sr = srIn; sg = sgIn; sb = sbIn; sa = saIn
+            } else {
+                val k = cov / 255f
+                sr = srIn * k; sg = sgIn * k; sb = sbIn * k; sa = saIn * k
+            }
+        } else {
+            sr = srIn; sg = sgIn; sb = sbIn; sa = saIn
+        }
         if (mode == SkBlendMode.kSrcOver) {
-            blendF16Premul(x, y, sr, sg, sb, sa)
+            // Inline kSrcOver here ; we MUST NOT recurse into
+            // [blendF16Premul] because that path would re-apply the
+            // clip-mask coverage to the already-modulated `sa` (double-
+            // multiplying the coverage). The body below is identical to
+            // [blendF16Premul] sans the mask check.
+            if (sa <= 0f) return
+            val pixels = bitmap.pixelsF16
+            val i = (y * bitmap.width + x) * 4
+            val invSa = 1f - sa
+            pixels[i]     = sr + pixels[i]     * invSa
+            pixels[i + 1] = sg + pixels[i + 1] * invSa
+            pixels[i + 2] = sb + pixels[i + 2] * invSa
+            pixels[i + 3] = sa + pixels[i + 3] * invSa
             return
         }
         val pixels = bitmap.pixelsF16
