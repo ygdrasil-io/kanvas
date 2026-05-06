@@ -15,10 +15,11 @@
 ## Table des matières
 
 1. [Principes iso-fidélité](#principes-iso-fidélité)
+   - [Iso-fidelity exceptions](#iso-fidelity-exceptions)
 2. [Architecture cible](#architecture-cible)
 3. [Chantiers critiques DM](#chantiers-critiques-dm)
    - [D1 — `SkPathOps`](#d1--skpathops)
-   - [D2 — `SkRuntimeEffect`](#d2--skruntimeeffect)
+   - [D2 — `SkRuntimeEffect` (compatibility shim)](#d2--skruntimeeffect-compatibility-shim--iso-fidelity-exception)
    - [D3 — Image codecs (`SkCodec` + `encodeToData`)](#d3--image-codecs-skcodec--encodetodata)
    - [D4 — DM sink architecture](#d4--dm-sink-architecture)
 4. [Chantiers fidélité Skia core](#chantiers-fidélité-skia-core)
@@ -79,6 +80,36 @@ Pour chaque chantier on vise les 4 niveaux de parité dans cet ordre :
 - Multi-threading
 - Sérialisation binaire de `SkPicture` (différée jusqu'à un usage clair)
 
+### Iso-fidelity exceptions
+
+La règle iso-fidélité s'applique à l'**API publique** et au
+**comportement observable**. Pour les composants où l'upstream Skia
+s'appuie sur **SkSL** (Skia Shading Language — interprété via SkVM
+côté raster, compilé vers GLSL/MSL/SPIR-V côté GPU), on conserve la
+surface API mais on substitue l'implémentation par un **registry
+de fonctions Kotlin pré-compilées**.
+
+**Justification projet** : la décision GPU étant de partir
+directement en WGSL (pas de SkSL → WGSL transpiler), l'investissement
+dans un parser + interpréteur SkSL côté raster (~5 000 LOC) serait
+orphelin — il ne sert que la partie CPU sans aucun levier GPU. On
+préfère donc :
+
+- Conserver `SkRuntimeEffect.MakeForShader(sksl: String)` côté API
+  (pour que tout code client compile et que le porting GM reste
+  syntaxiquement iso).
+- Hacher la source SkSL → lookup dans un registry → dispatch vers
+  une lambda Kotlin qui implémente exactement la même math.
+- Pour toute source SkSL inconnue du registry : retourner
+  `Result.failure` proprement (pas de crash) ; documenter que
+  l'effet doit être enregistré explicitement.
+
+**Liste des composants concernés** :
+- `SkRuntimeEffect` (chantier D2) — détail dans la section dédiée.
+
+**Tous les autres composants restent strictement iso** (algorithme +
+précision flottante).
+
 ---
 
 ## Architecture cible
@@ -116,7 +147,7 @@ Effects pipeline (Group A — completed) :
 
 What this plan adds :
 - Path operations layer (D1)
-- SkSL runtime effects (D2)
+- Runtime effects shim (D2 — SkSL surface, Kotlin registry impl)
 - Image I/O layer (D3)
 - DM sink layer (D4)
 - Text layer extensions (I1, I2, I4)
@@ -207,95 +238,156 @@ l'autonomie pure-Kotlin, mais ~10x moins de LOC.
 
 ---
 
-### D2 — `SkRuntimeEffect`
+### D2 — `SkRuntimeEffect` (compatibility shim — *iso-fidelity exception*)
 
-**Skia upstream files** :
-- `include/effects/SkRuntimeEffect.h` (public API)
-- `src/sksl/` (~100 files, ~30000+ LOC for parser + IR + interpreter)
+> ⚠️ **Iso-fidelity exception** : ce chantier substitue le moteur SkSL
+> upstream par un registry Kotlin. Voir
+> [§ Iso-fidelity exceptions](#iso-fidelity-exceptions) pour la
+> justification (décision projet : pas de SkSL côté GPU → pas de
+> levier pour parser/interpréter SkSL côté raster).
+
+**Skia upstream files** (référence API uniquement, pas portées) :
+- `include/effects/SkRuntimeEffect.h` (API publique — surface conservée
+  iso).
+- `src/sksl/` (~100 fichiers, ~30 000 LOC : parser + IR + interpreter
+  SkVM) — **non portés** ; remplacés par le registry.
 
 **Kotlin target** :
-- `kanvas-skia/src/main/kotlin/org/skia/sksl/SkRuntimeEffect.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/sksl/internal/*.kt` (lexer,
-  parser, AST, IR, interpreter)
+- `kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffect.kt`
+  (façade publique iso-API).
+- `kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffectRegistry.kt`
+  (registry interne : `SkSL hash → KotlinImpl`).
+- `kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeShader.kt`
+  / `SkRuntimeColorFilter.kt` / `SkRuntimeBlender.kt` (bindings vers
+  `SkShader` / `SkColorFilter` / `SkBlender`).
+- `kanvas-skia/src/main/kotlin/org/skia/effects/runtime/effects/*.kt`
+  (un fichier par effet enregistré, hand-porté depuis le SkSL upstream).
 
-**API surface** :
+**API surface** (strictement iso, *aucune* divergence visible côté
+client) :
 ```kotlin
 public class SkRuntimeEffect private constructor(
-    private val program: SkSLProgram,
+    private val source: String,
+    private val sourceHash: Long,
+    private val signature: SkRuntimeSignature,
+    private val impl: SkRuntimeImpl,
 ) {
-    public class Result(public val effect: SkRuntimeEffect?, public val errorText: String)
+    public class Result(
+        public val effect: SkRuntimeEffect?,
+        public val errorText: String,
+    )
 
     public companion object {
-        /** Compile SkSL source for shader use. */
+        /** Compile SkSL source for shader use (subject to registry lookup). */
         public fun MakeForShader(sksl: String): Result
 
-        /** Compile for color filter use (no `coords` parameter). */
+        /** Compile for color filter use. */
         public fun MakeForColorFilter(sksl: String): Result
 
-        /** Compile for blender (2 input colors). */
+        /** Compile for blender use (2 input colors). */
         public fun MakeForBlender(sksl: String): Result
     }
 
-    /** Build a shader / color filter / blender from this effect with uniforms + child effects. */
+    /** Build a shader / color filter / blender from this effect. */
     public fun makeShader(uniforms: SkData?, children: Array<SkShader?> = emptyArray()): SkShader?
     public fun makeColorFilter(uniforms: SkData?, children: Array<SkColorFilter?> = emptyArray()): SkColorFilter?
     public fun makeBlender(uniforms: SkData?, children: Array<SkBlender?> = emptyArray()): SkBlender?
 
-    /** Reflection on the compiled program. */
+    /** Reflection on the registered effect. */
     public fun uniforms(): List<Uniform>
     public fun children(): List<Child>
 }
 ```
 
+**Internal contract** :
+```kotlin
+internal interface SkRuntimeImpl {
+    val uniforms: List<SkRuntimeEffect.Uniform>
+    val children: List<SkRuntimeEffect.Child>
+
+    /** Evaluate the effect at one (x, y) point. `coords` is null for color filter / blender. */
+    fun shade(
+        coords: SkPoint?,
+        srcColor: SkColor4f?,    // for color filter / blender
+        dstColor: SkColor4f?,    // for blender
+        uniforms: ByteBuffer,
+        childResolvers: Array<(SkPoint) -> SkColor4f>,
+    ): SkColor4f
+}
+
+internal object SkRuntimeEffectRegistry {
+    private val effects: MutableMap<Long, () -> SkRuntimeImpl> = mutableMapOf()
+
+    /** Register an effect by its canonical SkSL source. Hash is FNV-1a 64-bit on the *normalized* source. */
+    fun register(canonicalSource: String, factory: () -> SkRuntimeImpl)
+
+    fun lookup(sksl: String): SkRuntimeImpl?
+}
+```
+
+**Source normalization** (avant hashing) :
+- Strip line comments `// …` et bloc `/* … */`.
+- Collapse runs of whitespace to one space.
+- Strip leading/trailing whitespace.
+- → garantit que des variantes triviales (espaces, indentation) du
+  même SkSL hashent identiquement.
+
 **Phase decomposition** :
 
-- **D2.1** — SkSL minimal parser.
-  - Lexer (`SkSLLexer.kt`) : tokens (keywords, operators, literals).
-  - Parser (`SkSLParser.kt`) : recursive-descent → AST.
-  - AST (`SkSLAst.kt`) : sealed class hierarchy mirroring Skia's
-    `IRNode`s.
-  - **LOC** : ~3000.
-  - **Subset shipped** : float/half/int/bool scalars, vec2/vec3/vec4,
-    mat2/mat3/mat4, basic operators (`+`, `-`, `*`, `/`, `<`, `>`,
-    `==`, `!=`, `&&`, `||`), `if/else`, `for`, function calls,
-    intrinsics (`mix`, `clamp`, `smoothstep`, `step`, `length`, `dot`,
-    `cross`, `normalize`, `texture`, `unpremul`).
-  - **Out of scope v1** : structs, arrays of arrays, recursion, while
-    loops, ESSL-style `break/continue` with labels.
+- **D2.1** — Façade + registry plumbing.
+  - `SkRuntimeEffect.kt` (façade, parse triviale de la signature
+    `uniform` / `in` / `vec4 main(...)` pour extraire les noms
+    d'uniforms et children — pas un vrai parser SkSL, juste un
+    regex ciblé sur les déclarations top-level).
+  - `SkRuntimeEffectRegistry.kt` (lookup + register + hash FNV-1a).
+  - `SkRuntimeShader/ColorFilter/Blender.kt` (bindings vers les
+    interfaces `SkShader` / `SkColorFilter` / `SkBlender`).
+  - `SkData.kt` si pas déjà présent (wrapper `ByteBuffer` pour
+    uniforms).
+  - **LOC** : ~700.
+  - **Tests** : registry hit/miss, signature parse correcte,
+    `Result.failure` pour SkSL inconnu.
 
-- **D2.2** — IR → tree-walk interpreter.
-  - `SkSLIR.kt` : type-checked intermediate representation.
-  - `SkSLInterpreter.kt` : recursive evaluator.
-  - **LOC** : ~2500.
-  - **Tests** : 30+ "program → expected output" tests with hand-coded
-    SkSL snippets from `tests/SkSLTest.cpp`.
+- **D2.2** — Hand-port des effets utilisés par les GMs upstream.
+  - Pour chaque GM qui appelle `SkRuntimeEffect::MakeForShader(...)`
+    (cibles initiales : `runtimeshader.cpp`, `runtimecolorfilter.cpp`,
+    `lit_filter.cpp`, `runtimefunc.cpp`, `null_color_filter.cpp` —
+    ~10 GMs en tout), extraire la string SkSL et hand-porter la math
+    en Kotlin (un fichier par effet, ~30-80 LOC).
+  - Chaque port est un commit séparé pour traçabilité.
+  - **LOC** : ~30-80 par effet × ~10 = ~300-800.
+  - **Tests** : pixel-iso vs PNG upstream pour chaque GM porté.
 
-- **D2.3** — Shader / ColorFilter / Blender bindings.
-  - `SkRuntimeShader.kt` : implements `SkShader`, runs interpreter
-    per pixel via `shadeRow` / `shadeRowF16`.
-  - `SkRuntimeColorFilter.kt` : implements `SkColorFilter`.
-  - `SkRuntimeBlender.kt` : new abstract `SkBlender` class +
-    integration with paint blending.
-  - **LOC** : ~1500.
-  - **Tests** : port `gm/runtimeshader.cpp`, `gm/runtimecolorfilter.cpp`.
+- **D2.3** — `SkBlender` plumbing dans le pipeline paint.
+  - Nouvelle interface `SkBlender` (jusqu'ici toute la blending
+    passe par `SkBlendMode`).
+  - Wire dans `SkBitmapDevice` : si `paint.blender != null`, use it
+    au lieu du `SkBlendMode`.
+  - **LOC** : ~250.
+  - **Tests** : custom blender via runtime effect → applied correctly.
 
-**Total LOC** : ~7000-10000.
-**Estimated time** : 3-4 weeks per slice.
+**Total LOC** : ~1 250-1 750 (vs ~7 000-10 000 pour SkSL VM complet).
+**Estimated time** : 1-2 semaines.
 
-**Validation** : run `tests/SkSLInterpreterTest.cpp` test cases.
-GM ports : `runtimeshader`, `runtimecolorfilter`, `lit_filter`,
-plus all the new SkSL-based GMs in `gm/runtime*` (~10 GMs).
+**Validation** :
+- Tests unitaires : registry, hash stability, signature parse.
+- Pixel-iso GMs : tous les `runtime*` GMs portés voient leurs PNG
+  upstream reproduits à >95% similarité.
 
-**Risk** : SkSL is a moving target — Skia's SkSL spec evolves with
-each release. Pin to a specific Skia version (e.g. 4.0).
+**Comportement quand un SkSL inconnu est passé** :
+- `MakeForShader(unknownSksl)` → `Result(effect = null, errorText =
+  "SkSL not registered: <hash>. Add an entry to SkRuntimeEffectRegistry.")`
+- DM pipeline : un GM qui essaie un SkSL non-enregistré loggue le
+  hash et le skip dans son rapport (on peut alors rétro-porter
+  l'effet à la demande).
 
-**Alternative** : JNI to native SkSL compiler/runtime. Same trade-off
-as D1.
-
-**Critical insight** : the interpreter approach is correct for v1 —
-GLSL/Metal codegen for GPU is out of scope. For raster, every
-pixel evaluation goes through the interpreter, which is acceptable
-performance-wise (DM is correctness-first, not perf-first).
+**Évolution future** :
+- Si un besoin de runtime effect *dynamique* apparaît (SkSL non
+  connu à compile-time), on pourra alors investir dans un vrai
+  parser SkSL — sans casser l'API existante (le registry reste un
+  fallback fast-path).
+- Si le projet GPU change d'avis et adopte SkSL, le moteur deviendra
+  partagé raster/GPU et le shim sera retiré (l'API publique reste).
 
 ---
 
@@ -1101,8 +1193,8 @@ DAG of dependencies :
                               ├─ D1 SkPathOps (huge)
                               │    └─ Self-contained
                               │
-                              ├─ D2 SkRuntimeEffect (huge)
-                              │    └─ Self-contained
+                              ├─ D2 SkRuntimeEffect (shim, ~1500 LOC)
+                              │    └─ Self-contained ; iso-fidelity exception
                               │
                               ├─ D3 image codecs
                               │    └─ Self-contained
@@ -1123,7 +1215,7 @@ DAG of dependencies :
                               │    └─ Built on I1 for text
                               │
                               ├─ B2 SkSVGCanvas
-                              │    └─ Built on D2 (defs reuse SkSL?)
+                              │    └─ Self-contained (filters → SVG <filter>)
                               │
                               ├─ Q4 DeferredDisplayList
                               │    └─ Low priority (single-threaded)
@@ -1143,7 +1235,7 @@ DAG of dependencies :
 8. **I5** drawPoints/Atlas/Vertices/Patch (~1000 LOC)
 9. **Q3** SkBBHFactory (~600 LOC, perf for Picture)
 10. **D1** SkPathOps (~9000 LOC, decompose into 3 sub-PRs)
-11. **D2** SkRuntimeEffect (~7000 LOC, the dragon)
+11. **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception*)
 12. **B1** SkPDF (PDFBox adapter, ~500 LOC)
 13. **B2** SkSVGCanvas (~3000 LOC)
 14. **C3** SkEmbossMaskFilter (~400 LOC)
@@ -1154,11 +1246,11 @@ DAG of dependencies :
 19. **C2/C4** Misc completions (~1300 LOC ensemble)
 20. **Q4** DeferredDisplayList (~400 LOC, low priority)
 
-**Total estimated LOC** : ~32000 of new Kotlin code, decomposed into
-~50 PRs of 100-1500 LOC each.
+**Total estimated LOC** : ~26 000 of new Kotlin code (revised after
+D2 → shim), decomposed into ~45 PRs of 100-1500 LOC each.
 
-**Estimated time** : 6-12 months for a single engineer working
-half-time, or 2-4 months full-time.
+**Estimated time** : 5-10 months for a single engineer working
+half-time, or 1.5-3 months full-time.
 
 ---
 
@@ -1235,7 +1327,7 @@ kanvas-skia/src/main/kotlin/org/skia/
 ├── core/                   # SkCanvas, SkSurface, SkBitmapDevice, SkPicture, ...
 ├── effects/                # SkColorFilters, SkImageFilters, ...  (currently in foundation/)
 ├── pathops/                # NEW — D1 chantier
-├── sksl/                   # NEW — D2 chantier
+├── effects/runtime/        # NEW — D2 chantier (shim, no SkSL VM)
 ├── codec/                  # NEW — D3 chantier
 ├── encode/                 # NEW — D3 chantier
 ├── dm/                     # NEW — D4 chantier
