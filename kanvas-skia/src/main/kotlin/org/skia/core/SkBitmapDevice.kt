@@ -278,6 +278,37 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         if (src.right <= src.left || src.bottom <= src.top) return
         if (image.width <= 0 || image.height <= 0) return
 
+        // Phase 7d.1 — when paint.imageFilter is set, route through
+        // the filter then re-enter `drawImageRect` with the filtered
+        // image + offset-shifted devDst. Recursion guard : the inner
+        // paint has imageFilter cleared.
+        val imageFilter = paint?.imageFilter
+        if (imageFilter != null) {
+            // Use an identity CTM proxy here — the device's own CTM is
+            // already baked into [devDst]. The filter's `ctm` parameter
+            // is for filters that need device-space precision (e.g.
+            // Offset scales its (dx, dy) by the canvas's max scale).
+            // We pass identity since the offset will be applied
+            // directly in device coords.
+            val result = imageFilter.filterImage(image, org.skia.math.SkMatrix.Identity)
+            // Shift devDst by the filter's offset.
+            val newDevDst = SkRect.MakeLTRB(
+                devDst.left + result.offsetX,
+                devDst.top + result.offsetY,
+                devDst.right + result.offsetX,
+                devDst.bottom + result.offsetY,
+            )
+            // Re-enter without the filter to avoid infinite recursion.
+            // For the filtered image, the source rect is the full
+            // filtered image (filters typically produce image-space
+            // outputs that the device draws 1:1 to the destination).
+            val filtered = result.image
+            val newSrc = SkRect.MakeWH(filtered.width.toFloat(), filtered.height.toFloat())
+            val innerPaint = paint.copy().apply { this.imageFilter = null }
+            drawImageRect(filtered, newSrc, newDevDst, sampling, innerPaint, constraint, clip)
+            return
+        }
+
         val ix0 = pixelEdge(devDst.left).coerceAtLeast(clip.left)
         val iy0 = pixelEdge(devDst.top).coerceAtLeast(clip.top)
         val ix1 = pixelEdge(devDst.right).coerceAtMost(clip.right)
