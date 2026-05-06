@@ -26,16 +26,15 @@ import org.skia.testing.TestUtils
  * If this passes, the `paint.colorFilter` integration is end-to-end
  * correct on the `drawImage` path.
  *
- * **Floor 35 %** — the residual gap vs the upstream reference is
- * the colourspace under which the matrix is evaluated. Phase 7a
- * applies [SkColorFilters.Matrix] in the bitmap's working colour
- * space (Rec.2020 here, per the GM harness) ; Skia upstream applies
- * it in linear sRGB and converts. The Rec.709 luma weights baked into
- * `saturationMatrix` therefore measure a different luminance under
- * Rec.2020, which shifts the desaturated cells. Closing this gap
- * means lifting the colour filter execution into the working-space
- * pipeline (Phase 7e candidate). Still well above the 0 % "filter
- * not applied" baseline ; the per-cell diff is structural-correct.
+ * **Floor 65 %** — Phase 7e bumped this from the original 49 %
+ * baseline (Phase 7a) to 69 % by re-ordering the pipeline so the
+ * colour filter runs in sRGB *before* the working-space xform :
+ * `paint.color → colorFilter (sRGB) → xform → blend`. The Rec.709
+ * luma weights baked into `saturationMatrix` therefore measure
+ * luminance in the space they were tuned for. The residual ~30 %
+ * gap vs upstream is the encoded-vs-linear-sRGB gamma curve
+ * difference (Skia evaluates the matrix in linear sRGB ; we still
+ * apply it in encoded sRGB). Closing that gap is a Phase 7e' refinement.
  */
 class ColorMatrixTest {
 
@@ -53,8 +52,8 @@ class ColorMatrixTest {
         val accepted = SimilarityTracker.updateScore("ColorMatrixGM", comparison.similarity)
         assertTrue(accepted, "ColorMatrixGM regressed below tolerance")
         assertTrue(
-            comparison.similarity >= 35.0,
-            "ColorMatrixGM similarity ${"%.2f".format(comparison.similarity)}% < 35% floor",
+            comparison.similarity >= 65.0,
+            "ColorMatrixGM similarity ${"%.2f".format(comparison.similarity)}% < 65% floor",
         )
     }
 }
