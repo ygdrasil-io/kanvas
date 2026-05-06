@@ -2,6 +2,7 @@ package org.skia.core
 
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
@@ -252,7 +253,37 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * — clip stacks compose as path intersection.
      */
     public open fun clipPath(path: SkPath, doAntiAlias: Boolean = false) {
+        clipPath(path, SkClipOp.kIntersect, doAntiAlias)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::clipPath(path, op, doAntiAlias)`. The
+     * [op] argument selects between
+     * [SkClipOp.kIntersect] (the default — restrict draws to the inside
+     * of [path]) and [SkClipOp.kDifference] (cut a hole — restrict draws
+     * to the outside of [path]).
+     *
+     * Implementation notes :
+     *  - **kIntersect** : the new clip bbox is the path's device-space
+     *    bbox intersected with the parent clip ; the mask is `path AND
+     *    parent_mask`.
+     *  - **kDifference** : the new clip bbox is the parent clip
+     *    unchanged (cutting a hole inside doesn't shrink the outer
+     *    bound) ; the mask is `(255 - path) AND parent_mask`.
+     *
+     * Both ops AND-multiply with any pre-existing parent mask using
+     * `(a*b + 127) / 255` rounding, so clip stacks compose correctly
+     * across mixed intersect/difference sequences.
+     */
+    public open fun clipPath(path: SkPath, op: SkClipOp, doAntiAlias: Boolean = false) {
         val s = top
+        when (op) {
+            SkClipOp.kIntersect -> clipPathIntersect(s, path, doAntiAlias)
+            SkClipOp.kDifference -> clipPathDifference(s, path, doAntiAlias)
+        }
+    }
+
+    private fun clipPathIntersect(s: State, path: SkPath, doAntiAlias: Boolean) {
         val pathBoundsDev = if (path.fillType.isInverse()) {
             SkRect.MakeLTRB(
                 s.clip.left.toFloat(), s.clip.top.toFloat(),
@@ -276,30 +307,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
             return
         }
 
-        // Rasterise the path into an alpha bitmap of size (w × h) placed
-        // at device origin (newClipBbox.left, newClipBbox.top).
-        val maskBitmap = SkBitmap(w, h).also { it.eraseColor(0) }
-        val maskDevice = SkBitmapDevice(maskBitmap)
-        val maskClip = SkIRect.MakeWH(w, h)
-        val maskCtm = s.matrix.postTranslate(
-            -newClipBbox.left.toFloat(), -newClipBbox.top.toFloat(),
-        )
-        val whitePaint = SkPaint().apply {
-            color = org.skia.foundation.SK_ColorWHITE
-            blendMode = SkBlendMode.kSrc
-            isAntiAlias = doAntiAlias
-        }
-        maskDevice.drawPath(path, maskCtm, maskClip, whitePaint)
-
-        // Extract alpha channel into a flat ByteArray.
-        val pathMask = ByteArray(w * h)
-        for (y in 0 until h) {
-            val row = y * w
-            for (x in 0 until w) {
-                pathMask[row + x] =
-                    org.skia.foundation.SkColorGetA(maskBitmap.getPixel(x, y)).toByte()
-            }
-        }
+        val pathMask = rasterisePathMask(s, path, newClipBbox, doAntiAlias)
 
         // AND with the existing clipMask (if any) — clip stacks compose
         // via intersection.
@@ -329,11 +337,94 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
+     * `clipPath(..., kDifference)` — cut the supplied path out of the
+     * current clip. Bbox stays at the parent clip ; the new mask is
+     * `(255 − pathCoverage) × parentCoverage`. If there was no parent
+     * mask the result is just the inverted path coverage (255 outside,
+     * 0 fully inside).
+     */
+    private fun clipPathDifference(s: State, path: SkPath, doAntiAlias: Boolean) {
+        val w = s.clip.right - s.clip.left
+        val h = s.clip.bottom - s.clip.top
+        if (w <= 0 || h <= 0) {
+            s.clipMask = null
+            return
+        }
+        val pathMask = rasterisePathMask(s, path, s.clip, doAntiAlias)
+        val parentMask = s.clipMask
+        val newMask = ByteArray(w * h)
+        for (i in 0 until w * h) {
+            val pCov = pathMask[i].toInt() and 0xFF
+            val invPath = 255 - pCov
+            val parentCov = parentMask?.let { it[i].toInt() and 0xFF } ?: 255
+            newMask[i] = ((parentCov * invPath + 127) / 255).toByte()
+        }
+        s.clipMask = newMask
+    }
+
+    /**
+     * Helper : rasterise [path] into an 8-bit alpha coverage [ByteArray]
+     * sized to the supplied device-space [bbox]. The path's source-space
+     * coordinates are mapped through the active CTM, then translated so
+     * `(bbox.left, bbox.top)` lands at mask origin `(0, 0)`. Returned
+     * buffer is `0xFF` inside the path, `0` outside, AA values on the
+     * edge.
+     */
+    private fun rasterisePathMask(
+        s: State, path: SkPath, bbox: SkIRect, doAntiAlias: Boolean,
+    ): ByteArray {
+        val w = bbox.right - bbox.left
+        val h = bbox.bottom - bbox.top
+        val maskBitmap = SkBitmap(w, h).also { it.eraseColor(0) }
+        val maskDevice = SkBitmapDevice(maskBitmap)
+        val maskClip = SkIRect.MakeWH(w, h)
+        val maskCtm = s.matrix.postTranslate(
+            -bbox.left.toFloat(), -bbox.top.toFloat(),
+        )
+        val whitePaint = SkPaint().apply {
+            color = org.skia.foundation.SK_ColorWHITE
+            blendMode = SkBlendMode.kSrc
+            isAntiAlias = doAntiAlias
+        }
+        maskDevice.drawPath(path, maskCtm, maskClip, whitePaint)
+        val out = ByteArray(w * h)
+        for (y in 0 until h) {
+            val row = y * w
+            for (x in 0 until w) {
+                out[row + x] =
+                    org.skia.foundation.SkColorGetA(maskBitmap.getPixel(x, y)).toByte()
+            }
+        }
+        return out
+    }
+
+    /**
      * Mirrors Skia's `SkCanvas::clipRRect(rrect, doAntiAlias)`. Delegates
      * to [clipPath] via [SkPath.RRect].
      */
     public open fun clipRRect(rrect: SkRRect, doAntiAlias: Boolean = false) {
-        clipPath(SkPath.RRect(rrect), doAntiAlias)
+        clipPath(SkPath.RRect(rrect), SkClipOp.kIntersect, doAntiAlias)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::clipRRect(rrect, op, doAntiAlias)`.
+     */
+    public open fun clipRRect(rrect: SkRRect, op: SkClipOp, doAntiAlias: Boolean = false) {
+        clipPath(SkPath.RRect(rrect), op, doAntiAlias)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::clipRect(rect, op, doAntiAlias)`. For
+     * [SkClipOp.kIntersect] this is the existing fast path ; for
+     * [SkClipOp.kDifference] we route through [clipPath] (a 4-vertex
+     * rect path), which gives us the alpha-mask "cut a hole" semantics
+     * the rasterizer needs.
+     */
+    public open fun clipRect(rect: SkRect, op: SkClipOp, doAntiAlias: Boolean = false) {
+        when (op) {
+            SkClipOp.kIntersect -> clipRect(rect, doAntiAlias)
+            SkClipOp.kDifference -> clipPath(SkPath.Rect(rect), SkClipOp.kDifference, doAntiAlias)
+        }
     }
 
     /** Bind the active state's clipMask onto the device before each draw. */
