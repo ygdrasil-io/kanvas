@@ -120,9 +120,38 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         if (stack.size <= 1) return
         val popped = stack.removeLast()
         val layer = popped.layer ?: return
-        // Composite the layer's bitmap back into the parent device using the
-        // layer's paint (color modulates alpha, SrcOver is the only blend
-        // mode in scope). The parent state is now `top`.
+
+        // Phase 7d.2 — when the layer's paint carries an imageFilter,
+        // snapshot the layer to an SkImage, apply the filter, and
+        // composite the filtered result onto the parent device with
+        // the offset adjusted for the filter's displacement.
+        val layerPaint = layer.paint
+        val imageFilter = layerPaint?.imageFilter
+        if (imageFilter != null) {
+            val snapshot = popped.device.bitmap.asImage()
+            val filterResult = imageFilter.filterImage(snapshot, top.matrix)
+            val filteredImg = filterResult.image
+            val filteredBitmap = SkBitmap(
+                filteredImg.width, filteredImg.height,
+                popped.device.bitmap.colorSpace, popped.device.bitmap.colorType,
+            )
+            for (yp in 0 until filteredImg.height) {
+                for (xp in 0 until filteredImg.width) {
+                    filteredBitmap.setPixel(xp, yp, filteredImg.peekPixel(xp, yp))
+                }
+            }
+            val filteredDevice = SkBitmapDevice(filteredBitmap)
+            val proxyPaint = layerPaint.copy().apply { this.imageFilter = null }
+            layer.parentDevice.compositeFrom(
+                filteredDevice,
+                layer.originX + filterResult.offsetX,
+                layer.originY + filterResult.offsetY,
+                top.clip,
+                proxyPaint,
+            )
+            return
+        }
+
         layer.parentDevice.compositeFrom(
             popped.device,
             layer.originX,
