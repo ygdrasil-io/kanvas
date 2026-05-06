@@ -18,16 +18,15 @@ import kotlin.math.exp
  *                                  // deviation σ.
  * ```
  *
- * **Phase 7c coverage** :
- *  - [SkBlurStyle.kNormal] — only style fully implemented in this
- *    slice. Returns the convolution of the path's coverage with the
- *    2D Gaussian kernel.
- *  - [SkBlurStyle.kSolid], [SkBlurStyle.kOuter], [SkBlurStyle.kInner]
- *    — accepted by the constructor (so client GMs can be ported)
- *    but currently degrade to [SkBlurStyle.kNormal]. The visual
- *    difference (sharp original kept inside / outer-only ring /
- *    inner-only ring) is a Phase 7c' refinement if any GM in scope
- *    demands it.
+ * **Phase 7c (current)** — all four [SkBlurStyle] values implemented :
+ *  - [SkBlurStyle.kNormal] — convolution of the path's coverage with
+ *    the 2D Gaussian.
+ *  - [SkBlurStyle.kSolid] — original mask kept opaque + outer blur
+ *    halo. Combination : `out = orig + blur·(255 − orig) / 255`.
+ *  - [SkBlurStyle.kOuter] — only the outer halo (the original
+ *    interior is cleared). Combination : `out = blur·(255 − orig) / 255`.
+ *  - [SkBlurStyle.kInner] — blur clipped to the original interior.
+ *    Combination : `out = blur·orig / 255`.
  *
  * The kernel is **separable** : a 2D Gaussian of standard deviation
  * `σ` factorises into the convolution of a 1D horizontal Gaussian
@@ -53,9 +52,14 @@ public class SkBlurMaskFilter private constructor(
         // Separable 1D pass : horizontal then vertical.
         val tmp = ByteArray(w * h)
         blurHorizontal(src, tmp, w, h, kernel, radius)
-        val out = ByteArray(w * h)
-        blurVertical(tmp, out, w, h, kernel, radius)
-        return out
+        val blur = ByteArray(w * h)
+        blurVertical(tmp, blur, w, h, kernel, radius)
+        return when (style) {
+            SkBlurStyle.kNormal -> blur
+            SkBlurStyle.kSolid -> combineSolid(src, blur)
+            SkBlurStyle.kOuter -> combineOuter(src, blur)
+            SkBlurStyle.kInner -> combineInner(src, blur)
+        }
     }
 
     public companion object {
@@ -116,6 +120,60 @@ public class SkBlurMaskFilter private constructor(
             }
         }
 
+        /**
+         * [SkBlurStyle.kSolid] — composite the original sharp interior
+         * with the outer blur halo : `out = orig + blur·(255 − orig) / 255`.
+         * Inside the path (orig=255) the result is fully opaque ;
+         * outside (orig=0) it is the bare blur. Mirrors Skia's
+         * `SkBlurMask.cpp::Blur(...)` solid path.
+         */
+        private fun combineSolid(orig: ByteArray, blur: ByteArray): ByteArray {
+            require(orig.size == blur.size)
+            val out = ByteArray(orig.size)
+            for (i in orig.indices) {
+                val o = orig[i].toInt() and 0xFF
+                val b = blur[i].toInt() and 0xFF
+                // out = o + b·(255 − o) / 255  (rounded).
+                val v = o + (b * (255 - o) + 127) / 255
+                out[i] = (if (v > 255) 255 else v).toByte()
+            }
+            return out
+        }
+
+        /**
+         * [SkBlurStyle.kOuter] — keep only the outer halo : the part of
+         * the blur that sits outside the original. `out = blur·(255 − orig) / 255`.
+         * Pixels fully inside the path (orig=255) become 0 ; pixels
+         * fully outside (orig=0) preserve the bare blur.
+         */
+        private fun combineOuter(orig: ByteArray, blur: ByteArray): ByteArray {
+            require(orig.size == blur.size)
+            val out = ByteArray(orig.size)
+            for (i in orig.indices) {
+                val o = orig[i].toInt() and 0xFF
+                val b = blur[i].toInt() and 0xFF
+                out[i] = ((b * (255 - o) + 127) / 255).toByte()
+            }
+            return out
+        }
+
+        /**
+         * [SkBlurStyle.kInner] — clip the blur to the original interior.
+         * `out = blur·orig / 255`. The path interior fades according to
+         * the blur, with full opacity at the centre and softening towards
+         * the edges. Pixels outside the path (orig=0) are zeroed.
+         */
+        private fun combineInner(orig: ByteArray, blur: ByteArray): ByteArray {
+            require(orig.size == blur.size)
+            val out = ByteArray(orig.size)
+            for (i in orig.indices) {
+                val o = orig[i].toInt() and 0xFF
+                val b = blur[i].toInt() and 0xFF
+                out[i] = ((b * o + 127) / 255).toByte()
+            }
+            return out
+        }
+
         /** Vertical counterpart. */
         private fun blurVertical(
             src: ByteArray, dst: ByteArray,
@@ -141,29 +199,19 @@ public class SkBlurMaskFilter private constructor(
  * Mirrors Skia's
  * [`SkBlurStyle`](https://github.com/google/skia/blob/main/include/core/SkBlurTypes.h).
  *
- * Phase 7c implements [kNormal] only ; the other three are accepted
- * by the [SkBlurMaskFilter.Make] factory but currently render as
- * `kNormal`.
+ * All four styles are now rendered correctly (Phase 7c). The combiner
+ * formulas live alongside the Gaussian convolution in [SkBlurMaskFilter].
  */
 public enum class SkBlurStyle {
     /** Convolution of the original mask with the 2D Gaussian. */
     kNormal,
 
-    /**
-     * Original mask kept opaque ; blur extends outward only. Phase 7c
-     * accepts but currently renders as [kNormal].
-     */
+    /** Original mask kept opaque ; blur extends outward only. */
     kSolid,
 
-    /**
-     * Original interior cleared ; blurred ring outside the original.
-     * Phase 7c accepts but currently renders as [kNormal].
-     */
+    /** Original interior cleared ; blurred ring outside the original. */
     kOuter,
 
-    /**
-     * Blurred mask clipped to the original interior. Phase 7c accepts
-     * but currently renders as [kNormal].
-     */
+    /** Blurred mask clipped to the original interior. */
     kInner,
 }
