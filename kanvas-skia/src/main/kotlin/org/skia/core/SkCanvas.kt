@@ -230,7 +230,14 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     public open fun drawRect(rect: SkRect, paint: SkPaint) {
         val s = top
-        if (s.matrix.isAxisAligned && paint.shader == null) {
+        // Fast path requires : axis-aligned CTM, no shader, no path
+        // effect, no mask filter. The fast path goes directly into the
+        // device's rect rasterizer and bypasses pathEffect/maskFilter
+        // (Phase 7p / 7c) ; falling through to drawPath honours both.
+        if (s.matrix.isAxisAligned &&
+            paint.shader == null &&
+            paint.pathEffect == null &&
+            paint.maskFilter == null) {
             // Fast path: solid colour, axis-aligned CTM. Pre-compute the
             // device rect and route through SkBitmapDevice's hard-edge /
             // analytic-AA rect rasterizer.
@@ -239,8 +246,8 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
             val devRect = SkRect.MakeLTRB(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
             s.device.drawRect(devRect, s.clip, paint)
         } else {
-            // Either rotated/skewed CTM (4-vertex polygon) or shader-driven
-            // colour (per-pixel scanline path). Both go through drawPath.
+            // Either rotated/skewed CTM (4-vertex polygon), shader-driven
+            // colour, dasher / mask filter — all routed through drawPath.
             drawPath(SkPath.Rect(rect), paint)
         }
     }

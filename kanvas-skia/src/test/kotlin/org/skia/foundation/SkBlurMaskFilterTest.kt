@@ -94,4 +94,115 @@ class SkBlurMaskFilterTest {
         val out = mf.filterMask(src, w, h)
         assertEquals(w * h, out.size)
     }
+
+    // ─── Phase 7c — non-kNormal style combiners ─────────────────────────
+
+    /**
+     * Build a centred opaque "disc" mask : a 5×5 square of 0xFF in the
+     * middle of a 21×21 buffer. The interior is fully opaque ; the
+     * outside is fully transparent. This is the canonical input for
+     * exercising the four blur styles.
+     */
+    private fun discMask(w: Int = 21, h: Int = 21, side: Int = 5): ByteArray {
+        val src = ByteArray(w * h)
+        val x0 = (w - side) / 2
+        val y0 = (h - side) / 2
+        for (y in y0 until y0 + side) {
+            for (x in x0 until x0 + side) {
+                src[y * w + x] = 0xFF.toByte()
+            }
+        }
+        return src
+    }
+
+    @Test
+    fun `kSolid keeps the original interior opaque + outer halo`() {
+        val mf = SkBlurMaskFilter.Make(SkBlurStyle.kSolid, 2f)!!
+        val w = 21; val h = 21
+        val src = discMask(w, h, side = 5)
+        val out = mf.filterMask(src, w, h)
+
+        // Centre pixel (was 0xFF in src) must remain 0xFF — the solid
+        // style preserves the original where it was opaque.
+        val centre = out[(h / 2) * w + (w / 2)].toInt() and 0xFF
+        assertEquals(255, centre)
+
+        // A pixel just outside the original interior (orig = 0) but
+        // inside the blur halo must be > 0 (outer blur is preserved).
+        val halo = out[(h / 2) * w + (w / 2) + 4].toInt() and 0xFF
+        assertTrue(halo in 1..254) { "halo $halo should be a partial blur value" }
+
+        // Far-from-anything pixel : 0.
+        val far = out[0].toInt() and 0xFF
+        assertEquals(0, far)
+    }
+
+    @Test
+    fun `kOuter zeros the original interior, keeps the halo`() {
+        val mf = SkBlurMaskFilter.Make(SkBlurStyle.kOuter, 2f)!!
+        val w = 21; val h = 21
+        val src = discMask(w, h, side = 5)
+        val out = mf.filterMask(src, w, h)
+
+        // Centre pixel (was 0xFF in src) is cleared to 0 (or near 0)
+        // because the (255 − orig) factor is 0.
+        val centre = out[(h / 2) * w + (w / 2)].toInt() and 0xFF
+        assertEquals(0, centre)
+
+        // The halo right outside the disc is preserved (orig = 0,
+        // blur > 0 → out = blur).
+        val halo = out[(h / 2) * w + (w / 2) + 4].toInt() and 0xFF
+        assertTrue(halo in 1..254) { "halo $halo should be a partial blur value" }
+    }
+
+    @Test
+    fun `kInner clips the blur to the original interior`() {
+        val mf = SkBlurMaskFilter.Make(SkBlurStyle.kInner, 2f)!!
+        val w = 21; val h = 21
+        val src = discMask(w, h, side = 5)
+        val out = mf.filterMask(src, w, h)
+
+        // Centre pixel (orig = 0xFF, blur ≈ 0xFF after a 5×5 disc + σ=2)
+        // → out ≈ blur · orig / 255 ≈ blur. Must be > 0.
+        val centre = out[(h / 2) * w + (w / 2)].toInt() and 0xFF
+        assertTrue(centre > 0) { "kInner centre $centre should be > 0" }
+
+        // A pixel just outside the disc (orig = 0) — out must be 0
+        // regardless of the blur value there.
+        val outside = out[(h / 2) * w + (w / 2) + 4].toInt() and 0xFF
+        assertEquals(0, outside)
+    }
+
+    @Test
+    fun `kSolid is at least as opaque as the original mask`() {
+        // Property test : for every pixel, kSolid output ≥ original
+        // (the formula `out = orig + blur·(255 − orig)/255` is
+        // monotonically increasing in `blur` and ≥ `orig` whenever
+        // `blur ≥ 0`).
+        val mf = SkBlurMaskFilter.Make(SkBlurStyle.kSolid, 1f)!!
+        val w = 16; val h = 16
+        val src = discMask(w, h, side = 4)
+        val out = mf.filterMask(src, w, h)
+        for (i in src.indices) {
+            val o = src[i].toInt() and 0xFF
+            val r = out[i].toInt() and 0xFF
+            assertTrue(r >= o) { "pixel $i : out $r < orig $o (kSolid violated)" }
+        }
+    }
+
+    @Test
+    fun `kInner is at most as opaque as the original mask`() {
+        // Property test : for every pixel, kInner output ≤ original
+        // (the formula `out = blur·orig/255` is bounded above by
+        // `orig` when `blur ≤ 255`).
+        val mf = SkBlurMaskFilter.Make(SkBlurStyle.kInner, 1f)!!
+        val w = 16; val h = 16
+        val src = discMask(w, h, side = 4)
+        val out = mf.filterMask(src, w, h)
+        for (i in src.indices) {
+            val o = src[i].toInt() and 0xFF
+            val r = out[i].toInt() and 0xFF
+            assertTrue(r <= o) { "pixel $i : out $r > orig $o (kInner violated)" }
+        }
+    }
 }
