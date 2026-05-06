@@ -416,13 +416,24 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // an initial-inside seed for inverse rules; see [scanFillPath]).
         if (path.isEmpty() && !path.fillType.isInverse()) return
 
+        // Phase 7p — apply [SkPaint.pathEffect] before the stroker
+        // (canonical Skia order : path → pathEffect → stroker → maskFilter
+        // → colorFilter → blend). Dash effects decompose the path into a
+        // stipple ; the stroker thickens each segment. When the effect
+        // returns an empty path (degenerate intervals etc.) we drop the
+        // draw.
+        val effectivePath = paint.pathEffect?.filterPath(path, ctm) ?: path
+        if (effectivePath !== path && effectivePath.isEmpty() && !effectivePath.fillType.isInverse()) return
+
         // Phase 7c — when a mask filter (e.g. Gaussian blur) is set,
         // route through the offscreen-mask pipeline instead of the
-        // direct rasteriser. Shader paths through the mask filter are
-        // out of scope for this slice (use the solid-paint route).
+        // direct rasteriser. The pathEffect-transformed path is what
+        // gets rasterised into the mask. Shader paths through the
+        // mask filter are out of scope for this slice (use the solid-
+        // paint route).
         val maskFilter = paint.maskFilter
         if (maskFilter != null && paint.shader == null) {
-            drawPathWithMaskFilter(path, ctm, clip, paint, maskFilter)
+            drawPathWithMaskFilter(effectivePath, ctm, clip, paint, maskFilter)
             return
         }
 
@@ -458,15 +469,15 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
         when (paint.style) {
             SkPaint.Style.kFill_Style ->
-                fillPath(path, ctm, clip, color4f, baseA, supers, shader, mode)
+                fillPath(effectivePath, ctm, clip, color4f, baseA, supers, shader, mode)
             SkPaint.Style.kStroke_Style -> {
-                val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
+                val outline = SkStroker.fromPaint(paint, resScale).stroke(effectivePath)
                 if (outline.isEmpty()) return
                 fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode)
             }
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillPath(path, ctm, clip, color4f, baseA, supers, shader, mode)
-                val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
+                fillPath(effectivePath, ctm, clip, color4f, baseA, supers, shader, mode)
+                val outline = SkStroker.fromPaint(paint, resScale).stroke(effectivePath)
                 if (outline.isEmpty()) return
                 fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode)
             }
