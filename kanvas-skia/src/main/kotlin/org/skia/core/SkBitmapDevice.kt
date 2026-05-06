@@ -179,9 +179,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             return
         }
 
-        // Solid-colour path (Phase 1). Phase 7a — apply colour filter
-        // after the colour-space xform, before the per-pixel blend.
-        val color = applyColorFilter(paint.colorFilter, transformPaintColor(paint.color))
+        // Solid-colour path (Phase 1). Phase 7e — apply colour filter
+        // BEFORE the colour-space xform, so the filter math runs in
+        // sRGB (matching Skia upstream's working space for filters).
+        // Pre-7e ordering applied filter in the device's working space
+        // (Rec.2020 under the GM harness), which silently re-tuned the
+        // matrix coefficients (Rec.709 luma weights) to a different
+        // gamut. Closing this gap was the docstring TODO of Phase 7a.
+        val color = transformPaintColor(applyColorFilter(paint.colorFilter, paint.color))
         if (SkColorGetA(color) == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         for (y in t until b) {
             for (x in l until r) blend(x, y, color, mode)
@@ -300,12 +305,17 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val maxY = image.height - 1
 
         // [SkImage] currently has no `colorSpace` property, so by convention
-        // image pixels are sRGB-encoded (same as SkColor). The device's
-        // [xformSteps] (sRGB → bitmap.colorSpace) is reused here: we
-        // pre-convert the entire image into device-space pixels once, then
-        // sample from that buffer in the inner loop. Cheap because images
-        // tend to have far fewer pixels than the dst rect.
-        val devPixels = imagePixelsInDeviceColorSpace(image)
+        // image pixels are sRGB-encoded (same as SkColor). Phase 7e — when
+        // [paint.colorFilter] is set we keep samples in sRGB throughout
+        // the alpha-modulate / filter pipeline and xform per-pixel to the
+        // device's working space *after* the filter, so the filter math
+        // runs in sRGB (the working space Skia tunes its matrix / luma
+        // coefficients for). When no filter is set, we keep the fast
+        // path : pre-xform the entire image once and sample without
+        // further xform inside the loop.
+        val needsXform = !xformSteps.flags.isIdentity
+        val deferXform = colorFilter != null && needsXform
+        val devPixels = if (deferXform) image.pixels else imagePixelsInDeviceColorSpace(image)
 
         // For modes whose formula reduces to a non-`dst` value at sa=0
         // (e.g. kClear, kSrc, kSrcIn, kSrcOut, kDstIn, kDstATop, kModulate),
@@ -325,6 +335,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val ix = floor(srcXc).coerceIn(0, maxX)
                         var sample = applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
                         if (colorFilter != null) sample = colorFilter.filterColor(sample)
+                        if (deferXform) sample = transformPaintColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
                         blend(px, py, sample, mode)
                     }
@@ -347,6 +358,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val c11 = devPixels[iy1i * image.width + ix1i]
                         var sample = applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
                         if (colorFilter != null) sample = colorFilter.filterColor(sample)
+                        if (deferXform) sample = transformPaintColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
                         blend(px, py, sample, mode)
                     }
@@ -452,11 +464,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         } else {
             // Slice 2.2: float-precision colour-space xform — `setAlphaf`
             // sub-byte precision survives the sRGB→working-space step.
-            // Phase 7a: apply [SkPaint.colorFilter] right after the
-            // colour-space xform, before alpha quantisation. Skia's
-            // canonical pipeline order : `paint.color → xform →
-            // colorFilter → blend`.
-            color4f = applyColorFilter(paint.colorFilter, transformPaintColor(paint.color4f))
+            // Phase 7e: apply [SkPaint.colorFilter] BEFORE the
+            // colour-space xform so filter math runs in sRGB (the
+            // working space Skia tunes its matrix / luma coefficients
+            // for). Pipeline order : `paint.color → colorFilter (sRGB)
+            // → xform → blend`.
+            color4f = transformPaintColor(applyColorFilter(paint.colorFilter, paint.color4f))
             baseA = (color4f.fA * 255f + 0.5f).toInt().coerceIn(0, 255)
             // Modes that produce a non-trivial output for transparent src
             // (e.g. kClear, kDstIn) must still walk covered pixels even when
@@ -513,8 +526,9 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     ) {
         if (path.fillType.isInverse()) return  // out of scope for this slice
         val mode = paint.blendMode
-        val effectiveColor = applyColorFilter(paint.colorFilter,
-            transformPaintColor(paint.color))
+        // Phase 7e — colour filter in sRGB, then xform to working space.
+        val effectiveColor = transformPaintColor(
+            applyColorFilter(paint.colorFilter, paint.color))
         val paintA = SkColorGetA(effectiveColor)
         if (paintA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
 
@@ -623,10 +637,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * the float overloads so `setAlphaf(x)` precision survives the
      * colour-space xform.
      *
-     * Phase 7a — when [SkPaint.colorFilter] is non-null and the paint has
-     * no shader, the filter is applied to the (xformed) `color4f` and the
-     * filter slot is cleared on the returned copy. Downstream code reads
-     * a filter-baked colour and never re-applies the filter.
+     * Phase 7e — when [SkPaint.colorFilter] is non-null and the paint
+     * has no shader, the filter is applied **first** (in sRGB on the
+     * un-xformed `color4f`) and the result is then xformed to the
+     * device's working space. Pre-7e applied the filter post-xform,
+     * which silently re-tuned matrix coefficients (Rec.709 luma
+     * weights designed for sRGB) to the destination gamut. The filter
+     * slot is cleared on the returned copy so downstream code reads a
+     * filter-baked colour and never re-applies the filter.
      */
     private fun inDeviceColorSpace(paint: SkPaint): SkPaint {
         val needsXform = !xformSteps.flags.isIdentity
@@ -635,11 +653,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         if (!needsXform && !solidWithFilter) return paint
         return paint.copy().also { p ->
             var c = p.color4f
-            if (needsXform) c = transformPaintColor(c)
             if (solidWithFilter) {
                 c = cf!!.filterColor4f(c)
-                p.colorFilter = null  // baked into c
+                p.colorFilter = null  // baked into c (sRGB at this point)
             }
+            if (needsXform) c = transformPaintColor(c)
             p.setColor4f(c)
         }
     }
