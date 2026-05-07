@@ -230,6 +230,65 @@ public class SkAAClip private constructor(
     /** Total `(width, alpha)` run count across every band. Useful for tests. */
     internal fun computeRunCount(): Int = bands.sumOf { it.widths.size }
 
+    // ─── Coverage query (Phase I3.3) ───────────────────────────────
+
+    /**
+     * Coverage byte at device pixel `(x, y)`, in `[0, 255]`. `0`
+     * means the pixel is fully outside the clip ; `255` means fully
+     * inside ; intermediate values represent fractional AA coverage.
+     *
+     * Out-of-bounds pixels return `0` (consistent with [SkRegion]'s
+     * half-open `contains` semantics).
+     *
+     * Implementation : binary search on band Y range (bands sorted
+     * ascending), then linear scan of the active band's run widths
+     * to find the X position. Linear scan is `O(runs)` worst-case
+     * but typical clip rows have ≤ 5 runs, so the constant is small.
+     * For tight inner loops over a horizontal scanline, callers
+     * should hoist the band lookup out of the X loop and walk runs
+     * incrementally instead.
+     */
+    public fun coverage(x: Int, y: Int): Int {
+        if (bands.isEmpty()) return 0
+        if (y < fBounds.top || y >= fBounds.bottom) return 0
+        if (x < fBounds.left || x >= fBounds.right) return 0
+        val band = findBandAt(y) ?: return 0
+        return readBandAlpha(band, x)
+    }
+
+    /**
+     * Find the band whose `[top, bottom)` range contains [y], or
+     * `null` if [y] falls in a Y-gap (uncovered between bands). Uses
+     * binary search since bands are sorted by `top` ascending.
+     */
+    private fun findBandAt(y: Int): Band? {
+        var lo = 0
+        var hi = bands.size - 1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            val b = bands[mid]
+            if (y < b.top) hi = mid - 1
+            else if (y >= b.bottom) lo = mid + 1
+            else return b
+        }
+        return null
+    }
+
+    /**
+     * Sample the band's alpha at device X. Walks the band's runs
+     * left-to-right starting at `fBounds.left` and accumulates run
+     * widths until the cursor passes [x].
+     */
+    private fun readBandAlpha(band: Band, x: Int): Int {
+        var cursor = fBounds.left
+        for (i in band.widths.indices) {
+            val nextCursor = cursor + band.widths[i]
+            if (x < nextCursor) return band.alphas[i].toInt() and 0xFF
+            cursor = nextCursor
+        }
+        return 0
+    }
+
     // ─── Set ops (Phase I3.2.c) ────────────────────────────────────
 
     /**
