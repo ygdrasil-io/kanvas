@@ -239,6 +239,8 @@ internal fun approximately_one_or_less_double(x: Double): Boolean = x < 1 + FLT_
 internal fun approximately_positive(x: Double): Boolean = x > -FLT_EPSILON
 internal fun approximately_positive_squared(x: Double): Boolean = x > -(FLT_EPSILON_SQUARED)
 internal fun approximately_positive_double(x: Double): Boolean = x > -FLT_EPSILON_DOUBLE
+internal fun approximately_zero_or_more(x: Double): Boolean = x > -FLT_EPSILON
+internal fun approximately_zero_or_more_double(x: Double): Boolean = x > -FLT_EPSILON_DOUBLE
 
 internal fun approximately_between_orderable(a: Double, b: Double, c: Double): Boolean =
     if (a <= c) approximately_negative_orderable(a - b) && approximately_negative_orderable(b - c)

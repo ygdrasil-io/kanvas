@@ -1,13 +1,14 @@
 /*
  * Copyright 2026 The kanvas-skia authors.
  *
- * Mirrors Skia's `src/pathops/SkPathOpsRect.h` — `SkDRect`, the
- * double-precision rectangle used by the pathops machinery to track
- * curve / segment bounds.
+ * Mirrors Skia's `src/pathops/SkPathOpsRect.{h,cpp}` — `SkDRect`,
+ * the double-precision rectangle used by the pathops machinery to
+ * track curve / segment bounds.
  *
- * Phase D1.1.a — port of the data type + add / contains / intersects.
- * The `setBounds(SkDQuad/Cubic/Conic, ...)` overloads need the
- * curve types from D1.1.b and are deferred to that slice.
+ * Phases :
+ *  - D1.1.a — data type + add / contains / intersects.
+ *  - D1.1.b — `setBounds(SkDQuad/Cubic/Conic, sub, startT, endT)`
+ *    overloads (curve-tight bounds via per-axis extrema).
  */
 package org.skia.pathops.internal
 
@@ -72,4 +73,82 @@ internal data class SkDRect(
         right = Double.NaN
         bottom = Double.NaN
     }
+
+    // ─── Curve-tight setBounds (Phase D1.1.b) ────────────────────────
+    //
+    // Each overload sets the rect to the tight bounds of `sub` (a
+    // sub-curve of `curve` between parameters `startT` and `endT`).
+    // Algorithm : seed with the endpoints, then add interior extrema
+    // (per-axis derivative roots in [0, 1]). Mirrors
+    // `SkDRect::setBounds(SkDQuad/Cubic/Conic, sub, startT, endT)` in
+    // `src/pathops/SkPathOpsRect.cpp`.
+
+    /** Tight bounds of a sub-quadratic. */
+    fun setBounds(curve: SkDQuad, sub: SkDQuad, startT: Double, endT: Double) {
+        set(sub[0])
+        add(sub[2])
+        val tValues = DoubleArray(2)
+        var roots = 0
+        if (!sub.monotonicInX()) {
+            roots = SkDQuad.FindExtrema(doubleArrayOf(sub[0].x, sub[1].x, sub[2].x), tValues)
+        }
+        if (!sub.monotonicInY()) {
+            val rest = DoubleArray(1)
+            val n = SkDQuad.FindExtrema(doubleArrayOf(sub[0].y, sub[1].y, sub[2].y), rest)
+            if (n > 0) tValues[roots++] = rest[0]
+        }
+        for (index in 0 until roots) {
+            val t = startT + (endT - startT) * tValues[index]
+            add(curve.ptAtT(t))
+        }
+    }
+
+    /** Tight bounds of a sub-conic. */
+    fun setBounds(curve: SkDConic, sub: SkDConic, startT: Double, endT: Double) {
+        set(sub[0])
+        add(sub[2])
+        val tValues = DoubleArray(2)
+        var roots = 0
+        if (!sub.monotonicInX()) {
+            roots = SkDConic.FindExtrema(doubleArrayOf(sub[0].x, sub[1].x, sub[2].x), sub.weight, tValues)
+        }
+        if (!sub.monotonicInY()) {
+            val rest = DoubleArray(1)
+            val n = SkDConic.FindExtrema(doubleArrayOf(sub[0].y, sub[1].y, sub[2].y), sub.weight, rest)
+            if (n > 0) tValues[roots++] = rest[0]
+        }
+        for (index in 0 until roots) {
+            val t = startT + (endT - startT) * tValues[index]
+            add(curve.ptAtT(t))
+        }
+    }
+
+    /** Tight bounds of a sub-cubic. */
+    fun setBounds(curve: SkDCubic, sub: SkDCubic, startT: Double, endT: Double) {
+        set(sub[0])
+        add(sub[3])
+        val tValues = DoubleArray(4)
+        var roots = 0
+        if (!sub.monotonicInX()) {
+            roots = SkDCubic.FindExtrema(doubleArrayOf(sub[0].x, sub[1].x, sub[2].x, sub[3].x), tValues)
+        }
+        if (!sub.monotonicInY()) {
+            val rest = DoubleArray(2)
+            val n = SkDCubic.FindExtrema(doubleArrayOf(sub[0].y, sub[1].y, sub[2].y, sub[3].y), rest)
+            for (i in 0 until n) tValues[roots++] = rest[i]
+        }
+        for (index in 0 until roots) {
+            val t = startT + (endT - startT) * tValues[index]
+            add(curve.ptAtT(t))
+        }
+    }
+
+    /** Convenience overload : full-range tight bounds (`startT=0, endT=1`). */
+    fun setBounds(curve: SkDQuad) = setBounds(curve, curve, 0.0, 1.0)
+
+    /** Convenience overload : full-range tight bounds. */
+    fun setBounds(curve: SkDConic) = setBounds(curve, curve, 0.0, 1.0)
+
+    /** Convenience overload : full-range tight bounds. */
+    fun setBounds(curve: SkDCubic) = setBounds(curve, curve, 0.0, 1.0)
 }
