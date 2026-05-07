@@ -62,6 +62,26 @@ internal data class SkDConic(
     /** Mirrors `SkDConic::flip` — return a reversed copy with the same weight. */
     fun flip(): SkDConic = SkDConic(pts.flip(), weight)
 
+    // ─── Cross-curve hullIntersects (Phase D1.1.e.1) ────────────────
+    //
+    // Conic-vs-{quad,conic} delegates to the inner SkDQuad's hull
+    // (the conic's hull is identical to its underlying quad's hull —
+    // the weight doesn't change which side of a line a control point
+    // lies on, only how the curve interpolates between them).
+    // Conic-vs-cubic delegates to the cubic's polymorphic helper.
+
+    /** Mirrors `SkDConic::hullIntersects(const SkDQuad&, bool*)`. */
+    fun hullIntersects(quad: SkDQuad, isLinearOut: BooleanArray): Boolean =
+        pts.hullIntersects(quad, isLinearOut)
+
+    /** Mirrors `SkDConic::hullIntersects(const SkDConic&, bool*)`. */
+    fun hullIntersects(conic: SkDConic, isLinearOut: BooleanArray): Boolean =
+        pts.hullIntersects(conic.pts, isLinearOut)
+
+    /** Mirrors `SkDConic::hullIntersects(const SkDCubic&, bool*)`. */
+    fun hullIntersects(cubic: SkDCubic, isLinearOut: BooleanArray): Boolean =
+        cubic.hullIntersects(this, isLinearOut)
+
     // ─── Evaluation ──────────────────────────────────────────────────
 
     /**
