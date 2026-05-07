@@ -342,4 +342,497 @@ internal class SkTSect(curve: SkTCurve) {
         }
         return true
     }
+
+    // ─── Coincidence machinery (Phase D1.1.e.2.c.2) ────────────────
+
+    /**
+     * Direction-match check : do the tangents at [t] (this curve) and
+     * [t2] ([sect2]'s curve) point in the same general direction
+     * (`dot >= 0`) ? Mirrors `SkTSect::matchedDirection`.
+     */
+    fun matchedDirection(t: Double, sect2: SkTSect, t2: Double): Boolean {
+        val dxdy = fCurve.dxdyAtT(t)
+        val dxdy2 = sect2.fCurve.dxdyAtT(t2)
+        return dxdy.dot(dxdy2) >= 0
+    }
+
+    /**
+     * Cached version of [matchedDirection] : on first call, computes
+     * the result into [oppMatched] and sets [calcMatched] true ; on
+     * subsequent calls, asserts the cached value matches.
+     * Mirrors `SkTSect::matchedDirCheck`.
+     */
+    fun matchedDirCheck(
+        t: Double, sect2: SkTSect, t2: Double,
+        calcMatched: BooleanArray, oppMatched: BooleanArray,
+    ) {
+        if (calcMatched[0]) {
+            require(oppMatched[0] == matchedDirection(t, sect2, t2))
+        } else {
+            oppMatched[0] = matchedDirection(t, sect2, t2)
+            calcMatched[0] = true
+        }
+    }
+
+    /**
+     * Compute perpendicular-coincidence state at every span endpoint
+     * in `[first, last]`. Mirrors `SkTSect::computePerpendiculars`.
+     */
+    fun computePerpendiculars(sect2: SkTSect, first: SkTSpan?, last: SkTSpan?) {
+        if (last == null) return
+        val opp = sect2.fCurve
+        var work: SkTSpan? = first
+        var prior: SkTSpan? = null
+        while (true) {
+            val w = work ?: break
+            if (!w.fHasPerp && !w.fCollapsed) {
+                if (prior != null) w.fCoinStart.copyFrom(prior.fCoinEnd)
+                else w.fCoinStart.setPerp(fCurve, w.fStartT, w.pointFirst(), opp)
+                if (w.fCoinStart.isMatch()) {
+                    val perpT = w.fCoinStart.perpT()
+                    if (sect2.coincidentHasT(perpT)) w.fCoinStart.init()
+                    else sect2.addForPerp(w, perpT)
+                }
+                w.fCoinEnd.setPerp(fCurve, w.fEndT, w.pointLast(), opp)
+                if (w.fCoinEnd.isMatch()) {
+                    val perpT = w.fCoinEnd.perpT()
+                    if (sect2.coincidentHasT(perpT)) w.fCoinEnd.init()
+                    else sect2.addForPerp(w, perpT)
+                }
+                w.fHasPerp = true
+            }
+            if (w === last) break
+            prior = w
+            work = w.fNext
+            require(work != null)
+        }
+    }
+
+    /**
+     * Top-level coincidence-detection loop : walk consecutive runs of
+     * ≥ COINCIDENT_SPAN_COUNT spans, compute perpendiculars, and
+     * extract any coincident sub-runs. Mirrors `SkTSect::coincidentCheck`.
+     */
+    fun coincidentCheck(sect2: SkTSect): Boolean {
+        var first: SkTSpan? = fHead ?: return false
+        var last: SkTSpan? = null
+        var next: SkTSpan?
+        do {
+            val firstNN = first ?: break
+            val lastPtr = arrayOfNulls<SkTSpan>(1)
+            val consecutive = countConsecutiveSpans(firstNN, lastPtr)
+            last = lastPtr[0]
+            next = last?.fNext
+            if (consecutive < COINCIDENT_SPAN_COUNT) {
+                first = next
+                continue
+            }
+            computePerpendiculars(sect2, firstNN, last)
+            // Extract coincident sub-runs.
+            var coinStart: SkTSpan? = firstNN
+            do {
+                val resultArr = arrayOfNulls<SkTSpan>(1)
+                val success = extractCoincident(sect2, coinStart!!, last!!, resultArr)
+                if (!success) return false
+                coinStart = resultArr[0]
+            } while (coinStart != null && !(last?.fDeleted ?: true))
+            if (fHead == null || sect2.fHead == null) break
+            if (next == null || next.fDeleted) break
+            first = next
+        } while (first != null)
+        return true
+    }
+
+    /**
+     * Force coincidence over the entire t-range when the standard
+     * algorithm fails to converge. Mirrors `SkTSect::coincidentForce`.
+     */
+    fun coincidentForce(sect2: SkTSect, start1s: Double, start1e: Double) {
+        val first = fHead ?: return
+        val last = tail() ?: return
+        val oppFirst = sect2.fHead ?: return
+        val oppLast = sect2.tail() ?: return
+        var deleteEmpty = updateBounded(first, last, oppFirst)
+        deleteEmpty = sect2.updateBounded(oppFirst, oppLast, first) || deleteEmpty
+        removeSpanRange(first, last)
+        sect2.removeSpanRange(oppFirst, oppLast)
+        first.fStartT = start1s
+        first.fEndT = start1e
+        first.resetBounds(fCurve)
+        first.fCoinStart.setPerp(fCurve, start1s, fCurve[0], sect2.fCurve)
+        first.fCoinEnd.setPerp(fCurve, start1e, pointLast(), sect2.fCurve)
+        val oppMatched = first.fCoinStart.perpT() < first.fCoinEnd.perpT()
+        var oppStartT = if (first.fCoinStart.perpT() == -1.0) 0.0
+            else maxOf(0.0, first.fCoinStart.perpT())
+        var oppEndT = if (first.fCoinEnd.perpT() == -1.0) 1.0
+            else minOf(1.0, first.fCoinEnd.perpT())
+        if (!oppMatched) { val t = oppStartT; oppStartT = oppEndT; oppEndT = t }
+        oppFirst.fStartT = oppStartT
+        oppFirst.fEndT = oppEndT
+        oppFirst.resetBounds(sect2.fCurve)
+        removeCoincident(first, false)
+        sect2.removeCoincident(oppFirst, true)
+        if (deleteEmpty) {
+            deleteEmptySpans()
+            sect2.deleteEmptySpans()
+        }
+    }
+
+    /**
+     * Walk [first] through [lastPtr] looking for the first / last
+     * span in a fully-coincident run (both endpoints match the
+     * opposing curve). Returns the first span of the run, or null
+     * if none found. Mirrors `SkTSect::findCoincidentRun`.
+     */
+    fun findCoincidentRun(firstIn: SkTSpan, lastPtr: Array<SkTSpan?>): SkTSpan? {
+        var work: SkTSpan? = firstIn
+        var lastCandidate: SkTSpan? = null
+        var first: SkTSpan? = null
+        while (true) {
+            val w = work ?: return null
+            if (w.fCoinStart.isMatch()) {
+                require(w.hasOppT(w.fCoinStart.perpT()))
+                if (!w.fCoinEnd.isMatch()) break
+                lastCandidate = w
+                if (first == null) first = w
+            } else if (first != null && w.fCollapsed) {
+                lastPtr[0] = lastCandidate
+                return first
+            } else {
+                lastCandidate = null
+                require(first == null)
+            }
+            if (w === lastPtr[0]) return first
+            work = w.fNext
+            if (work == null) return null
+        }
+        if (lastCandidate != null) lastPtr[0] = lastCandidate
+        return first
+    }
+
+    /**
+     * Bisect to find the exact t-value where coincidence transitions
+     * to non-coincidence. Mirrors `SkTSect::binarySearchCoin`.
+     *
+     * Returns true and writes [resultT] / [oppT] / [oppFirst] on
+     * success ; false otherwise. Used by [extractCoincident] to
+     * extend a coincident run into the previous span.
+     */
+    fun binarySearchCoin(
+        sect2: SkTSect, tStart: Double, tStepIn: Double,
+        resultT: DoubleArray, oppT: DoubleArray, oppFirst: Array<SkTSpan?>,
+    ): Boolean {
+        var tStep = tStepIn
+        val work = SkTSpan(fCurve)
+        var result = tStart
+        work.fStartT = tStart; work.fEndT = tStart
+        var last = fCurve.ptAtT(tStart)
+        var oppPt = SkDPoint()
+        var flip = false
+        var contained = false
+        val down = tStep < 0
+        val opp = sect2.fCurve
+        do {
+            tStep *= 0.5
+            work.fStartT += tStep
+            if (flip) { tStep = -tStep; flip = false }
+            work.initBounds(fCurve)
+            if (work.fCollapsed) return false
+            if (last.approximatelyEqual(work.pointFirst())) break
+            last = work.pointFirst()
+            work.fCoinStart.setPerp(fCurve, work.fStartT, last, opp)
+            if (work.fCoinStart.isMatch()) {
+                val oppTTest = work.fCoinStart.perpT()
+                if (sect2.fHead?.contains(oppTTest) == true) {
+                    oppT[0] = oppTTest
+                    oppPt = work.fCoinStart.perpPt()
+                    contained = true
+                    if (if (down) result <= work.fStartT else result >= work.fStartT) {
+                        oppFirst[0] = null
+                        return false
+                    }
+                    result = work.fStartT
+                    continue
+                }
+            }
+            tStep = -tStep
+            flip = true
+        } while (true)
+        if (!contained) return false
+        if (last.approximatelyEqual(fCurve[0])) result = 0.0
+        else if (last.approximatelyEqual(pointLast())) result = 1.0
+        if (oppPt.approximatelyEqual(opp[0])) oppT[0] = 0.0
+        else if (oppPt.approximatelyEqual(sect2.pointLast())) oppT[0] = 1.0
+        resultT[0] = result
+        return true
+    }
+
+    /**
+     * Try to extract a coincident sub-run from `[first, last]` of this
+     * sect that matches a sub-run on [sect2]. Writes the next start
+     * span into [result] (length-1 out), or null if no further run.
+     * Mirrors `SkTSect::extractCoincident`.
+     */
+    fun extractCoincident(
+        sect2: SkTSect, firstIn: SkTSpan, lastIn: SkTSpan,
+        result: Array<SkTSpan?>,
+    ): Boolean {
+        val lastPtr = arrayOfNulls<SkTSpan>(1)
+        lastPtr[0] = lastIn
+        var first = findCoincidentRun(firstIn, lastPtr)
+        var last = lastPtr[0]
+        if (first == null || last == null) { result[0] = null; return true }
+        val startT = first.fStartT
+        val oppStartTArr = doubleArrayOf(0.0)
+        val oppEndTArr = doubleArrayOf(0.0)
+        val prev = first.fPrev
+        require(first.fCoinStart.isMatch())
+        var oppFirst: SkTSpan? = first.findOppT(first.fCoinStart.perpT())
+        val oppMatched = first.fCoinStart.perpT() < last.fCoinEnd.perpT()
+        val coinStartArr = doubleArrayOf(0.0)
+        var cutFirst: SkTSpan? = null
+        val oppFirstArr = arrayOf(oppFirst)
+        if (prev != null && prev.fEndT == startT
+            && binarySearchCoin(sect2, startT, prev.fStartT - startT, coinStartArr, oppStartTArr, oppFirstArr)
+            && prev.fStartT < coinStartArr[0] && coinStartArr[0] < startT
+            && (run { cutFirst = prev.oppT(oppStartTArr[0]); cutFirst != null })
+        ) {
+            oppFirst = cutFirst
+            first = addSplitAt(prev, coinStartArr[0])
+            first.markCoincident()
+            prev.fCoinEnd.markCoincident()
+            val of = oppFirst!!
+            if (of.fStartT < oppStartTArr[0] && oppStartTArr[0] < of.fEndT) {
+                val oppHalf = sect2.addSplitAt(of, oppStartTArr[0])
+                if (oppMatched) {
+                    of.fCoinEnd.markCoincident()
+                    oppHalf.markCoincident()
+                    oppFirst = oppHalf
+                } else {
+                    of.markCoincident()
+                    oppHalf.fCoinStart.markCoincident()
+                }
+            }
+        } else {
+            if (oppFirst == null) return false
+            oppStartTArr[0] = if (oppMatched) oppFirst.fStartT else oppFirst.fEndT
+        }
+        require(last.fCoinEnd.isMatch())
+        var oppLast: SkTSpan? = last.findOppT(last.fCoinEnd.perpT())
+        oppEndTArr[0] = if (oppMatched) oppLast!!.fEndT else oppLast!!.fStartT
+        if (!oppMatched) {
+            val tmp = oppFirst; oppFirst = oppLast; oppLast = tmp
+            val t = oppStartTArr[0]; oppStartTArr[0] = oppEndTArr[0]; oppEndTArr[0] = t
+        }
+        if (oppFirst == null) { result[0] = null; return true }
+        if (oppLast == null) { result[0] = null; return true }
+        var deleteEmpty = updateBounded(first, last, oppFirst)
+        deleteEmpty = sect2.updateBounded(oppFirst, oppLast, first) || deleteEmpty
+        removeSpanRange(first, last)
+        sect2.removeSpanRange(oppFirst, oppLast)
+        first.fEndT = last.fEndT
+        first.resetBounds(fCurve)
+        first.fCoinStart.setPerp(fCurve, first.fStartT, first.pointFirst(), sect2.fCurve)
+        first.fCoinEnd.setPerp(fCurve, first.fEndT, first.pointLast(), sect2.fCurve)
+        val newOppStartT = first.fCoinStart.perpT()
+        val newOppEndT = first.fCoinEnd.perpT()
+        if (between(0.0, newOppStartT, 1.0) && between(0.0, newOppEndT, 1.0)) {
+            var os = newOppStartT; var oe = newOppEndT
+            if (!oppMatched) { val t = os; os = oe; oe = t }
+            oppFirst.fStartT = os
+            oppFirst.fEndT = oe
+            oppFirst.resetBounds(sect2.fCurve)
+        }
+        last = first.fNext
+        if (!removeCoincident(first, false)) return false
+        if (!sect2.removeCoincident(oppFirst, true)) return false
+        if (deleteEmpty) {
+            if (!deleteEmptySpans() || !sect2.deleteEmptySpans()) {
+                result[0] = null
+                return false
+            }
+        }
+        result[0] = if (last != null && !last.fDeleted && fHead != null && sect2.fHead != null) last
+            else null
+        return true
+    }
+
+    /**
+     * Merge adjacent coincident-list entries that share a boundary in
+     * t-space, when the midpoint between them is also coincident.
+     * Mirrors `SkTSect::mergeCoincidence`.
+     */
+    fun mergeCoincidence(sect2: SkTSect) {
+        var smallLimit = 0.0
+        outer@ while (true) {
+            // find the smallest unprocessed span
+            var smaller: SkTSpan? = null
+            var test = fCoincident
+            while (true) {
+                if (test == null) return
+                if (test.fStartT < smallLimit) { test = test.fNext; continue }
+                if (smaller != null && smaller.fEndT < test.fStartT) { test = test.fNext; continue }
+                smaller = test
+                test = test.fNext
+                if (test == null) break
+            }
+            if (smaller == null) return
+            smallLimit = smaller.fEndT
+            // find next larger span
+            var prior: SkTSpan? = null
+            var larger: SkTSpan? = null
+            var largerPrior: SkTSpan? = null
+            test = fCoincident
+            while (test != null) {
+                if (test.fStartT < smaller.fEndT) {
+                    prior = test; test = test.fNext; continue
+                }
+                if (larger != null && larger.fStartT < test.fStartT) {
+                    prior = test; test = test.fNext; continue
+                }
+                largerPrior = prior
+                larger = test
+                prior = test
+                test = test.fNext
+            }
+            if (larger == null) continue@outer
+            // check midpoint
+            val midT = (smaller.fEndT + larger.fStartT) / 2
+            val midPt = fCurve.ptAtT(midT)
+            val coin = SkTCoincident()
+            coin.setPerp(fCurve, midT, midPt, sect2.fCurve)
+            if (coin.isMatch()) {
+                smaller.fEndT = larger.fEndT
+                smaller.fCoinEnd.copyFrom(larger.fCoinEnd)
+                if (largerPrior != null) {
+                    largerPrior.fNext = larger.fNext
+                } else {
+                    fCoincident = larger.fNext
+                }
+            }
+        }
+    }
+
+    /**
+     * Move collapsed spans from the deleted list back to the active
+     * list, sorted by `fStartT`. Mirrors `SkTSect::recoverCollapsed`.
+     */
+    fun recoverCollapsed() {
+        var deleted = fDeleted
+        while (deleted != null) {
+            val delNext = deleted.fNext
+            if (deleted.fCollapsed) {
+                // Insert into active list at sorted position.
+                // Walk fHead forward until the next entry's endT > deleted.startT.
+                if (fHead == null || (fHead?.fStartT ?: 0.0) > deleted.fStartT) {
+                    deleted.fNext = fHead
+                    fHead = deleted
+                } else {
+                    var cur = fHead!!
+                    while (cur.fNext != null && cur.fNext!!.fEndT <= deleted.fStartT) cur = cur.fNext!!
+                    deleted.fNext = cur.fNext
+                    cur.fNext = deleted
+                }
+            }
+            deleted = delNext
+        }
+    }
+
+    /**
+     * From [span]'s bounded list, remove every entry except [keep],
+     * and propagate the removal to the opposing sect.
+     * Mirrors `SkTSect::removeAllBut`.
+     */
+    fun removeAllBut(keep: SkTSpan, span: SkTSpan, opp: SkTSect) {
+        var testBounded = span.fBounded
+        while (testBounded != null) {
+            val bounded = testBounded.bounded
+            val next = testBounded.next
+            if (bounded !== keep && !bounded.fDeleted) {
+                span.removeBounded(bounded)
+                if (bounded.removeBounded(span)) opp.removeSpan(bounded)
+            }
+            testBounded = next
+        }
+    }
+
+    /**
+     * Remove every span whose `fCoinStart`/`fCoinEnd` perp vectors
+     * point in the same direction (an indication that the span is
+     * outside the actual intersection region).
+     * Mirrors `SkTSect::removeByPerpendicular`.
+     */
+    fun removeByPerpendicular(opp: SkTSect): Boolean {
+        var test: SkTSpan? = fHead
+        while (test != null) {
+            val next = test.fNext
+            if (test.fCoinStart.perpT() < 0 || test.fCoinEnd.perpT() < 0) {
+                test = next; continue
+            }
+            val startV = test.fCoinStart.perpPt() - test.pointFirst()
+            val endV = test.fCoinEnd.perpPt() - test.pointLast()
+            if (startV.dot(endV) <= 0) { test = next; continue }
+            if (!removeSpans(test, opp)) return false
+            test = next
+        }
+        return true
+    }
+
+    /**
+     * Move [span] from the active list to the coincident list (if
+     * `isBetween` or its `fCoinStart.perpT()` is in `[0, 1]`), or
+     * mark it gone otherwise. Mirrors `SkTSect::removeCoincident`.
+     */
+    fun removeCoincident(span: SkTSpan, isBetween: Boolean): Boolean {
+        if (!unlinkSpan(span)) return false
+        if (isBetween || between(0.0, span.fCoinStart.perpT(), 1.0)) {
+            --fActiveCount
+            span.fNext = fCoincident
+            fCoincident = span
+        } else {
+            markSpanGone(span)
+        }
+        return true
+    }
+
+    /**
+     * Remove [span] and propagate the removal to the opposing sect.
+     * Mirrors `SkTSect::removeSpans`.
+     */
+    fun removeSpans(span: SkTSpan, opp: SkTSect): Boolean {
+        var bounded = span.fBounded
+        while (bounded != null) {
+            val spanBounded = bounded.bounded
+            val next = bounded.next
+            if (span.removeBounded(spanBounded)) removeSpan(span)
+            if (spanBounded.removeBounded(span)) opp.removeSpan(spanBounded)
+            if (span.fDeleted && opp.hasBounded(span)) return false
+            bounded = next
+        }
+        return true
+    }
+
+    /**
+     * After a coincidence extraction, reset all spans in `[first, last]`
+     * to point only at [oppFirst]. Returns true if any opposing span's
+     * bounded list became empty (caller deletes empty spans).
+     * Mirrors `SkTSect::updateBounded`.
+     */
+    fun updateBounded(first: SkTSpan, last: SkTSpan, oppFirst: SkTSpan): Boolean {
+        var test: SkTSpan? = first
+        val final = last.next()
+        var deleteSpan = false
+        do {
+            deleteSpan = (test?.removeAllBounded() ?: false) || deleteSpan
+            test = test?.fNext
+        } while (test !== final && test != null)
+        first.fBounded = null
+        first.addBounded(oppFirst)
+        return deleteSpan
+    }
+
+    companion object {
+        /** Coincidence is suspected once both sects have ≥9 consecutive spans. */
+        const val COINCIDENT_SPAN_COUNT = 9
+    }
 }

@@ -34,6 +34,17 @@ internal class SkTCoincident {
     fun perpPt(): SkDPoint = fPerpPt
 
     /**
+     * Bulk copy of state from [other]. Mirrors the upstream
+     * `work->fCoinStart = prior->fCoinEnd;` value-assignment idiom
+     * used by [SkTSect.computePerpendiculars] / [SkTSect.mergeCoincidence].
+     */
+    fun copyFrom(other: SkTCoincident) {
+        fPerpPt = other.fPerpPt
+        fPerpT = other.fPerpT
+        fMatch = other.fMatch
+    }
+
+    /**
      * Drop a perpendicular at parameter [t] on curve [c1] (point [cPt])
      * and find where it crosses [c2]. Stores the closest hit's t and
      * point, plus a `fMatch` flag that's true iff [cPt] is approximately
