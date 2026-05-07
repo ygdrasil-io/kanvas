@@ -48,6 +48,18 @@ public class SkBitmap(
         if (colorType == SkColorType.kRGBA_F16Norm) FloatArray(width * height * 4) else FloatArray(0)
 
     /**
+     * Backing storage for [SkColorType.kARGB_4444] (Phase C5). One
+     * `Short` per pixel : `[R:15..12 G:11..8 B:7..4 A:3..0]`. Pixels
+     * are stored **premultiplied** — matches Skia's
+     * `kPremul_SkAlphaType` default for ARGB_4444. The 4-bit channels
+     * are stored as `(8-bit-channel + 8) >> 4` (round-to-nearest of
+     * `b/17`), so a fully-opaque white pixel encodes to
+     * `0xFFFF` and a fully-transparent pixel to `0`.
+     */
+    public val pixels4444: ShortArray =
+        if (colorType == SkColorType.kARGB_4444) ShortArray(width * height) else ShortArray(0)
+
+    /**
      * Legacy alias for [pixels8888]. Kept for source-compatibility with
      * pre-Phase-6 callers; equivalent to `pixels8888` and *only* meaningful
      * when [colorType] is [SkColorType.kRGBA_8888].
@@ -114,6 +126,10 @@ public class SkBitmap(
                     i += 4
                 }
             }
+            SkColorType.kARGB_4444 -> {
+                // Quantize to 4 bits per channel (premul) and pack.
+                pixels4444.fill(packARGB4444Premul(a, r, g, b))
+            }
             else -> error("SkBitmap.eraseColor unsupported for colorType=$colorType")
         }
     }
@@ -149,6 +165,7 @@ public class SkBitmap(
         require(x in 0 until width && y in 0 until height) { "($x, $y) outside ${width}x$height" }
         return when (colorType) {
             SkColorType.kRGBA_8888 -> pixels8888[y * width + x]
+            SkColorType.kARGB_4444 -> unpackARGB4444Premul(pixels4444[y * width + x])
             SkColorType.kRGBA_F16Norm -> {
                 // Convert premul float → non-premul 8-bit ARGB SkColor. Use
                 // **truncation** (`floor(f * 256)`) instead of round-to-nearest
@@ -179,6 +196,13 @@ public class SkBitmap(
         if (x !in 0 until width || y !in 0 until height) return
         when (colorType) {
             SkColorType.kRGBA_8888 -> pixels8888[y * width + x] = c
+            SkColorType.kARGB_4444 -> {
+                val a = SkColorGetA(c) / 255f
+                val r = SkColorGetR(c) / 255f
+                val g = SkColorGetG(c) / 255f
+                val b = SkColorGetB(c) / 255f
+                pixels4444[y * width + x] = packARGB4444Premul(a, r, g, b)
+            }
             SkColorType.kRGBA_F16Norm -> {
                 val i = (y * width + x) * 4
                 val a = SkColorGetA(c) / 255f
@@ -214,6 +238,16 @@ public class SkBitmap(
                 out[2] = SkColorGetB(c) / 255f * a
                 out[3] = a
             }
+            SkColorType.kARGB_4444 -> {
+                // Unpack 4-bit premul channels into [0, 1] floats. The
+                // 4-bit value `v` round-trips to 8-bit via `v * 17` then
+                // /255, which simplifies to v/15.
+                val packed = pixels4444[y * width + x].toInt() and 0xFFFF
+                out[0] = ((packed shr 12) and 0xF) / 15f
+                out[1] = ((packed shr 8) and 0xF) / 15f
+                out[2] = ((packed shr 4) and 0xF) / 15f
+                out[3] = (packed and 0xF) / 15f
+            }
             else -> error("getPixelF16 unsupported for colorType=$colorType")
         }
     }
@@ -245,6 +279,14 @@ public class SkBitmap(
                 } else { ri = 0; gi = 0; bi = 0 }
                 pixels8888[y * width + x] = SkColorSetARGB(ai, ri, gi, bi)
             }
+            SkColorType.kARGB_4444 -> {
+                // Inputs are premul floats — quantise directly to 4 bits.
+                val r4 = (r * 15f + 0.5f).toInt().coerceIn(0, 15)
+                val g4 = (g * 15f + 0.5f).toInt().coerceIn(0, 15)
+                val b4 = (b * 15f + 0.5f).toInt().coerceIn(0, 15)
+                val a4 = (a * 15f + 0.5f).toInt().coerceIn(0, 15)
+                pixels4444[y * width + x] = ((r4 shl 12) or (g4 shl 8) or (b4 shl 4) or a4).toShort()
+            }
             else -> error("setPixelF16 unsupported for colorType=$colorType")
         }
     }
@@ -270,5 +312,58 @@ public class SkBitmap(
             SkBitmap(w, h, colorSpace)
         public fun Make(w: Int, h: Int, colorSpace: SkColorSpace, colorType: SkColorType): SkBitmap =
             SkBitmap(w, h, colorSpace, colorType)
+
+        // ─── ARGB_4444 helpers (Phase C5) ────────────────────────────
+
+        /**
+         * Pack non-premultiplied float channels `(r, g, b, a) ∈ [0, 1]`
+         * into a 16-bit `Short` with bit layout
+         * `[R:15..12 G:11..8 B:7..4 A:3..0]`. The output is
+         * **premultiplied** (matching Skia's `kPremul_SkAlphaType`
+         * default for ARGB_4444).
+         *
+         * Quantisation is round-to-nearest of `c * 15` per channel.
+         * Inputs are clamped to `[0, 1]` before quantisation.
+         */
+        internal fun packARGB4444Premul(a: Float, r: Float, g: Float, b: Float): Short {
+            val ac = a.coerceIn(0f, 1f)
+            val rPm = (r * ac).coerceIn(0f, 1f)
+            val gPm = (g * ac).coerceIn(0f, 1f)
+            val bPm = (b * ac).coerceIn(0f, 1f)
+            val a4 = (ac * 15f + 0.5f).toInt()
+            val r4 = (rPm * 15f + 0.5f).toInt()
+            val g4 = (gPm * 15f + 0.5f).toInt()
+            val b4 = (bPm * 15f + 0.5f).toInt()
+            return ((r4 shl 12) or (g4 shl 8) or (b4 shl 4) or a4).toShort()
+        }
+
+        /**
+         * Unpack a packed ARGB_4444 `Short` (premul, 4 bits per
+         * channel) to a non-premultiplied 8-bit ARGB [SkColor]. Mirrors
+         * Skia's `SkColor4444::toSkColor()` behaviour : 4-bit channels
+         * are widened to 8 bits via `v * 17` (so 15 → 255, 0 → 0), then
+         * the premul values are unpremul'd by dividing the colour
+         * channels by alpha.
+         */
+        internal fun unpackARGB4444Premul(packed: Short): SkColor {
+            val p = packed.toInt() and 0xFFFF
+            val r4 = (p shr 12) and 0xF
+            val g4 = (p shr 8) and 0xF
+            val b4 = (p shr 4) and 0xF
+            val a4 = p and 0xF
+            // Widen 4 → 8 bits via `v * 17` (= (v << 4) | v).
+            val a8 = a4 * 17
+            if (a8 == 0) return 0
+            // Unpremul colour channels : the stored 4-bit channel is
+            // premul ; we widen it to 8-bit then divide by `a8 / 255`
+            // to recover the non-premul 8-bit channel value.
+            val r8Pm = r4 * 17
+            val g8Pm = g4 * 17
+            val b8Pm = b4 * 17
+            val r8 = ((r8Pm * 255 + a8 / 2) / a8).coerceIn(0, 255)
+            val g8 = ((g8Pm * 255 + a8 / 2) / a8).coerceIn(0, 255)
+            val b8 = ((b8Pm * 255 + a8 / 2) / a8).coerceIn(0, 255)
+            return SkColorSetARGB(a8, r8, g8, b8)
+        }
     }
 }
