@@ -327,6 +327,173 @@ internal data class SkDCubic(
             + (pts[3] - pts[2]).length()) / gPrecisionUnit
 
     /**
+     * Binary-search for `t` in `[min, max]` such that the curve's
+     * [xAxis] coordinate at `t` equals [axisIntercept] (within
+     * `approximately_equal`). Returns -1 if no such t exists.
+     *
+     * The search bisects until the candidate point stops moving
+     * (`approximately_equal_half` on both axes), or until it
+     * straddles the target. Mirrors `SkDCubic::binarySearch`.
+     */
+    fun binarySearch(min: Double, max: Double, axisIntercept: Double, xAxis: SearchAxis): Double {
+        var t = (min + max) / 2
+        var step = (t - min) / 2
+        var cubicAtT = ptAtT(t)
+        var calcPos = if (xAxis == SearchAxis.kXAxis) cubicAtT.x else cubicAtT.y
+        var calcDist = calcPos - axisIntercept
+        do {
+            val priorT = maxOf(min, t - step)
+            val lessPt = ptAtT(priorT)
+            if (approximately_equal_half(lessPt.x, cubicAtT.x)
+                && approximately_equal_half(lessPt.y, cubicAtT.y)
+            ) return -1.0 // search has stalled
+            val lessPos = if (xAxis == SearchAxis.kXAxis) lessPt.x else lessPt.y
+            val lessDist = lessPos - axisIntercept
+            val lastStep = step
+            step /= 2
+            if (if (calcDist > 0) calcDist > lessDist else calcDist < lessDist) {
+                t = priorT
+            } else {
+                val nextT = t + lastStep
+                if (nextT > max) return -1.0
+                val morePt = ptAtT(nextT)
+                if (approximately_equal_half(morePt.x, cubicAtT.x)
+                    && approximately_equal_half(morePt.y, cubicAtT.y)
+                ) return -1.0
+                val morePos = if (xAxis == SearchAxis.kXAxis) morePt.x else morePt.y
+                val moreDist = morePos - axisIntercept
+                if (if (calcDist > 0) calcDist <= moreDist else calcDist >= moreDist) continue
+                t = nextT
+            }
+            cubicAtT = ptAtT(t)
+            calcPos = if (xAxis == SearchAxis.kXAxis) cubicAtT.x else cubicAtT.y
+            calcDist = calcPos - axisIntercept
+        } while (!approximately_equal(calcPos, axisIntercept))
+        return t
+    }
+
+    /**
+     * Combine the cubic's extrema (passed in) + inflections + the
+     * `[0, 1]` bookends, then run [binarySearch] in each interval
+     * looking for a curve point at [axisIntercept]. Up to 3 valid
+     * roots are written to [validRoots]. Mirrors `SkDCubic::searchRoots`.
+     *
+     * @param extremeTs scratch buffer of length ≥ 6, pre-filled with
+     *                  the [extrema] x-axis or y-axis extrema values.
+     * @param extrema   number of extrema entries already in [extremeTs].
+     */
+    fun searchRoots(
+        extremeTs: DoubleArray,
+        extremaIn: Int,
+        axisIntercept: Double,
+        xAxis: SearchAxis,
+        validRoots: DoubleArray,
+    ): Int {
+        var extrema = extremaIn
+        // Append inflections.
+        val inflectionScratch = DoubleArray(2)
+        val nInf = findInflections(inflectionScratch)
+        for (i in 0 until nInf) extremeTs[extrema++] = inflectionScratch[i]
+        // Append bookend t-values 0 and 1.
+        extremeTs[extrema++] = 0.0
+        extremeTs[extrema] = 1.0
+        require(extrema < 6)
+        // Sort the (extrema + 1) entries — upstream uses SkTQSort.
+        java.util.Arrays.sort(extremeTs, 0, extrema + 1)
+        var validCount = 0
+        var index = 0
+        while (index < extrema) {
+            val tMin = extremeTs[index]
+            index++
+            val tMax = extremeTs[index]
+            if (tMin == tMax) continue
+            val newT = binarySearch(tMin, tMax, axisIntercept, xAxis)
+            if (newT >= 0) {
+                if (validCount >= 3) return 0
+                validRoots[validCount++] = newT
+            }
+        }
+        return validCount
+    }
+
+    /**
+     * Number of valid t-values (`0 < t < 1`) where this cubic crosses
+     * `y = yIntercept`. Mirrors `SkDCubic::horizontalIntersect`.
+     */
+    fun horizontalIntersect(yIntercept: Double, roots: DoubleArray): Int {
+        val A = DoubleArray(1); val B = DoubleArray(1); val C = DoubleArray(1); val D = DoubleArray(1)
+        Coefficients(doubleArrayOf(pts[0].y, pts[1].y, pts[2].y, pts[3].y), A, B, C, D)
+        D[0] -= yIntercept
+        var count = RootsValidT(A[0], B[0], C[0], D[0], roots)
+        // Numeric robustness fallback : if any root doesn't actually
+        // produce a y close to yIntercept, fall back to searchRoots.
+        for (index in 0 until count) {
+            val calcPt = ptAtT(roots[index])
+            if (!approximately_equal(calcPt.y, yIntercept)) {
+                val extremeTs = DoubleArray(6)
+                val extrema = FindExtrema(doubleArrayOf(pts[0].y, pts[1].y, pts[2].y, pts[3].y), extremeTs)
+                count = searchRoots(extremeTs, extrema, yIntercept, SearchAxis.kYAxis, roots)
+                break
+            }
+        }
+        return count
+    }
+
+    /** Vertical analogue of [horizontalIntersect]. Mirrors `SkDCubic::verticalIntersect`. */
+    fun verticalIntersect(xIntercept: Double, roots: DoubleArray): Int {
+        val A = DoubleArray(1); val B = DoubleArray(1); val C = DoubleArray(1); val D = DoubleArray(1)
+        Coefficients(doubleArrayOf(pts[0].x, pts[1].x, pts[2].x, pts[3].x), A, B, C, D)
+        D[0] -= xIntercept
+        var count = RootsValidT(A[0], B[0], C[0], D[0], roots)
+        for (index in 0 until count) {
+            val calcPt = ptAtT(roots[index])
+            if (!approximately_equal(calcPt.x, xIntercept)) {
+                val extremeTs = DoubleArray(6)
+                val extrema = FindExtrema(doubleArrayOf(pts[0].x, pts[1].x, pts[2].x, pts[3].x), extremeTs)
+                count = searchRoots(extremeTs, extrema, xIntercept, SearchAxis.kXAxis, roots)
+                break
+            }
+        }
+        return count
+    }
+
+    /**
+     * Project [xy] onto this cubic via a perpendicular ray (rotated
+     * chord direction). Returns the curve t-value if `xy` is "near"
+     * the curve (within ULPs tolerance scaled by the curve's
+     * coordinate range), or `-1` if not. Mirrors
+     * `SkDCurve::nearPoint(SkPath::kCubic_Verb, ...)`. Used by
+     * [LineCubicIntersections.addLineNearEndPoints].
+     */
+    fun nearPoint(xy: SkDPoint, opp: SkDPoint): Double {
+        var minX = pts[0].x; var maxX = minX
+        var minY = pts[0].y; var maxY = minY
+        for (i in 1 until kPointCount) {
+            minX = minOf(minX, pts[i].x); maxX = maxOf(maxX, pts[i].x)
+            minY = minOf(minY, pts[i].y); maxY = maxOf(maxY, pts[i].y)
+        }
+        if (!AlmostBetweenUlps(minX, xy.x, maxX)) return -1.0
+        if (!AlmostBetweenUlps(minY, xy.y, maxY)) return -1.0
+        val perp = SkDLine(arrayOf(
+            xy,
+            SkDPoint(xy.x + opp.y - xy.y, xy.y + xy.x - opp.x),
+        ))
+        val ix = SkIntersections()
+        ix.intersectRay(this, perp)
+        var minIdx = -1
+        var minDist = Double.MAX_VALUE
+        for (i in 0 until ix.used()) {
+            val d = xy.distance(ix.pt(i))
+            if (minDist > d) { minDist = d; minIdx = i }
+        }
+        if (minIdx < 0) return -1.0
+        var largest = maxOf(maxX, maxY)
+        largest = maxOf(largest, -minOf(minX, minY))
+        if (!AlmostEqualUlpsPin(largest, largest + minDist)) return -1.0
+        return SkPinT(ix.t(0, minIdx))
+    }
+
+    /**
      * Returns true if the cubic from index [startIndex] to [endIndex]
      * is approximately linear (both interior controls within ULPs
      * tolerance of the chord through the chosen endpoints). Mirrors
