@@ -159,6 +159,73 @@ internal data class SkDConic(
         return chopped[1]
     }
 
+    // ─── Line-intercept helpers (axis-aligned crossings) ───────────
+
+    /**
+     * Number of valid t-values (`0 < t < 1`) where this conic crosses
+     * the horizontal line `y = yIntercept`. Mirrors
+     * `SkIntersections::HorizontalIntercept(SkDConic, ...)` (delegates
+     * to the conic-line intersection class). Solves the rational
+     * `validT` quadratic in `t`.
+     */
+    fun horizontalIntersect(yIntercept: Double, roots: DoubleArray): Int {
+        val w = weight.toDouble()
+        var A = pts[2].y
+        var B = pts[1].y * w - yIntercept * w + yIntercept
+        var C = pts[0].y
+        A += C - 2 * B
+        B -= C
+        C -= yIntercept
+        return SkDQuad.RootsValidT(A, 2 * B, C, roots)
+    }
+
+    /** Vertical analogue of [horizontalIntersect]. */
+    fun verticalIntersect(xIntercept: Double, roots: DoubleArray): Int {
+        val w = weight.toDouble()
+        var A = pts[2].x
+        var B = pts[1].x * w - xIntercept * w + xIntercept
+        var C = pts[0].x
+        A += C - 2 * B
+        B -= C
+        C -= xIntercept
+        return SkDQuad.RootsValidT(A, 2 * B, C, roots)
+    }
+
+    /**
+     * Project [xy] onto this conic via a perpendicular ray (rotated
+     * chord direction). Returns the curve t-value if `xy` is "near"
+     * the curve (within ULPs tolerance scaled by the curve's
+     * coordinate range), or `-1` if not. Mirrors
+     * `SkDCurve::nearPoint(SkPath::kConic_Verb, ...)`.
+     */
+    fun nearPoint(xy: SkDPoint, opp: SkDPoint): Double {
+        var minX = pts[0].x; var maxX = minX
+        var minY = pts[0].y; var maxY = minY
+        for (i in 1 until kPointCount) {
+            minX = minOf(minX, pts[i].x); maxX = maxOf(maxX, pts[i].x)
+            minY = minOf(minY, pts[i].y); maxY = maxOf(maxY, pts[i].y)
+        }
+        if (!AlmostBetweenUlps(minX, xy.x, maxX)) return -1.0
+        if (!AlmostBetweenUlps(minY, xy.y, maxY)) return -1.0
+        val perp = SkDLine(arrayOf(
+            xy,
+            SkDPoint(xy.x + opp.y - xy.y, xy.y + xy.x - opp.x),
+        ))
+        val ix = SkIntersections()
+        ix.intersectRay(this, perp)
+        var minIdx = -1
+        var minDist = Double.MAX_VALUE
+        for (i in 0 until ix.used()) {
+            val d = xy.distance(ix.pt(i))
+            if (minDist > d) { minDist = d; minIdx = i }
+        }
+        if (minIdx < 0) return -1.0
+        var largest = maxOf(maxX, maxY)
+        largest = maxOf(largest, -minOf(minX, minY))
+        if (!AlmostEqualUlpsPin(largest, largest + minDist)) return -1.0
+        return SkPinT(ix.t(0, minIdx))
+    }
+
     // ─── Equality ────────────────────────────────────────────────────
 
     override fun equals(other: Any?): Boolean {
