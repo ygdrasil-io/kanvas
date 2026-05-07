@@ -5,6 +5,8 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkBlendMode_Name
 import org.skia.foundation.SkColorSetARGB
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTileMode
@@ -120,11 +122,14 @@ public class XfermodesGM : GM() {
     override fun getISize(): SkISize = SkISize.Make(1990, 570)
 
     override fun onOnceBeforeDraw() {
-        // Background : 2 × 2 checkerboard (W, light-blue-grey) substitute
-        // for upstream's ARGB_4444 0xFFFF / 0xCCCF tiles.
-        fBG = SkBitmap(2, 2).also {
+        // Background : 2 × 2 ARGB_4444 checkerboard (Phase C5 — native
+        // ARGB_4444 storage). Upstream's tiles : `{0xFFFF, 0xCCCF,
+        // 0xCCCF, 0xFFFF}` with bit layout `[R:15..12 G:11..8 B:7..4
+        // A:3..0]` = `{opaque-white, opaque-grey-CC, opaque-grey-CC,
+        // opaque-white}`.
+        fBG = SkBitmap(2, 2, SkColorSpace.makeSRGB(), SkColorType.kARGB_4444).also {
             val white = SkColorSetARGB(0xFF, 0xFF, 0xFF, 0xFF)
-            val cc = SkColorSetARGB(0xFF, 0xCC, 0xCC, 0xFF)
+            val cc = SkColorSetARGB(0xFF, 0xCC, 0xCC, 0xCC)
             it.setPixel(0, 0, white)
             it.setPixel(1, 0, cc)
             it.setPixel(0, 1, cc)
