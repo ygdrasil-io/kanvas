@@ -77,6 +77,7 @@ public class SkPicture internal constructor(
             is SkRecord.DrawString -> c.drawString(r.str, r.x, r.y, r.font, r.paint)
             is SkRecord.DrawSimpleText ->
                 c.drawSimpleText(r.text, r.byteLength, r.encoding, r.x, r.y, r.font, r.paint)
+            is SkRecord.DrawTextBlob -> c.drawTextBlob(r.blob, r.x, r.y, r.paint)
         }
     }
 }
