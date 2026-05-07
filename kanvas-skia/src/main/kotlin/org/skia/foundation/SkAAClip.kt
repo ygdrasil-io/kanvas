@@ -230,6 +230,319 @@ public class SkAAClip private constructor(
     /** Total `(width, alpha)` run count across every band. Useful for tests. */
     internal fun computeRunCount(): Int = bands.sumOf { it.widths.size }
 
+    // ─── Set ops (Phase I3.2.c) ────────────────────────────────────
+
+    /**
+     * Combine `this` with [rect] under [op] — wraps [rect] into a
+     * temporary single-band rect AA clip and forwards to [op] of
+     * [SkAAClip].
+     */
+    public fun op(rect: SkIRect, op: SkRegion.Op): Boolean = op(SkAAClip(rect), op)
+
+    /**
+     * Combine `this` with [other] under [op]. The 6 opcodes from
+     * [SkRegion.Op] map to per-pixel alpha combinators (matching
+     * Skia's `SkAAClip` arithmetic) :
+     *  - `kIntersect`         → `a * b / 255`  (multiplicative)
+     *  - `kUnion`             → `a + b - a * b / 255`  (alpha-over)
+     *  - `kDifference`        → `a * (255 - b) / 255`
+     *  - `kReverseDifference` → `b * (255 - a) / 255`
+     *  - `kXOR`               → `a + b - 2 * a * b / 255`
+     *  - `kReplace`           → `b`  (short-circuited to [set])
+     *
+     * Algorithm :
+     *  1. handle empty-operand identities at entry ;
+     *  2. compute the union outer bounds of both operands ;
+     *  3. pad both operand band lists in X (leading / trailing alpha-0
+     *     runs) so they span the same width, and fill any Y-gaps
+     *     with all-zero bands so they cover the same Y range ;
+     *  4. Y-axis scanline merge — at each Y span where exactly one
+     *     band of each side is active, run [mergeXRuns] to combine
+     *     their alpha runs ;
+     *  5. drop all-zero bands ;
+     *  6. tighten bounds by stripping zero-alpha edge runs falling
+     *     entirely outside the tight extent ;
+     *  7. coalesce adjacent Y-bands with content-equal `(widths,
+     *     alphas)`.
+     *
+     * Returns `true` iff the resulting clip is non-empty.
+     */
+    public fun op(other: SkAAClip, op: SkRegion.Op): Boolean {
+        if (op == SkRegion.Op.kReplace) return set(other)
+
+        if (this.isEmpty() && other.isEmpty()) return setEmpty()
+        if (this.isEmpty()) return when (op) {
+            SkRegion.Op.kUnion, SkRegion.Op.kReverseDifference, SkRegion.Op.kXOR -> set(other)
+            SkRegion.Op.kIntersect, SkRegion.Op.kDifference -> setEmpty()
+            SkRegion.Op.kReplace -> error("kReplace handled above")
+        }
+        if (other.isEmpty()) return when (op) {
+            SkRegion.Op.kUnion, SkRegion.Op.kDifference, SkRegion.Op.kXOR -> !isEmpty()
+            SkRegion.Op.kIntersect, SkRegion.Op.kReverseDifference -> setEmpty()
+            SkRegion.Op.kReplace -> error("kReplace handled above")
+        }
+
+        val outerLeft = minOf(this.fBounds.left, other.fBounds.left)
+        val outerTop = minOf(this.fBounds.top, other.fBounds.top)
+        val outerRight = maxOf(this.fBounds.right, other.fBounds.right)
+        val outerBot = maxOf(this.fBounds.bottom, other.fBounds.bottom)
+        val outerW = outerRight - outerLeft
+
+        val aFilled = padAndFill(this.bands, this.fBounds, outerLeft, outerRight, outerTop, outerBot, outerW)
+        val bFilled = padAndFill(other.bands, other.fBounds, outerLeft, outerRight, outerTop, outerBot, outerW)
+
+        val merged = aaScanlineMerge(aFilled, bFilled, op)
+        // Drop fully-empty bands.
+        val nonEmpty = merged.filter { b -> b.alphas.any { it != 0.toByte() } }
+        if (nonEmpty.isEmpty()) return setEmpty()
+
+        // Tighten outer bounds by inspecting min leading-non-zero / max
+        // trailing-non-zero across all surviving bands.
+        var tightLeft = outerRight
+        var tightRight = outerLeft
+        for (b in nonEmpty) {
+            var x = outerLeft
+            for (i in b.widths.indices) {
+                val nx = x + b.widths[i]
+                if (b.alphas[i] != 0.toByte()) {
+                    if (x < tightLeft) tightLeft = x
+                    if (nx > tightRight) tightRight = nx
+                }
+                x = nx
+            }
+        }
+        // Strip per-band edge runs falling entirely outside [tightLeft, tightRight).
+        val trimmed = nonEmpty.map { b -> trimBandToBounds(b, outerLeft, tightLeft, tightRight) }
+        // Coalesce adjacent Y-bands with content-equal (widths, alphas).
+        val coalesced = ArrayList<Band>(trimmed.size)
+        for (b in trimmed) {
+            if (coalesced.isNotEmpty()) {
+                val prev = coalesced[coalesced.size - 1]
+                if (prev.bottom == b.top && prev.equalsRuns(b)) {
+                    coalesced[coalesced.size - 1] = Band(prev.top, b.bottom, prev.widths, prev.alphas)
+                    continue
+                }
+            }
+            coalesced.add(b)
+        }
+
+        bands = coalesced
+        fBounds = SkIRect(tightLeft, coalesced[0].top, tightRight, coalesced[coalesced.size - 1].bottom)
+        fIsRectFastPath = coalesced.size == 1 && coalesced[0].widths.size == 1 &&
+            coalesced[0].alphas[0] == 0xFF.toByte()
+        return true
+    }
+
+    /**
+     * Return [b] with leading / trailing alpha-zero runs that fall
+     * entirely outside `[tightLeft, tightRight)` removed. Runs that
+     * straddle the boundary are kept (their internal contents are
+     * unchanged ; they still contribute leading / trailing zeros
+     * inside the tight bounds, which is fine).
+     */
+    private fun trimBandToBounds(b: Band, outerLeft: Int, tightLeft: Int, tightRight: Int): Band {
+        // Find first run whose right edge > tightLeft → the first run
+        // we keep.
+        var firstKeep = 0
+        var x = outerLeft
+        while (firstKeep < b.widths.size) {
+            val nx = x + b.widths[firstKeep]
+            if (nx > tightLeft) break
+            x = nx
+            firstKeep++
+        }
+        // Find last run whose left edge < tightRight → the last run
+        // we keep.
+        var lastKeep = b.widths.size - 1
+        var trailX = b.runWidth() + outerLeft
+        while (lastKeep >= firstKeep) {
+            val rl = trailX - b.widths[lastKeep]
+            if (rl < tightRight) break
+            trailX = rl
+            lastKeep--
+        }
+        if (firstKeep == 0 && lastKeep == b.widths.size - 1) {
+            // Already tight — keep the band's existing arrays.
+            return b
+        }
+        if (firstKeep > lastKeep) {
+            // Whole band falls outside (shouldn't happen post-filter
+            // but defend) — emit a single 0-alpha run.
+            return Band(b.top, b.bottom, intArrayOf(tightRight - tightLeft), byteArrayOf(0))
+        }
+        val keepCount = lastKeep - firstKeep + 1
+        val newWidths = IntArray(keepCount)
+        val newAlphas = ByteArray(keepCount)
+        var i = 0
+        var k = firstKeep
+        while (k <= lastKeep) {
+            newWidths[i] = b.widths[k]
+            newAlphas[i] = b.alphas[k]
+            i++
+            k++
+        }
+        // Adjust the first / last run width to clip exactly to
+        // [tightLeft, tightRight).
+        // First run: its X start was `x` (computed above). Truncate
+        // to start at tightLeft.
+        if (x < tightLeft) {
+            newWidths[0] = (x + b.widths[firstKeep]) - tightLeft
+        }
+        // Last run: its X end was `trailX + b.widths[lastKeep]` —
+        // wait, recompute. Original run k=lastKeep starts at
+        // (trailX) and ends at (trailX + widths[lastKeep]).
+        // We want to truncate to end at tightRight.
+        val lastRunOriginalEnd = trailX + b.widths[lastKeep]
+        if (lastRunOriginalEnd > tightRight) {
+            newWidths[keepCount - 1] = tightRight - trailX
+        }
+        return Band(b.top, b.bottom, newWidths, newAlphas)
+    }
+
+    /**
+     * Pad / fill [bands] so they span exactly `[outerLeft,
+     * outerRight) × [outerTop, outerBot)` with all-zero leading /
+     * trailing X runs and all-zero Y-gap bands.
+     *
+     * @param outerW pre-computed `outerRight - outerLeft` to avoid
+     *               recomputing inside the loop.
+     */
+    private fun padAndFill(
+        bands: List<Band>, oldBounds: SkIRect,
+        outerLeft: Int, outerRight: Int,
+        outerTop: Int, outerBot: Int, outerW: Int,
+    ): List<Band> {
+        val out = ArrayList<Band>(bands.size + 2)
+        // Y-axis : insert leading all-zero band if `outerTop <
+        // bands[0].top`, gap bands between source bands, and trailing
+        // all-zero band if `outerBot > bands[last].bottom`.
+        var prevBot = outerTop
+        for (b in bands) {
+            if (prevBot < b.top) {
+                out.add(makeZeroBand(prevBot, b.top, outerW))
+            }
+            out.add(padBandX(b, oldBounds.left, oldBounds.right, outerLeft, outerRight))
+            prevBot = b.bottom
+        }
+        if (prevBot < outerBot) {
+            out.add(makeZeroBand(prevBot, outerBot, outerW))
+        }
+        return out
+    }
+
+    private fun makeZeroBand(top: Int, bottom: Int, totalWidth: Int): Band =
+        Band(top, bottom, intArrayOf(totalWidth), byteArrayOf(0))
+
+    private fun padBandX(b: Band, oldLeft: Int, oldRight: Int, newLeft: Int, newRight: Int): Band {
+        if (oldLeft == newLeft && oldRight == newRight) return b
+        val leadGap = oldLeft - newLeft
+        val trailGap = newRight - oldRight
+        val extra = (if (leadGap > 0) 1 else 0) + (if (trailGap > 0) 1 else 0)
+        val newWidths = IntArray(b.widths.size + extra)
+        val newAlphas = ByteArray(b.alphas.size + extra)
+        var i = 0
+        if (leadGap > 0) { newWidths[i] = leadGap; newAlphas[i] = 0; i++ }
+        for (k in b.widths.indices) {
+            newWidths[i] = b.widths[k]
+            newAlphas[i] = b.alphas[k]
+            i++
+        }
+        if (trailGap > 0) { newWidths[i] = trailGap; newAlphas[i] = 0; i++ }
+        return Band(b.top, b.bottom, newWidths, newAlphas)
+    }
+
+    /**
+     * Y-axis scanline merge over fully-padded [a] / [b] bands (each
+     * spanning the same `outerLeft..outerRight × outerTop..outerBot`
+     * extent). At every Y where the active band on each side is
+     * constant, [mergeXRuns] combines their alpha runs into the
+     * output band.
+     *
+     * Because [padAndFill] inserts virtual zero bands for Y-gaps,
+     * both lists cover the same Y range with no gaps — the merge
+     * walks them in lockstep advancing whichever ends first.
+     */
+    private fun aaScanlineMerge(
+        a: List<Band>, b: List<Band>, op: SkRegion.Op,
+    ): List<Band> {
+        val out = ArrayList<Band>(maxOf(a.size, b.size))
+        var ai = 0
+        var bi = 0
+        var yCursor = if (a.isNotEmpty()) a[0].top else if (b.isNotEmpty()) b[0].top else return emptyList()
+
+        while (ai < a.size && bi < b.size) {
+            val aBand = a[ai]
+            val bBand = b[bi]
+            val yBot = minOf(aBand.bottom, bBand.bottom)
+            val mergedRuns = mergeXRuns(aBand.widths, aBand.alphas, bBand.widths, bBand.alphas, op)
+            out.add(Band(yCursor, yBot, mergedRuns.first, mergedRuns.second))
+            yCursor = yBot
+            if (aBand.bottom == yBot) ai++
+            if (bBand.bottom == yBot) bi++
+        }
+        return out
+    }
+
+    /**
+     * Combine two equal-total-width run lists `(aWidths, aAlphas)`
+     * and `(bWidths, bAlphas)` element-wise under [op]. Output runs
+     * partition the same total width ; consecutive runs with equal
+     * combined alpha collapse on emit.
+     */
+    private fun mergeXRuns(
+        aWidths: IntArray, aAlphas: ByteArray,
+        bWidths: IntArray, bAlphas: ByteArray,
+        op: SkRegion.Op,
+    ): Pair<IntArray, ByteArray> {
+        val outWidths = ArrayList<Int>(aWidths.size + bWidths.size)
+        val outAlphas = ArrayList<Byte>(aWidths.size + bWidths.size)
+        var ai = 0; var bi = 0
+        var aRem = if (aWidths.isNotEmpty()) aWidths[0] else 0
+        var bRem = if (bWidths.isNotEmpty()) bWidths[0] else 0
+        while (ai < aWidths.size && bi < bWidths.size) {
+            val step = minOf(aRem, bRem)
+            val combined = combineAlpha(aAlphas[ai].toInt() and 0xFF, bAlphas[bi].toInt() and 0xFF, op).toByte()
+            // Coalesce with previous run if alpha matches.
+            if (outAlphas.isNotEmpty() && outAlphas[outAlphas.size - 1] == combined) {
+                outWidths[outWidths.size - 1] = outWidths[outWidths.size - 1] + step
+            } else {
+                outWidths.add(step)
+                outAlphas.add(combined)
+            }
+            aRem -= step
+            bRem -= step
+            if (aRem == 0) {
+                ai++
+                aRem = if (ai < aWidths.size) aWidths[ai] else 0
+            }
+            if (bRem == 0) {
+                bi++
+                bRem = if (bi < bWidths.size) bWidths[bi] else 0
+            }
+        }
+        return Pair(
+            IntArray(outWidths.size) { outWidths[it] },
+            ByteArray(outAlphas.size) { outAlphas[it] },
+        )
+    }
+
+    /**
+     * Per-pixel alpha combinator — mirrors Skia's `AlphaProcInt`
+     * functions in `src/core/SkAAClip.cpp`. Uses
+     * `mulDiv255Round(a, b) = (a*b + 127) / 255` for the
+     * multiplicative term to match Skia's rounding bit-exactly.
+     */
+    private fun combineAlpha(a: Int, b: Int, op: SkRegion.Op): Int = when (op) {
+        SkRegion.Op.kIntersect -> mulDiv255Round(a, b)
+        SkRegion.Op.kUnion -> a + b - mulDiv255Round(a, b)
+        SkRegion.Op.kDifference -> mulDiv255Round(a, 255 - b)
+        SkRegion.Op.kReverseDifference -> mulDiv255Round(b, 255 - a)
+        SkRegion.Op.kXOR -> a + b - 2 * mulDiv255Round(a, b)
+        SkRegion.Op.kReplace -> b
+    }
+
+    private fun mulDiv255Round(a: Int, b: Int): Int = (a * b + 127) / 255
+
     // ─── setPath (Phase I3.2.b) ────────────────────────────────────
 
     /**
