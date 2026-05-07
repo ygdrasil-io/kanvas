@@ -326,6 +326,64 @@ internal data class SkDCubic(
             + (pts[2] - pts[1]).length()
             + (pts[3] - pts[2]).length()) / gPrecisionUnit
 
+    /**
+     * Returns true if the cubic from index [startIndex] to [endIndex]
+     * is approximately linear (both interior controls within ULPs
+     * tolerance of the chord through the chosen endpoints). Mirrors
+     * `SkDCubic::isLinear(int startIndex, int endIndex)`.
+     *
+     * Edge case : if `pts[0] ≈ pts[3]` (closed loop), defer to the
+     * inner-quad linearity check. Phase D1.1.c — wired to
+     * [SkLineParameters].
+     */
+    fun isLinear(startIndex: Int, endIndex: Int): Boolean {
+        if (pts[0].approximatelyDEqual(pts[3])) {
+            // Upstream casts `(SkDQuad*) this` to reinterpret pts[0..2].
+            // We construct an explicit quad for type safety.
+            return SkDQuad(arrayOf(pts[0], pts[1], pts[2])).isLinear(0, 2)
+        }
+        val params = SkLineParameters()
+        params.cubicEndPoints(this, startIndex, endIndex)
+        params.normalize()
+        var tiniest = pts[0].x
+        for (p in pts) {
+            tiniest = minOf(tiniest, p.x); tiniest = minOf(tiniest, p.y)
+        }
+        var largest = pts[0].x
+        for (p in pts) {
+            largest = maxOf(largest, p.x); largest = maxOf(largest, p.y)
+        }
+        largest = maxOf(largest, -tiniest)
+        var distance = params.controlPtDistance(this, 1)
+        if (!approximately_zero_when_compared_to(distance, largest)) return false
+        distance = params.controlPtDistance(this, 2)
+        return approximately_zero_when_compared_to(distance, largest)
+    }
+
+    /**
+     * "Pinned" sub-divide variant — given pinned endpoints [a] (≈
+     * value at [t1]) and [d] (≈ value at [t2]), recover the two
+     * interior control points of the sub-cubic into [dst] (length 2).
+     * Mirrors `SkDCubic::subDivide(SkDPoint, SkDPoint, double, double, SkDPoint[2])`.
+     *
+     * Algorithm assumes the directly-computed sub-divided cubic's
+     * controls are accurate enough as a starting point ; the pinned
+     * endpoints are used only for endpoint snap (`align` + ULPs-equal).
+     */
+    fun subDivide(a: SkDPoint, d: SkDPoint, t1: Double, t2: Double, dst: Array<SkDPoint>) {
+        require(t1 != t2)
+        require(dst.size >= 2)
+        val sub = subDivide(t1, t2)
+        dst[0] = sub[1] + (a - sub[0])
+        dst[1] = sub[2] + (d - sub[3])
+        if (t1 == 0.0 || t2 == 0.0) align(0, 1, if (t1 == 0.0) dst[0] else dst[1])
+        if (t1 == 1.0 || t2 == 1.0) align(3, 2, if (t1 == 1.0) dst[0] else dst[1])
+        if (AlmostBequalUlps(dst[0].x, a.x)) dst[0].x = a.x
+        if (AlmostBequalUlps(dst[0].y, a.y)) dst[0].y = a.y
+        if (AlmostBequalUlps(dst[1].x, d.x)) dst[1].x = d.x
+        if (AlmostBequalUlps(dst[1].y, d.y)) dst[1].y = d.y
+    }
+
     // ─── Equality ────────────────────────────────────────────────────
 
     override fun equals(other: Any?): Boolean {

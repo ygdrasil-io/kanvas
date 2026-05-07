@@ -50,6 +50,15 @@ internal data class SkDConic(
     fun otherPts(oddMan: Int, endPt: Array<SkDPoint?>) { pts.otherPts(oddMan, endPt) }
     fun align(endIndex: Int, dstPt: SkDPoint) { pts.align(endIndex, dstPt) }
 
+    /**
+     * Returns true if the conic between indices [startIndex] and
+     * [endIndex] is approximately linear. Delegates to the inner
+     * [SkDQuad.isLinear] (the conic's linearity is determined entirely
+     * by the control-point geometry ; the weight only modifies the
+     * parametric speed along the curve). Mirrors `SkDConic::isLinear`.
+     */
+    fun isLinear(startIndex: Int, endIndex: Int): Boolean = pts.isLinear(startIndex, endIndex)
+
     /** Mirrors `SkDConic::flip` — return a reversed copy with the same weight. */
     fun flip(): SkDConic = SkDConic(pts.flip(), weight)
 
@@ -132,6 +141,22 @@ internal data class SkDConic(
             )),
             weight = (bz / sqrt(az * cz)).toFloat(),
         )
+    }
+
+    /**
+     * "Pinned" sub-divide variant — given pinned endpoints [a] and [c],
+     * returns the middle control point and writes the new weight into
+     * [weightOut] (length-1 out array).
+     * Mirrors `SkDConic::subDivide(SkDPoint, SkDPoint, double, double, SkScalar*)`.
+     */
+    fun subDivide(a: SkDPoint, c: SkDPoint, t1: Double, t2: Double, weightOut: FloatArray): SkDPoint {
+        require(weightOut.size >= 1)
+        val chopped = subDivide(t1, t2)
+        weightOut[0] = chopped.weight
+        // The pinned endpoints are accepted as-is — only the middle
+        // control + new weight are returned. (Upstream just returns
+        // chopped[1] without re-snapping to a/c.)
+        return chopped[1]
     }
 
     // ─── Equality ────────────────────────────────────────────────────
