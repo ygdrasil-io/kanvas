@@ -281,6 +281,46 @@ internal data class SkDQuad(val pts: Array<SkDPoint> = arrayOf(SkDPoint(), SkDPo
         return RootsValidT(a[0], b[0], c[0], roots)
     }
 
+    /**
+     * Project [xy] onto this quadratic via a perpendicular ray (the
+     * perpendicular is built from the chord direction `xy → opp` —
+     * rotated 90°). Returns the curve t-value if `xy` is "near" the
+     * curve (within ULPs tolerance scaled by the curve's coordinate
+     * range), or `-1` if not. Mirrors `SkDCurve::nearPoint(SkPath::kQuad_Verb, ...)`.
+     *
+     * Used by [LineQuadraticIntersections.addLineNearEndPoints] to
+     * register near-tangent intersections at the line endpoints.
+     */
+    fun nearPoint(xy: SkDPoint, opp: SkDPoint): Double {
+        // Bbox reject : skip if xy is clearly outside the control hull.
+        var minX = pts[0].x; var maxX = minX
+        var minY = pts[0].y; var maxY = minY
+        for (i in 1 until kPointCount) {
+            minX = minOf(minX, pts[i].x); maxX = maxOf(maxX, pts[i].x)
+            minY = minOf(minY, pts[i].y); maxY = maxOf(maxY, pts[i].y)
+        }
+        if (!AlmostBetweenUlps(minX, xy.x, maxX)) return -1.0
+        if (!AlmostBetweenUlps(minY, xy.y, maxY)) return -1.0
+        // Perpendicular ray from xy : direction is the chord rotated 90°.
+        val perp = SkDLine(arrayOf(
+            xy,
+            SkDPoint(xy.x + opp.y - xy.y, xy.y + xy.x - opp.x),
+        ))
+        val ix = SkIntersections()
+        ix.intersectRay(this, perp)
+        var minIdx = -1
+        var minDist = Double.MAX_VALUE
+        for (i in 0 until ix.used()) {
+            val d = xy.distance(ix.pt(i))
+            if (minDist > d) { minDist = d; minIdx = i }
+        }
+        if (minIdx < 0) return -1.0
+        var largest = maxOf(maxX, maxY)
+        largest = maxOf(largest, -minOf(minX, minY))
+        if (!AlmostEqualUlpsPin(largest, largest + minDist)) return -1.0
+        return SkPinT(ix.t(0, minIdx))
+    }
+
     // ─── Equality (default array equality is referential) ────────────
 
     override fun equals(other: Any?): Boolean {
