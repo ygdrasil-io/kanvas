@@ -103,6 +103,21 @@ private fun notEqualUlps(a: Float, b: Float, epsilon: Int): Boolean {
     return aBits >= bBits + epsilon || bBits >= aBits + epsilon
 }
 
+/** "D" variant of [notEqualUlps] : skips the denormalized-zero shortcut. */
+private fun dNotEqualUlps(a: Float, b: Float, epsilon: Int): Boolean {
+    val aBits = floatAs2sComplement(a)
+    val bBits = floatAs2sComplement(b)
+    return aBits >= bBits + epsilon || bBits >= aBits + epsilon
+}
+
+private fun notEqualUlpsPin(a: Float, b: Float, epsilon: Int): Boolean {
+    if (!a.isFinite() || !b.isFinite()) return false
+    if (argumentsDenormalized(a, b, epsilon)) return false
+    val aBits = floatAs2sComplement(a)
+    val bBits = floatAs2sComplement(b)
+    return aBits >= bBits + epsilon || bBits >= aBits + epsilon
+}
+
 private fun lessUlps(a: Float, b: Float, epsilon: Int): Boolean {
     if (argumentsDenormalized(a, b, epsilon)) return a <= b - FLT_EPSILON.toFloat() * epsilon
     val aBits = floatAs2sComplement(a)
@@ -147,6 +162,12 @@ internal fun AlmostDequalUlps(a: Double, b: Double): Boolean {
 
 internal fun NotAlmostEqualUlps(a: Float, b: Float): Boolean = notEqualUlps(a, b, 16)
 internal fun NotAlmostEqualUlps(a: Double, b: Double): Boolean = NotAlmostEqualUlps(a.toFloat(), b.toFloat())
+
+internal fun NotAlmostEqualUlpsPin(a: Float, b: Float): Boolean = notEqualUlpsPin(a, b, 16)
+internal fun NotAlmostEqualUlpsPin(a: Double, b: Double): Boolean = NotAlmostEqualUlpsPin(a.toFloat(), b.toFloat())
+
+internal fun NotAlmostDequalUlps(a: Float, b: Float): Boolean = dNotEqualUlps(a, b, 16)
+internal fun NotAlmostDequalUlps(a: Double, b: Double): Boolean = NotAlmostDequalUlps(a.toFloat(), b.toFloat())
 
 internal fun RoughlyEqualUlps(a: Float, b: Float): Boolean = equalUlps(a, b, 256, 1024)
 internal fun RoughlyEqualUlps(a: Double, b: Double): Boolean = RoughlyEqualUlps(a.toFloat(), b.toFloat())
