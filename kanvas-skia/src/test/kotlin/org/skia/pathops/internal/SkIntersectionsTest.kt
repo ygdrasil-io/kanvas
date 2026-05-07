@@ -212,10 +212,12 @@ class SkIntersectionsTest {
     // ─── Stubs for curve intersections (D1.1.d/e) ───────────────────
 
     @Test
-    fun `intersect(SkDQuad, SkDQuad) still throws until D1_1_e lands`() {
+    fun `intersect(SkDQuad, SkDQuad) is now implemented (D1_1_e shipped)`() {
+        // Sanity check : the long-standing stub is gone — disjoint quads
+        // return 0 cleanly instead of throwing.
         val ix = SkIntersections()
         val a = SkDQuad(arrayOf(SkDPoint(0.0, 0.0), SkDPoint(5.0, 5.0), SkDPoint(10.0, 0.0)))
-        val b = SkDQuad(arrayOf(SkDPoint(0.0, 5.0), SkDPoint(5.0, 0.0), SkDPoint(10.0, 5.0)))
-        assertThrows(NotImplementedError::class.java) { ix.intersect(a, b) }
+        val b = SkDQuad(arrayOf(SkDPoint(100.0, 100.0), SkDPoint(105.0, 105.0), SkDPoint(110.0, 100.0)))
+        org.junit.jupiter.api.Assertions.assertEquals(0, ix.intersect(a, b))
     }
 }
