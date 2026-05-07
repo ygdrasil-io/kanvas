@@ -49,6 +49,16 @@ public class SkFont(
      */
     public var hinting: SkFontHinting = SkFontHinting.kNormal
 
+    /**
+     * Variable-font design position — mirrors what Skia carries via
+     * `SkFontArguments::VariationPosition` on a typeface clone (Phase
+     * I2.2 light). The current AWT-backed scaler does **not** consume
+     * this list yet ; it is exposed today so direct ports that
+     * propagate variations through their pipelines compile and
+     * round-trip. See [SkFontVariation] for axis semantics.
+     */
+    public var variations: List<SkFontVariation> = emptyList()
+
     /** Copy ctor mirroring `SkFont::SkFont(const SkFont&)`. */
     public constructor(other: SkFont) : this(other.typeface, other.size, other.scaleX, other.skewX) {
         edging = other.edging
@@ -59,6 +69,7 @@ public class SkFont(
         isForceAutoHinting = other.isForceAutoHinting
         isEmbeddedBitmaps = other.isEmbeddedBitmaps
         hinting = other.hinting
+        variations = other.variations
     }
 
     /** Convenience ctor — typeface only, default size 12. */
