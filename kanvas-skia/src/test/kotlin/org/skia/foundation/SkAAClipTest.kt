@@ -239,6 +239,115 @@ class SkAAClipTest {
         assertFalse(c.isRect())
     }
 
+    // ─── Set ops (Phase I3.2.c) ─────────────────────────────────────
+
+    @Test
+    fun `op kReplace copies other regardless of receiver state`() {
+        val a = SkAAClip(SkIRect(0, 0, 10, 10))
+        val b = SkAAClip(SkIRect(20, 20, 30, 30))
+        assertTrue(a.op(b, SkRegion.Op.kReplace))
+        assertEquals(SkIRect(20, 20, 30, 30), a.getBounds())
+    }
+
+    @Test
+    fun `op union of two disjoint rects produces wider clip`() {
+        val a = SkAAClip(SkIRect(0, 0, 10, 10))
+        assertTrue(a.op(SkIRect(20, 0, 30, 10), SkRegion.Op.kUnion))
+        // Tightening should retain the full 30-wide span (the gap
+        // contributes alpha-zero runs but tight bounds keep both
+        // edges).
+        assertEquals(SkIRect(0, 0, 30, 10), a.getBounds())
+        assertFalse(a.isRect())
+    }
+
+    @Test
+    fun `op union of overlapping rects on stacked Y collapses to one rect`() {
+        // [0,10)x[0,5) ∪ [0,10)x[5,10) → [0,10)x[0,10)
+        val a = SkAAClip(SkIRect(0, 0, 10, 5))
+        assertTrue(a.op(SkIRect(0, 5, 10, 10), SkRegion.Op.kUnion))
+        assertEquals(SkIRect(0, 0, 10, 10), a.getBounds())
+        assertTrue(a.isRect())
+    }
+
+    @Test
+    fun `op intersect of disjoint rects yields empty`() {
+        val a = SkAAClip(SkIRect(0, 0, 10, 10))
+        assertFalse(a.op(SkIRect(20, 20, 30, 30), SkRegion.Op.kIntersect))
+        assertTrue(a.isEmpty())
+    }
+
+    @Test
+    fun `op intersect of overlapping rects yields the overlap`() {
+        val a = SkAAClip(SkIRect(0, 0, 20, 20))
+        assertTrue(a.op(SkIRect(10, 10, 30, 30), SkRegion.Op.kIntersect))
+        assertEquals(SkIRect(10, 10, 20, 20), a.getBounds())
+        assertTrue(a.isRect())
+    }
+
+    @Test
+    fun `op difference of fully-enclosing rect yields empty`() {
+        val a = SkAAClip(SkIRect(10, 10, 20, 20))
+        assertFalse(a.op(SkIRect(0, 0, 100, 100), SkRegion.Op.kDifference))
+        assertTrue(a.isEmpty())
+    }
+
+    @Test
+    fun `op difference cuts a hole`() {
+        val a = SkAAClip(SkIRect(0, 0, 100, 100))
+        assertTrue(a.op(SkIRect(40, 40, 60, 60), SkRegion.Op.kDifference))
+        assertEquals(SkIRect(0, 0, 100, 100), a.getBounds())
+        assertFalse(a.isRect())
+    }
+
+    @Test
+    fun `op xor of overlapping rects produces symmetric difference`() {
+        val a = SkAAClip(SkIRect(0, 0, 20, 20))
+        assertTrue(a.op(SkIRect(10, 10, 30, 30), SkRegion.Op.kXOR))
+        assertFalse(a.isRect())
+        // Bounds span the union of both rects.
+        assertEquals(SkIRect(0, 0, 30, 30), a.getBounds())
+    }
+
+    @Test
+    fun `op reverseDifference yields other minus this`() {
+        val a = SkAAClip(SkIRect(0, 0, 100, 100))
+        assertFalse(a.op(SkIRect(40, 40, 60, 60), SkRegion.Op.kReverseDifference))
+        assertTrue(a.isEmpty())
+    }
+
+    @Test
+    fun `op intersect of two AA clips with subpixel rects combines fractional edges`() {
+        // Both clips have fractional edges from setPath ; intersect
+        // should multiply edge alphas (a * b / 255).
+        val a = SkAAClip()
+        val pa = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0.5f, 0.5f, 9.5f, 9.5f)).detach()
+        a.setPath(pa, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true)
+
+        val b = SkAAClip()
+        val pb = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(2f, 2f, 8f, 8f)).detach()
+        b.setPath(pb, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true)
+
+        assertTrue(a.op(b, SkRegion.Op.kIntersect))
+        // Intersect bounds = inner rect.
+        assertEquals(SkIRect(2, 2, 8, 8), a.getBounds())
+        assertTrue(a.isRect())
+    }
+
+    @Test
+    fun `op union of empty operand with non-empty yields non-empty`() {
+        val a = SkAAClip()
+        val b = SkAAClip(SkIRect(0, 0, 10, 10))
+        assertTrue(a.op(b, SkRegion.Op.kUnion))
+        assertEquals(SkIRect(0, 0, 10, 10), a.getBounds())
+    }
+
+    @Test
+    fun `op intersect with empty yields empty`() {
+        val a = SkAAClip(SkIRect(0, 0, 10, 10))
+        assertFalse(a.op(SkAAClip(), SkRegion.Op.kIntersect))
+        assertTrue(a.isEmpty())
+    }
+
     @Test
     fun `setPath triangle doAA true yields complex coverage region`() {
         val path = SkPathBuilder()
