@@ -749,6 +749,72 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
+     * Mirrors Skia's
+     * [`SkCanvas::drawTextBlob(blob, x, y, paint)`](https://github.com/google/skia/blob/main/include/core/SkCanvas.h#L1858).
+     *
+     * Renders an [org.skia.foundation.SkTextBlob]'s glyph runs at
+     * `(x, y)` (added to each run's intrinsic positions). Each run
+     * carries its own [SkFont] ; for each glyph we walk the font's
+     * `getPath(glyphId)` and draw the resulting path with [paint].
+     *
+     * **Phase I1 implementation note** : routed glyph-by-glyph through
+     * `font.getPath(glyphId)` / `drawPath` — same pipeline as
+     * [drawString]. Phase I2 will replace this with a glyph mask
+     * cache for an order-of-magnitude perf improvement on text-heavy
+     * GMs.
+     */
+    public open fun drawTextBlob(
+        blob: org.skia.foundation.SkTextBlob,
+        x: SkScalar,
+        y: SkScalar,
+        paint: SkPaint,
+    ) {
+        for (run in blob.runs) {
+            when (run) {
+                is org.skia.foundation.SkTextBlob.Run.HorizontalSpread -> {
+                    var advance = 0f
+                    for (gid in run.glyphIds) {
+                        val path = run.font.getPath(gid)
+                        if (path != null) {
+                            save()
+                            translate(x + run.x + advance, y + run.y)
+                            drawPath(path, paint)
+                            restore()
+                        }
+                        advance += run.font.getWidth(gid)
+                    }
+                }
+                is org.skia.foundation.SkTextBlob.Run.HorizontalPositions -> {
+                    for (i in run.glyphIds.indices) {
+                        val gid = run.glyphIds[i]
+                        val path = run.font.getPath(gid) ?: continue
+                        save()
+                        translate(x + run.xs[i], y + run.constY)
+                        drawPath(path, paint)
+                        restore()
+                    }
+                }
+                is org.skia.foundation.SkTextBlob.Run.FullPositions -> {
+                    var i = 0
+                    var g = 0
+                    while (g < run.glyphIds.size) {
+                        val gid = run.glyphIds[g]
+                        val path = run.font.getPath(gid)
+                        if (path != null) {
+                            save()
+                            translate(x + run.positions[i], y + run.positions[i + 1])
+                            drawPath(path, paint)
+                            restore()
+                        }
+                        i += 2
+                        g += 1
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Mirrors Skia's `SkCanvas::saveLayer(bounds, paint)`. Allocates an
      * offscreen bitmap-backed device matching the device-space bbox of
      * [bounds] (intersected with the current clip), then redirects all
