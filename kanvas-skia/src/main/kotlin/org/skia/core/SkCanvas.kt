@@ -757,11 +757,18 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * carries its own [SkFont] ; for each glyph we walk the font's
      * `getPath(glyphId)` and draw the resulting path with [paint].
      *
-     * **Phase I1 implementation note** : routed glyph-by-glyph through
-     * `font.getPath(glyphId)` / `drawPath` — same pipeline as
-     * [drawString]. Phase I2 will replace this with a glyph mask
-     * cache for an order-of-magnitude perf improvement on text-heavy
-     * GMs.
+     * **Phase I2.3 — subpixel positioning** : per-glyph translates are
+     * snapped in device space using [snapGlyphPosition] :
+     *  - if `font.isSubpixel == true` → X is bucketed into 4 quarter
+     *    phases (`{0, .25, .5, .75}`), Y is snapped to integer baseline ;
+     *  - otherwise → both axes snap to integer.
+     *
+     * Snapping only kicks in when the CTM is identity / pure translate
+     * (the textblob GMs we mirror) — under any rotation or skew the
+     * float position is preserved. This matches Skia's
+     * `SkScalerContext::generateMetrics` rounding policy and removes
+     * the AA "shimmer" that pure-float positioning produced on
+     * horizontal text runs.
      */
     public open fun drawTextBlob(
         blob: org.skia.foundation.SkTextBlob,
@@ -770,14 +777,16 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         paint: SkPaint,
     ) {
         for (run in blob.runs) {
+            val isSubpixel = run.font.isSubpixel
             when (run) {
                 is org.skia.foundation.SkTextBlob.Run.HorizontalSpread -> {
                     var advance = 0f
                     for (gid in run.glyphIds) {
                         val path = run.font.getPath(gid)
                         if (path != null) {
+                            val (sx, sy) = snapGlyphPosition(x + run.x + advance, y + run.y, isSubpixel)
                             save()
-                            translate(x + run.x + advance, y + run.y)
+                            translate(sx, sy)
                             drawPath(path, paint)
                             restore()
                         }
@@ -788,8 +797,9 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
                     for (i in run.glyphIds.indices) {
                         val gid = run.glyphIds[i]
                         val path = run.font.getPath(gid) ?: continue
+                        val (sx, sy) = snapGlyphPosition(x + run.xs[i], y + run.constY, isSubpixel)
                         save()
-                        translate(x + run.xs[i], y + run.constY)
+                        translate(sx, sy)
                         drawPath(path, paint)
                         restore()
                     }
@@ -801,8 +811,13 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
                         val gid = run.glyphIds[g]
                         val path = run.font.getPath(gid)
                         if (path != null) {
+                            val (sx, sy) = snapGlyphPosition(
+                                x + run.positions[i],
+                                y + run.positions[i + 1],
+                                isSubpixel,
+                            )
                             save()
-                            translate(x + run.positions[i], y + run.positions[i + 1])
+                            translate(sx, sy)
                             drawPath(path, paint)
                             restore()
                         }
@@ -812,6 +827,37 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
                 }
             }
         }
+    }
+
+    /**
+     * Snap a per-glyph local-space translate to a pixel-aligned phase
+     * for [drawTextBlob] (Phase I2.3).
+     *
+     * Compute the device-space position via the active translate-only
+     * CTM, snap to integer (`isSubpixel == false`) or to the nearest
+     * 1/4-pixel horizontal phase + integer baseline (`isSubpixel == true`),
+     * then map back to local-space delta. Returns the input unchanged
+     * when the CTM has any scale / rotation / skew / perspective —
+     * those cases bypass snap and stay on the float path.
+     */
+    private fun snapGlyphPosition(
+        localX: SkScalar,
+        localY: SkScalar,
+        isSubpixel: Boolean,
+    ): Pair<SkScalar, SkScalar> {
+        val m = top.matrix
+        if (!m.isTranslate()) return Pair(localX, localY)
+        val devX = m.tx + localX
+        val devY = m.ty + localY
+        val snapDevY = kFloor(devY.toDouble() + 0.5).toFloat()
+        val snapDevX = if (isSubpixel) {
+            val ix = kFloor(devX.toDouble()).toFloat()
+            val phaseQuarters = kFloor(((devX - ix) * 4f + 0.5f).toDouble()).toInt().coerceIn(0, 4)
+            ix + phaseQuarters * 0.25f
+        } else {
+            kFloor(devX.toDouble() + 0.5).toFloat()
+        }
+        return Pair(snapDevX - m.tx, snapDevY - m.ty)
     }
 
     /**
