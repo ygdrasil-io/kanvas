@@ -566,9 +566,39 @@ internal class SkIntersections {
         return helper.verticalIntersect(x, top, bottom, flipped)
     }
 
-    /** Stub. Will land in D1.1.d.2. */
-    fun intersect(cubic: SkDCubic, line: SkDLine): Int =
-        throw NotImplementedError("intersect(SkDCubic, SkDLine) lands in Phase D1.1.d.2")
+    /** Mirrors `SkIntersections::intersect(SkDCubic, SkDLine)`. */
+    fun intersect(cubic: SkDCubic, line: SkDLine): Int {
+        val helper = LineCubicIntersections(cubic, line, this)
+        helper.allowNear(fAllowNear)
+        return helper.intersect()
+    }
+
+    /** Mirrors `SkIntersections::intersectRay(SkDCubic, SkDLine)`. */
+    fun intersectRay(cubic: SkDCubic, line: SkDLine): Int {
+        val helper = LineCubicIntersections(cubic, line, this)
+        val roots = DoubleArray(3)
+        val used = helper.intersectRay(roots)
+        fUsed = used
+        for (index in 0 until used) {
+            fT[0][index] = roots[index]
+            fPt[index] = cubic.ptAtT(roots[index])
+        }
+        return used
+    }
+
+    /** Mirrors `SkIntersections::horizontal(SkDCubic, double, double, double, bool)`. */
+    fun horizontal(cubic: SkDCubic, left: Double, right: Double, y: Double, flipped: Boolean): Int {
+        val line = SkDLine(arrayOf(SkDPoint(left, y), SkDPoint(right, y)))
+        val helper = LineCubicIntersections(cubic, line, this)
+        return helper.horizontalIntersect(y, left, right, flipped)
+    }
+
+    /** Mirrors `SkIntersections::vertical(SkDCubic, double, double, double, bool)`. */
+    fun vertical(cubic: SkDCubic, top: Double, bottom: Double, x: Double, flipped: Boolean): Int {
+        val line = SkDLine(arrayOf(SkDPoint(x, top), SkDPoint(x, bottom)))
+        val helper = LineCubicIntersections(cubic, line, this)
+        return helper.verticalIntersect(x, top, bottom, flipped)
+    }
 
     /** Stub. Will land in D1.1.d.3. */
     fun intersect(conic: SkDConic, line: SkDLine): Int =
@@ -577,10 +607,6 @@ internal class SkIntersections {
     /** Stub. Will land in D1.1.e. */
     fun intersect(a: SkDQuad, b: SkDQuad): Int =
         throw NotImplementedError("intersect(SkDQuad, SkDQuad) lands in Phase D1.1.e")
-
-    /** Stub. Will land in D1.1.d.2. */
-    fun intersectRay(cubic: SkDCubic, line: SkDLine): Int =
-        throw NotImplementedError("intersectRay(SkDCubic, SkDLine) lands in Phase D1.1.d.2")
 
     /** Stub. Will land in D1.1.d.3. */
     fun intersectRay(conic: SkDConic, line: SkDLine): Int =
@@ -610,6 +636,33 @@ internal class SkIntersections {
         val quad = SkDQuad().set(a[0], a[1], a[2])
         fMax = 2
         return vertical(quad, top.toDouble(), bottom.toDouble(), x.toDouble(), flipped)
+    }
+
+    // ─── SkPoint façade methods for SkDCubic ────────────────────────
+
+    /** Mirrors `SkIntersections::cubicLine(SkPoint a[4], SkPoint b[2])`. */
+    fun cubicLine(a: Array<org.skia.math.SkPoint>, b: Array<org.skia.math.SkPoint>): Int {
+        require(a.size >= 4 && b.size >= 2)
+        val cubic = SkDCubic().set(a[0], a[1], a[2], a[3])
+        val line = SkDLine().set(b[0], b[1])
+        fMax = 3
+        return intersect(cubic, line)
+    }
+
+    /** Mirrors `SkIntersections::cubicHorizontal(SkPoint a[4], left, right, y, flipped)`. */
+    fun cubicHorizontal(a: Array<org.skia.math.SkPoint>, left: Float, right: Float, y: Float, flipped: Boolean): Int {
+        require(a.size >= 4)
+        val cubic = SkDCubic().set(a[0], a[1], a[2], a[3])
+        fMax = 3
+        return horizontal(cubic, left.toDouble(), right.toDouble(), y.toDouble(), flipped)
+    }
+
+    /** Mirrors `SkIntersections::cubicVertical(SkPoint a[4], top, bottom, x, flipped)`. */
+    fun cubicVertical(a: Array<org.skia.math.SkPoint>, top: Float, bottom: Float, x: Float, flipped: Boolean): Int {
+        require(a.size >= 4)
+        val cubic = SkDCubic().set(a[0], a[1], a[2], a[3])
+        fMax = 3
+        return vertical(cubic, top.toDouble(), bottom.toDouble(), x.toDouble(), flipped)
     }
 
     // ─── Internal helpers ───────────────────────────────────────────
