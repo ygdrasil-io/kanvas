@@ -1154,5 +1154,241 @@ internal class SkTSect(curve: SkTCurve) {
             }
             return zeroOneSet
         }
+
+        // ─── BinarySearch (Phase D1.1.e.2.c.4) ──────────────────────
+
+        /**
+         * Compute every intersection between [sect1]'s and [sect2]'s
+         * curves, writing them into [intersections]. This is the
+         * top-level entry point for all curve-curve intersection in
+         * pathops — `SkIntersections.intersect(SkDQuad, SkDQuad)`,
+         * `intersect(SkDCubic, SkDQuad)`, etc. all dispatch here via
+         * `SkTSect` wrappers (D1.1.e.2.c.5 / D1.1.e.3).
+         *
+         * Mirrors `SkTSect::BinarySearch`. Algorithm :
+         *  1. Probe initial spans : trivial-case bail outs (no
+         *     intersection, endpoint-only intersection).
+         *  2. Iteratively split the larger span and `trim` the
+         *     bounded list.
+         *  3. Detect coincident runs (≥ COINCIDENT_SPAN_COUNT) and
+         *     extract them via `coincidentCheck`.
+         *  4. Compute perpendiculars and `removeByPerpendicular` to
+         *     drop spans that don't belong to the intersection.
+         *  5. After convergence, register coincident matches, then
+         *     check for endpoint matches (exact + approximate via
+         *     EndsEqual + the fRemovedStartT/EndT cleanup).
+         *  6. Use [SkClosestSect] to extract the remaining endpoint
+         *     intersections.
+         *  7. Final pass : detect midpoint coincidences between
+         *     adjacent intersections.
+         */
+        fun BinarySearch(sect1: SkTSect, sect2: SkTSect, intersections: SkIntersections) {
+            intersections.reset()
+            intersections.setMax(sect1.fCurve.maxIntersections() + 4) // extra slop
+            val span1 = sect1.fHead ?: return
+            val span2 = sect2.fHead ?: return
+            val oppSect = IntArray(1)
+            val sect = sect1.intersects(span1, sect2, span2, oppSect)
+            if (sect == 0) return
+            if (sect == 2 && oppSect[0] == 2) {
+                EndsEqual(sect1, sect2, intersections)
+                return
+            }
+            span1.addBounded(span2)
+            span2.addBounded(span1)
+            val kMaxCoinLoopCount = 8
+            var coinLoopCount = kMaxCoinLoopCount
+            var start1s = 0.0
+            var start1e = 0.0
+            do {
+                val largest1 = sect1.boundsMax()
+                if (largest1 == null) {
+                    if (sect1.fHung) return
+                    break
+                }
+                val largest2 = sect2.boundsMax()
+                if (largest2 == null
+                    || (largest1.fBoundsMax > largest2.fBoundsMax
+                        || (!largest1.fCollapsed && largest2.fCollapsed))
+                ) {
+                    if (sect2.fHung) return
+                    if (largest1.fCollapsed) break
+                    sect1.resetRemovedEnds()
+                    sect2.resetRemovedEnds()
+                    val half1 = sect1.addOne()
+                    if (!half1.split(largest1)) break
+                    if (!sect1.trim(largest1, sect2)) return
+                    if (!sect1.trim(half1, sect2)) return
+                } else {
+                    if (largest2.fCollapsed) break
+                    sect1.resetRemovedEnds()
+                    sect2.resetRemovedEnds()
+                    val half2 = sect2.addOne()
+                    if (!half2.split(largest2)) break
+                    if (!sect2.trim(largest2, sect1)) return
+                    if (!sect2.trim(half2, sect1)) return
+                }
+                // ≥9 consecutive spans on both → suspect coincidence.
+                if (sect1.fActiveCount >= COINCIDENT_SPAN_COUNT
+                    && sect2.fActiveCount >= COINCIDENT_SPAN_COUNT
+                ) {
+                    if (coinLoopCount == kMaxCoinLoopCount) {
+                        start1s = sect1.fHead!!.fStartT
+                        start1e = sect1.tail()!!.fEndT
+                    }
+                    if (!sect1.coincidentCheck(sect2)) return
+                    if (--coinLoopCount == 0 && sect1.fHead != null && sect2.fHead != null) {
+                        // All known working cases resolve in 2 tries. Force as fallback.
+                        sect1.coincidentForce(sect2, start1s, start1e)
+                    }
+                }
+                if (sect1.fActiveCount >= COINCIDENT_SPAN_COUNT
+                    && sect2.fActiveCount >= COINCIDENT_SPAN_COUNT
+                ) {
+                    if (sect1.fHead == null) return
+                    sect1.computePerpendiculars(sect2, sect1.fHead, sect1.tail())
+                    if (sect2.fHead == null) return
+                    sect2.computePerpendiculars(sect1, sect2.fHead, sect2.tail())
+                    if (!sect1.removeByPerpendicular(sect2)) return
+                    if (sect1.collapsed() > sect1.fCurve.maxIntersections()) break
+                }
+                if (sect1.fHead == null || sect2.fHead == null) break
+            } while (true)
+            // Coincident-list registration.
+            var coincident = sect1.fCoincident
+            if (coincident != null) {
+                if (coincident.fNext != null) {
+                    sect1.mergeCoincidence(sect2)
+                    coincident = sect1.fCoincident
+                }
+                while (coincident != null) {
+                    if (coincident.fCoinStart.isMatch() && coincident.fCoinEnd.isMatch()) {
+                        val perpT = coincident.fCoinStart.perpT()
+                        if (perpT < 0) return
+                        val index = intersections.insertCoincident(
+                            coincident.fStartT, perpT, coincident.pointFirst(),
+                        )
+                        if ((intersections.insertCoincident(
+                                coincident.fEndT,
+                                coincident.fCoinEnd.perpT(),
+                                coincident.pointLast(),
+                            ) < 0) && index >= 0
+                        ) intersections.clearCoincidence(index)
+                    }
+                    coincident = coincident.fNext
+                }
+            }
+            val zeroOneSet = EndsEqual(sect1, sect2, intersections)
+            // Endpoint-removal cleanup.
+            if (sect1.fRemovedStartT && (zeroOneSet and kZeroS1Set) == 0) {
+                val perp = SkTCoincident()
+                perp.setPerp(sect1.fCurve, 0.0, sect1.fCurve[0], sect2.fCurve)
+                if (perp.isMatch()) intersections.insert(0.0, perp.perpT(), perp.perpPt())
+            }
+            if (sect1.fRemovedEndT && (zeroOneSet and kOneS1Set) == 0) {
+                val perp = SkTCoincident()
+                perp.setPerp(sect1.fCurve, 1.0, sect1.pointLast(), sect2.fCurve)
+                if (perp.isMatch()) intersections.insert(1.0, perp.perpT(), perp.perpPt())
+            }
+            if (sect2.fRemovedStartT && (zeroOneSet and kZeroS2Set) == 0) {
+                val perp = SkTCoincident()
+                perp.setPerp(sect2.fCurve, 0.0, sect2.fCurve[0], sect1.fCurve)
+                if (perp.isMatch()) intersections.insert(perp.perpT(), 0.0, perp.perpPt())
+            }
+            if (sect2.fRemovedEndT && (zeroOneSet and kOneS2Set) == 0) {
+                val perp = SkTCoincident()
+                perp.setPerp(sect2.fCurve, 1.0, sect2.pointLast(), sect1.fCurve)
+                if (perp.isMatch()) intersections.insert(perp.perpT(), 1.0, perp.perpPt())
+            }
+            if (sect1.fHead == null || sect2.fHead == null) return
+            sect1.recoverCollapsed()
+            sect2.recoverCollapsed()
+            var result1: SkTSpan? = sect1.fHead
+            // Heads / tails endpoint check (in case BinarySearch shrunk the spans away from 0/1).
+            val head1 = result1
+            if (head1 != null && (zeroOneSet and kZeroS1Set) == 0
+                && approximately_less_than_zero(head1.fStartT)
+            ) {
+                val start1 = sect1.fCurve[0]
+                if (head1.isBounded()) {
+                    val t = head1.closestBoundedT(start1)
+                    if (sect2.fCurve.ptAtT(t).approximatelyEqual(start1)) {
+                        intersections.insert(0.0, t, start1)
+                    }
+                }
+            }
+            val head2 = sect2.fHead
+            if (head2 != null && (zeroOneSet and kZeroS2Set) == 0
+                && approximately_less_than_zero(head2.fStartT)
+            ) {
+                val start2 = sect2.fCurve[0]
+                if (head2.isBounded()) {
+                    val t = head2.closestBoundedT(start2)
+                    if (sect1.fCurve.ptAtT(t).approximatelyEqual(start2)) {
+                        intersections.insert(t, 0.0, start2)
+                    }
+                }
+            }
+            if ((zeroOneSet and kOneS1Set) == 0) {
+                val tail1 = sect1.tail() ?: return
+                if (approximately_greater_than_one(tail1.fEndT)) {
+                    val end1 = sect1.pointLast()
+                    if (tail1.isBounded()) {
+                        val t = tail1.closestBoundedT(end1)
+                        if (sect2.fCurve.ptAtT(t).approximatelyEqual(end1)) {
+                            intersections.insert(1.0, t, end1)
+                        }
+                    }
+                }
+            }
+            if ((zeroOneSet and kOneS2Set) == 0) {
+                val tail2 = sect2.tail() ?: return
+                if (approximately_greater_than_one(tail2.fEndT)) {
+                    val end2 = sect2.pointLast()
+                    if (tail2.isBounded()) {
+                        val t = tail2.closestBoundedT(end2)
+                        if (sect1.fCurve.ptAtT(t).approximatelyEqual(end2)) {
+                            intersections.insert(t, 1.0, end2)
+                        }
+                    }
+                }
+            }
+            // Final pass : closest endpoint pairs across remaining spans.
+            val closest = SkClosestSect()
+            do {
+                while (result1 != null && result1.fCoinStart.isMatch() && result1.fCoinEnd.isMatch()) {
+                    result1 = result1.fNext
+                }
+                if (result1 == null) break
+                var result2 = sect2.fHead
+                while (result2 != null) {
+                    closest.find(result1, result2)
+                    result2 = result2.fNext
+                }
+                result1 = result1.fNext
+            } while (result1 != null)
+            closest.finish(intersections)
+            // Midpoint coincidence detection between adjacent intersections.
+            var last = intersections.used() - 1
+            var index = 0
+            while (index < last) {
+                if (intersections.isCoincident(index) && intersections.isCoincident(index + 1)) {
+                    ++index; continue
+                }
+                val midT = (intersections.t(0, index) + intersections.t(0, index + 1)) / 2
+                val midPt = sect1.fCurve.ptAtT(midT)
+                val perp = SkTCoincident()
+                perp.setPerp(sect1.fCurve, midT, midPt, sect2.fCurve)
+                if (!perp.isMatch()) { ++index; continue }
+                if (intersections.isCoincident(index)) {
+                    intersections.removeOne(index); --last
+                } else if (intersections.isCoincident(index + 1)) {
+                    intersections.removeOne(index + 1); --last
+                } else {
+                    intersections.setCoincident(index); ++index
+                }
+                intersections.setCoincident(index)
+            }
+        }
     }
 }
