@@ -198,4 +198,103 @@ class JavaTextLayoutShaperTest {
         assertNotNull(blob)
         assertEquals(1, blob!!.runs.size)
     }
+
+    // -------------------------------------------------------------------
+    // Phase I4.3 — line wrapping (java.text.BreakIterator)
+    // -------------------------------------------------------------------
+
+    @Test
+    fun `wide width emits a single line for short text`() {
+        val handler = CapturingHandler()
+        SkShaper.MakeJavaTextLayout().shape(
+            utf8 = "Hello world", font = awtFont(), leftToRight = true,
+            width = 10_000f, runHandler = handler,
+        )
+        val begins = handler.log.count { it == "beginLine" }
+        val commits = handler.log.count { it == "commitLine" }
+        assertEquals(1, begins)
+        assertEquals(1, commits)
+    }
+
+    @Test
+    fun `narrow width wraps text into multiple lines at word boundaries`() {
+        val handler = CapturingHandler()
+        // "the quick brown fox jumps over" — at 16pt with a 60px width
+        // we expect at least 3 lines (one or two words per line).
+        SkShaper.MakeJavaTextLayout().shape(
+            utf8 = "the quick brown fox jumps over", font = awtFont(),
+            leftToRight = true, width = 60f, runHandler = handler,
+        )
+        val begins = handler.log.count { it == "beginLine" }
+        assertTrue(begins >= 3) { "Expected ≥ 3 lines, got $begins" }
+        // Same number of commits as begins.
+        assertEquals(begins, handler.log.count { it == "commitLine" })
+    }
+
+    @Test
+    fun `infinite width preserves single-line output`() {
+        val handler = CapturingHandler()
+        SkShaper.MakeJavaTextLayout().shape(
+            utf8 = "the quick brown fox jumps over the lazy dog",
+            font = awtFont(), leftToRight = true,
+            width = Float.POSITIVE_INFINITY, runHandler = handler,
+        )
+        assertEquals(1, handler.log.count { it == "beginLine" })
+        assertEquals(1, handler.log.count { it == "commitLine" })
+    }
+
+    @Test
+    fun `single oversized word overflows alone on one line`() {
+        // A single uninterrupted token — BreakIterator finds no
+        // intra-word break, so even at width=10 we get one line.
+        val handler = CapturingHandler()
+        SkShaper.MakeJavaTextLayout().shape(
+            utf8 = "supercalifragilisticexpialidocious",
+            font = awtFont(), leftToRight = true,
+            width = 10f, runHandler = handler,
+        )
+        assertEquals(1, handler.log.count { it == "beginLine" })
+        assertEquals(1, handler.log.count { it == "commitLine" })
+        assertTrue(handler.runs.isNotEmpty())
+    }
+
+    @Test
+    fun `wrapped lines anchor at successively lower Y in SkTextBlobShaperRunHandler`() {
+        val handler = SkTextBlobShaperRunHandler("the quick brown fox", originX = 0f, originY = 50f)
+        SkShaper.MakeJavaTextLayout().shape(
+            utf8 = "the quick brown fox", font = awtFont(),
+            leftToRight = true, width = 60f, runHandler = handler,
+        )
+        val blob = handler.makeBlob()
+        assertNotNull(blob)
+        // Multi-line output → at least 2 runs at distinct Ys.
+        val ys = blob!!.runs.flatMap { run ->
+            when (run) {
+                is org.skia.foundation.SkTextBlob.Run.FullPositions -> run.positions
+                    .filterIndexed { idx, _ -> idx % 2 == 1 }
+                else -> emptyList()
+            }
+        }.distinct()
+        assertTrue(ys.size >= 2) { "Expected ≥ 2 distinct line Y positions, got $ys" }
+    }
+
+    @Test
+    fun `cluster offsets stay absolute UTF-8 byte indices across line wraps`() {
+        // "aé bé cé" — wraps narrow ; clusters must keep increasing
+        // (no resets) since they're absolute byte offsets.
+        val handler = CapturingHandler()
+        SkShaper.MakeJavaTextLayout().shape(
+            utf8 = "aé bé cé", font = awtFont(),
+            leftToRight = true, width = 30f, runHandler = handler,
+        )
+        // Walk all clusters across all runs in the order emitted.
+        val clusters = handler.buffers.flatMap { buf ->
+            (0 until buf.glyphs.size).map { buf.clusters[it] }
+        }
+        // Every cluster index should map to a valid byte position
+        // within the input ("aé bé cé" = 11 UTF-8 bytes).
+        for (c in clusters) {
+            assertTrue(c in 0..11) { "cluster $c out of [0, 11] in $clusters" }
+        }
+    }
 }

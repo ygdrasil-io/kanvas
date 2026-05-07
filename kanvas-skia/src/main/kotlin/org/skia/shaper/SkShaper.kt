@@ -256,7 +256,19 @@ public class SkTextBlobShaperRunHandler(
     private var lineBottom = Float.NEGATIVE_INFINITY
     private var pendingAlloc: SkTextBlobBuilder.AllocationPos? = null
 
-    override fun beginLine() { /* no-op for single-line shaping */ }
+    /**
+     * Phase I4.3 — multi-line tracking. Each [beginLine] zeros the
+     * "max line height" accumulator ; runs report their lineHeight via
+     * [SkShaper.RunInfo.lineHeight] and we keep the largest. On
+     * [commitLine] the baseline cursor advances by that amount so the
+     * next line's runs anchor below the current one.
+     */
+    private var currentLineY: Float = originY
+    private var currentLineMaxHeight: Float = 0f
+
+    override fun beginLine() {
+        currentLineMaxHeight = 0f
+    }
 
     override fun runInfo(info: SkShaper.RunInfo) { /* no-op — buffer alloc happens in runBuffer */ }
 
@@ -265,18 +277,19 @@ public class SkTextBlobShaperRunHandler(
     override fun runBuffer(info: SkShaper.RunInfo): SkShaper.Buffer {
         val alloc = builder.allocRunPos(info.font, info.glyphCount)
         pendingAlloc = alloc
+        currentLineMaxHeight = maxOf(currentLineMaxHeight, info.lineHeight)
         // Track line bbox conservatively : extend by `font.size` on
-        // every side around `(originX, originY)`.
+        // every side around `(originX, currentLineY)`.
         val pad = info.font.size
         lineLeft = minOf(lineLeft, originX - pad)
-        lineTop = minOf(lineTop, originY + info.ascent)
+        lineTop = minOf(lineTop, currentLineY + info.ascent)
         lineRight = maxOf(lineRight, originX + info.advanceX + pad)
-        lineBottom = maxOf(lineBottom, originY + info.lineHeight + info.ascent)
+        lineBottom = maxOf(lineBottom, currentLineY + info.lineHeight + info.ascent)
         return SkShaper.Buffer(
             glyphs = alloc.glyphs,
             positions = alloc.pos,
             clusters = IntArray(info.glyphCount),
-            point = floatArrayOf(originX, originY),
+            point = floatArrayOf(originX, currentLineY),
         )
     }
 
@@ -284,7 +297,13 @@ public class SkTextBlobShaperRunHandler(
         pendingAlloc = null
     }
 
-    override fun commitLine() { /* no-op for single-line */ }
+    override fun commitLine() {
+        // Advance the baseline cursor by the largest lineHeight seen
+        // on this line. If no runs were emitted (empty line) the
+        // cursor stays put — matches Skia's behaviour where empty
+        // lines have zero height.
+        currentLineY += currentLineMaxHeight
+    }
 
     /**
      * Produce the accumulated [SkTextBlob], or `null` if no runs
