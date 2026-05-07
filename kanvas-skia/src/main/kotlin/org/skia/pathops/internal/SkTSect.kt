@@ -831,8 +831,328 @@ internal class SkTSect(curve: SkTCurve) {
         return deleteSpan
     }
 
+    // ─── Intersect machinery (Phase D1.1.e.2.c.3) ──────────────────
+
+    /**
+     * Test if [thisLine] is approximately parallel to the opposing
+     * curve [opp] — heuristic used by [linesIntersect] to detect
+     * coincidence early. Mirrors the static `is_parallel` template
+     * helper in `SkPathOpsTSect.cpp` ; specialized to the conic case
+     * (the upstream comment says "FIXME : breaks a lot of stuff now"
+     * for non-conic, so the helper bails out).
+     */
+    fun isParallel(thisLine: SkDLine, opp: SkTCurve): Boolean {
+        if (!opp.isConic()) return false
+        var finds = 0
+        // Perp at thisLine[1] : (thisLine[1].x + (thisLine[1].y - thisLine[0].y),
+        //                        thisLine[1].y + (thisLine[0].x - thisLine[1].x))
+        val perp1Pt0 = SkDPoint(
+            thisLine[1].x + (thisLine[1].y - thisLine[0].y),
+            thisLine[1].y + (thisLine[0].x - thisLine[1].x),
+        )
+        val thisPerp1 = SkDLine(arrayOf(perp1Pt0, thisLine[1]))
+        val perpRayI = SkIntersections()
+        opp.intersectRay(perpRayI, thisPerp1)
+        for (pIndex in 0 until perpRayI.used()) {
+            if (perpRayI.pt(pIndex).approximatelyEqual(thisPerp1[1])) finds++
+        }
+        // Perp at thisLine[0].
+        val perp2Pt1 = SkDPoint(
+            thisLine[0].x + (thisLine[1].y - thisLine[0].y),
+            thisLine[0].y + (thisLine[0].x - thisLine[1].x),
+        )
+        val thisPerp2 = SkDLine(arrayOf(thisLine[0], perp2Pt1))
+        opp.intersectRay(perpRayI, thisPerp2)
+        for (pIndex in 0 until perpRayI.used()) {
+            if (perpRayI.pt(pIndex).approximatelyEqual(thisPerp2[0])) finds++
+        }
+        return finds >= 2
+    }
+
+    /**
+     * Find the intersection of [span]'s and [oppSpan]'s linearized
+     * (chord) approximations, refining via tangent-line iteration if
+     * not yet converged. Returns 0 (no intersect), 1 (one converged
+     * intersection written to [i]), or 2 (curves are coincident over
+     * a range). Mirrors `SkTSect::linesIntersect`.
+     */
+    fun linesIntersect(span: SkTSpan, opp: SkTSect, oppSpan: SkTSpan, i: SkIntersections): Int {
+        val thisRayI = SkIntersections()
+        val oppRayI = SkIntersections()
+        var thisLine = SkDLine(arrayOf(span.pointFirst(), span.pointLast()))
+        var oppLine = SkDLine(arrayOf(oppSpan.pointFirst(), oppSpan.pointLast()))
+        var loopCount = 0
+        var bestDistSq = Double.MAX_VALUE
+        if (opp.fCurve.intersectRay(thisRayI, thisLine) == 0) return 0
+        if (fCurve.intersectRay(oppRayI, oppLine) == 0) return 0
+        // Coincidence detection : both endpoints of one chord land on the opp curve.
+        if (thisRayI.used() > 1) {
+            var ptMatches = 0
+            for (tIndex in 0 until thisRayI.used()) {
+                for (lIndex in 0..1) {
+                    if (thisRayI.pt(tIndex).approximatelyEqual(thisLine[lIndex])) ptMatches++
+                }
+            }
+            if (ptMatches == 2 || isParallel(thisLine, opp.fCurve)) return 2
+        }
+        if (oppRayI.used() > 1) {
+            var ptMatches = 0
+            for (oIndex in 0 until oppRayI.used()) {
+                for (lIndex in 0..1) {
+                    if (oppRayI.pt(oIndex).approximatelyEqual(oppLine[lIndex])) ptMatches++
+                }
+            }
+            if (ptMatches == 2 || isParallel(oppLine, fCurve)) return 2
+        }
+        // Iterate : pick the closest pair, refine the lines using tangents at those t-values.
+        do {
+            var closest = Double.MAX_VALUE
+            var closeIndex = 0
+            var oppCloseIndex = 0
+            for (index in 0 until oppRayI.used()) {
+                if (!roughly_between(span.fStartT, oppRayI.t(0, index), span.fEndT)) continue
+                for (oIndex in 0 until thisRayI.used()) {
+                    if (!roughly_between(oppSpan.fStartT, thisRayI.t(0, oIndex), oppSpan.fEndT)) continue
+                    val distSq = thisRayI.pt(oIndex).distanceSquared(oppRayI.pt(index))
+                    if (closest > distSq) {
+                        closest = distSq
+                        closeIndex = index
+                        oppCloseIndex = oIndex
+                    }
+                }
+            }
+            if (closest == Double.MAX_VALUE) break
+            val oppIPt = thisRayI.pt(oppCloseIndex)
+            val iPt = oppRayI.pt(closeIndex)
+            if (between(span.fStartT, oppRayI.t(0, closeIndex), span.fEndT)
+                && between(oppSpan.fStartT, thisRayI.t(0, oppCloseIndex), oppSpan.fEndT)
+                && oppIPt.approximatelyEqual(iPt)
+            ) {
+                i.merge(oppRayI, closeIndex, thisRayI, oppCloseIndex)
+                return i.used()
+            }
+            val distSq = oppIPt.distanceSquared(iPt)
+            if (bestDistSq < distSq || ++loopCount > 5) return 0
+            bestDistSq = distSq
+            val oppStart = oppRayI.t(0, closeIndex)
+            val newThis0 = fCurve.ptAtT(oppStart)
+            val tangent = fCurve.dxdyAtT(oppStart)
+            thisLine = SkDLine(arrayOf(newThis0, SkDPoint(newThis0.x + tangent.x, newThis0.y + tangent.y)))
+            if (opp.fCurve.intersectRay(thisRayI, thisLine) == 0) break
+            val start = thisRayI.t(0, oppCloseIndex)
+            val newOpp0 = opp.fCurve.ptAtT(start)
+            val oppTangent = opp.fCurve.dxdyAtT(start)
+            oppLine = SkDLine(arrayOf(newOpp0, SkDPoint(newOpp0.x + oppTangent.x, newOpp0.y + oppTangent.y)))
+            if (fCurve.intersectRay(oppRayI, oppLine) == 0) break
+        } while (true)
+        // Convergence may fail when curves are nearly coincident — fall back
+        // to a perpendicular bisection.
+        val oCoinS = SkTCoincident()
+        val oCoinE = SkTCoincident()
+        oCoinS.setPerp(opp.fCurve, oppSpan.fStartT, oppSpan.pointFirst(), fCurve)
+        oCoinE.setPerp(opp.fCurve, oppSpan.fEndT, oppSpan.pointLast(), fCurve)
+        var tStart = oCoinS.perpT()
+        var tEnd = oCoinE.perpT()
+        val swapped = tStart > tEnd
+        if (swapped) { val t = tStart; tStart = tEnd; tEnd = t }
+        tStart = maxOf(tStart, span.fStartT)
+        tEnd = minOf(tEnd, span.fEndT)
+        if (tStart > tEnd) return 0
+        val perpS: SkDVector
+        val perpE: SkDVector
+        when {
+            tStart == span.fStartT -> {
+                val coinS = SkTCoincident()
+                coinS.setPerp(fCurve, span.fStartT, span.pointFirst(), opp.fCurve)
+                perpS = span.pointFirst() - coinS.perpPt()
+            }
+            swapped -> perpS = oCoinE.perpPt() - oppSpan.pointLast()
+            else -> perpS = oCoinS.perpPt() - oppSpan.pointFirst()
+        }
+        when {
+            tEnd == span.fEndT -> {
+                val coinE = SkTCoincident()
+                coinE.setPerp(fCurve, span.fEndT, span.pointLast(), opp.fCurve)
+                perpE = span.pointLast() - coinE.perpPt()
+            }
+            swapped -> perpE = oCoinS.perpPt() - oppSpan.pointFirst()
+            else -> perpE = oCoinE.perpPt() - oppSpan.pointLast()
+        }
+        if (perpS.dot(perpE) >= 0) return 0
+        // Bisect to find the converged point.
+        val coinW = SkTCoincident()
+        var workT = tStart
+        var tStep = tEnd - tStart
+        var workPt = SkDPoint()
+        do {
+            tStep *= 0.5
+            if (precisely_zero(tStep)) return 0
+            workT += tStep
+            workPt = fCurve.ptAtT(workT)
+            coinW.setPerp(fCurve, workT, workPt, opp.fCurve)
+            val perpT = coinW.perpT()
+            if (if (coinW.isMatch()) !between(oppSpan.fStartT, perpT, oppSpan.fEndT) else perpT < 0) {
+                continue
+            }
+            val perpW = workPt - coinW.perpPt()
+            if ((perpS.dot(perpW) >= 0) == (tStep < 0)) tStep = -tStep
+            if (workPt.approximatelyEqual(coinW.perpPt())) break
+        } while (true)
+        val oppTTest = coinW.perpT()
+        if (opp.fHead?.contains(oppTTest) != true) return 0
+        i.setMax(1)
+        i.insert(workT, oppTTest, workPt)
+        return 1
+    }
+
+    /**
+     * Probe whether [span] (this sect) and [oppSpan] ([opp] sect) might
+     * intersect. Writes `oppSpan`'s outcome into [oppResult] (length-1
+     * out array). Returns -1 / 0 / 1 / 2 with the same semantics as
+     * [SkTSpan.hullsIntersect] : -1 means linear (caller follows up
+     * with `linearsIntersect`), 0 = no, 1 = yes, 2 = endpoint-touch only.
+     * Mirrors `SkTSect::intersects`.
+     */
+    fun intersects(span: SkTSpan, opp: SkTSect, oppSpan: SkTSpan, oppResult: IntArray): Int {
+        require(oppResult.size >= 1)
+        val spanStart = booleanArrayOf(false)
+        val oppStart = booleanArrayOf(false)
+        var hullResult = span.hullsIntersect(oppSpan, spanStart, oppStart)
+        if (hullResult >= 0) {
+            if (hullResult == 2) {
+                if (span.fBounded == null || span.fBounded?.next == null) {
+                    if (spanStart[0]) span.fEndT = span.fStartT
+                    else span.fStartT = span.fEndT
+                } else {
+                    hullResult = 1
+                }
+                if (oppSpan.fBounded == null || oppSpan.fBounded?.next == null) {
+                    if (oppSpan.fBounded != null && oppSpan.fBounded?.bounded !== span) return 0
+                    if (oppStart[0]) oppSpan.fEndT = oppSpan.fStartT
+                    else oppSpan.fStartT = oppSpan.fEndT
+                    oppResult[0] = 2
+                } else {
+                    oppResult[0] = 1
+                }
+            } else {
+                oppResult[0] = 1
+            }
+            return hullResult
+        }
+        if (span.fIsLine && oppSpan.fIsLine) {
+            val i = SkIntersections()
+            val sects = linesIntersect(span, opp, oppSpan, i)
+            if (sects == 2) { oppResult[0] = 1; return 1 }
+            if (sects == 0) return -1
+            removedEndCheck(span)
+            span.fStartT = i.t(0, 0); span.fEndT = i.t(0, 0)
+            opp.removedEndCheck(oppSpan)
+            oppSpan.fStartT = i.t(1, 0); oppSpan.fEndT = i.t(1, 0)
+            oppResult[0] = 2
+            return 2
+        }
+        if (span.fIsLinear || oppSpan.fIsLinear) {
+            val r = if (span.linearsIntersect(oppSpan)) 1 else 0
+            oppResult[0] = r
+            return r
+        }
+        oppResult[0] = 1
+        return 1
+    }
+
+    /**
+     * After [span] is split, walk its bounded list and re-test each
+     * entry — drop those that no longer intersect, narrow those that
+     * intersect at one endpoint. Mirrors `SkTSect::trim`.
+     */
+    fun trim(span: SkTSpan, opp: SkTSect): Boolean {
+        if (!span.initBounds(fCurve)) return false
+        var testBounded = span.fBounded
+        while (testBounded != null) {
+            val test = testBounded.bounded
+            val next = testBounded.next
+            val oppSects = IntArray(1)
+            val sects = intersects(span, opp, test, oppSects)
+            if (sects >= 1) {
+                if (oppSects[0] == 2) {
+                    test.initBounds(opp.fCurve)
+                    opp.removeAllBut(span, test, this)
+                }
+                if (sects == 2) {
+                    span.initBounds(fCurve)
+                    removeAllBut(test, span, opp)
+                    return true
+                }
+            } else {
+                if (span.removeBounded(test)) removeSpan(span)
+                if (test.removeBounded(span)) opp.removeSpan(test)
+            }
+            testBounded = next
+        }
+        return true
+    }
+
     companion object {
         /** Coincidence is suspected once both sects have ≥9 consecutive spans. */
         const val COINCIDENT_SPAN_COUNT = 9
+
+        // BinarySearch endpoint-equality bitset (matches upstream `enum`).
+        const val kZeroS1Set: Int = 1
+        const val kOneS1Set: Int = 2
+        const val kZeroS2Set: Int = 4
+        const val kOneS2Set: Int = 8
+
+        /**
+         * Detect endpoint coincidences between [sect1] and [sect2]
+         * (exact-equal first, then approximately-equal). Returns the
+         * `kXxxSet` bitmask of endpoints registered into [intersections].
+         * Mirrors `SkTSect::EndsEqual` — used by BinarySearch's
+         * end-cleanup pass.
+         */
+        fun EndsEqual(sect1: SkTSect, sect2: SkTSect, intersections: SkIntersections): Int {
+            var zeroOneSet = 0
+            if (sect1.fCurve[0] == sect2.fCurve[0]) {
+                zeroOneSet = zeroOneSet or kZeroS1Set or kZeroS2Set
+                intersections.insert(0.0, 0.0, sect1.fCurve[0])
+            }
+            if (sect1.fCurve[0] == sect2.pointLast()) {
+                zeroOneSet = zeroOneSet or kZeroS1Set or kOneS2Set
+                intersections.insert(0.0, 1.0, sect1.fCurve[0])
+            }
+            if (sect1.pointLast() == sect2.fCurve[0]) {
+                zeroOneSet = zeroOneSet or kOneS1Set or kZeroS2Set
+                intersections.insert(1.0, 0.0, sect1.pointLast())
+            }
+            if (sect1.pointLast() == sect2.pointLast()) {
+                zeroOneSet = zeroOneSet or kOneS1Set or kOneS2Set
+                intersections.insert(1.0, 1.0, sect1.pointLast())
+            }
+            // Approximate-equal pass for endpoints not already matched.
+            if ((zeroOneSet and (kZeroS1Set or kZeroS2Set)) == 0
+                && sect1.fCurve[0].approximatelyEqual(sect2.fCurve[0])
+            ) {
+                zeroOneSet = zeroOneSet or kZeroS1Set or kZeroS2Set
+                intersections.insertNear(0.0, 0.0, sect1.fCurve[0], sect2.fCurve[0])
+            }
+            if ((zeroOneSet and (kZeroS1Set or kOneS2Set)) == 0
+                && sect1.fCurve[0].approximatelyEqual(sect2.pointLast())
+            ) {
+                zeroOneSet = zeroOneSet or kZeroS1Set or kOneS2Set
+                intersections.insertNear(0.0, 1.0, sect1.fCurve[0], sect2.pointLast())
+            }
+            if ((zeroOneSet and (kOneS1Set or kZeroS2Set)) == 0
+                && sect1.pointLast().approximatelyEqual(sect2.fCurve[0])
+            ) {
+                zeroOneSet = zeroOneSet or kOneS1Set or kZeroS2Set
+                intersections.insertNear(1.0, 0.0, sect1.pointLast(), sect2.fCurve[0])
+            }
+            if ((zeroOneSet and (kOneS1Set or kOneS2Set)) == 0
+                && sect1.pointLast().approximatelyEqual(sect2.pointLast())
+            ) {
+                zeroOneSet = zeroOneSet or kOneS1Set or kOneS2Set
+                intersections.insertNear(1.0, 1.0, sect1.pointLast(), sect2.pointLast())
+            }
+            return zeroOneSet
+        }
     }
 }
