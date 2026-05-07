@@ -156,4 +156,106 @@ class SkAAClipTest {
         assertTrue(c.isRect())
         assertEquals(1, c.getRowCount())
     }
+
+    // ─── setPath (Phase I3.2.b) ─────────────────────────────────────
+
+    @Test
+    fun `setPath empty path with non-inverse fill yields empty clip`() {
+        val c = SkAAClip()
+        val empty = SkPathBuilder().detach()
+        assertFalse(c.setPath(empty, SkRegion(SkIRect(0, 0, 10, 10)), doAA = true))
+        assertTrue(c.isEmpty())
+    }
+
+    @Test
+    fun `setPath empty clip yields empty regardless of doAA`() {
+        val c = SkAAClip()
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        assertFalse(c.setPath(path, SkRegion(), doAA = false))
+        assertTrue(c.isEmpty())
+        assertFalse(c.setPath(path, SkRegion(), doAA = true))
+        assertTrue(c.isEmpty())
+    }
+
+    @Test
+    fun `setPath rect doAA false delegates through SkRegion+setRegion`() {
+        val c = SkAAClip()
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        assertTrue(c.setPath(path, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = false))
+        assertEquals(SkIRect(0, 0, 10, 10), c.getBounds())
+        assertTrue(c.isRect())
+    }
+
+    @Test
+    fun `setPath rect doAA true on integer-aligned rect yields full coverage rect clip`() {
+        // An integer-aligned rect path under 4×4 supersampling → every
+        // sub-sample inside, all alpha=255, single rect band.
+        val c = SkAAClip()
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(2f, 3f, 12f, 13f)).detach()
+        assertTrue(c.setPath(path, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true))
+        assertEquals(SkIRect(2, 3, 12, 13), c.getBounds())
+        assertTrue(c.isRect())
+    }
+
+    @Test
+    fun `setPath rect doAA true on subpixel-positioned rect yields fractional edges`() {
+        // Rect [0.5, 0.5, 9.5, 9.5] : centre integer pixels are full
+        // coverage, edge pixels (rows 0/9, cols 0/9) get half coverage.
+        val c = SkAAClip()
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0.5f, 0.5f, 9.5f, 9.5f)).detach()
+        assertTrue(c.setPath(path, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true))
+        // Bounds clip to the integer span [0, 10) × [0, 10).
+        assertEquals(SkIRect(0, 0, 10, 10), c.getBounds())
+        // It's no longer a "rect" — edge alpha runs are partial.
+        assertFalse(c.isRect()) { "expected fractional-edge clip, got rect-fast-path" }
+        // At least 3 distinct Y bands : top half-coverage row, full
+        // coverage middle, bottom half-coverage row.
+        assertTrue(c.getRowCount() >= 3) { "expected ≥ 3 bands for fractional edges, got ${c.getRowCount()}" }
+    }
+
+    @Test
+    fun `setPath path entirely outside clip yields empty`() {
+        val c = SkAAClip()
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(200f, 200f, 300f, 300f)).detach()
+        assertFalse(c.setPath(path, SkRegion(SkIRect(0, 0, 100, 100)), doAA = true))
+        assertTrue(c.isEmpty())
+    }
+
+    @Test
+    fun `setPath inverse fill rasterises clip minus path interior`() {
+        // 100×100 clip minus a 10×10 hole → bounds = clip ;
+        // coverage at hole interior should be 0, outside hole 0xFF.
+        val c = SkAAClip()
+        val path = SkPathBuilder()
+            .addRect(org.skia.math.SkRect.MakeLTRB(40f, 40f, 50f, 50f))
+            .setFillType(SkPathFillType.kInverseWinding)
+            .detach()
+        val clip = SkRegion(SkIRect(0, 0, 100, 100))
+        assertTrue(c.setPath(path, clip, doAA = true))
+        assertEquals(SkIRect(0, 0, 100, 100), c.getBounds())
+        // Multiple bands : top/bottom strips full coverage, middle
+        // strip with hole → at least 3 distinct Y regions.
+        assertTrue(c.getRowCount() >= 3)
+        assertFalse(c.isRect())
+    }
+
+    @Test
+    fun `setPath triangle doAA true yields complex coverage region`() {
+        val path = SkPathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(20f, 0f)
+            .lineTo(10f, 20f)
+            .close()
+            .detach()
+        val c = SkAAClip()
+        val clip = SkRegion(SkIRect(-100, -100, 100, 100))
+        assertTrue(c.setPath(path, clip, doAA = true))
+        assertFalse(c.isEmpty())
+        assertFalse(c.isRect())
+        // Triangle baseline at y=0 ; apex at y=20. Bounds should
+        // span the triangle.
+        val b = c.getBounds()
+        assertTrue(b.top >= 0 && b.top <= 1)
+        assertTrue(b.bottom in 19..21)
+    }
 }
