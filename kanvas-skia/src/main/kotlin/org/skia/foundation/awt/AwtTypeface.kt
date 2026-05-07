@@ -31,6 +31,36 @@ import kotlin.math.floor
  * **seul ce fichier (et ses pairs `Awt*.kt`) doit changer** — l'API publique
  * reste figée sur la signature Skia.
  */
+/**
+ * Phase I4.2 — output of [AwtTypeface.shapeAwtRun]. Carries shaped
+ * glyph IDs + run-local positions + char-cluster mapping for one
+ * single-direction text segment.
+ *
+ * @property glyphIds      per-glyph font-local IDs.
+ * @property positions     `(x, y)` per glyph in run-local coords,
+ *                         length `n * 2 + 2` — index `n*2` holds the
+ *                         pen position after the last glyph (the run's
+ *                         total advance).
+ * @property charClusters  UTF-16 char index *relative to the run
+ *                         start* that each glyph derives from. For RTL
+ *                         runs, indices descend monotonically (last
+ *                         char in the range produces the first glyph).
+ * @property advanceX      total run advance — same value as
+ *                         `positions[n * 2]` for convenience.
+ */
+internal data class AwtShapedRun(
+    val glyphIds: IntArray,
+    val positions: FloatArray,
+    val charClusters: IntArray,
+    val advanceX: Float,
+) {
+    // Identity equals/hashCode — these arrays are owned by the producer
+    // and reused ; data-class semantics on byte-equal arrays would be
+    // expensive to no benefit.
+    override fun equals(other: Any?): Boolean = this === other
+    override fun hashCode(): Int = System.identityHashCode(this)
+}
+
 internal class AwtTypeface internal constructor(
     private val baseFont: Font,
     public override val fontStyle: SkFontStyle = SkFontStyle.Normal(),
@@ -322,6 +352,59 @@ internal class AwtTypeface internal constructor(
                 SkFontMetrics.kStrikeoutPositionIsValid_Flag
 
         return lm.height
+    }
+
+    /**
+     * Phase I4.2 — shape one bidi run via `Font.layoutGlyphVector(...,
+     * Font.LAYOUT_LEFT_TO_RIGHT | LAYOUT_RIGHT_TO_LEFT)`, AWT's bidi-
+     * aware shaping entry point. AWT performs basic kerning + ligature
+     * substitution + glyph reordering for the requested direction
+     * within the supplied UTF-16 character range.
+     *
+     * @param chars        input UTF-16 character buffer.
+     * @param start        run start, inclusive (UTF-16 index into [chars]).
+     * @param limit        run end, exclusive.
+     * @param leftToRight  `true` → LTR layout ; `false` → RTL layout.
+     * @return one [AwtShapedRun] containing per-glyph IDs, `(x, y)`
+     *         positions (run-local coords, origin = run start), and
+     *         the UTF-16 char index into [chars] each glyph derives
+     *         from. The run advance is `glyphPositions[2*n]` (AWT
+     *         appends the post-last-glyph pen position).
+     */
+    internal fun shapeAwtRun(
+        chars: CharArray,
+        start: Int,
+        limit: Int,
+        leftToRight: Boolean,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): AwtShapedRun {
+        val font = derivedFont(size, scaleX, skewX)
+        val flags = if (leftToRight) Font.LAYOUT_LEFT_TO_RIGHT else Font.LAYOUT_RIGHT_TO_LEFT
+        val gv = font.layoutGlyphVector(FRC, chars, start, limit, flags)
+        val n = gv.numGlyphs
+        val glyphIds = IntArray(n) { gv.getGlyphCode(it) }
+        val positions = FloatArray(n * 2 + 2)
+        for (i in 0 until n) {
+            val pos = gv.getGlyphPosition(i)
+            positions[i * 2] = pos.x.toFloat()
+            positions[i * 2 + 1] = pos.y.toFloat()
+        }
+        // AWT appends the pen position after the last glyph at index n.
+        val end = gv.getGlyphPosition(n)
+        positions[n * 2] = end.x.toFloat()
+        positions[n * 2 + 1] = end.y.toFloat()
+        // Glyph→char map, indices RELATIVE TO `start` (so the caller
+        // can lift them to UTF-16 by adding `start` back, or to UTF-8
+        // via a precomputed prefix-sum table).
+        val charClusters = IntArray(n) { gv.getGlyphCharIndex(it) }
+        return AwtShapedRun(
+            glyphIds = glyphIds,
+            positions = positions,
+            charClusters = charClusters,
+            advanceX = end.x.toFloat(),
+        )
     }
 
     internal companion object {
