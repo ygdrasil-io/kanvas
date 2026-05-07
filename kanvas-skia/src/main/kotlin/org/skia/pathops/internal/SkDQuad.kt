@@ -101,6 +101,31 @@ internal data class SkDQuad(val pts: Array<SkDPoint> = arrayOf(SkDPoint(), SkDPo
     /** Mirrors `SkDQuad::flip` — return a reversed copy. */
     fun flip(): SkDQuad = SkDQuad(arrayOf(pts[2], pts[1], pts[0]))
 
+    /**
+     * Returns true if the quadratic from index [startIndex] to [endIndex]
+     * is approximately linear (control point lies within ULPs tolerance
+     * of the chord through the endpoints). Mirrors
+     * `SkDQuad::isLinear(int startIndex, int endIndex)`.
+     *
+     * Phase D1.1.c — wired to [SkLineParameters].
+     */
+    fun isLinear(startIndex: Int, endIndex: Int): Boolean {
+        val params = SkLineParameters()
+        params.quadEndPoints(this, startIndex, endIndex)
+        params.normalize()
+        val distance = params.controlPtDistance(this)
+        var tiniest = pts[0].x
+        for (p in pts) {
+            tiniest = minOf(tiniest, p.x); tiniest = minOf(tiniest, p.y)
+        }
+        var largest = pts[0].x
+        for (p in pts) {
+            largest = maxOf(largest, p.x); largest = maxOf(largest, p.y)
+        }
+        largest = maxOf(largest, -tiniest)
+        return approximately_zero_when_compared_to(distance, largest)
+    }
+
     // ─── Pointer helpers (used by hullIntersects) ────────────────────
 
     /**
@@ -197,6 +222,41 @@ internal data class SkDQuad(val pts: Array<SkDPoint> = arrayOf(SkDPoint(), SkDPo
     fun align(endIndex: Int, dstPt: SkDPoint) {
         if (pts[endIndex].x == pts[1].x) dstPt.x = pts[endIndex].x
         if (pts[endIndex].y == pts[1].y) dstPt.y = pts[endIndex].y
+    }
+
+    /**
+     * "Pinned" sub-divide variant — given pinned endpoints [a] (≈ value
+     * at [t1]) and [c] (≈ value at [t2]), recover the middle control
+     * point of the sub-quadratic. Mirrors
+     * `SkDPoint SkDQuad::subDivide(const SkDPoint&, const SkDPoint&, double, double)`.
+     *
+     * Algorithm : compute the regular sub-divided quad's control,
+     * project two rays through `(a, sub[1] + (a - sub[0]))` and
+     * `(c, sub[1] + (c - sub[2]))`, intersect them ; their crossing
+     * point is the pinned middle control. Falls back to the midpoint
+     * of the two ray endpoints if the rays don't meet cleanly.
+     *
+     * Phase D1.1.c — wired to [SkIntersections.intersectRay].
+     */
+    fun subDivide(a: SkDPoint, c: SkDPoint, t1: Double, t2: Double): SkDPoint {
+        require(t1 != t2)
+        val sub = subDivide(t1, t2)
+        val b0 = SkDLine(arrayOf(a, sub[1] + (a - sub[0])))
+        val b1 = SkDLine(arrayOf(c, sub[1] + (c - sub[2])))
+        val ix = SkIntersections()
+        ix.intersectRay(b0, b1)
+        val b: SkDPoint = if (ix.used() == 1 && ix.t(0, 0) >= 0 && ix.t(1, 0) >= 0) {
+            ix.pt(0).copy()
+        } else {
+            return SkDPoint.Mid(b0[1], b1[1])
+        }
+        if (t1 == 0.0 || t2 == 0.0) align(0, b)
+        if (t1 == 1.0 || t2 == 1.0) align(2, b)
+        if (AlmostBequalUlps(b.x, a.x)) b.x = a.x
+        else if (AlmostBequalUlps(b.x, c.x)) b.x = c.x
+        if (AlmostBequalUlps(b.y, a.y)) b.y = a.y
+        else if (AlmostBequalUlps(b.y, c.y)) b.y = c.y
+        return b
     }
 
     // ─── Linear-line intercepts (axis-aligned) ───────────────────────
