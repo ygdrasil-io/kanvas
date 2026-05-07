@@ -157,6 +157,54 @@ class SkAAClipTest {
         assertEquals(1, c.getRowCount())
     }
 
+    // ─── coverage(x, y) (Phase I3.3) ────────────────────────────────
+
+    @Test
+    fun `coverage of empty clip returns 0 for any point`() {
+        val c = SkAAClip()
+        assertEquals(0, c.coverage(0, 0))
+        assertEquals(0, c.coverage(-100, 100))
+    }
+
+    @Test
+    fun `coverage of rect clip is 255 inside, 0 outside (half-open)`() {
+        val c = SkAAClip(SkIRect(10, 20, 30, 40))
+        // Inside corners (inclusive on left/top, exclusive on right/bottom).
+        assertEquals(255, c.coverage(10, 20))
+        assertEquals(255, c.coverage(29, 39))
+        // Outside.
+        assertEquals(0, c.coverage(30, 40))
+        assertEquals(0, c.coverage(9, 20))
+        assertEquals(0, c.coverage(10, 19))
+    }
+
+    @Test
+    fun `coverage of two-rect clip returns 0 in the gap`() {
+        val rgn = SkRegion(SkIRect(0, 0, 10, 10))
+        rgn.op(SkIRect(20, 0, 30, 10), SkRegion.Op.kUnion)
+        val c = SkAAClip()
+        c.setRegion(rgn)
+        assertEquals(255, c.coverage(5, 5))   // first rect
+        assertEquals(0, c.coverage(15, 5))    // gap
+        assertEquals(255, c.coverage(25, 5))  // second rect
+        assertEquals(0, c.coverage(5, 15))    // outside Y
+    }
+
+    @Test
+    fun `coverage on subpixel-positioned AA rect returns fractional alpha at edges`() {
+        // Rect [0.5, 0.5, 9.5, 9.5] doAA=true → edge pixels get half coverage.
+        val c = SkAAClip()
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0.5f, 0.5f, 9.5f, 9.5f)).detach()
+        c.setPath(path, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true)
+        // Centre pixel (4, 4) is fully inside → 255.
+        assertEquals(255, c.coverage(4, 4))
+        // Edge pixel (0, 4) only the right half is covered → ~half (in 0..127 ish).
+        val edgeAlpha = c.coverage(0, 4)
+        assertTrue(edgeAlpha in 1..200) { "expected fractional alpha at edge, got $edgeAlpha" }
+        // Far outside → 0.
+        assertEquals(0, c.coverage(-50, 50))
+    }
+
     // ─── setPath (Phase I3.2.b) ─────────────────────────────────────
 
     @Test
