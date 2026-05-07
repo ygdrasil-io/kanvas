@@ -4,40 +4,46 @@ import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.awt.AwtTypeface
 import java.text.Bidi
+import java.text.BreakIterator
+import java.util.Locale
 
 /**
- * Phase I4.2 — bidi-aware [SkShaper] backed by the JDK's
+ * Phase I4.2 + I4.3 — bidi-aware [SkShaper] backed by the JDK's
  * `java.awt.Font.layoutGlyphVector` (kerning, ligatures, glyph
- * reordering) and `java.text.Bidi` (UAX #9 bidirectional algorithm).
+ * reordering), `java.text.Bidi` (UAX #9 bidirectional algorithm),
+ * and `java.text.BreakIterator` (UAX #14 line break opportunities).
  *
- * **Pipeline** :
- *  1. Decode the input UTF-8 string into Java's UTF-16 char buffer.
- *  2. Compute UTF-8 byte offsets per UTF-16 char (so the [SkShaper]
- *     contract — clusters as UTF-8 byte indices — is honoured).
- *  3. Run [Bidi] with the requested base direction to obtain a list
- *     of `(start, limit, level)` level runs in *logical* order.
- *  4. Reorder those runs into *visual* order via [Bidi.reorderVisually]
- *     (mirror the runs whose level is odd-aligned with the base).
- *  5. For each visual run :
- *     - delegate to [AwtTypeface.shapeAwtRun] which returns shaped
- *       glyph IDs + run-local positions + glyph→UTF-16-char map ;
- *     - emit one [SkShaper.RunInfo] / [SkShaper.Buffer] pair, with
- *       glyphs anchored at the supplied [SkShaper.Buffer.point]
- *       origin plus the cumulative advance of preceding runs ;
- *     - translate the per-glyph char-cluster indices to UTF-8 byte
- *       offsets via the prefix-sum table from step 2.
+ * **Pipeline (per [shape] call)** :
+ *  1. (I4.3) — split the input into lines using
+ *     [BreakIterator.getLineInstance] + a greedy width fill : we keep
+ *     extending the candidate line as long as the next break-segment
+ *     fits in [width]. Single break-segments wider than [width]
+ *     overflow alone (no mid-word breaks).
+ *  2. (I4.2, per line) — decode UTF-16 chars + UTF-8 byte prefix-sum,
+ *     then run [Bidi] with the requested base direction and
+ *     [Bidi.reorderVisually] to obtain visual-order runs.
+ *  3. Per visual run, delegate to [AwtTypeface.shapeAwtRun] to get
+ *     shaped glyph IDs, run-local positions and a glyph→UTF-16-char
+ *     map. Translate the cluster indices to UTF-8 byte offsets via
+ *     the prefix-sum, and emit one [SkShaper.RunInfo] / [SkShaper.Buffer]
+ *     pair anchored at the buffer's origin point + cumulative pen
+ *     advance for the line.
+ *  4. Surround each line with [SkShaper.RunHandler.beginLine] /
+ *     [SkShaper.RunHandler.commitLine] so multi-line handlers (notably
+ *     [SkTextBlobShaperRunHandler]) can advance the baseline cursor
+ *     between lines.
  *
- * **Fallback** : when [SkFont.typeface] is not an [AwtTypeface] (for
+ * **Fallback** — when [SkFont.typeface] is not an [AwtTypeface] (for
  * example [org.skia.foundation.SkTypeface.MakeEmpty]) the shaper
- * defers to [PrimitiveShaper] — the AWT entry-point requires a real
- * font.
+ * defers to [PrimitiveShaper] for the *whole* input ; line wrapping
+ * relies on AWT measurement, so without the AWT engine we punt to
+ * single-line primitive shaping.
  *
  * **Out of scope** :
- *  - line wrapping (Phase I4.3 via ICU `BreakIterator`) — `width` is
- *    accepted for API parity but ignored ;
- *  - complex Indic / Khmer / Thai shaping (HarfBuzz-grade). Latin /
- *    CJK / Arabic / Hebrew render correctly for the common cases via
- *    AWT's built-in shapers.
+ *  - mid-word breaks for ultra-narrow widths (a single break segment
+ *    overflows alone — no character-level fallback) ;
+ *  - HarfBuzz-grade complex Indic / Khmer / Thai shaping. Latin / CJK
+ *    / Arabic / Hebrew render correctly via AWT's built-in shapers.
  */
 internal class JavaTextLayoutShaper : SkShaper() {
 
@@ -45,64 +51,70 @@ internal class JavaTextLayoutShaper : SkShaper() {
         utf8: String,
         font: SkFont,
         leftToRight: Boolean,
-        @Suppress("UNUSED_PARAMETER") width: Float,
+        width: Float,
         runHandler: RunHandler,
     ) {
-        runHandler.beginLine()
-
         if (utf8.isEmpty()) {
+            runHandler.beginLine()
             runHandler.commitLine()
             return
         }
 
         val typeface = font.typeface
         if (typeface !is AwtTypeface) {
-            // No AWT backend → punt to the primitive shaper. We've
-            // already started the line ; close it and re-shape via
-            // PrimitiveShaper which manages its own line bracketing.
-            runHandler.commitLine()
+            // No AWT backend → punt to the primitive shaper for the
+            // whole input. PrimitiveShaper manages its own beginLine /
+            // commitLine bracketing.
             PrimitiveShaper().shape(utf8, font, leftToRight, width, runHandler)
             return
         }
 
-        val chars: CharArray = utf8.toCharArray()
-        val charsLen = chars.size
+        val lines = splitIntoLines(utf8, font, width)
+        // Phase I4.3 splits at UTF-16 char boundaries — store each
+        // line's start char index so we can lift cluster offsets to
+        // the original UTF-8 byte stream.
+        val originBytes = computeUtf8ByteOffsets(utf8.toCharArray())
 
-        // --- UTF-16 char index → UTF-8 byte offset (prefix-sum) ---
-        // Skia's RunHandler clusters are UTF-8 byte offsets ; we walk
-        // the input once in UTF-16 order and accumulate.
-        val byteOffsetByChar = IntArray(charsLen + 1)
-        run {
-            var byteIdx = 0
-            var i = 0
-            while (i < charsLen) {
-                byteOffsetByChar[i] = byteIdx
-                val c = chars[i]
-                val cp: Int = if (Character.isHighSurrogate(c) && i + 1 < charsLen) {
-                    val low = chars[i + 1]
-                    if (Character.isLowSurrogate(low)) {
-                        byteOffsetByChar[i + 1] = byteIdx
-                        Character.toCodePoint(c, low).also { i++ }
-                    } else c.code
-                } else c.code
-                byteIdx += when {
-                    cp < 0x80 -> 1
-                    cp < 0x800 -> 2
-                    cp < 0x10000 -> 3
-                    else -> 4
-                }
-                i++
-            }
-            byteOffsetByChar[charsLen] = byteIdx
+        for ((lineStart, lineLimit) in lines) {
+            runHandler.beginLine()
+            shapeOneLine(
+                chars = utf8.toCharArray(),
+                start = lineStart,
+                limit = lineLimit,
+                font = font,
+                typeface = typeface,
+                leftToRight = leftToRight,
+                originBytes = originBytes,
+                runHandler = runHandler,
+            )
+            runHandler.commitLine()
         }
+    }
 
-        // --- Bidi resolution ---
+    /**
+     * Bidi + per-run shape for one line, restricted to
+     * `chars[start..limit)`. Cluster offsets reported via
+     * [SkShaper.Buffer.clusters] are absolute UTF-8 byte offsets into
+     * the *original* input — looked up via [originBytes].
+     */
+    private fun shapeOneLine(
+        chars: CharArray,
+        start: Int,
+        limit: Int,
+        font: SkFont,
+        typeface: AwtTypeface,
+        leftToRight: Boolean,
+        originBytes: IntArray,
+        runHandler: RunHandler,
+    ) {
+        if (start >= limit) return
+
         val baseLevel = if (leftToRight) Bidi.DIRECTION_LEFT_TO_RIGHT else Bidi.DIRECTION_RIGHT_TO_LEFT
-        val bidi = Bidi(chars, 0, null, 0, charsLen, baseLevel)
+        val bidi = Bidi(chars, start, null, 0, limit - start, baseLevel)
 
         val nRuns = bidi.runCount
-        val runStarts = IntArray(nRuns) { bidi.getRunStart(it) }
-        val runLimits = IntArray(nRuns) { bidi.getRunLimit(it) }
+        val runStarts = IntArray(nRuns) { bidi.getRunStart(it) + start }
+        val runLimits = IntArray(nRuns) { bidi.getRunLimit(it) + start }
         val runLevels = ByteArray(nRuns) { bidi.getRunLevel(it).toByte() }
 
         // Reorder logical runs into visual order. AWT's
@@ -110,22 +122,21 @@ internal class JavaTextLayoutShaper : SkShaper() {
         val visualOrder: Array<Int> = Array(nRuns) { it }
         Bidi.reorderVisually(runLevels, 0, visualOrder, 0, nRuns)
 
-        // --- Font metrics, line height ---
         val metrics = SkFontMetrics()
         val lineHeight = font.getMetrics(metrics)
 
         var penX = 0f
         for (visualIdx in 0 until nRuns) {
             val logicalRun = visualOrder[visualIdx]
-            val start = runStarts[logicalRun]
-            val limit = runLimits[logicalRun]
-            if (start >= limit) continue
+            val runStart = runStarts[logicalRun]
+            val runLimit = runLimits[logicalRun]
+            if (runStart >= runLimit) continue
             val runIsLtr = (runLevels[logicalRun].toInt() and 1) == 0
 
             val shaped = typeface.shapeAwtRun(
                 chars = chars,
-                start = start,
-                limit = limit,
+                start = runStart,
+                limit = runLimit,
                 leftToRight = runIsLtr,
                 size = font.size,
                 scaleX = font.scaleX,
@@ -140,7 +151,7 @@ internal class JavaTextLayoutShaper : SkShaper() {
                 advanceX = shaped.advanceX,
                 advanceY = 0f,
                 glyphCount = n,
-                utf8Range = byteOffsetByChar[start]..byteOffsetByChar[limit],
+                utf8Range = originBytes[runStart]..originBytes[runLimit],
                 lineHeight = lineHeight,
                 ascent = metrics.fAscent,
             )
@@ -160,14 +171,97 @@ internal class JavaTextLayoutShaper : SkShaper() {
                 buffer.glyphs[i] = shaped.glyphIds[i]
                 buffer.positions[i * 2] = originX + penX + shaped.positions[i * 2]
                 buffer.positions[i * 2 + 1] = originY + shaped.positions[i * 2 + 1]
-                // shaped.charClusters[i] is *relative to start*, in UTF-16 chars.
-                val charIdx = (start + shaped.charClusters[i]).coerceIn(0, charsLen)
-                buffer.clusters[i] = byteOffsetByChar[charIdx]
+                // shaped.charClusters[i] is *relative to runStart*, in UTF-16 chars.
+                val charIdx = (runStart + shaped.charClusters[i]).coerceIn(0, originBytes.size - 1)
+                buffer.clusters[i] = originBytes[charIdx]
             }
             runHandler.commitRunBuffer(info)
 
             penX += shaped.advanceX
         }
-        runHandler.commitLine()
+    }
+
+    /**
+     * Phase I4.3 — split [text] into greedy line ranges (start, limit)
+     * such that each range fits in [width] when measured by [font].
+     *
+     * Uses [BreakIterator.getLineInstance] (UAX #14 line breaking
+     * opportunities) — the locale is [Locale.ROOT] for deterministic
+     * behaviour across environments. Trailing whitespace on each
+     * line is *not* trimmed from the range — handlers that want
+     * trimmed-bounds rendering can post-process via the cluster
+     * indices.
+     *
+     * Single break-segments that exceed [width] alone are emitted
+     * as their own line (overflow). Empty ranges are filtered.
+     *
+     * @return list of `(start, limit)` UTF-16 char index pairs into
+     *         [text] ; the union covers the entire input.
+     */
+    private fun splitIntoLines(text: String, font: SkFont, width: Float): List<Pair<Int, Int>> {
+        if (!width.isFinite() || width <= 0f) {
+            return listOf(Pair(0, text.length))
+        }
+
+        val bi = BreakIterator.getLineInstance(Locale.ROOT)
+        bi.setText(text)
+
+        val lines = mutableListOf<Pair<Int, Int>>()
+        var lineStart = 0
+        while (lineStart < text.length) {
+            var lastFit = lineStart
+            var b = bi.following(lineStart)
+            while (b != BreakIterator.DONE) {
+                val advance = font.measureText(text.substring(lineStart, b))
+                if (advance <= width) {
+                    lastFit = b
+                    b = bi.following(b)
+                } else {
+                    break
+                }
+            }
+            val emit = when {
+                lastFit > lineStart -> lastFit
+                b == BreakIterator.DONE -> text.length
+                // First candidate breaks past width — overflow it alone.
+                else -> b
+            }
+            lines.add(Pair(lineStart, emit))
+            lineStart = emit
+        }
+        return lines
+    }
+
+    /**
+     * Phase I4.3 — UTF-16 char index → absolute UTF-8 byte offset
+     * prefix-sum table. Length is `chars.size + 1`. Surrogate pairs
+     * collapse into one code point at the high-surrogate index ; the
+     * low-surrogate's slot mirrors the high one for convenience.
+     */
+    private fun computeUtf8ByteOffsets(chars: CharArray): IntArray {
+        val n = chars.size
+        val out = IntArray(n + 1)
+        var byteIdx = 0
+        var i = 0
+        while (i < n) {
+            out[i] = byteIdx
+            val c = chars[i]
+            val cp: Int = if (Character.isHighSurrogate(c) && i + 1 < n) {
+                val low = chars[i + 1]
+                if (Character.isLowSurrogate(low)) {
+                    out[i + 1] = byteIdx
+                    Character.toCodePoint(c, low).also { i++ }
+                } else c.code
+            } else c.code
+            byteIdx += when {
+                cp < 0x80 -> 1
+                cp < 0x800 -> 2
+                cp < 0x10000 -> 3
+                else -> 4
+            }
+            i++
+        }
+        out[n] = byteIdx
+        return out
     }
 }
