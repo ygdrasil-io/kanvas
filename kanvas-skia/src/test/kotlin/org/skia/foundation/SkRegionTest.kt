@@ -325,13 +325,121 @@ class SkRegionTest {
         assertEquals(SkIRect(0, 0, 100, 100), a.getBounds())
     }
 
+    // ─── setPath (Phase I3.1.c) ─────────────────────────────────────
+
     @Test
-    fun `setPath stub still throws UnsupportedOperationException pending I3 1 c`() {
+    fun `setPath empty path with finite fill yields empty region`() {
         val r = SkRegion()
-        val emptyPath = SkPathBuilder().detach()
-        val ex = assertThrows(UnsupportedOperationException::class.java) {
-            r.setPath(emptyPath, SkRegion(SkIRect(0, 0, 10, 10)))
-        }
-        assertTrue(ex.message?.contains("I3.1.c") == true)
+        val empty = SkPathBuilder().detach()
+        assertFalse(r.setPath(empty, SkRegion(SkIRect(0, 0, 100, 100))))
+        assertTrue(r.isEmpty())
+    }
+
+    @Test
+    fun `setPath empty path with inverse fill yields the clip`() {
+        val r = SkRegion()
+        val empty = SkPathBuilder().setFillType(SkPathFillType.kInverseWinding).detach()
+        val clip = SkRegion(SkIRect(0, 0, 50, 50))
+        assertTrue(r.setPath(empty, clip))
+        assertEquals(SkIRect(0, 0, 50, 50), r.getBounds())
+    }
+
+    @Test
+    fun `setPath empty clip yields empty region`() {
+        val r = SkRegion(SkIRect(0, 0, 10, 10))
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        assertFalse(r.setPath(path, SkRegion()))
+        assertTrue(r.isEmpty())
+    }
+
+    @Test
+    fun `setPath rectangular path matches its bounds when clip is generous`() {
+        val r = SkRegion()
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val clip = SkRegion(SkIRect(-100, -100, 100, 100))
+        assertTrue(r.setPath(path, clip))
+        // Pixel-center inclusion : pixels (0..9) × (0..9) are in.
+        assertEquals(SkIRect(0, 0, 10, 10), r.getBounds())
+        assertTrue(r.contains(0, 0))
+        assertTrue(r.contains(9, 9))
+        assertFalse(r.contains(10, 10))
+    }
+
+    @Test
+    fun `setPath rect intersects with clip`() {
+        val r = SkRegion()
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 100f, 100f)).detach()
+        val clip = SkRegion(SkIRect(20, 30, 60, 80))
+        assertTrue(r.setPath(path, clip))
+        assertEquals(SkIRect(20, 30, 60, 80), r.getBounds())
+    }
+
+    @Test
+    fun `setPath path entirely outside clip yields empty`() {
+        val r = SkRegion()
+        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(200f, 200f, 300f, 300f)).detach()
+        val clip = SkRegion(SkIRect(0, 0, 100, 100))
+        assertFalse(r.setPath(path, clip))
+        assertTrue(r.isEmpty())
+    }
+
+    @Test
+    fun `setPath triangle produces complex region with monotonically narrowing bands`() {
+        // Triangle (0,0)-(10,0)-(5,10), winding fill.
+        val path = SkPathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(10f, 0f)
+            .lineTo(5f, 10f)
+            .close()
+            .detach()
+        val r = SkRegion()
+        val clip = SkRegion(SkIRect(-100, -100, 100, 100))
+        assertTrue(r.setPath(path, clip))
+        assertTrue(r.isComplex()) { "expected complex region, got rects ${rectsOf(r)}" }
+        // Top of triangle (y=0) is wide ; near apex (y=8) is narrow.
+        // Pick a few interior pixels we expect to be inside.
+        assertTrue(r.contains(5, 1)) { "(5, 1) should be inside the triangle" }
+        // Bottom-left and bottom-right corners are *just* outside —
+        // the triangle's apex is at (5, 10).
+        assertFalse(r.contains(0, 9))
+        assertFalse(r.contains(9, 9))
+    }
+
+    @Test
+    fun `setPath inverse winding fill produces clip minus path interior`() {
+        // 100x100 clip with a 20x20 inverse-fill rect path → clip with
+        // a hole.
+        val path = SkPathBuilder()
+            .addRect(org.skia.math.SkRect.MakeLTRB(40f, 40f, 60f, 60f))
+            .setFillType(SkPathFillType.kInverseWinding)
+            .detach()
+        val r = SkRegion()
+        val clip = SkRegion(SkIRect(0, 0, 100, 100))
+        assertTrue(r.setPath(path, clip))
+        // Bounds unchanged (the hole is interior).
+        assertEquals(SkIRect(0, 0, 100, 100), r.getBounds())
+        // Interior of the hole : NOT in the region.
+        assertFalse(r.contains(50, 50))
+        // Just outside the hole : IN the region.
+        assertTrue(r.contains(0, 0))
+        assertTrue(r.contains(99, 99))
+        // Edge of the hole : 39 in, 40 out.
+        assertTrue(r.contains(39, 50))
+        assertFalse(r.contains(50, 50))
+    }
+
+    @Test
+    fun `setPath ignores horizontal edges (zero scanline contribution)`() {
+        // Two stacked rects sharing an edge — net should still be one
+        // rect after canonicalisation.
+        val path = SkPathBuilder()
+            .addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 5f))
+            .addRect(org.skia.math.SkRect.MakeLTRB(0f, 5f, 10f, 10f))
+            .detach()
+        val r = SkRegion()
+        val clip = SkRegion(SkIRect(-100, -100, 100, 100))
+        assertTrue(r.setPath(path, clip))
+        assertEquals(SkIRect(0, 0, 10, 10), r.getBounds())
+        assertTrue(r.isRect())  // canonical form coalesces the two stacked rects
     }
 }
