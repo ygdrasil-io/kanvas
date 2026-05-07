@@ -328,15 +328,311 @@ public class SkRegion private constructor(
     }
 
     /**
-     * Phase I3.1.c — rasterise [path] (intersected with [clip]) into
-     * the band representation. Currently unimplemented ; throws on
-     * call.
+     * Phase I3.1.c — rasterise [path] into integer-aligned bands and
+     * intersect the result with [clip]. The [path]'s
+     * [SkPathFillType] drives the inside / outside test :
+     *  - `kWinding` / `kEvenOdd` produce the path's interior region ;
+     *  - `kInverseWinding` / `kInverseEvenOdd` produce `clip - interior`.
+     *
+     * Algorithm :
+     *  1. Walk [path]'s verb stream, flattening curves to line
+     *     segments via adaptive De Casteljau (see [flattenQuadEdge] /
+     *     [flattenCubicEdge]) — exclude horizontal segments (zero
+     *     contribution to scanline crossings).
+     *  2. For each integer scanline `y` in the path's Y range, sample
+     *     at the pixel center `y + 0.5` :
+     *     - find every edge it crosses ;
+     *     - sort crossings by X ;
+     *     - run an even-odd / non-zero winding sweep to produce a
+     *       sequence of `(left, right)` X intervals ;
+     *     - round to integer pixels via `floor(x + 0.5)` and merge
+     *       any zero-width / abutting intervals.
+     *  3. Group consecutive scanlines with identical X-interval
+     *     arrays into a single band (canonical form).
+     *  4. Intersect / difference the resulting bands with [clip] via
+     *     [scanlineMerge].
+     *
+     * Returns `true` iff the resulting region is non-empty.
      */
-    public fun setPath(
-        @Suppress("UNUSED_PARAMETER") path: SkPath,
-        @Suppress("UNUSED_PARAMETER") clip: SkRegion,
+    public fun setPath(path: SkPath, clip: SkRegion): Boolean {
+        if (clip.isEmpty()) return setEmpty()
+        if (!path.isFinite()) return setEmpty()
+        val isInverse = path.fillType.isInverse()
+        if (path.isEmpty()) {
+            return if (isInverse) set(clip) else setEmpty()
+        }
+
+        val edges = flattenPathToEdges(path)
+        if (edges.isEmpty()) {
+            return if (isInverse) set(clip) else setEmpty()
+        }
+
+        // Y range from edges, intersected with the clip's Y range.
+        var yMinF = Float.POSITIVE_INFINITY
+        var yMaxF = Float.NEGATIVE_INFINITY
+        for (e in edges) {
+            val yLow = minOf(e.y0, e.y1)
+            val yHigh = maxOf(e.y0, e.y1)
+            if (yLow < yMinF) yMinF = yLow
+            if (yHigh > yMaxF) yMaxF = yHigh
+        }
+        val cb = clip.getBounds()
+        val yTop = maxOf(kotlin.math.floor(yMinF.toDouble()).toInt(), cb.top)
+        val yBot = minOf(kotlin.math.ceil(yMaxF.toDouble()).toInt(), cb.bottom)
+        if (yTop >= yBot) {
+            return if (isInverse) set(clip) else setEmpty()
+        }
+
+        val isEvenOdd = path.fillType.isEvenOdd()
+
+        // Build scanline-aggregated bands (consecutive Ys with the
+        // same X intervals collapse into one band).
+        val pathBands = ArrayList<Band>(yBot - yTop)
+        var pendingXs: IntArray? = null
+        var pendingTop = 0
+        for (y in yTop until yBot) {
+            val intervals = computeScanlineIntervals(edges, y + 0.5f, isEvenOdd)
+            if (intervals.isEmpty()) {
+                if (pendingXs != null) {
+                    pathBands.add(Band(pendingTop, y, pendingXs))
+                    pendingXs = null
+                }
+                continue
+            }
+            if (pendingXs == null) {
+                pendingXs = intervals
+                pendingTop = y
+            } else if (!intervals.contentEquals(pendingXs)) {
+                pathBands.add(Band(pendingTop, y, pendingXs))
+                pendingXs = intervals
+                pendingTop = y
+            }
+        }
+        if (pendingXs != null) {
+            pathBands.add(Band(pendingTop, yBot, pendingXs))
+        }
+
+        if (pathBands.isEmpty()) {
+            return if (isInverse) set(clip) else setEmpty()
+        }
+
+        // Intersect (or difference, for inverse fills) with the clip's
+        // bands via the existing scanlineMerge helper.
+        val finalBands = if (isInverse) {
+            // Inverse fill : `clip - pathInterior`.
+            scanlineMerge(clip.bands, pathBands, Op.kDifference)
+        } else {
+            scanlineMerge(pathBands, clip.bands, Op.kIntersect)
+        }
+        return assignFromBands(finalBands)
+    }
+
+    /** Phase I3.1.c — line-segment edge for path rasterisation. */
+    private class PathEdge(val x0: Float, val y0: Float, val x1: Float, val y1: Float)
+
+    /**
+     * Walk [path]'s verb stream, flattening Bézier curves into line
+     * segments via adaptive De Casteljau. Horizontal segments are
+     * dropped (they contribute zero to scanline crossings). Returns
+     * the resulting edge list.
+     */
+    private fun flattenPathToEdges(path: SkPath): List<PathEdge> {
+        val out = ArrayList<PathEdge>(path.verbs.size * 2)
+        var px = 0f; var py = 0f
+        var cx = 0f; var cy = 0f
+        var hasContour = false
+        var coordIdx = 0
+        var weightIdx = 0
+        val coords = path.coords
+        val weights = path.conicWeights
+        for (verb in path.verbs) {
+            when (verb) {
+                SkPath.Verb.kMove -> {
+                    if (hasContour) addEdgeIfNonHorizontal(out, px, py, cx, cy)
+                    px = coords[coordIdx++]
+                    py = coords[coordIdx++]
+                    cx = px; cy = py
+                    hasContour = true
+                }
+                SkPath.Verb.kLine -> {
+                    val nx = coords[coordIdx++]
+                    val ny = coords[coordIdx++]
+                    addEdgeIfNonHorizontal(out, px, py, nx, ny)
+                    px = nx; py = ny
+                }
+                SkPath.Verb.kQuad -> {
+                    val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
+                    val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
+                    flattenQuadEdge(out, px, py, x1, y1, x2, y2, depth = 0)
+                    px = x2; py = y2
+                }
+                SkPath.Verb.kConic -> {
+                    val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
+                    val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
+                    weightIdx++  // conic weight unused — flattened as a quad approximation
+                    flattenQuadEdge(out, px, py, x1, y1, x2, y2, depth = 0)
+                    px = x2; py = y2
+                }
+                SkPath.Verb.kCubic -> {
+                    val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
+                    val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
+                    val x3 = coords[coordIdx++]; val y3 = coords[coordIdx++]
+                    flattenCubicEdge(out, px, py, x1, y1, x2, y2, x3, y3, depth = 0)
+                    px = x3; py = y3
+                }
+                SkPath.Verb.kClose -> {
+                    if (hasContour) {
+                        addEdgeIfNonHorizontal(out, px, py, cx, cy)
+                        px = cx; py = cy
+                        hasContour = false
+                    }
+                }
+            }
+        }
+        if (hasContour) addEdgeIfNonHorizontal(out, px, py, cx, cy)
+        return out
+    }
+
+    private fun addEdgeIfNonHorizontal(
+        out: MutableList<PathEdge>, x0: Float, y0: Float, x1: Float, y1: Float,
+    ) {
+        if (y0 != y1) out.add(PathEdge(x0, y0, x1, y1))
+    }
+
+    /** Adaptive quad flattener — same algorithm as `SkBitmapDevice.flattenQuad`. */
+    private fun flattenQuadEdge(
+        out: MutableList<PathEdge>,
+        x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float, depth: Int,
+    ) {
+        if (depth >= PATH_FLATTEN_MAX_DEPTH || quadIsFlat(x0, y0, x1, y1, x2, y2)) {
+            addEdgeIfNonHorizontal(out, x0, y0, x2, y2)
+            return
+        }
+        val m01x = (x0 + x1) * 0.5f; val m01y = (y0 + y1) * 0.5f
+        val m12x = (x1 + x2) * 0.5f; val m12y = (y1 + y2) * 0.5f
+        val mx = (m01x + m12x) * 0.5f; val my = (m01y + m12y) * 0.5f
+        flattenQuadEdge(out, x0, y0, m01x, m01y, mx, my, depth + 1)
+        flattenQuadEdge(out, mx, my, m12x, m12y, x2, y2, depth + 1)
+    }
+
+    private fun quadIsFlat(
+        x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float,
     ): Boolean {
-        throw UnsupportedOperationException("SkRegion.setPath lands in Phase I3.1.c")
+        val dx = x2 - x0
+        val dy = y2 - y0
+        val chord2 = dx * dx + dy * dy
+        if (chord2 < 1e-12f) return true
+        val cross = (x1 - x0) * dy - (y1 - y0) * dx
+        return (cross * cross) <= PATH_FLATTEN_TOL_SQ * chord2
+    }
+
+    /** Adaptive cubic flattener — same algorithm as `SkBitmapDevice.flattenCubic`. */
+    private fun flattenCubicEdge(
+        out: MutableList<PathEdge>,
+        x0: Float, y0: Float, x1: Float, y1: Float,
+        x2: Float, y2: Float, x3: Float, y3: Float, depth: Int,
+    ) {
+        if (depth >= PATH_FLATTEN_MAX_DEPTH || cubicIsFlat(x0, y0, x1, y1, x2, y2, x3, y3)) {
+            addEdgeIfNonHorizontal(out, x0, y0, x3, y3)
+            return
+        }
+        val ax = (x0 + x1) * 0.5f; val ay = (y0 + y1) * 0.5f
+        val bx = (x1 + x2) * 0.5f; val by = (y1 + y2) * 0.5f
+        val cx = (x2 + x3) * 0.5f; val cy = (y2 + y3) * 0.5f
+        val dx2 = (ax + bx) * 0.5f; val dy2 = (ay + by) * 0.5f
+        val ex2 = (bx + cx) * 0.5f; val ey2 = (by + cy) * 0.5f
+        val fx2 = (dx2 + ex2) * 0.5f; val fy2 = (dy2 + ey2) * 0.5f
+        flattenCubicEdge(out, x0, y0, ax, ay, dx2, dy2, fx2, fy2, depth + 1)
+        flattenCubicEdge(out, fx2, fy2, ex2, ey2, cx, cy, x3, y3, depth + 1)
+    }
+
+    private fun cubicIsFlat(
+        x0: Float, y0: Float, x1: Float, y1: Float,
+        x2: Float, y2: Float, x3: Float, y3: Float,
+    ): Boolean {
+        val dx = x3 - x0
+        val dy = y3 - y0
+        val chord2 = dx * dx + dy * dy
+        if (chord2 < 1e-12f) return true
+        val cross1 = (x1 - x0) * dy - (y1 - y0) * dx
+        val cross2 = (x2 - x0) * dy - (y2 - y0) * dx
+        val maxCross2 = maxOf(cross1 * cross1, cross2 * cross2)
+        return maxCross2 <= PATH_FLATTEN_TOL_SQ * chord2
+    }
+
+    /**
+     * Phase I3.1.c — compute the scanline X intervals for [edges] at
+     * the given pixel-center [y]. Returns an even-length sorted
+     * `IntArray` of `(left, right)` integer pixel pairs, or
+     * [EMPTY_INT_ARRAY] when no part of the path covers the scanline.
+     *
+     * Crossings are paired under the requested winding rule
+     * ([evenOdd] = `true` → even-odd ; `false` → non-zero). Boundary
+     * X coordinates round to integer pixels via `floor(x + 0.5f)`,
+     * matching the pixel-center inclusion semantics of upstream's
+     * `SkRegion::setPath`.
+     */
+    private fun computeScanlineIntervals(
+        edges: List<PathEdge>, y: Float, evenOdd: Boolean,
+    ): IntArray {
+        // Collect crossings with sign indicating winding direction.
+        val xs = ArrayList<Float>()
+        val dirs = ArrayList<Int>()
+        for (e in edges) {
+            val yLow = minOf(e.y0, e.y1)
+            val yHigh = maxOf(e.y0, e.y1)
+            // Half-open Y range [yLow, yHigh) prevents double-counting
+            // at shared vertices.
+            if (y < yLow || y >= yHigh) continue
+            val t = (y - e.y0) / (e.y1 - e.y0)
+            xs.add(e.x0 + t * (e.x1 - e.x0))
+            dirs.add(if (e.y1 > e.y0) +1 else -1)
+        }
+        if (xs.isEmpty()) return EMPTY_INT_ARRAY
+        // Sort by X (carry dirs along).
+        val n = xs.size
+        val idx = IntArray(n) { it }
+        // Insertion sort — short scanlines (< ~50 crossings typical)
+        // beat O(n log n) here.
+        for (i in 1 until n) {
+            val pi = idx[i]
+            val px = xs[pi]
+            var j = i - 1
+            while (j >= 0 && xs[idx[j]] > px) {
+                idx[j + 1] = idx[j]
+                j--
+            }
+            idx[j + 1] = pi
+        }
+        val raw = ArrayList<Int>()
+        var winding = 0
+        var prevInside = false
+        for (i in 0 until n) {
+            val k = idx[i]
+            winding += dirs[k]
+            val inside = if (evenOdd) (winding and 1) != 0 else winding != 0
+            if (inside != prevInside) {
+                raw.add(kotlin.math.floor((xs[k] + 0.5f).toDouble()).toInt())
+                prevInside = inside
+            }
+        }
+        // Drop zero-width intervals + coalesce abutting ones.
+        val cleaned = ArrayList<Int>(raw.size)
+        var i = 0
+        while (i < raw.size - 1) {
+            val l = raw[i]
+            val r = raw[i + 1]
+            if (l < r) {
+                if (cleaned.isNotEmpty() && cleaned[cleaned.size - 1] == l) {
+                    cleaned[cleaned.size - 1] = r
+                } else {
+                    cleaned.add(l)
+                    cleaned.add(r)
+                }
+            }
+            i += 2
+        }
+        return if (cleaned.isEmpty()) EMPTY_INT_ARRAY else IntArray(cleaned.size) { cleaned[it] }
     }
 
     /**
@@ -391,8 +687,12 @@ public class SkRegion private constructor(
             if (aBand != null) yBot = minOf(yBot, if (aActive) aBand.bottom else aBand.top)
             if (bBand != null) yBot = minOf(yBot, if (bActive) bBand.bottom else bBand.top)
 
-            val aXs = if (aActive && aBand != null) aBand.xs else EMPTY_INT_ARRAY
-            val bXs = if (bActive && bBand != null) bBand.xs else EMPTY_INT_ARRAY
+            // Smart-cast through `aActive` / `bActive` (both imply
+            // their band is non-null) is unfortunately not seen by the
+            // Kotlin compiler across the prior `if (aActive && yCursor < aBand.top)`
+            // continue ; explicit null check satisfies the analysis.
+            val aXs = aBand?.takeIf { aActive }?.xs ?: EMPTY_INT_ARRAY
+            val bXs = bBand?.takeIf { bActive }?.xs ?: EMPTY_INT_ARRAY
             val merged = mergeXIntervals(aXs, bXs, op)
 
             if (merged.isNotEmpty()) {
@@ -476,5 +776,17 @@ public class SkRegion private constructor(
 
     private companion object {
         private val EMPTY_INT_ARRAY: IntArray = IntArray(0)
+
+        /** Recursion guard for the De Casteljau flattener — matches Skia's `SkRasterClip`. */
+        private const val PATH_FLATTEN_MAX_DEPTH: Int = 14
+
+        /**
+         * Squared chord-tolerance for [quadIsFlat] / [cubicIsFlat]. A
+         * curve is considered flat when the perpendicular distance
+         * from each control point to the chord is `≤ 0.5 px` —
+         * sufficient to keep the integer-rounded scanline output
+         * stable at typical region sizes.
+         */
+        private const val PATH_FLATTEN_TOL_SQ: Float = 0.25f
     }
 }
