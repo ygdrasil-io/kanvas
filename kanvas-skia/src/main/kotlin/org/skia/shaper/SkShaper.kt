@@ -101,6 +101,24 @@ public abstract class SkShaper protected constructor() {
          * `getWidth(glyphId)` advance API.
          */
         public fun MakePrimitive(): SkShaper = PrimitiveShaper()
+
+        /**
+         * Phase I4.2 — bidi-aware shaper that delegates to the JDK's
+         * [java.awt.Font.layoutGlyphVector] (basic kerning + ligature
+         * substitution + glyph reordering) and `java.text.Bidi`
+         * (Unicode Bidirectional Algorithm — UAX #9). Mixed LTR / RTL
+         * input emits one [RunInfo] per visual run, in visual order.
+         *
+         * Falls back to [MakePrimitive] when the font's typeface is
+         * not AWT-backed (the [SkTypeface.MakeEmpty] no-op typeface,
+         * for example) — those have no native shaping engine.
+         *
+         * **Out of scope** : line wrapping (`width` is still ignored —
+         * arrives in I4.3 via ICU `BreakIterator`), HarfBuzz-grade
+         * complex script support (Indic / Khmer / Thai). Latin / CJK /
+         * Arabic / Hebrew shape correctly for the common cases.
+         */
+        public fun MakeJavaTextLayout(): SkShaper = JavaTextLayoutShaper()
     }
 }
 
