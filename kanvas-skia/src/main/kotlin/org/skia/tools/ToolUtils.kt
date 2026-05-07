@@ -149,4 +149,33 @@ public object ToolUtils {
      */
     public fun DefaultPortableFont(size: SkScalar = 12f): SkFont =
         SkFont(DefaultPortableTypeface(), size)
+
+    /**
+     * Mirrors `ToolUtils::add_to_text_blob(builder, text, font, x, y)`
+     * (`tools/ToolUtils.cpp` line ~1080). Resolves [text] (UTF-8) into
+     * glyph IDs via [SkFont.unicharsToGlyphs] and appends a single
+     * `allocRun`-style run to [builder] anchored at `(x, y)`. The
+     * font's per-glyph advance widths drive intra-run positioning at
+     * draw time.
+     *
+     * No-op when [text] is empty (matches upstream's `count < 1` guard).
+     */
+    public fun addToTextBlob(
+        builder: org.skia.foundation.SkTextBlobBuilder,
+        text: String,
+        font: SkFont,
+        x: SkScalar,
+        y: SkScalar,
+    ) {
+        if (text.isEmpty()) return
+        val codepoints = text.codePoints().toArray()
+        val n = codepoints.size
+        if (n == 0) return
+        val rec = builder.allocRun(font, n, x, y)
+        val glyphsShort = ShortArray(n)
+        font.unicharsToGlyphs(codepoints, n, glyphsShort)
+        for (i in 0 until n) {
+            rec.glyphs[i] = glyphsShort[i].toInt() and 0xFFFF
+        }
+    }
 }
