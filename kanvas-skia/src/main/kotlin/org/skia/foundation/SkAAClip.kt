@@ -230,6 +230,144 @@ public class SkAAClip private constructor(
     /** Total `(width, alpha)` run count across every band. Useful for tests. */
     internal fun computeRunCount(): Int = bands.sumOf { it.widths.size }
 
+    // ─── setPath (Phase I3.2.b) ────────────────────────────────────
+
+    /**
+     * Phase I3.2.b — rasterise [path] (intersected with [clip]) into
+     * AA alpha runs. The [path]'s [SkPathFillType] drives the inside
+     * test (winding / even-odd / inverse).
+     *
+     * @param doAA `false` → binary rasterisation (every covered pixel
+     *             gets `0xFF`, equivalent to [SkRegion.setPath] +
+     *             [setRegion]) ; `true` → 4×4 supersampled coverage,
+     *             yielding alphas in `{0, 16, 32, ..., 240, 255}` at
+     *             edge pixels.
+     */
+    public fun setPath(path: SkPath, clip: SkRegion, doAA: Boolean): Boolean {
+        if (clip.isEmpty()) return setEmpty()
+        if (!path.isFinite()) return setEmpty()
+        if (path.isEmpty()) {
+            return if (path.fillType.isInverse()) setRegion(clip) else setEmpty()
+        }
+
+        if (!doAA) {
+            // Binary rasterisation : delegate to SkRegion.setPath then
+            // promote ; every interior pixel ends up at 0xFF coverage.
+            val region = SkRegion()
+            region.setPath(path, clip)
+            return setRegion(region)
+        }
+
+        return setPathAA(path, clip)
+    }
+
+    /**
+     * Phase I3.2.b — AA rasterisation via 4×4 supersampling.
+     *
+     * Algorithm :
+     *  1. Scale [path] by 4× via [SkPath.makeTransform] ;
+     *  2. rasterise the scaled path through [SkRegion.setPath] using
+     *     the 4× -scaled [clip] — each integer pixel of the resulting
+     *     region corresponds to one 4×4 sub-sample of the original ;
+     *  3. allocate a `width × height` 8-bit coverage buffer over the
+     *     path's clipped bounds (in *original* pixel coordinates) ;
+     *  4. walk the supersampled region's rectangles via
+     *     [SkRegion.Iterator], accumulating one count per original
+     *     pixel for every sub-sample inside ;
+     *  5. scale counts (0..16) to alpha bytes (0..255) ;
+     *  6. RLE-encode each row, group consecutive rows with content-
+     *     equal `(widths, alphas)` into a single band, drop all-zero
+     *     rows ;
+     *  7. for inverse fills, complement the coverage buffer against
+     *     the clip's bounds (`alpha → 255 - alpha`).
+     */
+    private fun setPathAA(path: SkPath, clip: SkRegion): Boolean {
+        val isInverse = path.fillType.isInverse()
+        val cb = clip.getBounds()
+
+        // Determine the integer pixel bounds. For inverse fills, the
+        // result spans the entire clip ; for non-inverse, only the
+        // path's tight bounds intersected with the clip.
+        val pathBounds = path.computeTightBounds()
+        val origLeft: Int
+        val origTop: Int
+        val origRight: Int
+        val origBot: Int
+        if (isInverse) {
+            origLeft = cb.left; origTop = cb.top
+            origRight = cb.right; origBot = cb.bottom
+        } else {
+            origLeft = maxOf(kotlin.math.floor(pathBounds.left.toDouble()).toInt(), cb.left)
+            origTop = maxOf(kotlin.math.floor(pathBounds.top.toDouble()).toInt(), cb.top)
+            origRight = minOf(kotlin.math.ceil(pathBounds.right.toDouble()).toInt(), cb.right)
+            origBot = minOf(kotlin.math.ceil(pathBounds.bottom.toDouble()).toInt(), cb.bottom)
+        }
+        if (origLeft >= origRight || origTop >= origBot) {
+            return if (isInverse) setRegion(clip) else setEmpty()
+        }
+
+        val w = origRight - origLeft
+        val h = origBot - origTop
+
+        // 4× supersample : scale path into a temp region whose pixels
+        // correspond to original sub-pixels.
+        val scaled = path.makeTransform(org.skia.math.SkMatrix.MakeScale(4f, 4f))
+        val ssClip = SkRegion(SkIRect(origLeft * 4, origTop * 4, origRight * 4, origBot * 4))
+        // Use the non-inverse half of the fill rule for raster — we
+        // complement the coverage buffer afterwards.
+        val rasterPath = if (isInverse) {
+            scaled.makeFillType(scaled.fillType.toggleInverse())
+        } else {
+            scaled
+        }
+        val ssRegion = SkRegion()
+        if (!ssRegion.setPath(rasterPath, ssClip) && !isInverse) {
+            return setEmpty()
+        }
+
+        // Coverage accumulator : `coverage[y * w + x]` ∈ 0..16 (sub-
+        // sample count) ; scaled to 0..255 alpha after accumulation.
+        val coverage = ByteArray(w * h)
+        val it = SkRegion.Iterator(ssRegion)
+        while (!it.done()) {
+            val r = it.rect()
+            for (ssY in r.top until r.bottom) {
+                val origY = (ssY shr 2) - origTop  // floorDiv(ssY, 4) - origTop
+                if (origY < 0 || origY >= h) { continue }
+                val rowOff = origY * w
+                for (ssX in r.left until r.right) {
+                    val origX = (ssX shr 2) - origLeft
+                    if (origX < 0 || origX >= w) continue
+                    val idx = rowOff + origX
+                    coverage[idx] = ((coverage[idx].toInt() and 0xFF) + 1).toByte()
+                }
+            }
+            it.next()
+        }
+
+        // 0..16 → 0..255.
+        for (i in coverage.indices) {
+            val c = coverage[i].toInt() and 0xFF
+            coverage[i] = (c * 255 / 16).toByte()
+        }
+        if (isInverse) {
+            for (i in coverage.indices) {
+                coverage[i] = (255 - (coverage[i].toInt() and 0xFF)).toByte()
+            }
+        }
+
+        // RLE-encode rows ; coalesce consecutive rows with identical
+        // runs into a single band ; drop all-zero rows.
+        val newBands = buildBandsFromCoverage(coverage, origLeft, origTop, w, h)
+        if (newBands.isEmpty()) return setEmpty()
+
+        bands = newBands
+        fBounds = computeUnionBounds(newBands, origLeft, origRight)
+        fIsRectFastPath = newBands.size == 1 && newBands[0].widths.size == 1 &&
+            newBands[0].alphas[0] == 0xFF.toByte()
+        return true
+    }
+
     // ─── Internal helpers (Phase I3.2.a) ───────────────────────────
 
     /**
@@ -268,6 +406,112 @@ public class SkAAClip private constructor(
             top = top, bottom = bottom,
             widths = IntArray(widths.size) { widths[it] },
             alphas = ByteArray(alphas.size) { alphas[it] },
+        )
+    }
+
+    /**
+     * Phase I3.2.b — group rows of [coverage] (laid out row-major, w
+     * pixels per row, h rows total) into [Band]s. Each row is RLE-
+     * compressed via [rleEncodeRow] ; consecutive rows with content-
+     * equal `(widths, alphas)` arrays coalesce into a single band ;
+     * all-zero rows are dropped (gap in the band list).
+     *
+     * Y origin is `origTop` (added to per-row indices when emitting
+     * bands). The bands' X width invariant `widths.sum() == w` is
+     * preserved by [rleEncodeRow].
+     */
+    private fun buildBandsFromCoverage(
+        coverage: ByteArray, origLeft: Int, origTop: Int, w: Int, h: Int,
+    ): List<Band> {
+        val out = ArrayList<Band>()
+        var pendingTop = 0
+        var pending: Pair<IntArray, ByteArray>? = null
+
+        for (y in 0 until h) {
+            val rowStart = y * w
+            val row = rleEncodeRow(coverage, rowStart, w)
+            val isAllZero = row.second.all { it == 0.toByte() }
+            if (isAllZero) {
+                pending?.let { (pw, pa) ->
+                    out.add(Band(origTop + pendingTop, origTop + y, pw, pa))
+                }
+                pending = null
+                continue
+            }
+            val current = pending
+            if (current == null) {
+                pending = row
+                pendingTop = y
+            } else if (
+                !row.first.contentEquals(current.first) ||
+                !row.second.contentEquals(current.second)
+            ) {
+                out.add(Band(origTop + pendingTop, origTop + y, current.first, current.second))
+                pending = row
+                pendingTop = y
+            }
+        }
+        pending?.let { (pw, pa) ->
+            out.add(Band(origTop + pendingTop, origTop + h, pw, pa))
+        }
+        return out
+    }
+
+    /**
+     * Run-length encode one row of [coverage] starting at byte
+     * [rowStart], spanning [w] pixels. Returns parallel `(widths,
+     * alphas)` arrays where `widths.sum() == w` and `alphas[i]` is
+     * the alpha byte for run `i`.
+     */
+    private fun rleEncodeRow(coverage: ByteArray, rowStart: Int, w: Int): Pair<IntArray, ByteArray> {
+        val widths = ArrayList<Int>()
+        val alphas = ArrayList<Byte>()
+        var i = 0
+        while (i < w) {
+            val a = coverage[rowStart + i]
+            var j = i + 1
+            while (j < w && coverage[rowStart + j] == a) j++
+            widths.add(j - i)
+            alphas.add(a)
+            i = j
+        }
+        return Pair(
+            IntArray(widths.size) { widths[it] },
+            ByteArray(alphas.size) { alphas[it] },
+        )
+    }
+
+    /**
+     * Phase I3.2.b — compute the tight bounding rect of [bands].
+     * `top` is the first band's `top`, `bottom` is the last band's
+     * `bottom`, `left` / `right` are tightened by inspecting the
+     * leading / trailing zero-alpha runs per band (a row that starts
+     * with `(20, 0), (30, 255)` has effective `left = origLeft + 20`).
+     */
+    private fun computeUnionBounds(bands: List<Band>, outerLeft: Int, outerRight: Int): SkIRect {
+        var minLeft = outerRight
+        var maxRight = outerLeft
+        for (b in bands) {
+            // Skip leading zero runs.
+            var x = outerLeft
+            var firstNonZero = -1
+            var lastNonZero = -1
+            for (i in b.widths.indices) {
+                val nextX = x + b.widths[i]
+                if (b.alphas[i] != 0.toByte()) {
+                    if (firstNonZero < 0) firstNonZero = x
+                    lastNonZero = nextX
+                }
+                x = nextX
+            }
+            if (firstNonZero >= 0) {
+                if (firstNonZero < minLeft) minLeft = firstNonZero
+                if (lastNonZero > maxRight) maxRight = lastNonZero
+            }
+        }
+        return SkIRect(
+            left = minLeft, top = bands[0].top,
+            right = maxRight, bottom = bands[bands.size - 1].bottom,
         )
     }
 }
