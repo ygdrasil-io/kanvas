@@ -238,7 +238,8 @@ internal class SkTSpan(curve: SkTCurve) {
         return false
     }
 
-    private fun oppT(t: Double): SkTSpan? {
+    /** Find the bounded entry whose t-range contains [t], or null. Mirrors `SkTSpan::oppT`. */
+    internal fun oppT(t: Double): SkTSpan? {
         var b = fBounded
         while (b != null) {
             val test = b.bounded
