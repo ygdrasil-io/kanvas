@@ -6,6 +6,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
 | AAXfermodesGM | 84.72% | -0.00% | 1 | 521,044 / 615,000 | 30, 255, 255, 255 | 0, 31, 26, 23 |
 | AaRectModesGM | 80.28% | = | 1 | 246,629 / 307,200 | 0, 209, 230, 30 | 0, 25, 21, 8 |
+| AaclipGM | 97.00% | = | 1 | 27,936 / 28,800 | 0, 76, 178, 163 | 0, 18, 22, 57 |
 | AddArcGM | 91.91% | = | 1 | 994,066 / 1,081,600 | 0, 76, 88, 76 | 0, 8, 9, 9 |
 | AnalyticAntialiasConvexGM | 99.78% | = | 1 | 638,619 / 640,000 | 0, 24, 67, 70 | 0, 8, 18, 18 |
 | AnalyticAntialiasGeneralGM | 99.36% | = | 1 | 635,892 / 640,000 | 0, 20, 56, 53 | 0, 8, 17, 14 |
@@ -29,6 +30,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | Blur2RectsGM | 95.92% | = | 1 | 335,708 / 350,000 | 0, 30, 30, 30 | 0, 9, 9, 9 |
 | Blur2RectsNonNinepatchGM | 94.97% | = | 1 | 332,398 / 350,000 | 0, 179, 179, 179 | 0, 11, 11, 11 |
 | BlurCirclesGM | 85.86% | = | 1 | 774,900 / 902,500 | 0, 59, 59, 59 | 0, 11, 11, 11 |
+| BlurLargeRRectsGM | 36.00% | = | 1 | 32,404 / 90,000 | 0, 124, 135, 112 | 0, 22, 21, 22 |
 | BlurQuickRejectGM | 99.08% | = | 1 | 89,170 / 90,000 | 0, 9, 10, 11 | 0, 1, 2, 2 |
 | BlurredClippedCircleGM | 97.73% | = | 1 | 912,359 / 933,528 | 0, 35, 119, 133 | 0, 7, 18, 19 |
 | Bug12866GM | 93.38% | -0.07% | 1 | 7,650 / 8,192 | 0, 162, 161, 161 | 0, 18, 18, 18 |
@@ -171,6 +173,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ShallowGradientRadialNoditherGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ShallowGradientSweepDitherGM | 99.99% | = | 1 | 639,929 / 640,000 | 0, 2, 2, 2 | 0, 1, 1, 1 |
 | ShallowGradientSweepNoDitherGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| SimpleBlurRoundRectGM | 68.05% | = | 1 | 340,262 / 500,000 | 0, 99, 148, 170 | 0, 14, 10, 22 |
 | SimpleRectGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | SimpleShapesAaGM | 65.01% | -0.01% | 1 | 162,518 / 250,000 | 0, 33, 31, 32 | 0, 5, 5, 5 |
 | SimpleShapesBwGM | 65.55% | = | 1 | 163,874 / 250,000 | 0, 129, 133, 137 | 0, 5, 5, 5 |
