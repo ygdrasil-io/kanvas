@@ -212,13 +212,10 @@ class SkIntersectionsTest {
     // ─── Stubs for curve intersections (D1.1.d/e) ───────────────────
 
     @Test
-    fun `intersect(SkDConic, SkDLine) still throws until D1_1_d_3 lands`() {
+    fun `intersect(SkDQuad, SkDQuad) still throws until D1_1_e lands`() {
         val ix = SkIntersections()
-        val k = SkDConic(
-            pts = SkDQuad(arrayOf(SkDPoint(1.0, 0.0), SkDPoint(1.0, 1.0), SkDPoint(0.0, 1.0))),
-            weight = 0.7071f,
-        )
-        val l = SkDLine(arrayOf(SkDPoint(0.0, 0.5), SkDPoint(1.0, 0.5)))
-        assertThrows(NotImplementedError::class.java) { ix.intersect(k, l) }
+        val a = SkDQuad(arrayOf(SkDPoint(0.0, 0.0), SkDPoint(5.0, 5.0), SkDPoint(10.0, 0.0)))
+        val b = SkDQuad(arrayOf(SkDPoint(0.0, 5.0), SkDPoint(5.0, 0.0), SkDPoint(10.0, 5.0)))
+        assertThrows(NotImplementedError::class.java) { ix.intersect(a, b) }
     }
 }

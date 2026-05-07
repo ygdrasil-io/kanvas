@@ -600,17 +600,43 @@ internal class SkIntersections {
         return helper.verticalIntersect(x, top, bottom, flipped)
     }
 
-    /** Stub. Will land in D1.1.d.3. */
-    fun intersect(conic: SkDConic, line: SkDLine): Int =
-        throw NotImplementedError("intersect(SkDConic, SkDLine) lands in Phase D1.1.d.3")
+    /** Mirrors `SkIntersections::intersect(SkDConic, SkDLine)`. */
+    fun intersect(conic: SkDConic, line: SkDLine): Int {
+        val helper = LineConicIntersections(conic, line, this)
+        helper.allowNear(fAllowNear)
+        return helper.intersect()
+    }
+
+    /** Mirrors `SkIntersections::intersectRay(SkDConic, SkDLine)`. */
+    fun intersectRay(conic: SkDConic, line: SkDLine): Int {
+        val helper = LineConicIntersections(conic, line, this)
+        val roots = DoubleArray(2)
+        val used = helper.intersectRay(roots)
+        fUsed = used
+        for (index in 0 until used) {
+            fT[0][index] = roots[index]
+            fPt[index] = conic.ptAtT(roots[index])
+        }
+        return used
+    }
+
+    /** Mirrors `SkIntersections::horizontal(SkDConic, double, double, double, bool)`. */
+    fun horizontal(conic: SkDConic, left: Double, right: Double, y: Double, flipped: Boolean): Int {
+        val line = SkDLine(arrayOf(SkDPoint(left, y), SkDPoint(right, y)))
+        val helper = LineConicIntersections(conic, line, this)
+        return helper.horizontalIntersect(y, left, right, flipped)
+    }
+
+    /** Mirrors `SkIntersections::vertical(SkDConic, double, double, double, bool)`. */
+    fun vertical(conic: SkDConic, top: Double, bottom: Double, x: Double, flipped: Boolean): Int {
+        val line = SkDLine(arrayOf(SkDPoint(x, top), SkDPoint(x, bottom)))
+        val helper = LineConicIntersections(conic, line, this)
+        return helper.verticalIntersect(x, top, bottom, flipped)
+    }
 
     /** Stub. Will land in D1.1.e. */
     fun intersect(a: SkDQuad, b: SkDQuad): Int =
         throw NotImplementedError("intersect(SkDQuad, SkDQuad) lands in Phase D1.1.e")
-
-    /** Stub. Will land in D1.1.d.3. */
-    fun intersectRay(conic: SkDConic, line: SkDLine): Int =
-        throw NotImplementedError("intersectRay(SkDConic, SkDLine) lands in Phase D1.1.d.3")
 
     // ─── SkPoint façade methods for SkDQuad ─────────────────────────
 
@@ -663,6 +689,39 @@ internal class SkIntersections {
         val cubic = SkDCubic().set(a[0], a[1], a[2], a[3])
         fMax = 3
         return vertical(cubic, top.toDouble(), bottom.toDouble(), x.toDouble(), flipped)
+    }
+
+    // ─── SkPoint façade methods for SkDConic ────────────────────────
+
+    /** Mirrors `SkIntersections::conicLine(SkPoint a[3], SkScalar weight, SkPoint b[2])`. */
+    fun conicLine(a: Array<org.skia.math.SkPoint>, weight: Float, b: Array<org.skia.math.SkPoint>): Int {
+        require(a.size >= 3 && b.size >= 2)
+        val conic = SkDConic().set(a[0], a[1], a[2], weight)
+        val line = SkDLine().set(b[0], b[1])
+        fMax = 3 // partial coincidence + non-coincident intersection
+        return intersect(conic, line)
+    }
+
+    /** Mirrors `SkIntersections::conicHorizontal(SkPoint a[3], SkScalar weight, left, right, y, flipped)`. */
+    fun conicHorizontal(
+        a: Array<org.skia.math.SkPoint>, weight: Float,
+        left: Float, right: Float, y: Float, flipped: Boolean,
+    ): Int {
+        require(a.size >= 3)
+        val conic = SkDConic().set(a[0], a[1], a[2], weight)
+        fMax = 2
+        return horizontal(conic, left.toDouble(), right.toDouble(), y.toDouble(), flipped)
+    }
+
+    /** Mirrors `SkIntersections::conicVertical(SkPoint a[3], SkScalar weight, top, bottom, x, flipped)`. */
+    fun conicVertical(
+        a: Array<org.skia.math.SkPoint>, weight: Float,
+        top: Float, bottom: Float, x: Float, flipped: Boolean,
+    ): Int {
+        require(a.size >= 3)
+        val conic = SkDConic().set(a[0], a[1], a[2], weight)
+        fMax = 2
+        return vertical(conic, top.toDouble(), bottom.toDouble(), x.toDouble(), flipped)
     }
 
     // ─── Internal helpers ───────────────────────────────────────────
@@ -724,6 +783,14 @@ internal class SkIntersections {
             F -= x.toDouble()
             return SkDQuad.RootsValidT(D, 2 * E, F, roots)
         }
+
+        /** Mirrors `SkIntersections::HorizontalIntercept(SkDConic, SkScalar, double*)`. */
+        fun HorizontalIntercept(conic: SkDConic, y: Float, roots: DoubleArray): Int =
+            conic.horizontalIntersect(y.toDouble(), roots)
+
+        /** Mirrors `SkIntersections::VerticalIntercept(SkDConic, SkScalar, double*)`. */
+        fun VerticalIntercept(conic: SkDConic, x: Float, roots: DoubleArray): Int =
+            conic.verticalIntersect(x.toDouble(), roots)
 
         /**
          * Mirrors the static `horizontal_coincident` helper in
