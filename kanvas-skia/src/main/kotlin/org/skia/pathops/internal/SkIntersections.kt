@@ -634,9 +634,62 @@ internal class SkIntersections {
         return helper.verticalIntersect(x, top, bottom, flipped)
     }
 
-    /** Stub. Will land in D1.1.e. */
-    fun intersect(a: SkDQuad, b: SkDQuad): Int =
-        throw NotImplementedError("intersect(SkDQuad, SkDQuad) lands in Phase D1.1.e")
+    // ─── Curve-curve intersection (Phase D1.1.e.3) ──────────────────
+    //
+    // Each method wraps the two curves in their respective SkT* types,
+    // builds two SkTSects, and dispatches to SkTSect.BinarySearch
+    // (the Bézier-clipping algorithm shipped in D1.1.e.2.c.4). All 6
+    // cross-curve combinations follow this pattern. Mirrors
+    // `SkIntersections::intersect(SkDQuad, SkDQuad)` etc. in
+    // `src/pathops/SkPathOpsTSect.cpp`.
+
+    /** Mirrors `SkIntersections::intersect(SkDQuad, SkDQuad)`. */
+    fun intersect(q1: SkDQuad, q2: SkDQuad): Int {
+        val sect1 = SkTSect(SkTQuad(q1))
+        val sect2 = SkTSect(SkTQuad(q2))
+        SkTSect.BinarySearch(sect1, sect2, this)
+        return used()
+    }
+
+    /** Mirrors `SkIntersections::intersect(SkDConic, SkDQuad)`. */
+    fun intersect(c: SkDConic, q: SkDQuad): Int {
+        val sect1 = SkTSect(SkTConic(c))
+        val sect2 = SkTSect(SkTQuad(q))
+        SkTSect.BinarySearch(sect1, sect2, this)
+        return used()
+    }
+
+    /** Mirrors `SkIntersections::intersect(SkDConic, SkDConic)`. */
+    fun intersect(c1: SkDConic, c2: SkDConic): Int {
+        val sect1 = SkTSect(SkTConic(c1))
+        val sect2 = SkTSect(SkTConic(c2))
+        SkTSect.BinarySearch(sect1, sect2, this)
+        return used()
+    }
+
+    /** Mirrors `SkIntersections::intersect(SkDCubic, SkDQuad)`. */
+    fun intersect(c: SkDCubic, q: SkDQuad): Int {
+        val sect1 = SkTSect(SkTCubic(c))
+        val sect2 = SkTSect(SkTQuad(q))
+        SkTSect.BinarySearch(sect1, sect2, this)
+        return used()
+    }
+
+    /** Mirrors `SkIntersections::intersect(SkDCubic, SkDConic)`. */
+    fun intersect(cu: SkDCubic, co: SkDConic): Int {
+        val sect1 = SkTSect(SkTCubic(cu))
+        val sect2 = SkTSect(SkTConic(co))
+        SkTSect.BinarySearch(sect1, sect2, this)
+        return used()
+    }
+
+    /** Mirrors `SkIntersections::intersect(SkDCubic, SkDCubic)`. */
+    fun intersect(c1: SkDCubic, c2: SkDCubic): Int {
+        val sect1 = SkTSect(SkTCubic(c1))
+        val sect2 = SkTSect(SkTCubic(c2))
+        SkTSect.BinarySearch(sect1, sect2, this)
+        return used()
+    }
 
     // ─── SkPoint façade methods for SkDQuad ─────────────────────────
 
