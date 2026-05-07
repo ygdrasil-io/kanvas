@@ -212,10 +212,13 @@ class SkIntersectionsTest {
     // ─── Stubs for curve intersections (D1.1.d/e) ───────────────────
 
     @Test
-    fun `intersect(SkDQuad, SkDLine) throws NotImplementedError as a deferred stub`() {
+    fun `intersect(SkDCubic, SkDLine) still throws until D1_1_d_2 lands`() {
         val ix = SkIntersections()
-        val q = SkDQuad(arrayOf(SkDPoint(0.0, 0.0), SkDPoint(5.0, 5.0), SkDPoint(10.0, 0.0)))
-        val l = SkDLine(arrayOf(SkDPoint(0.0, 2.0), SkDPoint(10.0, 2.0)))
-        assertThrows(NotImplementedError::class.java) { ix.intersect(q, l) }
+        val c = SkDCubic(arrayOf(
+            SkDPoint(0.0, 0.0), SkDPoint(0.0, 10.0),
+            SkDPoint(10.0, 10.0), SkDPoint(10.0, 0.0),
+        ))
+        val l = SkDLine(arrayOf(SkDPoint(0.0, 5.0), SkDPoint(10.0, 5.0)))
+        assertThrows(NotImplementedError::class.java) { ix.intersect(c, l) }
     }
 }
