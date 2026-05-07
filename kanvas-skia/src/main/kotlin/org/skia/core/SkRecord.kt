@@ -121,4 +121,12 @@ public sealed class SkRecord {
         public val font: SkFont,
         public val paint: SkPaint,
     ) : SkRecord()
+
+    /** Phase I1 — `SkCanvas::drawTextBlob`. */
+    public class DrawTextBlob(
+        public val blob: org.skia.foundation.SkTextBlob,
+        public val x: SkScalar,
+        public val y: SkScalar,
+        public val paint: SkPaint,
+    ) : SkRecord()
 }

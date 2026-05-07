@@ -215,4 +215,16 @@ internal class SkRecordingCanvas(
     ) {
         records += SkRecord.DrawSimpleText(text, byteLength, encoding, x, y, font.copy(), paint.copy())
     }
+
+    override fun drawTextBlob(
+        blob: org.skia.foundation.SkTextBlob,
+        x: SkScalar,
+        y: SkScalar,
+        paint: SkPaint,
+    ) {
+        // Phase I1 — record by reference. SkTextBlob is immutable so a
+        // shared reference between record and replay is safe ; we copy
+        // only the paint (mutable).
+        records += SkRecord.DrawTextBlob(blob, x, y, paint.copy())
+    }
 }
