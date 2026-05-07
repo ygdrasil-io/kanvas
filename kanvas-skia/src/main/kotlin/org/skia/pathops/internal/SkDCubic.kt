@@ -140,6 +140,172 @@ internal data class SkDCubic(
         o1Pts[2] = pts[offset]
     }
 
+    // ─── Convex hull + cross-curve hullIntersects (Phase D1.1.e.1) ──
+
+    /**
+     * Compute the convex hull of the 4 control points. Writes the
+     * vertex indices in CCW order into [order] (length 4). Returns
+     * the number of hull vertices (3 or 4 — never less, since
+     * collapsed cubics are not considered).
+     *
+     * Mirrors `SkDCubic::convexHull` (`src/pathops/SkOpCubicHull.cpp`).
+     * The algorithm assumes 3 unique non-linear points form a
+     * triangle ; the 4th point may replace one of the first three,
+     * be discarded if inside, or be inserted to form a quadrilateral.
+     */
+    fun convexHull(order: CharArray): Int {
+        require(order.size >= 4)
+        // Find top point (smallest y, then smallest x).
+        var yMin = 0
+        for (index in 1 until 4) {
+            if (pts[yMin].y > pts[index].y
+                || (pts[yMin].y == pts[index].y && pts[yMin].x > pts[index].x)
+            ) yMin = index
+        }
+        order[0] = yMin.toChar()
+        var midX = -1
+        var backupYMin = -1
+        for (pass in 0 until 2) {
+            for (index in 0 until 4) {
+                if (index == yMin) continue
+                val mask = otherTwo(yMin, index)
+                val side1 = yMin xor mask
+                val side2 = index xor mask
+                val rotPath = SkDCubic(arrayOf(SkDPoint(), SkDPoint(), SkDPoint(), SkDPoint()))
+                if (!rotateForHull(yMin, index, rotPath)) {
+                    order[1] = side1.toChar()
+                    order[2] = side2.toChar()
+                    return 3
+                }
+                var sides = sideSign(rotPath[side1].y - rotPath[yMin].y)
+                sides = sides xor sideSign(rotPath[side2].y - rotPath[yMin].y)
+                if (sides == 2) { // one remaining point < 0, one > 0 — index is the mid
+                    if (midX >= 0) {
+                        // Two midpoint candidates : means a control coincides with an end.
+                        order[0] = 0.toChar()
+                        order[1] = 3.toChar()
+                        if (pts[1] == pts[0] || pts[1] == pts[3]) {
+                            order[2] = 2.toChar(); return 3
+                        }
+                        if (pts[2] == pts[0] || pts[2] == pts[3]) {
+                            order[2] = 1.toChar(); return 3
+                        }
+                        // Near-equal control to end (numerically) — pick the closer.
+                        val d10 = pts[1].distanceSquared(pts[0])
+                        val d13 = pts[1].distanceSquared(pts[3])
+                        val d20 = pts[2].distanceSquared(pts[0])
+                        val d23 = pts[2].distanceSquared(pts[3])
+                        val s1 = minOf(d10, d13)
+                        val s2 = minOf(d20, d23)
+                        if (approximately_zero(minOf(s1, s2))) {
+                            order[2] = (if (s1 < s2) 2 else 1).toChar()
+                            return 3
+                        }
+                    }
+                    midX = index
+                } else if (sides == 0) {
+                    // Both points to one side — index is a backup top.
+                    backupYMin = index
+                }
+            }
+            if (midX >= 0) break
+            if (backupYMin < 0) break
+            yMin = backupYMin
+            backupYMin = -1
+        }
+        if (midX < 0) midX = yMin xor 3 // any other point
+        val mask = otherTwo(yMin, midX)
+        val least = yMin xor mask
+        val most = midX xor mask
+        order[0] = yMin.toChar()
+        order[1] = least.toChar()
+        // Check whether mid is on same side as yMin of the (least, most) line.
+        val midPath = SkDCubic(arrayOf(SkDPoint(), SkDPoint(), SkDPoint(), SkDPoint()))
+        if (!rotateForHull(least, most, midPath)) {
+            order[2] = midX.toChar()
+            return 3
+        }
+        var midSides = sideSign(midPath[yMin].y - midPath[least].y)
+        midSides = midSides xor sideSign(midPath[midX].y - midPath[least].y)
+        if (midSides != 2) {
+            order[2] = most.toChar()
+            return 3
+        }
+        order[2] = midX.toChar()
+        order[3] = most.toChar()
+        return 4
+    }
+
+    /**
+     * Generic hull-intersects test : does this cubic's hull share a
+     * separating line with the polygon `pts[0..ptCount-1]` ?
+     * Mirrors `SkDCubic::hullIntersects(const SkDPoint*, int, bool*)`.
+     */
+    fun hullIntersects(opp: Array<SkDPoint>, ptCount: Int, isLinearOut: BooleanArray): Boolean {
+        var linear = true
+        val hullOrder = CharArray(4)
+        val hullCount = convexHull(hullOrder)
+        var end1 = hullOrder[0].code
+        var hullIndex = 0
+        var endPt0 = pts[end1]
+        var endPt1 = pts[end1] // placeholder, overwritten below
+        do {
+            hullIndex = (hullIndex + 1) % hullCount
+            val end2 = hullOrder[hullIndex].code
+            endPt1 = pts[end2]
+            val origX = endPt0.x
+            val origY = endPt0.y
+            val adj = endPt1.x - origX
+            val opp_ = endPt1.y - origY
+            val oddManMask = otherTwo(end1, end2)
+            val oddMan = end1 xor oddManMask
+            val sign0 = (pts[oddMan].y - origY) * adj - (pts[oddMan].x - origX) * opp_
+            val oddMan2 = end2 xor oddManMask
+            val sign1 = (pts[oddMan2].y - origY) * adj - (pts[oddMan2].x - origX) * opp_
+            var sign = sign0
+            if (sign * sign1 < 0) {
+                endPt0 = endPt1; end1 = end2
+                continue
+            }
+            if (approximately_zero(sign)) {
+                sign = sign1
+                if (approximately_zero(sign)) {
+                    endPt0 = endPt1; end1 = end2
+                    continue
+                }
+            }
+            linear = false
+            var foundOutlier = false
+            for (n in 0 until ptCount) {
+                val test = (opp[n].y - origY) * adj - (opp[n].x - origX) * opp_
+                if (test * sign > 0 && !precisely_zero(test)) {
+                    foundOutlier = true
+                    break
+                }
+            }
+            if (!foundOutlier) {
+                isLinearOut[0] = linear
+                return false
+            }
+            endPt0 = endPt1
+            end1 = end2
+        } while (hullIndex != 0)
+        isLinearOut[0] = linear
+        return true
+    }
+
+    /** Mirrors `SkDCubic::hullIntersects(const SkDCubic&)`. */
+    fun hullIntersects(c2: SkDCubic, isLinearOut: BooleanArray): Boolean =
+        hullIntersects(arrayOf(c2[0], c2[1], c2[2], c2[3]), kPointCount, isLinearOut)
+
+    /** Mirrors `SkDCubic::hullIntersects(const SkDQuad&)`. */
+    fun hullIntersects(quad: SkDQuad, isLinearOut: BooleanArray): Boolean =
+        hullIntersects(arrayOf(quad[0], quad[1], quad[2]), SkDQuad.kPointCount, isLinearOut)
+
+    /** Mirrors `SkDCubic::hullIntersects(const SkDConic&)`. */
+    fun hullIntersects(conic: SkDConic, isLinearOut: BooleanArray): Boolean =
+        hullIntersects(arrayOf(conic[0], conic[1], conic[2]), SkDConic.kPointCount, isLinearOut)
+
     // ─── Evaluation ──────────────────────────────────────────────────
 
     /** Mirrors `SkDCubic::ptAtT`. */
@@ -777,5 +943,52 @@ internal data class SkDCubic(
 
         private fun skTPin(value: Double, lo: Double, hi: Double): Double =
             if (value < lo) lo else if (value > hi) hi else value
+
+        // ─── Hull helpers (Phase D1.1.e.1) ──────────────────────
+
+        /**
+         * Given two indices in `{0, 1, 2, 3}`, return an XOR mask that
+         * identifies the other two : `mask == 2` for {0,3}/{1,2} pairs,
+         * `mask == 3` for adjacent pairs. Mirrors `inline int
+         * other_two(int, int)` in `SkPathOpsCubic.h`.
+         */
+        internal fun otherTwo(one: Int, two: Int): Int =
+            (1 shr (3 - (one xor two))) xor 3
+
+        /** Returns 0 if negative, 1 if zero, 2 if positive. Mirrors `side` in `SkOpCubicHull.cpp`. */
+        private fun sideSign(x: Double): Int = (if (x > 0) 1 else 0) + (if (x >= 0) 1 else 0)
+    }
+
+    /**
+     * Rotate this cubic so the line `(zero, index)` aligns with the
+     * x-axis ; write the rotated cubic into [rotPath]. Returns false
+     * if `pts[zero]` and `pts[index]` are coincident on both axes.
+     * Mirrors the static `rotate` helper in `SkOpCubicHull.cpp`.
+     */
+    private fun rotateForHull(zero: Int, index: Int, rotPath: SkDCubic): Boolean {
+        val dy = pts[index].y - pts[zero].y
+        val dx = pts[index].x - pts[zero].x
+        if (approximately_zero(dy)) {
+            if (approximately_zero(dx)) return false
+            for (i in 0 until 4) {
+                rotPath[i] = SkDPoint(pts[i].x, pts[i].y)
+            }
+            if (dy != 0.0) {
+                rotPath[index].y = pts[zero].y
+                val mask = otherTwo(index, zero)
+                val side1 = index xor mask
+                val side2 = zero xor mask
+                if (approximately_equal(pts[side1].y, pts[zero].y)) rotPath[side1].y = pts[zero].y
+                if (approximately_equal(pts[side2].y, pts[zero].y)) rotPath[side2].y = pts[zero].y
+            }
+            return true
+        }
+        for (i in 0 until 4) {
+            rotPath[i] = SkDPoint(
+                pts[i].x * dx + pts[i].y * dy,
+                pts[i].y * dx - pts[i].x * dy,
+            )
+        }
+        return true
     }
 }

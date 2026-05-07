@@ -141,6 +141,86 @@ internal data class SkDQuad(val pts: Array<SkDPoint> = arrayOf(SkDPoint(), SkDPo
         }
     }
 
+    // ─── Hull-intersect helpers (Phase D1.1.e.1) ────────────────────
+
+    /**
+     * Quick reject for quad-quad intersection by hull-direction
+     * separation. Returns false if [q2]'s control hull lies entirely
+     * on one side of every line through 2 of this quad's points (so
+     * the curves at most share endpoints) ; returns true otherwise
+     * and writes whether the hull is approximately linear into
+     * [isLinearOut] (length-1 out array).
+     *
+     * Mirrors `SkDQuad::hullIntersects(const SkDQuad&)`. The
+     * algorithm is the "rotate and check sign" approach from
+     * `at_most_end_pts_in_common`.
+     */
+    fun hullIntersects(q2: SkDQuad, isLinearOut: BooleanArray): Boolean {
+        var linear = true
+        for (oddMan in 0 until kPointCount) {
+            val endPt = arrayOfNulls<SkDPoint>(2)
+            otherPts(oddMan, endPt)
+            val origX = endPt[0]!!.x
+            val origY = endPt[0]!!.y
+            val adj = endPt[1]!!.x - origX
+            val opp = endPt[1]!!.y - origY
+            val sign = (pts[oddMan].y - origY) * adj - (pts[oddMan].x - origX) * opp
+            if (approximately_zero(sign)) continue
+            linear = false
+            var foundOutlier = false
+            for (n in 0 until kPointCount) {
+                val test = (q2[n].y - origY) * adj - (q2[n].x - origX) * opp
+                if (test * sign > 0 && !precisely_zero(test)) {
+                    foundOutlier = true
+                    break
+                }
+            }
+            if (!foundOutlier) {
+                isLinearOut[0] = linear
+                return false
+            }
+        }
+        // If hull is linear and q2's endpoints aren't this quad's endpoints,
+        // check if either endpoint falls inside the (degenerate) triangle.
+        if (linear && !matchesEnd(q2[0]) && !matchesEnd(q2[2])) {
+            if (pointInTriangle(q2[0]) || pointInTriangle(q2[2])) linear = false
+        }
+        isLinearOut[0] = linear
+        return true
+    }
+
+    /** Forwarding overload — delegates to [SkDConic.hullIntersects]. */
+    fun hullIntersects(conic: SkDConic, isLinearOut: BooleanArray): Boolean =
+        conic.hullIntersects(this, isLinearOut)
+
+    /** Forwarding overload — delegates to [SkDCubic.hullIntersects]. */
+    fun hullIntersects(cubic: SkDCubic, isLinearOut: BooleanArray): Boolean =
+        cubic.hullIntersects(this, isLinearOut)
+
+    /** Mirrors `matchesEnd` static helper in `SkPathOpsQuad.cpp`. */
+    private fun matchesEnd(test: SkDPoint): Boolean = pts[0] == test || pts[2] == test
+
+    /**
+     * Barycentric-coordinate point-in-triangle test using `pts[0..2]`
+     * as the triangle vertices. Mirrors `pointInTriangle` from
+     * blackpawn.com/texts/pointinpoly via `SkPathOpsQuad.cpp`.
+     */
+    private fun pointInTriangle(test: SkDPoint): Boolean {
+        val v0 = pts[2] - pts[0]
+        val v1 = pts[1] - pts[0]
+        val v2 = test - pts[0]
+        val dot00 = v0.dot(v0)
+        val dot01 = v0.dot(v1)
+        val dot02 = v0.dot(v2)
+        val dot11 = v1.dot(v1)
+        val dot12 = v1.dot(v2)
+        val denom = dot00 * dot11 - dot01 * dot01
+        val u = dot11 * dot02 - dot01 * dot12
+        val v = dot00 * dot12 - dot01 * dot02
+        return if (denom >= 0) u >= 0 && v >= 0 && u + v < denom
+        else u <= 0 && v <= 0 && u + v > denom
+    }
+
     // ─── Evaluation ──────────────────────────────────────────────────
 
     /**
