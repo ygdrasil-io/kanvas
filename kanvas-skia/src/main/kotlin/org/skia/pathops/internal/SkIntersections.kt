@@ -530,35 +530,87 @@ internal class SkIntersections {
         if (used == 2) fPt[1] = line.ptAtT(fT[0][1])
     }
 
-    // ─── Curve intersection stubs (deferred to D1.1.d/e) ────────────
+    // ─── Curve intersection methods (D1.1.d.1 quad-line shipped) ────
 
-    /** Stub. Will land in D1.1.d. */
-    fun intersect(quad: SkDQuad, line: SkDLine): Int =
-        throw NotImplementedError("intersect(SkDQuad, SkDLine) lands in Phase D1.1.d")
+    /** Mirrors `SkIntersections::intersect(SkDQuad, SkDLine)`. */
+    fun intersect(quad: SkDQuad, line: SkDLine): Int {
+        val helper = LineQuadraticIntersections(quad, line, this)
+        helper.allowNear(fAllowNear)
+        return helper.intersect()
+    }
 
-    /** Stub. Will land in D1.1.d. */
+    /** Mirrors `SkIntersections::intersectRay(SkDQuad, SkDLine)`. */
+    fun intersectRay(quad: SkDQuad, line: SkDLine): Int {
+        val helper = LineQuadraticIntersections(quad, line, this)
+        val roots = DoubleArray(2)
+        val used = helper.intersectRay(roots)
+        fUsed = used
+        for (index in 0 until used) {
+            fT[0][index] = roots[index]
+            fPt[index] = quad.ptAtT(roots[index])
+        }
+        return used
+    }
+
+    /** Mirrors `SkIntersections::horizontal(SkDQuad, double, double, double, bool)`. */
+    fun horizontal(quad: SkDQuad, left: Double, right: Double, y: Double, flipped: Boolean): Int {
+        val line = SkDLine(arrayOf(SkDPoint(left, y), SkDPoint(right, y)))
+        val helper = LineQuadraticIntersections(quad, line, this)
+        return helper.horizontalIntersect(y, left, right, flipped)
+    }
+
+    /** Mirrors `SkIntersections::vertical(SkDQuad, double, double, double, bool)`. */
+    fun vertical(quad: SkDQuad, top: Double, bottom: Double, x: Double, flipped: Boolean): Int {
+        val line = SkDLine(arrayOf(SkDPoint(x, top), SkDPoint(x, bottom)))
+        val helper = LineQuadraticIntersections(quad, line, this)
+        return helper.verticalIntersect(x, top, bottom, flipped)
+    }
+
+    /** Stub. Will land in D1.1.d.2. */
     fun intersect(cubic: SkDCubic, line: SkDLine): Int =
-        throw NotImplementedError("intersect(SkDCubic, SkDLine) lands in Phase D1.1.d")
+        throw NotImplementedError("intersect(SkDCubic, SkDLine) lands in Phase D1.1.d.2")
 
-    /** Stub. Will land in D1.1.d. */
+    /** Stub. Will land in D1.1.d.3. */
     fun intersect(conic: SkDConic, line: SkDLine): Int =
-        throw NotImplementedError("intersect(SkDConic, SkDLine) lands in Phase D1.1.d")
+        throw NotImplementedError("intersect(SkDConic, SkDLine) lands in Phase D1.1.d.3")
 
     /** Stub. Will land in D1.1.e. */
     fun intersect(a: SkDQuad, b: SkDQuad): Int =
         throw NotImplementedError("intersect(SkDQuad, SkDQuad) lands in Phase D1.1.e")
 
-    /** Stub. Will land in D1.1.d. */
-    fun intersectRay(quad: SkDQuad, line: SkDLine): Int =
-        throw NotImplementedError("intersectRay(SkDQuad, SkDLine) lands in Phase D1.1.d")
-
-    /** Stub. Will land in D1.1.d. */
+    /** Stub. Will land in D1.1.d.2. */
     fun intersectRay(cubic: SkDCubic, line: SkDLine): Int =
-        throw NotImplementedError("intersectRay(SkDCubic, SkDLine) lands in Phase D1.1.d")
+        throw NotImplementedError("intersectRay(SkDCubic, SkDLine) lands in Phase D1.1.d.2")
 
-    /** Stub. Will land in D1.1.d. */
+    /** Stub. Will land in D1.1.d.3. */
     fun intersectRay(conic: SkDConic, line: SkDLine): Int =
-        throw NotImplementedError("intersectRay(SkDConic, SkDLine) lands in Phase D1.1.d")
+        throw NotImplementedError("intersectRay(SkDConic, SkDLine) lands in Phase D1.1.d.3")
+
+    // ─── SkPoint façade methods for SkDQuad ─────────────────────────
+
+    /** Mirrors `SkIntersections::quadLine(SkPoint a[3], SkPoint b[2])`. */
+    fun quadLine(a: Array<org.skia.math.SkPoint>, b: Array<org.skia.math.SkPoint>): Int {
+        require(a.size >= 3 && b.size >= 2)
+        val quad = SkDQuad().set(a[0], a[1], a[2])
+        val line = SkDLine().set(b[0], b[1])
+        return intersect(quad, line)
+    }
+
+    /** Mirrors `SkIntersections::quadHorizontal(SkPoint a[3], left, right, y, flipped)`. */
+    fun quadHorizontal(a: Array<org.skia.math.SkPoint>, left: Float, right: Float, y: Float, flipped: Boolean): Int {
+        require(a.size >= 3)
+        val quad = SkDQuad().set(a[0], a[1], a[2])
+        fMax = 2
+        return horizontal(quad, left.toDouble(), right.toDouble(), y.toDouble(), flipped)
+    }
+
+    /** Mirrors `SkIntersections::quadVertical(SkPoint a[3], top, bottom, x, flipped)`. */
+    fun quadVertical(a: Array<org.skia.math.SkPoint>, top: Float, bottom: Float, x: Float, flipped: Boolean): Int {
+        require(a.size >= 3)
+        val quad = SkDQuad().set(a[0], a[1], a[2])
+        fMax = 2
+        return vertical(quad, top.toDouble(), bottom.toDouble(), x.toDouble(), flipped)
+    }
 
     // ─── Internal helpers ───────────────────────────────────────────
 
@@ -599,6 +651,25 @@ internal class SkIntersections {
         fun VerticalIntercept(line: SkDLine, x: Double): Double {
             require(line[1].x != line[0].x)
             return SkPinT((x - line[0].x) / (line[1].x - line[0].x))
+        }
+
+        /** Mirrors `SkIntersections::HorizontalIntercept(SkDQuad, SkScalar, double*)`. */
+        fun HorizontalIntercept(quad: SkDQuad, y: Float, roots: DoubleArray): Int {
+            // Direct quadratic root finder ; doesn't need a line argument.
+            var D = quad[2].y; var E = quad[1].y; var F = quad[0].y
+            D += F - 2 * E
+            E -= F
+            F -= y.toDouble()
+            return SkDQuad.RootsValidT(D, 2 * E, F, roots)
+        }
+
+        /** Mirrors `SkIntersections::VerticalIntercept(SkDQuad, SkScalar, double*)`. */
+        fun VerticalIntercept(quad: SkDQuad, x: Float, roots: DoubleArray): Int {
+            var D = quad[2].x; var E = quad[1].x; var F = quad[0].x
+            D += F - 2 * E
+            E -= F
+            F -= x.toDouble()
+            return SkDQuad.RootsValidT(D, 2 * E, F, roots)
         }
 
         /**
