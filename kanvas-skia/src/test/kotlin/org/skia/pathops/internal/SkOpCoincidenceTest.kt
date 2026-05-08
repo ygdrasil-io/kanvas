@@ -595,4 +595,104 @@ class SkOpCoincidenceTest {
         assertTrue(c.checkOverlap(entry, a, b, 0.0, 1.0, 0.0, 1.0, overlaps))
         assertTrue(overlaps.isEmpty())
     }
+
+    // ─── addOrOverlap (D1.2.g.c.4) ────────────────────────────────
+
+    @Test
+    fun `addOrOverlap returns false when fTop is null`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        val addedOut = booleanArrayOf(false)
+        assertFalse(c.addOrOverlap(a, b, 0.0, 1.0, 0.0, 1.0, addedOut))
+        assertFalse(addedOut[0])
+    }
+
+    @Test
+    fun `addOrOverlap on fresh segment pair adds a new entry on fHead`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        // Park a dummy entry on fTop on a different (x, y) pair so
+        // checkOverlap has something to walk past.
+        val x = SkOpSegment().addLine(arrayOf(pt(20f, 0f), pt(30f, 0f)), null)
+        val y = SkOpSegment().addLine(arrayOf(pt(21f, 0f), pt(31f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.fTop = stubEntry(x, y, 0.0, 1.0, 0.0, 1.0)
+        val addedOut = booleanArrayOf(false)
+        assertTrue(c.addOrOverlap(a, b, 0.0, 1.0, 0.0, 1.0, addedOut))
+        assertTrue(addedOut[0])
+        assertSame(a.fHead.ptT(), c.fHead!!.coinPtTStart())
+        assertSame(a.fTail.ptT(), c.fHead!!.coinPtTEnd())
+        assertSame(b.fHead.ptT(), c.fHead!!.oppPtTStart())
+        assertSame(b.fTail.ptT(), c.fHead!!.oppPtTEnd())
+    }
+
+    @Test
+    fun `addOrOverlap returns true and skips when range fully inside an existing fHead entry`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val x = SkOpSegment().addLine(arrayOf(pt(20f, 0f), pt(30f, 0f)), null)
+        val y = SkOpSegment().addLine(arrayOf(pt(21f, 0f), pt(31f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.fTop = stubEntry(x, y, 0.0, 1.0, 0.0, 1.0)
+        // Pre-existing fHead entry on (a, b) covering [0..1].
+        c.fHead = stubEntry(a, b, 0.0, 1.0, 0.0, 1.0)
+        val addedOut = booleanArrayOf(false)
+        // Candidate [0.2..0.5] is fully inside [0..1] → checkOverlap
+        // bails out, addOrOverlap returns true with addedOut[0] still false.
+        assertTrue(c.addOrOverlap(a, b, 0.2, 0.5, 0.2, 0.5, addedOut))
+        assertFalse(addedOut[0])
+    }
+
+    // ─── addIfMissing (D1.2.g.c.4) ────────────────────────────────
+
+    @Test
+    fun `addIfMissing returns true on coin-side collapsed-range short-circuit`() {
+        // Set up : `over` segment whose head/tail spans don't contain
+        // either coinSeg or oppSeg → TRange returns the sentinel `1`
+        // for both coinTs and coinTe → coinSeg.collapsed sees a
+        // (1.0, 1.0) range and reports kYes (both endpoints fall on
+        // the only loop entry's t).
+        val over = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val coinSeg = SkOpSegment().addLine(arrayOf(pt(0f, 5f), pt(10f, 5f)), null)
+        val oppSeg = SkOpSegment().addLine(arrayOf(pt(0f, 9f), pt(10f, 9f)), null)
+        val c = SkOpCoincidence()
+        val addedOut = booleanArrayOf(false)
+        // tStart < tEnd is required ; use 0.2..0.5.
+        // TRange returns 1 for both → collapsed(1,1) on a fresh line
+        // returns kNo (no entry brackets [1..1]) — so we expect the
+        // routine to fall through to addOrOverlap, which fails on
+        // fTop == null and returns true (cf. addOrOverlap path).
+        assertTrue(c.addIfMissing(over.fHead.ptT(), over.fHead.ptT(),
+            0.2, 0.5, coinSeg, oppSeg, addedOut))
+        assertFalse(addedOut[0])
+    }
+
+    @Test
+    fun `addIfMissing falls through to addOrOverlap on a non-collapsed remap`() {
+        // over runs [0..1] on (0,0)→(10,0).
+        // Splice coinSeg pt-Ts into over's spans so TRange identity-maps.
+        val over = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val coinSeg = SkOpSegment().addLine(arrayOf(pt(0f, 5f), pt(10f, 5f)), null)
+        val oppSeg = SkOpSegment().addLine(arrayOf(pt(0f, 9f), pt(10f, 9f)), null)
+        // Splice coinSeg head/tail into over's head/tail so
+        // TRange(over.fHead, t, coinSeg) == t.
+        over.fHead.ptT().insert(coinSeg.fHead.ptT())
+        over.fTail.ptT().insert(coinSeg.fTail.ptT())
+        // Same for oppSeg.
+        over.fHead.ptT().insert(oppSeg.fHead.ptT())
+        over.fTail.ptT().insert(oppSeg.fTail.ptT())
+        // Park a dummy fTop so addOrOverlap doesn't immediately fail.
+        val x = SkOpSegment().addLine(arrayOf(pt(40f, 0f), pt(50f, 0f)), null)
+        val y = SkOpSegment().addLine(arrayOf(pt(41f, 0f), pt(51f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.fTop = stubEntry(x, y, 0.0, 1.0, 0.0, 1.0)
+        val addedOut = booleanArrayOf(false)
+        assertTrue(c.addIfMissing(over.fHead.ptT(), over.fHead.ptT(),
+            0.0, 1.0, coinSeg, oppSeg, addedOut))
+        // A fresh coincidence pair (coinSeg, oppSeg) should now be on fHead.
+        assertTrue(addedOut[0])
+        assertSame(coinSeg.fHead.ptT(), c.fHead!!.coinPtTStart())
+        assertSame(oppSeg.fHead.ptT(), c.fHead!!.oppPtTStart())
+    }
 }
