@@ -2,6 +2,10 @@ package org.skia.svg
 
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorGetA
+import org.skia.foundation.SkColorGetB
+import org.skia.foundation.SkColorGetG
+import org.skia.foundation.SkColorGetR
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
@@ -174,23 +178,26 @@ public open class SkSVGCanvas(
 
     /**
      * Emit a single SVG element on its own line. Indent matches the
-     * `<svg>` root indent (2 spaces). The [paint] argument is plumbed
-     * for B2.2 ; today we emit a placeholder fill ("black" if the
-     * paint's style admits a fill, else "none") plus the per-draw
-     * transform when the CTM is non-identity.
+     * `<svg>` root indent (2 spaces). The [paint] is serialised by
+     * [paintToSvgAttrs] (B2.2 — full surface) ; non-default blend
+     * modes get a leading XML comment via [emitBlendModeComment].
      */
     private inline fun emitElement(
         tag: String,
         attrs: AttrBuilder.() -> Unit,
         paint: SkPaint,
     ) {
+        emitBlendModeComment(paint)
         val builder = AttrBuilder()
         attrs.invoke(builder)
         out.append("  <").append(tag)
         // Geometry attrs first.
         out.append(builder.serialize())
-        // Paint placeholder — B2.2 will replace this stub.
-        out.append(' ').append(paintAttrsStub(paint))
+        // Paint surface — fill / stroke / alpha / cap / join / dash.
+        val paintAttrs = paintToSvgAttrs(paint)
+        if (paintAttrs.isNotEmpty()) {
+            out.append(' ').append(paintAttrs)
+        }
         // CTM as a per-draw transform attr when non-identity.
         val m = getTotalMatrix()
         if (!m.isIdentity) {
@@ -200,21 +207,134 @@ public open class SkSVGCanvas(
     }
 
     /**
-     * B2.1 paint stub : every element draws filled black, no stroke.
-     * B2.2 will replace this with full paint serialisation
-     * (`fill="#rrggbb" fill-opacity stroke stroke-width …`).
+     * Build the `fill`, `stroke`, and `stroke-*` attribute soup for
+     * [paint] — B2.2 replacement of the B2.1 stub.
+     *
+     * **Honoured fields** :
+     *  - [SkPaint.color] → `fill="#rrggbb"` / `stroke="#rrggbb"`
+     *    (lower-case hex ; alpha lands in [SkPaint.alpha] →
+     *    `fill-opacity` / `stroke-opacity` to keep the channel
+     *    decomposition diff-friendly).
+     *  - [SkPaint.alpha] → `fill-opacity="…"` / `stroke-opacity="…"`
+     *    when `< 255` (omitted at fully opaque).
+     *  - [SkPaint.style] → which side(s) of the (`fill`, `stroke`)
+     *    pair are emitted. `kFill_Style` → `fill=… stroke="none"` ;
+     *    `kStroke_Style` → `fill="none" stroke=…` ; `kStrokeAndFill_Style`
+     *    → both colour+opacity attrs.
+     *  - [SkPaint.strokeWidth] / [SkPaint.strokeCap] /
+     *    [SkPaint.strokeJoin] / [SkPaint.strokeMiter] →
+     *    `stroke-width / stroke-linecap / stroke-linejoin /
+     *    stroke-miterlimit`. Miter is emitted only when join is
+     *    miter and the value differs from SVG's default of `4`.
+     *  - [SkPaint.pathEffect] when the effect is an
+     *    [SkDashPathEffect] → `stroke-dasharray="i0 i1 …"` +
+     *    `stroke-dashoffset="phase"` (omitted at phase 0).
+     *  - [SkPaint.isAntiAlias] → `shape-rendering="crispEdges"` when
+     *    AA is **off** (SVG renderers default to AA-on).
+     *
+     * **Out of scope** for B2.2 (handled in later slices) :
+     *  - Shaders (gradients / bitmaps) — B2.4 wires them via
+     *    `<defs>` references that override the colour attribute.
+     *  - Color filters — descoped.
+     *  - Mask filters / image filters — descoped (filters slice).
      */
-    private fun paintAttrsStub(paint: SkPaint): String {
-        // Honour paint.style minimally so a stroke-only paint doesn't
-        // emit a filled element. B2.2 fills in the colour.
+    private fun paintToSvgAttrs(paint: SkPaint): String {
+        val sb = StringBuilder()
         val style = paint.style
-        return when (style) {
-            SkPaint.Style.kStroke_Style ->
-                "fill=\"none\" stroke=\"black\" stroke-width=\"${formatScalar(paint.strokeWidth)}\""
-            SkPaint.Style.kStrokeAndFill_Style ->
-                "fill=\"black\" stroke=\"black\" stroke-width=\"${formatScalar(paint.strokeWidth)}\""
-            SkPaint.Style.kFill_Style -> "fill=\"black\" stroke=\"none\""
+        val color = paint.color
+        val rgb = colorHex(color)
+        val alpha = SkColorGetA(color) // [0, 255]
+        val emitFill = style == SkPaint.Style.kFill_Style ||
+            style == SkPaint.Style.kStrokeAndFill_Style
+        val emitStroke = style == SkPaint.Style.kStroke_Style ||
+            style == SkPaint.Style.kStrokeAndFill_Style
+
+        if (emitFill) {
+            appendAttr(sb, "fill", rgb)
+            if (alpha < 255) appendAttr(sb, "fill-opacity", opacityString(alpha))
+        } else {
+            appendAttr(sb, "fill", "none")
         }
+
+        if (emitStroke) {
+            appendAttr(sb, "stroke", rgb)
+            if (alpha < 255) appendAttr(sb, "stroke-opacity", opacityString(alpha))
+            // SVG's default stroke-width is 1, but most consumers expect
+            // explicit width to avoid ambiguity ; emit it always.
+            appendAttr(sb, "stroke-width", formatScalar(paint.strokeWidth))
+            // stroke-linecap : map upstream → SVG names.
+            when (paint.strokeCap) {
+                SkPaint.Cap.kButt_Cap -> { /* "butt" is the SVG default */ }
+                SkPaint.Cap.kRound_Cap -> appendAttr(sb, "stroke-linecap", "round")
+                SkPaint.Cap.kSquare_Cap -> appendAttr(sb, "stroke-linecap", "square")
+            }
+            // stroke-linejoin : map upstream → SVG names.
+            when (paint.strokeJoin) {
+                SkPaint.Join.kMiter_Join -> {
+                    // SVG default is miter ; emit miterlimit only when
+                    // it differs from SVG's default of 4 (matches Skia's
+                    // SkPaint default — every paint with the default
+                    // miter limit doesn't need the attribute).
+                    if (paint.strokeMiter != 4f) {
+                        appendAttr(sb, "stroke-miterlimit", formatScalar(paint.strokeMiter))
+                    }
+                }
+                SkPaint.Join.kRound_Join -> appendAttr(sb, "stroke-linejoin", "round")
+                SkPaint.Join.kBevel_Join -> appendAttr(sb, "stroke-linejoin", "bevel")
+            }
+            // stroke-dasharray + stroke-dashoffset.
+            val pathEffect = paint.pathEffect
+            if (pathEffect is org.skia.foundation.SkDashPathEffect) {
+                val intervals = pathEffect.getIntervals()
+                if (intervals.isNotEmpty()) {
+                    val dashStr = intervals.joinToString(" ") { formatScalar(it) }
+                    appendAttr(sb, "stroke-dasharray", dashStr)
+                    val phase = pathEffect.getPhase()
+                    if (phase != 0f) appendAttr(sb, "stroke-dashoffset", formatScalar(phase))
+                }
+            }
+        } else {
+            appendAttr(sb, "stroke", "none")
+        }
+
+        // Anti-alias flag : SVG renderers default to AA on, so we only
+        // need to opt out when the paint says so.
+        if (!paint.isAntiAlias) {
+            appendAttr(sb, "shape-rendering", "crispEdges")
+        }
+
+        // Trim leading space.
+        return if (sb.isNotEmpty() && sb[0] == ' ') sb.substring(1) else sb.toString()
+    }
+
+    /**
+     * Emit an XML comment ahead of the next element when [paint]'s
+     * blend mode is non-default. Mirrors upstream's "PDF / SVG
+     * sinks document the blend mode they couldn't reproduce" pattern :
+     *
+     *  - [SkBlendMode.kSrcOver] → no comment (SVG default).
+     *  - [SkBlendMode.kSrc] → `<!-- blend: kSrc -->` ; an SVG renderer
+     *    can't natively reproduce kSrc so the visual result will look
+     *    like SrcOver, but the comment carries the intent for a
+     *    diagnostic reader.
+     *  - any other mode → comment **plus** a `System.err` warning so
+     *    consumers running the tests notice the loss of fidelity.
+     */
+    private fun emitBlendModeComment(paint: SkPaint) {
+        val mode = paint.blendMode
+        if (mode == org.skia.foundation.SkBlendMode.kSrcOver) return
+        out.append("  <!-- blend: ").append(mode.name).append(" -->\n")
+        if (mode != org.skia.foundation.SkBlendMode.kSrc) {
+            System.err.println(
+                "SkSVGCanvas : blend mode $mode is not natively supported in SVG ; " +
+                    "output will render as kSrcOver. (B2.2)",
+            )
+        }
+    }
+
+    /** `appendAttr(builder, k, v)` → `" k=\"v\""`. */
+    private fun appendAttr(sb: StringBuilder, name: String, value: String) {
+        sb.append(' ').append(name).append("=\"").append(value).append('"')
     }
 
     /** Tiny attribute-list builder — preserves emission order, escapes minimally. */
@@ -256,6 +376,32 @@ public open class SkSVGCanvas(
          * notation past `1e7`, which SVG renderers tolerate but make the
          * output noisier than necessary for diff-ability.
          */
+        /**
+         * Format an [org.skia.foundation.SkColor] as a 6-char lower-case
+         * hex string `"#rrggbb"`. Drops the alpha byte — alpha is
+         * surfaced separately as `fill-opacity` / `stroke-opacity` so the
+         * channel decomposition stays diff-friendly. The 3-char
+         * shorthand (`#rgb`) is intentionally **not** used : tests can
+         * grep for the full hex more reliably.
+         */
+        public fun colorHex(c: org.skia.foundation.SkColor): String {
+            val r = SkColorGetR(c)
+            val g = SkColorGetG(c)
+            val b = SkColorGetB(c)
+            return "#%02x%02x%02x".format(r, g, b)
+        }
+
+        /**
+         * Format an 8-bit alpha channel as a `[0, 1]` SVG opacity
+         * string. `255 → "1"` (handled by the caller — we never get
+         * called for opaque alphas), `0 → "0"`, others render via
+         * [formatScalar] for trailing-zero trim and locale safety.
+         */
+        public fun opacityString(alpha8: Int): String {
+            val pinned = alpha8.coerceIn(0, 255)
+            return formatScalar(pinned / 255f)
+        }
+
         public fun formatScalar(v: SkScalar): String {
             if (v == 0f) return "0"
             if (v == kotlin.math.floor(v) && kotlin.math.abs(v) < 1e7f) {

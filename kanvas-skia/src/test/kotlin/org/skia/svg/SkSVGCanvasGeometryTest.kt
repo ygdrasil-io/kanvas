@@ -113,9 +113,11 @@ class SkSVGCanvasGeometryTest {
         assertTrue(svg.contains("y1=\"10\""))
         assertTrue(svg.contains("x2=\"90\""))
         assertTrue(svg.contains("y2=\"90\""))
-        // Stroke paint stub : fill="none", stroke="black", stroke-width=...
+        // Stroke paint (B2.2 surface) : fill="none", stroke="#000000",
+        // stroke-width="...". Updated from the B2.1 stub which emitted
+        // the unhashed colour name "black".
         assertTrue(svg.contains("fill=\"none\""))
-        assertTrue(svg.contains("stroke=\"black\""))
+        assertTrue(svg.contains("stroke=\"#000000\""))
         assertTrue(svg.contains("stroke-width=\"2\""))
     }
 
