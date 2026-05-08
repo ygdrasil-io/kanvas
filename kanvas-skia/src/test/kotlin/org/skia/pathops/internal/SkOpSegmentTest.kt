@@ -280,4 +280,75 @@ class SkOpSegmentTest {
         val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
         assertTrue(seg.sortAngles())
     }
+
+    // ─── Winding marking (D1.2.c.2.b) ──────────────────────────────
+
+    @Test
+    fun `markDone increments fDoneCount and sets done flag`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        assertFalse(seg.fHead.done())
+        assertEquals(0, seg.fDoneCount)
+        seg.markDone(seg.fHead)
+        assertTrue(seg.fHead.done())
+        assertEquals(1, seg.fDoneCount)
+    }
+
+    @Test
+    fun `markDone is idempotent on an already-done span`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.markDone(seg.fHead)
+        seg.markDone(seg.fHead) // second call is a no-op.
+        assertEquals(1, seg.fDoneCount)
+    }
+
+    @Test
+    fun `markAllDone marks every span until tail`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.markAllDone()
+        assertTrue(seg.fHead.done())
+        // fCount=1 means there's only fHead as a SkOpSpan ; markAllDone
+        // marks it and stops.
+        assertEquals(1, seg.fDoneCount)
+    }
+
+    @Test
+    fun `markWinding sets windSum and returns true on a fresh span`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        assertTrue(seg.markWinding(seg.fHead, 1))
+        assertEquals(1, seg.fHead.windSum())
+    }
+
+    @Test
+    fun `markWinding returns false on an already-done span`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.markDone(seg.fHead)
+        assertFalse(seg.markWinding(seg.fHead, 1))
+    }
+
+    @Test
+    fun `markWinding binary form sets both windSum and oppSum`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        assertTrue(seg.markWinding(seg.fHead, 1, 2))
+        assertEquals(1, seg.fHead.windSum())
+        assertEquals(2, seg.fHead.oppSum())
+    }
+
+    @Test
+    fun `nextChase returns null when endSpan is interior with no angle`() {
+        // For a single-span line segment, nextChase from fHead (step=+1)
+        // looks at endSpan = fTail. fTail.fromAngle is null (no angle
+        // attached) and fTail.t == 1.0 — so it tries the pt-T loop.
+        // The loop is a self-loop, so otherPtT === endSpan.ptT and
+        // foundSpan == fTail. otherEnd = fTail.next, but fTail's
+        // upCastable is null (it's the tail). Returns null.
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val startArr = arrayOf<SkOpSpanBase?>(seg.fHead)
+        val stepArr = intArrayOf(1)
+        val minArr = arrayOf<SkOpSpan?>(seg.fHead)
+        val lastArr = arrayOf<SkOpSpanBase?>(null)
+        val result = seg.nextChase(startArr, stepArr, minArr, lastArr)
+        // Either null (terminates) or a non-null other segment ; for
+        // this isolated line fixture the chase terminates.
+        assertEquals(null, result)
+    }
 }
