@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SkPaint
 import org.skia.math.SkISize
 import org.skia.math.SkRect
@@ -50,16 +51,17 @@ public class StrokeCircleGM : GM() {
         val fRotate = 0f
         var sign = 1f
         while (r.width() > paint.strokeWidth * 2f) {
-            c.save()
-            c.rotate(fRotate * sign)
-            paint.color = ToolUtils.colorTo565(rand.nextU() or 0xFF000000.toInt())
-            c.drawOval(r, paint)
+            // Iso with upstream `SkAutoCanvasRestore acr(canvas, true);`.
+            c.withSave {
+                rotate(fRotate * sign)
+                paint.color = ToolUtils.colorTo565(rand.nextU() or 0xFF000000.toInt())
+                drawOval(r, paint)
+            }
             r = SkRect.MakeLTRB(
                 r.left + delta, r.top + delta,
                 r.right - delta, r.bottom - delta,
             )
             sign = -sign
-            c.restore()
         }
     }
 }

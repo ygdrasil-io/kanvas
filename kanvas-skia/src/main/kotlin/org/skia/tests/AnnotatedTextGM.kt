@@ -1,6 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withLayer
+import org.skia.core.withSave
 import org.skia.foundation.SK_ColorWHITE
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
@@ -71,29 +73,27 @@ public class AnnotatedTextGM : GM() {
     override fun onDraw(canvas: SkCanvas?) {
         val c = canvas ?: return
 
-        // SkAutoCanvasRestore equivalent — save once, restore at function
-        // exit so clip / CTM mods don't leak past this GM. (The harness
-        // gives us a fresh canvas each draw, so this is mostly defensive.)
-        c.save()
+        // Iso with upstream `SkAutoCanvasRestore autoCanvasRestore(canvas, true)` — save once,
+        // restore at function exit so clip / CTM mods don't leak past this GM.
+        c.withSave {
+            clear(SK_ColorWHITE)
+            clipRect(SkRect.MakeXYWH(64f, 64f, 256f, 256f))
+            clear(0xFFEEEEEE.toInt())
 
-        c.clear(SK_ColorWHITE)
-        c.clipRect(SkRect.MakeXYWH(64f, 64f, 256f, 256f))
-        c.clear(0xFFEEEEEE.toInt())
+            val font = ToolUtils.DefaultPortableFont().apply {
+                edging = SkFont.Edging.kAlias
+                size = 40f
+            }
+            val text = "Click this link!"
 
-        val font = ToolUtils.DefaultPortableFont().apply {
-            edging = SkFont.Edging.kAlias
-            size = 40f
+            drawUrlAnnotatedTextWithBox(this, text, 200f, 80f, font)
+
+            // Iso with upstream `canvas->saveLayer(nullptr, nullptr); … ; canvas->restore();`.
+            withLayer {
+                rotate(90f)
+                drawUrlAnnotatedTextWithBox(this, text, 150f, -55f, font)
+            }
         }
-        val text = "Click this link!"
-
-        drawUrlAnnotatedTextWithBox(c, text, 200f, 80f, font)
-
-        c.saveLayer(null, null)
-        c.rotate(90f)
-        drawUrlAnnotatedTextWithBox(c, text, 150f, -55f, font)
-        c.restore()
-
-        c.restore()
     }
 
     /**

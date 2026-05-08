@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SK_ColorBLACK
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
@@ -50,55 +51,55 @@ public class BatchedConvexPathsGM : GM() {
         // erase required.
 
         for (i in 0 until 10) {
-            c.save()
-
-            val numPoints = (i + 3) * 3
-            val builder = SkPathBuilder()
-            builder.moveTo(1f, 0f)
-            var j = 1
-            while (j < numPoints) {
-                val k2pi = (PI * 2.0).toFloat()
-                val a1 = j.toFloat() / numPoints * k2pi
-                val a2 = (j + 1).toFloat() / numPoints * k2pi
-                val a3 = (j + 2).toFloat() / numPoints * k2pi
-                val ex: Float
-                val ey: Float
-                if (j + 2 == numPoints) {
-                    ex = 1f
-                    ey = 0f
-                } else {
-                    ex = cos(a3.toDouble()).toFloat()
-                    ey = sin(a3.toDouble()).toFloat()
+            // Iso with upstream `SkAutoCanvasRestore acr(canvas, true);` at
+            // the top of each loop iteration in `gm/batchedconvexpaths.cpp`.
+            c.withSave {
+                val numPoints = (i + 3) * 3
+                val builder = SkPathBuilder()
+                builder.moveTo(1f, 0f)
+                var j = 1
+                while (j < numPoints) {
+                    val k2pi = (PI * 2.0).toFloat()
+                    val a1 = j.toFloat() / numPoints * k2pi
+                    val a2 = (j + 1).toFloat() / numPoints * k2pi
+                    val a3 = (j + 2).toFloat() / numPoints * k2pi
+                    val ex: Float
+                    val ey: Float
+                    if (j + 2 == numPoints) {
+                        ex = 1f
+                        ey = 0f
+                    } else {
+                        ex = cos(a3.toDouble()).toFloat()
+                        ey = sin(a3.toDouble()).toFloat()
+                    }
+                    builder.cubicTo(
+                        cos(a1.toDouble()).toFloat(), sin(a1.toDouble()).toFloat(),
+                        cos(a2.toDouble()).toFloat(), sin(a2.toDouble()).toFloat(),
+                        ex, ey,
+                    )
+                    j += 3
                 }
-                builder.cubicTo(
-                    cos(a1.toDouble()).toFloat(), sin(a1.toDouble()).toFloat(),
-                    cos(a2.toDouble()).toFloat(), sin(a2.toDouble()).toFloat(),
-                    ex, ey,
-                )
-                j += 3
+
+                val scale = (256 - i * 24).toFloat()
+                translate(scale + (256f - scale) * 0.33f, scale + (256f - scale) * 0.33f)
+                scale(scale, scale)
+
+                // Reproduce upstream's color computation exactly. Kotlin's
+                // signed Int arithmetic matches the low 32 bits of unsigned
+                // C++ integer multiply / add.
+                val raw = ((i + 123458383) * 285018463) or 0xff808080.toInt()
+
+                // Iso with upstream `gm/batchedconvexpaths.cpp`: setColor +
+                // setAlphaf(0.3f). Slice 2.2 plumbs float-precision colour
+                // through the F16 raster pipeline so 0.3f survives end-to-end
+                // (no longer quantised to 77/255 ≈ 0.30196).
+                val paint = SkPaint().apply {
+                    color = raw
+                    alphaf = 0.3f
+                    isAntiAlias = true
+                }
+                drawPath(builder.detach(), paint)
             }
-
-            val scale = (256 - i * 24).toFloat()
-            c.translate(scale + (256f - scale) * 0.33f, scale + (256f - scale) * 0.33f)
-            c.scale(scale, scale)
-
-            // Reproduce upstream's color computation exactly. Kotlin's
-            // signed Int arithmetic matches the low 32 bits of unsigned
-            // C++ integer multiply / add.
-            val raw = ((i + 123458383) * 285018463) or 0xff808080.toInt()
-
-            // Iso with upstream `gm/batchedconvexpaths.cpp`: setColor +
-            // setAlphaf(0.3f). Slice 2.2 plumbs float-precision colour
-            // through the F16 raster pipeline so 0.3f survives end-to-end
-            // (no longer quantised to 77/255 ≈ 0.30196).
-            val paint = SkPaint().apply {
-                color = raw
-                alphaf = 0.3f
-                isAntiAlias = true
-            }
-            c.drawPath(builder.detach(), paint)
-
-            c.restore()
         }
     }
 }

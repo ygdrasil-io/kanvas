@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SkPaint
 import org.skia.math.SkISize
 import org.skia.math.SkRect
@@ -52,14 +53,15 @@ public class FillCircleGM : GM() {
         @Suppress("UNUSED_VARIABLE")
         var sign = 1f
         while (r.width() > strokeWidth * 2f) {
-            c.save()
-            // Upstream: canvas.rotate(fRotate * sign) — fRotate=0 → no-op.
-            paint.color = ToolUtils.colorTo565(rand.nextU() or (0xFF shl 24))
-            c.drawOval(r, paint)
+            // Iso with upstream `SkAutoCanvasRestore acr(canvas, true);`.
+            c.withSave {
+                // Upstream: canvas.rotate(fRotate * sign) — fRotate=0 → no-op.
+                paint.color = ToolUtils.colorTo565(rand.nextU() or (0xFF shl 24))
+                drawOval(r, paint)
+            }
             r = SkRect.MakeLTRB(r.left + delta, r.top + delta,
                                 r.right - delta, r.bottom - delta)
             sign = -sign
-            c.restore()
         }
     }
 }
