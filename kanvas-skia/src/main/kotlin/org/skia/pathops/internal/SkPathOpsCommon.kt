@@ -8,9 +8,13 @@
  * Phase D1.2.h.1 — `SortContourList`.
  *
  * Phase D1.2.h.3 — `AddIntersectTs` (curve-vs-curve intersection
- * driver from `SkAddIntersections.cpp`). The remaining helpers
- * (`HandleCoincidence`, `bridgeOp`) land in subsequent D1.2.h
- * sub-slices.
+ * driver from `SkAddIntersections.cpp`).
+ *
+ * Phase D1.2.h.4 — `HandleCoincidence` orchestrator + the small
+ * static contour-walker helpers (`move_multiples`, `move_nearby`,
+ * `missing_coincidence`, `calc_angles`, `sort_angles`). The
+ * remaining helpers (`bridgeOp` walker, `Op` final wiring) land in
+ * D1.2.h.5.
  */
 package org.skia.pathops.internal
 
@@ -363,4 +367,163 @@ private fun processSegmentPair(wt: SkOpSegment, wn: SkOpSegment, coincidence: Sk
         coincidence.add(c0, t0, c1!!, n0)
         coinIndex = -1
     }
+}
+
+// ─── Contour-walker statics for HandleCoincidence (D1.2.h.4) ─────
+
+/**
+ * Walk every contour calling [SkOpContour.calcAngles]. Mirrors
+ * `calc_angles` (`src/pathops/SkPathOpsCommon.cpp:188`).
+ */
+internal fun calc_angles(contourList: SkOpContour) {
+    var c: SkOpContour? = contourList
+    while (c != null) {
+        c.calcAngles()
+        c = c.next()
+    }
+}
+
+/**
+ * Walk every contour OR-ing together `missingCoincidence`. Returns
+ * true iff at least one contour found a missing coincidence pair.
+ * Mirrors `missing_coincidence`
+ * (`src/pathops/SkPathOpsCommon.cpp:196`).
+ */
+internal fun missing_coincidence(contourList: SkOpContour): Boolean {
+    var c: SkOpContour? = contourList
+    var result = false
+    while (c != null) {
+        if (c.missingCoincidence()) result = true
+        c = c.next()
+    }
+    return result
+}
+
+/**
+ * Walk every contour calling `moveMultiples` ; short-circuit-false
+ * on the first failure. Mirrors `move_multiples`
+ * (`src/pathops/SkPathOpsCommon.cpp:206`).
+ */
+internal fun move_multiples(contourList: SkOpContour): Boolean {
+    var c: SkOpContour? = contourList
+    while (c != null) {
+        if (!c.moveMultiples()) return false
+        c = c.next()
+    }
+    return true
+}
+
+/**
+ * Walk every contour calling `moveNearby` ; short-circuit-false on
+ * the first failure. Mirrors `move_nearby`
+ * (`src/pathops/SkPathOpsCommon.cpp:217`).
+ */
+internal fun move_nearby(contourList: SkOpContour): Boolean {
+    var c: SkOpContour? = contourList
+    while (c != null) {
+        if (!c.moveNearby()) return false
+        c = c.next()
+    }
+    return true
+}
+
+/**
+ * Walk every contour calling `sortAngles` ; short-circuit-false on
+ * the first failure. Mirrors `sort_angles`
+ * (`src/pathops/SkPathOpsCommon.cpp:228`).
+ */
+internal fun sort_angles(contourList: SkOpContour): Boolean {
+    var c: SkOpContour? = contourList
+    while (c != null) {
+        if (!c.sortAngles()) return false
+        c = c.next()
+    }
+    return true
+}
+
+// ─── HandleCoincidence (D1.2.h.4) ────────────────────────────────
+
+/**
+ * The "fix coincidence" phase orchestrator that runs after
+ * intersection detection ([AddIntersectTs]) and before the
+ * contour-walk emit phase ([bridgeOp], lands in D1.2.h.5). Drives
+ * the entire D1.2.g coincidence machinery + the
+ * [contourList]-walker helpers above into a single pipeline :
+ *
+ *  1. `coincidence.addExpanded` — match span boundaries on already-
+ *     tracked coincidence pairs.
+ *  2. `move_multiples` then `move_nearby` — fold span lists where t
+ *     values overlap or sit close together.
+ *  3. `coincidence.correctEnds` + `addEndMovedSpans` — re-snap end
+ *     pairs on curves whose endpoints drifted during the merge.
+ *  4. `addMissing` loop (≤ 3 iters with `move_nearby` between
+ *     iterations) — detect coincidence visible in pair (A, B) +
+ *     pair (A, C) but not yet recorded between (B, C).
+ *  5. `coincidence.expand` + `addMissing` + `addExpanded` +
+ *     `move_multiples` + `move_nearby` — second growth pass when
+ *     `expand` finds new ranges.
+ *  6. `coincidence.addExpanded` again to align ranges that grew.
+ *  7. `coincidence.mark` — install the coincidence linkage on
+ *     spans.
+ *  8. `missing_coincidence` (contour-side) → if it finds anything,
+ *     re-run `expand` + `addExpanded` + `mark`.
+ *  9. Two more `coincidence.expand` — defensive after step 8.
+ * 10. Apply / find-overlaps loop on the local `overlaps` container :
+ *     each iter `apply` to the active pair set then collect new
+ *     overlaps ; loop until `overlaps.isEmpty`. Bounded by a safety
+ *     counter at 3 iterations.
+ * 11. `calc_angles` + `sort_angles` — final pre-emit setup.
+ *
+ * Returns false on any abort path (a sub-step returned false, or
+ * the safety counter tripped) ; true otherwise.
+ *
+ * Mirrors `HandleCoincidence` (`src/pathops/SkPathOpsCommon.cpp:238`).
+ */
+internal fun HandleCoincidence(
+    contourList: SkOpContour,
+    coincidence: SkOpCoincidence,
+): Boolean {
+    if (!coincidence.addExpanded()) return false
+    if (!move_multiples(contourList)) return false
+    if (!move_nearby(contourList)) return false
+    coincidence.correctEnds()
+    if (!coincidence.addEndMovedSpans()) return false
+    val SAFETY_COUNT = 3
+    var safetyHatch = SAFETY_COUNT
+    while (true) {
+        val addedOut = booleanArrayOf(false)
+        if (!coincidence.addMissing(addedOut)) return false
+        if (!addedOut[0]) break
+        if (--safetyHatch == 0) return false
+        move_nearby(contourList)
+    }
+    if (coincidence.expand()) {
+        val addedOut = booleanArrayOf(false)
+        if (!coincidence.addMissing(addedOut)) return false
+        if (!coincidence.addExpanded()) return false
+        if (!move_multiples(contourList)) return false
+        move_nearby(contourList)
+    }
+    if (!coincidence.addExpanded()) return false
+    coincidence.mark()
+    if (missing_coincidence(contourList)) {
+        coincidence.expand()
+        if (!coincidence.addExpanded()) return false
+        if (!coincidence.mark()) return false
+    } else {
+        coincidence.expand()
+    }
+    coincidence.expand()
+
+    val overlaps = SkOpCoincidence()
+    safetyHatch = SAFETY_COUNT
+    do {
+        val pairs = if (overlaps.isEmpty()) coincidence else overlaps
+        if (!pairs.apply()) return false
+        if (!pairs.findOverlaps(overlaps)) return false
+        if (--safetyHatch == 0) return false
+    } while (!overlaps.isEmpty())
+    calc_angles(contourList)
+    if (!sort_angles(contourList)) return false
+    return true
 }
