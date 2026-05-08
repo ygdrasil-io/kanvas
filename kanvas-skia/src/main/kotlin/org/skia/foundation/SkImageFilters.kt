@@ -1,6 +1,11 @@
 package org.skia.foundation
 
+import org.skia.core.SkBitmapDevice
+import org.skia.core.SkCanvas
+import org.skia.core.SkPicture
 import org.skia.math.SkMatrix
+import org.skia.math.SkRect
+import org.skia.math.SkScalar
 
 /**
  * Mirrors Skia's
@@ -91,6 +96,115 @@ public object SkImageFilters {
         color: SkColor,
         input: SkImageFilter? = null,
     ): SkImageFilter = SkDropShadowImageFilter(dx, dy, sigmaX, sigmaY, color, input)
+
+    // ─── C1.1 — Source / passthrough wrappers ────────────────────────
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Image(image, srcRect, dstRect,
+     * sampling)` — wraps a static [SkImage] as the filter input. The
+     * `src` parameter passed to [SkImageFilter.filterImage] is
+     * ignored ; the output is `image` cropped to [srcRect] and
+     * placed at [dstRect].
+     *
+     * Mainly useful as the *source* of a filter chain — pair with
+     * [Compose] / [Blend] / [Merge] / arithmetic filters that need
+     * an explicit input texture rather than the rasterised draw.
+     */
+    public fun Image(
+        image: SkImage,
+        srcRect: SkRect,
+        dstRect: SkRect,
+        sampling: SkSamplingOptions = SkSamplingOptions.Default,
+    ): SkImageFilter = SkImageImageFilter(image, srcRect, dstRect, sampling)
+
+    /**
+     * Convenience overload — wraps the full image into a filter at
+     * its native bounds.
+     */
+    public fun Image(
+        image: SkImage,
+        sampling: SkSamplingOptions = SkSamplingOptions.Default,
+    ): SkImageFilter {
+        val full = SkRect.MakeWH(image.width.toFloat(), image.height.toFloat())
+        return Image(image, full, full, sampling)
+    }
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Picture(pic, targetRect)` —
+     * replays an [SkPicture] into a bitmap of [targetRect]'s size,
+     * then exposes that bitmap as the filter's input. The `src`
+     * argument to [SkImageFilter.filterImage] is ignored.
+     *
+     * The picture's local-space origin is mapped to the bitmap's
+     * top-left via a `(-targetRect.left, -targetRect.top)` translate
+     * so a picture recorded at `(50, 50)` and a target rect of
+     * `(40, 40, 100, 100)` lands the recorded ops at the right
+     * spot in the output bitmap.
+     */
+    public fun Picture(pic: SkPicture, targetRect: SkRect): SkImageFilter =
+        SkPictureImageFilter(pic, targetRect)
+
+    /**
+     * Convenience overload — uses the picture's recorded
+     * [SkPicture.cullRect] as the target rect.
+     */
+    public fun Picture(pic: SkPicture): SkImageFilter = Picture(pic, pic.cullRect)
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Shader(shader, dither)` — fills
+     * a buffer with [shader] sampled at every pixel, returns that
+     * buffer as the filter input. The buffer's size matches the
+     * `src` image passed to [SkImageFilter.filterImage] (the chain's
+     * "evaluation context"), so this filter is always paired with
+     * something that defines size — typically as the source of a
+     * [Crop] / [Blend] / arithmetic chain on top of a real
+     * `saveLayer` rasterisation.
+     *
+     * [dither] is plumbed for source-compat with upstream call sites
+     * but currently advisory : the F16 raster path is already
+     * 16-bit per channel and doesn't need dithering, and the 8888
+     * path applies the project's standard dither.
+     */
+    public fun Shader(
+        shader: SkShader,
+        @Suppress("UNUSED_PARAMETER") dither: Boolean = false,
+    ): SkImageFilter = SkShaderImageFilter(shader)
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Empty()` — a transparent-black
+     * filter input. Useful as a placeholder in `Merge` / `Compose`
+     * chains under construction, and to test that downstream filters
+     * handle a fully-transparent input correctly.
+     */
+    public fun Empty(): SkImageFilter = SkEmptyImageFilter
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Crop(rect, tileMode, input)` —
+     * constrains [input]'s output to [rect], with [tileMode]
+     * dictating how out-of-rect samples are treated.
+     *
+     *  - [SkTileMode.kClamp] : every pixel inside `rect` keeps the
+     *    input's value at the closest clamped coord ; outside `rect`,
+     *    the result is transparent black.
+     *  - [SkTileMode.kRepeat] : tile the input's contribution across
+     *    the rect's interior.
+     *  - [SkTileMode.kMirror] : tile with mirroring at every period
+     *    boundary.
+     *  - [SkTileMode.kDecal] (default) : pass through inside `rect`,
+     *    transparent outside — the strict "crop" semantics.
+     *
+     * `input == null` is the identity input (the rasterised source
+     * image) — equivalent to upstream's "crop the implicit source".
+     */
+    public fun Crop(
+        rect: SkRect,
+        tileMode: SkTileMode = SkTileMode.kDecal,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkCropImageFilter(rect, tileMode, input)
+
+    /** Convenience overload — `Crop(rect, kDecal, input)`. */
+    public fun Crop(rect: SkRect, input: SkImageFilter? = null): SkImageFilter =
+        Crop(rect, SkTileMode.kDecal, input)
 }
 
 // -- Internal concrete implementations --------------------------------------
@@ -366,5 +480,246 @@ internal class SkDropShadowImageFilter(
         val outB = (sb * sa + db * da * invSa / 255 + outA / 2) / outA
         return (outA shl 24) or (outR.coerceIn(0, 255) shl 16) or
             (outG.coerceIn(0, 255) shl 8) or outB.coerceIn(0, 255)
+    }
+}
+
+// -- C1.1 source / passthrough wrappers ------------------------------------
+
+/**
+ * `Image` — wraps a static [SkImage] as the filter input. The
+ * `src` arg to [filterImage] is ignored — this filter generates
+ * its own source from the image-pixel data.
+ *
+ * Output is sized to [dstRect] ; pixels are sampled from
+ * [srcRect] of [image] via [sampling]. Output offset is
+ * `(dstRect.left, dstRect.top)` so the filter result lands at
+ * the correct device-space position.
+ *
+ * Fast path : when `srcRect == image bounds && dstRect == image
+ * bounds && sampling == kNearest`, the image is returned as-is
+ * (no sampling allocation).
+ */
+internal class SkImageImageFilter(
+    private val image: SkImage,
+    private val srcRect: SkRect,
+    private val dstRect: SkRect,
+    private val sampling: SkSamplingOptions,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val outW = kotlin.math.max(1, kotlin.math.ceil(dstRect.width().toDouble()).toInt())
+        val outH = kotlin.math.max(1, kotlin.math.ceil(dstRect.height().toDouble()).toInt())
+        val outOffX = kotlin.math.floor(dstRect.left.toDouble()).toInt()
+        val outOffY = kotlin.math.floor(dstRect.top.toDouble()).toInt()
+
+        // Identity-shape fast path : the most common case (Image(image)
+        // with no sub-rect remapping) skips the per-pixel sample loop.
+        val fullSrc = SkRect.MakeWH(image.width.toFloat(), image.height.toFloat())
+        if (srcRect == fullSrc && dstRect == fullSrc) {
+            return FilterResult(image, outOffX, outOffY)
+        }
+
+        // General path : sample srcRect → dstRect via the requested
+        // SkSamplingOptions filter mode. Identical math to
+        // SkMatrixTransformImageFilter's bilerp / nearest, just
+        // anchored on the dst-to-src remap implied by the two rects.
+        val outBuf = IntArray(outW * outH)
+        val sx = srcRect.width() / dstRect.width()
+        val sy = srcRect.height() / dstRect.height()
+        for (y in 0 until outH) {
+            val srcY = srcRect.top + (y + 0.5f) * sy
+            for (x in 0 until outW) {
+                val srcX = srcRect.left + (x + 0.5f) * sx
+                outBuf[y * outW + x] = sample(image, srcX, srcY)
+            }
+        }
+        return FilterResult(SkImage(outW, outH, outBuf), outOffX, outOffY)
+    }
+
+    private fun sample(img: SkImage, sx: Float, sy: Float): Int = when (sampling.filter) {
+        SkFilterMode.kNearest -> {
+            val ix = kotlin.math.floor(sx.toDouble()).toInt()
+            val iy = kotlin.math.floor(sy.toDouble()).toInt()
+            if (ix in 0 until img.width && iy in 0 until img.height) img.peekPixel(ix, iy) else 0
+        }
+        SkFilterMode.kLinear -> {
+            val fx = sx - 0.5f; val fy = sy - 0.5f
+            val ix0 = kotlin.math.floor(fx.toDouble()).toInt()
+            val iy0 = kotlin.math.floor(fy.toDouble()).toInt()
+            val tx = (fx - kotlin.math.floor(fx.toDouble()).toFloat()).coerceIn(0f, 1f)
+            val ty = (fy - kotlin.math.floor(fy.toDouble()).toFloat()).coerceIn(0f, 1f)
+            bilerp(peek(img, ix0, iy0), peek(img, ix0 + 1, iy0),
+                peek(img, ix0, iy0 + 1), peek(img, ix0 + 1, iy0 + 1), tx, ty)
+        }
+    }
+
+    private fun peek(img: SkImage, x: Int, y: Int): Int =
+        if (x in 0 until img.width && y in 0 until img.height) img.peekPixel(x, y) else 0
+
+    private fun bilerp(c00: Int, c10: Int, c01: Int, c11: Int, tx: Float, ty: Float): Int {
+        val itx = 1f - tx; val ity = 1f - ty
+        val w00 = itx * ity; val w10 = tx * ity; val w01 = itx * ty; val w11 = tx * ty
+        fun ch(shift: Int): Int {
+            val v = ((c00 ushr shift) and 0xFF) * w00 + ((c10 ushr shift) and 0xFF) * w10 +
+                ((c01 ushr shift) and 0xFF) * w01 + ((c11 ushr shift) and 0xFF) * w11
+            return (v + 0.5f).toInt().coerceIn(0, 255)
+        }
+        return (ch(24) shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+    }
+}
+
+/**
+ * `Picture` — replays a recorded [SkPicture] into a bitmap of
+ * [targetRect]'s size, returns that bitmap as the filter input.
+ * Mirrors upstream's `SkImageFilters::Picture`. The picture is
+ * rendered at draw time (each `filterImage` call replays it
+ * fresh — Skia does the same and clients are expected to wrap
+ * with [Compose] etc. only when they want the replay
+ * memoised).
+ */
+internal class SkPictureImageFilter(
+    private val pic: SkPicture,
+    private val targetRect: SkRect,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val outW = kotlin.math.max(1, kotlin.math.ceil(targetRect.width().toDouble()).toInt())
+        val outH = kotlin.math.max(1, kotlin.math.ceil(targetRect.height().toDouble()).toInt())
+        // Allocate a fresh raster bitmap and replay the picture into
+        // it, translated so the targetRect's top-left lands at (0, 0)
+        // in the bitmap. The bitmap's color space defaults to sRGB ;
+        // pictures recorded against a non-sRGB working space will
+        // need a callsite that re-tags appropriately (B2.4-style
+        // future enhancement).
+        val bitmap = SkBitmap(outW, outH)
+        val canvas = SkCanvas(bitmap)
+        canvas.translate(-targetRect.left, -targetRect.top)
+        pic.playback(canvas)
+        return FilterResult(
+            image = bitmap.asImage(),
+            offsetX = kotlin.math.floor(targetRect.left.toDouble()).toInt(),
+            offsetY = kotlin.math.floor(targetRect.top.toDouble()).toInt(),
+        )
+    }
+}
+
+/**
+ * `Shader` — fills a buffer sized to the input `src`'s dimensions
+ * with the shader's per-pixel output. Effectively the equivalent
+ * of `drawPaint(SkPaint().apply { shader = … })` into a fresh
+ * bitmap. The shader is sampled at pixel centres in the input's
+ * local coordinate space.
+ *
+ * Output offset is `(0, 0)` — the shader fills the whole input
+ * bbox, so the result aligns with `src`.
+ */
+internal class SkShaderImageFilter(
+    private val shader: SkShader,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val w = src.width
+        val h = src.height
+        val bitmap = SkBitmap(w, h)
+        // Drive the shader through SkBitmapDevice.drawPaint so it
+        // sees the same pipeline (color-space xform, premul) as the
+        // raster sinks. Identity CTM ; the shader's localMatrix
+        // handles its own geometry.
+        val device = SkBitmapDevice(bitmap)
+        val paint = SkPaint().apply { this.shader = this@SkShaderImageFilter.shader }
+        device.drawPaint(SkMatrix.Identity, org.skia.math.SkIRect.MakeWH(w, h), paint)
+        return FilterResult(bitmap.asImage(), 0, 0)
+    }
+}
+
+/**
+ * `Empty` — placeholder filter returning a 1×1 transparent-black
+ * image. Used as a default/initial value in `Merge` / `Compose`
+ * chains under construction, and to test that downstream filters
+ * handle fully-transparent inputs correctly.
+ *
+ * Singleton — there's no per-instance state.
+ */
+internal object SkEmptyImageFilter : SkImageFilter() {
+    private val EMPTY_IMAGE = SkImage(1, 1, IntArray(1))
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult =
+        FilterResult(EMPTY_IMAGE, 0, 0)
+}
+
+/**
+ * `Crop` — constrain [input]'s output to [rect], with [tileMode]
+ * dictating how out-of-rect samples are treated.
+ *
+ * Implementation : run [input] (or use `src` if input is null),
+ * then walk the rect-sized output buffer ; for each output pixel,
+ * the corresponding input pixel is either inside upstream's image
+ * bounds (direct copy), or out-of-bounds (apply [tileMode] to
+ * find the source pixel — clamp / repeat / mirror — or return
+ * transparent for kDecal).
+ *
+ * Output bounds : [rect]. Output offset matches [rect]'s top-left.
+ */
+internal class SkCropImageFilter(
+    private val rect: SkRect,
+    private val tileMode: SkTileMode,
+    private val input: SkImageFilter?,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
+        val srcImg = upstream.image
+        val srcOffX = upstream.offsetX
+        val srcOffY = upstream.offsetY
+
+        val outW = kotlin.math.max(1, kotlin.math.ceil(rect.width().toDouble()).toInt())
+        val outH = kotlin.math.max(1, kotlin.math.ceil(rect.height().toDouble()).toInt())
+        val outOffX = kotlin.math.floor(rect.left.toDouble()).toInt()
+        val outOffY = kotlin.math.floor(rect.top.toDouble()).toInt()
+        val outBuf = IntArray(outW * outH)
+
+        for (y in 0 until outH) {
+            // Map output (x, y) to upstream image coords.
+            // Output pixel (x, y) sits at device pos (outOffX + x, outOffY + y).
+            // The upstream image's pixel (sx, sy) sits at device pos (srcOffX + sx, srcOffY + sy).
+            // So sx = outOffX + x - srcOffX ; sy similarly.
+            val sy = outOffY + y - srcOffY
+            for (x in 0 until outW) {
+                val sx = outOffX + x - srcOffX
+                outBuf[y * outW + x] = sampleWithTileMode(srcImg, sx, sy)
+            }
+        }
+        return FilterResult(SkImage(outW, outH, outBuf), outOffX, outOffY)
+    }
+
+    private fun sampleWithTileMode(img: SkImage, sx: Int, sy: Int): Int {
+        val w = img.width
+        val h = img.height
+        if (w == 0 || h == 0) return 0
+        if (sx in 0 until w && sy in 0 until h) return img.peekPixel(sx, sy)
+        return when (tileMode) {
+            SkTileMode.kDecal -> 0
+            SkTileMode.kClamp -> img.peekPixel(sx.coerceIn(0, w - 1), sy.coerceIn(0, h - 1))
+            SkTileMode.kRepeat -> img.peekPixel(positiveMod(sx, w), positiveMod(sy, h))
+            SkTileMode.kMirror -> img.peekPixel(mirrorMod(sx, w), mirrorMod(sy, h))
+        }
+    }
+
+    /** Mathematical modulo : `((n % m) + m) % m` so result is in `[0, m)`. */
+    private fun positiveMod(n: Int, m: Int): Int {
+        val r = n % m
+        return if (r < 0) r + m else r
+    }
+
+    /**
+     * Mirror-mod : period = `2*m`, where `[0, m)` is direct and
+     * `[m, 2m)` mirrors back. Matches upstream Skia's `kMirror` tile
+     * mode for raster shaders.
+     */
+    private fun mirrorMod(n: Int, m: Int): Int {
+        if (m == 0) return 0
+        val twoM = 2 * m
+        var r = n % twoM
+        if (r < 0) r += twoM
+        return if (r < m) r else twoM - 1 - r
     }
 }
