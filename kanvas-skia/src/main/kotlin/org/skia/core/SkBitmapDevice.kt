@@ -218,6 +218,81 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     }
 
     /**
+     * Phase I5.3.b — rasterise a single triangle with per-vertex
+     * colour interpolation. Maps `(p0, p1, p2)` through [ctm] into
+     * device space, computes the AABB clipped to [clip], then per
+     * pixel inside the triangle :
+     *  1. computes barycentric weights `(w0, w1, w2)` with
+     *     `w0 + w1 + w2 = 1` ;
+     *  2. linearly interpolates the per-vertex ARGB values per
+     *     channel ;
+     *  3. modulates by `paint.color.alpha` (paint colour acts as a
+     *     post-multiplier when [SkVertices.colors] are present) ;
+     *  4. dispatches to [blend] with `paint.blendMode`.
+     *
+     * Color-space xform is applied to each interpolated colour
+     * before blending — same pipeline as the solid-colour
+     * [drawRect] / [drawPath] paths.
+     *
+     * Out of scope (next slice — I5.3.c) :
+     *  - per-vertex texCoords / shader sampling and color × shader
+     *    blending under the supplied `blendMode`.
+     */
+    internal fun drawColoredTriangle(
+        p0x: Float, p0y: Float, c0: SkColor,
+        p1x: Float, p1y: Float, c1: SkColor,
+        p2x: Float, p2y: Float, c2: SkColor,
+        ctm: SkMatrix, clip: SkIRect, paint: SkPaint,
+    ) {
+        val (ax, ay) = ctm.mapXY(p0x, p0y)
+        val (bx, by) = ctm.mapXY(p1x, p1y)
+        val (cx, cy) = ctm.mapXY(p2x, p2y)
+
+        val minXf = minOf(ax, bx, cx)
+        val minYf = minOf(ay, by, cy)
+        val maxXf = maxOf(ax, bx, cx)
+        val maxYf = maxOf(ay, by, cy)
+        val minX = maxOf(clip.left, kFloor(minXf.toDouble()).toInt())
+        val minY = maxOf(clip.top, kFloor(minYf.toDouble()).toInt())
+        val maxX = minOf(clip.right, kCeil(maxXf.toDouble()).toInt())
+        val maxY = minOf(clip.bottom, kCeil(maxYf.toDouble()).toInt())
+        if (minX >= maxX || minY >= maxY) return
+
+        val area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay)
+        if (kotlin.math.abs(area) < 1e-6f) return
+        val invArea = 1f / area
+
+        val mode = paint.blendMode
+        val paintAlpha = SkColorGetA(paint.color)
+
+        val a0a = SkColorGetA(c0); val a0r = SkColorGetR(c0)
+        val a0g = SkColorGetG(c0); val a0b = SkColorGetB(c0)
+        val a1a = SkColorGetA(c1); val a1r = SkColorGetR(c1)
+        val a1g = SkColorGetG(c1); val a1b = SkColorGetB(c1)
+        val a2a = SkColorGetA(c2); val a2r = SkColorGetR(c2)
+        val a2g = SkColorGetG(c2); val a2b = SkColorGetB(c2)
+
+        for (y in minY until maxY) {
+            for (x in minX until maxX) {
+                val px = x + 0.5f
+                val py = y + 0.5f
+                val w0 = ((bx - px) * (cy - py) - (cx - px) * (by - py)) * invArea
+                val w1 = ((cx - px) * (ay - py) - (ax - px) * (cy - py)) * invArea
+                val w2 = 1f - w0 - w1
+                if (w0 < 0 || w1 < 0 || w2 < 0) continue
+                val ai = (a0a * w0 + a1a * w1 + a2a * w2).toInt().coerceIn(0, 255)
+                val ri = (a0r * w0 + a1r * w1 + a2r * w2).toInt().coerceIn(0, 255)
+                val gi = (a0g * w0 + a1g * w1 + a2g * w2).toInt().coerceIn(0, 255)
+                val bi = (a0b * w0 + a1b * w1 + a2b * w2).toInt().coerceIn(0, 255)
+                val finalA = (ai * paintAlpha + 127) / 255
+                if (finalA == 0 && !modeAffectsZeroAlphaSrc(mode)) continue
+                val src = transformPaintColor(SkColorSetARGB(finalA, ri, gi, bi))
+                blend(x, y, src, mode)
+            }
+        }
+    }
+
+    /**
      * Composite `src`'s pixels onto this device, with `src`'s `(0, 0)`
      * landing at this device's `(originX, originY)`, intersecting writes
      * with [clip] (in this device's coords). Source pixels are blended
