@@ -39,6 +39,8 @@ import org.skia.pathops.internal.SkPathOpsMask
 import org.skia.pathops.internal.SkPathWriter
 import org.skia.pathops.internal.SortContourList
 import org.skia.pathops.internal.bridgeOp
+import org.skia.pathops.internal.bridgeWinding
+import org.skia.pathops.internal.bridgeXor
 
 /**
  * Pathops free functions. Mirrors Skia's `include/pathops/SkPathOps.h`.
@@ -230,9 +232,55 @@ public object SkPathOps {
      * Will land in D1.2.h.2 alongside the full coincidence machinery.
      */
     public fun Simplify(path: SkPath): SkPath? {
-        // TODO(D1.2.h.2) : implement Simplify. Same machinery as Op,
-        // restricted to a single input.
-        return null
+        val fillType = if (path.isInverseFillType())
+            SkPathFillType.kInverseEvenOdd else SkPathFillType.kEvenOdd
+
+        // Build single-input contour list.
+        val contourHead = SkOpContourHead()
+        val globalState = SkOpGlobalState()
+        contourHead.setGlobalState(globalState)
+        val coincidence = SkOpCoincidence()
+        globalState.setCoincidence(coincidence)
+        val builder = SkOpEdgeBuilder(path, contourHead)
+        if (!builder.finish()) return null
+
+        // Sort contours (single-input → both fill masks identical).
+        val ref = org.skia.pathops.internal.ContourHeadRef(contourHead)
+        if (!org.skia.pathops.internal.SortContourList(ref, false, false)) {
+            return SkPathBuilder().detach().makeFillType(fillType)
+        }
+        val sortedHead = ref.head!!
+
+        // Find intersections.
+        var current = sortedHead
+        do {
+            var next: org.skia.pathops.internal.SkOpContour? = current
+            while (org.skia.pathops.internal.AddIntersectTs(current, next!!, coincidence)) {
+                next = next.next() ?: break
+            }
+            current = current.next() ?: break
+        } while (true)
+
+        // Resolve coincidences.
+        if (!org.skia.pathops.internal.HandleCoincidence(sortedHead, coincidence)) return null
+
+        // Walk the resolved graph. bridgeWinding for kWinding,
+        // bridgeXor for kEvenOdd — selected by the path's xorMask.
+        val writer = SkPathWriter(fillType)
+        val xorMask = builder.xorMask()
+        val ok = if (xorMask == org.skia.pathops.internal.SkPathOpsMask.kWinding) {
+            bridgeWinding(sortedHead, writer)
+        } else {
+            bridgeXor(sortedHead, writer)
+        }
+        if (!ok) return null
+        writer.assemble()
+        val result = writer.nativePath()
+        // Same post-condition as Op : empty result on a non-empty input
+        // signals the algorithm short-circuited (FindSortableTop /
+        // walker bail) ; surface as null rather than mislead.
+        if (result.isEmpty() && !path.isEmpty()) return null
+        return result
     }
 
     /**
