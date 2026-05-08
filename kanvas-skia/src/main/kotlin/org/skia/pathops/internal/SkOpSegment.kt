@@ -240,6 +240,88 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         fTail.ptT().addOpp(start.fHead.ptT(), start.fHead.ptT())
     }
 
+    // ─── Subdivision (D1.2.b.2.0) ──────────────────────────────────
+
+    /**
+     * Pin this segment between the spans [start] and [end] into the
+     * provided [edge] carrier. Mirrors `SkOpSegment::subDivide`
+     * (`src/pathops/SkOpSegment.cpp:1624`).
+     *
+     * Always sets the carrier's verb + endpoints (`edge[0]` =
+     * [start]'s point, `edge[N]` = [end]'s point with `N` =
+     * [segVerbToPoints]). For non-line verbs, also computes any
+     * intermediate control point(s) — by reusing the original `fPts`
+     * directly when the span pair already covers the full curve
+     * (`(0,1)` or `(1,0)`), otherwise by calling the per-curve pinned
+     * `subDivide` to produce a re-parameterised middle.
+     *
+     * Returns `true` iff the result is *non-line* (i.e. has middle
+     * control points) ; mirrors upstream's bool return.
+     */
+    fun subDivide(start: SkOpSpanBase, end: SkOpSpanBase, edge: SkDCurve): Boolean {
+        require(start !== end)
+        val startPtT = start.ptT()
+        val endPtT = end.ptT()
+        edge.fVerb = fVerb
+        edge.fPts[0] = SkDPoint(startPtT.fPt.fX.toDouble(), startPtT.fPt.fY.toDouble())
+        val points = segVerbToPoints(fVerb)
+        edge.fPts[points] = SkDPoint(endPtT.fPt.fX.toDouble(), endPtT.fPt.fY.toDouble())
+        if (fVerb == SegVerb.kLine) return false
+        val startT = startPtT.fT
+        val endT = endPtT.fT
+        if ((startT == 0.0 || endT == 0.0) && (startT == 1.0 || endT == 1.0)) {
+            // Span pair covers the entire native parameterisation —
+            // reuse the original control points directly (preserving
+            // the upstream optimisation).
+            when (fVerb) {
+                SegVerb.kQuad -> {
+                    edge.fPts[1] = SkDPoint(fPts[1].fX.toDouble(), fPts[1].fY.toDouble())
+                }
+                SegVerb.kConic -> {
+                    edge.fPts[1] = SkDPoint(fPts[1].fX.toDouble(), fPts[1].fY.toDouble())
+                    edge.fWeight = fWeight.toDouble()
+                }
+                SegVerb.kCubic -> {
+                    if (startT == 0.0) {
+                        edge.fPts[1] = SkDPoint(fPts[1].fX.toDouble(), fPts[1].fY.toDouble())
+                        edge.fPts[2] = SkDPoint(fPts[2].fX.toDouble(), fPts[2].fY.toDouble())
+                    } else {
+                        // (startT, endT) = (1, 0) — the curve is being
+                        // walked tail-to-head ; flip the controls.
+                        edge.fPts[1] = SkDPoint(fPts[2].fX.toDouble(), fPts[2].fY.toDouble())
+                        edge.fPts[2] = SkDPoint(fPts[1].fX.toDouble(), fPts[1].fY.toDouble())
+                    }
+                }
+                else -> error("unreachable")
+            }
+            return false
+        }
+        // General sub-range : delegate to the per-curve pinned
+        // subDivide that consumes the start / end points and emits the
+        // middle control(s).
+        when (fVerb) {
+            SegVerb.kQuad -> {
+                val q = SkDQuad().apply { set(fPts[0], fPts[1], fPts[2]) }
+                edge.fPts[1] = q.subDivide(edge.fPts[0], edge.fPts[2], startT, endT)
+            }
+            SegVerb.kConic -> {
+                val c = SkDConic().apply { set(fPts[0], fPts[1], fPts[2], fWeight) }
+                val weightOut = FloatArray(1)
+                edge.fPts[1] = c.subDivide(edge.fPts[0], edge.fPts[2], startT, endT, weightOut)
+                edge.fWeight = weightOut[0].toDouble()
+            }
+            SegVerb.kCubic -> {
+                val cu = SkDCubic().apply { set(fPts[0], fPts[1], fPts[2], fPts[3]) }
+                val mid = arrayOf(SkDPoint(), SkDPoint())
+                cu.subDivide(edge.fPts[0], edge.fPts[3], startT, endT, mid)
+                edge.fPts[1] = mid[0]
+                edge.fPts[2] = mid[1]
+            }
+            else -> error("unreachable")
+        }
+        return true
+    }
+
     // ─── Angle ↔ span dispatch ─────────────────────────────────────
 
     /**
