@@ -37,7 +37,7 @@
 > | **C3** SkEmbossMaskFilter | 📋 pending | |
 > | **C4** drawAnnotation / drawDrawable / drawShadow | 📋 pending | |
 > | **B1** SkPDF (PDFBox adapter) | ❌ descoped | No ported GM needs PDF — only `internal_links.cpp` is PDF-specific upstream and isn't ported. See B1 section. |
-> | **B2** SkSVGCanvas | 📋 pending | |
+> | **B2** SkSVGCanvas | 📋 mini-planned | Slimmed to ~980 LOC + ~550 test (was ~3000+~700) ; text / filters / saveLayer descoped. See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md). |
 > | **Q1** SkAutoCanvasRestore Kotlin idiom | 📋 pending | |
 > | **Q2** Canvas wrappers | 📋 pending | |
 > | **Q3** SkBBHFactory + Picture cull | 📋 pending | |
@@ -745,8 +745,14 @@ public data class Report(
   (after B2). PDF half is dropped per the B1 audit (no ported
   GM needs PDF, only `internal_links.cpp` is PDF-specific
   upstream and isn't ported). The slice is reduced to the SVG
-  sink alone, depending on B2.
-  - **LOC** : ~75 (SVG only ; was ~150 ensemble).
+  sink alone, depending on B2 — see
+  [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) § B2.5 for the
+  active spec ; the SvgSink ships as the final slice of the
+  mini-plan (~80 LOC), tagged `"svg"`, registered with
+  [DmCli](kanvas-skia/src/main/kotlin/org/skia/dm/DmCli.kt)'s
+  `KNOWN_CONFIGS`.
+  - **LOC** : ~80 (SVG only, in MIGRATION_PLAN_SVG.md ; was
+    ~150 ensemble).
 
 **Total LOC** : ~625-925 (excluding B2 ; B1 / PdfSink descoped).
 
@@ -1288,7 +1294,13 @@ package** : the directory is not created.
 
 ---
 
-### B2 — `SkSVGCanvas`
+### B2 — `SkSVGCanvas` 📋 mini-planned
+
+**See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md)** for the active
+plan. The original 7-slice / ~3000 LOC scope below is preserved as a
+historical reference (struck through) ; the mini plan ships ~980
+main + ~550 test by descoping text, filters, saveLayer, color filters,
+and non-clamp bitmap shaders until a use case demands them.
 
 **Skia upstream files** :
 - `include/svg/SkSVGCanvas.h`
@@ -1297,23 +1309,29 @@ package** : the directory is not created.
 **Strategy** : SkCanvas implementation that serializes ops to SVG XML.
 Simpler than PDF (text-based).
 
-**LOC** : ~3000.
+**Active scope** : see [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md)
+(B2.1 skeleton + geometry, B2.2 paint, B2.3 clip, B2.4 image +
+gradients, B2.5 D4.5 SvgSink wiring).
 
-**Phase decomposition** :
+<details><summary>Original B2 scope (historical, ~3000 LOC, 7 slices)</summary>
 
-- **B2.1** — Path → SVG `<path d="...">` serialization. ~500 LOC.
-- **B2.2** — Solid fills + strokes → SVG `<g>` with style attrs. ~300.
-- **B2.3** — Shaders (linear, radial) → SVG `<linearGradient>` /
+- ~~**B2.1**~~ — Path → SVG `<path d="...">` serialization. ~500 LOC.
+- ~~**B2.2**~~ — Solid fills + strokes → SVG `<g>` with style attrs. ~300.
+- ~~**B2.3**~~ — Shaders (linear, radial) → SVG `<linearGradient>` /
   `<radialGradient>` defs. ~600.
-- **B2.4** — Image embedding → `<image>` with base64 data URL. ~200.
-- **B2.5** — Clipping → `<clipPath>` defs. ~400.
-- **B2.6** — Text → `<text>` (defer SkTextBlob → SVG textPath
-  extension). ~500.
-- **B2.7** — Filters → SVG filter primitives (`<feGaussianBlur>`,
-  `<feOffset>`, ...). ~500.
+- ~~**B2.4**~~ — Image embedding → `<image>` with base64 data URL. ~200.
+- ~~**B2.5**~~ — Clipping → `<clipPath>` defs. ~400.
+- ~~**B2.6**~~ — Text → `<text>` (defer SkTextBlob → SVG textPath
+  extension). ~500. **Descoped** in the mini plan.
+- ~~**B2.7**~~ — Filters → SVG filter primitives (`<feGaussianBlur>`,
+  `<feOffset>`, ...). ~500. **Descoped** in the mini plan.
 
 **Validation** : run all GMs through SvgSink, render the resulting
-SVG via Batik or browser, compare with raster reference.
+SVG via Batik or browser, compare with raster reference. **Mini plan
+relaxes** to structural well-formedness via `DocumentBuilder` ;
+pixel-level comparison deferred until a workflow demands it.
+
+</details>
 
 ---
 
@@ -1490,8 +1508,8 @@ DAG of dependencies :
                               │
                               ├─ B1 SkPDF ❌ descoped (no GM needs PDF)
                               │
-                              ├─ B2 SkSVGCanvas
-                              │    └─ Self-contained (filters → SVG <filter>)
+                              ├─ B2 SkSVGCanvas (mini ; see MIGRATION_PLAN_SVG.md)
+                              │    └─ Self-contained ; text + filters descoped
                               │
                               ├─ Q4 DeferredDisplayList
                               │    └─ Low priority (single-threaded)
@@ -1514,7 +1532,7 @@ DAG of dependencies :
 11. **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception*)
 12. ~~**B1** SkPDF~~ — ❌ **descoped** (no ported GM needs PDF ;
     see B1 section). The `pdf/` package is not created.
-13. **B2** SkSVGCanvas (~3000 LOC)
+13. **B2** SkSVGCanvas (~980 LOC main + ~550 test ; see [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) — was ~3000 in the original scope)
 14. **C3** SkEmbossMaskFilter (~400 LOC)
 15. **I2** Variable fonts + glyph cache (~700 LOC)
 16. **I4** SkShaper (~750 LOC)
