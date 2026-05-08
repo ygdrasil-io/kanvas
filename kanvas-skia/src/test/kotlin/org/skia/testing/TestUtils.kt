@@ -1,6 +1,7 @@
 package org.skia.testing
 
-import org.skia.core.SkCanvas
+import org.skia.dm.RasterSinkF16
+import org.skia.dm.Sink
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
@@ -55,8 +56,12 @@ public object TestUtils {
     /**
      * Render a GM into a freshly allocated bitmap of the GM's preferred size,
      * in the DM reference colorspace, filled with `gm.bgColor()` before
-     * `onDraw` runs. Mirrors Skia's `gm.cpp` test runner with `--config 8888`
+     * `onDraw` runs. Mirrors Skia's `gm.cpp` test runner with `--config f16`
      * and the "DM unified Rec.2020" working color space.
+     *
+     * Phase D4.1 routes this through the new [RasterSinkF16] DM sink so the
+     * existing call sites benefit from the unified sink dispatch ; the
+     * pixels and the colour space the bitmap is tagged with are unchanged.
      *
      * The bg color is sRGB-encoded (per the SkColor convention). When it is
      * black or white — both profile-invariant — a raw fill is bit-identical
@@ -65,21 +70,11 @@ public object TestUtils {
      * demands it.
      */
     public fun runGmTest(gm: GM): SkBitmap {
-        val size = gm.size()
-        // Phase 6 — render into an F16 bitmap so the per-pixel composite
-        // arithmetic stays in float `[0, 1]` premultiplied space. Reference
-        // images are 16-bit-per-channel PNGs; comparing them to F16 renders
-        // (instead of 8-bit-quantized renders) typically lifts gradient and
-        // multi-pass-translucent GMs by 30–60 percentage points.
-        val bitmap = SkBitmap(
-            size.width, size.height,
-            DM_REFERENCE_COLOR_SPACE,
-            SkColorType.kRGBA_F16Norm,
-        )
-        bitmap.eraseColor(gm.bgColor())
-        val canvas = SkCanvas(bitmap)
-        gm.draw(canvas)
-        return bitmap
+        val sink = RasterSinkF16(DM_REFERENCE_COLOR_SPACE)
+        return when (val result = sink.draw(gm)) {
+            is Sink.Result.Ok -> result.bitmap
+            is Sink.Result.Error -> throw IllegalStateException(result.message)
+        }
     }
 
     public fun loadReferenceImage(name: String): BufferedImage? {
