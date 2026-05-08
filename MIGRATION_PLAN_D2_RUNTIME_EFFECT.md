@@ -543,39 +543,70 @@ Cross-cutting :
 
 ---
 
-### D2.3 — `SkRuntimeEffectBuilder` + `SkData` helpers
+### D2.3 — `SkRuntimeEffectBuilder` ✅ shipped
 
-**Scope** : le helper Builder upstream qui simplifie le binding
-des uniforms — beaucoup de GMs l'utilisent au lieu du
-`makeShader(uniforms, children)` brut. Plus le foundation
-`SkData` (wrapper byte-buffer immutable) si pas déjà présent.
+**Scope** : helper Builder upstream qui simplifie le binding des
+uniforms — beaucoup de GMs upstream l'utilisent au lieu du
+`makeShader(uniforms, children)` brut. `SkData` a été absorbé en
+D2.2 ; D2.3 livre uniquement le Builder.
 
-**Files** :
-- `kanvas-skia/src/main/kotlin/org/skia/foundation/SkData.kt`
-  (uniquement si absent — quick check d'abord ; déjà shippé via
-  D3 / D4 peut-être).
-- `kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffectBuilder.kt`
-  — class avec accessors nommés :
-  ```kotlin
-  public class SkRuntimeEffectBuilder(public val effect: SkRuntimeEffect) {
-      public fun uniform(name: String): UniformAccessor
-      public fun child(name: String): ChildAccessor
-      public fun makeShader(localMatrix: SkMatrix? = null): SkShader?
-      public fun makeColorFilter(): SkColorFilter?
-      public fun makeBlender(): SkBlender?
-  }
-  ```
-  Chaque `uniform("name") = floatArrayOf(...)` écrit les bytes
-  dans le buffer interne au bon offset / type-checké contre le
-  record `Uniform` reflection.
+**Implementation** : [SkRuntimeEffectBuilder.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffectBuilder.kt) :
+- Constructeur `SkRuntimeEffectBuilder(effect, initialUniforms?
+  = null)` — buffer zero-init par défaut, sized à
+  `effect.uniformSize`.
+- `uniform(name): UniformAccessor` — accessor type-checké pour
+  les écritures uniformes. Surcharges :
+  - `set(Float)` (kFloat × 1)
+  - `set(Int)` (kInt × 1)
+  - `set(FloatArray)` (tout `kFloat*` / matrice — taille
+    validée contre `type.sizeBytes / 4 × count`)
+  - `set(IntArray)` (tout `kInt*`)
+  - `set(SkColor4f)` (kFloat4 — convenience pour
+    `layout(color) uniform vec4 ...`)
+  - `set(SkMatrix)` (kFloat3x3 — écriture column-major matchant
+    la convention Skia `SkMatrix → 9 floats`)
+  - Mismatch type ou size → `IllegalArgumentException` avec
+    diagnostic.
+- `child(name): ChildAccessor` — accessor type-checké pour les
+  child slots. Surcharges `set(SkShader?)` / `set(SkColorFilter?)`
+  / `set(SkBlender?)` ; mismatch declared
+  [SkRuntimeEffect.ChildType] → throw.
+- `makeShader(localMatrix? = null)` / `makeColorFilter()` /
+  `makeBlender()` — délègue à `effect.makeXxx(...)` avec un
+  snapshot des uniforms et un array de children typé. Retourne
+  `null` pour le mauvais kind d'effet.
+- **Snapshot semantics** : chaque `makeXxx` prend une copie
+  défensive des bytes uniformes ; les mutations subséquentes du
+  builder ne fuient pas dans les effets déjà construits.
+- Lookup miss (`uniform("nope")` ou `child("nope")`) → throw
+  avec diagnostic listant les uniforms / children déclarés.
 
-**Tests** :
-- `SkRuntimeEffectBuilderTest.kt` — set uniforms par nom → bytes
-  layout corrects ; type mismatch (écrire 3 floats dans un
-  uniform vec4) throw ; `makeShader()` retourne un shader
-  fonctionnel.
+**Tests** ([SkRuntimeEffectBuilderTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/SkRuntimeEffectBuilderTest.kt)
+— **20 tests, all green**) :
+- Construction : zero-init du buffer ; explicit `SkData` init.
+- Writes typés : `Float`, `Int`, `FloatArray` (avec offset
+  alignment vec4 → 16), `IntArray`, `SkColor4f` → 4 channels
+  RGBA, `SkMatrix` → mat3 column-major.
+- Failure paths : `set(Int)` sur uniform Float → throw,
+  `set(Float)` sur uniform Int → throw, `set(FloatArray(3))`
+  sur uniform vec4 → throw, `set(IntArray)` sur uniform float
+  → throw, `uniform("nope")` → throw avec nom dans le message.
+- Children : binding correct → slot peuplé ; type-mismatch
+  (SkColorFilter dans un slot `shader`) → throw ;
+  `child("nope")` → throw.
+- Kind gating : `makeShader` retourne null pour un effet
+  colorFilter / blender ; symétrique pour les autres factories.
+- End-to-end : impl reçoit bien les bytes uniformes écrits par
+  le builder ; chaque `makeShader` snapshot indépendant
+  (mutations post-build ne fuient pas).
 
-**LOC** : ~200 main + ~150 test = ~350.
+**LOC** : ~340 main (Builder + UniformAccessor + ChildAccessor) +
+~370 test (20 tests) = **~710 total** (cf. plan estimate ~350 ;
+overage couvre les 6 surcharges de `set` + les diagnostics +
+les 2 tests d'integration end-to-end qui valident la chaîne
+Builder → effect → impl).
+
+**Validation** : full kanvas-skia suite **3076 / 3076 green**.
 
 ---
 
@@ -775,7 +806,7 @@ la deuxième fois (cette fois en cross-validation raster ↔ GPU).
 | D2.0 SkBlender + paint plumbing ✅ | **280** (planned ~250) | **285** (planned ~150) | foundation |
 | D2.1 SkRuntimeEffect façade + dispatch ✅ | **560** (planned ~700) | **460** (planned ~350) | foundation |
 | D2.2 Shader/ColorFilter/Blender bindings ✅ | **525** (planned ~400 ; absorbs SkData) | **430** (planned ~250) | foundation |
-| D2.3 SkRuntimeEffectBuilder + SkData | ~200 | ~150 | foundation |
+| D2.3 SkRuntimeEffectBuilder ✅ (SkData absorbed in D2.2) | **340** (planned ~200) | **370** (planned ~150) | foundation |
 | D2.4.a Simple color filters | ~250 | ~200 | 4 |
 | D2.4.b runtimeshader cluster | ~700 | ~500 | 1 (13 variants) |
 | D2.4.c intrinsics test effects | ~500 | ~150 | 1 (~50 variants) |
