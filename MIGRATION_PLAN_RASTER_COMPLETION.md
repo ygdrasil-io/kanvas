@@ -32,7 +32,7 @@
 > | **I3** SkRegion + SkAAClip + SkRasterClip | ✅ shipped (I3.1-3.3) | clipMask Phase 7q remplacé par SkAAClip |
 > | **I4** SkShaper (Primitive + JavaTextLayout + wrap) | ✅ shipped (I4.1-4.3) | HarfBuzz parity hors scope |
 > | **I5** drawPoints / drawAtlas / drawVertices / drawPatch | ✅ shipped | I5.1 / I5.2 / I5.3.a-c / I5.4 livrés (commit `2de410e`) |
-> | **C1** Image filters extras | 📋 mini-planned | Group A core (6 factories) déjà shipped ; **22 factories manquantes** détaillées dans [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). 7 sous-slices, ~2750 main + ~1440 test, ~30 GM ports débloqués. |
+> | **C1** Image filters extras | ✅ shipped | 22 factories manquantes livrées (1 descope, `RuntimeShader` bloqué sur D2). 7 sous-slices, **1501 main + 1473 test** actuels (vs ~2750 + ~1440 estimés). ~30 GM ports débloqués. Voir [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). |
 > | **C2** Path effects extras (kMorph, StrokeAndFill recipe) | ✅ shipped | `SkPath1DPathEffect.Style.kMorph` ported faithfully (per-vertex bend along input path's normal, kLine→quad upgrade) via a new `ContourMeasure` chord-polyline parametriser ; `kStrokeAndFill_Style` was already shipped in `SkBitmapDevice` (verified). 8 morph tests + existing StrokeAndFill coverage. |
 > | **C3** SkEmbossMaskFilter | ✅ shipped | 3-plane dispatch via new `Sk3DMask` + `SkMaskFilter.Format` ; wired into `SkBitmapDevice.drawPathWithMaskFilter`. 14 tests, suite **2453 / 2453 green**. |
 > | **C4** drawAnnotation / drawDrawable / drawShadow | ✅ partially shipped | `SkDrawable` base class + `SkCanvas.drawDrawable(matrix?)` and `(x, y)` overloads ; `SkCanvas.drawAnnotation` no-op extension slot (raster sinks ignore by default ; subclasses can override to capture link metadata). `drawShadow` **descoped** — no Material-Design GM in the corpus needs it. 12 tests. |
@@ -1127,14 +1127,16 @@ public enum class PointMode { kPoints, kLines, kPolygon }
 
 ## Chantiers compléments core
 
-### C1 — Image filters extras 📋 mini-planned
+### C1 — Image filters extras ✅ shipped
 
 **See [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md)**
-for the active plan. The original 4-slice / ~1800 LOC scope below is
-preserved as a historical reference (struck through) ; the audited
-mini plan ships **~2750 main + ~1440 test** across **7 slices** that
-cover the **22 missing factories** (the original entry covered only
-11), unblocking ~30 GM ports.
+for the close-out report. All 7 sub-slices shipped : **22 image
+filter factories** matching upstream's `SkImageFilters.h` surface
+(1 explicit descope, `RuntimeShader`, blocked on D2). Total :
+**1501 main + 1473 test** (well under the ~2750 main audit
+estimate, thanks to the C1.7 sealed-class compaction). ~30 GM
+ports unblocked ; those land as separate `tests/<Name>GM.kt`
+follow-up PRs.
 
 **Skia upstream files** :
 - `include/effects/SkImageFilters.h` (the 28 factories ; 6 already
@@ -1813,7 +1815,7 @@ DAG of dependencies :
 
 📋 **remaining** (independent of D1 ; can ship in parallel) :
 
-13. 📋 **C1** Image filters extras (mini-planned ; **~2750 main + ~1440 test across 7 slices**, see [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). Group A core (6 factories) déjà shipped ; 22 missing factories audited and budgeted. RuntimeShader descoped on the D2 SkRuntimeEffect dependency.).
+13. ✅ **C1** Image filters extras (**1501 main + 1473 test across 7 slices**, see [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). 22 missing factories shipped ; RuntimeShader descoped on the D2 SkRuntimeEffect dependency. ~30 GM ports unblocked.).
 14. ✅ **C3** SkEmbossMaskFilter (~278 main + ~120 delta + ~280 test) — 3-plane mask dispatch via `Sk3DMask` + `SkMaskFilter.Format` ; per-pixel Lambertian + specular lighting.
 15. ✅ **Q2** Canvas wrappers (~453 main + ~270 test) — `SkNoDrawCanvas` + `SkPaintFilterCanvas` (abstract) + `SkOverdrawCanvas`.
 16. ✅ **Q3** SkBBHFactory + Picture cull (~582 main + ~430 test) — `SkBBoxHierarchy` + `SkRTree` + `SkRTreeFactory` + `SkPictureBoundsBuilder` ; `SkPictureRecorder` builds the BBH from per-op device-space bounds, `SkPicture.playback` queries on sub-rect clips.

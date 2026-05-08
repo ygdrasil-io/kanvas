@@ -465,45 +465,78 @@ seven distinct behavioural cases pin down the parameter surface).
 **Status** : full kanvas-skia suite **2527 / 2527 green**
 (+7 new tests).
 
-### C1.7 — Lighting (full surface : 6 variants) ✏️ ~1200 LOC
+### C1.7 — Lighting (full surface : 6 variants) ✅ shipped
 
-The biggest sub-slice. Six factories sharing a normal-from-height
-extraction + Phong reflection model :
+All 6 factories share a single `SkLightingImageFilter` class
+parameterised by an `SkLight` sealed type (Distant / Point / Spot)
+and an `isDiffuse` boolean ; the spec / diffuse switch is one
+branch in the main loop, not a class hierarchy.
 
-- **`DistantLitDiffuse(direction, color, surfaceScale, kd, input)`** —
-  parallel light + Lambertian (`max(0, n · L)`) shading. ~150 LOC.
-- **`PointLitDiffuse(location, color, surfaceScale, kd, input)`** —
-  point light (per-pixel `L = normalize(location - p)`). ~150 LOC.
-- **`SpotLitDiffuse(location, target, falloffExp, cutoffAngle, …)`**
-  — point light + cosine cutoff cone. ~250 LOC.
-- **`DistantLitSpecular(direction, …, ks, shininess, input)`** —
-  Blinn-Phong specular `(n · h)^shininess`. ~150 LOC.
-- **`PointLitSpecular(location, …, ks, shininess, input)`** —
-  point light specular. ~150 LOC.
-- **`SpotLitSpecular(location, target, …, ks, shininess, input)`**
-  — spot light specular. ~250 LOC.
+- **`DistantLitDiffuse(direction, color, surfaceScale, kd, input)`**
+- **`PointLitDiffuse(location, color, surfaceScale, kd, input)`**
+- **`SpotLitDiffuse(location, target, falloffExponent, cutoffAngle, color, surfaceScale, kd, input)`**
+- **`DistantLitSpecular(direction, color, surfaceScale, ks, shininess, input)`**
+- **`PointLitSpecular(location, color, surfaceScale, ks, shininess, input)`**
+- **`SpotLitSpecular(location, target, falloffExponent, cutoffAngle, color, surfaceScale, ks, shininess, input)`**
 
-**Implementation note** — the 6 variants share :
+**Algorithm per pixel** :
+1. Read input alpha as height : `h = α / 255`.
+2. Sobel gradient → normal `N = normalize(-Sx · surfaceScale,
+   -Sy · surfaceScale, 1)`.
+3. Per light type :
+   - Distant : `L` is the constant unit direction.
+   - Point : `L = normalize(location - p)` where
+     `p = (x, y, h · surfaceScale)`.
+   - Spot : `L = normalize(location - p)` plus a cone modulation
+     `m = cosOuter^falloffExponent` if `cosOuter ≥ cos(cutoffAngle)`,
+     else `m = 0`.
+4. Diffuse : `coef = kd · max(0, N · L)`.
+   Specular : `H = normalize(L + V)` with `V = (0, 0, 1)`,
+   `coef = ks · max(0, N · H)^shininess`.
+5. `out_rgb = coef · lightColor · m`, `out_a = max(R, G, B)`.
 
-1. A normal-from-height kernel : sample `input.alpha` at four
-   neighbours, compute Sobel gradient, normalise to unit normal.
-2. A Phong evaluator : compute `L`, `H = normalize(L + V)`, then
-   either `kd · max(0, n · L)` (diffuse) or `ks · max(0, n · H) ^
-   shininess` (specular).
-3. A spot-cone cutoff (Spot variants only) : `max(0, cos(angle) -
-   cos(cutoff))^falloffExp` modulation.
+**Implementation deltas vs plan** :
+- Plan said "factor `LightingCommon.kt`, then 6 thin factory
+  subclasses ; ~1200 LOC". Shipped is **~440 LOC** thanks to the
+  sealed-class approach over the 6-subclass approach. Six
+  subclasses all sharing a base class is heavier in Kotlin than a
+  single class with a sealed-type parameter.
+- Plan said "iso-fidelity caveat — match Sobel weights bit-for-bit
+  where possible". Shipped uses the canonical 3×3 Sobel with
+  weights `(1, 2, 1)`, normalised by `1 / (8 · 255)` so the
+  gradient is in `[-1, 1]`.
+- The planned `LightingCommon.kt` separate file isn't needed — the
+  shared helpers (`Float3` ops, `floatPow`, alpha sampler) fit
+  cleanly inside `SkImageFilters.kt`.
 
-Factor `LightingCommon.kt` for the shared kernel + Phong
-evaluator, then 6 thin factory subclasses. The shared kernel
-should be ~400 LOC ; each factory ~150 LOC ; ~1200 total.
+**Tests** :
+[SkImageFiltersLightingTest.kt](kanvas-skia/src/test/kotlin/org/skia/foundation/SkImageFiltersLightingTest.kt)
+(12) — diffuse straight-down saturates, sideways is black, kd
+halves output, point-light brightest at the closest pixel, spot
+inside cone non-zero, spot outside cone black, specular peak at
+N=H, high shininess narrows the highlight, point-spec non-zero
+at centre, spot-spec outside cone black, output bbox = input
+bbox, output alpha = max(R, G, B).
 
-**Iso-fidelity caveat** — the height-from-alpha kernel uses a
-specific Sobel weighting upstream ; sub-pixel drift on the
-generated normal is normal. The lighting GM tolerance is loose
-upstream (similarity ≥ 95%). Match those weights bit-for-bit
-where possible.
+The tests verify **invariants** of the Phong model rather than
+upstream's exact byte values — sub-pixel drift on the Sobel-derived
+normal makes byte-equality across a different floating-point path
+infeasible without iso-fidelity work that the upstream lighting GM
+tolerance (similarity ≥ 95%) doesn't justify.
 
-**GMs unblocked** : `lighting.cpp` (~6 GMs), `imagefiltersclipped.cpp` lighting branches.
+**LOC** : ~440 main delta on
+[SkImageFilters.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
++ ~245 test = **685 total** (cf. plan estimate ~1200 main + ~600
+test ; main came in **substantially under budget** because the
+sealed-class compaction + shared loop avoided per-variant
+boilerplate, and the test surface was kept lean by leaning on
+physics invariants rather than byte-equality assertions).
+
+**GMs unblocked** : `lighting.cpp` (~6 GMs), `imagefiltersclipped.cpp`
+lighting branches.
+
+**Status** : full kanvas-skia suite **2532 / 2532 green**
+(+12 new tests).
 
 ## Total LOC
 
@@ -515,12 +548,25 @@ where possible.
 | C1.4 Morphology ✅ | **135** (planned ~300) | **145** (planned ~150) | ~8 |
 | C1.5 DisplacementMap ✅ | **95** (planned ~200) | **165** (planned ~120) | 5 |
 | C1.6 MatrixConvolution ✅ | **135** (planned ~250) | **190** (planned ~150) | 5 |
-| C1.7 Lighting (6 variants) | ~1200 | ~600 | ~6 |
-| **Total** | **~2594** (so far : 344 actual + 2250 planned) | **~1640** (so far : 470 actual + 1170 planned) | **~30 GM ports unblocked** |
+| C1.7 Lighting (6 variants) ✅ | **440** (planned ~1200) | **245** (planned ~600) | ~6 |
+| **Total** | **1501** actual (vs ~2750 planned) | **1473** actual (vs ~1500 planned) | **~30 GM ports unblocked** |
 
 vs. the original C1 estimate of `~1800 main` (which only covered
 11 of 22 factories and undersized the lighting cluster by ~600
-LOC).
+LOC). **Shipped main LOC landed at 1501 — well under the audit's
+~2750 estimate** because the sealed-class compaction in C1.7 saved
+~750 main LOC vs the planned 6-subclass model, and the source /
+passthrough wrappers (C1.1) reused enough plumbing to come in
+under budget too.
+
+## C1 close-out
+
+All 7 sub-slices have shipped. The C1 mini plan is **complete** :
+22 image filter factories landed (matching upstream's `SkImageFilters.h`
+surface), 1 explicitly descoped (`RuntimeShader`, blocked on D2
+SkRuntimeEffect). The follow-up work is **GM porting** — each
+slice's PR mentions the upstream GMs it unblocks ; those land as
+separate `tests/<Name>GM.kt` ports in their own PRs.
 
 ## Validation
 
