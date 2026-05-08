@@ -18,6 +18,11 @@
  * for any non-done span across contours), `FindChase` (unary
  * variant of `findChaseOp` for the simplify walker).
  *
+ * Phase D1.2.h.6.1 — `bridgeWinding` (winding fill) +
+ * `bridgeXor` (even-odd fill) walkers, end-to-end `Simplify`
+ * pipeline. Single-input variant of `Op`, sharing the same
+ * `HandleCoincidence` machinery but with a single-mask filter.
+ *
  * Phase D1.2.h.5.3 — `AngleWinding` (angle-ring winding lookup).
  *
  * Phase D1.2.h.5.4 — `bridgeOp` + `findChaseOp` + Op final wiring.
@@ -899,6 +904,104 @@ internal fun bridgeOp(
             if (!findChaseOp(chase, startPtr, endPtr, resultArr)) return false
             current = resultArr[0] ?: break@outer
         }
+    }
+    return true
+}
+
+// ─── bridgeWinding / bridgeXor (D1.2.h.6.1) ──────────────────────
+
+/**
+ * Walk the resolved contour graph emitting active edges to
+ * [writer] under unary winding semantics (`Simplify` for
+ * `kWinding` fill type).
+ *
+ * Same outer-loop shape as [bridgeOp], but consults
+ * [SkOpSegment.activeWinding] instead of [SkOpSegment.activeOp]
+ * and uses [SkOpSegment.findNextWinding] / [FindChase] for the
+ * inner walks.
+ *
+ * Mirrors `bridgeWinding` (`src/pathops/SkPathOpsSimplify.cpp:24`).
+ */
+internal fun bridgeWinding(contourList: SkOpContour, writer: SkPathWriter): Boolean {
+    while (true) {
+        val span = FindSortableTop(contourList) ?: break
+        var current: SkOpSegment = span.segment() ?: return false
+        val startPtr = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = span.next() }
+        val endPtr = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = span }
+        val chase = mutableListOf<SkOpSpanBase>()
+        outer@ while (true) {
+            if (current.activeWinding(startPtr[0]!!, endPtr[0]!!)) {
+                val unsortableArr = booleanArrayOf(false)
+                while (true) {
+                    if (!unsortableArr[0] && current.done()) break
+                    val nextStart = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = startPtr[0] }
+                    val nextEnd = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = endPtr[0] }
+                    val next = current.findNextWinding(chase, nextStart, nextEnd, unsortableArr)
+                        ?: break
+                    if (!current.addCurveTo(startPtr[0]!!, endPtr[0]!!, writer)) return false
+                    current = next
+                    startPtr[0] = nextStart[0]
+                    endPtr[0] = nextEnd[0]
+                    if (writer.isClosed()) break
+                    if (unsortableArr[0] && startPtr[0]!!.starter(endPtr[0]!!).done()) break
+                }
+                if (current.activeWinding(startPtr[0]!!, endPtr[0]!!) && !writer.isClosed()) {
+                    val spanStart = startPtr[0]!!.starter(endPtr[0]!!)
+                    if (!spanStart.done()) {
+                        if (!current.addCurveTo(startPtr[0]!!, endPtr[0]!!, writer)) return false
+                        current.markDone(spanStart)
+                    }
+                }
+                writer.finishContour()
+            } else {
+                val lastArr = arrayOfNulls<SkOpSpanBase>(1)
+                if (!current.markAndChaseDone(startPtr[0]!!, endPtr[0]!!, lastArr)) return false
+                val last = lastArr[0]
+                if (last != null && !last.chased()) {
+                    last.setChased(true)
+                    chase.add(last)
+                }
+            }
+            current = FindChase(chase, startPtr, endPtr) ?: break@outer
+        }
+    }
+    return true
+}
+
+/**
+ * Walk the resolved contour graph emitting **every** edge under
+ * even-odd fill semantics (`Simplify` for `kEvenOdd` fill type).
+ * No winding test : [SkOpSegment.findNextXor] picks the first
+ * non-done angle and the walker just follows it.
+ *
+ * Mirrors `bridgeXor` (`src/pathops/SkPathOpsSimplify.cpp:100`).
+ */
+internal fun bridgeXor(contourList: SkOpContour, writer: SkPathWriter): Boolean {
+    var safetyNet = 1_000_000
+    while (true) {
+        val span = FindUndone(contourList) ?: break
+        var current: SkOpSegment = span.segment() ?: return false
+        val startPtr = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = span.next() }
+        val endPtr = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = span }
+        val unsortableArr = booleanArrayOf(false)
+        while (true) {
+            if (--safetyNet < 0) return false
+            if (!unsortableArr[0] && current.done()) break
+            val nextStart = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = startPtr[0] }
+            val nextEnd = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = endPtr[0] }
+            val next = current.findNextXor(nextStart, nextEnd, unsortableArr) ?: break
+            if (!current.addCurveTo(startPtr[0]!!, endPtr[0]!!, writer)) return false
+            current = next
+            startPtr[0] = nextStart[0]
+            endPtr[0] = nextEnd[0]
+            if (writer.isClosed()) break
+            if (unsortableArr[0] && startPtr[0]!!.starter(endPtr[0]!!).done()) break
+        }
+        if (!writer.isClosed()) {
+            val spanStart = startPtr[0]!!.starter(endPtr[0]!!)
+            if (!spanStart.done()) return false
+        }
+        writer.finishContour()
     }
     return true
 }
