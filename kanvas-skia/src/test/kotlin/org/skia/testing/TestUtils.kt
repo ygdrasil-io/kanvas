@@ -70,6 +70,10 @@ public object TestUtils {
         val sink = RasterSinkF16(DM_REFERENCE_COLOR_SPACE)
         return when (val result = sink.draw(gm)) {
             is Sink.Result.Ok -> result.bitmap
+            is Sink.Result.Bytes -> throw IllegalStateException(
+                "TestUtils.runGmTest expected raster output but RasterSinkF16 returned " +
+                    "Sink.Result.Bytes ; this should never happen.",
+            )
             is Sink.Result.Error -> throw IllegalStateException(result.message)
         }
     }

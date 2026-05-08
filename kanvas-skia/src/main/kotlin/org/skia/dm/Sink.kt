@@ -22,41 +22,83 @@ import org.skia.tests.GM
  * sum type so each sink owns its output buffer end-to-end, which is
  * cleaner in Kotlin and avoids the `nullptr` dance.
  *
- * Slice D4.1 ships the interface plus the two raster sinks
- * ([RasterSink8888], [RasterSinkF16]) that drive the existing
- * `runGmTest` flow through the new abstraction. Picture / PDF / SVG
- * sinks come in later slices (D4.2 / D4.5).
+ * Slice D4.1 shipped the interface plus the two raster sinks
+ * ([RasterSink8888], [RasterSinkF16]). Slice D4.2 added
+ * [PictureSink]. Slice **B2.5** of the SVG mini plan adds
+ * [SvgSink] alongside the [Result.Bytes] variant for vector
+ * outputs.
  */
 public interface Sink {
 
     /**
      * Short label identifying this sink in the DM report. Mirrors
      * upstream's `--config 8888` / `--config f16` / `--config pic-8888`
-     * convention so reports can be diffed line-for-line.
+     * / `--config svg` convention so reports can be diffed
+     * line-for-line.
      */
     public val tag: String
 
     /**
-     * Render [src] into this sink's configuration. Returns either a
-     * [Result.Ok] carrying the produced [SkBitmap] (for raster /
-     * replay-to-raster sinks) or a [Result.Error] with a human-readable
-     * message describing the failure mode.
+     * File extension of the encoded output : `"png"` for raster sinks,
+     * `"svg"` for [SvgSink]. Mirrors upstream's
+     * `Sink::fileExtension()` — the [Runner] consumes this when
+     * building the per-result `RunRecord.extension` field.
+     */
+    public val fileExtension: String get() = "png"
+
+    /**
+     * Render [src] into this sink's configuration. Raster sinks
+     * return [Result.Ok] with the produced [SkBitmap] ; vector sinks
+     * (B2.5 [SvgSink]) return [Result.Bytes] with the encoded
+     * payload ; failures return [Result.Error] with a human-readable
+     * message.
      *
-     * Concrete sinks **must** allocate their own output bitmap — this
-     * matches upstream's `Sink::draw` allocating its own
-     * `SkSurface::MakeRasterN32(...)`.
+     * Concrete sinks **must** allocate their own output buffer —
+     * this matches upstream's `Sink::draw` allocating its own
+     * `SkSurface::MakeRasterN32(...)` or `SkSVGCanvas::Make(stream)`.
      */
     public fun draw(src: GM): Result
 
     /**
-     * Result of a [draw] call. Sealed so future PDF / SVG sinks can
-     * extend it without breaking exhaustive `when` checks (likely
-     * additions in later slices : `Bytes(bytes, mimeType)` for vector
-     * outputs, or `Stream` for streaming consumers).
+     * Result of a [draw] call. Sealed so each future sink kind can
+     * extend it without breaking exhaustive `when` checks. The plan
+     * sketch in [MIGRATION_PLAN_RASTER_COMPLETION.md § D4](../../../../../../../MIGRATION_PLAN_RASTER_COMPLETION.md)
+     * flagged `Bytes(bytes, mimeType)` as a future extension ; that
+     * future is now (B2.5).
      */
     public sealed class Result {
-        /** Successful render. [bitmap] holds the rasterised pixels. */
+        /** Successful raster render. [bitmap] holds the rasterised pixels. */
         public data class Ok(val bitmap: SkBitmap) : Result()
+
+        /**
+         * Successful vector render (SVG, future PDF if revived). The
+         * caller hashes [bytes] directly into the DM report (no
+         * PNG re-encode), and writes the payload to disk under a
+         * filename ending in [SkSVGCanvas]'s — well, this is a
+         * sealed-class data carrier and doesn't reach into the
+         * canvas — the matching sink declares its [Sink.fileExtension]
+         * so [Runner] knows the suffix.
+         *
+         * [mimeType] is the MIME type for the bytes (e.g.
+         * `"image/svg+xml"`). It is **not** currently used by
+         * [Runner] but kept on the variant so a future HTTP / S3
+         * upload path has something semantic to set as
+         * `Content-Type`.
+         */
+        public data class Bytes(val bytes: ByteArray, val mimeType: String) : Result() {
+            // ByteArray.equals is reference-only, so we override to
+            // compare by content for the data-class equals contract.
+            override fun equals(other: Any?): Boolean {
+                if (this === other) return true
+                if (other !is Bytes) return false
+                return mimeType == other.mimeType && bytes.contentEquals(other.bytes)
+            }
+
+            override fun hashCode(): Int = 31 * bytes.contentHashCode() + mimeType.hashCode()
+
+            override fun toString(): String =
+                "Sink.Result.Bytes(${bytes.size} bytes, mimeType=$mimeType)"
+        }
 
         /** Render failed (configuration error, exception during draw). */
         public data class Error(val message: String) : Result()
