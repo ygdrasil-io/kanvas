@@ -226,6 +226,21 @@ internal open class SkOpSpanBase {
     fun t(): Double = fPtT.fT
 
     /**
+     * Walk this' pt-T loop and return the first pt-T whose segment is
+     * [opp], or null if none. Mirrors
+     * `SkOpSpanBase::contains(const SkOpSegment*)` (`SkOpSpan.cpp`).
+     */
+    fun contains(opp: SkOpSegment): SkOpPtT? {
+        var ptT: SkOpPtT? = fPtT
+        val stopPtT = fPtT
+        do {
+            if (ptT?.span()?.segment() === opp) return ptT
+            ptT = ptT?.next()
+        } while (ptT != null && ptT !== stopPtT)
+        return null
+    }
+
+    /**
      * True iff some pt-T in this' loop matches [other] by span identity.
      * Mirrors `SkOpSpanBase::contains(const SkOpSpanBase*)`.
      */
