@@ -3,8 +3,9 @@
 > **Status** : 🔄 **en cours** — plan vivant. **15 chantiers livrés**
 > (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 / I4 / I5 /
 > Q1 / Q2 / Q3 / Q5 ✅ ; B1 ❌ descoped). 🔄 D1.0 + D1.1 ✅, D1.2
-> active (g.* + h.0–h.6.4 + h.8 + h.9.0–9.2). 📋 D2 + Q4 restent.
-> Voir status par chantier ci-dessous.
+> active (g.* + h.0–h.6.4 + h.8 + h.9.0–9.2). 📋 D2 + Q4 + D1.4
+> (pathops regression harvest — backlog) restent. Voir status par
+> chantier ci-dessous.
 >
 > Ce document liste les chantiers restants pour atteindre la parité-iso
 > avec Skia raster (`include/core/*.h` + `include/effects/*.h`), hors
@@ -26,6 +27,7 @@
 > | **D1.1** Foundation (curves, line ops, intersections, TSect) | ✅ shipped (15 sous-slices) | a, b, c, d.1-3, e.1, e.2.a, e.2.b, e.2.c.1-4, e.3 |
 > | **D1.2** Op contour assembly | 🔄 en cours | g.* coincidence + h.0–h.4 (Op fast paths + HandleCoincidence orchestrator) + h.5.* (active edges + ray-tracing winding suite + Op end-to-end wiring) + h.6.0–h.6.4 (Simplify end-to-end + AsWinding fast paths) + h.8 (fillMaskFor inverse fill types) + h.9.0–h.9.2 (`SkOpBuilder.resolve` chained-Op fallback, pathops GM harvest, `SkParsePath::FromSVGString`) livrés ; reste finitions |
 > | **D1.3** Top-level entry points | 📋 pending | Bloqué sur D1.2 close |
+> | **D1.4** PathOps regression harvest | 📋 backlog | Port des 451 fixtures de `tests/PathOpsOpTest.cpp` (~12.5 k LOC C++) via un harness data-driven Kotlin. Couverture end-to-end actuelle ~2 % d'upstream ; chantier orthogonal au cœur algorithmique, attaque-recommandée après D2 / Q4. Voir section dédiée. |
 > | **D2** SkRuntimeEffect shim | 📋 doc-only | Plan ajouté ; pas d'implem |
 > | **D3** Image codecs | ✅ shipped | D3.1 PNG / D3.2 JPEG / D3.3 GIF+BMP+WBMP / D3.4 WEBP (TwelveMonkeys plugin) / D3.5 PNG+JPEG encoders / D3.6 `SkImage.encodeToData` |
 > | **D4** DM sink architecture | ✅ shipped | D4.1 Sink + Raster8888/F16 / D4.2 PictureSink / D4.3 Runner + Report / D4.4 DmCli + DmMain / D4.5 SvgSink (PdfSink ❌ descoped per B1) |
@@ -266,11 +268,51 @@ public object SkPathOps {
   - `SkOpAssembler.kt` : runs the algorithm and produces `SkPath`.
   - **LOC** : ~2000.
   - **Tests** : 1000+ Skia path-pair fixtures from
-    `tests/PathOpsOpTest.cpp`. GM ports : `pathops*` cluster (~15 GMs).
+    `tests/PathOpsOpTest.cpp` — *covered by D1.4 below*. GM ports :
+    `pathops*` cluster (only 2 GMs upstream, both shipped).
 
-**Total LOC** : ~9000-12000.
-**Estimated time** : 2-3 weeks per slice (D1.1 / D1.2 / D1.3) for a
-single engineer. Largest chantier in this plan.
+- **D1.4** — PathOps regression harvest. 📋 **backlog** (orthogonal
+  au cœur algorithmique ; à attaquer après D2 / Q4 ou en parallèle
+  des polish-passes D1.2 / D1.3).
+  - **Pourquoi** : couverture end-to-end actuelle de `SkPathOps.Op`
+    est **~2 %** d'upstream — 13 appels `SkPathOps.Op(...)` dans
+    nos tests + GMs vs 451 fixtures `TEST(name)` dans
+    [`tests/PathOpsOpTest.cpp`](https://github.com/google/skia/blob/main/tests/PathOpsOpTest.cpp).
+    Les 686 tests internes (segment / coincidence / TSect / angle)
+    valident les briques ; ils ne couvrent **pas** l'interaction
+    multi-composants sur cas-limites — qui est précisément ce que
+    chaque `TEST(bug8380)` / `TEST(crbug_526025)` / `TEST(fuzz_*)`
+    upstream a fixé une fois pour toutes.
+  - **Stratégie** — harness data-driven plutôt que port mécanique :
+    1. Script `extract_pathops_fixtures.py` : scrape les 449
+       fonctions `static void <name>(skiatest::Reporter*, const char*)`
+       de `PathOpsOpTest.cpp` → JSON `(name, pathA verbs, pathB verbs,
+       op, expected_status)`.
+    2. `PathOpsRegressionRunner.kt` (~300 LOC) : `@ParameterizedTest`
+       JUnit 5 chargeant le JSON, exécutant `SkPathOps.Op(A, B, op)`,
+       comparant le rasterised result au `expected` upstream (PNG
+       ref ou bbox + cardinality verb).
+    3. Run en CI ; ratchet les passing-counts au lieu d'échouer
+       binaire. Permet de mesurer la convergence du moteur.
+  - **LOC** estimés : ~300 main (harness) + ~5–8 k JSON data dump.
+  - **GMs débloqués** : aucun direct (les 2 pathops GMs sont déjà
+    shippés). Bénéfice = **détection de bugs latents** + base
+    DM-iso-fidelity pour pathops.
+  - **Estimation effort** :
+    - Port mécanique pur : **1–2 semaines** (script extract + harness +
+      premier ratchet).
+    - Debug des bugs surfacés (D1.2.h.7 / h.8 ont déjà trouvé 5 bugs
+      sur seulement 2 GMs) : **estimation 10–30 bugs latents × 1–3
+      jours = 4–12 semaines** supplémentaires.
+    - **Total réaliste : 6–15 semaines** sur un engineer focused.
+  - **Décision recommandée** : à programmer **après** clôture D2 /
+    Q4 si l'objectif est "DM iso-fidelity". À mettre **plus haut**
+    en priorité si l'objectif est "robustesse production
+    (anti-crash sur input fuzz)".
+
+**Total LOC** : ~9000-12000 (D1.0 → D1.3) + ~300 main + ~8 k data (D1.4).
+**Estimated time** : 2-3 weeks per slice (D1.1 / D1.2 / D1.3) plus
+6-15 weeks for D1.4 if attacked. Largest chantier in this plan.
 
 **Validation** : ensemble fixtures replays + ports of
 `gm/pathopsfuzz.cpp` + `gm/pathopsskpclip.cpp` + `gm/complexclip2.cpp`.
@@ -1825,11 +1867,13 @@ DAG of dependencies :
 18. ✅ **C2/C4** Misc completions (~505 main + ~400 test) — `Sk1DPathEffect.kMorph` (refactored around a `ContourMeasure` chord-polyline), `kStrokeAndFill_Style` already shipped ; `SkDrawable` + `SkCanvas.drawDrawable` + `SkCanvas.drawAnnotation` no-op slot. **`drawShadow` descoped** (no ported GM uses it).
 19. 📋 **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception* — large but unlocks SkSL-using GMs).
 20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
+21. 📋 **D1.4** PathOps regression harvest (~300 main + ~8 k JSON data) — backlog. Port des 451 fixtures `tests/PathOpsOpTest.cpp` via harness data-driven JUnit `@ParameterizedTest`. Couverture end-to-end actuelle ~2 % d'upstream ; à attaquer après D2 / Q4 si l'objectif est DM iso-fidelity, ou plus tôt si l'objectif est robustesse anti-fuzz.
 
-**Total estimated LOC remaining** : ~1 900 of new Kotlin code
-(D2 1500 + Q4 400 ; everything else shipped or descoped, D1 in-flight
-LOC tracked separately under the chantier's own slice budget).
-Decomposes into 2 PRs (D2 large, Q4 small).
+**Total estimated LOC remaining** : ~2 200 of new Kotlin code
+(D2 1500 + Q4 400 + D1.4 ~300 main ; D1.4 also ships ~8 k JSON test
+data ; everything else shipped or descoped, D1 in-flight LOC tracked
+separately under the chantier's own slice budget). Decomposes into
+3 PRs (D2 large, Q4 small, D1.4 medium-with-debug-tail).
 
 **Total LOC delivered so far** : ~25 000 across the **15 shipped
 chantiers** (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 /
@@ -1839,9 +1883,10 @@ overages on C1 lighting / Q3 / C2 / C4 absorbed. D1 is tracked
 separately at ~9 000 LOC and currently sits ~60 % through D1.2.
 
 **Estimated time remaining** : 1–3 weeks full-time on D2 + Q4 (the
-last two iso-fidelity items outside D1), plus whatever D1.2 / D1.3
-need to close. The "raster pipeline completion" goal is **down to D1
-+ D2 + Q4** — every other chantier is shipped or formally descoped.
+core iso-fidelity items outside D1), plus 6–15 weeks on D1.4 if
+prioritised, plus whatever D1.2 / D1.3 need to close. The "raster
+pipeline completion" goal is **down to D1 + D2 + Q4 + D1.4** —
+every other chantier is shipped or formally descoped.
 
 ---
 
