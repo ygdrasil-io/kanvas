@@ -69,7 +69,21 @@ internal open class SkOpContour : Comparable<SkOpContour> {
     /** True if the opposite path had even-odd fill. */
     var fOppXor: Boolean = false
 
+    /**
+     * Back-reference to the per-op global state (arena allocator,
+     * coincidence container, winding-failed flag, …). Currently only
+     * the coincidence container is wired ; the rest land alongside
+     * their first consumer. Plumbed by [setGlobalState] (typically
+     * during the `SkPathOpsOp` setup) and read by
+     * [SkOpSpanBase.globalState].
+     */
+    var fGlobalState: SkOpGlobalState? = null
+
     init { reset() }
+
+    /** Mirrors `SkOpContour::globalState()` (`SkOpContour.h`). */
+    fun globalState(): SkOpGlobalState? = fGlobalState
+    fun setGlobalState(s: SkOpGlobalState?) { fGlobalState = s }
 
     fun reset() {
         fTail = null
