@@ -1290,7 +1290,28 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         // TODO (D1.2.g) : globalState().coincidence().release(this).
     }
 
-    // ─── Coincidence helpers (D1.2.c.2.f) ──────────────────────────
+    // ─── Coincidence helpers (D1.2.c.2.f / D1.2.g.0) ───────────────
+
+    /**
+     * True iff this segment is "close" to [opp] at parameter [t] —
+     * the perpendicular ray at the curve point hits [opp] within
+     * roughly-equal distance. Mirrors `SkOpSegment::isClose`
+     * (`SkOpSegment.cpp:839`). Used by [SkCoincidentSpans.expand].
+     */
+    fun isClose(t: Double, opp: SkOpSegment): Boolean {
+        val cPt = dPtAtT(t)
+        val dxdy = dSlopeAtT(t)
+        val perp = SkDLine().apply {
+            this[0] = SkDPoint(cPt.x, cPt.y)
+            this[1] = SkDPoint(cPt.x + dxdy.y, cPt.y - dxdy.x)
+        }
+        val ix = SkIntersections()
+        opp.intersectRay(perp, ix)
+        for (index in 0 until ix.used()) {
+            if (cPt.roughlyEqual(ix.pt(index))) return true
+        }
+        return false
+    }
 
     /**
      * Find the first span whose `done` flag is unset. Mirrors
