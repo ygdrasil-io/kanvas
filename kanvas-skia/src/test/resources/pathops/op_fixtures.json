@@ -1625,6 +1625,974 @@
       "op": "kXOR"
     },
     {
+      "name": "testOp1d",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "testOp2d",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kEvenOdd",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "testOp3d",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "testOp1u",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          3.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          3.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kUnion"
+    },
+    {
+      "name": "testOp4d",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          4.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          4.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "testOp5d",
+      "fillTypeA": "kEvenOdd",
+      "fillTypeB": "kEvenOdd",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          3.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          3.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "testOp6d",
+      "fillTypeA": "kEvenOdd",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          3.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          3.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "testOp7d",
+      "fillTypeA": "kEvenOdd",
+      "fillTypeB": "kEvenOdd",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "testOp2u",
+      "fillTypeA": "kEvenOdd",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          3.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          3.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kUnion"
+    },
+    {
+      "name": "testOp8d",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          640.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          640.0,
+          480.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          480.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          577330.0,
+          1971.72
+        ],
+        [
+          "cubicTo",
+          10.7082,
+          -116.596,
+          262.057,
+          45.6468,
+          294.694,
+          1.96237
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
       "name": "cubicOp25i",
       "fillTypeA": "kWinding",
       "fillTypeB": "kWinding",
@@ -7239,6 +8207,210 @@
       "op": "kIntersect"
     },
     {
+      "name": "rectOp1i",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          4.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          4.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
+      "name": "rectOp2i",
+      "fillTypeA": "kEvenOdd",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          3.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          3.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
       "name": "rectOp3x",
       "fillTypeA": "kEvenOdd",
       "fillTypeB": "kWinding",
@@ -11618,6 +12790,108 @@
       "op": "kDifference"
     },
     {
+      "name": "cubicOp110",
+      "fillTypeA": "kEvenOdd",
+      "fillTypeB": "kEvenOdd",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          4.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          4.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
       "name": "cubicOp111",
       "fillTypeA": "kWinding",
       "fillTypeB": "kWinding",
@@ -12132,6 +13406,60 @@
       "op": "kDifference"
     },
     {
+      "name": "issue2504",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          34.2421875,
+          -5.976562976837158
+        ],
+        [
+          "lineTo",
+          35.453121185302734,
+          0.0
+        ],
+        [
+          "lineTo",
+          31.9375,
+          0.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          36.71843719482422,
+          0.8886508941650391
+        ],
+        [
+          "cubicTo",
+          36.71843719482422,
+          0.8886508941650391,
+          35.12338638305664,
+          0.5540154576301575,
+          34.511409759521484,
+          -0.11525535583496094
+        ],
+        [
+          "cubicTo",
+          33.8994255065918,
+          -0.7845261096954346,
+          34.53484344482422,
+          -5.677755355834961,
+          34.53484344482422,
+          -5.677755355834961
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kUnion"
+    },
+    {
       "name": "issue2540",
       "fillTypeA": "kWinding",
       "fillTypeB": "kWinding",
@@ -12439,6 +13767,210 @@
       "op": "kDifference"
     },
     {
+      "name": "rects3",
+      "fillTypeA": "kEvenOdd",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          4.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          4.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "rects4",
+      "fillTypeA": "kEvenOdd",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          3.0,
+          3.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          3.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
       "name": "issue2753",
       "fillTypeA": "kWinding",
       "fillTypeB": "kWinding",
@@ -12699,6 +14231,108 @@
           0.0,
           4.0,
           3.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "testRect2",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kEvenOdd",
+      "pathA": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1.0,
+          1.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          4.0,
+          4.0
+        ],
+        [
+          "lineTo",
+          5.0,
+          4.0
+        ],
+        [
+          "lineTo",
+          5.0,
+          5.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          5.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          2.0,
+          2.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          2.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          6.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          6.0
         ],
         [
           "close"
@@ -13675,6 +15309,202 @@
       "op": "kDifference"
     },
     {
+      "name": "circlesOp1",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          2.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          2.0,
+          -0.10456949966158668,
+          1.1045694996615867,
+          -1.0,
+          0.0,
+          -1.0
+        ],
+        [
+          "cubicTo",
+          -1.1045694996615867,
+          -1.0,
+          -2.0,
+          -0.10456949966158668,
+          -2.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          -2.0,
+          2.1045694996615865,
+          -1.1045694996615867,
+          3.0,
+          0.0,
+          3.0
+        ],
+        [
+          "cubicTo",
+          1.1045694996615867,
+          3.0,
+          2.0,
+          2.1045694996615865,
+          2.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          1.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          1.0,
+          1.5522847498307932,
+          0.5522847498307933,
+          2.0,
+          0.0,
+          2.0
+        ],
+        [
+          "cubicTo",
+          -0.5522847498307933,
+          2.0,
+          -1.0,
+          1.5522847498307932,
+          -1.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          -1.0,
+          0.44771525016920666,
+          -0.5522847498307933,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          "cubicTo",
+          0.5522847498307933,
+          0.0,
+          1.0,
+          0.44771525016920666,
+          1.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "circlesOp2",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          4.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          4.0,
+          -1.2091389993231734,
+          2.2091389993231734,
+          -3.0,
+          0.0,
+          -3.0
+        ],
+        [
+          "cubicTo",
+          -2.2091389993231734,
+          -3.0,
+          -4.0,
+          -1.2091389993231734,
+          -4.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          -4.0,
+          3.2091389993231734,
+          -2.2091389993231734,
+          5.0,
+          0.0,
+          5.0
+        ],
+        [
+          "cubicTo",
+          2.2091389993231734,
+          5.0,
+          4.0,
+          3.2091389993231734,
+          4.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          3.0,
+          4.0
+        ],
+        [
+          "cubicTo",
+          3.0,
+          5.65685424949238,
+          1.6568542494923801,
+          7.0,
+          0.0,
+          7.0
+        ],
+        [
+          "cubicTo",
+          -1.6568542494923801,
+          7.0,
+          -3.0,
+          5.65685424949238,
+          -3.0,
+          4.0
+        ],
+        [
+          "cubicTo",
+          -3.0,
+          2.34314575050762,
+          -1.6568542494923801,
+          1.0,
+          0.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          1.6568542494923801,
+          1.0,
+          3.0,
+          2.34314575050762,
+          3.0,
+          4.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
       "name": "loop7",
       "fillTypeA": "kWinding",
       "fillTypeB": "kWinding",
@@ -13717,6 +15547,108 @@
         ]
       ],
       "op": "kIntersect"
+    },
+    {
+      "name": "rects5",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kEvenOdd",
+      "pathA": [
+        [
+          "moveTo",
+          5.0,
+          5.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          5.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          6.0
+        ],
+        [
+          "lineTo",
+          5.0,
+          6.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          5.0,
+          5.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          5.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          6.0
+        ],
+        [
+          "lineTo",
+          5.0,
+          6.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          6.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          6.0
+        ],
+        [
+          "close"
+        ],
+        [
+          "moveTo",
+          5.0,
+          5.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          5.0
+        ],
+        [
+          "lineTo",
+          6.0,
+          6.0
+        ],
+        [
+          "lineTo",
+          5.0,
+          6.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
     },
     {
       "name": "loop8",
@@ -13805,6 +15737,104 @@
         ]
       ],
       "op": "kIntersect"
+    },
+    {
+      "name": "circlesOp3",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          2.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          2.0,
+          -0.10456949966158668,
+          1.1045694996615867,
+          -1.0,
+          0.0,
+          -1.0
+        ],
+        [
+          "cubicTo",
+          -1.1045694996615867,
+          -1.0,
+          -2.0,
+          -0.10456949966158668,
+          -2.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          -2.0,
+          2.1045694996615865,
+          -1.1045694996615867,
+          3.0,
+          0.0,
+          3.0
+        ],
+        [
+          "cubicTo",
+          1.1045694996615867,
+          3.0,
+          2.0,
+          2.1045694996615865,
+          2.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          6.0,
+          5.0
+        ],
+        [
+          "cubicTo",
+          6.0,
+          6.65685424949238,
+          4.65685424949238,
+          8.0,
+          3.0,
+          8.0
+        ],
+        [
+          "cubicTo",
+          1.3431457505076199,
+          8.0,
+          0.0,
+          6.65685424949238,
+          0.0,
+          5.0
+        ],
+        [
+          "cubicTo",
+          0.0,
+          3.34314575050762,
+          1.3431457505076199,
+          2.0,
+          3.0,
+          2.0
+        ],
+        [
+          "cubicTo",
+          4.65685424949238,
+          2.0,
+          6.0,
+          3.34314575050762,
+          6.0,
+          5.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
     },
     {
       "name": "loop10",
@@ -14419,6 +16449,336 @@
         ]
       ],
       "op": "kDifference"
+    },
+    {
+      "name": "quadRect1",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          6.0,
+          15.0
+        ],
+        [
+          "quadTo",
+          16.0,
+          0.0,
+          8.0,
+          4.0
+        ],
+        [
+          "quadTo",
+          2.0,
+          7.0,
+          12.0,
+          12.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          4.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          16.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          16.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
+      "name": "quadRect2",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          5.0,
+          12.0
+        ],
+        [
+          "quadTo",
+          15.0,
+          7.0,
+          9.0,
+          4.0
+        ],
+        [
+          "quadTo",
+          1.0,
+          0.0,
+          11.0,
+          15.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          4.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          16.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          16.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
+      "name": "quadRect3",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          12.0,
+          12.0
+        ],
+        [
+          "quadTo",
+          2.0,
+          7.0,
+          8.0,
+          4.0
+        ],
+        [
+          "quadTo",
+          16.0,
+          0.0,
+          6.0,
+          15.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          4.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          16.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          16.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
+      "name": "quadRect4",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          11.0,
+          15.0
+        ],
+        [
+          "quadTo",
+          1.0,
+          0.0,
+          9.0,
+          4.0
+        ],
+        [
+          "quadTo",
+          15.0,
+          7.0,
+          5.0,
+          12.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          4.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          16.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          16.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
+      "name": "quadRect5",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          11.0,
+          13.0
+        ],
+        [
+          "quadTo",
+          4.0,
+          4.0,
+          8.0,
+          4.0
+        ],
+        [
+          "quadTo",
+          12.0,
+          4.0,
+          5.0,
+          13.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          4.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          16.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          16.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
+      "name": "quadRect6",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          5.0,
+          13.0
+        ],
+        [
+          "quadTo",
+          12.0,
+          4.0,
+          8.0,
+          4.0
+        ],
+        [
+          "quadTo",
+          4.0,
+          4.0,
+          11.0,
+          13.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          4.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          11.0
+        ],
+        [
+          "lineTo",
+          13.0,
+          16.0
+        ],
+        [
+          "lineTo",
+          4.0,
+          16.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
     },
     {
       "name": "loops4i",
@@ -17105,6 +19465,43 @@
       "op": "kUnion"
     },
     {
+      "name": "fuzz38",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          100.34,
+          303.312
+        ],
+        [
+          "lineTo",
+          -100000000.0,
+          303.312
+        ],
+        [
+          "lineTo",
+          102.0,
+          310.156
+        ],
+        [
+          "lineTo",
+          100.34,
+          310.156
+        ],
+        [
+          "lineTo",
+          100.34,
+          303.312
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [],
+      "op": "kUnion"
+    },
+    {
       "name": "cubics_d",
       "fillTypeA": "kWinding",
       "fillTypeB": "kWinding",
@@ -17633,6 +20030,1591 @@
       "op": "kIntersect"
     },
     {
+      "name": "circlesOp4",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          5.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          5.0,
+          3.7614237491539666,
+          2.7614237491539666,
+          6.0,
+          0.0,
+          6.0
+        ],
+        [
+          "cubicTo",
+          -2.7614237491539666,
+          6.0,
+          -5.0,
+          3.7614237491539666,
+          -5.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          -5.0,
+          -1.7614237491539666,
+          -2.7614237491539666,
+          -4.0,
+          0.0,
+          -4.0
+        ],
+        [
+          "cubicTo",
+          2.7614237491539666,
+          -4.0,
+          5.0,
+          -1.7614237491539666,
+          5.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        [
+          "cubicTo",
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kDifference"
+    },
+    {
+      "name": "android1",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          -5.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1075.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1075.0,
+          242.0
+        ],
+        [
+          "lineTo",
+          -5.0,
+          242.0
+        ],
+        [
+          "lineTo",
+          -5.0,
+          0.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          0.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1080.0,
+          0.0
+        ],
+        [
+          "lineTo",
+          1080.0,
+          242.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          242.0
+        ],
+        [
+          "lineTo",
+          0.0,
+          0.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
+      "name": "seanbug",
+      "fillTypeA": "kEvenOdd",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          5804.0,
+          6036.0
+        ],
+        [
+          "lineTo",
+          5803.8798828125,
+          6035.96875
+        ],
+        [
+          "lineTo",
+          5803.76025390625,
+          6035.93505859375
+        ],
+        [
+          "lineTo",
+          5803.64013671875,
+          6035.8994140625
+        ],
+        [
+          "lineTo",
+          5803.52001953125,
+          6035.86083984375
+        ],
+        [
+          "lineTo",
+          5803.400390625,
+          6035.8203125
+        ],
+        [
+          "lineTo",
+          5803.28076171875,
+          6035.77734375
+        ],
+        [
+          "lineTo",
+          5803.1611328125,
+          6035.732421875
+        ],
+        [
+          "lineTo",
+          5803.0419921875,
+          6035.6845703125
+        ],
+        [
+          "lineTo",
+          5802.9228515625,
+          6035.634765625
+        ],
+        [
+          "lineTo",
+          5802.80419921875,
+          6035.5830078125
+        ],
+        [
+          "lineTo",
+          5802.685546875,
+          6035.52880859375
+        ],
+        [
+          "lineTo",
+          5802.56689453125,
+          6035.47216796875
+        ],
+        [
+          "lineTo",
+          5802.44873046875,
+          6035.41357421875
+        ],
+        [
+          "lineTo",
+          5802.3310546875,
+          6035.35302734375
+        ],
+        [
+          "lineTo",
+          5802.21337890625,
+          6035.2900390625
+        ],
+        [
+          "lineTo",
+          5802.09619140625,
+          6035.22509765625
+        ],
+        [
+          "lineTo",
+          5801.9794921875,
+          6035.15771484375
+        ],
+        [
+          "lineTo",
+          5801.86328125,
+          6035.0888671875
+        ],
+        [
+          "lineTo",
+          5801.74755859375,
+          6035.017578125
+        ],
+        [
+          "lineTo",
+          5801.6318359375,
+          6034.94384765625
+        ],
+        [
+          "lineTo",
+          5801.51708984375,
+          6034.86865234375
+        ],
+        [
+          "lineTo",
+          5801.40283203125,
+          6034.791015625
+        ],
+        [
+          "lineTo",
+          5801.28857421875,
+          6034.7119140625
+        ],
+        [
+          "lineTo",
+          5801.17529296875,
+          6034.63037109375
+        ],
+        [
+          "lineTo",
+          5801.0625,
+          6034.546875
+        ],
+        [
+          "lineTo",
+          5800.9501953125,
+          6034.46142578125
+        ],
+        [
+          "lineTo",
+          5800.8388671875,
+          6034.3740234375
+        ],
+        [
+          "lineTo",
+          5800.72802734375,
+          6034.28515625
+        ],
+        [
+          "lineTo",
+          5800.61767578125,
+          6034.19384765625
+        ],
+        [
+          "lineTo",
+          5800.5078125,
+          6034.10107421875
+        ],
+        [
+          "lineTo",
+          5800.39892578125,
+          6034.00634765625
+        ],
+        [
+          "lineTo",
+          5800.291015625,
+          6033.90966796875
+        ],
+        [
+          "lineTo",
+          5800.18359375,
+          6033.81103515625
+        ],
+        [
+          "lineTo",
+          5800.0771484375,
+          6033.7109375
+        ],
+        [
+          "lineTo",
+          5799.9716796875,
+          6033.6083984375
+        ],
+        [
+          "lineTo",
+          5799.86669921875,
+          6033.5048828125
+        ],
+        [
+          "lineTo",
+          5799.7626953125,
+          6033.39892578125
+        ],
+        [
+          "lineTo",
+          5799.65966796875,
+          6033.2919921875
+        ],
+        [
+          "lineTo",
+          5799.55712890625,
+          6033.1826171875
+        ],
+        [
+          "lineTo",
+          5799.4560546875,
+          6033.07177734375
+        ],
+        [
+          "lineTo",
+          5799.35546875,
+          6032.95947265625
+        ],
+        [
+          "lineTo",
+          5799.25634765625,
+          6032.845703125
+        ],
+        [
+          "lineTo",
+          5799.158203125,
+          6032.7294921875
+        ],
+        [
+          "lineTo",
+          5799.060546875,
+          6032.6123046875
+        ],
+        [
+          "lineTo",
+          5798.96435546875,
+          6032.4931640625
+        ],
+        [
+          "lineTo",
+          5798.869140625,
+          6032.373046875
+        ],
+        [
+          "lineTo",
+          5798.775390625,
+          6032.25048828125
+        ],
+        [
+          "lineTo",
+          5798.68212890625,
+          6032.126953125
+        ],
+        [
+          "lineTo",
+          5798.5908203125,
+          6032.001953125
+        ],
+        [
+          "lineTo",
+          5798.5,
+          6031.875
+        ],
+        [
+          "lineTo",
+          5798.41064453125,
+          6031.74658203125
+        ],
+        [
+          "lineTo",
+          5798.322265625,
+          6031.6171875
+        ],
+        [
+          "lineTo",
+          5798.2353515625,
+          6031.48583984375
+        ],
+        [
+          "lineTo",
+          5798.14990234375,
+          6031.35302734375
+        ],
+        [
+          "lineTo",
+          5798.0654296875,
+          6031.21923828125
+        ],
+        [
+          "lineTo",
+          5797.982421875,
+          6031.08349609375
+        ],
+        [
+          "lineTo",
+          5797.90087890625,
+          6030.94677734375
+        ],
+        [
+          "lineTo",
+          5797.8203125,
+          6030.80859375
+        ],
+        [
+          "lineTo",
+          5797.74169921875,
+          6030.6689453125
+        ],
+        [
+          "lineTo",
+          5797.6640625,
+          6030.52783203125
+        ],
+        [
+          "lineTo",
+          5797.587890625,
+          6030.3857421875
+        ],
+        [
+          "lineTo",
+          5797.51318359375,
+          6030.2421875
+        ],
+        [
+          "lineTo",
+          5797.4404296875,
+          6030.09716796875
+        ],
+        [
+          "lineTo",
+          5797.36865234375,
+          6029.951171875
+        ],
+        [
+          "lineTo",
+          5797.29833984375,
+          6029.8037109375
+        ],
+        [
+          "lineTo",
+          5797.22998046875,
+          6029.6552734375
+        ],
+        [
+          "lineTo",
+          5797.1630859375,
+          6029.50537109375
+        ],
+        [
+          "lineTo",
+          5797.09765625,
+          6029.3544921875
+        ],
+        [
+          "lineTo",
+          5797.0341796875,
+          6029.2021484375
+        ],
+        [
+          "lineTo",
+          5796.97216796875,
+          6029.048828125
+        ],
+        [
+          "lineTo",
+          5796.91162109375,
+          6028.89453125
+        ],
+        [
+          "lineTo",
+          5796.85302734375,
+          6028.73876953125
+        ],
+        [
+          "lineTo",
+          5796.7958984375,
+          6028.58203125
+        ],
+        [
+          "lineTo",
+          5796.75,
+          6028.45068359375
+        ],
+        [
+          "lineTo",
+          5796.75,
+          5974.0244140625
+        ],
+        [
+          "lineTo",
+          5796.75830078125,
+          5973.99853515625
+        ],
+        [
+          "lineTo",
+          5796.81591796875,
+          5973.82666015625
+        ],
+        [
+          "lineTo",
+          5796.875,
+          5973.65625
+        ],
+        [
+          "lineTo",
+          5796.93603515625,
+          5973.48779296875
+        ],
+        [
+          "lineTo",
+          5796.9990234375,
+          5973.32080078125
+        ],
+        [
+          "lineTo",
+          5797.06396484375,
+          5973.15576171875
+        ],
+        [
+          "lineTo",
+          5797.13037109375,
+          5972.99267578125
+        ],
+        [
+          "lineTo",
+          5797.19921875,
+          5972.8310546875
+        ],
+        [
+          "lineTo",
+          5797.26953125,
+          5972.67138671875
+        ],
+        [
+          "lineTo",
+          5797.34130859375,
+          5972.513671875
+        ],
+        [
+          "lineTo",
+          5797.4150390625,
+          5972.357421875
+        ],
+        [
+          "lineTo",
+          5797.49072265625,
+          5972.203125
+        ],
+        [
+          "lineTo",
+          5797.568359375,
+          5972.05078125
+        ],
+        [
+          "lineTo",
+          5797.6474609375,
+          5971.900390625
+        ],
+        [
+          "lineTo",
+          5797.72802734375,
+          5971.751953125
+        ],
+        [
+          "lineTo",
+          5797.810546875,
+          5971.60546875
+        ],
+        [
+          "lineTo",
+          5797.89453125,
+          5971.46044921875
+        ],
+        [
+          "lineTo",
+          5797.98046875,
+          5971.31787109375
+        ],
+        [
+          "lineTo",
+          5798.06787109375,
+          5971.17724609375
+        ],
+        [
+          "lineTo",
+          5798.15673828125,
+          5971.03857421875
+        ],
+        [
+          "lineTo",
+          5798.2470703125,
+          5970.9013671875
+        ],
+        [
+          "lineTo",
+          5798.33935546875,
+          5970.76708984375
+        ],
+        [
+          "lineTo",
+          5798.43310546875,
+          5970.63427734375
+        ],
+        [
+          "lineTo",
+          5798.5283203125,
+          5970.50341796875
+        ],
+        [
+          "lineTo",
+          5798.625,
+          5970.375
+        ],
+        [
+          "lineTo",
+          5798.72314453125,
+          5970.24853515625
+        ],
+        [
+          "lineTo",
+          5798.82275390625,
+          5970.1240234375
+        ],
+        [
+          "lineTo",
+          5798.92431640625,
+          5970.001953125
+        ],
+        [
+          "lineTo",
+          5799.02685546875,
+          5969.8818359375
+        ],
+        [
+          "lineTo",
+          5799.130859375,
+          5969.76416015625
+        ],
+        [
+          "lineTo",
+          5799.236328125,
+          5969.6484375
+        ],
+        [
+          "lineTo",
+          5799.34326171875,
+          5969.53515625
+        ],
+        [
+          "lineTo",
+          5799.45166015625,
+          5969.423828125
+        ],
+        [
+          "lineTo",
+          5799.56103515625,
+          5969.31494140625
+        ],
+        [
+          "lineTo",
+          5799.671875,
+          5969.2080078125
+        ],
+        [
+          "lineTo",
+          5799.7841796875,
+          5969.103515625
+        ],
+        [
+          "lineTo",
+          5799.89794921875,
+          5969.00146484375
+        ],
+        [
+          "lineTo",
+          5800.0126953125,
+          5968.9013671875
+        ],
+        [
+          "lineTo",
+          5800.12890625,
+          5968.80419921875
+        ],
+        [
+          "lineTo",
+          5800.24609375,
+          5968.708984375
+        ],
+        [
+          "lineTo",
+          5800.36474609375,
+          5968.6162109375
+        ],
+        [
+          "lineTo",
+          5800.484375,
+          5968.52587890625
+        ],
+        [
+          "lineTo",
+          5800.60546875,
+          5968.4375
+        ],
+        [
+          "lineTo",
+          5800.7275390625,
+          5968.35205078125
+        ],
+        [
+          "lineTo",
+          5800.85107421875,
+          5968.26904296875
+        ],
+        [
+          "lineTo",
+          5800.9755859375,
+          5968.1884765625
+        ],
+        [
+          "lineTo",
+          5801.10107421875,
+          5968.1103515625
+        ],
+        [
+          "lineTo",
+          5801.2275390625,
+          5968.03466796875
+        ],
+        [
+          "lineTo",
+          5801.35546875,
+          5967.96142578125
+        ],
+        [
+          "lineTo",
+          5801.484375,
+          5967.890625
+        ],
+        [
+          "lineTo",
+          5801.6142578125,
+          5967.82275390625
+        ],
+        [
+          "lineTo",
+          5801.7451171875,
+          5967.7568359375
+        ],
+        [
+          "lineTo",
+          5801.876953125,
+          5967.69384765625
+        ],
+        [
+          "lineTo",
+          5802.01025390625,
+          5967.6337890625
+        ],
+        [
+          "lineTo",
+          5802.14404296875,
+          5967.576171875
+        ],
+        [
+          "lineTo",
+          5802.21337890625,
+          5967.5478515625
+        ],
+        [
+          "lineTo",
+          6390.3251953125,
+          5967.5478515625
+        ],
+        [
+          "lineTo",
+          6390.3681640625,
+          5967.56787109375
+        ],
+        [
+          "lineTo",
+          6390.48291015625,
+          5967.62451171875
+        ],
+        [
+          "lineTo",
+          6390.59716796875,
+          5967.68359375
+        ],
+        [
+          "lineTo",
+          6390.71142578125,
+          5967.74462890625
+        ],
+        [
+          "lineTo",
+          6390.82470703125,
+          5967.80859375
+        ],
+        [
+          "lineTo",
+          6390.9375,
+          5967.875
+        ],
+        [
+          "lineTo",
+          6391.0498046875,
+          5967.94384765625
+        ],
+        [
+          "lineTo",
+          6391.1611328125,
+          5968.0146484375
+        ],
+        [
+          "lineTo",
+          6391.27197265625,
+          5968.08837890625
+        ],
+        [
+          "lineTo",
+          6391.38232421875,
+          5968.1640625
+        ],
+        [
+          "lineTo",
+          6391.4921875,
+          5968.2421875
+        ],
+        [
+          "lineTo",
+          6391.60107421875,
+          5968.322265625
+        ],
+        [
+          "lineTo",
+          6391.708984375,
+          5968.40478515625
+        ],
+        [
+          "lineTo",
+          6391.81640625,
+          5968.48974609375
+        ],
+        [
+          "lineTo",
+          6391.9228515625,
+          5968.57666015625
+        ],
+        [
+          "lineTo",
+          6392.0283203125,
+          5968.666015625
+        ],
+        [
+          "lineTo",
+          6392.13330078125,
+          5968.75732421875
+        ],
+        [
+          "lineTo",
+          6392.2373046875,
+          5968.85107421875
+        ],
+        [
+          "lineTo",
+          6392.34033203125,
+          5968.9462890625
+        ],
+        [
+          "lineTo",
+          6392.44287109375,
+          5969.04443359375
+        ],
+        [
+          "lineTo",
+          6392.5439453125,
+          5969.14404296875
+        ],
+        [
+          "lineTo",
+          6392.64453125,
+          5969.24560546875
+        ],
+        [
+          "lineTo",
+          6392.74365234375,
+          5969.349609375
+        ],
+        [
+          "lineTo",
+          6392.841796875,
+          5969.45556640625
+        ],
+        [
+          "lineTo",
+          6392.939453125,
+          5969.5634765625
+        ],
+        [
+          "lineTo",
+          6393.03564453125,
+          5969.6728515625
+        ],
+        [
+          "lineTo",
+          6393.130859375,
+          5969.78466796875
+        ],
+        [
+          "lineTo",
+          6393.224609375,
+          5969.8984375
+        ],
+        [
+          "lineTo",
+          6393.31787109375,
+          5970.013671875
+        ],
+        [
+          "lineTo",
+          6393.4091796875,
+          5970.130859375
+        ],
+        [
+          "lineTo",
+          6393.5,
+          5970.25
+        ],
+        [
+          "lineTo",
+          6393.58935546875,
+          5970.37109375
+        ],
+        [
+          "lineTo",
+          6393.677734375,
+          5970.49365234375
+        ],
+        [
+          "lineTo",
+          6393.7646484375,
+          5970.6181640625
+        ],
+        [
+          "lineTo",
+          6393.85009765625,
+          5970.744140625
+        ],
+        [
+          "lineTo",
+          6393.9345703125,
+          5970.8720703125
+        ],
+        [
+          "lineTo",
+          6394.017578125,
+          5971.00146484375
+        ],
+        [
+          "lineTo",
+          6394.09912109375,
+          5971.1328125
+        ],
+        [
+          "lineTo",
+          6394.1796875,
+          5971.265625
+        ],
+        [
+          "lineTo",
+          6394.25830078125,
+          5971.39990234375
+        ],
+        [
+          "lineTo",
+          6394.3359375,
+          5971.5361328125
+        ],
+        [
+          "lineTo",
+          6394.412109375,
+          5971.67333984375
+        ],
+        [
+          "lineTo",
+          6394.48681640625,
+          5971.8125
+        ],
+        [
+          "lineTo",
+          6394.5595703125,
+          5971.953125
+        ],
+        [
+          "lineTo",
+          6394.63134765625,
+          5972.09521484375
+        ],
+        [
+          "lineTo",
+          6394.70166015625,
+          5972.23876953125
+        ],
+        [
+          "lineTo",
+          6394.77001953125,
+          5972.3837890625
+        ],
+        [
+          "lineTo",
+          6394.8369140625,
+          5972.5302734375
+        ],
+        [
+          "lineTo",
+          6394.90234375,
+          5972.67822265625
+        ],
+        [
+          "lineTo",
+          6394.9658203125,
+          5972.82763671875
+        ],
+        [
+          "lineTo",
+          6395.02783203125,
+          5972.97802734375
+        ],
+        [
+          "lineTo",
+          6395.08837890625,
+          5973.1298828125
+        ],
+        [
+          "lineTo",
+          6395.14697265625,
+          5973.283203125
+        ],
+        [
+          "lineTo",
+          6395.2041015625,
+          5973.4375
+        ],
+        [
+          "lineTo",
+          6395.25927734375,
+          5973.59326171875
+        ],
+        [
+          "lineTo",
+          6395.3125,
+          5973.75
+        ],
+        [
+          "lineTo",
+          6395.3642578125,
+          5973.908203125
+        ],
+        [
+          "lineTo",
+          6395.4140625,
+          5974.0673828125
+        ],
+        [
+          "lineTo",
+          6395.4619140625,
+          5974.22802734375
+        ],
+        [
+          "lineTo",
+          6395.5078125,
+          5974.38916015625
+        ],
+        [
+          "lineTo",
+          6395.5517578125,
+          5974.5517578125
+        ],
+        [
+          "lineTo",
+          6395.55224609375,
+          6027.9677734375
+        ],
+        [
+          "lineTo",
+          6395.5078125,
+          6028.11279296875
+        ],
+        [
+          "lineTo",
+          6395.4619140625,
+          6028.25732421875
+        ],
+        [
+          "lineTo",
+          6395.4140625,
+          6028.4013671875
+        ],
+        [
+          "lineTo",
+          6395.3642578125,
+          6028.544921875
+        ],
+        [
+          "lineTo",
+          6395.3125,
+          6028.6875
+        ],
+        [
+          "lineTo",
+          6395.25927734375,
+          6028.82958984375
+        ],
+        [
+          "lineTo",
+          6395.2041015625,
+          6028.97119140625
+        ],
+        [
+          "lineTo",
+          6395.14697265625,
+          6029.1123046875
+        ],
+        [
+          "lineTo",
+          6395.08837890625,
+          6029.25244140625
+        ],
+        [
+          "lineTo",
+          6395.02783203125,
+          6029.39208984375
+        ],
+        [
+          "lineTo",
+          6394.9658203125,
+          6029.53076171875
+        ],
+        [
+          "lineTo",
+          6394.90234375,
+          6029.6689453125
+        ],
+        [
+          "lineTo",
+          6394.8369140625,
+          6029.80615234375
+        ],
+        [
+          "lineTo",
+          6394.77001953125,
+          6029.94287109375
+        ],
+        [
+          "lineTo",
+          6394.70166015625,
+          6030.07861328125
+        ],
+        [
+          "lineTo",
+          6394.63134765625,
+          6030.21337890625
+        ],
+        [
+          "lineTo",
+          6394.5595703125,
+          6030.34716796875
+        ],
+        [
+          "lineTo",
+          6394.48681640625,
+          6030.48046875
+        ],
+        [
+          "lineTo",
+          6394.412109375,
+          6030.61279296875
+        ],
+        [
+          "lineTo",
+          6394.3359375,
+          6030.744140625
+        ],
+        [
+          "lineTo",
+          6394.25830078125,
+          6030.87451171875
+        ],
+        [
+          "lineTo",
+          6394.1796875,
+          6031.00341796875
+        ],
+        [
+          "lineTo",
+          6394.09912109375,
+          6031.1318359375
+        ],
+        [
+          "lineTo",
+          6394.017578125,
+          6031.25927734375
+        ],
+        [
+          "lineTo",
+          6393.9345703125,
+          6031.3857421875
+        ],
+        [
+          "lineTo",
+          6393.85009765625,
+          6031.5107421875
+        ],
+        [
+          "lineTo",
+          6393.7646484375,
+          6031.634765625
+        ],
+        [
+          "lineTo",
+          6393.677734375,
+          6031.7578125
+        ],
+        [
+          "lineTo",
+          6393.58935546875,
+          6031.87939453125
+        ],
+        [
+          "lineTo",
+          6393.5,
+          6032.0
+        ],
+        [
+          "lineTo",
+          6393.4091796875,
+          6032.11962890625
+        ],
+        [
+          "lineTo",
+          6393.31787109375,
+          6032.23779296875
+        ],
+        [
+          "lineTo",
+          6393.224609375,
+          6032.3544921875
+        ],
+        [
+          "lineTo",
+          6393.130859375,
+          6032.47021484375
+        ],
+        [
+          "lineTo",
+          6393.03564453125,
+          6032.58447265625
+        ],
+        [
+          "lineTo",
+          6392.939453125,
+          6032.69775390625
+        ],
+        [
+          "lineTo",
+          6392.841796875,
+          6032.80908203125
+        ],
+        [
+          "lineTo",
+          6392.74365234375,
+          6032.91943359375
+        ],
+        [
+          "lineTo",
+          6392.64453125,
+          6033.0283203125
+        ],
+        [
+          "lineTo",
+          6392.5439453125,
+          6033.13623046875
+        ],
+        [
+          "lineTo",
+          6392.44287109375,
+          6033.2421875
+        ],
+        [
+          "lineTo",
+          6392.34033203125,
+          6033.3466796875
+        ],
+        [
+          "lineTo",
+          6392.2373046875,
+          6033.44970703125
+        ],
+        [
+          "lineTo",
+          6392.13330078125,
+          6033.55126953125
+        ],
+        [
+          "lineTo",
+          6392.0283203125,
+          6033.6513671875
+        ],
+        [
+          "lineTo",
+          6391.9228515625,
+          6033.75
+        ],
+        [
+          "lineTo",
+          6391.81640625,
+          6033.84716796875
+        ],
+        [
+          "lineTo",
+          6391.708984375,
+          6033.9423828125
+        ],
+        [
+          "lineTo",
+          6391.60107421875,
+          6034.0361328125
+        ],
+        [
+          "lineTo",
+          6391.4921875,
+          6034.1279296875
+        ],
+        [
+          "lineTo",
+          6391.38232421875,
+          6034.21826171875
+        ],
+        [
+          "lineTo",
+          6391.27197265625,
+          6034.30712890625
+        ],
+        [
+          "lineTo",
+          6391.1611328125,
+          6034.39404296875
+        ],
+        [
+          "lineTo",
+          6391.0498046875,
+          6034.47900390625
+        ],
+        [
+          "lineTo",
+          6390.9375,
+          6034.5625
+        ],
+        [
+          "lineTo",
+          6390.82470703125,
+          6034.64404296875
+        ],
+        [
+          "lineTo",
+          6390.71142578125,
+          6034.7236328125
+        ],
+        [
+          "lineTo",
+          6390.59765625,
+          6034.8017578125
+        ],
+        [
+          "lineTo",
+          6390.48291015625,
+          6034.8779296875
+        ],
+        [
+          "lineTo",
+          6390.3681640625,
+          6034.9521484375
+        ],
+        [
+          "lineTo",
+          6390.25244140625,
+          6035.0244140625
+        ],
+        [
+          "lineTo",
+          6390.13671875,
+          6035.0947265625
+        ],
+        [
+          "lineTo",
+          6390.0205078125,
+          6035.1630859375
+        ],
+        [
+          "lineTo",
+          6389.90380859375,
+          6035.22900390625
+        ],
+        [
+          "lineTo",
+          6389.78662109375,
+          6035.29345703125
+        ],
+        [
+          "lineTo",
+          6389.6689453125,
+          6035.35595703125
+        ],
+        [
+          "lineTo",
+          6389.55126953125,
+          6035.416015625
+        ],
+        [
+          "lineTo",
+          6389.43310546875,
+          6035.47412109375
+        ],
+        [
+          "lineTo",
+          6389.314453125,
+          6035.5302734375
+        ],
+        [
+          "lineTo",
+          6389.19580078125,
+          6035.583984375
+        ],
+        [
+          "lineTo",
+          6389.0771484375,
+          6035.6357421875
+        ],
+        [
+          "lineTo",
+          6388.9580078125,
+          6035.68505859375
+        ],
+        [
+          "lineTo",
+          6388.8388671875,
+          6035.732421875
+        ],
+        [
+          "lineTo",
+          6388.71923828125,
+          6035.77783203125
+        ],
+        [
+          "lineTo",
+          6388.599609375,
+          6035.8203125
+        ],
+        [
+          "lineTo",
+          6388.47998046875,
+          6035.86083984375
+        ],
+        [
+          "lineTo",
+          6388.35986328125,
+          6035.8994140625
+        ],
+        [
+          "lineTo",
+          6388.23974609375,
+          6035.93505859375
+        ],
+        [
+          "lineTo",
+          6388.1201171875,
+          6035.96875
+        ],
+        [
+          "lineTo",
+          6388.0,
+          6036.0
+        ],
+        [
+          "lineTo",
+          5804.0,
+          6036.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          5796.75,
+          5967.5478515625
+        ],
+        [
+          "lineTo",
+          6395.55224609375,
+          5967.5478515625
+        ],
+        [
+          "lineTo",
+          6395.55224609375,
+          6036.27783203125
+        ],
+        [
+          "lineTo",
+          5796.75,
+          6036.27783203125
+        ],
+        [
+          "lineTo",
+          5796.75,
+          5967.5478515625
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
+    },
+    {
       "name": "testRect1_u",
       "fillTypeA": "kWinding",
       "fillTypeB": "kWinding",
@@ -17709,92 +21691,226 @@
       ],
       "pathB": [],
       "op": "kUnion"
+    },
+    {
+      "name": "bug8228",
+      "fillTypeA": "kWinding",
+      "fillTypeB": "kWinding",
+      "pathA": [
+        [
+          "moveTo",
+          31.666669845581055,
+          73.33333587646484
+        ],
+        [
+          "lineTo",
+          31.666669845581055,
+          13.333333969116211
+        ],
+        [
+          "conicTo",
+          31.666669845581055,
+          10.000001907348633,
+          35.0,
+          10.000001907348633,
+          0.7071067690849304
+        ],
+        [
+          "lineTo",
+          56.11111068725586,
+          10.000001907348633
+        ],
+        [
+          "conicTo",
+          59.4444465637207,
+          10.000001907348633,
+          59.4444465637207,
+          13.333333969116211,
+          0.7071067690849304
+        ],
+        [
+          "lineTo",
+          59.4444465637207,
+          73.33333587646484
+        ],
+        [
+          "conicTo",
+          59.4444465637207,
+          76.66666412353516,
+          56.11111068725586,
+          76.66666412353516,
+          0.7071067690849304
+        ],
+        [
+          "lineTo",
+          35.0,
+          76.66666412353516
+        ],
+        [
+          "conicTo",
+          31.666669845581055,
+          76.66666412353516,
+          31.666669845581055,
+          73.33333587646484,
+          0.7071067690849304
+        ],
+        [
+          "close"
+        ]
+      ],
+      "pathB": [
+        [
+          "moveTo",
+          10.0,
+          10.0
+        ],
+        [
+          "lineTo",
+          29.392284393310547,
+          10.0
+        ],
+        [
+          "conicTo",
+          29.227886199951172,
+          10.483867645263672,
+          29.227886199951172,
+          10.99489974975586,
+          0.986621081829071
+        ],
+        [
+          "lineTo",
+          29.227886199951172,
+          66.66266632080078
+        ],
+        [
+          "conicTo",
+          29.227886199951172,
+          69.75531768798828,
+          32.32053756713867,
+          69.75531768798828,
+          0.7071067690849304
+        ],
+        [
+          "lineTo",
+          51.907344818115234,
+          69.75531768798828
+        ],
+        [
+          "conicTo",
+          54.999996185302734,
+          69.75531768798828,
+          54.999996185302734,
+          66.66266632080078,
+          0.7071067690849304
+        ],
+        [
+          "lineTo",
+          54.999996185302734,
+          10.99489974975586
+        ],
+        [
+          "conicTo",
+          54.999996185302734,
+          10.483867645263672,
+          54.83559799194336,
+          10.0,
+          0.986621081829071
+        ],
+        [
+          "lineTo",
+          65.4732437133789,
+          10.0
+        ],
+        [
+          "conicTo",
+          65.30884552001953,
+          10.483867645263672,
+          65.30884552001953,
+          10.99489974975586,
+          0.986621081829071
+        ],
+        [
+          "lineTo",
+          65.30884552001953,
+          66.66266632080078
+        ],
+        [
+          "conicTo",
+          65.30884552001953,
+          69.75531768798828,
+          68.40149688720703,
+          69.75531768798828,
+          0.7071067690849304
+        ],
+        [
+          "lineTo",
+          87.9883041381836,
+          69.75531768798828
+        ],
+        [
+          "conicTo",
+          91.0809555053711,
+          69.75531768798828,
+          91.0809555053711,
+          66.66266632080078,
+          0.7071067690849304
+        ],
+        [
+          "lineTo",
+          91.0809555053711,
+          10.99489974975586
+        ],
+        [
+          "conicTo",
+          91.0809555053711,
+          10.483867645263672,
+          90.91655731201172,
+          10.0,
+          0.986621081829071
+        ],
+        [
+          "lineTo",
+          110.0,
+          10.0
+        ],
+        [
+          "lineTo",
+          110.0,
+          110.0
+        ],
+        [
+          "lineTo",
+          10.0,
+          110.0
+        ],
+        [
+          "lineTo",
+          10.0,
+          10.0
+        ],
+        [
+          "close"
+        ]
+      ],
+      "op": "kIntersect"
     }
   ],
   "skipped": [
     {
-      "name": "testOp1d",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "testOp2d",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "testOp3d",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "testOp1u",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "testOp4d",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "testOp5d",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 2, 2}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "testOp6d",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "testOp7d",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 2, 2}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "testOp2u",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 2, 2}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "testOp8d",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 640, 480});'"
-    },
-    {
       "name": "rRect1",
       "reason": "unparseable line: 'SkScalar xA = 0.65f;'"
-    },
-    {
-      "name": "rectOp1i",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "rectOp2i",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
     },
     {
       "name": "loopEdge2",
       "reason": "verb 'moveTo' got 3 args, expected 2: 'pathB.moveTo(1 - 1e-6f,2);'"
     },
     {
-      "name": "cubicOp110",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
       "name": "cubicOp114asQuad",
       "reason": "unparseable line: 'qPathB = CubicPathToQuads(pathB.detach());'"
     },
     {
-      "name": "issue2504",
-      "reason": "unparseable line: 'path2.cubicTo(36.71843719482421875, 0.8886508941650390625,'"
-    },
-    {
-      "name": "rects3",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "rects4",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
-    },
-    {
       "name": "testRect1",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 60, 60}, SkPathDirection::kCCW);'"
-    },
-    {
-      "name": "testRect2",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({0, 0, 1, 1}, SkPathDirection::kCW);'"
+      "reason": "unparseable line: 'testPathOp(reporter, path.detach(), path2, kUnion_SkPathOp, filename);'"
     },
     {
       "name": "loop1asQuad",
@@ -17809,48 +21925,8 @@
       "reason": "unparseable line: 'SkPoint pts[] = { {5,6}, {4,6}, {3,0}, {2,1} };'"
     },
     {
-      "name": "circlesOp1",
-      "reason": "unknown verb 'addCircle' at: 'path.addCircle(0, 1, 2, SkPathDirection::kCCW);'"
-    },
-    {
-      "name": "circlesOp2",
-      "reason": "unknown verb 'addCircle' at: 'path.addCircle(0, 1, 4, SkPathDirection::kCCW);'"
-    },
-    {
       "name": "rRect1x",
       "reason": "path order mismatch at testPathOp: 'testPathOp(reporter, path1, path2, kDifference_SkPathOp, filename);'"
-    },
-    {
-      "name": "rects5",
-      "reason": "unknown verb 'addRect' at: 'path.addRect({5, 5, 6, 6}, SkPathDirection::kCW);'"
-    },
-    {
-      "name": "circlesOp3",
-      "reason": "unknown verb 'addCircle' at: 'path.addCircle(0, 1, 2, SkPathDirection::kCCW);'"
-    },
-    {
-      "name": "quadRect1",
-      "reason": "unknown verb 'addRect' at: 'pathB.addRect({4,11, 13,16});'"
-    },
-    {
-      "name": "quadRect2",
-      "reason": "unknown verb 'addRect' at: 'pathB.addRect({4,11, 13,16});'"
-    },
-    {
-      "name": "quadRect3",
-      "reason": "unknown verb 'addRect' at: 'pathB.addRect({4,11, 13,16});'"
-    },
-    {
-      "name": "quadRect4",
-      "reason": "unknown verb 'addRect' at: 'pathB.addRect({4,11, 13,16});'"
-    },
-    {
-      "name": "quadRect5",
-      "reason": "unknown verb 'addRect' at: 'pathB.addRect({4,11, 13,16});'"
-    },
-    {
-      "name": "quadRect6",
-      "reason": "unknown verb 'addRect' at: 'pathB.addRect({4,11, 13,16});'"
     },
     {
       "name": "loops33iMod",
@@ -17873,40 +21949,24 @@
       "reason": "unparseable line: 'qPathB = CubicPathToQuads(pathB.detach());'"
     },
     {
-      "name": "fuzz38",
-      "reason": "unparseable line: 'testPathOpCheck(reporter, path.detach(), pathB.detach(), kUnion_SkPathOp, filename, true);'"
-    },
-    {
       "name": "crbug_526025",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x43b40000), SkBits2Float(0xcf000000));  // 360, -2.14748e+09f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzzX_392",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x41e80000), SkBits2Float(0x43bde212));  // 29, 379.766f'"
+      "reason": "path order mismatch at testPathOp: 'testPathOp(reporter, path1, path2, kIntersect_SkPathOp, filename);'"
     },
     {
       "name": "dean2",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x3f2b74b3), SkBits2Float(0x4154a02b)); // 0.669749f, 13.2891f'"
-    },
-    {
-      "name": "circlesOp4",
-      "reason": "unknown verb 'addCircle' at: 'path.addCircle(0, 1, 5, SkPathDirection::kCW);'"
+      "reason": "path order mismatch at testPathOp: 'testPathOp(reporter, path1, path2, kIntersect_SkPathOp, filename);'"
     },
     {
       "name": "bug5240",
       "reason": "unparseable line: '.moveTo(815, 82)'"
     },
     {
-      "name": "android1",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0xc0a00000), SkBits2Float(0x00000000));  // -5, 0'"
-    },
-    {
-      "name": "seanbug",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x45b56000), SkBits2Float(0x45bca000));  // 5804, 6036'"
-    },
-    {
       "name": "halbug",
-      "reason": "unparseable line: 'SkPathFillType::kEvenOdd),'"
+      "reason": "unparseable line: 'path2 = SkPath::Rect(SkRect{278.657715f, 155.747314f, 580.238281f, 594.114014f}, SkPathFillType::kWinding);'"
     },
     {
       "name": "filinmangust14",
@@ -17918,31 +21978,27 @@
     },
     {
       "name": "op_1",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x15e80300), SkBits2Float(0x400004dc));  // 9.37088e-26f, 2.0003f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "op_2",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0xeee3ef57), SkBits2Float(0xef6300f8));  // -3.52712e+28f, -7.02543e+28f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "op_3",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x6e5a5a1b));  // 0, 1.68942e+28f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "op_4",
-      "reason": "unparseable line: '.moveTo(SkBits2Float(0x40d7ea90), SkBits2Float(0x3fa58930)) // 6.74738f, 1.29325f'"
-    },
-    {
-      "name": "bug8228",
-      "reason": "verb 'moveTo' got 7 args, expected 2: 'path1.moveTo(SkBits2Float(0x41fd5557), SkBits2Float(0x4292aaab));'"
+      "reason": "unparseable line: '.moveTo(6.747383117675781, 1.2932491302490234)'"
     },
     {
       "name": "bug8380",
-      "reason": "unparseable line: '.moveTo(SkBits2Float(0xa6800000), SkBits2Float(0x43b0f22d))  // -8.88178e-16f, 353.892f'"
+      "reason": "unparseable line: '.moveTo(-8.881784197001252e-16, 353.8919982910156)'"
     },
     {
       "name": "fuzz767834",
-      "reason": "unparseable line: 'one.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, SkPath(), one.detach(), kIntersect_SkPathOp, filename);'"
     },
     {
       "name": "fuzz535151",
@@ -17962,323 +22018,323 @@
     },
     {
       "name": "fuzz487a",
-      "reason": "verb 'moveTo' got 8 args, expected 2: 'path.moveTo(SkBits2Float(0x432c8000), SkBits2Float(0x42c00000));'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz487b",
-      "reason": "verb 'moveTo' got 8 args, expected 2: 'path.moveTo(SkBits2Float(0x432c8000), SkBits2Float(0x42c00000));'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz714",
-      "reason": "verb 'moveTo' got 7 args, expected 2: 'path.moveTo(SkBits2Float(0x430c0000), SkBits2Float(0x42200000));'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz1",
-      "reason": "verb 'moveTo' got 8 args, expected 2: 'path.moveTo(SkBits2Float(0x7f800000), SkBits2Float(0x7f800000));'"
+      "reason": "verb 'moveTo' got 0 args, expected 2: 'path.moveTo(inf, inf);'"
     },
     {
       "name": "fuzz753_91",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x42910000), SkBits2Float(0x00000000));  // 72.5f, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "bug597926_0",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x43b38000), SkBits2Float(0x433e0000));  // 359, 190'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 1, filename);'"
     },
     {
       "name": "fuzz1450_0",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x43b40000), SkBits2Float(0xcf000000));  // 360, -2.14748e+09f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, kUnion_SkPathOp, filename);'"
     },
     {
       "name": "fuzz1450_1",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x4e800002), SkBits2Float(0xce7ffffe));  // 1.07374e+09f, -1.07374e+09f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, kUnion_SkPathOp, filename);'"
     },
     {
       "name": "fuzz763_9",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 1, filename);'"
     },
     {
       "name": "fuzz763_4",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 1, filename);'"
     },
     {
       "name": "fuzz763_3",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 1, filename);'"
     },
     {
       "name": "fuzz763_5",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x5b292d55), SkBits2Float(0x2a2a8c55));  // 4.76191e+16f, 1.51477e-13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_2",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 1, filename);'"
     },
     {
       "name": "fuzz763_1c",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp)4, filename);'"
     },
     {
       "name": "fuzz763_1b",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp)2, filename);'"
     },
     {
       "name": "fuzz763_1a",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp)0, filename);'"
     },
     {
       "name": "fuzz763_3a",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 1, filename);'"
     },
     {
       "name": "fuzz763_5a",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x38bd8610), SkBits2Float(0x00000000));  // 9.03719e-05f, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_2a",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_2b",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x5b292d55), SkBits2Float(0x212a8c55));  // 4.76191e+16f, 5.7784e-19f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_2c",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x36344a4a));  // 0, 2.68653e-06f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, kReverseDifference_SkPathOp, filename);'"
     },
     {
       "name": "fuzz763_6",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x6a2a291f));  // 0, 5.14279e+25f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_7",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "kfuzz2",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0xfafadbfa));  // 0, -6.51268e+35f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, kXOR_SkPathOp, filename);'"
     },
     {
       "name": "fuzz763_10",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x68556829));  // 0, 4.03114e+24f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_11",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_12",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_13",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x212a8c55), SkBits2Float(0x21081f2a));  // 5.7784e-19f, 4.61198e-19f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_14",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0xf45b2d29));  // 4.03114e+24f, -6.94598e+31f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_15",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x5b292d55), SkBits2Float(0x212a8c55));  // 4.76191e+16f, 5.7784e-19f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_16",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_17",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_18",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_19",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x21081f21), SkBits2Float(0x4b7bc003));  // 4.61198e-19f, 1.64987e+07f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_20",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_21",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x6828c6f9), SkBits2Float(0x6614dc9e));  // 3.18811e+24f, 1.75745e+23f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 1, filename);'"
     },
     {
       "name": "fuzz763_22",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x68295b2d));  // 0, 3.19905e+24f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz763_23",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_24",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0xededed02), SkBits2Float(0xedededed));  // -9.20431e+27f, -9.20445e+27f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz763_25",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x6a4b7bc4));  // 0, 6.14991e+25f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_26",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_28",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_27",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_29",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_30",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x1f2108c0), SkBits2Float(0x4b7b0321));  // 3.41003e-20f, 1.64503e+07f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz763_31",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0xd72a8c55), SkBits2Float(0x61081f2a));  // -1.8752e+14f, 1.56938e+20f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_33",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x72c185d5), SkBits2Float(0x72c184e8));  // 7.66623e+30f, 7.66608e+30f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_32",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_34",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x63a95a6c), SkBits2Float(0x6cc8e7e2));  // 6.24803e+21f, 1.94304e+27f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz763_36",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68556829), SkBits2Float(0x555b2d29));  // 4.03114e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_35",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x2aed2a8c), SkBits2Float(0x03210a1f));  // 4.21292e-13f, 4.73253e-37f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_37",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x5568392a), SkBits2Float(0x5b2d3368));  // 1.59583e+13f, 4.87517e+16f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_38",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_41",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_40",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x10190004), SkBits2Float(0x7272727a));  // 3.01739e-29f, 4.80216e+30f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz763_39",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_42",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_43",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x5c386c3a), SkBits2Float(0x4e691a3e));  // 2.07642e+17f, 9.77703e+08f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_44",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x7c223bab), SkBits2Float(0x7cf35966));  // 3.36945e+36f, 1.01083e+37f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz763_45",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz763_46",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz763_47",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz763_48",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_49",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz763_50",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x70621ede), SkBits2Float(0x00000000));  // 2.79924e+29f, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz763_51",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz763_52",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz763_53",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x7644b829), SkBits2Float(0x00000000));  // 9.97486e+32f, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_54",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 4, filename);'"
     },
     {
       "name": "fuzz763_55",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x55415500));  // 0, 1.32857e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz763_56",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzz763_57",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x68546829), SkBits2Float(0x555b2d29));  // 4.01225e+24f, 1.50617e+13f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "fuzzhang_1",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "unparseable line: 'testPathOp(reporter, path1, path2, (SkPathOp) 0, filename);'"
     },
     {
       "name": "release_13",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0xd4438848), SkBits2Float(0xd488cf64));  // -3.35922e+12f, -4.70076e+12f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzzhang_2",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x5568392a), SkBits2Float(0x72837268));  // 1.59583e+13f, 5.20715e+30f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 1, filename);'"
     },
     {
       "name": "fuzzhang_3",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x46090052), SkBits2Float(0x7270726c));  // 8768.08f, 4.76254e+30f'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz754434_1",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz754434_2",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0xff00ff56), SkBits2Float(0x00000000));  // -1.71467e+38f, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     },
     {
       "name": "fuzz754434_3",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 3, filename);'"
     },
     {
       "name": "fuzz754434_4",
-      "reason": "unparseable line: 'path.moveTo(SkBits2Float(0xff00ff56), SkBits2Float(0x00000000));  // -1.71467e+38f, 0'"
+      "reason": "non-Op test harness: 'testPathOpFuzz(reporter, path1, path2, (SkPathOp) 2, filename);'"
     }
   ]
 }
