@@ -70,6 +70,23 @@ public open class SkSVGCanvas(
     private val svgHeight: Float,
 ) : SkCanvas(SkBitmap(1, 1)) {
 
+    /**
+     * Per-`save()` count of `<g clip-path="url(...)">` wrappers we
+     * opened above the current depth. Initial top entry is `0` for
+     * the implicit root scope ; `save()` pushes a new `0`,
+     * each `clipX()` increments the top entry and opens one wrapper,
+     * `restore()` closes that many wrappers and pops. Mirrors how the
+     * raster device stacks clip frames on top of the matrix stack.
+     */
+    private val clipDepthStack: ArrayDeque<Int> = ArrayDeque<Int>().apply { addLast(0) }
+
+    /**
+     * Monotonic counter for unique `<clipPath id="clip-N">` ids — the
+     * document never reuses one even after the corresponding `<g>`
+     * has been popped, since SVG renderers cache clipPath defs by id.
+     */
+    private var nextClipId: Int = 0
+
     init {
         out.append("<svg xmlns=\"http://www.w3.org/2000/svg\"")
         out.append(" width=\"").append(formatScalar(svgWidth)).append("\"")
@@ -93,11 +110,192 @@ public open class SkSVGCanvas(
     public open fun flush() {
         if (closed) return
         closed = true
+        // Close any clip wrappers the caller forgot to pop. We don't
+        // touch the underlying SkCanvas state stack (super doesn't
+        // need to be unwound just to close the writer), only the
+        // emitted `<g>` tags.
+        while (clipDepthStack.size > 1) {
+            val opened = clipDepthStack.removeLast()
+            repeat(opened) { closeClipGroup() }
+        }
+        repeat(clipDepthStack.first()) { closeClipGroup() }
+        clipDepthStack.clear()
+        clipDepthStack.addLast(0)
         out.append("</svg>\n")
         out.flush()
     }
 
     private var closed: Boolean = false
+
+    // ─── Save / restore — track clip-wrapper depth ────────────────────
+    //
+    // We delegate state mutation to super so the parent CTM / clip
+    // bookkeeping stays accurate ; the `<g>` wrapper accounting is
+    // local to this class.
+
+    override fun save(): Int {
+        clipDepthStack.addLast(0)
+        return super.save()
+    }
+
+    override fun restore() {
+        // Pop clip wrappers opened since the matching save first, so
+        // the resulting `<g>` close tags appear in the correct nesting
+        // order.
+        if (clipDepthStack.size > 1) {
+            val opened = clipDepthStack.removeLast()
+            repeat(opened) { closeClipGroup() }
+        }
+        super.restore()
+    }
+
+    override fun saveLayer(bounds: SkRect?, paint: SkPaint?): Int {
+        // saveLayer is treated like a regular save for clip-wrapper
+        // accounting ; the actual layer compositing is irrelevant for
+        // a write-only canvas. B2.4 / future slices may emit a `<g
+        // filter="...">` here when the paint carries an image filter.
+        clipDepthStack.addLast(0)
+        return super.saveLayer(bounds, paint)
+    }
+
+    // ─── Clip ops — emit `<defs><clipPath>` + open wrapping `<g>` ─────
+
+    // Clip ops : emit one <defs><clipPath>…</clipPath></defs> + open
+    // a wrapping <g clip-path="url(#…)">. We deliberately **do not**
+    // chain to super for clip mutations — the parent's clip state
+    // governs only its raster pipeline, which the SVG canvas never
+    // exercises (the 1×1 dummy backing bitmap is never drawn into).
+    // Chaining through `super.clipRect(rect, op, doAntiAlias)` would
+    // also infinitely loop : parent's 3-arg routes via virtual
+    // dispatch back into our 2-arg override.
+    //
+    // We override every overload so the SVG emit fires regardless of
+    // which arity the caller used.
+
+    override fun clipRect(rect: SkRect) {
+        clipRectImpl(rect, org.skia.foundation.SkClipOp.kIntersect)
+    }
+
+    override fun clipRect(rect: SkRect, doAntiAlias: Boolean) {
+        clipRectImpl(rect, org.skia.foundation.SkClipOp.kIntersect)
+    }
+
+    override fun clipRect(rect: SkRect, op: org.skia.foundation.SkClipOp, doAntiAlias: Boolean) {
+        clipRectImpl(rect, op)
+    }
+
+    override fun clipRRect(rrect: SkRRect, doAntiAlias: Boolean) {
+        clipRRectImpl(rrect, org.skia.foundation.SkClipOp.kIntersect)
+    }
+
+    override fun clipRRect(rrect: SkRRect, op: org.skia.foundation.SkClipOp, doAntiAlias: Boolean) {
+        clipRRectImpl(rrect, op)
+    }
+
+    override fun clipPath(path: SkPath, doAntiAlias: Boolean) {
+        clipPathImpl(path, org.skia.foundation.SkClipOp.kIntersect)
+    }
+
+    override fun clipPath(path: SkPath, op: org.skia.foundation.SkClipOp, doAntiAlias: Boolean) {
+        clipPathImpl(path, op)
+    }
+
+    private fun clipRectImpl(rect: SkRect, op: org.skia.foundation.SkClipOp) {
+        emitClip(op) {
+            it.append("    <rect")
+            it.append(" x=\"").append(formatScalar(rect.left)).append('"')
+            it.append(" y=\"").append(formatScalar(rect.top)).append('"')
+            it.append(" width=\"").append(formatScalar(rect.width())).append('"')
+            it.append(" height=\"").append(formatScalar(rect.height())).append('"')
+            appendClipTransform(it)
+            it.append("/>\n")
+        }
+    }
+
+    private fun clipRRectImpl(rrect: SkRRect, op: org.skia.foundation.SkClipOp) {
+        emitClip(op) {
+            val r = rrect.rect()
+            val radii = rrect.getSimpleRadii()
+            it.append("    <rect")
+            it.append(" x=\"").append(formatScalar(r.left)).append('"')
+            it.append(" y=\"").append(formatScalar(r.top)).append('"')
+            it.append(" width=\"").append(formatScalar(r.width())).append('"')
+            it.append(" height=\"").append(formatScalar(r.height())).append('"')
+            if (radii.fX != 0f) it.append(" rx=\"").append(formatScalar(radii.fX)).append('"')
+            if (radii.fY != 0f) it.append(" ry=\"").append(formatScalar(radii.fY)).append('"')
+            appendClipTransform(it)
+            it.append("/>\n")
+        }
+    }
+
+    private fun clipPathImpl(path: SkPath, op: org.skia.foundation.SkClipOp) {
+        emitClip(op) {
+            it.append("    <path d=\"").append(pathToSvgD(path)).append('"')
+            // Honour even-odd fill type via the SVG attribute on the
+            // <path> inside <clipPath> ; the wrapping <g> ignores
+            // fill-rule so it must live on the clip's geometry.
+            when (path.fillType) {
+                org.skia.foundation.SkPathFillType.kEvenOdd,
+                org.skia.foundation.SkPathFillType.kInverseEvenOdd ->
+                    it.append(" clip-rule=\"evenodd\"")
+                else -> {}
+            }
+            appendClipTransform(it)
+            it.append("/>\n")
+        }
+    }
+
+    /**
+     * Append a `transform="matrix(...)"` attribute carrying the CTM
+     * captured at clip emission time, so the inner geometry lands in
+     * the same device-space rect Skia would have clipped to. Identity
+     * CTMs omit the attr to keep the SVG readable.
+     */
+    private fun appendClipTransform(out: Writer) {
+        val m = getTotalMatrix()
+        if (!m.isIdentity) {
+            out.append(" transform=\"").append(matrixToSvg(m)).append('"')
+        }
+    }
+
+    /**
+     * Common emitter for [clipRect] / [clipRRect] / [clipPath].
+     * Allocates a fresh `clip-N` id, calls [geometry] to write the
+     * inner clip path, opens a wrapping `<g clip-path="url(#…)">`,
+     * and bumps the top of [clipDepthStack] so [restore] closes it.
+     *
+     * `kDifference` is documented but unsupported : SVG `<clipPath>`
+     * has no native subtraction (the `clip-rule="evenodd"` trick only
+     * works for odd-degree path windings, not arbitrary intersect-
+     * minus-other). We emit a comment and a `System.err` warning so
+     * the loss of fidelity is visible to the test harness ; the
+     * geometry is still written but treated as kIntersect.
+     */
+    private inline fun emitClip(
+        op: org.skia.foundation.SkClipOp,
+        geometry: (Writer) -> Unit,
+    ) {
+        if (op == org.skia.foundation.SkClipOp.kDifference) {
+            out.append("  <!-- clipOp: kDifference (SVG fallback : kIntersect) -->\n")
+            System.err.println(
+                "SkSVGCanvas : clipOp kDifference is not natively supported in SVG ; " +
+                    "the clip is treated as kIntersect. (B2.3)",
+            )
+        }
+        val id = nextClipId++
+        out.append("  <defs>\n")
+        out.append("    <clipPath id=\"clip-").append(id.toString()).append("\">\n")
+        geometry(out)
+        out.append("    </clipPath>\n")
+        out.append("  </defs>\n")
+        out.append("  <g clip-path=\"url(#clip-").append(id.toString()).append(")\">\n")
+        clipDepthStack[clipDepthStack.size - 1] += 1
+    }
+
+    /** Emit the matching `</g>` close tag, indented one nesting in. */
+    private fun closeClipGroup() {
+        out.append("  </g>\n")
+    }
 
     // ─── Draw ops — emit one SVG element each ─────────────────────────
 
