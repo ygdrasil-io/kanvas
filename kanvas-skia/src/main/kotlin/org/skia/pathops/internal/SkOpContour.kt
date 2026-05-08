@@ -211,6 +211,37 @@ internal open class SkOpContour : Comparable<SkOpContour> {
     /** Mirrors `SkOpContour::complete`. */
     fun complete() { setBounds() }
 
+    // ─── Per-segment driver wrappers (D1.2.h.1) ────────────────────
+
+    /**
+     * Walk every segment and call [SkOpSegment.calcAngles]. Mirrors
+     * `SkOpContour::calcAngles` (`SkOpContour.h:72`). Used as a
+     * pre-pass during pathops' "fix coincidence" phase.
+     */
+    fun calcAngles() {
+        require(fCount > 0)
+        var seg: SkOpSegment? = fHead
+        while (seg != null) {
+            seg.calcAngles()
+            seg = seg.next()
+        }
+    }
+
+    /**
+     * Walk every segment and call [SkOpSegment.sortAngles]. Returns
+     * `false` on the first segment that fails to sort. Mirrors
+     * `SkOpContour::sortAngles` (`SkOpContour.h:351`).
+     */
+    fun sortAngles(): Boolean {
+        require(fCount > 0)
+        var seg: SkOpSegment? = fHead
+        while (seg != null) {
+            if (!seg.sortAngles()) return false
+            seg = seg.next()
+        }
+        return true
+    }
+
     // ─── Comparable ───────────────────────────────────────────────
 
     /** Order by `bounds.top` ascending, ties broken by `bounds.left`. */
