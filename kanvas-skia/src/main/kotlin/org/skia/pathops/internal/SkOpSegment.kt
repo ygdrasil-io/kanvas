@@ -242,6 +242,29 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
     }
 
     /**
+     * "Is the active span at [angle]'s starter side already marked
+     * done?" Mirrors `SkOpSegment::done(const SkOpAngle*)`
+     * (`SkOpSegment.h:205`). Used by [findNextOp] to track the
+     * "found-done" preference when picking the next walk target.
+     */
+    fun done(angle: SkOpAngle): Boolean =
+        angle.start()!!.starter(angle.end()!!).done()
+
+    /**
+     * Walk the angle ring at `[end][0]` looking for a single
+     * candidate to advance to. Returns the next segment to walk
+     * to (and updates `[end][0]` / `[step][0]` in place) when a
+     * unique candidate exists ; null otherwise (caller must
+     * resolve via `findNextOp` /`findNextWinding` instead).
+     *
+     * Mirrors `SkOpSegment::isSimple` (`SkOpSegment.h:265`) — itself
+     * a thin wrapper around `nextChase` with both the `min` and
+     * `last` out-params set to null.
+     */
+    fun isSimple(end: Array<SkOpSpanBase?>, step: IntArray): SkOpSegment? =
+        nextChase(end, step, null, null)
+
+    /**
      * Decrement [fCount] (and [fDoneCount] when [span] was already
      * marked done) on a span being unlinked. Mirrors
      * `SkOpSegment::release(SkOpSpan*)` (`SkOpSegment.cpp:504`).
@@ -1166,6 +1189,119 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
             suTo = (w.oppSum and xorSuMask) != 0
         }
         return kActiveEdge(op, miFrom, miTo, suFrom, suTo)
+    }
+
+    // ─── findNextOp (D1.2.h.5.2) ──────────────────────────────────
+
+    /**
+     * Walk the angle ring at `(*nextStart, *nextEnd)` looking for
+     * the next active edge for boolean operation [op]. Updates
+     * `[nextStart][0]` / `[nextEnd][0]` to the chosen `(start, end)`
+     * pair on success ; flags `[unsortable][0]` / `[simple][0]` to
+     * inform the caller's outer-loop choices.
+     *
+     * Strategy :
+     *  1. If the angle ring has a single candidate (`isSimple`),
+     *     advance to it directly — fast path that doesn't need
+     *     winding analysis.
+     *  2. Otherwise compute the running winding sum via [computeSum]
+     *     (`kBinaryOpp` for boolean ops). Bail with `unsortable`
+     *     when the sum is unknown.
+     *  3. Iterate the angle ring : for each angle, run [activeOp]
+     *     to decide membership ; pick the first active angle (or a
+     *     subsequent active angle when the previous winner was
+     *     done and the activeCount is odd). Append marked spans
+     *     to [chase] for the side-walker.
+     *
+     * Returns the segment owning the chosen next angle (or null
+     * on a hard abort / no candidate).
+     *
+     * Mirrors `SkOpSegment::findNextOp` (`SkOpSegment.cpp:544`).
+     */
+    fun findNextOp(
+        chase: MutableList<SkOpSpanBase>,
+        nextStart: Array<SkOpSpanBase?>,
+        nextEnd: Array<SkOpSpanBase?>,
+        unsortable: BooleanArray,
+        simple: BooleanArray,
+        op: SkPathOp, xorMiMask: Int, xorSuMask: Int,
+    ): SkOpSegment? {
+        val start = nextStart[0]!!
+        val end = nextEnd[0]!!
+        require(start !== end)
+        val stepArr = intArrayOf(start.step(end))
+        val other = isSimple(nextStart, stepArr)
+        simple[0] = other != null
+        if (other != null) {
+            val startSpan = start.starter(end)
+            if (startSpan.done()) return null
+            markDone(startSpan)
+            val advanced = nextStart[0]!!
+            nextEnd[0] = if (stepArr[0] > 0) advanced.upCast().next() else advanced.prev()
+            return other
+        }
+        val advanced = nextStart[0]!!
+        val endNear: SkOpSpanBase = if (stepArr[0] > 0)
+            advanced.upCast().next()!! else advanced.prev()!!
+        require(endNear === end)
+        require(start !== endNear)
+        // > 1 viable candidate — measure angles to find the best.
+        val calcWinding = computeSum(start, endNear, SkOpAngle.IncludeType.kBinaryOpp)
+        if (calcWinding == SkOpSpan.SK_MinS32) {
+            unsortable[0] = true
+            markDone(start.starter(end))
+            return null
+        }
+        val angle = spanToAngle(end, start)!!
+        if (angle.unorderable()) {
+            unsortable[0] = true
+            markDone(start.starter(end))
+            return null
+        }
+        var sumMi = updateWinding(end, start)
+        if (sumMi == SkOpSpan.SK_MinS32) {
+            unsortable[0] = true
+            markDone(start.starter(end))
+            return null
+        }
+        var sumSu = updateOppWinding(end, start)
+        if (operand()) {
+            val tmp = sumMi; sumMi = sumSu; sumSu = tmp
+        }
+        val sumMiInOut = intArrayOf(sumMi)
+        val sumSuInOut = intArrayOf(sumSu)
+        var nextAngle: SkOpAngle = angle.next() ?: return null
+        var foundAngle: SkOpAngle? = null
+        var foundDone = false
+        var nextSegment: SkOpSegment? = null
+        var activeCount = 0
+        while (true) {
+            nextSegment = nextAngle.segment()!!
+            val active = nextSegment.activeOp(
+                xorMiMask, xorSuMask, nextAngle.start()!!, nextAngle.end()!!,
+                op, sumMiInOut, sumSuInOut)
+            if (active) {
+                ++activeCount
+                if (foundAngle == null || (foundDone && (activeCount and 1) == 1)) {
+                    foundAngle = nextAngle
+                    foundDone = nextSegment.done(nextAngle)
+                }
+            }
+            if (!nextSegment.done()) {
+                if (!active) {
+                    nextSegment.markAndChaseDone(nextAngle.start()!!, nextAngle.end()!!, null)
+                }
+                val last = nextAngle.lastMarked()
+                if (last != null) chase.add(last)
+            }
+            nextAngle = nextAngle.next() ?: break
+            if (nextAngle === angle) break
+        }
+        start.segment()!!.markDone(start.starter(end))
+        if (foundAngle == null) return null
+        nextStart[0] = foundAngle.start()
+        nextEnd[0] = foundAngle.end()
+        return foundAngle.segment()
     }
 
 
