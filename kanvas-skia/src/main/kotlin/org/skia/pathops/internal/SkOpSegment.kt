@@ -1024,6 +1024,102 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
      * Mirrors `SkOpSegment::activeOp(SkOpSpanBase*, SkOpSpanBase*,
      * int, int, SkPathOp)` (`SkOpSegment.cpp:114`).
      */
+    // ─── activeAngle family (D1.2.h.5.1) ──────────────────────────
+
+    /**
+     * Return the angle ring entry at [start] if either the up-span
+     * or down-span side has live winding (`windValue || oppValue`)
+     * and a known `windSum`. Updates `[startPtr][0]` /
+     * `[endPtr][0]` to the resolved (start, end) pair when first
+     * found, and `[doneOut][0]` to `false` when an unmarked span
+     * is encountered.
+     *
+     * Mirrors `SkOpSegment::activeAngleInner`
+     * (`SkOpSegment.cpp:65`).
+     */
+    fun activeAngleInner(
+        start: SkOpSpanBase,
+        startPtr: Array<SkOpSpanBase?>,
+        endPtr: Array<SkOpSpanBase?>,
+        doneOut: BooleanArray,
+    ): SkOpAngle? {
+        val upSpan = start.upCastable()
+        if (upSpan != null) {
+            if (upSpan.windValue() != 0 || upSpan.oppValue() != 0) {
+                val next = upSpan.next() ?: return null
+                if (endPtr[0] == null) {
+                    startPtr[0] = start
+                    endPtr[0] = next
+                }
+                if (!upSpan.done()) {
+                    if (upSpan.windSum() != SkOpSpan.SK_MinS32) {
+                        return spanToAngle(start, next)
+                    }
+                    doneOut[0] = false
+                }
+            } else {
+                require(upSpan.done())
+            }
+        }
+        val downSpan = start.prev()
+        if (downSpan != null) {
+            if (downSpan.windValue() != 0 || downSpan.oppValue() != 0) {
+                if (endPtr[0] == null) {
+                    startPtr[0] = start
+                    endPtr[0] = downSpan
+                }
+                if (!downSpan.done()) {
+                    if (downSpan.windSum() != SkOpSpan.SK_MinS32) {
+                        return spanToAngle(start, downSpan)
+                    }
+                    doneOut[0] = false
+                }
+            } else {
+                require(downSpan.done())
+            }
+        }
+        return null
+    }
+
+    /**
+     * Apply [activeAngleInner] to the next pt-T in [start]'s opp
+     * loop (i.e. the first coincident span on another segment).
+     * Returns null when [start]'s loop has no next entry, or when
+     * the inner side fails to find an active angle.
+     *
+     * Mirrors `SkOpSegment::activeAngleOther`
+     * (`SkOpSegment.cpp:106`).
+     */
+    fun activeAngleOther(
+        start: SkOpSpanBase,
+        startPtr: Array<SkOpSpanBase?>,
+        endPtr: Array<SkOpSpanBase?>,
+        doneOut: BooleanArray,
+    ): SkOpAngle? {
+        val oPtT = start.ptT().next() ?: return null
+        val oSpan = oPtT.span() ?: return null
+        val other = oSpan.segment() ?: return null
+        return other.activeAngleInner(oSpan, startPtr, endPtr, doneOut)
+    }
+
+    /**
+     * Return the first active angle reachable from [start] : try
+     * [activeAngleInner] on this segment first, then
+     * [activeAngleOther] on the opp-loop neighbour. Returns null
+     * when neither side reports an active angle.
+     *
+     * Mirrors `SkOpSegment::activeAngle` (`SkOpSegment.cpp:54`).
+     */
+    fun activeAngle(
+        start: SkOpSpanBase,
+        startPtr: Array<SkOpSpanBase?>,
+        endPtr: Array<SkOpSpanBase?>,
+        doneOut: BooleanArray,
+    ): SkOpAngle? {
+        activeAngleInner(start, startPtr, endPtr, doneOut)?.let { return it }
+        return activeAngleOther(start, startPtr, endPtr, doneOut)
+    }
+
     fun activeOp(
         start: SkOpSpanBase, end: SkOpSpanBase,
         xorMiMask: Int, xorSuMask: Int, op: SkPathOp,
