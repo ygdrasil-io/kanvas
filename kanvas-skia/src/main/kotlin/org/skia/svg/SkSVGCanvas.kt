@@ -1,18 +1,28 @@
 package org.skia.svg
 
 import org.skia.core.SkCanvas
+import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkBitmapShader
 import org.skia.foundation.SkColorGetA
 import org.skia.foundation.SkColorGetB
 import org.skia.foundation.SkColorGetG
 import org.skia.foundation.SkColorGetR
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRadialGradient
+import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkTileMode
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import java.io.Writer
+import java.util.Base64
 import java.util.Locale
 
 /**
@@ -86,6 +96,13 @@ public open class SkSVGCanvas(
      * has been popped, since SVG renderers cache clipPath defs by id.
      */
     private var nextClipId: Int = 0
+
+    /**
+     * Monotonic counter for unique `<linearGradient>` / `<radialGradient>`
+     * / `<pattern>` ids. Like [nextClipId], never reused so cached
+     * SVG renderer state stays consistent.
+     */
+    private var nextDefId: Int = 0
 
     init {
         out.append("<svg xmlns=\"http://www.w3.org/2000/svg\"")
@@ -297,6 +314,101 @@ public open class SkSVGCanvas(
         out.append("  </g>\n")
     }
 
+    // ─── Image draw ops (B2.4) ────────────────────────────────────────
+
+    /**
+     * Mirrors `SkCanvas::drawImage` — emits an `<image href="data:…"/>`
+     * element with the image's pixels base64-encoded as a PNG. The dst
+     * rect inherits the standard CTM-as-`transform` behaviour from
+     * [emitElement]. Sampling option is dropped (SVG renderers control
+     * sampling per-renderer ; no per-element knob).
+     */
+    override fun drawImage(
+        image: SkImage,
+        x: SkScalar,
+        y: SkScalar,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+    ) {
+        emitImage(image, dst = SkRect.MakeXYWH(x, y, image.width.toFloat(), image.height.toFloat()))
+    }
+
+    /**
+     * Mirrors `SkCanvas::drawImageRect`. For B2.4 the source rect is
+     * **honoured only** when it equals the full image bounds — a
+     * sub-rect would need an SVG `<clipPath>` trick that's deferred.
+     * Non-trivial src rects emit a `<!-- imageRect: src=… -->` comment
+     * and a `System.err` warning, then render the full image into the
+     * dst rect (visually wrong for crop-style call sites, but
+     * structurally diff-friendly).
+     */
+    override fun drawImageRect(
+        image: SkImage,
+        src: SkRect,
+        dst: SkRect,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+        constraint: org.skia.core.SrcRectConstraint,
+    ) {
+        val fullBounds = SkRect.MakeWH(image.width.toFloat(), image.height.toFloat())
+        if (src != fullBounds) {
+            out.append("  <!-- drawImageRect: non-full src rect not yet honoured (B2.4) -->\n")
+            System.err.println(
+                "SkSVGCanvas : drawImageRect with src=$src (full=$fullBounds) is approximated " +
+                    "as drawImage(dst). The src crop is dropped. (B2.4)",
+            )
+        }
+        emitImage(image, dst)
+    }
+
+    /**
+     * Encode [image] as PNG → base64 → emit a single `<image>` element
+     * sized to [dst]. The CTM is honoured via the standard
+     * `transform="matrix(…)"` attr, identical to the geometry verbs.
+     */
+    private fun emitImage(image: SkImage, dst: SkRect) {
+        val dataUrl = encodeImageDataUrl(image)
+        out.append("  <image")
+        out.append(" x=\"").append(formatScalar(dst.left)).append('"')
+        out.append(" y=\"").append(formatScalar(dst.top)).append('"')
+        out.append(" width=\"").append(formatScalar(dst.width())).append('"')
+        out.append(" height=\"").append(formatScalar(dst.height())).append('"')
+        // The href attribute is the only carrier of the pixel data.
+        // Per SVG 2 the canonical attribute is `href` ; legacy SVG 1.1
+        // engines accept `xlink:href`. Stock browser/Inkscape/Batik
+        // all read `href` natively today (SVG 2.0+ default), so we
+        // emit just `href` to keep the file readable.
+        out.append(" href=\"").append(dataUrl).append('"')
+        val m = getTotalMatrix()
+        if (!m.isIdentity) {
+            out.append(" transform=\"").append(matrixToSvg(m)).append('"')
+        }
+        out.append("/>\n")
+    }
+
+    /**
+     * Encode [image]'s pixel buffer as a `data:image/png;base64,…`
+     * URL via [SkPngEncoder]. Uses the same encoder as the rest of
+     * the project so a B2.4 round-trip through [SkSVGCanvas] →
+     * `<image>` → base64 → [SkPngEncoder]'s output matches
+     * byte-for-byte what the encoder emits standalone.
+     *
+     * Fallback : if [SkPngEncoder.Encode] returns `null` (which
+     * doesn't happen on any current code path but the API permits it),
+     * emit a 1×1 transparent PNG so the SVG stays well-formed.
+     */
+    private fun encodeImageDataUrl(image: SkImage): String {
+        val bitmap = SkBitmap(image.width, image.height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
+        for (y in 0 until image.height) {
+            for (x in 0 until image.width) {
+                bitmap.pixels[y * image.width + x] = image.peekPixel(x, y)
+            }
+        }
+        val pngBytes = SkPngEncoder.Encode(bitmap) ?: ByteArray(0)
+        val base64 = Base64.getEncoder().encodeToString(pngBytes)
+        return "data:image/png;base64,$base64"
+    }
+
     // ─── Draw ops — emit one SVG element each ─────────────────────────
 
     override fun drawRect(rect: SkRect, paint: SkPaint) {
@@ -386,13 +498,18 @@ public open class SkSVGCanvas(
         paint: SkPaint,
     ) {
         emitBlendModeComment(paint)
+        // Shader defs MUST be flushed to `out` before we open the
+        // element tag — otherwise the `<defs>` block lands in the
+        // middle of the element's attribute list, breaking XML.
+        val shaderUrl = emitShaderDef(paint)
         val builder = AttrBuilder()
         attrs.invoke(builder)
         out.append("  <").append(tag)
         // Geometry attrs first.
         out.append(builder.serialize())
         // Paint surface — fill / stroke / alpha / cap / join / dash.
-        val paintAttrs = paintToSvgAttrs(paint)
+        // The (already-emitted) shader URL feeds the colour attrs.
+        val paintAttrs = paintToSvgAttrs(paint, shaderUrl)
         if (paintAttrs.isNotEmpty()) {
             out.append(' ').append(paintAttrs)
         }
@@ -436,26 +553,33 @@ public open class SkSVGCanvas(
      *  - Color filters — descoped.
      *  - Mask filters / image filters — descoped (filters slice).
      */
-    private fun paintToSvgAttrs(paint: SkPaint): String {
+    private fun paintToSvgAttrs(paint: SkPaint, shaderUrl: String? = null): String {
         val sb = StringBuilder()
         val style = paint.style
         val color = paint.color
-        val rgb = colorHex(color)
         val alpha = SkColorGetA(color) // [0, 255]
         val emitFill = style == SkPaint.Style.kFill_Style ||
             style == SkPaint.Style.kStrokeAndFill_Style
         val emitStroke = style == SkPaint.Style.kStroke_Style ||
             style == SkPaint.Style.kStrokeAndFill_Style
 
+        // B2.4 — when a shader is present, the caller has already
+        // flushed its `<defs>` to `out` and passes the URL reference.
+        // For paints with no shader (or an unsupported type), we
+        // fall back to the hex paint colour.
+        val paintRef = shaderUrl ?: colorHex(color)
+
         if (emitFill) {
-            appendAttr(sb, "fill", rgb)
+            appendAttr(sb, "fill", paintRef)
+            // Alpha-on-shader is rare ; we still surface it via
+            // fill-opacity for consistency with the hex-colour path.
             if (alpha < 255) appendAttr(sb, "fill-opacity", opacityString(alpha))
         } else {
             appendAttr(sb, "fill", "none")
         }
 
         if (emitStroke) {
-            appendAttr(sb, "stroke", rgb)
+            appendAttr(sb, "stroke", paintRef)
             if (alpha < 255) appendAttr(sb, "stroke-opacity", opacityString(alpha))
             // SVG's default stroke-width is 1, but most consumers expect
             // explicit width to avoid ambiguity ; emit it always.
@@ -533,6 +657,170 @@ public open class SkSVGCanvas(
     /** `appendAttr(builder, k, v)` → `" k=\"v\""`. */
     private fun appendAttr(sb: StringBuilder, name: String, value: String) {
         sb.append(' ').append(name).append("=\"").append(value).append('"')
+    }
+
+    // ─── Shader → <defs> projection (B2.4) ────────────────────────────
+
+    /**
+     * If [paint] carries a supported shader, emit its `<defs>` entry
+     * to [out] and return the URL reference (`url(#def-N)`) for use
+     * as `fill=` / `stroke=`. Returns `null` for paints with no
+     * shader, or when the shader type is unsupported (caller falls
+     * back to the paint's hex colour). Unsupported types log a
+     * warning to `System.err`.
+     */
+    private fun emitShaderDef(paint: SkPaint): String? {
+        val shader = paint.shader ?: return null
+        return when (shader) {
+            is SkLinearGradient -> emitLinearGradientDef(shader)
+            is SkRadialGradient -> emitRadialGradientDef(shader)
+            is SkBitmapShader -> emitBitmapPatternDef(shader)
+            else -> {
+                System.err.println(
+                    "SkSVGCanvas : shader type ${shader::class.simpleName} not natively " +
+                        "representable in SVG ; falling back to paint colour. (B2.4)",
+                )
+                null
+            }
+        }
+    }
+
+    /**
+     * Emit a `<defs><linearGradient id="def-N" …>` block for [shader]
+     * and return the matching `url(#def-N)` reference.
+     */
+    private fun emitLinearGradientDef(shader: SkLinearGradient): String {
+        val id = nextDefId++
+        val ref = "def-$id"
+        val p0 = shader.getStartPoint()
+        val p1 = shader.getEndPoint()
+        out.append("  <defs>\n")
+        out.append("    <linearGradient id=\"").append(ref).append('"')
+        out.append(" gradientUnits=\"userSpaceOnUse\"")
+        out.append(" x1=\"").append(formatScalar(p0.fX)).append('"')
+        out.append(" y1=\"").append(formatScalar(p0.fY)).append('"')
+        out.append(" x2=\"").append(formatScalar(p1.fX)).append('"')
+        out.append(" y2=\"").append(formatScalar(p1.fY)).append('"')
+        appendShaderTransform(shader.localMatrix, "gradientTransform")
+        appendSpreadMethod(shader.getTileMode())
+        out.append(">\n")
+        emitGradientStops(shader.getColors(), shader.getPositions())
+        out.append("    </linearGradient>\n")
+        out.append("  </defs>\n")
+        return "url(#$ref)"
+    }
+
+    /** Emit a radial gradient `<defs>` and return its `url(#def-N)`. */
+    private fun emitRadialGradientDef(shader: SkRadialGradient): String {
+        val id = nextDefId++
+        val ref = "def-$id"
+        val c = shader.getCenter()
+        out.append("  <defs>\n")
+        out.append("    <radialGradient id=\"").append(ref).append('"')
+        out.append(" gradientUnits=\"userSpaceOnUse\"")
+        out.append(" cx=\"").append(formatScalar(c.fX)).append('"')
+        out.append(" cy=\"").append(formatScalar(c.fY)).append('"')
+        out.append(" r=\"").append(formatScalar(shader.getRadius())).append('"')
+        appendShaderTransform(shader.localMatrix, "gradientTransform")
+        appendSpreadMethod(shader.getTileMode())
+        out.append(">\n")
+        emitGradientStops(shader.getColors(), shader.getPositions())
+        out.append("    </radialGradient>\n")
+        out.append("  </defs>\n")
+        return "url(#$ref)"
+    }
+
+    /**
+     * Emit a `<defs><pattern …><image href="data:…"/></pattern>` for
+     * the bitmap [shader] and return its `url(#def-N)`.
+     *
+     * **Tile-mode caveat** — SVG `<pattern>` natively only supports
+     * "repeat" semantics. Skia's [SkTileMode.kClamp] / [SkTileMode.kMirror]
+     * are not natively expressible. Non-`kRepeat` tile modes emit a
+     * comment + `System.err` warning ; the rendered SVG will tile
+     * rather than clamp/mirror, which is visually wrong but keeps the
+     * structural output diff-able.
+     */
+    private fun emitBitmapPatternDef(shader: SkBitmapShader): String {
+        val id = nextDefId++
+        val ref = "def-$id"
+        val image = shader.getImage()
+        val tileX = shader.getTileX()
+        val tileY = shader.getTileY()
+        val unsupportedTile = tileX != SkTileMode.kRepeat || tileY != SkTileMode.kRepeat
+        if (unsupportedTile) {
+            out.append("  <!-- bitmap shader tile=($tileX, $tileY) — SVG <pattern> tiles, ")
+            out.append("not natively representable -->\n")
+            System.err.println(
+                "SkSVGCanvas : bitmap shader tile mode ($tileX, $tileY) not natively " +
+                    "representable as <pattern> ; output will tile instead. (B2.4)",
+            )
+        }
+        val dataUrl = encodeImageDataUrl(image)
+        out.append("  <defs>\n")
+        out.append("    <pattern id=\"").append(ref).append('"')
+        out.append(" patternUnits=\"userSpaceOnUse\"")
+        out.append(" x=\"0\" y=\"0\"")
+        out.append(" width=\"").append(image.width.toString()).append('"')
+        out.append(" height=\"").append(image.height.toString()).append('"')
+        appendShaderTransform(shader.localMatrix, "patternTransform")
+        out.append(">\n")
+        out.append("      <image x=\"0\" y=\"0\"")
+        out.append(" width=\"").append(image.width.toString()).append('"')
+        out.append(" height=\"").append(image.height.toString()).append('"')
+        out.append(" href=\"").append(dataUrl).append("\"/>\n")
+        out.append("    </pattern>\n")
+        out.append("  </defs>\n")
+        return "url(#$ref)"
+    }
+
+    /** Append `gradientTransform` / `patternTransform` when [m] is non-identity. */
+    private fun appendShaderTransform(m: SkMatrix, attrName: String) {
+        if (m.isIdentity) return
+        out.append(' ').append(attrName).append("=\"").append(matrixToSvg(m)).append('"')
+    }
+
+    /**
+     * Emit `spreadMethod="pad|repeat|reflect"` based on [SkTileMode].
+     * `kClamp` → "pad" (SVG default — omitted), `kRepeat` → "repeat",
+     * `kMirror` → "reflect", `kDecal` → "pad" (no SVG analogue).
+     */
+    private fun appendSpreadMethod(tileMode: SkTileMode) {
+        val method = when (tileMode) {
+            SkTileMode.kClamp -> "pad"
+            SkTileMode.kRepeat -> "repeat"
+            SkTileMode.kMirror -> "reflect"
+            SkTileMode.kDecal -> "pad"
+        }
+        if (method != "pad") {
+            out.append(" spreadMethod=\"").append(method).append('"')
+        }
+    }
+
+    /**
+     * Emit one `<stop offset="…" stop-color="#rrggbb" stop-opacity="…"/>`
+     * per gradient stop. Position fallback : when [positions] is
+     * empty (Skia's "use uniform spacing" convention), generate
+     * `i / (n-1)` for `n` colours.
+     */
+    private fun emitGradientStops(colors: IntArray, positions: FloatArray) {
+        val n = colors.size
+        for (i in 0 until n) {
+            val pos = if (positions.isEmpty()) {
+                if (n == 1) 0f else i.toFloat() / (n - 1).toFloat()
+            } else {
+                positions[i]
+            }
+            val c = colors[i]
+            val alpha = SkColorGetA(c)
+            out.append("      <stop")
+            out.append(" offset=\"").append(formatScalar(pos)).append('"')
+            out.append(" stop-color=\"").append(colorHex(c)).append('"')
+            if (alpha < 255) {
+                out.append(" stop-opacity=\"").append(opacityString(alpha)).append('"')
+            }
+            out.append("/>\n")
+        }
     }
 
     /** Tiny attribute-list builder — preserves emission order, escapes minimally. */

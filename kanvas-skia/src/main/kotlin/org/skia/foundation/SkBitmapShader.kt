@@ -29,6 +29,17 @@ public class SkBitmapShader internal constructor(
     localMatrix: SkMatrix = SkMatrix.Identity,
 ) : SkShader(localMatrix) {
 
+    // ─── Public accessors (B2.4 — SVG projection via <pattern>) ──────
+
+    /** Source image — read-only, never aliased. */
+    public fun getImage(): SkImage = image
+
+    /** Tile mode along the local-x axis. */
+    public fun getTileX(): SkTileMode = tileX
+
+    /** Tile mode along the local-y axis. */
+    public fun getTileY(): SkTileMode = tileY
+
     /**
      * Pre-transformed source pixels, working colour space, **non-premul**
      * 8-bit ARGB. Built once in [setupForDraw]. Same length and same row
