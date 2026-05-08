@@ -357,6 +357,39 @@ class SkPathOpsCommonTest {
             writer = writer))
     }
 
+    // ─── FindUndone / FindChase / undoneSpan (D1.2.h.6.0) ─────────
+
+    @Test
+    fun `FindUndone returns null on empty contour list`() {
+        val head = newContourList(null)
+        assertNull(FindUndone(head))
+    }
+
+    @Test
+    fun `FindUndone returns the head span on a fresh single-line contour`() {
+        val head = newContourList(null)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        // Fresh segment → undoneSpan returns the head span.
+        assertSame(head.fHead.fHead, FindUndone(head))
+    }
+
+    @Test
+    fun `Contour undoneSpan returns null and sets fDone when all done`() {
+        val head = newContourList(null)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        head.fHead.markAllDone()
+        assertNull(head.undoneSpan())
+        assertTrue(head.done())
+    }
+
+    @Test
+    fun `FindChase returns null on empty buffer`() {
+        val chase = mutableListOf<SkOpSpanBase>()
+        val s = arrayOfNulls<SkOpSpanBase>(1)
+        val e = arrayOfNulls<SkOpSpanBase>(1)
+        assertNull(FindChase(chase, s, e))
+    }
+
     @Test
     fun `findChaseOp returns true with null result on empty chase buffer`() {
         val chase = mutableListOf<SkOpSpanBase>()

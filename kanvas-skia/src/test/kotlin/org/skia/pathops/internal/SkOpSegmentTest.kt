@@ -715,6 +715,27 @@ class SkOpSegmentTest {
             org.skia.pathops.SkPathOp.kXOR, false, true, false, true))
     }
 
+    // ─── findNextWinding / findNextXor (D1.2.h.6.0) ──────────────
+
+    @Test
+    fun `findNextWinding returns null on a single-line empty angle ring`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val nextStart = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = a.fHead }
+        val nextEnd = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = a.fTail }
+        val unsortable = booleanArrayOf(false)
+        val chase = mutableListOf<SkOpSpanBase>()
+        assertNull(a.findNextWinding(chase, nextStart, nextEnd, unsortable))
+    }
+
+    @Test
+    fun `findNextXor returns null on a single-line empty angle ring`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val nextStart = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = a.fHead }
+        val nextEnd = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = a.fTail }
+        val unsortable = booleanArrayOf(false)
+        assertNull(a.findNextXor(nextStart, nextEnd, unsortable))
+    }
+
     // ─── activeOp on a non-coincident line (D1.2.h.5.0) ──────────
 
     // ─── activeAngle family (D1.2.h.5.1) ──────────────────────────
