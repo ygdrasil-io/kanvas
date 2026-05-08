@@ -139,6 +139,41 @@ class SkPathOpsAsWindingTest {
         assertEquals(0f, contours[0].minXY.fX)
     }
 
+    // ─── reverseAddPath / reverseMarkedContours (D1.2.h.6.6) ───────
+
+    @Test
+    fun `reverseAddPath flips a 4-line polygon's verb order`() {
+        val src = SkPathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(10f, 0f).lineTo(10f, 10f).lineTo(0f, 10f).lineTo(0f, 0f)
+            .close()
+            .detach()
+        val builder = SkPathBuilder()
+        reverseAddPath(builder, src)
+        val r = builder.detach()
+        // Expect : moveTo(start) + 4 lineTo (in reverse order) + close.
+        // First verb is kMove, second-to-last verb (before close) is the
+        // line back to (0, 0).
+        assertEquals(org.skia.foundation.SkPath.Verb.kMove, r.verbs[0])
+        // Last point (in reversed walk) is the original moveTo (0, 0)
+        // — which is the **first** lineTo target after the moveTo of the
+        // reversed path. Concretely the reversed sequence is :
+        // moveTo(0,0) → lineTo(0,10) → lineTo(10,10) → lineTo(10,0) → lineTo(0,0) → close.
+        val moves = r.verbs.count { it == org.skia.foundation.SkPath.Verb.kMove }
+        val lines = r.verbs.count { it == org.skia.foundation.SkPath.Verb.kLine }
+        assertEquals(1, moves)
+        assertEquals(4, lines)
+    }
+
+    @Test
+    fun `reverseAddPath is a no-op on empty input`() {
+        val empty = SkPathBuilder().detach()
+        val builder = SkPathBuilder()
+        reverseAddPath(builder, empty)
+        val r = builder.detach()
+        org.junit.jupiter.api.Assertions.assertTrue(r.isEmpty())
+    }
+
     @Test
     fun `containerContains — outer 4-line rect contains inner rect`() {
         val p = SkPathBuilder()
