@@ -12,8 +12,14 @@
  *
  * Phase D1.2.g.b — list-maintenance methods : release (× 2) /
  * releaseDeleted (× 2) / restoreHead / fixUp (× 2) / markCollapsed
- * (× 2). The remaining heavy methods (addMissing / addOverlap / apply
- * / mark / expand / …) land in subsequent D1.2.g sub-slices.
+ * (× 2).
+ *
+ * Phase D1.2.g.c.1 — overlap-detection predicates : overlap / TRange /
+ * checkOverlap. The two callers `addIfMissing` and `addOrOverlap`
+ * stay deferred to D1.2.g.c.2, gated on `SkOpSegment.existing` /
+ * `collapsed` / `SkOpSpanBase.addOpp` / `SkOpPtT.active` (none yet
+ * ported). The remaining heavy methods (addMissing / apply / mark /
+ * expand / …) land in subsequent D1.2.g sub-slices.
  *
  * # SkCoincidentSpans
  *
@@ -679,6 +685,101 @@ internal class SkOpCoincidence {
         markCollapsed(fTop, test)
     }
 
+    // ─── overlap-detection predicates (D1.2.g.c.1) ─────────────────
+
+    /**
+     * Pure t-arithmetic intersection of two coin-side ranges that
+     * already live on the same segment. Writes the t-overlap into
+     * [overOut]`[0]` (start) and [overOut]`[1]` (end). Returns true
+     * iff the overlap is non-empty.
+     *
+     * Mirrors `SkOpCoincidence::overlap`
+     * (`SkOpCoincidence.cpp:1434`). Caller must guarantee
+     * `coin1s.segment() === coin2s.segment()`.
+     */
+    fun overlap(
+        coin1s: SkOpPtT, coin1e: SkOpPtT,
+        coin2s: SkOpPtT, coin2e: SkOpPtT,
+        overOut: DoubleArray,
+    ): Boolean {
+        require(overOut.size >= 2)
+        require(coin1s.span()?.segment() === coin2s.span()?.segment())
+        val overS = maxOf(minOf(coin1s.fT, coin1e.fT), minOf(coin2s.fT, coin2e.fT))
+        val overE = minOf(maxOf(coin1s.fT, coin1e.fT), maxOf(coin2s.fT, coin2e.fT))
+        overOut[0] = overS
+        overOut[1] = overE
+        return overS < overE
+    }
+
+    /**
+     * Walk [check]'s chain looking for entries on the same `(coinSeg,
+     * oppSeg)` pair as the candidate range `[coinTs..coinTe] /
+     * `[oppTs..oppTe]`, classify each into one of three buckets :
+     *
+     *  - **fully outside** any tracked entry — keep walking ;
+     *  - **fully inside** an existing entry (already covered) —
+     *    abort, return `false` ;
+     *  - **partial overlap** — append the entry to [overlaps] for the
+     *    caller to merge / extend.
+     *
+     * Pre-canonicalises via [Ordered] (recursing on the swapped pair
+     * if needed), and tracks a `swapOpp` flag for entries whose opp
+     * range runs in the opposite direction.
+     *
+     * Returns true if the caller should add or merge ; false if the
+     * candidate range is already fully tracked.
+     *
+     * Mirrors `SkOpCoincidence::checkOverlap`
+     * (`SkOpCoincidence.cpp:576`).
+     */
+    fun checkOverlap(
+        check: SkCoincidentSpans?,
+        coinSeg: SkOpSegment,
+        oppSeg: SkOpSegment,
+        coinTs: Double, coinTe: Double,
+        oppTs: Double, oppTe: Double,
+        overlaps: MutableList<SkCoincidentSpans>,
+    ): Boolean {
+        if (!Ordered(coinSeg, oppSeg)) {
+            return if (oppTs < oppTe) {
+                checkOverlap(check, oppSeg, coinSeg, oppTs, oppTe, coinTs, coinTe, overlaps)
+            } else {
+                checkOverlap(check, oppSeg, coinSeg, oppTe, oppTs, coinTe, coinTs, overlaps)
+            }
+        }
+        val swapOpp = oppTs > oppTe
+        var oTs = oppTs; var oTe = oppTe
+        if (swapOpp) {
+            val tmp = oTs; oTs = oTe; oTe = tmp
+        }
+        var cur = check
+        while (cur != null) {
+            val tCoinStart = cur.coinPtTStart()!!
+            val tOppStart = cur.oppPtTStart()!!
+            if (tCoinStart.span()?.segment() === coinSeg &&
+                tOppStart.span()?.segment() === oppSeg) {
+                val checkTs = tCoinStart.fT
+                val checkTe = cur.coinPtTEnd()!!.fT
+                val coinOutside = coinTe < checkTs || coinTs > checkTe
+                var oCheckTs = tOppStart.fT
+                var oCheckTe = cur.oppPtTEnd()!!.fT
+                if (swapOpp) {
+                    if (oCheckTs <= oCheckTe) return false
+                    val tmp = oCheckTs; oCheckTs = oCheckTe; oCheckTe = tmp
+                }
+                val oppOutside = oTe < oCheckTs || oTs > oCheckTe
+                if (!(coinOutside && oppOutside)) {
+                    val coinInside = coinTe <= checkTe && coinTs >= checkTs
+                    val oppInside = oTe <= oCheckTe && oTs >= oCheckTs
+                    if (coinInside && oppInside) return false
+                    overlaps.add(cur)
+                }
+            }
+            cur = cur.next()
+        }
+        return true
+    }
+
     companion object {
         /**
          * Order two segments by verb (lower verb wins) then by their
@@ -712,6 +813,53 @@ internal class SkOpCoincidence {
             val coinSeg = coinPtTStart.span()?.segment() ?: return true
             val oppSeg = oppPtTStart.span()?.segment() ?: return true
             return Ordered(coinSeg, oppSeg)
+        }
+
+        /**
+         * Linearly remap [t] (a t-value on `overS`'s segment) onto
+         * [coinSeg], using the bracketing pair of pt-Ts on `overS`'s
+         * span loop that have a counterpart on [coinSeg]. Returns `1`
+         * (the upstream sentinel) when no bracket can be found.
+         *
+         * Curves don't scale linearly across the full overlap, so we
+         * only interpolate inside a single sub-bracket — this is what
+         * lets `addIfMissing` translate a third-segment overlap onto
+         * coin / opp sides.
+         *
+         * Mirrors `SkOpCoincidence::TRange`
+         * (`SkOpCoincidence.cpp:540`).
+         */
+        fun TRange(overS: SkOpPtT, t: Double, coinSeg: SkOpSegment): Double {
+            var work: SkOpSpanBase? = overS.span()
+            var foundStart: SkOpPtT? = null
+            var foundEnd: SkOpPtT? = null
+            var coinStart: SkOpPtT? = null
+            var coinEnd: SkOpPtT? = null
+            while (work != null) {
+                val contained = work.contains(coinSeg)
+                if (contained == null) {
+                    if (work.final()) break
+                    work = work.upCast().next()
+                    continue
+                }
+                if (work.t() <= t) {
+                    coinStart = contained
+                    foundStart = work.ptT()
+                }
+                if (work.t() >= t) {
+                    coinEnd = contained
+                    foundEnd = work.ptT()
+                    break
+                }
+                work = work.upCast().next()
+            }
+            if (coinStart == null || coinEnd == null ||
+                foundStart == null || foundEnd == null) {
+                return 1.0
+            }
+            val denom = foundEnd.fT - foundStart.fT
+            val sRatio = if (denom != 0.0) (t - foundStart.fT) / denom else 1.0
+            return coinStart.fT + (coinEnd.fT - coinStart.fT) * sRatio
         }
     }
 }
