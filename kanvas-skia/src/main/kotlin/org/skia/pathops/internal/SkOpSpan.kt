@@ -655,19 +655,24 @@ internal class SkOpSpan : SkOpSpanBase() {
     fun oppValue(): Int { require(!final()); return fOppValue }
 
     /**
-     * Compute (or read) this span's `windSum`. Upstream version
-     * fires a ray from this span and counts crossings via
-     * [SkOpContour.rayCheck] + the larger `SkPathOpsWinding.cpp`
-     * machinery. We don't have that ported yet ; this stub returns
-     * [windSum] verbatim so callers like [AngleWinding] correctly
-     * see `SK_MinS32` when the value hasn't been set by an earlier
-     * walk and continue without crashing.
+     * Compute (or read) this span's `windSum`. Fires perpendicular
+     * rays from this span via [sortableTop] until one succeeds (or
+     * [SkOpGlobalState.kMaxWindingTries] retries are exhausted),
+     * then returns the resulting windSum.
      *
-     * The full ray-tracing implementation lands in a future
-     * D1.2.h.5.x winding slice. Mirrors `SkOpSpan::computeWindSum`
-     * (`SkOpSpan.cpp:378`).
+     * Mirrors `SkOpSpan::computeWindSum` (`SkOpSpan.cpp:378`).
      */
-    fun computeWindSum(): Int = fWindSum
+    fun computeWindSum(): Int {
+        val gs = globalState() ?: return fWindSum
+        val contourHead = gs.contourHead() ?: return fWindSum
+        var windTry = 0
+        while (!sortableTop(contourHead) &&
+            ++windTry < SkOpGlobalState.kMaxWindingTries) {
+            // Loop body is empty — sortableTop's own retry counter
+            // (fTopTTry) advances each call.
+        }
+        return fWindSum
+    }
 
     fun setWindValue(v: Int) {
         require(!final())
