@@ -75,6 +75,26 @@ public abstract class SkSurface protected constructor(
     /** Mirrors Skia's `SkSurface::imageInfo()`. */
     public abstract fun imageInfo(): SkImageInfo
 
+    /**
+     * Replay an [SkDeferredDisplayList] into this surface's canvas.
+     * Returns `true` iff the DDL's characterization matches this
+     * surface's [imageInfo] (and the playback ran). Returns `false`
+     * — without modifying the surface — if the signature drifted
+     * (different dimensions, colour type, alpha type, or colour
+     * space).
+     *
+     * Mirrors Skia's
+     * [`skgpu::ganesh::DrawDDL`](https://github.com/google/skia/blob/main/include/private/chromium/GrDeferredDisplayList.h#L113)
+     * collapsed onto our raster pipeline (no GPU programs to compile,
+     * no flush boundary, no thread-safe handoff — see
+     * [SkDeferredDisplayList] KDoc for the raster-scope discussion).
+     */
+    public open fun draw(ddl: SkDeferredDisplayList): Boolean {
+        if (!ddl.characterization.isCompatibleWith(this)) return false
+        ddl.playbackInto(canvas)
+        return true
+    }
+
     public companion object {
         /**
          * Allocate a raster surface with a freshly created backing
