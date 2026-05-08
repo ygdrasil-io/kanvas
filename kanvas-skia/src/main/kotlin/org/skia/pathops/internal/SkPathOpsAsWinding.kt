@@ -482,9 +482,12 @@ internal fun containsEdge(rec: AsWindingVerbRec, edge: SkPoint): Int {
     if (minY > edge.fY) return 0
     if (maxY <= edge.fY) return 0 // edge at line end → avoid double-count
     if (minX >= edge.fX) return 0
-    // Horizontal intercept at y = edge.fY.
+    // Horizontal intercept at y = edge.fY. Upstream uses
+    // `CurveIntercept[verb * 2]` (no `+ xy_index(dir)` term) — i.e.
+    // the `_h` variant. We pass [SkOpRayDir.kLeft] (xy_index = 0)
+    // to select that branch in our [CurveIntercept] dispatch.
     val tVals = DoubleArray(3)
-    val tCount = CurveIntercept(verbToSegVerb(verb), SkOpRayDir.kTop, pts, rec.weight,
+    val tCount = CurveIntercept(verbToSegVerb(verb), SkOpRayDir.kLeft, pts, rec.weight,
         edge.fY, tVals)
     var count = tCount
     // Drop intersections to the right of edge.

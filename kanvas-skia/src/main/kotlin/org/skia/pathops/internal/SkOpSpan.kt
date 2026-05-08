@@ -593,7 +593,12 @@ internal class SkOpSpan : SkOpSpanBase() {
         fToAngle = null
         fWindSum = SK_MinS32
         fOppSum = SK_MinS32
-        fWindValue = 0
+        // Default winding contribution = 1 (each input edge contributes
+        // one to the winding count). Mirrors `SkOpSpan::init`
+        // (`SkOpSpan.cpp:398`) — without this, the entire winding
+        // accumulation collapses and bridgeOp / bridgeWinding /
+        // bridgeXor emit nothing.
+        fWindValue = 1
         fOppValue = 0
         fTopTTry = 0
         fDone = false

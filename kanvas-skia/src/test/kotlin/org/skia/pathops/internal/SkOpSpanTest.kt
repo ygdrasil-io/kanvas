@@ -187,7 +187,10 @@ class SkOpSpanTest {
         assertEquals(0.25, span.t())
         assertEquals(SkOpSpan.SK_MinS32, span.windSum())
         assertEquals(SkOpSpan.SK_MinS32, span.oppSum())
-        assertEquals(0, span.windValue())
+        // Default winding contribution is 1 (matches upstream
+        // SkOpSpan::init — each input edge contributes one to the
+        // winding count). oppValue starts at 0.
+        assertEquals(1, span.windValue())
         assertEquals(0, span.oppValue())
         assertFalse(span.done())
         assertFalse(span.alreadyAdded())
@@ -217,9 +220,10 @@ class SkOpSpanTest {
     fun `isCanceled true when both wind and opp values are zero`() {
         val seg = SkOpSegment()
         val span = SkOpSpan(); span.init(seg, null, 0.5, pt(0f, 0f))
-        assertTrue(span.isCanceled())
-        span.setWindValue(1)
+        // After init : windValue=1 (default contribution), oppValue=0.
         assertFalse(span.isCanceled())
+        span.setWindValue(0)
+        assertTrue(span.isCanceled())
     }
 
     @Test
