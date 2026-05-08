@@ -3,10 +3,10 @@
 > **Status** : 🔄 **en cours** — plan vivant. **17 chantiers livrés**
 > (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 / I4 / I5 /
 > Q1 / Q2 / Q3 / Q4 / Q5 ✅ ; B1 ❌ descoped). 🔄 D1.0 + D1.1 ✅,
-> D1.2 active (g.* + h.0–h.6.4 + h.8 + h.9.0–9.2). **D1.4 MVP
-> shipped** (pathops regression harvest, 303 fixtures, 96.7 %
-> survival). 📋 D2 + D1.4 follow-ups restent. Voir status par
-> chantier ci-dessous.
+> D1.2 active (g.* + h.0–h.6.4 + h.8 + h.9.0–9.2). **D1.4 shipped**
+> (pathops regression harvest, 335 fixtures = 74 % d'upstream,
+> 96.4 % survival). 📋 D2 + D1.4 follow-ups restent. Voir status
+> par chantier ci-dessous.
 >
 > Ce document liste les chantiers restants pour atteindre la parité-iso
 > avec Skia raster (`include/core/*.h` + `include/effects/*.h`), hors
@@ -28,7 +28,7 @@
 > | **D1.1** Foundation (curves, line ops, intersections, TSect) | ✅ shipped (15 sous-slices) | a, b, c, d.1-3, e.1, e.2.a, e.2.b, e.2.c.1-4, e.3 |
 > | **D1.2** Op contour assembly | 🔄 en cours | g.* coincidence + h.0–h.4 (Op fast paths + HandleCoincidence orchestrator) + h.5.* (active edges + ray-tracing winding suite + Op end-to-end wiring) + h.6.0–h.6.4 (Simplify end-to-end + AsWinding fast paths) + h.8 (fillMaskFor inverse fill types) + h.9.0–h.9.2 (`SkOpBuilder.resolve` chained-Op fallback, pathops GM harvest, `SkParsePath::FromSVGString`) livrés ; reste finitions |
 > | **D1.3** Top-level entry points | 📋 pending | Bloqué sur D1.2 close |
-> | **D1.4** PathOps regression harvest | ✅ MVP shipped | Harness data-driven : extracteur Python `extract_pathops_fixtures.py` (~285 LOC) → JSON dump (303 / 451 fixtures = **67 %** d'upstream) → `PathOpsRegressionRunner.kt` (~280 LOC) JUnit `@ParameterizedTest`. **293 / 303 survived (96.7 %)** sur Op end-to-end ; **0 crash** ; floor pinned à 90 %. Reste : (1) faire passer les 10 `RETURNED_NULL` ; (2) étendre l'extracteur aux ~150 fixtures à `addRect`/`SkPoint pts[]`/multi-line cubics. Voir section dédiée. |
+> | **D1.4** PathOps regression harvest | ✅ shipped (extended) | Harness data-driven : extracteur Python `extract_pathops_fixtures.py` (~530 LOC) → JSON dump (335 / 451 fixtures = **74 %** d'upstream, soit ~92 % du subset Op-only après exclusion testSimplify/testPathOpFuzz) → `PathOpsRegressionRunner.kt` (~280 LOC) JUnit `@ParameterizedTest`. **323 / 335 survived (96.4 %)** sur Op end-to-end ; **0 crash** ; floor pinned à 90 %. Reste : (1) faire passer les 12 `RETURNED_NULL` ; (2) `SkPoint pts[]` + `CubicPathToQuads` (~10 fixtures) ; (3) pixel parity vs PNG refs upstream. Voir section dédiée. |
 > | **D2** SkRuntimeEffect façade + per-effect Kotlin ports | 📋 mini-planned | Mini plan livré : **8 sous-slices**, ~3 700 main + ~2 200 test, ~13 GM clusters / ~80 DEF_GM débloquées. Aligné sur la stratégie [WebGPU](MIGRATION_PLAN_GPU_WEBGPU.md) (port hand-écrit par shader-type). Voir [MIGRATION_PLAN_D2_RUNTIME_EFFECT.md](MIGRATION_PLAN_D2_RUNTIME_EFFECT.md). |
 > | **D3** Image codecs | ✅ shipped | D3.1 PNG / D3.2 JPEG / D3.3 GIF+BMP+WBMP / D3.4 WEBP (TwelveMonkeys plugin) / D3.5 PNG+JPEG encoders / D3.6 `SkImage.encodeToData` |
 > | **D4** DM sink architecture | ✅ shipped | D4.1 Sink + Raster8888/F16 / D4.2 PictureSink / D4.3 Runner + Report / D4.4 DmCli + DmMain / D4.5 SvgSink (PdfSink ❌ descoped per B1) |
@@ -272,7 +272,7 @@ public object SkPathOps {
     `tests/PathOpsOpTest.cpp` — *covered by D1.4 below*. GM ports :
     `pathops*` cluster (only 2 GMs upstream, both shipped).
 
-- **D1.4** — PathOps regression harvest. ✅ **MVP shipped**.
+- **D1.4** — PathOps regression harvest. ✅ **shipped (extended)**.
   - **Pourquoi** : couverture end-to-end de `SkPathOps.Op` était
     **~2 %** d'upstream avant cette slice — 13 appels
     `SkPathOps.Op(...)` dans nos tests + GMs vs 451 fixtures
@@ -285,16 +285,23 @@ public object SkPathOps {
     upstream a fixé une fois pour toutes.
   - **Pipeline livré** :
     1. [`kanvas-skia/tools/extract_pathops_fixtures.py`](kanvas-skia/tools/extract_pathops_fixtures.py)
-       — extracteur Python (~285 LOC) qui scrape les 449 fonctions
+       — extracteur Python (~530 LOC) qui scrape les 449 fonctions
        `static void <name>(skiatest::Reporter*, const char*)` de
        `PathOpsOpTest.cpp` et émet un JSON dump avec
        `(name, fillTypeA, fillTypeB, pathA verbs, pathB verbs, op)`.
        Gère le format SkPathBuilder + le shortcut
        `SkPath one = SkPath::Rect({l,t,r,b}, dir)` + le cast int
-       `setFillType((SkPathFillType) 0..3)` + `path.reset()`.
-       **303 fixtures extraites / 451 = 67 %** d'upstream.
+       `setFillType((SkPathFillType) 0..3)` + `path.reset()` +
+       `path.addRect` (4-scalar + brace-init + LTRB + XYWH variants)
+       + `path.addCircle` (4-cubic Bézier expansion via κ=0.5523) +
+       `SkBits2Float(0x…)` decoder pour les coords hex-encodés +
+       `testPathOpCheck` variant. Multi-line `cubicTo` etc. sont
+       joints par un pré-passe paren-depth tracker.
+       **335 fixtures extraites / 451 = 74 %** d'upstream
+       (~92 % du subset Op-only après exclusion des 86 fixtures
+       `testSimplify`/`testPathOpFuzz` hors-scope).
     2. [`kanvas-skia/src/test/resources/pathops/op_fixtures.json`](kanvas-skia/src/test/resources/pathops/op_fixtures.json)
-       — JSON dump (~17 800 lignes) commité comme test resource.
+       — JSON dump (~22 300 lignes) commité comme test resource.
        Re-générer via `python3 kanvas-skia/tools/extract_pathops_fixtures.py
        /path/to/skia/tests/PathOpsOpTest.cpp >
        kanvas-skia/src/test/resources/pathops/op_fixtures.json`
@@ -309,28 +316,28 @@ public object SkPathOps {
        at-or-above the floor` enforce un **floor de 90 %** sur le
        SURVIVED-rate global ; bumper monotone à mesure que le moteur
        s'améliore.
-  - **Mesure initiale** (post C1.7 + C2/C4 + Q3, run sur master au
-    2026-05-08) : **293 / 303 survived = 96.7 %**, **0 crash**, 10
-    `RETURNED_NULL` sur cas dégénérés. Le floor à 90 % laisse ~7
-    points de marge pour les ajouts de fixtures futurs.
-  - **LOC livrés** : ~285 main (Python) + ~280 test (Kotlin) +
-    ~17 800 JSON. Bouge le compteur restant D1.4 de "~300 + ~8 k"
-    estimé à **~580 + ~17 800 livré**.
+  - **Mesure** (post C1.7 + C2/C4 + Q3, run sur master au
+    2026-05-08) : **323 / 335 survived = 96.4 %**, **0 crash**,
+    12 `RETURNED_NULL` sur cas dégénérés. Le floor à 90 % laisse
+    ~6 points de marge.
+  - **LOC livrés** : ~530 main (Python) + ~280 test (Kotlin) +
+    ~22 300 JSON. Bouge le compteur restant D1.4 de "~300 + ~8 k"
+    estimé à **~810 + ~22 300 livré**.
   - **Restant** :
-    1. **10 fixtures `RETURNED_NULL`** — investiguer chaque cas
+    1. **12 fixtures `RETURNED_NULL`** — investiguer chaque cas
        (chaque investigation = ~1-3 jours, mirror du pattern h.7/h.8
        debug) ; bumper le floor de 90 % vers 95 %+ par passes.
-    2. **148 fixtures non-extraites** (33 %) — étendre l'extracteur
-       pour gérer `SkPath::addRect/addCircle`, `SkPoint pts[] = {…}`
-       avec injection via `SkPath::Polygon`, multi-line cubics, et
-       les fixtures avec constantes `SkScalar xA = …`. ~2-3 jours.
+    2. **~30 fixtures non-extraites** (`SkPoint pts[]` arrays,
+       `CubicPathToQuads` helper calls, `SkScalar xA = …` named
+       constants, embedded SVG path strings). Effort modéré
+       (~1 semaine), gain de couverture marginal.
     3. **Pixel parity vs upstream** — actuellement on assert
        seulement "ne crashe pas + SkPath finite". Une slice
        follow-up rasteriserait le résultat et comparerait au PNG
        upstream (ressemble au harness de `RasterSink8888`). ~1-2
        semaines.
-  - **Bénéfice mesuré** : la suite stays green à **2914 / 2914**
-    avec 304 nouveaux tests (303 fixtures + 1 floor smoke) + 0
+  - **Bénéfice mesuré** : la suite stays green à **2946 / 2946**
+    avec 336 nouveaux tests (335 fixtures + 1 floor smoke) + 0
     crashes vs 451 cas-limites upstream. Le moteur D1 sort en
     bien meilleure forme que prévu — pas de bug critique latent
     dans l'extraction-MVP.
@@ -1960,10 +1967,10 @@ DAG of dependencies :
 18. ✅ **C2/C4** Misc completions (~505 main + ~400 test) — `Sk1DPathEffect.kMorph` (refactored around a `ContourMeasure` chord-polyline), `kStrokeAndFill_Style` already shipped ; `SkDrawable` + `SkCanvas.drawDrawable` + `SkCanvas.drawAnnotation` no-op slot. **`drawShadow` descoped** (no ported GM uses it).
 19. 📋 **D2** SkRuntimeEffect façade + per-effect Kotlin ports (mini-planned ; **~3 700 main + ~2 200 test across 8 slices**, see [MIGRATION_PLAN_D2_RUNTIME_EFFECT.md](MIGRATION_PLAN_D2_RUNTIME_EFFECT.md). Hand-port chaque shader type comme `SkLinearGradient` etc. ; aligned avec la stratégie WGSL côté GPU. Débloque ~80 DEF_GM rows across 13 GM clusters.).
 20. ✅ **Q4** DeferredDisplayList (~290 main + ~240 test) — `SkSurfaceCharacterization` + `SkDeferredDisplayList` + `SkDeferredDisplayListRecorder` ; `SkSurface.draw(ddl)` characterization-gated playback. Recording delegates to `SkPicture` infrastructure.
-21. ✅ **D1.4** PathOps regression harvest — **MVP shipped** (~285 Python + ~280 Kotlin + ~17 800 JSON). 303 / 451 upstream fixtures extraites = **67 %** ; 293 / 303 survived = **96.7 %** ; 0 crash ; floor pinned à 90 %. Reste : (a) faire passer les 10 `RETURNED_NULL` ; (b) étendre l'extracteur aux ~150 fixtures non-extraites ; (c) ajouter pixel-parity vs upstream PNG refs.
+21. ✅ **D1.4** PathOps regression harvest — **shipped (extended)** (~530 Python + ~280 Kotlin + ~22 300 JSON). 335 / 451 upstream fixtures extraites = **74 %** (~92 % du subset Op-only) ; 323 / 335 survived = **96.4 %** ; 0 crash ; floor pinned à 90 %. Reste : (a) faire passer les 12 `RETURNED_NULL` ; (b) ~30 fixtures non-extraites (`SkPoint pts[]`, helpers, named constants) ; (c) pixel parity vs upstream PNG refs.
 
 **Total estimated LOC remaining** : ~5 900 of new Kotlin code
-(D2 ~3 700 main + ~2 200 test = ~5 900 total ; Q4 + D1.4 MVP
+(D2 ~3 700 main + ~2 200 test = ~5 900 total ; Q4 + D1.4 (extended)
 shipped, everything else shipped or descoped, D1 in-flight LOC
 tracked separately under the chantier's own slice budget ; D1.4
 follow-ups counted on D1's own budget). Decomposes into ~8 PRs
@@ -1972,11 +1979,11 @@ piecewise).
 
 **Total LOC delivered so far** : ~25 800 across the **17 shipped
 chantiers** (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 /
-I4 / I5 / Q1 / Q2 / Q3 / Q4 / Q5) plus the D1.4 MVP — close to the
-26 000 original estimate, with B1 (~10 000 LOC) descoped and a few
-cumulative overages on C1 lighting / Q3 / C2 / C4 absorbed. D1 is
-tracked separately at ~9 000 LOC and currently sits ~60 % through
-D1.2.
+I4 / I5 / Q1 / Q2 / Q3 / Q4 / Q5) plus the D1.4 extended harness
+(~810 main + ~22 300 JSON test data) — close to the 26 000 original
+estimate, with B1 (~10 000 LOC) descoped and a few cumulative
+overages on C1 lighting / Q3 / C2 / C4 absorbed. D1 is tracked
+separately at ~9 000 LOC and currently sits ~60 % through D1.2.
 
 **Estimated time remaining** : 4–8 weeks full-time on D2 (the last
 core iso-fidelity item outside D1 — see its mini plan for the 8

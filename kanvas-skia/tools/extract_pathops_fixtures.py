@@ -94,6 +94,17 @@ TEST_PATH_OP_RE = re.compile(
     r"(\w+)\.detach\(\)\s*,\s*(k\w+_SkPathOp)\s*,\s*\w+\s*\)\s*;\s*$",
 )
 
+# `testPathOpCheck(reporter, path.detach(), pathB.detach(),
+#                 kUnion_SkPathOp, filename, true);` — variant that
+# takes an extra bool. Maps to the same Op call ; we just ignore the
+# trailing flag (it controls upstream's empty-handling, not the
+# operation result).
+TEST_PATH_OP_CHECK_RE = re.compile(
+    r"^\s*testPathOpCheck\s*\(\s*\w+\s*,\s*(\w+)\.detach\(\)\s*,\s*"
+    r"(\w+)\.detach\(\)\s*,\s*(k\w+_SkPathOp)\s*,\s*\w+\s*,\s*"
+    r"(?:true|false)\s*\)\s*;\s*$",
+)
+
 # `testPathOp(reporter, one, two, kIntersect_SkPathOp, filename);` — bare
 # variable form, used by fixtures that declare paths via `SkPath one =
 # SkPath::Rect(...)` static factories instead of builders.
@@ -114,6 +125,72 @@ RECT_FACTORY_RE = re.compile(
     r"(" + NUMBER + r")\s*\}\s*,\s*"
     r"SkPathDirection::(\w+)\s*\)\s*[,;]\s*$",
 )
+
+# `path.addRect(left, top, right, bottom);` — 4-scalar variant.
+# Mirrors `SkPath::addRect(SkScalar, SkScalar, SkScalar, SkScalar)`.
+# The optional 5th `SkPathDirection` argument is matched separately.
+ADD_RECT_4_RE = re.compile(
+    r"^\s*(\w+)\.addRect\s*\(\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*"
+    r"(?:,\s*SkPathDirection::(\w+)\s*)?"
+    r"\)\s*;\s*$",
+)
+
+# `path.addRect({l, t, r, b}, SkPathDirection::kCW);` — brace-init form
+# (C++ aggregate initialiser for `SkRect`). Common in newer fixtures.
+ADD_RECT_BRACE_RE = re.compile(
+    r"^\s*(\w+)\.addRect\s*\(\s*\{\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*\}\s*"
+    r"(?:,\s*SkPathDirection::(\w+)\s*)?"
+    r"\)\s*;\s*$",
+)
+
+# `path.addRect(SkRect::MakeLTRB(l, t, r, b));` — wrapped variant.
+ADD_RECT_LTRB_RE = re.compile(
+    r"^\s*(\w+)\.addRect\s*\(\s*SkRect::MakeLTRB\s*\(\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*\)\s*"
+    r"(?:,\s*SkPathDirection::(\w+)\s*)?"
+    r"\)\s*;\s*$",
+)
+
+# `path.addRect(SkRect::MakeXYWH(x, y, w, h));` — XYWH variant.
+ADD_RECT_XYWH_RE = re.compile(
+    r"^\s*(\w+)\.addRect\s*\(\s*SkRect::MakeXYWH\s*\(\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*\)\s*"
+    r"(?:,\s*SkPathDirection::(\w+)\s*)?"
+    r"\)\s*;\s*$",
+)
+
+# `path.addCircle(cx, cy, radius);` — optional direction arg.
+# Skia's circle is 4 cubic Bézier arcs ; we approximate using the
+# canonical kappa = 0.5522847498 unit-circle control offsets.
+ADD_CIRCLE_RE = re.compile(
+    r"^\s*(\w+)\.addCircle\s*\(\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*,\s*"
+    r"(" + NUMBER + r")\s*"
+    r"(?:,\s*SkPathDirection::(\w+)\s*)?"
+    r"\)\s*;\s*$",
+)
+
+# Magic constant for cubic-Bézier approximation of a circular arc.
+# `kappa = 4 * (sqrt(2) - 1) / 3 ≈ 0.5522847498` — the offset, in
+# units of the radius, from the on-axis points to the cubic control
+# points such that the resulting Bézier matches a true quarter-circle
+# to within ~0.00027 max radial error.
+KAPPA = 0.5522847498307933
 
 # Verbs we know how to translate to Kotlin SkPathBuilder calls.
 KNOWN_VERBS = {
@@ -182,6 +259,110 @@ def parse_numbers(s: str) -> list[float]:
     return out
 
 
+# `SkBits2Float(0x43b40000)` — upstream's exact-bit-pattern encoding.
+# Many fixtures use this instead of decimal literals to round-trip the
+# bytes Skia emitted into source ; we evaluate the hex back to a float
+# in a preprocessing pass so the per-line regex sees a normal number.
+SK_BITS2FLOAT_RE = re.compile(r"SkBits2Float\s*\(\s*0[xX]([0-9A-Fa-f]+)\s*\)")
+
+
+def expand_sk_bits2float(line: str) -> str:
+    """
+    Replace every `SkBits2Float(0x…)` in [line] with the decimal float
+    it encodes. Preserves all other content. Handles negatives, NaNs,
+    and infinities silently — Python's `struct.unpack('<f', ...)`
+    propagates them as `nan` / `inf` and the downstream verb-arg-count
+    check rejects them.
+    """
+    import struct
+
+    def replace(m: re.Match) -> str:
+        bits = int(m.group(1), 16)
+        try:
+            f = struct.unpack("<f", struct.pack("<I", bits & 0xFFFFFFFF))[0]
+        except Exception:
+            return m.group(0)
+        # Use repr for round-trip-able decimal (avoids "3.4e+38" vs
+        # "340282346638528859811704183484516925440" precision loss).
+        return repr(f)
+
+    return SK_BITS2FLOAT_RE.sub(replace, line)
+
+
+def rect_verbs(
+    l: float, t: float, r: float, b: float, direction: str | None,
+) -> list[list] | None:
+    """
+    Expand a rectangle into the verb sequence Skia's
+    `SkPath::addRect` would produce. Returns `None` for unknown
+    direction. Mirrors `SkPath.cpp:emitRectPath` exactly :
+    `kCW`  : moveTo(l,t) → lineTo(r,t) → lineTo(r,b) → lineTo(l,b) → close.
+    `kCCW` : moveTo(l,t) → lineTo(l,b) → lineTo(r,b) → lineTo(r,t) → close.
+    """
+    if direction == "kCW":
+        return [
+            ["moveTo", l, t],
+            ["lineTo", r, t],
+            ["lineTo", r, b],
+            ["lineTo", l, b],
+            ["close"],
+        ]
+    if direction == "kCCW":
+        return [
+            ["moveTo", l, t],
+            ["lineTo", l, b],
+            ["lineTo", r, b],
+            ["lineTo", r, t],
+            ["close"],
+        ]
+    return None
+
+
+def circle_verbs(
+    cx: float, cy: float, r: float, direction: str | None,
+) -> list[list] | None:
+    """
+    Approximate a circle with 4 cubic Bézier arcs starting from the
+    rightmost point `(cx + r, cy)` and going CW (or CCW) around. Each
+    quarter-arc uses the canonical [KAPPA] offset for the on-axis
+    cubic control points :
+
+        moveTo  (cx + r, cy)
+        cubicTo (cx + r,    cy + kr,  cx + kr,  cy + r,   cx,     cy + r)   # to bottom
+        cubicTo (cx - kr,   cy + r,   cx - r,   cy + kr,  cx - r, cy)        # to left
+        cubicTo (cx - r,    cy - kr,  cx - kr,  cy - r,   cx,     cy - r)    # to top
+        cubicTo (cx + kr,   cy - r,   cx + r,   cy - kr,  cx + r, cy)        # to right
+        close
+
+    Mirrors `SkPathBuilder.addCircle`'s 4-cubic emitter. Returns
+    `None` for unknown direction.
+    """
+    if direction not in {"kCW", "kCCW"}:
+        return None
+    kr = KAPPA * r
+    if direction == "kCW":
+        # CW order : right → bottom → left → top → right.
+        verbs = [
+            ["moveTo", cx + r, cy],
+            ["cubicTo", cx + r, cy + kr, cx + kr, cy + r, cx, cy + r],
+            ["cubicTo", cx - kr, cy + r, cx - r, cy + kr, cx - r, cy],
+            ["cubicTo", cx - r, cy - kr, cx - kr, cy - r, cx, cy - r],
+            ["cubicTo", cx + kr, cy - r, cx + r, cy - kr, cx + r, cy],
+            ["close"],
+        ]
+    else:
+        # CCW : right → top → left → bottom → right (mirror of CW).
+        verbs = [
+            ["moveTo", cx + r, cy],
+            ["cubicTo", cx + r, cy - kr, cx + kr, cy - r, cx, cy - r],
+            ["cubicTo", cx - kr, cy - r, cx - r, cy - kr, cx - r, cy],
+            ["cubicTo", cx - r, cy + kr, cx - kr, cy + r, cx, cy + r],
+            ["cubicTo", cx + kr, cy + r, cx + r, cy + kr, cx + r, cy],
+            ["close"],
+        ]
+    return verbs
+
+
 def parse_fixture(name: str, body: list[str]) -> tuple[Fixture | None, str | None]:
     """Parse one fixture body. Returns (fixture, error_msg)."""
     fix = Fixture(name=name, op="")
@@ -204,10 +385,20 @@ def parse_fixture(name: str, body: list[str]) -> tuple[Fixture | None, str | Non
 
     for line in body:
         line = line.strip()
-        if not line or line.startswith("//") or line.startswith("/*"):
+        # Strip trailing line comments — many SkBits2Float fixtures
+        # carry an inline `// 360, -2.14748e+09f` annotation that
+        # would otherwise break the `\)\s*;\s*$` anchors below.
+        # (Block comments inside lines are left alone — they're rare.)
+        line = re.sub(r"\s*//.*$", "", line).rstrip()
+        if not line or line.startswith("/*"):
             continue
         if line.startswith("if ") or line.startswith("for ") or line.startswith("while ") or line.startswith("switch "):
             return None, f"unparseable control flow at line: {line!r}"
+        # Decode `SkBits2Float(0x…)` → decimal float before per-line
+        # regex matching. Fixtures with hex-encoded coords are the
+        # single largest skip category once addRect / Rect-factory /
+        # multi-line cubics are handled.
+        line = expand_sk_bits2float(line)
         # Variable declarations.
         m = DECL_RE.match(line)
         if m:
@@ -247,6 +438,19 @@ def parse_fixture(name: str, body: list[str]) -> tuple[Fixture | None, str | Non
                 return None, f"unknown op: {op!r}"
             fix.op = OP_MAP[op]
             return fix, None
+        # testPathOpCheck variant — same as testPathOp but with a
+        # trailing `bool ignoreEmpty` flag we don't care about.
+        m = TEST_PATH_OP_CHECK_RE.match(line)
+        if m:
+            varA, varB, op = m.group(1), m.group(2), m.group(3)
+            slot_a = var_to_slot.get(varA)
+            slot_b = var_to_slot.get(varB)
+            if slot_a != "_a" or slot_b != "_b":
+                return None, f"path order mismatch at testPathOpCheck: {line!r}"
+            if op not in OP_MAP:
+                return None, f"unknown op: {op!r}"
+            fix.op = OP_MAP[op]
+            return fix, None
         # testPathOp call (bare-variable form for SkPath::Rect fixtures).
         m = TEST_PATH_OP_BARE_RE.match(line)
         if m:
@@ -269,26 +473,81 @@ def parse_fixture(name: str, body: list[str]) -> tuple[Fixture | None, str | Non
             slot = slot_for(var)
             if slot is None:
                 return None, f"too many paths declared at line: {line!r}"
-            # SkPath::Rect emits : moveTo(l,t), lineTo(r,t), lineTo(r,b),
-            # lineTo(l,b), close — for kCW. kCCW reverses the corner order.
-            if direction == "kCW":
-                fix.paths[slot]["verbs"].extend([
-                    ["moveTo", l, t],
-                    ["lineTo", r, t],
-                    ["lineTo", r, b],
-                    ["lineTo", l, b],
-                    ["close"],
-                ])
-            elif direction == "kCCW":
-                fix.paths[slot]["verbs"].extend([
-                    ["moveTo", l, t],
-                    ["lineTo", l, b],
-                    ["lineTo", r, b],
-                    ["lineTo", r, t],
-                    ["close"],
-                ])
-            else:
+            verbs_for_rect = rect_verbs(l, t, r, b, direction)
+            if verbs_for_rect is None:
                 return None, f"unknown SkPathDirection: {direction!r}"
+            fix.paths[slot]["verbs"].extend(verbs_for_rect)
+            continue
+        # `path.addRect({l, t, r, b})` — brace-init form.
+        m = ADD_RECT_BRACE_RE.match(line)
+        if m:
+            var = m.group(1)
+            l, t, r, b = (float(m.group(i).rstrip("f")) for i in (2, 3, 4, 5))
+            direction = m.group(6) or "kCW"
+            slot = slot_for(var)
+            if slot is None:
+                return None, f"too many paths declared at line: {line!r}"
+            verbs_for_rect = rect_verbs(l, t, r, b, direction)
+            if verbs_for_rect is None:
+                return None, f"unknown SkPathDirection: {direction!r}"
+            fix.paths[slot]["verbs"].extend(verbs_for_rect)
+            continue
+        # `path.addRect(l, t, r, b)` — 4-scalar variant.
+        m = ADD_RECT_4_RE.match(line)
+        if m:
+            var = m.group(1)
+            l, t, r, b = (float(m.group(i).rstrip("f")) for i in (2, 3, 4, 5))
+            direction = m.group(6) or "kCW"
+            slot = slot_for(var)
+            if slot is None:
+                return None, f"too many paths declared at line: {line!r}"
+            verbs_for_rect = rect_verbs(l, t, r, b, direction)
+            if verbs_for_rect is None:
+                return None, f"unknown SkPathDirection: {direction!r}"
+            fix.paths[slot]["verbs"].extend(verbs_for_rect)
+            continue
+        # `path.addRect(SkRect::MakeLTRB(l, t, r, b))` — wrapped variant.
+        m = ADD_RECT_LTRB_RE.match(line)
+        if m:
+            var = m.group(1)
+            l, t, r, b = (float(m.group(i).rstrip("f")) for i in (2, 3, 4, 5))
+            direction = m.group(6) or "kCW"
+            slot = slot_for(var)
+            if slot is None:
+                return None, f"too many paths declared at line: {line!r}"
+            verbs_for_rect = rect_verbs(l, t, r, b, direction)
+            if verbs_for_rect is None:
+                return None, f"unknown SkPathDirection: {direction!r}"
+            fix.paths[slot]["verbs"].extend(verbs_for_rect)
+            continue
+        # `path.addRect(SkRect::MakeXYWH(x, y, w, h))` — XYWH variant.
+        m = ADD_RECT_XYWH_RE.match(line)
+        if m:
+            var = m.group(1)
+            x, y, w, h = (float(m.group(i).rstrip("f")) for i in (2, 3, 4, 5))
+            l, t, r, b = x, y, x + w, y + h
+            direction = m.group(6) or "kCW"
+            slot = slot_for(var)
+            if slot is None:
+                return None, f"too many paths declared at line: {line!r}"
+            verbs_for_rect = rect_verbs(l, t, r, b, direction)
+            if verbs_for_rect is None:
+                return None, f"unknown SkPathDirection: {direction!r}"
+            fix.paths[slot]["verbs"].extend(verbs_for_rect)
+            continue
+        # `path.addCircle(cx, cy, r)` — expand to 4 cubic Bézier arcs.
+        m = ADD_CIRCLE_RE.match(line)
+        if m:
+            var = m.group(1)
+            cx, cy, r = (float(m.group(i).rstrip("f")) for i in (2, 3, 4))
+            direction = m.group(5) or "kCW"
+            slot = slot_for(var)
+            if slot is None:
+                return None, f"too many paths declared at line: {line!r}"
+            verbs_for_circle = circle_verbs(cx, cy, r, direction)
+            if verbs_for_circle is None:
+                return None, f"unknown SkPathDirection: {direction!r}"
+            fix.paths[slot]["verbs"].extend(verbs_for_circle)
             continue
         # Verb call.
         m = VERB_RE.match(line)
@@ -316,6 +575,52 @@ def parse_fixture(name: str, body: list[str]) -> tuple[Fixture | None, str | Non
     return None, "fixture body ended without testPathOp call"
 
 
+def join_multiline_statements(body: list[str]) -> list[str]:
+    """
+    Concatenate continuation lines into single logical statements before
+    per-line parsing. Many upstream fixtures emit a single
+    `path.cubicTo(...)` whose arguments span 2-3 source lines, e.g. ::
+
+        path.cubicTo(36.71843719482421875, 0.8886508941650390625,
+                     38.51341247558594, 1.7773017883300781,
+                     39.999961853027344, 3.255859375);
+
+    Without joining, each continuation line ends up as `38.51341..., …,`
+    which the per-line parser rejects. We join only when the previous
+    line ended with a non-zero paren depth ; lines that close at depth
+    0 are flushed verbatim (so multi-decl lines like
+    `SkPath one = SkPath::Rect({...}), \n two = SkPath::Rect({...});`
+    are NOT collapsed into one giant line — each declaration line is
+    still a self-contained statement that the per-line parser handles).
+    """
+    out: list[str] = []
+    buffer: list[str] = []
+    depth = 0
+    for raw in body:
+        # Strip line comments (`// …`) before counting parens — a
+        # `// (oops)` would otherwise unbalance the depth tracker.
+        stripped = re.sub(r"//.*$", "", raw)
+        line_open_minus_close = stripped.count("(") - stripped.count(")")
+        new_depth = depth + line_open_minus_close
+        buffer.append(raw.rstrip())
+        if new_depth <= 0:
+            # Statement boundary : flush whatever's in the buffer as
+            # one joined line. Empty / brace-only lines flush to
+            # themselves untouched.
+            joined = " ".join(s.strip() for s in buffer if s.strip())
+            if joined:
+                out.append(joined)
+            buffer = []
+            depth = 0
+        else:
+            depth = new_depth
+    if buffer:
+        joined = " ".join(s.strip() for s in buffer if s.strip())
+        if joined:
+            out.append(joined)
+    return out
+
+
 def extract(src: Path) -> dict[str, Any]:
     """Walk source file, extract fixtures."""
     text = src.read_text(encoding="utf-8")
@@ -340,7 +645,10 @@ def extract(src: Path) -> dict[str, Any]:
             depth += lines[j].count("{")
             depth -= lines[j].count("}")
             j += 1
-        body = lines[body_start : j - 1]
+        raw_body = lines[body_start : j - 1]
+        # Pre-pass : join multi-line statements so cubicTo / quadTo
+        # spanning 2-3 source lines parse as one logical line.
+        body = join_multiline_statements(raw_body)
         fix, err = parse_fixture(name, body)
         if fix:
             j_obj = fix.to_json()
