@@ -257,4 +257,54 @@ class SkOpSpanTest {
         span.setDone(true)
         assertTrue(span.done())
     }
+
+    // ─── SkOpPtT.active (D1.2.g.c.2) ──────────────────────────────
+
+    @Test
+    fun `active returns this when not deleted`() {
+        val span = SkOpSpanBase()
+        val a = SkOpPtT(); a.init(span, 0.5, pt(0f, 0f), false)
+        assertSame(a, a.active())
+    }
+
+    @Test
+    fun `active walks to a non-deleted alias on the same span`() {
+        val span = SkOpSpanBase()
+        val a = SkOpPtT(); a.init(span, 0.0, pt(0f, 0f), false)
+        val b = SkOpPtT(); b.init(span, 0.5, pt(0f, 0f), false)
+        a.insert(b)
+        a.setDeleted()
+        // a is deleted, b is alive on the same span → active should pick b.
+        assertSame(b, a.active())
+    }
+
+    @Test
+    fun `active returns null when no alive alias exists`() {
+        val span = SkOpSpanBase()
+        val a = SkOpPtT(); a.init(span, 0.5, pt(0f, 0f), false)
+        a.setDeleted()
+        // a's loop is just [a] — no alive alias.
+        assertNull(a.active())
+    }
+
+    // ─── SkOpSpanBase.collapsed(s, e) (D1.2.g.c.2) ────────────────
+
+    @Test
+    fun `SpanBase collapsed returns kNo on a singleton loop`() {
+        val seg = SkOpSegment()
+        val span = SkOpSpanBase(); span.initBase(seg, null, 0.0, pt(0f, 0f))
+        assertEquals(SkOpSpanBase.Collapsed.kNo, span.collapsed(0.5, 0.7))
+    }
+
+    @Test
+    fun `SpanBase collapsed returns kYes when both s and e fall inside the loop t-range`() {
+        val seg = SkOpSegment()
+        val span = SkOpSpanBase(); span.initBase(seg, null, 0.0, pt(0f, 0f))
+        // Splice another pt-T (same segment) at t=0.8 into the loop.
+        val alias = SkOpPtT()
+        alias.init(SkOpSpanBase().also { it.initBase(seg, null, 0.8, pt(0f, 0f)) }, 0.8, pt(0f, 0f), false)
+        span.fPtT.insert(alias)
+        // Range (0.0..0.8) covers s=0.2 and e=0.5.
+        assertEquals(SkOpSpanBase.Collapsed.kYes, span.collapsed(0.2, 0.5))
+    }
 }

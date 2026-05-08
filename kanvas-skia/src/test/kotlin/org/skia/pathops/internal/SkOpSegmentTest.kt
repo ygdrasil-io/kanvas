@@ -612,4 +612,45 @@ class SkOpSegmentTest {
         // First call to visited() on a freshly-reset segment returns false.
         assertFalse(b.visited())
     }
+
+    // ─── existing (D1.2.g.c.2) ────────────────────────────────────
+
+    @Test
+    fun `existing returns the head pt-T at t=0`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        assertSame(a.fHead.ptT(), a.existing(0.0, null))
+    }
+
+    @Test
+    fun `existing returns the tail pt-T at t=1`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        assertSame(a.fTail.ptT(), a.existing(1.0, null))
+    }
+
+    @Test
+    fun `existing returns null when no pt-T sits at the requested t`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // No interior pt-T at t=0.5 ; ptAtT gives a unique pt that
+        // doesn't ApproximatelyEqual either head or tail.
+        assertNull(a.existing(0.5, null))
+    }
+
+    @Test
+    fun `existing with non-null opp requires the span to contain opp`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(0f, 10f)), null)
+        // a's fHead doesn't contain b yet.
+        assertNull(a.existing(0.0, b))
+        // Splice b into a's fHead pt-T loop.
+        a.fHead.ptT().addOpp(b.fHead.ptT(), b.fHead.ptT())
+        assertSame(a.fHead.ptT(), a.existing(0.0, b))
+    }
+
+    // ─── collapsed(s, e) (D1.2.g.c.2) ─────────────────────────────
+
+    @Test
+    fun `Segment collapsed returns kNo on a freshly-built line`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        assertEquals(SkOpSpanBase.Collapsed.kNo, a.collapsed(0.2, 0.5))
+    }
 }
