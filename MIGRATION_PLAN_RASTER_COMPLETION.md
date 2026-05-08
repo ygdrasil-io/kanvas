@@ -32,7 +32,7 @@
 > | **I3** SkRegion + SkAAClip + SkRasterClip | ✅ shipped (I3.1-3.3) | clipMask Phase 7q remplacé par SkAAClip |
 > | **I4** SkShaper (Primitive + JavaTextLayout + wrap) | ✅ shipped (I4.1-4.3) | HarfBuzz parity hors scope |
 > | **I5** drawPoints / drawAtlas / drawVertices / drawPatch | ✅ shipped | I5.1 / I5.2 / I5.3.a-c / I5.4 livrés (commit `2de410e`) |
-> | **C1** Image filters extras | 📋 pending | Group A core déjà shipped (Offset/Blur/MatrixTransform/DropShadow/ColorFilter/Compose) |
+> | **C1** Image filters extras | 📋 mini-planned | Group A core (6 factories) déjà shipped ; **22 factories manquantes** détaillées dans [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). 7 sous-slices, ~2750 main + ~1440 test, ~30 GM ports débloqués. |
 > | **C2** Path effects extras (kMorph, StrokeAndFill recipe) | 📋 pending | |
 > | **C3** SkEmbossMaskFilter | 📋 pending | |
 > | **C4** drawAnnotation / drawDrawable / drawShadow | 📋 pending | |
@@ -1127,51 +1127,65 @@ public enum class PointMode { kPoints, kLines, kPolygon }
 
 ## Chantiers compléments core
 
-### C1 — Image filters extras
+### C1 — Image filters extras 📋 mini-planned
+
+**See [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md)**
+for the active plan. The original 4-slice / ~1800 LOC scope below is
+preserved as a historical reference (struck through) ; the audited
+mini plan ships **~2750 main + ~1440 test** across **7 slices** that
+cover the **22 missing factories** (the original entry covered only
+11), unblocking ~30 GM ports.
 
 **Skia upstream files** :
-- `include/effects/SkImageFilters.h` (the 15+ factories)
+- `include/effects/SkImageFilters.h` (the 28 factories ; 6 already
+  shipped)
 - `src/effects/imagefilters/Sk*ImageFilter.cpp`
 
 **Kotlin target** : extensions à `SkImageFilters` + nouvelles classes
 internes dans `kanvas-skia/src/main/kotlin/org/skia/foundation/`.
 
+**Active scope** : see
+[MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md)
+(C1.1 source / passthrough wrappers, C1.2 Tile + Magnifier, C1.3
+Arithmetic family, C1.4 Morphology, C1.5 DisplacementMap, C1.6
+MatrixConvolution, C1.7 Lighting full surface).
+
+<details><summary>Original C1 scope (historical, ~1800 LOC, 4 slices, 11 of 22 factories)</summary>
+
 **Per-filter scope** :
 
 | Filter | Algorithm | LOC |
 |---|---|---|
-| `Erode` / `Dilate` | morphology : per-pixel min/max over circular kernel | ~150 chacun |
-| `DisplacementMap` | sample from input via offset = displacement.{R,G} - 0.5 | ~200 |
-| `Lighting` (point/distant/spot) | normal map from height map + Phong shading | ~600 ensemble |
-| `Magnifier` | radial scale around centre | ~150 |
-| `Tile` | sample input through tiled bounds | ~150 |
-| `Arithmetic` | k1·src + k2·dst + k3·src·dst + k4 per channel | ~150 |
-| `Merge` | concat N inputs via per-pixel max-alpha | ~150 |
-| `Image` | use static SkImage as input source | ~80 |
-| `Picture` | use SkPicture replayed into bitmap as input | ~100 |
-| `Shader` | use SkShader as input source | ~80 |
+| ~~`Erode` / `Dilate`~~ | morphology : per-pixel min/max over circular kernel | ~150 chacun |
+| ~~`DisplacementMap`~~ | sample from input via offset = displacement.{R,G} - 0.5 | ~200 |
+| ~~`Lighting` (point/distant/spot)~~ | normal map from height map + Phong shading | ~600 ensemble (undersized — upstream has 6 lighting variants, not 3 ; mini plan budgets ~1200) |
+| ~~`Magnifier`~~ | radial scale around centre | ~150 |
+| ~~`Tile`~~ | sample input through tiled bounds | ~150 |
+| ~~`Arithmetic`~~ | k1·src + k2·dst + k3·src·dst + k4 per channel | ~150 |
+| ~~`Merge`~~ | concat N inputs via per-pixel max-alpha | ~150 |
+| ~~`Image`~~ | use static SkImage as input source | ~80 |
+| ~~`Picture`~~ | use SkPicture replayed into bitmap as input | ~100 |
+| ~~`Shader`~~ | use SkShader as input source | ~80 |
+
+**Missing from this old scope** (added in the mini plan) : Blend,
+Crop, DropShadowOnly, Empty, MatrixConvolution, the **3 specular
+lighting variants** (DistantLitSpecular / PointLitSpecular /
+SpotLitSpecular), and an explicit RuntimeShader descope.
 
 **Phase decomposition** :
 
-- **C1.1** — Trivial filters (Image, Picture, Shader, Tile, Arithmetic,
-  Merge, Magnifier).
-  - **LOC** : ~700.
+- ~~**C1.1**~~ — Trivial filters (Image, Picture, Shader, Tile,
+  Arithmetic, Merge, Magnifier). ~700 LOC.
+- ~~**C1.2**~~ — Morphology (Erode, Dilate). ~300 LOC.
+- ~~**C1.3**~~ — DisplacementMap. ~200 LOC.
+- ~~**C1.4**~~ — Lighting (point/distant/spot). ~600 LOC.
 
-- **C1.2** — Morphology (Erode, Dilate).
-  - **LOC** : ~300.
-  - GMs : `morphology*` (~2 GMs).
-
-- **C1.3** — DisplacementMap.
-  - **LOC** : ~200.
-  - GMs : `displacement*` (~3 GMs).
-
-- **C1.4** — Lighting (point/distant/spot).
-  - **LOC** : ~600.
-  - GMs : `lighting*` (~5 GMs).
-
-**Total LOC** : ~1800.
+**Total LOC** : ~1800. **Mini plan revises to ~2750 main + ~1440 test
+across 7 slices.**
 
 **Validation** : port `gm/imagefilters*` cluster (~15 GMs).
+
+</details>
 
 ---
 
@@ -1557,7 +1571,7 @@ DAG of dependencies :
 
 📋 **remaining** (independent of D1 ; can ship in parallel) :
 
-13. 📋 **C1** Image filters extras (~1800 LOC, Group A core déjà shipped : Offset / Blur / MatrixTransform / DropShadow / ColorFilter / Compose ; rest = Magnifier / Tile / Erode / Dilate / Lighting / Picture / Arithmetic / Merge / DistantLit / SpotLit / PointLit / DisplacementMap / Crop / Shader / Blend / Empty / Paint / RuntimeShader).
+13. 📋 **C1** Image filters extras (mini-planned ; **~2750 main + ~1440 test across 7 slices**, see [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). Group A core (6 factories) déjà shipped ; 22 missing factories audited and budgeted. RuntimeShader descoped on the D2 SkRuntimeEffect dependency.).
 14. 📋 **C3** SkEmbossMaskFilter (~400 LOC).
 15. 📋 **Q2** Canvas wrappers (PaintFilter / NoDraw / Overdraw, ~400 LOC).
 16. 📋 **Q3** SkBBHFactory + Picture cull (~600 LOC, perf for Picture, no GM unblocking).
