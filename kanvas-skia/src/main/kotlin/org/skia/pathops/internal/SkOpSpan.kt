@@ -669,6 +669,20 @@ internal class SkOpSpan : SkOpSpanBase() {
     }
 
     /**
+     * True if any span in this' coincidence loop lives on [segment].
+     * Mirrors `SkOpSpan::containsCoincidence(const SkOpSegment*)`
+     * (`SkOpSpan.cpp:392`).
+     */
+    fun containsCoincidence(segment: SkOpSegment): Boolean {
+        var next: SkOpSpan = fCoincident
+        while (next !== this) {
+            if (next.segment() === segment) return true
+            next = next.fCoincident
+        }
+        return false
+    }
+
+    /**
      * Splice [coin] into this' coincidence loop. Mirrors
      * `SkOpSpan::insertCoincidence(SkOpSpan*)`.
      */
@@ -681,6 +695,40 @@ internal class SkOpSpan : SkOpSpanBase() {
         val coinNext = coin.fCoincident
         coin.fCoincident = fCoincident
         fCoincident = coinNext
+    }
+
+    /**
+     * Find the span on [segment] in this' pt-T loop and splice it
+     * into this' coincidence loop ; respects the [flipped] /
+     * [ordered] orientation flags from `SkCoincidentSpans.flipped` /
+     * `ordered`. Returns false on the FAIL paths (loop walked without
+     * finding [segment], or the resolved span isn't upCastable).
+     *
+     * Mirrors `SkOpSpan::insertCoincidence(const SkOpSegment*, bool,
+     * bool)` (`SkOpSpan.cpp:412`).
+     */
+    fun insertCoincidence(segment: SkOpSegment, flipped: Boolean, ordered: Boolean): Boolean {
+        if (containsCoincidence(segment)) return true
+        var next: SkOpPtT = fPtT
+        while (true) {
+            next = next.next() ?: return false
+            if (next === fPtT) return true // safe-fallback : upstream asserts here
+            if (next.span()?.segment() !== segment) continue
+            var base: SkOpSpanBase = next.span()!!
+            if (!ordered) {
+                val spanEndPtT = this.contains(segment) ?: return false
+                base = spanEndPtT.span() ?: return false
+                if (base.final()) return false
+            }
+            val span: SkOpSpan = if (flipped) {
+                base.prev() ?: return false
+            } else {
+                if (base.final()) return false
+                base.upCast()
+            }
+            insertCoincidence(span)
+            return true
+        }
     }
 
     override fun upCast(): SkOpSpan = this
