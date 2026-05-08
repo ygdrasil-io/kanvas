@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SK_ColorBLACK
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
@@ -40,38 +41,38 @@ public class WideButtCapsGM : GM() {
         val rand = SkRandom()
         canvas.clear(SK_ColorBLACK)
 
-        canvas.save()
-        canvas.translate(60f, 60f)
+        // Iso with upstream `SkAutoCanvasRestore arc(canvas, true);`.
+        canvas.withSave {
+            translate(60f, 60f)
 
-        drawStrokes(
-            canvas, rand,
-            SkPathBuilder().lineTo(10f, 0f).lineTo(10f, 10f).detach(),
-            SkPathBuilder().cubicTo(10f, 0f, 10f, 0f, 10f, 10f).detach(),
-        )
-        canvas.translate(0f, 120f)
+            drawStrokes(
+                this, rand,
+                SkPathBuilder().lineTo(10f, 0f).lineTo(10f, 10f).detach(),
+                SkPathBuilder().cubicTo(10f, 0f, 10f, 0f, 10f, 10f).detach(),
+            )
+            translate(0f, 120f)
 
-        drawStrokes(
-            canvas, rand,
-            SkPathBuilder().lineTo(0f, -10f).lineTo(0f, 10f).detach(),
-            SkPathBuilder().cubicTo(0f, -10f, 0f, -10f, 0f, 10f).detach(),
-        )
-        canvas.translate(0f, 120f)
+            drawStrokes(
+                this, rand,
+                SkPathBuilder().lineTo(0f, -10f).lineTo(0f, 10f).detach(),
+                SkPathBuilder().cubicTo(0f, -10f, 0f, -10f, 0f, 10f).detach(),
+            )
+            translate(0f, 120f)
 
-        drawStrokes(
-            canvas, rand,
-            SkPathBuilder().lineTo(0f, -10f).lineTo(10f, -10f).lineTo(10f, 10f).lineTo(0f, 10f).detach(),
-            SkPathBuilder().cubicTo(0f, -10f, 10f, 10f, 0f, 10f).detach(),
-        )
-        canvas.translate(0f, 140f)
+            drawStrokes(
+                this, rand,
+                SkPathBuilder().lineTo(0f, -10f).lineTo(10f, -10f).lineTo(10f, 10f).lineTo(0f, 10f).detach(),
+                SkPathBuilder().cubicTo(0f, -10f, 10f, 10f, 0f, 10f).detach(),
+            )
+            translate(0f, 140f)
 
-        drawStrokes(
-            canvas, rand,
-            SkPathBuilder().lineTo(0f, -10f).lineTo(10f, -10f).lineTo(10f, 0f).lineTo(0f, 0f).detach(),
-            SkPathBuilder().cubicTo(0f, -10f, 10f, 0f, 0f, 0f).detach(),
-        )
-        canvas.translate(0f, 120f)
-
-        canvas.restore()
+            drawStrokes(
+                this, rand,
+                SkPathBuilder().lineTo(0f, -10f).lineTo(10f, -10f).lineTo(10f, 0f).lineTo(0f, 0f).detach(),
+                SkPathBuilder().cubicTo(0f, -10f, 10f, 0f, 0f, 0f).detach(),
+            )
+            translate(0f, 120f)
+        }
     }
 
     private fun drawStrokes(canvas: SkCanvas, rand: SkRandom, path: SkPath, cubic: SkPath) {
@@ -81,27 +82,26 @@ public class WideButtCapsGM : GM() {
             style = SkPaint.Style.kStroke_Style
         }
 
-        canvas.save()
+        // Iso with upstream `SkAutoCanvasRestore arc(canvas, true);`.
+        canvas.withSave {
+            strokePaint.strokeJoin = SkPaint.Join.kBevel_Join
+            strokePaint.color = rand.nextU() or 0xFF808080.toInt()
+            drawPath(path, strokePaint)
 
-        strokePaint.strokeJoin = SkPaint.Join.kBevel_Join
-        strokePaint.color = rand.nextU() or 0xFF808080.toInt()
-        canvas.drawPath(path, strokePaint)
+            translate(120f, 0f)
+            strokePaint.strokeJoin = SkPaint.Join.kRound_Join
+            strokePaint.color = rand.nextU() or 0xFF808080.toInt()
+            drawPath(path, strokePaint)
 
-        canvas.translate(120f, 0f)
-        strokePaint.strokeJoin = SkPaint.Join.kRound_Join
-        strokePaint.color = rand.nextU() or 0xFF808080.toInt()
-        canvas.drawPath(path, strokePaint)
+            translate(120f, 0f)
+            strokePaint.strokeJoin = SkPaint.Join.kMiter_Join
+            strokePaint.color = rand.nextU() or 0xFF808080.toInt()
+            drawPath(path, strokePaint)
 
-        canvas.translate(120f, 0f)
-        strokePaint.strokeJoin = SkPaint.Join.kMiter_Join
-        strokePaint.color = rand.nextU() or 0xFF808080.toInt()
-        canvas.drawPath(path, strokePaint)
-
-        canvas.translate(120f, 0f)
-        strokePaint.color = rand.nextU() or 0xFF808080.toInt()
-        canvas.drawPath(cubic, strokePaint)
-
-        canvas.restore()
+            translate(120f, 0f)
+            strokePaint.color = rand.nextU() or 0xFF808080.toInt()
+            drawPath(cubic, strokePaint)
+        }
     }
 
     private companion object {

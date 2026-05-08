@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SkPaint
 import org.skia.math.SkISize
 import org.skia.math.SkRect
@@ -38,16 +39,17 @@ public class StrokeRectsGM : GM() {
             for (x in 0 until 2) {
                 paint.strokeWidth = (x * 3).toFloat()
 
-                c.save()
-                c.translate((SW * x).toFloat(), (SH * y).toFloat())
-                c.clipRect(SkRect.MakeLTRB(2f, 2f, SW - 2f, SH - 2f))
+                // Iso with upstream `SkAutoCanvasRestore acr(canvas, true);`.
+                c.withSave {
+                    translate((SW * x).toFloat(), (SH * y).toFloat())
+                    clipRect(SkRect.MakeLTRB(2f, 2f, SW - 2f, SH - 2f))
 
-                val rand = SkRandom()
-                for (i in 0 until N) {
-                    val r = rndRect(rand)
-                    c.drawRect(r, paint)
+                    val rand = SkRandom()
+                    for (i in 0 until N) {
+                        val r = rndRect(rand)
+                        drawRect(r, paint)
+                    }
                 }
-                c.restore()
             }
         }
     }
