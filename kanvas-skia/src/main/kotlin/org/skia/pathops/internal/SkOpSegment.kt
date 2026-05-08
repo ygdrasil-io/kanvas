@@ -1138,6 +1138,158 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         return start.starter(end).windSum()
     }
 
+    // ─── Pt-T linking + utilities (D1.2.c.2.e) ─────────────────────
+
+    /**
+     * Float-precision point on this segment's curve at parameter [t].
+     * Convenience wrapper around [dPtAtT] mirroring the upstream
+     * `SkOpSegment::ptAtT` (`SkOpSegment.h:319`).
+     */
+    fun ptAtT(t: Double): SkPoint = dPtAtT(t).asSkPoint()
+
+    /**
+     * True iff the curve's midpoint between `t1` and `t2` lies far
+     * enough from the chord (`> 2 ×` chord-length squared, or
+     * `> 2 × FLT_EPSILON`) that the two t-positions are *not* the
+     * same intersection. Mirrors `SkOpSegment::ptsDisjoint`
+     * (`SkOpSegment.cpp:1504`).
+     *
+     * For lines this trivially returns false (lines can't loop).
+     */
+    fun ptsDisjoint(t1: Double, pt1: SkPoint, t2: Double, pt2: SkPoint): Boolean {
+        if (fVerb == SegVerb.kLine) return false
+        val midT = (t1 + t2) / 2
+        val midPt = ptAtT(midT)
+        val dx = (pt1.fX - pt2.fX).toDouble()
+        val dy = (pt1.fY - pt2.fY).toDouble()
+        val seDistSq = maxOf(dx * dx + dy * dy, FLT_EPSILON * 2)
+        val dx1 = (midPt.fX - pt1.fX).toDouble()
+        val dy1 = (midPt.fY - pt1.fY).toDouble()
+        if (dx1 * dx1 + dy1 * dy1 > seDistSq * 2) return true
+        val dx2 = (midPt.fX - pt2.fX).toDouble()
+        val dy2 = (midPt.fY - pt2.fY).toDouble()
+        return dx2 * dx2 + dy2 * dy2 > seDistSq * 2
+    }
+
+    /**
+     * True iff [base] and the candidate `(testParent, testT, testPt)`
+     * tuple represent the *same* intersection. Mirrors
+     * `SkOpSegment::match` (`SkOpSegment.cpp:1056`).
+     *
+     * Three cases :
+     *  - Same segment + precisely-equal t → true.
+     *  - Approximately-equal points (any segments) → true unless we
+     *    can show they're disjoint (curve loops back to the same pt).
+     *  - Otherwise false.
+     */
+    fun match(base: SkOpPtT, testParent: SkOpSegment, testT: Double, testPt: SkPoint): Boolean {
+        require(this === base.span()?.segment())
+        if (this === testParent && precisely_equal(base.fT, testT)) return true
+        if (!SkDPoint.ApproximatelyEqual(testPt, base.fPt)) return false
+        return this !== testParent || !ptsDisjoint(base.fT, base.fPt, testT, testPt)
+    }
+
+    /**
+     * Insert (or find) a pt-T at parameter [t] with explicit point
+     * [pt]. Walks `fHead..fTail` in t-order ; returns the existing
+     * pt-T when one already lives at that t (or matches via [match]),
+     * otherwise allocates a fresh [SkOpSpan] before the next-larger-t
+     * span. Mirrors `SkOpSegment::addT(double, const SkPoint&)`
+     * (`SkOpSegment.cpp:259`).
+     *
+     * Returns `null` only on the upstream `FAIL_WITH_NULL_IF` paths
+     * (no prev or hit fTail unexpectedly).
+     */
+    fun addT(t: Double, pt: SkPoint): SkOpPtT? {
+        var spanBase: SkOpSpanBase? = fHead
+        while (spanBase != null) {
+            val result = spanBase.ptT()
+            if (t == result.fT || (!zero_or_one(t) && match(result, this, t, pt))) {
+                spanBase.bumpSpanAdds()
+                return result
+            }
+            if (t < result.fT) {
+                val prev = result.span()?.prev() ?: return null
+                val span = insert(prev)
+                span.init(this, prev, t, pt)
+                span.bumpSpanAdds()
+                ++fCount
+                return span.fPtT
+            }
+            if (spanBase === fTail) return null
+            spanBase = spanBase.upCast().next()
+        }
+        return null
+    }
+
+    /** Convenience overload : derives `pt` via [ptAtT]. */
+    fun addT(t: Double): SkOpPtT? = addT(t, ptAtT(t))
+
+    /**
+     * Emit the curve segment from [start] to [end] into [path].
+     * Sub-divides the curve, runs the hull-sweep classification, and
+     * dispatches to the appropriate [SkPathWriter] verb. Mirrors
+     * `SkOpSegment::addCurveTo` (`SkOpSegment.cpp:172`).
+     *
+     * Returns `false` when the starter span was already emitted (the
+     * upstream `FAIL_IF(spanStart->alreadyAdded())` guard) — caller
+     * treats this as an abort signal.
+     */
+    fun addCurveTo(start: SkOpSpanBase, end: SkOpSpanBase, path: SkPathWriter): Boolean {
+        val spanStart = start.starter(end)
+        if (spanStart.alreadyAdded()) return false
+        spanStart.markAdded()
+        val curvePart = SkDCurveSweep()
+        start.segment()!!.subDivide(start, end, curvePart.fCurve)
+        curvePart.setCurveHullSweep(fVerb)
+        // Drop to a line when the hull collapsed (matches upstream).
+        val verb = if (curvePart.isCurve()) fVerb else SegVerb.kLine
+        path.deferredMove(start.ptT())
+        when (verb) {
+            SegVerb.kLine -> if (!path.deferredLine(end.ptT())) return false
+            SegVerb.kQuad -> path.quadTo(curvePart.fCurve[1].asSkPoint(), end.ptT())
+            SegVerb.kConic -> path.conicTo(
+                curvePart.fCurve[1].asSkPoint(),
+                end.ptT(),
+                curvePart.fCurve.fWeight.toFloat(),
+            )
+            SegVerb.kCubic -> path.cubicTo(
+                curvePart.fCurve[1].asSkPoint(),
+                curvePart.fCurve[2].asSkPoint(),
+                end.ptT(),
+            )
+            SegVerb.kUnset -> error("verb not set")
+        }
+        return true
+    }
+
+    /**
+     * Reset a single span's wind / opp values to 0 and mark it done.
+     * Mirrors `SkOpSegment::clearOne` (`SkOpSegment.cpp:332`).
+     */
+    fun clearOne(span: SkOpSpan) {
+        span.setWindValue(0)
+        span.setOppValue(0)
+        markDone(span)
+    }
+
+    /**
+     * Clear every span on this segment via [clearOne] then drop the
+     * segment from coincidence tracking. Mirrors
+     * `SkOpSegment::clearAll` (`SkOpSegment.cpp:323`).
+     *
+     * The coincidence-release step is a no-op until D1.2.g lands the
+     * SkOpCoincidence collection.
+     */
+    fun clearAll() {
+        var span: SkOpSpan? = fHead
+        while (span != null) {
+            clearOne(span)
+            span = span.next()?.upCastable()
+        }
+        // TODO (D1.2.g) : globalState().coincidence().release(this).
+    }
+
     // ─── Angle ↔ span dispatch ─────────────────────────────────────
 
     /**
