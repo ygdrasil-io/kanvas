@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
@@ -54,25 +55,24 @@ public class ClipCubicGM : GM() {
     }
 
     private fun drawAndClip(c: SkCanvas, p: SkPath, dx: SkScalar, dy: SkScalar) {
-        c.save()
+        // Iso with upstream `SkAutoCanvasRestore acr(canvas, true);`.
+        c.withSave {
+            val r = SkRect.MakeXYWH(0f, H / 4f, W, H / 2f)
+            val bgPaint = SkPaint().apply {
+                color = ToolUtils.colorTo565(0xFF8888FF.toInt())
+            }
 
-        val r = SkRect.MakeXYWH(0f, H / 4f, W, H / 2f)
-        val bgPaint = SkPaint().apply {
-            color = ToolUtils.colorTo565(0xFF8888FF.toInt())
+            // Unclipped: just the curve over the bg rect.
+            drawRect(r, bgPaint)
+            doDraw(this, p)
+
+            translate(dx, dy)
+
+            // Clipped: re-draw the bg rect and curve, then clip to r and re-draw.
+            drawRect(r, bgPaint)
+            clipRect(r)
+            doDraw(this, p)
         }
-
-        // Unclipped: just the curve over the bg rect.
-        c.drawRect(r, bgPaint)
-        doDraw(c, p)
-
-        c.translate(dx, dy)
-
-        // Clipped: re-draw the bg rect and curve, then clip to r and re-draw.
-        c.drawRect(r, bgPaint)
-        c.clipRect(r)
-        doDraw(c, p)
-
-        c.restore()
     }
 
     private fun doDraw(c: SkCanvas, p: SkPath) {

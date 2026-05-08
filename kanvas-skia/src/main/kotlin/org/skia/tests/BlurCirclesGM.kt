@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SK_ColorBLACK
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
@@ -45,21 +46,24 @@ public class BlurCirclesGM : GM() {
         val circleRadii = floatArrayOf(5f, 10f, 25f, 50f)
 
         for (i in blurFilters.indices) {
-            c.save()
-            c.translate(0f, 150f * i)
-            for (j in circleRadii.indices) {
-                val paint = SkPaint(SK_ColorBLACK).apply {
-                    isAntiAlias = true
-                    maskFilter = blurFilters[i]
+            // Iso with upstream `SkAutoCanvasRestore autoRestore(canvas, true)` — outer guard
+            // around each row. The inner per-circle `save() / restore()` matches upstream's
+            // bare pair (intentional, mirrors `gm/blurcircles.cpp`).
+            c.withSave {
+                translate(0f, 150f * i)
+                for (j in circleRadii.indices) {
+                    val paint = SkPaint(SK_ColorBLACK).apply {
+                        isAntiAlias = true
+                        maskFilter = blurFilters[i]
+                    }
+                    val cxC = 50f; val cyC = 50f
+                    save()
+                    rotate(j * 22f, cxC, cyC)
+                    drawCircle(cxC, cyC, circleRadii[j], paint)
+                    restore()
+                    translate(150f, 0f)
                 }
-                val cxC = 50f; val cyC = 50f
-                c.save()
-                c.rotate(j * 22f, cxC, cyC)
-                c.drawCircle(cxC, cyC, circleRadii[j], paint)
-                c.restore()
-                c.translate(150f, 0f)
             }
-            c.restore()
         }
     }
 

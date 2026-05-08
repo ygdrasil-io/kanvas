@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SK_ColorBLUE
 import org.skia.foundation.SK_ColorRED
 import org.skia.foundation.SkBitmap
@@ -44,26 +45,29 @@ public class SpriteBitmapGM : GM() {
     }
 
     private fun draw1Bitmap(c: SkCanvas, bm: SkBitmap, doClip: Boolean, dx: Int, dy: Int, blur: Boolean) {
-        val saveCount = c.save()
-        val clipR = SkRect.MakeXYWH(dx.toFloat(), dy.toFloat(), bm.width.toFloat(), bm.height.toFloat())
-        val insetClip = SkRect.MakeLTRB(clipR.left + 5f, clipR.top + 5f, clipR.right - 5f, clipR.bottom - 5f)
+        // Iso with upstream `SkAutoCanvasRestore acr(canvas, true);` (outer guard).
+        // The inner `save()` / `restore()` pair under `if (doClip)` matches upstream's
+        // bare pattern (intentional, mirrors `gm/spritebitmap.cpp:53,59`).
+        c.withSave {
+            val clipR = SkRect.MakeXYWH(dx.toFloat(), dy.toFloat(), bm.width.toFloat(), bm.height.toFloat())
+            val insetClip = SkRect.MakeLTRB(clipR.left + 5f, clipR.top + 5f, clipR.right - 5f, clipR.bottom - 5f)
 
-        val paint = SkPaint()
-        if (blur) {
-            paint.imageFilter = SkImageFilters.Blur(8f, 8f, null)
-        }
+            val paint = SkPaint()
+            if (blur) {
+                paint.imageFilter = SkImageFilters.Blur(8f, 8f, null)
+            }
 
-        c.translate(bm.width + 20f, 0f)
+            translate(bm.width + 20f, 0f)
 
-        if (doClip) {
-            c.save()
-            c.clipRect(insetClip)
+            if (doClip) {
+                save()
+                clipRect(insetClip)
+            }
+            drawImage(bm.asImage(), dx.toFloat(), dy.toFloat(), SkSamplingOptions.Default, paint)
+            if (doClip) {
+                restore()
+            }
         }
-        c.drawImage(bm.asImage(), dx.toFloat(), dy.toFloat(), SkSamplingOptions.Default, paint)
-        if (doClip) {
-            c.restore()
-        }
-        c.restoreToCount(saveCount)
     }
 
     override fun onDraw(canvas: SkCanvas?) {
