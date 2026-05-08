@@ -837,18 +837,42 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     ) {
         val tCount = vertices.triangleCount()
         if (tCount == 0) return
+        val s = top
+        val colors = vertices.colors
+        if (colors == null) {
+            // Phase I5.3.a — solid colour fast path : every triangle
+            // becomes a closed [SkPath] dispatched through drawPath.
+            for (t in 0 until tCount) {
+                val tri = vertices.triangleAt(t)
+                val a = vertices.positions[tri[0]]
+                val b = vertices.positions[tri[1]]
+                val c = vertices.positions[tri[2]]
+                val path = SkPathBuilder()
+                    .moveTo(a.fX, a.fY)
+                    .lineTo(b.fX, b.fY)
+                    .lineTo(c.fX, c.fY)
+                    .close()
+                    .detach()
+                drawPath(path, paint)
+            }
+            return
+        }
+        // Phase I5.3.b — per-vertex colour interpolation. Each
+        // triangle is rasterised pixel-by-pixel via
+        // [SkBitmapDevice.drawColoredTriangle] with barycentric ARGB
+        // interp.
+        bindClip(s)
         for (t in 0 until tCount) {
             val tri = vertices.triangleAt(t)
             val a = vertices.positions[tri[0]]
             val b = vertices.positions[tri[1]]
             val c = vertices.positions[tri[2]]
-            val path = SkPathBuilder()
-                .moveTo(a.fX, a.fY)
-                .lineTo(b.fX, b.fY)
-                .lineTo(c.fX, c.fY)
-                .close()
-                .detach()
-            drawPath(path, paint)
+            s.device.drawColoredTriangle(
+                a.fX, a.fY, colors[tri[0]],
+                b.fX, b.fY, colors[tri[1]],
+                c.fX, c.fY, colors[tri[2]],
+                s.matrix, s.clip, paint,
+            )
         }
     }
 
