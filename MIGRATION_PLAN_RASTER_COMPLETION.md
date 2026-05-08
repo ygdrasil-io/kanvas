@@ -42,7 +42,7 @@
 > | **Q2** Canvas wrappers | 📋 pending | |
 > | **Q3** SkBBHFactory + Picture cull | 📋 pending | |
 > | **Q4** SkDeferredDisplayList | 📋 low-priority | |
-> | **Q5** Linear sRGB diagnostic | 📋 pending | Phase 7e' réinvestigué |
+> | **Q5** Linear sRGB diagnostic | ✅ shipped | Diagnostic confirms upstream applies the matrix in **encoded sRGB** (linear-mode wins 0 cells, encoded wins 5/5 non-tie) ; the residual ColorMatrixGM gap is elsewhere. Test in `ColorMatrixModeDiagnosticTest`. |
 
 ## Table des matières
 
@@ -1452,28 +1452,64 @@ single-threaded raster rasterizer. Mostly useful for GPU.
 
 ---
 
-### Q5 — Linear sRGB working space (Phase 7e' réinvestigué)
+### Q5 — Linear sRGB working space (Phase 7e' réinvestigué) ✅ shipped
 
-**Context** : Phase 7e' was attempted (decode → matrix → encode
-wrapper around `applyColorFilter`) and **made ColorMatrixGM worse**
-(69% → 49%). Indicates Skia upstream applies the matrix in
-**encoded sRGB**, not linear.
+**Status** : diagnostic completed. **Upstream applies the colour
+matrix in encoded sRGB** — the Phase 7e' regression hypothesis was
+correct. The 30 % gap on `ColorMatrixGM` (current 69 % vs ratchet
+95 %+) is **not** the gamma curve.
 
-**Action** :
+**Diagnostic** : the test
+[ColorMatrixModeDiagnosticTest](kanvas-skia/src/test/kotlin/org/skia/diagnostics/ColorMatrixModeDiagnosticTest.kt)
+samples 9 pixels per cell across the 12-cell ColorMatrixGM matrix
+(2 source bitmaps × 6 colour matrices), computes the expected
+output for both modes (encoded : `out = matrix × encoded_input` ;
+linear : `out = encode(matrix × decode(encoded_input))`), and
+sums the per-channel L1 distance against the upstream PNG
+reference. Lower Σ = closer to upstream.
 
-1. **Diagnostic** : sample 5-10 pixels per cell of `ColorMatrixGM`,
-   compute the expected output for both encoded-sRGB and linear-sRGB
-   matrix application, compare with upstream reference. Determine
-   which matches better per cell.
-2. **If linear is correct for *some* cells** : add a per-filter
-   `evaluateInLinear` flag (matches Skia's `gAlwaysClamp` /
-   gamut-aware filter design).
-3. **If encoded sRGB is correct everywhere** : the gap is elsewhere
-   (image sampling precision, alpha-channel modulation order, ...).
-   Ratchet bumps would come from those investigations.
+**Findings** (full report at `kanvas-skia/build/q5-colormatrix-mode-diagnostic.md`
+after running the test) :
 
-**Estimated LOC** : ~80 if just the diagnostic ; ~300 if a per-filter
-flag is added.
+| Outcome | Count |
+|---|---:|
+| **encoded** wins | **5** cells |
+| **linear** wins | **0** cells |
+| ties (matrix is RGB-identity for the input — saturation × grey, identity matrix) | 7 cells |
+
+**Aggregate Σ over 12 cells** : encoded = 4481, linear = 6332
+(linear is 41 % worse).
+
+**Strongest signal** : the `red→α` cells score **encoded Σ = 0 vs
+linear Σ = 408 / 548**. That's pixel-identical agreement with
+upstream when the encoded interpretation is used — a definitive
+proof that upstream is encoded, not linear.
+
+**Implication for the residual gap** : the 30 % delta is **not**
+in the gamma curve. Candidate explanations to investigate next :
+
+1. **Sampling precision** — `drawImageRect` uses `kFast`
+   constraint by default ; upstream may pick a different sampler
+   for `kSrc` blend mode that affects sub-pixel accuracy.
+2. **Alpha-channel modulation order** — Skia's pipeline composes
+   `paint.alpha × colorFilter × source` ; the order may differ
+   slightly when both `paint.color.alpha < 255` and a colour
+   filter are present.
+3. **Working-space xform timing** — we apply the colour filter in
+   sRGB (per Phase 7e) before the Rec.2020 working-space xform.
+   Upstream may apply it after, producing small but accumulating
+   differences on saturated colours.
+
+Each follow-up is a separate slice ; Q5 itself stays closed
+(diagnostic answered its question).
+
+**Stale claim retracted** : the `ColorMatrixTest` kdoc previously
+said "Skia evaluates the matrix in linear sRGB ; we still apply
+it in encoded sRGB" — incorrect ; both Skia and us apply in
+encoded sRGB. The kdoc is updated alongside this slice.
+
+**LOC** : ~290 test (the diagnostic) — no main code change needed
+since the encoded path is already correct.
 
 ---
 
@@ -1561,13 +1597,13 @@ DAG of dependencies :
 14. 📋 **C3** SkEmbossMaskFilter (~400 LOC).
 15. 📋 **Q2** Canvas wrappers (PaintFilter / NoDraw / Overdraw, ~400 LOC).
 16. 📋 **Q3** SkBBHFactory + Picture cull (~600 LOC, perf for Picture, no GM unblocking).
-17. 📋 **Q5** Linear sRGB diagnostic (~80 LOC investigation).
+17. ✅ **Q5** Linear sRGB diagnostic (~290 test LOC) — diagnosis : upstream applies matrix in encoded sRGB ; gap is elsewhere.
 18. 📋 **C2/C4** Misc completions (kMorph path effect, StrokeAndFill, drawAnnotation / drawDrawable / drawShadow ; ~1300 LOC ensemble).
 19. 📋 **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception* — large but unlocks SkSL-using GMs).
 20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
 
-**Total estimated LOC remaining** : ~6 200 of new Kotlin code
-(C1 1800 + C3 400 + Q2 400 + Q3 600 + Q5 80 + C2/C4 1300 +
+**Total estimated LOC remaining** : ~6 120 of new Kotlin code
+(C1 1800 + C3 400 + Q2 400 + Q3 600 + C2/C4 1300 +
 D2 1500 + Q4 400 ; D1 in-flight LOC tracked separately under
 the chantier's own slice budget). Decomposes into ~15 PRs of
 80-1500 LOC each.
