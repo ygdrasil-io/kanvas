@@ -1449,6 +1449,276 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
      *
      * Mirrors `SkOpSegment::testForCoincidence` (`SkOpSegment.cpp:1671`).
      */
+    /**
+     * Walk this segment's spans looking for coincidence pairs that
+     * the intersection pass missed. For every span (other than head)
+     * whose pt-T loop touches an "already-visited" opp segment via
+     * a span on a non-head index of `this`, walk back to find a prior
+     * span where the same opp segment was seen ; if the resulting
+     * `(prior, this) ↔ (oppStart, oppEnd)` range tests as coincident
+     * via [testForCoincidence], extend or add that pair on
+     * [SkOpCoincidence].
+     *
+     * Returns true iff at least one new coincidence was added.
+     * Returns false on safety-net trip (1000-iteration upstream) or
+     * when the segment is already done.
+     *
+     * Mirrors `SkOpSegment::missingCoincidence`
+     * (`SkOpSegment.cpp:1161`).
+     */
+    /**
+     * Walk every span on this segment ; for each span with
+     * `spanAddsCount > 1` (i.e. >1 intersection through it), consider
+     * its pt-T loop and merge nearby spans on other segments whose
+     * `spanAddsCount` differs, but only when the candidate's loop
+     * shares a segment with the start span's loop (and not `this`).
+     *
+     * Returns false on the 1000-iteration safety net trip ; true
+     * otherwise.
+     *
+     * Mirrors `SkOpSegment::moveMultiples`
+     * (`SkOpSegment.cpp:1271`).
+     */
+    /**
+     * Two-pass cleanup :
+     *  1. Release un-deleted alias spans pointing to this segment that
+     *     are linked to a primary span on the same loop ;
+     *  2. Walk adjacent span pairs and merge them when [spansNearby]
+     *     reports a near-coincident pair.
+     *
+     * Returns false on the safety-net trip (9999 iterations) or on
+     * [spansNearby] failure ; true otherwise.
+     *
+     * Mirrors `SkOpSegment::moveNearby` (`SkOpSegment.cpp:1441`).
+     */
+    fun moveNearby(): Boolean {
+        // Pass 1 : release alias spans.
+        var spanBase: SkOpSpanBase = fHead
+        var escapeHatch = 9999
+        do {
+            val headPtT = spanBase.ptT()
+            var ptT: SkOpPtT = headPtT.next() ?: break
+            while (ptT !== headPtT) {
+                if (--escapeHatch == 0) return false
+                val test = ptT.span()
+                if (test != null &&
+                    ptT.span()?.segment() === this &&
+                    !ptT.deleted() &&
+                    test !== spanBase &&
+                    test.ptT() === ptT) {
+                    if (test.final()) {
+                        if (spanBase === fHead) {
+                            clearAll()
+                            return true
+                        }
+                        spanBase.upCast().release(ptT)
+                    } else if (test.prev() != null) {
+                        test.upCast().release(headPtT)
+                    }
+                    break
+                }
+                ptT = ptT.next() ?: break
+            }
+            spanBase = if (spanBase.final()) break else spanBase.upCast().next() ?: break
+        } while (!spanBase.final())
+        // Pass 2 : merge nearby adjacent spans.
+        spanBase = fHead
+        do {
+            val test = if (spanBase.final()) break else spanBase.upCast().next() ?: break
+            val foundOut = booleanArrayOf(false)
+            if (!spansNearby(spanBase, test, foundOut)) return false
+            if (foundOut[0]) {
+                if (test.final()) {
+                    if (spanBase.prev() != null) {
+                        test.merge(spanBase.upCast())
+                    } else {
+                        clearAll()
+                        return true
+                    }
+                } else {
+                    spanBase.merge(test.upCast())
+                }
+            }
+            spanBase = test
+        } while (!spanBase.final())
+        return true
+    }
+
+    fun moveMultiples(): Boolean {
+        var test: SkOpSpanBase = fHead
+        outer@ while (true) {
+            val addCount = test.spanAddsCount()
+            if (addCount > 1) {
+                val startPtT = test.ptT()
+                var testPtT: SkOpPtT = startPtT
+                var safetyHatch = 1000
+                inner@ do {
+                    if (--safetyHatch == 0) return false
+                    val oppSpan = testPtT.span()
+                    if (oppSpan == null ||
+                        oppSpan.spanAddsCount() == addCount ||
+                        oppSpan.deleted()) {
+                        testPtT = testPtT.next() ?: break@inner
+                        continue
+                    }
+                    val oppSegment = oppSpan.segment()
+                    if (oppSegment === this) {
+                        testPtT = testPtT.next() ?: break@inner
+                        continue
+                    }
+                    // Find range of candidate spans by walking prev/next on opp.
+                    var oppFirst: SkOpSpanBase = oppSpan
+                    var oppPrev: SkOpSpanBase? = oppSpan
+                    while (true) {
+                        oppPrev = oppPrev?.prev()
+                        if (oppPrev == null) break
+                        if (!roughly_equal(oppPrev.t(), oppSpan.t())) break
+                        if (oppPrev.spanAddsCount() == addCount) continue
+                        if (oppPrev.deleted()) continue
+                        oppFirst = oppPrev
+                    }
+                    var oppLast: SkOpSpanBase = oppSpan
+                    var oppNext: SkOpSpanBase? = oppSpan
+                    while (true) {
+                        oppNext = if (oppNext == null || oppNext.final()) null
+                                  else oppNext.upCast().next()
+                        if (oppNext == null) break
+                        if (!roughly_equal(oppNext.t(), oppSpan.t())) break
+                        if (oppNext.spanAddsCount() == addCount) continue
+                        if (oppNext.deleted()) continue
+                        oppLast = oppNext
+                    }
+                    if (oppFirst === oppLast) {
+                        testPtT = testPtT.next() ?: break@inner
+                        continue
+                    }
+                    var oppTest: SkOpSpanBase = oppFirst
+                    candidate@ while (true) {
+                        if (oppTest !== oppSpan) {
+                            // Verify the candidate touches a segment in startPtT's
+                            // loop (other than `this`).
+                            val oppStartPtT = oppTest.ptT()
+                            var oppPtT: SkOpPtT = oppStartPtT.next() ?: oppStartPtT
+                            var canceled = false
+                            while (oppPtT !== oppStartPtT) {
+                                val oppPtTSeg = oppPtT.span()?.segment()
+                                if (oppPtTSeg === this) { canceled = true; break }
+                                var matchPtT: SkOpPtT = startPtT
+                                var found = false
+                                do {
+                                    if (matchPtT.span()?.segment() === oppPtTSeg) {
+                                        found = true; break
+                                    }
+                                    matchPtT = matchPtT.next() ?: break
+                                } while (matchPtT !== startPtT)
+                                if (found) {
+                                    oppTest.mergeMatches(oppSpan)
+                                    oppTest.addOpp(oppSpan)
+                                    test = if (test.final()) break@outer
+                                           else test.upCast().next() ?: break@outer
+                                    continue@outer
+                                }
+                                oppPtT = oppPtT.next() ?: break
+                            }
+                            if (canceled) {
+                                // continue to next candidate
+                            }
+                        }
+                        if (oppTest === oppLast) break@candidate
+                        oppTest = oppTest.upCast().next() ?: break@candidate
+                    }
+                    testPtT = testPtT.next() ?: break@inner
+                } while (testPtT !== startPtT)
+            }
+            test = if (test.final()) break else test.upCast().next() ?: break
+        }
+        return true
+    }
+
+    fun missingCoincidence(): Boolean {
+        if (this.done()) return false
+        var prior: SkOpSpan? = null
+        var spanBase: SkOpSpanBase = fHead
+        var result = false
+        var safetyNet = 1000
+        while (true) {
+            val spanStopPtT = spanBase.ptT()
+            var ptT: SkOpPtT = spanStopPtT.next() ?: break
+            while (ptT !== spanStopPtT) {
+                if (--safetyNet == 0) return false
+                if (ptT.deleted()) {
+                    ptT = ptT.next() ?: break
+                    continue
+                }
+                val opp = ptT.span()?.segment()
+                if (opp == null || opp.done() || !opp.visited() ||
+                    spanBase === fHead || ptT.span()?.segment() === this) {
+                    ptT = ptT.next() ?: break
+                    continue
+                }
+                val span = spanBase.upCastable()
+                if (span?.containsCoincidence(opp) == true) {
+                    ptT = ptT.next() ?: break
+                    continue
+                }
+                if (spanBase.containsCoinEnd(opp)) {
+                    ptT = ptT.next() ?: break
+                    continue
+                }
+                // Walk backward from spanBase looking for the same opp segment.
+                var priorPtT: SkOpPtT? = null
+                var priorOpp: SkOpSegment? = null
+                var priorTest: SkOpSpan? = spanBase.prev()
+                while (priorOpp == null && priorTest != null) {
+                    val priorStopPtT = priorTest.ptT()
+                    var p: SkOpPtT = priorStopPtT.next() ?: break
+                    while (p !== priorStopPtT) {
+                        if (!p.deleted() && p.span()?.segment() === opp) {
+                            prior = priorTest
+                            priorPtT = p
+                            priorOpp = opp
+                            break
+                        }
+                        p = p.next() ?: break
+                    }
+                    priorTest = priorTest.prev()
+                }
+                if (priorOpp == null || priorPtT === ptT || priorPtT == null || prior == null) {
+                    ptT = ptT.next() ?: break
+                    continue
+                }
+                var pPtT = priorPtT
+                var ePtT = ptT
+                var oppStart = prior.ptT()
+                var oppEnd = spanBase.ptT()
+                val swapped = pPtT.fT > ePtT.fT
+                if (swapped) {
+                    val t1 = pPtT; pPtT = ePtT; ePtT = t1
+                    val t2 = oppStart; oppStart = oppEnd; oppEnd = t2
+                }
+                val coincidences = globalState()?.coincidence()
+                if (coincidences != null) {
+                    val rootPriorPtT = pPtT.span()!!.ptT()
+                    val rootPtT = ePtT.span()!!.ptT()
+                    val rootOppStart = oppStart.span()!!.ptT()
+                    val rootOppEnd = oppEnd.span()!!.ptT()
+                    if (!coincidences.contains(rootPriorPtT, rootPtT, rootOppStart, rootOppEnd)) {
+                        if (testForCoincidence(rootPriorPtT, rootPtT, prior, spanBase, opp)) {
+                            if (!coincidences.extend(rootPriorPtT, rootPtT, rootOppStart, rootOppEnd)) {
+                                coincidences.add(rootPriorPtT, rootPtT, rootOppStart, rootOppEnd)
+                            }
+                            result = true
+                        }
+                    }
+                }
+                ptT = ptT.next() ?: break
+            }
+            spanBase = if (spanBase.final()) break else spanBase.upCast().next() ?: break
+        }
+        ClearVisited(fHead)
+        return result
+    }
+
     fun testForCoincidence(
         priorPtT: SkOpPtT,
         ptT: SkOpPtT,
