@@ -523,12 +523,38 @@ manageable while reaching multi-format parity.
     non-WBMP bytes). 12/12 green ; full kanvas-skia suite
     **2189 / 2189 green**.
 
-- **D3.4** — WEBP (no `imageio` support).
-  - Option A : pure-Kotlin port of libwebp's lossless decoder
-    (~3000 LOC, complex VP8L bitstream).
-  - Option B : optional dependency on Google's `webp` Java jar via
-    Maven coordinate (~5 LOC integration, external dep).
-  - Recommend Option B for v1 ; mark `webp` extension as opt-in.
+- **D3.4** ✅ — WEBP via the
+  [TwelveMonkeys `imageio-webp`](https://github.com/haraldk/TwelveMonkeys/tree/master/imageio/imageio-webp)
+  ImageIO plugin (Option B from the plan — external Maven dep, no
+  native libwebp / no FFI). The plugin auto-registers a
+  `WebPImageReaderSpi` on classpath load, so `ImageIO.read`
+  handles VP8 / VP8L / VP8X bitstreams transparently from the same
+  call site the other D3 codecs use.
+  [SkWebpCodec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/webp/SkWebpCodec.kt)
+  registers as the 5th `SkCodec.Decoder` (between BMP and WBMP),
+  signature is the 12-byte `RIFF` + 4 size bytes + `WEBP` prefix,
+  and the codec emits `kRGBA_8888 / kUnpremul / sRGB` like every
+  other D3 sibling. **Read-only** — TwelveMonkeys ships no WEBP
+  encoder, so the D3.5 encoder family is not extended. **No ICC
+  profile** : VP8X can carry an `ICCP` sub-chunk but TwelveMonkeys
+  doesn't surface it through the public API ; documented as a
+  future-slice opportunity.
+  - **Dep added** :
+    `implementation("com.twelvemonkeys.imageio:imageio-webp:3.12.0")`
+    (pulls in 5 transitive jars : `imageio-core`,
+    `imageio-metadata`, `common-lang`, `common-io`,
+    `common-image`).
+  - **LOC** : ~111 main + ~104 test = 215 total + 340-byte
+    fixture (`stoplight.webp`, copied from upstream Skia's
+    `resources/images/`).
+  - **Tests** :
+    [SkWebpCodecTest.kt](kanvas-skia/src/test/kotlin/org/skia/codec/webp/SkWebpCodecTest.kt)
+    (5 — signature dispatch incl. negative match for `RIFF…WAVE`
+    containers, end-to-end decode of `stoplight.webp` confirming
+    the TwelveMonkeys plugin is reachable on the runtime
+    classpath, `kRGBA_8888 / sRGB / kUnpremul` tagging, geometry
+    validation). 5/5 green ; full kanvas-skia suite
+    **2229 / 2229 green**.
 
 - **D3.5** ✅ — `SkPngEncoder` + `SkJpegEncoder` re-exposing
   ImageIO encoders through the upstream Skia API. Two `object`s
@@ -573,7 +599,8 @@ manageable while reaching multi-format parity.
   `kJPEG → SkJpegEncoder(Options(quality = quality))` ; every
   other [SkEncodedImageFormat] returns `null` (encoders ship for
   PNG / JPEG only — GIF / BMP / WBMP have decoders but no
-  encoders, and WEBP is D3.4-deferred).
+  encoders, WEBP encoder is out of scope — D3.4 ships
+  decode-only via TwelveMonkeys).
   - **LOC** : ~52 main + ~99 test = 151 total (cf. plan estimate
     ~50 main — close).
   - **Tests** :
@@ -584,11 +611,8 @@ manageable while reaching multi-format parity.
     bytes equal `SkPngEncoder.Encode(bitmap)` bytes). 4/4 green ;
     full kanvas-skia suite **2216 / 2216 green**.
 
-D3 closes apart from **D3.4 WEBP**, which the plan flags as
-external-dependency-bound (Option B = optional Maven coordinate
-on Google's `webp` Java jar, ~5 LOC integration ; pure-Kotlin
-port ~3000 LOC). Tracked separately ; defer until a workflow
-needs WEBP.
+D3 closes — see D3.4 above for WEBP via the TwelveMonkeys
+plugin.
 
 **Total LOC** : ~1000-1500 (with WEBP via opt-in dep ; +3000 if
 pure-Kotlin WEBP).

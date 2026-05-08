@@ -9,6 +9,15 @@ repositories {
 dependencies {
     implementation(kotlin("stdlib"))
 
+    // D3.4 — WEBP decoding via the TwelveMonkeys ImageIO plugin.
+    // Registers a WEBP `ImageReader` with the JVM's ImageIO SPI on
+    // classpath load, so `ImageIO.read` decodes WEBP bytes the same
+    // way it does PNG / JPEG / GIF / BMP / WBMP. Plan
+    // (MIGRATION_PLAN_RASTER_COMPLETION.md § D3.4) recommended this
+    // "Option B" external-dep approach over a ~3000 LOC pure-Kotlin
+    // VP8L port. Read-only — TwelveMonkeys has no WEBP encoder.
+    implementation("com.twelvemonkeys.imageio:imageio-webp:3.12.0")
+
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
