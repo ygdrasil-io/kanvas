@@ -218,13 +218,12 @@ public object SkPathOps {
         if (!bridgeOp(sortedHead, workOp, xorMask, xorOpMask, writer)) return null
         writer.assemble()
         val result = writer.nativePath()
-        // Until the SkPathOpsWinding.cpp ray-tracing suite is wired
-        // (replaces the FindSortableTop stub), bridgeOp's outer loop
-        // short-circuits before any walking happens — the writer stays
-        // empty for any non-trivial input. Surface that as null
-        // (caller's "not yet supported") rather than mislead with a
-        // bogus empty result.
-        if (result.isEmpty()) return null
+        // An empty result here is meaningful — it means
+        // [bridgeOp] succeeded with no surviving edges (e.g.
+        // `A - A = ∅` for kDifference, or two disjoint inputs
+        // intersected) — return the empty path with the right
+        // fillType, never null. Mirrors upstream's
+        // `Op(A, A, kDifference) = empty` semantic.
         return result
     }
 
