@@ -19,8 +19,12 @@
  *
  * Phase D1.2.g.c.4 — the two callers `addIfMissing` / `addOrOverlap`
  * (gated on the SkOpSegment / SkOpPtT / SkOpSpanBase helpers landed
- * in c.2 + c.3). The remaining heavy methods (addMissing / apply /
- * mark / expand / …) land in subsequent D1.2.g sub-slices.
+ * in c.2 + c.3).
+ *
+ * Phase D1.2.g.d — addMissing / addOverlap / findOverlaps /
+ * addEndMovedSpans (3 overloads). These are the public drivers that
+ * exercise everything c.* built. The remaining heavy methods (apply
+ * / mark / expand / addExpanded / …) land in D1.2.g.e.
  *
  * # SkCoincidentSpans
  *
@@ -747,6 +751,329 @@ internal class SkOpCoincidence {
      * Mirrors `SkOpCoincidence::addIfMissing`
      * (`SkOpCoincidence.cpp:627`).
      */
+    /**
+     * Public driver : detect coincidence pairs that share at least
+     * one segment with another already-tracked pair, but whose
+     * t-overlap on the shared side hasn't been recorded yet.
+     * Snapshots [fHead] into [fTop], walks every (outer, inner) pair,
+     * and routes through [addIfMissing] for each shared-segment
+     * overlap. Restores [fHead] on the way out.
+     *
+     * Sets `addedOut[0]` when a new pair was actually inserted
+     * (delegated through `addIfMissing` → `addOrOverlap`). Returns
+     * true when the caller should loop again ; false on a hard
+     * abort.
+     *
+     * Mirrors `SkOpCoincidence::addMissing`
+     * (`SkOpCoincidence.cpp:797`).
+     */
+    fun addMissing(addedOut: BooleanArray): Boolean {
+        addedOut[0] = false
+        var outer: SkCoincidentSpans? = fHead ?: return true
+        fTop = outer
+        fHead = null
+        val overOut = DoubleArray(2)
+        while (outer != null) {
+            val ocs = outer.coinPtTStart()!!
+            if (ocs.deleted()) return false
+            val outerCoin = ocs.span()?.segment() ?: return false
+            if (outerCoin.done()) return false
+            val oos = outer.oppPtTStart()!!
+            if (oos.deleted()) return true
+            val outerOpp = oos.span()?.segment() ?: return false
+            var inner = outer.next()
+            while (inner != null) {
+                val ics = inner.coinPtTStart()!!
+                if (ics.deleted()) return false
+                val innerCoin = ics.span()?.segment() ?: return false
+                if (innerCoin.done()) return false
+                val ios = inner.oppPtTStart()!!
+                if (ios.deleted()) return false
+                val innerOpp = ios.span()?.segment() ?: return false
+                when {
+                    outerCoin === innerCoin -> {
+                        val oce = outer.coinPtTEnd()!!
+                        if (oce.deleted()) return true
+                        val ice = inner.coinPtTEnd()!!
+                        if (ice.deleted()) return false
+                        if (outerOpp !== innerOpp &&
+                            overlap(ocs, oce, ics, ice, overOut)) {
+                            if (!addIfMissing(ocs.starter(oce), ics.starter(ice),
+                                    overOut[0], overOut[1], outerOpp, innerOpp, addedOut)) {
+                                return false
+                            }
+                        }
+                    }
+                    outerCoin === innerOpp -> {
+                        val oce = outer.coinPtTEnd()!!
+                        if (oce.deleted()) return false
+                        val ioe = inner.oppPtTEnd()!!
+                        if (ioe.deleted()) return false
+                        if (outerOpp !== innerCoin &&
+                            overlap(ocs, oce, ios, ioe, overOut)) {
+                            if (!addIfMissing(ocs.starter(oce), ios.starter(ioe),
+                                    overOut[0], overOut[1], outerOpp, innerCoin, addedOut)) {
+                                return false
+                            }
+                        }
+                    }
+                    outerOpp === innerCoin -> {
+                        val ooe = outer.oppPtTEnd()!!
+                        if (ooe.deleted()) return false
+                        val ice = inner.coinPtTEnd()!!
+                        if (ice.deleted()) return false
+                        require(outerCoin !== innerOpp)
+                        if (overlap(oos, ooe, ics, ice, overOut)) {
+                            if (!addIfMissing(oos.starter(ooe), ics.starter(ice),
+                                    overOut[0], overOut[1], outerCoin, innerOpp, addedOut)) {
+                                return false
+                            }
+                        }
+                    }
+                    outerOpp === innerOpp -> {
+                        val ooe = outer.oppPtTEnd()!!
+                        if (ooe.deleted()) return false
+                        val ioe = inner.oppPtTEnd()!!
+                        if (ioe.deleted()) return true
+                        require(outerCoin !== innerCoin)
+                        if (overlap(oos, ooe, ios, ioe, overOut)) {
+                            if (!addIfMissing(oos.starter(ooe), ios.starter(ioe),
+                                    overOut[0], overOut[1], outerCoin, innerCoin, addedOut)) {
+                                return false
+                            }
+                        }
+                    }
+                }
+                inner = inner.next()
+            }
+            outer = outer.next()
+        }
+        restoreHead()
+        return true
+    }
+
+    /**
+     * For each non-deleted, non-`baseSeg`, canonical pt-T on
+     * [testSpan]'s loop : if the perpendicular ray from [base]'s
+     * point hits its segment near the same point, attach a fresh
+     * pt-T at that intersection and ask [addOrOverlap] to track the
+     * resulting coincidence pair.
+     *
+     * Mirrors the private `SkOpCoincidence::addEndMovedSpans(const
+     * SkOpSpan*, const SkOpSpanBase*)`
+     * (`SkOpCoincidence.cpp:289`).
+     */
+    private fun addEndMovedSpans(base: SkOpSpan, testSpan: SkOpSpanBase): Boolean {
+        val stopPtT = testSpan.ptT()
+        val baseSeg = base.segment() ?: return false
+        var escapeHatch = 100_000
+        var testPtT: SkOpPtT = stopPtT.next() ?: return true
+        while (testPtT !== stopPtT) {
+            if (--escapeHatch <= 0) return false
+            val testSeg = testPtT.span()?.segment()
+            if (!testPtT.deleted() && testSeg !== null && testSeg !== baseSeg &&
+                testPtT.span()?.ptT() === testPtT &&
+                !contains(baseSeg, testSeg, testPtT.fT)) {
+                val dxdy = baseSeg.dSlopeAtT(base.t())
+                val pt = base.pt()
+                val ray = SkDLine().apply {
+                    set(0, SkDPoint(pt.fX.toDouble(), pt.fY.toDouble()))
+                    set(1, SkDPoint(pt.fX + dxdy.y, pt.fY - dxdy.x))
+                }
+                val ix = SkIntersections()
+                testSeg.intersectRay(ray, ix)
+                for (index in 0 until ix.used()) {
+                    val t = ix.t(0, index)
+                    if (!between(0.0, t, 1.0)) continue
+                    val oppPt = ix.pt(index)
+                    if (!oppPt.approximatelyEqual(SkDPoint(pt.fX.toDouble(), pt.fY.toDouble()))) continue
+                    val oppStart = testSeg.addT(t) ?: continue
+                    if (oppStart === testPtT) continue
+                    if (oppStart.span()?.addOpp(base) != true) continue
+                    if (oppStart.deleted()) continue
+                    var coinSeg = base.segment()!!
+                    var oppSeg = oppStart.span()?.segment() ?: continue
+                    var coinTs: Double; var coinTe: Double
+                    var oppTs: Double; var oppTe: Double
+                    if (Ordered(coinSeg, oppSeg)) {
+                        coinTs = base.t(); coinTe = testSpan.t()
+                        oppTs = oppStart.fT; oppTe = testPtT.fT
+                    } else {
+                        val swap = coinSeg; coinSeg = oppSeg; oppSeg = swap
+                        coinTs = oppStart.fT; coinTe = testPtT.fT
+                        oppTs = base.t(); oppTe = testSpan.t()
+                    }
+                    if (coinTs > coinTe) {
+                        val ttmp = coinTs; coinTs = coinTe; coinTe = ttmp
+                        val otmp = oppTs; oppTs = oppTe; oppTe = otmp
+                    }
+                    val added = booleanArrayOf(false)
+                    if (!addOrOverlap(coinSeg, oppSeg, coinTs, coinTe, oppTs, oppTe, added)) {
+                        return false
+                    }
+                }
+            }
+            testPtT = testPtT.next() ?: return true
+        }
+        return true
+    }
+
+    /**
+     * For [ptT]'s span: walk both adjacent (prev / next) spans, and
+     * for each one that isn't already canceled, run the
+     * `(base, testSpan)` overload.
+     *
+     * Mirrors the private `SkOpCoincidence::addEndMovedSpans(const
+     * SkOpPtT*)` (`SkOpCoincidence.cpp:365`).
+     */
+    private fun addEndMovedSpans(ptT: SkOpPtT): Boolean {
+        val base = ptT.span()?.upCastable() ?: return false
+        val prev = base.prev() ?: return false
+        if (!prev.isCanceled()) {
+            if (!addEndMovedSpans(base, base.prev()!!)) return false
+        }
+        if (!base.isCanceled()) {
+            val nxt = base.next() ?: return false
+            if (!addEndMovedSpans(base, nxt)) return false
+        }
+        return true
+    }
+
+    /**
+     * Public driver : snapshot [fHead] into [fTop], then for every
+     * coincidence entry whose coin- and opp-side pt have drifted at
+     * an end, scan the adjacent pt-T loop for a near-coincident
+     * segment via the ray-cast helper. Restores [fHead] (with
+     * [restoreHead]) on the way out.
+     *
+     * Mirrors `SkOpCoincidence::addEndMovedSpans()`
+     * (`SkOpCoincidence.cpp:392`).
+     */
+    fun addEndMovedSpans(): Boolean {
+        var span = fHead ?: return true
+        fTop = span
+        fHead = null
+        do {
+            val coinStart = span.coinPtTStart()!!
+            val oppStart = span.oppPtTStart()!!
+            if (coinStart.fPt != oppStart.fPt) {
+                if (coinStart.fT == 1.0) return false
+                val onEnd = coinStart.fT == 0.0
+                val oOnEnd = zero_or_one(oppStart.fT)
+                if (onEnd) {
+                    if (!oOnEnd) {
+                        if (!addEndMovedSpans(oppStart)) return false
+                    }
+                } else if (oOnEnd) {
+                    if (!addEndMovedSpans(coinStart)) return false
+                }
+            }
+            val coinEnd = span.coinPtTEnd()!!
+            val oppEnd = span.oppPtTEnd()!!
+            if (coinEnd.fPt != oppEnd.fPt) {
+                val onEnd = coinEnd.fT == 1.0
+                val oOnEnd = zero_or_one(oppEnd.fT)
+                if (onEnd) {
+                    if (!oOnEnd) {
+                        if (!addEndMovedSpans(oppEnd)) return false
+                    }
+                } else if (oOnEnd) {
+                    if (!addEndMovedSpans(coinEnd)) return false
+                }
+            }
+            span = span.next() ?: break
+        } while (true)
+        restoreHead()
+        return true
+    }
+
+    /**
+     * Resolve overlapping pt-Ts on `(seg1, seg1o)` × `(seg2, seg2o)`
+     * around an outer t-overlap `[overS..overE]` and append a fresh
+     * coincidence pair via [add]. Returns true on the no-op paths
+     * (zero windValue or both ranges on the same segment) ; returns
+     * false on the `find` failure paths.
+     *
+     * Mirrors `SkOpCoincidence::addOverlap`
+     * (`SkOpCoincidence.cpp:901`).
+     */
+    fun addOverlap(
+        seg1: SkOpSegment, seg1o: SkOpSegment,
+        seg2: SkOpSegment, seg2o: SkOpSegment,
+        overS: SkOpPtT, overE: SkOpPtT,
+    ): Boolean {
+        var s1 = overS.find(seg1) ?: return false
+        var e1 = overE.find(seg1) ?: return false
+        if (s1.starter(e1).span()!!.upCast().windValue() == 0) {
+            s1 = overS.find(seg1o) ?: return false
+            e1 = overE.find(seg1o) ?: return false
+            if (s1.starter(e1).span()!!.upCast().windValue() == 0) return true
+        }
+        var s2 = overS.find(seg2) ?: return false
+        var e2 = overE.find(seg2) ?: return false
+        if (s2.starter(e2).span()!!.upCast().windValue() == 0) {
+            s2 = overS.find(seg2o) ?: return false
+            e2 = overE.find(seg2o) ?: return false
+            if (s2.starter(e2).span()!!.upCast().windValue() == 0) return true
+        }
+        if (s1.span()?.segment() === s2.span()?.segment()) return true
+        if (s1.fT > e1.fT) {
+            val t1 = s1; s1 = e1; e1 = t1
+            val t2 = s2; s2 = e2; e2 = t2
+        }
+        add(s1, e1, s2, e2)
+        return true
+    }
+
+    /**
+     * Walk every pair of fHead entries ; whenever two distinct
+     * segment-pair entries share at least one segment, compute the
+     * t-overlap on the shared side via [SkOpPtT.Overlaps] and emit a
+     * fresh coincidence pair on [out] via [addOverlap].
+     *
+     * Used as a "scan for cross-coincidences" pass before [addMissing].
+     *
+     * Mirrors `SkOpCoincidence::findOverlaps`
+     * (`SkOpCoincidence.cpp:1261`).
+     */
+    fun findOverlaps(out: SkOpCoincidence): Boolean {
+        out.fHead = null
+        out.fTop = null
+        var outer: SkCoincidentSpans? = fHead
+        val sOut = arrayOfNulls<SkOpPtT>(1)
+        val eOut = arrayOfNulls<SkOpPtT>(1)
+        while (outer != null) {
+            val outerCoin = outer.coinPtTStart()!!.span()?.segment() ?: return false
+            val outerOpp = outer.oppPtTStart()!!.span()?.segment() ?: return false
+            var inner = outer.next()
+            while (inner != null) {
+                val innerCoin = inner.coinPtTStart()!!.span()?.segment() ?: return false
+                if (outerCoin === innerCoin) {
+                    inner = inner.next(); continue
+                }
+                val innerOpp = inner.oppPtTStart()!!.span()?.segment() ?: return false
+                val matched = (outerOpp === innerCoin && SkOpPtT.Overlaps(
+                        outer.oppPtTStart()!!, outer.oppPtTEnd()!!,
+                        inner.coinPtTStart()!!, inner.coinPtTEnd()!!, sOut, eOut)) ||
+                    (outerCoin === innerOpp && SkOpPtT.Overlaps(
+                        outer.coinPtTStart()!!, outer.coinPtTEnd()!!,
+                        inner.oppPtTStart()!!, inner.oppPtTEnd()!!, sOut, eOut)) ||
+                    (outerOpp === innerOpp && SkOpPtT.Overlaps(
+                        outer.oppPtTStart()!!, outer.oppPtTEnd()!!,
+                        inner.oppPtTStart()!!, inner.oppPtTEnd()!!, sOut, eOut))
+                if (matched) {
+                    if (!out.addOverlap(outerCoin, outerOpp, innerCoin, innerOpp,
+                            sOut[0]!!, eOut[0]!!)) {
+                        return false
+                    }
+                }
+                inner = inner.next()
+            }
+            outer = outer.next()
+        }
+        return true
+    }
+
     fun addIfMissing(
         over1s: SkOpPtT, over2s: SkOpPtT,
         tStart: Double, tEnd: Double,
