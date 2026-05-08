@@ -122,6 +122,20 @@ internal class SkOpPtT {
     fun starter(end: SkOpPtT): SkOpPtT = if (fT < end.fT) this else end
 
     /**
+     * Walk this' opp loop and return the first non-deleted entry on
+     * [segment], or null if none. Mirrors
+     * `SkOpPtT::find(const SkOpSegment*)` (`SkOpSpan.cpp:87`).
+     */
+    fun find(segment: SkOpSegment): SkOpPtT? {
+        var ptT: SkOpPtT = this
+        do {
+            if (ptT.span()?.segment() === segment && !ptT.deleted()) return ptT
+            ptT = ptT.fNext ?: return null
+        } while (ptT !== this)
+        return null
+    }
+
+    /**
      * Returns true iff `fT == 1` (the terminal entry's t-value).
      * Mirrors the contract `onEnd()` — but in upstream this is a
      * cpp-defined helper. We replicate the simple check.
