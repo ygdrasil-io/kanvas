@@ -414,6 +414,168 @@ public object SkImageFilters {
             tileMode, convolveAlpha, input,
         )
     }
+
+    // ─── C1.7 — Lighting (6 variants : 3 diffuse + 3 specular) ────────
+
+    /**
+     * Mirrors Skia's `SkImageFilters::DistantLitDiffuse(direction,
+     * lightColor, surfaceScale, kd, input)` — Phong-Lambert diffuse
+     * shading with a directional (parallel) light. The input's alpha
+     * channel is treated as a height map ; the surface normal is
+     * derived per-pixel via a 3×3 Sobel kernel scaled by [surfaceScale].
+     *
+     * Per pixel : `out_rgb = kd · max(0, N · L) · lightColor` ;
+     * `out_a = max(out_r, out_g, out_b)`.
+     *
+     * - [direction] : unit vector pointing **toward** the light (the
+     *   direction from surface to light).
+     * - [surfaceScale] : multiplier on the normal's z component ;
+     *   higher values make the surface appear "deeper" (steeper
+     *   normals).
+     * - [kd] : diffuse reflection coefficient (typical range 0..1).
+     */
+    public fun DistantLitDiffuse(
+        direction: FloatArray,
+        lightColor: SkColor,
+        surfaceScale: SkScalar,
+        kd: SkScalar,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkLightingImageFilter(
+        light = SkLight.Distant(direction.normalized3()),
+        lightColor = lightColor, surfaceScale = surfaceScale,
+        kdOrKs = kd, isDiffuse = true, shininess = 1f, input = input,
+    )
+
+    /** Point-light diffuse — same as [DistantLitDiffuse] but with a 3-D point light at [location]. */
+    public fun PointLitDiffuse(
+        location: FloatArray,
+        lightColor: SkColor,
+        surfaceScale: SkScalar,
+        kd: SkScalar,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkLightingImageFilter(
+        light = SkLight.Point(location.copyOf3()),
+        lightColor = lightColor, surfaceScale = surfaceScale,
+        kdOrKs = kd, isDiffuse = true, shininess = 1f, input = input,
+    )
+
+    /**
+     * Spot-light diffuse — point light at [location] aimed at [target],
+     * with a cosine-cutoff cone of half-angle [cutoffAngle] (radians)
+     * and a power-of-cosine falloff exponent [falloffExponent].
+     */
+    public fun SpotLitDiffuse(
+        location: FloatArray,
+        target: FloatArray,
+        falloffExponent: SkScalar,
+        cutoffAngle: SkScalar,
+        lightColor: SkColor,
+        surfaceScale: SkScalar,
+        kd: SkScalar,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkLightingImageFilter(
+        light = SkLight.Spot(location.copyOf3(), target.copyOf3(), falloffExponent, cutoffAngle),
+        lightColor = lightColor, surfaceScale = surfaceScale,
+        kdOrKs = kd, isDiffuse = true, shininess = 1f, input = input,
+    )
+
+    /**
+     * Mirrors Skia's `SkImageFilters::DistantLitSpecular(direction,
+     * lightColor, surfaceScale, ks, shininess, input)` — Blinn-Phong
+     * specular shading with a directional light.
+     *
+     * Per pixel : `out_rgb = ks · max(0, N · H)^shininess · lightColor`
+     * where `H = normalize(L + V)` and `V = (0, 0, 1)` (eye looks
+     * straight down at the surface) ; `out_a = max(out_r, out_g, out_b)`.
+     */
+    public fun DistantLitSpecular(
+        direction: FloatArray,
+        lightColor: SkColor,
+        surfaceScale: SkScalar,
+        ks: SkScalar,
+        shininess: SkScalar,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkLightingImageFilter(
+        light = SkLight.Distant(direction.normalized3()),
+        lightColor = lightColor, surfaceScale = surfaceScale,
+        kdOrKs = ks, isDiffuse = false, shininess = shininess, input = input,
+    )
+
+    /** Point-light specular — counterpart of [DistantLitSpecular] with a point light. */
+    public fun PointLitSpecular(
+        location: FloatArray,
+        lightColor: SkColor,
+        surfaceScale: SkScalar,
+        ks: SkScalar,
+        shininess: SkScalar,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkLightingImageFilter(
+        light = SkLight.Point(location.copyOf3()),
+        lightColor = lightColor, surfaceScale = surfaceScale,
+        kdOrKs = ks, isDiffuse = false, shininess = shininess, input = input,
+    )
+
+    /** Spot-light specular — counterpart of [SpotLitDiffuse] for the Blinn-Phong specular term. */
+    public fun SpotLitSpecular(
+        location: FloatArray,
+        target: FloatArray,
+        falloffExponent: SkScalar,
+        cutoffAngle: SkScalar,
+        lightColor: SkColor,
+        surfaceScale: SkScalar,
+        ks: SkScalar,
+        shininess: SkScalar,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkLightingImageFilter(
+        light = SkLight.Spot(location.copyOf3(), target.copyOf3(), falloffExponent, cutoffAngle),
+        lightColor = lightColor, surfaceScale = surfaceScale,
+        kdOrKs = ks, isDiffuse = false, shininess = shininess, input = input,
+    )
+}
+
+// -- Phase C1.7 — Lighting helpers (Float3 ops, light shapes) ----------------
+
+/**
+ * Light shape sealed hierarchy — picks how the per-pixel light
+ * direction L is computed from the surface point.
+ */
+internal sealed class SkLight {
+    /** Parallel light : L is a constant 3-D unit vector. */
+    internal class Distant(val dir: FloatArray) : SkLight()
+
+    /** Point light at [location] : `L(p) = normalize(location - p)`. */
+    internal class Point(val location: FloatArray) : SkLight()
+
+    /**
+     * Spot light : point light at [location] aimed at [target] with a
+     * cosine-cutoff cone of half-angle [cutoffAngle] radians and a
+     * cosine-power falloff [falloffExponent].
+     */
+    internal class Spot(
+        val location: FloatArray,
+        val target: FloatArray,
+        val falloffExponent: Float,
+        val cutoffAngle: Float,
+    ) : SkLight()
+}
+
+/** Returns a copy of the (3-D) [this] array, padded with zeros if shorter. */
+internal fun FloatArray.copyOf3(): FloatArray {
+    val out = FloatArray(3)
+    for (i in 0 until minOf(3, size)) out[i] = this[i]
+    return out
+}
+
+/** Returns a 3-D unit-length copy of [this] ; defaults to (0, 0, 1) if zero-length. */
+internal fun FloatArray.normalized3(): FloatArray {
+    val v = copyOf3()
+    val mag2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2]
+    if (mag2 < 1e-12f) {
+        return floatArrayOf(0f, 0f, 1f)
+    }
+    val invMag = 1f / kotlin.math.sqrt(mag2)
+    v[0] *= invMag; v[1] *= invMag; v[2] *= invMag
+    return v
 }
 
 // -- Internal concrete implementations --------------------------------------
@@ -1587,13 +1749,7 @@ internal class SkMorphologyImageFilter(
  * transparent black (kDecal). This matches upstream Skia's default
  * behaviour without an explicit cropRect.
  *
- * **Output bbox** : the colour filter's bbox. The displacement
- * filter is sampled at the output coordinates, so its bbox doesn't
- * influence the output size — pixels outside the displacement bbox
- * see "no displacement" (zero offset, since OOB → 0 → 0 - 0.5 →
- * `(-scale/2, -scale/2)` actually, NOT zero). The pre-existing tests
- * use a uniform-grey displacement map (channels all `0x80 = 128`),
- * which gives `dx = dy ≈ 0` after the centre-and-scale transform.
+ * **Output bbox** : the colour filter's bbox.
  */
 internal class SkDisplacementMapImageFilter(
     private val xChannelSelector: SkColorChannel,
@@ -1640,9 +1796,6 @@ internal class SkDisplacementMapImageFilter(
                 val dy = scaledMag * (cy - 0.5f)
 
                 // Sample colour at (x + dx, y + dy) using nearest-neighbour.
-                // `round` is required (not `+ 0.5f).toInt()`) because
-                // toInt truncates toward zero — that's wrong for
-                // negative offsets (e.g. -1.5 → -1 instead of -2).
                 val sxLocal = kotlin.math.round(x + dx).toInt()
                 val syLocal = kotlin.math.round(y + dy).toInt()
                 outBuf[y * outW + x] = if (sxLocal in 0 until outW && syLocal in 0 until outH)
@@ -1672,18 +1825,10 @@ internal class SkDisplacementMapImageFilter(
  * row-major in [kernel] (so `kernel[j * width + i]` is the weight
  * applied to the input sample `(x + i - kCenter.x, y + j - kCenter.y)`).
  *
- * Per output pixel, per channel :
- * ```
- * out = gain · Σ kernel[j, i] · in(x + i - kCenter.x, y + j - kCenter.y) + bias
- * ```
- *
  * Operates in **non-premul** colour space. `convolveAlpha = false`
  * passes alpha through from the centre input pixel ; otherwise
- * alpha is convolved like the colour channels.
- *
- * OOB samples follow [tileMode] : `kDecal` returns transparent
- * black, `kClamp` clamps to the nearest edge, `kRepeat` / `kMirror`
- * tile.
+ * alpha is convolved like the colour channels. OOB samples follow
+ * [tileMode].
  */
 internal class SkMatrixConvolutionImageFilter(
     private val kSize: SkISize,
@@ -1743,4 +1888,171 @@ internal class SkMatrixConvolutionImageFilter(
 
         return FilterResult(SkImage(upW, upH, outBuf), upstream.offsetX, upstream.offsetY)
     }
+}
+
+// -- C1.7 Lighting (full surface : 6 variants) ------------------------------
+
+/**
+ * `SkLightingImageFilter` — shared implementation for all 6 lighting
+ * variants. Treats [input]'s alpha channel as a height map, derives
+ * per-pixel surface normals via a 3×3 Sobel kernel scaled by
+ * [surfaceScale], then evaluates the Phong reflection model at each
+ * pixel.
+ *
+ * **Per pixel** :
+ *  1. `h(x, y) = α(x, y) / 255` — height from input alpha.
+ *  2. Surface normal : `N = normalize(-Sobel_x · surfaceScale,
+ *     -Sobel_y · surfaceScale, 1)`.
+ *  3. Light direction `L` and modulation `m` from [light].
+ *  4. Diffuse : `out_rgb = kdOrKs · max(0, N · L) · lightColor · m`.
+ *     Specular : `H = normalize(L + V)` with `V = (0, 0, 1)` ;
+ *     `out_rgb = kdOrKs · max(0, N · H)^shininess · lightColor · m`.
+ *  5. Output alpha : `max(out_r, out_g, out_b)` (canonical Skia
+ *     behaviour for lighting filters).
+ */
+internal class SkLightingImageFilter(
+    private val light: SkLight,
+    private val lightColor: SkColor,
+    private val surfaceScale: SkScalar,
+    private val kdOrKs: SkScalar,
+    private val isDiffuse: Boolean,
+    private val shininess: SkScalar,
+    private val input: SkImageFilter?,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
+        val upImg = upstream.image
+        val w = upImg.width
+        val h = upImg.height
+        if (w == 0 || h == 0) return upstream
+
+        val outBuf = IntArray(w * h)
+        val lightR = ((lightColor ushr 16) and 0xFF) / 255f
+        val lightG = ((lightColor ushr 8) and 0xFF) / 255f
+        val lightB = (lightColor and 0xFF) / 255f
+
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                // Height at the surface point ; treat OOB as 0.
+                val pz = sampleAlpha(upImg, x, y) / 255f * surfaceScale
+                val sx = sobelX(upImg, x, y) * surfaceScale
+                val sy = sobelY(upImg, x, y) * surfaceScale
+                // Normal = normalize((-sx, -sy, 1)).
+                val nMag2 = sx * sx + sy * sy + 1f
+                val nInvMag = 1f / kotlin.math.sqrt(nMag2)
+                val nx = -sx * nInvMag
+                val ny = -sy * nInvMag
+                val nz = nInvMag
+
+                // Light direction L and modulation m.
+                val lAndM = computeLightDirAndMod(x.toFloat(), y.toFloat(), pz)
+                val lx = lAndM[0]; val ly = lAndM[1]; val lz = lAndM[2]
+                val mod = lAndM[3]
+                if (mod <= 0f) {
+                    outBuf[y * w + x] = 0
+                    continue
+                }
+
+                val coef = if (isDiffuse) {
+                    val nDotL = nx * lx + ny * ly + nz * lz
+                    if (nDotL <= 0f) 0f else kdOrKs * nDotL
+                } else {
+                    // H = normalize(L + V) ; V = (0, 0, 1).
+                    val hx = lx; val hy = ly; val hz = lz + 1f
+                    val hMag2 = hx * hx + hy * hy + hz * hz
+                    val hInv = if (hMag2 < 1e-12f) 0f else 1f / kotlin.math.sqrt(hMag2)
+                    val hxN = hx * hInv; val hyN = hy * hInv; val hzN = hz * hInv
+                    val nDotH = nx * hxN + ny * hyN + nz * hzN
+                    if (nDotH <= 0f) 0f
+                    else kdOrKs * floatPow(nDotH, shininess)
+                }
+                if (coef <= 0f) {
+                    outBuf[y * w + x] = 0
+                    continue
+                }
+
+                val rF = coef * lightR * mod
+                val gF = coef * lightG * mod
+                val bF = coef * lightB * mod
+                val rB = (rF * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val gB = (gF * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val bB = (bF * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val aB = maxOf(rB, gB, bB)
+                outBuf[y * w + x] = (aB shl 24) or (rB shl 16) or (gB shl 8) or bB
+            }
+        }
+
+        return FilterResult(SkImage(w, h, outBuf), upstream.offsetX, upstream.offsetY)
+    }
+
+    /** `[lx, ly, lz, modulation]` per-pixel for the configured light. */
+    private fun computeLightDirAndMod(px: Float, py: Float, pz: Float): FloatArray {
+        return when (val l = light) {
+            is SkLight.Distant -> floatArrayOf(l.dir[0], l.dir[1], l.dir[2], 1f)
+            is SkLight.Point -> {
+                val dx = l.location[0] - px
+                val dy = l.location[1] - py
+                val dz = l.location[2] - pz
+                val mag2 = dx * dx + dy * dy + dz * dz
+                if (mag2 < 1e-12f) floatArrayOf(0f, 0f, 1f, 0f)
+                else {
+                    val inv = 1f / kotlin.math.sqrt(mag2)
+                    floatArrayOf(dx * inv, dy * inv, dz * inv, 1f)
+                }
+            }
+            is SkLight.Spot -> {
+                val dx = l.location[0] - px
+                val dy = l.location[1] - py
+                val dz = l.location[2] - pz
+                val mag2 = dx * dx + dy * dy + dz * dz
+                if (mag2 < 1e-12f) return floatArrayOf(0f, 0f, 1f, 0f)
+                val inv = 1f / kotlin.math.sqrt(mag2)
+                val lx = dx * inv; val ly = dy * inv; val lz = dz * inv
+                // Spot axis : direction from location to target, normalised.
+                val ax = l.target[0] - l.location[0]
+                val ay = l.target[1] - l.location[1]
+                val az = l.target[2] - l.location[2]
+                val aMag2 = ax * ax + ay * ay + az * az
+                if (aMag2 < 1e-12f) return floatArrayOf(lx, ly, lz, 1f)
+                val aInv = 1f / kotlin.math.sqrt(aMag2)
+                val axN = ax * aInv; val ayN = ay * aInv; val azN = az * aInv
+                // Cosine of angle between (-L) and the spot axis.
+                val cosOuter = -(lx * axN + ly * ayN + lz * azN)
+                val cosCutoff = kotlin.math.cos(l.cutoffAngle)
+                if (cosOuter < cosCutoff) {
+                    floatArrayOf(lx, ly, lz, 0f)
+                } else {
+                    val mod = floatPow(cosOuter, l.falloffExponent)
+                    floatArrayOf(lx, ly, lz, mod)
+                }
+            }
+        }
+    }
+
+    /** `pow` for floats — exponent may be non-integer (specular shininess, spot falloff). */
+    private fun floatPow(base: Float, exp: Float): Float =
+        kotlin.math.exp(exp * kotlin.math.ln(base.coerceAtLeast(1e-12f)))
+
+    /** Sobel X gradient of the alpha channel at `(x, y)` ; OOB samples → 0. */
+    private fun sobelX(img: SkImage, x: Int, y: Int): Float {
+        val a = (sampleAlpha(img, x + 1, y - 1) - sampleAlpha(img, x - 1, y - 1)) +
+            2 * (sampleAlpha(img, x + 1, y) - sampleAlpha(img, x - 1, y)) +
+            (sampleAlpha(img, x + 1, y + 1) - sampleAlpha(img, x - 1, y + 1))
+        return a / (8f * 255f)
+    }
+
+    /** Sobel Y gradient of the alpha channel at `(x, y)` ; OOB samples → 0. */
+    private fun sobelY(img: SkImage, x: Int, y: Int): Float {
+        val a = (sampleAlpha(img, x - 1, y + 1) - sampleAlpha(img, x - 1, y - 1)) +
+            2 * (sampleAlpha(img, x, y + 1) - sampleAlpha(img, x, y - 1)) +
+            (sampleAlpha(img, x + 1, y + 1) - sampleAlpha(img, x + 1, y - 1))
+        return a / (8f * 255f)
+    }
+
+    /** Read the alpha byte at `(x, y)`, returning 0 for OOB. */
+    private fun sampleAlpha(img: SkImage, x: Int, y: Int): Int =
+        if (x in 0 until img.width && y in 0 until img.height)
+            (img.peekPixel(x, y) ushr 24) and 0xFF
+        else 0
 }
