@@ -248,9 +248,68 @@ class SkPathOpsTest {
         SkPathOps.Simplify(p)
     }
 
+    // ─── AsWinding (D1.2.h.6.2) ─────────────────────────────────────
+
     @Test
-    fun `AsWinding returns null in D1_0 (not yet implemented)`() {
-        val p = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+    fun `AsWinding returns the input path unchanged when fill is already winding`() {
+        val p = SkPathBuilder()
+            .setFillType(org.skia.foundation.SkPathFillType.kWinding)
+            .addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f))
+            .detach()
+        org.junit.jupiter.api.Assertions.assertSame(p, SkPathOps.AsWinding(p))
+    }
+
+    @Test
+    fun `AsWinding flips kEvenOdd to kWinding on a single-contour rect`() {
+        val p = SkPathBuilder()
+            .setFillType(org.skia.foundation.SkPathFillType.kEvenOdd)
+            .addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f))
+            .detach()
+        val r = SkPathOps.AsWinding(p)
+        assertNotNull(r)
+        assertEquals(org.skia.foundation.SkPathFillType.kWinding, r!!.fillType)
+    }
+
+    @Test
+    fun `AsWinding flips kInverseEvenOdd to kInverseWinding on a single contour`() {
+        val p = SkPathBuilder()
+            .setFillType(org.skia.foundation.SkPathFillType.kInverseEvenOdd)
+            .addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f))
+            .detach()
+        val r = SkPathOps.AsWinding(p)
+        assertNotNull(r)
+        assertEquals(org.skia.foundation.SkPathFillType.kInverseWinding, r!!.fillType)
+    }
+
+    @Test
+    fun `AsWinding on empty path returns empty with target fill`() {
+        val p = SkPathBuilder()
+            .setFillType(org.skia.foundation.SkPathFillType.kEvenOdd)
+            .detach()
+        val r = SkPathOps.AsWinding(p)
+        assertNotNull(r)
+        org.junit.jupiter.api.Assertions.assertTrue(r!!.isEmpty())
+        assertEquals(org.skia.foundation.SkPathFillType.kWinding, r.fillType)
+    }
+
+    @Test
+    fun `AsWinding on multi-contour path falls through to null in this slice`() {
+        val p = SkPathBuilder()
+            .setFillType(org.skia.foundation.SkPathFillType.kEvenOdd)
+            .addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f))
+            .addRect(SkRect.MakeLTRB(20f, 20f, 30f, 30f))
+            .detach()
+        // 2 contours → multi-contour impl deferred → null.
+        assertNull(SkPathOps.AsWinding(p))
+    }
+
+    @Test
+    fun `AsWinding rejects non-finite paths`() {
+        val p = SkPathBuilder()
+            .setFillType(org.skia.foundation.SkPathFillType.kEvenOdd)
+            .moveTo(Float.POSITIVE_INFINITY, 0f)
+            .lineTo(0f, 1f)
+            .detach()
         assertNull(SkPathOps.AsWinding(p))
     }
 
