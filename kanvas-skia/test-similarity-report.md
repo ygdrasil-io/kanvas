@@ -140,6 +140,8 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | NonClosedPathsGM | 96.82% | -0.01% | 1 | 2,267,829 / 2,342,400 | 0, 255, 255, 255 | 0, 56, 55, 55 |
 | OneBadArcGM | 83.67% | = | 1 | 8,367 / 10,000 | 0, 34, 100, 108 | 0, 15, 28, 21 |
 | OvalGM | 94.66% | = | 1 | 1,022,349 / 1,080,000 | 0, 209, 245, 242 | 0, 23, 21, 23 |
+| PatchAlphaTestGM | 41.65% | = | 1 | 57,275 / 137,500 | 0, 40, 126, 137 | 0, 14, 28, 19 |
+| PatchPrimitiveGM | 79.88% | = | 1 | 1,318,015 / 1,650,000 | 0, 255, 255, 255 | 0, 95, 107, 73 |
 | PathArcToSkbug9077GM | 98.38% | = | 1 | 39,350 / 40,000 | 0, 47, 172, 208 | 0, 8, 20, 19 |
 | PathEffectGM | 82.67% | = | 1 | 396,822 / 480,000 | 0, 255, 255, 255 | 0, 225, 225, 225 |
 | PathHugeCrbug800804GM | 89.33% | = | 1 | 26,800 / 30,000 | 0, 255, 255, 255 | 0, 102, 102, 102 |
@@ -214,6 +216,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | TrickyCubicStrokesButtMiterGM | 97.87% | = | 1 | 978,684 / 1,000,000 | 0, 244, 246, 249 | 0, 116, 111, 115 |
 | TrickyCubicStrokesLargeRadiusGM | 98.38% | -0.02% | 1 | 32,237 / 32,768 | 0, 77, 76, 76 | 0, 23, 22, 22 |
 | TrickyCubicStrokesRoundCapsGM | 97.95% | = | 1 | 979,508 / 1,000,000 | 0, 244, 246, 249 | 0, 106, 100, 103 |
+| VerticesCollapsedGM | 100.00% | = | 1 | 2,500 / 2,500 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | WideButtCapsGM | 81.90% | = | 1 | 196,569 / 240,000 | 0, 244, 246, 249 | 0, 179, 186, 187 |
 | XfermodesGM | 90.08% | = | 1 | 1,021,801 / 1,134,300 | 0, 89, 84, 172 | 0, 12, 9, 25 |
 | ZeroControlStrokeGM | 99.48% | = | 1 | 318,344 / 320,000 | 0, 53, 196, 237 | 0, 8, 24, 26 |
