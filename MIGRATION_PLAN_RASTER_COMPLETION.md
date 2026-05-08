@@ -36,7 +36,7 @@
 > | **C2** Path effects extras (kMorph, StrokeAndFill recipe) | 📋 pending | |
 > | **C3** SkEmbossMaskFilter | 📋 pending | |
 > | **C4** drawAnnotation / drawDrawable / drawShadow | 📋 pending | |
-> | **B1** SkPDF (PDFBox adapter) | 📋 pending | |
+> | **B1** SkPDF (PDFBox adapter) | ❌ descoped | No ported GM needs PDF — only `internal_links.cpp` is PDF-specific upstream and isn't ported. See B1 section. |
 > | **B2** SkSVGCanvas | 📋 pending | |
 > | **Q1** SkAutoCanvasRestore Kotlin idiom | 📋 pending | |
 > | **Q2** Canvas wrappers | 📋 pending | |
@@ -187,7 +187,7 @@ What this plan adds :
 - Extra canvas ops (I5, C4)
 - Filter / effect completions (C1, C2, C3)
 - ARGB_4444 + linear sRGB (C5, Q5)
-- Alternative backends (B1, B2)
+- Alternative backends (~~B1~~ descoped, B2)
 ```
 
 ---
@@ -635,14 +635,15 @@ channel after re-decode.
 - `kanvas-skia/src/main/kotlin/org/skia/dm/RasterSink8888.kt`
 - `kanvas-skia/src/main/kotlin/org/skia/dm/RasterSinkF16.kt`
 - `kanvas-skia/src/main/kotlin/org/skia/dm/PictureSink.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/dm/PdfSink.kt` (depends on B1)
+- ~~`kanvas-skia/src/main/kotlin/org/skia/dm/PdfSink.kt`~~ — descoped
+  along with B1 (no ported GM needs PDF, see B1 section)
 - `kanvas-skia/src/main/kotlin/org/skia/dm/SvgSink.kt` (depends on B2)
 - `kanvas-skia/src/main/kotlin/org/skia/dm/Runner.kt` (entry point)
 
 **API surface** :
 ```kotlin
 public interface Sink {
-    public val tag: String  // e.g. "8888", "f16", "pic-8888", "pdf"
+    public val tag: String  // e.g. "8888", "f16", "pic-8888", "svg"
     public fun draw(src: GM): Result
 
     public sealed class Result {
@@ -705,20 +706,55 @@ public data class Report(
     JSON escape for `"` / `\\`). 10/10 green ; full kanvas-skia
     suite **2250 / 2250 green**.
 
-- **D4.4** — CLI flags (`--config`, `--match`, `--blacklist`)
-  matching upstream's syntax.
-  - **LOC** : ~200.
+- **D4.4** ✅ — CLI flags matching upstream's syntax. Two
+  main-side files :
+  [DmCli.kt](kanvas-skia/src/main/kotlin/org/skia/dm/DmCli.kt)
+  parses `--config` / `--match` / `--skip` / `--key` /
+  `--properties`, exposes `resolveSinks()` (tag → live `Sink`
+  via the `8888` / `f16` / `pic-8888` / `pic-f16` registry),
+  `shouldRun(name)` (port of upstream's
+  `CommandLineFlags::ShouldSkip` with `~` / `^` / `$`
+  syntax), `shouldSkipPair(gmName, sinkTag)` (the upstream
+  `--skip <config> <src> <srcOptions> <name>` quadruple
+  walker, with `_` wildcard and `~` negation per upstream's
+  `match` helper) ;
+  [DmMain.kt](kanvas-skia/src/main/kotlin/org/skia/dm/DmMain.kt)
+  wires the parsed CLI into the D4.3 [Runner] and applies
+  the post-run skip filter.
+  Plan called the blacklist flag `--blacklist` ; we go with
+  upstream's actual name `--skip`. Both `--flag value` (greedy
+  multi-value, upstream style) and `--flag=value` (single,
+  POSIX-y) syntaxes are accepted.
+  - **LOC** : ~242 (DmCli) + ~98 (DmMain) + ~275 test = ~615
+    total (cf. plan estimate ~200 — overage covers the
+    upstream-faithful `ShouldSkip` algorithm, the per-pair
+    skip filter, and the end-to-end `DmMain` orchestration).
+  - **Tests** :
+    [DmCliTest.kt](kanvas-skia/src/test/kotlin/org/skia/dm/DmCliTest.kt)
+    (23 — flag parsing in both syntaxes, all 4 `--match`
+    variants (`bare` / `^` / `$` / `^$` / `~`), order-dependent
+    include/exclude semantics, `--skip` per-pair gating with
+    wildcard, sink resolution incl. `null` for unknown tags,
+    end-to-end `DmMain` runs the matrix and applies skip
+    filter, `--key` / `--properties` wired into
+    `Report.toJson()`, error paths : empty `--config`,
+    unknown tag, odd-length pairs). 23/23 green ; full
+    kanvas-skia suite **2292 / 2292 green**.
 
-- **D4.5** — `PdfSink` (after B1) and `SvgSink` (after B2).
-  - **LOC** : ~150 ensemble.
+- **D4.5** — ~~`PdfSink`~~ (descoped along with B1) + `SvgSink`
+  (after B2). PDF half is dropped per the B1 audit (no ported
+  GM needs PDF, only `internal_links.cpp` is PDF-specific
+  upstream and isn't ported). The slice is reduced to the SVG
+  sink alone, depending on B2.
+  - **LOC** : ~75 (SVG only ; was ~150 ensemble).
 
-**Total LOC** : ~700-1100 (excluding B1 / B2).
+**Total LOC** : ~625-925 (excluding B2 ; B1 / PdfSink descoped).
 
 **Validation** : run all GMs through all sinks ; for raster sinks,
 output pixels should be ~identical to direct render (gives 100% iso
-on Picture playback). For PDF/SVG sinks, compare with upstream-
-generated reference PDFs/SVGs (lower fidelity expected — these are
-vector formats).
+on Picture playback). For the SVG sink, compare with upstream-
+generated reference SVGs (lower fidelity expected — vector format).
+PDF sink dropped (see B1 audit).
 
 ---
 
@@ -1210,27 +1246,45 @@ public class SkEmbossMaskFilter private constructor(/* ... */) : SkMaskFilter() 
 
 ## Backends alternatifs raster
 
-### B1 — `SkPDF`
+### B1 — `SkPDF` ❌ descoped
 
-**Skia upstream files** :
-- `include/docs/SkPDFDocument.h`
-- `src/pdf/` (~50 files, ~15000 LOC)
+**Status** : **dropped from the active migration plan**. No GM
+currently in `kanvas-skia/src/main/kotlin/org/skia/tests/` requires
+PDF output to pass its similarity ratchet — the GMs run through the
+raster sink path (`RasterSink8888` / `RasterSinkF16`), and the
+upstream PDF sink is an *additional* output channel, not a
+prerequisite for any GM.
 
-**Kotlin target** :
-- `kanvas-skia/src/main/kotlin/org/skia/pdf/SkPDFDocument.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/pdf/internal/*.kt` (PDF object
-  model, content stream serializer, font subsetting, image embedding)
+**Audit** (2026-05-08) — searched `gm/*.cpp` upstream for `PDF` /
+`SkPDF` references :
 
-**Strategy** : pure-Kotlin PDF writer mirroring Skia's structure.
-Or external lib (e.g. PDFBox via Maven) for v1 with a thin `SkCanvas`
-adapter on top.
+| Upstream GM | PDF role | Ported in kanvas-skia ? |
+|---|---|---|
+| `internal_links.cpp` | PDF-only (`SkAnnotation::kLink_t` ; cliquer-pour-sauter, n'a aucun sens en raster) | No |
+| `fadefilter.cpp` | "renders correctly in 8888, but fails in PDF" — known upstream PDF bug, GM passes in raster | **Yes** (`FadeFilterGM`) |
+| `skbug_4868.cpp` | regression test for an SkPDF rounding bug | **Yes** (`Skbug4868GM`) |
+| `strokes.cpp` | `#ifdef PDF_IS_FIXED_…` — sub-test gated on a PDF fix that never landed | **Yes** (`StrokesGM`) |
+| `xfermodes.cpp` | "PDF has to play some tricks" — narrative comment only | **Yes** (`XfermodesGM`) |
+| `clippedbitmapshaders.cpp` | known PDF clamp bug | No |
+| `crbug_918512.cpp`, `skbug_5321.cpp` | PDF regression tests | No |
 
-**Phase decomposition** : 5+ slices, very large chantier.
+**Conclusion** : the only GM that *needs* PDF is `internal_links.cpp`
+(annotation links), and porting it isn't on the critical path. Every
+other PDF mention is either a comment or a regression test for an
+upstream PDF bug — none of those require kanvas-skia to *emit* PDF.
 
-**Total LOC** : ~10000 (pure-Kotlin) or ~500 (PDFBox adapter).
+**Implication for the `kanvas-skia/src/main/kotlin/org/skia/pdf/`
+package** : the directory is not created.
+[D4.5](#d4--dm-sink-architecture) is reduced to SVG-only.
 
-**Recommandation** : **PDFBox adapter** for v1. Pure-Kotlin only if
-PDF iso-fidelity becomes critical.
+**If PDF becomes necessary later** :
+- Skia upstream files : `include/docs/SkPDFDocument.h`, `src/pdf/`
+  (~50 files, ~15000 LOC).
+- Strategy : pure-Kotlin writer mirroring Skia's structure
+  (~10000 LOC) **or** an external lib (PDFBox via Maven) with a
+  thin `SkCanvas` adapter on top (~500 LOC).
+- Recommendation if revived : **PDFBox adapter** for v1 ; pure-Kotlin
+  only if PDF iso-fidelity becomes critical.
 
 ---
 
@@ -1434,8 +1488,7 @@ DAG of dependencies :
                               ├─ Q5 Linear sRGB diagnostic
                               │    └─ Self-contained
                               │
-                              ├─ B1 SkPDF (PDFBox adapter)
-                              │    └─ Built on I1 for text
+                              ├─ B1 SkPDF ❌ descoped (no GM needs PDF)
                               │
                               ├─ B2 SkSVGCanvas
                               │    └─ Self-contained (filters → SVG <filter>)
@@ -1459,7 +1512,8 @@ DAG of dependencies :
 9. **Q3** SkBBHFactory (~600 LOC, perf for Picture)
 10. **D1** SkPathOps (~9000 LOC, decompose into 3 sub-PRs)
 11. **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception*)
-12. **B1** SkPDF (PDFBox adapter, ~500 LOC)
+12. ~~**B1** SkPDF~~ — ❌ **descoped** (no ported GM needs PDF ;
+    see B1 section). The `pdf/` package is not created.
 13. **B2** SkSVGCanvas (~3000 LOC)
 14. **C3** SkEmbossMaskFilter (~400 LOC)
 15. **I2** Variable fonts + glyph cache (~700 LOC)
@@ -1555,7 +1609,7 @@ kanvas-skia/src/main/kotlin/org/skia/
 ├── encode/                 # NEW — D3 chantier
 ├── dm/                     # NEW — D4 chantier
 ├── shaper/                 # NEW — I4 chantier
-├── pdf/                    # NEW — B1 chantier
+├── # pdf/  ❌ descoped       — B1 not created (no GM needs PDF)
 ├── svg/                    # NEW — B2 chantier
 ├── utils/                  # SkAutoCanvasRestore, PaintFilterCanvas, ... (Q1, Q2)
 ├── tools/                  # ToolUtils, SkRandom, ...
