@@ -633,6 +633,21 @@ internal class SkOpSpan : SkOpSpanBase() {
     fun oppSum(): Int { require(!final()); return fOppSum }
     fun oppValue(): Int { require(!final()); return fOppValue }
 
+    /**
+     * Compute (or read) this span's `windSum`. Upstream version
+     * fires a ray from this span and counts crossings via
+     * [SkOpContour.rayCheck] + the larger `SkPathOpsWinding.cpp`
+     * machinery. We don't have that ported yet ; this stub returns
+     * [windSum] verbatim so callers like [AngleWinding] correctly
+     * see `SK_MinS32` when the value hasn't been set by an earlier
+     * walk and continue without crashing.
+     *
+     * The full ray-tracing implementation lands in a future
+     * D1.2.h.5.x winding slice. Mirrors `SkOpSpan::computeWindSum`
+     * (`SkOpSpan.cpp:378`).
+     */
+    fun computeWindSum(): Int = fWindSum
+
     fun setWindValue(v: Int) {
         require(!final())
         require(v >= 0)
