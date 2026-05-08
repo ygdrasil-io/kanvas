@@ -160,6 +160,8 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
     fun bounds(): SkRect = fBounds
     fun bumpCount() { ++fCount }
     fun contour(): SkOpContour? = fContour
+    /** Convenience : `contour()?.globalState()`. */
+    fun globalState(): SkOpGlobalState? = fContour?.globalState()
     fun count(): Int = fCount
     fun head(): SkOpSpan = fHead
     fun tail(): SkOpSpanBase = fTail
@@ -236,6 +238,19 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
     fun done(): Boolean {
         require(fDoneCount <= fCount)
         return fDoneCount == fCount
+    }
+
+    /**
+     * Decrement [fCount] (and [fDoneCount] when [span] was already
+     * marked done) on a span being unlinked. Mirrors
+     * `SkOpSegment::release(SkOpSpan*)` (`SkOpSegment.cpp:504`).
+     * Note : the actual span-list unlink happens in
+     * [SkOpSpan.release].
+     */
+    fun release(span: SkOpSpan) {
+        if (span.done()) --fDoneCount
+        --fCount
+        require(fCount >= fDoneCount)
     }
 
     /**
