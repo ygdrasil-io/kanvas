@@ -1,8 +1,10 @@
 # Migration plan — Raster pipeline completion (post-Group A)
 
-> **Status** : 🔄 **en cours** — plan vivant. Premiers chantiers livrés
-> (C5, I1, I2, I3, I4 ✅ ; D1.1 ✅ ; D1.2 / I5 🔄). Voir status par
-> chantier ci-dessous.
+> **Status** : 🔄 **en cours** — plan vivant. **15 chantiers livrés**
+> (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 / I4 / I5 /
+> Q1 / Q2 / Q3 / Q5 ✅ ; B1 ❌ descoped). 🔄 D1.0 + D1.1 ✅, D1.2
+> active (g.* + h.0–h.6.4 + h.8 + h.9.0–9.2). 📋 D2 + Q4 restent.
+> Voir status par chantier ci-dessous.
 >
 > Ce document liste les chantiers restants pour atteindre la parité-iso
 > avec Skia raster (`include/core/*.h` + `include/effects/*.h`), hors
@@ -22,7 +24,7 @@
 > | **C5** ARGB_4444 + color-management completion | ✅ shipped (Phase 6s + ARGB_4444 commit) | Display P3 / HDR PQ tests restent (~150 LOC) |
 > | **D1.0** SkPathOps skeleton + TightBounds | ✅ shipped | Entry points `Op` / `Simplify` / `AsWinding` retournent `null` jusqu'à D1.3 |
 > | **D1.1** Foundation (curves, line ops, intersections, TSect) | ✅ shipped (15 sous-slices) | a, b, c, d.1-3, e.1, e.2.a, e.2.b, e.2.c.1-4, e.3 |
-> | **D1.2** Op contour assembly | 🔄 en cours | g.* coincidence + h.0–h.4 (Op fast paths + HandleCoincidence orchestrator) + h.5.* (active edges + ray-tracing winding suite + Op end-to-end wiring) + h.6.0–h.6.4 (Simplify end-to-end + AsWinding fast paths) livrés ; reste finitions |
+> | **D1.2** Op contour assembly | 🔄 en cours | g.* coincidence + h.0–h.4 (Op fast paths + HandleCoincidence orchestrator) + h.5.* (active edges + ray-tracing winding suite + Op end-to-end wiring) + h.6.0–h.6.4 (Simplify end-to-end + AsWinding fast paths) + h.8 (fillMaskFor inverse fill types) + h.9.0–h.9.2 (`SkOpBuilder.resolve` chained-Op fallback, pathops GM harvest, `SkParsePath::FromSVGString`) livrés ; reste finitions |
 > | **D1.3** Top-level entry points | 📋 pending | Bloqué sur D1.2 close |
 > | **D2** SkRuntimeEffect shim | 📋 doc-only | Plan ajouté ; pas d'implem |
 > | **D3** Image codecs | ✅ shipped | D3.1 PNG / D3.2 JPEG / D3.3 GIF+BMP+WBMP / D3.4 WEBP (TwelveMonkeys plugin) / D3.5 PNG+JPEG encoders / D3.6 `SkImage.encodeToData` |
@@ -1811,7 +1813,7 @@ DAG of dependencies :
 
 🔄 **in flight** :
 
-12. 🔄 **D1** SkPathOps (~9000 LOC) — D1.0 + D1.1 ✅ ; D1.2 🔄 (g.* + h.0–h.6.4 shipped, very active) ; D1.3 📋 piecewise alongside D1.2.h.5.* (Op end-to-end) and D1.2.h.6.* (Simplify end-to-end + AsWinding fast paths).
+12. 🔄 **D1** SkPathOps (~9000 LOC) — D1.0 + D1.1 ✅ ; D1.2 🔄 (g.* + h.0–h.6.4 + h.8 + h.9.0–h.9.2 shipped — `SkOpBuilder.resolve` chained-Op fallback, pathops GM harvest, `SkParsePath::FromSVGString` ; very active) ; D1.3 📋 piecewise alongside D1.2.h.5.* (Op end-to-end) and D1.2.h.6.* (Simplify end-to-end + AsWinding fast paths).
 
 📋 **remaining** (independent of D1 ; can ship in parallel) :
 
@@ -1824,20 +1826,22 @@ DAG of dependencies :
 19. 📋 **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception* — large but unlocks SkSL-using GMs).
 20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
 
-**Total estimated LOC remaining** : ~3 700 of new Kotlin code
-(C1 1800 + D2 1500 + Q4 400 ;
-Q5 + C3 + Q2 + Q3 + C2/C4 shipped, D1 in-flight LOC tracked
-separately under the chantier's own slice budget). Decomposes into
-~10 PRs of 80-1500 LOC each.
+**Total estimated LOC remaining** : ~1 900 of new Kotlin code
+(D2 1500 + Q4 400 ; everything else shipped or descoped, D1 in-flight
+LOC tracked separately under the chantier's own slice budget).
+Decomposes into 2 PRs (D2 large, Q4 small).
 
-**Total LOC delivered so far** : ~22 000 across the eleven shipped
-chantiers (D3 / D4 / Q1 / C5 / I1 / I2 / I3 / I4 / I5 / B2) —
-roughly tracking the 26 000 original total estimate after
-discounting B1 (descoped) and what's left.
+**Total LOC delivered so far** : ~25 000 across the **15 shipped
+chantiers** (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 /
+I4 / I5 / Q1 / Q2 / Q3 / Q5) — close to the 26 000 original
+estimate, with B1 (~10 000 LOC) descoped and a few cumulative
+overages on C1 lighting / Q3 / C2 / C4 absorbed. D1 is tracked
+separately at ~9 000 LOC and currently sits ~60 % through D1.2.
 
-**Estimated time remaining** : 2-4 months for a single engineer
-working half-time, or 3-6 weeks full-time, plus whatever D1
-needs to close.
+**Estimated time remaining** : 1–3 weeks full-time on D2 + Q4 (the
+last two iso-fidelity items outside D1), plus whatever D1.2 / D1.3
+need to close. The "raster pipeline completion" goal is **down to D1
++ D2 + Q4** — every other chantier is shipped or formally descoped.
 
 ---
 
