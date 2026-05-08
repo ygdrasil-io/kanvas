@@ -706,9 +706,40 @@ public data class Report(
     JSON escape for `"` / `\\`). 10/10 green ; full kanvas-skia
     suite **2250 / 2250 green**.
 
-- **D4.4** — CLI flags (`--config`, `--match`, `--blacklist`)
-  matching upstream's syntax.
-  - **LOC** : ~200.
+- **D4.4** ✅ — CLI flags matching upstream's syntax. Two
+  main-side files :
+  [DmCli.kt](kanvas-skia/src/main/kotlin/org/skia/dm/DmCli.kt)
+  parses `--config` / `--match` / `--skip` / `--key` /
+  `--properties`, exposes `resolveSinks()` (tag → live `Sink`
+  via the `8888` / `f16` / `pic-8888` / `pic-f16` registry),
+  `shouldRun(name)` (port of upstream's
+  `CommandLineFlags::ShouldSkip` with `~` / `^` / `$`
+  syntax), `shouldSkipPair(gmName, sinkTag)` (the upstream
+  `--skip <config> <src> <srcOptions> <name>` quadruple
+  walker, with `_` wildcard and `~` negation per upstream's
+  `match` helper) ;
+  [DmMain.kt](kanvas-skia/src/main/kotlin/org/skia/dm/DmMain.kt)
+  wires the parsed CLI into the D4.3 [Runner] and applies
+  the post-run skip filter.
+  Plan called the blacklist flag `--blacklist` ; we go with
+  upstream's actual name `--skip`. Both `--flag value` (greedy
+  multi-value, upstream style) and `--flag=value` (single,
+  POSIX-y) syntaxes are accepted.
+  - **LOC** : ~242 (DmCli) + ~98 (DmMain) + ~275 test = ~615
+    total (cf. plan estimate ~200 — overage covers the
+    upstream-faithful `ShouldSkip` algorithm, the per-pair
+    skip filter, and the end-to-end `DmMain` orchestration).
+  - **Tests** :
+    [DmCliTest.kt](kanvas-skia/src/test/kotlin/org/skia/dm/DmCliTest.kt)
+    (23 — flag parsing in both syntaxes, all 4 `--match`
+    variants (`bare` / `^` / `$` / `^$` / `~`), order-dependent
+    include/exclude semantics, `--skip` per-pair gating with
+    wildcard, sink resolution incl. `null` for unknown tags,
+    end-to-end `DmMain` runs the matrix and applies skip
+    filter, `--key` / `--properties` wired into
+    `Report.toJson()`, error paths : empty `--config`,
+    unknown tag, odd-length pairs). 23/23 green ; full
+    kanvas-skia suite **2292 / 2292 green**.
 
 - **D4.5** — ~~`PdfSink`~~ (descoped along with B1) + `SvgSink`
   (after B2). PDF half is dropped per the B1 audit (no ported
