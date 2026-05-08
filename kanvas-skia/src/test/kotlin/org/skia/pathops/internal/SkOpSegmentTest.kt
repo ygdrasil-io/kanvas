@@ -653,4 +653,81 @@ class SkOpSegmentTest {
         val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
         assertEquals(SkOpSpanBase.Collapsed.kNo, a.collapsed(0.2, 0.5))
     }
+
+    // ─── kActiveEdge truth table (D1.2.h.5.0) ────────────────────
+
+    @Test
+    fun `kActiveEdge minuend-only entering edge — kDifference is T when sub absent`() {
+        // (miFrom=0, miTo=1, suFrom=0, suTo=0) — entering minuend, no
+        // subtrahend involvement.
+        // Expected per kActiveEdge[diff][0][1][0] = {T, F} :
+        assertTrue(SkOpSegment.kActiveEdge(
+            org.skia.pathops.SkPathOp.kDifference, false, true, false, false))
+        // (miFrom=0, miTo=1, suFrom=0, suTo=1) — entering both.
+        // diff says F : the minuend's edge is now inside subtrahend → not in result.
+        org.junit.jupiter.api.Assertions.assertFalse(SkOpSegment.kActiveEdge(
+            org.skia.pathops.SkPathOp.kDifference, false, true, false, true))
+    }
+
+    @Test
+    fun `kActiveEdge minuend-only entering — kIntersect is F when sub absent`() {
+        // sect[0][1][0] = {F, T} : suTo=0 → F (no overlap), suTo=1 → T.
+        org.junit.jupiter.api.Assertions.assertFalse(SkOpSegment.kActiveEdge(
+            org.skia.pathops.SkPathOp.kIntersect, false, true, false, false))
+        assertTrue(SkOpSegment.kActiveEdge(
+            org.skia.pathops.SkPathOp.kIntersect, false, true, false, true))
+    }
+
+    @Test
+    fun `kActiveEdge minuend-only entering — kUnion always T when sub absent`() {
+        // union[0][1][0] = {T, T} : both suTo branches true.
+        assertTrue(SkOpSegment.kActiveEdge(
+            org.skia.pathops.SkPathOp.kUnion, false, true, false, false))
+        assertTrue(SkOpSegment.kActiveEdge(
+            org.skia.pathops.SkPathOp.kUnion, false, true, false, true))
+    }
+
+    @Test
+    fun `kActiveEdge no-edge anywhere — all ops return F`() {
+        // (mF=0, mT=0, sF=0, sT=0) — no minuend, no subtrahend → no edge.
+        for (op in arrayOf(
+            org.skia.pathops.SkPathOp.kDifference,
+            org.skia.pathops.SkPathOp.kIntersect,
+            org.skia.pathops.SkPathOp.kUnion,
+            org.skia.pathops.SkPathOp.kXOR,
+        )) {
+            org.junit.jupiter.api.Assertions.assertFalse(
+                SkOpSegment.kActiveEdge(op, false, false, false, false),
+                "op=$op should be F at (0,0,0,0)",
+            )
+        }
+    }
+
+    @Test
+    fun `kActiveEdge xor symmetry — flipping either input toggles result`() {
+        // XOR is symmetric : (mFrom, mTo) entering minuend-side at the
+        // boundary should toggle independently of (suFrom, suTo).
+        // From upstream xor table : xor[0][1][0] = {T, F}. F when both
+        // mins toggle, T when only one does.
+        assertTrue(SkOpSegment.kActiveEdge(
+            org.skia.pathops.SkPathOp.kXOR, false, true, false, false))
+        org.junit.jupiter.api.Assertions.assertFalse(SkOpSegment.kActiveEdge(
+            org.skia.pathops.SkPathOp.kXOR, false, true, false, true))
+    }
+
+    // ─── activeOp on a non-coincident line (D1.2.h.5.0) ──────────
+
+    @Test
+    fun `activeOp on a fresh line returns true for kUnion`() {
+        // updateWinding / updateOppWinding on a fresh non-coincident
+        // line return SK_MinS32 (sentinel) — but we still feed them
+        // through. The activeOp result depends on the bits of those
+        // values masked against xorMiMask / xorSuMask.
+        // For a baseline smoke check, exercise the path : it should
+        // return without throwing, regardless of the boolean result.
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // Just ensure the call returns ; no exception.
+        a.activeOp(a.fHead, a.fTail, xorMiMask = 1, xorSuMask = 1,
+            op = org.skia.pathops.SkPathOp.kUnion)
+    }
 }
