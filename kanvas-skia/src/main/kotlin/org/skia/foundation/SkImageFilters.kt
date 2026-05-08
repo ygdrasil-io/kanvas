@@ -205,6 +205,40 @@ public object SkImageFilters {
     /** Convenience overload — `Crop(rect, kDecal, input)`. */
     public fun Crop(rect: SkRect, input: SkImageFilter? = null): SkImageFilter =
         Crop(rect, SkTileMode.kDecal, input)
+
+    // ─── C1.2 — Tile + Magnifier ─────────────────────────────────────
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Tile(srcRect, dstRect, input)` —
+     * replicates [input] sampled in [srcRect] across [dstRect]. The
+     * implicit tile mode is kRepeat ; for clamp / mirror / decal use
+     * [Crop] instead.
+     *
+     * Output dimensions match `dstRect`. Empty `srcRect` yields a
+     * transparent-black `dstRect`-sized output, matching upstream's
+     * "empty tile" semantic.
+     */
+    public fun Tile(srcRect: SkRect, dstRect: SkRect, input: SkImageFilter? = null): SkImageFilter =
+        SkTileImageFilter(srcRect, dstRect, input)
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Magnifier(lensBounds, zoom,
+     * inset, sampling, input)` — radial-ish lens distortion. Inside
+     * [lensBounds], the input is magnified by [zoomAmount] around
+     * the lens centre ; pixels within [inset] of the lens edge fade
+     * smoothly back to the un-magnified pass-through.
+     *
+     * `zoomAmount <= 0` is treated as a no-op (returns input
+     * unchanged). `inset` is pinned to `>= 0.0001f` to avoid
+     * division-by-zero in the blend factor.
+     */
+    public fun Magnifier(
+        lensBounds: SkRect,
+        zoomAmount: SkScalar,
+        inset: SkScalar,
+        sampling: SkSamplingOptions = SkSamplingOptions.Default,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkMagnifierImageFilter(lensBounds, zoomAmount, inset, sampling, input)
 }
 
 // -- Internal concrete implementations --------------------------------------
@@ -691,35 +725,201 @@ internal class SkCropImageFilter(
         return FilterResult(SkImage(outW, outH, outBuf), outOffX, outOffY)
     }
 
-    private fun sampleWithTileMode(img: SkImage, sx: Int, sy: Int): Int {
-        val w = img.width
-        val h = img.height
-        if (w == 0 || h == 0) return 0
-        if (sx in 0 until w && sy in 0 until h) return img.peekPixel(sx, sy)
-        return when (tileMode) {
-            SkTileMode.kDecal -> 0
-            SkTileMode.kClamp -> img.peekPixel(sx.coerceIn(0, w - 1), sy.coerceIn(0, h - 1))
-            SkTileMode.kRepeat -> img.peekPixel(positiveMod(sx, w), positiveMod(sy, h))
-            SkTileMode.kMirror -> img.peekPixel(mirrorMod(sx, w), mirrorMod(sy, h))
+    private fun sampleWithTileMode(img: SkImage, sx: Int, sy: Int): Int =
+        sampleImageWithTileMode(img, sx, sy, tileMode)
+}
+
+// -- C1.2 Tile + Magnifier ---------------------------------------------------
+
+/**
+ * `Tile` — replicates [input] sampled in [src] across [dst], with
+ * implicit kRepeat tiling. Mirrors upstream Skia's
+ * `SkImageFilters::Tile(src, dst, input)`.
+ *
+ * Output dimensions match `dst`. For each output pixel `(x, y)` in
+ * the dst rect, we map back to a `(sx, sy)` in the src rect via
+ * `sx = src.left + ((x - dst.left) * src.width / dst.width) mod
+ * src.width`, then sample the upstream filter result at that
+ * coordinate. The wrap-around uses the [positiveMod] helper shared
+ * with [SkCropImageFilter]'s kRepeat path.
+ *
+ * Same identity-source convention as the rest of the family : `null`
+ * input means "tile the rasterised source directly".
+ */
+internal class SkTileImageFilter(
+    private val src: SkRect,
+    private val dst: SkRect,
+    private val input: SkImageFilter?,
+) : SkImageFilter() {
+
+    override fun filterImage(srcImg: SkImage, ctm: SkMatrix): FilterResult {
+        val upstream = input?.filterImage(srcImg, ctm) ?: FilterResult(srcImg, 0, 0)
+        val upImg = upstream.image
+        val upOffX = upstream.offsetX
+        val upOffY = upstream.offsetY
+
+        val outW = kotlin.math.max(1, kotlin.math.ceil(dst.width().toDouble()).toInt())
+        val outH = kotlin.math.max(1, kotlin.math.ceil(dst.height().toDouble()).toInt())
+        val outOffX = kotlin.math.floor(dst.left.toDouble()).toInt()
+        val outOffY = kotlin.math.floor(dst.top.toDouble()).toInt()
+
+        val srcW = kotlin.math.max(0, kotlin.math.ceil(src.width().toDouble()).toInt())
+        val srcH = kotlin.math.max(0, kotlin.math.ceil(src.height().toDouble()).toInt())
+        // Degenerate src ⇒ nothing to tile from. Fill with transparent
+        // black, output sized to dst (matches upstream's "empty tile"
+        // semantic).
+        if (srcW == 0 || srcH == 0) {
+            return FilterResult(SkImage(outW, outH, IntArray(outW * outH)), outOffX, outOffY)
         }
-    }
 
-    /** Mathematical modulo : `((n % m) + m) % m` so result is in `[0, m)`. */
-    private fun positiveMod(n: Int, m: Int): Int {
-        val r = n % m
-        return if (r < 0) r + m else r
+        // **Pure repeat tiling** : output (x, y) at dst-relative pos
+        // (rx, ry) = (x, y) maps to src-relative pos
+        // `(rx mod srcW, ry mod srcH)`. The src-relative pos is then
+        // anchored at `src.origin` for the upstream lookup. No
+        // scaling — `Tile` matches upstream's "tile across dst"
+        // semantic, which is implicit kRepeat with no zoom.
+        val srcLeftI = kotlin.math.floor(src.left.toDouble()).toInt()
+        val srcTopI = kotlin.math.floor(src.top.toDouble()).toInt()
+        val outBuf = IntArray(outW * outH)
+        for (y in 0 until outH) {
+            val syRel = positiveMod(y, srcH)
+            val absSrcY = srcTopI + syRel
+            val upY = absSrcY - upOffY
+            for (x in 0 until outW) {
+                val sxRel = positiveMod(x, srcW)
+                val absSrcX = srcLeftI + sxRel
+                val upX = absSrcX - upOffX
+                outBuf[y * outW + x] = if (upX in 0 until upImg.width && upY in 0 until upImg.height)
+                    upImg.peekPixel(upX, upY) else 0
+            }
+        }
+        return FilterResult(SkImage(outW, outH, outBuf), outOffX, outOffY)
     }
+}
 
-    /**
-     * Mirror-mod : period = `2*m`, where `[0, m)` is direct and
-     * `[m, 2m)` mirrors back. Matches upstream Skia's `kMirror` tile
-     * mode for raster shaders.
-     */
-    private fun mirrorMod(n: Int, m: Int): Int {
-        if (m == 0) return 0
-        val twoM = 2 * m
-        var r = n % twoM
-        if (r < 0) r += twoM
-        return if (r < m) r else twoM - 1 - r
+/**
+ * `Magnifier` — radial-ish lens distortion. Mirrors upstream Skia's
+ * `SkImageFilters::Magnifier(lensBounds, zoomAmount, inset, sampling, input)`.
+ *
+ * Algorithm per pixel `p = (x, y)` :
+ *  - Outside [lensBounds] : pass through `input.eval(p)`.
+ *  - Inside [lensBounds] : sample `input.eval(lensBounds.center +
+ *    (p - lensBounds.center) / zoom)` — i.e. zoom into the lens
+ *    centre by [zoomAmount]. The closer to the lens edge, the
+ *    closer the sample is to `p` itself (smooth blend over a band
+ *    of width [inset]).
+ *
+ * The smooth blend formula matches upstream Skia : for each pixel
+ * `inside`, `t = clamp(min_distance_from_edge / inset, 0, 1)`
+ * (distance to the nearest lens edge, normalised by the inset
+ * width), then the sample coord is `lerp(p, magnified_p, t)`. So
+ * exactly at the edge `t = 0` ⇒ pass-through ; in the centre
+ * `t = 1` ⇒ full magnification.
+ *
+ * `sampling` is plumbed for source-compat ; the C1.2 implementation
+ * uses kNearest. A future bilerp pass can swap in if a GM demands
+ * sub-pixel precision.
+ */
+internal class SkMagnifierImageFilter(
+    private val lensBounds: SkRect,
+    private val zoom: SkScalar,
+    private val inset: SkScalar,
+    @Suppress("unused") private val sampling: SkSamplingOptions,
+    private val input: SkImageFilter?,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
+        val upImg = upstream.image
+        val upOffX = upstream.offsetX
+        val upOffY = upstream.offsetY
+        val outW = upImg.width
+        val outH = upImg.height
+        if (outW == 0 || outH == 0 || zoom <= 0f) return upstream
+
+        val cx = (lensBounds.left + lensBounds.right) * 0.5f
+        val cy = (lensBounds.top + lensBounds.bottom) * 0.5f
+        val invZoom = 1f / zoom
+        val insetSafe = inset.coerceAtLeast(0.0001f) // avoid div-by-0
+
+        val outBuf = IntArray(outW * outH)
+        for (y in 0 until outH) {
+            // Map output (x, y) to device-space pos via upstream offset.
+            val devY = (y + upOffY).toFloat()
+            for (x in 0 until outW) {
+                val devX = (x + upOffX).toFloat()
+                val pixel = if (devX < lensBounds.left || devX >= lensBounds.right ||
+                    devY < lensBounds.top || devY >= lensBounds.bottom
+                ) {
+                    // Outside the lens — passthrough.
+                    upImg.peekPixel(x, y)
+                } else {
+                    // Inside the lens — compute the distance to the
+                    // nearest lens edge for the inset blend factor.
+                    val dLeft = devX - lensBounds.left
+                    val dRight = lensBounds.right - devX
+                    val dTop = devY - lensBounds.top
+                    val dBottom = lensBounds.bottom - devY
+                    val minEdgeDist = minOf(dLeft, dRight, dTop, dBottom)
+                    val t = (minEdgeDist / insetSafe).coerceIn(0f, 1f)
+                    // Sample coord lerped between identity and full magnification.
+                    // Full magnification : sampleX = cx + (devX - cx) * invZoom.
+                    val magX = cx + (devX - cx) * invZoom
+                    val magY = cy + (devY - cy) * invZoom
+                    val sampleX = devX + (magX - devX) * t
+                    val sampleY = devY + (magY - devY) * t
+                    // Translate back to upstream local coords + nearest sample.
+                    val sxLocal = (sampleX - upOffX + 0.5f).toInt()
+                    val syLocal = (sampleY - upOffY + 0.5f).toInt()
+                    if (sxLocal in 0 until outW && syLocal in 0 until outH) {
+                        upImg.peekPixel(sxLocal, syLocal)
+                    } else {
+                        0
+                    }
+                }
+                outBuf[y * outW + x] = pixel
+            }
+        }
+        return FilterResult(SkImage(outW, outH, outBuf), upOffX, upOffY)
     }
+}
+
+// -- Shared tile-mode helpers (factored from SkCropImageFilter for C1.2) ----
+
+/** Sample [img] at integer coords with the given [tileMode] for OOB. */
+private fun sampleImageWithTileMode(
+    img: SkImage,
+    sx: Int,
+    sy: Int,
+    tileMode: SkTileMode,
+): Int {
+    val w = img.width
+    val h = img.height
+    if (w == 0 || h == 0) return 0
+    if (sx in 0 until w && sy in 0 until h) return img.peekPixel(sx, sy)
+    return when (tileMode) {
+        SkTileMode.kDecal -> 0
+        SkTileMode.kClamp -> img.peekPixel(sx.coerceIn(0, w - 1), sy.coerceIn(0, h - 1))
+        SkTileMode.kRepeat -> img.peekPixel(positiveMod(sx, w), positiveMod(sy, h))
+        SkTileMode.kMirror -> img.peekPixel(mirrorMod(sx, w), mirrorMod(sy, h))
+    }
+}
+
+/** Mathematical modulo : `((n % m) + m) % m` so result is in `[0, m)`. */
+private fun positiveMod(n: Int, m: Int): Int {
+    val r = n % m
+    return if (r < 0) r + m else r
+}
+
+/**
+ * Mirror-mod : period = `2*m`, where `[0, m)` is direct and `[m,
+ * 2m)` mirrors back. Matches upstream Skia's `kMirror` tile mode
+ * for raster shaders.
+ */
+private fun mirrorMod(n: Int, m: Int): Int {
+    if (m == 0) return 0
+    val twoM = 2 * m
+    var r = n % twoM
+    if (r < 0) r += twoM
+    return if (r < m) r else twoM - 1 - r
 }
