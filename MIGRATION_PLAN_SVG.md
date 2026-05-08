@@ -312,33 +312,79 @@ when rendered in a stock SVG engine (browser, Batik) is.
   (+47 vs B2.3 baseline ; 14 new image+gradient tests, the rest
   are upstream pathops slices that merged in parallel).
 
-### B2.5 — D4.5 SvgSink wiring ✏️ ~80 LOC
+### B2.5 — D4.5 SvgSink wiring ✅ shipped
 
-Once B2.1–B2.4 land, D4.5 SvgSink is a thin shell :
+Closes the SVG mini plan. Wires the [SkSVGCanvas](kanvas-skia/src/main/kotlin/org/skia/svg/SkSVGCanvas.kt)
+chain (B2.1 → B2.4) into the DM matrix as a fifth sink alongside
+`8888` / `f16` / `pic-8888` / `pic-f16`.
 
-- **`SvgSink`** in `org.skia.dm` — `Sink` impl that allocates a
-  `StringWriter`, builds an `SkSVGCanvas` over it, runs `gm.draw`,
-  flushes, returns the bytes (`ByteArray.fromUtf8`).
-- **`tag = "svg"`**, **`fileExtension = "svg"`**.
-- Register with the [DmCli registry](kanvas-skia/src/main/kotlin/org/skia/dm/DmCli.kt)'s
-  `KNOWN_CONFIGS` so `--config svg` resolves.
-- **Result type** — `Sink.Result` currently carries an `SkBitmap`
-  ; SVG output is bytes, not pixels. Two options :
-    1. Add `Sink.Result.Bytes(bytes, mimeType)` (the plan-sketch
-       in the original D4 section flagged this as a future
-       extension).
-    2. Render the SVG to a raster bitmap via Batik / a stock SVG
-       engine and return the rasterised bitmap.
-  **Pick (1)** — it's the cleaner extension and keeps SvgSink
-  closer to upstream's "vector sinks emit bytes, not pixels"
-  convention. The D4.3 [Runner](kanvas-skia/src/main/kotlin/org/skia/dm/Runner.kt)
-  needs a small extension for the new variant : MD5 hashes the
-  bytes directly (no PNG re-encode).
-- **Tests** — run a representative subset of GMs (rect / path /
-  clip / gradient / image, ~5 GMs) through `SvgSink` ; parse the
-  output with `DocumentBuilder` to confirm well-formedness ; assert
-  the SVG contains the expected structural anchors (one
-  `<rect>` / `<path>` per draw call, etc.).
+- **[SvgSink](kanvas-skia/src/main/kotlin/org/skia/dm/SvgSink.kt)** —
+  `Sink` impl that allocates a `StringWriter`, builds an
+  `SkSVGCanvas` over it, drives `gm.draw`, flushes, and returns
+  the UTF-8 bytes wrapped in [Sink.Result.Bytes].
+  - `tag = "svg"`, `fileExtension = "svg"`.
+  - GM-level `bgColor()` is honoured by emitting a full-viewport
+    rect when non-default (the SVG default background is
+    transparent, so emitting a white rect for every default-bg GM
+    would be noise).
+  - Wraps `gm.draw` exceptions as [Sink.Result.Error] with a
+    `"SvgSink[<gmName>]: <message>"` prefix.
+- **[Sink.Result.Bytes](kanvas-skia/src/main/kotlin/org/skia/dm/Sink.kt)**
+  — new variant on the sealed `Result` hierarchy. The plan sketch
+  in [MIGRATION_PLAN_RASTER_COMPLETION.md § D4](MIGRATION_PLAN_RASTER_COMPLETION.md)
+  flagged this as a future extension ; B2.5 makes it real. Carries
+  `bytes: ByteArray` + `mimeType: String` (typically
+  `"image/svg+xml"`). Custom `equals` / `hashCode` for content
+  comparison since `data class` defaults to reference equality on
+  arrays.
+- **[Sink.fileExtension](kanvas-skia/src/main/kotlin/org/skia/dm/Sink.kt)**
+  — new property on the [Sink] interface (default `"png"` so the
+  raster sinks don't have to declare). Mirrors upstream's
+  `Sink::fileExtension()`. The [Runner] consumes it for the
+  per-record `extension` field — B2.5 also drops the previous
+  hardcoded `"png"` literal in [Runner.buildPassRecord].
+- **[Runner](kanvas-skia/src/main/kotlin/org/skia/dm/Runner.kt)**
+  extended to switch on the new variant : `Sink.Result.Bytes` →
+  `buildBytesRecord` which hashes the raw bytes directly (no PNG
+  re-encode — vector formats are already canonical) and leaves the
+  raster classification fields empty (`colorType` / `alphaType` /
+  `gamut` / `transferFn` / `colorDepth` = `""`).
+- **[DmCli](kanvas-skia/src/main/kotlin/org/skia/dm/DmCli.kt)** —
+  `"svg"` joins `KNOWN_CONFIGS` and `resolveOneSink` ; `--config svg`
+  now resolves to a fresh `SvgSink` and mixed matrices like
+  `--config 8888 svg` work.
+- **`TestUtils.runGmTest`** — extended `when` to handle the new
+  `Bytes` branch as an `IllegalStateException` (the function
+  expects raster output ; F16 sink can't return Bytes).
+- **`SinkTest`** — extended the "exhaustive sealed `when`" sanity
+  test to assert the new trio (`Ok` / `Bytes` / `Error`).
+
+**Tests** :
+[SvgSinkTest.kt](kanvas-skia/src/test/kotlin/org/skia/dm/SvgSinkTest.kt)
+(14) — `tag` / `fileExtension`, `Bytes` payload + MIME type +
+parseable XML, GM draw ops surfaced in output, default-bg silence
+vs non-default bg-rect emission, exception → Error wrap, Runner
+produces `Bytes`-shaped record with `extension=svg` + empty raster
+fields, **MD5 over raw bytes equals `MessageDigest.getInstance("MD5")`
+output** (no PNG re-encode), `dm.json` ext field reflects `"svg"`,
+DmCli `KNOWN_CONFIGS` membership + single-config resolution + mixed
+8888+svg matrix, `Sink.Result.Bytes` content equality + inequality
+(both bytes and mime as discriminators).
+
+**LOC** : ~74 main (SvgSink) + ~46 main delta on Sink (Result.Bytes
+variant + fileExtension property) + ~22 main delta on Runner
+(Bytes branch + buildBytesRecord) + ~3 main delta on DmCli (one
+config registration line + one resolveOneSink branch) + ~1 main
+delta on TestUtils + ~1 main delta on SinkTest = **~147 main +
+~221 test = 368 total** (cf. plan estimate ~80 main + ~120 test ;
+overage covers the Sink interface widening (`fileExtension` +
+`Result.Bytes` data class with custom equals/hashCode), the
+exhaustiveness updates in callers, and the wider DmCli /
+TestUtils plumbing).
+
+**Status** : full kanvas-skia suite **2417 / 2417 green** (+23 vs
+B2.4 ; 14 new SvgSink tests, the rest are upstream pathops slices
+that merged in parallel). **SVG mini plan closes**.
 
 ## Total LOC
 
@@ -348,8 +394,8 @@ Once B2.1–B2.4 land, D4.5 SvgSink is a thin shell :
 | B2.2 ✅ | **126** (108 SVG + 18 SkDashPathEffect ; planned ~200) | **252** (planned ~80) |
 | B2.3 ✅ | **155** (planned ~150) | **243** (planned ~80) |
 | B2.4 ✅ | **249** (189 SVG + 60 shader accessors ; planned ~250) | **340** (planned ~120) |
-| B2.5 | ~80 | ~120 |
-| **Total** | **~1037** (so far : 957 actual + 80 planned) | **~1250** (so far : 1130 actual + 120 planned) |
+| B2.5 ✅ | **147** (74 SvgSink + 46 Sink + 22 Runner + 5 DmCli/test plumbing ; planned ~80) | **221** (planned ~120) |
+| **Total** | **1104** (all 5 slices shipped) | **1351** (all 5 slices shipped) |
 
 vs. the original B2 estimate of ~3000 main + ~700 test (text +
 filters + saveLayer + non-clamp shaders + color filters all
@@ -382,8 +428,23 @@ contribute the missing ~2000 LOC).
 
 ## Status
 
-🔄 **in progress** — B2.1 ✅ shipped, B2.2 / B2.3 / B2.4 / B2.5
-📋 pending. The skeleton + geometry serialiser is on `master` and
-the full kanvas-skia suite is **2330 / 2330 green** with the new
-SVG package on the classpath. Pickup B2.2 next when the schedule
-allows ; not blocking any other open chantier.
+✅ **closed** — all 5 slices shipped. B2.1 ✅ skeleton + geometry,
+B2.2 ✅ paint surface, B2.3 ✅ clip, B2.4 ✅ image + gradients,
+B2.5 ✅ D4.5 SvgSink wiring. Full kanvas-skia suite **2417 / 2417
+green** with the SVG canvas + sink on the classpath, `--config svg`
+resolves, and `Runner` emits `dm.json` records carrying
+`"ext": "svg"` for SVG output.
+
+**What this delivers** :
+- A vector debug channel — every existing GM can be re-rendered as
+  SVG simply by adding `--config svg` to the DM CLI.
+- A complete D4 matrix : 5 sinks (`8888`, `f16`, `pic-8888`,
+  `pic-f16`, `svg`).
+- The `Sink.Result.Bytes` extension hook so future vector / streaming
+  sinks (e.g. a revived `PdfSink`) can plug in without touching the
+  Runner's contract.
+
+**What's not (deliberately) covered** — see [Out (descoped, with
+revival path)](#out-descoped-with-revival-path) for the catalogue :
+text, filters, saveLayer, color filters, non-clamp bitmap shader
+modes (each has a "revive when…" trigger).

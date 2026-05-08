@@ -150,12 +150,14 @@ class SinkTest {
     }
 
     @Test
-    fun `Sink Result Ok and Error are distinguishable via sealed when`() {
+    fun `Sink Result Ok and Error and Bytes are distinguishable via sealed when`() {
         // Sanity that the sealed hierarchy is exhaustive in a `when` —
-        // ensures future PDF / SVG additions to the sealed class force
-        // call sites to update.
+        // any future Result variant must force call sites to update.
+        // B2.5 added Bytes (vector outputs) ; the test now asserts the
+        // exhaustive trio.
         fun describe(r: Sink.Result): String = when (r) {
             is Sink.Result.Ok -> "ok-${r.bitmap.width}x${r.bitmap.height}"
+            is Sink.Result.Bytes -> "bytes-${r.bytes.size}-${r.mimeType}"
             is Sink.Result.Error -> "error-${r.message}"
         }
         val ok = RasterSink8888().draw(TwoSquaresGM())
