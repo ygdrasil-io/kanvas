@@ -13,6 +13,8 @@
  * D1.2.b.2.a — should be `end - start > 16`, not `start < 8 && end > 23`).
  * Phase D1.2.b.2.c — end-of-curve probes (`endToSide` / `midToSide` /
  * `checkParallel` / `endsIntersect`).
+ * Phase D1.2.b.2.d — sort drivers (`orderable` / `after` / `insert` /
+ * `merge`). With this slice the SkOpAngle CCW sort is fully ported.
  *
  * # What is an angle ?
  *
@@ -947,6 +949,235 @@ internal class SkOpAngle {
         return checkParallel(rh)
     }
 
-    // ─── Deferred (D1.2.b.2.d) ──────────────────────────────────
-    // - orderable / after / insert / merge
+    // ─── Sort drivers (D1.2.b.2.d) ─────────────────────────────────
+
+    /**
+     * Pairwise CCW comparison. Returns :
+     *  - 0  : `this` sorts CW of [rh] (`this < rh`)
+     *  - 1  : `this` sorts CCW of [rh] (`this > rh`)
+     *  - -1 : the pair is unorderable
+     *
+     * Mirrors `SkOpAngle::orderable` (`SkOpAngle.cpp:914`). Sets
+     * [fUnorderable] on both sides when the math underflows.
+     */
+    fun orderable(rh: SkOpAngle): Int {
+        val result: Int
+        if (!fPart.isCurve()) {
+            if (!rh.fPart.isCurve()) {
+                // Line vs line : compare tangent half-line cross-product.
+                val leftX = fTangentHalf.dx()
+                val leftY = fTangentHalf.dy()
+                val rightX = rh.fTangentHalf.dx()
+                val rightY = rh.fTangentHalf.dy()
+                val xRy = leftX * rightY
+                val rxY = rightX * leftY
+                if (xRy == rxY) {
+                    if (leftX * rightX < 0 || leftY * rightY < 0) return 1 // exactly 180°
+                    return markUnorderable(rh)
+                }
+                // x_ry == rx_y signals an undetected coincidence ; in
+                // upstream this is an assert. We trust the input here.
+                return if (xRy < rxY) 1 else 0
+            }
+            result = lineOnOneSide(rh, false)
+            if (result >= 0) return result
+            if (fUnorderable || approximately_zero(rh.fSide)) return markUnorderable(rh)
+        } else if (!rh.fPart.isCurve()) {
+            result = rh.lineOnOneSide(this, false)
+            if (result >= 0) return if (result != 0) 0 else 1
+            if (rh.fUnorderable || approximately_zero(fSide)) return markUnorderable(rh)
+        } else {
+            val hullResult = convexHullOverlaps(rh)
+            if (hullResult >= 0) return hullResult
+        }
+        return if (endsIntersect(rh)) 1 else 0
+    }
+
+    private fun markUnorderable(rh: SkOpAngle): Int {
+        fUnorderable = true
+        rh.fUnorderable = true
+        return -1
+    }
+
+    /**
+     * Decide whether `this` should be inserted *after* [test] in
+     * the CCW loop. The decision is a 3-way comparison among
+     * `(test, this, test.next)`. Returns true when `this` fits
+     * between [test] and `test.next` going CCW.
+     *
+     * Mirrors `SkOpAngle::after` (`SkOpAngle.cpp:74`). Restores each
+     * angle's `fPart.fCurve` to the original curve at the entry,
+     * re-aligned to a common origin.
+     */
+    fun after(test: SkOpAngle): Boolean {
+        val lh = test
+        val rh = lh.fNext!!
+        require(lh !== rh)
+        // Re-align all 3 curves to a common origin (the floating-point
+        // intersections may have drifted ; we want exact matching here).
+        fPart.fCurve.copyFrom(fOriginalCurvePart)
+        lh.fPart.fCurve.copyFrom(lh.fOriginalCurvePart)
+        lh.fPart.fCurve[0] = fPart.fCurve[0]
+        rh.fPart.fCurve.copyFrom(rh.fOriginalCurvePart)
+        rh.fPart.fCurve[0] = fPart.fCurve[0]
+        if (lh.fComputeSector && !lh.computeSector()) return true
+        if (fComputeSector && !computeSector()) return true
+        if (rh.fComputeSector && !rh.computeSector()) return true
+        val ltrOverlap = ((lh.fSectorMask or rh.fSectorMask) and fSectorMask) != 0
+        val lrOverlap = (lh.fSectorMask and rh.fSectorMask) != 0
+        var lrOrder: Int
+        if (!lrOverlap) {
+            if (!ltrOverlap) {
+                // No sector overlap among the three : fall back to
+                // start-comparison parity.
+                return ((lh.fSectorEnd > rh.fSectorStart) xor
+                        (fSectorStart > lh.fSectorEnd) xor
+                        (fSectorStart > rh.fSectorStart))
+            }
+            // The "12-to-20 gap" zone is uncertain — treat as unordered.
+            val lrGap = (rh.fSectorStart - lh.fSectorStart + 32) and 0x1f
+            lrOrder = if (lrGap > 20) 0 else if (lrGap > 11) -1 else 1
+        } else {
+            lrOrder = lh.orderable(rh)
+            if (!ltrOverlap && lrOrder >= 0) return lrOrder == 0
+        }
+        val ltOrder = if ((lh.fSectorMask and fSectorMask) != 0) {
+            lh.orderable(this)
+        } else {
+            val ltGap = (fSectorStart - lh.fSectorStart + 32) and 0x1f
+            if (ltGap > 20) 0 else if (ltGap > 11) -1 else 1
+        }
+        val trOrder = if ((rh.fSectorMask and fSectorMask) != 0) {
+            orderable(rh)
+        } else {
+            val trGap = (rh.fSectorStart - fSectorStart + 32) and 0x1f
+            if (trGap > 20) 0 else if (trGap > 11) -1 else 1
+        }
+        val ltArr = intArrayOf(ltOrder); alignmentSameSide(lh, ltArr)
+        val trArr = intArrayOf(trOrder); alignmentSameSide(rh, trArr)
+        val ltFinal = ltArr[0]; val trFinal = trArr[0]
+        if (lrOrder >= 0 && ltFinal >= 0 && trFinal >= 0) {
+            return if (lrOrder != 0) (ltFinal and trFinal) != 0
+                   else (ltFinal or trFinal) != 0
+        }
+        // Not enough info — try the opposite-planes fallback rules.
+        if (ltFinal == 0 && lrOrder == 0) {
+            return lh.oppositePlanes(this)
+        } else if (ltFinal == 1 && trFinal == 0) {
+            return oppositePlanes(rh)
+        } else if (lrOrder == 1 && trFinal == 1) {
+            return lh.oppositePlanes(rh)
+        }
+        // Last resort : if all three are line-only, try original-side
+        // sort against shared endpoints.
+        if ((fUnorderable || lh.fUnorderable || rh.fUnorderable) &&
+            !fPart.isCurve() && !lh.fPart.isCurve() && !rh.fPart.isCurve()) {
+            val ltShare = lh.fOriginalCurvePart[0] == fOriginalCurvePart[0]
+            val lrShare = lh.fOriginalCurvePart[0] == rh.fOriginalCurvePart[0]
+            val trShare = fOriginalCurvePart[0] == rh.fOriginalCurvePart[0]
+            val shareCount = (if (ltShare) 1 else 0) +
+                             (if (lrShare) 1 else 0) +
+                             (if (trShare) 1 else 0)
+            if (shareCount == 1) {
+                if (lrShare) {
+                    val ltOOrder = lh.linesOnOriginalSide(this)
+                    val rtOOrder = rh.linesOnOriginalSide(this)
+                    if ((rtOOrder xor ltOOrder) == 1) return ltOOrder != 0
+                } else if (trShare) {
+                    val tlOOrder = linesOnOriginalSide(lh)
+                    val rlOOrder = rh.linesOnOriginalSide(lh)
+                    if ((tlOOrder xor rlOOrder) == 1) return rlOOrder != 0
+                } else {
+                    require(ltShare)
+                    val trOOrder = rh.linesOnOriginalSide(this)
+                    val lrOOrder = lh.linesOnOriginalSide(rh)
+                    if ((lrOOrder xor trOOrder) == 1) return trOOrder != 0
+                }
+            }
+        }
+        if (lrOrder < 0) {
+            if (ltFinal < 0) return trFinal != 0
+            return ltFinal != 0
+        }
+        return lrOrder == 0
+    }
+
+    /**
+     * Splice [angle] into this' CCW-sorted loop. If [angle] already
+     * has a loop, merges the two. Otherwise walks this' loop and
+     * inserts [angle] at the position where `angle.after(prev)` holds.
+     *
+     * Mirrors `SkOpAngle::insert` (`SkOpAngle.cpp:749`). Always
+     * returns true ; the only "failure" path (FAIL_IF on the
+     * flip-ambiguity loop) signals the upstream caller to abort.
+     */
+    fun insert(angle: SkOpAngle): Boolean {
+        if (angle.fNext != null) {
+            if (loopCount() >= angle.loopCount()) {
+                if (!merge(angle)) return true
+            } else if (fNext != null) {
+                if (!angle.merge(this)) return true
+            } else {
+                angle.insert(this)
+            }
+            return true
+        }
+        val singleton = fNext == null
+        if (singleton) fNext = this
+        val next: SkOpAngle = fNext!!
+        if (next.fNext === this) {
+            // Two-element loop — pick which side `angle` lands on.
+            if (singleton || angle.after(this)) {
+                fNext = angle
+                angle.fNext = next
+            } else {
+                next.fNext = angle
+                angle.fNext = this
+            }
+            return true
+        }
+        var last: SkOpAngle = this
+        var cursor = next
+        var flipAmbiguity = false
+        while (true) {
+            require(last.fNext === cursor)
+            if (angle.after(last) xor (angle.tangentsAmbiguous() && flipAmbiguity)) {
+                last.fNext = angle
+                angle.fNext = cursor
+                return true
+            }
+            last = cursor
+            if (last === this) {
+                if (flipAmbiguity) return false // FAIL_IF analogue
+                flipAmbiguity = true
+            }
+            cursor = cursor.fNext!!
+        }
+    }
+
+    /**
+     * Splice [angle]'s loop into this' loop. Mirrors
+     * `SkOpAngle::merge` (`SkOpAngle.cpp:848`). Returns true on
+     * success, false if this is already part of [angle]'s loop.
+     */
+    fun merge(angle: SkOpAngle): Boolean {
+        require(fNext != null && angle.fNext != null)
+        // First : check that `this` isn't already in `angle`'s loop
+        // (would create a self-merge cycle).
+        var working: SkOpAngle = angle
+        do {
+            if (this === working) return false
+            working = working.fNext!!
+        } while (working !== angle)
+        // Walk angle's loop, detaching each element and re-inserting
+        // it into this' loop.
+        working = angle
+        do {
+            val next = working.fNext!!
+            working.fNext = null
+            insert(working)
+            working = next
+        } while (working !== angle)
+        return true
+    }
 }
