@@ -845,24 +845,50 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             }
         }
 
-        // 7. Run the mask filter (Gaussian blur). May return [srcMask]
-        //    in place or a fresh buffer ; either way the dimensions
-        //    match.
-        val blurred = maskFilter.filterMask(srcMask, maskW, maskH)
-
-        // 8. Composite : for each mask pixel, src colour = paint colour
-        //    with alpha modulated by the mask, then blend through
-        //    paint.blendMode.
-        val rgb = effectiveColor and 0x00FFFFFF
+        // 7. Run the mask filter. Single-plane filters (e.g. Gaussian
+        //    blur) walk the [Format.kA8] branch ; emboss-class filters
+        //    return three planes (alpha + multiply + additive) and
+        //    take the [Format.k3D] branch.
         val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
-        for (y in 0 until maskH) {
-            val devY = mt + y
-            for (x in 0 until maskW) {
-                val devX = ml + x
-                val maskA = blurred[y * maskW + x].toInt() and 0xFF
-                val effA = (paintA * maskA + 127) / 255
-                if (effA == 0 && !mustBlendZero) continue
-                blend(devX, devY, (effA shl 24) or rgb, mode)
+        when (maskFilter.format) {
+            org.skia.foundation.SkMaskFilter.Format.kA8 -> {
+                val blurred = maskFilter.filterMask(srcMask, maskW, maskH)
+                val rgb = effectiveColor and 0x00FFFFFF
+                for (y in 0 until maskH) {
+                    val devY = mt + y
+                    for (x in 0 until maskW) {
+                        val devX = ml + x
+                        val maskA = blurred[y * maskW + x].toInt() and 0xFF
+                        val effA = (paintA * maskA + 127) / 255
+                        if (effA == 0 && !mustBlendZero) continue
+                        blend(devX, devY, (effA shl 24) or rgb, mode)
+                    }
+                }
+            }
+            org.skia.foundation.SkMaskFilter.Format.k3D -> {
+                val mask3d = maskFilter.filterMask3D(srcMask, maskW, maskH)
+                // Composite per pixel : `src.rgb = paint.rgb × multiply / 255 + additive`,
+                // `src.a = paint.a × mask.alpha / 255` ; then blend.
+                val paintR = (effectiveColor ushr 16) and 0xFF
+                val paintG = (effectiveColor ushr 8) and 0xFF
+                val paintB = effectiveColor and 0xFF
+                for (y in 0 until maskH) {
+                    val devY = mt + y
+                    val rowOffset = y * maskW
+                    for (x in 0 until maskW) {
+                        val devX = ml + x
+                        val idx = rowOffset + x
+                        val maskA = mask3d.alpha[idx].toInt() and 0xFF
+                        val effA = (paintA * maskA + 127) / 255
+                        if (effA == 0 && !mustBlendZero) continue
+                        val mul = mask3d.multiply[idx].toInt() and 0xFF
+                        val add = mask3d.additive[idx].toInt() and 0xFF
+                        val r = ((paintR * mul + 127) / 255 + add).coerceAtMost(255)
+                        val g = ((paintG * mul + 127) / 255 + add).coerceAtMost(255)
+                        val b = ((paintB * mul + 127) / 255 + add).coerceAtMost(255)
+                        blend(devX, devY, (effA shl 24) or (r shl 16) or (g shl 8) or b, mode)
+                    }
+                }
             }
         }
     }
