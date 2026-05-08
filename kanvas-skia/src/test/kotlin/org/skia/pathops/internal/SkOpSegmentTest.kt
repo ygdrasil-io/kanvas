@@ -431,4 +431,54 @@ class SkOpSegmentTest {
         val sumArr2 = intArrayOf(0)
         assertTrue(seg.activeWinding(seg.fHead, seg.fTail, sumArr2))
     }
+
+    // ─── Sum propagation (D1.2.c.2.d) ──────────────────────────────
+
+    @Test
+    fun `computeSum returns SK_MinS32 sentinel when no angle ring is attached`() {
+        // No angles → spanToAngle returns null → computeSum bails.
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val result = seg.computeSum(seg.fHead, seg.fTail, SkOpAngle.IncludeType.kUnaryWinding)
+        assertEquals(SkOpSpan.SK_MinS32, result)
+    }
+
+    @Test
+    fun `computeSum rejects kUnaryXor`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException::class.java) {
+            seg.computeSum(seg.fHead, seg.fTail, SkOpAngle.IncludeType.kUnaryXor)
+        }
+    }
+
+    @Test
+    fun `ComputeOneSum unary form transfers windSum from base to next via markAngle`() {
+        // Two angles wrapping disjoint segments. baseAngle has its
+        // windSum already set ; ComputeOneSum reads it, computes the
+        // delta-adjusted sum for nextAngle, and marks it.
+        val sa = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val sb = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(0f, 10f)), null)
+        sa.fHead.fWindValue = 1
+        sa.markWinding(sa.fHead, 3)
+        val baseA = SkOpAngle().also { it.set(sa.fHead, sa.fTail) }
+        val nextA = SkOpAngle().also { it.set(sb.fHead, sb.fTail) }
+        // Pre-condition : nextA's segment.fHead has no windSum set.
+        assertEquals(SkOpSpan.SK_MinS32, sb.fHead.windSum())
+        val result = sa.ComputeOneSum(baseA, nextA, SkOpAngle.IncludeType.kUnaryWinding)
+        assertTrue(result)
+        // Post : sb.fHead.windSum is now set.
+        org.junit.jupiter.api.Assertions.assertNotEquals(SkOpSpan.SK_MinS32, sb.fHead.windSum())
+    }
+
+    @Test
+    fun `ComputeOneSumReverse uses forward updateWinding for the base read`() {
+        val sa = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val sb = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(0f, 10f)), null)
+        sa.fHead.fWindValue = 1
+        sa.markWinding(sa.fHead, 3)
+        val baseA = SkOpAngle().also { it.set(sa.fHead, sa.fTail) }
+        val nextA = SkOpAngle().also { it.set(sb.fHead, sb.fTail) }
+        val result = sa.ComputeOneSumReverse(baseA, nextA, SkOpAngle.IncludeType.kUnaryWinding)
+        assertTrue(result)
+        org.junit.jupiter.api.Assertions.assertNotEquals(SkOpSpan.SK_MinS32, sb.fHead.windSum())
+    }
 }

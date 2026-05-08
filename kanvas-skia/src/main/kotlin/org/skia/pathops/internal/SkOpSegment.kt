@@ -975,6 +975,169 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         return activeWinding(start, end, sumArr)
     }
 
+    // ─── Sum propagation (D1.2.c.2.d) ──────────────────────────────
+
+    /**
+     * Transfer the winding sum from [baseAngle]'s computed span to
+     * the next-adjacent angle [nextAngle] in the CCW ring. Mirrors
+     * `SkOpSegment::ComputeOneSum` (`SkOpSegment.cpp:349`).
+     *
+     * For unary (`Simplify` / `AsWinding`) include types, only the
+     * `windSum` channel is propagated. For binary (`Op`), both
+     * `windSum` and `oppSum` are propagated, with an operand-cross
+     * swap when [baseAngle]'s segment is on the operand path.
+     *
+     * Returns `false` when [markAngle] declines (the marker chase hit
+     * the safety net or a winding mismatch).
+     */
+    fun ComputeOneSum(
+        baseAngle: SkOpAngle,
+        nextAngle: SkOpAngle,
+        includeType: SkOpAngle.IncludeType,
+    ): Boolean {
+        val baseSegment = baseAngle.segment()!!
+        val sumMi = intArrayOf(baseSegment.updateWindingReverse(baseAngle))
+        val binary = includeType >= SkOpAngle.IncludeType.kBinarySingle
+        val sumSu = intArrayOf(0)
+        if (binary) {
+            sumSu[0] = baseSegment.updateOppWindingReverse(baseAngle)
+            if (baseSegment.operand()) {
+                val tmp = sumMi[0]; sumMi[0] = sumSu[0]; sumSu[0] = tmp
+            }
+        }
+        val nextSegment = nextAngle.segment()!!
+        val lastArr = arrayOf<SkOpSpanBase?>(null)
+        if (binary) {
+            val w = nextSegment.setUpWindings(nextAngle.start()!!, nextAngle.end()!!, sumMi, sumSu)
+            if (!nextSegment.markAngle(w.max, w.sum, w.oppMax, w.oppSum, nextAngle, lastArr)) {
+                return false
+            }
+        } else {
+            val (max, sum) = nextSegment.setUpWindings(nextAngle.start()!!, nextAngle.end()!!, sumMi)
+            if (!nextSegment.markAngle(max, sum, nextAngle, lastArr)) return false
+        }
+        nextAngle.setLastMarked(lastArr[0])
+        return true
+    }
+
+    /**
+     * Reverse-direction transfer : reads [baseAngle] in its
+     * "forward" direction (vs. `Reverse`'s reversed read), and
+     * writes [nextAngle] from `(end, start)` rather than `(start,
+     * end)`. Mirrors `SkOpSegment::ComputeOneSumReverse`
+     * (`SkOpSegment.cpp:384`).
+     */
+    fun ComputeOneSumReverse(
+        baseAngle: SkOpAngle,
+        nextAngle: SkOpAngle,
+        includeType: SkOpAngle.IncludeType,
+    ): Boolean {
+        val baseSegment = baseAngle.segment()!!
+        val sumMi = intArrayOf(baseSegment.updateWinding(baseAngle))
+        val binary = includeType >= SkOpAngle.IncludeType.kBinarySingle
+        val sumSu = intArrayOf(0)
+        if (binary) {
+            sumSu[0] = baseSegment.updateOppWinding(baseAngle)
+            if (baseSegment.operand()) {
+                val tmp = sumMi[0]; sumMi[0] = sumSu[0]; sumSu[0] = tmp
+            }
+        }
+        val nextSegment = nextAngle.segment()!!
+        val lastArr = arrayOf<SkOpSpanBase?>(null)
+        if (binary) {
+            val w = nextSegment.setUpWindings(nextAngle.end()!!, nextAngle.start()!!, sumMi, sumSu)
+            if (!nextSegment.markAngle(w.max, w.sum, w.oppMax, w.oppSum, nextAngle, lastArr)) {
+                return false
+            }
+        } else {
+            val (max, sum) = nextSegment.setUpWindings(nextAngle.end()!!, nextAngle.start()!!, sumMi)
+            if (!nextSegment.markAngle(max, sum, nextAngle, lastArr)) return false
+        }
+        nextAngle.setLastMarked(lastArr[0])
+        return true
+    }
+
+    /**
+     * Walk the CCW angle ring at the (start, end) span pair and
+     * propagate winding sums until every adjacent orderable angle
+     * has a computed sum. Mirrors `SkOpSegment::computeSum`
+     * (`SkOpSegment.cpp:420`).
+     *
+     * Strategy : two passes.
+     *  1. Forward (CCW) walk : when an angle has a known windSum,
+     *     adopt it as the "base" and transfer to the next-adjacent
+     *     angles via [ComputeOneSum]. Stop if 3 consecutive angles
+     *     are unorderable.
+     *  2. If the forward pass left the firstAngle un-summed but
+     *     a base was found, run a reverse pass via
+     *     [ComputeOneSumReverse] to back-fill.
+     *
+     * Returns the final `windSum` at `start.starter(end)`, or
+     * `SK_MinS32` (the upstream `SK_NaN32` sentinel) when no
+     * propagation could occur.
+     */
+    fun computeSum(
+        start: SkOpSpanBase,
+        end: SkOpSpanBase,
+        includeType: SkOpAngle.IncludeType,
+    ): Int {
+        require(includeType != SkOpAngle.IncludeType.kUnaryXor)
+        var firstAngle = spanToAngle(end, start) ?: return SkOpSpan.SK_MinS32
+        if (firstAngle.next() == null) return SkOpSpan.SK_MinS32
+        var baseAngle: SkOpAngle? = null
+        var tryReverse = false
+        // CCW walk : start at firstAngle.previous(), advance.
+        var angle = firstAngle.previous()
+        var next = angle.next()!!
+        firstAngle = next
+        do {
+            val prior = angle
+            angle = next
+            next = angle.next()!!
+            if (prior.unorderable() || angle.unorderable() || next.unorderable()) {
+                baseAngle = null
+                continue
+            }
+            val testWinding = angle.starter()!!.windSum()
+            if (testWinding != SkOpSpan.SK_MinS32) {
+                baseAngle = angle
+                tryReverse = true
+                continue
+            }
+            if (baseAngle != null) {
+                ComputeOneSum(baseAngle, angle, includeType)
+                baseAngle = if (angle.starter()!!.windSum() != SkOpSpan.SK_MinS32) angle else null
+            }
+        } while (next !== firstAngle)
+        if (baseAngle != null && firstAngle.starter()!!.windSum() == SkOpSpan.SK_MinS32) {
+            firstAngle = baseAngle
+            tryReverse = true
+        }
+        if (tryReverse) {
+            baseAngle = null
+            var prior = firstAngle
+            do {
+                angle = prior
+                prior = angle.previous()
+                next = angle.next()!!
+                if (prior.unorderable() || angle.unorderable() || next.unorderable()) {
+                    baseAngle = null
+                    continue
+                }
+                val testWinding = angle.starter()!!.windSum()
+                if (testWinding != SkOpSpan.SK_MinS32) {
+                    baseAngle = angle
+                    continue
+                }
+                if (baseAngle != null) {
+                    ComputeOneSumReverse(baseAngle, angle, includeType)
+                    baseAngle = if (angle.starter()!!.windSum() != SkOpSpan.SK_MinS32) angle else null
+                }
+            } while (prior !== firstAngle)
+        }
+        return start.starter(end).windSum()
+    }
+
     // ─── Angle ↔ span dispatch ─────────────────────────────────────
 
     /**
