@@ -58,6 +58,25 @@ internal class SkOpPtT {
     fun next(): SkOpPtT? = fNext
     fun span(): SkOpSpanBase? = fSpan
 
+    /**
+     * If `this` is alive, returns `this`. Otherwise walks the opp loop
+     * for the first non-deleted entry on the same span — used by the
+     * coincidence walker to recover an alive alias when the canonical
+     * pt-T has been deleted. Returns null when no alive alias exists.
+     *
+     * Mirrors `SkOpPtT::active` (`SkOpSpan.cpp:22`).
+     */
+    fun active(): SkOpPtT? {
+        if (!fDeleted) return this
+        val stopPtT = this
+        var ptT: SkOpPtT = this.fNext ?: return null
+        while (ptT !== stopPtT) {
+            if (ptT.fSpan === fSpan && !ptT.fDeleted) return ptT
+            ptT = ptT.fNext ?: return null
+        }
+        return null
+    }
+
     fun setSpan(span: SkOpSpanBase) { fSpan = span }
     fun setCoincident() {
         require(!fDeleted)
@@ -252,6 +271,40 @@ internal open class SkOpSpanBase {
             ptT = ptT?.next()
         } while (ptT != null && ptT !== stopPtT)
         return false
+    }
+
+    /**
+     * Walk this' pt-T loop ; track the (min, max) t-range over entries
+     * on the same segment as `this`. Returns [Collapsed.kYes] as soon
+     * as both [s] and [e] fall inside that range, [Collapsed.kError]
+     * on a malformed loop, [Collapsed.kNo] otherwise.
+     *
+     * Used by [SkOpCoincidence.addIfMissing] to short-circuit when a
+     * candidate range collapses to an existing pt-T pair.
+     *
+     * Mirrors `SkOpSpanBase::collapsed(double, double)`
+     * (`SkOpSpan.cpp:169`).
+     */
+    fun collapsed(s: Double, e: Double): Collapsed {
+        val start = fPtT
+        var startNext: SkOpPtT? = null
+        var walk: SkOpPtT = start
+        var min = walk.fT
+        var max = min
+        val seg = segment()
+        var safetyNet = 100000
+        while (true) {
+            walk = walk.next() ?: break
+            if (walk === start) break
+            if (--safetyNet == 0) return Collapsed.kError
+            if (walk === startNext) return Collapsed.kError
+            if (walk.span()?.segment() !== seg) continue
+            min = minOf(min, walk.fT)
+            max = maxOf(max, walk.fT)
+            if (between(min, s, max) && between(min, e, max)) return Collapsed.kYes
+            startNext = start.next()
+        }
+        return Collapsed.kNo
     }
 
     /**
