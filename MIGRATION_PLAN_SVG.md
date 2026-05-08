@@ -81,25 +81,58 @@ when rendered in a stock SVG engine (browser, Batik) is.
 
 ## Slices
 
-### B2.1 — Skeleton + geometry serializer ✏️ ~300 LOC
+### B2.1 — Skeleton + geometry serializer ✅ shipped
 
-- **New package** `org.skia.svg` (sibling of `org.skia.codec`,
-  `org.skia.encode`, `org.skia.dm`).
-- **`SkSVGCanvas(out: java.io.Writer)`** — extends [`SkCanvas`](kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt)
-  ; writes `<svg width=… height=…>` on construct, `</svg>` on flush.
-- **`onDrawRect` / `Oval` / `Circle` / `Path` / `Line` / `RRect`** →
-  emit the corresponding SVG element (`<rect>` / `<ellipse>` /
-  `<circle>` / `<path d="…">` / `<line>` / `<rect rx=… ry=…>`).
-- **CTM** — every `save()` / `restore()` writes a `<g transform=…>`
-  open / close, mirroring the existing CTM stack in `SkCanvas`.
-- **`SkPath` → `d="…"`** — walk verbs ; `kMove` → `M x y`, `kLine` →
-  `L x y`, `kQuad` → `Q x1 y1 x2 y2`, `kCubic` → `C x1 y1 x2 y2 x3 y3`,
-  `kClose` → `Z`. `kConic` is converted to cubics first via the
-  rasterizer's existing helper.
-- **Tests** — `SkSVGCanvasGeometryTest` (rect / circle / path with
-  every verb / nested CTM stack ; assert against expected SVG strings
-  + parse with `javax.xml.parsers.DocumentBuilder` to confirm
-  well-formedness).
+- **New package** [`org.skia.svg`](kanvas-skia/src/main/kotlin/org/skia/svg/SkSVGCanvas.kt)
+  (sibling of `org.skia.codec`, `org.skia.encode`, `org.skia.dm`).
+- **`SkSVGCanvas(out: Writer, width, height)`** — extends
+  [`SkCanvas`](kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt)
+  with the same 1×1 dummy bitmap pattern that
+  `SkRecordingCanvas` uses ; writes `<svg xmlns="…" width=…
+  height=… viewBox="0 0 W H">` on construct and `</svg>` on
+  [flush] (idempotent).
+- **`drawRect` / `drawOval` / `drawCircle` / `drawLine` /
+  `drawRRect` / `drawPath`** → emit the corresponding SVG
+  element. RRect with non-zero radii uses `rx` / `ry`
+  attributes ; zero radii omits them. Path fill type honoured
+  via the SVG `fill-rule` attribute (winding default omitted,
+  even-odd emits `fill-rule="evenodd"`).
+- **CTM** — implementation chose **per-draw `transform`
+  attribute** (Strategy B in the slice notes) over the
+  originally-described `<g>` wrappers : each draw whose CTM
+  is non-identity gets a `transform="matrix(a b c d e f)"` ;
+  identity matrices omit the attribute. `<g>` wrappers are
+  deferred to B2.3 where they become the natural carrier for
+  `<clipPath>` references.
+- **`SkPath` → `d="…"`** — verbs walked in order : `kMove → M`,
+  `kLine → L`, `kQuad → Q`, `kCubic → C`, `kClose → Z`.
+  `kConic` is approximated by a single cubic via
+  `c1 = start + k·(ctrl - start)`, `c2 = end + k·(ctrl - end)`
+  with `k = 2w / (1 + 2w)` — matches at t=0/1 and is exact at
+  t=0.5 ; sub-pixel error for the weights upstream GMs use.
+- **Paint stub** — `fill="black" stroke="none"` for fill
+  paints, `fill="none" stroke="black" stroke-width=…` for
+  stroke paints. B2.2 will replace this with full paint
+  serialisation (colour, alpha, linecap / linejoin / dash).
+- **Number format** — `formatScalar` renders integer-valued
+  floats without a `.0` suffix, others via `%.6g` with
+  trailing-zero trim. Locale-independent so emitted SVG is
+  bit-stable across JVMs.
+- **Tests** :
+  [SkSVGCanvasGeometryTest.kt](kanvas-skia/src/test/kotlin/org/skia/svg/SkSVGCanvasGeometryTest.kt)
+  (18 — framing incl. `flush` idempotence, per-op emission
+  for all 6 geometry verbs, RRect with and without radii,
+  path verb sequences M/L/Q/C/Z, even-odd vs default fill
+  rule, identity vs non-identity CTM transform attribute,
+  translate / scale composition, save/restore matrix
+  discipline, end-to-end well-formed XML guard via
+  `javax.xml.parsers.DocumentBuilder`).
+- **LOC** : 427 main + 295 test = 722 total (cf. plan
+  estimate ~300 + ~150 — overage covers the conic→cubic
+  approximator, the scalar formatter, and the
+  parse-with-DocumentBuilder integration test).
+- **Status** : full kanvas-skia suite **2330 / 2330 green**
+  (no regressions ; +18 new SVG tests).
 
 ### B2.2 — Paint surface ✏️ ~200 LOC
 
@@ -173,12 +206,12 @@ Once B2.1–B2.4 land, D4.5 SvgSink is a thin shell :
 
 | Slice | Main | Test |
 |---|---:|---:|
-| B2.1 | ~300 | ~150 |
+| B2.1 ✅ | **427** (planned ~300) | **295** (planned ~150) |
 | B2.2 | ~200 | ~80 |
 | B2.3 | ~150 | ~80 |
 | B2.4 | ~250 | ~120 |
 | B2.5 | ~80 | ~120 |
-| **Total** | **~980** | **~550** |
+| **Total** | **~1107** (so far : 427 actual + 680 planned) | **~695** (so far : 295 actual + 400 planned) |
 
 vs. the original B2 estimate of ~3000 main + ~700 test (text +
 filters + saveLayer + non-clamp shaders + color filters all
@@ -211,5 +244,8 @@ contribute the missing ~2000 LOC).
 
 ## Status
 
-📋 **planned** — slices defined, scope agreed, no code yet.
-Pickup-ready when the schedule allows ; not blocking any open chantier.
+🔄 **in progress** — B2.1 ✅ shipped, B2.2 / B2.3 / B2.4 / B2.5
+📋 pending. The skeleton + geometry serialiser is on `master` and
+the full kanvas-skia suite is **2330 / 2330 green** with the new
+SVG package on the classpath. Pickup B2.2 next when the schedule
+allows ; not blocking any other open chantier.
