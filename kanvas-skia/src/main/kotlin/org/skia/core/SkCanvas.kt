@@ -832,13 +832,41 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      */
     public open fun drawVertices(
         vertices: org.skia.foundation.SkVertices,
-        @Suppress("UNUSED_PARAMETER") blendMode: SkBlendMode,
+        blendMode: SkBlendMode,
         paint: SkPaint,
     ) {
         val tCount = vertices.triangleCount()
         if (tCount == 0) return
         val s = top
         val colors = vertices.colors
+        val texCoords = vertices.texCoords
+        val shader = paint.shader
+
+        // Dispatch table :
+        //   1) texCoords + shader → I5.3.c texture-mapped triangles
+        //      (with optional per-vertex colour modulation).
+        //   2) colors only → I5.3.b barycentric colour interpolation.
+        //   3) neither → I5.3.a solid-colour drawPath fast path.
+        if (texCoords != null && shader != null) {
+            bindClip(s)
+            for (t in 0 until tCount) {
+                val tri = vertices.triangleAt(t)
+                val a = vertices.positions[tri[0]]
+                val b = vertices.positions[tri[1]]
+                val c = vertices.positions[tri[2]]
+                val uvA = texCoords[tri[0]]
+                val uvB = texCoords[tri[1]]
+                val uvC = texCoords[tri[2]]
+                s.device.drawTexturedTriangle(
+                    a.fX, a.fY, uvA.fX, uvA.fY, colors?.get(tri[0]),
+                    b.fX, b.fY, uvB.fX, uvB.fY, colors?.get(tri[1]),
+                    c.fX, c.fY, uvC.fX, uvC.fY, colors?.get(tri[2]),
+                    blendMode,
+                    s.matrix, s.clip, paint,
+                )
+            }
+            return
+        }
         if (colors == null) {
             // Phase I5.3.a — solid colour fast path : every triangle
             // becomes a closed [SkPath] dispatched through drawPath.

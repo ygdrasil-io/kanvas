@@ -168,6 +168,29 @@ public class SkBitmapShader internal constructor(
     }
 
     /**
+     * Phase I5.3.c — sample the shader at an arbitrary `(lx, ly)`
+     * point in shader-local space (image pixel coords when
+     * [localMatrix] is identity). Used by
+     * [org.skia.core.SkCanvas.drawVertices] to look up texture
+     * pixels at a triangle's interpolated UV.
+     *
+     * Honours the shader's per-axis tile mode and filter mode just
+     * like [shadeRow], but bypasses the device-space coordinate
+     * traversal — the caller already has the local coords in hand.
+     */
+    override fun sampleAtLocal(lx: Float, ly: Float): SkColor {
+        val w = image.width
+        val h = image.height
+        return when (sampling.filter) {
+            SkFilterMode.kNearest -> {
+                val (sxi, syi, decalled) = sampleCoordsNearest(lx, ly, w, h)
+                if (decalled) 0 else xformedPixels[syi * w + sxi]
+            }
+            SkFilterMode.kLinear -> sampleLinear8(lx, ly, w, h)
+        }
+    }
+
+    /**
      * Apply the per-axis tile mode and pick the integer texel for nearest
      * sampling. Returns `(sxi, syi, decalled)` — `decalled = true` when the
      * coordinate falls outside `[0, w)` / `[0, h)` under [SkTileMode.kDecal]

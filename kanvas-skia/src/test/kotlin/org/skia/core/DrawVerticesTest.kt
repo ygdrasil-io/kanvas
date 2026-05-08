@@ -203,6 +203,110 @@ class DrawVerticesTest {
         assertEquals(before.toList(), bm.pixels.toList())
     }
 
+    // ─── Phase I5.3.c — texture sampling via shader ────────────────
+
+    /** 16×16 4-quadrant atlas : red / green / blue / white (same layout as DrawAtlasTest). */
+    private fun makeColorAtlas(): SkBitmap {
+        val bm = SkBitmap(16, 16)
+        for (y in 0 until 16) {
+            for (x in 0 until 16) {
+                val color: Int = when {
+                    x < 8 && y < 8 -> 0xFFFF0000.toInt()  // red
+                    x >= 8 && y < 8 -> 0xFF00FF00.toInt() // green
+                    x < 8 && y >= 8 -> 0xFF0000FF.toInt() // blue
+                    else -> 0xFFFFFFFF.toInt()            // white
+                }
+                bm.setPixel(x, y, color)
+            }
+        }
+        return bm
+    }
+
+    @Test
+    fun `texCoords with shader samples atlas pixels at interpolated UV`() {
+        val (bm, canvas) = newWhiteCanvas(40, 40)
+        val atlas = makeColorAtlas().asImage()
+        val paint = SkPaint(0xFF000000.toInt()).apply {
+            shader = atlas.makeShader()
+            isAntiAlias = false
+        }
+        // Quad at canvas (0..16, 0..16) mapped to full atlas via two triangles.
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangles,
+            arrayOf(
+                SkPoint(0f, 0f), SkPoint(16f, 0f), SkPoint(0f, 16f),
+                SkPoint(16f, 0f), SkPoint(16f, 16f), SkPoint(0f, 16f),
+            ),
+            texCoords = arrayOf(
+                SkPoint(0f, 0f), SkPoint(16f, 0f), SkPoint(0f, 16f),
+                SkPoint(16f, 0f), SkPoint(16f, 16f), SkPoint(0f, 16f),
+            ),
+        )
+        canvas.drawVertices(v, SkBlendMode.kModulate, paint)
+        // (4, 4) → atlas (4, 4) — red.
+        assertEquals(0xFFFF0000.toInt(), bm.getPixel(4, 4))
+        // (12, 4) → atlas (12, 4) — green.
+        assertEquals(0xFF00FF00.toInt(), bm.getPixel(12, 4))
+        // (4, 12) → atlas (4, 12) — blue.
+        assertEquals(0xFF0000FF.toInt(), bm.getPixel(4, 12))
+        // (12, 12) → atlas (12, 12) — white.
+        assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(12, 12))
+        // Outside the quad stays white.
+        assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(20, 20))
+    }
+
+    @Test
+    fun `texCoords with scaled mapping stretches the atlas across the dst quad`() {
+        val (bm, canvas) = newWhiteCanvas(40, 40)
+        val atlas = makeColorAtlas().asImage()
+        val paint = SkPaint(0xFF000000.toInt()).apply {
+            shader = atlas.makeShader()
+            isAntiAlias = false
+        }
+        // Dst quad 0..32 × 0..32, mapped to atlas (0..16, 0..16) — 2× upscale.
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangleFan,
+            arrayOf(SkPoint(0f, 0f), SkPoint(32f, 0f), SkPoint(32f, 32f), SkPoint(0f, 32f)),
+            texCoords = arrayOf(SkPoint(0f, 0f), SkPoint(16f, 0f), SkPoint(16f, 16f), SkPoint(0f, 16f)),
+        )
+        canvas.drawVertices(v, SkBlendMode.kModulate, paint)
+        // (5, 5) in dst ↔ atlas (2.5, 2.5) — red.
+        assertEquals(0xFFFF0000.toInt(), bm.getPixel(5, 5))
+        // (25, 5) in dst ↔ atlas (12.5, 2.5) — green.
+        assertEquals(0xFF00FF00.toInt(), bm.getPixel(25, 5))
+        // (25, 25) in dst ↔ atlas (12.5, 12.5) — white.
+        assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(25, 25))
+    }
+
+    @Test
+    fun `texCoords + per-vertex colors modulate the texture`() {
+        val (bm, canvas) = newWhiteCanvas(40, 40)
+        val atlas = makeColorAtlas().asImage()
+        val paint = SkPaint(0xFF000000.toInt()).apply {
+            shader = atlas.makeShader()
+            isAntiAlias = false
+        }
+        // Same quad as above but with all-half-grey vertex colors.
+        // kModulate : tex × vertex / 255. Half-grey (128) × red (255) = 128.
+        val grey = 0xFF808080.toInt()
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangleFan,
+            arrayOf(SkPoint(0f, 0f), SkPoint(16f, 0f), SkPoint(16f, 16f), SkPoint(0f, 16f)),
+            texCoords = arrayOf(SkPoint(0f, 0f), SkPoint(16f, 0f), SkPoint(16f, 16f), SkPoint(0f, 16f)),
+            colors = intArrayOf(grey, grey, grey, grey),
+        )
+        canvas.drawVertices(v, SkBlendMode.kModulate, paint)
+        // Atlas red × grey 128 = (128 * 255 + 127) / 255 = 128. So (4, 4) is half-red.
+        val px = bm.getPixel(4, 4)
+        val r = (px shr 16) and 0xFF
+        val g = (px shr 8) and 0xFF
+        val b = px and 0xFF
+        // R should be near 128 (modulated red) ; G and B should be near 0.
+        assertTrue(r in 100..150) { "expected R≈128, got R=$r" }
+        assertTrue(g in 0..30) { "expected G≈0, got G=$g" }
+        assertTrue(b in 0..30) { "expected B≈0, got B=$b" }
+    }
+
     @Test
     fun `kTriangleStrip tessellates a strip into a quad`() {
         val (bm, canvas) = newWhiteCanvas()
