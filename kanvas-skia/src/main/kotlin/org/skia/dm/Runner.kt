@@ -76,6 +76,7 @@ public class Runner(
     private fun runOne(gm: GM, sink: Sink): RunRecord {
         return when (val r = sink.draw(gm)) {
             is Sink.Result.Ok -> buildPassRecord(gm, sink, r.bitmap)
+            is Sink.Result.Bytes -> buildBytesRecord(gm, sink, r.bytes)
             is Sink.Result.Error -> buildFailRecord(gm, sink, r.message)
         }
     }
@@ -92,7 +93,7 @@ public class Runner(
             gmName = gm.name(),
             sinkTag = sink.tag,
             md5 = md5,
-            extension = "png",
+            extension = sink.fileExtension,
             colorType = classification.colorType,
             alphaType = classification.alphaType,
             gamut = classification.gamut,
@@ -100,6 +101,26 @@ public class Runner(
             colorDepth = classification.colorDepth,
         )
     }
+
+    /**
+     * Build a record from a vector-output sink (B2.5 [SvgSink]).
+     * The MD5 is over the raw bytes — no PNG re-encode because the
+     * payload is already the canonical encoded form. The bitmap-side
+     * classification fields stay empty, since vector formats don't
+     * have raster colour-type / gamut / depth.
+     */
+    private fun buildBytesRecord(gm: GM, sink: Sink, bytes: ByteArray): RunRecord =
+        RunRecord(
+            gmName = gm.name(),
+            sinkTag = sink.tag,
+            md5 = md5Hex(bytes),
+            extension = sink.fileExtension,
+            colorType = "",
+            alphaType = "",
+            gamut = "",
+            transferFn = "",
+            colorDepth = "",
+        )
 
     private fun buildFailRecord(gm: GM, sink: Sink, message: String): RunRecord =
         RunRecord(

@@ -77,6 +77,7 @@ public class DmCli internal constructor(
         "f16" -> RasterSinkF16(dmReferenceColorSpace())
         "pic-8888" -> PictureSink(RasterSink8888())
         "pic-f16" -> PictureSink(RasterSinkF16(dmReferenceColorSpace()))
+        "svg" -> SvgSink()
         else -> null
     }
 
@@ -184,7 +185,8 @@ public class DmCli internal constructor(
     public companion object {
 
         /** Recognised `--config` tags. `null` from [resolveSinks] for anything else. */
-        public val KNOWN_CONFIGS: List<String> = listOf("8888", "f16", "pic-8888", "pic-f16")
+        public val KNOWN_CONFIGS: List<String> =
+            listOf("8888", "f16", "pic-8888", "pic-f16", "svg")
 
         /**
          * Parse `args` into a [DmCli]. Flag tokens accept both the

@@ -37,7 +37,7 @@
 > | **C3** SkEmbossMaskFilter | 📋 pending | |
 > | **C4** drawAnnotation / drawDrawable / drawShadow | 📋 pending | |
 > | **B1** SkPDF (PDFBox adapter) | ❌ descoped | No ported GM needs PDF — only `internal_links.cpp` is PDF-specific upstream and isn't ported. See B1 section. |
-> | **B2** SkSVGCanvas | 📋 mini-planned | Slimmed to ~980 LOC + ~550 test (was ~3000+~700) ; text / filters / saveLayer descoped. See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md). |
+> | **B2** SkSVGCanvas | ✅ shipped | All 5 slices delivered : 1104 main + 1351 test (mini plan estimate ~980 + ~550). See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) for the per-slice breakdown. |
 > | **Q1** SkAutoCanvasRestore Kotlin idiom | 📋 pending | |
 > | **Q2** Canvas wrappers | 📋 pending | |
 > | **Q3** SkBBHFactory + Picture cull | 📋 pending | |
@@ -741,18 +741,27 @@ public data class Report(
     unknown tag, odd-length pairs). 23/23 green ; full
     kanvas-skia suite **2292 / 2292 green**.
 
-- **D4.5** — ~~`PdfSink`~~ (descoped along with B1) + `SvgSink`
-  (after B2). PDF half is dropped per the B1 audit (no ported
-  GM needs PDF, only `internal_links.cpp` is PDF-specific
-  upstream and isn't ported). The slice is reduced to the SVG
-  sink alone, depending on B2 — see
-  [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) § B2.5 for the
-  active spec ; the SvgSink ships as the final slice of the
-  mini-plan (~80 LOC), tagged `"svg"`, registered with
-  [DmCli](kanvas-skia/src/main/kotlin/org/skia/dm/DmCli.kt)'s
-  `KNOWN_CONFIGS`.
-  - **LOC** : ~80 (SVG only, in MIGRATION_PLAN_SVG.md ; was
-    ~150 ensemble).
+- **D4.5** ✅ — ~~`PdfSink`~~ (descoped along with B1) +
+  [`SvgSink`](kanvas-skia/src/main/kotlin/org/skia/dm/SvgSink.kt)
+  (shipped via B2.5). PDF half dropped per the B1 audit ; the SVG
+  sink wires the SVG mini plan into the DM matrix.
+  - Tagged `"svg"`, file extension `"svg"`. Registered with
+    [DmCli](kanvas-skia/src/main/kotlin/org/skia/dm/DmCli.kt)'s
+    `KNOWN_CONFIGS` so `--config svg` resolves.
+  - Returns the new
+    [Sink.Result.Bytes](kanvas-skia/src/main/kotlin/org/skia/dm/Sink.kt)
+    variant (vector output — the [Runner](kanvas-skia/src/main/kotlin/org/skia/dm/Runner.kt)
+    hashes the raw bytes, no PNG re-encode). The
+    [Sink](kanvas-skia/src/main/kotlin/org/skia/dm/Sink.kt) interface
+    also gained a `fileExtension` property so the per-record
+    `RunRecord.extension` field stays accurate per sink kind.
+  - **LOC** : ~147 main + ~221 test (cf. plan estimate ~80 main —
+    overage covers the `Sink.Result.Bytes` data class with custom
+    equals/hashCode, the Sink interface widening, the Runner's
+    Bytes branch, the exhaustiveness updates in callers
+    `TestUtils.runGmTest` / `SinkTest`).
+  - See [MIGRATION_PLAN_SVG.md § B2.5](MIGRATION_PLAN_SVG.md) for
+    the per-piece breakdown.
 
 **Total LOC** : ~625-925 (excluding B2 ; B1 / PdfSink descoped).
 
@@ -1294,12 +1303,14 @@ package** : the directory is not created.
 
 ---
 
-### B2 — `SkSVGCanvas` 📋 mini-planned
+### B2 — `SkSVGCanvas` ✅ shipped
 
-**See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md)** for the active
-plan. The original 7-slice / ~3000 LOC scope below is preserved as a
-historical reference (struck through) ; the mini plan ships ~980
-main + ~550 test by descoping text, filters, saveLayer, color filters,
+**See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md)** for the
+per-slice details. The mini plan delivered 1104 main + 1351 test
+(estimated ~980 + ~550). The original 7-slice / ~3000 LOC scope
+below is preserved as a historical reference (struck through) ;
+the mini plan shipped by descoping text, filters, saveLayer,
+color filters,
 and non-clamp bitmap shaders until a use case demands them.
 
 **Skia upstream files** :
