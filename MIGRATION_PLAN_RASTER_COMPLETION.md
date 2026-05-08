@@ -31,7 +31,7 @@
 > | **I2** Glyph cache + variable-fonts (light) + subpixel | ✅ shipped (I2.1-2.3) | Variable fonts AWT-wired déféré |
 > | **I3** SkRegion + SkAAClip + SkRasterClip | ✅ shipped (I3.1-3.3) | clipMask Phase 7q remplacé par SkAAClip |
 > | **I4** SkShaper (Primitive + JavaTextLayout + wrap) | ✅ shipped (I4.1-4.3) | HarfBuzz parity hors scope |
-> | **I5** drawPoints / drawAtlas / drawVertices / drawPatch | 🔄 en cours | I5.1, I5.2, I5.3.a/b livrés ; I5.4 (Patch) reste |
+> | **I5** drawPoints / drawAtlas / drawVertices / drawPatch | ✅ shipped | I5.1 / I5.2 / I5.3.a-c / I5.4 livrés (commit `2de410e`) |
 > | **C1** Image filters extras | 📋 pending | Group A core déjà shipped (Offset/Blur/MatrixTransform/DropShadow/ColorFilter/Compose) |
 > | **C2** Path effects extras (kMorph, StrokeAndFill recipe) | 📋 pending | |
 > | **C3** SkEmbossMaskFilter | 📋 pending | |
@@ -949,7 +949,7 @@ needed.
 
 ---
 
-### I5 — `drawPoints` / `drawAtlas` / `drawVertices` / `drawPatch` 🔄 en cours (I5.1, I5.2, I5.3 ✅ ; I5.4 📋)
+### I5 — `drawPoints` / `drawAtlas` / `drawVertices` / `drawPatch` ✅ shipped
 
 **Skia upstream files** :
 - `include/core/SkCanvas.h` (the public methods)
@@ -1002,12 +1002,19 @@ public enum class PointMode { kPoints, kLines, kPolygon }
   - **LOC** : ~400.
   - GMs : `vertices*` (~5 GMs).
 
-- **I5.4** — `drawPatch` : Coons patch (cubic interp grid). The most
-  complex. 📋 pending.
-  - Algorithm : tessellate the 4 boundary cubics into a grid of
-    triangles, then defer to `drawVertices`.
-  - **LOC** : ~300.
-  - GMs : `patch*`, `coonspatchmesh*` (~3 GMs).
+- **I5.4** ✅ shipped (commit `2de410e`) — `drawPatch` : Coons patch
+  (cubic interp grid). Tessellates the 4 boundary cubics into an
+  N×N grid (`PATCH_TESS_N = 8` → 128 triangles per patch) via the
+  Coons surface formula `C(s, t) = Lc(s, t) + Ld(s, t) − B(s, t)`,
+  then defers to `drawVertices`. Lives in
+  [SkCanvas.drawPatch](kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt:948)
+  with [coonsSurfaceAt](kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt:1012)
+  / `cubicAt` helpers.
+  - GMs ported : `PatchAlphaTestGM`, `PatchPrimitiveGM` (test
+    runners in
+    [Round17Test.kt](kanvas-skia/src/test/kotlin/org/skia/tests/Round17Test.kt)).
+  - Unit test :
+    [DrawPatchTest.kt](kanvas-skia/src/test/kotlin/org/skia/core/DrawPatchTest.kt).
 
 **Total LOC** : ~1000 + GM ports.
 
