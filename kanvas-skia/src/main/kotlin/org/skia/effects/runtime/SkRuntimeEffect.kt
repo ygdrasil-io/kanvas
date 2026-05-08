@@ -357,6 +357,12 @@ public class SkRuntimeEffect private constructor(
          * [SkRuntimeEffectDispatch].
          */
         private fun makeFor(sksl: String, kind: Kind): Result {
+            // Ensure the registry is populated with every hand-ported
+            // built-in effect before we look up. Idempotent — the
+            // builtin objects' `init {}` blocks register on first
+            // touch ; subsequent touches are no-ops.
+            ensureBuiltinsLoaded()
+
             val parseResult = SkRuntimeEffectSignatureParser.parse(sksl)
             if (parseResult is SkRuntimeEffectSignatureParser.Outcome.Error) {
                 return Result(null, parseResult.message)
@@ -385,6 +391,21 @@ public class SkRuntimeEffect private constructor(
             Kind.kShader -> "MakeForShader"
             Kind.kColorFilter -> "MakeForColorFilter"
             Kind.kBlender -> "MakeForBlender"
+        }
+
+        /**
+         * Re-populates the dispatch table with every hand-ported
+         * built-in effect. Called once per [makeFor] (cheap —
+         * each `register` is a single map insert).
+         *
+         * Idempotent : if a test calls
+         * [SkRuntimeEffectDispatch.clearForTest] between cases,
+         * the next [makeFor] re-registers everything. If the
+         * registry is already populated, the calls just overwrite
+         * with the same factories.
+         */
+        private fun ensureBuiltinsLoaded() {
+            org.skia.effects.runtime.effects.SkBuiltinColorFilterEffects.registerAll()
         }
     }
 }
