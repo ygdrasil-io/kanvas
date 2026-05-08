@@ -5,10 +5,12 @@
  * from `src/pathops/SkOpCoincidence.{h,cpp}`.
  *
  * Phase D1.2.g.0 — SkCoincidentSpans data model + simple methods, plus
- * the SkOpCoincidence skeleton (head pointer + Ordered statics). The
- * heavy SkOpCoincidence methods (add / extend / addMissing / addOverlap
- * / apply / mark / expand / fixUp / release / etc.) land in subsequent
- * D1.2.g sub-slices.
+ * the SkOpCoincidence skeleton (head pointer + Ordered statics).
+ *
+ * Phase D1.2.g.a — SkOpCoincidence container methods : add / extend /
+ * contains (× 3 overloads). The remaining heavy methods (addMissing /
+ * addOverlap / apply / mark / expand / fixUp / release / …) land in
+ * subsequent D1.2.g sub-slices.
  *
  * # SkCoincidentSpans
  *
@@ -273,6 +275,192 @@ internal class SkOpCoincidence {
     var fTop: SkCoincidentSpans? = null
 
     fun isEmpty(): Boolean = fHead == null && fTop == null
+
+    /**
+     * Push a new coincident-pair onto [fHead]. Canonicalises the (coin,
+     * opp) pair via [Ordered] (recursing with the opposite ordering if
+     * required), then snaps each pt-T to its span's canonical
+     * representative before linking.
+     *
+     * Mirrors `SkOpCoincidence::add`
+     * (`SkOpCoincidence.cpp:257`).
+     */
+    fun add(
+        coinPtTStart: SkOpPtT,
+        coinPtTEnd: SkOpPtT,
+        oppPtTStart: SkOpPtT,
+        oppPtTEnd: SkOpPtT,
+    ) {
+        // OPTIMIZE: caller should have already sorted.
+        if (!Ordered(coinPtTStart, oppPtTStart)) {
+            if (oppPtTStart.fT < oppPtTEnd.fT) {
+                add(oppPtTStart, oppPtTEnd, coinPtTStart, coinPtTEnd)
+            } else {
+                add(oppPtTEnd, oppPtTStart, coinPtTEnd, coinPtTStart)
+            }
+            return
+        }
+        // Choose the ptT at the front of the list to track.
+        val cs = coinPtTStart.span()!!.ptT()
+        val ce = coinPtTEnd.span()!!.ptT()
+        val os = oppPtTStart.span()!!.ptT()
+        val oe = oppPtTEnd.span()!!.ptT()
+        require(cs.fT < ce.fT)
+        require(os.fT != oe.fT)
+        require(!cs.deleted())
+        require(!ce.deleted())
+        require(!os.deleted())
+        require(!oe.deleted())
+        val coinRec = SkCoincidentSpans()
+        coinRec.set(fHead, cs, ce, os, oe)
+        fHead = coinRec
+    }
+
+    /**
+     * If an existing entry on [fHead] overlaps the new
+     * `(coinPtTStart..coinPtTEnd, oppPtTStart..oppPtTEnd)` range on
+     * the same (coin, opp) segment pair, stretch it to include the new
+     * range and return true. Returns false otherwise (caller should
+     * fall back to [add]).
+     *
+     * Mirrors `SkOpCoincidence::extend`
+     * (`SkOpCoincidence.cpp:199`).
+     */
+    fun extend(
+        coinPtTStart: SkOpPtT,
+        coinPtTEnd: SkOpPtT,
+        oppPtTStart: SkOpPtT,
+        oppPtTEnd: SkOpPtT,
+    ): Boolean {
+        var test = fHead ?: return false
+        var cs = coinPtTStart
+        var ce = coinPtTEnd
+        var os = oppPtTStart
+        var oe = oppPtTEnd
+        var coinSeg = cs.span()?.segment()
+        var oppSeg = os.span()?.segment()
+        if (!Ordered(cs, os)) {
+            val tSeg = coinSeg; coinSeg = oppSeg; oppSeg = tSeg
+            val tcs = cs; cs = os; os = tcs
+            val tce = ce; ce = oe; oe = tce
+            if (cs.fT > ce.fT) {
+                val tcs2 = cs; cs = ce; ce = tcs2
+                val tos = os; os = oe; oe = tos
+            }
+        }
+        val oppMinT = minOf(os.fT, oe.fT)
+        while (true) {
+            val tCoinStart = test.coinPtTStart()!!
+            val tOppStart = test.oppPtTStart()!!
+            if (coinSeg === tCoinStart.span()?.segment() &&
+                oppSeg === tOppStart.span()?.segment()) {
+                val tCoinEnd = test.coinPtTEnd()!!
+                val tOppEnd = test.oppPtTEnd()!!
+                val oTestMinT = minOf(tOppStart.fT, tOppEnd.fT)
+                val oTestMaxT = maxOf(tOppStart.fT, tOppEnd.fT)
+                if ((tCoinStart.fT <= ce.fT && cs.fT <= tCoinEnd.fT) ||
+                    (oTestMinT <= oTestMaxT && oppMinT <= oTestMaxT)) {
+                    test.extend(cs, ce, os, oe)
+                    return true
+                }
+            }
+            test = test.next() ?: return false
+        }
+    }
+
+    /**
+     * True iff some entry on [fHead] or [fTop] reports [seg] as the
+     * coin-side (or opp-side) and brackets [oppT] on the opposite end
+     * of that entry. Used by the missing-coincidence walker to skip
+     * pt-Ts already tracked.
+     *
+     * Mirrors `SkOpCoincidence::contains(SkOpSegment, SkOpSegment,
+     * double)` (`SkOpCoincidence.cpp:942`).
+     */
+    fun contains(seg: SkOpSegment, opp: SkOpSegment, oppT: Double): Boolean =
+        contains(fHead, seg, opp, oppT) || contains(fTop, seg, opp, oppT)
+
+    /**
+     * True iff some entry on [coin]'s chain matches the (seg, opp)
+     * pair (in either order) and brackets [oppT].
+     *
+     * Mirrors the private `SkOpCoincidence::contains(const
+     * SkCoincidentSpans*, …)` (`SkOpCoincidence.cpp:952`).
+     */
+    fun contains(
+        coin: SkCoincidentSpans?,
+        seg: SkOpSegment,
+        opp: SkOpSegment,
+        oppT: Double,
+    ): Boolean {
+        var c = coin ?: return false
+        while (true) {
+            val coinStart = c.coinPtTStart()!!
+            val oppStart = c.oppPtTStart()!!
+            val coinSeg = coinStart.span()?.segment()
+            val oppSeg = oppStart.span()?.segment()
+            if (coinSeg === seg && oppSeg === opp &&
+                between(oppStart.fT, oppT, c.oppPtTEnd()!!.fT)) {
+                return true
+            }
+            if (oppSeg === seg && coinSeg === opp &&
+                between(coinStart.fT, oppT, c.coinPtTEnd()!!.fT)) {
+                return true
+            }
+            c = c.next() ?: return false
+        }
+    }
+
+    /**
+     * True iff some entry on [fHead] already brackets the
+     * `[coinPtTStart..coinPtTEnd] / [oppPtTStart..oppPtTEnd]` range on
+     * the same (coin, opp) segment pair. Pre-canonicalises via
+     * [Ordered] (and a t-swap on the coin side when canonicalisation
+     * flips it backwards).
+     *
+     * Mirrors `SkOpCoincidence::contains(SkOpPtT*, SkOpPtT*, SkOpPtT*,
+     * SkOpPtT*)` (`SkOpCoincidence.cpp:970`).
+     */
+    fun contains(
+        coinPtTStart: SkOpPtT,
+        coinPtTEnd: SkOpPtT,
+        oppPtTStart: SkOpPtT,
+        oppPtTEnd: SkOpPtT,
+    ): Boolean {
+        var test = fHead ?: return false
+        var cs = coinPtTStart
+        var ce = coinPtTEnd
+        var os = oppPtTStart
+        var oe = oppPtTEnd
+        var coinSeg = cs.span()?.segment()
+        var oppSeg = os.span()?.segment()
+        if (!Ordered(cs, os)) {
+            val tSeg = coinSeg; coinSeg = oppSeg; oppSeg = tSeg
+            val tcs = cs; cs = os; os = tcs
+            val tce = ce; ce = oe; oe = tce
+            if (cs.fT > ce.fT) {
+                val tcs2 = cs; cs = ce; ce = tcs2
+                val tos = os; os = oe; oe = tos
+            }
+        }
+        val oppMinT = minOf(os.fT, oe.fT)
+        val oppMaxT = maxOf(os.fT, oe.fT)
+        while (true) {
+            val tCoinStart = test.coinPtTStart()!!
+            if (coinSeg === tCoinStart.span()?.segment() &&
+                cs.fT >= tCoinStart.fT &&
+                ce.fT <= test.coinPtTEnd()!!.fT) {
+                val tOppStart = test.oppPtTStart()!!
+                val tOppEnd = test.oppPtTEnd()!!
+                if (oppSeg === tOppStart.span()?.segment() &&
+                    oppMinT >= minOf(tOppStart.fT, tOppEnd.fT) &&
+                    oppMaxT <= maxOf(tOppStart.fT, tOppEnd.fT)) {
+                    return true
+                }
+            }
+            test = test.next() ?: return false
+        }
+    }
 
     companion object {
         /**
