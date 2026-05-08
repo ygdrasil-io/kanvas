@@ -177,15 +177,64 @@ when rendered in a stock SVG engine (browser, Batik) is.
 - **Status** : full kanvas-skia suite **2347 / 2347 green**
   (+18 vs B2.1).
 
-### B2.3 — Clip ✏️ ~150 LOC
+### B2.3 — Clip ✅ shipped
 
-- Each `clipRect` / `clipRRect` / `clipPath` writes a `<defs><clipPath
-  id="clip-N">…</clipPath></defs>` (auto-allocated `N` from the
-  existing save/restore stack depth) plus `clip-path="url(#clip-N)"`
-  on the wrapping `<g>`.
-- AA flag is dropped silently (SVG handles AA in the renderer).
-- **Tests** — assert per-clip-shape output ; assert nested clips
-  produce nested wrappers.
+- **Per-clip emission** — every `clipRect` / `clipRRect` / `clipPath`
+  writes a `<defs><clipPath id="clip-N">…</clipPath></defs>` def
+  followed by an open `<g clip-path="url(#clip-N)">` wrapper. The
+  wrapper stays open until a matching `restore()` (or `flush()`)
+  closes it. Subsequent draws inside the wrapper inherit the clip.
+  Clip ids are document-monotonic (never reused) — SVG renderers
+  cache `<clipPath>` defs by id and reuse would be undefined.
+- **CTM capture** — the inner geometry inside `<clipPath>` carries a
+  `transform="matrix(…)"` snapshot of the CTM at clip emission
+  time. Subsequent CTM changes don't move the clip — same semantic
+  as Skia's "device-space clip computed at clipX call time". Per-
+  draw `transform` continues to use the full current CTM, so the
+  drawn geometry lands in the right place regardless of the clip
+  wrapper's transform-bearing inner geometry.
+- **save / restore tracking** — a private `clipDepthStack` counts
+  how many wrappers each save level opened ; `restore()` closes
+  exactly that many `</g>` tags. `flush()` defensively closes any
+  wrappers the caller forgot to pop, so a malformed draw loop still
+  produces well-formed XML.
+- **Multiple clips per save scope** — each `clipX` opens its own
+  wrapper ; intersection-of-clips becomes nested SVG
+  `<g clip-path>…<g clip-path>…</g></g>` (matches Skia's "clips
+  compose as path intersection").
+- **AA flag** — dropped silently (SVG handles AA at the renderer
+  level — `clipPath` content has no equivalent of `doAntiAlias` so
+  the bit would be lost in any encoding).
+- **`kDifference`** — SVG `<clipPath>` has no native subtraction.
+  The op emits a `<!-- clipOp: kDifference (SVG fallback :
+  kIntersect) -->` comment **plus** a `System.err` warning, then
+  falls through to the kIntersect path.
+- **Even-odd fill rule** for `clipPath` — emitted as
+  `clip-rule="evenodd"` on the inner `<path>` (the wrapping `<g>`
+  ignores `fill-rule`, so the attribute must live on the clip's
+  geometry).
+- **Implementation note** — clip overrides do **not** chain to
+  `super.clipRect / clipRRect / clipPath`. Two reasons : (a) the
+  parent's clip state governs only its raster pipeline (the 1×1
+  dummy backing bitmap is never drawn into) so we don't need it to
+  be accurate ; (b) parent's 3-arg `clipRect` virtually dispatches
+  back to the 2-arg variant, which would loop through the same
+  override.
+- **Tests** :
+  [SkSVGCanvasClipTest.kt](kanvas-skia/src/test/kotlin/org/skia/svg/SkSVGCanvasClipTest.kt)
+  (11) — per-shape def emission + wrapper opening, RRect with rx/ry,
+  path with even-odd → `clip-rule`, CTM-at-emit-time captured as
+  inner geometry transform, save/restore closes the wrapper,
+  multiple clips inside the same save → nested wrappers, document-
+  monotonic ids (no reuse after close), `flush()` closes leaked
+  wrappers without crashing, kDifference comment + stderr warning,
+  end-to-end well-formed XML guard.
+- **LOC** : ~155 main delta (on `SkSVGCanvas`) + ~243 test = 398
+  total (cf. plan estimate ~150 main + ~80 test ; overage covers
+  the kDifference fallback path + capture-stderr scaffold and the
+  flush-leak-recovery code).
+- **Status** : full kanvas-skia suite **green** with all SVG slices
+  cumulating (11 clip + 18 paint + 18 geometry = 47 SVG tests).
 
 ### B2.4 — Image + gradients ✏️ ~250 LOC
 
@@ -239,10 +288,10 @@ Once B2.1–B2.4 land, D4.5 SvgSink is a thin shell :
 |---|---:|---:|
 | B2.1 ✅ | **427** (planned ~300) | **295** (planned ~150) |
 | B2.2 ✅ | **126** (108 SVG + 18 SkDashPathEffect ; planned ~200) | **252** (planned ~80) |
-| B2.3 | ~150 | ~80 |
+| B2.3 ✅ | **155** (planned ~150) | **243** (planned ~80) |
 | B2.4 | ~250 | ~120 |
 | B2.5 | ~80 | ~120 |
-| **Total** | **~1033** (so far : 553 actual + 480 planned) | **~867** (so far : 547 actual + 320 planned) |
+| **Total** | **~1038** (so far : 708 actual + 330 planned) | **~1030** (so far : 790 actual + 240 planned) |
 
 vs. the original B2 estimate of ~3000 main + ~700 test (text +
 filters + saveLayer + non-clamp shaders + color filters all
