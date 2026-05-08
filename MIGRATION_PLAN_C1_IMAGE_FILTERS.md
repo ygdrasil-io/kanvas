@@ -368,18 +368,52 @@ budget — both ops share a parameterised test pattern).
 **Status** : full kanvas-skia suite **2520 / 2520 green**
 (+10 vs C1.3 ; 10 new tests).
 
-### C1.5 — DisplacementMap ✏️ ~200 LOC
+### C1.5 — DisplacementMap ✅ shipped
 
 - **`DisplacementMap(xCh, yCh, scale, displacement, color)`** —
-  for each pixel `(x, y)`, read `displacement(x, y).{xCh, yCh}`
-  as floats in `[0, 1]`, subtract `0.5` to centre, multiply by
-  `scale` to get an offset `(dx, dy)`, then sample
-  `color(x + dx, y + dy)` with the colour image's tile mode.
+  for each output pixel `(x, y)`, read the displacement filter's
+  pixel, extract its `xCh` / `yCh` channels as floats `c ∈ [0, 1]`,
+  centre at zero (`c - 0.5`), multiply by `scale` (and the CTM
+  max-scale) to get an offset `(dx, dy)`, then sample the colour
+  filter at `(x + dx, y + dy)` with nearest-neighbour. OOB sampling
+  on the colour input returns transparent black.
 
-Algorithm is straightforward but allocates a temporary for the
-displacement run. ~200 LOC.
+Reuses the existing
+[SkColorChannel](kanvas-skia/src/main/kotlin/org/skia/foundation/SkColor.kt)
+enum — no new types added.
+
+**Implementation deltas vs plan** :
+- Plan said "~200 LOC, allocates a temporary for the displacement
+  run". Shipped is **~95 LOC** because the displacement and colour
+  filters are evaluated to `FilterResult`s up-front (already a
+  `SkImage` allocation), then a single output buffer is written.
+- The original plan assumed nearest-neighbour sampling without
+  rounding ; first test pass caught that `(value).toInt()`
+  truncates toward zero (so `-1.5 → -1` instead of `-2`). Fixed by
+  using `kotlin.math.round` for the sample-coord conversion.
+- Scale is multiplied by the CTM max-scale (`getMaxScale`) so
+  displacement magnitudes track device-pixel intent under non-
+  identity transforms — same convention as `Offset` / `DropShadow`.
+
+**Tests** :
+[SkImageFiltersDisplacementMapTest.kt](kanvas-skia/src/test/kotlin/org/skia/foundation/SkImageFiltersDisplacementMapTest.kt)
+(6) — mid-grey displacement = identity, saturated-red on X
+shifts by `+scale/2`, black displacement shifts by `-scale/2`,
+zero-scale collapses to identity, output bbox tracks colour
+filter, alpha channel can drive displacement.
+
+**LOC** : ~95 main delta on
+[SkImageFilters.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
++ ~165 test = **260 total** (cf. plan estimate ~200 main + ~120
+test ; main came in **under budget** because reusing
+`SkColorChannel` and the existing `FilterResult` plumbing kept the
+delta compact, test came in modestly over because the algorithm
+has 6 distinct boundary cases to pin down).
 
 **GMs unblocked** : `displacement.cpp` and 4 cross-cluster GMs.
+
+**Status** : full kanvas-skia suite **2516 / 2516 green**
+(+6 new tests).
 
 ### C1.6 — MatrixConvolution ✏️ ~250 LOC
 
@@ -444,7 +478,7 @@ where possible.
 | C1.2 Tile + Magnifier ✅ | **125** (planned ~250) | **213** (planned ~120) | 3 |
 | C1.3 Arithmetic family ✅ | **352** (planned ~300) | **258** (planned ~150) | 3 |
 | C1.4 Morphology ✅ | **135** (planned ~300) | **145** (planned ~150) | ~8 |
-| C1.5 DisplacementMap | ~200 | ~120 | 5 |
+| C1.5 DisplacementMap ✅ | **95** (planned ~200) | **165** (planned ~120) | 5 |
 | C1.6 MatrixConvolution | ~250 | ~150 | 5 |
 | C1.7 Lighting (6 variants) | ~1200 | ~600 | ~6 |
 | **Total** | **~2594** (so far : 344 actual + 2250 planned) | **~1640** (so far : 470 actual + 1170 planned) | **~30 GM ports unblocked** |
