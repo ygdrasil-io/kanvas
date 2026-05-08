@@ -231,7 +231,14 @@ internal fun CurveIntercept(
     axisIntercept: Float,
     roots: DoubleArray,
 ): Int {
-    val horizontal = xy_index(dir) == 1
+    // Upstream `CurveIntercept[verb * 2 + xy_index(dir)]` :
+    // `xy_index = 0` (kLeft / kRight) → horizontal-intercept variant
+    // (the ray is horizontal, so we ask where the curve crosses
+    // y = axisIntercept).
+    // `xy_index = 1` (kTop / kBottom) → vertical-intercept variant
+    // (the ray is vertical, so we ask where the curve crosses
+    // x = axisIntercept).
+    val horizontal = xy_index(dir) == 0
     return when (verb) {
         SkOpSegment.SegVerb.kLine -> {
             if (horizontal) {
