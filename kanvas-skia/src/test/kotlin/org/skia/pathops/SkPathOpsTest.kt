@@ -208,9 +208,6 @@ class SkPathOpsTest {
     @Test
     fun `Op on two non-rect non-empty paths produces a non-null result`() {
         // Triangle and pentagon — full pipeline runs end-to-end.
-        // Result correctness depends on the upstream algorithm which
-        // we mirror verbatim ; we only smoke-check that the result
-        // is non-null and has the expected fillType.
         val triangle = SkPathBuilder()
             .moveTo(0f, 0f).lineTo(10f, 0f).lineTo(5f, 10f).close()
             .detach()
@@ -220,6 +217,10 @@ class SkPathOpsTest {
         val r = SkPathOps.Op(triangle, pentagon, SkPathOp.kUnion)
         assertNotNull(r)
         assertEquals(org.skia.foundation.SkPathFillType.kEvenOdd, r!!.fillType)
+        // Both inputs already span [0, 0, 10, 10] ; their union must too.
+        val b = r.computeBounds()
+        assertEquals(0f, b.left, 1e-4f); assertEquals(0f, b.top, 1e-4f)
+        assertEquals(10f, b.right, 1e-4f); assertEquals(10f, b.bottom, 1e-4f)
     }
 
     // ─── Simplify (D1.2.h.6.1) ──────────────────────────────────────
@@ -254,6 +255,13 @@ class SkPathOpsTest {
         val r = SkPathOps.Simplify(p)
         assertNotNull(r)
         assertEquals(org.skia.foundation.SkPathFillType.kEvenOdd, r!!.fillType)
+        // Output should preserve the triangle's bounding box.
+        val inB = p.computeBounds()
+        val outB = r!!.computeBounds()
+        assertEquals(inB.left, outB.left, 1e-4f, "left bound preserved")
+        assertEquals(inB.top, outB.top, 1e-4f, "top bound preserved")
+        assertEquals(inB.right, outB.right, 1e-4f, "right bound preserved")
+        assertEquals(inB.bottom, outB.bottom, 1e-4f, "bottom bound preserved")
     }
 
     // ─── AsWinding (D1.2.h.6.2) ─────────────────────────────────────
