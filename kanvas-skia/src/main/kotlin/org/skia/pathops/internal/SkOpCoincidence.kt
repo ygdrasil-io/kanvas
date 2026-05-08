@@ -22,9 +22,12 @@
  * in c.2 + c.3).
  *
  * Phase D1.2.g.d — addMissing / addOverlap / findOverlaps /
- * addEndMovedSpans (3 overloads). These are the public drivers that
- * exercise everything c.* built. The remaining heavy methods (apply
- * / mark / expand / addExpanded / …) land in D1.2.g.e.
+ * addEndMovedSpans (3 overloads).
+ *
+ * Phase D1.2.g.e — the marking pass : correctEnds / mark / expand /
+ * addExpanded / apply. These run during pathops' "fix coincidence"
+ * phase to align span boundaries on coincident pairs and propagate
+ * winding values across them. Closes the D1.2.g chantier.
  *
  * # SkCoincidentSpans
  *
@@ -270,7 +273,10 @@ internal class SkCoincidentSpans {
     ) {
         val origPtT = getEnd() ?: return
         val origSpan = origPtT.span() ?: return
-        val prev = origSpan.upCastable()?.prev()
+        // origSpan.prev() (SkOpSpanBase API) returns the prev SkOpSpan
+        // even when origSpan is the final tail. Only the head's prev
+        // is null.
+        val prev = origSpan.prev()
         val testPtT = if (prev != null) prev.next()!!.ptT()
                       else origSpan.upCast().next()?.prev()?.ptT() ?: return
         if (origPtT !== testPtT) setEnd(testPtT)
@@ -751,6 +757,320 @@ internal class SkOpCoincidence {
      * Mirrors `SkOpCoincidence::addIfMissing`
      * (`SkOpCoincidence.cpp:627`).
      */
+    // ─── marking pass (D1.2.g.e) ───────────────────────────────────
+
+    /**
+     * For every entry on [fHead], snap each endpoint to its span's
+     * canonical pt-T. Fast path : empty fHead returns immediately.
+     *
+     * Mirrors `SkOpCoincidence::correctEnds()`
+     * (`SkOpCoincidence.cpp:1014`).
+     */
+    fun correctEnds() {
+        var coin = fHead ?: return
+        while (true) {
+            coin.correctEnds()
+            coin = coin.next() ?: return
+        }
+    }
+
+    /**
+     * Set up the coincidence linkage on each entry's spans : mark
+     * the start / end pairs via `insertCoincidence` / `insertCoinEnd`,
+     * then walk the interior spans on both sides and route each one
+     * through the segment-overload of `insertCoincidence`. Returns
+     * `false` on any failure path (non-upcastable terminal, ordered
+     * lookup failure, etc.).
+     *
+     * Mirrors `SkOpCoincidence::mark` (`SkOpCoincidence.cpp:1343`).
+     */
+    fun mark(): Boolean {
+        var coin: SkCoincidentSpans = fHead ?: return true
+        while (true) {
+            val startBase = coin.coinPtTStart()!!.span() ?: return false
+            if (startBase.final()) return false
+            val start = startBase.upCast()
+            if (start.deleted()) return false
+            val end = coin.coinPtTEnd()!!.span() ?: return false
+            require(!end.deleted())
+            var oStartBase = coin.oppPtTStart()!!.span() ?: return false
+            require(!oStartBase.deleted())
+            var oEndBase = coin.oppPtTEnd()!!.span() ?: return false
+            if (oEndBase.deleted()) return false
+            val flipped = coin.flipped()
+            if (flipped) {
+                val tmp = oStartBase; oStartBase = oEndBase; oEndBase = tmp
+            }
+            if (oStartBase.final()) return false
+            val oStart = oStartBase.upCast()
+            start.insertCoincidence(oStart)
+            end.insertCoinEnd(oEndBase)
+            val seg = start.segment()!!
+            val oSeg = oStart.segment()!!
+            val orderedOut = booleanArrayOf(false)
+            if (!coin.ordered(orderedOut)) return false
+            val ordered = orderedOut[0]
+            // Walk interior coin-side spans.
+            var nextBase: SkOpSpanBase = start
+            while (true) {
+                val nxt = nextBase.upCast().next() ?: return false
+                if (nxt === end) break
+                if (nxt.final()) return false
+                if (!nxt.upCast().insertCoincidence(oSeg, flipped, ordered)) return false
+                nextBase = nxt
+            }
+            // Walk interior opp-side spans.
+            var oNextBase: SkOpSpanBase = oStart
+            while (true) {
+                val nxt = oNextBase.upCast().next() ?: return false
+                if (nxt === oEndBase) break
+                if (nxt.final()) return false
+                if (!nxt.upCast().insertCoincidence(seg, flipped, ordered)) return false
+                oNextBase = nxt
+            }
+            coin = coin.next() ?: return true
+        }
+    }
+
+    /**
+     * Drive [SkCoincidentSpans.expand] on every entry ; on each
+     * successful expansion, scan the rest of the chain for an entry
+     * that now matches the same `(coinPtTStart, oppPtTStart)` pair
+     * and release the duplicate. Returns true iff at least one entry
+     * actually expanded.
+     *
+     * Mirrors `SkOpCoincidence::expand` (`SkOpCoincidence.cpp:1234`).
+     */
+    fun expand(): Boolean {
+        var coin: SkCoincidentSpans = fHead ?: return false
+        var expanded = false
+        while (true) {
+            if (coin.expand()) {
+                var test = fHead
+                while (test != null) {
+                    if (test !== coin &&
+                        coin.coinPtTStart() === test.coinPtTStart() &&
+                        coin.oppPtTStart() === test.oppPtTStart()) {
+                        release(fHead!!, test)
+                        break
+                    }
+                    test = test.next()
+                }
+                expanded = true
+            }
+            coin = coin.next() ?: return expanded
+        }
+    }
+
+    /**
+     * For every coincident pair, walk both sides in lockstep ;
+     * whenever a coin-side span lacks a counterpart on the opp side
+     * (or vice-versa), call [SkOpSegment.addExpanded] to insert a
+     * matching pt-T at the linearly-interpolated t-value, then loop.
+     *
+     * Returns false on any failure path (degenerate t-range,
+     * non-upcastable terminal, addExpanded failure).
+     *
+     * Mirrors `SkOpCoincidence::addExpanded`
+     * (`SkOpCoincidence.cpp:440`).
+     */
+    fun addExpanded(): Boolean {
+        var coin: SkCoincidentSpans = fHead ?: return true
+        while (true) {
+            val startPtT = coin.coinPtTStart()!!
+            val oStartPtT = coin.oppPtTStart()!!
+            var priorT = startPtT.fT
+            var oPriorT = oStartPtT.fT
+            if (!startPtT.contains(oStartPtT)) return false
+            require(coin.coinPtTEnd()!!.contains(coin.oppPtTEnd()!!))
+            val start = startPtT.span()!!
+            val oStart = oStartPtT.span()!!
+            var endRef = coin.coinPtTEnd()!!.span()!!
+            var oEndRef = coin.oppPtTEnd()!!.span()!!
+            if (oEndRef.deleted()) return false
+            if (start.final()) return false
+            var test: SkOpSpanBase = start.upCast().next() ?: return false
+            if (!coin.flipped() && oStart.final()) return false
+            var oTest: SkOpSpanBase = if (coin.flipped()) {
+                oStart.prev() ?: return false
+            } else {
+                oStart.upCast().next() ?: return false
+            }
+            val seg = start.segment()!!
+            val oSeg = oStart.segment()!!
+            while (test !== endRef || oTest !== oEndRef) {
+                val containedOpp = test.contains(oSeg)
+                val containedThis = oTest.contains(seg)
+                if (containedOpp == null || containedThis == null) {
+                    val nextT: Double; val oNextT: Double
+                    when {
+                        containedOpp != null -> {
+                            nextT = test.t(); oNextT = containedOpp.fT
+                        }
+                        containedThis != null -> {
+                            nextT = containedThis.fT; oNextT = oTest.t()
+                        }
+                        else -> {
+                            // Walk forward until we find a span that brackets oSeg.
+                            var walk: SkOpSpanBase = test
+                            var walkOpp: SkOpPtT? = null
+                            while (walkOpp == null && walk !== coin.coinPtTEnd()!!.span()) {
+                                if (walk.final()) return false
+                                walk = walk.upCast().next() ?: return false
+                                walkOpp = walk.contains(oSeg)
+                            }
+                            if (walkOpp == null) return false
+                            nextT = walk.t(); oNextT = walkOpp.fT
+                        }
+                    }
+                    val startRange = nextT - priorT
+                    if (startRange == 0.0) return false
+                    val startPart = (test.t() - priorT) / startRange
+                    val oStartRange = oNextT - oPriorT
+                    if (oStartRange == 0.0) return false
+                    val oStartPart = (oTest.t() - oPriorT) / oStartRange
+                    if (startPart == oStartPart) return false
+                    val addToOpp = if (containedOpp == null && containedThis == null) {
+                        startPart < oStartPart
+                    } else {
+                        containedThis != null
+                    }
+                    val startOver = booleanArrayOf(false)
+                    val ok = if (addToOpp) {
+                        oSeg.addExpanded(oPriorT + oStartRange * startPart, test, startOver)
+                    } else {
+                        seg.addExpanded(priorT + startRange * oStartPart, oTest, startOver)
+                    }
+                    if (!ok) return false
+                    if (startOver[0]) {
+                        test = start
+                        oTest = oStart
+                    }
+                    endRef = coin.coinPtTEnd()!!.span()!!
+                    oEndRef = coin.oppPtTEnd()!!.span()!!
+                }
+                if (test !== endRef) {
+                    if (test.final()) return false
+                    priorT = test.t()
+                    test = test.upCast().next() ?: return false
+                }
+                if (oTest !== oEndRef) {
+                    oPriorT = oTest.t()
+                    oTest = if (coin.flipped()) {
+                        oTest.prev() ?: return false
+                    } else {
+                        if (oTest.final()) return false
+                        oTest.upCast().next() ?: return false
+                    }
+                }
+            }
+            coin = coin.next() ?: return true
+        }
+    }
+
+    /**
+     * Walk every coincidence pair in lockstep ; for each (coin, opp)
+     * span pair, fold the winding values from one side to the other
+     * (sign and combination depending on `flipped`, `operandSwap`,
+     * and the enclosing segments' `isXor` / `oppXor` flags). Spans
+     * whose winding drops to zero on both axes get marked done.
+     *
+     * Returns false on any failure path (negative wind, non-final
+     * terminal mismatch).
+     *
+     * Mirrors `SkOpCoincidence::apply` (`SkOpCoincidence.cpp:1026`).
+     */
+    fun apply(): Boolean {
+        var coin: SkCoincidentSpans = fHead ?: return true
+        while (true) {
+            val startBase = coin.coinPtTStart()!!.span() ?: return false
+            if (startBase.final()) return false
+            var start = startBase.upCast()
+            if (!start.deleted()) {
+                val end = coin.coinPtTEnd()!!.span() ?: return false
+                if (start !== start.starter(end)) return false
+                val flipped = coin.flipped()
+                val oStartBase = (if (flipped) coin.oppPtTEnd()!! else coin.oppPtTStart()!!).span() ?: return false
+                if (oStartBase.final()) return false
+                var oStart = oStartBase.upCast()
+                if (!oStart.deleted()) {
+                    val oEnd = (if (flipped) coin.oppPtTStart()!! else coin.oppPtTEnd()!!).span() ?: return false
+                    require(oStart === oStart.starter(oEnd))
+                    val seg = start.segment()!!
+                    val oSeg = oStart.segment()!!
+                    val operandSwap = seg.operand() != oSeg.operand()
+                    if (flipped) {
+                        if (oEnd.deleted()) {
+                            coin = coin.next() ?: return true
+                            continue
+                        }
+                        while (true) {
+                            val oNxt = oStart.next() ?: return false
+                            if (oNxt === oEnd) break
+                            if (oNxt.final()) return false
+                            oStart = oNxt.upCast()
+                        }
+                    }
+                    while (true) {
+                        var windValue = start.windValue()
+                        var oppValue = start.oppValue()
+                        var oWindValue = oStart.windValue()
+                        var oOppValue = oStart.oppValue()
+                        var windDiff = if (operandSwap) oOppValue else oWindValue
+                        var oWindDiff = if (operandSwap) oppValue else windValue
+                        if (!flipped) { windDiff = -windDiff; oWindDiff = -oWindDiff }
+                        var addToStart = windValue != 0 && (windValue > windDiff ||
+                            (windValue == windDiff && oWindValue <= oWindDiff))
+                        if (if (addToStart) start.done() else oStart.done()) addToStart = !addToStart
+                        if (addToStart) {
+                            if (operandSwap) { val tmp = oWindValue; oWindValue = oOppValue; oOppValue = tmp }
+                            if (flipped) {
+                                windValue -= oWindValue
+                                oppValue -= oOppValue
+                            } else {
+                                windValue += oWindValue
+                                oppValue += oOppValue
+                            }
+                            if (seg.isXor()) windValue = windValue and 1
+                            if (seg.oppXor()) oppValue = oppValue and 1
+                            oWindValue = 0; oOppValue = 0
+                        } else {
+                            if (operandSwap) { val tmp = windValue; windValue = oppValue; oppValue = tmp }
+                            if (flipped) {
+                                oWindValue -= windValue
+                                oOppValue -= oppValue
+                            } else {
+                                oWindValue += windValue
+                                oOppValue += oppValue
+                            }
+                            if (oSeg.isXor()) oWindValue = oWindValue and 1
+                            if (oSeg.oppXor()) oOppValue = oOppValue and 1
+                            windValue = 0; oppValue = 0
+                        }
+                        if (windValue <= -1) return false
+                        start.setWindValue(windValue)
+                        start.setOppValue(oppValue)
+                        if (oWindValue <= -1) return false
+                        oStart.setWindValue(oWindValue)
+                        oStart.setOppValue(oOppValue)
+                        if (windValue == 0 && oppValue == 0) seg.markDone(start)
+                        if (oWindValue == 0 && oOppValue == 0) oSeg.markDone(oStart)
+                        val next = start.next() ?: return false
+                        var oNext: SkOpSpanBase? = if (flipped) oStart.prev() else oStart.next()
+                        if (next === end) break
+                        if (next.final()) return false
+                        start = next.upCast()
+                        if (oNext == null || oNext.final()) {
+                            oNext = oStart
+                        }
+                        oStart = oNext.upCast()
+                    }
+                }
+            }
+            coin = coin.next() ?: return true
+        }
+    }
+
     /**
      * Public driver : detect coincidence pairs that share at least
      * one segment with another already-tracked pair, but whose

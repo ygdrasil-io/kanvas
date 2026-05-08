@@ -749,13 +749,89 @@ class SkOpCoincidenceTest {
         val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
         val c = SkOpCoincidence()
         c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
-        // Single entry — no inner pair to merge against.
         val addedOut = booleanArrayOf(false)
         assertTrue(c.addMissing(addedOut))
         assertFalse(addedOut[0])
-        // restoreHead fired → fTop null, fHead has the entry back.
         assertTrue(c.fHead != null)
         assertNull(c.fTop)
+    }
+
+    // ─── correctEnds (D1.2.g.e) ───────────────────────────────────
+
+    @Test
+    fun `correctEnds is a no-op on empty fHead`() {
+        val c = SkOpCoincidence()
+        c.correctEnds() // does not throw
+    }
+
+    @Test
+    fun `correctEnds visits every entry on fHead`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        // Endpoints are already canonical → correctEnds is a stable no-op.
+        c.correctEnds()
+        assertSame(a.fHead.ptT(), c.fHead!!.coinPtTStart())
+    }
+
+    // ─── expand (D1.2.g.e) ────────────────────────────────────────
+
+    @Test
+    fun `expand returns false on empty fHead`() {
+        val c = SkOpCoincidence()
+        assertFalse(c.expand())
+    }
+
+    @Test
+    fun `expand returns false when no adjacent span can be folded`() {
+        // Single entry covering the whole segment — no neighbours.
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        assertFalse(c.expand())
+    }
+
+    // ─── mark / addExpanded / apply (D1.2.g.e) ────────────────────
+
+    @Test
+    fun `mark returns true on empty fHead`() {
+        val c = SkOpCoincidence()
+        assertTrue(c.mark())
+    }
+
+    @Test
+    fun `addExpanded returns true on empty fHead`() {
+        val c = SkOpCoincidence()
+        assertTrue(c.addExpanded())
+    }
+
+    @Test
+    fun `apply returns true on empty fHead`() {
+        val c = SkOpCoincidence()
+        assertTrue(c.apply())
+    }
+
+    @Test
+    fun `apply zeroes one side and markDones it on a fully-overlapping pair`() {
+        // Two collinear lines with the head & tail spliced into each
+        // other's loops so addExpanded's contains() is satisfied.
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        a.fHead.ptT().addOpp(b.fHead.ptT(), b.fHead.ptT())
+        a.fTail.ptT().addOpp(b.fTail.ptT(), b.fTail.ptT())
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        // Pre-condition : both spans have windValue=0 by default. Set
+        // a's wind = 1 so the apply-decision picks "add to start".
+        a.fHead.setWindValue(1)
+        assertTrue(c.apply())
+        // After apply with operandSwap=false / flipped=false :
+        //   addToStart = (windValue=1 != 0) && (1 > -0 || ...) = true
+        //   → start absorbs opp's wind ; opp is zeroed and markDone'd.
+        assertEquals(0, b.fHead.windValue())
+        assertTrue(b.fHead.done())
     }
 
     @Test
