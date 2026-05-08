@@ -104,6 +104,22 @@ internal class SkOpPtT {
     }
 
     /**
+     * Walk this' loop forward until just before returning to `this`.
+     * Returns the entry whose `fNext === this`. Mirrors `SkOpPtT::prev`
+     * (`SkOpSpan.cpp:134`).
+     */
+    fun prev(): SkOpPtT {
+        var result: SkOpPtT = this
+        var next: SkOpPtT = this
+        while (true) {
+            next = next.fNext ?: return result
+            if (next === this) break
+            result = next
+        }
+        return result
+    }
+
+    /**
      * Find the predecessor of [opp] in this' loop ; returns null if
      * walking the loop comes back to `this` first (meaning `this` is
      * already in [opp]'s loop). Mirrors `SkOpPtT::oppPrev`.
