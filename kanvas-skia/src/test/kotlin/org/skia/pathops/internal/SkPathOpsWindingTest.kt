@@ -151,11 +151,13 @@ class SkPathOpsWindingTest {
 
     @Test
     fun `CurveIntercept on line returns 0 when line is parallel to ray`() {
-        // Horizontal line, kTop dir (Y-aligned) → line.fY[0] == fY[1] → 0.
+        // Horizontal line, horizontal ray (kLeft) → parallel → 0.
+        // (kLeft uses the horizontal-intercept variant which checks
+        // pts[0].fY == pts[1].fY ; for our line both Y = 0, so 0 roots.)
         val pts = arrayOf(pt(0f, 0f), pt(10f, 0f))
         val roots = DoubleArray(3)
         assertEquals(0, CurveIntercept(SkOpSegment.SegVerb.kLine,
-            SkOpRayDir.kTop, pts, 1f, axisIntercept = 0.5f, roots))
+            SkOpRayDir.kLeft, pts, 1f, axisIntercept = 0.5f, roots))
     }
 
     @Test
