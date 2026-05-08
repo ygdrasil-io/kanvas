@@ -111,6 +111,18 @@ class PathOpsRegressionRunner {
                 "floor = ${"%.2f".format(floor * 100)} %",
         )
         println("[PathOpsRegression] outcomes : $byOutcome")
+        // Diagnostic dump — list every non-SURVIVED fixture. Helps
+        // maintainers running locally identify candidates for the
+        // next debug pass without re-grepping the build log.
+        val nonSurvivors = outcomes.entries
+            .filter { it.value != Outcome.SURVIVED }
+            .sortedWith(compareBy({ it.value.name }, { it.key }))
+        if (nonSurvivors.isNotEmpty()) {
+            println("[PathOpsRegression] non-survivors :")
+            for ((name, outcome) in nonSurvivors) {
+                println("[PathOpsRegression]   $outcome : $name")
+            }
+        }
         assertTrue(
             rate >= floor,
             buildString {
@@ -280,18 +292,21 @@ class PathOpsRegressionRunner {
          *  - **D1.4 MVP** (initial run, 303 fixtures) : 293 survived
          *    = 96.7 %. Floor pinned at 90 %.
          *  - **D1.4 extractor coverage follow-up** (+32 fixtures →
-         *    335 total via `addRect` brace-init variants + multi-line
-         *    cubic-to joiner + `SkBits2Float(0x…)` decoder + trailing
-         *    `// comment` strip + `testPathOpCheck` variant) :
-         *    323 / 335 = **96.4 %** survived ; rate dropped 0.3 pp
-         *    because the new fixtures include 2 extra
-         *    `RETURNED_NULL` edge cases. No new crashes ; floor
-         *    stays at 90 % (cushion narrows from 6.7 pp to 6.4 pp).
+         *    335 total) : 323 / 335 = 96.4 %. Floor stays at 90 %.
+         *  - **D1.4 RETURNED_NULL debug pass — stale empty-result guard
+         *    removed** (no fixture-count change, just an engine fix) :
+         *    `SkPathOps.Op` no longer treats `bridgeOp`'s legitimate
+         *    empty-writer output as a failure. 11 of the 12 previous
+         *    `RETURNED_NULL` fixtures now correctly return the empty
+         *    `SkPath` (e.g. `Op(A, A, kDifference) = ∅`). Survival
+         *    jumps to **334 / 335 = 99.7 %**. Floor bumped 90 % → 99 %
+         *    (0.7 pp cushion). Sole remaining null-return : `cubicOp35d`
+         *    (two crossing cubics with sub-pixel intersection — needs
+         *    deeper algorithmic debug ; tracked separately).
          *
-         * Bump the floor when an engine debug-pass moves the
-         * `SURVIVED` bucket into the high-90s.
+         * Bump the floor monotonically as future debug passes land.
          */
-        private const val INITIAL_SURVIVAL_FLOOR: Double = 0.90
+        private const val INITIAL_SURVIVAL_FLOOR: Double = 0.99
 
         /**
          * Load fixtures from the JSON resource. Cached lazily so the
