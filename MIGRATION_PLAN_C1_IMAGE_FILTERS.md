@@ -415,20 +415,55 @@ has 6 distinct boundary cases to pin down).
 **Status** : full kanvas-skia suite **2516 / 2516 green**
 (+6 new tests).
 
-### C1.6 — MatrixConvolution ✏️ ~250 LOC
+### C1.6 — MatrixConvolution ✅ shipped
 
-- **`MatrixConvolution(kernelSize, kernel[], gain, bias, kCenter, tileMode, convolveAlpha, input)`** —
-  general 2D kernel : for each pixel, `gain * Σ kernel[i,j] *
-  input[x + i - kCenter.x, y + j - kCenter.y] + bias`. `tileMode`
-  dictates edge sampling. `convolveAlpha = false` skips the alpha
-  channel (per-channel premul-aware path).
+- **`MatrixConvolution(kernelSize, kernel[], gain, bias, kernelOffset, tileMode, convolveAlpha, input)`** —
+  general 2D kernel : `out = gain · Σ kernel[i,j] · in[x + i -
+  kCenter.x, y + j - kCenter.y] + bias`. `tileMode` dictates edge
+  sampling (reuses the
+  [sampleImageWithTileMode](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
+  helper from C1.2). `convolveAlpha = false` passes alpha through
+  from the centre input pixel ; `true` convolves alpha alongside
+  RGB.
 
-Hot path : a doubly-nested loop in scalar Kotlin is plenty fast
-for the kernel sizes upstream uses (3×3 to 9×9). No SIMD needed.
-~250 LOC.
+Hot path : a doubly-nested loop in scalar Kotlin operating in
+**non-premul** colour space, walking each (i, j) kernel cell per
+output pixel. No SIMD ; runs ~5 ms on a 100×100 input with a 5×5
+kernel — adequate for the test surface and the GMs that exercise
+this filter (kernels up to 9×9).
+
+**Implementation deltas vs plan** :
+- Plan said "~250 LOC, premul-aware path". Shipped is **~85 LOC**
+  in non-premul space. Premul-aware path (multiplying RGB by alpha
+  before convolving, then un-premul'ing the result) adds complexity
+  without changing output for fully-opaque inputs ; future PR can
+  upgrade if a transparency-aware GM lands.
+- Argument validation : `require(kernel.size == width × height)`
+  surfaces config errors loudly — upstream Skia silently truncates,
+  but a fail-fast assertion is friendlier.
+- The factory copies the kernel array on construction so the caller
+  can mutate / reuse the array post-construction without affecting
+  the filter behaviour.
+
+**Tests** :
+[SkImageFiltersMatrixConvolutionTest.kt](kanvas-skia/src/test/kotlin/org/skia/foundation/SkImageFiltersMatrixConvolutionTest.kt)
+(7) — identity kernel pass-through, 3×3 box-blur preserves uniform
+input, gain saturates, bias offsets every channel,
+`convolveAlpha = false` keeps input alpha, kDecal vs kClamp tile
+modes differ at edges, kernel-size-mismatch throws.
+
+**LOC** : ~135 main delta on
+[SkImageFilters.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
++ ~190 test = **325 total** (cf. plan estimate ~250 main + ~150
+test ; main came in **under budget** because `sampleImageWithTileMode`
+from C1.2 was reusable verbatim, test came in modestly over because
+seven distinct behavioural cases pin down the parameter surface).
 
 **GMs unblocked** : `matrixconvolution.cpp`, plus 4 GMs in the
 `imagefilters*` cluster.
+
+**Status** : full kanvas-skia suite **2527 / 2527 green**
+(+7 new tests).
 
 ### C1.7 — Lighting (full surface : 6 variants) ✏️ ~1200 LOC
 
@@ -479,7 +514,7 @@ where possible.
 | C1.3 Arithmetic family ✅ | **352** (planned ~300) | **258** (planned ~150) | 3 |
 | C1.4 Morphology ✅ | **135** (planned ~300) | **145** (planned ~150) | ~8 |
 | C1.5 DisplacementMap ✅ | **95** (planned ~200) | **165** (planned ~120) | 5 |
-| C1.6 MatrixConvolution | ~250 | ~150 | 5 |
+| C1.6 MatrixConvolution ✅ | **135** (planned ~250) | **190** (planned ~150) | 5 |
 | C1.7 Lighting (6 variants) | ~1200 | ~600 | ~6 |
 | **Total** | **~2594** (so far : 344 actual + 2250 planned) | **~1640** (so far : 470 actual + 1170 planned) | **~30 GM ports unblocked** |
 
