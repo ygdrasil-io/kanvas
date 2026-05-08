@@ -362,6 +362,151 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         return true
     }
 
+    // ─── Angle ring construction (D1.2.c.2.a) ──────────────────────
+
+    /**
+     * Allocate a fresh [SkOpAngle] that wraps the curve from
+     * `fHead.next()` back to `fHead`, and stash it in `fHead.toAngle`.
+     * Returns the new angle.
+     *
+     * Mirrors `SkOpSegment::addStartSpan` (`SkOpSegment.h:91`). Used
+     * by [calcAngles] when the segment's head needs an outgoing
+     * angle.
+     */
+    fun addStartSpan(): SkOpAngle {
+        val angle = SkOpAngle()
+        angle.set(fHead, fHead.next()!!)
+        fHead.setToAngle(angle)
+        return angle
+    }
+
+    /**
+     * Allocate a fresh [SkOpAngle] that wraps the curve from `fTail`
+     * back to `fTail.prev()`, and stash it in `fTail.fromAngle`.
+     * Returns the new angle.
+     *
+     * Mirrors `SkOpSegment::addEndSpan` (`SkOpSegment.h:73`). Used by
+     * [calcAngles] when the segment's tail needs an incoming angle.
+     */
+    fun addEndSpan(): SkOpAngle {
+        val angle = SkOpAngle()
+        angle.set(fTail, fTail.prev()!!)
+        fTail.setFromAngle(angle)
+        return angle
+    }
+
+    /**
+     * Walk every span in this segment and attach `fromAngle` /
+     * `toAngle` for each non-canceled span pair. Mirrors
+     * `SkOpSegment::calcAngles` (`SkOpSegment.cpp:292`).
+     *
+     * Each span gets :
+     *  - a `toAngle` looking forward toward `span.next` (if active),
+     *  - a `fromAngle` looking backward toward `span.prev` (if its
+     *    predecessor was active).
+     *
+     * Head / tail get their angles via [addStartSpan] / [addEndSpan]
+     * when the canonical head / tail state isn't already simple
+     * (i.e. has only the segment's own pt-T in its loop).
+     */
+    fun calcAngles() {
+        var activePrior = !fHead.isCanceled()
+        if (activePrior && !fHead.simple()) addStartSpan()
+        var prior: SkOpSpan = fHead
+        var spanBase: SkOpSpanBase = fHead.next() ?: return
+        while (spanBase !== fTail) {
+            if (activePrior) {
+                val priorAngle = SkOpAngle()
+                priorAngle.set(spanBase, prior)
+                spanBase.setFromAngle(priorAngle)
+            }
+            val span = spanBase.upCast()
+            val active = !span.isCanceled()
+            val next = span.next() ?: break
+            if (active) {
+                val angle = SkOpAngle()
+                angle.set(span, next)
+                span.setToAngle(angle)
+            }
+            activePrior = active
+            prior = span
+            spanBase = next
+        }
+        if (activePrior && !fTail.simple()) addEndSpan()
+    }
+
+    /**
+     * Build radial-CCW angle rings at every span by gathering all
+     * angles from coincident pt-T loops and inserting them into a
+     * common sort ring. Mirrors `SkOpSegment::sortAngles`
+     * (`SkOpSegment.cpp:1549`).
+     *
+     * For each span :
+     *  1. Splice the span's own `fromAngle` and `toAngle` together if
+     *     both exist (`fromAngle.insert(toAngle)`).
+     *  2. Walk the span's pt-T loop ; for every coincident span on
+     *     other segments, insert that span's angles into the ring
+     *     (skipping ones already in the loop).
+     *  3. If the resulting loop has only one element, drop the
+     *     angle pointers — a 1-loop carries no sort information.
+     *
+     * Returns false if the inner safety net trips (1000-iteration
+     * loop guard from upstream).
+     */
+    fun sortAngles(): Boolean {
+        var span: SkOpSpanBase = fHead
+        outer@ while (true) {
+            val fromAngle = span.fromAngle()
+            val toAngle = if (span.final()) null else span.upCast().toAngle()
+            if (fromAngle == null && toAngle == null) {
+                // Skip — no angles to sort here.
+                if (span.final()) break@outer
+                span = span.upCast().next() ?: break@outer
+                continue
+            }
+            var baseAngle: SkOpAngle? = fromAngle
+            if (fromAngle != null && toAngle != null) {
+                if (!fromAngle.insert(toAngle)) return false
+            } else if (fromAngle == null) {
+                baseAngle = toAngle
+            }
+            var ptT: SkOpPtT? = span.ptT()
+            val stopPtT = ptT
+            var safetyNet = 1000
+            do {
+                if (--safetyNet == 0) return false
+                val oSpan = ptT?.span()
+                if (oSpan === span) {
+                    ptT = ptT?.next()
+                    continue
+                }
+                val oAngle = oSpan?.fromAngle()
+                if (oAngle != null) {
+                    if (!oAngle.loopContains(baseAngle!!)) {
+                        baseAngle.insert(oAngle)
+                    }
+                }
+                if (oSpan != null && !oSpan.final()) {
+                    val toA = oSpan.upCast().toAngle()
+                    if (toA != null) {
+                        if (!toA.loopContains(baseAngle!!)) {
+                            baseAngle.insert(toA)
+                        }
+                    }
+                }
+                ptT = ptT?.next()
+            } while (ptT != null && ptT !== stopPtT)
+            // 1-element loops carry no sort info — clear angle pointers.
+            if (baseAngle != null && baseAngle.loopCount() == 1) {
+                if (fromAngle != null) span.fFromAngle = null
+                if (toAngle != null) span.upCast().fToAngle = null
+            }
+            if (span.final()) break@outer
+            span = span.upCast().next() ?: break@outer
+        }
+        return true
+    }
+
     // ─── Angle ↔ span dispatch ─────────────────────────────────────
 
     /**
