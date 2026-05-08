@@ -276,12 +276,20 @@ class PathOpsRegressionRunner {
          * engine improves ; never lower without a maintainer comment
          * justifying the regression.
          *
-         * **Initial calibration** (D1.4 MVP, post C2/C4 + Q3 + C1.7) :
-         * 293 / 303 survived = **96.7 %** measured — no engine
-         * crashes, 10 `null`-returns on edge cases. We pin the floor
-         * at **90 %** (~7 percentage-point cushion) to absorb future
-         * fixture additions from upstream / our extractor improving
-         * its parse rate. Bump monotonically as Op debug-passes land.
+         * **Calibration history** :
+         *  - **D1.4 MVP** (initial run, 303 fixtures) : 293 survived
+         *    = 96.7 %. Floor pinned at 90 %.
+         *  - **D1.4 extractor coverage follow-up** (+32 fixtures →
+         *    335 total via `addRect` brace-init variants + multi-line
+         *    cubic-to joiner + `SkBits2Float(0x…)` decoder + trailing
+         *    `// comment` strip + `testPathOpCheck` variant) :
+         *    323 / 335 = **96.4 %** survived ; rate dropped 0.3 pp
+         *    because the new fixtures include 2 extra
+         *    `RETURNED_NULL` edge cases. No new crashes ; floor
+         *    stays at 90 % (cushion narrows from 6.7 pp to 6.4 pp).
+         *
+         * Bump the floor when an engine debug-pass moves the
+         * `SURVIVED` bucket into the high-90s.
          */
         private const val INITIAL_SURVIVAL_FLOOR: Double = 0.90
 
