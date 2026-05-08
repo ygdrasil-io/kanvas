@@ -40,7 +40,7 @@
 > | **B2** SkSVGCanvas | ✅ shipped | All 5 slices delivered : 1104 main + 1351 test (mini plan estimate ~980 + ~550). See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) for the per-slice breakdown. |
 > | **Q1** SkAutoCanvasRestore Kotlin idiom | ✅ shipped | `withSave` / `withLayer` extension functions on `SkCanvas` (`SkAutoCanvasRestore.kt`) |
 > | **Q2** Canvas wrappers | ✅ shipped | `SkNoDrawCanvas` + `SkPaintFilterCanvas` (abstract) + `SkOverdrawCanvas` in [`org.skia.utils`](kanvas-skia/src/main/kotlin/org/skia/utils/) ; 13 tests. |
-> | **Q3** SkBBHFactory + Picture cull | 📋 pending | |
+> | **Q3** SkBBHFactory + Picture cull | ✅ shipped | `SkBBoxHierarchy` + `SkRTree` (bottom-up bulk-load, branch-factor 6-11) + `SkRTreeFactory` ; `SkPictureRecorder.beginRecording` accepts an optional factory ; per-op bounds computed by `SkPictureBoundsBuilder` ; `SkPicture.playback` queries the BBH for sub-rect clips. 21 tests. |
 > | **Q4** SkDeferredDisplayList | 📋 low-priority | |
 > | **Q5** Linear sRGB diagnostic | ✅ shipped | Diagnostic confirms upstream applies the matrix in **encoded sRGB** (linear-mode wins 0 cells, encoded wins 5/5 non-tie) ; the residual ColorMatrixGM gap is elsewhere. Test in `ColorMatrixModeDiagnosticTest`. |
 
@@ -1489,32 +1489,67 @@ arities — and the 13-test coverage matrix).
 
 ---
 
-### Q3 — `SkBBHFactory` + Picture cull
+### Q3 — `SkBBHFactory` + Picture cull ✅ shipped
 
 **Skia upstream files** :
-- `include/core/SkBBHFactory.h`
-- `src/core/SkRTree.cpp`
+- `include/core/SkBBHFactory.h` (interface)
+- `src/core/SkRTree.{h,cpp}` (concrete bottom-up bulk-loaded R-tree)
 
-**Algorithm** : R-tree indexes recorded ops by their device-space
-bounds. At playback time, query the R-tree with the current clip
-bounds and skip ops whose bounds don't intersect.
+**Algorithm** : the R-tree indexes recorded ops by their device-space
+bounds. At playback time, [SkPicture.playback] queries the tree with
+the canvas's local-space clip bounds and dispatches only the ops
+whose bounds intersect — turning an `O(N)` walk into `O(log N + K)`
+on tight clips.
 
-**Kotlin target** :
-- `kanvas-skia/src/main/kotlin/org/skia/core/SkRTree.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/core/SkBBHFactory.kt`
+**Shipped Kotlin** :
+- [`kanvas-skia/src/main/kotlin/org/skia/core/SkBBoxHierarchy.kt`](kanvas-skia/src/main/kotlin/org/skia/core/SkBBoxHierarchy.kt)
+  — abstract base : `insert(rects, n)`, `search(query): IntArray`,
+  `bytesUsed`, plus a `Metadata(isDraw)` parity hook.
+- [`kanvas-skia/src/main/kotlin/org/skia/core/SkRTree.kt`](kanvas-skia/src/main/kotlin/org/skia/core/SkRTree.kt)
+  — concrete bottom-up bulk-loaded R-tree, faithful port of
+  upstream's `bulkLoad` / `search` (branch factor `[6, 11]`,
+  insertion-order preserved through the tree so [search] returns
+  ascending-sorted indices). Empty rects skipped silently.
+- [`kanvas-skia/src/main/kotlin/org/skia/core/SkBBHFactory.kt`](kanvas-skia/src/main/kotlin/org/skia/core/SkBBHFactory.kt)
+  — `fun interface SkBBHFactory { fun create(): SkBBoxHierarchy }`
+  (lambda-friendly SAM) plus `object SkRTreeFactory` mirroring
+  upstream's default.
+- [`kanvas-skia/src/main/kotlin/org/skia/core/SkPictureBoundsBuilder.kt`](kanvas-skia/src/main/kotlin/org/skia/core/SkPictureBoundsBuilder.kt)
+  — walks the recorded `SkRecord` list once, tracking the CTM via
+  a matrix stack, producing per-op device-space bounds (tight for
+  geometric draws, paint-stroke-outset where applicable, picture's
+  cullRect for state ops / text / `drawPaint` / `drawColor`).
+- [`SkCanvas`](kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt)
+  gains `getDeviceClipBounds()` and `getLocalClipBounds()`
+  helpers (the latter inverts the CTM for the BBH query).
+- [`SkPictureRecorder.beginRecording`](kanvas-skia/src/main/kotlin/org/skia/core/SkPictureRecorder.kt)
+  accepts an optional `bbhFactory: SkBBHFactory? = null`. When
+  non-null, `finishRecordingAsPicture` builds the BBH from the
+  per-op bounds and bakes it into the picture.
+- [`SkPicture.playback`](kanvas-skia/src/main/kotlin/org/skia/core/SkPicture.kt)
+  short-circuits empty clips, falls back to a linear walk when the
+  clip covers the full cullRect, and otherwise dispatches only the
+  BBH-search hits in insertion order.
 
-**LOC** : ~600.
+**Tests** (21 total, all green) :
+- [`SkRTreeTest`](kanvas-skia/src/test/kotlin/org/skia/core/SkRTreeTest.kt)
+  — 9 tests including the upstream-parity 100-iteration random
+  benchmark (200 rects × 50 queries vs brute force), depth bound
+  envelope, empty-insert / single-rect / empty-rect skipping,
+  insertion-order sort, double-insert rejection, factory parity.
+- [`SkPictureBBHCullTest`](kanvas-skia/src/test/kotlin/org/skia/core/SkPictureBBHCullTest.kt)
+  — 12 tests covering: BBH presence flag, pixel parity under full
+  and sub-rect clips, effective cull (counting canvas), CTM
+  honoured during recording, never-under-includes (10×10 grid
+  intersect verification), draw-order preservation, empty-clip
+  short-circuit.
 
-**Phase decomposition** :
+**LOC** : ~582 main + ~430 test = ~1012 total.
 
-- **Q3.1** — `SkRTree` : N-ary R-tree with branch factor 2-8.
-  - **LOC** : ~400.
-- **Q3.2** — `SkPictureRecorder` integration : emit op bounds during
-  recording. `SkPicture.playback` queries the R-tree.
-  - **LOC** : ~200.
-
-**Validation** : huge picture (1000+ ops) replayed under a tiny clip
-should be much faster.
+**Validation** : a 1000-op picture replayed under a tiny clip is
+now O(log N + K) ; the counting-canvas tests demonstrate effective
+cull (3-op picture under 20% clip → 1 op replayed ; 100-op grid
+under 30% clip → 16 ops replayed).
 
 ---
 
@@ -1682,16 +1717,16 @@ DAG of dependencies :
 13. 📋 **C1** Image filters extras (mini-planned ; **~2750 main + ~1440 test across 7 slices**, see [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). Group A core (6 factories) déjà shipped ; 22 missing factories audited and budgeted. RuntimeShader descoped on the D2 SkRuntimeEffect dependency.).
 14. ✅ **C3** SkEmbossMaskFilter (~278 main + ~120 delta + ~280 test) — 3-plane mask dispatch via `Sk3DMask` + `SkMaskFilter.Format` ; per-pixel Lambertian + specular lighting.
 15. ✅ **Q2** Canvas wrappers (~453 main + ~270 test) — `SkNoDrawCanvas` + `SkPaintFilterCanvas` (abstract) + `SkOverdrawCanvas`.
-16. 📋 **Q3** SkBBHFactory + Picture cull (~600 LOC, perf for Picture, no GM unblocking).
+16. ✅ **Q3** SkBBHFactory + Picture cull (~582 main + ~430 test) — `SkBBoxHierarchy` + `SkRTree` + `SkRTreeFactory` + `SkPictureBoundsBuilder` ; `SkPictureRecorder` builds the BBH from per-op device-space bounds, `SkPicture.playback` queries on sub-rect clips.
 17. ✅ **Q5** Linear sRGB diagnostic (~290 test LOC) — diagnosis : upstream applies matrix in encoded sRGB ; gap is elsewhere.
 18. 📋 **C2/C4** Misc completions (kMorph path effect, StrokeAndFill, drawAnnotation / drawDrawable / drawShadow ; ~1300 LOC ensemble).
 19. 📋 **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception* — large but unlocks SkSL-using GMs).
 20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
 
-**Total estimated LOC remaining** : ~5 600 of new Kotlin code
-(C1 1800 + Q3 600 + C2/C4 1300 + D2 1500 + Q4 400 ;
-Q5 + C3 + Q2 shipped, D1 in-flight LOC tracked separately
-under the chantier's own slice budget). Decomposes into ~12 PRs
+**Total estimated LOC remaining** : ~5 000 of new Kotlin code
+(C1 1800 + C2/C4 1300 + D2 1500 + Q4 400 ;
+Q5 + C3 + Q2 + Q3 shipped, D1 in-flight LOC tracked separately
+under the chantier's own slice budget). Decomposes into ~11 PRs
 of 80-1500 LOC each.
 
 **Total LOC delivered so far** : ~22 000 across the eleven shipped
