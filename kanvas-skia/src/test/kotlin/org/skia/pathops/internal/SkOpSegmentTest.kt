@@ -3,6 +3,7 @@ package org.skia.pathops.internal
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotSame
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -240,5 +241,43 @@ class SkOpSegmentTest {
     fun `UseInnerWinding tie-breaks by sign of outer when absolutes match`() {
         assertTrue(SkOpSegment.UseInnerWinding(-2, 2))
         assertFalse(SkOpSegment.UseInnerWinding(2, -2))
+    }
+
+    // ─── Angle ring construction (D1.2.c.2.a) ──────────────────────
+
+    @Test
+    fun `addStartSpan attaches a fresh angle to fHead's toAngle slot`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val angle = seg.addStartSpan()
+        assertSame(seg.fHead, angle.start())
+        assertSame(seg.fTail, angle.end())
+        assertSame(angle, seg.fHead.toAngle())
+    }
+
+    @Test
+    fun `addEndSpan attaches a fresh angle to fTail's fromAngle slot`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val angle = seg.addEndSpan()
+        assertSame(seg.fTail, angle.start())
+        assertSame(seg.fHead, angle.end())
+        assertSame(angle, seg.fTail.fromAngle())
+    }
+
+    @Test
+    fun `calcAngles is a no-op when head and tail are simple and active`() {
+        // Single-span segment with simple head + tail — no angles attached.
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.calcAngles()
+        // fHead is canonical, fTail is canonical — neither got angles.
+        assertNull(seg.fHead.toAngle())
+        assertNull(seg.fTail.fromAngle())
+    }
+
+    @Test
+    fun `sortAngles returns true on a segment with no angles attached`() {
+        // No angles on any span → outer loop short-circuits everywhere ;
+        // method runs to completion and returns true.
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        assertTrue(seg.sortAngles())
     }
 }
