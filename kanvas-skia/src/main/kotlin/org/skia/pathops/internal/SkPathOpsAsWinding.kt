@@ -8,11 +8,15 @@
  * Phase D1.2.h.6.3 — Multi-contour AsWinding **partial impl** :
  * port the contour bbox-tree builder (`Contour` + `contourBounds`
  * + `inParent`) and use it to detect flat-tree inputs (no contour
- * contains another). For flat trees, even-odd vs winding fill is
- * still correct via a simple `makeFillType` swap. For nested trees
- * (donut hole, letter "O", etc.), return null until the full
- * upstream machinery (containment ray-cast + reverse-marker pass +
- * `reverseAddPath`) lands in a follow-up.
+ * contains another).
+ *
+ * Phase D1.2.h.6.4 — Add `getDirection` (signed-area test) and a
+ * **2-level-nested fast path** : when the bbox tree is exactly
+ * two levels deep, compare each child's direction to its parent.
+ * If they alternate (parent CW + child CCW, or vice-versa), no
+ * reversal is needed and `makeFillType` is correct. Same direction
+ * (parent CW + child CW) means the child needs reversing — return
+ * null (deferred to h.6.5+).
  */
 package org.skia.pathops.internal
 
@@ -141,3 +145,126 @@ internal fun inParent(contour: AsWindingContour, parent: AsWindingContour) {
  */
 internal fun isFlatTree(root: AsWindingContour): Boolean =
     root.children.all { it.children.isEmpty() }
+
+/**
+ * Contour-direction enum used during reverse-marker analysis.
+ * Mirrors `Contour::Direction`
+ * (`src/pathops/SkPathOpsAsWinding.cpp:30`).
+ *
+ * `kCCW` = `-1`, `kNone` = `0`, `kCW` = `+1` — preserves the
+ * upstream sign-arithmetic convention.
+ */
+internal enum class AsWindingDirection(val sign: Int) { kCCW(-1), kNone(0), kCW(1) }
+
+private fun toDirection(dy: Float): AsWindingDirection = when {
+    dy > 0 -> AsWindingDirection.kCCW
+    dy < 0 -> AsWindingDirection.kCW
+    else -> AsWindingDirection.kNone
+}
+
+/**
+ * Compute [contour]'s direction (CW / CCW) by summing the signed
+ * area of its constituent line / quad / conic / cubic verbs.
+ * Mirrors `OpAsWinding::getDirection`
+ * (`src/pathops/SkPathOpsAsWinding.cpp:217`).
+ *
+ * Strategy : per verb, accumulate `(p0.y - pN.y) * (p0.x + pN.x)`
+ * (the shoelace formula on endpoints). Negative total → CCW,
+ * positive → CW.
+ *
+ * Curve verbs collapse to their endpoints — an inexact
+ * approximation that nonetheless agrees with upstream because the
+ * direction sign is invariant under polygon-vs-curve substitution
+ * for non-self-intersecting paths.
+ */
+internal fun getDirection(path: SkPath, contour: AsWindingContour): AsWindingDirection {
+    var verbCount = -1
+    var coordIdx = 0
+    var penX = 0f; var penY = 0f
+    var totalSignedArea = 0f
+    for (v in path.verbs) {
+        ++verbCount
+        // Advance the pen for each verb, regardless of whether it
+        // falls inside the contour range we're measuring.
+        if (verbCount < contour.verbStart || verbCount >= contour.verbEnd) {
+            // Still need to advance the coord cursor.
+            when (v) {
+                SkPath.Verb.kMove -> {
+                    penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
+                    coordIdx += 2
+                }
+                SkPath.Verb.kLine -> {
+                    penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
+                    coordIdx += 2
+                }
+                SkPath.Verb.kQuad, SkPath.Verb.kConic -> {
+                    coordIdx += 2 // control
+                    penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
+                    coordIdx += 2
+                }
+                SkPath.Verb.kCubic -> {
+                    coordIdx += 4 // 2 controls
+                    penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
+                    coordIdx += 2
+                }
+                SkPath.Verb.kClose -> { /* no points */ }
+            }
+            continue
+        }
+        when (v) {
+            SkPath.Verb.kMove -> {
+                penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
+                coordIdx += 2
+            }
+            SkPath.Verb.kLine -> {
+                val ex = path.coords[coordIdx]; val ey = path.coords[coordIdx + 1]
+                coordIdx += 2
+                totalSignedArea += (penY - ey) * (penX + ex)
+                penX = ex; penY = ey
+            }
+            SkPath.Verb.kQuad, SkPath.Verb.kConic -> {
+                coordIdx += 2 // skip control
+                val ex = path.coords[coordIdx]; val ey = path.coords[coordIdx + 1]
+                coordIdx += 2
+                totalSignedArea += (penY - ey) * (penX + ex)
+                penX = ex; penY = ey
+            }
+            SkPath.Verb.kCubic -> {
+                coordIdx += 4 // skip 2 controls
+                val ex = path.coords[coordIdx]; val ey = path.coords[coordIdx + 1]
+                coordIdx += 2
+                totalSignedArea += (penY - ey) * (penX + ex)
+                penX = ex; penY = ey
+            }
+            SkPath.Verb.kClose -> { /* no points */ }
+        }
+    }
+    return if (totalSignedArea < 0) AsWindingDirection.kCCW else AsWindingDirection.kCW
+}
+
+/**
+ * 2-level-nested AsWinding analysis : check that every (parent,
+ * child) pair has alternating directions (one CW, one CCW). When
+ * all pairs alternate, no reversal is needed and the input is
+ * already a well-formed winding-equivalent path — caller can
+ * `makeFillType`.
+ *
+ * Returns false (reversal needed → caller bail-outs to null) when
+ * any pair shares direction, or when the tree is deeper than 2
+ * levels (caller falls through to null until h.6.5).
+ */
+internal fun no2LevelReverseNeeded(
+    path: SkPath,
+    sortedRoot: AsWindingContour,
+): Boolean {
+    for (parent in sortedRoot.children) {
+        if (parent.children.isEmpty()) continue
+        val parentDir = getDirection(path, parent)
+        for (child in parent.children) {
+            if (child.children.isNotEmpty()) return false // 3+ levels deep
+            val childDir = getDirection(path, child)
+            if (parentDir == childDir) return false // same direction → reverse needed
+        }
+    }
+    return true
+}

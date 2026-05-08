@@ -45,6 +45,7 @@ import org.skia.pathops.internal.bridgeXor
 import org.skia.pathops.internal.contourBounds
 import org.skia.pathops.internal.inParent
 import org.skia.pathops.internal.isFlatTree
+import org.skia.pathops.internal.no2LevelReverseNeeded
 
 /**
  * Pathops free functions. Mirrors Skia's `include/pathops/SkPathOps.h`.
@@ -350,10 +351,13 @@ public object SkPathOps {
         val sorted = AsWindingContour(SkRect.MakeEmpty(), 0, 0)
         for (c in contours) inParent(c, sorted)
         if (isFlatTree(sorted)) return path.makeFillType(targetFill)
-        // Nested contours (donut hole, letter "O", etc.) — needs the
-        // full Contour ray-cast containment + reverse-marker pass +
-        // SkPath.reverseAddPath (~250 LOC C++, deferred to a
-        // follow-up slice).
+        // 2-level-nested fast path : when every (parent, child) pair
+        // has alternating directions (one CW, one CCW), the input is
+        // already winding-equivalent — `makeFillType` is correct.
+        if (no2LevelReverseNeeded(path, sorted)) return path.makeFillType(targetFill)
+        // Reversal needed (or > 2 levels deep) — needs the upstream
+        // reverse-marker pass + SkPath.reverseAddPath (deferred to
+        // h.6.5+).
         return null
     }
 }
