@@ -127,6 +127,68 @@ class SkPathOpsCommonTest {
         assertTrue(head.sortAngles())
     }
 
+    // ─── missingCoincidence / moveMultiples / moveNearby (D1.2.h.2) ──
+
+    @Test
+    fun `Segment missingCoincidence returns false on a done segment`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        a.markAllDone()
+        org.junit.jupiter.api.Assertions.assertFalse(a.missingCoincidence())
+    }
+
+    @Test
+    fun `Segment missingCoincidence returns false on a single-span segment`() {
+        // Single line, no inner spans, no opp loop — nothing to find.
+        val head = newContourList(SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) })
+        pushLine(head, 0f, 0f, 10f, 0f)
+        org.junit.jupiter.api.Assertions.assertFalse(head.fHead.missingCoincidence())
+    }
+
+    @Test
+    fun `Segment moveMultiples returns true on a single-span segment`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // No span has spanAddsCount > 1 → loop is a no-op.
+        assertTrue(a.moveMultiples())
+    }
+
+    @Test
+    fun `Segment moveNearby returns true on a single-span segment`() {
+        val head = newContourList(null)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        // No alias spans, no near-by adjacent pairs to merge.
+        assertTrue(head.fHead.moveNearby())
+    }
+
+    // ─── Contour driver wrappers (D1.2.h.2) ───────────────────────
+
+    @Test
+    fun `Contour missingCoincidence false on plain non-coincident contours`() {
+        val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
+        val head = newContourList(gs)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        head.appendContour().also {
+            it.setGlobalState(gs)
+            pushLine(it, 0f, 5f, 10f, 5f)
+        }
+        org.junit.jupiter.api.Assertions.assertFalse(head.missingCoincidence())
+    }
+
+    @Test
+    fun `Contour moveMultiples true on plain contours`() {
+        val head = newContourList(null)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        head.appendContour().also { pushLine(it, 0f, 5f, 10f, 5f) }
+        assertTrue(head.moveMultiples())
+    }
+
+    @Test
+    fun `Contour moveNearby true on plain contours`() {
+        val head = newContourList(null)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        head.appendContour().also { pushLine(it, 0f, 5f, 10f, 5f) }
+        assertTrue(head.moveNearby())
+    }
+
     // ─── globalState contourHead get/set ──────────────────────────
 
     @Test
