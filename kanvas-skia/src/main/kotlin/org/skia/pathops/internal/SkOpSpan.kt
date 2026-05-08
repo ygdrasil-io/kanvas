@@ -121,6 +121,23 @@ internal class SkOpPtT {
         return false
     }
 
+    /**
+     * True iff some entry in [check]'s opp loop (walking forward
+     * from [check] up to but not including `this`) has the same `fPt`
+     * as `this`. Used by [SkOpSegment.spansNearby] to skip duplicate
+     * points already seen during a walk. Mirrors
+     * `SkOpPtT::ptAlreadySeen`.
+     */
+    fun ptAlreadySeen(check: SkOpPtT): Boolean {
+        var c: SkOpPtT? = check
+        while (c !== this) {
+            if (c == null) return false
+            if (this.fPt == c.fPt) return true
+            c = c.next()
+        }
+        return false
+    }
+
     companion object {
         /** Mirrors the kIsAlias / kIsDuplicate enum in upstream. */
         const val kIsAlias: Int = 1

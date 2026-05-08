@@ -1290,6 +1290,142 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         // TODO (D1.2.g) : globalState().coincidence().release(this).
     }
 
+    // ─── Coincidence helpers (D1.2.c.2.f) ──────────────────────────
+
+    /**
+     * Find the first span whose `done` flag is unset. Mirrors
+     * `SkOpSegment::undoneSpan` (`SkOpSegment.cpp:1708`). Used by
+     * the contour walker to seed the next sort.
+     */
+    fun undoneSpan(): SkOpSpan? {
+        var span: SkOpSpan = fHead
+        while (true) {
+            val next = span.next()
+            if (!span.done()) return span
+            if (next == null || next.final()) return null
+            span = next.upCast()
+        }
+    }
+
+    /**
+     * True iff the prior↔current pt-T pair represents a coincidence
+     * with [opp]. Samples the curve at the average t and projects a
+     * perpendicular ray through [opp]'s sub-curve ; coincidence
+     * holds when (a) the midpoint already coincides with one of the
+     * pt-T endpoints, or (b) the perpendicular ray intersects [opp]
+     * within `[0, 1]` at a point approximately-equal to our midpoint.
+     *
+     * Mirrors `SkOpSegment::testForCoincidence` (`SkOpSegment.cpp:1671`).
+     */
+    fun testForCoincidence(
+        priorPtT: SkOpPtT,
+        ptT: SkOpPtT,
+        prior: SkOpSpanBase,
+        spanBase: SkOpSpanBase,
+        opp: SkOpSegment,
+    ): Boolean {
+        val midT = (prior.t() + spanBase.t()) / 2
+        val midPt = ptAtT(midT)
+        var coincident = true
+        if (!SkDPoint.ApproximatelyEqual(priorPtT.fPt, midPt) &&
+            !SkDPoint.ApproximatelyEqual(ptT.fPt, midPt)) {
+            if (priorPtT.span() === ptT.span()) return false
+            coincident = false
+            val curvePart = SkDCurve()
+            subDivide(prior, spanBase, curvePart)
+            curvePart.fVerb = fVerb
+            val dxdy = curvePart.slopeAtT(0.5)
+            val partMidPt = curvePart.pointAtT(0.5)
+            val ray = SkDLine().apply {
+                this[0] = SkDPoint(midPt.fX.toDouble(), midPt.fY.toDouble())
+                this[1] = SkDPoint(partMidPt.x + dxdy.y, partMidPt.y - dxdy.x)
+            }
+            val oppPart = SkDCurve()
+            opp.subDivide(priorPtT.span()!!, ptT.span()!!, oppPart)
+            oppPart.fVerb = opp.verb()
+            val ix = SkIntersections()
+            oppPart.intersectRay(ray, ix)
+            for (index in 0 until ix.used()) {
+                if (!between(0.0, ix.t(0, index), 1.0)) continue
+                val oppPt = ix.pt(index)
+                if (oppPt.approximatelyDEqual(SkDPoint(midPt.fX.toDouble(), midPt.fY.toDouble()))) {
+                    coincident = true
+                }
+            }
+        }
+        return coincident
+    }
+
+    /**
+     * True iff the closest-point pair across [refSpan]'s and
+     * [checkSpan]'s pt-T loops is approximately coincident. Writes
+     * the result into [foundOut]`[0]`. Returns `false` only on the
+     * 100-iteration safety net trip from upstream.
+     *
+     * Mirrors `SkOpSegment::spansNearby` (`SkOpSegment.cpp:1370`).
+     */
+    fun spansNearby(
+        refSpan: SkOpSpanBase,
+        checkSpan: SkOpSpanBase,
+        foundOut: BooleanArray,
+    ): Boolean {
+        val refHead = refSpan.ptT()
+        val checkHead = checkSpan.ptT()
+        // Cheap reject : if the heads are far apart, all pairs are.
+        if (!SkDPoint.WayRoughlyEqual(refHead.fPt, checkHead.fPt)) {
+            foundOut[0] = false
+            return true
+        }
+        var distSqBest = Double.POSITIVE_INFINITY
+        var refBest: SkOpPtT? = null
+        var checkBest: SkOpPtT? = null
+        var ref: SkOpPtT = refHead
+        outer@ while (true) {
+            if (!ref.deleted()) {
+                while (ref.ptAlreadySeen(refHead)) {
+                    val n = ref.next() ?: break@outer
+                    if (n === refHead) break@outer
+                    ref = n
+                }
+                val refSeg = ref.span()?.segment()
+                var check: SkOpPtT = checkHead
+                var escapeHatch = 100
+                inner@ while (true) {
+                    if (!check.deleted()) {
+                        while (check.ptAlreadySeen(checkHead)) {
+                            val n = check.next() ?: break@inner
+                            if (n === checkHead) break@inner
+                            check = n
+                        }
+                        val dx = (ref.fPt.fX - check.fPt.fX).toDouble()
+                        val dy = (ref.fPt.fY - check.fPt.fY).toDouble()
+                        val distSq = dx * dx + dy * dy
+                        val checkSeg = check.span()?.segment()
+                        val disjointOrDifferent =
+                            refSeg !== checkSeg ||
+                            !(refSeg ?: this).ptsDisjoint(ref.fT, ref.fPt, check.fT, check.fPt)
+                        if (distSqBest > distSq && disjointOrDifferent) {
+                            distSqBest = distSq
+                            refBest = ref
+                            checkBest = check
+                        }
+                        if (--escapeHatch <= 0) return false
+                    }
+                    val n = check.next() ?: break@inner
+                    if (n === checkHead) break@inner
+                    check = n
+                }
+            }
+            val n = ref.next() ?: break@outer
+            if (n === refHead) break@outer
+            ref = n
+        }
+        foundOut[0] = checkBest != null && refBest != null &&
+            (refBest.span()?.segment() ?: this).match(refBest, checkBest.span()!!.segment()!!,
+                checkBest.fT, checkBest.fPt)
+        return true
+    }
+
     // ─── Angle ↔ span dispatch ─────────────────────────────────────
 
     /**
@@ -1309,6 +1445,25 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
     override fun compareTo(other: SkOpSegment): Int = fBounds.top.compareTo(other.fBounds.top)
 
     companion object {
+        /**
+         * Walk every span starting from [span] and reset the
+         * visited flag on every segment in each span's pt-T loop.
+         * Mirrors `SkOpSegment::ClearVisited` (`SkOpSegment.cpp:1140`).
+         */
+        fun ClearVisited(start: SkOpSpanBase) {
+            var span: SkOpSpanBase? = start
+            while (span != null) {
+                var ptT: SkOpPtT? = span.ptT().next()
+                val stopPtT = span.ptT()
+                while (ptT != null && ptT !== stopPtT) {
+                    val opp = ptT.span()?.segment()
+                    opp?.resetVisited()
+                    ptT = ptT.next()
+                }
+                span = if (span.final()) null else span.upCast().next()
+            }
+        }
+
         /**
          * Sign of the wind value at the start of the (start, end) span
          * pair — negated when `start.t < end.t`. Mirrors `SkOpSegment::SpanSign`.
