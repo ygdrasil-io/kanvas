@@ -238,6 +238,24 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         return fDoneCount == fCount
     }
 
+    /**
+     * Walk every span and return the first non-`kNo` answer to
+     * `SkOpSpanBase.collapsed(s, e)`. Mirrors
+     * `SkOpSegment::collapsed(double, double)`
+     * (`SkOpSegment.cpp:338`). Used by [SkOpCoincidence.addIfMissing]
+     * (lands in D1.2.g.c.3).
+     */
+    fun collapsed(s: Double, e: Double): SkOpSpanBase.Collapsed {
+        var span: SkOpSpanBase = fHead
+        while (true) {
+            val result = span.collapsed(s, e)
+            if (result != SkOpSpanBase.Collapsed.kNo) return result
+            val nxt = span.upCastable()?.next() ?: break
+            span = nxt
+        }
+        return SkOpSpanBase.Collapsed.kNo
+    }
+
     // ─── Span-list mutation ────────────────────────────────────────
 
     /**
@@ -1224,6 +1242,47 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
 
     /** Convenience overload : derives `pt` via [ptAtT]. */
     fun addT(t: Double): SkOpPtT? = addT(t, ptAtT(t))
+
+    /**
+     * Walk `fHead..fTail` looking for a pt-T at parameter [t]. Returns
+     * the pt-T if one already exists at that t (or matches via
+     * [match]) ; otherwise null. When [opp] is non-null, the result
+     * must additionally have a sibling on [opp] in its loop.
+     *
+     * Mirrors `SkOpSegment::existing(double, const SkOpSegment*)`
+     * (`SkOpSegment.cpp:203`). Used by [SkOpCoincidence.addOrOverlap]
+     * (D1.2.g.c.3) to skip pt-T allocation when a usable one already
+     * sits at the desired t-value.
+     */
+    fun existing(t: Double, opp: SkOpSegment?): SkOpPtT? {
+        var test: SkOpSpanBase = fHead
+        val pt = ptAtT(t)
+        var testPtT: SkOpPtT
+        while (true) {
+            testPtT = test.ptT()
+            if (testPtT.fT == t) break
+            if (!match(testPtT, this, t, pt)) {
+                if (t < testPtT.fT) return null
+            } else {
+                if (opp == null) return testPtT
+                // Walk testPtT's loop looking for a sibling on `this`
+                // at the same t / pt.
+                var loop: SkOpPtT = testPtT.next() ?: return null
+                var found = false
+                while (loop !== testPtT) {
+                    if (loop.span()?.segment() === this && loop.fT == t && loop.fPt == pt) {
+                        found = true; break
+                    }
+                    loop = loop.next() ?: return null
+                }
+                if (!found) return null
+                break
+            }
+            if (test === fTail) return null
+            test = test.upCast().next() ?: return null
+        }
+        return if (opp != null && test.contains(opp) == null) null else testPtT
+    }
 
     /**
      * Emit the curve segment from [start] to [end] into [path].
