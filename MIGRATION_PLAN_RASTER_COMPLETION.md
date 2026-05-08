@@ -22,11 +22,11 @@
 > | **C5** ARGB_4444 + color-management completion | ✅ shipped (Phase 6s + ARGB_4444 commit) | Display P3 / HDR PQ tests restent (~150 LOC) |
 > | **D1.0** SkPathOps skeleton + TightBounds | ✅ shipped | Entry points `Op` / `Simplify` / `AsWinding` retournent `null` jusqu'à D1.3 |
 > | **D1.1** Foundation (curves, line ops, intersections, TSect) | ✅ shipped (15 sous-slices) | a, b, c, d.1-3, e.1, e.2.a, e.2.b, e.2.c.1-4, e.3 |
-> | **D1.2** Op contour assembly | 🔄 en cours | a, b, b.2.0, c, e, f, i, i.2 livrés ; reste winding propagation + assembleur |
+> | **D1.2** Op contour assembly | 🔄 en cours | g.* coincidence + h.0–h.4 (Op fast paths + HandleCoincidence orchestrator) + h.5.* (active edges + ray-tracing winding suite + Op end-to-end wiring) + h.6.0–h.6.4 (Simplify end-to-end + AsWinding fast paths) livrés ; reste finitions |
 > | **D1.3** Top-level entry points | 📋 pending | Bloqué sur D1.2 close |
 > | **D2** SkRuntimeEffect shim | 📋 doc-only | Plan ajouté ; pas d'implem |
-> | **D3** Image codecs | 📋 pending | |
-> | **D4** DM sink architecture | 📋 pending | |
+> | **D3** Image codecs | ✅ shipped | D3.1 PNG / D3.2 JPEG / D3.3 GIF+BMP+WBMP / D3.4 WEBP (TwelveMonkeys plugin) / D3.5 PNG+JPEG encoders / D3.6 `SkImage.encodeToData` |
+> | **D4** DM sink architecture | ✅ shipped | D4.1 Sink + Raster8888/F16 / D4.2 PictureSink / D4.3 Runner + Report / D4.4 DmCli + DmMain / D4.5 SvgSink (PdfSink ❌ descoped per B1) |
 > | **I1** SkTextBlob + drawTextBlob + Picture wiring | ✅ shipped (I1.1-1.5) | 4 GM ports |
 > | **I2** Glyph cache + variable-fonts (light) + subpixel | ✅ shipped (I2.1-2.3) | Variable fonts AWT-wired déféré |
 > | **I3** SkRegion + SkAAClip + SkRasterClip | ✅ shipped (I3.1-3.3) | clipMask Phase 7q remplacé par SkAAClip |
@@ -38,7 +38,7 @@
 > | **C4** drawAnnotation / drawDrawable / drawShadow | 📋 pending | |
 > | **B1** SkPDF (PDFBox adapter) | ❌ descoped | No ported GM needs PDF — only `internal_links.cpp` is PDF-specific upstream and isn't ported. See B1 section. |
 > | **B2** SkSVGCanvas | ✅ shipped | All 5 slices delivered : 1104 main + 1351 test (mini plan estimate ~980 + ~550). See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) for the per-slice breakdown. |
-> | **Q1** SkAutoCanvasRestore Kotlin idiom | 📋 pending | |
+> | **Q1** SkAutoCanvasRestore Kotlin idiom | ✅ shipped | `withSave` / `withLayer` extension functions on `SkCanvas` (`SkAutoCanvasRestore.kt`) |
 > | **Q2** Canvas wrappers | 📋 pending | |
 > | **Q3** SkBBHFactory + Picture cull | 📋 pending | |
 > | **Q4** SkDeferredDisplayList | 📋 low-priority | |
@@ -436,7 +436,7 @@ internal object SkRuntimeEffectRegistry {
 
 ---
 
-### D3 — Image codecs (`SkCodec` + `encodeToData`)
+### D3 — Image codecs (`SkCodec` + `encodeToData`) ✅ shipped
 
 **Skia upstream files** :
 - `include/codec/SkCodec.h`, `SkPngDecoder.h`, `SkJpegDecoder.h`,
@@ -623,7 +623,7 @@ channel after re-decode.
 
 ---
 
-### D4 — DM sink architecture
+### D4 — DM sink architecture ✅ shipped
 
 **Skia upstream files** :
 - `dm/DM.cpp` (the runner)
@@ -1348,9 +1348,16 @@ pixel-level comparison deferred until a workflow demands it.
 
 ## Infrastructure & qualité
 
-### Q1 — `SkAutoCanvasRestore` Kotlin idiom
+### Q1 — `SkAutoCanvasRestore` Kotlin idiom ✅ shipped
 
-**LOC** : ~30.
+Implemented in
+[SkAutoCanvasRestore.kt](kanvas-skia/src/main/kotlin/org/skia/core/SkAutoCanvasRestore.kt)
+as `withSave` / `withLayer` extension functions on [SkCanvas].
+Plus a Phase Q1.x clean-up that migrated 11 GMs to the
+extension-function form (see commit `14748d5` "Phase Q1.x —
+migrate 11 GMs to withSave / withLayer").
+
+**LOC** : ~30 (shipped).
 
 ```kotlin
 public inline fun <R> SkCanvas.withSave(block: SkCanvas.() -> R): R {
@@ -1528,35 +1535,51 @@ DAG of dependencies :
                               └─ C2/C3/C4 misc completions
 ```
 
-**Recommended ordering for "DM-ready iso" goal** :
+**Recommended ordering for "DM-ready iso" goal**.
 
-1. **D4** Sink architecture (~700 LOC)
-2. **Q1** AutoCanvasRestore (~30 LOC, immediate quality-of-life)
-3. **C5** ARGB_4444 (~200 LOC, +1 GM bump)
-4. **I1** SkTextBlob (~600 LOC, unblocks all text in Picture)
-5. **D3** image codecs (~1000 LOC, JPEG quick win via imageio)
-6. **I3** SkRegion (~3000 LOC)
-7. **C1** Image filters extras (~1800 LOC, decompose into 4 sub-PRs)
-8. **I5** drawPoints/Atlas/Vertices/Patch (~1000 LOC)
-9. **Q3** SkBBHFactory (~600 LOC, perf for Picture)
-10. **D1** SkPathOps (~9000 LOC, decompose into 3 sub-PRs)
-11. **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception*)
-12. ~~**B1** SkPDF~~ — ❌ **descoped** (no ported GM needs PDF ;
-    see B1 section). The `pdf/` package is not created.
-13. **B2** SkSVGCanvas (~980 LOC main + ~550 test ; see [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) — was ~3000 in the original scope)
-14. **C3** SkEmbossMaskFilter (~400 LOC)
-15. **I2** Variable fonts + glyph cache (~700 LOC)
-16. **I4** SkShaper (~750 LOC)
-17. **Q2** Canvas wrappers (~400 LOC)
-18. **Q5** Linear sRGB diagnostic (~80 LOC investigation)
-19. **C2/C4** Misc completions (~1300 LOC ensemble)
-20. **Q4** DeferredDisplayList (~400 LOC, low priority)
+✅ **shipped** (struck order matches what landed) :
 
-**Total estimated LOC** : ~26 000 of new Kotlin code (revised after
-D2 → shim), decomposed into ~45 PRs of 100-1500 LOC each.
+1. ✅ **D4** Sink architecture (~700 LOC) — D4.1-D4.5 all shipped (PdfSink ❌ descoped per B1).
+2. ✅ **Q1** AutoCanvasRestore (~30 LOC) — `withSave` / `withLayer` extension functions plus the Q1.x GM migration.
+3. ✅ **C5** ARGB_4444 (~200 LOC, +1 GM bump) — partial (Display P3 / HDR PQ tests reste).
+4. ✅ **I1** SkTextBlob (~600 LOC) — I1.1-I1.5.
+5. ✅ **D3** image codecs (~1000 LOC) — D3.1 PNG / D3.2 JPEG / D3.3 GIF+BMP+WBMP / D3.4 WEBP / D3.5 encoders / D3.6 `SkImage.encodeToData`.
+6. ✅ **I3** SkRegion (~3000 LOC) — I3.1-I3.3 (clipMask Phase 7q remplacé par SkAAClip).
+7. ✅ **I5** drawPoints/Atlas/Vertices/Patch (~1000 LOC) — I5.1 / I5.2 / I5.3.a-c / I5.4.
+8. ✅ **B2** SkSVGCanvas (~1104 main + ~1351 test) — see [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) ; mini plan delivered the full 5-slice scope.
+9. ✅ **I2** Variable fonts + glyph cache (~700 LOC) — I2.1-I2.3.
+10. ✅ **I4** SkShaper (~750 LOC) — I4.1-I4.3 (HarfBuzz parity hors scope).
+11. ❌ **B1** SkPDF — descoped (no ported GM needs PDF ; see B1 section).
 
-**Estimated time** : 5-10 months for a single engineer working
-half-time, or 1.5-3 months full-time.
+🔄 **in flight** :
+
+12. 🔄 **D1** SkPathOps (~9000 LOC) — D1.0 + D1.1 ✅ ; D1.2 🔄 (g.* + h.0–h.6.4 shipped, very active) ; D1.3 📋 piecewise alongside D1.2.h.5.* (Op end-to-end) and D1.2.h.6.* (Simplify end-to-end + AsWinding fast paths).
+
+📋 **remaining** (independent of D1 ; can ship in parallel) :
+
+13. 📋 **C1** Image filters extras (~1800 LOC, Group A core déjà shipped : Offset / Blur / MatrixTransform / DropShadow / ColorFilter / Compose ; rest = Magnifier / Tile / Erode / Dilate / Lighting / Picture / Arithmetic / Merge / DistantLit / SpotLit / PointLit / DisplacementMap / Crop / Shader / Blend / Empty / Paint / RuntimeShader).
+14. 📋 **C3** SkEmbossMaskFilter (~400 LOC).
+15. 📋 **Q2** Canvas wrappers (PaintFilter / NoDraw / Overdraw, ~400 LOC).
+16. 📋 **Q3** SkBBHFactory + Picture cull (~600 LOC, perf for Picture, no GM unblocking).
+17. 📋 **Q5** Linear sRGB diagnostic (~80 LOC investigation).
+18. 📋 **C2/C4** Misc completions (kMorph path effect, StrokeAndFill, drawAnnotation / drawDrawable / drawShadow ; ~1300 LOC ensemble).
+19. 📋 **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception* — large but unlocks SkSL-using GMs).
+20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
+
+**Total estimated LOC remaining** : ~6 200 of new Kotlin code
+(C1 1800 + C3 400 + Q2 400 + Q3 600 + Q5 80 + C2/C4 1300 +
+D2 1500 + Q4 400 ; D1 in-flight LOC tracked separately under
+the chantier's own slice budget). Decomposes into ~15 PRs of
+80-1500 LOC each.
+
+**Total LOC delivered so far** : ~22 000 across the eleven shipped
+chantiers (D3 / D4 / Q1 / C5 / I1 / I2 / I3 / I4 / I5 / B2) —
+roughly tracking the 26 000 original total estimate after
+discounting B1 (descoped) and what's left.
+
+**Estimated time remaining** : 2-4 months for a single engineer
+working half-time, or 3-6 weeks full-time, plus whatever D1
+needs to close.
 
 ---
 
