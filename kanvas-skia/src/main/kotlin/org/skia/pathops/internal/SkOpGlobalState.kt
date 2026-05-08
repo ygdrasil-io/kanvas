@@ -16,10 +16,24 @@
  */
 package org.skia.pathops.internal
 
+/**
+ * Per-op processing phase. Mirrors `enum class SkOpPhase`
+ * (`src/pathops/SkPathOpsTypes.h:24`). The Kotlin port currently
+ * only distinguishes [kFixWinding] (set during `AsWinding`) from
+ * the rest ; intermediate values used by upstream debug-validate
+ * (`kNoChange` / `kIntersecting` / `kWalking`) are folded into
+ * [kIntersecting] for now.
+ */
+internal enum class SkOpPhase {
+    kNoChange, kIntersecting, kWalking, kFixWinding,
+}
+
 internal class SkOpGlobalState {
     private var fCoincidence: SkOpCoincidence? = null
     private var fAllocatedOpSpan: Boolean = false
     private var fContourHead: SkOpContour? = null
+    private var fPhase: SkOpPhase = SkOpPhase.kIntersecting
+    private var fNested: Int = 0
 
     fun coincidence(): SkOpCoincidence? = fCoincidence
     fun setCoincidence(c: SkOpCoincidence?) { fCoincidence = c }
@@ -44,4 +58,23 @@ internal class SkOpGlobalState {
      */
     fun contourHead(): SkOpContour? = fContourHead
     fun setContourHead(head: SkOpContour?) { fContourHead = head }
+
+    /**
+     * Current op phase. Mirrors `SkOpGlobalState::phase / setPhase`
+     * (`SkPathOpsTypes.h:143`). [SkOpSpan.sortableTop] consults
+     * this to decide whether to call `markAndChaseWinding` (default
+     * `Op` / `Simplify` path) or just record the CCW flag on the
+     * contour (`AsWinding` path).
+     */
+    fun phase(): SkOpPhase = fPhase
+    fun setPhase(p: SkOpPhase) { fPhase = p }
+
+    /**
+     * Increment the nested-op counter. Used as a debug guard against
+     * runaway recursion in [SkOpSpan.sortableTop]'s safety net.
+     * Mirrors `SkOpGlobalState::bumpNested`
+     * (`SkPathOpsTypes.h:54`).
+     */
+    fun bumpNested() { ++fNested }
+    fun nested(): Int = fNested
 }

@@ -10,11 +10,13 @@
  * helpers, `get_t_guess`, `SkOpRayHit` + `makeTestBase`, comparators.
  *
  * Phase D1.2.h.5.6 — `CurveIntercept` dispatch + `SkOpSegment.rayCheck`
- * + `SkOpSegment.windingSpanAtT` + `SkOpContour.rayCheck`. These
- * walk a contour list firing a perpendicular ray and emit one
- * [SkOpRayHit] per non-trivial curve crossing. The remaining pieces
- * (`SkOpSpan.sortableTop`, `findSortableTop` × 3, real
- * `FindSortableTop`) land in D1.2.h.5.7 / .5.8.
+ * + `SkOpSegment.windingSpanAtT` + `SkOpContour.rayCheck`.
+ *
+ * Phase D1.2.h.5.7 — `SkOpSpan.sortableTop`, the winding-accumulation
+ * walker that consumes the hit list and assigns absolute winding
+ * sums to the spans crossed by the ray. The remaining pieces
+ * (`findSortableTop` × 3, real `FindSortableTop`) land in
+ * D1.2.h.5.8.
  */
 package org.skia.pathops.internal
 
@@ -394,4 +396,115 @@ internal fun SkOpContour.rayCheck(
         seg.rayCheck(base, dir, hitsHead)
         seg = seg.next()
     }
+}
+
+// ─── SkOpSpan.sortableTop (D1.2.h.5.7) ───────────────────────────
+
+/**
+ * Compute this span's absolute winding number by firing a
+ * perpendicular ray and counting curve crossings.
+ *
+ * Pipeline :
+ *  1. Pick a t-value via [get_t_guess] (cycles through
+ *     `0.5, 0.25, 0.75, …` on retry via [SkOpSpan.fTopTTry]).
+ *  2. Initialise a `SkOpRayHit` test base via [SkOpRayHit.makeTestBase] ;
+ *     bail when the slope is `(0, 0)` (degenerate).
+ *  3. Bail when the segment is curved AND the slope is exactly
+ *     parallel to the ray (would cause numerical instability).
+ *  4. Walk every contour calling [SkOpContour.rayCheck] to populate
+ *     a linked list of [SkOpRayHit].
+ *  5. Sort the hits along the ray's perpendicular axis (via the
+ *     [hit_compare_x] / [hit_compare_y] / reversed comparators
+ *     selected from `xy_index(dir)` and `less_than(dir)`).
+ *  6. Walk the sorted hits accumulating wind / oppWind, assigning
+ *     `windSum` / `oppSum` to each span (or the segment's CCW flag
+ *     when the global state is in `kFixWinding` phase).
+ *
+ * Returns false on any abort path : zero slope, parallel slope,
+ * adjacent equal hits (numerical degeneracy), invalid hit, or
+ * null span on a hit. The caller then retries with a new t-guess
+ * up to `kMaxWindingTries`.
+ *
+ * Mirrors `SkOpSpan::sortableTop`
+ * (`src/pathops/SkPathOpsWinding.cpp:255`).
+ */
+internal fun SkOpSpan.sortableTop(contourHead: SkOpContour): Boolean {
+    val dirOffset = IntArray(1)
+    val t = get_t_guess(fTopTTry++, dirOffset)
+    val hitBase = SkOpRayHit()
+    var dir = hitBase.makeTestBase(this, t)
+    if (hitBase.fSlope.x == 0.0 && hitBase.fSlope.y == 0.0) return false
+    val newDir = SkOpRayDir.entries[dir.ordinal + dirOffset[0]]
+    dir = newDir
+    val baseSeg = hitBase.fSpan!!.segment()!!
+    if (baseSeg.verb() != SkOpSegment.SegVerb.kLine && pt_dydx(hitBase.fSlope, dir) == 0.0) {
+        return false
+    }
+    // 4. Walk every contour collecting hits.
+    val hitsHead = arrayOf<SkOpRayHit?>(hitBase)
+    var contour: SkOpContour? = contourHead
+    while (contour != null) {
+        if (contour.count() != 0) contour.rayCheck(hitBase, dir, hitsHead)
+        contour = contour.next()
+    }
+    // 5. Linearise the linked list and sort.
+    val sorted = mutableListOf<SkOpRayHit>()
+    var hit: SkOpRayHit? = hitsHead[0]
+    while (hit != null) { sorted.add(hit); hit = hit.fNext }
+    val cmp = if (xy_index(dir) == 1) {
+        if (less_than(dir)) hit_compare_y else reverse_hit_compare_y
+    } else {
+        if (less_than(dir)) hit_compare_x else reverse_hit_compare_x
+    }
+    sorted.sortWith(cmp)
+    // 6. Accumulate winding.
+    var last: SkPoint? = null
+    var wind = 0
+    var oppWind = 0
+    for (index in sorted.indices) {
+        val h = sorted[index]
+        if (!h.fValid) return false
+        val ccw = ccw_dxdy(h.fSlope, dir)
+        val span = h.fSpan ?: return false
+        val hitSegment = span.segment() ?: return false
+        if (span.windValue() == 0 && span.oppValue() == 0) continue
+        if (last != null && SkDPoint.ApproximatelyEqual(last, h.fPt)) return false
+        if (index < sorted.size - 1) {
+            val nxt = sorted[index + 1].fPt
+            if (SkDPoint.ApproximatelyEqual(nxt, h.fPt)) return false
+        }
+        val operand = hitSegment.operand()
+        if (operand) { val tmp = wind; wind = oppWind; oppWind = tmp }
+        val lastWind = wind
+        val lastOpp = oppWind
+        val windValue = if (ccw) -span.windValue() else span.windValue()
+        val oppValue = if (ccw) -span.oppValue() else span.oppValue()
+        wind += windValue
+        oppWind += oppValue
+        var sumSet = false
+        val spanSum = span.windSum()
+        val windSum = if (SkOpSegment.UseInnerWinding(lastWind, wind)) wind else lastWind
+        if (spanSum == SkOpSpan.SK_MinS32) {
+            span.setWindSum(windSum)
+            sumSet = true
+        }
+        val oSpanSum = span.oppSum()
+        val oppSum = if (SkOpSegment.UseInnerWinding(lastOpp, oppWind)) oppWind else lastOpp
+        if (oSpanSum == SkOpSpan.SK_MinS32) {
+            span.setOppSum(oppSum)
+        }
+        if (sumSet) {
+            if (globalState()?.phase() == SkOpPhase.kFixWinding) {
+                hitSegment.contour()?.setCcw(if (ccw) 1 else 0)
+            } else {
+                val nextSpan = span.next() ?: return false
+                hitSegment.markAndChaseWinding(span, nextSpan, windSum, oppSum, null)
+                hitSegment.markAndChaseWinding(nextSpan, span, windSum, oppSum, null)
+            }
+        }
+        if (operand) { val tmp = wind; wind = oppWind; oppWind = tmp }
+        last = h.fPt
+        globalState()?.bumpNested()
+    }
+    return true
 }
