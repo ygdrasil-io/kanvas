@@ -530,9 +530,37 @@ manageable while reaching multi-format parity.
     Maven coordinate (~5 LOC integration, external dep).
   - Recommend Option B for v1 ; mark `webp` extension as opt-in.
 
-- **D3.5** — `SkPngEncoder` + `SkJpegEncoder` re-exposing existing
-  Java-side encoders through Skia API.
-  - **LOC** : ~200.
+- **D3.5** ✅ — `SkPngEncoder` + `SkJpegEncoder` re-exposing
+  ImageIO encoders through the upstream Skia API. Two `object`s
+  under `org.skia.encode` mirroring upstream's
+  `SkPngEncoder` / `SkJpegEncoder` namespaces : static
+  `Encode(bitmap, options): ByteArray?` + `Encode(dst, bitmap,
+  options): Boolean`, plus per-format `Options` data classes
+  ([SkPngEncoder.kt](kanvas-skia/src/main/kotlin/org/skia/encode/SkPngEncoder.kt)
+  / [SkJpegEncoder.kt](kanvas-skia/src/main/kotlin/org/skia/encode/SkJpegEncoder.kt)).
+  Shared `EncoderSupport.bitmapToBufferedImage` helper handles the
+  `kRGBA_8888` / `kRGBA_F16Norm` projection.
+  **What's honoured today** : JPEG `quality` (wired through to
+  `JPEGImageWriter.setCompressionQuality`). **What's advisory** :
+  PNG filter / zlib / tEXt fields and JPEG downsample / alphaOption
+  — plumbed for source-compat with upstream call sites but ignored
+  by ImageIO. JPEG drops alpha automatically (the writer rejects
+  ARGB inputs, so the bitmap is composited onto opaque RGB before
+  encoding — equivalent to upstream's `kIgnore`).
+  **What's deferred** : embedding the bitmap's
+  [SkColorSpace] as an `iCCP` / APP2-ICC chunk on encode, so a
+  non-sRGB `SkBitmap` loses its working-space tag through an
+  encode→decode round-trip. Tracked as a follow-up when a workflow
+  needs it.
+  - **LOC** : ~226 main + ~217 test = 443 total (cf. plan estimate
+    ~200 — overage covers the upstream-faithful `Options` /
+    `FilterFlag` / `Downsample` / `AlphaOption` enums).
+  - **Tests** : `SkPngEncoderTest` (6 — encode → decode round-trip
+    is **byte-identical** for opaque pixels, stream/byte-array
+    parity, options validation), `SkJpegEncoderTest` (5 — quality
+    plumbing verified by `lower quality → fewer bytes`,
+    quantisation tolerance round-trip, alpha drop). 11/11 green ;
+    full kanvas-skia suite **2205 / 2205 green**.
 
 - **D3.6** — `SkImage.encodeToData(format, quality)` convenience.
   - **LOC** : ~50.
