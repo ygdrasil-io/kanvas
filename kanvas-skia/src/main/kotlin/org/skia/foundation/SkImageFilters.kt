@@ -239,6 +239,77 @@ public object SkImageFilters {
         sampling: SkSamplingOptions = SkSamplingOptions.Default,
         input: SkImageFilter? = null,
     ): SkImageFilter = SkMagnifierImageFilter(lensBounds, zoomAmount, inset, sampling, input)
+
+    // ─── C1.3 — Arithmetic family (Arithmetic / Blend / Merge / DropShadowOnly) ─
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Arithmetic(k1, k2, k3, k4,
+     * enforcePMColor, bg, fg)` — per-pixel `result = k1·src·dst +
+     * k2·src + k3·dst + k4` per channel, where `src = fg` and
+     * `dst = bg`. The four `k*` coefficients form a linear blend
+     * with a multiplicative cross-term ; common recipes include
+     * `(0, 1, -1, 0)` for "bg minus fg" and `(0, 0.5, 0.5, 0)`
+     * for "average".
+     *
+     * `enforcePMColor = true` clamps the result to a valid
+     * premultiplied colour after the formula (`max(r, g, b) ≤ a`).
+     * `null bg` / `null fg` use the rasterised source as that
+     * input — equivalent to upstream's "implicit source" convention.
+     *
+     * Output bbox = union of `bg` and `fg` bboxes.
+     */
+    public fun Arithmetic(
+        k1: SkScalar, k2: SkScalar, k3: SkScalar, k4: SkScalar,
+        enforcePMColor: Boolean = true,
+        bg: SkImageFilter? = null,
+        fg: SkImageFilter? = null,
+    ): SkImageFilter = SkArithmeticImageFilter(k1, k2, k3, k4, enforcePMColor, bg, fg)
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Blend(mode, bg, fg)` — applies
+     * an [SkBlendMode] per pixel, treating `fg` as `src` and `bg`
+     * as `dst`. Output bbox = union of `bg` and `fg` bboxes.
+     *
+     * Distinct from `Compose` (which chains filters sequentially) :
+     * `Blend` evaluates two inputs in parallel and composites the
+     * pair through a blend equation. Equivalent to `saveLayer` +
+     * `paint.blendMode = mode` between two `drawImageRect` calls.
+     */
+    public fun Blend(
+        mode: SkBlendMode,
+        bg: SkImageFilter? = null,
+        fg: SkImageFilter? = null,
+    ): SkImageFilter = SkBlendImageFilter(mode, bg, fg)
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Merge(filters[N])` —
+     * SrcOver-composites `filters` left-to-right, so `filters[0]`
+     * is the bottom layer and `filters[N-1]` is the top. Output
+     * bbox = union of every input's bbox.
+     *
+     * `null` entries are treated as the rasterised source. Empty
+     * list is equivalent to [Empty].
+     */
+    public fun Merge(vararg filters: SkImageFilter?): SkImageFilter =
+        SkMergeImageFilter(filters.toList())
+
+    /**
+     * Mirrors Skia's `SkImageFilters::DropShadowOnly(dx, dy, σx,
+     * σy, color, input)` — produces just the blurred drop shadow
+     * without compositing the original [input] on top. Equivalent
+     * to extracting only the shadow layer from [DropShadow].
+     *
+     * Same parameter semantics as [DropShadow] : `(dx, dy)` is the
+     * device-space offset, `(σx, σy)` is the per-axis Gaussian
+     * blur sigma, [color] is the shadow tint applied via SrcIn to
+     * the blurred input alpha.
+     */
+    public fun DropShadowOnly(
+        dx: Float, dy: Float,
+        sigmaX: Float, sigmaY: Float,
+        color: SkColor,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkDropShadowOnlyImageFilter(dx, dy, sigmaX, sigmaY, color, input)
 }
 
 // -- Internal concrete implementations --------------------------------------
@@ -922,4 +993,377 @@ private fun mirrorMod(n: Int, m: Int): Int {
     var r = n % twoM
     if (r < 0) r += twoM
     return if (r < m) r else twoM - 1 - r
+}
+
+// -- C1.3 Arithmetic family -----------------------------------------------
+
+/**
+ * Common helper for filters that combine two filter inputs (`bg`
+ * and `fg`) with a per-pixel formula. Allocates an output sized to
+ * the union of both bboxes, walks every pixel, and calls [combine]
+ * with the two pre-aligned RGBA quads. Out-of-bounds samples for
+ * either input default to transparent black.
+ */
+private inline fun combineTwoFilters(
+    bg: SkImageFilter?,
+    fg: SkImageFilter?,
+    src: SkImage,
+    ctm: SkMatrix,
+    crossinline combine: (bgPx: Int, fgPx: Int) -> Int,
+): SkImageFilter.FilterResult {
+    val bgRes = bg?.filterImage(src, ctm) ?: SkImageFilter.FilterResult(src, 0, 0)
+    val fgRes = fg?.filterImage(src, ctm) ?: SkImageFilter.FilterResult(src, 0, 0)
+    return composeBboxes(bgRes, fgRes) { bgPx, fgPx -> combine(bgPx, fgPx) }
+}
+
+/** Compose two filter results into the union bbox, applying [combine] per pixel. */
+private inline fun composeBboxes(
+    bgRes: SkImageFilter.FilterResult,
+    fgRes: SkImageFilter.FilterResult,
+    crossinline combine: (bgPx: Int, fgPx: Int) -> Int,
+): SkImageFilter.FilterResult {
+    val bgImg = bgRes.image; val fgImg = fgRes.image
+    val bgL = bgRes.offsetX; val bgT = bgRes.offsetY
+    val fgL = fgRes.offsetX; val fgT = fgRes.offsetY
+    val bgR = bgL + bgImg.width; val bgB = bgT + bgImg.height
+    val fgR = fgL + fgImg.width; val fgB = fgT + fgImg.height
+
+    val outL = minOf(bgL, fgL)
+    val outT = minOf(bgT, fgT)
+    val outR = maxOf(bgR, fgR)
+    val outB = maxOf(bgB, fgB)
+    val outW = (outR - outL).coerceAtLeast(1)
+    val outH = (outB - outT).coerceAtLeast(1)
+    val outBuf = IntArray(outW * outH)
+
+    for (y in 0 until outH) {
+        val devY = outT + y
+        val bgY = devY - bgT
+        val fgY = devY - fgT
+        val bgYIn = bgY in 0 until bgImg.height
+        val fgYIn = fgY in 0 until fgImg.height
+        for (x in 0 until outW) {
+            val devX = outL + x
+            val bgX = devX - bgL
+            val fgX = devX - fgL
+            val bgPx = if (bgYIn && bgX in 0 until bgImg.width) bgImg.peekPixel(bgX, bgY) else 0
+            val fgPx = if (fgYIn && fgX in 0 until fgImg.width) fgImg.peekPixel(fgX, fgY) else 0
+            outBuf[y * outW + x] = combine(bgPx, fgPx)
+        }
+    }
+    return SkImageFilter.FilterResult(SkImage(outW, outH, outBuf), outL, outT)
+}
+
+/**
+ * `Arithmetic` — per-pixel `result = k1·src·dst + k2·src + k3·dst +
+ * k4` per channel, where `src = fg` and `dst = bg`. Channels are
+ * interpreted as **non-premul** floats in `[0, 1]` for the
+ * arithmetic, then re-clamped back to byte range.
+ *
+ * `enforcePMColor` clamps each channel to `≤ alpha` after the
+ * formula so the result is a valid premultiplied colour.
+ */
+internal class SkArithmeticImageFilter(
+    private val k1: SkScalar,
+    private val k2: SkScalar,
+    private val k3: SkScalar,
+    private val k4: SkScalar,
+    private val enforcePMColor: Boolean,
+    private val bg: SkImageFilter?,
+    private val fg: SkImageFilter?,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult =
+        combineTwoFilters(bg, fg, src, ctm) { bgPx, fgPx -> arithmeticPixel(bgPx, fgPx) }
+
+    private fun arithmeticPixel(bgPx: Int, fgPx: Int): Int {
+        // The arithmetic formula is applied in **premultiplied** colour
+        // space — matches upstream Skia's
+        // SkArithmeticImageFilterImpl::onFilterImage and means recipes
+        // like (0, 0, 0, k) produce a uniform-fill at premul intensity
+        // `k`, which un-premuls correctly to (255, 255, 255, k·255).
+        val ba = ((bgPx ushr 24) and 0xFF) / 255f
+        val br = ((bgPx ushr 16) and 0xFF) / 255f * ba
+        val bgC = ((bgPx ushr 8) and 0xFF) / 255f * ba
+        val bb = (bgPx and 0xFF) / 255f * ba
+        val fa = ((fgPx ushr 24) and 0xFF) / 255f
+        val fr = ((fgPx ushr 16) and 0xFF) / 255f * fa
+        val fgC = ((fgPx ushr 8) and 0xFF) / 255f * fa
+        val fb = (fgPx and 0xFF) / 255f * fa
+        var oa = (k1 * fa * ba + k2 * fa + k3 * ba + k4).coerceIn(0f, 1f)
+        var or = k1 * fr * br + k2 * fr + k3 * br + k4
+        var og = k1 * fgC * bgC + k2 * fgC + k3 * bgC + k4
+        var ob = k1 * fb * bb + k2 * fb + k3 * bb + k4
+        if (enforcePMColor) {
+            or = or.coerceIn(0f, oa)
+            og = og.coerceIn(0f, oa)
+            ob = ob.coerceIn(0f, oa)
+        } else {
+            or = or.coerceIn(0f, 1f)
+            og = og.coerceIn(0f, 1f)
+            ob = ob.coerceIn(0f, 1f)
+        }
+        // Convert back to non-premul ARGB bytes for storage.
+        val ai = (oa * 255f + 0.5f).toInt().coerceIn(0, 255)
+        if (ai == 0) return 0
+        val invA = 1f / oa
+        val ri = (or * invA * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val gi = (og * invA * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val bi = (ob * invA * 255f + 0.5f).toInt().coerceIn(0, 255)
+        return (ai shl 24) or (ri shl 16) or (gi shl 8) or bi
+    }
+}
+
+/**
+ * `Blend` — per-pixel composition of two filter inputs through an
+ * [SkBlendMode]. We delegate the actual blend math to a self-
+ * contained [blendPixel] evaluator covering the canonical Porter-
+ * Duff and separable blend modes.
+ *
+ * Per-pixel input convention : `bgPx = dst`, `fgPx = src` to match
+ * upstream's "blend(src=fg, dst=bg)" convention.
+ */
+internal class SkBlendImageFilter(
+    private val mode: SkBlendMode,
+    private val bg: SkImageFilter?,
+    private val fg: SkImageFilter?,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult =
+        combineTwoFilters(bg, fg, src, ctm) { bgPx, fgPx ->
+            blendPixel(mode, fgPx, bgPx)
+        }
+}
+
+/**
+ * Per-pixel `SkBlendMode` evaluator. `srcPx` and `dstPx` are
+ * non-premul ARGB ints. We convert to premul floats, apply the
+ * mode's Porter-Duff (or HSL / "advanced" blend) formula, then
+ * convert back to non-premul bytes.
+ *
+ * **Coverage** : the 9 Porter-Duff modes (Clear / Src / Dst /
+ * SrcOver / DstOver / SrcIn / DstIn / SrcOut / DstOut / SrcAtop /
+ * DstAtop / Xor / Plus / Modulate) plus the multiplicative
+ * separable modes (Multiply / Screen / Darken / Lighten / Overlay).
+ * Modes not on this list (`HardLight`, `SoftLight`, `Difference`,
+ * `Exclusion`, `ColorDodge`, `ColorBurn`, the four HSL modes) fall
+ * back to SrcOver for now — none are exercised by the C1.3 GMs.
+ *
+ * Math reference :
+ * [Skia's `SkBlendMode.h`](https://github.com/google/skia/blob/main/include/core/SkBlendMode.h).
+ */
+private fun blendPixel(mode: SkBlendMode, srcPx: Int, dstPx: Int): Int {
+    // Premul float decode.
+    val sa = ((srcPx ushr 24) and 0xFF) / 255f
+    val sr = ((srcPx ushr 16) and 0xFF) / 255f * sa
+    val sg = ((srcPx ushr 8) and 0xFF) / 255f * sa
+    val sb = (srcPx and 0xFF) / 255f * sa
+    val da = ((dstPx ushr 24) and 0xFF) / 255f
+    val dr = ((dstPx ushr 16) and 0xFF) / 255f * da
+    val dg = ((dstPx ushr 8) and 0xFF) / 255f * da
+    val db = (dstPx and 0xFF) / 255f * da
+
+    val (oa, or, og, ob) = when (mode) {
+        SkBlendMode.kClear -> floatArrayOf4(0f, 0f, 0f, 0f)
+        SkBlendMode.kSrc -> floatArrayOf4(sa, sr, sg, sb)
+        SkBlendMode.kDst -> floatArrayOf4(da, dr, dg, db)
+        SkBlendMode.kSrcOver -> {
+            val ia = 1f - sa
+            floatArrayOf4(sa + da * ia, sr + dr * ia, sg + dg * ia, sb + db * ia)
+        }
+        SkBlendMode.kDstOver -> {
+            val ia = 1f - da
+            floatArrayOf4(da + sa * ia, dr + sr * ia, dg + sg * ia, db + sb * ia)
+        }
+        SkBlendMode.kSrcIn -> floatArrayOf4(sa * da, sr * da, sg * da, sb * da)
+        SkBlendMode.kDstIn -> floatArrayOf4(da * sa, dr * sa, dg * sa, db * sa)
+        SkBlendMode.kSrcOut -> {
+            val ia = 1f - da
+            floatArrayOf4(sa * ia, sr * ia, sg * ia, sb * ia)
+        }
+        SkBlendMode.kDstOut -> {
+            val ia = 1f - sa
+            floatArrayOf4(da * ia, dr * ia, dg * ia, db * ia)
+        }
+        SkBlendMode.kSrcATop -> {
+            val ia = 1f - sa
+            floatArrayOf4(da, sr * da + dr * ia, sg * da + dg * ia, sb * da + db * ia)
+        }
+        SkBlendMode.kDstATop -> {
+            val ia = 1f - da
+            floatArrayOf4(sa, dr * sa + sr * ia, dg * sa + sg * ia, db * sa + sb * ia)
+        }
+        SkBlendMode.kXor -> {
+            val isa = 1f - sa; val ida = 1f - da
+            floatArrayOf4(
+                sa * ida + da * isa,
+                sr * ida + dr * isa, sg * ida + dg * isa, sb * ida + db * isa,
+            )
+        }
+        SkBlendMode.kPlus -> floatArrayOf4(
+            (sa + da).coerceAtMost(1f),
+            (sr + dr).coerceAtMost(1f),
+            (sg + dg).coerceAtMost(1f),
+            (sb + db).coerceAtMost(1f),
+        )
+        SkBlendMode.kModulate -> floatArrayOf4(sa * da, sr * dr, sg * dg, sb * db)
+        SkBlendMode.kMultiply -> {
+            val isa = 1f - sa; val ida = 1f - da
+            floatArrayOf4(
+                sa + da - sa * da,
+                sr * ida + dr * isa + sr * dr,
+                sg * ida + dg * isa + sg * dg,
+                sb * ida + db * isa + sb * db,
+            )
+        }
+        SkBlendMode.kScreen -> floatArrayOf4(
+            sa + da - sa * da,
+            sr + dr - sr * dr,
+            sg + dg - sg * dg,
+            sb + db - sb * db,
+        )
+        SkBlendMode.kDarken -> {
+            val isa = 1f - sa; val ida = 1f - da
+            floatArrayOf4(
+                sa + da - sa * da,
+                minOf(sr + dr * isa, dr + sr * ida),
+                minOf(sg + dg * isa, dg + sg * ida),
+                minOf(sb + db * isa, db + sb * ida),
+            )
+        }
+        SkBlendMode.kLighten -> {
+            val isa = 1f - sa; val ida = 1f - da
+            floatArrayOf4(
+                sa + da - sa * da,
+                maxOf(sr + dr * isa, dr + sr * ida),
+                maxOf(sg + dg * isa, dg + sg * ida),
+                maxOf(sb + db * isa, db + sb * ida),
+            )
+        }
+        else -> {
+            // Fallback : SrcOver for unsupported modes.
+            val ia = 1f - sa
+            floatArrayOf4(sa + da * ia, sr + dr * ia, sg + dg * ia, sb + db * ia)
+        }
+    }
+
+    // Convert back to non-premul bytes.
+    val ai = (oa * 255f + 0.5f).toInt().coerceIn(0, 255)
+    if (ai == 0) return 0
+    val invA = 1f / oa
+    val ri = (or * invA * 255f + 0.5f).toInt().coerceIn(0, 255)
+    val gi = (og * invA * 255f + 0.5f).toInt().coerceIn(0, 255)
+    val bi = (ob * invA * 255f + 0.5f).toInt().coerceIn(0, 255)
+    return (ai shl 24) or (ri shl 16) or (gi shl 8) or bi
+}
+
+/** Tiny destructuring helper — Kotlin's component1..N over IntArray would alloc. */
+private fun floatArrayOf4(a: Float, r: Float, g: Float, b: Float): FloatArray =
+    floatArrayOf(a, r, g, b)
+
+private operator fun FloatArray.component1(): Float = this[0]
+private operator fun FloatArray.component2(): Float = this[1]
+private operator fun FloatArray.component3(): Float = this[2]
+private operator fun FloatArray.component4(): Float = this[3]
+
+/**
+ * `Merge` — SrcOver-composites N filter inputs left-to-right.
+ * `filters[0]` is the bottom, `filters.last()` is the top.
+ *
+ * Output bbox = union of every non-null input's bbox. Empty list
+ * collapses to [SkEmptyImageFilter]'s 1×1 transparent black.
+ */
+internal class SkMergeImageFilter(
+    private val filters: List<SkImageFilter?>,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        if (filters.isEmpty()) return SkEmptyImageFilter.filterImage(src, ctm)
+        // Evaluate every input upfront so we can compute the union bbox.
+        val results = filters.map { f -> f?.filterImage(src, ctm) ?: FilterResult(src, 0, 0) }
+        var outL = Int.MAX_VALUE; var outT = Int.MAX_VALUE
+        var outR = Int.MIN_VALUE; var outB = Int.MIN_VALUE
+        for (r in results) {
+            outL = minOf(outL, r.offsetX)
+            outT = minOf(outT, r.offsetY)
+            outR = maxOf(outR, r.offsetX + r.image.width)
+            outB = maxOf(outB, r.offsetY + r.image.height)
+        }
+        val outW = (outR - outL).coerceAtLeast(1)
+        val outH = (outB - outT).coerceAtLeast(1)
+        val outBuf = IntArray(outW * outH)
+
+        // Apply each input with SrcOver in order (bottom → top).
+        for (r in results) {
+            val img = r.image
+            val l = r.offsetX; val t = r.offsetY
+            for (y in 0 until img.height) {
+                val outY = (t + y) - outT
+                if (outY !in 0 until outH) continue
+                for (x in 0 until img.width) {
+                    val outX = (l + x) - outL
+                    if (outX !in 0 until outW) continue
+                    val srcPx = img.peekPixel(x, y)
+                    val srcA = (srcPx ushr 24) and 0xFF
+                    if (srcA == 0) continue
+                    val idx = outY * outW + outX
+                    outBuf[idx] = if (srcA == 0xFF) srcPx else srcOver(srcPx, outBuf[idx])
+                }
+            }
+        }
+        return FilterResult(SkImage(outW, outH, outBuf), outL, outT)
+    }
+
+    /** SrcOver(src, dst) — non-premul-aware byte-arith implementation. */
+    private fun srcOver(src: Int, dst: Int): Int {
+        val sa = (src ushr 24) and 0xFF
+        if (sa == 0) return dst
+        val da = (dst ushr 24) and 0xFF
+        val invSa = 255 - sa
+        val outA = sa + (da * invSa + 127) / 255
+        if (outA == 0) return 0
+        val sr = (src ushr 16) and 0xFF; val sg = (src ushr 8) and 0xFF; val sb = src and 0xFF
+        val dr = (dst ushr 16) and 0xFF; val dg = (dst ushr 8) and 0xFF; val db = dst and 0xFF
+        val outR = (sr * sa + dr * da * invSa / 255 + outA / 2) / outA
+        val outG = (sg * sa + dg * da * invSa / 255 + outA / 2) / outA
+        val outB = (sb * sa + db * da * invSa / 255 + outA / 2) / outA
+        return (outA shl 24) or (outR.coerceIn(0, 255) shl 16) or
+            (outG.coerceIn(0, 255) shl 8) or outB.coerceIn(0, 255)
+    }
+}
+
+/**
+ * `DropShadowOnly` — produces just the blurred drop shadow without
+ * the original input composited on top. Same parameter semantics
+ * as [SkDropShadowImageFilter] ; reuses the SrcIn-tint + Gaussian
+ * blur sub-pipeline. The output bbox is exactly the shadow bbox
+ * (no union with the original input, since we don't draw it).
+ */
+internal class SkDropShadowOnlyImageFilter(
+    private val dx: SkScalar, private val dy: SkScalar,
+    private val sigmaX: SkScalar, private val sigmaY: SkScalar,
+    private val color: SkColor,
+    private val input: SkImageFilter?,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
+        val srcImg = upstream.image
+        // Tint the upstream image to `color` via SrcIn (same recipe
+        // as DropShadow).
+        val tinted = SkColorFilterImageFilter(
+            SkColorFilters.Blend(color, SkBlendMode.kSrcIn), null,
+        ).filterImage(srcImg, ctm).image
+        // Apply Gaussian blur to the tinted image.
+        val blurred = SkBlurImageFilter(sigmaX, sigmaY, null).filterImage(tinted, ctm)
+        // Translate by (dx, dy) scaled with CTM max-scale.
+        val scale = ctm.computeMaxScale().coerceAtLeast(1f)
+        val sdx = (dx * scale + 0.5f).toInt()
+        val sdy = (dy * scale + 0.5f).toInt()
+        return FilterResult(
+            image = blurred.image,
+            offsetX = upstream.offsetX + blurred.offsetX + sdx,
+            offsetY = upstream.offsetY + blurred.offsetY + sdy,
+        )
+    }
 }
