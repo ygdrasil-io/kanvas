@@ -784,6 +784,45 @@ class SkOpSegmentTest {
         org.junit.jupiter.api.Assertions.assertSame(a.fTail, eOut[0])
     }
 
+    // ─── done(SkOpAngle) / isSimple / findNextOp (D1.2.h.5.2) ────
+
+    @Test
+    fun `done(angle) returns the starter span's done flag`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // Build an angle directly — spanToAngle returns null on a fresh
+        // single-line segment whose addStartSpan / addEndSpan were
+        // skipped by calcAngles (simple() == true on both ends).
+        val angle = SkOpAngle().also { it.set(a.fHead, a.fTail) }
+        org.junit.jupiter.api.Assertions.assertFalse(a.done(angle))
+        a.markDone(a.fHead)
+        assertTrue(a.done(angle))
+    }
+
+    @Test
+    fun `isSimple returns null on a single-segment angle ring`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // No angle ring has been built (no calcAngles call).
+        // isSimple → nextChase, which returns null when no opposite
+        // span is in the angle's pt-T loop.
+        val end = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = a.fHead }
+        val step = intArrayOf(1)
+        assertNull(a.isSimple(end, step))
+    }
+
+    @Test
+    fun `findNextOp returns null on an empty angle ring`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val nextStart = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = a.fHead }
+        val nextEnd = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = a.fTail }
+        val unsortable = booleanArrayOf(false)
+        val simple = booleanArrayOf(false)
+        val chase = mutableListOf<SkOpSpanBase>()
+        // Single-segment line, no coincidence, no angle ring →
+        // findNextOp finds no candidate and returns null.
+        assertNull(a.findNextOp(chase, nextStart, nextEnd, unsortable, simple,
+            org.skia.pathops.SkPathOp.kUnion, xorMiMask = 1, xorSuMask = 1))
+    }
+
     @Test
     fun `activeOp on a fresh line returns true for kUnion`() {
         // updateWinding / updateOppWinding on a fresh non-coincident
