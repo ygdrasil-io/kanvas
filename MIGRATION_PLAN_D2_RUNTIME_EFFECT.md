@@ -452,43 +452,94 @@ juste après.
 
 ---
 
-### D2.2 — Shader / ColorFilter / Blender bindings
+### D2.2 — Shader / ColorFilter / Blender bindings ✅ shipped
 
 **Scope** : wrap un `SkRuntimeImpl` enregistré comme un type
 foundation pour qu'il s'insère dans `paint.shader` /
-`paint.colorFilter` / `paint.blender`.
+`paint.colorFilter` / `paint.blender`. Plus une refactorisation
+de l'interface `SkRuntimeImpl` : la signature `shade(...)` accepte
+désormais un `Array<ChildResolver>` (sealed) au lieu d'un
+`Array<(SkPoint) -> SkColor4f>` — chaque slot enfant est typé
+selon son `ChildType` (shader / colorFilter / blender), donc
+l'impl pattern-matche directement sans cast. Plus une **mini SkData**
+introduite ici (au lieu de D2.3 comme prévu) — 70 LOC, immutable
+byte container, pour porter le paramètre `uniforms: SkData?` des
+factories `makeXxx`.
 
-**Files** :
-- `kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeShader.kt`
-  — sous-classe concrète `SkShader`. `at(point: SkPoint)` appelle
-  `impl.shade(coords = point, …)` avec les uniforms / child
-  resolvers liés.
-- `kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeColorFilter.kt`
-  — sous-classe concrète `SkColorFilter`. `apply(SkColor4f)`
-  appelle `impl.shade(coords = null, srcColor = input, …)`.
-- `kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeBlender.kt`
-  — sous-classe concrète `SkBlender`. `blend(src, dst)` appelle
-  `impl.shade(coords = null, srcColor = src, dstColor = dst, …)`.
+**Implementation actuelle** :
+- [SkRuntimeImpl.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeImpl.kt)
+  — refactor : `children: Array<ChildResolver>` + nouvelle sealed
+  interface `ChildResolver { Shader, ColorFilter, Blender }`. Les
+  D2.1 tests utilisant l'ancienne signature ont été migrés.
+- [SkRuntimeShader.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeShader.kt)
+  — `SkShader` concret. `shadeRow(devX, devY, count, dst)` mappe
+  chaque pixel via `deviceToLocal` puis appelle
+  `impl.shade(coords = SkPoint(lx, ly), …)`. `sampleAtLocal(lx,
+  ly)` bypasse le `canvasCtm × localMatrix` pour les child shaders
+  imbriqués. Les enfants sont pré-construits via
+  `buildShaderChildResolvers` qui valide `decl.type ==
+  ChildType.kShader` slot par slot.
+- [SkRuntimeColorFilter.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeColorFilter.kt)
+  — `SkColorFilter` concret. `filterColor4f(src)` →
+  `impl.shade(srcColor = src, …)`. `isAlphaUnchanged()` lit le
+  flag `kAlphaUnchanged_Flag` de l'impl.
+- [SkRuntimeBlender.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeBlender.kt)
+  — `SkBlender` concret. `blend(src, dst)` →
+  `impl.shade(srcColor = src, dstColor = dst, …)`.
+- [SkData.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkData.kt)
+  — immutable byte container. `MakeWithCopy(bytes)`,
+  `MakeUninitialized(size)`, `EMPTY` singleton.
+- [SkRuntimeEffect.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffect.kt)
+  — wire `makeShader(uniforms, children, localMatrix)` /
+  `makeColorFilter(uniforms, children)` /
+  `makeBlender(uniforms, children)`. Chaque factory valide :
+  - le kind (`allowShader` / `allowColorFilter` / `allowBlender`)
+    avant de produire un binding ;
+  - le children-count match `parsed.children.size` (mismatch →
+    `null`) ;
+  - pour chaque slot child, le type déclaré dans la SkSL
+    correspond au kind du binding (shader-binding accepte des
+    children shader, etc.). Ajout des constantes `Flags`
+    (`kUsesSampleCoords_Flag` / `kAllowShader_Flag` / … /
+    `kAlphaUnchanged_Flag` / `kDisableOptimization_Flag`) côté
+    companion.
 
-Chaque binding contient :
-- La référence `SkRuntimeImpl`.
-- Un snapshot `ByteBuffer uniforms` pris à la construction (defensive
-  copy du `SkData` du caller).
-- Un `Array<SkChild>` de children résolus (`SkShader` pour les
-  slots child shader, `SkColorFilter` / `SkBlender` pour les
-  autres). Chaque child est converti en lambda `(SkPoint) ->
-  SkColor4f` passée au `shade(...)` interne.
+**Tests** ([4 nouvelles classes / 16 tests, all green](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/)) :
+- [SkRuntimeShaderTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/SkRuntimeShaderTest.kt) (8) :
+  `makeShader` rejette colorFilter SkSL + children-count mismatch ;
+  draw-rect avec un constant-color RuntimeShader produit bien
+  les pixels du constant ; les `coords` reçus sont les positions
+  local-space après `deviceToLocal` (vérifié sur un shader qui
+  encode `coords` dans les channels rouge/vert) ; child shader
+  passé via `child.eval(p)` retourne sa propre couleur ; null
+  child → resolver renvoie `kTransparent` (background préservé) ;
+  uniform bytes traversent bien jusqu'à l'impl.
+- [SkRuntimeColorFilterTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/SkRuntimeColorFilterTest.kt) (5) :
+  `makeColorFilter` rejette shader SkSL ; rejette children
+  shader-typés sur un colorFilter binding ; identité passe
+  `srcColor` inchangé ; invert-RGB transforme rouge → cyan ;
+  `isAlphaUnchanged()` lit le flag.
+- [SkRuntimeBlenderTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt) (3) :
+  `makeBlender` rejette shader SkSL ; averaging blender forwards
+  `(src, dst)` correctement ; pixel-iso end-to-end : red-on-blue
+  via `paint.blender = makeBlender(...)` produit mid-purple
+  (`0xFF80_0080`).
 
-**Tests** :
-- `SkRuntimeShaderTest.kt` — register un effet stub qui retourne
-  `vec4(0.5, 0.0, 0.0, 1.0)`, build un shader, drawRect →
-  pixel = 0xFF800000.
-- `SkRuntimeColorFilterTest.kt` — register un filtre "invert
-  RGB", apply à un paint rouge → output vert.
-- `SkRuntimeBlenderTest.kt` — register un blender "average",
-  draw red-on-blue → output mid-purple.
+**LOC** : ~525 main (bindings + SkData + SkRuntimeEffect makeXxx
+wiring + ChildResolver sealed) + ~430 test = **~955 total** (cf.
+plan estimate ~650 ; overage couvre la mini-SkData absorbée
+depuis D2.3 + le refactor `Array<ChildResolver>` qui touche les 3
+test files D2.1 existants).
 
-**LOC** : ~400 main + ~250 test = ~650.
+**Validation** : full kanvas-skia suite **3052 / 3052 green**.
+Cross-cutting :
+- `paint.blender` round-trip via `SkBitmapDevice.dispatchBlend`
+  fonctionne pour les `SkRuntimeBlender` (le custom blender path
+  introduit en D2.0 absorbe les blenders sans changement) ;
+- `paint.shader = SkRuntimeShader(...)` fonctionne pour fillPath
+  / drawRect / drawPath via le path solid-color OU shader (le
+  rasterizer ne fait aucune distinction au-delà de
+  `paint.shader != null`).
 
 ---
 
@@ -723,7 +774,7 @@ la deuxième fois (cette fois en cross-validation raster ↔ GPU).
 |---|---:|---:|---|
 | D2.0 SkBlender + paint plumbing ✅ | **280** (planned ~250) | **285** (planned ~150) | foundation |
 | D2.1 SkRuntimeEffect façade + dispatch ✅ | **560** (planned ~700) | **460** (planned ~350) | foundation |
-| D2.2 Shader/ColorFilter/Blender bindings | ~400 | ~250 | foundation |
+| D2.2 Shader/ColorFilter/Blender bindings ✅ | **525** (planned ~400 ; absorbs SkData) | **430** (planned ~250) | foundation |
 | D2.3 SkRuntimeEffectBuilder + SkData | ~200 | ~150 | foundation |
 | D2.4.a Simple color filters | ~250 | ~200 | 4 |
 | D2.4.b runtimeshader cluster | ~700 | ~500 | 1 (13 variants) |
