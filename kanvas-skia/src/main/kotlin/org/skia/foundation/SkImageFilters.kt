@@ -3,6 +3,8 @@ package org.skia.foundation
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
+import org.skia.math.SkIPoint
+import org.skia.math.SkISize
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
@@ -365,6 +367,53 @@ public object SkImageFilters {
     ): SkImageFilter = SkDisplacementMapImageFilter(
         xChannelSelector, yChannelSelector, scale, displacement, color,
     )
+
+    // ─── C1.6 — MatrixConvolution ────────────────────────────────────
+
+    /**
+     * Mirrors Skia's `SkImageFilters::MatrixConvolution(kSize, kernel,
+     * gain, bias, kernelOffset, tileMode, convolveAlpha, input)` —
+     * applies a 2D kernel convolution per pixel :
+     *
+     * ```
+     * out(x, y) = gain · Σ kernel[i, j] · in(x + i - kernelOffset.x,
+     *                                       y + j - kernelOffset.y)
+     *           + bias
+     * ```
+     *
+     * where the kernel is an `kernelSize.width × kernelSize.height`
+     * grid of floats stored row-major in `kernel`.
+     *
+     * - `tileMode` — boundary mode for OOB samples (kDecal /
+     *   kClamp / kRepeat / kMirror).
+     * - `convolveAlpha = false` skips the alpha channel (alpha is
+     *   passed through from the input). When `true`, alpha is also
+     *   convolved.
+     * - The convolution is applied in **non-premul** space ; bias
+     *   and gain are applied per-channel before clamping back to
+     *   `[0, 255]`.
+     *
+     * Throws if `kernel.size != kernelSize.width * kernelSize.height`.
+     */
+    public fun MatrixConvolution(
+        kernelSize: SkISize,
+        kernel: FloatArray,
+        gain: SkScalar,
+        bias: SkScalar,
+        kernelOffset: SkIPoint,
+        tileMode: SkTileMode,
+        convolveAlpha: Boolean,
+        input: SkImageFilter? = null,
+    ): SkImageFilter {
+        require(kernel.size == kernelSize.width * kernelSize.height) {
+            "Kernel size mismatch : expected ${kernelSize.width * kernelSize.height} entries " +
+                "for ${kernelSize.width}×${kernelSize.height} kernel, got ${kernel.size}"
+        }
+        return SkMatrixConvolutionImageFilter(
+            kernelSize, kernel.copyOf(), gain, bias, kernelOffset,
+            tileMode, convolveAlpha, input,
+        )
+    }
 }
 
 // -- Internal concrete implementations --------------------------------------
@@ -1610,5 +1659,88 @@ internal class SkDisplacementMapImageFilter(
         SkColorChannel.kG -> (px ushr 8) and 0xFF
         SkColorChannel.kB -> px and 0xFF
         SkColorChannel.kA -> (px ushr 24) and 0xFF
+    }
+}
+
+// -- C1.6 MatrixConvolution -------------------------------------------------
+
+/**
+ * `SkMatrixConvolutionImageFilter` — applies a 2D kernel
+ * convolution per pixel.
+ *
+ * The kernel is a `kSize.width × kSize.height` grid of floats stored
+ * row-major in [kernel] (so `kernel[j * width + i]` is the weight
+ * applied to the input sample `(x + i - kCenter.x, y + j - kCenter.y)`).
+ *
+ * Per output pixel, per channel :
+ * ```
+ * out = gain · Σ kernel[j, i] · in(x + i - kCenter.x, y + j - kCenter.y) + bias
+ * ```
+ *
+ * Operates in **non-premul** colour space. `convolveAlpha = false`
+ * passes alpha through from the centre input pixel ; otherwise
+ * alpha is convolved like the colour channels.
+ *
+ * OOB samples follow [tileMode] : `kDecal` returns transparent
+ * black, `kClamp` clamps to the nearest edge, `kRepeat` / `kMirror`
+ * tile.
+ */
+internal class SkMatrixConvolutionImageFilter(
+    private val kSize: SkISize,
+    private val kernel: FloatArray,
+    private val gain: SkScalar,
+    private val bias: SkScalar,
+    private val kCenter: SkIPoint,
+    private val tileMode: SkTileMode,
+    private val convolveAlpha: Boolean,
+    private val input: SkImageFilter?,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
+        val upImg = upstream.image
+        val upW = upImg.width
+        val upH = upImg.height
+        if (upW == 0 || upH == 0) return upstream
+
+        val kW = kSize.width
+        val kH = kSize.height
+        val cx = kCenter.fX
+        val cy = kCenter.fY
+        val outBuf = IntArray(upW * upH)
+
+        for (y in 0 until upH) {
+            for (x in 0 until upW) {
+                var accR = 0f; var accG = 0f; var accB = 0f; var accA = 0f
+                for (j in 0 until kH) {
+                    val sy = y + j - cy
+                    for (i in 0 until kW) {
+                        val sx = x + i - cx
+                        val px = sampleImageWithTileMode(upImg, sx, sy, tileMode)
+                        val w = kernel[j * kW + i]
+                        val r = ((px ushr 16) and 0xFF).toFloat()
+                        val g = ((px ushr 8) and 0xFF).toFloat()
+                        val b = (px and 0xFF).toFloat()
+                        val a = ((px ushr 24) and 0xFF).toFloat()
+                        accR += w * r; accG += w * g; accB += w * b
+                        if (convolveAlpha) accA += w * a
+                    }
+                }
+                accR = gain * accR + bias
+                accG = gain * accG + bias
+                accB = gain * accB + bias
+                val outR = accR.toInt().coerceIn(0, 255)
+                val outG = accG.toInt().coerceIn(0, 255)
+                val outB = accB.toInt().coerceIn(0, 255)
+                val outA = if (convolveAlpha) {
+                    (gain * accA + bias).toInt().coerceIn(0, 255)
+                } else {
+                    (upImg.peekPixel(x, y) ushr 24) and 0xFF
+                }
+                outBuf[y * upW + x] = (outA shl 24) or (outR shl 16) or (outG shl 8) or outB
+            }
+        }
+
+        return FilterResult(SkImage(upW, upH, outBuf), upstream.offsetX, upstream.offsetY)
     }
 }
