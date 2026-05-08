@@ -192,18 +192,62 @@ math edge cases).
 **Status** : full kanvas-skia suite **2453 / 2453 green** with
 the new 5 factories on the classpath.
 
-### C1.2 — Tile + Magnifier ✏️ ~250 LOC
+### C1.2 — Tile + Magnifier ✅ shipped
 
-- **`Tile(srcRect, dstRect, input)`** — like `Crop` with
-  `kRepeat`, but the source rect is sampled in `srcRect` units,
-  scaled into `dstRect`. ~150 LOC.
+- **`Tile(srcRect, dstRect, input)`** — pure-repeat semantic
+  matching upstream Skia : output (x, y) at dst-relative pos
+  `(rx, ry) = (x, y)` maps to upstream pos `(rx mod srcW, ry mod
+  srcH) + src.origin`. **No scaling** — initial design tried
+  `srcW/dstW` scaling but that doesn't match upstream's "tile
+  across dst" semantic ; tests caught the mistake on first run.
+  Reuses the `positiveMod` helper factored out of C1.1
+  `SkCropImageFilter`. Empty `srcRect` yields a transparent-
+  black `dstRect`-sized output.
 - **`Magnifier(lensBounds, zoom, inset, sampling, input)`** —
-  inside `lensBounds`, sample `input` at the centre of the lens
-  scaled by `zoom` ; outside, pass through ; with a smooth fade
-  in the `inset` band. ~150 LOC.
+  radial-ish lens. Output dimensions match upstream input (no
+  resize). Per-pixel : outside `lensBounds` → pass-through ;
+  inside → `t = clamp(minEdgeDist / inset, 0, 1)`, then
+  `sampleX = lerp(devX, magX, t)` with `magX = lensCentre +
+  (devX - lensCentre) / zoom`. So the lens edge is pure
+  pass-through (`t = 0`) and the centre is full
+  magnification (`t = 1`). `zoom <= 0` is a no-op. `sampling`
+  is plumbed for source-compat ; C1.2 uses kNearest (a future
+  bilerp pass can swap in if a GM demands sub-pixel).
+
+**Implementation deltas vs plan** :
+- Tile : impl is 67 LOC, plan budgeted 150 LOC. Saving comes
+  from dropping the (incorrect) scaling path and reusing
+  `positiveMod` from C1.1.
+- Magnifier : impl is ~50 LOC, plan budgeted 150 LOC.
+  Straightforward 4-edge-distance computation + Phong-like
+  blend. No surprises.
+- Shared `sampleImageWithTileMode` / `positiveMod` / `mirrorMod`
+  helpers extracted from `SkCropImageFilter` to file-level
+  `private fun`s so C1.2 (and future C1.x) reuse them ; one
+  more line of refactor saving on top.
+
+**Tests** :
+[SkImageFiltersTileMagnifierTest.kt](kanvas-skia/src/test/kotlin/org/skia/foundation/SkImageFiltersTileMagnifierTest.kt)
+(11) — Tile 2x-wider tiles, smaller dst crops via positive-mod,
+empty src → transparent black, dst origin offsets, null input
+tiles raster src directly ; Magnifier outside-lens pass-through,
+non-positive zoom no-op, centre fixed-point invariant, t=0 pure
+pass-through at lens edge, away-from-edges magnification pulls
+samples toward centre, edge-band blend produces partial
+magnification.
+
+**LOC** : ~125 main delta on
+[SkImageFilters.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
++ ~213 test = **338 total** (cf. plan estimate ~250 main + ~120
+test ; main came in **under budget** because the helpers from
+C1.1 could be reused, test came in modestly over because each
+filter has 5+ behavioural cases).
 
 **GMs unblocked** : `tileimagefilter.cpp`, `bigtileimagefilter.cpp`,
 `imagemagnifier.cpp`.
+
+**Status** : full kanvas-skia suite **2465 / 2465 green**
+(+12 vs C1.1 ; 11 new tests).
 
 ### C1.3 — Arithmetic family ✏️ ~300 LOC
 
@@ -316,13 +360,13 @@ where possible.
 | Slice | Main | Test | GMs unblocked |
 |---|---:|---:|---|
 | C1.1 source / passthrough ✅ | **219** (planned ~250) | **257** (planned ~150) | foundation for higher slices |
-| C1.2 Tile + Magnifier | ~250 | ~120 | 3 |
+| C1.2 Tile + Magnifier ✅ | **125** (planned ~250) | **213** (planned ~120) | 3 |
 | C1.3 Arithmetic family | ~300 | ~150 | 3 |
 | C1.4 Morphology | ~300 | ~150 | ~8 |
 | C1.5 DisplacementMap | ~200 | ~120 | 5 |
 | C1.6 MatrixConvolution | ~250 | ~150 | 5 |
 | C1.7 Lighting (6 variants) | ~1200 | ~600 | ~6 |
-| **Total** | **~2719** (so far : 219 actual + 2500 planned) | **~1547** (so far : 257 actual + 1290 planned) | **~30 GM ports unblocked** |
+| **Total** | **~2594** (so far : 344 actual + 2250 planned) | **~1640** (so far : 470 actual + 1170 planned) | **~30 GM ports unblocked** |
 
 vs. the original C1 estimate of `~1800 main` (which only covered
 11 of 22 factories and undersized the lighting cluster by ~600
