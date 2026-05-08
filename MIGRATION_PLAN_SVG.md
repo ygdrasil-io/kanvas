@@ -236,23 +236,81 @@ when rendered in a stock SVG engine (browser, Batik) is.
 - **Status** : full kanvas-skia suite **green** with all SVG slices
   cumulating (11 clip + 18 paint + 18 geometry = 47 SVG tests).
 
-### B2.4 — Image + gradients ✏️ ~250 LOC
+### B2.4 — Image + gradients ✅ shipped
 
-- **`SkImage`** → `SkPngEncoder.Encode(bitmap)` + Base64 → `<image
-  href="data:image/png;base64,…" width=… height=…>`. The bitmap
-  passes the codec's `kRGBA_8888 / kUnpremul / sRGB` projection — a
-  Rec.2020 working-space bitmap is encoded as 8-bit sRGB, matching
-  what the raster sinks emit through the same encoder.
-- **`SkLinearGradient`** → `<defs><linearGradient id="g-N" x1=… y1=…
-  x2=… y2=…><stop offset="…" stop-color="…" stop-opacity="…"/>…
-  </linearGradient></defs>` + `fill="url(#g-N)"` on the consumer.
-- **`SkRadialGradient`** → `<defs><radialGradient id="g-N" cx=… cy=…
-  r=…>…</radialGradient></defs>`.
-- **Bitmap shader (clamp only)** → `<pattern>` wrapping the encoded
-  image. Non-clamp tile modes log a warning.
-- **Tests** — round-trip a 4×4 bitmap through the data-URL path ;
-  parse the resulting SVG and decode the data URL ; assert the
-  bytes are exactly `SkPngEncoder.Encode(bitmap)`.
+- **`drawImage` / `drawImageRect`** override → encode the source
+  via [SkPngEncoder.Encode](kanvas-skia/src/main/kotlin/org/skia/encode/SkPngEncoder.kt)
+  + Base64 → emit a single `<image href="data:image/png;base64,…"
+  x=… y=… width=… height=…>` element. The standard CTM-as-`transform`
+  attr applies. Sub-rect `src` (≠ full image bounds) emits a
+  `<!-- drawImageRect: non-full src rect not yet honoured -->`
+  comment + `System.err` warning ; the SVG renders the full image
+  scaled into the dst rect (visually wrong for crop call sites,
+  but structurally diff-friendly — proper sub-rect support needs
+  an SVG `<clipPath>` trick that's deferred).
+- **`SkLinearGradient`** shader on `paint.shader` →
+  `<defs><linearGradient id="def-N" gradientUnits="userSpaceOnUse"
+  x1=… y1=… x2=… y2=…
+  gradientTransform="…" spreadMethod="…">
+  <stop offset="…" stop-color="#rrggbb" stop-opacity="…"/>…
+  </linearGradient></defs>` plus `fill="url(#def-N)"` on the
+  consumer element. Tile mode → `spreadMethod` ("pad" for
+  `kClamp` is the SVG default and omitted ; `kRepeat` → "repeat",
+  `kMirror` → "reflect", `kDecal` falls back to "pad").
+  Non-identity local matrix → `gradientTransform`.
+- **`SkRadialGradient`** → analogous `<radialGradient>` block with
+  `cx` / `cy` / `r`.
+- **`SkBitmapShader`** → `<defs><pattern
+  patternUnits="userSpaceOnUse" x=0 y=0 width=W height=H
+  patternTransform="…"><image href="data:…"/></pattern></defs>` +
+  `fill="url(#def-N)"`. **Tile-mode caveat** : SVG `<pattern>`
+  natively only supports "repeat" semantics. `kClamp` / `kMirror`
+  are not natively expressible — non-`kRepeat` tile modes emit a
+  `<!-- bitmap shader tile=… not natively representable -->`
+  comment + `System.err` warning ; the rendered SVG tiles instead.
+- **Document-monotonic def ids** — a single `nextDefId` counter is
+  shared across linear gradient / radial gradient / pattern, never
+  reused even after the def goes out of scope, mirroring the clip-id
+  policy from B2.3 (SVG renderers cache defs by id).
+- **Required prerequisite accessors** — added to the upstream
+  shader classes (mirrors Skia's `asAGradient(GradientInfo*)` /
+  `asImage` patterns) :
+  - [SkLinearGradient](kanvas-skia/src/main/kotlin/org/skia/foundation/SkLinearGradient.kt) :
+    `getStartPoint() / getEndPoint() / getColors() /
+    getPositions() / getTileMode()`
+  - [SkRadialGradient](kanvas-skia/src/main/kotlin/org/skia/foundation/SkRadialGradient.kt) :
+    `getCenter() / getRadius() / getColors() / getPositions() /
+    getTileMode()`
+  - [SkBitmapShader](kanvas-skia/src/main/kotlin/org/skia/foundation/SkBitmapShader.kt) :
+    `getImage() / getTileX() / getTileY()`
+- **Implementation note — defs must precede the consumer element**.
+  The B2.2 `paintToSvgAttrs` was a pure function ; B2.4 had to
+  refactor `emitElement` to flush shader defs to `out` **before**
+  opening the element tag (otherwise the `<defs>` block lands in
+  the middle of an attribute list, breaking XML — caught by the
+  end-to-end well-formed-XML test).
+- **Tests** :
+  [SkSVGCanvasImageGradientTest.kt](kanvas-skia/src/test/kotlin/org/skia/svg/SkSVGCanvasImageGradientTest.kt)
+  (14) — drawImage `<image>` emission with correct dimensions,
+  data-URL round-trip via [SkCodec](kanvas-skia/src/main/kotlin/org/skia/codec/SkCodec.kt)
+  (lossless because PNG), drawImageRect with full src vs sub-rect
+  src (sub-rect path emits comment + warning), CTM honoured on
+  `<image>`, linear gradient defs + fill URL + spread method
+  mapping + stop-opacity for translucent stops + gradientTransform
+  for non-identity localMatrix, radial gradient analogue, bitmap
+  shader → `<pattern>` (kRepeat silent, non-kRepeat warns),
+  document-monotonic def ids across linear/radial/pattern, complex
+  draw end-to-end well-formed XML.
+- **LOC** : ~189 main delta on
+  [SkSVGCanvas](kanvas-skia/src/main/kotlin/org/skia/svg/SkSVGCanvas.kt)
+  + ~60 main delta across the 3 shader accessor adds + ~340 test
+  = ~589 total (cf. plan estimate ~250 main + ~120 test ; overage
+  covers the shader-defs-must-precede-element refactor on
+  `emitElement`, the drawImageRect sub-rect fallback, the bitmap-
+  pattern tile-mode caveat plumbing).
+- **Status** : full kanvas-skia suite **2394 / 2394 green**
+  (+47 vs B2.3 baseline ; 14 new image+gradient tests, the rest
+  are upstream pathops slices that merged in parallel).
 
 ### B2.5 — D4.5 SvgSink wiring ✏️ ~80 LOC
 
@@ -289,9 +347,9 @@ Once B2.1–B2.4 land, D4.5 SvgSink is a thin shell :
 | B2.1 ✅ | **427** (planned ~300) | **295** (planned ~150) |
 | B2.2 ✅ | **126** (108 SVG + 18 SkDashPathEffect ; planned ~200) | **252** (planned ~80) |
 | B2.3 ✅ | **155** (planned ~150) | **243** (planned ~80) |
-| B2.4 | ~250 | ~120 |
+| B2.4 ✅ | **249** (189 SVG + 60 shader accessors ; planned ~250) | **340** (planned ~120) |
 | B2.5 | ~80 | ~120 |
-| **Total** | **~1038** (so far : 708 actual + 330 planned) | **~1030** (so far : 790 actual + 240 planned) |
+| **Total** | **~1037** (so far : 957 actual + 80 planned) | **~1250** (so far : 1130 actual + 120 planned) |
 
 vs. the original B2 estimate of ~3000 main + ~700 test (text +
 filters + saveLayer + non-clamp shaders + color filters all

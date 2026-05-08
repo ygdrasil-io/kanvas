@@ -21,6 +21,28 @@ public class SkLinearGradient internal constructor(
     localMatrix: SkMatrix = SkMatrix.Identity,
 ) : SkShader(localMatrix) {
 
+    // ─── Public accessors (mirror Skia's `SkShader::asAGradient(GradientInfo*)`) ─
+    //
+    // Used by [org.skia.svg.SkSVGCanvas] (B2.4) to project a linear
+    // gradient into a `<linearGradient>` SVG def. Defensive copies are
+    // returned so external mutation can't corrupt the shader's
+    // pre-computed colour table.
+
+    /** Start point of the gradient line, in shader-local space. */
+    public fun getStartPoint(): SkPoint = p0.copy()
+
+    /** End point of the gradient line, in shader-local space. */
+    public fun getEndPoint(): SkPoint = p1.copy()
+
+    /** Stop colours (defensive copy) — same order / count as [getPositions]. */
+    public fun getColors(): IntArray = srcColors.copyOf()
+
+    /** Stop positions in `[0, 1]` (defensive copy). */
+    public fun getPositions(): FloatArray = positions.copyOf()
+
+    /** What happens for `t < 0` / `t > 1`. */
+    public fun getTileMode(): SkTileMode = tileMode
+
     /**
      * Pre-transformed `colors` (working colour space). Built once per draw
      * in [setupForDraw]. Same length as [srcColors].

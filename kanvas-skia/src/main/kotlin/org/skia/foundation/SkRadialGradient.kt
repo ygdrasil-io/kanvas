@@ -22,6 +22,23 @@ public class SkRadialGradient internal constructor(
     localMatrix: SkMatrix = SkMatrix.Identity,
 ) : SkShader(localMatrix) {
 
+    // ─── Public accessors (B2.4 — SVG projection) ────────────────────
+
+    /** Centre of the radial gradient in shader-local space. */
+    public fun getCenter(): SkPoint = center.copy()
+
+    /** Radius from [getCenter] at which `t = 1`. */
+    public fun getRadius(): SkScalar = radius
+
+    /** Stop colours (defensive copy). */
+    public fun getColors(): IntArray = srcColors.copyOf()
+
+    /** Stop positions in `[0, 1]` (defensive copy). */
+    public fun getPositions(): FloatArray = positions.copyOf()
+
+    /** What happens for `t < 0` / `t > 1`. */
+    public fun getTileMode(): SkTileMode = tileMode
+
     private val xformedColors: IntArray = IntArray(srcColors.size)
 
     /** Phase 6b — float-premul stops for the F16 raster path. */
