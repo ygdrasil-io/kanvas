@@ -36,6 +36,7 @@ package org.skia.pathops.internal
 
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
+import org.skia.pathops.SkPathOp
 
 internal class SkOpSegment : Comparable<SkOpSegment> {
 
@@ -1012,6 +1013,66 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         return activeWinding(start, end, sumArr)
     }
 
+    /**
+     * Boolean-op winding test for a single span. Updates this'
+     * winding accumulator (`updateWinding` + `updateOppWinding`),
+     * then defers to the inner overload that consults [kActiveEdge].
+     *
+     * Returns true iff the edge `[start..end]` belongs to the
+     * boundary of the resulting path under boolean operation [op].
+     *
+     * Mirrors `SkOpSegment::activeOp(SkOpSpanBase*, SkOpSpanBase*,
+     * int, int, SkPathOp)` (`SkOpSegment.cpp:114`).
+     */
+    fun activeOp(
+        start: SkOpSpanBase, end: SkOpSpanBase,
+        xorMiMask: Int, xorSuMask: Int, op: SkPathOp,
+    ): Boolean {
+        var sumMi = updateWinding(end, start)
+        var sumSu = updateOppWinding(end, start)
+        if (operand()) {
+            val tmp = sumMi; sumMi = sumSu; sumSu = tmp
+        }
+        return activeOp(xorMiMask, xorSuMask, start, end, op,
+            intArrayOf(sumMi), intArrayOf(sumSu))
+    }
+
+    /**
+     * Inner overload : sets up `setUpWindings` (binary form) to
+     * derive `(maxWinding, sumWinding, oppMaxWinding, oppSumWinding)`,
+     * then indexes [kActiveEdge] by `(op, miFrom, miTo, suFrom,
+     * suTo)` to decide membership.
+     *
+     * `sumMiInOut[0]` is the minuend running winding,
+     * `sumSuInOut[0]` the subtrahend ; both updated in place by
+     * the binary `setUpWindings`.
+     *
+     * Mirrors the second `activeOp` overload
+     * (`SkOpSegment.cpp:129`).
+     */
+    fun activeOp(
+        xorMiMask: Int, xorSuMask: Int,
+        start: SkOpSpanBase, end: SkOpSpanBase, op: SkPathOp,
+        sumMiInOut: IntArray, sumSuInOut: IntArray,
+    ): Boolean {
+        val w = setUpWindings(start, end, sumMiInOut, sumSuInOut)
+        val miFrom: Boolean; val miTo: Boolean
+        val suFrom: Boolean; val suTo: Boolean
+        if (operand()) {
+            miFrom = (w.oppMax and xorMiMask) != 0
+            miTo = (w.oppSum and xorMiMask) != 0
+            suFrom = (w.max and xorSuMask) != 0
+            suTo = (w.sum and xorSuMask) != 0
+        } else {
+            miFrom = (w.max and xorMiMask) != 0
+            miTo = (w.sum and xorMiMask) != 0
+            suFrom = (w.oppMax and xorSuMask) != 0
+            suTo = (w.oppSum and xorSuMask) != 0
+        }
+        return kActiveEdge(op, miFrom, miTo, suFrom, suTo)
+    }
+
+
     // ─── Sum propagation (D1.2.c.2.d) ──────────────────────────────
 
     /**
@@ -1900,5 +1961,70 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
             val absIn = if (innerWinding < 0) -innerWinding else innerWinding
             return if (absOut == absIn) outerWinding < 0 else absOut < absIn
         }
+
+        // ─── kActiveEdge (D1.2.h.5.0) ──────────────────────────────
+
+        /**
+         * Boolean-op active-edge truth table for the four supported
+         * ops (`kDifference`, `kIntersect`, `kUnion`, `kXOR` —
+         * `kReverseDifference` is normalized away in `OpDebug`).
+         *
+         * Indexed by `(op, miFrom, miTo, suFrom, suTo)` → bool.
+         *
+         * Mirrors `kActiveEdge` (`SkOpSegment.cpp:40`).
+         */
+        @Suppress("FunctionName")
+        internal fun kActiveEdge(
+            op: SkPathOp, miFrom: Boolean, miTo: Boolean,
+            suFrom: Boolean, suTo: Boolean,
+        ): Boolean {
+            val mF = if (miFrom) 1 else 0
+            val mT = if (miTo) 1 else 0
+            val sF = if (suFrom) 1 else 0
+            val sT = if (suTo) 1 else 0
+            return ACTIVE_EDGE_TABLE[op.ordinal][mF][mT][sF][sT]
+        }
+
+        // Generated from src/pathops/SkOpSegment.cpp:40 — preserves
+        // upstream layout, then transposed for the Kotlin-friendly
+        // [op][miFrom][miTo][suFrom][suTo] index order.
+        private val ACTIVE_EDGE_TABLE: Array<Array<Array<Array<BooleanArray>>>> = arrayOf(
+            // diff (kDifference, ordinal 0)
+            activeEdgeCell(false, false, false, false,
+                           true,  false, true,  false,
+                           true,  true,  false, false,
+                           false, true,  true,  false),
+            // sect (kIntersect, ordinal 1)
+            activeEdgeCell(false, false, false, false,
+                           false, true,  false, true,
+                           false, false, true,  true,
+                           false, true,  true,  false),
+            // union (kUnion, ordinal 2)
+            activeEdgeCell(false, true,  true,  false,
+                           true,  true,  false, false,
+                           true,  false, true,  false,
+                           false, false, false, false),
+            // xor (kXOR, ordinal 3)
+            activeEdgeCell(false, true,  true,  false,
+                           true,  false, false, true,
+                           true,  false, false, true,
+                           false, true,  true,  false),
+        )
+
+        private fun activeEdgeCell(
+            v0: Boolean, v1: Boolean, v2: Boolean, v3: Boolean,
+            v4: Boolean, v5: Boolean, v6: Boolean, v7: Boolean,
+            v8: Boolean, v9: Boolean, vA: Boolean, vB: Boolean,
+            vC: Boolean, vD: Boolean, vE: Boolean, vF: Boolean,
+        ): Array<Array<Array<BooleanArray>>> = arrayOf(
+            arrayOf( // miFrom=0
+                arrayOf(booleanArrayOf(v0, v1), booleanArrayOf(v2, v3)), // miTo=0
+                arrayOf(booleanArrayOf(v4, v5), booleanArrayOf(v6, v7)), // miTo=1
+            ),
+            arrayOf( // miFrom=1
+                arrayOf(booleanArrayOf(v8, v9), booleanArrayOf(vA, vB)),
+                arrayOf(booleanArrayOf(vC, vD), booleanArrayOf(vE, vF)),
+            ),
+        )
     }
 }
