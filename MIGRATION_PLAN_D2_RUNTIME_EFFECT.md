@@ -330,7 +330,7 @@ regression on the existing 64 raster GMs.
 
 ---
 
-### D2.1 — `SkRuntimeEffect` façade + dispatch table
+### D2.1 — `SkRuntimeEffect` façade + dispatch table ✅ shipped
 
 **Scope** : le point d'entrée central. Parse la *signature* SkSL
 (uniform / child / main) juste assez pour peupler `Uniform[]` /
@@ -397,22 +397,58 @@ La dispatch table répond à `MakeForShader` / `MakeForColorFilter` /
   vec4-typed). Calcule offsets uniformes (alignement 4-byte,
   std140-ish layout d'upstream).
 
-**Tests** :
-- `SkRuntimeEffectDispatchTest.kt` — register / lookup hit ;
-  lookup miss → null ; whitespace-variant hashe pareil ; comment-
-  strip OK ; FNV-1a vector test contre une référence connue.
-- `SkRuntimeEffectSignatureParseTest.kt` — reconnaît chaque
-  `Uniform.Type` ; rejette `vec5` malformé ; uniform offsets
-  corrects ; child types `shader` / `colorFilter` / `blender`
-  parsés avec leurs indices.
+**Tests** ([3 test classes / 42 tests, all green](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/)) :
+- [SkRuntimeEffectDispatchTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/SkRuntimeEffectDispatchTest.kt) (15 tests) :
+  comment stripping (line + block), whitespace collapsing,
+  punctuation-adjacent stripping, case-sensitivity, FNV-1a-64
+  vector tests (`""`, `"a"`, `"foobar"` against canonical
+  reference values), register / lookup round-trip, lazy factory
+  invocation contract, re-register replacement, clearForTest.
+- [SkRuntimeEffectSignatureParseTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/SkRuntimeEffectSignatureParseTest.kt) (16 tests) :
+  every `Uniform.Type` alias decodes correctly (vec2/float2/half2,
+  mat3/float3x3/half3x3, ivec3/int3, etc.), unknown type errors
+  carry the bad token, array uniforms set the kArray_Flag and
+  count, layout(color) sets kColor_Flag, half-prefixed types set
+  kHalfPrecision_Flag, child uniforms get incrementing indices,
+  uniform offsets honour std140-ish alignment (capped at 16
+  bytes), main(...) classifies kShader / kColorFilter / kBlender
+  correctly, missing main / unknown arity errors carry diagnostics,
+  comment-strip applied before scan.
+- [SkRuntimeEffectMakeTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/SkRuntimeEffectMakeTest.kt) (11 tests) :
+  end-to-end MakeForShader / MakeForColorFilter / MakeForBlender
+  with stub impls, allowShader / allowColorFilter / allowBlender
+  reflection, findUniform / findChild by name, source() returns
+  unnormalised input, registry-miss error includes the canonical
+  hash in hex, kind-mismatch error when calling MakeForColorFilter
+  on a shader-shaped SkSL, parser-error round-trip, whitespace-
+  variant lookup hits the same impl.
 
-**LOC** : ~700 main + ~350 test = ~1 050.
+**LOC** : ~560 main (façade + dispatch + parser + impl interface) +
+~460 test (3 classes / 42 tests) = ~1 020 ; came in slightly under
+the planned 1 050 because the signature parser landed in 220 LOC
+(regex-driven) instead of the budgeted 300+, and the dispatch
+helper that hashes + normalises was lean (~225 LOC including
+KDoc and the FNV-1a routine).
 
-**Validation** : `MakeForShader("vec4 main(vec2 p) { return
-vec4(p, 0, 1); }")` retourne un `Result` avec `effect != null`
-quand l'impl correspondante est enregistrée ; même appel renvoie
-`Result(effect = null, errorText = "SkSL not registered:
-<hash>")` quand l'impl n'est pas dans la table.
+**Validation actuelle** : `MakeForShader("vec4 main(vec2 p) {
+return vec4(p, 0, 1); }")` retourne un `Result` avec `effect !=
+null` quand l'impl correspondante est enregistrée ; même appel
+renvoie `Result(effect = null, errorText = "SkSL not registered:
+<hex-hash>. Add an entry to SkRuntimeEffectDispatch.")` quand
+l'impl n'est pas dans la table. La hash est stable cross-JVM
+(vector tests pinned). Whitespace-variant SkSL résout le même
+impl (`main(p)` ↔ `main ( p )` ↔ `// header\nmain(p)` hashent
+identiquement).
+
+**Implementation** : voir
+[SkRuntimeEffect.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffect.kt),
+[SkRuntimeEffectDispatch.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffectDispatch.kt),
+[SkRuntimeEffectSignatureParser.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffectSignatureParser.kt),
+[SkRuntimeImpl.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/SkRuntimeImpl.kt).
+`makeShader` / `makeColorFilter` / `makeBlender` instance methods
+sont **déférés à D2.2** (bindings) — D2.1 livre la façade + le
+dispatch ; les bindings concrets (SkRuntimeShader / etc.) viennent
+juste après.
 
 ---
 
@@ -686,7 +722,7 @@ la deuxième fois (cette fois en cross-validation raster ↔ GPU).
 | Slice | Main | Test | GMs débloqués |
 |---|---:|---:|---|
 | D2.0 SkBlender + paint plumbing ✅ | **280** (planned ~250) | **285** (planned ~150) | foundation |
-| D2.1 SkRuntimeEffect façade + dispatch | ~700 | ~350 | foundation |
+| D2.1 SkRuntimeEffect façade + dispatch ✅ | **560** (planned ~700) | **460** (planned ~350) | foundation |
 | D2.2 Shader/ColorFilter/Blender bindings | ~400 | ~250 | foundation |
 | D2.3 SkRuntimeEffectBuilder + SkData | ~200 | ~150 | foundation |
 | D2.4.a Simple color filters | ~250 | ~200 | 4 |
