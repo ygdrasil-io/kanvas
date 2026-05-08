@@ -235,6 +235,10 @@ internal open class SkOpSpanBase {
     fun pt(): SkPoint = fPtT.fPt
     fun ptT(): SkOpPtT = fPtT
     fun segment(): SkOpSegment? = fSegment
+    /** Convenience : `segment()?.contour()`. */
+    fun contour(): SkOpContour? = fSegment?.contour()
+    /** Convenience : `segment()?.globalState()`. */
+    fun globalState(): SkOpGlobalState? = fSegment?.globalState()
     fun setAligned() { fAligned = true }
     fun unaligned() { fAligned = false }
     fun aligned(): Boolean = fAligned
@@ -305,6 +309,141 @@ internal open class SkOpSpanBase {
             startNext = start.next()
         }
         return Collapsed.kNo
+    }
+
+    /**
+     * Merge another span's pt-T loop into this span's loop. Releases
+     * [span] (unlinking it from its segment), splices its pt-T after
+     * `this.ptT()`, then walks the rest of the merged loop deduping
+     * `(span, fT)` pairs already seen. Caller must ensure
+     * `t != span.t()` and `!zero_or_one(span.t())`.
+     *
+     * Mirrors `SkOpSpanBase::merge` (`SkOpSpan.cpp:259`).
+     */
+    fun merge(span: SkOpSpan) {
+        val spanPtT = span.ptT()
+        require(this.t() != spanPtT.fT)
+        require(!zero_or_one(spanPtT.fT))
+        span.release(this.ptT())
+        if (this.contains(span)) {
+            return // already in the loop
+        }
+        var remainder: SkOpPtT = spanPtT.next() ?: return
+        this.ptT().insert(spanPtT)
+        while (remainder !== spanPtT) {
+            val nextR: SkOpPtT = remainder.next() ?: break
+            var compare: SkOpPtT = spanPtT.next() ?: break
+            var dup = false
+            while (compare !== spanPtT) {
+                val nextC: SkOpPtT = compare.next() ?: break
+                if (nextC.span() === remainder.span() && nextC.fT == remainder.fT) {
+                    dup = true; break
+                }
+                compare = nextC
+            }
+            if (!dup) spanPtT.insert(remainder)
+            remainder = nextR
+        }
+        fSpanAdds += span.fSpanAdds
+    }
+
+    /**
+     * For each coincident pt-T in this' loop, ask the active
+     * [SkOpCoincidence] container whether the corresponding entry has
+     * collapsed onto this pt-T ; release the deleted entries
+     * afterwards. No-op when no global state / coincidence container
+     * is wired (e.g. unit tests building an isolated span graph).
+     *
+     * Mirrors `SkOpSpanBase::checkForCollapsedCoincidence`
+     * (`SkOpSpan.cpp:288`).
+     */
+    fun checkForCollapsedCoincidence() {
+        val coins = globalState()?.coincidence() ?: return
+        if (coins.isEmpty()) return
+        val head = this.ptT()
+        var test: SkOpPtT = head
+        do {
+            if (test.coincident()) coins.markCollapsed(test)
+            test = test.next() ?: break
+        } while (test !== head)
+        coins.releaseDeleted()
+    }
+
+    /**
+     * Walk this' pt-T loop and [opp]'s pt-T loop ; for any segment
+     * referenced by both loops, release the duplicate span (preferring
+     * to keep the one at t = 0 or t = 1). When both ends of a
+     * segment's intersection are at zero/one, mark the segment fully
+     * done and delete both pt-Ts.
+     *
+     * Returns false when the safety hatch trips (a pathologically
+     * deep loop) — caller must abort.
+     *
+     * Mirrors `SkOpSpanBase::mergeMatches` (`SkOpSpan.cpp:313`).
+     */
+    fun mergeMatches(opp: SkOpSpanBase): Boolean {
+        var test: SkOpPtT = fPtT
+        val stop = test
+        var safetyHatch = 1_000_000
+        do {
+            if (--safetyHatch == 0) return false
+            val testNext = test.next() ?: break
+            if (test.deleted()) { test = testNext; continue }
+            val testBase = test.span() ?: break
+            val seg = testBase.segment() ?: break
+            if (seg.done()) { test = testNext; continue }
+            var inner: SkOpPtT = opp.ptT()
+            val innerStop = inner
+            do {
+                if (inner.span()?.segment() !== seg) {
+                    inner = inner.next() ?: break
+                    if (inner === innerStop) break
+                    continue
+                }
+                if (inner.deleted()) {
+                    inner = inner.next() ?: break
+                    if (inner === innerStop) break
+                    continue
+                }
+                val innerBase = inner.span() ?: break
+                // Span base is marked when there's >1 pt-T in the
+                // intersection. Prefer to keep the zero/one one.
+                if (!zero_or_one(inner.fT)) {
+                    innerBase.upCast().release(test)
+                } else {
+                    require(inner.fT != test.fT)
+                    if (!zero_or_one(test.fT)) {
+                        testBase.upCast().release(inner)
+                    } else {
+                        seg.markAllDone()
+                        test.setDeleted()
+                        inner.setDeleted()
+                    }
+                }
+                break
+            } while (true)
+            test = testNext
+        } while (test !== stop)
+        checkForCollapsedCoincidence()
+        return true
+    }
+
+    /**
+     * Splice [opp]'s pt-T into this' loop, fusing them into a single
+     * coincident loop. Pre-checks via [SkOpPtT.oppPrev] : returns true
+     * (no-op) when [opp] is already in this' loop. Otherwise runs
+     * [mergeMatches] (failure propagates) before splicing and ends
+     * with [checkForCollapsedCoincidence].
+     *
+     * Mirrors `SkOpSpanBase::addOpp(SkOpSpanBase*)`
+     * (`SkOpSpan.cpp:158`).
+     */
+    fun addOpp(opp: SkOpSpanBase): Boolean {
+        val oppPrev = this.ptT().oppPrev(opp.ptT()) ?: return true
+        if (!mergeMatches(opp)) return false
+        this.ptT().addOpp(opp.ptT(), oppPrev)
+        checkForCollapsedCoincidence()
+        return true
     }
 
     /**
@@ -396,12 +535,17 @@ internal class SkOpSpan : SkOpSpanBase() {
     var fDone: Boolean = false
     var fAlreadyAdded: Boolean = false
 
-    /** Mirrors `SkOpSpan::init`. */
+    /**
+     * Mirrors `SkOpSpan::init` (`SkOpSpan.cpp:398`). Note that
+     * `fNext` is intentionally NOT reset here — `SkOpSegment::insert`
+     * sets up the doubly-linked next/prev pointers immediately
+     * before `init` is called by `SkOpSegment::addT`, and we'd
+     * otherwise wipe them out.
+     */
     fun init(parent: SkOpSegment, prev: SkOpSpan?, t: Double, pt: SkPoint) {
         initBase(parent, prev, t, pt)
         fCoincident = this
         fToAngle = null
-        fNext = null
         fWindSum = SK_MinS32
         fOppSum = SK_MinS32
         fWindValue = 0
@@ -418,6 +562,39 @@ internal class SkOpSpan : SkOpSpanBase() {
 
     fun next(): SkOpSpanBase? { require(!final()); return fNext }
     fun setNext(n: SkOpSpanBase?) { require(!final()); fNext = n }
+
+    /**
+     * Unlink this span from its segment's doubly-linked list, decrement
+     * counts, fix up any [SkOpCoincidence] entries that referenced this
+     * span's pt-T, mark the pt-T deleted, and rewire every pt-T in the
+     * loop that pointed to this span over to [kept]'s span.
+     *
+     * [kept] must live on a different span ; this is the surviving
+     * representative.
+     *
+     * Mirrors `SkOpSpan::release(const SkOpPtT*)`
+     * (`SkOpSpan.cpp:446`).
+     */
+    fun release(kept: SkOpPtT) {
+        require(kept.span() !== this)
+        require(!final())
+        val prev = this.prev()!!
+        val next = this.next()!!
+        prev.setNext(next)
+        next.setPrev(prev)
+        this.segment()!!.release(this)
+        globalState()?.coincidence()?.fixUp(this.ptT(), kept)
+        this.ptT().setDeleted()
+        val stopPtT = this.ptT()
+        var testPtT: SkOpPtT = stopPtT
+        val keptSpan = kept.span()!!
+        do {
+            if (this === testPtT.span()) {
+                testPtT.setSpan(keptSpan)
+            }
+            testPtT = testPtT.next() ?: break
+        } while (testPtT !== stopPtT)
+    }
 
     fun toAngle(): SkOpAngle? { require(!final()); return fToAngle }
     fun setToAngle(a: SkOpAngle) { require(!final()); fToAngle = a }
