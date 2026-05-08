@@ -60,6 +60,21 @@ public abstract class SkShader internal constructor(
     public abstract fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray)
 
     /**
+     * Phase I5.3.c — sample the shader at an arbitrary point in
+     * **shader-local space** (the space [localMatrix] maps from). Used
+     * by [org.skia.core.SkCanvas.drawVertices] to look up texture
+     * pixels at a triangle's interpolated UV ; bypasses the
+     * `canvasCtm × localMatrix` chain that [shadeRow] applies.
+     *
+     * Default implementation : returns transparent black. Override in
+     * subclasses that have a native "sample at a point" pipeline
+     * (e.g. [org.skia.foundation.SkBitmapShader]). Callers must invoke
+     * [setupForDraw] once before [sampleAtLocal] — same lifecycle as
+     * [shadeRow].
+     */
+    public open fun sampleAtLocal(@Suppress("UNUSED_PARAMETER") lx: Float, @Suppress("UNUSED_PARAMETER") ly: Float): SkColor = 0
+
+    /**
      * Phase 6b: float version of [shadeRow], called by the device when
      * compositing into a `kRGBA_F16Norm` bitmap. Writes 4 floats per pixel
      * (R, G, B, A — **premultiplied**, in the bitmap's working colour space,

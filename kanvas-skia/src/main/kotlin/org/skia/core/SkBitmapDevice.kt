@@ -293,6 +293,129 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     }
 
     /**
+     * Phase I5.3.c — rasterise a single triangle with per-vertex
+     * texture coordinates and (optionally) per-vertex colours. The
+     * texture comes from `paint.shader` ; per pixel inside the
+     * triangle we :
+     *  1. compute barycentric weights `(w0, w1, w2)` ;
+     *  2. linearly interpolate the texture coords to `(uvX, uvY)` ;
+     *  3. sample the shader via [SkShader.sampleAtLocal] ;
+     *  4. if [c0] / [c1] / [c2] are non-null, also interpolate the
+     *     vertex ARGB and combine `vertexColor × shaderSample` under
+     *     [vertexBlend] ;
+     *  5. modulate by `paint.color.alpha` ;
+     *  6. dispatch to [blend] with `paint.blendMode`.
+     *
+     * @param vertexBlend mirrors the `blendMode` argument of
+     *   `SkCanvas::drawVertices` — combines the per-vertex colour
+     *   with the texture sample (currently only [SkBlendMode.kSrc],
+     *   [SkBlendMode.kModulate] and [SkBlendMode.kDst] are honoured ;
+     *   other modes default to `kModulate` for now).
+     */
+    @Suppress("LongParameterList")
+    internal fun drawTexturedTriangle(
+        p0x: Float, p0y: Float, uv0x: Float, uv0y: Float, c0: SkColor?,
+        p1x: Float, p1y: Float, uv1x: Float, uv1y: Float, c1: SkColor?,
+        p2x: Float, p2y: Float, uv2x: Float, uv2y: Float, c2: SkColor?,
+        vertexBlend: SkBlendMode,
+        ctm: SkMatrix, clip: SkIRect, paint: SkPaint,
+    ) {
+        val shader = paint.shader ?: return
+        // Pre-warm the shader (one-time per draw — reused across all
+        // pixels of the triangle).
+        shader.setupForDraw(ctm, xformSteps)
+
+        val (ax, ay) = ctm.mapXY(p0x, p0y)
+        val (bx, by) = ctm.mapXY(p1x, p1y)
+        val (cx, cy) = ctm.mapXY(p2x, p2y)
+
+        val minX = maxOf(clip.left, kFloor(minOf(ax, bx, cx).toDouble()).toInt())
+        val minY = maxOf(clip.top, kFloor(minOf(ay, by, cy).toDouble()).toInt())
+        val maxX = minOf(clip.right, kCeil(maxOf(ax, bx, cx).toDouble()).toInt())
+        val maxY = minOf(clip.bottom, kCeil(maxOf(ay, by, cy).toDouble()).toInt())
+        if (minX >= maxX || minY >= maxY) return
+
+        val area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay)
+        if (kotlin.math.abs(area) < 1e-6f) return
+        val invArea = 1f / area
+
+        val mode = paint.blendMode
+        val paintAlpha = SkColorGetA(paint.color)
+        val haveColors = c0 != null && c1 != null && c2 != null
+
+        for (y in minY until maxY) {
+            for (x in minX until maxX) {
+                val px = x + 0.5f
+                val py = y + 0.5f
+                val w0 = ((bx - px) * (cy - py) - (cx - px) * (by - py)) * invArea
+                val w1 = ((cx - px) * (ay - py) - (ax - px) * (cy - py)) * invArea
+                val w2 = 1f - w0 - w1
+                if (w0 < 0 || w1 < 0 || w2 < 0) continue
+
+                val uvX = uv0x * w0 + uv1x * w1 + uv2x * w2
+                val uvY = uv0y * w0 + uv1y * w1 + uv2y * w2
+                val texColor = shader.sampleAtLocal(uvX, uvY)
+
+                val combinedRaw: SkColor = if (haveColors) {
+                    val vci = combineVertexColorTexture(
+                        SkColorGetA(c0!!) * w0 + SkColorGetA(c1!!) * w1 + SkColorGetA(c2!!) * w2,
+                        SkColorGetR(c0) * w0 + SkColorGetR(c1) * w1 + SkColorGetR(c2) * w2,
+                        SkColorGetG(c0) * w0 + SkColorGetG(c1) * w1 + SkColorGetG(c2) * w2,
+                        SkColorGetB(c0) * w0 + SkColorGetB(c1) * w1 + SkColorGetB(c2) * w2,
+                        texColor, vertexBlend,
+                    )
+                    vci
+                } else {
+                    texColor
+                }
+
+                val ai = SkColorGetA(combinedRaw)
+                if (ai == 0 && !modeAffectsZeroAlphaSrc(mode)) continue
+                val finalA = (ai * paintAlpha + 127) / 255
+                val src = SkColorSetARGB(
+                    finalA, SkColorGetR(combinedRaw), SkColorGetG(combinedRaw), SkColorGetB(combinedRaw),
+                )
+                blend(x, y, src, mode)
+            }
+        }
+    }
+
+    /**
+     * Internal helper for [drawTexturedTriangle] : combine an
+     * interpolated vertex colour (passed as float per channel to
+     * preserve barycentric precision) with the sampled texture
+     * colour under the requested vertex blend mode. Honours the
+     * common `kSrc` / `kDst` / `kModulate` modes ; falls back to
+     * `kModulate` for the rest (deferred to a future polish slice).
+     */
+    private fun combineVertexColorTexture(
+        vA: Float, vR: Float, vG: Float, vB: Float,
+        texColor: SkColor,
+        vertexBlend: SkBlendMode,
+    ): SkColor {
+        val tA = SkColorGetA(texColor)
+        val tR = SkColorGetR(texColor)
+        val tG = SkColorGetG(texColor)
+        val tB = SkColorGetB(texColor)
+        val viA = vA.toInt().coerceIn(0, 255)
+        val viR = vR.toInt().coerceIn(0, 255)
+        val viG = vG.toInt().coerceIn(0, 255)
+        val viB = vB.toInt().coerceIn(0, 255)
+        return when (vertexBlend) {
+            SkBlendMode.kSrc -> SkColorSetARGB(viA, viR, viG, viB)
+            SkBlendMode.kDst -> texColor
+            else -> {
+                // kModulate (and anything else) : per-channel multiply.
+                val a = (viA * tA + 127) / 255
+                val r = (viR * tR + 127) / 255
+                val g = (viG * tG + 127) / 255
+                val b = (viB * tB + 127) / 255
+                SkColorSetARGB(a, r, g, b)
+            }
+        }
+    }
+
+    /**
      * Composite `src`'s pixels onto this device, with `src`'s `(0, 0)`
      * landing at this device's `(originX, originY)`, intersecting writes
      * with [clip] (in this device's coords). Source pixels are blended
