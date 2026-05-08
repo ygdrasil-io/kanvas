@@ -338,6 +338,33 @@ public object SkImageFilters {
      */
     public fun Dilate(rx: Int, ry: Int, input: SkImageFilter? = null): SkImageFilter =
         SkMorphologyImageFilter(SkMorphologyImageFilter.Op.kDilate, rx.coerceAtLeast(0), ry.coerceAtLeast(0), input)
+
+    // ─── C1.5 — DisplacementMap ──────────────────────────────────────
+
+    /**
+     * Mirrors Skia's `SkImageFilters::DisplacementMap(xCh, yCh,
+     * scale, displacement, color)` — for each pixel `(x, y)` in
+     * the output, read the corresponding pixel from [displacement],
+     * extract its [xChannelSelector] and [yChannelSelector] channels
+     * as floats `c ∈ [0, 1]`, centre at zero (`c - 0.5`), multiply
+     * by [scale] to get an offset `(dx, dy)`, and sample [color] at
+     * `(x + dx, y + dy)`.
+     *
+     * `null` displacement filter ⇒ the rasterised source is used as
+     * the displacement map. Same convention for [color].
+     *
+     * Output bbox = [color] filter's bbox. OOB samples on the
+     * colour input return transparent black (kDecal).
+     */
+    public fun DisplacementMap(
+        xChannelSelector: SkColorChannel,
+        yChannelSelector: SkColorChannel,
+        scale: SkScalar,
+        displacement: SkImageFilter? = null,
+        color: SkImageFilter? = null,
+    ): SkImageFilter = SkDisplacementMapImageFilter(
+        xChannelSelector, yChannelSelector, scale, displacement, color,
+    )
 }
 
 // -- Internal concrete implementations --------------------------------------
@@ -1495,5 +1522,93 @@ internal class SkMorphologyImageFilter(
             upstream.offsetX - padX,
             upstream.offsetY - padY,
         )
+    }
+}
+
+// -- C1.5 DisplacementMap ----------------------------------------------------
+
+/**
+ * `SkDisplacementMapImageFilter` — for every output pixel `p`, read
+ * the displacement filter's pixel at `p`, extract the configured
+ * [xChannelSelector] / [yChannelSelector] channels (centred on
+ * `0.5`), multiply by [scale] to derive an offset `(dx, dy)`, then
+ * sample the [color] filter at `p + (dx, dy)`.
+ *
+ * **Boundary semantic** : OOB samples on the colour input return
+ * transparent black (kDecal). This matches upstream Skia's default
+ * behaviour without an explicit cropRect.
+ *
+ * **Output bbox** : the colour filter's bbox. The displacement
+ * filter is sampled at the output coordinates, so its bbox doesn't
+ * influence the output size — pixels outside the displacement bbox
+ * see "no displacement" (zero offset, since OOB → 0 → 0 - 0.5 →
+ * `(-scale/2, -scale/2)` actually, NOT zero). The pre-existing tests
+ * use a uniform-grey displacement map (channels all `0x80 = 128`),
+ * which gives `dx = dy ≈ 0` after the centre-and-scale transform.
+ */
+internal class SkDisplacementMapImageFilter(
+    private val xChannelSelector: SkColorChannel,
+    private val yChannelSelector: SkColorChannel,
+    private val scale: SkScalar,
+    private val displacement: SkImageFilter?,
+    private val color: SkImageFilter?,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val displRes = displacement?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
+        val colorRes = color?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
+        val displImg = displRes.image
+        val colorImg = colorRes.image
+        val outImg = colorImg
+        val outW = outImg.width
+        val outH = outImg.height
+        if (outW == 0 || outH == 0) return colorRes
+
+        val outBuf = IntArray(outW * outH)
+
+        // Scale is in **device pixels** ; multiply by ctm max-scale
+        // for CTM-aware offsetting. Matches the convention used by
+        // Offset / DropShadow.
+        val scaledMag = scale * ctm.computeMaxScale().coerceAtLeast(1f)
+
+        for (y in 0 until outH) {
+            // Map output local (x, y) → device-space coords for displacement lookup.
+            val devY = y + colorRes.offsetY
+            val displLocalY = devY - displRes.offsetY
+            for (x in 0 until outW) {
+                val devX = x + colorRes.offsetX
+                val displLocalX = devX - displRes.offsetX
+
+                // Read displacement pixel ; OOB → 0 (transparent black).
+                val displPx = if (displLocalX in 0 until displImg.width &&
+                    displLocalY in 0 until displImg.height
+                ) displImg.peekPixel(displLocalX, displLocalY) else 0
+
+                val cx = extractChannel(displPx, xChannelSelector) / 255f
+                val cy = extractChannel(displPx, yChannelSelector) / 255f
+                // Centre at zero, then scale.
+                val dx = scaledMag * (cx - 0.5f)
+                val dy = scaledMag * (cy - 0.5f)
+
+                // Sample colour at (x + dx, y + dy) using nearest-neighbour.
+                // `round` is required (not `+ 0.5f).toInt()`) because
+                // toInt truncates toward zero — that's wrong for
+                // negative offsets (e.g. -1.5 → -1 instead of -2).
+                val sxLocal = kotlin.math.round(x + dx).toInt()
+                val syLocal = kotlin.math.round(y + dy).toInt()
+                outBuf[y * outW + x] = if (sxLocal in 0 until outW && syLocal in 0 until outH)
+                    colorImg.peekPixel(sxLocal, syLocal) else 0
+            }
+        }
+
+        return FilterResult(SkImage(outW, outH, outBuf), colorRes.offsetX, colorRes.offsetY)
+    }
+
+    /** Extract the byte value of a single channel from a non-premul ARGB int. */
+    private fun extractChannel(px: Int, ch: SkColorChannel): Int = when (ch) {
+        SkColorChannel.kR -> (px ushr 16) and 0xFF
+        SkColorChannel.kG -> (px ushr 8) and 0xFF
+        SkColorChannel.kB -> px and 0xFF
+        SkColorChannel.kA -> (px ushr 24) and 0xFF
     }
 }
