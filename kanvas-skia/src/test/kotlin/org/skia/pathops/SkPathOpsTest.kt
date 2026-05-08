@@ -206,6 +206,38 @@ class SkPathOpsTest {
     }
 
     @Test
+    fun `Op produces non-null geometry for all 20 (op x fillType) rect-rect combos`() {
+        // Mirrors the C++ PathOpsInverseGM coverage matrix : 5 ops ×
+        // 4 (oneFill × twoFill) ∈ {ee, eI, Ie, II}. Each cell must
+        // produce a non-null result with sensible bounds (subset of
+        // [10, 10, 100, 100] — the convex hull of both inputs).
+        val eo = org.skia.foundation.SkPathFillType.kEvenOdd
+        val ie = org.skia.foundation.SkPathFillType.kInverseEvenOdd
+        val ops = listOf(
+            SkPathOp.kDifference, SkPathOp.kIntersect, SkPathOp.kUnion,
+            SkPathOp.kXOR, SkPathOp.kReverseDifference,
+        )
+        for (oneFt in listOf(eo, ie)) {
+            for (twoFt in listOf(eo, ie)) {
+                val one = org.skia.foundation.SkPath
+                    .Rect(SkRect.MakeLTRB(10f, 10f, 70f, 70f)).makeFillType(oneFt)
+                val two = org.skia.foundation.SkPath
+                    .Rect(SkRect.MakeLTRB(40f, 40f, 100f, 100f)).makeFillType(twoFt)
+                for (op in ops) {
+                    val name = "$oneFt $op $twoFt"
+                    val r = SkPathOps.Op(one, two, op)
+                    assertNotNull(r, "$name returned null")
+                    val b = r!!.computeBounds()
+                    org.junit.jupiter.api.Assertions.assertTrue(
+                        b.left >= 10f && b.top >= 10f && b.right <= 100f && b.bottom <= 100f,
+                        "$name bounds $b out of expected envelope [10..100, 10..100]",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun `Op on two non-rect non-empty paths produces a non-null result`() {
         // Triangle and pentagon — full pipeline runs end-to-end.
         val triangle = SkPathBuilder()
