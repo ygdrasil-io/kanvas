@@ -39,7 +39,7 @@
 > | **B1** SkPDF (PDFBox adapter) | ❌ descoped | No ported GM needs PDF — only `internal_links.cpp` is PDF-specific upstream and isn't ported. See B1 section. |
 > | **B2** SkSVGCanvas | ✅ shipped | All 5 slices delivered : 1104 main + 1351 test (mini plan estimate ~980 + ~550). See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) for the per-slice breakdown. |
 > | **Q1** SkAutoCanvasRestore Kotlin idiom | ✅ shipped | `withSave` / `withLayer` extension functions on `SkCanvas` (`SkAutoCanvasRestore.kt`) |
-> | **Q2** Canvas wrappers | 📋 pending | |
+> | **Q2** Canvas wrappers | ✅ shipped | `SkNoDrawCanvas` + `SkPaintFilterCanvas` (abstract) + `SkOverdrawCanvas` in [`org.skia.utils`](kanvas-skia/src/main/kotlin/org/skia/utils/) ; 13 tests. |
 > | **Q3** SkBBHFactory + Picture cull | 📋 pending | |
 > | **Q4** SkDeferredDisplayList | 📋 low-priority | |
 > | **Q5** Linear sRGB diagnostic | ✅ shipped | Diagnostic confirms upstream applies the matrix in **encoded sRGB** (linear-mode wins 0 cells, encoded wins 5/5 non-tie) ; the residual ColorMatrixGM gap is elsewhere. Test in `ColorMatrixModeDiagnosticTest`. |
@@ -1436,28 +1436,56 @@ Refactor existing GM ports to use these (~50 callsites).
 
 ---
 
-### Q2 — Canvas wrappers (`PaintFilter`, `NoDraw`, `Overdraw`)
+### Q2 — Canvas wrappers (`PaintFilter`, `NoDraw`, `Overdraw`) ✅ shipped
 
-**Skia upstream files** :
-- `include/utils/SkPaintFilterCanvas.h`
-- `include/utils/SkNoDrawCanvas.h`
-- `include/utils/SkOverdrawCanvas.h`
+Three diagnostic [SkCanvas] subclasses live under
+[`org.skia.utils`](kanvas-skia/src/main/kotlin/org/skia/utils/) :
 
-**Kotlin target** :
-- `kanvas-skia/src/main/kotlin/org/skia/utils/SkPaintFilterCanvas.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/utils/SkNoDrawCanvas.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/utils/SkOverdrawCanvas.kt`
+- [SkNoDrawCanvas](kanvas-skia/src/main/kotlin/org/skia/utils/SkNoDrawCanvas.kt)
+  — every `drawX` is a no-op ; the matrix / clip stack still works.
+  Constructor takes `(width, height)`. Backed by a `1×1` dummy
+  bitmap (the SkRecordingCanvas / SkSVGCanvas pattern) so the
+  state machinery in [SkCanvas] applies without rendering.
+  Use case : analysis passes that need [getTotalMatrix] but not the
+  pixels (compute device-space bounds, time `onDraw` overhead, …).
+- [SkPaintFilterCanvas](kanvas-skia/src/main/kotlin/org/skia/utils/SkPaintFilterCanvas.kt)
+  — abstract proxy that forwards every draw to a wrapped target,
+  invoking `onFilter(paint)` on a *copy* of the paint first.
+  `onFilter` returns `true` to forward (with the possibly mutated
+  paint) or `false` to drop the draw. State changes (save / restore
+  / matrix / clip / saveLayer) are forwarded to **both** the
+  wrapper's local stack (for accurate [getTotalMatrix] queries) and
+  the target. `null`-paint image draws receive a synthesised default
+  paint so subclassers always have something to inspect. A
+  convenience `Companion.invoke` factory takes a lambda for one-shot
+  use : `SkPaintFilterCanvas(target) { paint -> ... ; true }`.
+- [SkOverdrawCanvas](kanvas-skia/src/main/kotlin/org/skia/utils/SkOverdrawCanvas.kt)
+  — concrete subclass of [SkPaintFilterCanvas] that substitutes
+  every paint with a fixed `(alpha=1, blend=kPlus)` source so each
+  draw increments the destination's alpha by `+1`. Used to detect
+  overdraw — situations where a single output pixel is rasterised
+  multiple times. After a GM run, `bitmap.getPixel(x, y) >> 24` is
+  the count of draws that touched `(x, y)` (saturating at 255).
 
-**API** : extend `SkCanvas` (open class) + override every draw method.
+**API** : `SkNoDrawCanvas(w, h)` ; `abstract SkPaintFilterCanvas(target)
+{ protected abstract fun onFilter(paint: SkPaint): Boolean }` (or
+the lambda factory) ; `SkOverdrawCanvas(target)`.
 
-**LOC** : ~400.
+**Tests** :
+[SkCanvasWrappersTest](kanvas-skia/src/test/kotlin/org/skia/utils/SkCanvasWrappersTest.kt)
+(13) — NoDraw drops draws + keeps matrix stack ; PaintFilter
+forwards filtered draws, drops on `false`, mutates the target's
+paint, leaves the caller's paint untouched, synthesises a default
+paint for `null`-paint image draws, end-to-end translate +
+clipRect + drawPath chain ; Overdraw accumulates `+1` per draw,
+saturates at 255, substitutes paint regardless of input
+shader/filter, only touched pixels increment.
 
-**Use cases** :
-- `PaintFilterCanvas` : paint modifier (e.g. force-disable AA for
-  perf testing).
-- `NoDrawCanvas` : layout pass (compute bounds without rasterizing).
-- `OverdrawCanvas` : count how many times each pixel is touched
-  (perf debugging).
+**LOC** : ~83 (NoDraw) + ~290 (PaintFilter) + ~80 (Overdraw) +
+~270 (test) = **~723 total** (cf. plan estimate ~400 ; overage
+covers the per-overload override matrix on PaintFilterCanvas —
+3 clipRect / 2 clipPath / 2 clipRRect / 2 rotate / 3 saveLayer
+arities — and the 13-test coverage matrix).
 
 ---
 
@@ -1653,18 +1681,18 @@ DAG of dependencies :
 
 13. 📋 **C1** Image filters extras (mini-planned ; **~2750 main + ~1440 test across 7 slices**, see [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). Group A core (6 factories) déjà shipped ; 22 missing factories audited and budgeted. RuntimeShader descoped on the D2 SkRuntimeEffect dependency.).
 14. ✅ **C3** SkEmbossMaskFilter (~278 main + ~120 delta + ~280 test) — 3-plane mask dispatch via `Sk3DMask` + `SkMaskFilter.Format` ; per-pixel Lambertian + specular lighting.
-15. 📋 **Q2** Canvas wrappers (PaintFilter / NoDraw / Overdraw, ~400 LOC).
+15. ✅ **Q2** Canvas wrappers (~453 main + ~270 test) — `SkNoDrawCanvas` + `SkPaintFilterCanvas` (abstract) + `SkOverdrawCanvas`.
 16. 📋 **Q3** SkBBHFactory + Picture cull (~600 LOC, perf for Picture, no GM unblocking).
 17. ✅ **Q5** Linear sRGB diagnostic (~290 test LOC) — diagnosis : upstream applies matrix in encoded sRGB ; gap is elsewhere.
 18. 📋 **C2/C4** Misc completions (kMorph path effect, StrokeAndFill, drawAnnotation / drawDrawable / drawShadow ; ~1300 LOC ensemble).
 19. 📋 **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception* — large but unlocks SkSL-using GMs).
 20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
 
-**Total estimated LOC remaining** : ~5 800 of new Kotlin code
-(C1 1800 + Q2 400 + Q3 600 + C2/C4 1300 + D2 1500 + Q4 400 ;
-Q5 + C3 shipped, D1 in-flight LOC tracked separately under
-the chantier's own slice budget). Decomposes into ~13 PRs of
-80-1500 LOC each.
+**Total estimated LOC remaining** : ~5 600 of new Kotlin code
+(C1 1800 + Q3 600 + C2/C4 1300 + D2 1500 + Q4 400 ;
+Q5 + C3 + Q2 shipped, D1 in-flight LOC tracked separately
+under the chantier's own slice budget). Decomposes into ~12 PRs
+of 80-1500 LOC each.
 
 **Total LOC delivered so far** : ~22 000 across the eleven shipped
 chantiers (D3 / D4 / Q1 / C5 / I1 / I2 / I3 / I4 / I5 / B2) —
