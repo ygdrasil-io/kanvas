@@ -224,17 +224,21 @@ class SkOpSegmentTest {
     }
 
     @Test
-    fun `UseInnerWinding rejects equal arguments`() {
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException::class.java) {
-            SkOpSegment.UseInnerWinding(2, 2)
-        }
+    fun `UseInnerWinding accepts equal arguments and tie-breaks by outer sign`() {
+        // The original D1.2.c port asserted that equal args were rejected.
+        // Upstream just asserts neither is SK_MaxS32 ; the equal case is a
+        // valid input handled by the absOut==absIn branch.
+        assertTrue(SkOpSegment.UseInnerWinding(-2, -2))   // outer < 0 → true
+        assertFalse(SkOpSegment.UseInnerWinding(2, 2))    // outer > 0 → false
     }
 
     @Test
-    fun `UseInnerWinding returns absOut greater than absIn when absolutes differ`() {
-        // Mirrors upstream : `absOut == absIn ? outerWinding < 0 : absOut > absIn`.
-        assertTrue(SkOpSegment.UseInnerWinding(3, 1))
-        assertFalse(SkOpSegment.UseInnerWinding(1, 3))
+    fun `UseInnerWinding returns absOut less than absIn when absolutes differ`() {
+        // Mirrors upstream : `absOut == absIn ? outerWinding < 0 : absOut < absIn`.
+        // The D1.2.c port had this flipped ; D1.2.c.2.c restores upstream
+        // parity (surfaced by the new winding-query callers).
+        assertFalse(SkOpSegment.UseInnerWinding(3, 1))
+        assertTrue(SkOpSegment.UseInnerWinding(1, 3))
     }
 
     @Test
@@ -350,5 +354,81 @@ class SkOpSegmentTest {
         // Either null (terminates) or a non-null other segment ; for
         // this isolated line fixture the chase terminates.
         assertEquals(null, result)
+    }
+
+    // ─── Winding queries (D1.2.c.2.c) ──────────────────────────────
+
+    @Test
+    fun `setUpWinding returns max equals input and sum equals max minus deltaSum`() {
+        // Single-line segment with windValue=1.
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.fHead.fWindValue = 1
+        // SpanSign(start=fHead, end=fTail) : fHead.t=0 < fTail.t=1 → -windValue = -1.
+        // setUpWinding(start, end, sumIn=5) → max=5, sum=5-(-1)=6.
+        val (max, sum) = seg.setUpWinding(seg.fHead, seg.fTail, 5)
+        assertEquals(5, max)
+        assertEquals(6, sum)
+    }
+
+    @Test
+    fun `setUpWinding propagates SK_MinS32 sentinel without subtracting`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val (max, sum) = seg.setUpWinding(seg.fHead, seg.fTail, SkOpSpan.SK_MinS32)
+        // Max gets the sentinel ; sum stays at the sentinel rather than
+        // subtracting (would produce a meaningless wraparound).
+        assertEquals(SkOpSpan.SK_MinS32, max)
+        assertEquals(SkOpSpan.SK_MinS32, sum)
+    }
+
+    @Test
+    fun `setUpWindings unary form mutates running total in place`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.fHead.fWindValue = 2
+        val sumMi = intArrayOf(10)
+        // SpanSign = -2 ; sumMi becomes 10 - (-2) = 12 in place ; max=10, sum=12.
+        val (max, sum) = seg.setUpWindings(seg.fHead, seg.fTail, sumMi)
+        assertEquals(10, max)
+        assertEquals(12, sum)
+        assertEquals(12, sumMi[0])
+    }
+
+    @Test
+    fun `windSum reads the angle starter span's windSum`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.markWinding(seg.fHead, 7)
+        val angle = SkOpAngle().also { it.set(seg.fHead, seg.fTail) }
+        assertEquals(7, seg.windSum(angle))
+    }
+
+    @Test
+    fun `updateWinding returns the lesser windSum when no inner-winding flip is needed`() {
+        // windSum=5, SpanSign=-1. UseInnerWinding(5-(-1)=6, 5) :
+        // absOut=6, absIn=5 → 6 < 5 is false → returns false.
+        // → updateWinding returns winding (5) unchanged.
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.fHead.fWindValue = 1
+        seg.markWinding(seg.fHead, 5)
+        assertEquals(5, seg.updateWinding(seg.fHead, seg.fTail))
+    }
+
+    @Test
+    fun `updateWinding returns SK_MinS32 sentinel when wind sum is unset`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // fHead.windSum is SK_MinS32 by default.
+        assertEquals(SkOpSpan.SK_MinS32, seg.updateWinding(seg.fHead, seg.fTail))
+    }
+
+    @Test
+    fun `activeWinding flags a span where from and to differ on zero crossing`() {
+        // A pre-marked span where winding crosses zero between max and sum.
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.fHead.fWindValue = 1
+        // Set up : sumWindingIn = 1, SpanSign = -1, so sum = 1 - (-1) = 2.
+        // from = (max=1) != 0 = true ; to = (sum=2) != 0 = true. Same → false.
+        val sumArr = intArrayOf(1)
+        assertFalse(seg.activeWinding(seg.fHead, seg.fTail, sumArr))
+        // sumWindingIn=0, SpanSign=-1 → sum=0-(-1)=1. from=false, to=true → true.
+        val sumArr2 = intArrayOf(0)
+        assertTrue(seg.activeWinding(seg.fHead, seg.fTail, sumArr2))
     }
 }

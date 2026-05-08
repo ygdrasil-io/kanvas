@@ -798,6 +798,183 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
      */
     fun operand(): Boolean = fContour?.operand() ?: false
 
+    // ─── Winding queries (D1.2.c.2.c) ──────────────────────────────
+
+    /**
+     * Compute the winding sum *up to* the (start, end) span pair from
+     * the [sumWindingIn] running total. Mirrors the inline
+     * `SkOpSegment::setUpWinding` (`SkOpSegment.h:369`) — writes
+     * `[maxWinding] = sumWinding`, then `sumWinding -= deltaSum`
+     * (with the SK_MinS32 sentinel pass-through).
+     *
+     * Returns `(maxOut, sumOut)` as a pair.
+     */
+    fun setUpWinding(
+        start: SkOpSpanBase,
+        end: SkOpSpanBase,
+        sumWindingIn: Int,
+    ): Pair<Int, Int> {
+        val deltaSum = SpanSign(start, end)
+        val maxOut = sumWindingIn
+        val sumOut = if (sumWindingIn == SkOpSpan.SK_MinS32) sumWindingIn
+                     else sumWindingIn - deltaSum
+        return maxOut to sumOut
+    }
+
+    /**
+     * Unary 3-out form. Mirrors `setUpWindings(start, end,
+     * sumMiWinding, maxWinding, sumWinding)` (`SkOpSegment.cpp:1521`).
+     */
+    fun setUpWindings(
+        start: SkOpSpanBase,
+        end: SkOpSpanBase,
+        sumMiWindingInOut: IntArray,
+    ): Pair<Int, Int> {
+        val deltaSum = SpanSign(start, end)
+        val maxOut = sumMiWindingInOut[0]
+        sumMiWindingInOut[0] -= deltaSum
+        val sumOut = sumMiWindingInOut[0]
+        return maxOut to sumOut
+    }
+
+    /**
+     * Binary 4-out form. Mirrors `setUpWindings(start, end,
+     * sumMiWinding, sumSuWinding, maxWinding, sumWinding,
+     * oppMaxWinding, oppSumWinding)` (`SkOpSegment.cpp:1529`).
+     *
+     * Returns `BinaryWindings(max, sum, oppMax, oppSum)`. When this
+     * segment is on the operand path, the (sum, max) and
+     * (oppSum, oppMax) channels swap.
+     */
+    fun setUpWindings(
+        start: SkOpSpanBase,
+        end: SkOpSpanBase,
+        sumMiWindingInOut: IntArray,
+        sumSuWindingInOut: IntArray,
+    ): BinaryWindings {
+        val deltaSum = SpanSign(start, end)
+        val oppDeltaSum = OppSign(start, end)
+        return if (operand()) {
+            val maxOut = sumSuWindingInOut[0]
+            sumSuWindingInOut[0] -= deltaSum
+            val sumOut = sumSuWindingInOut[0]
+            val oppMaxOut = sumMiWindingInOut[0]
+            sumMiWindingInOut[0] -= oppDeltaSum
+            val oppSumOut = sumMiWindingInOut[0]
+            BinaryWindings(maxOut, sumOut, oppMaxOut, oppSumOut)
+        } else {
+            val maxOut = sumMiWindingInOut[0]
+            sumMiWindingInOut[0] -= deltaSum
+            val sumOut = sumMiWindingInOut[0]
+            val oppMaxOut = sumSuWindingInOut[0]
+            sumSuWindingInOut[0] -= oppDeltaSum
+            val oppSumOut = sumSuWindingInOut[0]
+            BinaryWindings(maxOut, sumOut, oppMaxOut, oppSumOut)
+        }
+    }
+
+    /** Tuple type for the binary-op `setUpWindings` result. */
+    data class BinaryWindings(val max: Int, val sum: Int, val oppMax: Int, val oppSum: Int)
+
+    /**
+     * Read the winding sum at the (start, end) span pair, applying
+     * the inner-winding rule. Mirrors
+     * `SkOpSegment::updateWinding(SkOpSpanBase*, SkOpSpanBase*)`
+     * (`SkOpSegment.cpp:1743`).
+     *
+     * Returns `SK_MinS32` (the upstream sentinel) when the span's
+     * winding sum hasn't been computed yet — upstream calls
+     * `computeWindSum` here, which lands in a later sub-slice. Until
+     * then, callers must precondition this with a manual `markWinding`.
+     */
+    fun updateWinding(start: SkOpSpanBase, end: SkOpSpanBase): Int {
+        val lesser = start.starter(end)
+        val winding = lesser.windSum()
+        if (winding == SkOpSpan.SK_MinS32) {
+            // TODO (D1.2.c.2.x) : call lesser.computeWindSum() once it
+            // ports. For now we propagate the sentinel.
+            return winding
+        }
+        val spanWinding = SpanSign(start, end)
+        if (winding != 0 && UseInnerWinding(winding - spanWinding, winding) &&
+            winding != Int.MAX_VALUE) {
+            return winding - spanWinding
+        }
+        return winding
+    }
+
+    /**
+     * Angle-input form : reads at `(angle.end, angle.start)`.
+     * Mirrors `updateWinding(SkOpAngle*)` (`SkOpSegment.cpp:1760`).
+     */
+    fun updateWinding(angle: SkOpAngle): Int =
+        updateWinding(angle.end()!!, angle.start()!!)
+
+    /**
+     * Angle-input reversed form : reads at `(angle.start, angle.end)`.
+     * Mirrors `updateWindingReverse` (`SkOpSegment.cpp:1766`).
+     */
+    fun updateWindingReverse(angle: SkOpAngle): Int =
+        updateWinding(angle.start()!!, angle.end()!!)
+
+    /**
+     * Read the opp-winding sum at the (start, end) span pair, applying
+     * the inner-winding rule. Mirrors
+     * `SkOpSegment::updateOppWinding(SkOpSpanBase*, SkOpSpanBase*)`
+     * (`SkOpSegment.cpp:1720`).
+     */
+    fun updateOppWinding(start: SkOpSpanBase, end: SkOpSpanBase): Int {
+        val lesser = start.starter(end)
+        var oppWinding = lesser.oppSum()
+        val oppSpanWinding = OppSign(start, end)
+        if (oppSpanWinding != 0 &&
+            UseInnerWinding(oppWinding - oppSpanWinding, oppWinding) &&
+            oppWinding != Int.MAX_VALUE) {
+            oppWinding -= oppSpanWinding
+        }
+        return oppWinding
+    }
+
+    fun updateOppWinding(angle: SkOpAngle): Int =
+        updateOppWinding(angle.end()!!, angle.start()!!)
+
+    fun updateOppWindingReverse(angle: SkOpAngle): Int =
+        updateOppWinding(angle.start()!!, angle.end()!!)
+
+    /**
+     * The angle's starter span's `windSum`. Mirrors
+     * `SkOpSegment::windSum(const SkOpAngle*)` (`SkOpSegment.cpp:1784`).
+     */
+    fun windSum(angle: SkOpAngle): Int =
+        angle.start()!!.starter(angle.end()!!).windSum()
+
+    /**
+     * Decide whether the `(start, end)` span pair is "active" for
+     * unary path operations (Simplify / AsWinding). Mirrors
+     * `SkOpSegment::activeWinding(start, end, sumWinding)`
+     * (`SkOpSegment.cpp:163`).
+     *
+     * The 2×2 `kUnaryActiveEdge` table boils down to "active iff
+     * `from != to`" — an edge is part of the boundary when the
+     * winding crosses zero.
+     */
+    fun activeWinding(start: SkOpSpanBase, end: SkOpSpanBase, sumWindingInOut: IntArray): Boolean {
+        val (max, sum) = setUpWinding(start, end, sumWindingInOut[0])
+        sumWindingInOut[0] = sum
+        val from = max != 0
+        val to = sum != 0
+        return from != to
+    }
+
+    /**
+     * Convenience overload : computes `sumWinding` from
+     * `updateWinding(end, start)` first.
+     */
+    fun activeWinding(start: SkOpSpanBase, end: SkOpSpanBase): Boolean {
+        val sumArr = intArrayOf(updateWinding(end, start))
+        return activeWinding(start, end, sumArr)
+    }
+
     // ─── Angle ↔ span dispatch ─────────────────────────────────────
 
     /**
@@ -836,16 +1013,20 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         /**
          * "Use the inner winding" rule from upstream — used during
          * winding propagation (D1.2.h). Mirrors
-         * `SkOpSegment::UseInnerWinding`.
+         * `SkOpSegment::UseInnerWinding` (`SkOpSegment.cpp:1775`).
          *
-         * If `outerWinding == innerWinding`, the result is undefined
-         * upstream (asserts in DEBUG builds) — we mirror that.
+         * Bug-fix slice (D1.2.c.2.c) : the original D1.2.c port had
+         * the comparison flipped (`absOut > absIn` instead of
+         * `absOut < absIn`). The new winding-query callers in this
+         * slice surfaced the inversion ; fixed here.
          */
         fun UseInnerWinding(outerWinding: Int, innerWinding: Int): Boolean {
-            require(outerWinding != innerWinding)
+            // Upstream guards via SK_MaxS32 ; we don't have that
+            // sentinel yet, so the only invariant we enforce is that
+            // both inputs are real winding integers.
             val absOut = if (outerWinding < 0) -outerWinding else outerWinding
             val absIn = if (innerWinding < 0) -innerWinding else innerWinding
-            return if (absOut == absIn) outerWinding < 0 else absOut > absIn
+            return if (absOut == absIn) outerWinding < 0 else absOut < absIn
         }
     }
 }
