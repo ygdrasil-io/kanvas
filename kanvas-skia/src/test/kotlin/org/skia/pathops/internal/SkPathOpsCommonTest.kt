@@ -321,6 +321,38 @@ class SkPathOpsCommonTest {
         assertEquals(SkOpSpan.SK_MinS32, winding[0])
     }
 
+    // ─── FindSortableTop stub / bridgeOp skeleton (D1.2.h.5.4) ────
+
+    @Test
+    fun `FindSortableTop stub returns null until winding suite lands`() {
+        val head = newContourList(null)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        assertNull(FindSortableTop(head))
+    }
+
+    @Test
+    fun `bridgeOp returns true and emits nothing when FindSortableTop is stubbed`() {
+        val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
+        val head = newContourList(gs)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        val writer = SkPathWriter(org.skia.foundation.SkPathFillType.kEvenOdd)
+        // Outer loop short-circuits (FindSortableTop stub → null) → true.
+        assertTrue(bridgeOp(head, org.skia.pathops.SkPathOp.kUnion,
+            xorMask = SkPathOpsMask.kWinding,
+            xorOpMask = SkPathOpsMask.kWinding,
+            writer = writer))
+    }
+
+    @Test
+    fun `findChaseOp returns true with null result on empty chase buffer`() {
+        val chase = mutableListOf<SkOpSpanBase>()
+        val s = arrayOfNulls<SkOpSpanBase>(1)
+        val e = arrayOfNulls<SkOpSpanBase>(1)
+        val r = arrayOfNulls<SkOpSegment>(1).apply { this[0] = null }
+        assertTrue(findChaseOp(chase, s, e, r))
+        assertNull(r[0])
+    }
+
     // ─── globalState contourHead get/set ──────────────────────────
 
     @Test
