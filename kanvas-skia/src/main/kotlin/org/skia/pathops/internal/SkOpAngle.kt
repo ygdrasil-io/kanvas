@@ -4,6 +4,8 @@
  * Mirrors Skia's `class SkOpAngle` from `src/pathops/SkOpAngle.{h,cpp}`.
  *
  * Phase D1.2.b — data model + linked-list ops + simple accessors.
+ * Phase D1.2.b.2.a — geometry setup (`setSpans` / `setSector` /
+ * `findSector` / `computeSector`).
  *
  * # What is an angle ?
  *
@@ -79,6 +81,25 @@ internal class SkOpAngle {
     /** Set when tangent-divergence math gives ambiguous magnitudes. */
     var fTangentsAmbiguous: Boolean = false
 
+    /** Original (unmodified) curve segment from `fStart` to `fEnd`. */
+    val fOriginalCurvePart: SkDCurve = SkDCurve()
+
+    /** Working sweep / curve carrier — set by [setSpans]. */
+    val fPart: SkDCurveSweep = SkDCurveSweep()
+
+    /**
+     * Sign-only "which side of the tangent the curve bends toward".
+     * Set by [setSpans] for non-line verbs ; only the sign is consumed
+     * (compare-only). Lines leave it as 0.
+     */
+    var fSide: Double = 0.0
+
+    /**
+     * Tangent half-line — used by [orderable] when both angles are
+     * line-or-line-like. Mirrors `fTangentHalf` from upstream.
+     */
+    val fTangentHalf: SkLineParameters = SkLineParameters()
+
     // ─── Simple accessors ──────────────────────────────────────────
 
     fun start(): SkOpSpanBase? = fStart
@@ -103,11 +124,11 @@ internal class SkOpAngle {
     /**
      * Initialize this angle to represent the curve segment from [start]
      * to [end]. `fNext` is reset to null (caller is responsible for
-     * splicing into a sort loop via [insert] — D1.2.b.2).
+     * splicing into a sort loop via [insert] — D1.2.b.2.d). Also runs
+     * [setSpans] + [setSector] to populate the geometric prep used by
+     * the CCW comparators.
      *
-     * Mirrors the lifecycle prefix of `SkOpAngle::set` ; the
-     * `setSpans` follow-on call (which projects the curve to compute
-     * sectors + tangent half-line) is deferred to D1.2.b.2.
+     * Mirrors `SkOpAngle::set` (`SkOpAngle.cpp:973`).
      */
     fun set(start: SkOpSpanBase, end: SkOpSpanBase) {
         require(start !== end)
@@ -119,7 +140,8 @@ internal class SkOpAngle {
         fComputedSector = false
         fCheckCoincidence = false
         fTangentsAmbiguous = false
-        // setSpans() lands in D1.2.b.2.
+        setSpans()
+        setSector()
     }
 
     // ─── Linked-list helpers ──────────────────────────────────────
@@ -180,17 +202,284 @@ internal class SkOpAngle {
         return count
     }
 
-    // ─── Deferred (D1.2.b.2) ──────────────────────────────────────
+    // ─── Geometry setup (D1.2.b.2.a) ───────────────────────────────
+
+    /**
+     * Project the segment between [fStart] and [fEnd] into the working
+     * carrier ([fPart]) and compute the tangent half-line + side sign
+     * used by the CCW comparators. Mirrors `SkOpAngle::setSpans`
+     * (`SkOpAngle.cpp:984`).
+     *
+     * For line / line-like (degenerate-curve) segments :
+     *  - The tangent half-line is the line through the two endpoints.
+     *  - [fSide] stays 0 — sign comparisons drop out.
+     *
+     * For quad / conic : `fSide` is `−tangent.pointDistance(curve[2])`
+     * — the sign of the side the curve bends toward, normal-unscaled.
+     *
+     * For cubic : sample several `t` values bracketing inflection
+     * points and pick the largest signed distance from the chord — gives
+     * the most informative side sign even when the curve crosses its
+     * own chord.
+     */
+    fun setSpans() {
+        fUnorderable = false
+        fLastMarked = null
+        val start = fStart ?: run { fUnorderable = true; return }
+        val segment = start.segment() ?: run { fUnorderable = true; return }
+        // Guard against test fixtures that wrap an uninitialised segment :
+        // upstream never hits this, but our tests build bare segments to
+        // exercise the data-model API in isolation.
+        if (segment.verb() == SkOpSegment.SegVerb.kUnset) { fUnorderable = true; return }
+        // subDivide carriers into fPart.fCurve.
+        segment.subDivide(start, fEnd!!, fPart.fCurve)
+        fOriginalCurvePart.copyFrom(fPart.fCurve)
+        val verb = segment.verb()
+        fPart.setCurveHullSweep(verb)
+        // Line-like : a curve whose hull collapsed to its endpoints. Set
+        // up tangent[0..1] = (curve[0], curve[end]) so the line-tangent
+        // path can sort it.
+        if (verb != SkOpSegment.SegVerb.kLine && !fPart.isCurve()) {
+            fPart.fCurve[1] = fPart.fCurve[segVerbToPoints(verb)]
+            fOriginalCurvePart[1] = fPart.fCurve[1]
+            val lineHalf = SkDLine().apply {
+                set(fPart.fCurve[0].asSkPoint(), fPart.fCurve[1].asSkPoint())
+            }
+            fTangentHalf.lineEndPoints(lineHalf)
+            fSide = 0.0
+        }
+        when (verb) {
+            SkOpSegment.SegVerb.kLine -> {
+                require(fStart !== fEnd)
+                val pts = segment.pts()
+                val cP1 = pts[if (start.t() < fEnd!!.t()) 1 else 0]
+                val lineHalf = SkDLine().apply { set(start.pt(), cP1) }
+                fTangentHalf.lineEndPoints(lineHalf)
+                fSide = 0.0
+            }
+            SkOpSegment.SegVerb.kQuad,
+            SkOpSegment.SegVerb.kConic -> {
+                if (fPart.isCurve()) {
+                    val tangentPart = SkLineParameters()
+                    tangentPart.quadEndPoints(fPart.fCurve.asQuad())
+                    fSide = -tangentPart.pointDistance(fPart.fCurve[2])
+                }
+            }
+            SkOpSegment.SegVerb.kCubic -> {
+                if (fPart.isCurve()) {
+                    val tangentPart = SkLineParameters()
+                    tangentPart.cubicPart(fPart.fCurve.asCubic())
+                    fSide = -tangentPart.pointDistance(fPart.fCurve[3])
+                    // Sample at points bracketing each inflection so a
+                    // self-crossing cubic gets the most informative side.
+                    val pts = segment.pts()
+                    val testTs = DoubleArray(4)
+                    var testCount = SkDCubic.FindInflections(pts, testTs)
+                    val startT = start.t()
+                    val endT = fEnd!!.t()
+                    val limitT = endT
+                    for (i in 0 until testCount) {
+                        if (!between(startT, testTs[i], limitT)) testTs[i] = -1.0
+                    }
+                    testTs[testCount++] = startT
+                    testTs[testCount++] = endT
+                    val sortable = testTs.copyOfRange(0, testCount)
+                    sortable.sort()
+                    for (i in 0 until testCount) testTs[i] = sortable[i]
+                    var bestSide = 0.0
+                    val testCases = (testCount shl 1) - 1
+                    var idx = 0
+                    while (testTs[idx] < 0) idx++
+                    idx = idx shl 1
+                    val cubic = SkDCubic().apply { set(pts[0], pts[1], pts[2], pts[3]) }
+                    while (idx < testCases) {
+                        val testIndex = idx ushr 1
+                        var testT = testTs[testIndex]
+                        if ((idx and 1) == 1) testT = (testT + testTs[testIndex + 1]) / 2
+                        val pt = cubic.ptAtT(testT)
+                        val testPart = SkLineParameters()
+                        testPart.cubicEndPoints(fPart.fCurve.asCubic())
+                        val testSide = testPart.pointDistance(pt)
+                        if (kotlin.math.abs(bestSide) < kotlin.math.abs(testSide)) {
+                            bestSide = testSide
+                        }
+                        idx++
+                    }
+                    fSide = -bestSide
+                }
+            }
+            SkOpSegment.SegVerb.kUnset -> error("verb not set")
+        }
+    }
+
+    /**
+     * Quantize the angle's sweep into 1/32-circle "sectors". Mirrors
+     * `SkOpAngle::setSector` (`SkOpAngle.cpp:1074`).
+     *
+     * `fSectorStart` / `fSectorEnd` are in `0..31` (or -1 if deferred
+     * to [computeSector]). `fSectorMask` is the bitmask of all sectors
+     * spanned by the angle — used by the CCW reject path.
+     *
+     * The "exact compass point" trick : sectors with `(s & 3) == 3`
+     * sit on `45°` boundaries. If both start + end land there, the
+     * sector has zero width and can't act as a tie-breaker — we bump
+     * it +1 or +31 (mod 32) into the curve's bend direction.
+     */
+    fun setSector() {
+        val start = fStart ?: run { fUnorderable = true; return }
+        val segment = start.segment() ?: run { fUnorderable = true; return }
+        val verb = segment.verb()
+        if (verb == SkOpSegment.SegVerb.kUnset) { fUnorderable = true; return }
+        fSectorStart = findSector(verb, fPart.fSweep[0].x, fPart.fSweep[0].y).toByte()
+        if (fSectorStart < 0) { deferTilLater(); return }
+        if (!fPart.isCurve()) {
+            fSectorEnd = fSectorStart
+            fSectorMask = 1 shl fSectorStart.toInt()
+            return
+        }
+        require(verb != SkOpSegment.SegVerb.kLine)
+        fSectorEnd = findSector(verb, fPart.fSweep[1].x, fPart.fSweep[1].y).toByte()
+        if (fSectorEnd < 0) { deferTilLater(); return }
+        if (fSectorEnd == fSectorStart && (fSectorStart.toInt() and 3) != 3) {
+            fSectorMask = 1 shl fSectorStart.toInt()
+            return
+        }
+        var crossesZero = checkCrossesZero()
+        var startMin = minOf(fSectorStart.toInt(), fSectorEnd.toInt())
+        val curveBendsCCW = (fSectorStart.toInt() == startMin) xor crossesZero
+        // Bump start / end off exact 45° boundaries.
+        if ((fSectorStart.toInt() and 3) == 3) {
+            fSectorStart = ((fSectorStart.toInt() + (if (curveBendsCCW) 1 else 31)) and 0x1f).toByte()
+        }
+        if ((fSectorEnd.toInt() and 3) == 3) {
+            fSectorEnd = ((fSectorEnd.toInt() + (if (curveBendsCCW) 31 else 1)) and 0x1f).toByte()
+        }
+        crossesZero = checkCrossesZero()
+        startMin = minOf(fSectorStart.toInt(), fSectorEnd.toInt())
+        val end = maxOf(fSectorStart.toInt(), fSectorEnd.toInt())
+        fSectorMask = if (!crossesZero) {
+            // Ascending span [start, end].
+            ((-1).toLong() and 0xffffffffL).toInt() ushr (31 - end + startMin) shl startMin
+        } else {
+            // Wraps through 0 : two halves.
+            (((-1).toLong() and 0xffffffffL).toInt() ushr (31 - startMin)) or
+                (((-1).toLong() and 0xffffffffL).toInt() shl end)
+        }
+    }
+
+    private fun deferTilLater() {
+        fSectorStart = -1; fSectorEnd = -1; fSectorMask = 0
+        fComputeSector = true
+    }
+
+    /**
+     * Quantize a sweep vector `(x, y)` into a sector in `0..31`, or -1
+     * if the vector is exactly zero (curve too small to classify).
+     * Mirrors `SkOpAngle::findSector` (`SkOpAngle.cpp:723`).
+     *
+     * The 32-sector partition is :
+     *  - 8 quadrants (per sign of x, sign of y, |x|<|y| / |x|=|y| /
+     *    |x|>|y|), each split into 2 half-sectors → 16 "sedecimants" ;
+     *  - returns `2 * sedecimant + 1` so the values are odd 0..31.
+     */
+    fun findSector(verb: SkOpSegment.SegVerb, x: Double, y: Double): Int {
+        val absX = kotlin.math.abs(x)
+        val absY = kotlin.math.abs(y)
+        val xy = if (verb == SkOpSegment.SegVerb.kLine || !AlmostEqualUlps(absX, absY)) absX - absY else 0.0
+        // First index (0/1/2) : |x|<|y| / |x|=|y| / |x|>|y|.
+        // Second index : sign of y. Third : sign of x.
+        val sedecimant = arrayOf(
+            // |x| < |y|
+            arrayOf(intArrayOf( 4,  3,  2), intArrayOf( 7, -1, 15), intArrayOf(10, 11, 12)),
+            // |x| == |y|
+            arrayOf(intArrayOf( 5, -1,  1), intArrayOf(-1, -1, -1), intArrayOf( 9, -1, 13)),
+            // |x| > |y|
+            arrayOf(intArrayOf( 6,  3,  0), intArrayOf( 7, -1, 15), intArrayOf( 8, 11, 14)),
+        )
+        val xyIdx = (if (xy >= 0) 1 else 0) + (if (xy > 0) 1 else 0)
+        val yIdx = (if (y >= 0) 1 else 0) + (if (y > 0) 1 else 0)
+        val xIdx = (if (x >= 0) 1 else 0) + (if (x > 0) 1 else 0)
+        val s = sedecimant[xyIdx][yIdx][xIdx]
+        return if (s < 0) -1 else s * 2 + 1
+    }
+
+    /**
+     * True if the angle's sweep crosses the +x axis (sector 0 / 31
+     * boundary). The sectors `(31 → 0)` adjacency requires special
+     * handling in [setSector]'s mask-build step. Mirrors
+     * `SkOpAngle::checkCrossesZero` (`SkOpAngle.cpp:343`).
+     */
+    fun checkCrossesZero(): Boolean {
+        val startSpan = fSectorStart.toInt() and 0x1f
+        val endSpan = fSectorEnd.toInt() and 0x1f
+        val start = minOf(startSpan, endSpan)
+        val end = maxOf(startSpan, endSpan)
+        return start < 8 && end > 23
+    }
+
+    /**
+     * Recompute [fSectorStart] / [fSectorEnd] when the eager
+     * computation in [setSpans] / [setSector] couldn't classify the
+     * sweep. Walks coincident spans on the same segment to find a
+     * nearby span at which the sector is computable, replays
+     * [setSpans] + [setSector] there, then restores `fEnd`.
+     *
+     * Mirrors `SkOpAngle::computeSector` (`SkOpAngle.cpp:401`).
+     */
+    fun computeSector(): Boolean {
+        if (fComputedSector) return !fUnorderable
+        fComputedSector = true
+        val start = fStart ?: run { fUnorderable = true; return false }
+        val end0 = fEnd ?: run { fUnorderable = true; return false }
+        val stepUp = start.t() < end0.t()
+        var checkEnd: SkOpSpanBase? = end0
+        if (checkEnd!!.final() && stepUp) { fUnorderable = true; return false }
+        // Walk same-segment coincident spans until we find one whose
+        // sector is computable (or run out of options).
+        recompute@ while (checkEnd != null) {
+            val other = checkEnd.segment() ?: run { fUnorderable = true; return false }
+            var oSpan: SkOpSpanBase? = other.head()
+            var found = false
+            while (oSpan != null) {
+                val osSegment = oSpan.segment()
+                val mySegment = segment()
+                val sameSegment = osSegment === mySegment
+                val notCheckEnd = oSpan !== checkEnd
+                val tEqual = approximately_equal(oSpan.t(), checkEnd.t())
+                if (sameSegment && notCheckEnd && tEqual) { found = true; break }
+                oSpan = if (oSpan.final()) null else oSpan.upCast().next()
+            }
+            if (found) break@recompute
+            checkEnd = if (stepUp) {
+                if (!checkEnd.final()) checkEnd.upCast().next() else null
+            } else {
+                checkEnd.prev()
+            }
+        }
+        val computedEnd: SkOpSpanBase? = if (stepUp) {
+            if (checkEnd != null) checkEnd.prev() else fEnd!!.segment()!!.head()
+        } else {
+            if (checkEnd != null) checkEnd.upCast().next() else fEnd!!.segment()!!.tail()
+        }
+        if (checkEnd === fEnd || computedEnd === fEnd || computedEnd === fStart) {
+            fUnorderable = true; return false
+        }
+        if (computedEnd == null) { fUnorderable = true; return false }
+        if (stepUp != (start.t() < computedEnd.t())) { fUnorderable = true; return false }
+        val saveEnd = fEnd
+        fComputedEnd = computedEnd
+        fEnd = computedEnd
+        setSpans()
+        setSector()
+        fEnd = saveEnd
+        return !fUnorderable
+    }
+
+    // ─── Deferred (D1.2.b.2.b-d) ──────────────────────────────────
     // - insert(other) : the CCW-sort splice
     // - after / orderable / convexHullOverlaps / endsIntersect
-    // - checkParallel / checkCrossesZero / oppositePlanes
+    // - checkParallel / oppositePlanes
     // - endToSide / midToSide / lineOnOneSide / linesOnOriginalSide
     // - merge / midT / tangentsDiverge / alignmentSameSide
-    // - findSector / setSector / computeSector / setSpans
     // - distEndRatio
-    //
-    // These all depend on SkDCurve / SkDCurveSweep (separate dispatcher
-    // not yet ported) and on SkOpSegment.verb() / pts() / weight()
-    // (land in D1.2.c). The data fields above are sufficient for
-    // SkOpSpan / SkOpSegment to reference SkOpAngle by type.
 }
