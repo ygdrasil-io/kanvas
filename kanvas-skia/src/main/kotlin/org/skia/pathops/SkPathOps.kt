@@ -38,9 +38,13 @@ import org.skia.pathops.internal.SkOpGlobalState
 import org.skia.pathops.internal.SkPathOpsMask
 import org.skia.pathops.internal.SkPathWriter
 import org.skia.pathops.internal.SortContourList
+import org.skia.pathops.internal.AsWindingContour
 import org.skia.pathops.internal.bridgeOp
 import org.skia.pathops.internal.bridgeWinding
 import org.skia.pathops.internal.bridgeXor
+import org.skia.pathops.internal.contourBounds
+import org.skia.pathops.internal.inParent
+import org.skia.pathops.internal.isFlatTree
 
 /**
  * Pathops free functions. Mirrors Skia's `include/pathops/SkPathOps.h`.
@@ -338,8 +342,18 @@ public object SkPathOps {
             }
         }
         if (contourCount <= 1) return path.makeFillType(targetFill)
-        // TODO(D1.2.h.6.3+) : full multi-contour impl with bbox tree
-        // + containment checks + reverse-marker pass.
+        // Multi-contour : build a bbox tree, see if any contour
+        // contains another. When the tree is "flat" (no nesting),
+        // even-odd vs winding fill paint the same area, so a
+        // fillType swap is correct.
+        val contours = contourBounds(path)
+        val sorted = AsWindingContour(SkRect.MakeEmpty(), 0, 0)
+        for (c in contours) inParent(c, sorted)
+        if (isFlatTree(sorted)) return path.makeFillType(targetFill)
+        // Nested contours (donut hole, letter "O", etc.) — needs the
+        // full Contour ray-cast containment + reverse-marker pass +
+        // SkPath.reverseAddPath (~250 LOC C++, deferred to a
+        // follow-up slice).
         return null
     }
 }
