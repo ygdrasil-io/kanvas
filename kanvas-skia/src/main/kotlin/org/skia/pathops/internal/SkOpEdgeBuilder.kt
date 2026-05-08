@@ -114,8 +114,16 @@ internal class SkOpEdgeBuilder(
 
     // ─── Internals ─────────────────────────────────────────────────
 
+    /**
+     * Map `path.fillType` to the path-ops mask. Only the even-odd bit
+     * matters here ; the inverse bit is purely a rendering concern and
+     * is canonicalised away by `gOpInverse` / `gOutInverse` in
+     * [SkPathOps.Op] before reaching the pipeline. Mirrors upstream's
+     * `(int)fPath->getFillType() & 1`
+     * (`SkOpEdgeBuilder.cpp:25` and `:57`).
+     */
     private fun fillMaskFor(path: SkPath): Int =
-        if (path.fillType == SkPathFillType.kEvenOdd) SkPathOpsMask.kEvenOdd
+        if (path.fillType.isEvenOdd()) SkPathOpsMask.kEvenOdd
         else SkPathOpsMask.kWinding
 
     /**
