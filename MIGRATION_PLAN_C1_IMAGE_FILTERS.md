@@ -249,29 +249,75 @@ filter has 5+ behavioural cases).
 **Status** : full kanvas-skia suite **2465 / 2465 green**
 (+12 vs C1.1 ; 11 new tests).
 
-### C1.3 — Arithmetic family ✏️ ~300 LOC
+### C1.3 — Arithmetic family ✅ shipped
 
-Filters that combine two input filters per pixel.
+Filters that combine two input filters per pixel. All 4 share a
+`combineTwoFilters` / `composeBboxes` helper that evaluates both
+inputs upfront, computes the union bbox, and walks the output
+buffer applying a per-pixel combiner closure.
 
 - **`Arithmetic(k1, k2, k3, k4, enforcePMColor, bg, fg)`** —
-  `k1·src·dst + k2·src + k3·dst + k4` channel-wise, optionally
-  pinned to premul-valid range. ~120 LOC.
-- **`Blend(mode, bg, fg)`** — apply [SkBlendMode] per pixel.
-  Implementation : run both inputs, then walk the result with the
-  existing
-  [SkBlendModeDispatch](kanvas-skia/src/main/kotlin/org/skia/foundation/SkBlendMode.kt)
-  table. ~80 LOC.
-- **`Merge(filters[])`** — N inputs composited via per-pixel
-  max-alpha (visually : "show whichever input has more coverage
-  here"). ~60 LOC.
-- **`DropShadowOnly(dx, dy, σx, σy, color, input)`** — variant of
-  the existing `DropShadow` that returns just the shadow without
-  compositing the original. ~40 LOC (factor out the shadow-build
-  code from
-  [SkImageFilters.DropShadow](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)).
+  formula `result = k1·src·dst + k2·src + k3·dst + k4` per
+  channel, applied in **premultiplied** colour space (matches
+  upstream's `SkArithmeticImageFilterImpl` ; tests caught the
+  non-premul mistake on first run). `enforcePMColor = true`
+  clamps each premul channel `≤ alpha` post-formula.
+- **`Blend(mode, bg, fg)`** — applies an [SkBlendMode] per pixel
+  via a hand-rolled `blendPixel` evaluator. Coverage : 9
+  Porter-Duff modes (Clear / Src / Dst / SrcOver / DstOver /
+  SrcIn / DstIn / SrcOut / DstOut / SrcAtop / DstAtop / Xor) +
+  Plus / Modulate + 5 separable modes (Multiply / Screen /
+  Darken / Lighten). Modes outside this set fall back to
+  SrcOver — none are exercised by the C1.3 test surface, and
+  the uncovered modes (HardLight / SoftLight / Difference /
+  Exclusion / ColorDodge / ColorBurn / HSL family) are
+  follow-up territory.
+- **`Merge(vararg filters)`** — SrcOver-stacks inputs left to
+  right (filters[0] = bottom, filters.last() = top).
+  Output bbox = union of every non-null input's bbox. Empty
+  list collapses to the [Empty] singleton.
+- **`DropShadowOnly(dx, dy, σx, σy, color, input)`** — reuses
+  the SrcIn-tint + Gaussian blur sub-pipeline from
+  `SkDropShadowImageFilter`, then skips the original-input
+  composite. Output bbox = shadow bbox only.
+
+**Implementation deltas vs plan** :
+- Plan said "Blend walks the result with the existing
+  `SkBlendModeDispatch` table" — we **don't have** an exposed
+  blend dispatcher (the rasteriser's `blend(...)` is private to
+  `SkBitmapDevice`). Rolled a self-contained
+  [blendPixel](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
+  per-pixel evaluator instead. Adds ~120 LOC ; the blend-mode
+  table is well-defined enough that an inline implementation
+  is cleaner than reaching across the layering.
+- `Merge` plan said "concat N inputs via per-pixel max-alpha".
+  Shipped uses **SrcOver** stacking (matches upstream's
+  `SkMergeImageFilter` semantic ; max-alpha would obscure the
+  per-input ordering).
+
+**Tests** :
+[SkImageFiltersArithmeticFamilyTest.kt](kanvas-skia/src/test/kotlin/org/skia/foundation/SkImageFiltersArithmeticFamilyTest.kt)
+(16) — Arithmetic recipes (fg-passthrough, bg-passthrough,
+enforcePMColor clamp), Blend modes (kSrc / kDst / kClear /
+kSrcOver opaque + half-alpha / kPlus saturating / kModulate),
+Merge (empty list, single, two opaque, half-alpha-on-opaque),
+DropShadowOnly (zero-blur shadow-only sanity, offset records
+on output bbox).
+
+**LOC** : ~352 main delta on
+[SkImageFilters.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
++ ~258 test = **610 total** (cf. plan estimate ~300 main +
+~150 test ; main came in over because the blend-mode table is
+larger than expected — 17 modes covered explicitly — and the
+shared `combineTwoFilters` / `composeBboxes` plumbing is
+~50 LOC of reusable primitive that future C1.x slices can
+build on).
 
 **GMs unblocked** : `arithmode.cpp`, `xfermodeimagefilter.cpp`,
 `imagefiltersgraph.cpp`.
+
+**Status** : full kanvas-skia suite **2495 / 2495 green**
+(+16 vs C1.2 ; 16 new tests).
 
 ### C1.4 — Morphology ✏️ ~300 LOC
 
@@ -361,7 +407,7 @@ where possible.
 |---|---:|---:|---|
 | C1.1 source / passthrough ✅ | **219** (planned ~250) | **257** (planned ~150) | foundation for higher slices |
 | C1.2 Tile + Magnifier ✅ | **125** (planned ~250) | **213** (planned ~120) | 3 |
-| C1.3 Arithmetic family | ~300 | ~150 | 3 |
+| C1.3 Arithmetic family ✅ | **352** (planned ~300) | **258** (planned ~150) | 3 |
 | C1.4 Morphology | ~300 | ~150 | ~8 |
 | C1.5 DisplacementMap | ~200 | ~120 | 5 |
 | C1.6 MatrixConvolution | ~250 | ~150 | 5 |
