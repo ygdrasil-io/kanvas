@@ -711,6 +711,100 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
+     * Mirrors Skia's `SkCanvas::drawAtlas(image, xform, src, colors,
+     * blendMode, sampling, cullRect, paint)`
+     * (`include/core/SkCanvas.h:1970`). Batched sprite draw : for
+     * each `i`, the source rect `src[i]` of [image] is positioned in
+     * destination space according to `xform[i]` (an [SkRSXform]
+     * carrying scale + rotation + translation), then composited with
+     * [paint] / [blendMode] / [sampling] semantics shared across all
+     * sprites in the batch.
+     *
+     * **Implementation** : per-sprite, build the dst quad path from
+     * the four src-rect corners under `xform[i]`, then fill via
+     * [SkImage.makeShader] with the inverse transform as the local
+     * matrix. Each sprite goes through the standard [drawPath]
+     * dispatch ; the shader sampler handles arbitrary CTM rotation /
+     * scale / skew (no axis-aligned restriction).
+     *
+     * **Out of scope (deferred)** :
+     *  - per-sprite [colors] tinting (the `colors[i] × image` blend
+     *    via [blendMode]) — the current implementation ignores
+     *    [colors] ; the GMs in scope use `colors = null` ;
+     *  - [cullRect] early-out — sprites outside [cullRect] are still
+     *    drawn (correctness-equivalent ; just costs perf).
+     *
+     * @param xform     same length as [src] (and [colors] if non-null).
+     * @param colors    per-sprite tint, length `xform.size` (deferred).
+     * @param blendMode applied between [colors] and the sampled image
+     *                  pixels (deferred).
+     */
+    public open fun drawAtlas(
+        image: SkImage,
+        xform: Array<org.skia.foundation.SkRSXform>,
+        src: Array<SkRect>,
+        @Suppress("UNUSED_PARAMETER") colors: IntArray? = null,
+        @Suppress("UNUSED_PARAMETER") blendMode: SkBlendMode = SkBlendMode.kSrcOver,
+        sampling: SkSamplingOptions = SkSamplingOptions.Default,
+        @Suppress("UNUSED_PARAMETER") cullRect: SkRect? = null,
+        paint: SkPaint? = null,
+    ) {
+        require(xform.size == src.size) {
+            "drawAtlas : xform.size (${xform.size}) != src.size (${src.size})"
+        }
+        if (xform.isEmpty()) return
+        val basePaint = paint?.copy() ?: SkPaint()
+        for (i in xform.indices) {
+            val xf = xform[i]
+            val sr = src[i]
+            // Affine that maps source pixel (x, y) → dst pixel.
+            //   dst.x = sCos*x − sSin*y + (tx − sCos*sr.left + sSin*sr.top)
+            //   dst.y = sSin*x + sCos*y + (ty − sSin*sr.left − sCos*sr.top)
+            val tx = xf.fTx - xf.fSCos * sr.left + xf.fSSin * sr.top
+            val ty = xf.fTy - xf.fSSin * sr.left - xf.fSCos * sr.top
+            val srcToDst = org.skia.math.SkMatrix(
+                sx = xf.fSCos, kx = -xf.fSSin, tx = tx,
+                ky = xf.fSSin, sy = xf.fSCos, ty = ty,
+            )
+            // Sanity check : srcToDst must be invertible (rejects
+            // degenerate xforms with sCos == sSin == 0).
+            srcToDst.invert() ?: continue
+
+            // Quad corners in dst space.
+            val (x00, y00) = srcToDst.mapXY(sr.left, sr.top)
+            val (x10, y10) = srcToDst.mapXY(sr.right, sr.top)
+            val (x11, y11) = srcToDst.mapXY(sr.right, sr.bottom)
+            val (x01, y01) = srcToDst.mapXY(sr.left, sr.bottom)
+
+            val quad = SkPathBuilder()
+                .moveTo(x00, y00)
+                .lineTo(x10, y10)
+                .lineTo(x11, y11)
+                .lineTo(x01, y01)
+                .close()
+                .detach()
+
+            // Shader localMatrix maps **shader-space (atlas pixels) →
+            // local (path) space**. For drawAtlas the path is already
+            // in dst (= device) space, so localMatrix is exactly
+            // [srcToDst] — pixel sampling at device (devX, devY)
+            // queries `(canvasCtm.preConcat(srcToDst)).invert() * (devX,
+            // devY)` = `dstToSrc * (devX, devY)` for an identity CTM,
+            // which lands back on the atlas pixel.
+            val spritePaint = basePaint.copy().apply {
+                shader = image.makeShader(
+                    tileX = org.skia.foundation.SkTileMode.kClamp,
+                    tileY = org.skia.foundation.SkTileMode.kClamp,
+                    sampling = sampling,
+                    localMatrix = srcToDst,
+                )
+                style = SkPaint.Style.kFill_Style
+            }
+            drawPath(quad, spritePaint)
+        }
+    }
+
+    /**
      * Mirrors Skia's `SkCanvas::drawColor(SkColor, SkBlendMode)`
      * (`SkCanvas.h:1235`). Fills the active clip with [color] under [mode]
      * — defaults to `kSrcOver` like upstream. `clear` is the `kSrc` flavour
