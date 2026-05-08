@@ -14,6 +14,10 @@
  * static contour-walker helpers (`move_multiples`, `move_nearby`,
  * `missing_coincidence`, `calc_angles`, `sort_angles`).
  *
+ * Phase D1.2.h.6.0 — `Simplify` foundation : `FindUndone` (walk
+ * for any non-done span across contours), `FindChase` (unary
+ * variant of `findChaseOp` for the simplify walker).
+ *
  * Phase D1.2.h.5.3 — `AngleWinding` (angle-ring winding lookup).
  *
  * Phase D1.2.h.5.4 — `bridgeOp` + `findChaseOp` + Op final wiring.
@@ -633,6 +637,100 @@ internal fun FindSortableTop(contourHead: SkOpContour): SkOpSpan? {
                 contour.findSortableTop(contourHead)?.let { return it }
             }
             contour = contour.next()
+        }
+    }
+    return null
+}
+
+/**
+ * Walk every contour calling [SkOpContour.undoneSpan]. Returns the
+ * first non-done span across the contour list, or null when every
+ * contour is done.
+ *
+ * Mirrors `FindUndone` (`src/pathops/SkPathOpsCommon.cpp:73`). Used
+ * by [bridgeXor] (D1.2.h.6.1).
+ */
+internal fun FindUndone(contourHead: SkOpContour): SkOpSpan? {
+    var contour: SkOpContour? = contourHead
+    while (contour != null) {
+        if (!contour.done()) {
+            contour.undoneSpan()?.let { return it }
+        }
+        contour = contour.next()
+    }
+    return null
+}
+
+/**
+ * Pop the most-recently-chased span ; route it through
+ * [SkOpSegment.activeAngle] for a quick win, otherwise compute
+ * winding via [AngleWinding] and walk the angle ring marking
+ * spans as we find an unmarked active edge.
+ *
+ * Unary variant of [findChaseOp] — used by [bridgeWinding]
+ * (D1.2.h.6.1) for `Simplify`. Returns the next segment to walk
+ * to, or null when the chase buffer is empty / no candidate
+ * exists. Updates [startPtr] / [endPtr] in place.
+ *
+ * Mirrors `FindChase` (`src/pathops/SkPathOpsCommon.cpp:87`).
+ */
+internal fun FindChase(
+    chase: MutableList<SkOpSpanBase>,
+    startPtr: Array<SkOpSpanBase?>,
+    endPtr: Array<SkOpSpanBase?>,
+): SkOpSegment? {
+    while (chase.isNotEmpty()) {
+        val span = chase.removeAt(chase.size - 1)
+        var segment: SkOpSegment = span.segment() ?: return null
+        startPtr[0] = span.ptT().next()?.span()
+        val doneOut = booleanArrayOf(true)
+        endPtr[0] = null
+        val last = segment.activeAngle(startPtr[0]!!, startPtr, endPtr, doneOut)
+        if (last != null) {
+            startPtr[0] = last.start()
+            endPtr[0] = last.end()
+            chase.add(span)
+            return last.segment()
+        }
+        if (doneOut[0]) continue
+        val windingOut = intArrayOf(0)
+        val sortableOut = booleanArrayOf(false)
+        val angle = AngleWinding(startPtr[0]!!, endPtr[0]!!, windingOut, sortableOut) ?: return null
+        if (windingOut[0] == SkOpSpan.SK_MinS32) continue
+        var sumWinding = 0
+        if (sortableOut[0]) {
+            segment = angle.segment() ?: return null
+            sumWinding = segment.updateWindingReverse(angle)
+        }
+        var first: SkOpSegment? = null
+        val firstAngle = angle
+        var a: SkOpAngle = angle.next() ?: continue
+        while (a !== firstAngle) {
+            segment = a.segment() ?: break
+            val s = a.start() ?: break
+            val e = a.end() ?: break
+            var maxWinding = 0
+            if (sortableOut[0]) {
+                val (max, sum) = segment.setUpWinding(s, e, sumWinding)
+                maxWinding = max
+                sumWinding = sum
+            }
+            if (!segment.done(a)) {
+                if (first == null && (sortableOut[0] ||
+                        s.starter(e).windSum() != SkOpSpan.SK_MinS32)) {
+                    first = segment
+                    startPtr[0] = s
+                    endPtr[0] = e
+                }
+                if (sortableOut[0]) {
+                    if (!segment.markAngle(maxWinding, sumWinding, a, null)) return null
+                }
+            }
+            a = a.next() ?: break
+        }
+        if (first != null) {
+            chase.add(span)
+            return first
         }
     }
     return null
