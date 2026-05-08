@@ -15,11 +15,12 @@
  * (× 2).
  *
  * Phase D1.2.g.c.1 — overlap-detection predicates : overlap / TRange /
- * checkOverlap. The two callers `addIfMissing` and `addOrOverlap`
- * stay deferred to D1.2.g.c.2, gated on `SkOpSegment.existing` /
- * `collapsed` / `SkOpSpanBase.addOpp` / `SkOpPtT.active` (none yet
- * ported). The remaining heavy methods (addMissing / apply / mark /
- * expand / …) land in subsequent D1.2.g sub-slices.
+ * checkOverlap.
+ *
+ * Phase D1.2.g.c.4 — the two callers `addIfMissing` / `addOrOverlap`
+ * (gated on the SkOpSegment / SkOpPtT / SkOpSpanBase helpers landed
+ * in c.2 + c.3). The remaining heavy methods (addMissing / apply /
+ * mark / expand / …) land in subsequent D1.2.g sub-slices.
  *
  * # SkCoincidentSpans
  *
@@ -732,6 +733,190 @@ internal class SkOpCoincidence {
      * Mirrors `SkOpCoincidence::checkOverlap`
      * (`SkOpCoincidence.cpp:576`).
      */
+    /**
+     * Translate an overlap range on a third segment (`over1s`'s
+     * segment) onto the (coinSeg, oppSeg) pair via [TRange], then
+     * fall through to [addOrOverlap]. Caller's `addedOut[0]` is set
+     * if a new coincidence pair was actually inserted (or merged).
+     *
+     * Returns `false` only on the underlying `addOrOverlap`
+     * abort-paths when the resulting range is malformed ; returns
+     * `true` on the collapsed-range short-circuit (which is the
+     * upstream's bool-encoded variant).
+     *
+     * Mirrors `SkOpCoincidence::addIfMissing`
+     * (`SkOpCoincidence.cpp:627`).
+     */
+    fun addIfMissing(
+        over1s: SkOpPtT, over2s: SkOpPtT,
+        tStart: Double, tEnd: Double,
+        coinSeg: SkOpSegment, oppSeg: SkOpSegment,
+        addedOut: BooleanArray,
+    ): Boolean {
+        require(tStart < tEnd)
+        require(over1s.span()?.segment() === over2s.span()?.segment())
+        require(over1s.span()?.segment() !== coinSeg)
+        require(over1s.span()?.segment() !== oppSeg)
+        require(coinSeg !== oppSeg)
+        var coinTs = TRange(over1s, tStart, coinSeg)
+        var coinTe = TRange(over1s, tEnd, coinSeg)
+        var c = coinSeg.collapsed(coinTs, coinTe)
+        if (c != SkOpSpanBase.Collapsed.kNo) {
+            return c == SkOpSpanBase.Collapsed.kYes
+        }
+        var oppTs = TRange(over2s, tStart, oppSeg)
+        var oppTe = TRange(over2s, tEnd, oppSeg)
+        c = oppSeg.collapsed(oppTs, oppTe)
+        if (c != SkOpSpanBase.Collapsed.kNo) {
+            return c == SkOpSpanBase.Collapsed.kYes
+        }
+        if (coinTs > coinTe) {
+            val tmp1 = coinTs; coinTs = coinTe; coinTe = tmp1
+            val tmp2 = oppTs; oppTs = oppTe; oppTe = tmp2
+        }
+        addOrOverlap(coinSeg, oppSeg, coinTs, coinTe, oppTs, oppTe, addedOut)
+        return true
+    }
+
+    /**
+     * Add a coincidence pair `(coinSeg[coinTs..coinTe],
+     * oppSeg[oppTs..oppTe])`, or merge it into an existing pair when
+     * the ranges overlap. Side-effect : may allocate fresh pt-Ts on
+     * `coinSeg` / `oppSeg` (via [SkOpSegment.addT]) and splice them
+     * via [SkOpSpanBase.addOpp]. Sets `addedOut[0]` on success.
+     *
+     * Returns `false` on any of the abort conditions in the upstream
+     * (collapsed-range degeneracies, deleted pt-Ts, span allocations
+     * that fail) — in those cases the caller (`addMissing` /
+     * `addEndMovedSpans`) treats the pair as untrackable and moves on.
+     *
+     * Mirrors `SkOpCoincidence::addOrOverlap`
+     * (`SkOpCoincidence.cpp:668`).
+     *
+     * Pre-condition : [fTop] non-null. The upstream consumer
+     * `addMissing` arranges this by snapshotting `fHead` into `fTop`
+     * before walking ; calling `addOrOverlap` on a fresh container
+     * fails (the upstream `FAIL_IF(!fTop)`).
+     */
+    fun addOrOverlap(
+        coinSeg: SkOpSegment, oppSeg: SkOpSegment,
+        coinTs: Double, coinTe: Double,
+        oppTs: Double, oppTe: Double,
+        addedOut: BooleanArray,
+    ): Boolean {
+        val overlaps = mutableListOf<SkCoincidentSpans>()
+        if (fTop == null) return false
+        if (!checkOverlap(fTop, coinSeg, oppSeg, coinTs, coinTe, oppTs, oppTe, overlaps)) {
+            return true
+        }
+        if (fHead != null && !checkOverlap(
+                fHead, coinSeg, oppSeg, coinTs, coinTe, oppTs, oppTe, overlaps)) {
+            return true
+        }
+        val overlap: SkCoincidentSpans? = overlaps.firstOrNull()
+        // Fold any further overlaps into the first one.
+        for (idx in 1 until overlaps.size) {
+            val test = overlaps[idx]
+            val o = overlap!!
+            if (o.coinPtTStart()!!.fT > test.coinPtTStart()!!.fT) {
+                o.setCoinPtTStart(test.coinPtTStart()!!)
+            }
+            if (o.coinPtTEnd()!!.fT < test.coinPtTEnd()!!.fT) {
+                o.setCoinPtTEnd(test.coinPtTEnd()!!)
+            }
+            val moveOppStart = if (o.flipped()) {
+                o.oppPtTStart()!!.fT < test.oppPtTStart()!!.fT
+            } else {
+                o.oppPtTStart()!!.fT > test.oppPtTStart()!!.fT
+            }
+            if (moveOppStart) o.setOppPtTStart(test.oppPtTStart()!!)
+            val moveOppEnd = if (o.flipped()) {
+                o.oppPtTEnd()!!.fT > test.oppPtTEnd()!!.fT
+            } else {
+                o.oppPtTEnd()!!.fT < test.oppPtTEnd()!!.fT
+            }
+            if (moveOppEnd) o.setOppPtTEnd(test.oppPtTEnd()!!)
+            if (fHead == null || !release(fHead!!, test)) {
+                require(release(fTop!!, test))
+            }
+        }
+        var cs = coinSeg.existing(coinTs, oppSeg)
+        var ce = coinSeg.existing(coinTe, oppSeg)
+        if (overlap != null && cs != null && ce != null && overlap.contains(cs, ce)) {
+            return true
+        }
+        if (cs != null && cs === ce) return false
+        var os = oppSeg.existing(oppTs, coinSeg)
+        var oe = oppSeg.existing(oppTe, coinSeg)
+        if (overlap != null && os != null && oe != null && overlap.contains(os, oe)) {
+            return true
+        }
+        if (cs?.deleted() == true) return false
+        if (os?.deleted() == true) return false
+        if (ce?.deleted() == true) return false
+        if (oe?.deleted() == true) return false
+        val csExisting = if (cs == null) coinSeg.existing(coinTs, null) else null
+        val ceExisting = if (ce == null) coinSeg.existing(coinTe, null) else null
+        if (csExisting != null && csExisting === ceExisting) return false
+        if (ceExisting != null) {
+            if (ceExisting === cs) return false
+            val needle = csExisting ?: cs
+            if (needle != null && ceExisting.contains(needle)) return false
+        }
+        val osExisting = if (os == null) oppSeg.existing(oppTs, null) else null
+        val oeExisting = if (oe == null) oppSeg.existing(oppTe, null) else null
+        if (osExisting != null && osExisting === oeExisting) return false
+        if (osExisting != null) {
+            if (osExisting === oe) return false
+            val needle = oeExisting ?: oe
+            if (needle != null && osExisting.contains(needle)) return false
+        }
+        if (oeExisting != null) {
+            if (oeExisting === os) return false
+            val needle = osExisting ?: os
+            if (needle != null && oeExisting.contains(needle)) return false
+        }
+        if (cs == null || os == null) {
+            val csW = cs ?: coinSeg.addT(coinTs)
+            if (csW === ce) return true
+            val osW = os ?: oppSeg.addT(oppTs)
+            if (csW == null || osW == null) return false
+            csW.span()?.addOpp(osW.span()!!) ?: return false
+            cs = csW
+            os = osW.active() ?: return false
+            if (ce?.deleted() == true || oe?.deleted() == true) return false
+        }
+        if (ce == null || oe == null) {
+            val ceW = ce ?: coinSeg.addT(coinTe)
+            val oeW = oe ?: oppSeg.addT(oppTe)
+            if (ceW == null || oeW == null) return false
+            if (ceW.span()?.addOpp(oeW.span()!!) != true) return false
+            ce = ceW
+            oe = oeW
+        }
+        // cs / ce / os / oe are now provably non-null on every path
+        // (each `if` block above either returned or assigned).
+        if (cs.deleted() || os.deleted() || ce.deleted() || oe.deleted()) return false
+        if (cs.contains(ce) || os.contains(oe)) return false
+        var ok = true
+        if (overlap != null) {
+            if (overlap.coinPtTStart()!!.span()?.segment() === coinSeg) {
+                ok = overlap.extend(cs, ce, os, oe)
+            } else {
+                var cs2 = cs; var ce2 = ce; var os2 = os; var oe2 = oe
+                if (os2.fT > oe2.fT) {
+                    val t1 = cs2; cs2 = ce2; ce2 = t1
+                    val t2 = os2; os2 = oe2; oe2 = t2
+                }
+                ok = overlap.extend(os2, oe2, cs2, ce2)
+            }
+        } else {
+            add(cs, ce, os, oe)
+        }
+        if (ok) addedOut[0] = true
+        return true
+    }
+
     fun checkOverlap(
         check: SkCoincidentSpans?,
         coinSeg: SkOpSegment,
