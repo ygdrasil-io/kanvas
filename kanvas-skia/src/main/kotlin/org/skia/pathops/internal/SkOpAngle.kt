@@ -115,7 +115,7 @@ internal class SkOpAngle {
     fun end(): SkOpSpanBase? = fEnd
     fun next(): SkOpAngle? = fNext
     fun lastMarked(): SkOpSpanBase? = fLastMarked
-    fun setLastMarked(marked: SkOpSpanBase) { fLastMarked = marked }
+    fun setLastMarked(marked: SkOpSpanBase?) { fLastMarked = marked }
     fun tangentsAmbiguous(): Boolean = fTangentsAmbiguous
     fun unorderable(): Boolean = fUnorderable
 
