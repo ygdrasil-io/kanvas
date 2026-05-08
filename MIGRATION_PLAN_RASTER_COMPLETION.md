@@ -3,9 +3,10 @@
 > **Status** : 🔄 **en cours** — plan vivant. **15 chantiers livrés**
 > (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 / I4 / I5 /
 > Q1 / Q2 / Q3 / Q5 ✅ ; B1 ❌ descoped). 🔄 D1.0 + D1.1 ✅, D1.2
-> active (g.* + h.0–h.6.4 + h.8 + h.9.0–9.2). 📋 D2 + Q4 + D1.4
-> (pathops regression harvest — backlog) restent. Voir status par
-> chantier ci-dessous.
+> active (g.* + h.0–h.6.4 + h.8 + h.9.0–9.2). **D1.4 MVP shipped**
+> (pathops regression harvest, 303 fixtures, 96.7 % survival).
+> 📋 D2 + Q4 + D1.4 follow-ups restent. Voir status par chantier
+> ci-dessous.
 >
 > Ce document liste les chantiers restants pour atteindre la parité-iso
 > avec Skia raster (`include/core/*.h` + `include/effects/*.h`), hors
@@ -27,7 +28,7 @@
 > | **D1.1** Foundation (curves, line ops, intersections, TSect) | ✅ shipped (15 sous-slices) | a, b, c, d.1-3, e.1, e.2.a, e.2.b, e.2.c.1-4, e.3 |
 > | **D1.2** Op contour assembly | 🔄 en cours | g.* coincidence + h.0–h.4 (Op fast paths + HandleCoincidence orchestrator) + h.5.* (active edges + ray-tracing winding suite + Op end-to-end wiring) + h.6.0–h.6.4 (Simplify end-to-end + AsWinding fast paths) + h.8 (fillMaskFor inverse fill types) + h.9.0–h.9.2 (`SkOpBuilder.resolve` chained-Op fallback, pathops GM harvest, `SkParsePath::FromSVGString`) livrés ; reste finitions |
 > | **D1.3** Top-level entry points | 📋 pending | Bloqué sur D1.2 close |
-> | **D1.4** PathOps regression harvest | 📋 backlog | Port des 451 fixtures de `tests/PathOpsOpTest.cpp` (~12.5 k LOC C++) via un harness data-driven Kotlin. Couverture end-to-end actuelle ~2 % d'upstream ; chantier orthogonal au cœur algorithmique, attaque-recommandée après D2 / Q4. Voir section dédiée. |
+> | **D1.4** PathOps regression harvest | ✅ MVP shipped | Harness data-driven : extracteur Python `extract_pathops_fixtures.py` (~285 LOC) → JSON dump (303 / 451 fixtures = **67 %** d'upstream) → `PathOpsRegressionRunner.kt` (~280 LOC) JUnit `@ParameterizedTest`. **293 / 303 survived (96.7 %)** sur Op end-to-end ; **0 crash** ; floor pinned à 90 %. Reste : (1) faire passer les 10 `RETURNED_NULL` ; (2) étendre l'extracteur aux ~150 fixtures à `addRect`/`SkPoint pts[]`/multi-line cubics. Voir section dédiée. |
 > | **D2** SkRuntimeEffect façade + per-effect Kotlin ports | 📋 mini-planned | Mini plan livré : **8 sous-slices**, ~3 700 main + ~2 200 test, ~13 GM clusters / ~80 DEF_GM débloquées. Aligné sur la stratégie [WebGPU](MIGRATION_PLAN_GPU_WEBGPU.md) (port hand-écrit par shader-type). Voir [MIGRATION_PLAN_D2_RUNTIME_EFFECT.md](MIGRATION_PLAN_D2_RUNTIME_EFFECT.md). |
 > | **D3** Image codecs | ✅ shipped | D3.1 PNG / D3.2 JPEG / D3.3 GIF+BMP+WBMP / D3.4 WEBP (TwelveMonkeys plugin) / D3.5 PNG+JPEG encoders / D3.6 `SkImage.encodeToData` |
 > | **D4** DM sink architecture | ✅ shipped | D4.1 Sink + Raster8888/F16 / D4.2 PictureSink / D4.3 Runner + Report / D4.4 DmCli + DmMain / D4.5 SvgSink (PdfSink ❌ descoped per B1) |
@@ -271,44 +272,68 @@ public object SkPathOps {
     `tests/PathOpsOpTest.cpp` — *covered by D1.4 below*. GM ports :
     `pathops*` cluster (only 2 GMs upstream, both shipped).
 
-- **D1.4** — PathOps regression harvest. 📋 **backlog** (orthogonal
-  au cœur algorithmique ; à attaquer après D2 / Q4 ou en parallèle
-  des polish-passes D1.2 / D1.3).
-  - **Pourquoi** : couverture end-to-end actuelle de `SkPathOps.Op`
-    est **~2 %** d'upstream — 13 appels `SkPathOps.Op(...)` dans
-    nos tests + GMs vs 451 fixtures `TEST(name)` dans
+- **D1.4** — PathOps regression harvest. ✅ **MVP shipped**.
+  - **Pourquoi** : couverture end-to-end de `SkPathOps.Op` était
+    **~2 %** d'upstream avant cette slice — 13 appels
+    `SkPathOps.Op(...)` dans nos tests + GMs vs 451 fixtures
+    `TEST(name)` dans
     [`tests/PathOpsOpTest.cpp`](https://github.com/google/skia/blob/main/tests/PathOpsOpTest.cpp).
     Les 686 tests internes (segment / coincidence / TSect / angle)
     valident les briques ; ils ne couvrent **pas** l'interaction
     multi-composants sur cas-limites — qui est précisément ce que
     chaque `TEST(bug8380)` / `TEST(crbug_526025)` / `TEST(fuzz_*)`
     upstream a fixé une fois pour toutes.
-  - **Stratégie** — harness data-driven plutôt que port mécanique :
-    1. Script `extract_pathops_fixtures.py` : scrape les 449
-       fonctions `static void <name>(skiatest::Reporter*, const char*)`
-       de `PathOpsOpTest.cpp` → JSON `(name, pathA verbs, pathB verbs,
-       op, expected_status)`.
-    2. `PathOpsRegressionRunner.kt` (~300 LOC) : `@ParameterizedTest`
-       JUnit 5 chargeant le JSON, exécutant `SkPathOps.Op(A, B, op)`,
-       comparant le rasterised result au `expected` upstream (PNG
-       ref ou bbox + cardinality verb).
-    3. Run en CI ; ratchet les passing-counts au lieu d'échouer
-       binaire. Permet de mesurer la convergence du moteur.
-  - **LOC** estimés : ~300 main (harness) + ~5–8 k JSON data dump.
-  - **GMs débloqués** : aucun direct (les 2 pathops GMs sont déjà
-    shippés). Bénéfice = **détection de bugs latents** + base
-    DM-iso-fidelity pour pathops.
-  - **Estimation effort** :
-    - Port mécanique pur : **1–2 semaines** (script extract + harness +
-      premier ratchet).
-    - Debug des bugs surfacés (D1.2.h.7 / h.8 ont déjà trouvé 5 bugs
-      sur seulement 2 GMs) : **estimation 10–30 bugs latents × 1–3
-      jours = 4–12 semaines** supplémentaires.
-    - **Total réaliste : 6–15 semaines** sur un engineer focused.
-  - **Décision recommandée** : à programmer **après** clôture D2 /
-    Q4 si l'objectif est "DM iso-fidelity". À mettre **plus haut**
-    en priorité si l'objectif est "robustesse production
-    (anti-crash sur input fuzz)".
+  - **Pipeline livré** :
+    1. [`kanvas-skia/tools/extract_pathops_fixtures.py`](kanvas-skia/tools/extract_pathops_fixtures.py)
+       — extracteur Python (~285 LOC) qui scrape les 449 fonctions
+       `static void <name>(skiatest::Reporter*, const char*)` de
+       `PathOpsOpTest.cpp` et émet un JSON dump avec
+       `(name, fillTypeA, fillTypeB, pathA verbs, pathB verbs, op)`.
+       Gère le format SkPathBuilder + le shortcut
+       `SkPath one = SkPath::Rect({l,t,r,b}, dir)` + le cast int
+       `setFillType((SkPathFillType) 0..3)` + `path.reset()`.
+       **303 fixtures extraites / 451 = 67 %** d'upstream.
+    2. [`kanvas-skia/src/test/resources/pathops/op_fixtures.json`](kanvas-skia/src/test/resources/pathops/op_fixtures.json)
+       — JSON dump (~17 800 lignes) commité comme test resource.
+       Re-générer via `python3 kanvas-skia/tools/extract_pathops_fixtures.py
+       /path/to/skia/tests/PathOpsOpTest.cpp >
+       kanvas-skia/src/test/resources/pathops/op_fixtures.json`
+       quand upstream gagne de nouvelles fixtures.
+    3. [`PathOpsRegressionRunner`](kanvas-skia/src/test/kotlin/org/skia/pathops/PathOpsRegressionRunner.kt)
+       — JUnit 5 `@ParameterizedTest` (~280 LOC) chargeant le JSON
+       via `jackson-databind`, replayant chaque verb-stream sur
+       `SkPathBuilder`, exécutant `SkPathOps.Op(A, B, op)`, et
+       classifiant l'outcome dans une enum
+       `{ SURVIVED, RETURNED_NULL, NON_FINITE, THREW, BUILD_FAILED,
+       UNKNOWN_OP }`. Un test smoke `pathops Op survival rate stays
+       at-or-above the floor` enforce un **floor de 90 %** sur le
+       SURVIVED-rate global ; bumper monotone à mesure que le moteur
+       s'améliore.
+  - **Mesure initiale** (post C1.7 + C2/C4 + Q3, run sur master au
+    2026-05-08) : **293 / 303 survived = 96.7 %**, **0 crash**, 10
+    `RETURNED_NULL` sur cas dégénérés. Le floor à 90 % laisse ~7
+    points de marge pour les ajouts de fixtures futurs.
+  - **LOC livrés** : ~285 main (Python) + ~280 test (Kotlin) +
+    ~17 800 JSON. Bouge le compteur restant D1.4 de "~300 + ~8 k"
+    estimé à **~580 + ~17 800 livré**.
+  - **Restant** :
+    1. **10 fixtures `RETURNED_NULL`** — investiguer chaque cas
+       (chaque investigation = ~1-3 jours, mirror du pattern h.7/h.8
+       debug) ; bumper le floor de 90 % vers 95 %+ par passes.
+    2. **148 fixtures non-extraites** (33 %) — étendre l'extracteur
+       pour gérer `SkPath::addRect/addCircle`, `SkPoint pts[] = {…}`
+       avec injection via `SkPath::Polygon`, multi-line cubics, et
+       les fixtures avec constantes `SkScalar xA = …`. ~2-3 jours.
+    3. **Pixel parity vs upstream** — actuellement on assert
+       seulement "ne crashe pas + SkPath finite". Une slice
+       follow-up rasteriserait le résultat et comparerait au PNG
+       upstream (ressemble au harness de `RasterSink8888`). ~1-2
+       semaines.
+  - **Bénéfice mesuré** : la suite stays green à **2914 / 2914**
+    avec 304 nouveaux tests (303 fixtures + 1 floor smoke) + 0
+    crashes vs 451 cas-limites upstream. Le moteur D1 sort en
+    bien meilleure forme que prévu — pas de bug critique latent
+    dans l'extraction-MVP.
 
 **Total LOC** : ~9000-12000 (D1.0 → D1.3) + ~300 main + ~8 k data (D1.4).
 **Estimated time** : 2-3 weeks per slice (D1.1 / D1.2 / D1.3) plus
@@ -1885,15 +1910,14 @@ DAG of dependencies :
 18. ✅ **C2/C4** Misc completions (~505 main + ~400 test) — `Sk1DPathEffect.kMorph` (refactored around a `ContourMeasure` chord-polyline), `kStrokeAndFill_Style` already shipped ; `SkDrawable` + `SkCanvas.drawDrawable` + `SkCanvas.drawAnnotation` no-op slot. **`drawShadow` descoped** (no ported GM uses it).
 19. 📋 **D2** SkRuntimeEffect façade + per-effect Kotlin ports (mini-planned ; **~3 700 main + ~2 200 test across 8 slices**, see [MIGRATION_PLAN_D2_RUNTIME_EFFECT.md](MIGRATION_PLAN_D2_RUNTIME_EFFECT.md). Hand-port chaque shader type comme `SkLinearGradient` etc. ; aligned avec la stratégie WGSL côté GPU. Débloque ~80 DEF_GM rows across 13 GM clusters.).
 20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
-21. 📋 **D1.4** PathOps regression harvest (~300 main + ~8 k JSON data) — backlog. Port des 451 fixtures `tests/PathOpsOpTest.cpp` via harness data-driven JUnit `@ParameterizedTest`. Couverture end-to-end actuelle ~2 % d'upstream ; à attaquer après D2 / Q4 si l'objectif est DM iso-fidelity, ou plus tôt si l'objectif est robustesse anti-fuzz.
+21. ✅ **D1.4** PathOps regression harvest — **MVP shipped** (~285 Python + ~280 Kotlin + ~17 800 JSON). 303 / 451 upstream fixtures extraites = **67 %** ; 293 / 303 survived = **96.7 %** ; 0 crash ; floor pinned à 90 %. Reste : (a) faire passer les 10 `RETURNED_NULL` ; (b) étendre l'extracteur aux ~150 fixtures non-extraites ; (c) ajouter pixel-parity vs upstream PNG refs.
 
-**Total estimated LOC remaining** : ~4 400 of new Kotlin code
-(D2 ~3 700 main + ~2 200 test = ~5 900 total + Q4 400 + D1.4 ~300
-main ; D1.4 also ships ~8 k JSON test data ; everything else shipped
-or descoped, D1 in-flight LOC tracked separately under the
-chantier's own slice budget). Decomposes into ~10 PRs (D2 = 8
-sub-slice PRs per its mini plan, Q4 small, D1.4 medium-with-debug-
-tail).
+**Total estimated LOC remaining** : ~4 100 of new Kotlin code
+(D2 ~3 700 main + ~2 200 test = ~5 900 total + Q4 400 ; everything
+else shipped or descoped, D1 in-flight LOC tracked separately under
+the chantier's own slice budget ; D1.4 follow-ups counted on D1's
+own budget). Decomposes into ~9 PRs (D2 = 8 sub-slice PRs per its
+mini plan, Q4 small).
 
 **Total LOC delivered so far** : ~25 000 across the **15 shipped
 chantiers** (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 /

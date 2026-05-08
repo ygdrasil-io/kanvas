@@ -19,8 +19,13 @@ dependencies {
     implementation("com.twelvemonkeys.imageio:imageio-webp:3.12.0")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
+    // D1.4 — PathOps regression harness loads upstream Skia
+    // fixtures from a JSON resource. jackson-databind is the
+    // standard mature JSON parser ; only the harness imports it.
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.16.1")
 }
 
 sourceSets {
