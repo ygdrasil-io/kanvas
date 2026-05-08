@@ -1,5 +1,6 @@
 package org.skia.core
 
+import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
@@ -77,35 +78,27 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
     public fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
 
-    // ─── Phase 7q — clipPath / clipRRect alpha-mask plumbing ──────────────
-    private var activeClipMask: ByteArray? = null
-    private var activeClipMaskLeft: Int = 0
-    private var activeClipMaskTop: Int = 0
-    private var activeClipMaskWidth: Int = 0
+    // ─── Phase I3.3.b — SkAAClip-backed clip plumbing ────────────────────
+    //
+    // Replaces the Phase 7q `clipMask: ByteArray?` 2D byte buffer with an
+    // `SkAAClip` carrying band-encoded RLE (width, alpha) runs. Memory is
+    // sparse for typical clip shapes (rect ⇒ 1 band × 1 run ; convex AA
+    // path ⇒ ≤ 30 bands × ≤ 5 runs each, vs `width × height` bytes for
+    // the byte buffer). Per-pixel queries are slightly more expensive
+    // (binary-search Y + linear scan X runs) but typical row layouts
+    // keep that constant small.
 
-    /** Bind the active clip mask before the next draw call. Called by SkCanvas. */
-    internal fun setActiveClip(mask: ByteArray?, bounds: SkIRect) {
-        activeClipMask = mask
-        if (mask != null) {
-            activeClipMaskLeft = bounds.left
-            activeClipMaskTop = bounds.top
-            activeClipMaskWidth = bounds.right - bounds.left
-        } else {
-            activeClipMaskLeft = 0
-            activeClipMaskTop = 0
-            activeClipMaskWidth = 0
-        }
+    private var activeAaClip: SkAAClip? = null
+
+    /** Bind the active AA clip before the next draw call. Called by SkCanvas. */
+    internal fun setActiveClip(aaClip: SkAAClip?) {
+        activeAaClip = aaClip
     }
 
-    /** Clip-mask coverage at device pixel `(x, y)` ; 255 if no mask, 0 outside bounds. */
+    /** Clip-mask coverage at device pixel `(x, y)` ; 255 if no AA clip, 0 outside its bounds. */
     private fun clipCoverage(x: Int, y: Int): Int {
-        val mask = activeClipMask ?: return 255
-        val mx = x - activeClipMaskLeft
-        val my = y - activeClipMaskTop
-        if (mx < 0 || my < 0 || mx >= activeClipMaskWidth) return 0
-        val idx = my * activeClipMaskWidth + mx
-        if (idx < 0 || idx >= mask.size) return 0
-        return mask[idx].toInt() and 0xFF
+        val ac = activeAaClip ?: return 255
+        return ac.coverage(x, y)
     }
 
     public fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
@@ -1650,7 +1643,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // non-rect clip is active we modulate `src.alpha` by the mask
         // coverage at this pixel before any blend dispatch.
         val src: SkColor
-        if (activeClipMask != null) {
+        if (activeAaClip != null) {
             val cov = clipCoverage(x, y)
             if (cov == 0) {
                 if (!modeAffectsZeroAlphaSrc(mode)) return
@@ -2353,7 +2346,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         var sa = SkColorGetA(src)
         if (sa == 0) return
         // Phase 7q — clip-mask alpha modulation.
-        if (activeClipMask != null) {
+        if (activeAaClip != null) {
             val cov = clipCoverage(x, y)
             if (cov == 0) return
             if (cov != 255) {
@@ -2390,7 +2383,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         if (saIn <= 0f) return
         // Phase 7q — clip-mask coverage modulation in premul-float.
         val sr: Float; val sg: Float; val sb: Float; val sa: Float
-        if (activeClipMask != null) {
+        if (activeAaClip != null) {
             val cov = clipCoverage(x, y)
             if (cov == 0) return
             if (cov == 255) {
@@ -2442,7 +2435,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     ) {
         // Phase 7q — clip-mask modulation in premul-float space.
         val sr: Float; val sg: Float; val sb: Float; val sa: Float
-        if (activeClipMask != null) {
+        if (activeAaClip != null) {
             val cov = clipCoverage(x, y)
             if (cov == 0) {
                 if (!modeAffectsZeroAlphaSrc(mode)) return
