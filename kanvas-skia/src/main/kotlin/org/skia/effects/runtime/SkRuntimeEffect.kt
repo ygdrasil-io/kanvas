@@ -1,9 +1,13 @@
 package org.skia.effects.runtime
 
-// D2.1 — façade + dispatch only ; the makeShader / makeColorFilter
-// / makeBlender bindings land in D2.2 (wires SkRuntimeShader /
-// SkRuntimeColorFilter / SkRuntimeBlender) ; SkData and the
-// Builder helper land in D2.3.
+import org.skia.core.SkAlphaType
+import org.skia.core.SkColorSpaceXformSteps
+import org.skia.foundation.SkBlender
+import org.skia.foundation.SkColorFilter
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkData
+import org.skia.foundation.SkShader
+import org.skia.math.SkMatrix
 
 /**
  * Faithful port of Skia's
@@ -169,15 +173,151 @@ public class SkRuntimeEffect private constructor(
      */
     internal val impl: SkRuntimeImpl by lazy { implFactory() }
 
-    // makeShader / makeColorFilter / makeBlender are added in D2.2
-    // (bindings) once SkRuntimeShader / SkRuntimeColorFilter /
-    // SkRuntimeBlender exist. The SkData uniform-buffer parameter
-    // lands in D2.3. D2.1 ships only the façade + reflection +
-    // dispatch — see [`MIGRATION_PLAN_D2_RUNTIME_EFFECT.md`].
+    // ─── Builder paths (D2.2) ────────────────────────────────────────
+
+    /**
+     * Build an [SkShader] from this effect. Mirrors Skia's
+     * `SkRuntimeEffect::makeShader(uniforms, children, localMatrix)`.
+     *
+     * Returns `null` if [allowShader] is `false` (this effect is a
+     * color filter or blender) or if the supplied [children] count
+     * doesn't match the number of declared child slots. Otherwise
+     * returns a fresh [SkRuntimeShader] wrapping the registered
+     * impl with a snapshot of [uniforms] and the resolver array.
+     *
+     * @param uniforms uniform values laid out per [parsed.uniforms]
+     *   — exactly [uniformSize] bytes. Pass `null` or
+     *   [SkData.EMPTY] for an effect with no uniforms.
+     * @param children one [SkShader] per declared child slot, in
+     *   declaration order. `null` slots are wired to a transparent-
+     *   black resolver (matches upstream's missing-child fallback).
+     * @param localMatrix optional shader-local matrix ; defaults to
+     *   identity.
+     */
+    public fun makeShader(
+        uniforms: SkData?,
+        children: Array<SkShader?> = emptyArray(),
+        localMatrix: SkMatrix? = null,
+    ): SkShader? {
+        if (!allowShader()) return null
+        if (parsed.children.size != children.size) return null
+        // Pre-set up children for sampling. We don't have the
+        // canvas CTM here, so use identity ; SkBitmapDevice will
+        // call [SkShader.setupForDraw] on the parent
+        // SkRuntimeShader, which in turn re-setups the children
+        // through [SkRuntimeShader.setupForDraw].
+        val resolvers = SkRuntimeShader.buildShaderChildResolvers(
+            declared = parsed.children,
+            children = children,
+            canvasCtm = SkMatrix.Identity,
+            xform = identityXform,
+        )
+        return SkRuntimeShader(
+            impl = impl,
+            uniformsBuffer = SkRuntimeShader.makeUniformsBuffer(uniforms),
+            childResolvers = resolvers,
+            localMatrix = localMatrix ?: SkMatrix.Identity,
+        )
+    }
+
+    /**
+     * Build an [SkColorFilter] from this effect. Mirrors Skia's
+     * `SkRuntimeEffect::makeColorFilter(uniforms, children)`.
+     *
+     * Returns `null` if [allowColorFilter] is `false` or if the
+     * supplied [children] count doesn't match.
+     */
+    public fun makeColorFilter(
+        uniforms: SkData?,
+        children: Array<SkColorFilter?> = emptyArray(),
+    ): SkColorFilter? {
+        if (!allowColorFilter()) return null
+        if (parsed.children.size != children.size) return null
+        val resolvers = Array<ChildResolver>(parsed.children.size) { i ->
+            val decl = parsed.children[i]
+            require(decl.type == SkRuntimeEffect.ChildType.kColorFilter) {
+                "SkRuntimeColorFilter only accepts color-filter children (slot ${decl.name} declared as ${decl.type})"
+            }
+            val cf = children[i]
+            if (cf == null) ChildResolver.ColorFilter { input -> input }
+            else ChildResolver.ColorFilter { input -> cf.filterColor4f(input) }
+        }
+        return SkRuntimeColorFilter(
+            impl = impl,
+            uniformsBuffer = SkRuntimeShader.makeUniformsBuffer(uniforms),
+            childResolvers = resolvers,
+        )
+    }
+
+    /**
+     * Build an [SkBlender] from this effect. Mirrors Skia's
+     * `SkRuntimeEffect::makeBlender(uniforms, children)`.
+     *
+     * Returns `null` if [allowBlender] is `false` or if the
+     * supplied [children] count doesn't match.
+     */
+    public fun makeBlender(
+        uniforms: SkData?,
+        children: Array<SkBlender?> = emptyArray(),
+    ): SkBlender? {
+        if (!allowBlender()) return null
+        if (parsed.children.size != children.size) return null
+        val resolvers = Array<ChildResolver>(parsed.children.size) { i ->
+            val decl = parsed.children[i]
+            require(decl.type == SkRuntimeEffect.ChildType.kBlender) {
+                "SkRuntimeBlender only accepts blender children (slot ${decl.name} declared as ${decl.type})"
+            }
+            val b = children[i]
+            if (b == null) ChildResolver.Blender { _, dst -> dst }
+            else ChildResolver.Blender { src, dst -> b.blend(src, dst) }
+        }
+        return SkRuntimeBlender(
+            impl = impl,
+            uniformsBuffer = SkRuntimeShader.makeUniformsBuffer(uniforms),
+            childResolvers = resolvers,
+        )
+    }
 
     // ─── Factories (Companion) ────────────────────────────────────────
 
     public companion object {
+
+        // ─── Effect flags (mirror upstream's SkRuntimeEffect::Flags) ─
+
+        /** This effect uses `sk_FragCoord` or otherwise samples its
+         *  coordinate input. Matches upstream `kUsesSampleCoords_Flag`. */
+        public const val kUsesSampleCoords_Flag: Int = 0x001
+        /** Effect is allowed in a color-filter context. */
+        public const val kAllowColorFilter_Flag: Int = 0x002
+        /** Effect is allowed in a shader context. */
+        public const val kAllowShader_Flag: Int = 0x004
+        /** Effect is allowed in a blender context. */
+        public const val kAllowBlender_Flag: Int = 0x008
+        /** Effect samples a child shader from outside `main(...)`. */
+        public const val kSamplesOutsideMain_Flag: Int = 0x010
+        /** Effect's output uses a colour-space transform. */
+        public const val kUsesColorTransform_Flag: Int = 0x020
+        /** Effect always produces a fully opaque output (alpha = 1). */
+        public const val kAlwaysOpaque_Flag: Int = 0x040
+        /** Effect leaves the input alpha unchanged — bindings can
+         *  short-circuit some compositing optimisations. Mirrors
+         *  upstream's `kAlphaUnchanged_Flag`. */
+        public const val kAlphaUnchanged_Flag: Int = 0x080
+        /** Effect must skip optimisation passes (debug-only). */
+        public const val kDisableOptimization_Flag: Int = 0x100
+
+        /**
+         * Identity colour-space xform — every shader child setup
+         * needs one, but the runtime-effect path doesn't pre-
+         * transform colour stops, so the xform is a no-op. Cached
+         * here to avoid re-allocating per `makeShader` call.
+         */
+        internal val identityXform: SkColorSpaceXformSteps = SkColorSpaceXformSteps(
+            src = SkColorSpace.makeSRGB(),
+            srcAT = SkAlphaType.kUnpremul,
+            dst = SkColorSpace.makeSRGB(),
+            dstAT = SkAlphaType.kUnpremul,
+        )
 
         /**
          * Compile [sksl] as a shader effect. Mirrors Skia's
