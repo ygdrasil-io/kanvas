@@ -291,6 +291,23 @@ internal open class SkOpContour : Comparable<SkOpContour> {
         return true
     }
 
+    /**
+     * Walk every segment looking for the first non-done one whose
+     * [SkOpSegment.undoneSpan] returns a span. Sets [fDone] and
+     * returns null when every segment is done.
+     *
+     * Mirrors `SkOpContour::undoneSpan` (`SkOpContour.cpp:34`).
+     */
+    fun undoneSpan(): SkOpSpan? {
+        var seg: SkOpSegment? = fHead
+        while (seg != null) {
+            if (!seg.done()) return seg.undoneSpan()
+            seg = seg.next()
+        }
+        fDone = true
+        return null
+    }
+
     // ─── Comparable ───────────────────────────────────────────────
 
     /** Order by `bounds.top` ascending, ties broken by `bounds.left`. */
