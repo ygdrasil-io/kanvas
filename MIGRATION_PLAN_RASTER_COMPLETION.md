@@ -34,7 +34,7 @@
 > | **I5** drawPoints / drawAtlas / drawVertices / drawPatch | ✅ shipped | I5.1 / I5.2 / I5.3.a-c / I5.4 livrés (commit `2de410e`) |
 > | **C1** Image filters extras | 📋 mini-planned | Group A core (6 factories) déjà shipped ; **22 factories manquantes** détaillées dans [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). 7 sous-slices, ~2750 main + ~1440 test, ~30 GM ports débloqués. |
 > | **C2** Path effects extras (kMorph, StrokeAndFill recipe) | 📋 pending | |
-> | **C3** SkEmbossMaskFilter | 📋 pending | |
+> | **C3** SkEmbossMaskFilter | ✅ shipped | 3-plane dispatch via new `Sk3DMask` + `SkMaskFilter.Format` ; wired into `SkBitmapDevice.drawPathWithMaskFilter`. 14 tests, suite **2453 / 2453 green**. |
 > | **C4** drawAnnotation / drawDrawable / drawShadow | 📋 pending | |
 > | **B1** SkPDF (PDFBox adapter) | ❌ descoped | No ported GM needs PDF — only `internal_links.cpp` is PDF-specific upstream and isn't ported. See B1 section. |
 > | **B2** SkSVGCanvas | ✅ shipped | All 5 slices delivered : 1104 main + 1351 test (mini plan estimate ~980 + ~550). See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) for the per-slice breakdown. |
@@ -1202,18 +1202,39 @@ across 7 slices.**
 
 ---
 
-### C3 — `SkEmbossMaskFilter`
+### C3 — `SkEmbossMaskFilter` ✅ shipped
 
-**Skia upstream files** :
-- `include/effects/SkEmbossMaskFilter.h`
-- `src/effects/SkEmbossMaskFilter.cpp`
+[SkEmbossMaskFilter.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkEmbossMaskFilter.kt)
+— port of upstream's `src/effects/SkEmbossMaskFilter.cpp` +
+`SkEmbossMask.cpp`. Computes per-pixel Lambertian + raised-cosine
+specular lighting from the alpha-mask gradient and a directional
+light, outputs three coverage planes.
 
-**Algorithm** : compute a 3D normal map from the alpha mask gradient,
-apply Lambertian shading from a directional light, output a tinted
-+ shadowed version.
-
-**Kotlin target** :
-- `kanvas-skia/src/main/kotlin/org/skia/foundation/SkEmbossMaskFilter.kt`
+**Mechanism** :
+1. The mask filter's `format` is `k3D` ; the base
+   [SkMaskFilter](kanvas-skia/src/main/kotlin/org/skia/foundation/SkMaskFilter.kt)
+   gains an enum + a default `filterMask3D` fallback that
+   degrades single-plane filters to "alpha = filterMask, multiply
+   = 255, additive = 0" so the Bitmap device can always dispatch
+   through the 3-plane path.
+2. [SkBitmapDevice.drawPathWithMaskFilter](kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt)
+   now switches on `maskFilter.format` : `kA8` keeps the legacy
+   single-plane composite, `k3D` runs the per-pixel formula
+   `dst.rgb = clamp(paint.rgb × multiply / 255 + additive)`,
+   `dst.a = paint.a × alpha / 255`.
+3. The emboss filter's algorithm :
+   - Inner-blur the source coverage via [SkBlurMaskFilter] with
+     [SkBlurStyle.kInner] to build the height field.
+   - Per-pixel : compute the gradient `(nx, ny)`, project the
+     normalised light direction onto the surface normal
+     `(nx, ny, kDelta)`, derive the diffuse term
+     `multiply = ambient + clamp(dot, 0, 255)`.
+   - Specular : raised-cosine peak around the perfect-mirror
+     reflection, dampened by `additive = hilite^(specular ÷ 16)`
+     via repeated `div255` multiplication (matches upstream's 4.4
+     fixed-point falloff).
+   - Carry the original (unblurred) coverage as the alpha plane
+     so path edge AA is preserved verbatim.
 
 **API** :
 ```kotlin
@@ -1222,16 +1243,39 @@ public class SkEmbossMaskFilter private constructor(/* ... */) : SkMaskFilter() 
         public fun Make(blurSigma: Float, light: Light): SkMaskFilter?
     }
     public data class Light(
-        val direction: SkPoint3,
-        val ambient: Float,
-        val specular: Float,
+        val direction: FloatArray, // 3-vector, normalised inside Make
+        val ambient: Int,          // [0, 255]
+        val specular: Int,         // 4.4 fixed-point in [0, 255]
     )
 }
 ```
 
-**LOC** : ~400.
+**Tests** : 14 in
+[SkEmbossMaskFilterTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkEmbossMaskFilterTest.kt)
+— factory invariants (null on bad sigma / zero direction,
+direction normalisation), format declared `k3D`, plane sizes,
+alpha plane preserved verbatim, flat-coverage uniform multiply,
+non-flat coverage non-uniform multiply, specular falloff
+monotonicity, end-to-end `drawRect` + emboss producing
+non-uniform pixels (with a control assertion that `drawRect`
+without emboss is uniform — guards against false positives in
+the integration check).
 
-**GMs** : `emboss*` (~5 GMs), `bevel*`.
+**GM port deferred** — the upstream `EmbossGM` uses
+`drawImage` with a mask filter (a code path not implemented in
+`kanvas-skia`'s raster pipeline ; mask filters apply to paths
+and rrects only). A faithful port needs image-blit-with-
+maskFilter support first ; tracked separately if a workflow
+demands it.
+
+**LOC** : ~278 main (SkEmbossMaskFilter) + ~120 main delta
+across SkMaskFilter (`Format` enum + `Sk3DMask` data class +
+`filterMask3D` default) + SkBitmapDevice (3-plane dispatch
+branch) + ~280 test = **~678 total** (cf. plan estimate ~400 ;
+overage covers the SkMaskFilter interface widening — `Format`,
+`Sk3DMask`, `filterMask3D` fallback — that lays the foundation
+for any future multi-plane mask filter, plus the upstream-
+faithful div255 specular falloff).
 
 ---
 
@@ -1608,7 +1652,7 @@ DAG of dependencies :
 📋 **remaining** (independent of D1 ; can ship in parallel) :
 
 13. 📋 **C1** Image filters extras (mini-planned ; **~2750 main + ~1440 test across 7 slices**, see [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). Group A core (6 factories) déjà shipped ; 22 missing factories audited and budgeted. RuntimeShader descoped on the D2 SkRuntimeEffect dependency.).
-14. 📋 **C3** SkEmbossMaskFilter (~400 LOC).
+14. ✅ **C3** SkEmbossMaskFilter (~278 main + ~120 delta + ~280 test) — 3-plane mask dispatch via `Sk3DMask` + `SkMaskFilter.Format` ; per-pixel Lambertian + specular lighting.
 15. 📋 **Q2** Canvas wrappers (PaintFilter / NoDraw / Overdraw, ~400 LOC).
 16. 📋 **Q3** SkBBHFactory + Picture cull (~600 LOC, perf for Picture, no GM unblocking).
 17. ✅ **Q5** Linear sRGB diagnostic (~290 test LOC) — diagnosis : upstream applies matrix in encoded sRGB ; gap is elsewhere.
@@ -1616,10 +1660,10 @@ DAG of dependencies :
 19. 📋 **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception* — large but unlocks SkSL-using GMs).
 20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
 
-**Total estimated LOC remaining** : ~6 120 of new Kotlin code
-(C1 1800 + C3 400 + Q2 400 + Q3 600 + C2/C4 1300 +
-D2 1500 + Q4 400 ; D1 in-flight LOC tracked separately under
-the chantier's own slice budget). Decomposes into ~15 PRs of
+**Total estimated LOC remaining** : ~5 800 of new Kotlin code
+(C1 1800 + Q2 400 + Q3 600 + C2/C4 1300 + D2 1500 + Q4 400 ;
+Q5 + C3 shipped, D1 in-flight LOC tracked separately under
+the chantier's own slice budget). Decomposes into ~13 PRs of
 80-1500 LOC each.
 
 **Total LOC delivered so far** : ~22 000 across the eleven shipped
