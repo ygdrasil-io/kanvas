@@ -905,6 +905,228 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
+     * Mirrors Skia's
+     * [`SkCanvas::drawPatch(cubics, colors, texCoords, blendMode, paint)`](https://github.com/google/skia/blob/main/include/core/SkCanvas.h#L2010).
+     * Renders a *Coons patch* — a curvy quadrilateral whose 4 sides
+     * are cubic Bézier curves and whose interior is bilinearly
+     * interpolated between those edges.
+     *
+     * Vertex layout in [cubics] (12 [SkPoint]s, 24 floats) :
+     * ```
+     *   [0]──top edge──[3]
+     *    │              │
+     *  left           right
+     *  edge           edge
+     *    │              │
+     *   [9]──bot edge──[6]
+     * ```
+     * - top edge : cubics[0..3] (left → right)
+     * - right edge : cubics[3..6] (top → bottom)
+     * - bottom edge : cubics[6..9] (right → left)
+     * - left edge : cubics[9..11] + cubics[0] (bottom → top)
+     *
+     * Corners — `cubics[0]` (top-left), `cubics[3]` (top-right),
+     * `cubics[6]` (bottom-right), `cubics[9]` (bottom-left) — match
+     * the 4 entries of [colors] / [texCoords] when present.
+     *
+     * **Implementation** : tessellates the patch into an N×N grid of
+     * quads (`N = 8` ; 128 triangles) via the Coons surface formula
+     * `C(s, t) = Lc(s, t) + Ld(s, t) − B(s, t)` (linear blend along
+     * each pair of opposite edges minus the bilinear blend of the
+     * 4 corners), then defers to [drawVertices].
+     *
+     * @param cubics    12 control points (24 floats) describing the
+     *                  4 edge cubics ; corners are shared between
+     *                  adjacent edges.
+     * @param colors    optional 4 corner ARGB colours, bilinearly
+     *                  interpolated across the patch interior.
+     * @param texCoords optional 4 corner texture coords, bilinearly
+     *                  interpolated and used by [paint]'s shader.
+     * @param blendMode passed through to [drawVertices] for vertex /
+     *                  texture combination.
+     */
+    public open fun drawPatch(
+        cubics: Array<org.skia.math.SkPoint>,
+        colors: IntArray?,
+        texCoords: Array<org.skia.math.SkPoint>?,
+        blendMode: SkBlendMode,
+        paint: SkPaint,
+    ) {
+        require(cubics.size == 12) { "drawPatch : cubics must have 12 points, got ${cubics.size}" }
+        if (colors != null) require(colors.size == 4) { "drawPatch : colors must have 4 entries, got ${colors.size}" }
+        if (texCoords != null) require(texCoords.size == 4) { "drawPatch : texCoords must have 4 entries, got ${texCoords.size}" }
+
+        val n = PATCH_TESS_N
+        val verts = ArrayList<org.skia.math.SkPoint>((n + 1) * (n + 1))
+        val tCoords = if (texCoords != null) ArrayList<org.skia.math.SkPoint>((n + 1) * (n + 1)) else null
+        val cArr = if (colors != null) IntArray((n + 1) * (n + 1)) else null
+
+        for (j in 0..n) {
+            val t = j.toFloat() / n
+            for (i in 0..n) {
+                val s = i.toFloat() / n
+                val pt = coonsSurfaceAt(cubics, s, t)
+                verts.add(pt)
+                if (tCoords != null && texCoords != null) {
+                    tCoords.add(bilerpPoint(texCoords, s, t))
+                }
+                if (cArr != null && colors != null) {
+                    cArr[j * (n + 1) + i] = bilerpColor(colors, s, t)
+                }
+            }
+        }
+
+        // Build triangle indices (two triangles per quad cell).
+        val indices = ShortArray(n * n * 6)
+        var idx = 0
+        for (j in 0 until n) {
+            for (i in 0 until n) {
+                val a = (j * (n + 1) + i).toShort()
+                val b = (j * (n + 1) + i + 1).toShort()
+                val c = ((j + 1) * (n + 1) + i).toShort()
+                val d = ((j + 1) * (n + 1) + i + 1).toShort()
+                // Quad → 2 triangles : (a, b, c) + (b, d, c).
+                indices[idx++] = a; indices[idx++] = b; indices[idx++] = c
+                indices[idx++] = b; indices[idx++] = d; indices[idx++] = c
+            }
+        }
+
+        val sk = org.skia.foundation.SkVertices.MakeCopy(
+            org.skia.foundation.SkVertices.VertexMode.kTriangles,
+            verts.toTypedArray(),
+            tCoords?.toTypedArray(),
+            cArr,
+            indices,
+        )
+        drawVertices(sk, blendMode, paint)
+    }
+
+    /**
+     * Phase I5.4 — evaluate the Coons surface at parametric point
+     * `(s, t) ∈ [0, 1]²`. Implements
+     *   `C(s, t) = Lc(s, t) + Ld(s, t) − B(s, t)`
+     * where `Lc`, `Ld` are the lerp surfaces along the (top/bottom)
+     * and (left/right) edge pairs, and `B` is the bilinear blend of
+     * the 4 corners.
+     */
+    private fun coonsSurfaceAt(cubics: Array<org.skia.math.SkPoint>, s: SkScalar, t: SkScalar): org.skia.math.SkPoint {
+        // Top : cubics[0] → cubics[3] at parameter s.
+        val top = cubicAt(cubics, 0, s)
+        // Bottom : cubics[6] → cubics[9] at parameter (1 - s) (so s
+        // increases left-to-right in dst space).
+        val bot = cubicAt(cubics, 6, 1f - s)
+        // Right : cubics[3] → cubics[6] at parameter t.
+        val rig = cubicAt(cubics, 3, t)
+        // Left : cubics[9..11] + cubics[0] at parameter (1 - t).
+        val lef = cubicAtLeftEdge(cubics, 1f - t)
+
+        val p00 = cubics[0]   // top-left
+        val p10 = cubics[3]   // top-right
+        val p11 = cubics[6]   // bottom-right
+        val p01 = cubics[9]   // bottom-left
+
+        val lcX = (1f - t) * top.fX + t * bot.fX
+        val lcY = (1f - t) * top.fY + t * bot.fY
+        val ldX = (1f - s) * lef.fX + s * rig.fX
+        val ldY = (1f - s) * lef.fY + s * rig.fY
+        val bX = (1f - s) * (1f - t) * p00.fX + s * (1f - t) * p10.fX +
+            (1f - s) * t * p01.fX + s * t * p11.fX
+        val bY = (1f - s) * (1f - t) * p00.fY + s * (1f - t) * p10.fY +
+            (1f - s) * t * p01.fY + s * t * p11.fY
+        return org.skia.math.SkPoint(lcX + ldX - bX, lcY + ldY - bY)
+    }
+
+    /**
+     * Evaluate the cubic Bézier `[cubics[i0], cubics[i0+1],
+     * cubics[i0+2], cubics[i0+3]]` at parameter `t`. The standard
+     * Bernstein polynomial form keeps the algorithm trivial.
+     */
+    private fun cubicAt(cubics: Array<org.skia.math.SkPoint>, i0: Int, t: SkScalar): org.skia.math.SkPoint {
+        val u = 1f - t
+        val b0 = u * u * u
+        val b1 = 3f * u * u * t
+        val b2 = 3f * u * t * t
+        val b3 = t * t * t
+        val p0 = cubics[i0]
+        val p1 = cubics[i0 + 1]
+        val p2 = cubics[i0 + 2]
+        val p3 = cubics[i0 + 3]
+        return org.skia.math.SkPoint(
+            b0 * p0.fX + b1 * p1.fX + b2 * p2.fX + b3 * p3.fX,
+            b0 * p0.fY + b1 * p1.fY + b2 * p2.fY + b3 * p3.fY,
+        )
+    }
+
+    /**
+     * Left edge cubic uses `cubics[9..11] + cubics[0]` (the layout
+     * wraps back around to `cubics[0]` so the 4-corner sequence
+     * stays connected). Same Bernstein evaluation as [cubicAt],
+     * just with a discontiguous index pattern.
+     */
+    private fun cubicAtLeftEdge(cubics: Array<org.skia.math.SkPoint>, t: SkScalar): org.skia.math.SkPoint {
+        val u = 1f - t
+        val b0 = u * u * u
+        val b1 = 3f * u * u * t
+        val b2 = 3f * u * t * t
+        val b3 = t * t * t
+        val p0 = cubics[9]
+        val p1 = cubics[10]
+        val p2 = cubics[11]
+        val p3 = cubics[0]
+        return org.skia.math.SkPoint(
+            b0 * p0.fX + b1 * p1.fX + b2 * p2.fX + b3 * p3.fX,
+            b0 * p0.fY + b1 * p1.fY + b2 * p2.fY + b3 * p3.fY,
+        )
+    }
+
+    private fun bilerpPoint(corners: Array<org.skia.math.SkPoint>, s: SkScalar, t: SkScalar): org.skia.math.SkPoint {
+        // corners : 0 = top-left, 1 = top-right, 2 = bottom-right, 3 = bottom-left.
+        val p00 = corners[0]; val p10 = corners[1]; val p11 = corners[2]; val p01 = corners[3]
+        val w00 = (1f - s) * (1f - t)
+        val w10 = s * (1f - t)
+        val w01 = (1f - s) * t
+        val w11 = s * t
+        return org.skia.math.SkPoint(
+            w00 * p00.fX + w10 * p10.fX + w01 * p01.fX + w11 * p11.fX,
+            w00 * p00.fY + w10 * p10.fY + w01 * p01.fY + w11 * p11.fY,
+        )
+    }
+
+    private fun bilerpColor(corners: IntArray, s: SkScalar, t: SkScalar): SkColor {
+        val w00 = (1f - s) * (1f - t)
+        val w10 = s * (1f - t)
+        val w01 = (1f - s) * t
+        val w11 = s * t
+        val a = (org.skia.foundation.SkColorGetA(corners[0]) * w00 +
+            org.skia.foundation.SkColorGetA(corners[1]) * w10 +
+            org.skia.foundation.SkColorGetA(corners[2]) * w11 +
+            org.skia.foundation.SkColorGetA(corners[3]) * w01).toInt().coerceIn(0, 255)
+        val r = (org.skia.foundation.SkColorGetR(corners[0]) * w00 +
+            org.skia.foundation.SkColorGetR(corners[1]) * w10 +
+            org.skia.foundation.SkColorGetR(corners[2]) * w11 +
+            org.skia.foundation.SkColorGetR(corners[3]) * w01).toInt().coerceIn(0, 255)
+        val g = (org.skia.foundation.SkColorGetG(corners[0]) * w00 +
+            org.skia.foundation.SkColorGetG(corners[1]) * w10 +
+            org.skia.foundation.SkColorGetG(corners[2]) * w11 +
+            org.skia.foundation.SkColorGetG(corners[3]) * w01).toInt().coerceIn(0, 255)
+        val b = (org.skia.foundation.SkColorGetB(corners[0]) * w00 +
+            org.skia.foundation.SkColorGetB(corners[1]) * w10 +
+            org.skia.foundation.SkColorGetB(corners[2]) * w11 +
+            org.skia.foundation.SkColorGetB(corners[3]) * w01).toInt().coerceIn(0, 255)
+        return org.skia.foundation.SkColorSetARGB(a, r, g, b)
+    }
+
+    private companion object {
+        /**
+         * Patch tessellation density (one side of the grid). 8 → 64
+         * quads → 128 triangles per patch ; matches the default Skia
+         * uses for raster-side patches and keeps the budget under
+         * SkVertices's 16-bit index limit.
+         */
+        private const val PATCH_TESS_N: Int = 8
+    }
+
+    /**
      * Mirrors Skia's `SkCanvas::drawColor(SkColor, SkBlendMode)`
      * (`SkCanvas.h:1235`). Fills the active clip with [color] under [mode]
      * — defaults to `kSrcOver` like upstream. `clear` is the `kSrc` flavour
