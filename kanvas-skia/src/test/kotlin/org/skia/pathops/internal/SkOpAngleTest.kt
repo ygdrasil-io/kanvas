@@ -468,4 +468,73 @@ class SkOpAngleTest {
         // (We don't assert which one ; this test is mostly a smoke
         // test that the method runs to completion on a degenerate input.)
     }
+
+    // ─── Sort drivers (D1.2.b.2.d) ─────────────────────────────────
+
+    @Test
+    fun `orderable line vs line returns 1 for exactly-180-degree-apart`() {
+        // a points along +X, b along -X — both lines, exactly 180° apart.
+        val sa = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val sb = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(-10f, 0f)), null)
+        val a = SkOpAngle().also { it.set(sa.fHead, sa.fTail) }
+        val b = SkOpAngle().also { it.set(sb.fHead, sb.fTail) }
+        // Tangent halves : a is (10,0), b is (-10,0). x_ry = 10*0 = 0 ;
+        // rx_y = -10*0 = 0. Equal. leftX*rightX = -100 < 0 → exactly 180.
+        assertEquals(1, a.orderable(b))
+    }
+
+    @Test
+    fun `orderable line vs line with non-180 returns 0 or 1 deterministically`() {
+        val sa = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val sb = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(0f, 10f)), null)
+        val a = SkOpAngle().also { it.set(sa.fHead, sa.fTail) }
+        val b = SkOpAngle().also { it.set(sb.fHead, sb.fTail) }
+        // a = (+X), b = (+Y). The cross-product comparison is
+        // deterministic (one direction returns 0, the other 1).
+        val ab = a.orderable(b)
+        val ba = b.orderable(a)
+        assertTrue(ab == 0 || ab == 1)
+        assertEquals(if (ab == 0) 1 else 0, ba)
+    }
+
+    @Test
+    fun `insert on a singleton wraps the receiver around itself`() {
+        // Pre-condition : `this` has fNext=null, angle has fNext=null.
+        val sa = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val sb = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(0f, 10f)), null)
+        val a = SkOpAngle().also { it.set(sa.fHead, sa.fTail) }
+        val b = SkOpAngle().also { it.set(sb.fHead, sb.fTail) }
+        // a is a singleton (fNext=null) ; insert(b) treats `this` as
+        // a self-loop and decides which side b lands on. After the call
+        // there's a 2-cycle.
+        assertTrue(a.insert(b))
+        assertEquals(2, a.loopCount())
+        assertEquals(2, b.loopCount())
+    }
+
+    @Test
+    fun `merge declines when this is already in angle's loop`() {
+        // Build a 3-cycle ; `a` and `b` are in the same loop.
+        val a = SkOpAngle()
+        val b = SkOpAngle()
+        val c = SkOpAngle()
+        a.fNext = b; b.fNext = c; c.fNext = a
+        // `a` is in `b`'s loop — merge should bail.
+        assertFalse(a.merge(b))
+    }
+
+    @Test
+    fun `insert builds a 3-element CCW loop from singletons`() {
+        // Three lines pointing at distinct angles. Insert them one by
+        // one ; the resulting loop should have 3 elements.
+        val sa = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val sb = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(0f, 10f)), null)
+        val sc = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(-10f, 0f)), null)
+        val a = SkOpAngle().also { it.set(sa.fHead, sa.fTail) }
+        val b = SkOpAngle().also { it.set(sb.fHead, sb.fTail) }
+        val c = SkOpAngle().also { it.set(sc.fHead, sc.fTail) }
+        a.insert(b)
+        a.insert(c)
+        assertEquals(3, a.loopCount())
+    }
 }
