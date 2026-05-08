@@ -36,6 +36,7 @@
  */
 package org.skia.pathops.internal
 
+import org.skia.math.SkRect
 import org.skia.pathops.SkPathOp
 
 /**
@@ -144,14 +145,14 @@ internal fun AddIntersectTs(
 ): Boolean {
     if (test !== next) {
         if (AlmostLessUlps(test.bounds().bottom, next.bounds().top)) return false
-        if (!test.bounds().intersects(next.bounds())) return true
+        if (!skPathOpsBoundsIntersects(test.bounds(), next.bounds())) return true
     }
     var wt: SkOpSegment? = test.fHead
     while (wt != null) {
         val wnStart: SkOpSegment? = if (test === next) wt.next() else next.fHead
         var wn = wnStart
         while (wn != null) {
-            if (wt.bounds().intersects(wn.bounds())) {
+            if (skPathOpsBoundsIntersects(wt.bounds(), wn.bounds())) {
                 processSegmentPair(wt, wn, coincidence)
             }
             wn = wn.next()
@@ -160,6 +161,25 @@ internal fun AddIntersectTs(
     }
     return true
 }
+
+/**
+ * Path-ops-flavoured bounds intersection : uses [AlmostLessOrEqualUlps]
+ * (≤, with ulps tolerance) on each side, so a degenerate rect (zero
+ * width or zero height — i.e. a horizontal or vertical line) is
+ * **not** treated as empty. Mirrors `SkPathOpsBounds::Intersects`
+ * (`src/pathops/SkPathOpsBounds.h:15`).
+ *
+ * The standard [SkRect.intersects] uses strict `<`, so two rects
+ * meeting exactly at a corner / edge would (incorrectly for path-ops)
+ * miss endpoint-shared segments — critical for triangles and other
+ * polygons where adjacent edges share a vertex but their bboxes
+ * only touch along a line/point.
+ */
+internal fun skPathOpsBoundsIntersects(a: SkRect, b: SkRect): Boolean =
+    AlmostLessOrEqualUlps(a.left, b.right)
+            && AlmostLessOrEqualUlps(b.left, a.right)
+            && AlmostLessOrEqualUlps(a.top, b.bottom)
+            && AlmostLessOrEqualUlps(b.top, a.bottom)
 
 /**
  * Per-pair worker for [AddIntersectTs] : runs the (verb × verb)
