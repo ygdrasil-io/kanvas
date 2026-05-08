@@ -479,11 +479,25 @@ manageable while reaching multi-format parity.
     determinism on `bigrect.png`, geometry + colour-type validation).
     Full kanvas-skia suite **2126 / 2126 green** through the new path.
 
-- **D3.2** — JPEG via `imageio`.
-  - `SkJpegCodec.kt`.
-  - **LOC** : ~150 (mostly format-specific options : quality, chroma
-    subsampling).
-  - **Tests** : roundtrip on synthetic JPEG fixtures.
+- **D3.2** ✅ — JPEG via `imageio`.
+  [SkJpegCodec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/jpeg/SkJpegCodec.kt)
+  registers as the second `SkCodec.Decoder` (signature `FF D8 FF`),
+  delegates the bitstream decode to ImageIO, and reconstructs the
+  embedded ICC profile from `APP2 / ICC_PROFILE` chunks (multi-marker
+  walker, sorted by chunk index, contiguous-coverage validation, raw
+  ICC bytes are not deflated unlike PNG iCCP). JPEG is always 8-bit
+  opaque so the codec only emits `kRGBA_8888` bitmaps tagged
+  `kUnpremul`.
+  - **LOC** : ~221 main + ~209 test = 430 total (cf. plan estimate
+    ~150 — overage is the upstream-faithful APP2 walker for
+    multi-chunk ICC reconstruction, which the plan had not scoped).
+  - **Tests** :
+    [SkJpegCodecTest.kt](kanvas-skia/src/test/kotlin/org/skia/codec/jpeg/SkJpegCodecTest.kt)
+    (7 cases : signature dispatch incl. PNG-non-match, decode
+    plumbing, opaque-alpha invariant, flat-colour round-trip within
+    JPEG tolerance, APP2 multi-chunk reassembly with deliberate
+    out-of-order emission, geometry validation). Full kanvas-skia
+    suite **2133 / 2133 green**.
 
 - **D3.3** — GIF + BMP + WBMP via `imageio`.
   - **LOC** : ~250 ensemble.

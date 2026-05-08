@@ -1,5 +1,6 @@
 package org.skia.codec
 
+import org.skia.codec.jpeg.SkJpegCodec
 import org.skia.codec.png.SkPngCodec
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
@@ -166,6 +167,7 @@ public abstract class SkCodec internal constructor() {
          */
         internal val Decoders: List<Decoder> = listOf(
             SkPngCodec.Decoder,
+            SkJpegCodec.Decoder,
         )
     }
 
