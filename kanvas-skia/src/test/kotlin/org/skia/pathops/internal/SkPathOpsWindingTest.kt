@@ -146,4 +146,78 @@ class SkPathOpsWindingTest {
         assertTrue(hit_compare_y.compare(a, b) < 0)
         assertTrue(reverse_hit_compare_y.compare(a, b) > 0)
     }
+
+    // ─── CurveIntercept (D1.2.h.5.6) ──────────────────────────────
+
+    @Test
+    fun `CurveIntercept on line returns 0 when line is parallel to ray`() {
+        // Horizontal line, kTop dir (Y-aligned) → line.fY[0] == fY[1] → 0.
+        val pts = arrayOf(pt(0f, 0f), pt(10f, 0f))
+        val roots = DoubleArray(3)
+        assertEquals(0, CurveIntercept(SkOpSegment.SegVerb.kLine,
+            SkOpRayDir.kTop, pts, 1f, axisIntercept = 0.5f, roots))
+    }
+
+    @Test
+    fun `CurveIntercept on diagonal line returns the t-root`() {
+        val pts = arrayOf(pt(0f, 0f), pt(10f, 10f))
+        val roots = DoubleArray(3)
+        // Horizontal axis at y=5 → diagonal crosses at t=0.5.
+        val n = CurveIntercept(SkOpSegment.SegVerb.kLine,
+            SkOpRayDir.kTop, pts, 1f, axisIntercept = 5f, roots)
+        assertEquals(1, n)
+        assertEquals(0.5, roots[0], 1e-6)
+    }
+
+    // ─── SkOpSegment.windingSpanAtT (D1.2.h.5.6) ──────────────────
+
+    @Test
+    fun `windingSpanAtT returns the head span on a single-line segment`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // On a fresh single-segment line : t=0.5 is between fHead.t=0
+        // and fTail.t=1 → returns fHead.
+        assertSame(a.fHead, a.windingSpanAtT(0.5))
+    }
+
+    @Test
+    fun `windingSpanAtT returns null on the boundary`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // approximately_equal(tHit, fTail.t=1) → ambiguous → null.
+        assertEquals(null, a.windingSpanAtT(1.0))
+    }
+
+    // ─── SkOpSegment.rayCheck (D1.2.h.5.6) ────────────────────────
+
+    @Test
+    fun `Segment rayCheck on miss-bbox is a no-op`() {
+        // Vertical line at x=10, ray from (50, 50) heading kLeft → no overlap.
+        val a = SkOpSegment().addLine(arrayOf(pt(10f, 0f), pt(10f, 100f)), null)
+        val base = SkOpRayHit().apply { fPt = pt(50f, 200f) /* y outside [0..100] */ }
+        val hits = arrayOfNulls<SkOpRayHit>(1)
+        a.rayCheck(base, SkOpRayDir.kLeft, hits)
+        assertEquals(null, hits[0])
+    }
+
+    @Test
+    fun `Contour rayCheck on bounds-cull is a no-op`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val head = SkOpContourHead()
+        // Build a contour around the line.
+        head.appendSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), head)
+        head.complete()
+        val base = SkOpRayHit().apply { fPt = pt(50f, 50f) }
+        val hits = arrayOfNulls<SkOpRayHit>(1)
+        // Contour bounds at (0,0)-(10,0) ; ray from (50, 50) kLeft.
+        // bounds.left = 0, base.x = 50 → 50 < 0 == less_than(kLeft)=true → false.
+        // 50 < 0 is false → bail-out trips because (false == true) is false.
+        // Actually less_than(kLeft) = true ; (50 < 0) = false ; (false == true) = false
+        // → won't bail. Hmm, semantics : early-out when cond true.
+        // The check is `(baseXY < boundsXY) == checkLessThan` → if true, return.
+        // 50 < 0 = false ; checkLessThan = true ; false == true = false → don't bail.
+        // → walks into segment.rayCheck which then bails on sideways_overlap.
+        head.rayCheck(base, SkOpRayDir.kLeft, hits)
+        assertEquals(null, hits[0])
+        // Suppress unused warning :
+        @Suppress("UNUSED_VARIABLE") val _a = a
+    }
 }
