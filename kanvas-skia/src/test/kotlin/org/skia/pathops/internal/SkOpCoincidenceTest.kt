@@ -668,6 +668,96 @@ class SkOpCoincidenceTest {
         assertFalse(addedOut[0])
     }
 
+    // ─── addOverlap (D1.2.g.d) ────────────────────────────────────
+
+    @Test
+    fun `addOverlap returns false when overS does not contain seg1`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpSegment().addLine(arrayOf(pt(2f, 0f), pt(12f, 0f)), null)
+        val d = SkOpSegment().addLine(arrayOf(pt(3f, 0f), pt(13f, 0f)), null)
+        val coin = SkOpCoincidence()
+        // overS is on `a`'s loop only ; seg1 = c → find returns null.
+        assertFalse(coin.addOverlap(c, d, a, b, a.fHead.ptT(), a.fTail.ptT()))
+    }
+
+    // ─── findOverlaps (D1.2.g.d) ──────────────────────────────────
+
+    @Test
+    fun `findOverlaps clears out and returns true on empty fHead`() {
+        val out = SkOpCoincidence()
+        out.fHead = stubEntry(
+            SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null),
+            SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null),
+            0.0, 1.0, 0.0, 1.0,
+        )
+        val c = SkOpCoincidence()
+        assertTrue(c.findOverlaps(out))
+        assertNull(out.fHead)
+        assertNull(out.fTop)
+    }
+
+    @Test
+    fun `findOverlaps skips entries that share both segments via outerCoin === innerCoin`() {
+        // Both entries on (a, b) — same coin segment, so loop continues.
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.fHead = stubEntry(a, b, 0.0, 0.4, 0.0, 0.4)
+        c.fHead!!.setNext(stubEntry(a, b, 0.5, 1.0, 0.5, 1.0))
+        val out = SkOpCoincidence()
+        assertTrue(c.findOverlaps(out))
+        assertNull(out.fHead)
+    }
+
+    // ─── addEndMovedSpans (D1.2.g.d) ──────────────────────────────
+
+    @Test
+    fun `addEndMovedSpans returns true on empty fHead`() {
+        val c = SkOpCoincidence()
+        assertTrue(c.addEndMovedSpans())
+    }
+
+    @Test
+    fun `addEndMovedSpans short-circuits on aligned-endpoints entry`() {
+        // Coin and opp pt-Ts share fPt at both ends → no end has
+        // moved → routine just snapshots fHead and restores it.
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        // Same fPt on both ends → fast path.
+        assertTrue(c.addEndMovedSpans())
+        // restoreHead splices fTop back onto fHead.
+        assertTrue(c.fHead != null)
+        assertNull(c.fTop)
+    }
+
+    // ─── addMissing (D1.2.g.d) ────────────────────────────────────
+
+    @Test
+    fun `addMissing returns true on empty fHead`() {
+        val c = SkOpCoincidence()
+        val addedOut = booleanArrayOf(false)
+        assertTrue(c.addMissing(addedOut))
+        assertFalse(addedOut[0])
+    }
+
+    @Test
+    fun `addMissing snapshots fHead into fTop and restores on the way out`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        // Single entry — no inner pair to merge against.
+        val addedOut = booleanArrayOf(false)
+        assertTrue(c.addMissing(addedOut))
+        assertFalse(addedOut[0])
+        // restoreHead fired → fTop null, fHead has the entry back.
+        assertTrue(c.fHead != null)
+        assertNull(c.fTop)
+    }
+
     @Test
     fun `addIfMissing falls through to addOrOverlap on a non-collapsed remap`() {
         // over runs [0..1] on (0,0)→(10,0).
