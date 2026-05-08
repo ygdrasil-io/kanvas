@@ -507,6 +507,297 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
         return true
     }
 
+    // ─── Winding marking (D1.2.c.2.b) ──────────────────────────────
+
+    /**
+     * Mark every span in this segment as done. Mirrors
+     * `SkOpSegment::markAllDone` (`SkOpSegment.cpp:858`).
+     */
+    fun markAllDone() {
+        var span: SkOpSpan = fHead
+        while (true) {
+            markDone(span)
+            val nxt = span.next()?.upCastable() ?: break
+            span = nxt
+        }
+    }
+
+    /**
+     * Mark a single span as done — increments [fDoneCount] (driving
+     * [done]). Mirrors `SkOpSegment::markDone` (`SkOpSegment.cpp:1014`).
+     */
+    fun markDone(span: SkOpSpan) {
+        require(this === span.segment())
+        if (span.done()) return
+        span.setDone(true)
+        ++fDoneCount
+    }
+
+    /**
+     * Set [span]'s windSum to [winding]. Mirrors
+     * `SkOpSegment::markWinding(SkOpSpan*, int)` (`SkOpSegment.cpp:1027`).
+     * Returns `false` if the span is already done (caller treats this
+     * as a no-op).
+     */
+    fun markWinding(span: SkOpSpan, winding: Int): Boolean {
+        require(this === span.segment())
+        require(winding != 0)
+        if (span.done()) return false
+        span.setWindSum(winding)
+        return true
+    }
+
+    /**
+     * Set [span]'s windSum + oppSum. Mirrors
+     * `SkOpSegment::markWinding(SkOpSpan*, int, int)`
+     * (`SkOpSegment.cpp:1041`).
+     */
+    fun markWinding(span: SkOpSpan, winding: Int, oppWinding: Int): Boolean {
+        require(this === span.segment())
+        require(winding != 0 || oppWinding != 0)
+        if (span.done()) return false
+        span.setWindSum(winding)
+        span.setOppSum(oppWinding)
+        return true
+    }
+
+    /**
+     * Walk coincident spans across segments to chase a marking
+     * forward. Mirrors `SkOpSegment::nextChase` (`SkOpSegment.cpp:1077`)
+     * — the cornerstone helper for `markAndChase*`.
+     *
+     * Returns the next segment to mark (and updates [startPtr] /
+     * [stepPtr] / [minPtr] in place), or `null` when the chase
+     * terminates. When the chase visits a 3+-element angle ring, it
+     * stops early and writes the visited span into [last].
+     */
+    fun nextChase(
+        startPtr: Array<SkOpSpanBase?>,
+        stepPtr: IntArray,
+        minPtr: Array<SkOpSpan?>?,
+        last: Array<SkOpSpanBase?>?,
+    ): SkOpSegment? {
+        val origStart = startPtr[0]!!
+        val step = stepPtr[0]
+        val endSpan: SkOpSpanBase = if (step > 0) origStart.upCast().next()!! else origStart.prev()!!
+        val angle: SkOpAngle? = if (step > 0) endSpan.fromAngle() else endSpan.upCast().toAngle()
+        val foundSpan: SkOpSpanBase
+        val otherEnd: SkOpSpanBase?
+        val other: SkOpSegment
+        if (angle == null) {
+            if (endSpan.t() != 0.0 && endSpan.t() != 1.0) return null
+            val otherPtT = endSpan.ptT().next() ?: return null
+            foundSpan = otherPtT.span() ?: return null
+            other = foundSpan.segment() ?: return null
+            otherEnd = if (step > 0) {
+                if (foundSpan.upCastable() != null) foundSpan.upCast().next() else null
+            } else foundSpan.prev()
+        } else {
+            if (angle.loopCount() > 2) {
+                if (last != null) last[0] = endSpan
+                return null
+            }
+            val next = angle.next() ?: return null
+            other = next.segment() ?: return null
+            foundSpan = next.start()!!
+            otherEnd = next.end()
+        }
+        if (otherEnd == null) return null
+        val foundStep = foundSpan.step(otherEnd)
+        if (stepPtr[0] != foundStep) {
+            if (last != null) last[0] = endSpan
+            return null
+        }
+        val origMin = if (step < 0) origStart.prev()!! else origStart.upCast()
+        val foundMin = foundSpan.starter(otherEnd)
+        if (foundMin.windValue() != origMin.windValue() ||
+            foundMin.oppValue() != origMin.oppValue()) {
+            if (last != null) last[0] = endSpan
+            return null
+        }
+        startPtr[0] = foundSpan
+        stepPtr[0] = foundStep
+        if (minPtr != null) minPtr[0] = foundMin
+        return other
+    }
+
+    /**
+     * Mark `(start, end)`'s starter span done, then chase along
+     * coincident segments marking each as we go. Mirrors
+     * `SkOpSegment::markAndChaseDone` (`SkOpSegment.cpp:865`).
+     *
+     * Returns `false` if the 1000-iteration safety net trips.
+     */
+    fun markAndChaseDone(
+        start: SkOpSpanBase,
+        end: SkOpSpanBase,
+        found: Array<SkOpSpanBase?>?,
+    ): Boolean {
+        val step = start.step(end)
+        val minSpan = start.starter(end)
+        markDone(minSpan)
+        val startArr = arrayOf<SkOpSpanBase?>(start)
+        val stepArr = intArrayOf(step)
+        val minArr = arrayOf<SkOpSpan?>(minSpan)
+        val lastArr = arrayOf<SkOpSpanBase?>(null)
+        var other: SkOpSegment? = this
+        var priorDone: SkOpSpan? = null
+        var lastDone: SkOpSpan? = null
+        var safetyNet = 1000
+        while (true) {
+            other = other!!.nextChase(startArr, stepArr, minArr, lastArr)
+            if (other == null) break
+            if (--safetyNet == 0) return false
+            if (other.done()) {
+                require(lastArr[0] == null)
+                break
+            }
+            val curMin = minArr[0]!!
+            if (lastDone === curMin || priorDone === curMin) {
+                if (found != null) found[0] = null
+                return true
+            }
+            other.markDone(curMin)
+            priorDone = lastDone
+            lastDone = curMin
+        }
+        if (found != null) found[0] = lastArr[0]
+        return true
+    }
+
+    /**
+     * Mark `(start, end)` with [winding] and chase along coincident
+     * segments. Mirrors the unary-winding overload of
+     * `SkOpSegment::markAndChaseWinding` (`SkOpSegment.cpp:898`).
+     */
+    fun markAndChaseWinding(
+        start: SkOpSpanBase,
+        end: SkOpSpanBase,
+        winding: Int,
+        lastPtr: Array<SkOpSpanBase?>?,
+    ): Boolean {
+        val spanStart = start.starter(end)
+        val step = start.step(end)
+        val success = markWinding(spanStart, winding)
+        val startArr = arrayOf<SkOpSpanBase?>(start)
+        val stepArr = intArrayOf(step)
+        val minArr = arrayOf<SkOpSpan?>(spanStart)
+        val lastArr = arrayOf<SkOpSpanBase?>(null)
+        var other: SkOpSegment? = this
+        var safetyNet = 1000
+        while (true) {
+            other = other!!.nextChase(startArr, stepArr, minArr, lastArr)
+            if (other == null) break
+            if (--safetyNet == 0) return false
+            val cur = minArr[0]!!
+            if (cur.windSum() != SkOpSpan.SK_MinS32) {
+                require(lastArr[0] == null)
+                break
+            }
+            other.markWinding(cur, winding)
+        }
+        if (lastPtr != null) lastPtr[0] = lastArr[0]
+        return success
+    }
+
+    /**
+     * Binary-winding overload : marks both `winding` and `oppWinding`,
+     * with operand-cross handling that flips the pair when chasing
+     * across an operand boundary. Mirrors
+     * `SkOpSegment::markAndChaseWinding(int, int)` (`SkOpSegment.cpp:923`).
+     */
+    fun markAndChaseWinding(
+        start: SkOpSpanBase,
+        end: SkOpSpanBase,
+        winding: Int,
+        oppWinding: Int,
+        lastPtr: Array<SkOpSpanBase?>?,
+    ): Boolean {
+        val spanStart = start.starter(end)
+        val step = start.step(end)
+        val success = markWinding(spanStart, winding, oppWinding)
+        val startArr = arrayOf<SkOpSpanBase?>(start)
+        val stepArr = intArrayOf(step)
+        val minArr = arrayOf<SkOpSpan?>(spanStart)
+        val lastArr = arrayOf<SkOpSpanBase?>(null)
+        var other: SkOpSegment? = this
+        var safetyNet = 1000
+        while (true) {
+            other = other!!.nextChase(startArr, stepArr, minArr, lastArr)
+            if (other == null) break
+            if (--safetyNet == 0) return false
+            val cur = minArr[0]!!
+            if (cur.windSum() != SkOpSpan.SK_MinS32) {
+                if (operand() == other.operand()) {
+                    // Mismatch → upstream sets a "winding failed" flag on
+                    // the global state but lets the operation succeed.
+                    // We don't have global state, so just succeed.
+                    require(lastArr[0] == null)
+                } else {
+                    if (cur.windSum() != oppWinding) return false
+                    if (cur.oppSum() != winding) return false
+                    require(lastArr[0] == null)
+                }
+                break
+            }
+            if (operand() == other.operand()) {
+                other.markWinding(cur, winding, oppWinding)
+            } else {
+                other.markWinding(cur, oppWinding, winding)
+            }
+        }
+        if (lastPtr != null) lastPtr[0] = lastArr[0]
+        return success
+    }
+
+    /**
+     * Mark the angle's starter span with `max(maxWinding, sumWinding)`
+     * (per [UseInnerWinding]) and chase. Mirrors
+     * `SkOpSegment::markAngle` (`SkOpSegment.cpp:960`) — unary form.
+     */
+    fun markAngle(
+        maxWindingIn: Int,
+        sumWinding: Int,
+        angle: SkOpAngle,
+        result: Array<SkOpSpanBase?>?,
+    ): Boolean {
+        require(angle.segment() === this)
+        var maxWinding = maxWindingIn
+        if (UseInnerWinding(maxWinding, sumWinding)) maxWinding = sumWinding
+        return markAndChaseWinding(angle.start()!!, angle.end()!!, maxWinding, result)
+    }
+
+    /**
+     * Binary-winding form. Mirrors `SkOpSegment::markAngle`
+     * (`SkOpSegment.cpp:984`).
+     */
+    fun markAngle(
+        maxWindingIn: Int,
+        sumWinding: Int,
+        oppMaxWindingIn: Int,
+        oppSumWinding: Int,
+        angle: SkOpAngle,
+        result: Array<SkOpSpanBase?>?,
+    ): Boolean {
+        require(angle.segment() === this)
+        var maxWinding = maxWindingIn
+        var oppMaxWinding = oppMaxWindingIn
+        if (UseInnerWinding(maxWinding, sumWinding)) maxWinding = sumWinding
+        if (oppMaxWinding != oppSumWinding && UseInnerWinding(oppMaxWinding, oppSumWinding)) {
+            oppMaxWinding = oppSumWinding
+        }
+        return markAndChaseWinding(angle.start()!!, angle.end()!!,
+                                   maxWinding, oppMaxWinding, result)
+    }
+
+    /**
+     * True if this segment is on the operand path (i.e. the second
+     * input to a binary path-op). Mirrors `SkOpSegment::operand` —
+     * delegates to the contour. Returns false when the contour is
+     * null (test fixtures).
+     */
+    fun operand(): Boolean = fContour?.operand() ?: false
+
     // ─── Angle ↔ span dispatch ─────────────────────────────────────
 
     /**

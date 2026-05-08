@@ -357,6 +357,12 @@ internal class SkOpSpan : SkOpSpanBase() {
         fOppValue = v
     }
 
+    /** Mirrors `SkOpSpan::setWindSum`. */
+    fun setWindSum(v: Int) { require(!final()); fWindSum = v }
+
+    /** Mirrors `SkOpSpan::setOppSum`. */
+    fun setOppSum(v: Int) { require(!final()); fOppSum = v }
+
     fun isCanceled(): Boolean { require(!final()); return fWindValue == 0 && fOppValue == 0 }
     fun isCoincident(): Boolean { require(!final()); return fCoincident !== this }
 
