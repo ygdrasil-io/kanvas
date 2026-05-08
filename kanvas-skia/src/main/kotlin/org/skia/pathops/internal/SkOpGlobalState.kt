@@ -19,6 +19,7 @@ package org.skia.pathops.internal
 internal class SkOpGlobalState {
     private var fCoincidence: SkOpCoincidence? = null
     private var fAllocatedOpSpan: Boolean = false
+    private var fContourHead: SkOpContour? = null
 
     fun coincidence(): SkOpCoincidence? = fCoincidence
     fun setCoincidence(c: SkOpCoincidence?) { fCoincidence = c }
@@ -26,4 +27,21 @@ internal class SkOpGlobalState {
     fun allocatedOpSpan(): Boolean = fAllocatedOpSpan
     fun setAllocatedOpSpan() { fAllocatedOpSpan = true }
     fun resetAllocatedOpSpan() { fAllocatedOpSpan = false }
+
+    /**
+     * Active contour-list head. Set by [SortContourList] once it
+     * picks the lex-smallest non-empty contour to be the new chain
+     * head.
+     *
+     * The upstream signature is `SkOpContourHead*` — but in C++ the
+     * sort routine `static_cast<>`s an arbitrary [SkOpContour] (the
+     * lex-smallest survivor) to the head type, relying on layout
+     * equivalence (subclass adds no fields). We expose the looser
+     * [SkOpContour] type to skip that cast.
+     *
+     * Mirrors `SkOpGlobalState::contourHead` / `setContourHead`
+     * (`SkPathOpsTypes.h:66, 156`).
+     */
+    fun contourHead(): SkOpContour? = fContourHead
+    fun setContourHead(head: SkOpContour?) { fContourHead = head }
 }
