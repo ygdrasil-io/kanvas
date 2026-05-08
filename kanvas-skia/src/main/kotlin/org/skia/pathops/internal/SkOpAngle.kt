@@ -11,6 +11,8 @@
  * `convexHullOverlaps` / `tangentsDiverge` / `distEndRatio` / `midT`).
  * Plus a fix to [checkCrossesZero] (the bit-twiddling was wrong in
  * D1.2.b.2.a — should be `end - start > 16`, not `start < 8 && end > 23`).
+ * Phase D1.2.b.2.c — end-of-curve probes (`endToSide` / `midToSide` /
+ * `checkParallel` / `endsIntersect`).
  *
  * # What is an angle ?
  *
@@ -693,7 +695,258 @@ internal class SkOpAngle {
         return if (m0xm1 < 0) 1 else 0
     }
 
-    // ─── Deferred (D1.2.b.2.c-d) ──────────────────────────────────
-    // - endToSide / midToSide / checkParallel / endsIntersect
+    // ─── End-of-curve probes (D1.2.b.2.c) ──────────────────────────
+
+    /**
+     * Drop a perpendicular ray from the angle's [fEnd] point into the
+     * other angle's curve and check which side of the original chord
+     * the closest crossing falls on. Mirrors `SkOpAngle::endToSide`.
+     *
+     * Writes the side bit into [inside]`[0]`. Returns `true` when the
+     * comparison is conclusive ; returns `false` (with [inside]
+     * unchanged) when the perpendicular doesn't cleanly cross or the
+     * crossing is too close to the chord's endpoint.
+     */
+    fun endToSide(rh: SkOpAngle, inside: BooleanArray): Boolean {
+        val segment = segment()!!
+        val rayEnd = SkDLine()
+        rayEnd[0] = SkDPoint().apply { set(fEnd!!.pt()) }
+        rayEnd[1] = SkDPoint(rayEnd[0].x, rayEnd[0].y)
+        val slopeAtEnd = segment.dSlopeAtT(fEnd!!.t())
+        rayEnd[1].x += slopeAtEnd.y
+        rayEnd[1].y -= slopeAtEnd.x
+        val iEnd = SkIntersections()
+        val oppSegment = rh.segment()!!
+        oppSegment.intersectRay(rayEnd, iEnd)
+        val endDistOut = DoubleArray(1)
+        val closestEnd = iEnd.closestTo(rh.fStart!!.t(), rh.fEnd!!.t(), rayEnd[0], endDistOut)
+        if (closestEnd < 0) return false
+        var endDist = endDistOut[0]
+        if (endDist == 0.0) return false
+        val start = SkDPoint().apply { set(fStart!!.pt()) }
+        // Curve bbox of rh.fPart.fCurve.
+        var minX = Double.POSITIVE_INFINITY; var minY = Double.POSITIVE_INFINITY
+        var maxX = Double.NEGATIVE_INFINITY; var maxY = Double.NEGATIVE_INFINITY
+        val curve = rh.fPart.fCurve
+        val oppPts = segVerbToPoints(oppSegment.verb())
+        for (i in 0..oppPts) {
+            minX = minOf(minX, curve[i].x); minY = minOf(minY, curve[i].y)
+            maxX = maxOf(maxX, curve[i].x); maxY = maxOf(maxY, curve[i].y)
+        }
+        val maxWidth = maxOf(maxX - minX, maxY - minY)
+        endDist = if (maxWidth == 0.0) Double.NaN else endDist / maxWidth
+        // The `!(x >= 5e-12)` form catches NaN.
+        if (!(endDist >= 5e-12)) return false
+        val endPt = rayEnd[0]
+        val oppPt = iEnd.pt(closestEnd)
+        val vLeft = endPt - start
+        val vRight = oppPt - start
+        val dir = vLeft.crossNoNormalCheck(vRight)
+        if (dir == 0.0) return false
+        inside[0] = dir < 0
+        return true
+    }
+
+    /**
+     * Drop a perpendicular ray from the angle's chord midpoint and
+     * compare the "outside" intersection on each curve. Mirrors
+     * `SkOpAngle::midToSide`.
+     *
+     * Returns `true` with [inside]`[0]` set when the comparison is
+     * conclusive ; `false` when the rays miss or the crossings are
+     * inconclusive.
+     */
+    fun midToSide(rh: SkOpAngle, inside: BooleanArray): Boolean {
+        val segment = segment()!!
+        val startPt = fStart!!.pt()
+        val endPt = fEnd!!.pt()
+        val dStartPt = SkDPoint().apply { set(startPt) }
+        val rayMid = SkDLine()
+        rayMid[0] = SkDPoint(
+            (startPt.fX + endPt.fX) / 2.0,
+            (startPt.fY + endPt.fY) / 2.0,
+        )
+        rayMid[1] = SkDPoint(
+            rayMid[0].x + (endPt.fY - startPt.fY).toDouble(),
+            rayMid[0].y - (endPt.fX - startPt.fX).toDouble(),
+        )
+        val iMid = SkIntersections()
+        segment.intersectRay(rayMid, iMid)
+        val iOutside = iMid.mostOutside(fStart!!.t(), fEnd!!.t(), dStartPt)
+        if (iOutside < 0) return false
+        val oppSegment = rh.segment()!!
+        val oppMid = SkIntersections()
+        oppSegment.intersectRay(rayMid, oppMid)
+        val oppOutside = oppMid.mostOutside(rh.fStart!!.t(), rh.fEnd!!.t(), dStartPt)
+        if (oppOutside < 0) return false
+        val iSide = iMid.pt(iOutside) - dStartPt
+        val oppSide = oppMid.pt(oppOutside) - dStartPt
+        val dir = iSide.crossCheck(oppSide)
+        if (dir == 0.0) return false
+        inside[0] = dir < 0
+        return true
+    }
+
+    /**
+     * Last-resort comparison when sweeps appear parallel. Mirrors
+     * `SkOpAngle::checkParallel`. Returns `true` if `this` sorts after
+     * [rh] in the CCW order, `false` if before. May set
+     * [fUnorderable] (and [rh].fUnorderable) when the mid-T cross
+     * underflows to zero.
+     */
+    fun checkParallel(rh: SkOpAngle): Boolean {
+        val scratch = arrayOf(SkDVector(0.0, 0.0), SkDVector(0.0, 0.0))
+        val sweep: Array<SkDVector>
+        val tweep: Array<SkDVector>
+        if (fPart.isOrdered()) {
+            sweep = fPart.fSweep
+        } else {
+            scratch[0] = fPart.fCurve[1] - fPart.fCurve[0]
+            sweep = arrayOf(scratch[0], scratch[0])
+        }
+        if (rh.fPart.isOrdered()) {
+            tweep = rh.fPart.fSweep
+        } else {
+            scratch[1] = rh.fPart.fCurve[1] - rh.fPart.fCurve[0]
+            tweep = arrayOf(scratch[1], scratch[1])
+        }
+        val s0xt0 = sweep[0].crossCheck(tweep[0])
+        if (tangentsDiverge(rh, s0xt0)) return s0xt0 < 0
+        val inside = BooleanArray(1)
+        if (!fEnd!!.contains(rh.fEnd!!)) {
+            if (endToSide(rh, inside)) return inside[0]
+            if (rh.endToSide(this, inside)) return !inside[0]
+        }
+        if (midToSide(rh, inside)) return inside[0]
+        if (rh.midToSide(this, inside)) return !inside[0]
+        // Last-ditch : mid-T cross-check.
+        val m0 = segment()!!.dPtAtT(midT()) - fPart.fCurve[0]
+        val m1 = rh.segment()!!.dPtAtT(rh.midT()) - rh.fPart.fCurve[0]
+        val m0xm1 = m0.crossCheck(m1)
+        if (m0xm1 == 0.0) {
+            fUnorderable = true; rh.fUnorderable = true
+            return true
+        }
+        return m0xm1 < 0
+    }
+
+    /**
+     * Mirrors `SkOpAngle::endsIntersect`. The big driver behind
+     * [orderable] for the curve-vs-curve case : projects each angle's
+     * "tangent ray" through the other curve and decides which side the
+     * intersection lands on.
+     *
+     * Returns `true` when `this` sorts after [rh], `false` otherwise.
+     */
+    fun endsIntersect(rh: SkOpAngle): Boolean {
+        val lVerb = segment()!!.verb()
+        val rVerb = rh.segment()!!.verb()
+        val lPts = segVerbToPoints(lVerb)
+        val rPts = segVerbToPoints(rVerb)
+        val rays = arrayOf(
+            SkDLine(arrayOf(fPart.fCurve[0], rh.fPart.fCurve[rPts])),
+            SkDLine(arrayOf(fPart.fCurve[0], fPart.fCurve[lPts])),
+        )
+        if (fEnd!!.contains(rh.fEnd!!)) return checkParallel(rh)
+        val smallTs = doubleArrayOf(-1.0, -1.0)
+        val limited = booleanArrayOf(false, false)
+        for (index in 0..1) {
+            val cVerb = if (index == 1) rVerb else lVerb
+            // Ray vs line is just their direct crossing — skip.
+            if (cVerb == SkOpSegment.SegVerb.kLine) continue
+            val seg = if (index == 1) rh.segment()!! else segment()!!
+            val ix = SkIntersections()
+            seg.intersectRay(rays[index], ix)
+            val tStart = if (index == 1) rh.fStart!!.t() else fStart!!.t()
+            val tEnd = if (index == 1) rh.fComputedEnd!!.t() else fComputedEnd!!.t()
+            val testAscends = tStart < tEnd
+            var t = if (testAscends) 0.0 else 1.0
+            for (idx2 in 0 until ix.used()) {
+                val testT = ix.t(0, idx2)
+                if (!approximately_between_orderable(tStart, testT, tEnd)) continue
+                if (approximately_equal_orderable(tStart, testT)) continue
+                t = if (testAscends) maxOf(t, testT) else minOf(t, testT)
+                smallTs[index] = t
+                limited[index] = approximately_equal_orderable(t, tEnd)
+            }
+        }
+        var sRayLonger = false
+        var sCept = SkDVector(0.0, 0.0)
+        var sCeptT = -1.0
+        var sIndex = -1
+        var useIntersect = false
+        for (index in 0..1) {
+            if (smallTs[index] < 0) continue
+            val seg = if (index == 1) rh.segment()!! else segment()!!
+            val dPt = seg.dPtAtT(smallTs[index])
+            val cept = dPt - rays[index][0]
+            // If the curve on this side is a line, drop hits whose ray
+            // length is < half the chord (would have been caught by the
+            // ordinary line-line crossing).
+            if ((if (index == 1) lPts else rPts) == 1) {
+                val total = rays[index][1] - rays[index][0]
+                if (cept.lengthSquared() * 2 < total.lengthSquared()) continue
+            }
+            val end = rays[index][1] - rays[index][0]
+            if (cept.x * end.x < 0 || cept.y * end.y < 0) continue
+            val rayDist = cept.length()
+            val endDist = end.length()
+            val rayLonger = rayDist > endDist
+            if (limited[0] && limited[1] && rayLonger) {
+                useIntersect = true
+                sRayLonger = rayLonger
+                sCept = cept
+                sCeptT = smallTs[index]
+                sIndex = index
+                break
+            }
+            var delta = kotlin.math.abs(rayDist - endDist)
+            // Curve bbox to scale delta.
+            var minX = Double.POSITIVE_INFINITY; var minY = Double.POSITIVE_INFINITY
+            var maxX = Double.NEGATIVE_INFINITY; var maxY = Double.NEGATIVE_INFINITY
+            val curve = if (index == 1) rh.fPart.fCurve else fPart.fCurve
+            val ptCount = if (index == 1) rPts else lPts
+            for (idx2 in 0..ptCount) {
+                minX = minOf(minX, curve[idx2].x); minY = minOf(minY, curve[idx2].y)
+                maxX = maxOf(maxX, curve[idx2].x); maxY = maxOf(maxY, curve[idx2].y)
+            }
+            val maxWidth = maxOf(maxX - minX, maxY - minY)
+            delta = if (maxWidth == 0.0) Double.NaN else delta / maxWidth
+            // skbug.com/40039654 : narrow band where translation flips
+            // the original-vs-translated hull side ; treat as parallel.
+            if (delta < 4e-3 && delta > 1e-3 && !useIntersect && fPart.isCurve() &&
+                rh.fPart.isCurve() && fOriginalCurvePart[0] != fPart.fCurve[0]) {
+                val origin = rh.fOriginalCurvePart[0]
+                val count = segVerbToPoints(rh.segment()!!.verb())
+                val line = rh.fOriginalCurvePart[count] - origin
+                val originalSide = rh.lineOnOneSide(origin, line, this, true)
+                if (originalSide >= 0) {
+                    val translatedSide = rh.lineOnOneSide(origin, line, this, false)
+                    if (originalSide != translatedSide) continue
+                }
+            }
+            if (delta > 1e-3) {
+                useIntersect = !useIntersect
+                if (useIntersect) {
+                    sRayLonger = rayLonger
+                    sCept = cept
+                    sCeptT = smallTs[index]
+                    sIndex = index
+                }
+            }
+        }
+        if (useIntersect) {
+            val curve = if (sIndex == 1) rh.fPart.fCurve else fPart.fCurve
+            val seg = if (sIndex == 1) rh.segment()!! else segment()!!
+            val tStart = if (sIndex == 1) rh.fStart!!.t() else fStart!!.t()
+            val mid = seg.dPtAtT(tStart + (sCeptT - tStart) / 2) - curve[0]
+            val septDir = mid.crossCheck(sCept)
+            if (septDir == 0.0) return checkParallel(rh)
+            return sRayLonger xor (sIndex == 0) xor (septDir < 0)
+        }
+        return checkParallel(rh)
+    }
+
+    // ─── Deferred (D1.2.b.2.d) ──────────────────────────────────
     // - orderable / after / insert / merge
 }
