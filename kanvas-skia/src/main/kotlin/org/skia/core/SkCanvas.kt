@@ -2,7 +2,9 @@ package org.skia.core
 
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkClipOp
+import org.skia.foundation.SkRegion
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
@@ -60,12 +62,13 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         /** Non-null iff this state was opened by `saveLayer`. */
         var layer: Layer? = null,
         /**
-         * Phase 7q `clipPath` / `clipRRect` alpha mask, sized exactly
-         * `clip.width() × clip.height()`. `0xFF` = fully inside the clip
-         * region ; `0` = fully outside ; intermediate values = AA partial
-         * coverage. `null` = pure rectangular clip.
+         * Phase I3.3.b — band-encoded AA clip carrying the
+         * combined `clipPath` / `clipRRect` coverage. `null` = pure
+         * rectangular clip (fast path ; the bbox is [State.clip]).
+         * Replaces the Phase 7q `clipMask: ByteArray?` 2D byte buffer
+         * — see [SkAAClip] for the run-encoded representation.
          */
-        var clipMask: ByteArray? = null,
+        var aaClip: SkAAClip? = null,
     )
 
     /**
@@ -92,9 +95,10 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     public open fun save(): Int {
         val s = top
-        // ClipMask shared by reference — clipPath/RRect always allocates a
-        // fresh mask before AND-ing in, so the parent's stays untouched.
-        stack.addLast(State(s.matrix, s.clip.copy(), s.device, clipMask = s.clipMask))
+        // aaClip shared by reference — clipPath / clipRRect always
+        // allocates a fresh SkAAClip before mutating (op() with the
+        // path's own AA clip), so the parent's stays untouched.
+        stack.addLast(State(s.matrix, s.clip.copy(), s.device, aaClip = s.aaClip))
         return stack.size - 2
     }
 
@@ -332,98 +336,55 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         val h = newClipBbox.bottom - newClipBbox.top
         if (w <= 0 || h <= 0) {
             s.clip = SkIRect.MakeLTRB(s.clip.left, s.clip.top, s.clip.left, s.clip.top)
-            s.clipMask = null
+            s.aaClip = null
             return
         }
 
-        val pathMask = rasterisePathMask(s, path, newClipBbox, doAntiAlias)
+        val pathAac = rasterisePathToAaClip(s, path, newClipBbox, doAntiAlias)
 
-        // AND with the existing clipMask (if any) — clip stacks compose
-        // via intersection.
-        val parentMask = s.clipMask
-        if (parentMask != null) {
-            val parentL = s.clip.left
-            val parentT = s.clip.top
-            val parentW = s.clip.right - s.clip.left
-            for (y in 0 until h) {
-                for (x in 0 until w) {
-                    val absX = newClipBbox.left + x
-                    val absY = newClipBbox.top + y
-                    val pIdx = (absY - parentT) * parentW + (absX - parentL)
-                    if (pIdx in 0 until parentMask.size) {
-                        val pCov = parentMask[pIdx].toInt() and 0xFF
-                        val newCov = pathMask[y * w + x].toInt() and 0xFF
-                        pathMask[y * w + x] = ((pCov * newCov + 127) / 255).toByte()
-                    } else {
-                        pathMask[y * w + x] = 0
-                    }
-                }
-            }
+        val parent = s.aaClip
+        s.aaClip = if (parent == null) {
+            pathAac
+        } else {
+            val combined = SkAAClip(parent)
+            combined.op(pathAac, SkRegion.Op.kIntersect)
+            combined
         }
 
         s.clip = newClipBbox
-        s.clipMask = pathMask
     }
 
     /**
      * `clipPath(..., kDifference)` — cut the supplied path out of the
-     * current clip. Bbox stays at the parent clip ; the new mask is
-     * `(255 − pathCoverage) × parentCoverage`. If there was no parent
-     * mask the result is just the inverted path coverage (255 outside,
-     * 0 fully inside).
+     * current clip. Bbox stays at the parent clip ; the new
+     * [SkAAClip] is `parent.op(pathAaClip, kDifference)`. If there
+     * was no parent AA clip we synthesise one from `s.clip` (full
+     * coverage rect) before subtracting.
      */
     private fun clipPathDifference(s: State, path: SkPath, doAntiAlias: Boolean) {
         val w = s.clip.right - s.clip.left
         val h = s.clip.bottom - s.clip.top
         if (w <= 0 || h <= 0) {
-            s.clipMask = null
+            s.aaClip = null
             return
         }
-        val pathMask = rasterisePathMask(s, path, s.clip, doAntiAlias)
-        val parentMask = s.clipMask
-        val newMask = ByteArray(w * h)
-        for (i in 0 until w * h) {
-            val pCov = pathMask[i].toInt() and 0xFF
-            val invPath = 255 - pCov
-            val parentCov = parentMask?.let { it[i].toInt() and 0xFF } ?: 255
-            newMask[i] = ((parentCov * invPath + 127) / 255).toByte()
-        }
-        s.clipMask = newMask
+        val pathAac = rasterisePathToAaClip(s, path, s.clip, doAntiAlias)
+        val combined = SkAAClip(s.aaClip ?: SkAAClip(s.clip))
+        combined.op(pathAac, SkRegion.Op.kDifference)
+        s.aaClip = combined
     }
 
     /**
-     * Helper : rasterise [path] into an 8-bit alpha coverage [ByteArray]
-     * sized to the supplied device-space [bbox]. The path's source-space
-     * coordinates are mapped through the active CTM, then translated so
-     * `(bbox.left, bbox.top)` lands at mask origin `(0, 0)`. Returned
-     * buffer is `0xFF` inside the path, `0` outside, AA values on the
-     * edge.
+     * Phase I3.3.b — rasterise [path] (transformed by the active CTM
+     * and clipped to [bbox]) into an [SkAAClip]. Replaces the Phase
+     * 7q `rasterisePathMask` ByteArray helper.
      */
-    private fun rasterisePathMask(
+    private fun rasterisePathToAaClip(
         s: State, path: SkPath, bbox: SkIRect, doAntiAlias: Boolean,
-    ): ByteArray {
-        val w = bbox.right - bbox.left
-        val h = bbox.bottom - bbox.top
-        val maskBitmap = SkBitmap(w, h).also { it.eraseColor(0) }
-        val maskDevice = SkBitmapDevice(maskBitmap)
-        val maskClip = SkIRect.MakeWH(w, h)
-        val maskCtm = s.matrix.postTranslate(
-            -bbox.left.toFloat(), -bbox.top.toFloat(),
-        )
-        val whitePaint = SkPaint().apply {
-            color = org.skia.foundation.SK_ColorWHITE
-            blendMode = SkBlendMode.kSrc
-            isAntiAlias = doAntiAlias
-        }
-        maskDevice.drawPath(path, maskCtm, maskClip, whitePaint)
-        val out = ByteArray(w * h)
-        for (y in 0 until h) {
-            val row = y * w
-            for (x in 0 until w) {
-                out[row + x] =
-                    org.skia.foundation.SkColorGetA(maskBitmap.getPixel(x, y)).toByte()
-            }
-        }
+    ): SkAAClip {
+        val transformed = path.makeTransform(s.matrix)
+        val out = SkAAClip()
+        out.setPath(transformed, SkRegion(bbox), doAA = doAntiAlias)
         return out
     }
 
@@ -456,9 +417,9 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         }
     }
 
-    /** Bind the active state's clipMask onto the device before each draw. */
+    /** Bind the active state's AA clip onto the device before each draw. */
     private fun bindClip(s: State) {
-        s.device.setActiveClip(s.clipMask, s.clip)
+        s.device.setActiveClip(s.aaClip)
     }
 
     public open fun drawRect(rect: SkRect, paint: SkPaint) {

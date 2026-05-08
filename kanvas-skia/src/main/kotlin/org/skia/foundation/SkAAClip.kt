@@ -420,8 +420,16 @@ public class SkAAClip private constructor(
             trailX = rl
             lastKeep--
         }
-        if (firstKeep == 0 && lastKeep == b.widths.size - 1) {
-            // Already tight — keep the band's existing arrays.
+        // Early return only when no trimming at all is needed — that is,
+        // the band already spans exactly `[tightLeft, tightRight)`. Even
+        // if every run is kept, the first / last run widths may still
+        // need adjusting when `tightLeft > outerLeft` or
+        // `tightRight < outerRight` (the band's current widths sum to
+        // outerWidth, which violates the SkAAClip invariant `widths.sum()
+        // == fBounds.width()` after the bounds tighten).
+        if (firstKeep == 0 && lastKeep == b.widths.size - 1 &&
+            tightLeft == outerLeft && trailX == tightRight
+        ) {
             return b
         }
         if (firstKeep > lastKeep) {
@@ -447,13 +455,14 @@ public class SkAAClip private constructor(
         if (x < tightLeft) {
             newWidths[0] = (x + b.widths[firstKeep]) - tightLeft
         }
-        // Last run: its X end was `trailX + b.widths[lastKeep]` —
-        // wait, recompute. Original run k=lastKeep starts at
-        // (trailX) and ends at (trailX + widths[lastKeep]).
-        // We want to truncate to end at tightRight.
-        val lastRunOriginalEnd = trailX + b.widths[lastKeep]
-        if (lastRunOriginalEnd > tightRight) {
-            newWidths[keepCount - 1] = tightRight - trailX
+        // Last kept run : the trim loop terminates with `trailX` set
+        // to the *right edge* of the last kept run (= start of the
+        // first dropped trailing run, which is `widths[lastKeep + 1]`
+        // if any, otherwise the original total run-width).
+        // Truncate the last kept run when it extends past tightRight.
+        if (trailX > tightRight) {
+            val lastRunStart = trailX - b.widths[lastKeep]
+            newWidths[keepCount - 1] = tightRight - lastRunStart
         }
         return Band(b.top, b.bottom, newWidths, newAlphas)
     }
