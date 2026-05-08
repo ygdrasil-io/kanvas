@@ -39,6 +39,25 @@ public class SkDashPathEffect private constructor(
     private val phase: Float,
 ) : SkPathEffect() {
 
+    /**
+     * Mirrors Skia's `SkDashPathEffect::asADash(DashInfo*)` exposing
+     * the on/off interval pattern. Returns a defensive copy ; mutating
+     * the result does not affect this effect.
+     *
+     * Used by [org.skia.svg.SkSVGCanvas] (B2.2 paint slice) to build
+     * the SVG `stroke-dasharray` attribute.
+     */
+    public fun getIntervals(): FloatArray = intervals.copyOf()
+
+    /**
+     * The dash phase — the cumulative distance into the
+     * `intervals` cycle the first contour's first verb starts from.
+     * Mirrors Skia's `SkDashPathEffect::asADash(DashInfo*)` `phase`
+     * field. Used by [org.skia.svg.SkSVGCanvas] for the SVG
+     * `stroke-dashoffset` attribute (B2.2).
+     */
+    public fun getPhase(): Float = phase
+
     private val totalCycle: Float = intervals.sum()
     private val normalisedPhase: Float = run {
         if (totalCycle <= 0f) 0f
