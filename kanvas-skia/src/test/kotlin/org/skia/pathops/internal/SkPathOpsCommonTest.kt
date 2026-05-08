@@ -308,6 +308,21 @@ class SkPathOpsCommonTest {
 
     // ─── globalState contourHead get/set ──────────────────────────
 
+    // ─── AngleWinding (D1.2.h.5.3) ────────────────────────────────
+
+    @Test
+    fun `AngleWinding returns null on a span with no angle ring`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val winding = intArrayOf(0)
+        val sortable = booleanArrayOf(false)
+        // Single-line segment, calcAngles is a no-op → spanToAngle returns
+        // null → AngleWinding fast-fails.
+        assertNull(AngleWinding(a.fHead, a.fTail, winding, sortable))
+        assertEquals(SkOpSpan.SK_MinS32, winding[0])
+    }
+
+    // ─── globalState contourHead get/set ──────────────────────────
+
     @Test
     fun `GlobalState contourHead get-set roundtrip`() {
         val gs = SkOpGlobalState()
