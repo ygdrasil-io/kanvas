@@ -191,6 +191,64 @@ class SkPathOpsCommonTest {
 
     // ─── globalState contourHead get/set ──────────────────────────
 
+    // ─── AddIntersectTs (D1.2.h.3) ────────────────────────────────
+
+    @Test
+    fun `AddIntersectTs returns false when test bounds is fully above next`() {
+        val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
+        val above = newContourList(gs)
+        // above is at y=0..0
+        pushLine(above, 0f, 0f, 10f, 0f)
+        val below = SkOpContourHead().also { it.setGlobalState(gs) }
+        pushLine(below, 0f, 100f, 10f, 100f) // bounds.top = 100, well above
+        val coin = gs.coincidence()!!
+        assertFalse(AddIntersectTs(above, below, coin))
+    }
+
+    @Test
+    fun `AddIntersectTs returns true on disjoint horizontally`() {
+        val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
+        val left = newContourList(gs)
+        pushLine(left, 0f, 0f, 10f, 0f)
+        val right = SkOpContourHead().also { it.setGlobalState(gs) }
+        pushLine(right, 100f, 0f, 110f, 0f) // bounds disjoint
+        val coin = gs.coincidence()!!
+        assertTrue(AddIntersectTs(left, right, coin))
+        // No coincidence pair added.
+        assertNull(coin.fHead)
+    }
+
+    @Test
+    fun `AddIntersectTs splices ptT loops on line-line intersection`() {
+        val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
+        // Two crossing diagonals : (0,0)-(10,10) and (0,10)-(10,0).
+        val a = newContourList(gs)
+        pushLine(a, 0f, 0f, 10f, 10f)
+        val b = SkOpContourHead().also { it.setGlobalState(gs) }
+        pushLine(b, 0f, 10f, 10f, 0f)
+        val coin = gs.coincidence()!!
+        assertTrue(AddIntersectTs(a, b, coin))
+        // After intersection, both segments have a fresh interior pt-T at t=0.5.
+        org.junit.jupiter.api.Assertions.assertEquals(2, a.fHead.count())
+        org.junit.jupiter.api.Assertions.assertEquals(2, b.fHead.count())
+        // No coincidence pair (lines just cross — single intersection).
+        assertNull(coin.fHead)
+    }
+
+    @Test
+    fun `AddIntersectTs is a no-op when self-intersecting on a single segment`() {
+        val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
+        val head = newContourList(gs)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        val coin = gs.coincidence()!!
+        // Self-intersect on a single-segment contour : wn loop never starts
+        // (no segment after wt) → no work.
+        assertTrue(AddIntersectTs(head, head, coin))
+        assertNull(coin.fHead)
+    }
+
+    // ─── globalState contourHead get/set ──────────────────────────
+
     @Test
     fun `GlobalState contourHead get-set roundtrip`() {
         val gs = SkOpGlobalState()
