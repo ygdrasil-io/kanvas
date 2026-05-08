@@ -77,4 +77,14 @@ internal class SkOpGlobalState {
      */
     fun bumpNested() { ++fNested }
     fun nested(): Int = fNested
+
+    companion object {
+        /**
+         * Max number of t-guess retries [SkOpSpan.sortableTop] is
+         * allowed before giving up. Mirrors
+         * `SkOpGlobalState::kMaxWindingTries`
+         * (`SkPathOpsTypes.h:43`).
+         */
+        const val kMaxWindingTries: Int = 10
+    }
 }
