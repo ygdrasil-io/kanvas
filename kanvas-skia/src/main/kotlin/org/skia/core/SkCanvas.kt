@@ -93,6 +93,39 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     /** Read-only access to the current CTM. */
     public open fun getTotalMatrix(): SkMatrix = top.matrix
 
+    /**
+     * Current clip bounds in **device** coordinates — i.e. the
+     * smallest [SkIRect] that fully contains the active clip
+     * (intersected through every `clipRect` / `clipRRect` /
+     * `clipPath` op since the matching `save`).
+     *
+     * Mirrors Skia's `SkCanvas::getDeviceClipBounds`. Empty rect
+     * iff the clip is empty (subsequent draws are guaranteed to
+     * be no-ops). Used by [SkPicture.playback] to feed the BBH
+     * cull query.
+     */
+    public open fun getDeviceClipBounds(): SkIRect = top.clip.copy()
+
+    /**
+     * Current clip bounds in **local** coordinates — i.e. the
+     * device clip transformed back through the inverse of the
+     * current CTM. Used by [SkPicture.playback] to query the
+     * picture's BBH (recorded ops carry bounds in the recording
+     * canvas's own local frame, which equals the playback's local
+     * frame when the picture sits inside its `cullRect`).
+     *
+     * Mirrors Skia's `SkCanvas::getLocalClipBounds`. Falls back to
+     * the device clip (cast to floats) when the CTM is singular
+     * (degenerate inverse). The fallback rect is conservative — it
+     * may over-include but never under-includes — matching Skia.
+     */
+    public open fun getLocalClipBounds(): SkRect {
+        val devClip = SkRect.Make(top.clip)
+        if (devClip.isEmpty) return devClip
+        val inv = top.matrix.invert() ?: return devClip
+        return inv.mapRect(devClip)
+    }
+
     public open fun save(): Int {
         val s = top
         // aaClip shared by reference — clipPath / clipRRect always
