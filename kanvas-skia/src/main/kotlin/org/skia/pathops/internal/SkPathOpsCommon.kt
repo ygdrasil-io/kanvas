@@ -614,26 +614,27 @@ internal fun AngleWinding(
 // ─── FindSortableTop / findChaseOp / bridgeOp (D1.2.h.5.4) ──────
 
 /**
- * **STUB** — returns null until the `SkPathOpsWinding.cpp` suite
- * lands. The full upstream impl walks every contour calling
- * `SkOpContour.findSortableTop` ; the per-contour walker fires a
- * perpendicular ray from each non-done span and counts crossings
- * to determine the absolute winding number, then returns the
- * lex-smallest active span as the start point for [bridgeOp]'s
- * outer loop.
- *
- * With this stub returning null, [bridgeOp] short-circuits its
- * outer `do { … } while` on the first iteration. The wiring is
- * in place and `Op` becomes functional automatically once the
- * winding suite lands and replaces this body.
+ * Top-level entry point for the bridgeOp walker : iterate up to
+ * [SkOpGlobalState.kMaxWindingTries] times, each iteration
+ * walking every non-done contour calling
+ * [SkOpContour.findSortableTop]. Returns the first span whose
+ * winding is known (or just got computed via
+ * [SkOpSpan.sortableTop]) ; null when every contour is done or
+ * every retry failed.
  *
  * Mirrors `FindSortableTop`
  * (`src/pathops/SkPathOpsWinding.cpp:429`).
  */
 internal fun FindSortableTop(contourHead: SkOpContour): SkOpSpan? {
-    // TODO(D1.2.h.5.x) : SkOpContour.findSortableTop → SkOpSegment.findSortableTop →
-    //                    SkOpSpan.sortableTop → SkOpContour.rayCheck →
-    //                    SkOpRayHit / SkOpRayDir + ccw helpers.
+    repeat(SkOpGlobalState.kMaxWindingTries) {
+        var contour: SkOpContour? = contourHead
+        while (contour != null) {
+            if (!contour.done()) {
+                contour.findSortableTop(contourHead)?.let { return it }
+            }
+            contour = contour.next()
+        }
+    }
     return null
 }
 

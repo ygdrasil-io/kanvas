@@ -14,9 +14,13 @@
  *
  * Phase D1.2.h.5.7 — `SkOpSpan.sortableTop`, the winding-accumulation
  * walker that consumes the hit list and assigns absolute winding
- * sums to the spans crossed by the ray. The remaining pieces
- * (`findSortableTop` × 3, real `FindSortableTop`) land in
- * D1.2.h.5.8.
+ * sums to the spans crossed by the ray.
+ *
+ * Phase D1.2.h.5.8 — `findSortableTop` × 3 (Segment / Contour /
+ * global) ; replaces the h.5.4 `FindSortableTop` stub. **Closes
+ * the winding suite** — `bridgeOp` now drives a real walker, so
+ * `Op` becomes functional for non-rect non-empty inputs (modulo
+ * the upstream-bug workarounds the algorithm relies on).
  */
 package org.skia.pathops.internal
 
@@ -507,4 +511,53 @@ internal fun SkOpSpan.sortableTop(contourHead: SkOpContour): Boolean {
         globalState()?.bumpNested()
     }
     return true
+}
+
+// ─── findSortableTop x 3 (D1.2.h.5.8) ────────────────────────────
+
+/**
+ * Walk this segment's spans returning the first one whose winding
+ * is already known (`windSum != SK_MinS32`) or that successfully
+ * computed its winding via [sortableTop]. Returns null when every
+ * span is done or every [sortableTop] retry failed.
+ *
+ * Mirrors `SkOpSegment::findSortableTop`
+ * (`src/pathops/SkPathOpsWinding.cpp:390`).
+ */
+internal fun SkOpSegment.findSortableTop(contourHead: SkOpContour): SkOpSpan? {
+    var span: SkOpSpan = fHead
+    while (true) {
+        val next = span.next() ?: break
+        if (!span.done()) {
+            if (span.windSum() != SkOpSpan.SK_MinS32) return span
+            if (span.sortableTop(contourHead)) return span
+        }
+        if (next.final()) break
+        span = next.upCast()
+    }
+    return null
+}
+
+/**
+ * Walk this contour's segments calling [SkOpSegment.findSortableTop].
+ * When every segment is already done, set this contour's `fDone`
+ * and return null.
+ *
+ * Mirrors `SkOpContour::findSortableTop`
+ * (`src/pathops/SkPathOpsWinding.cpp:408`).
+ */
+internal fun SkOpContour.findSortableTop(contourHead: SkOpContour): SkOpSpan? {
+    var allDone = true
+    if (fCount != 0) {
+        var seg: SkOpSegment? = fHead
+        while (seg != null) {
+            if (!seg.done()) {
+                allDone = false
+                seg.findSortableTop(contourHead)?.let { return it }
+            }
+            seg = seg.next()
+        }
+    }
+    if (allDone) fDone = true
+    return null
 }
