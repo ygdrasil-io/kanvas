@@ -9,6 +9,7 @@ import org.skia.foundation.SkPathBuilder
 import org.skia.math.SkISize
 import org.skia.pathops.SkOpBuilder
 import org.skia.pathops.SkPathOp
+import org.skia.utils.SkParsePath
 
 /**
  * Port of Skia's `gm/pathopsinverse.cpp::pathops_skbug_10155`
@@ -21,10 +22,9 @@ import org.skia.pathops.SkPathOp
  * `Op` result (nearly) overdraws the red outlines of both inputs
  * — except where the two paths intersect.
  *
- * Skia's source uses `SkParsePath::FromSVGString` to materialise
- * the paths ; we don't ship an SVG parser, so the verbs are
- * spelled out explicitly via [SkPathBuilder]. Coordinates are
- * verbatim from the upstream SVG strings.
+ * Mirrors upstream verbatim — including the use of
+ * [SkParsePath.FromSVGString] to materialise the two paths from
+ * their SVG path-data strings.
  */
 public class PathOpsSkbug10155GM : GM() {
 
@@ -63,33 +63,15 @@ public class PathOpsSkbug10155GM : GM() {
         c.drawPath(resultPath, paint)
     }
 
-    /**
-     * SVG : `M474.889 27.0952C474.889 27.1002 474.888 27.1018 474.889 27.1004
-     *        L479.872 27.5019 C479.883 27.3656 479.889 27.2299 479.889 27.0952
-     *        L474.889 27.0952L474.889 27.0952Z`
-     */
-    private fun path0(): SkPath = SkPathBuilder()
-        .moveTo(474.889f, 27.0952f)
-        .cubicTo(474.889f, 27.1002f, 474.888f, 27.1018f, 474.889f, 27.1004f)
-        .lineTo(479.872f, 27.5019f)
-        .cubicTo(479.883f, 27.3656f, 479.889f, 27.2299f, 479.889f, 27.0952f)
-        .lineTo(474.889f, 27.0952f)
-        .lineTo(474.889f, 27.0952f)
-        .close()
-        .detach()
+    private fun path0(): SkPath = SkParsePath.FromSVGString(
+        "M474.889 27.0952C474.889 27.1002 474.888 27.1018 474.889 27.1004" +
+                "L479.872 27.5019C479.883 27.3656 479.889 27.2299 479.889 27.0952" +
+                "L474.889 27.0952L474.889 27.0952Z",
+    ) ?: SkPathBuilder().detach()
 
-    /**
-     * SVG : `M474.94 26.9405C474.93 26.9482 474.917 26.9576 474.901 26.9683
-     *        L477.689 31.1186 C477.789 31.0512 477.888 30.9804 477.985 30.9059
-     *        L474.94 26.9405L474.94 26.9405Z`
-     */
-    private fun path1(): SkPath = SkPathBuilder()
-        .moveTo(474.94f, 26.9405f)
-        .cubicTo(474.93f, 26.9482f, 474.917f, 26.9576f, 474.901f, 26.9683f)
-        .lineTo(477.689f, 31.1186f)
-        .cubicTo(477.789f, 31.0512f, 477.888f, 30.9804f, 477.985f, 30.9059f)
-        .lineTo(474.94f, 26.9405f)
-        .lineTo(474.94f, 26.9405f)
-        .close()
-        .detach()
+    private fun path1(): SkPath = SkParsePath.FromSVGString(
+        "M474.94 26.9405C474.93 26.9482 474.917 26.9576 474.901 26.9683" +
+                "L477.689 31.1186C477.789 31.0512 477.888 30.9804 477.985 30.9059" +
+                "L474.94 26.9405L474.94 26.9405Z",
+    ) ?: SkPathBuilder().detach()
 }
