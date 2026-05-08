@@ -1,12 +1,12 @@
 # Migration plan — Raster pipeline completion (post-Group A)
 
-> **Status** : 🔄 **en cours** — plan vivant. **15 chantiers livrés**
+> **Status** : 🔄 **en cours** — plan vivant. **17 chantiers livrés**
 > (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 / I4 / I5 /
-> Q1 / Q2 / Q3 / Q5 ✅ ; B1 ❌ descoped). 🔄 D1.0 + D1.1 ✅, D1.2
-> active (g.* + h.0–h.6.4 + h.8 + h.9.0–9.2). **D1.4 MVP shipped**
-> (pathops regression harvest, 303 fixtures, 96.7 % survival).
-> 📋 D2 + Q4 + D1.4 follow-ups restent. Voir status par chantier
-> ci-dessous.
+> Q1 / Q2 / Q3 / Q4 / Q5 ✅ ; B1 ❌ descoped). 🔄 D1.0 + D1.1 ✅,
+> D1.2 active (g.* + h.0–h.6.4 + h.8 + h.9.0–9.2). **D1.4 MVP
+> shipped** (pathops regression harvest, 303 fixtures, 96.7 %
+> survival). 📋 D2 + D1.4 follow-ups restent. Voir status par
+> chantier ci-dessous.
 >
 > Ce document liste les chantiers restants pour atteindre la parité-iso
 > avec Skia raster (`include/core/*.h` + `include/effects/*.h`), hors
@@ -46,7 +46,7 @@
 > | **Q1** SkAutoCanvasRestore Kotlin idiom | ✅ shipped | `withSave` / `withLayer` extension functions on `SkCanvas` (`SkAutoCanvasRestore.kt`) |
 > | **Q2** Canvas wrappers | ✅ shipped | `SkNoDrawCanvas` + `SkPaintFilterCanvas` (abstract) + `SkOverdrawCanvas` in [`org.skia.utils`](kanvas-skia/src/main/kotlin/org/skia/utils/) ; 13 tests. |
 > | **Q3** SkBBHFactory + Picture cull | ✅ shipped | `SkBBoxHierarchy` + `SkRTree` (bottom-up bulk-load, branch-factor 6-11) + `SkRTreeFactory` ; `SkPictureRecorder.beginRecording` accepts an optional factory ; per-op bounds computed by `SkPictureBoundsBuilder` ; `SkPicture.playback` queries the BBH for sub-rect clips. 21 tests. |
-> | **Q4** SkDeferredDisplayList | 📋 low-priority | |
+> | **Q4** SkDeferredDisplayList | ✅ shipped | `SkSurfaceCharacterization` (value-type wrapping `SkImageInfo`) + `SkDeferredDisplayList` (immutable `(characterization, picture)` holder) + `SkDeferredDisplayListRecorder` (single-shot detach) + `SkSurface.draw(ddl): Boolean` characterization-gated playback. Recording delegates to `SkPictureRecorder` ; the addition vs `SkPicture` is the per-surface compatibility check. 12 tests. |
 > | **Q5** Linear sRGB diagnostic | ✅ shipped | Diagnostic confirms upstream applies the matrix in **encoded sRGB** (linear-mode wins 0 cells, encoded wins 5/5 non-tie) ; the residual ColorMatrixGM gap is elsewhere. Test in `ColorMatrixModeDiagnosticTest`. |
 
 ## Table des matières
@@ -1741,23 +1741,73 @@ under 30% clip → 16 ops replayed).
 
 ---
 
-### Q4 — `SkDeferredDisplayList`
+### Q4 — `SkDeferredDisplayList` ✅ shipped
 
-**Skia upstream files** :
-- `include/core/SkDeferredDisplayList.h`
-- `include/core/SkDeferredDisplayListRecorder.h`
+**Skia upstream reference** (the public `SkDeferredDisplayList` C++
+headers were retired in Skia 4.x ; the modern surface lives in
+[`include/private/chromium/`](https://github.com/google/skia/tree/main/include/private/chromium))
+:
+- `GrDeferredDisplayList.h` — value type holding the recorded ops
+  + a `GrSurfaceCharacterization`.
+- `GrDeferredDisplayListRecorder.h` — single-shot recorder vending
+  an `SkCanvas` and a `detach()` snapshotter.
+- `skgpu::ganesh::DrawDDL(SkSurface*, sk_sp<DDL>)` — the
+  characterization-gated playback entry point.
 
-**Algorithm** : record commands on one thread, replay on another. We
-already have most of this via `SkPicture` ; the extra step is the
-"thread-safe handoff" of recorded ops to a different SkCanvas.
+**Shipped Kotlin** :
+- [`kanvas-skia/src/main/kotlin/org/skia/core/SkSurfaceCharacterization.kt`](kanvas-skia/src/main/kotlin/org/skia/core/SkSurfaceCharacterization.kt)
+  — value-type wrapping [SkImageInfo] (width / height / colorType /
+  alphaType / colorSpace). Two characterizations with identical
+  `imageInfo` are structurally equal. Factories : `Make(imageInfo)`
+  and `From(surface)`. Compatibility check via `isCompatibleWith(surface)`.
+- [`SkDeferredDisplayList.kt`](kanvas-skia/src/main/kotlin/org/skia/core/SkDeferredDisplayList.kt)
+  — immutable `(characterization, SkPicture)` holder. Internal
+  `playbackInto(canvas)` delegates to the wrapped picture. Public
+  `opCount` for diagnostics.
+- [`SkDeferredDisplayListRecorder.kt`](kanvas-skia/src/main/kotlin/org/skia/core/SkDeferredDisplayListRecorder.kt)
+  — single-shot recorder wrapping [SkPictureRecorder].
+  `getCanvas(): SkCanvas?` returns `null` after `detach()` ; second
+  `detach()` throws `IllegalStateException`. Mirrors upstream's
+  contract.
+- [`SkSurface`](kanvas-skia/src/main/kotlin/org/skia/core/SkSurface.kt)
+  gains `draw(ddl): Boolean` — checks the DDL's characterization
+  against the surface's `imageInfo()`, plays back if match, returns
+  `false` (untouched) on mismatch. Mirrors `skgpu::ganesh::DrawDDL`.
 
-**Kotlin target** :
-- `kanvas-skia/src/main/kotlin/org/skia/core/SkDeferredDisplayList.kt`
+**Why DDL when [SkPicture] already exists** : the difference is the
+characterization-locked playback. A DDL refuses to replay onto a
+surface whose signature drifted from the recording-time
+characterization (different dimensions, colour type, alpha type,
+or colour space) ; a picture is surface-agnostic. The lock is the
+primitive that lets clients tile a scene, record per-tile DDLs in
+parallel ahead of time, and feed each DDL into its dedicated
+surface confident no pixel-format mismatch will sneak in.
 
-**LOC** : ~400.
+**Raster scope** — the upstream "thread-safe handoff" advertised
+by GPU DDL is nominal in our single-threaded raster pipeline. The
+API surface is preserved for compatibility with code that uses
+DDL ; the implementation delegates to `SkPicture` verbatim.
 
-**Priorité** : low — multi-threading is out of scope for our
-single-threaded raster rasterizer. Mostly useful for GPU.
+**Tests** ([SkDeferredDisplayListTest](kanvas-skia/src/test/kotlin/org/skia/core/SkDeferredDisplayListTest.kt))
+— 12 tests :
+- Characterization : `Make` rejects empty, `Make` accepts and
+  exposes fields, `From` snaps off a surface, structural equality,
+  different dimensions → non-equal, `isCompatibleWith` mismatch.
+- Recorder : canvas valid before detach + null after, second
+  detach throws, opCount reflects ops.
+- Playback : success on match (rasterised pixels), failure on
+  mismatch (surface untouched), pixel-identical to direct draw,
+  same DDL replays onto multiple compatible surfaces, empty DDL
+  is a no-op.
+
+**LOC** : ~290 main + ~240 test = **~530 total** (cf. plan
+estimate ~400 main ; the surplus covers `SkSurfaceCharacterization`
+which the original LOC estimate didn't budget separately).
+
+**Validation** : a DDL recorded against a 40×40 N32-premul
+characterization replays bit-identically onto a fresh 40×40
+N32-premul surface ; the same DDL rejected (returns `false`) by a
+50×50 surface without touching its pixels.
 
 ---
 
@@ -1909,28 +1959,31 @@ DAG of dependencies :
 17. ✅ **Q5** Linear sRGB diagnostic (~290 test LOC) — diagnosis : upstream applies matrix in encoded sRGB ; gap is elsewhere.
 18. ✅ **C2/C4** Misc completions (~505 main + ~400 test) — `Sk1DPathEffect.kMorph` (refactored around a `ContourMeasure` chord-polyline), `kStrokeAndFill_Style` already shipped ; `SkDrawable` + `SkCanvas.drawDrawable` + `SkCanvas.drawAnnotation` no-op slot. **`drawShadow` descoped** (no ported GM uses it).
 19. 📋 **D2** SkRuntimeEffect façade + per-effect Kotlin ports (mini-planned ; **~3 700 main + ~2 200 test across 8 slices**, see [MIGRATION_PLAN_D2_RUNTIME_EFFECT.md](MIGRATION_PLAN_D2_RUNTIME_EFFECT.md). Hand-port chaque shader type comme `SkLinearGradient` etc. ; aligned avec la stratégie WGSL côté GPU. Débloque ~80 DEF_GM rows across 13 GM clusters.).
-20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
+20. ✅ **Q4** DeferredDisplayList (~290 main + ~240 test) — `SkSurfaceCharacterization` + `SkDeferredDisplayList` + `SkDeferredDisplayListRecorder` ; `SkSurface.draw(ddl)` characterization-gated playback. Recording delegates to `SkPicture` infrastructure.
 21. ✅ **D1.4** PathOps regression harvest — **MVP shipped** (~285 Python + ~280 Kotlin + ~17 800 JSON). 303 / 451 upstream fixtures extraites = **67 %** ; 293 / 303 survived = **96.7 %** ; 0 crash ; floor pinned à 90 %. Reste : (a) faire passer les 10 `RETURNED_NULL` ; (b) étendre l'extracteur aux ~150 fixtures non-extraites ; (c) ajouter pixel-parity vs upstream PNG refs.
 
-**Total estimated LOC remaining** : ~4 100 of new Kotlin code
-(D2 ~3 700 main + ~2 200 test = ~5 900 total + Q4 400 ; everything
-else shipped or descoped, D1 in-flight LOC tracked separately under
-the chantier's own slice budget ; D1.4 follow-ups counted on D1's
-own budget). Decomposes into ~9 PRs (D2 = 8 sub-slice PRs per its
-mini plan, Q4 small).
+**Total estimated LOC remaining** : ~5 900 of new Kotlin code
+(D2 ~3 700 main + ~2 200 test = ~5 900 total ; Q4 + D1.4 MVP
+shipped, everything else shipped or descoped, D1 in-flight LOC
+tracked separately under the chantier's own slice budget ; D1.4
+follow-ups counted on D1's own budget). Decomposes into ~8 PRs
+(D2's 8 sub-slices per its mini plan, plus D1.4 follow-ups
+piecewise).
 
-**Total LOC delivered so far** : ~25 000 across the **15 shipped
+**Total LOC delivered so far** : ~25 800 across the **17 shipped
 chantiers** (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 /
-I4 / I5 / Q1 / Q2 / Q3 / Q5) — close to the 26 000 original
-estimate, with B1 (~10 000 LOC) descoped and a few cumulative
-overages on C1 lighting / Q3 / C2 / C4 absorbed. D1 is tracked
-separately at ~9 000 LOC and currently sits ~60 % through D1.2.
+I4 / I5 / Q1 / Q2 / Q3 / Q4 / Q5) plus the D1.4 MVP — close to the
+26 000 original estimate, with B1 (~10 000 LOC) descoped and a few
+cumulative overages on C1 lighting / Q3 / C2 / C4 absorbed. D1 is
+tracked separately at ~9 000 LOC and currently sits ~60 % through
+D1.2.
 
-**Estimated time remaining** : 1–3 weeks full-time on D2 + Q4 (the
-core iso-fidelity items outside D1), plus 6–15 weeks on D1.4 if
-prioritised, plus whatever D1.2 / D1.3 need to close. The "raster
-pipeline completion" goal is **down to D1 + D2 + Q4 + D1.4** —
-every other chantier is shipped or formally descoped.
+**Estimated time remaining** : 4–8 weeks full-time on D2 (the last
+core iso-fidelity item outside D1 — see its mini plan for the 8
+sub-slice breakdown), plus 6–15 weeks on D1.4 if prioritised, plus
+whatever D1.2 / D1.3 need to close. The "raster pipeline
+completion" goal is **down to D1 + D2 + D1.4** — every other
+chantier is shipped or formally descoped.
 
 ---
 
