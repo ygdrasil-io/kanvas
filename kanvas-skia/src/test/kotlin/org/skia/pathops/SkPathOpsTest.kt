@@ -96,13 +96,121 @@ class SkPathOpsTest {
 
     // ─── Op / Simplify / AsWinding stubs (D1.0) ─────────────────────────
 
+    // ─── Op fast paths (D1.2.h.0) ───────────────────────────────────────
+
     @Test
-    fun `Op returns null in D1_0 (not yet implemented)`() {
+    fun `Op rect-rect kIntersect returns the intersection rect`() {
         val a = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
         val b = SkPathBuilder().addRect(SkRect.MakeLTRB(5f, 5f, 15f, 15f)).detach()
-        for (op in SkPathOp.values()) {
-            assertNull(SkPathOps.Op(a, b, op), "Op($op) should return null until D1.3")
-        }
+        val result = SkPathOps.Op(a, b, SkPathOp.kIntersect)
+        assertNotNull(result)
+        val rect = result!!.isRect()
+        assertNotNull(rect)
+        assertEquals(5f, rect!!.left, 1e-4f); assertEquals(5f, rect.top, 1e-4f)
+        assertEquals(10f, rect.right, 1e-4f); assertEquals(10f, rect.bottom, 1e-4f)
+    }
+
+    @Test
+    fun `Op rect-rect kIntersect on disjoint rects returns an empty path`() {
+        val a = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val b = SkPathBuilder().addRect(SkRect.MakeLTRB(20f, 20f, 30f, 30f)).detach()
+        val result = SkPathOps.Op(a, b, SkPathOp.kIntersect)
+        assertNotNull(result)
+        org.junit.jupiter.api.Assertions.assertTrue(result!!.isEmpty())
+    }
+
+    @Test
+    fun `Op kIntersect on non-rect paths still falls through to null`() {
+        val a = SkPathBuilder().addCircle(0f, 0f, 10f).detach()
+        val b = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        // Only rect-rect intersect is fast-pathed in this slice.
+        assertNull(SkPathOps.Op(a, b, SkPathOp.kIntersect))
+    }
+
+    @Test
+    fun `Op kUnion with empty first input returns the second input`() {
+        val empty = SkPathBuilder().detach()
+        val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val result = SkPathOps.Op(empty, rect, SkPathOp.kUnion)
+        assertNotNull(result)
+        val r = result!!.isRect()
+        assertNotNull(r)
+        assertEquals(10f, r!!.right, 1e-4f)
+    }
+
+    @Test
+    fun `Op kUnion with empty second input returns the first input`() {
+        val empty = SkPathBuilder().detach()
+        val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val result = SkPathOps.Op(rect, empty, SkPathOp.kUnion)
+        assertNotNull(result)
+        assertNotNull(result!!.isRect())
+    }
+
+    @Test
+    fun `Op kIntersect with an empty input returns an empty path`() {
+        val empty = SkPathBuilder().detach()
+        val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val result = SkPathOps.Op(rect, empty, SkPathOp.kIntersect)
+        assertNotNull(result)
+        org.junit.jupiter.api.Assertions.assertTrue(result!!.isEmpty())
+    }
+
+    @Test
+    fun `Op kDifference with empty first input returns an empty path`() {
+        val empty = SkPathBuilder().detach()
+        val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val result = SkPathOps.Op(empty, rect, SkPathOp.kDifference)
+        assertNotNull(result)
+        org.junit.jupiter.api.Assertions.assertTrue(result!!.isEmpty())
+    }
+
+    @Test
+    fun `Op kDifference with empty second input returns the first input`() {
+        val empty = SkPathBuilder().detach()
+        val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val result = SkPathOps.Op(rect, empty, SkPathOp.kDifference)
+        assertNotNull(result)
+        assertNotNull(result!!.isRect())
+    }
+
+    @Test
+    fun `Op kReverseDifference with empty second input returns an empty path`() {
+        val empty = SkPathBuilder().detach()
+        val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val result = SkPathOps.Op(rect, empty, SkPathOp.kReverseDifference)
+        assertNotNull(result)
+        org.junit.jupiter.api.Assertions.assertTrue(result!!.isEmpty())
+    }
+
+    @Test
+    fun `Op kReverseDifference with empty first input returns the second input`() {
+        val empty = SkPathBuilder().detach()
+        val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val result = SkPathOps.Op(empty, rect, SkPathOp.kReverseDifference)
+        assertNotNull(result)
+        assertNotNull(result!!.isRect())
+    }
+
+    @Test
+    fun `Op kUnion with both empty returns an empty path`() {
+        val empty = SkPathBuilder().detach()
+        val result = SkPathOps.Op(empty, empty, SkPathOp.kUnion)
+        assertNotNull(result)
+        org.junit.jupiter.api.Assertions.assertTrue(result!!.isEmpty())
+    }
+
+    @Test
+    fun `Op on two non-rect non-empty paths still returns null in this slice`() {
+        // Triangle and pentagon — no fast path applies, full machinery
+        // pending in D1.2.h.1+.
+        val triangle = SkPathBuilder()
+            .moveTo(0f, 0f).lineTo(10f, 0f).lineTo(5f, 10f).close()
+            .detach()
+        val pentagon = SkPathBuilder()
+            .moveTo(5f, 0f).lineTo(10f, 4f).lineTo(8f, 10f).lineTo(2f, 10f).lineTo(0f, 4f).close()
+            .detach()
+        assertNull(SkPathOps.Op(triangle, pentagon, SkPathOp.kUnion))
     }
 
     @Test

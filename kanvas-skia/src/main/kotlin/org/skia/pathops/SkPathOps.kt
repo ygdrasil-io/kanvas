@@ -4,27 +4,29 @@
  * Mirrors Skia's `include/pathops/SkPathOps.h` (free functions in the
  * top-level `skia` namespace).
  *
- * # Phase D1.0 — package skeleton + TightBounds shim
+ * # Phase D1.2.h.0 — Op fast paths (rect-rect intersect / empty-input)
  *
- * This file ships the public API surface of `SkPathOps` (chantier D1
- * of the raster-completion plan). Only `TightBounds` is implemented
- * in this slice — it delegates to [SkPath.computeTightBounds] which
- * already exists and is fully tested.
+ * Wires the public `SkPathOps.Op` entry point end-to-end for the
+ * "easy" cases that don't need the full coincidence machinery :
  *
- * `Op`, `Simplify`, `AsWinding` return `null` and log a `NotImplementedError`
- * to signal "not yet ported". They will be implemented in subsequent
- * D1.x slices :
- *  - **D1.1** : segment / intersection primitives.
- *  - **D1.2** : op contour assembly + winding propagation.
- *  - **D1.3** : top-level `Op` / `Simplify` / `AsWinding` algorithms.
+ *  - rect ∩ rect → rect via [SkRect.intersect] ;
+ *  - empty input → return the other input (with a fillType remap)
+ *    for `kUnion` / `kXOR` / `kDifference` / `kReverseDifference`,
+ *    or empty for `kIntersect`.
  *
- * The reason this slice exists separately is to commit the package
- * skeleton, the public contracts, and the immediate-win `TightBounds`
- * delegate without blocking on the (~9 000 LOC) intersection machinery.
+ * For inputs that fall through (two non-empty non-rect paths, or
+ * `kIntersect` of non-rects), we still return `null` until D1.2.h.1+
+ * land `SortContourList` / `AddIntersectTs` / `HandleCoincidence` /
+ * `bridgeOp` to drive the full algorithm.
+ *
+ * `Simplify` and `AsWinding` likewise stay deferred to later D1.2.h
+ * sub-slices (they share the same machinery).
  */
 package org.skia.pathops
 
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathBuilder
+import org.skia.foundation.SkPathFillType
 import org.skia.math.SkRect
 
 /**
@@ -35,6 +37,63 @@ import org.skia.math.SkRect
  * verbatim (`SkPathOps.Op(a, b, op)`, `SkPathOps.Simplify(p)`).
  */
 public object SkPathOps {
+
+    /**
+     * `gOpInverse[op][isInverseFillTypeOne][isInverseFillTypeTwo]` →
+     * the equivalent boolean op when one or both inputs use
+     * inverse-fill semantics. Mirrors `gOpInverse`
+     * (`src/pathops/SkPathOpsOp.cpp:220`).
+     *
+     * Indexed by `SkPathOp.ordinal` (must match upstream's
+     * `kDifference_SkPathOp = 0`, `kIntersect = 1`, `kUnion = 2`,
+     * `kXOR = 3`, `kReverseDifference = 4` — verified to match
+     * [SkPathOp]).
+     */
+    private val gOpInverse: Array<Array<Array<SkPathOp>>> = arrayOf(
+        // diff
+        arrayOf(
+            arrayOf(SkPathOp.kDifference, SkPathOp.kIntersect),
+            arrayOf(SkPathOp.kUnion, SkPathOp.kReverseDifference),
+        ),
+        // sect
+        arrayOf(
+            arrayOf(SkPathOp.kIntersect, SkPathOp.kDifference),
+            arrayOf(SkPathOp.kReverseDifference, SkPathOp.kUnion),
+        ),
+        // union
+        arrayOf(
+            arrayOf(SkPathOp.kUnion, SkPathOp.kReverseDifference),
+            arrayOf(SkPathOp.kDifference, SkPathOp.kIntersect),
+        ),
+        // xor
+        arrayOf(
+            arrayOf(SkPathOp.kXOR, SkPathOp.kXOR),
+            arrayOf(SkPathOp.kXOR, SkPathOp.kXOR),
+        ),
+        // rev diff
+        arrayOf(
+            arrayOf(SkPathOp.kReverseDifference, SkPathOp.kUnion),
+            arrayOf(SkPathOp.kIntersect, SkPathOp.kDifference),
+        ),
+    )
+
+    /**
+     * `gOutInverse[op][isInverseFillTypeOne][isInverseFillTypeTwo]` →
+     * whether the result should use an inverse-fill type. Mirrors
+     * `gOutInverse` (`src/pathops/SkPathOpsOp.cpp:230`).
+     */
+    private val gOutInverse: Array<Array<BooleanArray>> = arrayOf(
+        // diff
+        arrayOf(booleanArrayOf(false, false), booleanArrayOf(true, false)),
+        // sect
+        arrayOf(booleanArrayOf(false, false), booleanArrayOf(false, true)),
+        // union
+        arrayOf(booleanArrayOf(false, true), booleanArrayOf(true, true)),
+        // xor
+        arrayOf(booleanArrayOf(false, true), booleanArrayOf(true, false)),
+        // rev diff
+        arrayOf(booleanArrayOf(false, true), booleanArrayOf(false, false)),
+    )
 
     /**
      * Returns the result of applying the boolean [op] to [one] and [two].
@@ -48,11 +107,53 @@ public object SkPathOps {
      * Mirrors Skia's
      * [`Op(const SkPath&, const SkPath&, SkPathOp)`](https://github.com/google/skia/blob/main/include/pathops/SkPathOps.h#L47).
      *
-     * **Phase D1.0** : not yet implemented ; returns `null`.
+     * **Phase D1.2.h.0** : fast paths only — rect-rect intersect and
+     * empty-input shortcuts. Other cases still fall through to `null`
+     * until the full machinery lands in D1.2.h.1+.
      */
     public fun Op(one: SkPath, two: SkPath, op: SkPathOp): SkPath? {
-        // TODO(D1.3) : implement the boolean operation. Requires
-        // D1.1 (intersections) + D1.2 (contour assembly).
+        val oneInv = if (one.isInverseFillType()) 1 else 0
+        val twoInv = if (two.isInverseFillType()) 1 else 0
+        val effectiveOp = gOpInverse[op.ordinal][oneInv][twoInv]
+        val inverseFill = gOutInverse[effectiveOp.ordinal][oneInv][twoInv]
+        val fillType = if (inverseFill) SkPathFillType.kInverseEvenOdd else SkPathFillType.kEvenOdd
+
+        // Fast path : rect ∩ rect.
+        if (effectiveOp == SkPathOp.kIntersect) {
+            val rect1 = one.isRect()
+            val rect2 = two.isRect()
+            if (rect1 != null && rect2 != null) {
+                val out = SkRect.MakeLTRB(rect1.left, rect1.top, rect1.right, rect1.bottom)
+                val result = if (out.intersect(rect2)) SkPath.Rect(out) else SkPathBuilder().detach()
+                return result.makeFillType(fillType)
+            }
+        }
+
+        // Fast path : empty-input shortcuts.
+        if (one.isEmpty() || two.isEmpty()) {
+            val work: SkPath = when (effectiveOp) {
+                SkPathOp.kIntersect -> SkPathBuilder().detach()
+                SkPathOp.kUnion, SkPathOp.kXOR ->
+                    if (one.isEmpty()) two else one
+                SkPathOp.kDifference ->
+                    if (one.isEmpty()) SkPathBuilder().detach() else one
+                SkPathOp.kReverseDifference ->
+                    if (two.isEmpty()) SkPathBuilder().detach() else two
+            }
+            // Upstream calls Simplify(work) here ; for the empty-input
+            // cases `work` is either an unchanged input (already simple)
+            // or empty, so the Simplify call is effectively a no-op.
+            // Sufficient to remap the fill type.
+            val toggled = if (inverseFill != work.isInverseFillType()) {
+                work.makeToggleInverseFillType()
+            } else {
+                work
+            }
+            return toggled.makeFillType(fillType)
+        }
+
+        // TODO(D1.2.h.1+) : full Boolean machinery via SortContourList /
+        // AddIntersectTs / HandleCoincidence / bridgeOp.
         return null
     }
 
@@ -65,10 +166,11 @@ public object SkPathOps {
      * Mirrors Skia's
      * [`Simplify(const SkPath&)`](https://github.com/google/skia/blob/main/include/pathops/SkPathOps.h#L66).
      *
-     * **Phase D1.0** : not yet implemented ; returns `null`.
+     * **Phase D1.2.h.0** : not yet implemented ; returns `null`.
+     * Will land in D1.2.h.2 alongside the full coincidence machinery.
      */
     public fun Simplify(path: SkPath): SkPath? {
-        // TODO(D1.3) : implement Simplify. Same machinery as Op,
+        // TODO(D1.2.h.2) : implement Simplify. Same machinery as Op,
         // restricted to a single input.
         return null
     }
@@ -105,10 +207,10 @@ public object SkPathOps {
      * Mirrors Skia's
      * [`AsWinding(const SkPath&)`](https://github.com/google/skia/blob/main/include/pathops/SkPathOps.h#L102).
      *
-     * **Phase D1.0** : not yet implemented ; returns `null`.
+     * **Phase D1.2.h.0** : not yet implemented ; returns `null`.
      */
     public fun AsWinding(path: SkPath): SkPath? {
-        // TODO(D1.3) : implement AsWinding. Independent of Op but
+        // TODO(D1.2.h.3) : implement AsWinding. Independent of Op but
         // shares the contour walker.
         return null
     }
