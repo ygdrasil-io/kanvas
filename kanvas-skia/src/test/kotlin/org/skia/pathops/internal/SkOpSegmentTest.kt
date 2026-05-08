@@ -717,6 +717,73 @@ class SkOpSegmentTest {
 
     // ─── activeOp on a non-coincident line (D1.2.h.5.0) ──────────
 
+    // ─── activeAngle family (D1.2.h.5.1) ──────────────────────────
+
+    @Test
+    fun `activeAngleInner returns null on a single-line head with no live winding`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // A fresh segment has windValue=0 / oppValue=0 → both branches
+        // hit the "else" assert branches, so we'd need to mark the
+        // span done first. For a no-op, mark fHead done so the
+        // upSpan branch's require(done) holds, then call.
+        a.fHead.setDone(true)
+        val sOut = arrayOfNulls<SkOpSpanBase>(1)
+        val eOut = arrayOfNulls<SkOpSpanBase>(1)
+        val done = booleanArrayOf(true)
+        // No prev (fHead.prev == null) so downSpan branch is skipped.
+        assertNull(a.activeAngleInner(a.fHead, sOut, eOut, done))
+    }
+
+    @Test
+    fun `activeAngleInner records start-end pair when windValue is set`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        a.fHead.setWindValue(1)
+        val sOut = arrayOfNulls<SkOpSpanBase>(1)
+        val eOut = arrayOfNulls<SkOpSpanBase>(1)
+        val done = booleanArrayOf(true)
+        // windValue!=0 + windSum==MinS32 + !done → returns null but
+        // sets sOut/eOut/done.
+        val angle = a.activeAngleInner(a.fHead, sOut, eOut, done)
+        // We can't easily predict the angle return without more setup.
+        // The contract verified : (start, end) recorded, done flipped.
+        org.junit.jupiter.api.Assertions.assertSame(a.fHead, sOut[0])
+        org.junit.jupiter.api.Assertions.assertSame(a.fTail, eOut[0])
+        org.junit.jupiter.api.Assertions.assertFalse(done[0])
+        // angle is null because windSum is still MinS32 (uncomputed).
+        assertNull(angle)
+    }
+
+    @Test
+    fun `activeAngleOther returns null when start ptT loop has no neighbour`() {
+        // Single segment, no opp loop on fHead.
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // a.fHead.ptT().next() points back to itself (self loop).
+        // The C++ uses `start->ptT()->next()` which dereferences to
+        // the loop's first entry. With self-loop, it's the same ptT
+        // → its segment is `this`, recursing on activeAngleInner.
+        // For a fresh head with windValue=0, that returns null.
+        val sOut = arrayOfNulls<SkOpSpanBase>(1)
+        val eOut = arrayOfNulls<SkOpSpanBase>(1)
+        val done = booleanArrayOf(true)
+        a.fHead.setDone(true)
+        assertNull(a.activeAngleOther(a.fHead, sOut, eOut, done))
+    }
+
+    @Test
+    fun `activeAngle defers to inner first, then other`() {
+        // Same setup as inner-with-windValue test : we expect the same
+        // (start, end) recording behaviour from activeAngle which
+        // delegates to activeAngleInner first.
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        a.fHead.setWindValue(1)
+        val sOut = arrayOfNulls<SkOpSpanBase>(1)
+        val eOut = arrayOfNulls<SkOpSpanBase>(1)
+        val done = booleanArrayOf(true)
+        a.activeAngle(a.fHead, sOut, eOut, done)
+        org.junit.jupiter.api.Assertions.assertSame(a.fHead, sOut[0])
+        org.junit.jupiter.api.Assertions.assertSame(a.fTail, eOut[0])
+    }
+
     @Test
     fun `activeOp on a fresh line returns true for kUnion`() {
         // updateWinding / updateOppWinding on a fresh non-coincident
