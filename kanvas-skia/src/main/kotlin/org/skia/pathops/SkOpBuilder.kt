@@ -6,6 +6,7 @@
 package org.skia.pathops
 
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathBuilder
 
 /**
  * Performs a series of path operations, optimized for unioning many
@@ -49,15 +50,32 @@ public class SkOpBuilder {
      * Compute the sum of all paths and operands and reset the builder
      * to its initial state. Returns `null` on failure.
      *
-     * Mirrors `SkOpBuilder::resolve()`.
+     * Mirrors `SkOpBuilder::resolve()`
+     * (`src/pathops/SkOpBuilder.cpp:145`). Implements the
+     * chained-`Op` fallback path : iteratively folds each `(path, op)`
+     * pair into the running result via [SkPathOps.Op]. The upstream
+     * all-union fast path (concatenate then Simplify, with a
+     * convex-bounds short-circuit and `FixWinding`) is **not** ported
+     * yet — it's an optimisation, not a correctness requirement.
      *
-     * **Phase D1.0** : not yet implemented ; returns `null` and resets
-     * the builder.
+     * Empty builder → empty path. Single entry → `Op(emptyPath, path,
+     * op)`, mirroring upstream's handling of a single `add`.
      */
     public fun resolve(): SkPath? {
-        // TODO(D1.3) : implement multi-path union via repeated SkPathOps.Op.
+        if (paths.isEmpty()) {
+            reset()
+            return SkPathBuilder().detach()
+        }
+        var result: SkPath = paths[0]
+        for (i in 1 until paths.size) {
+            val next = SkPathOps.Op(result, paths[i], ops[i]) ?: run {
+                reset()
+                return null
+            }
+            result = next
+        }
         reset()
-        return null
+        return result
     }
 
     private fun reset() {
