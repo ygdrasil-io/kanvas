@@ -8,9 +8,12 @@
  * the SkOpCoincidence skeleton (head pointer + Ordered statics).
  *
  * Phase D1.2.g.a — SkOpCoincidence container methods : add / extend /
- * contains (× 3 overloads). The remaining heavy methods (addMissing /
- * addOverlap / apply / mark / expand / fixUp / release / …) land in
- * subsequent D1.2.g sub-slices.
+ * contains (× 3 overloads).
+ *
+ * Phase D1.2.g.b — list-maintenance methods : release (× 2) /
+ * releaseDeleted (× 2) / restoreHead / fixUp (× 2) / markCollapsed
+ * (× 2). The remaining heavy methods (addMissing / addOverlap / apply
+ * / mark / expand / …) land in subsequent D1.2.g sub-slices.
  *
  * # SkCoincidentSpans
  *
@@ -460,6 +463,220 @@ internal class SkOpCoincidence {
             }
             test = test.next() ?: return false
         }
+    }
+
+    // ─── list maintenance (D1.2.g.b) ───────────────────────────────
+
+    /**
+     * Walk the chain rooted at [coin] looking for [remove] ; unlink
+     * it on hit. The chain may be either the [fHead] list or the
+     * [fTop] list — `head === fHead` decides which root pointer to
+     * patch when [remove] is the very first entry. Returns true iff
+     * [remove] was found.
+     *
+     * Mirrors the private `SkOpCoincidence::release(SkCoincidentSpans*,
+     * SkCoincidentSpans*)` (`SkOpCoincidence.cpp:1160`).
+     */
+    private fun release(coin: SkCoincidentSpans, remove: SkCoincidentSpans): Boolean {
+        val head = coin
+        var prev: SkCoincidentSpans? = null
+        var cur: SkCoincidentSpans? = coin
+        while (cur != null) {
+            val next = cur.next()
+            if (cur === remove) {
+                if (prev != null) {
+                    prev.setNext(next)
+                } else if (head === fHead) {
+                    fHead = next
+                } else {
+                    fTop = next
+                }
+                return true
+            }
+            prev = cur
+            cur = next
+        }
+        return false
+    }
+
+    /**
+     * Release every entry on [fHead] that touches [deleted] (on any
+     * of the four endpoint segments). Mirrors
+     * `SkOpCoincidence::release(SkOpSegment*)`
+     * (`SkOpCoincidence.cpp:1443`).
+     */
+    fun release(deleted: SkOpSegment) {
+        var coin = fHead ?: return
+        while (true) {
+            if (coin.coinPtTStart()?.span()?.segment() === deleted ||
+                coin.coinPtTEnd()?.span()?.segment() === deleted ||
+                coin.oppPtTStart()?.span()?.segment() === deleted ||
+                coin.oppPtTEnd()?.span()?.segment() === deleted) {
+                release(fHead!!, coin)
+            }
+            coin = coin.next() ?: return
+        }
+    }
+
+    /**
+     * Walk [coin]'s chain and unlink every entry whose `coinPtTStart`
+     * has been deleted. Mirrors the private
+     * `SkOpCoincidence::releaseDeleted(SkCoincidentSpans*)`
+     * (`SkOpCoincidence.cpp:1181`).
+     */
+    private fun releaseDeleted(coin: SkCoincidentSpans?) {
+        if (coin == null) return
+        val head = coin
+        var prev: SkCoincidentSpans? = null
+        var cur: SkCoincidentSpans? = coin
+        while (cur != null) {
+            val next = cur.next()
+            if (cur.coinPtTStart()!!.deleted()) {
+                if (prev != null) {
+                    prev.setNext(next)
+                } else if (head === fHead) {
+                    fHead = next
+                } else {
+                    fTop = next
+                }
+            } else {
+                prev = cur
+            }
+            cur = next
+        }
+    }
+
+    /**
+     * Apply [releaseDeleted] to both [fHead] and [fTop]. Mirrors
+     * `SkOpCoincidence::releaseDeleted()` (`SkOpCoincidence.cpp:1208`).
+     */
+    fun releaseDeleted() {
+        releaseDeleted(fHead)
+        releaseDeleted(fTop)
+    }
+
+    /**
+     * Splice the [fTop] list onto the tail of [fHead], clear [fTop],
+     * then prune entries on [fHead] whose coin- or opp-segment is
+     * already done. Mirrors `SkOpCoincidence::restoreHead`
+     * (`SkOpCoincidence.cpp:1213`).
+     */
+    fun restoreHead() {
+        // Find tail of fHead and append fTop.
+        if (fHead == null) {
+            fHead = fTop
+        } else {
+            var tail = fHead!!
+            while (true) {
+                val next = tail.next() ?: run { tail.setNext(fTop); null }
+                if (next == null) break
+                tail = next
+            }
+        }
+        fTop = null
+        // Prune entries whose segments are already done.
+        var prev: SkCoincidentSpans? = null
+        var cur = fHead
+        while (cur != null) {
+            val coinSeg = cur.coinPtTStart()!!.span()!!.segment()!!
+            val oppSeg = cur.oppPtTStart()!!.span()!!.segment()!!
+            if (coinSeg.done() || oppSeg.done()) {
+                val next = cur.next()
+                if (prev != null) prev.setNext(next) else fHead = next
+                cur = next
+            } else {
+                prev = cur
+                cur = cur.next()
+            }
+        }
+    }
+
+    /**
+     * Walk [coin]'s chain ; for each entry whose endpoint pt-T equals
+     * [deleted], either release the entry (when its opposite endpoint
+     * lives on the same span as [kept] — i.e. the range collapses) or
+     * rewire that endpoint to [kept]. Mirrors the private
+     * `SkOpCoincidence::fixUp(SkCoincidentSpans*, SkOpPtT*, SkOpPtT*)`
+     * (`SkOpCoincidence.cpp:1307`).
+     */
+    private fun fixUp(coin: SkCoincidentSpans, deleted: SkOpPtT, kept: SkOpPtT) {
+        val head = coin
+        var cur: SkCoincidentSpans? = coin
+        while (cur != null) {
+            if (cur.coinPtTStart() === deleted) {
+                if (cur.coinPtTEnd()!!.span() === kept.span()) {
+                    release(head, cur); cur = cur.next(); continue
+                }
+                cur.setCoinPtTStart(kept)
+            }
+            if (cur.coinPtTEnd() === deleted) {
+                if (cur.coinPtTStart()!!.span() === kept.span()) {
+                    release(head, cur); cur = cur.next(); continue
+                }
+                cur.setCoinPtTEnd(kept)
+            }
+            if (cur.oppPtTStart() === deleted) {
+                if (cur.oppPtTEnd()!!.span() === kept.span()) {
+                    release(head, cur); cur = cur.next(); continue
+                }
+                cur.setOppPtTStart(kept)
+            }
+            if (cur.oppPtTEnd() === deleted) {
+                if (cur.oppPtTStart()!!.span() === kept.span()) {
+                    release(head, cur); cur = cur.next(); continue
+                }
+                cur.setOppPtTEnd(kept)
+            }
+            cur = cur.next()
+        }
+    }
+
+    /**
+     * Rewire every reference to [deleted] (across [fHead] and [fTop])
+     * to [kept], releasing any entry whose range collapses as a
+     * result. Mirrors `SkOpCoincidence::fixUp(SkOpPtT*, const
+     * SkOpPtT*)` (`SkOpCoincidence.cpp:1297`).
+     */
+    fun fixUp(deleted: SkOpPtT, kept: SkOpPtT) {
+        require(deleted !== kept)
+        fHead?.let { fixUp(it, deleted, kept) }
+        fTop?.let { fixUp(it, deleted, kept) }
+    }
+
+    /**
+     * Walk [coin]'s chain ; release every entry that has collapsed
+     * onto [test]. When the collapse spans the full t-range of either
+     * side ([0, 1]), mark that segment fully done. Mirrors the
+     * private `SkOpCoincidence::markCollapsed(SkCoincidentSpans*,
+     * SkOpPtT*)` (`SkOpCoincidence.cpp:1389`).
+     */
+    private fun markCollapsed(coin: SkCoincidentSpans?, test: SkOpPtT) {
+        val head = coin ?: return
+        var cur: SkCoincidentSpans? = head
+        while (cur != null) {
+            if (cur.collapsed(test)) {
+                if (zero_or_one(cur.coinPtTStart()!!.fT) &&
+                    zero_or_one(cur.coinPtTEnd()!!.fT)) {
+                    cur.coinPtTStart()!!.span()!!.segment()!!.markAllDone()
+                }
+                if (zero_or_one(cur.oppPtTStart()!!.fT) &&
+                    zero_or_one(cur.oppPtTEnd()!!.fT)) {
+                    cur.oppPtTStart()!!.span()!!.segment()!!.markAllDone()
+                }
+                release(head, cur)
+            }
+            cur = cur.next()
+        }
+    }
+
+    /**
+     * Apply [markCollapsed] to both [fHead] and [fTop]. Mirrors
+     * `SkOpCoincidence::markCollapsed(SkOpPtT*)`
+     * (`SkOpCoincidence.cpp:1406`).
+     */
+    fun markCollapsed(test: SkOpPtT) {
+        markCollapsed(fHead, test)
+        markCollapsed(fTop, test)
     }
 
     companion object {
