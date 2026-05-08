@@ -12,9 +12,11 @@
  *
  * Phase D1.2.h.4 — `HandleCoincidence` orchestrator + the small
  * static contour-walker helpers (`move_multiples`, `move_nearby`,
- * `missing_coincidence`, `calc_angles`, `sort_angles`). The
- * remaining helpers (`bridgeOp` walker, `Op` final wiring) land in
- * D1.2.h.5.
+ * `missing_coincidence`, `calc_angles`, `sort_angles`).
+ *
+ * Phase D1.2.h.5.3 — `AngleWinding` (angle-ring winding lookup).
+ * The remaining helpers (`FindSortableTop` ray-tracing suite,
+ * `bridgeOp` walker, `Op` final wiring) land in D1.2.h.5.4+.
  */
 package org.skia.pathops.internal
 
@@ -526,4 +528,76 @@ internal fun HandleCoincidence(
     calc_angles(contourList)
     if (!sort_angles(contourList)) return false
     return true
+}
+
+// ─── AngleWinding (D1.2.h.5.3) ──────────────────────────────────
+
+/**
+ * Walk the angle ring at the `(start, end)` span pair to find the
+ * first angle whose segment has an already-computed `windSum` ;
+ * return it along with the winding value into [windingOut] and a
+ * sortability flag into [sortableOut]. Used by [findChaseOp]
+ * (lands in D1.2.h.5.4) to set up the running winding for the
+ * angle-side walker.
+ *
+ * Two-pass strategy :
+ *  1. Walk forward from `spanToAngle(start, end)` through
+ *     `angle.next()` until an angle reports a known windSum.
+ *     Track whether any angle is unorderable along the way.
+ *  2. If the loop found nothing or saw an unorderable, walk again
+ *     consulting `lesser->windSum()` directly (and falling back to
+ *     `lesser->computeWindSum()` — currently a stub returning the
+ *     stored value, full ray-tracing pending).
+ *
+ * Returns null on a hard abort (no angle ring at start/end), or
+ * the first angle with a known windSum (writing the winding value
+ * into [windingOut] and `!unorderable` into [sortableOut]).
+ *
+ * Mirrors `AngleWinding` (`src/pathops/SkPathOpsCommon.cpp:21`).
+ */
+internal fun AngleWinding(
+    start: SkOpSpanBase,
+    end: SkOpSpanBase,
+    windingOut: IntArray,
+    sortableOut: BooleanArray,
+): SkOpAngle? {
+    var segment = start.segment() ?: return null
+    var angle: SkOpAngle = segment.spanToAngle(start, end) ?: run {
+        windingOut[0] = SkOpSpan.SK_MinS32
+        return null
+    }
+    var computeWinding = false
+    val firstAngle = angle
+    var loop = false
+    var unorderable = false
+    var winding = SkOpSpan.SK_MinS32
+    do {
+        angle = angle.next() ?: return null
+        unorderable = unorderable || angle.unorderable()
+        computeWinding = unorderable || (angle === firstAngle && loop)
+        if (computeWinding) break
+        loop = loop || angle === firstAngle
+        segment = angle.segment() ?: return null
+        winding = segment.windSum(angle)
+    } while (winding == SkOpSpan.SK_MinS32)
+    if (computeWinding) {
+        var a = angle
+        winding = SkOpSpan.SK_MinS32
+        do {
+            val sStart = a.start() ?: return null
+            val sEnd = a.end() ?: return null
+            val lesser = sStart.starter(sEnd)
+            var testWinding = lesser.windSum()
+            if (testWinding == SkOpSpan.SK_MinS32) {
+                testWinding = lesser.computeWindSum()
+            }
+            if (testWinding != SkOpSpan.SK_MinS32) {
+                winding = testWinding
+            }
+            a = a.next() ?: return null
+        } while (a !== angle)
+    }
+    sortableOut[0] = !unorderable
+    windingOut[0] = winding
+    return angle
 }

@@ -359,6 +359,19 @@ class SkOpSpanTest {
     }
 
     @Test
+    fun `computeWindSum returns the stored fWindSum (D1_2_h_5_3 stub)`() {
+        // Stub : the full ray-tracing implementation lands in a future
+        // winding slice ; for now computeWindSum just returns the
+        // stored value.
+        val seg = SkOpSegment()
+        val span = SkOpSpan(); span.init(seg, null, 0.5, pt(0f, 0f))
+        // Default fWindSum is SK_MinS32.
+        assertEquals(SkOpSpan.SK_MinS32, span.computeWindSum())
+        span.setWindSum(7)
+        assertEquals(7, span.computeWindSum())
+    }
+
+    @Test
     fun `addOpp returns true when opp is already in the loop`() {
         val span1 = SkOpSpanBase()
         val span2 = SkOpSpanBase()
