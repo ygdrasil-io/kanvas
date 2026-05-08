@@ -136,6 +136,73 @@ class DrawVerticesTest {
         assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(2, 2))
     }
 
+    // ─── Phase I5.3.b — per-vertex colour interpolation ────────────
+
+    @Test
+    fun `per-vertex colors with same color everywhere paints solid`() {
+        val (bm, canvas) = newWhiteCanvas()
+        // Triangle (5,5)-(25,5)-(5,25), all 3 vertices red.
+        val red = 0xFFFF0000.toInt()
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangles,
+            arrayOf(SkPoint(5f, 5f), SkPoint(25f, 5f), SkPoint(5f, 25f)),
+            colors = intArrayOf(red, red, red),
+        )
+        canvas.drawVertices(v, SkBlendMode.kSrcOver, SkPaint(0xFF000000.toInt()))
+        // Interior pixel is red.
+        assertEquals(red, bm.getPixel(10, 10))
+        // Outside stays white.
+        assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(29, 29))
+    }
+
+    @Test
+    fun `per-vertex colors interpolate linearly between vertices`() {
+        val (bm, canvas) = newWhiteCanvas(40, 40)
+        // Triangle (5,5)-red, (35,5)-green, (5,35)-blue.
+        val red = 0xFFFF0000.toInt()
+        val green = 0xFF00FF00.toInt()
+        val blue = 0xFF0000FF.toInt()
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangles,
+            arrayOf(SkPoint(5f, 5f), SkPoint(35f, 5f), SkPoint(5f, 35f)),
+            colors = intArrayOf(red, green, blue),
+        )
+        canvas.drawVertices(v, SkBlendMode.kSrcOver, SkPaint(0xFF000000.toInt()))
+        // Near red vertex (5, 5) → strong red.
+        val nearRed = bm.getPixel(7, 7)
+        val rR = (nearRed shr 16) and 0xFF
+        val gR = (nearRed shr 8) and 0xFF
+        assertTrue(rR > gR) { "near red vertex : R=$rR should dominate G=$gR" }
+        // Near green vertex (35, 5) — pick pixel well inside the
+        // triangle's right corner. Hypotenuse is x+y=40 ; (28, 6) is
+        // safely inside (28+6=34 < 40).
+        val nearGreen = bm.getPixel(28, 6)
+        val rG = (nearGreen shr 16) and 0xFF
+        val gG = (nearGreen shr 8) and 0xFF
+        assertTrue(gG > rG) { "near green vertex : G=$gG should dominate R=$rG" }
+        // Near blue vertex (5, 35) → pick (6, 28) on the other interior side.
+        val nearBlue = bm.getPixel(6, 28)
+        val gB = (nearBlue shr 8) and 0xFF
+        val bB = nearBlue and 0xFF
+        assertTrue(bB > gB) { "near blue vertex : B=$bB should dominate G=$gB" }
+    }
+
+    @Test
+    fun `per-vertex colors with paint alpha 0 produces transparent draw`() {
+        val (bm, canvas) = newWhiteCanvas()
+        val before = bm.pixels.copyOf()
+        val red = 0xFFFF0000.toInt()
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangles,
+            arrayOf(SkPoint(5f, 5f), SkPoint(25f, 5f), SkPoint(5f, 25f)),
+            colors = intArrayOf(red, red, red),
+        )
+        // Paint alpha = 0 — vertex colors get modulated to transparent
+        // → no pixel writes under SrcOver.
+        canvas.drawVertices(v, SkBlendMode.kSrcOver, SkPaint(0x00000000))
+        assertEquals(before.toList(), bm.pixels.toList())
+    }
+
     @Test
     fun `kTriangleStrip tessellates a strip into a quad`() {
         val (bm, canvas) = newWhiteCanvas()
