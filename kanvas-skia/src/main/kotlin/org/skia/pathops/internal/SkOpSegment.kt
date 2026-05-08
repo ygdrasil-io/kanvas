@@ -950,12 +950,15 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
      */
     fun updateWinding(start: SkOpSpanBase, end: SkOpSpanBase): Int {
         val lesser = start.starter(end)
-        val winding = lesser.windSum()
+        var winding = lesser.windSum()
         if (winding == SkOpSpan.SK_MinS32) {
-            // TODO (D1.2.c.2.x) : call lesser.computeWindSum() once it
-            // ports. For now we propagate the sentinel.
-            return winding
+            // Trigger the ray-cast walker to compute it on demand.
+            // Mirrors `SkOpSegment::updateWinding`'s
+            // `lesser->computeWindSum()` call
+            // (`SkOpSegment.cpp:1747`).
+            winding = lesser.computeWindSum()
         }
+        if (winding == SkOpSpan.SK_MinS32) return winding
         val spanWinding = SpanSign(start, end)
         if (winding != 0 && UseInnerWinding(winding - spanWinding, winding) &&
             winding != Int.MAX_VALUE) {

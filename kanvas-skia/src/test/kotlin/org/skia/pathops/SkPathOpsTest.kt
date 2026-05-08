@@ -120,11 +120,16 @@ class SkPathOpsTest {
     }
 
     @Test
-    fun `Op kIntersect on non-rect paths still falls through to null`() {
+    fun `Op kIntersect on non-rect paths runs the full pipeline`() {
         val a = SkPathBuilder().addCircle(0f, 0f, 10f).detach()
         val b = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
-        // Only rect-rect intersect is fast-pathed in this slice.
-        assertNull(SkPathOps.Op(a, b, SkPathOp.kIntersect))
+        // Post-D1.2.h.8 the path-ops bounds intersect (treats degenerate
+        // line bboxes as non-empty) lets the full pipeline reach
+        // bridgeOp on circle ∩ rect ; we just assert it produces a
+        // non-null result here. Geometric correctness is exercised by
+        // the upstream GM regression suite separately.
+        val r = SkPathOps.Op(a, b, SkPathOp.kIntersect)
+        assertNotNull(r)
     }
 
     @Test
@@ -239,17 +244,16 @@ class SkPathOpsTest {
     }
 
     @Test
-    fun `Simplify on a triangle runs without crashing`() {
-        // Non-self-intersecting triangle. The full pipeline runs ;
-        // bridgeWinding's per-contour walk may still emit empty
-        // output on simple inputs (the upstream algorithm relies on
-        // multi-pass winding propagation that's hard to verify
-        // end-to-end without geometric oracles). For now we just
-        // assert no crash.
+    fun `Simplify on a triangle produces a non-null result`() {
+        // Non-self-intersecting triangle. The full pipeline runs
+        // through bridgeWinding ; computeWindSum (now functional)
+        // populates absolute winding via ray-cast on demand.
         val p = SkPathBuilder()
             .moveTo(0f, 0f).lineTo(10f, 0f).lineTo(5f, 10f).close()
             .detach()
-        SkPathOps.Simplify(p) // does not throw
+        val r = SkPathOps.Simplify(p)
+        assertNotNull(r)
+        assertEquals(org.skia.foundation.SkPathFillType.kEvenOdd, r!!.fillType)
     }
 
     // ─── AsWinding (D1.2.h.6.2) ─────────────────────────────────────
