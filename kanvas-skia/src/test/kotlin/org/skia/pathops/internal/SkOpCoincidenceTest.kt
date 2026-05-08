@@ -248,4 +248,189 @@ class SkOpCoincidenceTest {
         c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
         assertFalse(c.contains(x.fHead.ptT(), x.fTail.ptT(), y.fHead.ptT(), y.fTail.ptT()))
     }
+
+    // ─── release(SkOpSegment) (D1.2.g.b) ──────────────────────────
+
+    @Test
+    fun `release of a touched segment unlinks the entry`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        assertTrue(c.fHead != null)
+        c.release(a)
+        assertNull(c.fHead)
+    }
+
+    @Test
+    fun `release of an untouched segment is a no-op`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val x = SkOpSegment().addLine(arrayOf(pt(2f, 0f), pt(12f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        c.release(x)
+        assertTrue(c.fHead != null)
+    }
+
+    @Test
+    fun `release of opp segment also unlinks`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        // b lives on the opp side of the entry, should still match.
+        c.release(b)
+        assertNull(c.fHead)
+    }
+
+    // ─── releaseDeleted (D1.2.g.b) ────────────────────────────────
+
+    @Test
+    fun `releaseDeleted prunes entries whose coinPtTStart is deleted`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        // Mark the coin-side start pt-T deleted (a.fHead.ptT()).
+        c.fHead!!.coinPtTStart()!!.setDeleted()
+        c.releaseDeleted()
+        assertNull(c.fHead)
+    }
+
+    @Test
+    fun `releaseDeleted leaves alive entries intact`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        c.releaseDeleted()
+        assertTrue(c.fHead != null)
+    }
+
+    @Test
+    fun `releaseDeleted prunes from the middle of a chain`() {
+        val a1 = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b1 = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val a2 = SkOpSegment().addLine(arrayOf(pt(2f, 0f), pt(12f, 0f)), null)
+        val b2 = SkOpSegment().addLine(arrayOf(pt(3f, 0f), pt(13f, 0f)), null)
+        val a3 = SkOpSegment().addLine(arrayOf(pt(4f, 0f), pt(14f, 0f)), null)
+        val b3 = SkOpSegment().addLine(arrayOf(pt(5f, 0f), pt(15f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a1.fHead.ptT(), a1.fTail.ptT(), b1.fHead.ptT(), b1.fTail.ptT())
+        c.add(a2.fHead.ptT(), a2.fTail.ptT(), b2.fHead.ptT(), b2.fTail.ptT())
+        c.add(a3.fHead.ptT(), a3.fTail.ptT(), b3.fHead.ptT(), b3.fTail.ptT())
+        // Middle entry (most recently added is at fHead.next, since prepend).
+        c.fHead!!.next()!!.coinPtTStart()!!.setDeleted()
+        c.releaseDeleted()
+        // Two entries remain : the head (a3, b3) and the tail (a1, b1).
+        assertSame(a3.fHead.ptT(), c.fHead!!.coinPtTStart())
+        assertSame(a1.fHead.ptT(), c.fHead!!.next()!!.coinPtTStart())
+        assertNull(c.fHead!!.next()!!.next())
+    }
+
+    // ─── restoreHead (D1.2.g.b) ───────────────────────────────────
+
+    @Test
+    fun `restoreHead splices fTop onto end of fHead and clears fTop`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val x = SkOpSegment().addLine(arrayOf(pt(2f, 0f), pt(12f, 0f)), null)
+        val y = SkOpSegment().addLine(arrayOf(pt(3f, 0f), pt(13f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        // Park a separate entry on fTop (manually — restoreHead is the
+        // only public consumer of fTop in this slice).
+        val parked = SkCoincidentSpans()
+        parked.set(null, x.fHead.ptT(), x.fTail.ptT(), y.fHead.ptT(), y.fTail.ptT())
+        c.fTop = parked
+        c.restoreHead()
+        assertNull(c.fTop)
+        // fHead retains its (a, b) entry, with parked appended.
+        assertSame(a.fHead.ptT(), c.fHead!!.coinPtTStart())
+        assertSame(parked, c.fHead!!.next())
+    }
+
+    @Test
+    fun `restoreHead prunes entries whose coin segment is done`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        a.markAllDone()
+        assertTrue(a.done())
+        c.restoreHead()
+        assertNull(c.fHead)
+    }
+
+    @Test
+    fun `restoreHead with empty fHead promotes fTop directly`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        val parked = SkCoincidentSpans()
+        parked.set(null, a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        c.fTop = parked
+        c.restoreHead()
+        assertSame(parked, c.fHead)
+        assertNull(c.fTop)
+    }
+
+    // ─── fixUp (D1.2.g.b) ─────────────────────────────────────────
+
+    @Test
+    fun `fixUp rewires endpoint when no collapse occurs`() {
+        // Build (a, b) coincidence ; fix up b.fHead.ptT() → some other
+        // pt-T living on a different span (b.fTail.ptT()'s span ≠
+        // b.fHead.ptT()'s span, so no collapse).
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val x = SkOpSegment().addLine(arrayOf(pt(2f, 0f), pt(12f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        val deleted = b.fHead.ptT()
+        val kept = x.fHead.ptT() // span differs from b.fTail.ptT's span
+        c.fixUp(deleted, kept)
+        // oppPtTStart should now be `kept`.
+        assertSame(kept, c.fHead!!.oppPtTStart())
+    }
+
+    @Test
+    fun `fixUp releases entry when replacement collapses the range`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        // Collapse : redirect b.fHead.ptT() (oppPtTStart) to a pt-T
+        // whose span is the same as oppPtTEnd's span — i.e. b.fTail.
+        c.fixUp(b.fHead.ptT(), b.fTail.ptT())
+        assertNull(c.fHead)
+    }
+
+    // ─── markCollapsed (D1.2.g.b) ─────────────────────────────────
+
+    @Test
+    fun `markCollapsed leaves entry alive when test is not an endpoint`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val x = SkOpSegment().addLine(arrayOf(pt(2f, 0f), pt(12f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        c.markCollapsed(x.fHead.ptT())
+        assertTrue(c.fHead != null)
+    }
+
+    @Test
+    fun `markCollapsed releases entry whose endpoint loop already contains test`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        c.add(a.fHead.ptT(), a.fTail.ptT(), b.fHead.ptT(), b.fTail.ptT())
+        // Splice a.fHead.ptT() into a.fTail.ptT()'s opp loop so that
+        // collapsed(a.fHead.ptT()) is true on the (a.fHead, a.fTail)
+        // coin-side : fCoinPtTStart === test && fCoinPtTEnd.contains(test).
+        a.fTail.ptT().insert(a.fHead.ptT())
+        c.markCollapsed(a.fHead.ptT())
+        assertNull(c.fHead)
+    }
 }
