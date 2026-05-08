@@ -106,6 +106,55 @@ class SkPathOpsAsWindingTest {
         assertEquals(AsWindingDirection.kCW, getDirection(p, contours[1]))
     }
 
+    // ─── containsEdge / leftEdge / nextEdge (D1.2.h.6.5) ─────────
+
+    @Test
+    fun `leftEdge on a horizontal line picks the smaller-X endpoint`() {
+        val rec = AsWindingVerbRec(
+            org.skia.foundation.SkPath.Verb.kLine,
+            arrayOf(org.skia.math.SkPoint(10f, 5f), org.skia.math.SkPoint(0f, 5f)),
+            1f, 0,
+        )
+        val lp = leftEdge(rec)
+        assertEquals(0f, lp.fX)
+    }
+
+    @Test
+    fun `nextEdge kInitial sets contour minXY to leftmost edge point`() {
+        // 4-edge quadrilateral with all edges explicit.
+        val p = SkPathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(100f, 0f).lineTo(100f, 100f).lineTo(0f, 100f).lineTo(0f, 0f)
+            .close()
+            .detach()
+        val contours = contourBounds(p)
+        assertEquals(1, contours.size)
+        // Reset minXY to ScalarMax so kInitial mode populates it.
+        contours[0].minXY = org.skia.math.SkPoint(AsWindingContour.SK_ScalarMax,
+                                                    AsWindingContour.SK_ScalarMax)
+        nextEdge(p, contours[0], AsWindingEdge.kInitial)
+        // Smallest X is 0 ; first non-horizontal edge with X=0 is the
+        // (0,100) → (0,0) closing line, whose top point is (0, 0)
+        // (after the smaller-X-then-Y tie-break).
+        assertEquals(0f, contours[0].minXY.fX)
+    }
+
+    @Test
+    fun `containerContains — outer 4-line rect contains inner rect`() {
+        val p = SkPathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(100f, 0f).lineTo(100f, 100f).lineTo(0f, 100f).lineTo(0f, 0f)
+            .close()
+            .moveTo(20f, 20f)
+            .lineTo(80f, 20f).lineTo(80f, 80f).lineTo(20f, 80f).lineTo(20f, 20f)
+            .close()
+            .detach()
+        val contours = contourBounds(p)
+        assertEquals(2, contours.size)
+        assertTrue(containerContains(p, contours[0], contours[1]))
+        assertTrue(contours[1].contained)
+    }
+
     @Test
     fun `inParent promotion — inner inserted before outer gets re-parented`() {
         // Same setup as nested, but insert inner first. inParent

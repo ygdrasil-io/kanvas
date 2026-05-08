@@ -42,10 +42,13 @@ import org.skia.pathops.internal.AsWindingContour
 import org.skia.pathops.internal.bridgeOp
 import org.skia.pathops.internal.bridgeWinding
 import org.skia.pathops.internal.bridgeXor
+import org.skia.pathops.internal.AsWindingEdge
+import org.skia.pathops.internal.checkContainerChildren
 import org.skia.pathops.internal.contourBounds
 import org.skia.pathops.internal.inParent
 import org.skia.pathops.internal.isFlatTree
-import org.skia.pathops.internal.no2LevelReverseNeeded
+import org.skia.pathops.internal.markReverse
+import org.skia.pathops.internal.nextEdge
 
 /**
  * Pathops free functions. Mirrors Skia's `include/pathops/SkPathOps.h`.
@@ -351,13 +354,21 @@ public object SkPathOps {
         val sorted = AsWindingContour(SkRect.MakeEmpty(), 0, 0)
         for (c in contours) inParent(c, sorted)
         if (isFlatTree(sorted)) return path.makeFillType(targetFill)
-        // 2-level-nested fast path : when every (parent, child) pair
-        // has alternating directions (one CW, one CCW), the input is
-        // already winding-equivalent — `makeFillType` is correct.
-        if (no2LevelReverseNeeded(path, sorted)) return path.makeFillType(targetFill)
-        // Reversal needed (or > 2 levels deep) — needs the upstream
-        // reverse-marker pass + SkPath.reverseAddPath (deferred to
-        // h.6.5+).
+        // Full nested-tree analysis : ray-cast containment +
+        // recursive reverse-marker.
+        for (child in sorted.children) {
+            nextEdge(path, child, AsWindingEdge.kInitial)
+            child.direction = org.skia.pathops.internal.getDirection(path, child)
+            if (!checkContainerChildren(path, null, child)) return null
+        }
+        var reversed = false
+        for (child in sorted.children) {
+            reversed = markReverse(path, null, child) || reversed
+        }
+        if (!reversed) return path.makeFillType(targetFill)
+        // Reversal-emit (h.6.6+) needs SkPath.reverseAddPath +
+        // reverseMarkedContours. Until that lands, signal "couldn't
+        // produce a winding-equivalent path" via null.
         return null
     }
 }

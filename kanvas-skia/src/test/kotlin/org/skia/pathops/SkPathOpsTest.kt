@@ -307,14 +307,23 @@ class SkPathOpsTest {
     }
 
     @Test
-    fun `AsWinding on same-direction-nested contour path falls through to null (h_6_5+)`() {
-        // Outer rect contains inner rect, both CW (default direction).
-        // Same direction → reversal needed → null (deferred).
+    fun `AsWinding on same-direction-nested contour path falls through to null (h_6_6+)`() {
+        // Outer + inner quadrilateral, same direction (visual-CW),
+        // ALL 4 edges explicit (no implicit close-back). Required
+        // because the ray-cast containment relies on every non-
+        // horizontal edge being in the verb stream.
         val p = SkPathBuilder()
             .setFillType(org.skia.foundation.SkPathFillType.kEvenOdd)
-            .addRect(SkRect.MakeLTRB(0f, 0f, 100f, 100f))
-            .addRect(SkRect.MakeLTRB(20f, 20f, 80f, 80f))
+            // Outer : (0,0) → (100,0) → (100,100) → (0,100) → (0,0).
+            .moveTo(0f, 0f)
+            .lineTo(100f, 0f).lineTo(100f, 100f).lineTo(0f, 100f).lineTo(0f, 0f)
+            .close()
+            // Inner : same shape, smaller.
+            .moveTo(20f, 20f)
+            .lineTo(80f, 20f).lineTo(80f, 80f).lineTo(20f, 80f).lineTo(20f, 20f)
+            .close()
             .detach()
+        // markReverse detects same direction → reverse → null (deferred).
         assertNull(SkPathOps.AsWinding(p))
     }
 
