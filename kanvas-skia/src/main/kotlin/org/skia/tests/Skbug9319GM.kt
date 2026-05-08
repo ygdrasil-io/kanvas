@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
 import org.skia.foundation.SkClipOp
@@ -38,21 +39,18 @@ public class Skbug9319GM : GM() {
 
         val r = SkRect.MakeXYWH(10f, 10f, 100f, 100f)
 
-        run {
-            val saveCount = c.save()
-            c.clipRect(r, SkClipOp.kDifference)
-            c.drawRect(r, p)
-            c.restoreToCount(saveCount)
+        // Iso with upstream `SkAutoCanvasRestore acr(canvas, true);` (×2).
+        c.withSave {
+            clipRect(r, SkClipOp.kDifference)
+            drawRect(r, p)
         }
 
         c.translate(0f, 120f)
 
-        run {
+        c.withSave {
             val rr = SkRRect.MakeRectXY(r, 0.1f, 0.1f)
-            val saveCount = c.save()
-            c.clipRRect(rr, SkClipOp.kDifference)
-            c.drawRRect(rr, p)
-            c.restoreToCount(saveCount)
+            clipRRect(rr, SkClipOp.kDifference)
+            drawRRect(rr, p)
         }
     }
 }

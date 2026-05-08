@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.core.withSave
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
@@ -35,18 +36,19 @@ public class Bug5252GM : GM() {
 
         for (i in 0 until 15) {
             for (j in 0 until 10) {
-                c.save()
-                c.translate(i * 15f, j * 20f)
-                c.drawRect(SkRect.MakeXYWH(5f, 5f, 10f, 15f), pa)
-                c.drawPath(
-                    SkPathBuilder()
-                        .moveTo(6f, 6f)
-                        .cubicTo(14f, 10f, 13f, 12f, 10f, 12f)
-                        .cubicTo(7f, 15f, 8f, 17f, 14f, 18f)
-                        .detach(),
-                    pa,
-                )
-                c.restore()
+                // Iso with upstream `SkAutoCanvasRestore acs(canvas, true);`.
+                c.withSave {
+                    translate(i * 15f, j * 20f)
+                    drawRect(SkRect.MakeXYWH(5f, 5f, 10f, 15f), pa)
+                    drawPath(
+                        SkPathBuilder()
+                            .moveTo(6f, 6f)
+                            .cubicTo(14f, 10f, 13f, 12f, 10f, 12f)
+                            .cubicTo(7f, 15f, 8f, 17f, 14f, 18f)
+                            .detach(),
+                        pa,
+                    )
+                }
             }
         }
     }
