@@ -144,6 +144,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      */
     public fun drawPaint(ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
         val mode = paint.blendMode
+        val blender = paint.blender
         val l = clip.left.coerceAtLeast(0)
         val t = clip.top.coerceAtLeast(0)
         val r = clip.right.coerceAtMost(width)
@@ -196,7 +197,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val effA = if (paintAlpha == 0xFF) srcA
                             else (srcA * paintAlpha + 127) / 255
                         if (effA == 0) continue
-                        blend(l + xOff, y, (effA shl 24) or (src and 0x00FFFFFF), mode)
+                        dispatchBlend(l + xOff, y, (effA shl 24) or (src and 0x00FFFFFF), mode, blender)
                     }
                 }
             }
@@ -213,7 +214,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val color = transformPaintColor(applyColorFilter(paint.colorFilter, paint.color))
         if (SkColorGetA(color) == 0 && !modeAffectsZeroAlphaSrc(mode)) return
         for (y in t until b) {
-            for (x in l until r) blend(x, y, color, mode)
+            for (x in l until r) dispatchBlend(x, y, color, mode, blender)
         }
     }
 
@@ -263,6 +264,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val invArea = 1f / area
 
         val mode = paint.blendMode
+        val blender = paint.blender
         val paintAlpha = SkColorGetA(paint.color)
 
         val a0a = SkColorGetA(c0); val a0r = SkColorGetR(c0)
@@ -287,7 +289,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 val finalA = (ai * paintAlpha + 127) / 255
                 if (finalA == 0 && !modeAffectsZeroAlphaSrc(mode)) continue
                 val src = transformPaintColor(SkColorSetARGB(finalA, ri, gi, bi))
-                blend(x, y, src, mode)
+                dispatchBlend(x, y, src, mode, blender)
             }
         }
     }
@@ -340,6 +342,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val invArea = 1f / area
 
         val mode = paint.blendMode
+        val blender = paint.blender
         val paintAlpha = SkColorGetA(paint.color)
         val haveColors = c0 != null && c1 != null && c2 != null
 
@@ -375,7 +378,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 val src = SkColorSetARGB(
                     finalA, SkColorGetR(combinedRaw), SkColorGetG(combinedRaw), SkColorGetB(combinedRaw),
                 )
-                blend(x, y, src, mode)
+                dispatchBlend(x, y, src, mode, blender)
             }
         }
     }
@@ -443,6 +446,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     ) {
         val paintAlpha = paint?.alpha ?: 0xFF
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
+        val blender = paint?.blender
         // For "normal" modes (kSrcOver et al.), a fully transparent paint
         // alpha makes every src contribution vanish, so we can short-circuit
         // entirely. Modes like kClear / kSrcIn still need to walk the layer
@@ -465,7 +469,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 val sample = src.bitmap.getPixel(x - originX, y - originY)
                 val effective = if (paintAlpha == 0xFF) sample else applyAlpha(sample, paintAlpha)
                 if (effective ushr 24 == 0 && !mustBlendZero) continue
-                blend(x, y, effective, mode)
+                dispatchBlend(x, y, effective, mode, blender)
             }
         }
     }
@@ -554,6 +558,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // short-circuit when a filter is present.
         if (paintAlpha == 0 && colorFilter == null) return
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
+        val blender = paint?.blender
         val maxX = image.width - 1
         val maxY = image.height - 1
 
@@ -590,7 +595,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         if (colorFilter != null) sample = colorFilter.filterColor(sample)
                         if (deferXform) sample = transformPaintColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
-                        blend(px, py, sample, mode)
+                        dispatchBlend(px, py, sample, mode, blender)
                     }
                 }
             }
@@ -613,7 +618,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         if (colorFilter != null) sample = colorFilter.filterColor(sample)
                         if (deferXform) sample = transformPaintColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
-                        blend(px, py, sample, mode)
+                        dispatchBlend(px, py, sample, mode, blender)
                     }
                 }
             }
@@ -732,20 +737,21 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val supers = if (paint.isAntiAlias) 4 else 1
         val resScale = ctm.computeMaxScale().coerceAtLeast(1f)
         val mode = paint.blendMode
+        val blender = paint.blender
 
         when (paint.style) {
             SkPaint.Style.kFill_Style ->
-                fillPath(effectivePath, ctm, clip, color4f, baseA, supers, shader, mode)
+                fillPath(effectivePath, ctm, clip, color4f, baseA, supers, shader, mode, blender)
             SkPaint.Style.kStroke_Style -> {
                 val outline = SkStroker.fromPaint(paint, resScale).stroke(effectivePath)
                 if (outline.isEmpty()) return
-                fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode)
+                fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode, blender)
             }
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillPath(effectivePath, ctm, clip, color4f, baseA, supers, shader, mode)
+                fillPath(effectivePath, ctm, clip, color4f, baseA, supers, shader, mode, blender)
                 val outline = SkStroker.fromPaint(paint, resScale).stroke(effectivePath)
                 if (outline.isEmpty()) return
-                fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode)
+                fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode, blender)
             }
         }
     }
@@ -779,6 +785,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     ) {
         if (path.fillType.isInverse()) return  // out of scope for this slice
         val mode = paint.blendMode
+        val blender = paint.blender
         // Phase 7e — colour filter in sRGB, then xform to working space.
         val effectiveColor = transformPaintColor(
             applyColorFilter(paint.colorFilter, paint.color))
@@ -861,7 +868,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val maskA = blurred[y * maskW + x].toInt() and 0xFF
                         val effA = (paintA * maskA + 127) / 255
                         if (effA == 0 && !mustBlendZero) continue
-                        blend(devX, devY, (effA shl 24) or rgb, mode)
+                        dispatchBlend(devX, devY, (effA shl 24) or rgb, mode, blender)
                     }
                 }
             }
@@ -886,7 +893,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         val r = ((paintR * mul + 127) / 255 + add).coerceAtMost(255)
                         val g = ((paintG * mul + 127) / 255 + add).coerceAtMost(255)
                         val b = ((paintB * mul + 127) / 255 + add).coerceAtMost(255)
-                        blend(devX, devY, (effA shl 24) or (r shl 16) or (g shl 8) or b, mode)
+                        dispatchBlend(devX, devY, (effA shl 24) or (r shl 16) or (g shl 8) or b, mode, blender)
                     }
                 }
             }
@@ -897,13 +904,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         path: SkPath, ctm: SkMatrix,
         clip: SkIRect, color4f: SkColor4f, baseA: Int, supers: Int,
         shader: SkShader?, mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender? = null,
     ) {
         val edges = buildEdges(path, ctm)
         // No edges + non-inverse fill = nothing to draw. Inverse fills
         // still need to flood the clip (no edges → entire clip is "outside
         // the path" → covered).
         if (edges.isEmpty() && !path.fillType.isInverse()) return
-        scanFillPath(edges, path.fillType, clip, color4f, baseA, supers, shader, mode)
+        scanFillPath(edges, path.fillType, clip, color4f, baseA, supers, shader, mode, blender)
     }
 
     /**
@@ -1031,29 +1039,36 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
     private fun drawRectNonAA(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val mode = paint.blendMode
+        val blender = paint.blender
         when (paint.style) {
-            SkPaint.Style.kFill_Style -> fillRect(rect, clip, paint.color, mode)
-            SkPaint.Style.kStroke_Style -> strokeRect(rect, paint.strokeWidth, clip, paint.color, mode)
+            SkPaint.Style.kFill_Style -> fillRect(rect, clip, paint.color, mode, blender)
+            SkPaint.Style.kStroke_Style -> strokeRect(rect, paint.strokeWidth, clip, paint.color, mode, blender)
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillRect(rect, clip, paint.color, mode)
-                strokeRect(rect, paint.strokeWidth, clip, paint.color, mode)
+                fillRect(rect, clip, paint.color, mode, blender)
+                strokeRect(rect, paint.strokeWidth, clip, paint.color, mode, blender)
             }
         }
     }
 
-    private fun fillRect(rect: SkRect, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
+    private fun fillRect(
+        rect: SkRect, clip: SkIRect, color: SkColor, mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender? = null,
+    ) {
         val l = pixelEdge(rect.left).coerceAtLeast(clip.left)
         val t = pixelEdge(rect.top).coerceAtLeast(clip.top)
         val r = pixelEdge(rect.right).coerceAtMost(clip.right)
         val b = pixelEdge(rect.bottom).coerceAtMost(clip.bottom)
         for (y in t until b) {
             for (x in l until r) {
-                blend(x, y, color, mode)
+                dispatchBlend(x, y, color, mode, blender)
             }
         }
     }
 
-    private fun strokeRect(rect: SkRect, strokeWidth: Float, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
+    private fun strokeRect(
+        rect: SkRect, strokeWidth: Float, clip: SkIRect, color: SkColor, mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender? = null,
+    ) {
         if (strokeWidth <= 0f) {
             // Hairline: 1px-wide outline. Skia's AA-off hairline snaps the
             // outline to floor-style integer coords (matches `SkScan::HairLineRgn`).
@@ -1061,10 +1076,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
             val t = floor(rect.top)
             val r = floor(rect.right)
             val b = floor(rect.bottom)
-            drawHLine(l, r + 1, t, clip, color, mode)         // top edge
-            drawHLine(l, r + 1, b, clip, color, mode)         // bottom edge
-            drawVLine(l, t + 1, b, clip, color, mode)         // left edge
-            drawVLine(r, t + 1, b, clip, color, mode)         // right edge
+            drawHLine(l, r + 1, t, clip, color, mode, blender)         // top edge
+            drawHLine(l, r + 1, b, clip, color, mode, blender)         // bottom edge
+            drawVLine(l, t + 1, b, clip, color, mode, blender)         // left edge
+            drawVLine(r, t + 1, b, clip, color, mode, blender)         // right edge
             return
         }
 
@@ -1090,7 +1105,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         for (y in ot until ob) {
             for (x in ol until or) {
                 if (innerEmpty || x < il || x >= ir || y < it || y >= ib) {
-                    blend(x, y, color, mode)
+                    dispatchBlend(x, y, color, mode, blender)
                 }
             }
         }
@@ -1107,17 +1122,21 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
     private fun drawRectAA(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val mode = paint.blendMode
+        val blender = paint.blender
         when (paint.style) {
-            SkPaint.Style.kFill_Style -> fillRectAA(rect, clip, paint.color4f, mode)
-            SkPaint.Style.kStroke_Style -> strokeRectAA(rect, paint.strokeWidth, clip, paint.color4f, mode)
+            SkPaint.Style.kFill_Style -> fillRectAA(rect, clip, paint.color4f, mode, blender)
+            SkPaint.Style.kStroke_Style -> strokeRectAA(rect, paint.strokeWidth, clip, paint.color4f, mode, blender)
             SkPaint.Style.kStrokeAndFill_Style -> {
-                fillRectAA(rect, clip, paint.color4f, mode)
-                strokeRectAA(rect, paint.strokeWidth, clip, paint.color4f, mode)
+                fillRectAA(rect, clip, paint.color4f, mode, blender)
+                strokeRectAA(rect, paint.strokeWidth, clip, paint.color4f, mode, blender)
             }
         }
     }
 
-    private fun fillRectAA(rect: SkRect, clip: SkIRect, color4f: SkColor4f, mode: SkBlendMode) {
+    private fun fillRectAA(
+        rect: SkRect, clip: SkIRect, color4f: SkColor4f, mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender? = null,
+    ) {
         if (rect.right <= rect.left || rect.bottom <= rect.top) return
         val baseA = (color4f.fA * 255f + 0.5f).toInt().coerceIn(0, 255)
         if (baseA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
@@ -1136,7 +1155,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // round-trip — `setAlphaf(0.3f)` survives end-to-end.
         // Phase 6s — F16 path covers all 29 modes (was: kSrcOver only).
         // Non-srcOver modes route through [blendF16PremulMode].
-        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm) {
+        // Phase D2.0 — custom blenders fall back to the 8-bit path
+        // (the F16 lane only knows SkBlendMode).
+        val customBlender = blender != null && blender !is org.skia.foundation.SkBlendModeBlender
+        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm && !customBlender) {
             val src = FloatArray(4)
             colorToF16Premul(color4f, src)
             val sr = src[0]; val sg = src[1]; val sb = src[2]; val sa = src[3]
@@ -1168,7 +1190,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 if (cx <= 0f) continue
                 val effA = scaleAlpha(baseA, cx * cy)
                 if (effA == 0) continue
-                blend(x, y, (effA shl 24) or rgb, mode)
+                dispatchBlend(x, y, (effA shl 24) or rgb, mode, blender)
             }
         }
     }
@@ -1179,7 +1201,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * axis-aligned rects this lights up the same pixel set as Skia's
      * `SkScan::AntiHairLineRgn` with matching coverage at half-integer edges.
      */
-    private fun strokeRectAA(rect: SkRect, strokeWidth: Float, clip: SkIRect, color4f: SkColor4f, mode: SkBlendMode) {
+    private fun strokeRectAA(
+        rect: SkRect, strokeWidth: Float, clip: SkIRect, color4f: SkColor4f, mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender? = null,
+    ) {
         val w = if (strokeWidth <= 0f) 1f else strokeWidth
         val half = w * 0.5f
         val ol = rect.left - half
@@ -1200,7 +1225,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val iy1 = ceil(ob).coerceAtMost(clip.bottom)
 
         // Phase 6s — F16 path covers all 29 modes (was: kSrcOver only).
-        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm) {
+        // Phase D2.0 — custom blenders fall back to the 8-bit path
+        // (the F16 lane only knows SkBlendMode).
+        val customBlender = blender != null && blender !is org.skia.foundation.SkBlendModeBlender
+        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm && !customBlender) {
             val src = FloatArray(4)
             colorToF16Premul(color4f, src)
             val sr = src[0]; val sg = src[1]; val sb = src[2]; val sa = src[3]
@@ -1237,7 +1265,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 if (cov <= 0f) continue
                 val effA = scaleAlpha(baseA, cov)
                 if (effA == 0) continue
-                blend(x, y, (effA shl 24) or rgb, mode)
+                dispatchBlend(x, y, (effA shl 24) or rgb, mode, blender)
             }
         }
     }
@@ -1604,6 +1632,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         edges: List<Edge>, fillType: SkPathFillType, clip: SkIRect,
         color4f: SkColor4f, baseA: Int, supers: Int,
         shader: SkShader?, mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender? = null,
     ) {
         // Lazily computed on entry to the legacy 8-bit path. The F16 fast
         // path consumes [color4f] directly and never pays the byte
@@ -1656,7 +1685,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val isF16 = bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm
         // Phase 6s — F16 path now covers all 29 modes (was: kSrcOver only).
         // Non-srcOver modes route through [blendF16PremulMode].
-        val useF16Path = isF16
+        // Phase D2.0 — custom blenders (anything that's not the
+        // SkBlendModeBlender mode-tag wrapper) force the 8-bit path
+        // through [dispatchBlend], so the blender's blend() runs
+        // through the lossy round-trip rather than the F16 fast lane.
+        // The F16 lane only knows about SkBlendMode ; teaching it to
+        // run an arbitrary [SkBlender] is a future slice.
+        val customBlender = blender != null && blender !is org.skia.foundation.SkBlendModeBlender
+        val useF16Path = isF16 && !customBlender
         val useF16ShaderPath = shader != null && useF16Path
         val useF16SolidPath = shader == null && useF16Path
         val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
@@ -1764,7 +1800,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         else (srcA * samples * baseA + (maxSamples * 255) / 2) / (maxSamples * 255)
                     if (effA == 0) continue
                     val srcRgb = src and 0x00FFFFFF
-                    blend(clip.left + xOff, py, (effA shl 24) or srcRgb, mode)
+                    dispatchBlend(clip.left + xOff, py, (effA shl 24) or srcRgb, mode, blender)
                 }
             } else {
                 // Solid-colour path (Phase 1–4).
@@ -1774,7 +1810,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     val effA = if (samples >= maxSamples) baseA
                         else (baseA * samples + maxSamples / 2) / maxSamples
                     if (effA == 0) continue
-                    blend(clip.left + xOff, py, (effA shl 24) or rgb, mode)
+                    dispatchBlend(clip.left + xOff, py, (effA shl 24) or rgb, mode, blender)
                 }
             }
         }
@@ -1830,18 +1866,24 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
     // Hairline / span helpers (Phase 1).
     // --------------------------------------------------------------------
 
-    private fun drawHLine(x0: Int, x1: Int, y: Int, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
+    private fun drawHLine(
+        x0: Int, x1: Int, y: Int, clip: SkIRect, color: SkColor, mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender? = null,
+    ) {
         if (y < clip.top || y >= clip.bottom) return
         val l = x0.coerceAtLeast(clip.left)
         val r = x1.coerceAtMost(clip.right)
-        for (x in l until r) blend(x, y, color, mode)
+        for (x in l until r) dispatchBlend(x, y, color, mode, blender)
     }
 
-    private fun drawVLine(x: Int, y0: Int, y1: Int, clip: SkIRect, color: SkColor, mode: SkBlendMode) {
+    private fun drawVLine(
+        x: Int, y0: Int, y1: Int, clip: SkIRect, color: SkColor, mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender? = null,
+    ) {
         if (x < clip.left || x >= clip.right) return
         val t = y0.coerceAtLeast(clip.top)
         val b = y1.coerceAtMost(clip.bottom)
-        for (y in t until b) blend(x, y, color, mode)
+        for (y in t until b) dispatchBlend(x, y, color, mode, blender)
     }
 
     /**
@@ -1925,6 +1967,87 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val dst = bitmap.getPixel(x, y)
         val out = blendPixel(src, dst, mode)
         bitmap.setPixel(x, y, out)
+    }
+
+    /**
+     * Phase D2.0 — paint-aware blend dispatch. Routes between :
+     *  - the legacy [blend] fast paths when the paint carries no
+     *    custom blender (the common case ; `null` blender or a
+     *    [org.skia.foundation.SkBlendModeBlender] tag) ;
+     *  - the [blendCustom] generic path when an arbitrary
+     *    [org.skia.foundation.SkBlender] is installed.
+     *
+     * Call sites read `paint.blendMode` and `paint.blender` once at
+     * the top of their loop, then call this dispatch per-pixel.
+     * The legacy path is preserved bit-iso when `blender == null` ;
+     * a `SkBlendModeBlender` is treated as the equivalent
+     * [SkBlendMode] (so `paint.blender = SkBlender.Mode(m)` is
+     * indistinguishable from `paint.blendMode = m`).
+     */
+    private fun dispatchBlend(
+        x: Int,
+        y: Int,
+        src: SkColor,
+        mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender?,
+    ) {
+        when (blender) {
+            null -> blend(x, y, src, mode)
+            is org.skia.foundation.SkBlendModeBlender -> blend(x, y, src, blender.mode)
+            else -> blendCustom(x, y, src, blender)
+        }
+    }
+
+    /**
+     * Generic per-pixel custom blender dispatch. Reads `dst` from
+     * the bitmap, converts both `src` and `dst` to unpremul
+     * [SkColor4f], runs [org.skia.foundation.SkBlender.blend], and
+     * writes the result back via the colour-type-aware setPixel.
+     *
+     * Lossy round-trip on F16 devices (~1 ulp per channel due to
+     * the byte-color → float → byte conversion at the
+     * `bitmap.setPixel` boundary) ; acceptable for D2.0 since the
+     * GMs unblocked by custom blenders (Arithmetic + future
+     * runtime effects) are 8-bit by default. A future slice may
+     * specialise an F16 path that keeps full precision.
+     *
+     * **Clip modulation** : the AA-clip coverage is applied before
+     * the blender call, mirroring [blend]'s behaviour exactly.
+     */
+    private fun blendCustom(
+        x: Int,
+        y: Int,
+        srcIn: SkColor,
+        blender: org.skia.foundation.SkBlender,
+    ) {
+        // AA-clip modulation parity with [blend].
+        val srcByte: SkColor
+        if (activeAaClip != null) {
+            val cov = clipCoverage(x, y)
+            if (cov == 0) {
+                // Custom blenders don't get an "affects-zero-alpha-src"
+                // shortcut yet — assume they always affect dst until we
+                // expose a per-blender flag (parity with upstream's
+                // `SkRuntimeEffect.kAlphaUnchanged_Flag` would let us
+                // skip when the blender provably preserves alpha).
+                srcByte = SkColorSetARGB(0, 0, 0, 0)
+            } else if (cov == 255) {
+                srcByte = srcIn
+            } else {
+                val newA = (SkColorGetA(srcIn) * cov + 127) / 255
+                srcByte = SkColorSetARGB(
+                    newA, SkColorGetR(srcIn), SkColorGetG(srcIn), SkColorGetB(srcIn),
+                )
+            }
+        } else {
+            srcByte = srcIn
+        }
+
+        val dstByte = bitmap.getPixel(x, y)
+        val src4f = org.skia.foundation.SkColor4f.FromColor(srcByte)
+        val dst4f = org.skia.foundation.SkColor4f.FromColor(dstByte)
+        val out4f = blender.blend(src4f, dst4f)
+        bitmap.setPixel(x, y, out4f.toSkColor())
     }
 
     /**
