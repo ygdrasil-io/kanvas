@@ -61,6 +61,51 @@ class SkPathOpsAsWindingTest {
         assertFalse(isFlatTree(root))
     }
 
+    // ─── getDirection (D1.2.h.6.4) ──────────────────────────────
+    //
+    // Note : the upstream `Contour::Direction` enum is the
+    // mathematical direction (Y-up convention), while
+    // `SkPathDirection.kCW` describes the visual screen-coord
+    // direction (Y-down). The two are flipped : a `addRect(kCW)`
+    // tracing visually clockwise in screen coords plots
+    // mathematically counter-clockwise on a Y-up plot, so
+    // [getDirection] returns [AsWindingDirection.kCCW] for such a
+    // rect. This matches `OpAsWinding::getDirection`'s
+    // `total_signed_area < 0 ? kCCW : kCW` convention.
+
+    @Test
+    fun `getDirection on visual-CW rect returns kCCW (math direction)`() {
+        val p = SkPathBuilder()
+            .addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f), org.skia.foundation.SkPathDirection.kCW)
+            .detach()
+        val contours = contourBounds(p)
+        assertEquals(1, contours.size)
+        assertEquals(AsWindingDirection.kCCW, getDirection(p, contours[0]))
+    }
+
+    @Test
+    fun `getDirection on visual-CCW rect returns kCW (math direction)`() {
+        val p = SkPathBuilder()
+            .addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f), org.skia.foundation.SkPathDirection.kCCW)
+            .detach()
+        val contours = contourBounds(p)
+        assertEquals(1, contours.size)
+        assertEquals(AsWindingDirection.kCW, getDirection(p, contours[0]))
+    }
+
+    @Test
+    fun `getDirection ignores other contours via verbStart-verbEnd`() {
+        // Two contours : first visual-CW (math kCCW), second visual-CCW (math kCW).
+        val p = SkPathBuilder()
+            .addRect(SkRect.MakeLTRB(0f, 0f, 100f, 100f), org.skia.foundation.SkPathDirection.kCW)
+            .addRect(SkRect.MakeLTRB(20f, 20f, 80f, 80f), org.skia.foundation.SkPathDirection.kCCW)
+            .detach()
+        val contours = contourBounds(p)
+        assertEquals(2, contours.size)
+        assertEquals(AsWindingDirection.kCCW, getDirection(p, contours[0]))
+        assertEquals(AsWindingDirection.kCW, getDirection(p, contours[1]))
+    }
+
     @Test
     fun `inParent promotion — inner inserted before outer gets re-parented`() {
         // Same setup as nested, but insert inner first. inParent

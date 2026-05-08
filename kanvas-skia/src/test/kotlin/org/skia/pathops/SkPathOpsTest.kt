@@ -307,15 +307,29 @@ class SkPathOpsTest {
     }
 
     @Test
-    fun `AsWinding on nested contour path falls through to null (deferred)`() {
-        // Outer rect contains inner rect (donut hole pattern).
+    fun `AsWinding on same-direction-nested contour path falls through to null (h_6_5+)`() {
+        // Outer rect contains inner rect, both CW (default direction).
+        // Same direction → reversal needed → null (deferred).
         val p = SkPathBuilder()
             .setFillType(org.skia.foundation.SkPathFillType.kEvenOdd)
             .addRect(SkRect.MakeLTRB(0f, 0f, 100f, 100f))
             .addRect(SkRect.MakeLTRB(20f, 20f, 80f, 80f))
             .detach()
-        // Nested → needs reverse-marker pass + reverseAddPath, deferred.
         assertNull(SkPathOps.AsWinding(p))
+    }
+
+    @Test
+    fun `AsWinding on alternating-direction-nested contours uses 2-level fast path`() {
+        // Outer CW + inner CCW (donut hole pattern that's already
+        // winding-equivalent). makeFillType is correct.
+        val p = SkPathBuilder()
+            .setFillType(org.skia.foundation.SkPathFillType.kEvenOdd)
+            .addRect(SkRect.MakeLTRB(0f, 0f, 100f, 100f), org.skia.foundation.SkPathDirection.kCW)
+            .addRect(SkRect.MakeLTRB(20f, 20f, 80f, 80f), org.skia.foundation.SkPathDirection.kCCW)
+            .detach()
+        val r = SkPathOps.AsWinding(p)
+        assertNotNull(r)
+        assertEquals(org.skia.foundation.SkPathFillType.kWinding, r!!.fillType)
     }
 
     @Test
