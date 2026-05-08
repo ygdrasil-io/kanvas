@@ -310,6 +310,34 @@ public object SkImageFilters {
         color: SkColor,
         input: SkImageFilter? = null,
     ): SkImageFilter = SkDropShadowOnlyImageFilter(dx, dy, sigmaX, sigmaY, color, input)
+
+    // ─── C1.4 — Morphology (Erode / Dilate) ──────────────────────────
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Erode(rx, ry, input)` —
+     * morphological erosion : each output pixel is the per-channel
+     * **minimum** over a `(2·rx + 1) × (2·ry + 1)` rectangular
+     * neighbourhood of [input]. OOB samples are treated as
+     * transparent black, so the output shrinks at the input's edges.
+     *
+     * `rx == 0 && ry == 0` is a no-op (returns input unchanged).
+     * Negative radii are coerced to 0.
+     */
+    public fun Erode(rx: Int, ry: Int, input: SkImageFilter? = null): SkImageFilter =
+        SkMorphologyImageFilter(SkMorphologyImageFilter.Op.kErode, rx.coerceAtLeast(0), ry.coerceAtLeast(0), input)
+
+    /**
+     * Mirrors Skia's `SkImageFilters::Dilate(rx, ry, input)` —
+     * morphological dilation : each output pixel is the per-channel
+     * **maximum** over a `(2·rx + 1) × (2·ry + 1)` rectangular
+     * neighbourhood of [input]. The output bbox is the input bbox
+     * expanded by `(rx, ry)` on each side to capture the dilated
+     * pixels that didn't exist in the input.
+     *
+     * `rx == 0 && ry == 0` is a no-op. Negative radii are coerced to 0.
+     */
+    public fun Dilate(rx: Int, ry: Int, input: SkImageFilter? = null): SkImageFilter =
+        SkMorphologyImageFilter(SkMorphologyImageFilter.Op.kDilate, rx.coerceAtLeast(0), ry.coerceAtLeast(0), input)
 }
 
 // -- Internal concrete implementations --------------------------------------
@@ -1364,6 +1392,108 @@ internal class SkDropShadowOnlyImageFilter(
             image = blurred.image,
             offsetX = upstream.offsetX + blurred.offsetX + sdx,
             offsetY = upstream.offsetY + blurred.offsetY + sdy,
+        )
+    }
+}
+
+// -- C1.4 Morphology (Erode + Dilate) ---------------------------------------
+
+/**
+ * `SkMorphologyImageFilter` — shared implementation for `Erode`
+ * (per-channel min) and `Dilate` (per-channel max). The kernel is
+ * a `(2·rx + 1) × (2·ry + 1)` rectangle centred on each output
+ * pixel.
+ *
+ * **Algorithm** : straightforward `O(W · H · (2·rx + 1) · (2·ry + 1))`
+ * brute-force scan. Upstream Skia uses van Herk-Gil-Werman
+ * (sliding-window deque) for `O(W · H)` independence from kernel
+ * size ; we ship the simpler version because :
+ *  - The test surface uses small radii (≤ 4 px).
+ *  - The output is identical regardless of the algorithm.
+ *  - A future PR can swap in van Herk if a GM exercises large radii.
+ *
+ * **Boundary semantic** : OOB samples are treated as transparent
+ * black `(0, 0, 0, 0)`. For `Erode` (min) this means edges shrink ;
+ * for `Dilate` (max) this means transparent samples don't pollute
+ * the result, only push it outward where ANY in-bounds sample
+ * exists.
+ *
+ * **Output bbox** :
+ *  - `Erode` : same as input bbox (the eroded region is a subset).
+ *  - `Dilate` : input bbox expanded by `(rx, ry)` on each side to
+ *    accommodate the new dilated pixels.
+ */
+internal class SkMorphologyImageFilter(
+    private val op: Op,
+    private val rx: Int,
+    private val ry: Int,
+    private val input: SkImageFilter?,
+) : SkImageFilter() {
+
+    enum class Op { kErode, kDilate }
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
+        val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
+        if (rx == 0 && ry == 0) return upstream
+
+        val upImg = upstream.image
+        val upW = upImg.width
+        val upH = upImg.height
+        if (upW == 0 || upH == 0) return upstream
+
+        // Dilate expands by (rx, ry) ; erode keeps the input bbox.
+        val padX = if (op == Op.kDilate) rx else 0
+        val padY = if (op == Op.kDilate) ry else 0
+        val outW = upW + 2 * padX
+        val outH = upH + 2 * padY
+        val outBuf = IntArray(outW * outH)
+
+        val isErode = op == Op.kErode
+
+        for (oy in 0 until outH) {
+            // Map output (ox, oy) → upstream local centre (sxC, syC).
+            val syC = oy - padY
+            for (ox in 0 until outW) {
+                val sxC = ox - padX
+
+                // Init accumulators : 255 (max byte) for min, 0 for max.
+                var bestA = if (isErode) 255 else 0
+                var bestR = if (isErode) 255 else 0
+                var bestG = if (isErode) 255 else 0
+                var bestB = if (isErode) 255 else 0
+
+                for (j in -ry..ry) {
+                    val sy = syC + j
+                    val syIn = sy in 0 until upH
+                    for (i in -rx..rx) {
+                        val sx = sxC + i
+                        val sxIn = sx in 0 until upW
+                        val px = if (sxIn && syIn) upImg.peekPixel(sx, sy) else 0
+                        val a = (px ushr 24) and 0xFF
+                        val r = (px ushr 16) and 0xFF
+                        val g = (px ushr 8) and 0xFF
+                        val b = px and 0xFF
+                        if (isErode) {
+                            if (a < bestA) bestA = a
+                            if (r < bestR) bestR = r
+                            if (g < bestG) bestG = g
+                            if (b < bestB) bestB = b
+                        } else {
+                            if (a > bestA) bestA = a
+                            if (r > bestR) bestR = r
+                            if (g > bestG) bestG = g
+                            if (b > bestB) bestB = b
+                        }
+                    }
+                }
+                outBuf[oy * outW + ox] = (bestA shl 24) or (bestR shl 16) or (bestG shl 8) or bestB
+            }
+        }
+
+        return FilterResult(
+            SkImage(outW, outH, outBuf),
+            upstream.offsetX - padX,
+            upstream.offsetY - padY,
         )
     }
 }

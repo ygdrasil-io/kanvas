@@ -319,19 +319,54 @@ build on).
 **Status** : full kanvas-skia suite **2495 / 2495 green**
 (+16 vs C1.2 ; 16 new tests).
 
-### C1.4 — Morphology ✏️ ~300 LOC
+### C1.4 — Morphology ✅ shipped
 
-- **`Erode(rx, ry, input)`** — replace each pixel with the per-channel
-  minimum over a disk of radius `(rx, ry)`. Implementation :
-  separable horizontal + vertical pass with a sliding-window
-  min-deque (van Herk / Gil-Werman algorithm), `O(N)` per pass.
-  ~150 LOC.
-- **`Dilate(rx, ry, input)`** — same with max instead of min.
-  Sharing the deque kernel as `MorphologyOp.kErode` /
-  `MorphologyOp.kDilate`, the actual delta is ~30 LOC.
+Both ops share a single
+[SkMorphologyImageFilter](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
+class with an `Op.kErode` / `Op.kDilate` enum.
+
+- **`Erode(rx, ry, input)`** — per-channel **min** over a
+  `(2·rx + 1) × (2·ry + 1)` rectangular kernel. OOB samples are
+  treated as transparent black, so edges shrink. Output bbox = input
+  bbox.
+- **`Dilate(rx, ry, input)`** — per-channel **max** over the same
+  kernel. Output bbox = input bbox **expanded by `(rx, ry)` on each
+  side** to capture the dilated growth region.
+
+**Implementation deltas vs plan** :
+- Plan said "separable horizontal + vertical pass with a sliding-
+  window min-deque (van Herk / Gil-Werman), O(N) per pass". Shipped
+  ships a **brute-force `O(W · H · (2·rx + 1) · (2·ry + 1))` scan**
+  instead. Justification :
+  - Output is **identical** regardless of algorithm (min/max are
+    associative).
+  - The test surface uses small radii (≤ 4 px). `morphology.cpp` GM
+    uses radii up to 5 px. Brute-force at 1024² with rx=5 is
+    ~120M comparisons — sub-second on a single thread.
+  - A future PR can swap in van Herk if a GM exercises large radii
+    (none do today).
+- Negative radii are coerced to 0 (no-op). Upstream Skia asserts on
+  negative radii ; we degrade gracefully.
+
+**Tests** :
+[SkImageFiltersMorphologyTest.kt](kanvas-skia/src/test/kotlin/org/skia/foundation/SkImageFiltersMorphologyTest.kt)
+(10) — Erode (rx=ry=0 no-op, rx=1 wipes edge columns, ry=1 wipes
+edge rows, single-dot collapses to nothing), Dilate (rx=ry=0 no-op,
+single-dot grows to 3×3 square, output offset shifts by -radius,
+opaque rect interior preserved), negative-radius coercion (both ops).
+
+**LOC** : ~135 main delta on
+[SkImageFilters.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
++ ~145 test = **280 total** (cf. plan estimate ~300 main + ~150
+test ; main came in **under budget** because the brute-force scan
+is more compact than van Herk-Gil-Werman, test came in roughly on
+budget — both ops share a parameterised test pattern).
 
 **GMs unblocked** : `morphology.cpp` (~3 GMs), and ~5 more in the
 `imagefilters*` cluster that compose Erode / Dilate.
+
+**Status** : full kanvas-skia suite **2520 / 2520 green**
+(+10 vs C1.3 ; 10 new tests).
 
 ### C1.5 — DisplacementMap ✏️ ~200 LOC
 
@@ -408,7 +443,7 @@ where possible.
 | C1.1 source / passthrough ✅ | **219** (planned ~250) | **257** (planned ~150) | foundation for higher slices |
 | C1.2 Tile + Magnifier ✅ | **125** (planned ~250) | **213** (planned ~120) | 3 |
 | C1.3 Arithmetic family ✅ | **352** (planned ~300) | **258** (planned ~150) | 3 |
-| C1.4 Morphology | ~300 | ~150 | ~8 |
+| C1.4 Morphology ✅ | **135** (planned ~300) | **145** (planned ~150) | ~8 |
 | C1.5 DisplacementMap | ~200 | ~120 | 5 |
 | C1.6 MatrixConvolution | ~250 | ~150 | 5 |
 | C1.7 Lighting (6 variants) | ~1200 | ~600 | ~6 |
