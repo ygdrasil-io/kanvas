@@ -499,9 +499,29 @@ manageable while reaching multi-format parity.
     out-of-order emission, geometry validation). Full kanvas-skia
     suite **2133 / 2133 green**.
 
-- **D3.3** — GIF + BMP + WBMP via `imageio`.
-  - **LOC** : ~250 ensemble.
-  - GIF includes optional animated extension (defer animation).
+- **D3.3** ✅ — GIF + BMP + WBMP via `imageio`. Three sibling
+  decoders under `org.skia.codec.gif` /
+  [`bmp`](kanvas-skia/src/main/kotlin/org/skia/codec/bmp/SkBmpCodec.kt)
+  /
+  [`wbmp`](kanvas-skia/src/main/kotlin/org/skia/codec/wbmp/SkWbmpCodec.kt),
+  each parallel in shape to [SkJpegCodec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/jpeg/SkJpegCodec.kt)
+  : sniff the format-specific signature, delegate the bitstream
+  decode to ImageIO, and emit `kRGBA_8888 / kUnpremul / sRGB`. None
+  of the three formats carry an ICC profile in practice so the
+  codecs return `null` from `getICCProfile`.
+  GIF animation is **deferred** as the plan calls out — only the
+  first frame is decoded. WBMP signature is the loose upstream
+  triple `(type==0, fixedHeader & 0x9F == 0, valid VLQ width/height)` ;
+  it is registered last in `SkCodec.Decoders` so every other
+  format with a stronger magic gets first refusal.
+  - **LOC** : ~298 main + ~219 test = 517 total (cf. plan estimate
+    ~250 — overage covers the parallel-but-distinct kdoc per format
+    and the WBMP VLQ header walker).
+  - **Tests** : `SkGifCodecTest` (4), `SkBmpCodecTest` (4 — incl.
+    24-bit BMP byte-identical round-trip), `SkWbmpCodecTest` (4 —
+    incl. a "loose magic" rejection case for `00 00`-prefixed
+    non-WBMP bytes). 12/12 green ; full kanvas-skia suite
+    **2189 / 2189 green**.
 
 - **D3.4** — WEBP (no `imageio` support).
   - Option A : pure-Kotlin port of libwebp's lossless decoder

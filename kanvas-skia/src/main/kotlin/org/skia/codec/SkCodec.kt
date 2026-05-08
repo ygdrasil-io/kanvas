@@ -1,7 +1,10 @@
 package org.skia.codec
 
+import org.skia.codec.bmp.SkBmpCodec
+import org.skia.codec.gif.SkGifCodec
 import org.skia.codec.jpeg.SkJpegCodec
 import org.skia.codec.png.SkPngCodec
+import org.skia.codec.wbmp.SkWbmpCodec
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
 import org.skia.math.SkIRect
@@ -168,6 +171,13 @@ public abstract class SkCodec internal constructor() {
         internal val Decoders: List<Decoder> = listOf(
             SkPngCodec.Decoder,
             SkJpegCodec.Decoder,
+            SkGifCodec.Decoder,
+            SkBmpCodec.Decoder,
+            // WBMP last : its signature ("type 0, fixed-header byte
+            // with bits 0..4+7 zero, valid VLQ width/height") is
+            // looser than every other format above, so we let strong
+            // signatures match first.
+            SkWbmpCodec.Decoder,
         )
     }
 
