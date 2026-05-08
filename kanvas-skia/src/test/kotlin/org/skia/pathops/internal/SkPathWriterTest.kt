@@ -211,4 +211,93 @@ class SkPathWriterTest {
         w.deferredMove(a)
         assertFalse(w.isClosed())
     }
+
+    // ─── assemble (D1.2.i.2) ──────────────────────────────────────
+
+    @Test
+    fun `assemble closes a single open partial with a diagonal`() {
+        val w = SkPathWriter(SkPathFillType.kWinding)
+        val a = ptT(0.0, pt(0f, 0f))
+        val b = ptT(1.0, pt(10f, 0f))
+        val c = ptT(2.0, pt(5f, 10f))
+        // No closing pt-T in a's opp loop — the contour stays open and
+        // is queued as a partial.
+        w.deferredMove(a)
+        w.deferredLine(b)
+        w.deferredLine(c)
+        w.finishContour()
+        assertTrue(w.someAssemblyRequired())
+        w.assemble()
+        val path = w.nativePath()
+        // Single partial : assemble matches the start to the end of the
+        // same partial, emitting the contour as-is and adding a close.
+        assertTrue(path.isLastContourClosed())
+        assertEquals(2, path.verbs.count { it == SkPath.Verb.kLine })
+    }
+
+    @Test
+    fun `assemble stitches two partials sharing endpoints (non-flip)`() {
+        val w = SkPathWriter(SkPathFillType.kWinding)
+        // partial0 : A (0,0) → B (10,0).
+        w.deferredMove(ptT(0.0, pt(0f, 0f)))
+        w.deferredLine(ptT(1.0, pt(10f, 0f)))
+        w.finishContour()
+        // partial1 : B' (10, 0.01) → A' (0, 0.01) — running right-to-left
+        // with both endpoints near partial0's, but in opposite direction.
+        // The closest pairs are (A↔A') and (B↔B'), each crossing partials.
+        w.deferredMove(ptT(2.0, pt(10f, 0.01f)))
+        w.deferredLine(ptT(3.0, pt(0f, 0.01f)))
+        w.finishContour()
+        assertTrue(w.someAssemblyRequired())
+        w.assemble()
+        val path = w.nativePath()
+        // After assemble : A → B → B' (kExtend, lineTo) → A' (kExtend) → close.
+        assertTrue(path.isLastContourClosed())
+        assertEquals(3, path.verbs.count { it == SkPath.Verb.kLine })
+    }
+
+    @Test
+    fun `assemble stitches two partials with shared starts (flip path)`() {
+        val w = SkPathWriter(SkPathFillType.kWinding)
+        // partial0 : A (0,0) → B (10,0).
+        w.deferredMove(ptT(0.0, pt(0f, 0f)))
+        w.deferredLine(ptT(1.0, pt(10f, 0f)))
+        w.finishContour()
+        // partial1 : A' (0, 0.01) → B' (10, 0.01) — running left-to-right
+        // parallel to partial0. Both starts and both ends coincide, so
+        // assemble pairs (A,A') as start↔start and (B,B') as end↔end —
+        // the "flip" case that exercises [reverseExtend].
+        w.deferredMove(ptT(2.0, pt(0f, 0.01f)))
+        w.deferredLine(ptT(3.0, pt(10f, 0.01f)))
+        w.finishContour()
+        assertTrue(w.someAssemblyRequired())
+        w.assemble()
+        val path = w.nativePath()
+        // After assemble : A → B → B' (reverseExtend → lineTo) → A' → close.
+        assertTrue(path.isLastContourClosed())
+        assertEquals(3, path.verbs.count { it == SkPath.Verb.kLine })
+    }
+
+    @Test
+    fun `reverseExtend preserves the quad control point`() {
+        val w = SkPathWriter(SkPathFillType.kWinding)
+        // partial0 : moveTo(A) ; quadTo(c=(5,5), B).
+        val a = ptT(0.0, pt(0f, 0f))
+        val b = ptT(1.0, pt(10f, 0f))
+        w.deferredMove(a)
+        w.quadTo(pt(5f, 5f), b)
+        w.finishContour()
+        // partial1 : line A' → B' (flip case — both starts and both ends
+        // align). assemble walks partial0 forward (emitting the quad)
+        // then partial1 reversed via reverseExtend.
+        w.deferredMove(ptT(2.0, pt(0f, 0.01f)))
+        w.deferredLine(ptT(3.0, pt(10f, 0.01f)))
+        w.finishContour()
+        w.assemble()
+        val path = w.nativePath()
+        assertTrue(path.isLastContourClosed())
+        // The quad survives the assembly — emitted once during partial0's
+        // forward walk.
+        assertEquals(1, path.verbs.count { it == SkPath.Verb.kQuad })
+    }
 }
