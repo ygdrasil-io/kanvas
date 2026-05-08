@@ -148,7 +148,7 @@ class SkRuntimeEffectDispatchTest {
             srcColor: SkColor4f?,
             dstColor: SkColor4f?,
             uniforms: ByteBuffer,
-            childResolvers: Array<(SkPoint) -> SkColor4f>,
+            children: Array<ChildResolver>,
         ): SkColor4f = SkColor4f.kBlack
     }
 
