@@ -324,19 +324,33 @@ class SkPathOpsCommonTest {
     // ─── FindSortableTop stub / bridgeOp skeleton (D1.2.h.5.4) ────
 
     @Test
-    fun `FindSortableTop stub returns null until winding suite lands`() {
+    fun `FindSortableTop returns null on an empty contour list`() {
         val head = newContourList(null)
-        pushLine(head, 0f, 0f, 10f, 0f)
+        // No segments → contour.count() == 0 → contour.findSortableTop
+        // sets fDone and returns null → FindSortableTop returns null.
         assertNull(FindSortableTop(head))
     }
 
     @Test
-    fun `bridgeOp returns true and emits nothing when FindSortableTop is stubbed`() {
+    fun `FindSortableTop returns the head span on a fresh single-line contour`() {
+        val gs = SkOpGlobalState()
+        val head = newContourList(gs)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        // First non-done span on the only segment → fHead. sortableTop
+        // succeeds with empty hit list (single-segment contour, no
+        // ray crossings) → findSortableTop returns fHead.
+        org.junit.jupiter.api.Assertions.assertSame(head.fHead.fHead, FindSortableTop(head))
+    }
+
+    @Test
+    fun `bridgeOp on a fresh single-segment contour completes without emitting`() {
         val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
         val head = newContourList(gs)
         pushLine(head, 0f, 0f, 10f, 0f)
         val writer = SkPathWriter(org.skia.foundation.SkPathFillType.kEvenOdd)
-        // Outer loop short-circuits (FindSortableTop stub → null) → true.
+        // FindSortableTop returns the head span ; bridgeOp's inner
+        // loop sees windValue=0 / oppValue=0 throughout, activeOp
+        // returns false → markAndChaseDone path, no curves emitted.
         assertTrue(bridgeOp(head, org.skia.pathops.SkPathOp.kUnion,
             xorMask = SkPathOpsMask.kWinding,
             xorOpMask = SkPathOpsMask.kWinding,
