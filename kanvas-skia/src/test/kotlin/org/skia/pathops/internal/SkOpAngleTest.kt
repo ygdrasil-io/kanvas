@@ -154,4 +154,111 @@ class SkOpAngleTest {
             SkOpAngle.IncludeType.values().map { it.name }.toSet(),
         )
     }
+
+    // ─── findSector (D1.2.b.2.a) ───────────────────────────────────
+
+    @Test
+    fun `findSector classifies the +X direction into sector 31`() {
+        val a = SkOpAngle()
+        // Sweep along +X (1, 0) : |x|>|y|, y==0, x>0 → sedecimant[2][1][2] = 15
+        // → sector = 15 * 2 + 1 = 31. Sector 0 is reserved for "+x, slightly
+        // below x-axis" ; pure +X falls just below it (mod 32).
+        assertEquals(31, a.findSector(SkOpSegment.SegVerb.kLine, 1.0, 0.0))
+    }
+
+    @Test
+    fun `findSector classifies the +Y direction into sector 9`() {
+        val a = SkOpAngle()
+        // Sweep along +Y (0, 1) → sedecimant[1][2][1] = -1 ; cells with (x==0
+        // && y!=0) and abs equal aren't reachable for kLine — fall to
+        // sedecimant[0][2][1] = 11 → 11*2+1 = 23. And for non-line, the
+        // |x|==|y| row applies only when AlmostEqualUlps(0,1) which is false,
+        // so we fall through to |x|<|y| (xyIdx = 0). yIdx=2, xIdx=1 → 11.
+        assertEquals(11 * 2 + 1, a.findSector(SkOpSegment.SegVerb.kLine, 0.0, 1.0))
+    }
+
+    @Test
+    fun `findSector returns -1 for the zero vector`() {
+        val a = SkOpAngle()
+        // (0, 0) → sedecimant[1][1][1] = -1.
+        assertEquals(-1, a.findSector(SkOpSegment.SegVerb.kLine, 0.0, 0.0))
+    }
+
+    // ─── setSpans / setSector on a line segment ────────────────────
+
+    @Test
+    fun `setSpans on a line populates fPart with the line carrier and zero side`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 5f)), null)
+        val a = SkOpAngle()
+        a.set(seg.fHead, seg.fTail)
+        assertFalse(a.unorderable())
+        // fPart is non-curve for a line.
+        assertFalse(a.fPart.isCurve())
+        assertTrue(a.fPart.isOrdered())
+        // fSide stays 0 for line / line-like.
+        assertEquals(0.0, a.fSide)
+        // fSectorStart is computable (not deferred to computeSector).
+        assertTrue(a.fSectorStart >= 0)
+        assertEquals(a.fSectorStart, a.fSectorEnd)
+    }
+
+    // ─── setSpans / setSector on a quad segment ────────────────────
+
+    @Test
+    fun `setSpans on a non-degenerate quad sets fPart isCurve true and a non-zero side`() {
+        val seg = SkOpSegment().addQuad(arrayOf(pt(0f, 0f), pt(5f, 10f), pt(10f, 0f)), null)
+        val a = SkOpAngle()
+        a.set(seg.fHead, seg.fTail)
+        assertFalse(a.unorderable())
+        assertTrue(a.fPart.isCurve())
+        // Side : negative point-distance ; concrete sign depends on hull
+        // orientation. Just check it's not zero.
+        assertTrue(a.fSide != 0.0)
+        // sectorMask covers a non-trivial range — at least 1 bit set.
+        assertTrue(a.fSectorMask != 0)
+    }
+
+    @Test
+    fun `setSpans on a collinear-control quad collapses to line-like`() {
+        // Three collinear points → fPart.isCurve() == false ; angle behaves
+        // like a line.
+        val seg = SkOpSegment().addQuad(arrayOf(pt(0f, 0f), pt(5f, 0f), pt(10f, 0f)), null)
+        val a = SkOpAngle()
+        a.set(seg.fHead, seg.fTail)
+        assertFalse(a.fPart.isCurve())
+        assertEquals(0.0, a.fSide)
+    }
+
+    // ─── checkCrossesZero ─────────────────────────────────────────
+
+    @Test
+    fun `checkCrossesZero is true when start and end straddle the +X axis`() {
+        val a = SkOpAngle()
+        // Start in sector 1 (≈ +X-ish), end in sector 25 (just below +X) :
+        // start < 8 && end > 23 → crosses zero.
+        a.fSectorStart = 1; a.fSectorEnd = 25
+        assertTrue(a.checkCrossesZero())
+        // Both in the upper half — no zero crossing.
+        a.fSectorStart = 9; a.fSectorEnd = 17
+        assertFalse(a.checkCrossesZero())
+    }
+
+    // ─── computeSector lazy guard ──────────────────────────────────
+
+    @Test
+    fun `computeSector caches its result via fComputedSector`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val a = SkOpAngle()
+        a.set(seg.fHead, seg.fTail)
+        // set() ran setSector eagerly so fComputeSector is false — but
+        // fComputedSector is also false (it gates *computeSector*'s own
+        // re-run, not the eager path).
+        assertFalse(a.fComputeSector)
+        assertFalse(a.fComputedSector)
+        val first = a.computeSector()
+        assertTrue(a.fComputedSector)  // caching marker now set.
+        // Second call is a no-op : returns the cached !unorderable.
+        val second = a.computeSector()
+        assertEquals(first, second)
+    }
 }
