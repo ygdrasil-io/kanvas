@@ -1464,4 +1464,48 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     public open val width: Int get() = device.width
     public open val height: Int get() = device.height
+
+    // ─── Phase C4 — extension slots ───────────────────────────────────
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawDrawable(SkDrawable*, const
+     * SkMatrix*)`. The drawable's [SkDrawable.draw] method is invoked
+     * with `this` canvas, optionally pre-concatenated by [matrix].
+     * The implementation is wrapped in a `save` / `restore` so the
+     * canvas's external state is preserved on return.
+     *
+     * Subclasses (e.g. `SkRecordingCanvas`, `SkSVGCanvas`) may
+     * override to record / serialise the drawable directly instead
+     * of replaying its op stream — but the default behaviour
+     * (delegate to [SkDrawable.draw]) is correct for every backend
+     * that supports the basic draw primitives.
+     */
+    public open fun drawDrawable(drawable: SkDrawable, matrix: SkMatrix? = null) {
+        drawable.draw(this, matrix)
+    }
+
+    /**
+     * Convenience overload — translates by `(x, y)` before drawing.
+     * Mirrors `SkCanvas::drawDrawable(SkDrawable*, SkScalar, SkScalar)`.
+     */
+    public open fun drawDrawable(drawable: SkDrawable, x: SkScalar, y: SkScalar) {
+        drawable.draw(this, SkMatrix.MakeTrans(x, y))
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawAnnotation(rect, key, value)` —
+     * attach a sink-specific annotation (typically PDF link metadata,
+     * a named destination, or a URL) to a rectangular region of the
+     * canvas.
+     *
+     * **Raster behaviour** : a no-op. The raster pipeline does not
+     * encode annotations into a backing image — only structured
+     * sinks (PDF, future XPS) can act on them. Subclasses that
+     * support annotations override this method ; the default impl
+     * silently drops [rect], [key], [value]. Mirrors upstream's
+     * raster-device behaviour.
+     */
+    public open fun drawAnnotation(rect: SkRect, key: String, value: ByteArray?) {
+        // Raster sinks ignore annotations — see KDoc.
+    }
 }
