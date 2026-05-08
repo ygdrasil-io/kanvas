@@ -248,7 +248,7 @@ plusieurs lignes DEF_GM.
 
 8 sub-slices, ~3 000 LOC main + ~1 200 LOC test.
 
-### D2.0 — `SkBlender` interface + paint plumbing
+### D2.0 — `SkBlender` interface + paint plumbing ✅ shipped
 
 **Scope** : ajouter `SkBlender` à la foundation à côté de
 `SkShader` et `SkColorFilter`. Wirer `paint.blender` ;
@@ -273,16 +273,60 @@ plusieurs lignes DEF_GM.
   `paint.blender?.blend(src, dst) ?: applyBlendMode(...)`. Garder
   le fast path pour `null` blender (cas commun).
 
-**Tests** :
-- `SkBlenderTest.kt` — `Mode(kSrcOver)` matche bit-pour-bit le
-  legacy ; `Arithmetic(0, 0, 0, 1)` retourne dst constant ;
-  `Arithmetic(0, 1, 0, 0)` retourne src ; null blender → fall back
-  to `paint.blendMode`.
+**Tests** ([SkBlenderTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkBlenderTest.kt))
+— **26 tests, all green** :
+- `Mode` factory : returns `SkBlendModeBlender` carrying the tag,
+  equality is mode-tag based ;
+- `SkBlendModeBlender.blend` : Clear / Src / Dst / SrcOver
+  closed-form impl + non-trivial modes throw with a clear
+  "route through SkBitmapDevice" diagnostic ;
+- `SkBlenders.Arithmetic` factory : rejects non-finite
+  coefficients, short-circuits canonical mode tuples
+  `(0,1,0,0) → kSrc`, `(0,0,1,0) → kDst`, `(0,0,0,0) → kClear`,
+  otherwise returns `SkArithmeticBlender` carrying the tuple ;
+- `SkArithmeticBlender.blend` : `k2=1` reduces to kSrc, `k3=1`
+  reduces to kDst, `k4=1` returns white, per-channel saturate,
+  `enforcePremul` caps RGB ≤ alpha ;
+- end-to-end pixel parity : `paint.blender = Mode(kSrcOver)`
+  pixel-bit-iso with `paint.blendMode = kSrcOver` ;
+  `Mode(kClear)` zeroes the rect ; `Arithmetic(0, 0.5, 0.5, 0,
+  true)` produces midpoint pixels (red-on-blue → 0xFF80_0080) ;
+- paint round-trip : `copy()` preserves blender, `reset()`
+  clears it, `equals` / `hashCode` accounts for the slot.
 
-**LOC** : ~250 main + ~150 test = ~400.
+**Implementation actuelle** :
+- [SkBlender.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkBlender.kt)
+  — abstract base + `Mode(SkBlendMode)` factory + concrete
+  `SkBlendModeBlender` (mode tag carrier).
+- [SkBlenders.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkBlenders.kt)
+  — `SkBlenders.Arithmetic(k1,k2,k3,k4,enforcePremul)` static
+  factory + concrete `SkArithmeticBlender`.
+- [SkPaint.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkPaint.kt)
+  — `blender: SkBlender? = null` slot, threaded through
+  `reset` / `copy` / `equals` / `hashCode`.
+- [SkBitmapDevice.kt](kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt)
+  — new `dispatchBlend(x, y, src, mode, blender)` paint-aware
+  helper + `blendCustom(x, y, src, blender)` route via
+  `SkColor4f` round-trip when the blender is custom. Threaded
+  through `drawPaint` / `drawTriangle` / `drawTexturedTriangle`
+  / `drawPath` / `compositeFrom` / `drawImageRect` /
+  `drawPathWithMaskFilter` / `fillRect` / `strokeRect` /
+  `fillRectAA` / `strokeRectAA` / `drawHLine` / `drawVLine` /
+  `fillPath` / `scanFillPath`. F16 fast paths fall back to the
+  8-bit dispatch when a custom blender is in flight (the F16
+  lane only knows `SkBlendMode` ; a future slice may
+  specialise an F16 custom-blend path).
 
-**Validation** : `XfermodesGM` continue à passer (legacy path
-inchangé) ; `Arithmetic(...)` round-trip à travers paint copy.
+**LOC** : ~280 main (SkBlender + SkBlenders + SkPaint delta +
+SkBitmapDevice plumbing) + ~285 test = **~565 total** (cf. plan
+estimate ~400 ; overage covers the dispatch threading through
+14 device-internal helpers — each `mode: SkBlendMode` parameter
+got a paired `blender: SkBlender? = null` for symmetry).
+
+**Validation** : full kanvas-skia suite **2955 / 2955 green** ;
+`paint.blender = SkBlender.Mode(m)` is bit-iso with
+`paint.blendMode = m` (verified by the dedicated test) — no
+regression on the existing 64 raster GMs.
 
 ---
 
@@ -641,7 +685,7 @@ la deuxième fois (cette fois en cross-validation raster ↔ GPU).
 
 | Slice | Main | Test | GMs débloqués |
 |---|---:|---:|---|
-| D2.0 SkBlender + paint plumbing | ~250 | ~150 | foundation |
+| D2.0 SkBlender + paint plumbing ✅ | **280** (planned ~250) | **285** (planned ~150) | foundation |
 | D2.1 SkRuntimeEffect façade + dispatch | ~700 | ~350 | foundation |
 | D2.2 Shader/ColorFilter/Blender bindings | ~400 | ~250 | foundation |
 | D2.3 SkRuntimeEffectBuilder + SkData | ~200 | ~150 | foundation |

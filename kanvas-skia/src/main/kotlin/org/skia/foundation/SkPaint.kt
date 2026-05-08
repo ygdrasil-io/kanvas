@@ -27,7 +27,14 @@ import org.skia.math.SkScalar
  * fully wired through the rasterizer ; the other three carry abstract
  * base classes only and are silent no-ops at draw time until their
  * respective slices land (see the per-class docstrings for the
- * roadmap). `SkBlender` remains out of scope.
+ * roadmap).
+ *
+ * **Phase D2.0** : [blender] slot added. Non-`null` values take
+ * precedence over [blendMode] at draw time —
+ * [`SkBitmapDevice`](../core/SkBitmapDevice.kt) detects the
+ * [SkBlendModeBlender] subtype to keep the legacy 8-bit blend-mode
+ * fast paths, and routes the rest through the abstract [SkBlender.blend]
+ * method (e.g. arithmetic blenders, future runtime-effect blenders).
  */
 public class SkPaint() {
     public enum class Style { kFill_Style, kStroke_Style, kStrokeAndFill_Style }
@@ -113,6 +120,21 @@ public class SkPaint() {
      * dash / corner / discrete slice lands. See [SkPathEffect].
      */
     public var pathEffect: SkPathEffect? = null
+
+    /**
+     * Phase D2.0 — custom blender slot. When non-`null`, takes
+     * precedence over [blendMode] at draw time —
+     * [`SkBitmapDevice`](../core/SkBitmapDevice.kt) routes through
+     * [SkBlender.blend] for arbitrary blenders, and detects the
+     * [SkBlendModeBlender] subtype to keep the existing 8-bit
+     * blend-mode fast paths (so `paint.blender = SkBlender.Mode(m)`
+     * is bit-iso with the legacy `paint.blendMode = m` path).
+     *
+     * Mirrors Skia's
+     * [`SkPaint::setBlender`](https://github.com/google/skia/blob/main/include/core/SkPaint.h)
+     * — when both [blender] and [blendMode] are set, the blender wins.
+     */
+    public var blender: SkBlender? = null
 
     /** Mirrors Skia's `SkPaint(SkColor)` (kept as a Kotlin convenience). */
     public constructor(color: SkColor) : this() { this.color = color }
@@ -267,6 +289,7 @@ public class SkPaint() {
         maskFilter = null
         imageFilter = null
         pathEffect = null
+        blender = null
     }
 
     public fun copy(): SkPaint = SkPaint().also {
@@ -286,6 +309,7 @@ public class SkPaint() {
         it.maskFilter = maskFilter
         it.imageFilter = imageFilter
         it.pathEffect = pathEffect
+        it.blender = blender
     }
 
     // ─── Equality ───────────────────────────────────────────────────
@@ -306,7 +330,8 @@ public class SkPaint() {
             colorFilter === other.colorFilter &&
             maskFilter === other.maskFilter &&
             imageFilter === other.imageFilter &&
-            pathEffect === other.pathEffect
+            pathEffect === other.pathEffect &&
+            blender == other.blender
     }
 
     override fun hashCode(): Int {
@@ -324,6 +349,7 @@ public class SkPaint() {
         result = 31 * result + (maskFilter?.hashCode() ?: 0)
         result = 31 * result + (imageFilter?.hashCode() ?: 0)
         result = 31 * result + (pathEffect?.hashCode() ?: 0)
+        result = 31 * result + (blender?.hashCode() ?: 0)
         return result
     }
 }
