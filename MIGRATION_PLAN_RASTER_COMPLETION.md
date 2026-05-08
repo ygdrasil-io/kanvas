@@ -562,8 +562,33 @@ manageable while reaching multi-format parity.
     quantisation tolerance round-trip, alpha drop). 11/11 green ;
     full kanvas-skia suite **2205 / 2205 green**.
 
-- **D3.6** — `SkImage.encodeToData(format, quality)` convenience.
-  - **LOC** : ~50.
+- **D3.6** ✅ — `SkImage.encodeToData(format, quality)` convenience.
+  Single Kotlin extension function in
+  [SkImageEncode.kt](kanvas-skia/src/main/kotlin/org/skia/encode/SkImageEncode.kt)
+  that wraps the D3.5 encoders. Lives on the `org.skia.encode`
+  side rather than as an instance method on [SkImage] so the
+  `org.skia.foundation` package stays free of any dependency on
+  the encoder layer (`encode` depends on `foundation`, not the
+  other way round). Dispatches `kPNG → SkPngEncoder` and
+  `kJPEG → SkJpegEncoder(Options(quality = quality))` ; every
+  other [SkEncodedImageFormat] returns `null` (encoders ship for
+  PNG / JPEG only — GIF / BMP / WBMP have decoders but no
+  encoders, and WEBP is D3.4-deferred).
+  - **LOC** : ~52 main + ~99 test = 151 total (cf. plan estimate
+    ~50 main — close).
+  - **Tests** :
+    [SkImageEncodeTest.kt](kanvas-skia/src/test/kotlin/org/skia/encode/SkImageEncodeTest.kt)
+    (4 — default-PNG byte-identical round-trip, JPEG `quality`
+    plumbing via `lower q → fewer bytes`, unsupported-format
+    `null` return, "thin wrapper" check that `encodeToData(kPNG)`
+    bytes equal `SkPngEncoder.Encode(bitmap)` bytes). 4/4 green ;
+    full kanvas-skia suite **2216 / 2216 green**.
+
+D3 closes apart from **D3.4 WEBP**, which the plan flags as
+external-dependency-bound (Option B = optional Maven coordinate
+on Google's `webp` Java jar, ~5 LOC integration ; pure-Kotlin
+port ~3000 LOC). Tracked separately ; defer until a workflow
+needs WEBP.
 
 **Total LOC** : ~1000-1500 (with WEBP via opt-in dep ; +3000 if
 pure-Kotlin WEBP).
