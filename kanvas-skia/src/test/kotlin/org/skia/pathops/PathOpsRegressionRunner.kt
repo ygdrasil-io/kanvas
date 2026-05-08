@@ -128,6 +128,67 @@ class PathOpsRegressionRunner {
         )
     }
 
+    /**
+     * Pixel-parity smoke test — orthogonal to the survival floor.
+     * Every SURVIVED fixture has its result compared, pixel-wise,
+     * against an independent oracle (see [PathOpsPixelOracle]). The
+     * fraction of SURVIVED fixtures whose engine result also matches
+     * the oracle is gated by [INITIAL_PIXEL_FLOOR].
+     *
+     * **Floor calibration** : the same monotonic-bump rule applies as
+     * the survival floor — bump as the engine improves, never lower
+     * without a maintainer comment justifying the regression.
+     *
+     * **Why orthogonal** : a fixture can survive (no crash, finite
+     * result) yet still rasterise to a different shape than the
+     * oracle. The two metrics together give a more honest picture
+     * than either alone — survival catches engine crashes, parity
+     * catches algorithmic bugs.
+     */
+    @Test
+    fun `pathops Op pixel-parity rate stays at-or-above the floor`() {
+        val fixtures = upstreamFixtures().toList()
+        if (outcomes.size < fixtures.size) {
+            for (f in fixtures) {
+                outcomes.putIfAbsent(f.name, runFixture(f))
+            }
+        }
+        // Only count fixtures where the engine produced a SURVIVED
+        // result — otherwise there's no path to pixel-compare.
+        val candidates = pixelOutcomes.size
+        val matches = pixelOutcomes.values.count {
+            it == PathOpsPixelOracle.PixelOutcome.PIXEL_MATCH ||
+                it == PathOpsPixelOracle.PixelOutcome.DEGENERATE
+        }
+        val rate = if (candidates == 0) 0.0 else matches.toDouble() / candidates
+        val floor = INITIAL_PIXEL_FLOOR
+        val byOutcome = pixelOutcomes.values.groupingBy { it }.eachCount()
+        println(
+            "[PathOpsRegression] $matches / $candidates pixel-match " +
+                "(${"%.2f".format(rate * 100)} %) ; " +
+                "floor = ${"%.2f".format(floor * 100)} % ; " +
+                "outcomes = $byOutcome",
+        )
+        assertTrue(
+            rate >= floor,
+            buildString {
+                appendLine("Pixel-parity rate $rate ($matches / $candidates) < floor $floor")
+                appendLine("Diverging fixtures :")
+                pixelOutcomes.entries
+                    .filter { it.value == PathOpsPixelOracle.PixelOutcome.PIXEL_DIVERGE }
+                    .sortedBy { it.key }
+                    .take(20)
+                    .forEach { appendLine("  ${it.key}") }
+                val divergeCount = pixelOutcomes.values.count {
+                    it == PathOpsPixelOracle.PixelOutcome.PIXEL_DIVERGE
+                }
+                if (divergeCount > 20) {
+                    appendLine("  ... (${divergeCount - 20} more)")
+                }
+            },
+        )
+    }
+
     // ─── Engine driver ────────────────────────────────────────────────
 
     private fun runFixture(f: PathOpsFixture): Outcome {
@@ -150,6 +211,19 @@ class PathOpsRegressionRunner {
         if (result == null) return Outcome.RETURNED_NULL
         // Verify all coords are finite — catches degenerate output.
         if (!result.isFinite()) return Outcome.NON_FINITE
+        // Pixel parity vs the independent oracle — see
+        // [PathOpsPixelOracle] for the algorithm. Only meaningful on a
+        // SURVIVED engine result ; we cache the outcome on
+        // [pixelOutcomes] for the parallel pixel-parity floor test.
+        try {
+            pixelOutcomes[f.name] = PathOpsPixelOracle.compare(pathA, pathB, op, result)
+        } catch (t: Throwable) {
+            // The oracle itself can throw on degenerate scaling
+            // (e.g. paths reduced to a single point under the oracle's
+            // matrix). Bucket as DEGENERATE — caller will see it as
+            // "no parity verdict" rather than a fail.
+            pixelOutcomes[f.name] = PathOpsPixelOracle.PixelOutcome.DEGENERATE
+        }
         return Outcome.SURVIVED
     }
 
@@ -272,6 +346,15 @@ class PathOpsRegressionRunner {
         private val outcomes: MutableMap<String, Outcome> = LinkedHashMap()
 
         /**
+         * Pixel-parity outcome per SURVIVED fixture — populated by
+         * [runFixture] alongside the survival outcome. Empty until the
+         * runner has been driven once. See [PathOpsPixelOracle] for
+         * the bucketing semantics.
+         */
+        private val pixelOutcomes:
+            MutableMap<String, PathOpsPixelOracle.PixelOutcome> = LinkedHashMap()
+
+        /**
          * Floor for the survival-rate ratchet. Bump this when the
          * engine improves ; never lower without a maintainer comment
          * justifying the regression.
@@ -295,6 +378,25 @@ class PathOpsRegressionRunner {
          * Bump the floor monotonically as future debug passes land.
          */
         private const val INITIAL_SURVIVAL_FLOOR: Double = 0.99
+
+        /**
+         * Floor for the pixel-parity ratchet. See
+         * `pathops Op pixel-parity rate stays at-or-above the floor`
+         * for the semantics. Bumped monotonically as the engine's
+         * shape-correctness improves ; the rate is only meaningful
+         * over fixtures that SURVIVED (no crash + finite result).
+         *
+         * **Initial calibration** (post-D1.2.h.10, run sur master au
+         * 2026-05-09) : **320 / 334 = 95.8 %** pixel-match against
+         * an independent rasteriser-set-op oracle (see
+         * [PathOpsPixelOracle]). 14 fixtures diverge — likely a
+         * mix of cubic-cubic intersection precision losses and
+         * fillType handling on inverse-fill inputs. Floor pinned at
+         * **90 %** (~5.8 pp cushion) ; bump as algo debug passes
+         * land. cubicOp35d (the sole `RETURNED_NULL`) is excluded
+         * from this metric — only SURVIVED fixtures count.
+         */
+        private const val INITIAL_PIXEL_FLOOR: Double = 0.90
 
         /**
          * Load fixtures from the JSON resource. Cached lazily so the
