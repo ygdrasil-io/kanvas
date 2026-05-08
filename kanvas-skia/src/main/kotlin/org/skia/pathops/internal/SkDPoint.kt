@@ -192,6 +192,22 @@ internal data class SkDPoint(var x: Double, var y: Double) {
             return AlmostDequalUlps(largest.toDouble(), largest.toDouble() + dist)
         }
 
+        /**
+         * Same as [ApproximatelyEqual] but uses `RoughlyEqualUlps`
+         * (looser tolerance) for the cheap path. Mirrors
+         * `SkDPoint::RoughlyEqual` (`SkPathOpsPoint.h:252`).
+         */
+        fun RoughlyEqual(a: SkPoint, b: SkPoint): Boolean {
+            if (!RoughlyEqualUlps(a.fX, b.fX) && !RoughlyEqualUlps(a.fY, b.fY)) return false
+            val dA = SkDPoint(a.fX.toDouble(), a.fY.toDouble())
+            val dB = SkDPoint(b.fX.toDouble(), b.fY.toDouble())
+            val dist = dA.distance(dB)
+            val tiniest = min(min(min(a.fX, b.fX), a.fY), b.fY)
+            var largest = max(max(max(a.fX, b.fX), a.fY), b.fY)
+            largest = max(largest, -tiniest)
+            return AlmostDequalUlps(largest.toDouble(), largest.toDouble() + dist)
+        }
+
         /** Light-weight inequality check. Mirrors `SkDPoint::WayRoughlyEqual`. */
         fun WayRoughlyEqual(a: SkPoint, b: SkPoint): Boolean {
             val largest = max(
