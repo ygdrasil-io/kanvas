@@ -31,10 +31,22 @@ import org.skia.testing.TestUtils
  * colour filter runs in sRGB *before* the working-space xform :
  * `paint.color → colorFilter (sRGB) → xform → blend`. The Rec.709
  * luma weights baked into `saturationMatrix` therefore measure
- * luminance in the space they were tuned for. The residual ~30 %
- * gap vs upstream is the encoded-vs-linear-sRGB gamma curve
- * difference (Skia evaluates the matrix in linear sRGB ; we still
- * apply it in encoded sRGB). Closing that gap is a Phase 7e' refinement.
+ * luminance in the space they were tuned for.
+ *
+ * **The residual ~30 % gap is NOT the gamma curve** — Q5 diagnostic
+ * ([ColorMatrixModeDiagnosticTest](../diagnostics/ColorMatrixModeDiagnosticTest.kt))
+ * ran a per-cell pixel-level comparison of the encoded-sRGB vs
+ * linear-sRGB matrix application modes against the upstream
+ * reference, and found upstream is **encoded** : 5/5 non-tie cells
+ * favour the encoded path with pixel-identical agreement on the
+ * `red→α` cells (Σ = 0). The earlier kdoc claim that "Skia
+ * evaluates the matrix in linear sRGB" was wrong ; the Phase 7e'
+ * attempt that wrapped the filter in decode → matrix → encode
+ * regressed correctly because it was solving a non-existent
+ * problem. See [MIGRATION_PLAN_RASTER_COMPLETION.md § Q5](../../../../../../../MIGRATION_PLAN_RASTER_COMPLETION.md)
+ * for the full diagnostic report and candidate next steps for
+ * closing the residual gap (sampling precision, alpha-modulation
+ * order, working-space xform timing).
  */
 class ColorMatrixTest {
 
