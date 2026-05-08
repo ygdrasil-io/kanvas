@@ -49,6 +49,7 @@ import org.skia.pathops.internal.inParent
 import org.skia.pathops.internal.isFlatTree
 import org.skia.pathops.internal.markReverse
 import org.skia.pathops.internal.nextEdge
+import org.skia.pathops.internal.reverseMarkedContours
 
 /**
  * Pathops free functions. Mirrors Skia's `include/pathops/SkPathOps.h`.
@@ -366,9 +367,8 @@ public object SkPathOps {
             reversed = markReverse(path, null, child) || reversed
         }
         if (!reversed) return path.makeFillType(targetFill)
-        // Reversal-emit (h.6.6+) needs SkPath.reverseAddPath +
-        // reverseMarkedContours. Until that lands, signal "couldn't
-        // produce a winding-equivalent path" via null.
-        return null
+        // Reversal needed — split the path by contours, reverse the
+        // ones flagged by markReverse, and stitch back together.
+        return reverseMarkedContours(path, contours, targetFill)
     }
 }

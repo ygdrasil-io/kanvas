@@ -11,12 +11,19 @@
  * contains another).
  *
  * Phase D1.2.h.6.4 — Add `getDirection` (signed-area test) and a
- * **2-level-nested fast path** : when the bbox tree is exactly
- * two levels deep, compare each child's direction to its parent.
- * If they alternate (parent CW + child CCW, or vice-versa), no
- * reversal is needed and `makeFillType` is correct. Same direction
- * (parent CW + child CW) means the child needs reversing — return
- * null (deferred to h.6.5+).
+ * **2-level-nested fast path**.
+ *
+ * Phase D1.2.h.6.5 — Full nested analysis : `containsEdge`,
+ * `leftEdge`, `nextEdge`, `containerContains`,
+ * `checkContainerChildren`, `markReverse`. Replaces the 2-level
+ * fast path with the upstream's general bbox-tree-walking
+ * algorithm.
+ *
+ * Phase D1.2.h.6.6 — Reversal emit : `reverseAddPath` (walk a
+ * source path in reverse and append onto a builder),
+ * `reverseMarkedContours` (split-and-emit per `Contour.reverse`
+ * flag). **Closes the AsWinding chantier** — `AsWinding` is now
+ * end-to-end functional for nested-contour inputs.
  */
 package org.skia.pathops.internal
 
@@ -698,4 +705,176 @@ internal fun no2LevelReverseNeeded(
         }
     }
     return true
+}
+
+// ─── Reversal emit (D1.2.h.6.6) ──────────────────────────────────
+
+/**
+ * Append [src] reversed onto [builder]. Walks `src`'s verb stream
+ * back-to-front, advancing the points cursor backwards through
+ * `src.coords` and re-emitting each verb on `builder` with its
+ * direction flipped (kMove ↔ kClose, control points reversed).
+ *
+ * Mirrors `SkPathBuilder::privateReverseAddPath`
+ * (`src/core/SkPathBuilder.cpp:896`) — top-level helper here
+ * since our [SkPathBuilder] doesn't expose a native reverse-add.
+ */
+internal fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkPath) {
+    val verbs = src.verbs
+    if (verbs.isEmpty()) return
+    // Cursor : points to the *index past* the next coord pair to read
+    // (i.e. start at end, walk down).
+    var ptCursor = src.coords.size / 2 // 1 = last point ; 0 = before first
+    var conicCursor = src.conicWeights.size
+    var needMove = true
+    var needClose = false
+    var i = verbs.size - 1
+    while (i >= 0) {
+        val v = verbs[i]
+        val n = ptsInVerb(v)
+        if (needMove) {
+            // Read the last point as the next moveTo target.
+            ptCursor -= 1
+            val mx = src.coords[ptCursor * 2]; val my = src.coords[ptCursor * 2 + 1]
+            builder.moveTo(mx, my)
+            needMove = false
+        }
+        ptCursor -= n
+        when (v) {
+            SkPath.Verb.kMove -> {
+                if (needClose) {
+                    builder.close()
+                    needClose = false
+                }
+                needMove = true
+                ptCursor += 1 // restore so next iter's "needMove" reads it
+            }
+            SkPath.Verb.kLine -> {
+                val x = src.coords[ptCursor * 2]; val y = src.coords[ptCursor * 2 + 1]
+                builder.lineTo(x, y)
+            }
+            SkPath.Verb.kQuad -> {
+                // Original verb : pts[0] = pen, pts[1] = control, pts[2] = end.
+                // Reversed : start at original end, control = original control,
+                // end = original pen. For builder.quadTo(c, e), c = pts[1]
+                // (original control), e = pts[0] (original pen).
+                val c1x = src.coords[(ptCursor + 1) * 2]
+                val c1y = src.coords[(ptCursor + 1) * 2 + 1]
+                val ex = src.coords[ptCursor * 2]; val ey = src.coords[ptCursor * 2 + 1]
+                builder.quadTo(c1x, c1y, ex, ey)
+            }
+            SkPath.Verb.kConic -> {
+                conicCursor -= 1
+                val w = src.conicWeights[conicCursor]
+                val c1x = src.coords[(ptCursor + 1) * 2]
+                val c1y = src.coords[(ptCursor + 1) * 2 + 1]
+                val ex = src.coords[ptCursor * 2]; val ey = src.coords[ptCursor * 2 + 1]
+                builder.conicTo(c1x, c1y, ex, ey, w)
+            }
+            SkPath.Verb.kCubic -> {
+                // pts[0..3] = pen, c1, c2, end. Reversed : end → c2 → c1 → pen.
+                // builder.cubicTo(c1, c2, e) emits (orig c2, orig c1, orig pen).
+                val c2x = src.coords[(ptCursor + 2) * 2]
+                val c2y = src.coords[(ptCursor + 2) * 2 + 1]
+                val c1x = src.coords[(ptCursor + 1) * 2]
+                val c1y = src.coords[(ptCursor + 1) * 2 + 1]
+                val ex = src.coords[ptCursor * 2]; val ey = src.coords[ptCursor * 2 + 1]
+                builder.cubicTo(c2x, c2y, c1x, c1y, ex, ey)
+            }
+            SkPath.Verb.kClose -> {
+                needClose = true
+            }
+        }
+        --i
+    }
+}
+
+private fun ptsInVerb(v: SkPath.Verb): Int = when (v) {
+    SkPath.Verb.kMove -> 1
+    SkPath.Verb.kLine -> 1
+    SkPath.Verb.kQuad, SkPath.Verb.kConic -> 2
+    SkPath.Verb.kCubic -> 3
+    SkPath.Verb.kClose -> 0
+}
+
+/**
+ * Walk [path]'s verb stream split by [contours] ; for each contour
+ * with `reverse = false`, append directly to the result builder ;
+ * for those with `reverse = true`, build a temporary path then
+ * [reverseAddPath] it onto the result. Returns the reconstituted
+ * path with [fillType].
+ *
+ * Mirrors `OpAsWinding::reverseMarkedContours`
+ * (`src/pathops/SkPathOpsAsWinding.cpp:366`).
+ */
+internal fun reverseMarkedContours(
+    path: SkPath,
+    contours: List<AsWindingContour>,
+    fillType: org.skia.foundation.SkPathFillType,
+): SkPath {
+    val result = org.skia.foundation.SkPathBuilder().setFillType(fillType)
+    var verbCursor = 0
+    val rec = AsWindingVerbCursor(path)
+    for (contour in contours) {
+        val tempBuilder = if (contour.reverse) org.skia.foundation.SkPathBuilder()
+                          else result
+        // Walk verbs from current position up to contour.verbEnd.
+        while (verbCursor < contour.verbEnd) {
+            rec.emitNext(tempBuilder)
+            ++verbCursor
+        }
+        if (contour.reverse) {
+            reverseAddPath(result, tempBuilder.detach())
+        }
+    }
+    return result.detach()
+}
+
+/**
+ * Stateful verb-emit cursor : tracks position in the source path's
+ * coord / conic arrays as we walk and emit one verb at a time
+ * onto a target builder.
+ */
+private class AsWindingVerbCursor(private val src: SkPath) {
+    private var verbIdx = 0
+    private var coordIdx = 0
+    private var conicIdx = 0
+    private var penX = 0f; private var penY = 0f
+
+    fun emitNext(builder: org.skia.foundation.SkPathBuilder) {
+        val v = src.verbs[verbIdx++]
+        when (v) {
+            SkPath.Verb.kMove -> {
+                val x = src.coords[coordIdx]; val y = src.coords[coordIdx + 1]
+                coordIdx += 2
+                builder.moveTo(x, y); penX = x; penY = y
+            }
+            SkPath.Verb.kLine -> {
+                val x = src.coords[coordIdx]; val y = src.coords[coordIdx + 1]
+                coordIdx += 2
+                builder.lineTo(x, y); penX = x; penY = y
+            }
+            SkPath.Verb.kQuad -> {
+                val cx = src.coords[coordIdx]; val cy = src.coords[coordIdx + 1]
+                val ex = src.coords[coordIdx + 2]; val ey = src.coords[coordIdx + 3]
+                coordIdx += 4
+                builder.quadTo(cx, cy, ex, ey); penX = ex; penY = ey
+            }
+            SkPath.Verb.kConic -> {
+                val cx = src.coords[coordIdx]; val cy = src.coords[coordIdx + 1]
+                val ex = src.coords[coordIdx + 2]; val ey = src.coords[coordIdx + 3]
+                coordIdx += 4
+                val w = src.conicWeights[conicIdx++]
+                builder.conicTo(cx, cy, ex, ey, w); penX = ex; penY = ey
+            }
+            SkPath.Verb.kCubic -> {
+                val c1x = src.coords[coordIdx]; val c1y = src.coords[coordIdx + 1]
+                val c2x = src.coords[coordIdx + 2]; val c2y = src.coords[coordIdx + 3]
+                val ex = src.coords[coordIdx + 4]; val ey = src.coords[coordIdx + 5]
+                coordIdx += 6
+                builder.cubicTo(c1x, c1y, c2x, c2y, ex, ey); penX = ex; penY = ey
+            }
+            SkPath.Verb.kClose -> { builder.close() }
+        }
+    }
 }
