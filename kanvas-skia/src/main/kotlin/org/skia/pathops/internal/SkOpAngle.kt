@@ -6,6 +6,11 @@
  * Phase D1.2.b — data model + linked-list ops + simple accessors.
  * Phase D1.2.b.2.a — geometry setup (`setSpans` / `setSector` /
  * `findSector` / `computeSector`).
+ * Phase D1.2.b.2.b — comparison primitives (`oppositePlanes` /
+ * `lineOnOneSide` / `linesOnOriginalSide` / `alignmentSameSide` /
+ * `convexHullOverlaps` / `tangentsDiverge` / `distEndRatio` / `midT`).
+ * Plus a fix to [checkCrossesZero] (the bit-twiddling was wrong in
+ * D1.2.b.2.a — should be `end - start > 16`, not `start < 8 && end > 23`).
  *
  * # What is an angle ?
  *
@@ -408,13 +413,14 @@ internal class SkOpAngle {
      * boundary). The sectors `(31 → 0)` adjacency requires special
      * handling in [setSector]'s mask-build step. Mirrors
      * `SkOpAngle::checkCrossesZero` (`SkOpAngle.cpp:343`).
+     *
+     * The criterion is "the gap between min/max sectors exceeds 16" —
+     * meaning the wrap-around path is *shorter* than the direct path.
      */
     fun checkCrossesZero(): Boolean {
-        val startSpan = fSectorStart.toInt() and 0x1f
-        val endSpan = fSectorEnd.toInt() and 0x1f
-        val start = minOf(startSpan, endSpan)
-        val end = maxOf(startSpan, endSpan)
-        return start < 8 && end > 23
+        val start = minOf(fSectorStart.toInt(), fSectorEnd.toInt())
+        val end = maxOf(fSectorStart.toInt(), fSectorEnd.toInt())
+        return end - start > 16
     }
 
     /**
@@ -475,11 +481,219 @@ internal class SkOpAngle {
         return !fUnorderable
     }
 
-    // ─── Deferred (D1.2.b.2.b-d) ──────────────────────────────────
-    // - insert(other) : the CCW-sort splice
-    // - after / orderable / convexHullOverlaps / endsIntersect
-    // - checkParallel / oppositePlanes
-    // - endToSide / midToSide / lineOnOneSide / linesOnOriginalSide
-    // - merge / midT / tangentsDiverge / alignmentSameSide
-    // - distEndRatio
+    // ─── Comparison primitives (D1.2.b.2.b) ────────────────────────
+
+    /** Mid-T of the angle's parameter range. Mirrors `SkOpAngle::midT`. */
+    fun midT(): Double = (fStart!!.t() + fEnd!!.t()) / 2
+
+    /**
+     * True iff this angle and [rh] are at least 8 sectors apart at
+     * their start. Used by [endsIntersect] / [orderable] as a quick
+     * "they're nowhere near each other" reject. Mirrors
+     * `SkOpAngle::oppositePlanes`.
+     */
+    fun oppositePlanes(rh: SkOpAngle): Boolean {
+        val startSpan = kotlin.math.abs(rh.fSectorStart - fSectorStart)
+        return startSpan >= 8
+    }
+
+    /**
+     * Ratio of the segment's longest control-pair length to [dist].
+     * Used by [tangentsDiverge] to scale the displacement test. Mirrors
+     * `SkOpAngle::distEndRatio`.
+     */
+    fun distEndRatio(dist: Double): Double {
+        var longest = 0.0
+        val seg = segment()!!
+        val ptCount = segVerbToPoints(seg.verb())
+        val pts = seg.pts()
+        for (i in 0..ptCount - 1) {
+            for (j in i + 1..ptCount) {
+                val dx = (pts[j].fX - pts[i].fX).toDouble()
+                val dy = (pts[j].fY - pts[i].fY).toDouble()
+                val lenSq = dx * dx + dy * dy
+                if (lenSq > longest) longest = lenSq
+            }
+        }
+        return kotlin.math.sqrt(longest) / dist
+    }
+
+    /**
+     * Core line-vs-curve-hull check. Returns :
+     *  - 0  : test's hull is on the CW side of the line
+     *  - 1  : test's hull is on the CCW side of the line
+     *  - -1 : hull straddles the line (or is on it ambiguously)
+     *  - -2 : all crosses are zero (caller treats as unorderable)
+     *
+     * Mirrors the upstream private `lineOnOneSide` overload.
+     */
+    fun lineOnOneSide(
+        origin: SkDPoint,
+        line: SkDVector,
+        test: SkOpAngle,
+        useOriginal: Boolean,
+    ): Int {
+        val crosses = DoubleArray(3)
+        val testVerb = test.segment()!!.verb()
+        val iMax = segVerbToPoints(testVerb)
+        val testCurve = if (useOriginal) test.fOriginalCurvePart else test.fPart.fCurve
+        for (index in 1..iMax) {
+            val xy1 = line.x * (testCurve[index].y - origin.y)
+            val xy2 = line.y * (testCurve[index].x - origin.x)
+            crosses[index - 1] = if (AlmostBequalUlps(xy1, xy2)) 0.0 else xy1 - xy2
+        }
+        if (crosses[0] * crosses[1] < 0) return -1
+        if (testVerb == SkOpSegment.SegVerb.kCubic) {
+            if (crosses[0] * crosses[2] < 0 || crosses[1] * crosses[2] < 0) return -1
+        }
+        if (crosses[0] != 0.0) return if (crosses[0] < 0) 1 else 0
+        if (crosses[1] != 0.0) return if (crosses[1] < 0) 1 else 0
+        if (testVerb == SkOpSegment.SegVerb.kCubic && crosses[2] != 0.0) {
+            return if (crosses[2] < 0) 1 else 0
+        }
+        return -2
+    }
+
+    /**
+     * Line-vs-curve-hull check on the line variant of `this` against
+     * the curve [test]. Sets [fUnorderable] when all crosses are zero
+     * (returns -1 in that case). Mirrors the upstream non-`const` overload.
+     */
+    fun lineOnOneSide(test: SkOpAngle, useOriginal: Boolean): Int {
+        require(!fPart.isCurve())
+        require(test.fPart.isCurve())
+        val origin = fPart.fCurve[0]
+        val line = fPart.fCurve[1] - origin
+        var result = lineOnOneSide(origin, line, test, useOriginal)
+        if (result == -2) {
+            fUnorderable = true
+            result = -1
+        }
+        return result
+    }
+
+    /**
+     * Compare two line-only angles using their *original* (un-translated)
+     * sweep vectors. Returns :
+     *  - 0 / 1 : standard CW / CCW order
+     *  - 2     : exactly 180° apart (caller handles separately)
+     *  - -1    : crossing or unorderable
+     *
+     * Mirrors `SkOpAngle::linesOnOriginalSide`.
+     */
+    fun linesOnOriginalSide(test: SkOpAngle): Int {
+        require(!fPart.isCurve())
+        require(!test.fPart.isCurve())
+        val origin = fOriginalCurvePart[0]
+        val line = fOriginalCurvePart[1] - origin
+        val dots = DoubleArray(2)
+        val crosses = DoubleArray(2)
+        val testCurve = test.fOriginalCurvePart
+        for (index in 0..1) {
+            val testLine = testCurve[index] - origin
+            val xy1 = line.x * testLine.y
+            val xy2 = line.y * testLine.x
+            dots[index] = line.x * testLine.x + line.y * testLine.y
+            crosses[index] = if (AlmostBequalUlps(xy1, xy2)) 0.0 else xy1 - xy2
+        }
+        if (crosses[0] * crosses[1] < 0) return -1
+        if (crosses[0] != 0.0) return if (crosses[0] < 0) 1 else 0
+        if (crosses[1] != 0.0) return if (crosses[1] < 0) 1 else 0
+        if ((dots[0] == 0.0 && dots[1] < 0) || (dots[0] < 0 && dots[1] == 0.0)) {
+            return 2
+        }
+        fUnorderable = true
+        return -1
+    }
+
+    /**
+     * Re-orient [order] (0 / 1 / -1) when the curves' translation to a
+     * common origin would flip a control point's side relative to the
+     * other curve's chord. Pure side-effect on [order]. Mirrors
+     * `SkOpAngle::alignmentSameSide`.
+     */
+    fun alignmentSameSide(test: SkOpAngle, order: IntArray) {
+        if (order[0] < 0) return
+        // Upstream comment : applying this to curves causes existing tests to
+        // fail ; line-only is sufficient.
+        if (fPart.isCurve()) return
+        if (test.fPart.isCurve()) return
+        val xOrigin = test.fPart.fCurve[0]
+        val oOrigin = test.fOriginalCurvePart[0]
+        if (xOrigin == oOrigin) return
+        val iMax = segVerbToPoints(segment()!!.verb())
+        val xLine = test.fPart.fCurve[1] - xOrigin
+        val oLine = test.fOriginalCurvePart[1] - oOrigin
+        for (index in 1..iMax) {
+            val testPt = fPart.fCurve[index]
+            val xCross = oLine.crossCheck(testPt - xOrigin)
+            val oCross = xLine.crossCheck(testPt - oOrigin)
+            if (oCross * xCross < 0) {
+                order[0] = order[0] xor 1
+                break
+            }
+        }
+    }
+
+    /**
+     * True iff the tangent at this and [rh]'s start "diverge enough"
+     * (the perpendicular displacement that aligns them is large enough
+     * relative to the segment lengths). Mirrors
+     * `SkOpAngle::tangentsDiverge`.
+     */
+    fun tangentsDiverge(rh: SkOpAngle, s0xt0: Double): Boolean {
+        if (s0xt0 == 0.0) return false
+        val sweep = fPart.fSweep
+        val tweep = rh.fPart.fSweep
+        val s0dt0 = sweep[0].dot(tweep[0])
+        if (s0dt0 == 0.0) return true
+        val m = s0xt0 / s0dt0
+        val sDist = sweep[0].length() * m
+        val tDist = tweep[0].length() * m
+        val useS = kotlin.math.abs(sDist) < kotlin.math.abs(tDist)
+        val mFactor = kotlin.math.abs(if (useS) distEndRatio(sDist) else rh.distEndRatio(tDist))
+        fTangentsAmbiguous = mFactor in 50.0..200.0
+        return mFactor < 50  // empirically found limit
+    }
+
+    /**
+     * Compare two curve hulls by their sweep vectors. Returns :
+     *  - 0 / 1 : standard CW / CCW order
+     *  - -1    : hulls overlap — caller falls through to `endsIntersect`
+     *
+     * Mirrors `SkOpAngle::convexHullOverlaps`.
+     */
+    fun convexHullOverlaps(rh: SkOpAngle): Int {
+        val sweep = fPart.fSweep
+        val tweep = rh.fPart.fSweep
+        val s0xs1 = sweep[0].crossCheck(sweep[1])
+        val s0xt0 = sweep[0].crossCheck(tweep[0])
+        val s1xt0 = sweep[1].crossCheck(tweep[0])
+        var tBetweenS = if (s0xs1 > 0) (s0xt0 > 0 && s1xt0 < 0) else (s0xt0 < 0 && s1xt0 > 0)
+        val s0xt1 = sweep[0].crossCheck(tweep[1])
+        val s1xt1 = sweep[1].crossCheck(tweep[1])
+        tBetweenS = tBetweenS || (if (s0xs1 > 0) (s0xt1 > 0 && s1xt1 < 0) else (s0xt1 < 0 && s1xt1 > 0))
+        val t0xt1 = tweep[0].crossCheck(tweep[1])
+        if (tBetweenS) return -1
+        if ((s0xt0 == 0.0 && s1xt1 == 0.0) || (s1xt0 == 0.0 && s0xt1 == 0.0)) return -1
+        var sBetweenT = if (t0xt1 > 0) (s0xt0 < 0 && s0xt1 > 0) else (s0xt0 > 0 && s0xt1 < 0)
+        sBetweenT = sBetweenT || (if (t0xt1 > 0) (s1xt0 < 0 && s1xt1 > 0) else (s1xt0 > 0 && s1xt1 < 0))
+        if (sBetweenT) return -1
+        // Same half-plane → first pair's order is enough.
+        if (s0xt0 >= 0 && s0xt1 >= 0 && s1xt0 >= 0 && s1xt1 >= 0) return 0
+        if (s0xt0 <= 0 && s0xt1 <= 0 && s1xt0 <= 0 && s1xt1 <= 0) return 1
+        // Outside sweeps span > 180° : check midpoint direction first,
+        // then divergence as a last resort.
+        val m0 = segment()!!.dPtAtT(midT()) - fPart.fCurve[0]
+        val m1 = rh.segment()!!.dPtAtT(rh.midT()) - rh.fPart.fCurve[0]
+        val m0xm1 = m0.crossCheck(m1)
+        if (s0xt0 > 0 && m0xm1 > 0) return 0
+        if (s0xt0 < 0 && m0xm1 < 0) return 1
+        if (tangentsDiverge(rh, s0xt0)) return if (s0xt0 < 0) 1 else 0
+        return if (m0xm1 < 0) 1 else 0
+    }
+
+    // ─── Deferred (D1.2.b.2.c-d) ──────────────────────────────────
+    // - endToSide / midToSide / checkParallel / endsIntersect
+    // - orderable / after / insert / merge
 }

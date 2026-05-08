@@ -175,6 +175,34 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
 
     fun lastPt(): SkPoint = fPts[lastPtIndex()]
 
+    /**
+     * Double-precision point on this segment's curve at parameter [t].
+     * Mirrors `SkOpSegment::dPtAtT` (`SkOpSegment.h:209`) — dispatches
+     * by [fVerb] to the per-curve `ptAtT`.
+     */
+    fun dPtAtT(t: Double): SkDPoint = when (fVerb) {
+        SegVerb.kLine -> SkDLine().apply { set(fPts[0], fPts[1]) }.ptAtT(t)
+        SegVerb.kQuad -> SkDQuad().apply { set(fPts[0], fPts[1], fPts[2]) }.ptAtT(t)
+        SegVerb.kConic -> SkDConic().apply { set(fPts[0], fPts[1], fPts[2], fWeight) }.ptAtT(t)
+        SegVerb.kCubic -> SkDCubic().apply { set(fPts[0], fPts[1], fPts[2], fPts[3]) }.ptAtT(t)
+        SegVerb.kUnset -> error("verb not set")
+    }
+
+    /**
+     * Double-precision tangent vector on this segment's curve at [t].
+     * Mirrors `SkOpSegment::dSlopeAtT` (`SkOpSegment.h:213`).
+     */
+    fun dSlopeAtT(t: Double): SkDVector = when (fVerb) {
+        SegVerb.kLine -> {
+            val a = fPts[0]; val b = fPts[1]
+            SkDVector((b.fX - a.fX).toDouble(), (b.fY - a.fY).toDouble())
+        }
+        SegVerb.kQuad -> SkDQuad().apply { set(fPts[0], fPts[1], fPts[2]) }.dxdyAtT(t)
+        SegVerb.kConic -> SkDConic().apply { set(fPts[0], fPts[1], fPts[2], fWeight) }.dxdyAtT(t)
+        SegVerb.kCubic -> SkDCubic().apply { set(fPts[0], fPts[1], fPts[2], fPts[3]) }.dxdyAtT(t)
+        SegVerb.kUnset -> error("verb not set")
+    }
+
     fun isHorizontal(): Boolean = fBounds.top == fBounds.bottom
     fun isVertical(): Boolean = fBounds.left == fBounds.right
 
