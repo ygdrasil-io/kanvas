@@ -89,6 +89,23 @@ class D2PreFauxPositifTest {
         runGm(ComposeCFIFGM(), "ComposeCFIFGM", floor = 0.0)
 
     /**
+     * `runtimecolorfilter` — the first DEF_GM of
+     * `runtimecolorfilter.cpp`. **D2.4.a** port : the 5 SkSL color
+     * filters (Noop / LumaSrc / Ternary / Ifs / EarlyReturn) are
+     * hand-ported via [org.skia.effects.runtime.effects.SkBuiltinColorFilterEffects]
+     * and dispatched through the SkRuntimeEffect façade. The GM
+     * uses a synthetic 256×256 RGB-gradient stand-in for upstream's
+     * `mandrill_256.png` ; iso-pixel parity is therefore impossible
+     * (the per-cell colour-filter math is correct, but the
+     * underlying source pixels differ from upstream's mandrill).
+     * Floor stays at 0 % until either the image asset lands or a
+     * mandrill-substitute ratchet baseline is captured.
+     */
+    @Test
+    fun `RuntimeColorFilterGM matches reference`() =
+        runGm(RuntimeColorFilterGM(), "RuntimeColorFilterGM", floor = 0.0)
+
+    /**
      * `vertices_perspective` — `gm/vertices.cpp`. Pure faux-positif :
      * `<SkRuntimeEffect.h>` is included but never used.
      */
