@@ -28,7 +28,7 @@
 > | **D1.2** Op contour assembly | 🔄 en cours | g.* coincidence + h.0–h.4 (Op fast paths + HandleCoincidence orchestrator) + h.5.* (active edges + ray-tracing winding suite + Op end-to-end wiring) + h.6.0–h.6.4 (Simplify end-to-end + AsWinding fast paths) + h.8 (fillMaskFor inverse fill types) + h.9.0–h.9.2 (`SkOpBuilder.resolve` chained-Op fallback, pathops GM harvest, `SkParsePath::FromSVGString`) livrés ; reste finitions |
 > | **D1.3** Top-level entry points | 📋 pending | Bloqué sur D1.2 close |
 > | **D1.4** PathOps regression harvest | 📋 backlog | Port des 451 fixtures de `tests/PathOpsOpTest.cpp` (~12.5 k LOC C++) via un harness data-driven Kotlin. Couverture end-to-end actuelle ~2 % d'upstream ; chantier orthogonal au cœur algorithmique, attaque-recommandée après D2 / Q4. Voir section dédiée. |
-> | **D2** SkRuntimeEffect shim | 📋 doc-only | Plan ajouté ; pas d'implem |
+> | **D2** SkRuntimeEffect façade + per-effect Kotlin ports | 📋 mini-planned | Mini plan livré : **8 sous-slices**, ~3 700 main + ~2 200 test, ~13 GM clusters / ~80 DEF_GM débloquées. Aligné sur la stratégie [WebGPU](MIGRATION_PLAN_GPU_WEBGPU.md) (port hand-écrit par shader-type). Voir [MIGRATION_PLAN_D2_RUNTIME_EFFECT.md](MIGRATION_PLAN_D2_RUNTIME_EFFECT.md). |
 > | **D3** Image codecs | ✅ shipped | D3.1 PNG / D3.2 JPEG / D3.3 GIF+BMP+WBMP / D3.4 WEBP (TwelveMonkeys plugin) / D3.5 PNG+JPEG encoders / D3.6 `SkImage.encodeToData` |
 > | **D4** DM sink architecture | ✅ shipped | D4.1 Sink + Raster8888/F16 / D4.2 PictureSink / D4.3 Runner + Report / D4.4 DmCli + DmMain / D4.5 SvgSink (PdfSink ❌ descoped per B1) |
 > | **I1** SkTextBlob + drawTextBlob + Picture wiring | ✅ shipped (I1.1-1.5) | 4 GM ports |
@@ -327,13 +327,31 @@ l'autonomie pure-Kotlin, mais ~10x moins de LOC.
 
 ---
 
-### D2 — `SkRuntimeEffect` (compatibility shim — *iso-fidelity exception*)
+### D2 — `SkRuntimeEffect` façade + per-effect Kotlin ports
 
-> ⚠️ **Iso-fidelity exception** : ce chantier substitue le moteur SkSL
-> upstream par un registry Kotlin. Voir
-> [§ Iso-fidelity exceptions](#iso-fidelity-exceptions) pour la
-> justification (décision projet : pas de SkSL côté GPU → pas de
-> levier pour parser/interpréter SkSL côté raster).
+> ✏️ **Mini plan dédié** :
+> [MIGRATION_PLAN_D2_RUNTIME_EFFECT.md](MIGRATION_PLAN_D2_RUNTIME_EFFECT.md)
+> couvre la décomposition complète en 8 sous-slices (D2.0
+> SkBlender + paint plumbing, D2.1 façade + dispatch table, D2.2
+> bindings, D2.3 Builder + SkData, D2.4.a-d hand-port des effets,
+> D2.5 image-filter integration, D2.6 DM pipeline). La section
+> ci-dessous reste comme **résumé** ; tout détail nouveau va dans
+> le mini plan.
+
+> 🔁 **Stratégie alignée sur le plan GPU.** Ce chantier suit la
+> même politique que
+> [MIGRATION_PLAN_GPU_WEBGPU.md § Phase G4](MIGRATION_PLAN_GPU_WEBGPU.md#phase-g4--shader-infra--gradients-en-wgsl)
+> : *« Pas de SkSL → WGSL transpilation. Chaque type de shader
+> a son template WGSL. »* D2 fait l'équivalent côté raster —
+> chaque "runtime effect" devient un type de shader / colorFilter
+> / blender hand-porté en Kotlin, exactement comme l'a été
+> `SkLinearGradient` / `SkRadialGradient` / `SkBitmapShader` en
+> Phase 5 du master plan. La classe `SkRuntimeEffect` reste comme
+> surface publique de dispatch (les ports de GMs upstream peuvent
+> appeler `MakeForShader(skslString)` verbatim, le shim retrouve
+> l'impl Kotlin via le SkSL canonique → hash). **Aucun parser ni
+> VM SkSL n'est porté**, ni aujourd'hui ni plus tard — c'est un
+> choix architectural du projet, pas un compromis.
 
 **Skia upstream files** (référence API uniquement, pas portées) :
 - `include/effects/SkRuntimeEffect.h` (API publique — surface conservée
@@ -1865,15 +1883,17 @@ DAG of dependencies :
 16. ✅ **Q3** SkBBHFactory + Picture cull (~582 main + ~430 test) — `SkBBoxHierarchy` + `SkRTree` + `SkRTreeFactory` + `SkPictureBoundsBuilder` ; `SkPictureRecorder` builds the BBH from per-op device-space bounds, `SkPicture.playback` queries on sub-rect clips.
 17. ✅ **Q5** Linear sRGB diagnostic (~290 test LOC) — diagnosis : upstream applies matrix in encoded sRGB ; gap is elsewhere.
 18. ✅ **C2/C4** Misc completions (~505 main + ~400 test) — `Sk1DPathEffect.kMorph` (refactored around a `ContourMeasure` chord-polyline), `kStrokeAndFill_Style` already shipped ; `SkDrawable` + `SkCanvas.drawDrawable` + `SkCanvas.drawAnnotation` no-op slot. **`drawShadow` descoped** (no ported GM uses it).
-19. 📋 **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception* — large but unlocks SkSL-using GMs).
+19. 📋 **D2** SkRuntimeEffect façade + per-effect Kotlin ports (mini-planned ; **~3 700 main + ~2 200 test across 8 slices**, see [MIGRATION_PLAN_D2_RUNTIME_EFFECT.md](MIGRATION_PLAN_D2_RUNTIME_EFFECT.md). Hand-port chaque shader type comme `SkLinearGradient` etc. ; aligned avec la stratégie WGSL côté GPU. Débloque ~80 DEF_GM rows across 13 GM clusters.).
 20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
 21. 📋 **D1.4** PathOps regression harvest (~300 main + ~8 k JSON data) — backlog. Port des 451 fixtures `tests/PathOpsOpTest.cpp` via harness data-driven JUnit `@ParameterizedTest`. Couverture end-to-end actuelle ~2 % d'upstream ; à attaquer après D2 / Q4 si l'objectif est DM iso-fidelity, ou plus tôt si l'objectif est robustesse anti-fuzz.
 
-**Total estimated LOC remaining** : ~2 200 of new Kotlin code
-(D2 1500 + Q4 400 + D1.4 ~300 main ; D1.4 also ships ~8 k JSON test
-data ; everything else shipped or descoped, D1 in-flight LOC tracked
-separately under the chantier's own slice budget). Decomposes into
-3 PRs (D2 large, Q4 small, D1.4 medium-with-debug-tail).
+**Total estimated LOC remaining** : ~4 400 of new Kotlin code
+(D2 ~3 700 main + ~2 200 test = ~5 900 total + Q4 400 + D1.4 ~300
+main ; D1.4 also ships ~8 k JSON test data ; everything else shipped
+or descoped, D1 in-flight LOC tracked separately under the
+chantier's own slice budget). Decomposes into ~10 PRs (D2 = 8
+sub-slice PRs per its mini plan, Q4 small, D1.4 medium-with-debug-
+tail).
 
 **Total LOC delivered so far** : ~25 000 across the **15 shipped
 chantiers** (B2 / C1 / C2 / C3 / C4 / C5 / D3 / D4 / I1 / I2 / I3 /
