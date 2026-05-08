@@ -249,6 +249,65 @@ class SkPathOpsCommonTest {
 
     // ─── globalState contourHead get/set ──────────────────────────
 
+    // ─── HandleCoincidence + walker statics (D1.2.h.4) ────────────
+
+    @Test
+    fun `calc_angles walks every contour without throwing`() {
+        val gs = SkOpGlobalState()
+        val head = newContourList(gs)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        head.appendContour().also { it.setGlobalState(gs); pushLine(it, 0f, 5f, 10f, 5f) }
+        calc_angles(head)
+    }
+
+    @Test
+    fun `missing_coincidence false on plain non-coincident contours`() {
+        val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
+        val head = newContourList(gs)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        head.appendContour().also { it.setGlobalState(gs); pushLine(it, 0f, 5f, 10f, 5f) }
+        assertFalse(missing_coincidence(head))
+    }
+
+    @Test
+    fun `move_multiples and move_nearby return true on single-segment chain`() {
+        val head = newContourList(null)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        assertTrue(move_multiples(head))
+        assertTrue(move_nearby(head))
+    }
+
+    @Test
+    fun `sort_angles returns true on single-segment chain`() {
+        val head = newContourList(null)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        head.calcAngles()
+        assertTrue(sort_angles(head))
+    }
+
+    @Test
+    fun `HandleCoincidence returns true on a non-overlapping contour pair`() {
+        val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
+        val head = newContourList(gs)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        head.appendContour().also { it.setGlobalState(gs); pushLine(it, 0f, 5f, 10f, 5f) }
+        // No coincidence to fix — orchestrator just walks the pipeline
+        // and returns true.
+        assertTrue(HandleCoincidence(head, gs.coincidence()!!))
+    }
+
+    @Test
+    fun `HandleCoincidence returns true on an empty coincidence container`() {
+        val gs = SkOpGlobalState().also { it.setCoincidence(SkOpCoincidence()) }
+        val head = newContourList(gs)
+        pushLine(head, 0f, 0f, 10f, 0f)
+        // Single contour, single segment — every step should short-circuit
+        // on the empty / single-element fast path.
+        assertTrue(HandleCoincidence(head, gs.coincidence()!!))
+    }
+
+    // ─── globalState contourHead get/set ──────────────────────────
+
     @Test
     fun `GlobalState contourHead get-set roundtrip`() {
         val gs = SkOpGlobalState()
