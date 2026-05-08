@@ -242,6 +242,55 @@ internal open class SkOpContour : Comparable<SkOpContour> {
         return true
     }
 
+    /**
+     * Walk every segment and OR together its
+     * [SkOpSegment.missingCoincidence] result. Returns true if any
+     * segment found a missing coincidence pair.
+     *
+     * Mirrors `SkOpContour::missingCoincidence` (`SkOpContour.h:231`).
+     */
+    fun missingCoincidence(): Boolean {
+        require(fCount > 0)
+        var seg: SkOpSegment? = fHead
+        var result = false
+        while (seg != null) {
+            if (seg.missingCoincidence()) result = true
+            seg = seg.next()
+        }
+        return result
+    }
+
+    /**
+     * Walk every segment calling [SkOpSegment.moveMultiples]. Returns
+     * `false` on the first segment that aborts (1000-iteration
+     * safety net). Mirrors `SkOpContour::moveMultiples`
+     * (`SkOpContour.h:244`).
+     */
+    fun moveMultiples(): Boolean {
+        require(fCount > 0)
+        var seg: SkOpSegment? = fHead
+        while (seg != null) {
+            if (!seg.moveMultiples()) return false
+            seg = seg.next()
+        }
+        return true
+    }
+
+    /**
+     * Walk every segment calling [SkOpSegment.moveNearby]. Returns
+     * `false` on the first segment that aborts. Mirrors
+     * `SkOpContour::moveNearby` (`SkOpContour.h:255`).
+     */
+    fun moveNearby(): Boolean {
+        require(fCount > 0)
+        var seg: SkOpSegment? = fHead
+        while (seg != null) {
+            if (!seg.moveNearby()) return false
+            seg = seg.next()
+        }
+        return true
+    }
+
     // ─── Comparable ───────────────────────────────────────────────
 
     /** Order by `bounds.top` ascending, ties broken by `bounds.left`. */

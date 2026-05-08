@@ -475,6 +475,21 @@ internal open class SkOpSpanBase {
     }
 
     /**
+     * True if any span in this' coincident-end loop lives on [segment].
+     * Mirrors `SkOpSpanBase::containsCoinEnd(const SkOpSegment*)`
+     * (`SkOpSpan.cpp:224`).
+     */
+    fun containsCoinEnd(segment: SkOpSegment): Boolean {
+        require(this.segment() !== segment)
+        var next: SkOpSpanBase = this
+        while (true) {
+            next = next.fCoinEnd
+            if (next === this) return false
+            if (next.segment() === segment) return true
+        }
+    }
+
+    /**
      * Splice [coin] into this' coincident-end loop. Mirrors
      * `SkOpSpanBase::insertCoinEnd`.
      */
