@@ -458,13 +458,26 @@ manageable while reaching multi-format parity.
 
 **Phase decomposition** :
 
-- **D3.1** — `SkCodec` decoder facade + PNG (refactor existing
-  `BufferedImage`-based loader into the new abstraction).
-  - `SkCodec.MakeFromData(data)` returns `SkCodec?` ; `SkCodec.MakeFromStream`.
-  - `getInfo()`, `getPixels(info, dst, rowBytes, options)`.
-  - PNG via existing `javax.imageio.ImageIO`.
-  - **LOC** : ~400.
-  - **Tests** : decode + re-encode roundtrip on all `original-888/*.png` references.
+- **D3.1** ✅ — `SkCodec` decoder facade + PNG. Package
+  `org.skia.codec` ([SkCodec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/SkCodec.kt))
+  ships the facade (`Result` enum, `MakeFromData` / `MakeFromStream`,
+  `getInfo` / `getEncodedFormat` / `getICCProfile` / `getPixels` /
+  `getImage`) plus the `SkEncodedImageFormat` enum.
+  [SkPngCodec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/png/SkPngCodec.kt)
+  registers as the first `SkCodec.Decoder`, sniffs the PNG signature,
+  walks the `iCCP` chunk for the embedded profile (the DM Rec.2020
+  references rely on this), and dispatches to a 16-bpc → F16 path or
+  an 8-bpc → 8888 path. `TestUtils.loadReferenceBitmap` /
+  `loadReferenceColorSpace` now go through the codec, so the inline
+  iCCP / `BufferedImage` plumbing is gone from the test harness.
+  - **LOC** : ~454 main + ~220 test = 674 total (cf. plan estimate
+    ~400 — the overage covers the `SkEncodedImageFormat` enum and a
+    fuller test surface than the plan called out).
+  - **Tests** :
+    [SkPngCodecTest.kt](kanvas-skia/src/test/kotlin/org/skia/codec/png/SkPngCodecTest.kt)
+    (10 cases : signature dispatch, 8-bit + 16-bpc decode parity,
+    determinism on `bigrect.png`, geometry + colour-type validation).
+    Full kanvas-skia suite **2126 / 2126 green** through the new path.
 
 - **D3.2** — JPEG via `imageio`.
   - `SkJpegCodec.kt`.

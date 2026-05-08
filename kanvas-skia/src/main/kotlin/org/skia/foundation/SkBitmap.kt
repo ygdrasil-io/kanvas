@@ -169,12 +169,12 @@ public class SkBitmap(
             SkColorType.kRGBA_F16Norm -> {
                 // Convert premul float → non-premul 8-bit ARGB SkColor. Use
                 // **truncation** (`floor(f * 256)`) instead of round-to-nearest
-                // to match the legacy `ushr 8` semantics that
-                // `bufferedImageToBitmap` used when loading 16-bit PNGs into
-                // 8-bit bitmaps. Round-to-nearest would shift the gradient
-                // boundary by one byte for pixels whose 16-bit value's low
-                // byte exceeds 0x80, causing a regression on the previously
-                // 100 %-passing `ShallowGradient*` GMs.
+                // to match the legacy `ushr 8` semantics the test-side PNG
+                // loader used when materialising 16-bit references as 8-bit
+                // bitmaps. Round-to-nearest would shift the gradient boundary
+                // by one byte for pixels whose 16-bit value's low byte exceeds
+                // 0x80, causing a regression on the previously 100 %-passing
+                // `ShallowGradient*` GMs.
                 val i = (y * width + x) * 4
                 val pr = pixelsF16[i]
                 val pg = pixelsF16[i + 1]

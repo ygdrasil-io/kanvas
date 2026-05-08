@@ -1,5 +1,6 @@
 package org.skia.testing
 
+import org.skia.codec.SkCodec
 import org.skia.dm.RasterSinkF16
 import org.skia.dm.Sink
 import org.skia.foundation.SkBitmap
@@ -7,13 +8,9 @@ import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.skcms.SkNamedGamut
 import org.skia.skcms.SkNamedTransferFn
-import org.skia.skcms.skcmsParse
 import org.skia.tests.GM
 import java.awt.image.BufferedImage
-import java.awt.image.DataBufferUShort
-import java.io.DataInputStream
 import java.io.File
-import java.util.zip.Inflater
 import javax.imageio.ImageIO
 
 public object TestUtils {
@@ -84,8 +81,8 @@ public object TestUtils {
     }
 
     /**
-     * Read raw PNG bytes from the classpath. Used by [loadReferenceBitmap]
-     * to extract the iCCP chunk and parse the embedded color profile.
+     * Read raw PNG bytes from the classpath. Used by [loadReferenceCodec]
+     * to feed the [SkCodec] dispatcher.
      */
     private fun readPngBytes(name: String): ByteArray? {
         val path = "$REFERENCE_DIR/$name.png"
@@ -93,41 +90,17 @@ public object TestUtils {
     }
 
     /**
-     * Walk a PNG looking for the `iCCP` chunk and return its inflated ICC
-     * profile bytes, or `null` if the PNG has no ICC profile.
+     * Build an [SkCodec] over the named reference PNG. Returns `null`
+     * if the resource is missing or the bytes are not a valid PNG.
+     *
+     * D3.1 wire-up : the codec replaces the inline iCCP / `BufferedImage`
+     * plumbing that used to live in this file. Callers that need just
+     * the colour space go through [loadReferenceColorSpace] ; callers
+     * that need the decoded bitmap go through [loadReferenceBitmap].
      */
-    private fun extractIccProfile(pngBytes: ByteArray): ByteArray? {
-        if (pngBytes.size < 8) return null
-        val sig = byteArrayOf(
-            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-        )
-        if (!pngBytes.copyOfRange(0, 8).contentEquals(sig)) return null
-
-        val dis = DataInputStream(pngBytes.inputStream())
-        dis.skipBytes(8)
-        while (dis.available() > 0) {
-            val length = dis.readInt()
-            val typeBytes = ByteArray(4).also { dis.readFully(it) }
-            val type = String(typeBytes, Charsets.US_ASCII)
-            val data = ByteArray(length).also { dis.readFully(it) }
-            dis.readInt()
-            if (type == "iCCP") {
-                var nameEnd = 0
-                while (nameEnd < data.size && data[nameEnd] != 0.toByte()) nameEnd++
-                val compressed = data.copyOfRange(nameEnd + 2, data.size)
-                val inflater = Inflater()
-                inflater.setInput(compressed)
-                val out = ByteArray(64 * 1024)
-                val len = inflater.inflate(out)
-                inflater.end()
-                return out.copyOfRange(0, len)
-            } else if (type == "IDAT") {
-                // IDAT comes after iCCP per PNG spec; if we hit it without an
-                // iCCP, there is none.
-                return null
-            }
-        }
-        return null
+    public fun loadReferenceCodec(name: String): SkCodec? {
+        val bytes = readPngBytes(name) ?: return null
+        return SkCodec.MakeFromData(bytes)
     }
 
     /**
@@ -142,19 +115,16 @@ public object TestUtils {
      * future GM whose profile diverges).
      */
     public fun loadReferenceColorSpace(name: String): SkColorSpace? {
-        val pngBytes = readPngBytes(name) ?: return null
-        val iccBytes = extractIccProfile(pngBytes) ?: return null
-        val profile = skcmsParse(iccBytes) ?: return null
+        val codec = loadReferenceCodec(name) ?: return null
+        val profile = codec.getICCProfile() ?: return null
         return SkColorSpace.make(profile)
     }
 
     public fun loadReferenceBitmap(name: String): SkBitmap? {
-        val img = loadReferenceImage(name) ?: return null
-        // Best-effort: tag the bitmap with the colorspace parsed from
-        // the PNG's iCCP chunk. Falls back to the default sRGB if the
-        // PNG has no profile or the parser rejects it.
-        val cs = loadReferenceColorSpace(name) ?: SkColorSpace.makeSRGB()
-        return bufferedImageToBitmap(img, cs)
+        val codec = loadReferenceCodec(name) ?: return null
+        val (bitmap, result) = codec.getImage()
+        if (result != SkCodec.Result.kSuccess || bitmap == null) return null
+        return bitmap
     }
 
     public fun saveDebugImage(bitmap: SkBitmap, name: String) {
@@ -306,49 +276,4 @@ public object TestUtils {
         return img
     }
 
-    public fun bufferedImageToBitmap(
-        img: BufferedImage,
-        colorSpace: SkColorSpace = SkColorSpace.makeSRGB(),
-    ): SkBitmap {
-        val raster = img.raster
-        val buf = raster.dataBuffer
-        val numBands = raster.numBands
-        // 16-bit-per-channel PNGs (the format Skia DM emits) — read raw
-        // raster samples and preserve them as F16 floats. Going through
-        // `getRGB` / `drawImage` would (a) apply the embedded ICC profile,
-        // (b) quantize to 8 bits, both unwanted.
-        if (buf is DataBufferUShort && numBands >= 3) {
-            val bitmap = SkBitmap(img.width, img.height, colorSpace, SkColorType.kRGBA_F16Norm)
-            val pixel = IntArray(numBands)
-            val out = bitmap.pixelsF16
-            val inv65535 = 1f / 65535f
-            for (y in 0 until img.height) {
-                for (x in 0 until img.width) {
-                    raster.getPixel(x, y, pixel)
-                    val r = pixel[0] * inv65535
-                    val g = pixel[1] * inv65535
-                    val b = pixel[2] * inv65535
-                    val a = if (numBands >= 4) pixel[3] * inv65535 else 1f
-                    val o = (y * img.width + x) * 4
-                    // Premultiply — the F16 format requires it.
-                    out[o] = r * a
-                    out[o + 1] = g * a
-                    out[o + 2] = b * a
-                    out[o + 3] = a
-                }
-            }
-            return bitmap
-        }
-        // Fallback: 8-bit images without an ICC profile load fine via getRGB.
-        // Stay 8-bit (lossy, but matches the old behaviour).
-        val bitmap = SkBitmap(img.width, img.height, colorSpace)
-        val argb = if (img.type == BufferedImage.TYPE_INT_ARGB) img else
-            BufferedImage(img.width, img.height, BufferedImage.TYPE_INT_ARGB).also {
-                val g = it.createGraphics()
-                g.drawImage(img, 0, 0, null)
-                g.dispose()
-            }
-        argb.getRGB(0, 0, argb.width, argb.height, bitmap.pixels, 0, argb.width)
-        return bitmap
-    }
 }
