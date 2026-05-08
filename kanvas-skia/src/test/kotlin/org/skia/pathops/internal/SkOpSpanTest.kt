@@ -307,4 +307,66 @@ class SkOpSpanTest {
         // Range (0.0..0.8) covers s=0.2 and e=0.5.
         assertEquals(SkOpSpanBase.Collapsed.kYes, span.collapsed(0.2, 0.5))
     }
+
+    // ─── release / merge / addOpp (D1.2.g.c.3) ────────────────────
+
+    @Test
+    fun `Segment release decrements fCount and fDoneCount when span is done`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val mid = a.addT(0.5)!!
+        assertEquals(2, a.count())
+        val midSpan = mid.span()!! as SkOpSpan
+        a.markDone(midSpan)
+        a.release(midSpan)
+        assertEquals(1, a.count())
+    }
+
+    @Test
+    fun `Segment release with non-done span decrements only fCount`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val mid = a.addT(0.5)!!
+        assertEquals(2, a.count())
+        a.release(mid.span()!! as SkOpSpan)
+        assertEquals(1, a.count())
+    }
+
+    @Test
+    fun `SkOpSpan release unlinks the span and rewires the pt-T loop`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val mid = a.addT(0.5)!!
+        val midSpan = mid.span() as SkOpSpan
+        midSpan.release(a.fHead.ptT())
+        // fHead's next now skips the released span.
+        assertSame(a.fTail, a.fHead.next())
+        assertSame(a.fHead, a.fTail.prev())
+        assertTrue(mid.deleted())
+    }
+
+    @Test
+    fun `SpanBase merge splices spanPtT into this loop and releases the span`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // Create a mid-span at t=0.5 — to be merged into fHead's loop.
+        val mid = a.addT(0.5)!!
+        val midSpan = mid.span() as SkOpSpan
+        // Pre-condition checks : t == 0 != 0.5 and 0.5 is not zero_or_one.
+        a.fHead.merge(midSpan)
+        // After merge : mid is marked deleted (release sets it) ; mid's
+        // span pointer is rewired to fHead's span ; mid pt-T sits right
+        // after a.fHead.ptT() in the merged loop.
+        assertTrue(mid.deleted())
+        assertSame(a.fHead, mid.span())
+        assertSame(mid, a.fHead.ptT().next())
+    }
+
+    @Test
+    fun `addOpp returns true when opp is already in the loop`() {
+        val span1 = SkOpSpanBase()
+        val span2 = SkOpSpanBase()
+        val a = SkOpPtT(); a.init(span1, 0.0, pt(0f, 0f), false)
+        val b = SkOpPtT(); b.init(span2, 0.0, pt(0f, 0f), false)
+        // Pre-splice via addOpp(SkOpPtT, SkOpPtT) so b is already in a's loop.
+        a.addOpp(b, b)
+        // Now the SpanBase-level addOpp should short-circuit (oppPrev null).
+        assertTrue(span1.addOpp(span2))
+    }
 }
