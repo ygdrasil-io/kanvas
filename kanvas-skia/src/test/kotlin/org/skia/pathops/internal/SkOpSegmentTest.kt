@@ -2,6 +2,7 @@ package org.skia.pathops.internal
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
@@ -480,5 +481,75 @@ class SkOpSegmentTest {
         val result = sa.ComputeOneSumReverse(baseA, nextA, SkOpAngle.IncludeType.kUnaryWinding)
         assertTrue(result)
         org.junit.jupiter.api.Assertions.assertNotEquals(SkOpSpan.SK_MinS32, sb.fHead.windSum())
+    }
+
+    // ─── Pt-T linking + utilities (D1.2.c.2.e) ─────────────────────
+
+    @Test
+    fun `ptAtT on a line returns the lerp endpoint`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        assertEquals(pt(5f, 0f), seg.ptAtT(0.5))
+        assertEquals(pt(0f, 0f), seg.ptAtT(0.0))
+        assertEquals(pt(10f, 0f), seg.ptAtT(1.0))
+    }
+
+    @Test
+    fun `ptsDisjoint returns false for line segments`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // Lines never loop back ; ptsDisjoint short-circuits to false.
+        assertFalse(seg.ptsDisjoint(0.1, pt(1f, 0f), 0.5, pt(5f, 0f)))
+    }
+
+    @Test
+    fun `match returns true when same segment and precisely-equal t`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // fHead's pt-T has fT=0 ; match against the same (t=0, pt=(0,0)) → true.
+        assertTrue(seg.match(seg.fHead.ptT(), seg, 0.0, pt(0f, 0f)))
+    }
+
+    @Test
+    fun `match returns false when test point is far from base point`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // Different t with non-equal point → ApproximatelyEqual fails.
+        assertFalse(seg.match(seg.fHead.ptT(), seg, 0.5, pt(99f, 99f)))
+    }
+
+    @Test
+    fun `addT returns the existing pt-T when t already exists`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // t=0 already lives on fHead.
+        val result = seg.addT(0.0, pt(0f, 0f))
+        assertSame(seg.fHead.ptT(), result)
+    }
+
+    @Test
+    fun `addT inserts a new span when t is between existing ones`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        assertEquals(1, seg.fCount)
+        val result = seg.addT(0.5, pt(5f, 0f))
+        assertNotNull(result)
+        // A fresh span was inserted between fHead and fTail ; fCount bumped.
+        assertEquals(2, seg.fCount)
+        assertEquals(0.5, result!!.fT)
+    }
+
+    @Test
+    fun `clearOne resets windValue oppValue and marks done`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.fHead.fWindValue = 7
+        seg.fHead.fOppValue = 3
+        seg.clearOne(seg.fHead)
+        assertEquals(0, seg.fHead.windValue())
+        assertEquals(0, seg.fHead.oppValue())
+        assertTrue(seg.fHead.done())
+    }
+
+    @Test
+    fun `clearAll clears every span`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        seg.fHead.fWindValue = 5
+        seg.clearAll()
+        assertEquals(0, seg.fHead.windValue())
+        assertTrue(seg.fHead.done())
     }
 }
