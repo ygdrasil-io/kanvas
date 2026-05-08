@@ -1,6 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.effects.runtime.SkRuntimeEffect
+import org.skia.effects.runtime.effects.SkBuiltinColorFilterEffects
 import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkColorGetA
@@ -19,29 +21,27 @@ import org.skia.math.SkPoint
 import org.skia.math.SkRect
 
 /**
- * Port of upstream Skia's `gm/composecolorfilter.cpp` GMs —
- * specifically the **non-runtime** branches.
+ * Port of upstream Skia's `gm/composecolorfilter.cpp` GMs.
  *
  * Upstream ships two `DEF_SIMPLE_GM` :
  *
  *  - **`composeCF`** : draws the same scene twice — once with
  *    `outer.makeComposed(inner)` (no SkSL), once with
- *    `SkRuntimeEffect::MakeForColorFilter` (SkSL). We port only
- *    the non-SkSL half ; the second column will be drawn as a
- *    placeholder gray rectangle, so the rendered output covers
- *    half the cells of the upstream PNG. Similarity will be ~50 %.
+ *    `SkRuntimeEffect::MakeForColorFilter` (SkSL). **D2.4.a wires
+ *    the SkSL branch** via the registered
+ *    [SkBuiltinColorFilterEffects.ComposeChildrenImpl] (the
+ *    `outer.eval(inner.eval(c))` runtime effect). Both columns
+ *    render now ; the SkSL column should be pixel-iso with the
+ *    non-SkSL one.
  *  - **`composeCFIF`** : draws `SkImageFilters::Compose` of a
  *    Shader-image-filter and a ColorFilter-image-filter. **No
- *    SkSL** is used — this GM is fully portable.
+ *    `SkRuntimeEffect` involvement** — fully portable.
  *
- * **Iso-fidelity caveats** :
- *  - `composeCF` only renders the left column ; right column is
- *    a gray fill (placeholder for the runtime-effect half).
- *  - The Perlin-noise turbulence used by `composeCFIF` is
- *    Skia's `SkPerlinNoiseShader.MakeTurbulence` ; iso-pixel
- *    parity depends on the noise generator matching upstream's
- *    seed semantics. Likely off-by-some-pixels but visually
- *    similar.
+ * **Iso-fidelity caveat** : the Perlin-noise turbulence used by
+ * `composeCFIF` is Skia's `SkPerlinNoiseShader.MakeTurbulence` ;
+ * iso-pixel parity depends on the noise generator matching
+ * upstream's seed semantics. Likely off-by-some-pixels but
+ * visually similar.
  */
 public class ComposeColorFilterGM : GM() {
 
@@ -68,39 +68,39 @@ public class ComposeColorFilterGM : GM() {
 
         val paint = SkPaint().apply { shader = sweep }
 
-        c.save()
-        // Two bool values for upstream's `useSkSL` loop, but we only
-        // exercise `useSkSL=false` (left column). The right column
-        // would need D2.4.a.
-        val cf0 = makeTintColorFilter(0xFF300000.toInt(), 0xFFA00000.toInt())
-        val cf1 = makeTintColorFilter(0xFF003000.toInt(), 0xFF00A000.toInt())
+        // Both columns of upstream's `useSkSL` loop : false (top row,
+        // direct makeComposed) and true (bottom row, SkSL via
+        // SkRuntimeEffect.MakeForColorFilter).
+        for (useSkSL in listOf(false, true)) {
+            c.save()
+            val cf0 = makeTintColorFilter(0xFF300000.toInt(), 0xFFA00000.toInt(), useSkSL)
+            val cf1 = makeTintColorFilter(0xFF003000.toInt(), 0xFF00A000.toInt(), useSkSL)
 
-        paint.colorFilter = cf0
-        c.drawRect(SkRect.MakeLTRB(0f, 0f, 100f, 100f), paint)
-        c.translate(100f, 0f)
-        paint.colorFilter = cf1
-        c.drawRect(SkRect.MakeLTRB(0f, 0f, 100f, 100f), paint)
-        c.restore()
+            paint.colorFilter = cf0
+            c.drawRect(SkRect.MakeLTRB(0f, 0f, 100f, 100f), paint)
+            c.translate(100f, 0f)
+            paint.colorFilter = cf1
+            c.drawRect(SkRect.MakeLTRB(0f, 0f, 100f, 100f), paint)
+            c.restore()
 
-        // Right-column placeholder for the SkSL branch — gray fill,
-        // documented in KDoc.
-        c.save()
-        c.translate(0f, 100f)
-        val placeholder = SkPaint().apply {
-            color = SkColorSetARGB(0xFF, 0x88, 0x88, 0x88)
+            c.translate(0f, 100f)
         }
-        c.drawRect(SkRect.MakeWH(200f, 100f), placeholder)
-        c.restore()
     }
 
     /**
-     * Mirrors upstream's `MakeTintColorFilter(lo, hi, useSkSL=false)` —
-     * the non-SkSL branch only. Composes a [SkLumaColorFilter] (inner)
-     * with a tint matrix (outer) that linearly interpolates between
-     * `lo` and `hi` based on the input's luminance (stored in α
-     * after Luma's pass).
+     * Mirrors upstream's `MakeTintColorFilter(lo, hi, useSkSL)`.
+     * Composes a [SkLumaColorFilter] (inner) with a tint matrix
+     * (outer) that linearly interpolates between `lo` and `hi`
+     * based on the input's luminance (stored in α after Luma's
+     * pass).
+     *
+     * When [useSkSL] is `true`, composes via the runtime-effect
+     * registered as
+     * [SkBuiltinColorFilterEffects.ComposeChildrenImpl]
+     * (`outer.eval(inner.eval(c))`) — proves the SkSL path is
+     * pixel-iso with the direct `Compose` path.
      */
-    private fun makeTintColorFilter(lo: Int, hi: Int): SkColorFilter {
+    private fun makeTintColorFilter(lo: Int, hi: Int, useSkSL: Boolean): SkColorFilter {
         val rLo = SkColorGetR(lo); val gLo = SkColorGetG(lo)
         val bLo = SkColorGetB(lo); val aLo = SkColorGetA(lo)
         val rHi = SkColorGetR(hi); val gHi = SkColorGetG(hi)
@@ -113,9 +113,21 @@ public class ComposeColorFilterGM : GM() {
         )
         val inner = SkLumaColorFilter.Make()
         val outer = SkColorFilters.Matrix(tint)
-        // Upstream calls `outer->makeComposed(inner)` ; our Compose
-        // factory has the same `Compose(outer, inner)` semantic.
-        return SkColorFilters.Compose(outer, inner)
+        if (!useSkSL) {
+            // Upstream calls `outer->makeComposed(inner)` ; our
+            // Compose factory has the same `Compose(outer, inner)`
+            // semantic.
+            return SkColorFilters.Compose(outer, inner)
+        }
+        // SkSL branch — register the 2-child runtime effect, then
+        // bind inner / outer as children.
+        val effect = SkRuntimeEffect.MakeForColorFilter(
+            SkBuiltinColorFilterEffects.COMPOSE_CF_SKSL
+        ).effect ?: error("Compose-CF runtime effect failed to compile")
+        return effect.makeColorFilter(
+            uniforms = null,
+            children = arrayOf<SkColorFilter?>(inner, outer),
+        ) ?: error("Compose-CF runtime effect failed to instantiate")
     }
 }
 
