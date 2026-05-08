@@ -126,35 +126,71 @@ named GM cluster. Order picks "smallest first" plus "dependencies
 first" — the trivial wrappers (C1.1) feed the fancier composers
 (C1.3 / C1.7).
 
-### C1.1 — Source / passthrough wrappers ✏️ ~250 LOC
+### C1.1 — Source / passthrough wrappers ✅ shipped
 
 Filters whose "algorithm" is "reuse an existing canvas op as the
 filter input". No new pixel arithmetic.
 
-- **`Image(image, srcRect, dstRect, sampling)`** — wrap an
-  [SkImage] sampled from `srcRect` into a filter input lying at
-  `dstRect`. Implementation : draw `image` into a filter-result
-  bitmap of `dstRect` size via the existing
-  `SkBitmapDevice.drawImageRect` path.
-- **`Picture(pic, targetRect)`** — same with [SkPicture] : replay
-  the picture into a `targetRect`-sized bitmap, return as the
-  filter input.
-- **`Shader(shader, dither)`** — fill a filter-result bitmap with
-  the shader. Re-uses
-  [SkBitmapDevice.drawPaint](kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt).
-  `dither` ignored on F16 (already 16-bit per channel) ; honoured
-  on 8888 by routing through the existing dither path.
-- **`Empty()`** — return a transparent-black input. ~10 LOC ;
-  trivial subclass that always reports an empty bbox.
-- **`Crop(rect, [tileMode], input)`** — clip `input.eval(ctx)` to
-  `rect`. Implementation : run `input.filter`, then for each
-  output pixel either return the inside value, the tile-mode
-  fallback (clamp / repeat / mirror), or transparent for
-  `kDecal`. ~80 LOC.
+- **`Image(image, srcRect, dstRect, sampling)`** — wraps an
+  [SkImage] as the filter source. Identity-shape fast path
+  (srcRect = dstRect = full image bounds) returns the wrapped
+  image by reference, no allocation. Sub-rect / scaled cases
+  allocate the output buffer and sample with the chosen
+  [SkSamplingOptions] filter mode (kNearest / kLinear).
+  Implementation note : ended up reimplementing the bilerp
+  helper inline rather than delegating through
+  `SkBitmapDevice.drawImageRect`, since the filter's coord
+  space is more direct than the canvas pipeline.
+- **`Picture(pic, targetRect)`** — replays an [SkPicture] into
+  a fresh [SkBitmap] of `targetRect`'s size, with the
+  picture's local-space origin translated to `(0, 0)` so a
+  picture recorded at e.g. `(10, 20)` lands at the right
+  position in the output. Convenience overload uses
+  [SkPicture.cullRect] as the target.
+- **`Shader(shader, dither)`** — fills a buffer sized to the
+  evaluation context's `src` with the shader's per-pixel
+  output, driven through
+  [SkBitmapDevice.drawPaint](kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt)
+  so it sees the same colour-space xform / premul pipeline as
+  the raster sinks. `dither` is plumbed for source-compat but
+  currently advisory (F16 needs no dither, 8888 applies the
+  project default).
+- **`Empty()`** — singleton 1×1 transparent-black filter.
+  Useful as a placeholder in `Merge` / `Compose` chains under
+  construction.
+- **`Crop(rect, [tileMode], input)`** — clips `input`'s output
+  to `rect`. For each output pixel, looks up the corresponding
+  upstream pixel ; out-of-bounds samples handled by the
+  per-mode helpers — `kDecal` (default) → transparent black ;
+  `kClamp` → nearest border ; `kRepeat` → positive-mod tile ;
+  `kMirror` → period-`2m` mirror tile. `null` input means
+  "crop the rasterised source directly".
 
-**Tests** : unit-test each factory with a known input bitmap +
-expected output bytes. Per-filter ~20 LOC test ; ~150 LOC test
-total.
+**Implementation deltas vs plan** :
+- The plan said "Image draws via `SkBitmapDevice.drawImageRect`".
+  Shipped uses inline bilerp + nearest sampling because the
+  filter's coord remap is a simpler `srcRect → dstRect` linear
+  map than the device-CTM round-trip ; ~30 LOC saved.
+- The `Crop` mode helpers (`positiveMod` / `mirrorMod`) are
+  factored out of the per-pixel loop so the next slice
+  (`C1.2 Tile`) can reuse them.
+
+**Tests** :
+[SkImageFiltersSourcePassthroughTest.kt](kanvas-skia/src/test/kotlin/org/skia/foundation/SkImageFiltersSourcePassthroughTest.kt)
+(14) — Image identity fast path / dst-offset / sub-rect ; Picture
+with explicit targetRect + cullRect overload ; Shader fills src
+dimensions via gradient ; Empty 1×1 transparent + singleton ; Crop
+all 4 tile modes (kDecal / kClamp / kRepeat / kMirror) + null-input
++ non-zero rect origin offset.
+
+**LOC** : 219 main delta on
+[SkImageFilters.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageFilters.kt)
++ 257 test = 476 total (cf. plan estimate ~250 main + ~150 test ;
+modest overage covers the bilerp helper + the kMirror periodic-
+math edge cases).
+
+**Status** : full kanvas-skia suite **2453 / 2453 green** with
+the new 5 factories on the classpath.
 
 ### C1.2 — Tile + Magnifier ✏️ ~250 LOC
 
@@ -279,14 +315,14 @@ where possible.
 
 | Slice | Main | Test | GMs unblocked |
 |---|---:|---:|---|
-| C1.1 source / passthrough | ~250 | ~150 | foundation for higher slices |
+| C1.1 source / passthrough ✅ | **219** (planned ~250) | **257** (planned ~150) | foundation for higher slices |
 | C1.2 Tile + Magnifier | ~250 | ~120 | 3 |
 | C1.3 Arithmetic family | ~300 | ~150 | 3 |
 | C1.4 Morphology | ~300 | ~150 | ~8 |
 | C1.5 DisplacementMap | ~200 | ~120 | 5 |
 | C1.6 MatrixConvolution | ~250 | ~150 | 5 |
 | C1.7 Lighting (6 variants) | ~1200 | ~600 | ~6 |
-| **Total** | **~2750** | **~1440** | **~30 GM ports unblocked** |
+| **Total** | **~2719** (so far : 219 actual + 2500 planned) | **~1547** (so far : 257 actual + 1290 planned) | **~30 GM ports unblocked** |
 
 vs. the original C1 estimate of `~1800 main` (which only covered
 11 of 22 factories and undersized the lighting cluster by ~600
@@ -325,9 +361,16 @@ LOC).
 
 ## Status
 
-📋 **planned** — slices defined, scope agreed, no code yet.
-Pickup-ready when the schedule allows ; not blocking any other
-open chantier.
+🔄 **in progress** — C1.1 ✅ shipped, C1.2 / C1.3 / C1.4 / C1.5 /
+C1.6 / C1.7 📋 pending. The 5 source / passthrough wrappers are
+on `master` (`Image`, `Picture`, `Shader`, `Empty`, `Crop`) and
+the full kanvas-skia suite is **2453 / 2453 green** with the new
+factories on the classpath.
+
+Pickup C1.2 (Tile + Magnifier, ~250 LOC main + ~120 test) next
+when the schedule allows. The `Crop` tile-mode helpers from
+C1.1 (`positiveMod` / `mirrorMod`) are factored out for reuse
+by `Tile`.
 
 The original [§ C1 entry](MIGRATION_PLAN_RASTER_COMPLETION.md)
 will be slimmed to point here, mirroring how
