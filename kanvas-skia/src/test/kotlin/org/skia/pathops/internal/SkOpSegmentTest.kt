@@ -552,4 +552,64 @@ class SkOpSegmentTest {
         assertEquals(0, seg.fHead.windValue())
         assertTrue(seg.fHead.done())
     }
+
+    // ─── Coincidence helpers (D1.2.c.2.f) ──────────────────────────
+
+    @Test
+    fun `undoneSpan returns the first not-done span`() {
+        val seg = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // Fresh segment : fHead is not done.
+        assertSame(seg.fHead, seg.undoneSpan())
+        // After marking, undoneSpan returns null.
+        seg.markDone(seg.fHead)
+        assertNull(seg.undoneSpan())
+    }
+
+    @Test
+    fun `testForCoincidence on coincident lines returns true at midpoint`() {
+        // Two collinear segments — same chord. The perpendicular ray
+        // sampled at mid-T crosses the opposite curve at the midpoint
+        // exactly → coincidence detected.
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val result = a.testForCoincidence(a.fHead.ptT(), a.fTail.ptT(),
+            a.fHead, a.fTail, b)
+        assertTrue(result)
+    }
+
+    @Test
+    fun `spansNearby finds a match when both heads share an exact point`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(0f, 10f)), null)
+        // Splice b's fHead pt-T into a's loop so the head's pt-T loop
+        // sees both segments.
+        a.fHead.ptT().addOpp(b.fHead.ptT(), b.fHead.ptT())
+        val foundOut = booleanArrayOf(false)
+        val ok = a.spansNearby(a.fHead, b.fHead, foundOut)
+        assertTrue(ok)
+        assertTrue(foundOut[0])
+    }
+
+    @Test
+    fun `spansNearby returns false-found when heads are far apart`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(100f, 100f), pt(200f, 100f)), null)
+        val foundOut = booleanArrayOf(true)  // pre-set to detect overwrite
+        val ok = a.spansNearby(a.fHead, b.fHead, foundOut)
+        assertTrue(ok)
+        assertFalse(foundOut[0])
+    }
+
+    @Test
+    fun `ClearVisited resets visited flags on segments in span pt-T loops`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(0f, 10f)), null)
+        // Splice b into a's head loop so ClearVisited sees both segments.
+        a.fHead.ptT().addOpp(b.fHead.ptT(), b.fHead.ptT())
+        // Pre-mark both as visited.
+        a.visited(); b.visited()
+        SkOpSegment.ClearVisited(a.fHead)
+        // First call to visited() on a freshly-reset segment returns false.
+        assertFalse(b.visited())
+    }
 }
