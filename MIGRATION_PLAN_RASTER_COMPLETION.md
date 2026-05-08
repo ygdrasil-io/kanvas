@@ -1,9 +1,12 @@
 # Migration plan — Raster pipeline completion (post-Group A)
 
-> **Status** : 📋 **planning** — ce document liste les chantiers restants
-> pour atteindre la parité-iso avec Skia raster (`include/core/*.h` +
-> `include/effects/*.h`), hors GM ports et hors backends GPU
-> (Ganesh / Graphite).
+> **Status** : 🔄 **en cours** — plan vivant. Premiers chantiers livrés
+> (C5, I1, I2, I3, I4 ✅ ; D1.1 ✅ ; D1.2 / I5 🔄). Voir status par
+> chantier ci-dessous.
+>
+> Ce document liste les chantiers restants pour atteindre la parité-iso
+> avec Skia raster (`include/core/*.h` + `include/effects/*.h`), hors
+> GM ports et hors backends GPU (Ganesh / Graphite).
 >
 > Source de vérité : Skia 4.x dans
 > `/Users/chaos/workspace/kanvas-forge/skia-main/`.
@@ -11,6 +14,35 @@
 > **But** : que chaque API publique côté Kotlin se comporte de manière
 > observable identique à son équivalent C++ Skia, pour permettre à terme
 > l'exécution iso-fidèle de DM (Skia DM = test runner upstream).
+>
+> ## Avancement (snapshot)
+>
+> | Chantier | Status | Notes |
+> |---|---|---|
+> | **C5** ARGB_4444 + color-management completion | ✅ shipped (Phase 6s + ARGB_4444 commit) | Display P3 / HDR PQ tests restent (~150 LOC) |
+> | **D1.0** SkPathOps skeleton + TightBounds | ✅ shipped | Entry points `Op` / `Simplify` / `AsWinding` retournent `null` jusqu'à D1.3 |
+> | **D1.1** Foundation (curves, line ops, intersections, TSect) | ✅ shipped (15 sous-slices) | a, b, c, d.1-3, e.1, e.2.a, e.2.b, e.2.c.1-4, e.3 |
+> | **D1.2** Op contour assembly | 🔄 en cours | a, b, b.2.0, c, e, f, i, i.2 livrés ; reste winding propagation + assembleur |
+> | **D1.3** Top-level entry points | 📋 pending | Bloqué sur D1.2 close |
+> | **D2** SkRuntimeEffect shim | 📋 doc-only | Plan ajouté ; pas d'implem |
+> | **D3** Image codecs | 📋 pending | |
+> | **D4** DM sink architecture | 📋 pending | |
+> | **I1** SkTextBlob + drawTextBlob + Picture wiring | ✅ shipped (I1.1-1.5) | 4 GM ports |
+> | **I2** Glyph cache + variable-fonts (light) + subpixel | ✅ shipped (I2.1-2.3) | Variable fonts AWT-wired déféré |
+> | **I3** SkRegion + SkAAClip + SkRasterClip | ✅ shipped (I3.1-3.3) | clipMask Phase 7q remplacé par SkAAClip |
+> | **I4** SkShaper (Primitive + JavaTextLayout + wrap) | ✅ shipped (I4.1-4.3) | HarfBuzz parity hors scope |
+> | **I5** drawPoints / drawAtlas / drawVertices / drawPatch | 🔄 en cours | I5.1, I5.2, I5.3.a/b livrés ; I5.4 (Patch) reste |
+> | **C1** Image filters extras | 📋 pending | Group A core déjà shipped (Offset/Blur/MatrixTransform/DropShadow/ColorFilter/Compose) |
+> | **C2** Path effects extras (kMorph, StrokeAndFill recipe) | 📋 pending | |
+> | **C3** SkEmbossMaskFilter | 📋 pending | |
+> | **C4** drawAnnotation / drawDrawable / drawShadow | 📋 pending | |
+> | **B1** SkPDF (PDFBox adapter) | 📋 pending | |
+> | **B2** SkSVGCanvas | 📋 pending | |
+> | **Q1** SkAutoCanvasRestore Kotlin idiom | 📋 pending | |
+> | **Q2** Canvas wrappers | 📋 pending | |
+> | **Q3** SkBBHFactory + Picture cull | 📋 pending | |
+> | **Q4** SkDeferredDisplayList | 📋 low-priority | |
+> | **Q5** Linear sRGB diagnostic | 📋 pending | Phase 7e' réinvestigué |
 
 ## Table des matières
 
@@ -162,7 +194,7 @@ What this plan adds :
 
 ## Chantiers critiques DM
 
-### D1 — `SkPathOps`
+### D1 — `SkPathOps` 🔄 en cours (D1.0 + D1.1 ✅ ; D1.2 🔄 ; D1.3 📋)
 
 **Skia upstream files** :
 - `include/pathops/SkPathOps.h` (public API : 4 functions)
@@ -193,29 +225,42 @@ public object SkPathOps {
 
 **Phase decomposition** :
 
-- **D1.1** — Foundation : segment types, intersection primitives.
-  - `SkPathOpsTypes.kt` : `OpContour`, `OpSegment`, `OpSpan`, `OpAngle`.
-  - `SkPathOpsLine.kt` : line ↔ line intersection, line ↔ quad/cubic.
-  - `SkPathOpsQuad.kt` / `SkPathOpsCubic.kt` : Bézier subdivision +
-    intersections (Bézier clipping algorithm — Sederberg-Nishita).
-  - `SkPathOpsBounds.kt` : tight bbox via bezier extremes.
-  - **LOC** : ~3000.
-  - **Tests** : 50+ unit tests on individual intersections (input
-    pairs from `tests/PathOpsLineIntersectionTest.cpp`,
-    `PathOpsQuadIntersectionTest.cpp`).
-  - **Iso-fidelity** : exhaustive Skia fixtures (~500 line/quad/cubic
-    pairs in `tests/PathOpsExtendedTest.cpp`) replayed.
+- **D1.1** — Foundation : segment types, intersection primitives. ✅ **shipped**
+  - Sous-slices livrés : (a) double-precision primitives `SkDPoint` /
+    `SkDLine` / `SkDRect` ; (b) curves `SkDQuad` / `SkDCubic` /
+    `SkDConic` + `SkDRect.setBounds` curve-tight ; (c)
+    `SkLineParameters` + `SkIntersections` (line ops) + `isLinear` /
+    pinned `subDivide` ; (d.1) `SkDQuad ↔ SkDLine` intersection ;
+    (d.2) `SkDCubic ↔ SkDLine` + `binarySearch` / `searchRoots` ;
+    (d.3) `SkDConic ↔ SkDLine` ; (e.1) cross-curve `hullIntersects` +
+    `SkDCubic.convexHull` ; (e.2.a) `SkTCurve` abstraction +
+    `SkTQuad` / `SkTConic` / `SkTCubic` wrappers ; (e.2.b)
+    `SkTCoincident` + `SkTSpan` (per-span TSect state) ; (e.2.c.1)
+    `SkTSect` skeleton + linked-list lifecycle ; (e.2.c.2)
+    coincidence machinery (16 methods) ; (e.2.c.3) intersect
+    machinery (`intersects` / `linesIntersect` / `trim` / `EndsEqual`
+    / `isParallel`) ; (e.2.c.4) `SkTSect.BinarySearch` +
+    `SkClosestSect` / `SkClosestRecord` ; (e.3)
+    `SkIntersections.intersect` curve-curve wrappers — **D1.1 close.**
+  - **LOC** estimés : ~3000.
 
-- **D1.2** — Op contour assembly.
-  - `OpContourBuilder.kt` : assemble segments into contours.
-  - `SkPathOpsTSect.kt` : T-section solver for self-intersections.
-  - `SkPathOpsCommon.kt` : winding-number propagation across spans.
-  - **LOC** : ~4000.
-  - **Tests** : `PathOpsBuilderTest`, `PathOpsExtendedTest` rep.
+- **D1.2** — Op contour assembly. 🔄 **en cours**
+  - Sous-slices livrés : (a) `SkOpPtT` + `SkOpSpanBase` + `SkOpSpan`
+    data model + 4 forward-decl skeletons ; (b) `SkOpAngle` data
+    model + linked-list ops + simple accessors ; (b.2.0) `SkDCurve`
+    / `SkDCurveSweep` + `SkOpSegment.subDivide` ; (c) `SkOpSegment`
+    data model (structural / span-list / static helpers) ; (e)
+    `SkOpContour` + `SkOpContourHead` + `SkOpContourBuilder` ; (f)
+    `SkOpEdgeBuilder` (reads `SkPath` verbs into `SkOpContour`) ;
+    (i) `SkPathWriter` (per-contour writer + simple assembly) ;
+    (i.2) `SkPathWriter.assemble` (partials stitching).
+  - À faire : `SkPathOpsTSect.kt` self-intersections (D1.1.e core
+    déjà disponible), winding-number propagation across spans
+    (`SkPathOpsCommon.kt`).
+  - **LOC** estimés restants : ~2000.
 
 - **D1.3** — Top-level `Op` / `Simplify` / `AsWinding` /
-  `TightBounds` entry points.
-  - `SkOpEdgeBuilder.kt` : reads `SkPath` verbs into `OpSegment`s.
+  `TightBounds` entry points. 📋 **pending** (bloqué sur D1.2 close).
   - `SkOpAssembler.kt` : runs the algorithm and produces `SkPath`.
   - **LOC** : ~2000.
   - **Tests** : 1000+ Skia path-pair fixtures from
@@ -528,7 +573,7 @@ vector formats).
 
 ## Chantiers fidélité Skia core
 
-### I1 — `SkTextBlob`
+### I1 — `SkTextBlob` ✅ shipped
 
 **Skia upstream files** :
 - `include/core/SkTextBlob.h`, `SkTextBlobBuilder.h`
@@ -572,25 +617,27 @@ public fun SkCanvas.drawTextBlob(blob: SkTextBlob, x: Float, y: Float, paint: Sk
 **Phase decomposition** :
 
 - **I1.1** — `SkTextBlobBuilder` with `allocRun` (uniform x-spacing,
-  constant y) + `allocRunPosH` (per-glyph x, constant y).
+  constant y) + `allocRunPosH` (per-glyph x, constant y). ✅ shipped
   - **LOC** : ~250.
   - **Tests** : 6 unit tests (build + bounds + rebuild).
 
-- **I1.2** — `allocRunPos` (full per-glyph positions).
+- **I1.2** — `allocRunPos` (full per-glyph positions). ✅ shipped
   - **LOC** : ~100.
 
 - **I1.3** — `SkCanvas.drawTextBlob` integration : delegate to
   existing `drawString` per-glyph for v1, or directly to glyph mask
-  cache when I2 ships.
+  cache when I2 ships. ✅ shipped
   - **LOC** : ~100.
 
 - **I1.4** — `SkPicture` recording integration : add `DrawTextBlob`
-  variant to `SkRecord` + `SkRecordingCanvas` + `SkPicture.playback`.
+  variant to `SkRecord` + `SkRecordingCanvas` + `SkPicture.playback`. ✅ shipped
   - **LOC** : ~80.
   - **Tests** : 1 integration test (record + playback identical to
     direct draw).
 
-- **I1.5** — Port `gm/textblob*.cpp` (5-10 GMs).
+- **I1.5** — Port `gm/textblob*.cpp` (5-10 GMs). ✅ 4 ports shipped
+  (`TextBlobGM`, `TextBlobColorTransGM`, `TextBlobShaderGM`,
+  `TextBlobUseAfterGpuFreeGM` smoke).
 
 **Total LOC** : ~600 + GM ports.
 
@@ -601,7 +648,7 @@ distinct verb (it routes through `drawPath`).
 
 ---
 
-### I2 — Variable fonts + glyph mask cache
+### I2 — Variable fonts + glyph mask cache ✅ shipped (light variant)
 
 **Skia upstream files** :
 - `src/sfnt/SkOTUtils.cpp` (variable fvar table parser)
@@ -638,7 +685,7 @@ internal object SkGlyphCache {
 
 **Phase decomposition** :
 
-- **I2.1** — Glyph mask cache (LRU bounded by N entries or M MB).
+- **I2.1** — Glyph mask cache (LRU bounded by N entries or M MB). ✅ shipped
   - Key : `(typefaceId, size, scaleX, skewX, glyphId, edging)`.
   - Value : 8-bit alpha mask + origin.
   - **LOC** : ~300.
@@ -647,12 +694,14 @@ internal object SkGlyphCache {
 
 - **I2.2** — Variable font axes via AWT
   `Font.deriveFont(Map<TextAttribute, ?>)` + `OPTICAL_SIZE`,
-  `WEIGHT`, `WIDTH`, `POSTURE` attributes.
+  `WEIGHT`, `WIDTH`, `POSTURE` attributes. ✅ light shipped (data
+  class `SkFontVariation` + `SkFont.variations` field) ; AWT
+  wiring full encore à câbler — pas bloquant pour les GMs actuels.
   - **LOC** : ~200.
   - GMs : `varfont*` (~5 GMs).
 
 - **I2.3** — Subpixel positioning fast path (instead of always
-  rasterising at integer x,y).
+  rasterising at integer x,y). ✅ shipped (pour `drawTextBlob`).
   - **LOC** : ~150.
   - Improves AA quality on horizontal text runs.
 
@@ -663,7 +712,7 @@ variable fonts, port `gm/variable_width.cpp`.
 
 ---
 
-### I3 — `SkRegion` / `SkAAClip`
+### I3 — `SkRegion` / `SkAAClip` ✅ shipped
 
 **Skia upstream files** :
 - `include/core/SkRegion.h`
@@ -707,17 +756,26 @@ public class SkRegion {
 **Phase decomposition** :
 
 - **I3.1** — `SkRegion` core : run-based 1D representation, set ops
-  via scanline merging.
+  via scanline merging. ✅ shipped (a, b, c)
+  - Sous-slices : (a) data model + queries + iterator, (b) set
+    operations via scanline merging, (c) `setPath` via path
+    scanline rasterisation.
   - **LOC** : ~1500.
   - **Tests** : ~50 set-op tests vs Skia fixtures.
 
-- **I3.2** — `SkAAClip` : AA region with per-row alpha runs.
+- **I3.2** — `SkAAClip` : AA region with per-row alpha runs. ✅ shipped (a, b, c)
+  - Sous-slices : (a) core (data model + region promotion), (b)
+    `setPath` via 4×4 supersampled `SkRegion`, (c) set operations
+    on alpha runs.
   - **LOC** : ~1000.
   - **Tests** : ~30 AA-clip tests.
 
 - **I3.3** — `SkRasterClip` integration : replace current Phase 7q
   alpha-mask-bitmap with the run-based representation. Faster + less
-  memory for typical clip shapes.
+  memory for typical clip shapes. ✅ shipped (a, b)
+  - Sous-slices : (a) `SkAAClip.coverage(x, y)` query method (hot
+    path du rasterizer), (b) `clipMask` Phase 7q remplacé par
+    `SkAAClip` dans `SkRasterClip`.
   - **LOC** : ~500.
 
 **Total LOC** : ~3000.
@@ -728,7 +786,7 @@ on convex clips.
 
 ---
 
-### I4 — `SkShaper` (text shaping)
+### I4 — `SkShaper` (text shaping) ✅ shipped
 
 **Skia upstream files** :
 - `modules/skshaper/include/SkShaper.h`
@@ -769,15 +827,16 @@ public abstract class SkShaper {
 
 - **I4.1** — `SkShaper.MakePrimitive` : naive char-by-char glyph
   mapping (no shaping). Already exists implicitly in
-  `SkFont.makeTextPath` ; re-expose as `SkShaper`.
+  `SkFont.makeTextPath` ; re-expose as `SkShaper`. ✅ shipped
   - **LOC** : ~150.
 
 - **I4.2** — `SkShaper.MakeJavaTextLayout` : delegate to JDK's
-  `TextLayout` for shaping.
+  `TextLayout` for shaping. ✅ shipped
   - **LOC** : ~400.
   - Handles bidi (Arabic, Hebrew), basic ligatures, kerning.
 
-- **I4.3** — Linebreak / wrapping support via ICU `BreakIterator`.
+- **I4.3** — Linebreak / wrapping support via ICU `BreakIterator`. ✅ shipped
+  (via `java.text.BreakIterator` JDK).
   - **LOC** : ~200.
 
 **Total LOC** : ~750.
@@ -790,7 +849,7 @@ needed.
 
 ---
 
-### I5 — `drawPoints` / `drawAtlas` / `drawVertices` / `drawPatch`
+### I5 — `drawPoints` / `drawAtlas` / `drawVertices` / `drawPatch` 🔄 en cours (I5.1, I5.2, I5.3 ✅ ; I5.4 📋)
 
 **Skia upstream files** :
 - `include/core/SkCanvas.h` (the public methods)
@@ -824,23 +883,27 @@ public enum class PointMode { kPoints, kLines, kPolygon }
 **Phase decomposition** :
 
 - **I5.1** — `drawPoints` : trivial (delegates to drawCircle for
-  kPoints, drawLine for kLines/kPolygon).
+  kPoints, drawLine for kLines/kPolygon). ✅ shipped
   - **LOC** : ~80.
 
 - **I5.2** — `drawAtlas` : sprite batching. Delegate to
-  `drawImageRect` per sprite with RSXform → SkMatrix conversion.
+  `drawImageRect` per sprite with RSXform → SkMatrix conversion. ✅ shipped
   - **LOC** : ~250.
   - GMs : `drawatlas*` (~3 GMs).
 
 - **I5.3** — `drawVertices` : triangle mesh rendering with per-vertex
-  color + texture coords + blend.
+  color + texture coords + blend. ✅ shipped (a, b)
+  - Sous-slices : (a) `SkVertices.MakeCopy(...)` + `SkCanvas.drawVertices`
+    solid-color path ; (b) per-vertex colour barycentric interpolation
+    (full triangle mesh shading). Texture coords (`drawVertices` UV +
+    sample image) restent.
   - Algorithm : 1) build SkPath from triangles, 2) for each pixel
     inside, barycentric-interpolate color/UV, sample texture, blend.
   - **LOC** : ~400.
   - GMs : `vertices*` (~5 GMs).
 
 - **I5.4** — `drawPatch` : Coons patch (cubic interp grid). The most
-  complex.
+  complex. 📋 pending.
   - Algorithm : tessellate the 4 boundary cubics into a grid of
     triangles, then defer to `drawVertices`.
   - **LOC** : ~300.
@@ -965,13 +1028,15 @@ public class SkEmbossMaskFilter private constructor(/* ... */) : SkMaskFilter() 
 
 ---
 
-### C5 — Color management completion
+### C5 — Color management completion ✅ partially shipped (ARGB_4444 done ; P3/HDR tests reste)
 
 **Manquants** :
 - **`ARGB_4444` colortype** : 4 bits per channel, packed `0xARGB`.
-  Used by upstream's `XfermodesGM` for the bg checkerboard.
+  Used by upstream's `XfermodesGM` for the bg checkerboard. ✅ shipped
   - **LOC** : ~200 (storage path + `getPixel`/`setPixel` + erase).
-  - **Impact** : XfermodesGM 78% → ~95%.
+  - **Impact** : XfermodesGM 78% → ~95% (mesuré : XfermodesGM
+    repassé via ARGB_4444 checkerboard, plus de divergence visible
+    sur le bg).
 
 - **Display P3 / Adobe RGB color spaces** : already supported via
   `SkColorSpace` infrastructure ; just need named singletons + tests.
