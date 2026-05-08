@@ -7,16 +7,14 @@
  * a perpendicular ray and counting curve crossings.
  *
  * Phase D1.2.h.5.5 — Foundation : `SkOpRayDir` enum, axis-projection
- * helpers (`xy_index` / `pt_xy` / `pt_yx` / `pt_dxdy` / `pt_dydx` /
- * `rect_side` / `sideways_overlap` / `less_than` / `ccw_dxdy`),
- * `get_t_guess` t-value generator, `SkOpRayHit` data class +
- * `makeTestBase`, and the `hit_compare_x/y` ± reverse comparators.
+ * helpers, `get_t_guess`, `SkOpRayHit` + `makeTestBase`, comparators.
  *
- * The remaining pieces (`SkOpSegment.rayCheck` /
- * `SkOpContour.rayCheck`, `SkOpSpan.sortableTop`,
- * `SkOpSegment.findSortableTop` / `SkOpContour.findSortableTop`,
- * `FindSortableTop` real impl) land in subsequent D1.2.h.5.x
- * sub-slices.
+ * Phase D1.2.h.5.6 — `CurveIntercept` dispatch + `SkOpSegment.rayCheck`
+ * + `SkOpSegment.windingSpanAtT` + `SkOpContour.rayCheck`. These
+ * walk a contour list firing a perpendicular ray and emit one
+ * [SkOpRayHit] per non-trivial curve crossing. The remaining pieces
+ * (`SkOpSpan.sortableTop`, `findSortableTop` × 3, real
+ * `FindSortableTop`) land in D1.2.h.5.7 / .5.8.
  */
 package org.skia.pathops.internal
 
@@ -205,3 +203,195 @@ internal val hit_compare_y: Comparator<SkOpRayHit> =
 
 internal val reverse_hit_compare_y: Comparator<SkOpRayHit> =
     Comparator { a, b -> b.fPt.fY.compareTo(a.fPt.fY) }
+
+// ─── CurveIntercept dispatch (D1.2.h.5.6) ─────────────────────────
+
+/**
+ * Find t-values where the curve crosses the axis-aligned line
+ * `(axis = horizontal/vertical based on [dir], axisIntercept)`.
+ *
+ * Mirrors `CurveIntercept[verb*2 + xy_index(dir)]` dispatch table
+ * (`src/pathops/SkPathOpsCurve.h:414`) and the per-verb static
+ * helpers (`line_intercept_h/v`, `quad_intercept_h/v`,
+ * `conic_intercept_h/v`, `cubic_intercept_h/v`).
+ *
+ * Returns the number of in-range roots written into [roots].
+ */
+internal fun CurveIntercept(
+    verb: SkOpSegment.SegVerb,
+    dir: SkOpRayDir,
+    pts: Array<SkPoint>,
+    weight: Float,
+    axisIntercept: Float,
+    roots: DoubleArray,
+): Int {
+    val horizontal = xy_index(dir) == 1
+    return when (verb) {
+        SkOpSegment.SegVerb.kLine -> {
+            if (horizontal) {
+                if (pts[0].fY == pts[1].fY) return 0
+                val line = SkDLine().apply { set(pts[0], pts[1]) }
+                roots[0] = SkIntersections.HorizontalIntercept(line, axisIntercept.toDouble())
+                if (between(0.0, roots[0], 1.0)) 1 else 0
+            } else {
+                if (pts[0].fX == pts[1].fX) return 0
+                val line = SkDLine().apply { set(pts[0], pts[1]) }
+                roots[0] = SkIntersections.VerticalIntercept(line, axisIntercept.toDouble())
+                if (between(0.0, roots[0], 1.0)) 1 else 0
+            }
+        }
+        SkOpSegment.SegVerb.kQuad -> {
+            val quad = SkDQuad().apply { set(pts[0], pts[1], pts[2]) }
+            if (horizontal) SkIntersections.HorizontalIntercept(quad, axisIntercept, roots)
+            else SkIntersections.VerticalIntercept(quad, axisIntercept, roots)
+        }
+        SkOpSegment.SegVerb.kConic -> {
+            val conic = SkDConic().apply { set(pts[0], pts[1], pts[2], weight) }
+            if (horizontal) SkIntersections.HorizontalIntercept(conic, axisIntercept, roots)
+            else SkIntersections.VerticalIntercept(conic, axisIntercept, roots)
+        }
+        SkOpSegment.SegVerb.kCubic -> {
+            val cubic = SkDCubic().apply { set(pts[0], pts[1], pts[2], pts[3]) }
+            if (horizontal) cubic.horizontalIntersect(axisIntercept.toDouble(), roots)
+            else cubic.verticalIntersect(axisIntercept.toDouble(), roots)
+        }
+        SkOpSegment.SegVerb.kUnset -> error("invalid verb (kUnset)")
+    }
+}
+
+// ─── rayCheck (D1.2.h.5.6) ────────────────────────────────────────
+
+/**
+ * Walk this segment's spans and find the one whose t-range contains
+ * [tHit]. Returns null when [tHit] sits exactly on a span boundary
+ * (which the upstream `windingSpanAtT` treats as ambiguous).
+ *
+ * Mirrors `SkOpSegment::windingSpanAtT`
+ * (`src/pathops/SkPathOpsWinding.cpp:208`).
+ */
+internal fun SkOpSegment.windingSpanAtT(tHit: Double): SkOpSpan? {
+    var span: SkOpSpan = fHead
+    while (true) {
+        val next = span.next() ?: break
+        if (approximately_equal(tHit, next.t())) return null
+        if (tHit < next.t()) return span
+        if (next.final()) break
+        span = next.upCast()
+    }
+    return null
+}
+
+/**
+ * Fire the perpendicular ray from [base] in direction [dir] at this
+ * segment ; for each curve crossing, prepend a fresh [SkOpRayHit]
+ * onto [hitsHead].
+ *
+ * Skips :
+ *  - segments whose bbox doesn't overlap the ray's perpendicular
+ *    axis at [base]'s point ([sideways_overlap]),
+ *  - segments fully on the wrong side of the ray ([less_than] /
+ *    `rect_side` cull),
+ *  - root t-values that match `base.fT` exactly when the ray's
+ *    own segment is `this`,
+ *  - intersection points that match `base.fPt` (same span) or
+ *    sit on the wrong side of the ray,
+ *  - cubics whose t-value roughly equals `base.fT` and pt roughly
+ *    equals `base.fPt` (defensive against the `(rarely expect this)`
+ *    upstream comment),
+ *  - root t-values where the slope is too parallel to the ray (the
+ *    `pt_dydx * 10000 > pt_dxdy` test),
+ *  - spans with both `windValue == 0` and `oppValue == 0`.
+ *
+ * Mirrors `SkOpSegment::rayCheck`
+ * (`src/pathops/SkPathOpsWinding.cpp:138`).
+ */
+internal fun SkOpSegment.rayCheck(
+    base: SkOpRayHit,
+    dir: SkOpRayDir,
+    hitsHead: Array<SkOpRayHit?>,
+) {
+    if (!sideways_overlap(bounds(), base.fPt, dir)) return
+    val baseXY = pt_xy(base.fPt, dir)
+    val boundsXY = rect_side(bounds(), dir)
+    val checkLessThan = less_than(dir)
+    if (!approximately_equal(baseXY.toDouble(), boundsXY.toDouble()) &&
+        (baseXY < boundsXY) == checkLessThan) {
+        return
+    }
+    val baseYX = pt_yx(base.fPt, dir)
+    val tVals = DoubleArray(3)
+    val roots = CurveIntercept(verb(), dir, pts(), weight(), baseYX, tVals)
+    for (index in 0 until roots) {
+        val t = tVals[index]
+        if (base.fSpan?.segment() === this && approximately_equal(base.fT, t)) continue
+        var slope = SkDVector()
+        var pt = SkPoint()
+        var valid = false
+        when {
+            approximately_zero(t) -> pt = pts()[0]
+            approximately_equal(t, 1.0) -> pt = pts()[segVerbToPoints(verb())]
+            else -> {
+                require(between(0.0, t, 1.0))
+                pt = ptAtT(t)
+                if (SkDPoint.ApproximatelyEqual(pt, base.fPt)) {
+                    if (base.fSpan?.segment() === this) continue
+                } else {
+                    val ptXY = pt_xy(pt, dir)
+                    if (!approximately_equal(baseXY.toDouble(), ptXY.toDouble()) &&
+                        (baseXY < ptXY) == checkLessThan) continue
+                    slope = dSlopeAtT(t)
+                    if (verb() == SkOpSegment.SegVerb.kCubic &&
+                        base.fSpan?.segment() === this &&
+                        roughly_equal(base.fT, t) &&
+                        SkDPoint.RoughlyEqual(pt, base.fPt)) continue
+                    if (kotlin.math.abs(pt_dydx(slope, dir) * 10000) >
+                        kotlin.math.abs(pt_dxdy(slope, dir))) {
+                        valid = true
+                    }
+                }
+            }
+        }
+        val span = windingSpanAtT(t)
+        if (span == null) {
+            valid = false
+        } else if (span.windValue() == 0 && span.oppValue() == 0) {
+            continue
+        }
+        val newHit = SkOpRayHit().apply {
+            fNext = hitsHead[0]
+            fPt = pt
+            fSlope = slope
+            fSpan = span
+            fT = t
+            fValid = valid
+        }
+        hitsHead[0] = newHit
+    }
+}
+
+/**
+ * Per-contour rayCheck driver : early-out when the contour's bbox
+ * is fully on the wrong side of the ray, otherwise walk every
+ * segment calling [SkOpSegment.rayCheck].
+ *
+ * Mirrors `SkOpContour::rayCheck`
+ * (`src/pathops/SkPathOpsWinding.cpp:123`).
+ */
+internal fun SkOpContour.rayCheck(
+    base: SkOpRayHit,
+    dir: SkOpRayDir,
+    hitsHead: Array<SkOpRayHit?>,
+) {
+    val baseXY = pt_xy(base.fPt, dir)
+    val boundsXY = rect_side(bounds(), dir)
+    val checkLessThan = less_than(dir)
+    if (!approximately_equal(baseXY.toDouble(), boundsXY.toDouble()) &&
+        (baseXY < boundsXY) == checkLessThan) {
+        return
+    }
+    var seg: SkOpSegment? = fHead
+    while (seg != null) {
+        seg.rayCheck(base, dir, hitsHead)
+        seg = seg.next()
+    }
+}
