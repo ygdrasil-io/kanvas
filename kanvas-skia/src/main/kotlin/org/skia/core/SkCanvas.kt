@@ -554,6 +554,113 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
+     * Mirrors Skia's `SkCanvas::PointMode` enum
+     * (`include/core/SkCanvas.h:1478-1482`). Selects how the point
+     * array passed to [drawPoints] is interpreted geometrically.
+     */
+    public enum class PointMode {
+        /** Each `SkPoint` becomes one stroked dot (square / circle / pixel per stroke cap). */
+        kPoints,
+        /** Each adjacent **pair** `(p[0],p[1]), (p[2],p[3]) …` becomes a stroked line. */
+        kLines,
+        /** Each adjacent pair `(p[i], p[i+1])` becomes a stroked line — closed-loop without close. */
+        kPolygon,
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawPoints(mode, count, points, paint)`
+     * (`include/core/SkCanvas.h:1496`). Draws [points] interpreted per
+     * [mode] using the supplied [paint] :
+     *
+     *  - [PointMode.kPoints] — each point becomes a stroked dot. The
+     *    visual shape is governed by [SkPaint.strokeCap] :
+     *    [SkPaint.Cap.kRound_Cap] → circle of radius
+     *    `paint.strokeWidth / 2`, [SkPaint.Cap.kSquare_Cap] → square of
+     *    side `paint.strokeWidth`, [SkPaint.Cap.kButt_Cap] → a
+     *    zero-length line stroke (single-pixel dot at hairline widths,
+     *    visible square otherwise — same as upstream's degenerate-
+     *    butt behaviour).
+     *  - [PointMode.kLines] — `points` is consumed in pairs ;
+     *    `points[2*i]` to `points[2*i+1]` becomes a stroked line. An
+     *    odd trailing point is dropped.
+     *  - [PointMode.kPolygon] — `points[i]` to `points[i+1]` for every
+     *    adjacent pair (open polyline ; no implicit close).
+     *
+     * No fast path : delegates per-point/per-segment to [drawCircle]
+     * (round caps), [drawRect] (square caps) or [drawLine] (line
+     * modes). The path the rasteriser walks is exactly the same as if
+     * the caller emitted those calls themselves, so honouring of
+     * paint shaders / blend modes / clipPath stays uniform.
+     */
+    public open fun drawPoints(mode: PointMode, points: Array<org.skia.math.SkPoint>, paint: SkPaint) {
+        if (points.isEmpty()) return
+        when (mode) {
+            PointMode.kPoints -> {
+                val r = paint.strokeWidth * 0.5f
+                when (paint.strokeCap) {
+                    SkPaint.Cap.kRound_Cap -> {
+                        // Circle of diameter strokeWidth ; fall back to
+                        // hairline-square when strokeWidth is zero.
+                        val fillPaint = paint.copy().apply {
+                            style = SkPaint.Style.kFill_Style
+                        }
+                        if (r > 0f) {
+                            for (p in points) drawCircle(p.fX, p.fY, r, fillPaint)
+                        } else {
+                            // Hairline → 1-pixel dot via 1×1 rect.
+                            for (p in points) {
+                                drawRect(SkRect.MakeXYWH(p.fX, p.fY, 1f, 1f), fillPaint)
+                            }
+                        }
+                    }
+                    SkPaint.Cap.kSquare_Cap -> {
+                        // Square of side strokeWidth, centred at the point.
+                        val fillPaint = paint.copy().apply {
+                            style = SkPaint.Style.kFill_Style
+                        }
+                        val side = if (paint.strokeWidth > 0f) paint.strokeWidth else 1f
+                        val half = side * 0.5f
+                        for (p in points) {
+                            drawRect(SkRect.MakeXYWH(p.fX - half, p.fY - half, side, side), fillPaint)
+                        }
+                    }
+                    SkPaint.Cap.kButt_Cap -> {
+                        // Degenerate line at the point — invisible at
+                        // strokeWidth=0, single-pixel hint at >0.
+                        // Mirror upstream by using a 1×1 rect when
+                        // stroke is hairline ; otherwise the
+                        // degenerate stroke is a no-op.
+                        if (paint.strokeWidth <= 0f) {
+                            val fillPaint = paint.copy().apply {
+                                style = SkPaint.Style.kFill_Style
+                            }
+                            for (p in points) {
+                                drawRect(SkRect.MakeXYWH(p.fX, p.fY, 1f, 1f), fillPaint)
+                            }
+                        }
+                    }
+                }
+            }
+            PointMode.kLines -> {
+                var i = 0
+                while (i + 1 < points.size) {
+                    val a = points[i]
+                    val b = points[i + 1]
+                    drawLine(a.fX, a.fY, b.fX, b.fY, paint)
+                    i += 2
+                }
+            }
+            PointMode.kPolygon -> {
+                for (i in 0 until points.size - 1) {
+                    val a = points[i]
+                    val b = points[i + 1]
+                    drawLine(a.fX, a.fY, b.fX, b.fY, paint)
+                }
+            }
+        }
+    }
+
+    /**
      * Draw `image` at device-space position `(x, y)`, sampled with
      * `sampling`. Mirrors Skia's `SkCanvas::drawImage(image, x, y, sampling, paint)`.
      */
