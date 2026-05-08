@@ -33,9 +33,9 @@
 > | **I4** SkShaper (Primitive + JavaTextLayout + wrap) | ✅ shipped (I4.1-4.3) | HarfBuzz parity hors scope |
 > | **I5** drawPoints / drawAtlas / drawVertices / drawPatch | ✅ shipped | I5.1 / I5.2 / I5.3.a-c / I5.4 livrés (commit `2de410e`) |
 > | **C1** Image filters extras | 📋 mini-planned | Group A core (6 factories) déjà shipped ; **22 factories manquantes** détaillées dans [MIGRATION_PLAN_C1_IMAGE_FILTERS.md](MIGRATION_PLAN_C1_IMAGE_FILTERS.md). 7 sous-slices, ~2750 main + ~1440 test, ~30 GM ports débloqués. |
-> | **C2** Path effects extras (kMorph, StrokeAndFill recipe) | 📋 pending | |
+> | **C2** Path effects extras (kMorph, StrokeAndFill recipe) | ✅ shipped | `SkPath1DPathEffect.Style.kMorph` ported faithfully (per-vertex bend along input path's normal, kLine→quad upgrade) via a new `ContourMeasure` chord-polyline parametriser ; `kStrokeAndFill_Style` was already shipped in `SkBitmapDevice` (verified). 8 morph tests + existing StrokeAndFill coverage. |
 > | **C3** SkEmbossMaskFilter | ✅ shipped | 3-plane dispatch via new `Sk3DMask` + `SkMaskFilter.Format` ; wired into `SkBitmapDevice.drawPathWithMaskFilter`. 14 tests, suite **2453 / 2453 green**. |
-> | **C4** drawAnnotation / drawDrawable / drawShadow | 📋 pending | |
+> | **C4** drawAnnotation / drawDrawable / drawShadow | ✅ partially shipped | `SkDrawable` base class + `SkCanvas.drawDrawable(matrix?)` and `(x, y)` overloads ; `SkCanvas.drawAnnotation` no-op extension slot (raster sinks ignore by default ; subclasses can override to capture link metadata). `drawShadow` **descoped** — no Material-Design GM in the corpus needs it. 12 tests. |
 > | **B1** SkPDF (PDFBox adapter) | ❌ descoped | No ported GM needs PDF — only `internal_links.cpp` is PDF-specific upstream and isn't ported. See B1 section. |
 > | **B2** SkSVGCanvas | ✅ shipped | All 5 slices delivered : 1104 main + 1351 test (mini plan estimate ~980 + ~550). See [MIGRATION_PLAN_SVG.md](MIGRATION_PLAN_SVG.md) for the per-slice breakdown. |
 > | **Q1** SkAutoCanvasRestore Kotlin idiom | ✅ shipped | `withSave` / `withLayer` extension functions on `SkCanvas` (`SkAutoCanvasRestore.kt`) |
@@ -1189,16 +1189,59 @@ across 7 slices.**
 
 ---
 
-### C2 — Path effects extras
+### C2 — Path effects extras ✅ shipped
 
-**Manquants** :
-- `Sk1DPathEffect.kMorph` style : path bend along curve (math
-  complexe — Bézier reparam by arc length).
-- `StrokeAndFill` recipe : composé `Compose(stroke, fill)`.
+**Two slices** :
 
-**LOC** : ~500.
+#### C2.1 — `Sk1DPathEffect.Style.kMorph` ✅ shipped
 
-**GMs débloqués** : peu (kMorph mostly used by tools, not by GMs).
+[SkPath1DPathEffect.kt](kanvas-skia/src/main/kotlin/org/skia/foundation/SkPath1DPathEffect.kt)
+— faithful port of upstream's `morphpath` + `morphpoints` from
+[`src/effects/Sk1DPathEffect.cpp`](https://github.com/google/skia/blob/main/src/effects/Sk1DPathEffect.cpp).
+
+**Mechanism** :
+1. The input path is flattened into one **`ContourMeasure`** per
+   `kMove`-rooted contour : a chord polyline with cumulative
+   arc-length per vertex. `getPosTan(d)` answers position +
+   tangent at any arc distance via binary search + linear
+   interpolation, clamping `d` to `[0, length]`.
+2. For each contour, stamps are placed at `initialOffset,
+   initialOffset + advance, …` until the contour is exhausted
+   (`MAX_ITERATIONS = 100000` governor mirrors upstream).
+3. **`kMorph` per-vertex map** : each control point at stamp-local
+   coords `(sx, sy)` is mapped to `pos(d + sx) + sy · normal(d + sx)`
+   where `normal = (-tan.y, tan.x)`. Mirrors upstream's
+   `morphpoints` matrix exactly.
+4. **`kLine → kQuad` upgrade** : straight stamp segments are
+   replaced by a degenerate quad (control = midpoint) before
+   morphing so they bend with the input path's curvature. Mirrors
+   upstream's `morphpath` line→quad path.
+5. `kTranslate` and `kRotate` go through the same `ContourMeasure`
+   parametriser — the previous per-segment chord walker has been
+   replaced by a unified contour-level loop. Behaviour preserved
+   (existing test suite stays green).
+
+**Tests** ([SkPath1DPathEffectMorphTest](kanvas-skia/src/test/kotlin/org/skia/foundation/SkPath1DPathEffectMorphTest.kt)) :
+8 tests — factory invariants, stamp count parity with `kTranslate`,
+geometric parity with `kRotate` on straight inputs (when stamps
+have `sx ≥ 0`), arc-bend on curved inputs (control points pulled
+off the chord), per-contour reset, contour-start clamping
+behaviour pinned.
+
+**LOC** : ~370 main (refactored) + ~250 test.
+
+#### C2.2 — `kStrokeAndFill_Style` ✅ already shipped
+
+Verified pre-existing : `SkBitmapDevice.drawPathWithoutMaskFilter`
+(branches at lines 744 / 1037 / 1113) already filled-then-stroked
+the path when `paint.style == kStrokeAndFill_Style`. The plan's
+"`Compose(stroke, fill)` recipe" is delivered by the upstream-
+canonical paint-style dispatch — no new code needed.
+
+Coverage in [SkBitmapDeviceStrokeTest](kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDeviceStrokeTest.kt#L101)
+(`kStrokeAndFill renders both fill and stroke`).
+
+**LOC** : 0 (verification only).
 
 ---
 
@@ -1279,19 +1322,75 @@ faithful div255 specular falloff).
 
 ---
 
-### C4 — Canvas opérations manquantes
+### C4 — Canvas opérations manquantes ✅ partially shipped
 
-**Manquants** :
-- `drawAnnotation(rect, key, value)` : PDF annotations (no-op for
-  raster sinks). LOC : ~50.
-- `drawDrawable(drawable, matrix?)` : custom drawable extension slot.
-  LOC : ~150.
-- `drawShadow(path, recParams)` : Skia 3D shadow primitive (spot +
-  ambient shadow projected from path elevation). Complex. LOC : ~600.
+#### C4.1 — `drawAnnotation` ✅ shipped
 
-**Total** : ~800.
+[SkCanvas.drawAnnotation](kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt)
+— a no-op extension slot on the raster canvas. PDF / SVG sinks
+(or any future structured backend) can override to capture link
+metadata, named destinations, or URL anchors. The default impl
+silently drops `(rect, key, value)` — matches Skia's raster-device
+behaviour exactly.
 
-**Priorité** : `drawShadow` only if porting Material Design GMs.
+**LOC** : ~20 main + ~30 test (3 assertions in `SkDrawableTest` :
+no-op preserves bitmap, null value tolerated, subclass override
+captures every annotation).
+
+#### C4.2 — `SkDrawable` + `drawDrawable` ✅ shipped
+
+[SkDrawable.kt](kanvas-skia/src/main/kotlin/org/skia/core/SkDrawable.kt)
+— faithful port of upstream's
+[`include/core/SkDrawable.h`](https://github.com/google/skia/blob/main/include/core/SkDrawable.h) :
+
+- Abstract `onDraw(canvas)` entry point.
+- Optional `onGetBounds(): SkRect` (default = empty).
+- Public `draw(canvas, matrix?)` and `draw(canvas, x, y)` overloads
+  that wrap the call in `save` / `restoreToCount` so the canvas's
+  matrix / clip / save-stack are guaranteed preserved on return.
+- Process-wide unique `getGenerationID()` + `notifyDrawingChanged()`
+  for downstream cache invalidation. Generation ids come from a
+  shared `AtomicInteger`, matching the upstream contract.
+
+[SkCanvas](kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt)
+gains `drawDrawable(drawable, matrix?)` and `drawDrawable(drawable, x, y)`
+overloads that delegate to `SkDrawable.draw`. Subclasses
+(`SkRecordingCanvas`, `SkSVGCanvas`) may override to record /
+serialise the drawable directly ; the default delegate is correct
+for any backend supporting basic primitives.
+
+**LOC** : ~115 main + ~120 test (9 tests in `SkDrawableTest` :
+onDraw fires, save-count rebalance, matrix pre-concat, xy
+overload, CTM preservation, gen-id stability, gen-id uniqueness,
+default + overridden bounds).
+
+#### C4.3 — `drawShadow` ❌ descoped
+
+**Audit** (2026-05-08) — searched `gm/*.cpp` upstream for
+`drawShadow` / `SkShadowUtils` references :
+
+| Upstream GM | drawShadow role | Ported in `kanvas-skia` ? |
+|---|---|---|
+| `shadowutils.cpp` | Material-Design shadow rendering matrix | No |
+| `androidshadowutils.cpp` | Android-flavoured shadow util GM | No |
+| `shadowutils_occluders.cpp` | Occluder-aware shadow GM | No |
+
+**Conclusion** : zero ported GMs in
+`kanvas-skia/src/main/kotlin/org/skia/tests/` use
+`SkCanvas::drawShadow` ; the only upstream GMs that exercise it
+are the three above, none of which are on the migration path.
+The Material Design shadow pipeline (spot + ambient projection
+from path elevation, Tessellator-driven mesh emission, ~600 LOC)
+is therefore deferred indefinitely.
+
+If a Material-Design GM is added later :
+- Skia upstream files : `include/core/SkCanvas.h` (declarations) +
+  `src/utils/SkShadowUtils.cpp` + `src/utils/SkShadowTessellator.cpp`.
+- Estimated port size : ~600 LOC main + ~250 test for tessellator
+  + projection ; the `SkPath3DEffectGM` family stays out of scope
+  unless Path3DEffect itself is also ported.
+
+**LOC** : 0 (descoped).
 
 ---
 
@@ -1719,15 +1818,15 @@ DAG of dependencies :
 15. ✅ **Q2** Canvas wrappers (~453 main + ~270 test) — `SkNoDrawCanvas` + `SkPaintFilterCanvas` (abstract) + `SkOverdrawCanvas`.
 16. ✅ **Q3** SkBBHFactory + Picture cull (~582 main + ~430 test) — `SkBBoxHierarchy` + `SkRTree` + `SkRTreeFactory` + `SkPictureBoundsBuilder` ; `SkPictureRecorder` builds the BBH from per-op device-space bounds, `SkPicture.playback` queries on sub-rect clips.
 17. ✅ **Q5** Linear sRGB diagnostic (~290 test LOC) — diagnosis : upstream applies matrix in encoded sRGB ; gap is elsewhere.
-18. 📋 **C2/C4** Misc completions (kMorph path effect, StrokeAndFill, drawAnnotation / drawDrawable / drawShadow ; ~1300 LOC ensemble).
+18. ✅ **C2/C4** Misc completions (~505 main + ~400 test) — `Sk1DPathEffect.kMorph` (refactored around a `ContourMeasure` chord-polyline), `kStrokeAndFill_Style` already shipped ; `SkDrawable` + `SkCanvas.drawDrawable` + `SkCanvas.drawAnnotation` no-op slot. **`drawShadow` descoped** (no ported GM uses it).
 19. 📋 **D2** SkRuntimeEffect shim (~1500 LOC, *iso-fidelity exception* — large but unlocks SkSL-using GMs).
 20. 📋 **Q4** DeferredDisplayList (~400 LOC, low priority).
 
-**Total estimated LOC remaining** : ~5 000 of new Kotlin code
-(C1 1800 + C2/C4 1300 + D2 1500 + Q4 400 ;
-Q5 + C3 + Q2 + Q3 shipped, D1 in-flight LOC tracked separately
-under the chantier's own slice budget). Decomposes into ~11 PRs
-of 80-1500 LOC each.
+**Total estimated LOC remaining** : ~3 700 of new Kotlin code
+(C1 1800 + D2 1500 + Q4 400 ;
+Q5 + C3 + Q2 + Q3 + C2/C4 shipped, D1 in-flight LOC tracked
+separately under the chantier's own slice budget). Decomposes into
+~10 PRs of 80-1500 LOC each.
 
 **Total LOC delivered so far** : ~22 000 across the eleven shipped
 chantiers (D3 / D4 / Q1 / C5 / I1 / I2 / I3 / I4 / I5 / B2) —
