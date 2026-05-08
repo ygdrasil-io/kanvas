@@ -405,7 +405,10 @@ class SkPathOpsTest {
     // ─── SkOpBuilder ────────────────────────────────────────────────────
 
     @Test
-    fun `SkOpBuilder accepts adds and returns null on resolve in D1_0`() {
+    fun `SkOpBuilder folds adds via chained Op into a non-null result`() {
+        // Post-pathops-harvest the chained-Op fallback in resolve() is
+        // wired (see `SkOpBuilder.cpp:180`) ; assert it returns a
+        // non-null path with bounds covering the union of the inputs.
         val builder = SkOpBuilder()
         builder.add(
             SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach(),
@@ -415,7 +418,13 @@ class SkPathOpsTest {
             SkPathBuilder().addRect(SkRect.MakeLTRB(5f, 5f, 15f, 15f)).detach(),
             SkPathOp.kIntersect,
         )
-        assertNull(builder.resolve())
+        val r = builder.resolve()
+        assertNotNull(r)
+        // first add seeds the running result with rect[0..10] ; second
+        // add intersects with rect[5..15] → expect [5,5,10,10].
+        val b = r!!.computeBounds()
+        assertEquals(5f, b.left, 1e-4f); assertEquals(5f, b.top, 1e-4f)
+        assertEquals(10f, b.right, 1e-4f); assertEquals(10f, b.bottom, 1e-4f)
     }
 
     @Test
@@ -426,7 +435,9 @@ class SkPathOpsTest {
         // After resolve, the builder is empty again — adding new paths
         // and resolving works without state leakage.
         builder.add(SkPathBuilder().detach(), SkPathOp.kIntersect)
-        assertNull(builder.resolve())
+        val r = builder.resolve()
+        assertNotNull(r)
+        org.junit.jupiter.api.Assertions.assertTrue(r!!.isEmpty())
     }
 
     // ─── SkPathOp enum surface ──────────────────────────────────────────
