@@ -674,9 +674,36 @@ public data class Report(
   - **LOC** : ~150.
   - Validates Phase 6r record/replay end-to-end on every GM.
 
-- **D4.3** — `Runner` + `Report` JSON output mirroring upstream
-  `dm/dm.json` format.
-  - **LOC** : ~300.
+- **D4.3** ✅ — `Runner` + `Report` JSON output mirroring upstream
+  `dm/dm.json` format. Two main-side files :
+  [Runner.kt](kanvas-skia/src/main/kotlin/org/skia/dm/Runner.kt)
+  drives every `(GM × Sink)` combination, builds a [RunRecord]
+  per result, and aggregates into a [Report] ;
+  [Report.kt](kanvas-skia/src/main/kotlin/org/skia/dm/Report.kt)
+  carries the records plus `properties` / `key` top-level
+  metadata and emits upstream-shaped `dm.json` via a hand-rolled
+  pretty-printed writer (no JSON-library dep).
+  Each pass record carries a hex-encoded MD5 of the PNG-encoded
+  output bytes (same convention as upstream — two sinks
+  producing the same visible image yield the same MD5) ; failure
+  records leave the bitmap-side fields empty and prefix the
+  error in `"md5"` as `"error: …"`.
+  Single-threaded by design — order-determinism makes
+  report-diffing easier, and the parallel inner loop is a future
+  slice when a use case shows up.
+  - **LOC** : ~199 main + ~178 test = 377 total (cf. plan
+    estimate ~300 — overage covers the per-`SkColorSpace` gamut
+    / TF stringifier with named-profile fall-throughs and the
+    JSON-escape walker).
+  - **Tests** :
+    [RunnerTest.kt](kanvas-skia/src/test/kotlin/org/skia/dm/RunnerTest.kt)
+    (10 — `(GM × Sink)` matrix coverage, MD5 determinism,
+    different GMs → different MD5, `Sink.Result.Error` →
+    `failed` with carried-through message, **full
+    upstream-shape JSON checks** (top-level keys + per-record
+    nested shape), Rec.2020 gamut/TF named-profile recovery,
+    JSON escape for `"` / `\\`). 10/10 green ; full kanvas-skia
+    suite **2250 / 2250 green**.
 
 - **D4.4** — CLI flags (`--config`, `--match`, `--blacklist`)
   matching upstream's syntax.
