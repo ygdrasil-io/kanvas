@@ -318,8 +318,28 @@ public object SkPathOps {
      * **Phase D1.2.h.0** : not yet implemented ; returns `null`.
      */
     public fun AsWinding(path: SkPath): SkPath? {
-        // TODO(D1.2.h.3) : implement AsWinding. Independent of Op but
-        // shares the contour walker.
+        // Fast paths from src/pathops/SkPathOpsAsWinding.cpp:411.
+        if (!path.isFinite()) return null
+        if (path.fillType == SkPathFillType.kWinding ||
+            path.fillType == SkPathFillType.kInverseWinding) {
+            return path
+        }
+        val targetFill = if (path.isInverseFillType())
+            SkPathFillType.kInverseWinding else SkPathFillType.kWinding
+        if (path.isEmpty()) return path.makeFillType(targetFill)
+        // Count contours via verb-walk. Multi-contour case needs the
+        // upstream Contour bbox-tree + reverse-marker machinery
+        // (~460 LOC, deferred to D1.2.h.6.3+). For ≤1 contour, the
+        // even-odd-vs-winding distinction is moot — area is the same.
+        var contourCount = 0
+        for (v in path.verbs) {
+            if (v == SkPath.Verb.kMove) {
+                if (++contourCount > 1) break
+            }
+        }
+        if (contourCount <= 1) return path.makeFillType(targetFill)
+        // TODO(D1.2.h.6.3+) : full multi-contour impl with bbox tree
+        // + containment checks + reverse-marker pass.
         return null
     }
 }
