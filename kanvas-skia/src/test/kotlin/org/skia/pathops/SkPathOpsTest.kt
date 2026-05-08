@@ -293,13 +293,28 @@ class SkPathOpsTest {
     }
 
     @Test
-    fun `AsWinding on multi-contour path falls through to null in this slice`() {
+    fun `AsWinding on disjoint multi-contour path flips fill via flat-tree fast path`() {
         val p = SkPathBuilder()
             .setFillType(org.skia.foundation.SkPathFillType.kEvenOdd)
             .addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f))
             .addRect(SkRect.MakeLTRB(20f, 20f, 30f, 30f))
             .detach()
-        // 2 contours → multi-contour impl deferred → null.
+        // 2 disjoint contours → bbox-tree is flat (neither contains
+        // the other) → makeFillType is correct.
+        val r = SkPathOps.AsWinding(p)
+        assertNotNull(r)
+        assertEquals(org.skia.foundation.SkPathFillType.kWinding, r!!.fillType)
+    }
+
+    @Test
+    fun `AsWinding on nested contour path falls through to null (deferred)`() {
+        // Outer rect contains inner rect (donut hole pattern).
+        val p = SkPathBuilder()
+            .setFillType(org.skia.foundation.SkPathFillType.kEvenOdd)
+            .addRect(SkRect.MakeLTRB(0f, 0f, 100f, 100f))
+            .addRect(SkRect.MakeLTRB(20f, 20f, 80f, 80f))
+            .detach()
+        // Nested → needs reverse-marker pass + reverseAddPath, deferred.
         assertNull(SkPathOps.AsWinding(p))
     }
 
