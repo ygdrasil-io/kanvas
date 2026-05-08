@@ -189,6 +189,18 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
     }
 
     /**
+     * Accumulate ray-vs-curve intersections into [ix]. Mirrors the
+     * `CurveIntersectRay[verb]` dispatch table in `SkPathOpsCurve.h`.
+     */
+    fun intersectRay(ray: SkDLine, ix: SkIntersections): Int = when (fVerb) {
+        SegVerb.kLine -> ix.intersectRay(SkDLine().apply { set(fPts[0], fPts[1]) }, ray)
+        SegVerb.kQuad -> ix.intersectRay(SkDQuad().apply { set(fPts[0], fPts[1], fPts[2]) }, ray)
+        SegVerb.kConic -> ix.intersectRay(SkDConic().apply { set(fPts[0], fPts[1], fPts[2], fWeight) }, ray)
+        SegVerb.kCubic -> ix.intersectRay(SkDCubic().apply { set(fPts[0], fPts[1], fPts[2], fPts[3]) }, ray)
+        SegVerb.kUnset -> error("verb not set")
+    }
+
+    /**
      * Double-precision tangent vector on this segment's curve at [t].
      * Mirrors `SkOpSegment::dSlopeAtT` (`SkOpSegment.h:213`).
      */

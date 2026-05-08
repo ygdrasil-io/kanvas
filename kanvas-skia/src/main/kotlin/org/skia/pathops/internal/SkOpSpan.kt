@@ -209,6 +209,20 @@ internal open class SkOpSpanBase {
     fun t(): Double = fPtT.fT
 
     /**
+     * True iff some pt-T in this' loop matches [other] by span identity.
+     * Mirrors `SkOpSpanBase::contains(const SkOpSpanBase*)`.
+     */
+    fun contains(other: SkOpSpanBase): Boolean {
+        var ptT: SkOpPtT? = fPtT
+        val stopPtT = fPtT
+        do {
+            if (ptT?.span() === other) return true
+            ptT = ptT?.next()
+        } while (ptT != null && ptT !== stopPtT)
+        return false
+    }
+
+    /**
      * True if [coin] is anywhere in this' coincident-end loop.
      * Mirrors `SkOpSpanBase::containsCoinEnd(SkOpSpanBase*)`.
      */
