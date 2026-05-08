@@ -101,28 +101,16 @@ class PathOpsRegressionRunner {
         // Initial floor — bumped as the engine improves. See
         // PathOpsRegressionRunner.kdoc for the ratcheting policy.
         val floor = INITIAL_SURVIVAL_FLOOR
-        // Always print the rate breakdown — visible in the build log
-        // even when the test passes, so maintainers see the current
-        // distance to the floor and know when to bump.
+        // One-line rate breakdown — gives maintainers running with
+        // `--info` instant visibility into the ratchet's distance to
+        // the floor without re-grepping the test report XML.
         val byOutcome = outcomes.values.groupingBy { it }.eachCount()
         println(
             "[PathOpsRegression] $survived / $total survived " +
                 "(${"%.2f".format(rate * 100)} %) ; " +
-                "floor = ${"%.2f".format(floor * 100)} %",
+                "floor = ${"%.2f".format(floor * 100)} % ; " +
+                "outcomes = $byOutcome",
         )
-        println("[PathOpsRegression] outcomes : $byOutcome")
-        // Diagnostic dump — list every non-SURVIVED fixture. Helps
-        // maintainers running locally identify candidates for the
-        // next debug pass without re-grepping the build log.
-        val nonSurvivors = outcomes.entries
-            .filter { it.value != Outcome.SURVIVED }
-            .sortedWith(compareBy({ it.value.name }, { it.key }))
-        if (nonSurvivors.isNotEmpty()) {
-            println("[PathOpsRegression] non-survivors :")
-            for ((name, outcome) in nonSurvivors) {
-                println("[PathOpsRegression]   $outcome : $name")
-            }
-        }
         assertTrue(
             rate >= floor,
             buildString {
