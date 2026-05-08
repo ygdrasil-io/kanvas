@@ -805,6 +805,54 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     }
 
     /**
+     * Mirrors Skia's `SkCanvas::drawVertices(vertices, blendMode, paint)`
+     * (`include/core/SkCanvas.h:1942`). Renders the triangle mesh
+     * carried by [vertices] onto the canvas, filling each triangle
+     * via the configured fill rule.
+     *
+     * **Phase I5.3 implementation note** : the current iso slice
+     * supports the **solid-color** path — every triangle is filled
+     * with `paint.color` / `paint.shader`. Per-vertex
+     * [SkVertices.colors] interpolation and per-vertex
+     * [SkVertices.texCoords] sampling are deferred (the parameters
+     * are accepted but currently ignored ; documented in the
+     * migration plan as I5.3.b / I5.3.c follow-ups).
+     *
+     * Triangle iteration honours [vertices]'s `mode`
+     * ([SkVertices.VertexMode.kTriangles] / `kTriangleStrip` /
+     * `kTriangleFan`) and any optional `indices` indirection. Each
+     * triangle becomes a 3-vertex closed [SkPath] dispatched through
+     * the existing [drawPath] pipeline — paint shaders / clipPath /
+     * blend mode are honoured uniformly.
+     *
+     * @param blendMode currently unused at the per-vertex level —
+     *                  combines into the paint via the standard
+     *                  `paint.blendMode` slot when [vertices.colors]
+     *                  is null. Reserved for I5.3.b.
+     */
+    public open fun drawVertices(
+        vertices: org.skia.foundation.SkVertices,
+        @Suppress("UNUSED_PARAMETER") blendMode: SkBlendMode,
+        paint: SkPaint,
+    ) {
+        val tCount = vertices.triangleCount()
+        if (tCount == 0) return
+        for (t in 0 until tCount) {
+            val tri = vertices.triangleAt(t)
+            val a = vertices.positions[tri[0]]
+            val b = vertices.positions[tri[1]]
+            val c = vertices.positions[tri[2]]
+            val path = SkPathBuilder()
+                .moveTo(a.fX, a.fY)
+                .lineTo(b.fX, b.fY)
+                .lineTo(c.fX, c.fY)
+                .close()
+                .detach()
+            drawPath(path, paint)
+        }
+    }
+
+    /**
      * Mirrors Skia's `SkCanvas::drawColor(SkColor, SkBlendMode)`
      * (`SkCanvas.h:1235`). Fills the active clip with [color] under [mode]
      * — defaults to `kSrcOver` like upstream. `clear` is the `kSrc` flavour
