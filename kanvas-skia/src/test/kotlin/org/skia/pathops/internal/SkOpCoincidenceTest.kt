@@ -433,4 +433,166 @@ class SkOpCoincidenceTest {
         c.markCollapsed(a.fHead.ptT())
         assertNull(c.fHead)
     }
+
+    // ─── overlap (D1.2.g.c.1) ─────────────────────────────────────
+
+    /** Build a free-floating pt-T at [t] sharing [span]'s segment. */
+    private fun stubPtT(span: SkOpSpanBase, t: Double): SkOpPtT {
+        val p = SkOpPtT()
+        p.fT = t
+        p.fSpan = span
+        p.fNext = p
+        return p
+    }
+
+    @Test
+    fun `overlap returns true and writes the t-intersection`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val s1 = stubPtT(a.fHead, 0.1)
+        val e1 = stubPtT(a.fHead, 0.6)
+        val s2 = stubPtT(a.fHead, 0.4)
+        val e2 = stubPtT(a.fHead, 0.9)
+        val c = SkOpCoincidence()
+        val out = DoubleArray(2)
+        assertTrue(c.overlap(s1, e1, s2, e2, out))
+        assertEquals(0.4, out[0], 1e-12)
+        assertEquals(0.6, out[1], 1e-12)
+    }
+
+    @Test
+    fun `overlap returns false on disjoint ranges`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val s1 = stubPtT(a.fHead, 0.0)
+        val e1 = stubPtT(a.fHead, 0.3)
+        val s2 = stubPtT(a.fHead, 0.5)
+        val e2 = stubPtT(a.fHead, 0.9)
+        val c = SkOpCoincidence()
+        val out = DoubleArray(2)
+        assertFalse(c.overlap(s1, e1, s2, e2, out))
+    }
+
+    @Test
+    fun `overlap handles ranges given in reverse t order`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        // First range : 0.6 → 0.1 (reverse).
+        val s1 = stubPtT(a.fHead, 0.6)
+        val e1 = stubPtT(a.fHead, 0.1)
+        val s2 = stubPtT(a.fHead, 0.4)
+        val e2 = stubPtT(a.fHead, 0.9)
+        val c = SkOpCoincidence()
+        val out = DoubleArray(2)
+        assertTrue(c.overlap(s1, e1, s2, e2, out))
+        assertEquals(0.4, out[0], 1e-12)
+        assertEquals(0.6, out[1], 1e-12)
+    }
+
+    // ─── TRange (D1.2.g.c.1) ──────────────────────────────────────
+
+    @Test
+    fun `TRange returns sentinel 1 when no bracket can be found`() {
+        // overS lives on `over` but `over`'s spans don't reference coin.
+        val over = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val coin = SkOpSegment().addLine(arrayOf(pt(0f, 5f), pt(10f, 5f)), null)
+        assertEquals(1.0, SkOpCoincidence.TRange(over.fHead.ptT(), 0.5, coin), 1e-12)
+    }
+
+    @Test
+    fun `TRange linearly maps t between two bracketing pt-Ts`() {
+        val over = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val coin = SkOpSegment().addLine(arrayOf(pt(20f, 0f), pt(30f, 0f)), null)
+        // Splice : `over`'s spans now each contain a `coin` pt-T.
+        over.fHead.ptT().insert(coin.fHead.ptT())
+        over.fTail.ptT().insert(coin.fTail.ptT())
+        // `over` runs [0..1] and `coin` also [0..1] — identity map.
+        assertEquals(0.5, SkOpCoincidence.TRange(over.fHead.ptT(), 0.5, coin), 1e-12)
+        assertEquals(0.0, SkOpCoincidence.TRange(over.fHead.ptT(), 0.0, coin), 1e-12)
+        assertEquals(1.0, SkOpCoincidence.TRange(over.fHead.ptT(), 1.0, coin), 1e-12)
+    }
+
+    @Test
+    fun `TRange remaps onto a different coin t-range`() {
+        val over = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val coin = SkOpSegment().addLine(arrayOf(pt(20f, 0f), pt(30f, 0f)), null)
+        // Force the `coin`-side endpoints to non-(0,1) t-values via stub
+        // pt-Ts. The mapping is then [0..1] (over) → [0.2..0.8] (coin).
+        val coinStartStub = stubPtT(coin.fHead, 0.2)
+        val coinEndStub = stubPtT(coin.fTail, 0.8)
+        over.fHead.ptT().insert(coinStartStub)
+        over.fTail.ptT().insert(coinEndStub)
+        assertEquals(0.5, SkOpCoincidence.TRange(over.fHead.ptT(), 0.5, coin), 1e-12)
+        // sRatio = (0.25 - 0) / (1 - 0) = 0.25 → 0.2 + (0.8 - 0.2) * 0.25 = 0.35
+        assertEquals(0.35, SkOpCoincidence.TRange(over.fHead.ptT(), 0.25, coin), 1e-12)
+    }
+
+    // ─── checkOverlap (D1.2.g.c.1) ────────────────────────────────
+
+    /**
+     * Build a synthetic [SkCoincidentSpans] with [fT]-stubbed
+     * endpoints. Allows checkOverlap tests to exercise partial-
+     * overlap logic without porting `SkOpSegment.addT`.
+     */
+    private fun stubEntry(
+        coinSeg: SkOpSegment, oppSeg: SkOpSegment,
+        coinTs: Double, coinTe: Double,
+        oppTs: Double, oppTe: Double,
+    ): SkCoincidentSpans {
+        val s = SkCoincidentSpans()
+        s.set(
+            null,
+            stubPtT(coinSeg.fHead, coinTs),
+            stubPtT(coinSeg.fTail, coinTe),
+            stubPtT(oppSeg.fHead, oppTs),
+            stubPtT(oppSeg.fTail, oppTe),
+        )
+        return s
+    }
+
+    @Test
+    fun `checkOverlap on empty chain returns true with no overlaps`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        val overlaps = mutableListOf<SkCoincidentSpans>()
+        assertTrue(c.checkOverlap(null, a, b, 0.0, 1.0, 0.0, 1.0, overlaps))
+        assertTrue(overlaps.isEmpty())
+    }
+
+    @Test
+    fun `checkOverlap returns false when candidate is fully inside an entry`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        val entry = stubEntry(a, b, 0.0, 1.0, 0.0, 1.0)
+        val overlaps = mutableListOf<SkCoincidentSpans>()
+        // Candidate [0.2..0.5] / [0.2..0.5] is fully inside [0..1] / [0..1].
+        assertFalse(c.checkOverlap(entry, a, b, 0.2, 0.5, 0.2, 0.5, overlaps))
+    }
+
+    @Test
+    fun `checkOverlap appends partially-overlapping entries`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val c = SkOpCoincidence()
+        val entry = stubEntry(a, b, 0.2, 0.7, 0.2, 0.7)
+        val overlaps = mutableListOf<SkCoincidentSpans>()
+        // Candidate [0.0..0.4] / [0.0..0.4] partially overlaps
+        // [0.2..0.7] / [0.2..0.7] : straddles the start.
+        assertTrue(c.checkOverlap(entry, a, b, 0.0, 0.4, 0.0, 0.4, overlaps))
+        assertEquals(1, overlaps.size)
+        assertSame(entry, overlaps[0])
+    }
+
+    @Test
+    fun `checkOverlap skips entries on a different segment pair`() {
+        val a = SkOpSegment().addLine(arrayOf(pt(0f, 0f), pt(10f, 0f)), null)
+        val b = SkOpSegment().addLine(arrayOf(pt(1f, 0f), pt(11f, 0f)), null)
+        val x = SkOpSegment().addLine(arrayOf(pt(2f, 0f), pt(12f, 0f)), null)
+        val y = SkOpSegment().addLine(arrayOf(pt(3f, 0f), pt(13f, 0f)), null)
+        val c = SkOpCoincidence()
+        // Entry on (x, y) — checkOverlap is for (a, b).
+        val entry = stubEntry(x, y, 0.0, 1.0, 0.0, 1.0)
+        val overlaps = mutableListOf<SkCoincidentSpans>()
+        assertTrue(c.checkOverlap(entry, a, b, 0.0, 1.0, 0.0, 1.0, overlaps))
+        assertTrue(overlaps.isEmpty())
+    }
 }
