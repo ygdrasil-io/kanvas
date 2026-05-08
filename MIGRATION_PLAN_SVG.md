@@ -134,17 +134,48 @@ when rendered in a stock SVG engine (browser, Batik) is.
 - **Status** : full kanvas-skia suite **2330 / 2330 green**
   (no regressions ; +18 new SVG tests).
 
-### B2.2 — Paint surface ✏️ ~200 LOC
+### B2.2 — Paint surface ✅ shipped
 
-- **`SkPaint`** → `fill="#rrggbb" fill-opacity="…"` (or `none` for
-  stroke-only), `stroke="…" stroke-width="…"
-  stroke-linecap="…" stroke-linejoin="…" stroke-miterlimit="…"
-  stroke-dasharray="…"`.
-- **Blend mode** — `kSrcOver` is implicit (default), `kSrc` is
-  annotated as an XML comment, every other mode logs a warning to
-  stderr and falls through to default.
-- **Tests** — round-trip a paint with each style/cap/join combo and
-  assert the emitted attributes.
+- **Colour decomposition** — `fill` / `stroke` carry the lower-case
+  `#rrggbb` hex (no 3-char shorthand — easier to grep). Alpha is
+  surfaced separately via `fill-opacity` / `stroke-opacity` (omitted
+  at fully opaque). The `colorHex` / `opacityString` helpers live
+  on the [SkSVGCanvas](kanvas-skia/src/main/kotlin/org/skia/svg/SkSVGCanvas.kt)
+  companion for reuse by future slices.
+- **Style** — `kFill_Style` → `fill=… stroke="none"` ; `kStroke_Style`
+  → `fill="none" stroke=…` ; `kStrokeAndFill_Style` → both colour +
+  opacity attrs.
+- **Stroke surface** — `stroke-width`, `stroke-linecap` (only
+  emitted for non-`butt` ; `butt` is the SVG default),
+  `stroke-linejoin` (non-`miter` only), `stroke-miterlimit` (only
+  when join is miter and value differs from SVG's default of `4`).
+- **Dash effect** — when `paint.pathEffect is SkDashPathEffect`, emit
+  `stroke-dasharray` from the intervals plus `stroke-dashoffset`
+  when phase is non-zero. Required new accessors on
+  [SkDashPathEffect](kanvas-skia/src/main/kotlin/org/skia/foundation/SkDashPathEffect.kt) :
+  `getIntervals()` (defensive copy) + `getPhase()`. Mirrors
+  upstream's `SkDashPathEffect::asADash(DashInfo*)` pattern.
+- **Anti-alias OFF** → `shape-rendering="crispEdges"` (SVG default
+  is AA on).
+- **Blend mode** : `kSrcOver` (default) emits no annotation ;
+  `kSrc` emits a `<!-- blend: kSrc -->` XML comment ; any other
+  mode emits the comment **plus** a `System.err` warning (so
+  consumers running tests notice the loss of fidelity).
+- **Tests** :
+  [SkSVGCanvasPaintTest.kt](kanvas-skia/src/test/kotlin/org/skia/svg/SkSVGCanvasPaintTest.kt)
+  (18) — colour hex + alpha, all 3 paint styles, every cap/join
+  variant + the SVG-default elision rules, miterlimit elision,
+  dash with and without phase, anti-alias OFF, all 3 blend-mode
+  branches (default / kSrc / other-with-warning, the last
+  asserted via captured `System.err`).
+- **LOC** : ~108 main delta on [SkSVGCanvas](kanvas-skia/src/main/kotlin/org/skia/svg/SkSVGCanvas.kt)
+  + ~18 main delta on
+  [SkDashPathEffect](kanvas-skia/src/main/kotlin/org/skia/foundation/SkDashPathEffect.kt)
+  (the two accessors) + ~252 test = 378 total (cf. plan estimate
+  ~200 main + ~80 test ; overage covers the explicit System.err
+  warning + capture-stderr test scaffold and the dash plumbing).
+- **Status** : full kanvas-skia suite **2347 / 2347 green**
+  (+18 vs B2.1).
 
 ### B2.3 — Clip ✏️ ~150 LOC
 
@@ -207,11 +238,11 @@ Once B2.1–B2.4 land, D4.5 SvgSink is a thin shell :
 | Slice | Main | Test |
 |---|---:|---:|
 | B2.1 ✅ | **427** (planned ~300) | **295** (planned ~150) |
-| B2.2 | ~200 | ~80 |
+| B2.2 ✅ | **126** (108 SVG + 18 SkDashPathEffect ; planned ~200) | **252** (planned ~80) |
 | B2.3 | ~150 | ~80 |
 | B2.4 | ~250 | ~120 |
 | B2.5 | ~80 | ~120 |
-| **Total** | **~1107** (so far : 427 actual + 680 planned) | **~695** (so far : 295 actual + 400 planned) |
+| **Total** | **~1033** (so far : 553 actual + 480 planned) | **~867** (so far : 547 actual + 320 planned) |
 
 vs. the original B2 estimate of ~3000 main + ~700 test (text +
 filters + saveLayer + non-clamp shaders + color filters all
