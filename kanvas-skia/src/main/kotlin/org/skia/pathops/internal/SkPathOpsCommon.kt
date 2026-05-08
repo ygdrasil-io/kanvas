@@ -15,10 +15,19 @@
  * `missing_coincidence`, `calc_angles`, `sort_angles`).
  *
  * Phase D1.2.h.5.3 — `AngleWinding` (angle-ring winding lookup).
- * The remaining helpers (`FindSortableTop` ray-tracing suite,
- * `bridgeOp` walker, `Op` final wiring) land in D1.2.h.5.4+.
+ *
+ * Phase D1.2.h.5.4 — `bridgeOp` + `findChaseOp` + Op final wiring.
+ * Includes a stub `FindSortableTop` that returns null until the
+ * full `SkPathOpsWinding.cpp` ray-tracing suite lands. With the
+ * stub, `bridgeOp` short-circuits its outer loop on the first
+ * iteration, and `Op` returns null for non-empty non-rect inputs
+ * — same behaviour as before this slice from a user perspective,
+ * but the entire wiring is now in place and will become functional
+ * the moment the winding suite lands.
  */
 package org.skia.pathops.internal
+
+import org.skia.pathops.SkPathOp
 
 /**
  * Out-param wrapper for the upstream `**SkOpContourHead`
@@ -600,4 +609,197 @@ internal fun AngleWinding(
     sortableOut[0] = !unorderable
     windingOut[0] = winding
     return angle
+}
+
+// ─── FindSortableTop / findChaseOp / bridgeOp (D1.2.h.5.4) ──────
+
+/**
+ * **STUB** — returns null until the `SkPathOpsWinding.cpp` suite
+ * lands. The full upstream impl walks every contour calling
+ * `SkOpContour.findSortableTop` ; the per-contour walker fires a
+ * perpendicular ray from each non-done span and counts crossings
+ * to determine the absolute winding number, then returns the
+ * lex-smallest active span as the start point for [bridgeOp]'s
+ * outer loop.
+ *
+ * With this stub returning null, [bridgeOp] short-circuits its
+ * outer `do { … } while` on the first iteration. The wiring is
+ * in place and `Op` becomes functional automatically once the
+ * winding suite lands and replaces this body.
+ *
+ * Mirrors `FindSortableTop`
+ * (`src/pathops/SkPathOpsWinding.cpp:429`).
+ */
+internal fun FindSortableTop(contourHead: SkOpContour): SkOpSpan? {
+    // TODO(D1.2.h.5.x) : SkOpContour.findSortableTop → SkOpSegment.findSortableTop →
+    //                    SkOpSpan.sortableTop → SkOpContour.rayCheck →
+    //                    SkOpRayHit / SkOpRayDir + ccw helpers.
+    return null
+}
+
+/**
+ * Pop the most-recently-chased span ; route it through
+ * [SkOpSegment.activeAngle] for a quick win, otherwise compute
+ * winding via [AngleWinding] and walk the angle ring marking
+ * spans as we find an unmarked active edge to dispatch to. On
+ * a hit, the chase span is re-appended to keep walking later.
+ *
+ * Returns true iff `[result][0]` was set (either to a found
+ * segment or explicitly to null on a sortable-but-no-candidate
+ * scenario, which the caller treats as "stop walking but no
+ * abort").
+ *
+ * Mirrors `findChaseOp` (`src/pathops/SkPathOpsOp.cpp:28`).
+ */
+internal fun findChaseOp(
+    chase: MutableList<SkOpSpanBase>,
+    startPtr: Array<SkOpSpanBase?>,
+    endPtr: Array<SkOpSpanBase?>,
+    result: Array<SkOpSegment?>,
+): Boolean {
+    while (chase.isNotEmpty()) {
+        val span = chase.removeAt(chase.size - 1)
+        startPtr[0] = span.ptT().prev().span()
+        var segment: SkOpSegment = startPtr[0]?.segment() ?: return true.also { result[0] = null }
+        val doneOut = booleanArrayOf(true)
+        endPtr[0] = null
+        val last = segment.activeAngle(startPtr[0]!!, startPtr, endPtr, doneOut)
+        if (last != null) {
+            startPtr[0] = last.start()
+            endPtr[0] = last.end()
+            chase.add(span)
+            result[0] = last.segment()
+            return true
+        }
+        if (doneOut[0]) continue
+        val windingOut = intArrayOf(0)
+        val sortableOut = booleanArrayOf(false)
+        val angle = AngleWinding(startPtr[0]!!, endPtr[0]!!, windingOut, sortableOut)
+            ?: run { result[0] = null; return true }
+        if (windingOut[0] == SkOpSpan.SK_MinS32) continue
+        var sumMi = 0; var sumSu = 0
+        if (sortableOut[0]) {
+            segment = angle.segment() ?: run { result[0] = null; return true }
+            sumMi = segment.updateWindingReverse(angle)
+            if (sumMi == SkOpSpan.SK_MinS32) { result[0] = null; return true }
+            sumSu = segment.updateOppWindingReverse(angle)
+            if (sumSu == SkOpSpan.SK_MinS32) { result[0] = null; return true }
+            if (segment.operand()) {
+                val tmp = sumMi; sumMi = sumSu; sumSu = tmp
+            }
+        }
+        var first: SkOpSegment? = null
+        val firstAngle = angle
+        var a: SkOpAngle = angle.next() ?: continue
+        val sumMiInOut = intArrayOf(sumMi)
+        val sumSuInOut = intArrayOf(sumSu)
+        while (a !== firstAngle) {
+            segment = a.segment() ?: break
+            val s = a.start() ?: break
+            val e = a.end() ?: break
+            val outArr = SkOpSegment.BinaryWindings(0, 0, 0, 0)
+            var max = 0; var sum = 0; var oppMax = 0; var oppSum = 0
+            if (sortableOut[0]) {
+                val w = segment.setUpWindings(s, e, sumMiInOut, sumSuInOut)
+                max = w.max; sum = w.sum; oppMax = w.oppMax; oppSum = w.oppSum
+            }
+            if (!segment.done(a)) {
+                if (first == null && (sortableOut[0] ||
+                        s.starter(e).windSum() != SkOpSpan.SK_MinS32)) {
+                    first = segment
+                    startPtr[0] = s
+                    endPtr[0] = e
+                }
+                if (sortableOut[0]) {
+                    if (!segment.markAngle(max, sum, oppMax, oppSum, a, null)) return false
+                }
+            }
+            // Suppress unused warning : keep the BinaryWindings shape for
+            // upstream parity (we only need the four ints).
+            @Suppress("UNUSED_VARIABLE") val unused = outArr
+            a = a.next() ?: break
+        }
+        if (first != null) {
+            chase.add(span)
+            result[0] = first
+            return true
+        }
+    }
+    result[0] = null
+    return true
+}
+
+/**
+ * Walk the resolved contour graph emitting active edges to [writer]
+ * under boolean operation [op] with the given fill-type masks.
+ * Each iteration of the outer loop picks an entry point via
+ * [FindSortableTop] (returns null in this slice — see stub) ; the
+ * inner loop walks contiguous active edges via [SkOpSegment.findNextOp],
+ * popping the [chase] buffer via [findChaseOp] when it stalls.
+ *
+ * Mirrors `bridgeOp` (`src/pathops/SkPathOpsOp.cpp:122`).
+ */
+internal fun bridgeOp(
+    contourList: SkOpContour,
+    op: SkPathOp,
+    xorMask: Int, xorOpMask: Int,
+    writer: SkPathWriter,
+): Boolean {
+    var lastSimple = false
+    while (true) {
+        val span = FindSortableTop(contourList) ?: break
+        var current: SkOpSegment = span.segment() ?: return false
+        val startPtr = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = span.next() }
+        val endPtr = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = span }
+        val chase = mutableListOf<SkOpSpanBase>()
+        outer@ while (true) {
+            if (current.activeOp(startPtr[0]!!, endPtr[0]!!, xorMask, xorOpMask, op)) {
+                val unsortableArr = booleanArrayOf(false)
+                val simpleArr = booleanArrayOf(false)
+                while (true) {
+                    if (!unsortableArr[0] && current.done()) break
+                    val nextStart = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = startPtr[0] }
+                    val nextEnd = arrayOfNulls<SkOpSpanBase>(1).also { it[0] = endPtr[0] }
+                    lastSimple = simpleArr[0]
+                    val next = current.findNextOp(chase, nextStart, nextEnd,
+                        unsortableArr, simpleArr, op, xorMask, xorOpMask)
+                    if (next == null) {
+                        if (!unsortableArr[0] && writer.hasMove() &&
+                            current.verb() != SkOpSegment.SegVerb.kLine && !writer.isClosed()) {
+                            if (!current.addCurveTo(startPtr[0]!!, endPtr[0]!!, writer)) return false
+                        } else if (lastSimple) {
+                            if (!current.addCurveTo(startPtr[0]!!, endPtr[0]!!, writer)) return false
+                        }
+                        break
+                    }
+                    if (!current.addCurveTo(startPtr[0]!!, endPtr[0]!!, writer)) return false
+                    current = next
+                    startPtr[0] = nextStart[0]
+                    endPtr[0] = nextEnd[0]
+                    if (writer.isClosed()) break
+                    if (unsortableArr[0] && startPtr[0]!!.starter(endPtr[0]!!).done()) break
+                }
+                if (current.activeWinding(startPtr[0]!!, endPtr[0]!!) && !writer.isClosed()) {
+                    val spanStart = startPtr[0]!!.starter(endPtr[0]!!)
+                    if (!spanStart.done()) {
+                        if (!current.addCurveTo(startPtr[0]!!, endPtr[0]!!, writer)) return false
+                        current.markDone(spanStart)
+                    }
+                }
+                writer.finishContour()
+            } else {
+                val lastArr = arrayOfNulls<SkOpSpanBase>(1)
+                if (!current.markAndChaseDone(startPtr[0]!!, endPtr[0]!!, lastArr)) return false
+                val last = lastArr[0]
+                if (last != null && !last.chased()) {
+                    last.setChased(true)
+                    chase.add(last)
+                }
+            }
+            val resultArr = arrayOfNulls<SkOpSegment>(1)
+            if (!findChaseOp(chase, startPtr, endPtr, resultArr)) return false
+            current = resultArr[0] ?: break@outer
+        }
+    }
+    return true
 }

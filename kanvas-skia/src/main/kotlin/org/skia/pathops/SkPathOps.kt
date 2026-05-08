@@ -28,6 +28,17 @@ import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
 import org.skia.math.SkRect
+import org.skia.pathops.internal.AddIntersectTs
+import org.skia.pathops.internal.ContourHeadRef
+import org.skia.pathops.internal.HandleCoincidence
+import org.skia.pathops.internal.SkOpCoincidence
+import org.skia.pathops.internal.SkOpContourHead
+import org.skia.pathops.internal.SkOpEdgeBuilder
+import org.skia.pathops.internal.SkOpGlobalState
+import org.skia.pathops.internal.SkPathOpsMask
+import org.skia.pathops.internal.SkPathWriter
+import org.skia.pathops.internal.SortContourList
+import org.skia.pathops.internal.bridgeOp
 
 /**
  * Pathops free functions. Mirrors Skia's `include/pathops/SkPathOps.h`.
@@ -152,9 +163,58 @@ public object SkPathOps {
             return toggled.makeFillType(fillType)
         }
 
-        // TODO(D1.2.h.1+) : full Boolean machinery via SortContourList /
-        // AddIntersectTs / HandleCoincidence / bridgeOp.
-        return null
+        // Full Boolean machinery — D1.2.h.5.4 wiring.
+        // 1. Build the contour list from both paths.
+        val contourHead = SkOpContourHead()
+        val globalState = SkOpGlobalState()
+        contourHead.setGlobalState(globalState)
+        val coincidence = SkOpCoincidence()
+        globalState.setCoincidence(coincidence)
+        var minuend = one
+        var subtrahend = two
+        var workOp = effectiveOp
+        if (workOp == SkPathOp.kReverseDifference) {
+            minuend = two; subtrahend = one
+            workOp = SkPathOp.kDifference
+        }
+        val builder = SkOpEdgeBuilder(minuend, contourHead)
+        if (builder.fUnparseable) return null
+        val xorMask = builder.xorMask()
+        builder.addOperand(subtrahend)
+        if (!builder.finish()) return null
+        val xorOpMask = builder.xorMask()
+        // 2. Sort contour list (drops empty + canonicalises chain).
+        val ref = ContourHeadRef(contourHead)
+        if (!SortContourList(ref, xorMask == SkPathOpsMask.kEvenOdd,
+                xorOpMask == SkPathOpsMask.kEvenOdd)) {
+            // No survivors — empty result with the right fillType.
+            return SkPathBuilder().detach().makeFillType(fillType)
+        }
+        val sortedHead = ref.head!!
+        // 3. Find all intersections.
+        var current = sortedHead
+        do {
+            var next: org.skia.pathops.internal.SkOpContour? = current
+            while (AddIntersectTs(current, next!!, coincidence)) {
+                next = next.next() ?: break
+            }
+            current = current.next() ?: break
+        } while (true)
+        // 4. Resolve coincidence (the big "fix coincidence" pipeline).
+        if (!HandleCoincidence(sortedHead, coincidence)) return null
+        // 5. Walk the resolved graph emitting active edges.
+        val writer = SkPathWriter(fillType)
+        if (!bridgeOp(sortedHead, workOp, xorMask, xorOpMask, writer)) return null
+        writer.assemble()
+        val result = writer.nativePath()
+        // Until the SkPathOpsWinding.cpp ray-tracing suite is wired
+        // (replaces the FindSortableTop stub), bridgeOp's outer loop
+        // short-circuits before any walking happens — the writer stays
+        // empty for any non-trivial input. Surface that as null
+        // (caller's "not yet supported") rather than mislead with a
+        // bogus empty result.
+        if (result.isEmpty()) return null
+        return result
     }
 
     /**
