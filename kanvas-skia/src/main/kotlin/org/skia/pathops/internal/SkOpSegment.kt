@@ -1305,6 +1305,142 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
     }
 
 
+    // ─── findNextWinding / findNextXor (D1.2.h.6.0) ────────────────
+
+    /**
+     * Walk the angle ring at `(*nextStart, *nextEnd)` looking for
+     * the next active edge under unary winding semantics (the
+     * `Simplify` machinery). Mirrors [findNextOp] but consults
+     * [activeWinding] instead of [activeOp] and propagates only
+     * the `windSum` channel.
+     *
+     * Mirrors `SkOpSegment::findNextWinding`
+     * (`src/pathops/SkOpSegment.cpp:651`).
+     */
+    fun findNextWinding(
+        chase: MutableList<SkOpSpanBase>,
+        nextStart: Array<SkOpSpanBase?>,
+        nextEnd: Array<SkOpSpanBase?>,
+        unsortable: BooleanArray,
+    ): SkOpSegment? {
+        val start = nextStart[0]!!
+        val end = nextEnd[0]!!
+        require(start !== end)
+        val stepArr = intArrayOf(start.step(end))
+        val other = isSimple(nextStart, stepArr)
+        if (other != null) {
+            val startSpan = start.starter(end)
+            if (startSpan.done()) return null
+            markDone(startSpan)
+            val advanced = nextStart[0]!!
+            nextEnd[0] = if (stepArr[0] > 0) advanced.upCast().next() else advanced.prev()
+            return other
+        }
+        val advanced = nextStart[0]!!
+        val endNear: SkOpSpanBase = if (stepArr[0] > 0)
+            advanced.upCast().next()!! else advanced.prev()!!
+        require(endNear === end)
+        require(start !== endNear)
+        val calcWinding = computeSum(start, endNear, SkOpAngle.IncludeType.kUnaryWinding)
+        if (calcWinding == SkOpSpan.SK_MinS32) {
+            unsortable[0] = true
+            markDone(start.starter(end))
+            return null
+        }
+        val angle = spanToAngle(end, start)!!
+        if (angle.unorderable()) {
+            unsortable[0] = true
+            markDone(start.starter(end))
+            return null
+        }
+        val sumInOut = intArrayOf(updateWinding(end, start))
+        var nextAngle: SkOpAngle = angle.next() ?: return null
+        var foundAngle: SkOpAngle? = null
+        var foundDone = false
+        var nextSegment: SkOpSegment? = null
+        var activeCount = 0
+        while (true) {
+            nextSegment = nextAngle.segment()!!
+            val active = nextSegment.activeWinding(
+                nextAngle.start()!!, nextAngle.end()!!, sumInOut)
+            if (active) {
+                ++activeCount
+                if (foundAngle == null || (foundDone && (activeCount and 1) == 1)) {
+                    foundAngle = nextAngle
+                    foundDone = nextSegment.done(nextAngle)
+                }
+            }
+            if (!nextSegment.done()) {
+                if (!active) {
+                    nextSegment.markAndChaseDone(nextAngle.start()!!, nextAngle.end()!!, null)
+                }
+                val last = nextAngle.lastMarked()
+                if (last != null) chase.add(last)
+            }
+            nextAngle = nextAngle.next() ?: break
+            if (nextAngle === angle) break
+        }
+        start.segment()!!.markDone(start.starter(end))
+        if (foundAngle == null) return null
+        nextStart[0] = foundAngle.start()
+        nextEnd[0] = foundAngle.end()
+        return foundAngle.segment()
+    }
+
+    /**
+     * Walk the angle ring under XOR fill semantics — every angle is
+     * "active" so the choice criterion reduces to "first non-done
+     * angle". Mirrors `SkOpSegment::findNextXor`
+     * (`src/pathops/SkOpSegment.cpp:747`).
+     */
+    fun findNextXor(
+        nextStart: Array<SkOpSpanBase?>,
+        nextEnd: Array<SkOpSpanBase?>,
+        unsortable: BooleanArray,
+    ): SkOpSegment? {
+        val start = nextStart[0]!!
+        val end = nextEnd[0]!!
+        require(start !== end)
+        val stepArr = intArrayOf(start.step(end))
+        val other = isSimple(nextStart, stepArr)
+        if (other != null) {
+            val startSpan = start.starter(end)
+            if (startSpan.done()) return null
+            markDone(startSpan)
+            val advanced = nextStart[0]!!
+            nextEnd[0] = if (stepArr[0] > 0) advanced.upCast().next() else advanced.prev()
+            return other
+        }
+        val angle = spanToAngle(end, start)
+        if (angle == null || angle.unorderable()) {
+            unsortable[0] = true
+            markDone(start.starter(end))
+            return null
+        }
+        var nextAngle: SkOpAngle? = angle.next()
+        var foundAngle: SkOpAngle? = null
+        var foundDone = false
+        var nextSegment: SkOpSegment? = null
+        var activeCount = 0
+        while (nextAngle != null) {
+            nextSegment = nextAngle.segment()
+            ++activeCount
+            if (foundAngle == null || (foundDone && (activeCount and 1) == 1)) {
+                foundAngle = nextAngle
+                foundDone = nextSegment?.done(nextAngle) == true
+                if (!foundDone) break
+            }
+            nextAngle = nextAngle.next()
+            if (nextAngle === angle) break
+        }
+        start.segment()!!.markDone(start.starter(end))
+        if (foundAngle == null) return null
+        nextStart[0] = foundAngle.start()
+        nextEnd[0] = foundAngle.end()
+        return foundAngle.segment()
+    }
+
+
     // ─── Sum propagation (D1.2.c.2.d) ──────────────────────────────
 
     /**
