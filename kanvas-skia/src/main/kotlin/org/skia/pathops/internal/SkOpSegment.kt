@@ -830,6 +830,10 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
      * null (test fixtures).
      */
     fun operand(): Boolean = fContour?.operand() ?: false
+    /** Convenience : `contour()?.isXor()`. */
+    fun isXor(): Boolean = fContour?.isXor() ?: false
+    /** Convenience : `contour()?.oppXor()`. */
+    fun oppXor(): Boolean = fContour?.oppXor() ?: false
 
     // ─── Winding queries (D1.2.c.2.c) ──────────────────────────────
 
@@ -1247,6 +1251,9 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
                 span.init(this, prev, t, pt)
                 span.bumpSpanAdds()
                 ++fCount
+                // Flag the global state so addExpanded callers can
+                // detect that a fresh span was allocated.
+                globalState()?.setAllocatedOpSpan()
                 return span.fPtT
             }
             if (spanBase === fTail) return null
@@ -1257,6 +1264,36 @@ internal class SkOpSegment : Comparable<SkOpSegment> {
 
     /** Convenience overload : derives `pt` via [ptAtT]. */
     fun addT(t: Double): SkOpPtT? = addT(t, ptAtT(t))
+
+    /**
+     * Break a span at parameter [newT] so the coincident sub-range
+     * doesn't change the angle of the remainder. Resets the
+     * `allocatedOpSpan` flag, calls [addT], and (when a previous
+     * non-self-loop oppPrev exists on [test]'s ptT) splices the new
+     * pt-T into [test]'s loop via [SkOpPtT.addOpp] +
+     * [SkOpSpanBase.mergeMatches] + [SkOpSpanBase.checkForCollapsedCoincidence].
+     *
+     * `startOverOut[0]` is OR-ed with the post-`addT` allocatedOpSpan
+     * flag — caller (`SkOpCoincidence.addExpanded`) restarts its walk
+     * when a fresh span has been inserted, since the linked list it
+     * was iterating may have grown.
+     *
+     * Mirrors `SkOpSegment::addExpanded(double, const SkOpSpanBase*,
+     * bool*)` (`SkOpSegment.cpp:235`).
+     */
+    fun addExpanded(newT: Double, test: SkOpSpanBase, startOverOut: BooleanArray): Boolean {
+        if (this.contains(newT)) return true
+        globalState()?.resetAllocatedOpSpan()
+        if (!between(0.0, newT, 1.0)) return false
+        val newPtT = addT(newT) ?: return false
+        if (globalState()?.allocatedOpSpan() == true) startOverOut[0] = true
+        newPtT.fPt = ptAtT(newT)
+        val oppPrev = test.ptT().oppPrev(newPtT) ?: return true
+        test.mergeMatches(newPtT.span()!!)
+        test.ptT().addOpp(newPtT, oppPrev)
+        test.checkForCollapsedCoincidence()
+        return true
+    }
 
     /**
      * Walk `fHead..fTail` looking for a pt-T at parameter [t]. Returns
