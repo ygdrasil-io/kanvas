@@ -406,6 +406,9 @@ public class SkRuntimeEffect private constructor(
          */
         private fun ensureBuiltinsLoaded() {
             org.skia.effects.runtime.effects.SkBuiltinColorFilterEffects.registerAll()
+            org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple.registerAll()
+            org.skia.effects.runtime.effects.SkBuiltinShaderEffectsChildren.registerAll()
+            org.skia.effects.runtime.effects.SkBuiltinShaderEffectsColorCube.registerAll()
         }
     }
 }
