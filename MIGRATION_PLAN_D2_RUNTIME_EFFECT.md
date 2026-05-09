@@ -691,21 +691,58 @@ in `D2PreFauxPositifTest`, ratcheted at 16.92 %.
 absorbs the GM port + the 3 tone-map variants pinning identical
 outputs).
 
-#### D2.4.b — Shader effects (`runtimeshader.cpp` cluster)
+#### D2.4.b — Shader effects (`runtimeshader.cpp` cluster) ✅ shipped (7 of 9 DEF_GMs)
 
-**Targets** : les 13 DEF_GM de `runtimeshader.cpp` :
-- `SimpleRT`, `ThresholdRT`, `SpiralRT`, `UnsharpRT`,
-  `ColorCubeRT`, `ColorCubeColorFilterRT`, `ClipSuperRRect`
-  (×2), `LinearGradientRT`, plus 2-3 variantes child-using.
+**Implementation** : 3 cluster files dans
+[`runtime/effects/`](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/effects/) :
 
-Chaque a un fichier Kotlin dans
-`org/skia/effects/runtime/effects/runtimeshader/`. Le math va
-de trivial (`SimpleRT` = solid color) à non-trivial
-(`UnsharpRT` = kernel unsharp-mask 5×5 appelant `child.eval(...)`).
+| Cluster | Effects | Hash keys | Path |
+|---|---|---|---|
+| **A — Simple** (no children) | SimpleRT, SpiralRT, LinearGradientRT | 3 | [SkBuiltinShaderEffectsSimple.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsSimple.kt) |
+| **B — Children** (shader children) | ThresholdRT (3 children), UnsharpRT (1 child + 5-tap kernel) | 2 | [SkBuiltinShaderEffectsChildren.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsChildren.kt) |
+| **C — Color cube LUT** | ColorCubeRT (shader + LUT child), ColorCubeColorFilterRT (color filter + LUT child) | 2 | [SkBuiltinShaderEffectsColorCube.kt](kanvas-skia/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsColorCube.kt) |
 
-**LOC** : ~50-100 par effet × 13 = ~700 main + ~500 test.
+**Total** : 7 hand-ported `SkRuntimeImpl` objects covering 7 SkSL hash keys.
 
-**GMs débloqués** : `RuntimeShaderGM` (chaque variante).
+**Effets shippés** :
+- `SimpleRT` — `(p.x/255, p.y/255, gColor.b, 1)` ; tests math at known pixel positions.
+- `SpiralRT` — radius / angle / fract spiral with 2 colour stops ; tests reference recompute at 4 points.
+- `LinearGradientRT` — top-half encoded-sRGB lerp, bottom-half linear-sRGB lerp via `toLinearSrgb` / `fromLinearSrgb` (uses existing `SkNamedTransferFn.kSRGB` helpers).
+- `ThresholdRT` — 3 shader children (before / after / threshold), `smooth_cutoff(threshold.a)` drives a `mix(before, after, m)` ; verified clamping behaviour at low / high luma.
+- `UnsharpRT` — 5-tap unsharp mask kernel (`5·centre − Σ neighbours`) ; verified by constant-child input (kernel sum = 1 → identity) and by impulse-child input (negative neighbour clamps to 0).
+- `ColorCubeRT` (shader) and `ColorCubeColorFilterRT` (color filter) — 3D LUT lookup with bilinear B-axis lerp ; verified with constant LUT (all coords return same colour) and shader-vs-cf parity.
+
+**Effets descopés** :
+- `ClipSuperRRect("clip_super_rrect_pow2", 2)` and `("clip_super_rrect_pow3.5", 3.5)` — ces 2 DEF_GMs utilisent `canvas->clipShader(...)` qui n'existe pas encore dans `SkCanvas`. Le shader lui-même (saturate-coverage du superellipse) est trivial à porter ; **le bloquant est `SkCanvas.clipShader`**, un chantier raster séparé. À reprendre quand `clipShader` landed.
+
+**Auto-registration** : 3 cluster `object`s, chacun avec
+`init { registerAll() }` + `registerAll()` public idempotent.
+Wired into `SkRuntimeEffect.ensureBuiltinsLoaded()` (added by
+D2.4.a, extended ici à 4 clusters) — chaque `makeFor(...)`
+re-populate la dispatch table. Test classes utilisent en plus
+`@BeforeEach { ClusterX.registerAll() }` pour rester défensifs
+contre `clearForTest`.
+
+**Tests** ([3 test classes / 37 tests, all green](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/effects/)) :
+- [SkBuiltinShaderEffectsSimpleTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsSimpleTest.kt) — 16 tests
+- [SkBuiltinShaderEffectsChildrenTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsChildrenTest.kt) — 11 tests
+- [SkBuiltinShaderEffectsColorCubeTest](kanvas-skia/src/test/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsColorCubeTest.kt) — 10 tests
+
+**LOC** : ~720 main (3 cluster files) + ~860 test (3 test
+classes) = **~1580 total** (cf. plan estimate ~700 + ~500 =
+~1200 ; overage couvre les child-resolver stubs nécessaires aux
+tests + l'instrumentation pour vérifier les 3 SkSL contrastés).
+
+**Validation** : full kanvas-skia suite **3134 / 3134 green** (post-rebase sur D2.4.a / D2-pre batch 5).
+
+**GM ports** : différé. Les GMs upstream (`runtime_shader`,
+`spiral_rt`, etc.) instancient le `RuntimeShaderGM` template
+avec une SkSL string par variante. Un port complet doit
+factoriser le template + porter chaque DEF_GM avec son setup
+spécifique (mandrill / dog images pour ThresholdRT,
+mandrill_sepia / lut_identity / lut_sepia pour ColorCube). À
+porter dans un slice de suivi (D2.4.b GM ports) une fois les
+images stand-in décidées.
 
 #### D2.4.c — Intrinsics test effects
 
@@ -858,7 +895,7 @@ la deuxième fois (cette fois en cross-validation raster ↔ GPU).
 | D2.2 Shader/ColorFilter/Blender bindings ✅ | **525** (planned ~400 ; absorbs SkData) | **430** (planned ~250) | foundation |
 | D2.3 SkRuntimeEffectBuilder ✅ (SkData absorbed in D2.2) | **340** (planned ~200) | **370** (planned ~150) | foundation |
 | D2.4.a Simple color filters ✅ | **400** (planned ~250) | **270** (planned ~200) | 2 (RuntimeColorFilterGM, ComposeColorFilterGM SkSL column) |
-| D2.4.b runtimeshader cluster | ~700 | ~500 | 1 (13 variants) |
+| D2.4.b runtimeshader cluster ✅ (7 of 9 DEF_GMs ; ClipSuperRRect ×2 deferred on `clipShader`) | **720** (planned ~700) | **860** (planned ~500) | 7 SkSL hashes ; GM ports deferred |
 | D2.4.c intrinsics test effects | ~500 | ~150 | 1 (~50 variants) |
 | D2.4.d Specialised one-offs | ~450 | ~250 | 6 |
 | D2.5 Image-filter integration | ~200 | ~100 | 1 |
