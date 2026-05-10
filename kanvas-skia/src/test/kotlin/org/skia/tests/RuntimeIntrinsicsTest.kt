@@ -73,4 +73,15 @@ class RuntimeIntrinsicsTest {
     @Test
     fun `RuntimeIntrinsicsExponentialGM matches reference`() =
         runGm(RuntimeIntrinsicsExponentialGM(), "RuntimeIntrinsicsExponentialGM", floor = 0.0)
+
+    /**
+     * `runtime_intrinsics_common` — 31 plot calls in a 6×7 grid
+     * covering the GLSL "common" function family (abs / sign /
+     * floor / ceil / fract / mod / min / max / clamp / saturate /
+     * mix / step / smoothstep + componentwise floor(p) / ceil(p)).
+     * Phase D2.4.c.3 port.
+     */
+    @Test
+    fun `RuntimeIntrinsicsCommonGM matches reference`() =
+        runGm(RuntimeIntrinsicsCommonGM(), "RuntimeIntrinsicsCommonGM", floor = 0.0)
 }
