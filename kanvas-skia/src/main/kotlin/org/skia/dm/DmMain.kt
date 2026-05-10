@@ -57,12 +57,32 @@ public object DmMain {
 
         val gms = cli.filterGms(allGms)
 
-        return Runner(
+        val report = Runner(
             sinks = sinks,
             gms = gms,
             properties = pairUp(cli.properties),
             key = pairUp(cli.key),
         ).run().applySkip(cli)
+
+        // Phase D2.6 — surface unregistered SkSL hashes when the
+        // user asks for them. Prints to stderr (so the report
+        // payload on stdout stays clean) ; exits with code 0 either
+        // way. The set is empty most of the time — these only
+        // appear when a GM passes a SkSL string the project hasn't
+        // hand-ported yet.
+        if (cli.listMissingEffects) {
+            val missing = report.missingRuntimeEffectHashes()
+            if (missing.isEmpty()) {
+                System.err.println("[DM] No missing runtime-effect hashes — all SkSL programs in the run are registered.")
+            } else {
+                System.err.println("[DM] ${missing.size} missing runtime-effect hash(es) — register an impl in SkRuntimeEffectDispatch :")
+                for (hash in missing.sorted()) {
+                    System.err.println("  $hash")
+                }
+            }
+        }
+
+        return report
     }
 
     /**
