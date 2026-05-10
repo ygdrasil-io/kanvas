@@ -817,9 +817,27 @@ sous-chantiers plus larges.
 
 ---
 
-### D2.5 — Image-filter integration
+### D2.5 — Image-filter integration ✅ shipped
 
-**Scope** : wirer `SkRuntimeEffect` dans `SkImageFilter`. Demande
+**Status** : ✅ shipped. `SkRuntimeImageFilter` + 2 factory
+overloads (`SkImageFilters.RuntimeShader`) live in
+`org.skia.foundation`. Tests : 3 unit tests pinning end-to-end
+shader-through-filterImage wiring + multi-child variant + arity
+mismatch guard. Suite à 3211 verts. Le port d'un GM upstream
+(`rtif_unsharp` / `rtif_distort`) est déféré — voir D2.5 follow-up
+note ci-dessous.
+
+**D2.5 follow-up** (non-bloquant pour D2.5 close) :
+- Port `rtif_unsharp` (`gm/runtimeimagefilter.cpp` second GM) —
+  utilise un 2-child runtime shader (`content` + `blurred`)
+  avec `Blur` filter via la SkSL chain. Le SkSL doit être
+  enregistré (probablement dans un nouveau cluster
+  `SkBuiltinRuntimeImageFilterEffects`).
+- Port `rtif_distort` — single-child SkSL avec `sin(coord.y/3)`
+  distortion ; dépend de la text-rendering pour les multiple
+  text rasters underneath. Dépendant des labels glyphs.
+
+**Original scope** : wirer `SkRuntimeEffect` dans `SkImageFilter`. Demande
 deux pièces :
 
 1. Une nouvelle factory `SkImageFilters.RuntimeShader(effect,

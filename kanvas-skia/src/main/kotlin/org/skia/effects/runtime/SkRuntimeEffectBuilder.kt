@@ -164,6 +164,15 @@ public class SkRuntimeEffectBuilder(
         if (uniformBytes.isEmpty()) SkData.EMPTY else SkData.MakeWithCopy(uniformBytes)
 
     /**
+     * Public snapshot of the bound uniforms — needed by
+     * [SkImageFilters.RuntimeShader] (Phase D2.5) which builds an
+     * image filter that captures the current builder state.
+     * Defensive copy ; mutating the builder afterwards doesn't
+     * affect the returned [SkData].
+     */
+    public fun snapshotUniforms(): SkData = currentUniforms()
+
+    /**
      * Build a typed children array of the requested kind, slotting
      * `null` for any slot of a different type. Used by
      * [makeShader] / [makeColorFilter] / [makeBlender] which each

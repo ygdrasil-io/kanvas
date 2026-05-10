@@ -181,6 +181,67 @@ public object SkImageFilters {
     public fun Empty(): SkImageFilter = SkEmptyImageFilter
 
     /**
+     * Phase D2.5 — `SkImageFilters::RuntimeShader(builder, sampleRadius,
+     * childShaderName, input)`. Wraps a runtime-effect shader as
+     * an image filter. The shader's `[childShaderName]` slot is
+     * bound to either the layer's source image (when [input] is
+     * null) or the result of evaluating [input] over the source.
+     *
+     * The runtime effect must be a **shader** (created via
+     * [org.skia.effects.runtime.SkRuntimeEffect.MakeForShader]) ;
+     * a color-filter or blender effect produces an
+     * [IllegalStateException] at filter time.
+     *
+     * **Sampling radius** : currently advisory — we evaluate the
+     * filter over the input's exact bounding box and clamp child
+     * sample coords to those bounds. Upstream uses the radius to
+     * inflate the working canvas so the shader can sample beyond
+     * the input ; that's a slice-internal optimisation that
+     * doesn't affect output correctness for filters whose sample
+     * stays within the bounds.
+     */
+    public fun RuntimeShader(
+        builder: org.skia.effects.runtime.SkRuntimeEffectBuilder,
+        sampleRadius: Float = 0f,
+        childShaderName: String,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkRuntimeImageFilter(
+        effect = builder.effect,
+        uniforms = builder.snapshotUniforms(),
+        bindings = listOf(SkRuntimeImageFilter.ChildBinding(childShaderName, input)),
+        sampleRadius = sampleRadius,
+    )
+
+    /**
+     * Phase D2.5 — multi-child variant of [RuntimeShader]. Mirrors
+     * upstream `SkImageFilters::RuntimeShader(builder,
+     * childShaderNames, inputs)`. Each child slot in the runtime
+     * effect is bound to the corresponding image filter ; `null`
+     * inputs bind to the layer's source image directly.
+     *
+     * Throws if [childShaderNames] and [inputs] have different
+     * lengths, or if any child name is not declared in the effect's
+     * SkSL.
+     */
+    public fun RuntimeShader(
+        builder: org.skia.effects.runtime.SkRuntimeEffectBuilder,
+        childShaderNames: Array<String>,
+        inputs: Array<SkImageFilter?>,
+    ): SkImageFilter {
+        require(childShaderNames.size == inputs.size) {
+            "childShaderNames (${childShaderNames.size}) and inputs (${inputs.size}) must have the same length"
+        }
+        return SkRuntimeImageFilter(
+            effect = builder.effect,
+            uniforms = builder.snapshotUniforms(),
+            bindings = childShaderNames.zip(inputs.toList()).map { (n, f) ->
+                SkRuntimeImageFilter.ChildBinding(n, f)
+            },
+            sampleRadius = 0f,
+        )
+    }
+
+    /**
      * Mirrors Skia's `SkImageFilters::Crop(rect, tileMode, input)` —
      * constrains [input]'s output to [rect], with [tileMode]
      * dictating how out-of-rect samples are treated.
