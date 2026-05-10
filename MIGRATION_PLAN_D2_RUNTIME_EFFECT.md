@@ -744,23 +744,42 @@ mandrill_sepia / lut_identity / lut_sepia pour ColorCube). À
 porter dans un slice de suivi (D2.4.b GM ports) une fois les
 images stand-in décidées.
 
-#### D2.4.c — Intrinsics test effects
+#### D2.4.c — Intrinsics test effects (6 sub-slices, en cours)
 
-**Targets** : `runtimeintrinsics.cpp` exerce ~50 intrinsèques
-SkSL (`mod`, `mix`, `cross`, `dFdx`, `smoothstep`, `packFloat`,
-`clamp`, `min`, `max`, `length`, `normalize`, `dot`, `reflect`,
-`refract`, `faceforward`, …).
+**Targets** : `runtimeintrinsics.cpp` couvre 6 GMs raster
+(`runtime_intrinsics_trig` / `_exponential` / `_common` /
+`_geometric` / `_matrix` / `_relational`) qui exercent ~85
+intrinsèques SkSL distincts via 3 templates SkSL (`make_unary_sksl_1d`
+pour la majorité, `make_matrix_*_sksl` pour le matrix GM,
+`make_bvec_sksl` pour le relational GM).
 
-Chaque test rend une grille 256×256 où chaque pixel applique
-l'intrinsèque à une fonction de `(x, y)`. Le port Kotlin est
-**un helper par intrinsèque** (~10-30 LOC chacun) plus un seul
-squelette `SkRuntimeImpl` "render-grid" partagé.
+**Stratégie** — *un squelette `SkRuntimeImpl` partagé par
+template SkSL*, paramétré par une lambda Kotlin qui implémente
+le math de l'intrinsèque. Chaque entry registered dans le
+dispatch produit une instance fresh du squelette + sa lambda.
+Réduit la duplication : seul le math change par hash, le
+plumbing (uniforms / coord remap / output broadcast) est partagé.
 
-**LOC** : ~500 main (50 × 10 LOC) + ~150 test = ~650.
+**Découpage en 6 sous-slices** (1 PR / 1 GM chacun) :
 
-**GMs débloqués** : `RuntimeIntrinsicsGM` (besoin d'un stub —
-absent de `kanvas/src/generated/tests/` aujourd'hui, donc
-ajouter le stub + porter).
+| Sub-slice | GM | Intrinsics | Status |
+|---|---|---:|---|
+| D2.4.c.1 | `runtime_intrinsics_trig` | 12 (radians/degrees/sin/cos/tan/asin/acos/atan + 4 atan2 variants) | ✅ shipped — **96.33 %** vs reference |
+| D2.4.c.2 | `runtime_intrinsics_exponential` | 10 (pow×4 / exp / log / exp2 / log2 / sqrt / inversesqrt) | 📋 pending |
+| D2.4.c.3 | `runtime_intrinsics_common` | ~25 (abs/sign/floor/ceil/fract/mod×3/min×3/max×3/clamp×3/saturate/mix×3/step×3/smoothstep×3) | 📋 pending |
+| D2.4.c.4 | `runtime_intrinsics_geometric` | ~16 (length×2/distance×2/dot×2/cross×3/normalize×3/faceforward/reflect×2/refract×2) | 📋 pending |
+| D2.4.c.5 | `runtime_intrinsics_matrix` | matrixCompMult × 3 dims + inverse × 3 dims (6 entries) — distinct SkSL template | 📋 pending |
+| D2.4.c.6 | `runtime_intrinsics_relational` | bvec template × ~16 ops (lessThan/greaterThan/equal/notEqual + bvec compositions) — distinct SkSL template | 📋 pending |
+
+**LOC réel D2.4.c.1** : ~280 main (cluster) + ~95 main (GM port)
++ ~165 test = ~540 total. Plan estimate ~250 + ~85 = ~335 — on
+overrun parce que le GM port lui-même (sub-surface + plot
+polyline + label-centred) est plus volumineux qu'attendu.
+
+**GMs débloqués (6 raster ; les ES3 variants restent hors scope)** :
+6 DEF_SIMPLE_GM upstream. Le stub `RuntimeIntrinsicsGM` du
+plan original n'existe pas — chaque sub-slice porte directement
+son propre `<Name>GM.kt` sans stub intermédiaire.
 
 #### D2.4.d — Specialised shaders (one-offs)
 
@@ -896,7 +915,8 @@ la deuxième fois (cette fois en cross-validation raster ↔ GPU).
 | D2.3 SkRuntimeEffectBuilder ✅ (SkData absorbed in D2.2) | **340** (planned ~200) | **370** (planned ~150) | foundation |
 | D2.4.a Simple color filters ✅ | **400** (planned ~250) | **270** (planned ~200) | 2 (RuntimeColorFilterGM, ComposeColorFilterGM SkSL column) |
 | D2.4.b runtimeshader cluster ✅ (7 of 9 DEF_GMs ; ClipSuperRRect ×2 deferred on `clipShader`) | **720** (planned ~700) | **860** (planned ~500) | 7 SkSL hashes ; GM ports deferred |
-| D2.4.c intrinsics test effects | ~500 | ~150 | 1 (~50 variants) |
+| D2.4.c.1 trig intrinsics ✅ (1 GM at 96.33 %) | **375** (planned ~80) | **165** (planned ~25) | `runtime_intrinsics_trig` (12 entries) |
+| D2.4.c.2-6 remaining intrinsics 📋 | ~~~500~~ | ~~~150~~ | 5 GMs (~70 entries) |
 | D2.4.d Specialised one-offs | ~450 | ~250 | 6 |
 | D2.5 Image-filter integration | ~200 | ~100 | 1 |
 | D2.6 DM pipeline | ~50 | ~100 | quality-of-life |
