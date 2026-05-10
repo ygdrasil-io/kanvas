@@ -765,7 +765,7 @@ plumbing (uniforms / coord remap / output broadcast) est partagé.
 | Sub-slice | GM | Intrinsics | Status |
 |---|---|---:|---|
 | D2.4.c.1 | `runtime_intrinsics_trig` | 12 (radians/degrees/sin/cos/tan/asin/acos/atan + 4 atan2 variants) | ✅ shipped — **96.33 %** vs reference |
-| D2.4.c.2 | `runtime_intrinsics_exponential` | 10 (pow×4 / exp / log / exp2 / log2 / sqrt / inversesqrt) | 📋 pending |
+| D2.4.c.2 | `runtime_intrinsics_exponential` | 10 (pow×4 / exp / log / exp2 / log2 / sqrt / inversesqrt) | ✅ shipped — **95.64 %** vs reference |
 | D2.4.c.3 | `runtime_intrinsics_common` | ~25 (abs/sign/floor/ceil/fract/mod×3/min×3/max×3/clamp×3/saturate/mix×3/step×3/smoothstep×3) | 📋 pending |
 | D2.4.c.4 | `runtime_intrinsics_geometric` | ~16 (length×2/distance×2/dot×2/cross×3/normalize×3/faceforward/reflect×2/refract×2) | 📋 pending |
 | D2.4.c.5 | `runtime_intrinsics_matrix` | matrixCompMult × 3 dims + inverse × 3 dims (6 entries) — distinct SkSL template | 📋 pending |
