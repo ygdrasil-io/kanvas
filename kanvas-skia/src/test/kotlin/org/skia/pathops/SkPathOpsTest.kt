@@ -138,9 +138,15 @@ class SkPathOpsTest {
         val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
         val result = SkPathOps.Op(empty, rect, SkPathOp.kUnion)
         assertNotNull(result)
-        val r = result!!.isRect()
-        assertNotNull(r)
-        assertEquals(10f, r!!.right, 1e-4f)
+        // Post-D1.4.a : the empty-input fast path now flows through
+        // `Simplify`, which normalises the verb stream — `isRect()`
+        // no longer matches the canonical pattern. Assert observable
+        // correctness via bounds instead.
+        val bounds = result!!.computeBounds()
+        assertEquals(0f, bounds.left, 1e-4f)
+        assertEquals(0f, bounds.top, 1e-4f)
+        assertEquals(10f, bounds.right, 1e-4f)
+        assertEquals(10f, bounds.bottom, 1e-4f)
     }
 
     @Test
@@ -149,7 +155,11 @@ class SkPathOpsTest {
         val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
         val result = SkPathOps.Op(rect, empty, SkPathOp.kUnion)
         assertNotNull(result)
-        assertNotNull(result!!.isRect())
+        val bounds = result!!.computeBounds()
+        assertEquals(0f, bounds.left, 1e-4f)
+        assertEquals(0f, bounds.top, 1e-4f)
+        assertEquals(10f, bounds.right, 1e-4f)
+        assertEquals(10f, bounds.bottom, 1e-4f)
     }
 
     @Test
@@ -176,7 +186,11 @@ class SkPathOpsTest {
         val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
         val result = SkPathOps.Op(rect, empty, SkPathOp.kDifference)
         assertNotNull(result)
-        assertNotNull(result!!.isRect())
+        val bounds = result!!.computeBounds()
+        assertEquals(0f, bounds.left, 1e-4f)
+        assertEquals(0f, bounds.top, 1e-4f)
+        assertEquals(10f, bounds.right, 1e-4f)
+        assertEquals(10f, bounds.bottom, 1e-4f)
     }
 
     @Test
@@ -194,7 +208,11 @@ class SkPathOpsTest {
         val rect = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
         val result = SkPathOps.Op(empty, rect, SkPathOp.kReverseDifference)
         assertNotNull(result)
-        assertNotNull(result!!.isRect())
+        val bounds = result!!.computeBounds()
+        assertEquals(0f, bounds.left, 1e-4f)
+        assertEquals(0f, bounds.top, 1e-4f)
+        assertEquals(10f, bounds.right, 1e-4f)
+        assertEquals(10f, bounds.bottom, 1e-4f)
     }
 
     @Test
