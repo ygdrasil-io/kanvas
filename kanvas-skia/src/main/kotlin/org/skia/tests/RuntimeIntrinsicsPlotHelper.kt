@@ -155,4 +155,54 @@ internal object RuntimeIntrinsicsPlotHelper {
         c.translate(0f, (kBoxSize + kPadding + kLabelHeight).toFloat())
         c.save()
     }
+
+    /**
+     * Render a "shader cell" — no polyline overlay, just the
+     * shader output drawn into a 100×100 sub-surface and
+     * composited onto the parent canvas. Used by the matrix and
+     * relational GM ports (D2.4.c.5 / D2.4.c.6) where the visual
+     * is a 2D colour map of the SkSL output, not a 1D function plot.
+     *
+     * Mirrors upstream's `draw_shader(canvas, shader)` followed by
+     * a `next_column` advance, with the label centred above by
+     * [drawLabel] (mirroring upstream's `plot_matrix_comp_mult` /
+     * `plot_matrix_inverse` / `plot_bvec`).
+     *
+     * @param sksl canonical SkSL source of the runtime effect.
+     * @param label text drawn centred above the cell.
+     * @param configure callback invoked with the
+     *   [SkRuntimeEffectBuilder] to bind the effect's uniforms /
+     *   children before [SkRuntimeEffectBuilder.makeShader] is
+     *   called.
+     */
+    fun drawShaderCell(
+        c: SkCanvas,
+        label: String,
+        sksl: String,
+        configure: (org.skia.effects.runtime.SkRuntimeEffectBuilder) -> Unit,
+    ) {
+        c.save()
+        drawLabel(c, label)
+
+        val effect = org.skia.effects.runtime.SkRuntimeEffect.MakeForShader(sksl).effect
+            ?: error("Unable to compile runtime shader : $label")
+        val builder = org.skia.effects.runtime.SkRuntimeEffectBuilder(effect)
+        configure(builder)
+        val shader = builder.makeShader()
+            ?: error("Unable to build shader from effect : $label")
+
+        val info = SkImageInfo.MakeN32Premul(kBoxSize, kBoxSize)
+        val surface = SkSurface.MakeRaster(info)
+        val sc = surface.canvas
+        sc.clear(SK_ColorWHITE)
+        sc.scale(kBoxSize.toFloat(), kBoxSize.toFloat())
+        val paint = SkPaint().apply { this.shader = shader }
+        sc.drawRect(SkRect.MakeWH(1f, 1f), paint)
+
+        val img = surface.makeImageSnapshot()
+        c.drawImage(img, 0f, 0f, SkSamplingOptions.Default, null)
+
+        c.restore()
+        nextColumn(c)
+    }
 }
