@@ -186,6 +186,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | RotatedCubicPathGM | 99.40% | = | 1 | 39,758 / 40,000 | 0, 70, 68, 48 | 0, 14, 19, 9 |
 | RoundRectGM | 96.27% | = | 1 | 1,039,733 / 1,080,000 | 0, 192, 245, 242 | 0, 20, 18, 19 |
 | RuntimeColorFilterGM | 16.92% | = | 1 | 66,529 / 393,216 | 0, 246, 248, 248 | 0, 71, 80, 75 |
+| RuntimeIntrinsicsExponentialGM | 95.64% | = | 1 | 124,405 / 130,075 | 0, 255, 255, 255 | 0, 85, 82, 89 |
 | RuntimeIntrinsicsTrigGM | 96.33% | = | 1 | 186,503 / 193,600 | 0, 255, 255, 255 | 0, 87, 81, 92 |
 | ScaledRectsGM | 87.79% | = | 1 | 7,192 / 8,192 | 0, 36, 7, 11 | 0, 36, 7, 11 |
 | ScaledStrokesGM | 96.03% | -0.03% | 1 | 196,665 / 204,800 | 0, 255, 255, 255 | 0, 129, 128, 128 |
