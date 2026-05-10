@@ -27,13 +27,13 @@
 
 ## Current snapshot
 
-**As of 2026-05-09**, post-merge of [#274](https://github.com/ygdrasil-io/kanvas/pull/274) :
+**As of 2026-05-10**, post-D1.4.a `testRect1_u` debug pass :
 
 | Metric | Value |
 |---|---|
-| Suite total | **3077 / 3077 verts** |
+| Suite total | **3214 / 3214 verts** |
 | `PathOpsRegressionRunner` survival | **334 / 335 = 99.7 %** (floor 99 %) |
-| `PathOpsRegressionRunner` pixel parity | **320 / 334 = 95.8 %** (floor 90 %) |
+| `PathOpsRegressionRunner` pixel parity | **321 / 334 = 96.1 %** (floor 95 %) |
 | Upstream fixture coverage | **335 / 451 = 74 %** (~92 % of Op-only subset) |
 | Engine crashes | **0** (no `THREW`, no `NON_FINITE`) |
 
@@ -64,19 +64,29 @@
 
 ### D1.4.a — Pixel-divergent fixture debug pass
 
-**14 fixtures fail pixel parity** (engine produces a finite SkPath
+**13 fixtures fail pixel parity** (engine produces a finite SkPath
 that rasterises to a different shape than the oracle). Each is a
-candidate for an algorithmic debug pass that bumps the floor 90 %
-→ 95 %+ monotonically.
+candidate for an algorithmic debug pass that bumps the floor 95 %
+→ 99 %+ monotonically.
 
-**Names** (extracted via a one-shot probe at handoff time) :
+**Names** (extracted via a one-shot probe at handoff time, 2026-05-10) :
 
 ```
 cubicOp25i      cubicOp32d      cubicOp33i      cubicOp48d
 cubicOp61d      cubicOp63d      cubicOp95u      loop3
 loops23i        loops26i        loops33i        loops47i
-loops63i        testRect1_u
+loops63i
 ```
+
+**Recently shipped** : `testRect1_u` (the original 14th entry, the
+sole rect-only fixture in the list) was fixed by routing the
+empty-input fast path through `Simplify(work)` instead of bare
+fillType remap (`SkPathOps.kt:155-181`). The previous fast path
+hand-waved away the `Simplify` step on the false hypothesis that
+`work` was always already-simple ; in fact `work = pathA` for
+`Op(A, ∅, kUnion)` even when A has overlapping winding sub-contours,
+and skipping `Simplify` left the new even-odd fill type to render
+those overlaps as holes. Floor bumped 90 % → 95 %.
 
 **Recipe** (mirrors D1.2.h.7 / h.8 / h.10) :
 
