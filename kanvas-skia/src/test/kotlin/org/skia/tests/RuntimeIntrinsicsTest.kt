@@ -94,4 +94,14 @@ class RuntimeIntrinsicsTest {
     @Test
     fun `RuntimeIntrinsicsGeometricGM matches reference`() =
         runGm(RuntimeIntrinsicsGeometricGM(), "RuntimeIntrinsicsGeometricGM", floor = 0.0)
+
+    /**
+     * `runtime_intrinsics_matrix` — 6 plot calls (matrixCompMult ×
+     * 3 dims + inverse × 3 dims) in a 3×2 grid. Phase D2.4.c.5
+     * port — uses the new `MatrixCompMultImpl` / `MatrixInverseImpl`
+     * built on a distinct SkSL template (not `make_unary_sksl_1d`).
+     */
+    @Test
+    fun `RuntimeIntrinsicsMatrixGM matches reference`() =
+        runGm(RuntimeIntrinsicsMatrixGM(), "RuntimeIntrinsicsMatrixGM", floor = 0.0)
 }
