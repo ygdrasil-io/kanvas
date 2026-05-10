@@ -781,7 +781,22 @@ polyline + label-centred) est plus volumineux qu'attendu.
 plan original n'existe pas — chaque sub-slice porte directement
 son propre `<Name>GM.kt` sans stub intermédiaire.
 
-#### D2.4.d — Specialised shaders (one-offs)
+#### D2.4.d — Specialised shaders (one-offs) ✅ partly shipped (3 / 5 GMs ; 2 GMs deferred)
+
+**Status** : ✅ shipped via `SkBuiltinSpecialisedEffects` —
+3 GMs (`DestColorGM`, `ImageDitherGM`, `KawaseBlurRtGM`) +
+4 SkSL programs (invert blender, stretch blender, kawase
+blur shader, kawase mix shader). Scores 14.44 % – 70.83 %
+(synthetic stand-in images for missing `mandrill_*.png` assets).
+
+**Deferred to D2.4.d.2 follow-up** :
+- `RippleShaderGM` (`gm/rippleshadergm.cpp`) — uses
+  `RippleShader.rts` (~100 LOC of bespoke SkSL with 9 helper
+  functions: `triangleNoise`, `sparkles`, `softCircle`,
+  `softRing`, `subProgress`, `circle_grid`, `turbulence`, etc.).
+  Substantial port effort.
+- `FpSampleChainingGM` (`gm/fp_sample_chaining.cpp`) — multi-effect
+  chain test, ~244 LOC upstream.
 
 **Targets** :
 - `RippleShaderGM` (animated water ripples).
