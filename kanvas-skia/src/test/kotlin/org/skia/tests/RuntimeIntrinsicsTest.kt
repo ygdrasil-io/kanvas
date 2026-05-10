@@ -104,4 +104,15 @@ class RuntimeIntrinsicsTest {
     @Test
     fun `RuntimeIntrinsicsMatrixGM matches reference`() =
         runGm(RuntimeIntrinsicsMatrixGM(), "RuntimeIntrinsicsMatrixGM", floor = 0.0)
+
+    /**
+     * `runtime_intrinsics_relational` — 18 plot calls covering
+     * every GLSL bvec relational (lessThan / lessThanEqual /
+     * greaterThan / greaterThanEqual / equal / notEqual in float
+     * + int variants, plus bvec compositions and `any` / `all`
+     * reductions). Phase D2.4.c.6 port — closes the D2.4.c chantier.
+     */
+    @Test
+    fun `RuntimeIntrinsicsRelationalGM matches reference`() =
+        runGm(RuntimeIntrinsicsRelationalGM(), "RuntimeIntrinsicsRelationalGM", floor = 0.0)
 }

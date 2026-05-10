@@ -190,6 +190,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | RuntimeIntrinsicsExponentialGM | 95.64% | = | 1 | 124,405 / 130,075 | 0, 255, 255, 255 | 0, 85, 82, 89 |
 | RuntimeIntrinsicsGeometricGM | 95.84% | = | 1 | 246,434 / 257,125 | 0, 255, 255, 255 | 0, 94, 91, 97 |
 | RuntimeIntrinsicsMatrixGM | 96.61% | = | 1 | 75,744 / 78,400 | 0, 255, 255, 255 | 0, 135, 135, 135 |
+| RuntimeIntrinsicsRelationalGM | 97.53% | = | 1 | 300,504 / 308,125 | 0, 255, 255, 255 | 0, 139, 139, 139 |
 | RuntimeIntrinsicsTrigGM | 96.33% | = | 1 | 186,503 / 193,600 | 0, 255, 255, 255 | 0, 87, 81, 92 |
 | ScaledRectsGM | 87.79% | = | 1 | 7,192 / 8,192 | 0, 36, 7, 11 | 0, 36, 7, 11 |
 | ScaledStrokesGM | 96.03% | -0.03% | 1 | 196,665 / 204,800 | 0, 255, 255, 255 | 0, 129, 128, 128 |
