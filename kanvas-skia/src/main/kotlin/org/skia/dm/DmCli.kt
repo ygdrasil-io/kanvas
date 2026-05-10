@@ -59,6 +59,16 @@ public class DmCli internal constructor(
     public val key: List<String>,
     /** `--properties` entries flattened the same way. */
     public val properties: List<String>,
+    /**
+     * Phase D2.6 — `--list-missing-effects` boolean flag. When set,
+     * [DmMain.runFromArgs] prints the set of unregistered SkSL hashes
+     * collected from failing GM records (via
+     * [Report.missingRuntimeEffectHashes]) to `stderr` after the run.
+     * Devs use the list to prioritise retro-porting effects to
+     * [`SkBuiltinSpecialisedEffects`](../../../../../../org/skia/effects/runtime/effects/SkBuiltinSpecialisedEffects.kt)
+     * (or the appropriate intrinsics cluster).
+     */
+    public val listMissingEffects: Boolean = false,
 ) {
 
     /**
@@ -203,6 +213,7 @@ public class DmCli internal constructor(
             val skip = mutableListOf<String>()
             val key = mutableListOf<String>()
             val properties = mutableListOf<String>()
+            var listMissingEffects = false
 
             var current: MutableList<String>? = null
             for (raw in args) {
@@ -210,6 +221,16 @@ public class DmCli internal constructor(
                     val (flag, inlineValue) = raw.substringAfter("--").let {
                         val eq = it.indexOf('=')
                         if (eq >= 0) it.substring(0, eq) to it.substring(eq + 1) else it to null
+                    }
+                    if (flag == "list-missing-effects") {
+                        // Boolean flag — accepts no value ; ignore any
+                        // inline `=value` form (so `--list-missing-effects=true`
+                        // and `--list-missing-effects=false` both treat the
+                        // flag as set, matching upstream's permissive style
+                        // for boolean toggles).
+                        listMissingEffects = true
+                        current = null
+                        continue
                     }
                     current = when (flag) {
                         "config" -> configs
@@ -238,6 +259,7 @@ public class DmCli internal constructor(
                 skip = skip,
                 key = key,
                 properties = properties,
+                listMissingEffects = listMissingEffects,
             )
         }
     }

@@ -108,6 +108,35 @@ public data class Report(
         "DM run : ${passed.size} passed, ${failed.size} failed (total ${all.size})"
 
     /**
+     * Phase D2.6 — extract the set of unregistered SkSL hashes
+     * referenced by failing GMs. A failure caused by
+     * [org.skia.effects.runtime.SkRuntimeEffect.MakeForShader] (or
+     * its color-filter / blender variants) hitting an unregistered
+     * SkSL string carries an error message of the form
+     * `"... SkSL not registered: 0x<16-hex>. Add an entry ..."`.
+     * Each missing hash appears once in the returned set, even if
+     * multiple GMs fail on the same string.
+     *
+     * Devs can use this list to prioritise retro-porting :
+     * the most-frequently-missing hashes typically correspond to
+     * the most-impactful effects to ship next. Mirrors upstream
+     * Skia DM's `--list-missing-effects` flag (the harness's
+     * way of surfacing which SkSL strings were observed but not
+     * supported).
+     */
+    public fun missingRuntimeEffectHashes(): Set<String> {
+        val out = mutableSetOf<String>()
+        val regex = Regex("""SkSL not registered: (0x[0-9A-Fa-f]{16})""")
+        for (record in failed) {
+            val msg = record.errorMessage ?: continue
+            for (match in regex.findAll(msg)) {
+                out += match.groupValues[1]
+            }
+        }
+        return out
+    }
+
+    /**
      * Emit upstream-compatible `dm.json` text. See class kdoc for the
      * shape ; pretty-printed with 2-space indent so the output is
      * line-diffable against a reference run.
