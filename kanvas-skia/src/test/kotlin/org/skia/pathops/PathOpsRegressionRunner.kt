@@ -395,8 +395,22 @@ class PathOpsRegressionRunner {
          * **90 %** (~5.8 pp cushion) ; bump as algo debug passes
          * land. cubicOp35d (the sole `RETURNED_NULL`) is excluded
          * from this metric — only SURVIVED fixtures count.
+         *
+         * **D1.4.a.1** (`testRect1_u` debug pass, run au 2026-05-10) :
+         * `SkPathOps.Op` empty-input fast path now calls `Simplify(work)`
+         * (previously skipped, on the false hypothesis that work was
+         * always already-simple). Recovers `testRect1_u` (3 overlapping
+         * winding rect sub-contours OR'd with empty pathB ; the
+         * unsimplified result rendered with the new even-odd fill
+         * produced holes where winding=2 sub-contour overlaps fell on
+         * even pixels). New rate **321 / 334 = 96.11 %** ; PIXEL_DIVERGE
+         * count down 14 → 13. Floor bumped 90 % → 95 % (~1.1 pp
+         * cushion). `fuzz38`-style fuzzer inputs trip `Simplify` itself
+         * — the fast path falls back to the legacy fillType remap when
+         * `Simplify` returns null, preserving the survival rate on
+         * pathological inputs.
          */
-        private const val INITIAL_PIXEL_FLOOR: Double = 0.90
+        private const val INITIAL_PIXEL_FLOOR: Double = 0.95
 
         /**
          * Load fixtures from the JSON resource. Cached lazily so the
