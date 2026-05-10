@@ -410,6 +410,7 @@ public class SkRuntimeEffect private constructor(
             org.skia.effects.runtime.effects.SkBuiltinShaderEffectsChildren.registerAll()
             org.skia.effects.runtime.effects.SkBuiltinShaderEffectsColorCube.registerAll()
             org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsTrig.registerAll()
+            org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsExponential.registerAll()
         }
     }
 }

@@ -63,4 +63,14 @@ class RuntimeIntrinsicsTest {
     @Test
     fun `RuntimeIntrinsicsTrigGM matches reference`() =
         runGm(RuntimeIntrinsicsTrigGM(), "RuntimeIntrinsicsTrigGM", floor = 0.0)
+
+    /**
+     * `runtime_intrinsics_exponential` — 10 unary exponential
+     * intrinsics in a 2×5 grid (pow×4 / exp / log / exp2 / log2 /
+     * sqrt / inversesqrt). Phase D2.4.c.2 port — reuses the
+     * `UnaryIntrinsicImpl` skeleton from D2.4.c.1.
+     */
+    @Test
+    fun `RuntimeIntrinsicsExponentialGM matches reference`() =
+        runGm(RuntimeIntrinsicsExponentialGM(), "RuntimeIntrinsicsExponentialGM", floor = 0.0)
 }
