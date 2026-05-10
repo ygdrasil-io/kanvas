@@ -414,6 +414,7 @@ public class SkRuntimeEffect private constructor(
             org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsCommon.registerAll()
             org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsGeometric.registerAll()
             org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsMatrix.registerAll()
+            org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsRelational.registerAll()
         }
     }
 }

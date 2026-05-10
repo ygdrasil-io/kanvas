@@ -744,7 +744,7 @@ mandrill_sepia / lut_identity / lut_sepia pour ColorCube). À
 porter dans un slice de suivi (D2.4.b GM ports) une fois les
 images stand-in décidées.
 
-#### D2.4.c — Intrinsics test effects (6 sub-slices, en cours)
+#### D2.4.c — Intrinsics test effects (6 sub-slices ✅ COMPLETE)
 
 **Targets** : `runtimeintrinsics.cpp` couvre 6 GMs raster
 (`runtime_intrinsics_trig` / `_exponential` / `_common` /
@@ -769,7 +769,7 @@ plumbing (uniforms / coord remap / output broadcast) est partagé.
 | D2.4.c.3 | `runtime_intrinsics_common` | 31 (abs/sign/floor/ceil/fract/mod×3/min×3/max×3/clamp×3/saturate/mix×3/step×3/smoothstep×3 + floor(p)×2/ceil(p)×2) | ✅ shipped — **95.90 %** vs reference |
 | D2.4.c.4 | `runtime_intrinsics_geometric` | 16 (length×2/distance×2/dot×2/cross×3/normalize×3/faceforward/reflect×2/refract×2) | ✅ shipped — **95.84 %** vs reference |
 | D2.4.c.5 | `runtime_intrinsics_matrix` | matrixCompMult × 3 dims + inverse × 3 dims (6 entries) — distinct SkSL template | ✅ shipped — **96.61 %** vs reference |
-| D2.4.c.6 | `runtime_intrinsics_relational` | bvec template × ~16 ops (lessThan/greaterThan/equal/notEqual + bvec compositions) — distinct SkSL template | 📋 pending |
+| D2.4.c.6 | `runtime_intrinsics_relational` | bvec template × 18 ops (lessThan/lessThanEqual/greaterThan/greaterThanEqual/equal/notEqual × {float, int} + bvec compositions + not() + any/all reductions) — distinct SkSL template | ✅ shipped — **97.53 %** vs reference |
 
 **LOC réel D2.4.c.1** : ~280 main (cluster) + ~95 main (GM port)
 + ~165 test = ~540 total. Plan estimate ~250 + ~85 = ~335 — on
