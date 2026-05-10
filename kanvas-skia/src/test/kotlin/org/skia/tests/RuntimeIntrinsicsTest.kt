@@ -84,4 +84,14 @@ class RuntimeIntrinsicsTest {
     @Test
     fun `RuntimeIntrinsicsCommonGM matches reference`() =
         runGm(RuntimeIntrinsicsCommonGM(), "RuntimeIntrinsicsCommonGM", floor = 0.0)
+
+    /**
+     * `runtime_intrinsics_geometric` — 16 plot calls in a 4×5 grid
+     * covering GLSL geometric functions (length / distance / dot /
+     * cross / normalize / faceforward / reflect / refract).
+     * Phase D2.4.c.4 port.
+     */
+    @Test
+    fun `RuntimeIntrinsicsGeometricGM matches reference`() =
+        runGm(RuntimeIntrinsicsGeometricGM(), "RuntimeIntrinsicsGeometricGM", floor = 0.0)
 }
