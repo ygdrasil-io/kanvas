@@ -866,7 +866,32 @@ aujourd'hui — ajouter puis porter).
 
 ---
 
-### D2.6 — DM pipeline integration
+### D2.6 — DM pipeline integration ✅ shipped — D2 CLOSE
+
+**Status** : ✅ shipped. **D2 CHANTIER COMPLETE.** Quand un GM
+échoue parce que `SkRuntimeEffect.MakeFor*` retourne un null
+effect (SkSL non enregistré), les sinks catchent l'exception et
+retournent `Sink.Result.Error(message)`. Le runner record la
+failure dans `Report.failed`. Phase D2.6 ajoute :
+
+1. **`Report.missingRuntimeEffectHashes(): Set<String>`** — parse
+   les error messages des records failed, extrait chaque hash
+   `0x<16-hex>` mentionné via la regex
+   `"SkSL not registered: (0x[0-9A-Fa-f]{16})"`. Returns un set
+   uniqued (un hash apparaît une seule fois même si multiple GMs
+   échouent dessus).
+2. **`DmCli.listMissingEffects: Boolean`** + parser support pour
+   `--list-missing-effects` flag (boolean, no value).
+3. **`DmMain.runFromArgs`** — quand le flag est set, print les
+   hashes manquants à `System.err` après le run. Format :
+   `[DM] N missing runtime-effect hash(es) — register an impl in SkRuntimeEffectDispatch :`
+   suivi d'une ligne par hash sortée alphabétiquement.
+
+**Tests** : 3 unit tests dans `MissingRuntimeEffectTest` pinning
+l'end-to-end (GM avec SkSL non enregistré → graceful failure →
+hash extrait → CLI flag se propage).
+
+### D2.6 — Original scope
 
 **Scope** : quand un GM passe une string SkSL non enregistrée, le
 DM pipeline doit **logger le hash absent et skip le GM** au lieu de
