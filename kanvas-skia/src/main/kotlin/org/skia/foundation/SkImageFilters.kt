@@ -4,6 +4,7 @@ import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.math.SkIPoint
+import org.skia.math.SkIRect
 import org.skia.math.SkISize
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
@@ -64,16 +65,58 @@ public object SkImageFilters {
     /**
      * Phase 7d.2 — Gaussian blur. Output grows by `±ceil(3·σ)` per
      * axis. `sigma <= 0` returns input unchanged.
+     *
+     * Phase G6 — adds [tileMode] (matches upstream `SkImageFilters::
+     * Blur(sigmaX, sigmaY, tileMode, input, cropRect)`). The blur
+     * kernel samples outside the input image's bounds using the
+     * supplied [tileMode] : `kDecal` ⇒ transparent black, `kClamp` ⇒
+     * clamp to the nearest edge texel, `kRepeat` / `kMirror` ⇒ the
+     * usual periodic tilings.
+     *
+     * The optional [cropRect] restricts the filter's output bounds —
+     * implemented as `Crop(cropRect, kDecal, blur(...))`. Upstream
+     * uses cropRect as the filter's `getOutputBounds()` hint as well
+     * as a hard clip ; here we just hard-clip the output to match
+     * the visual result.
      */
     public fun Blur(
         sigmaX: Float,
         sigmaY: Float = sigmaX,
+        tileMode: SkTileMode = SkTileMode.kDecal,
         input: SkImageFilter? = null,
+        cropRect: SkIRect? = null,
     ): SkImageFilter? {
-        if (!sigmaX.isFinite() || !sigmaY.isFinite()) return input
-        if (sigmaX <= 0f && sigmaY <= 0f) return input
-        return SkBlurImageFilter(sigmaX.coerceAtLeast(0f), sigmaY.coerceAtLeast(0f), input)
+        if (!sigmaX.isFinite() || !sigmaY.isFinite()) {
+            // Even a no-op blur honours an explicit cropRect.
+            if (cropRect != null && input != null) {
+                return Crop(SkRect.Make(cropRect), SkTileMode.kDecal, input)
+            }
+            return input
+        }
+        val blur: SkImageFilter? = if (sigmaX <= 0f && sigmaY <= 0f) {
+            input
+        } else {
+            SkBlurImageFilter(
+                sigmaX.coerceAtLeast(0f),
+                sigmaY.coerceAtLeast(0f),
+                tileMode,
+                input,
+            )
+        }
+        if (cropRect == null) return blur
+        return Crop(SkRect.Make(cropRect), SkTileMode.kDecal, blur)
     }
+
+    /**
+     * Legacy 3-arg overload preserved for source-compat with existing
+     * call sites (Phase 7d.2 signature). Equivalent to
+     * `Blur(sigmaX, sigmaY, SkTileMode.kDecal, input)`.
+     */
+    public fun Blur(
+        sigmaX: Float,
+        sigmaY: Float,
+        input: SkImageFilter?,
+    ): SkImageFilter? = Blur(sigmaX, sigmaY, SkTileMode.kDecal, input, null)
 
     /**
      * Phase 7d.2 — apply 2-D affine matrix with sampling. Output is
@@ -721,8 +764,13 @@ internal class SkComposeImageFilter(
 internal class SkBlurImageFilter(
     private val sigmaX: Float,
     private val sigmaY: Float,
+    private val tileMode: SkTileMode,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    // Legacy 3-arg constructor for internal call sites that pre-date G6.
+    internal constructor(sigmaX: Float, sigmaY: Float, input: SkImageFilter?) :
+        this(sigmaX, sigmaY, SkTileMode.kDecal, input)
+
     private val radiusX: Int = kotlin.math.ceil(3.0 * sigmaX).toInt().coerceAtLeast(0)
     private val radiusY: Int = kotlin.math.ceil(3.0 * sigmaY).toInt().coerceAtLeast(0)
     private val kernelX: FloatArray = gaussianKernel1D(sigmaX, radiusX)
@@ -733,25 +781,32 @@ internal class SkBlurImageFilter(
         val srcImg = upstream.image
         val srcW = srcImg.width; val srcH = srcImg.height
         if (radiusX == 0 && radiusY == 0) return upstream
-        val outW = srcW + 2 * radiusX
-        val outH = srcH + 2 * radiusY
+        // Under kClamp / kRepeat / kMirror the kernel "fills in" beyond
+        // the input's edges, so growing the output by ±radius doesn't
+        // bring any extra information — keep the output the same size as
+        // the input. Only kDecal needs the extra band to capture the
+        // alpha falloff at the edges.
+        val growX = if (tileMode == SkTileMode.kDecal) radiusX else 0
+        val growY = if (tileMode == SkTileMode.kDecal) radiusY else 0
+        val outW = srcW + 2 * growX
+        val outH = srcH + 2 * growY
         val tmp = IntArray(outW * srcH)
         for (y in 0 until srcH) for (xOut in 0 until outW) {
-            tmp[y * outW + xOut] = sampleH(srcImg, xOut - radiusX, y, kernelX, radiusX)
+            tmp[y * outW + xOut] = sampleH(srcImg, xOut - growX, y, kernelX, radiusX)
         }
         val outBuf = IntArray(outW * outH)
         for (yOut in 0 until outH) for (xOut in 0 until outW) {
-            outBuf[yOut * outW + xOut] = sampleV(tmp, outW, srcH, xOut, yOut - radiusY, kernelY, radiusY)
+            outBuf[yOut * outW + xOut] = sampleV(tmp, outW, srcH, xOut, yOut - growY, kernelY, radiusY)
         }
         return FilterResult(SkImage(outW, outH, outBuf),
-            upstream.offsetX - radiusX, upstream.offsetY - radiusY)
+            upstream.offsetX - growX, upstream.offsetY - growY)
     }
 
     private fun sampleH(src: SkImage, cx: Int, cy: Int, kernel: FloatArray, radius: Int): Int {
         var aF = 0f; var rF = 0f; var gF = 0f; var bF = 0f
         for (k in -radius..radius) {
             val sx = cx + k
-            val px = if (sx in 0 until src.width && cy in 0 until src.height) src.peekPixel(sx, cy) else 0
+            val px = sampleImageWithTileMode(src, sx, cy, tileMode)
             val w = kernel[k + radius]
             val a = ((px ushr 24) and 0xFF) / 255f
             aF += a * w; rF += ((px ushr 16) and 0xFF) / 255f * a * w
@@ -764,13 +819,34 @@ internal class SkBlurImageFilter(
         var aF = 0f; var rF = 0f; var gF = 0f; var bF = 0f
         for (k in -radius..radius) {
             val sy = cy + k
-            val px = if (sy in 0 until h) tmp[sy * w + cx] else 0
+            val px = sampleTmpWithTileMode(tmp, w, h, cx, sy, tileMode)
             val ws = kernel[k + radius]
             val a = ((px ushr 24) and 0xFF) / 255f
             aF += a * ws; rF += ((px ushr 16) and 0xFF) / 255f * a * ws
             gF += ((px ushr 8) and 0xFF) / 255f * a * ws; bF += (px and 0xFF) / 255f * a * ws
         }
         return packPremulFloat(aF, rF, gF, bF)
+    }
+
+    private fun sampleTmpWithTileMode(
+        tmp: IntArray, w: Int, h: Int, cx: Int, cy: Int, mode: SkTileMode,
+    ): Int {
+        if (cx in 0 until w && cy in 0 until h) return tmp[cy * w + cx]
+        if (w == 0 || h == 0) return 0
+        return when (mode) {
+            SkTileMode.kDecal -> 0
+            SkTileMode.kClamp -> tmp[cy.coerceIn(0, h - 1) * w + cx.coerceIn(0, w - 1)]
+            SkTileMode.kRepeat -> tmp[positiveModInternal(cy, h) * w + positiveModInternal(cx, w)]
+            SkTileMode.kMirror -> tmp[mirrorModInternal(cy, h) * w + mirrorModInternal(cx, w)]
+        }
+    }
+
+    private fun positiveModInternal(n: Int, m: Int): Int { val r = n % m; return if (r < 0) r + m else r }
+    private fun mirrorModInternal(n: Int, m: Int): Int {
+        if (m == 0) return 0
+        val twoM = 2 * m
+        var r = n % twoM; if (r < 0) r += twoM
+        return if (r < m) r else twoM - 1 - r
     }
 
     private fun packPremulFloat(aF: Float, rF: Float, gF: Float, bF: Float): Int {
