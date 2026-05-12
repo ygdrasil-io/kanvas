@@ -1,6 +1,14 @@
 package org.skia.core
 
+import org.skia.foundation.SK_ColorTRANSPARENT
+import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkFilterMode
+import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
+import org.skia.foundation.SkTileMode
+import org.skia.math.SkMatrix
 import org.skia.math.SkRect
+import kotlin.math.ceil
 
 /**
  * Mirrors Skia's
@@ -123,5 +131,70 @@ public class SkPicture internal constructor(
                 c.drawSimpleText(r.text, r.byteLength, r.encoding, r.x, r.y, r.font, r.paint)
             is SkRecord.DrawTextBlob -> c.drawTextBlob(r.blob, r.x, r.y, r.paint)
         }
+    }
+
+    /**
+     * Mirrors Skia's
+     * [`SkPicture::makeShader(tmx, tmy, filter, localMatrix, tile)`](https://github.com/google/skia/blob/main/include/core/SkPicture.h)
+     * — wrap this picture as a tiled [SkShader].
+     *
+     * **Strategy** : we render the picture once into a transient
+     * [SkBitmap] sized to the tile (defaulting to the picture's
+     * [cullRect] dimensions), then return an image shader over that
+     * snapshot. This trades a one-time rasterization cost for
+     * unlimited reuse and lets the existing
+     * [org.skia.foundation.SkBitmapShader] infrastructure handle
+     * tile-mode / filtering / local-matrix concerns uniformly.
+     *
+     * The transient bitmap is allocated in sRGB / 8888 — same backing
+     * format the rest of the shader stack consumes — and cleared to
+     * `SK_ColorTRANSPARENT` before playback so the picture's alpha
+     * passes through to the eventual blend.
+     *
+     * @param tileX tile mode along the local-x axis.
+     * @param tileY tile mode along the local-y axis.
+     * @param filter sampling filter (kNearest by default — matches
+     *   upstream's `SkPicture::makeShader` default).
+     * @param localMatrix shader-local transform applied before
+     *   sampling, or `null` for identity.
+     * @param tile sub-rectangle of the picture to use as the tile.
+     *   When `null` (the common case) defaults to [cullRect]. The
+     *   width/height are ceil'd to ints for the snapshot allocation.
+     */
+    public fun makeShader(
+        tileX: SkTileMode,
+        tileY: SkTileMode,
+        filter: SkFilterMode = SkFilterMode.kNearest,
+        localMatrix: SkMatrix? = null,
+        tile: SkRect? = null,
+    ): SkShader {
+        val tileRect = tile ?: cullRect
+        // Snapshot dimensions : ceil to int and clamp to >= 1 so we
+        // always allocate a valid (non-degenerate) bitmap even when
+        // the cullRect is empty or sub-pixel.
+        val w = maxOf(1, ceil(tileRect.width().toDouble()).toInt())
+        val h = maxOf(1, ceil(tileRect.height().toDouble()).toInt())
+
+        val bitmap = SkBitmap(w, h)
+        val canvas = SkCanvas(bitmap)
+        // Wipe the snapshot to fully transparent so the picture's own
+        // alpha is preserved (drawColor with kSrcOver over an
+        // already-transparent canvas is a no-op, but clear is explicit).
+        canvas.clear(SK_ColorTRANSPARENT)
+        // Map the picture's tile origin to (0, 0) of the snapshot so
+        // a non-default `tile` selects the right sub-region.
+        if (tileRect.left != 0f || tileRect.top != 0f) {
+            canvas.translate(-tileRect.left, -tileRect.top)
+        }
+        playback(canvas)
+
+        val image = bitmap.asImage()
+        val sampling = SkSamplingOptions(filter)
+        return image.makeShader(
+            tileX = tileX,
+            tileY = tileY,
+            sampling = sampling,
+            localMatrix = localMatrix ?: SkMatrix.Identity,
+        )
     }
 }
