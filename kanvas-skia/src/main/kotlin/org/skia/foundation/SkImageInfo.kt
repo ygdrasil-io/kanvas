@@ -129,6 +129,24 @@ public class SkImageInfo private constructor(
             colorSpace: SkColorSpace = SkColorSpace.makeSRGB(),
         ): SkImageInfo = Make(width, height, SkColorType.kAlpha_8, SkAlphaType.kPremul, colorSpace)
 
+        /**
+         * Phase G4c — convenience factory for `kARGB_4444` image info.
+         *
+         * Upstream callers spell this as
+         * `SkImageInfo::Make(w, h, kARGB_4444_SkColorType, kPremul_SkAlphaType)`
+         * (see `gm/bitmappremul.cpp` and `gm/copy_to_4444.cpp`). Skia
+         * doesn't ship a `MakeARGB4444` shorthand, but porting any of
+         * the in-scope 4444 GMs threads the same five-arg call enough
+         * times that exposing a dedicated factory keeps the Kotlin
+         * ports readable. Alpha type defaults to premultiplied —
+         * matches the (only) configuration Skia GMs use for 4444.
+         */
+        public fun Make4444(
+            width: Int,
+            height: Int,
+            colorSpace: SkColorSpace = SkColorSpace.makeSRGB(),
+        ): SkImageInfo = Make(width, height, SkColorType.kARGB_4444, SkAlphaType.kPremul, colorSpace)
+
         private fun defaultAlphaTypeFor(ct: SkColorType): SkAlphaType = when (ct) {
             SkColorType.kRGBA_8888 -> SkAlphaType.kUnpremul
             SkColorType.kBGRA_8888 -> SkAlphaType.kUnpremul
