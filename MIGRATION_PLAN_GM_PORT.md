@@ -10,9 +10,9 @@ Statut du portage des Graphics Modules (GM) C++ de Skia vers `kanvas-skia/src/ma
 
 | Statut | Fichiers `.cpp` | Pourcentage |
 |---|---:|---:|
-| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 248 | 57% |
-| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 99 | 23% |
-| ❌ Non tenté (potentiellement portable) | 90 | 21% |
+| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 257 | 59% |
+| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 100 | 23% |
+| ❌ Non tenté (potentiellement portable) | 80 | 18% |
 | **Total** | **437** | **100%** |
 
 GMs Kotlin sans correspondance dans le tree de référence (probablement issus d'une version Skia plus récente) : **30**.
@@ -29,9 +29,10 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 | Phases G10 + H1 (assets + 4 ports) | 215 / 437 | 49% |
 | H1 complet (10 ports) + H3 wave 1 (9 ports) | 232 / 437 | 53% |
 | H3 wave 2 (9 ports + 1 skip SkM44) | 241 / 437 | 55% |
-| **H3 wave 3 (7 ports + 1 skip computeFastBounds)** | **248 / 437** | **57%** |
+| H3 wave 3 (7 ports + 1 skip computeFastBounds) | 248 / 437 | 57% |
+| **H3 wave 4 (9 ports + 1 skip SkPath.contains)** | **257 / 437** | **59%** |
 
-**Gain net** : +100 GMs en 3 jours (de 34% à 57% de couverture).
+**Gain net** : +109 GMs en 3 jours (de 34% à 59% de couverture).
 
 ## Phases d'API — toutes mergées ✅
 
@@ -122,6 +123,9 @@ Chaque sous-tâche est petite (½-1 jour). Toutes parallélisables car touchent 
 | H2.26 — `SkPaint.computeFastBounds` + `SkImageFilter.computeFastBounds` | 1+ | `SkPaint.kt`, `SkImageFilter.kt` |
 | H2.27 — `SaveLayerRec.scaleFactor` (ScaledBackdropLayer) | 1 | `SaveLayerRec.kt`, `SkBitmapDevice.kt` |
 | H2.28 — Bicubic + tile-mode `SkBitmapShader` (fidelity) | nombreux | `SkBitmapShader.kt` (H1.5 lié) |
+| H2.29 — `SkPath.contains(scalar, scalar)` | 1 | `SkPath.kt` |
+| H2.30 — Gradient `r==0` / sweep `start==end` graceful tile-mode fill | 1+ | `SkRadialGradient.kt`, `SkSweepGradient.kt` |
+| H2.31 — `kRepeat` tile mode pour `SkImageFilters.Blur` (parité Skia) | 1+ | `SkImageFilters.kt` (H1.5) |
 
 ### Phase H1.5 — Suivis fidélité (qualité de ports)
 
@@ -349,11 +353,11 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `glyph_pos.cpp` | ❌ | — | — |
 | `gm.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `gpu_blur_utils.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `gradient_dirty_laundry.cpp` | ❌ | — | — |
-| `gradient_matrix.cpp` | ❌ | — | — |
+| `gradient_dirty_laundry.cpp` | ✅ | `GradientDirtyLaundryGM.kt` | — |
+| `gradient_matrix.cpp` | ✅ | `GradientMatrixGM.kt` | — (66 % : tiles tile-mode fallback `paint.color`) |
 | `gradients.cpp` | ✅ | `ClampedGradientsGM.kt`, `GradientsGM.kt`, `RgbwSweepGradientGM.kt`, `SmallColorStopGM.kt`, `SweepTilingGM.kt` | — |
 | `gradients_2pt_conical.cpp` | ❌ | — | — |
-| `gradients_degenerate.cpp` | ❌ | — | — |
+| `gradients_degenerate.cpp` | ✅ | `DegenerateGradientGM.kt` | — (61 % : Radial r=0 / Sweep s==e rejetés, fallback color) |
 | `gradients_no_texture.cpp` | ❌ | — | — |
 | `gradtext.cpp` | ✅ | `ChromeGradTextGM.kt`, `GradTextGM.kt` | — |
 | `graphite_replay.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
@@ -366,23 +370,23 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `hdr_pip_blur.cpp` | ❌ | — | — |
 | `hello_bazel_world.cpp` | 🚧 | — | GM Bazel-only (pas de PNG de référence) |
 | `highcontrastfilter.cpp` | ❌ | — | — |
-| `hittestpath.cpp` | ❌ | — | — |
+| `hittestpath.cpp` | 🚧 | — | `SkPath.contains(scalar, scalar)` |
 | `hsl.cpp` | ✅ | `HSLGM.kt` | — |
-| `hugepath.cpp` | ❌ | — | — |
+| `hugepath.cpp` | ✅ | `HugePathCrbug800804GM.kt`, `PathHugeAaGM.kt`, `PathHugeAaManualGM.kt` | — |
 | `image.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `image_pict.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `image_shader.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `imageblur.cpp` | ✅ | `ImageBlurGM.kt` | — |
-| `imageblur2.cpp` | ❌ | — | — |
-| `imageblurclampmode.cpp` | ❌ | — | — |
-| `imageblurrepeatmode.cpp` | ❌ | — | — |
+| `imageblur2.cpp` | ✅ | `ImageBlur2GM.kt` | — |
+| `imageblurclampmode.cpp` | ✅ | `ImageBlurClampModeGM.kt` | — |
+| `imageblurrepeatmode.cpp` | ✅ | `ImageBlurRepeatModeGM.kt` | — (35 % : divergence kRepeat blur) |
 | `imageblurtiled.cpp` | ✅ | `ImageBlurTiledGM.kt` | — |
 | `imagedither.cpp` | ✅ | `ImageDitherGM.kt` | — |
 | `imagefilters.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `imagefiltersbase.cpp` | ❌ | — | — |
 | `imagefiltersclipped.cpp` | ✅ | `ImageFiltersClippedGM.kt` | — |
-| `imagefilterscropexpand.cpp` | ❌ | — | — |
-| `imagefilterscropped.cpp` | ❌ | — | — |
+| `imagefilterscropexpand.cpp` | ✅ | `ImageFiltersCropExpandGM.kt` | — (cropRect wrappé `Crop`) |
+| `imagefilterscropped.cpp` | ✅ | `ImageFiltersCroppedGM.kt` | — (cropRect wrappé `Crop`) |
 | `imagefiltersgraph.cpp` | ❌ | — | — |
 | `imagefiltersscaled.cpp` | ❌ | — | — |
 | `imagefiltersstroked.cpp` | ❌ | — | — |
