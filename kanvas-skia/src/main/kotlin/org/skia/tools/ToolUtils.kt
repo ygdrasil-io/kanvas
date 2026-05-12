@@ -1,12 +1,20 @@
 package org.skia.tools
 
+import org.skia.codec.SkCodec
+import org.skia.core.SkCanvas
+import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkColorGetB
 import org.skia.foundation.SkColorGetG
 import org.skia.foundation.SkColorGetR
 import org.skia.foundation.SkColorSetARGB
+import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontStyle
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkTypeface
 import org.skia.foundation.awt.LiberationFontMgr
 import org.skia.math.SkScalar
@@ -177,5 +185,132 @@ public object ToolUtils {
         for (i in 0 until n) {
             rec.glyphs[i] = glyphsShort[i].toInt() and 0xFFFF
         }
+    }
+
+    // ─── Resource loading (mirrors tools/Resources.{h,cpp} + tools/DecodeUtils.h) ──
+    //
+    // Upstream `Resources.cpp` reads from a filesystem path baked at build
+    // time (`-Dresources_dir=...`) or via `SetResourcePath`. The Kotlin port
+    // pulls bytes from the JVM classpath instead — every GM-test resource
+    // lives under `src/test/resources/` and is published to the test
+    // classloader, so a relative path like `"images/mandrill_512.png"`
+    // resolves identically across local runs and CI without any
+    // configuration plumbing.
+
+    /**
+     * Mirrors `sk_sp<SkData> GetResourceAsData(const char* resource)`
+     * (`tools/Resources.cpp:42`). Reads the entire classpath resource at
+     * [path] into a freshly-allocated [SkData] via [SkData.MakeWithCopy].
+     * Returns `null` when no such resource is on the classpath — matches
+     * upstream's `nullptr` return on `SkStream::MakeFromFile` failure.
+     *
+     * Resource paths are relative to the classpath root, e.g. for a file
+     * at `kanvas/src/test/resources/images/mandrill_512.png` (shared with
+     * `:kanvas-skia` via the build script's `resources.srcDir(...)`) the
+     * caller passes `"images/mandrill_512.png"`.
+     */
+    public fun GetResourceAsData(path: String): SkData? {
+        val stream = ToolUtils::class.java.classLoader.getResourceAsStream(path)
+            ?: return null
+        val bytes = stream.use { it.readBytes() }
+        return SkData.MakeWithCopy(bytes)
+    }
+
+    /**
+     * Mirrors `sk_sp<SkImage> ToolUtils::GetResourceAsImage(const char*)`
+     * (`tools/DecodeUtils.h:31`). Loads the encoded bytes via
+     * [GetResourceAsData], dispatches them through [SkCodec.MakeFromData],
+     * and returns the decoded [SkImage]. Returns `null` if the resource
+     * is missing, no codec recognises its container format, or the decode
+     * fails — mirrors upstream's `nullptr` short-circuits.
+     *
+     * The Kotlin port collapses upstream's `SkImages::DeferredFromEncodedData`
+     * → lazy decode pipeline into an eager decode through [SkCodec.getImage].
+     * `:kanvas-skia` has no GPU upload path that would benefit from lazy
+     * decoding, and eager-decode keeps every test deterministic regardless
+     * of how many times the caller samples the image.
+     */
+    public fun GetResourceAsImage(path: String): SkImage? {
+        val data = GetResourceAsData(path) ?: return null
+        val codec = SkCodec.MakeFromData(data.toByteArray()) ?: return null
+        val (bitmap, result) = codec.getImage()
+        if (result != SkCodec.Result.kSuccess || bitmap == null) return null
+        return bitmap.asImage()
+    }
+
+    /**
+     * Mirrors `bool ToolUtils::GetResourceAsBitmap(const char* resource,
+     * SkBitmap* dst)` (`tools/DecodeUtils.h:23`). Decodes the resource
+     * into a caller-provided [dst] bitmap whose [SkBitmap.width] /
+     * [SkBitmap.height] / [SkBitmap.colorType] must match the codec's
+     * default [org.skia.foundation.SkImageInfo]. Returns `true` on
+     * success ; `false` if the resource is missing, no codec matched,
+     * or the decode failed.
+     *
+     * Upstream's signature takes a `SkBitmap*` that the function
+     * `allocPixels`-resizes on success ; our [SkBitmap] is constructed
+     * with fixed dimensions and the caller is responsible for sizing
+     * [dst] to the codec's [SkCodec.getInfo] (typically queried via
+     * [GetResourceAsData] + [SkCodec.MakeFromData] for the dimensions
+     * before allocating the bitmap).
+     */
+    public fun GetResourceAsBitmap(path: String, dst: SkBitmap): Boolean {
+        val data = GetResourceAsData(path) ?: return false
+        val codec = SkCodec.MakeFromData(data.toByteArray()) ?: return false
+        return codec.getPixels(dst) == SkCodec.Result.kSuccess
+    }
+
+    /**
+     * Mirrors `sk_sp<SkImage> ToolUtils::MakeTextureImage(SkCanvas*,
+     * sk_sp<SkImage>)` (`tools/GpuToolUtils.h:32`). Upstream uploads
+     * [image] to the [canvas]'s GPU recording context when one is
+     * available (Ganesh or Graphite), falling back to the original
+     * raster image otherwise.
+     *
+     * `:kanvas-skia` is raster-only — there is no GPU backend to upload
+     * to — so this helper short-circuits to the identity. GMs that call
+     * `MakeTextureImage` to opt into GPU upload still render correctly,
+     * just through the raster path. Returns `null` iff [image] is `null`,
+     * matching upstream.
+     */
+    public fun MakeTextureImage(canvas: SkCanvas?, image: SkImage?): SkImage? = image
+
+    /**
+     * Mirrors `ToolUtils::draw_checkerboard(SkCanvas*, SkColor, SkColor,
+     * int)` (`tools/ToolUtils.cpp:176`). Paints a [size]-pixel checker
+     * pattern alternating between [c1] and [c2] across the canvas's
+     * current clip, using [SkBlendMode.kSrc] so the existing pixels are
+     * replaced (not blended).
+     *
+     * Upstream constructs a 2×[size] tiled bitmap shader via
+     * `create_checkerboard_shader` and `drawPaint`s it ; the Kotlin
+     * port follows the same recipe — a `2*size × 2*size` 8888 bitmap
+     * with `(c1, c2)` in opposite quadrants, wrapped in a [SkTileMode.kRepeat]
+     * shader. The shader path keeps the cost O(1) regardless of clip
+     * size, matches upstream visually, and re-uses the already-tested
+     * raster bitmap-shader pipeline.
+     *
+     * `size` must be positive — a zero or negative tile would produce
+     * an empty shader and upstream's `create_checkerboard_shader` would
+     * crash on the underlying `allocPixels(2*size, 2*size)`. We mirror
+     * the implicit contract.
+     */
+    public fun draw_checkerboard(canvas: SkCanvas, c1: SkColor, c2: SkColor, size: Int) {
+        require(size > 0) { "draw_checkerboard size must be > 0 ; got $size" }
+        val tile = SkBitmap(2 * size, 2 * size)
+        tile.eraseColor(c1)
+        // Fill the off-diagonal quadrants with c2 (matches upstream's
+        // `eraseArea(LTRB(0, 0, size, size), c2)` +
+        // `eraseArea(LTRB(size, size, 2*size, 2*size), c2)`).
+        for (y in 0 until size) {
+            for (x in 0 until size) {
+                tile.setPixel(x, y, c2)
+                tile.setPixel(x + size, y + size, c2)
+            }
+        }
+        val paint = SkPaint()
+        paint.shader = tile.makeShader(SkTileMode.kRepeat, SkTileMode.kRepeat)
+        paint.blendMode = SkBlendMode.kSrc
+        canvas.drawPaint(paint)
     }
 }
