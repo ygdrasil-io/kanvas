@@ -4,15 +4,15 @@ Statut du portage des Graphics Modules (GM) C++ de Skia vers `kanvas-skia/src/ma
 
 **Source de référence** : `/Users/chaos/workspace/kanvas-forge/skia-main/gm/` (437 fichiers `.cpp`)
 **Cible** : `kanvas-skia/src/main/kotlin/org/skia/tests/*GM.kt` (310 GMs Kotlin sur `origin/master`)
-**Snapshot** : post-merge **13 phases d'API** (G1-G10 + G9a/b) + **vague H1** (assets + 4 ports en preuve)
+**Snapshot** : post-merge **13 phases d'API** (G1-G10 + G9a/b) + **H1 complet** (10 GMs image-asset) + **H3 wave 1** (9 cpps, 11 variants)
 
 ## Résumé
 
 | Statut | Fichiers `.cpp` | Pourcentage |
 |---|---:|---:|
-| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 215 | 49% |
-| 🚧 Bloqué (API manquante / GPU-only) | 94 | 21% |
-| ❌ Non tenté (potentiellement portable) | 128 | 30% |
+| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 232 | 53% |
+| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 97 | 22% |
+| ❌ Non tenté (potentiellement portable) | 108 | 25% |
 | **Total** | **437** | **100%** |
 
 GMs Kotlin sans correspondance dans le tree de référence (probablement issus d'une version Skia plus récente) : **30**.
@@ -26,9 +26,10 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 | Phases G1, G3, G4a, G7, G9a, G9b + vagues I-A/I-B | 184 / 437 | 42% |
 | Phases G2, G4b, G5 + vagues K/L | 208 / 437 | 47% |
 | Phases G4c, G6, G8 + vagues K-bis, L | 215 / 437 | 49% |
-| **Phases G10 + H1 (état courant)** | **215 / 437** | **49%** |
+| Phases G10 + H1 (assets + 4 ports) | 215 / 437 | 49% |
+| **H1 complet (10 ports) + H3 wave 1 (9 ports)** | **232 / 437** | **53%** |
 
-**Gain net** : +67 GMs en 2 jours (de 34% à 49% de couverture).
+**Gain net** : +84 GMs en 3 jours (de 34% à 53% de couverture).
 
 ## Phases d'API — toutes mergées ✅
 
@@ -47,7 +48,8 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 | **G9a** — SkParsePath | `SkParsePath.FromSVGString` (12 commandes SVG, arc via `arcTo`) |
 | **G9b** — OverdrawColorFilter | `SkOverdrawColorFilter.MakeWithSkColors(IntArray(6))` |
 | **G10** — Mipmap/Aniso | `SkImage.withDefaultMipmaps`, `SkSamplingOptions.Aniso`, LOD selection raster |
-| **H1** — Asset copy | 16 PNG/JPG copiés depuis upstream `resources/images/` + 4 ports en preuve |
+| **H1** — Asset copy + ports | 16 PNG/JPG copiés depuis upstream `resources/images/` + 10 ports (4 initial + 3 H1-A + 5 H1-B, 2 skip) |
+| **H3 wave 1** — Ports raster purs | 9 cpps portés (color4f, dash*, degenerate, emboss, blurcircles2, blur_ignore_xform, complexclip2, convexpolyclip), 1 skip (closedcappedhairlines : pas de PNG ref) |
 
 ## Bloqueurs restants — catalogue par ROI
 
@@ -102,6 +104,13 @@ Chaque sous-tâche est petite (½-1 jour). Toutes parallélisables car touchent 
 | H2.10 — `SkShaders.CoordClamp(shader, rect)` | 1 | `SkShaders.kt` |
 | H2.11 — `SkCanvas.drawImageNine(image, center, dstRect)` | 1 | `SkCanvas.kt`, 9-patch raster |
 | H2.12 — YUV multi-plane support | 1 | beaucoup |
+| H2.13 — `SkMaskFilter.MakeBlur(style, sigma, respectCTM)` overload | 3 | `SkMaskFilter.kt` (BlurIgnoreXform → ~99 %) |
+| H2.14 — `SkImage.makeColorSpace` + `SkCanvas.makeSurface(info)` + `imageInfo().colorSpace()` | 1 | `SkImage.kt`, `SkCanvas.kt` |
+| H2.15 — `SkMipmapBuilder` + `SkImage.attachTo` | 1 | nouvelle classe |
+| H2.16 — `SkShaders.Color(c)` (constant-color shader factory) | 1+ | `SkShaders.kt` |
+| H2.17 — `SkColorFilters.Lighting(mul, add)` factory direct | 1+ | `SkColorFilters.kt` |
+| H2.18 — `SkBitmap` color types `kRGB_565`, `kGray_8` | 1+ | `SkBitmap.kt` |
+| H2.19 — `ToolUtils.copy_to` + `create_checkerboard_image` helpers | nombreux | `ToolUtils.kt` |
 
 ### Phase H1.5 — Suivis fidélité (qualité de ports)
 
@@ -133,8 +142,8 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `aarectmodes.cpp` | ✅ | `AaRectModesGM.kt` | — |
 | `aaxfermodes.cpp` | ✅ | `AAXfermodesGM.kt` | — |
 | `addarc.cpp` | ✅ | `AddArcGM.kt`, `FillCircleGM.kt`, `StrokeCircleGM.kt` | — |
-| `all_bitmap_configs.cpp` | ❌ | — | — |
-| `alpha_image.cpp` | ❌ | — | — |
+| `all_bitmap_configs.cpp` | ✅ | `AllBitmapConfigsGM.kt` | — (partiel : RGB565/Gray8 absents) |
+| `alpha_image.cpp` | ✅ | `AlphaImageGM.kt` | — (partiel : H1.5 tint A8) |
 | `alphagradients.cpp` | ✅ | `AlphaGradientsGM.kt` | — |
 | `analytic_gradients.cpp` | ✅ | `AnalyticGradientShaderGM.kt` | — |
 | `androidblendmodes.cpp` | ✅ | `AndroidBlendModesGM.kt` | — |
@@ -173,8 +182,8 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `bitmaptiled.cpp` | ✅ | `BitmapTiledGM.kt` | — |
 | `bleed.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `blurcircles.cpp` | ✅ | `BlurCirclesGM.kt` | — |
-| `blurcircles2.cpp` | ❌ | — | — |
-| `blurignorexform.cpp` | ❌ | — | — |
+| `blurcircles2.cpp` | ✅ | `BlurCircles2GM.kt` | — |
+| `blurignorexform.cpp` | ✅ | `BlurIgnoreXformGM.kt` (3 variants) | — (H2 : `MakeBlur(respectCTM=false)`) |
 | `blurimagevmask.cpp` | ✅ | `BlurImageGM.kt`, `BlurImageVMaskGM.kt` | — |
 | `blurpositioning.cpp` | ✅ | `BlurPositioningGM.kt` | — |
 | `blurquickreject.cpp` | ✅ | `BlurQuickRejectGM.kt` | — |
@@ -202,20 +211,20 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `clippedbitmapshaders.cpp` | ❌ | — | — |
 | `clipshader.cpp` | 🚧 | — | `SkCanvas::clipShader` |
 | `clockwise.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `closedcappedhairlines.cpp` | ❌ | — | — |
+| `closedcappedhairlines.cpp` | 🚧 | — | Pas de PNG de référence dans `original-888/` |
 | `collapsepaths.cpp` | ✅ | `CollapsePathsGM.kt` | — |
-| `color4f.cpp` | ❌ | — | — |
+| `color4f.cpp` | ✅ | `Color4fGM.kt` | — |
 | `coloremoji.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `coloremoji_blendmodes.cpp` | ❌ | — | — |
 | `colorfilteralpha8.cpp` | ✅ | `ColorFilterAlpha8GM.kt` | — |
-| `colorfilterimagefilter.cpp` | ❌ | — | — |
-| `colorfilters.cpp` | ❌ | — | — |
+| `colorfilterimagefilter.cpp` | ✅ | `ColorFilterImageFilterGM.kt` | — |
+| `colorfilters.cpp` | ✅ | `ColorFiltersGM.kt` (lightingcolorfilter) | — |
 | `colormatrix.cpp` | ✅ | `ColorMatrixGM.kt` | — |
-| `colorspace.cpp` | ❌ | — | — |
+| `colorspace.cpp` | 🚧 | — | `SkImage.makeColorSpace` + `SkCanvas.makeSurface(info)` absents |
 | `colorwheel.cpp` | ✅ | `ColorWheelNativeGM.kt` | — |
 | `colrv1.cpp` | ❌ | — | — |
 | `complexclip.cpp` | 🚧 | — | `SkCanvas::clipShader` |
-| `complexclip2.cpp` | ❌ | — | — |
+| `complexclip2.cpp` | ✅ | `ComplexClip2GM.kt` (6 variants rect/rrect/path × bw/aa) | — |
 | `complexclip3.cpp` | ❌ | — | — |
 | `complexclip4.cpp` | ❌ | — | — |
 | `complexclip_blur_tiled.cpp` | ❌ | — | — |
@@ -228,10 +237,10 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `constcolorprocessor.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `convex_all_line_paths.cpp` | ✅ | `ConvexLineOnlyPathsGM.kt` | — |
 | `convexpaths.cpp` | ✅ | `ConvexPathsGM.kt` | — |
-| `convexpolyclip.cpp` | ❌ | — | — |
+| `convexpolyclip.cpp` | ✅ | `ConvexPolyClipGM.kt` | — |
 | `convexpolyeffect.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `coordclampshader.cpp` | 🚧 | — | `SkShaders::CoordClamp` |
-| `copy_to_4444.cpp` | ❌ | — | — |
+| `copy_to_4444.cpp` | ✅ | `CopyTo4444GM.kt` | — |
 | `crbug_1041204.cpp` | ✅ | `Crbug10141204GM.kt` | — |
 | `crbug_1073670.cpp` | ✅ | `Crbug1073670GM.kt` | — |
 | `crbug_1086705.cpp` | ✅ | `Crbug1086705GM.kt` | — |
@@ -267,10 +276,10 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `crosscontextimage.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `cubicpaths.cpp` | ✅ | `Bug5099GM.kt`, `Bug6083GM.kt`, `ClippedCubicGM.kt`, `ClippedCubic2GM.kt`, `CubicClosePathGM.kt`, `CubicPathGM.kt`, `CubicPathShaderGM.kt` | — |
 | `daa.cpp` | ❌ | — | — |
-| `dashcircle.cpp` | ❌ | — | — |
-| `dashcubics.cpp` | ❌ | — | — |
+| `dashcircle.cpp` | ✅ | `DashCircleGM.kt` | — |
+| `dashcubics.cpp` | ✅ | `DashCubicsGM.kt` | — |
 | `dashing.cpp` | ✅ | `DashingGM.kt`, `LongWavyLineGM.kt`, `PathEffectGM.kt` | — |
-| `degeneratesegments.cpp` | ❌ | — | — |
+| `degeneratesegments.cpp` | ✅ | `DegenerateSegmentsGM.kt` | — |
 | `destcolor.cpp` | ✅ | `DestColorGM.kt` | — |
 | `dftext.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `dftext_blob_persp.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
@@ -294,7 +303,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `drrect_small_inner.cpp` | ✅ | `DRRectSmallInnerGM.kt` | — |
 | `dstreadshuffle.cpp` | ❌ | — | — |
 | `ducky_yuv_blend.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `emboss.cpp` | ❌ | — | — |
+| `emboss.cpp` | ✅ | `EmbossGM.kt` | — |
 | `emptypath.cpp` | ✅ | `EmptyPathGM.kt` | — |
 | `emptyshader.cpp` | ✅ | `EmptyShaderGM.kt` | — |
 | `encode.cpp` | ✅ | `EncodeGM.kt` | — |
@@ -347,7 +356,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `hello_bazel_world.cpp` | 🚧 | — | GM Bazel-only (pas de PNG de référence) |
 | `highcontrastfilter.cpp` | ❌ | — | — |
 | `hittestpath.cpp` | ❌ | — | — |
-| `hsl.cpp` | ❌ | — | — |
+| `hsl.cpp` | ✅ | `HSLGM.kt` | — |
 | `hugepath.cpp` | ❌ | — | — |
 | `image.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `image_pict.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
@@ -360,7 +369,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `imagedither.cpp` | ✅ | `ImageDitherGM.kt` | — |
 | `imagefilters.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `imagefiltersbase.cpp` | ❌ | — | — |
-| `imagefiltersclipped.cpp` | ❌ | — | — |
+| `imagefiltersclipped.cpp` | ✅ | `ImageFiltersClippedGM.kt` | — |
 | `imagefilterscropexpand.cpp` | ❌ | — | — |
 | `imagefilterscropped.cpp` | ❌ | — | — |
 | `imagefiltersgraph.cpp` | ❌ | — | — |
@@ -437,7 +446,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `pdf_never_embed.cpp` | ❌ | — | — |
 | `perlinnoise.cpp` | ✅ | `PerlinNoiseGM.kt`, `PerlinNoiseRotatedGM.kt` | — |
 | `perspimages.cpp` | 🚧 | — | `SkImage::makeSubset` |
-| `perspshaders.cpp` | ❌ | — | — |
+| `perspshaders.cpp` | ✅ | `PerspShadersGM.kt` | — (H1.5 : `drawImage` sous perspective drop) |
 | `persptext.cpp` | ❌ | — | — |
 | `picture.cpp` | ✅ | `PictureGM.kt`, `PictureCullRectGM.kt` | — |
 | `pictureimagefilter.cpp` | ❌ | — | — |
@@ -486,7 +495,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `shallowgradient.cpp` | ❌ | — | — |
 | `shapes.cpp` | ✅ | `InnerShapesGM.kt`, `SimpleShapesGM.kt` | — |
 | `sharedcorners.cpp` | ❌ | — | — |
-| `showmiplevels.cpp` | ❌ | — | — |
+| `showmiplevels.cpp` | 🚧 | — | `SkMipmapBuilder` + `SkImage.attachTo` absents |
 | `simpleaaclip.cpp` | ❌ | — | — |
 | `simplerect.cpp` | ✅ | `SimpleRectGM.kt` | — |
 | `skbug1719.cpp` | ✅ | `Skbug1719GM.kt` | — |
