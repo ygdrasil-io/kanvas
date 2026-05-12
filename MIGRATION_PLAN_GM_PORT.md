@@ -10,9 +10,9 @@ Statut du portage des Graphics Modules (GM) C++ de Skia vers `kanvas-skia/src/ma
 
 | Statut | Fichiers `.cpp` | Pourcentage |
 |---|---:|---:|
-| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 241 | 55% |
-| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 98 | 22% |
-| ❌ Non tenté (potentiellement portable) | 98 | 22% |
+| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 248 | 57% |
+| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 99 | 23% |
+| ❌ Non tenté (potentiellement portable) | 90 | 21% |
 | **Total** | **437** | **100%** |
 
 GMs Kotlin sans correspondance dans le tree de référence (probablement issus d'une version Skia plus récente) : **30**.
@@ -28,9 +28,10 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 | Phases G4c, G6, G8 + vagues K-bis, L | 215 / 437 | 49% |
 | Phases G10 + H1 (assets + 4 ports) | 215 / 437 | 49% |
 | H1 complet (10 ports) + H3 wave 1 (9 ports) | 232 / 437 | 53% |
-| **H3 wave 2 (9 ports + 1 skip SkM44)** | **241 / 437** | **55%** |
+| H3 wave 2 (9 ports + 1 skip SkM44) | 241 / 437 | 55% |
+| **H3 wave 3 (7 ports + 1 skip computeFastBounds)** | **248 / 437** | **57%** |
 
-**Gain net** : +93 GMs en 3 jours (de 34% à 55% de couverture).
+**Gain net** : +100 GMs en 3 jours (de 34% à 57% de couverture).
 
 ## Phases d'API — toutes mergées ✅
 
@@ -118,6 +119,9 @@ Chaque sous-tâche est petite (½-1 jour). Toutes parallélisables car touchent 
 | H2.23 — `SkCanvas.drawAtlas` colors + blendMode (Phase I5.3 deferred) | 1+ | `SkBitmapDevice.kt` |
 | H2.24 — `SkImageFilters.DisplacementMap(..., cropRect)` 6-arg overload | 1 | `SkImageFilters.kt` |
 | H2.25 — `ToolUtils.makeSurface(canvas, info)` colour-space-matched helper | nombreux | `ToolUtils.kt` |
+| H2.26 — `SkPaint.computeFastBounds` + `SkImageFilter.computeFastBounds` | 1+ | `SkPaint.kt`, `SkImageFilter.kt` |
+| H2.27 — `SaveLayerRec.scaleFactor` (ScaledBackdropLayer) | 1 | `SaveLayerRec.kt`, `SkBitmapDevice.kt` |
+| H2.28 — Bicubic + tile-mode `SkBitmapShader` (fidelity) | nombreux | `SkBitmapShader.kt` (H1.5 lié) |
 
 ### Phase H1.5 — Suivis fidélité (qualité de ports)
 
@@ -165,8 +169,8 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `asyncrescaleandread.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `attributes.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `b_119394958.cpp` | ✅ | `B119394958GM.kt` | — |
-| `backdrop.cpp` | ❌ | — | — |
-| `backdrop_imagefilter_croprect.cpp` | ❌ | — | — |
+| `backdrop.cpp` | ✅ | `BackdropHintrectClippingGM.kt` (+ `BackdropScalefactorGM`) | — (partiel : `SaveLayerRec.scaleFactor` ignoré) |
+| `backdrop_imagefilter_croprect.cpp` | ✅ | `BackdropImagefilterCroprectGM.kt` | — (partiel : variants rotated/persp/nested/tilemode non portés) |
 | `badpaint.cpp` | ✅ | `BadPaintGM.kt` | — |
 | `batchedconvexpaths.cpp` | ✅ | `BatchedConvexPathsGM.kt` | — |
 | `bc1_transparency.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
@@ -179,8 +183,8 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `bigrrectaaeffect.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `bigtext.cpp` | ✅ | `BigTextGM.kt` | — |
 | `bigtileimagefilter.cpp` | ✅ | `BigTileImageFilterGM.kt` | — |
-| `bitmapcopy.cpp` | ❌ | — | — |
-| `bitmapfilters.cpp` | ❌ | — | — |
+| `bitmapcopy.cpp` | ✅ | `BitmapCopyGM.kt` | — (partiel : RGB565 → 8888 fallback) |
+| `bitmapfilters.cpp` | ✅ | `BitmapFiltersGM.kt` | — (partiel : RGB565 → 8888 fallback) |
 | `bitmapimage.cpp` | ✅ | `BitmapImageGM.kt` | — |
 | `bitmappremul.cpp` | ✅ | `BitmapPremulGM.kt` | — |
 | `bitmaprect.cpp` | ✅ | `BitmapRectRoundingGM.kt`, `DrawBitmapRect3GM.kt` | — |
@@ -215,7 +219,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `clip_sierpinski_region.cpp` | ✅ | `ClipSierpinskiRegionGM.kt` | — |
 | `clip_strokerect.cpp` | ✅ | `ClipStrokeRectGM.kt` | — |
 | `clipdrawdraw.cpp` | ✅ | `ClipDrawDrawGM.kt`, `ClipRegionGM.kt` | — |
-| `clippedbitmapshaders.cpp` | ❌ | — | — |
+| `clippedbitmapshaders.cpp` | ✅ | `ClippedBitmapShadersGM.kt` (6 variants : clamp/mirror/tile × low/hq) | — |
 | `clipshader.cpp` | 🚧 | — | `SkCanvas::clipShader` |
 | `clockwise.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `closedcappedhairlines.cpp` | 🚧 | — | Pas de PNG de référence dans `original-888/` |
@@ -325,8 +329,8 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `fillrect_gradient.cpp` | ✅ | `FillrectGradientGM.kt` | — |
 | `filltypes.cpp` | ✅ | `FillTypeGM.kt`, `FillTypesGM.kt` | — |
 | `filltypespersp.cpp` | ✅ | `FillTypePerspGM.kt` | — |
-| `filterbug.cpp` | ❌ | — | — |
-| `filterfastbounds.cpp` | ❌ | — | — |
+| `filterbug.cpp` | ✅ | `FilterBugGM.kt` | — |
+| `filterfastbounds.cpp` | 🚧 | — | `SkPaint.computeFastBounds` + `SkImageFilter.computeFastBounds` |
 | `filterindiabox.cpp` | ✅ | `FilterIndiaBoxGM.kt` | — |
 | `flippity.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `fontations.cpp` | ❌ | — | — |
@@ -424,7 +428,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `mirrortile.cpp` | ✅ | `MirrorTileGM.kt` | — |
 | `mixedtextblobs.cpp` | ❌ | — | — |
 | `mixercolorfilter.cpp` | ❌ | — | — |
-| `modecolorfilters.cpp` | ❌ | — | — |
+| `modecolorfilters.cpp` | ✅ | `ModeColorFiltersGM.kt` | — (44 % : divergence saveLayer + `SrcOver` bgPaint) |
 | `morphology.cpp` | ✅ | `MorphologyGM.kt` | — |
 | `nearesthalfpixelimage.cpp` | ❌ | — | — |
 | `nested.cpp` | ✅ | `NestedGM.kt` | — |
