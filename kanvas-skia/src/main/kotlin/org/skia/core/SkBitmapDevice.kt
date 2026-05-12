@@ -12,6 +12,7 @@ import org.skia.foundation.SkColorGetG
 import org.skia.foundation.SkColorGetR
 import org.skia.foundation.SkColorSetARGB
 import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkCubicBC
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
@@ -642,6 +643,48 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // a priori whether it produces a non-trivial output for transparent
         // input, so we skip the short-circuit.
         val mustBlendZero = modeAffectsZeroAlphaSrc(mode) || colorFilter != null
+        val cubic = sampling.cubic
+        if (cubic != null) {
+            for (py in iy0 until iy1) {
+                val srcYf = src.top + (py + 0.5f - devDst.top) * scaleY - 0.5f
+                val iyc = floor(srcYf).toInt()
+                val fy = srcYf - iyc
+                val wy0 = SkCubicBC.weight(1f + fy, cubic.B, cubic.C)
+                val wy1 = SkCubicBC.weight(fy,       cubic.B, cubic.C)
+                val wy2 = SkCubicBC.weight(1f - fy,  cubic.B, cubic.C)
+                val wy3 = SkCubicBC.weight(2f - fy,  cubic.B, cubic.C)
+                val iy0c = (iyc - 1).coerceIn(0, maxY)
+                val iy1c = iyc.coerceIn(0, maxY)
+                val iy2c = (iyc + 1).coerceIn(0, maxY)
+                val iy3c = (iyc + 2).coerceIn(0, maxY)
+                for (px in ix0 until ix1) {
+                    val srcXf = src.left + (px + 0.5f - devDst.left) * scaleX - 0.5f
+                    val ixc = floor(srcXf).toInt()
+                    val fx = srcXf - ixc
+                    val wx0 = SkCubicBC.weight(1f + fx, cubic.B, cubic.C)
+                    val wx1 = SkCubicBC.weight(fx,       cubic.B, cubic.C)
+                    val wx2 = SkCubicBC.weight(1f - fx,  cubic.B, cubic.C)
+                    val wx3 = SkCubicBC.weight(2f - fx,  cubic.B, cubic.C)
+                    val ix0c = (ixc - 1).coerceIn(0, maxX)
+                    val ix1c = ixc.coerceIn(0, maxX)
+                    val ix2c = (ixc + 1).coerceIn(0, maxX)
+                    val ix3c = (ixc + 2).coerceIn(0, maxX)
+                    var sample = cubicSampleARGB(
+                        devPixels, image.width,
+                        ix0c, ix1c, ix2c, ix3c,
+                        iy0c, iy1c, iy2c, iy3c,
+                        wx0, wx1, wx2, wx3,
+                        wy0, wy1, wy2, wy3,
+                    )
+                    sample = applyAlpha(sample, paintAlpha)
+                    if (colorFilter != null) sample = colorFilter.filterColor(sample)
+                    if (deferXform) sample = transformPaintColor(sample)
+                    if (sample ushr 24 == 0 && !mustBlendZero) continue
+                    dispatchBlend(px, py, sample, mode, blender)
+                }
+            }
+            return
+        }
         when (sampling.filter) {
             SkFilterMode.kNearest -> {
                 for (py in iy0 until iy1) {
@@ -682,6 +725,48 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 }
             }
         }
+    }
+
+    /**
+     * Bicubic 4×4 convolution. The caller computes the 4 source-x and
+     * 4 source-y indices (clamped to the image bounds — the device's
+     * raster path is the "kClamp" equivalent of [SkBitmapShader]'s
+     * per-axis tile mode) and the 8 kernel weights. Returns an 8-bit
+     * ARGB sample with channels clamped to `[0, 255]` to absorb the
+     * cubic kernel's negative-lobe overshoot.
+     */
+    private fun cubicSampleARGB(
+        pixels: IntArray, stride: Int,
+        ix0: Int, ix1: Int, ix2: Int, ix3: Int,
+        iy0: Int, iy1: Int, iy2: Int, iy3: Int,
+        wx0: Float, wx1: Float, wx2: Float, wx3: Float,
+        wy0: Float, wy1: Float, wy2: Float, wy3: Float,
+    ): SkColor {
+        var sumA = 0f; var sumR = 0f; var sumG = 0f; var sumB = 0f
+        val ys = intArrayOf(iy0, iy1, iy2, iy3)
+        val xs = intArrayOf(ix0, ix1, ix2, ix3)
+        val wys = floatArrayOf(wy0, wy1, wy2, wy3)
+        val wxs = floatArrayOf(wx0, wx1, wx2, wx3)
+        var sumW = 0f
+        for (j in 0..3) {
+            val rowBase = ys[j] * stride
+            val wy = wys[j]
+            for (i in 0..3) {
+                val wt = wxs[i] * wy
+                val c = pixels[rowBase + xs[i]]
+                sumA += wt * SkColorGetA(c)
+                sumR += wt * SkColorGetR(c)
+                sumG += wt * SkColorGetG(c)
+                sumB += wt * SkColorGetB(c)
+                sumW += wt
+            }
+        }
+        val invW = if (sumW != 0f) 1f / sumW else 0f
+        val a = (sumA * invW + 0.5f).toInt().coerceIn(0, 255)
+        val r = (sumR * invW + 0.5f).toInt().coerceIn(0, 255)
+        val g = (sumG * invW + 0.5f).toInt().coerceIn(0, 255)
+        val b = (sumB * invW + 0.5f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(a, r, g, b)
     }
 
     /**
