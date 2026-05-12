@@ -119,6 +119,26 @@ public class SkPath internal constructor(
     public fun countPoints(): Int = coords.size / 2
 
     /**
+     * Snapshot of every point stored in the path's flat coord array,
+     * one [SkPoint] per `(x, y)` pair. Mirrors Skia's
+     * `SkPath::points()` (`include/core/SkPath.h:441`), which returns
+     * an `SkSpan<const SkPoint>` over the same backing storage. The
+     * Kotlin port allocates a new array because [SkPath]'s coord
+     * buffer is private; the returned array has length
+     * [countPoints].
+     *
+     * Order matches insertion order via [SkPathBuilder], with each
+     * verb emitting its new endpoints in the order they appear in
+     * the verb stream (e.g. a `kCubic` emits its three new points
+     * after the `kMove` start, an `addRect` emits the 4 corners in
+     * the rectangle's traversal order).
+     */
+    public fun points(): Array<SkPoint> {
+        val n = coords.size / 2
+        return Array(n) { i -> SkPoint(coords[2 * i], coords[2 * i + 1]) }
+    }
+
+    /**
      * True iff [other] shares this path's verb stream and conic-weight
      * sequence — the precondition for [makeInterpolate]. Two paths are
      * interpolatable when corresponding points can be lerped without
@@ -839,6 +859,19 @@ public class SkPath internal constructor(
             rect: SkRect,
             dir: SkPathDirection = SkPathDirection.kCW,
         ): SkPath = SkPathBuilder().addRect(rect, dir).detach()
+
+        /**
+         * Closed rectangular contour starting at the corner selected by
+         * [startIndex] (`0..3` mapping to top-left / top-right /
+         * bottom-right / bottom-left CW). Mirrors
+         * `SkPath::Rect(SkRect, SkPathDirection, unsigned)`
+         * (`include/core/SkPath.h:90`).
+         */
+        public fun Rect(
+            rect: SkRect,
+            dir: SkPathDirection,
+            startIndex: Int,
+        ): SkPath = SkPathBuilder().addRect(rect, dir, startIndex).detach()
 
         /**
          * Closed rectangular contour with explicit [fillType] and
