@@ -8,6 +8,7 @@ import org.skia.foundation.SkRegion
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
@@ -1453,7 +1454,24 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * coordinates land in the same place as before, just shifted by the
      * layer origin.
      */
-    public open fun saveLayer(bounds: SkRect?, paint: SkPaint?): Int {
+    public open fun saveLayer(bounds: SkRect?, paint: SkPaint?): Int =
+        saveLayer(SaveLayerRec(bounds, paint, null, 0))
+
+    /**
+     * Mirrors Skia's full-fat `SkCanvas::saveLayer(SaveLayerRec)` —
+     * see the [SaveLayerRec] KDoc for field semantics.
+     *
+     * Phase G6 adds [SaveLayerRec.backdrop] handling : if non-null,
+     * the parent device's pixels (within the resolved layer bbox)
+     * are snapshotted, run through the backdrop filter, and pasted
+     * into the new layer as its initial content. Subsequent draws
+     * into the layer compose on top. `restore()` then composites
+     * the layer back onto the parent with [SaveLayerRec.paint].
+     */
+    public open fun saveLayer(rec: SaveLayerRec): Int {
+        val bounds = rec.bounds
+        val paint = rec.paint
+        val backdrop = rec.backdrop
         val s = top
         val layerBounds: SkIRect = if (bounds == null) {
             s.clip
@@ -1492,6 +1510,15 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         val originX = layerBounds.left
         val originY = layerBounds.top
 
+        // Phase G6 — backdrop : seed the new layer with the parent's
+        // pre-filtered pixels. The backdrop reads the parent device's
+        // pixels in the device-space layer bbox, runs them through the
+        // image filter, and pastes the (possibly displaced + resized)
+        // result back into the layer at the correct origin.
+        if (backdrop != null) {
+            seedLayerFromBackdrop(s.device, layerDevice, originX, originY, w, h, backdrop, s.matrix)
+        }
+
         // Layer-local CTM: the parent matrix post-translated by `-origin`,
         // so a source point that used to land at parent device `(px, py)`
         // now lands at layer coords `(px - originX, py - originY)`.
@@ -1512,6 +1539,65 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         )
         stack.addLast(newState)
         return stack.size - 2
+    }
+
+    /**
+     * Phase G6 helper — snapshots the parent device's pixels in the
+     * device-space rectangle `[originX, originY, originX+w, originY+h)`,
+     * runs them through [backdrop], and pastes the result into
+     * [layerDevice] at `(filterResult.offsetX, filterResult.offsetY)`
+     * (relative to the layer's top-left).
+     *
+     * The snapshot is taken on the **parent's** pixel grid (not the
+     * full parent device) so the filter sees only the layer's
+     * footprint — this matches upstream's `getRasterBackdrop` which
+     * crops the backdrop image to the layer bounds before running
+     * the filter (`SkCanvas::internalSaveLayer` in
+     * `src/core/SkCanvas.cpp`).
+     */
+    private fun seedLayerFromBackdrop(
+        parent: SkBitmapDevice,
+        layerDevice: SkBitmapDevice,
+        originX: Int,
+        originY: Int,
+        w: Int,
+        h: Int,
+        backdrop: SkImageFilter,
+        ctm: SkMatrix,
+    ) {
+        // Snapshot parent's pixels in the layer bbox. Out-of-parent
+        // samples come back as 0 (transparent) — matching upstream's
+        // "transparent black" backdrop padding.
+        val snapBuf = IntArray(w * h)
+        val pw = parent.width; val ph = parent.height
+        for (y in 0 until h) {
+            val py = originY + y
+            if (py < 0 || py >= ph) continue
+            for (x in 0 until w) {
+                val px = originX + x
+                if (px < 0 || px >= pw) continue
+                snapBuf[y * w + x] = parent.bitmap.getPixel(px, py)
+            }
+        }
+        val snapImg = SkImage(w, h, snapBuf)
+        val filtered = backdrop.filterImage(snapImg, ctm)
+        val filteredImg = filtered.image
+        // Paste filtered pixels into the layer bitmap at the offset the
+        // filter reported, clamped to the layer's bounds.
+        val dx = filtered.offsetX
+        val dy = filtered.offsetY
+        val fw = filteredImg.width
+        val fh = filteredImg.height
+        val l = maxOf(0, dx); val t = maxOf(0, dy)
+        val r = minOf(w, dx + fw); val b = minOf(h, dy + fh)
+        if (l >= r || t >= b) return
+        for (y in t until b) {
+            for (x in l until r) {
+                val px = filteredImg.peekPixel(x - dx, y - dy)
+                if ((px ushr 24) == 0) continue
+                layerDevice.bitmap.setPixel(x, y, px)
+            }
+        }
     }
 
     /** Convenience overload mirroring `SkCanvas::saveLayer()`. */
