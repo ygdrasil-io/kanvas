@@ -169,6 +169,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ImageBlurTiledGM | 70.81% | (new) | 1 | 217,514 / 307,200 | 0, 162, 162, 162 | 0, 11, 11, 11 |
 | ImageDitherGM | 14.44% | = | 1 | 6,750 / 46,750 | 0, 255, 255, 255 | 0, 184, 184, 184 |
 | ImageFiltersUnpremulGM | 100.00% | = | 32 | 4,096 / 4,096 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| ImageSourceGM | 98.53% | (new) | 8 | 73,901 / 75,000 | 0, 232, 232, 232 | 0, 75, 75, 75 |
 | InnerJoinGeometryGM | 97.92% | = | 1 | 685,452 / 700,000 | 0, 255, 255, 255 | 0, 78, 67, 63 |
 | InnerShapesAaGM | 81.85% | = | 1 | 204,622 / 250,000 | 0, 27, 28, 32 | 0, 3, 3, 3 |
 | InnerShapesBwGM | 82.62% | = | 1 | 206,553 / 250,000 | 0, 116, 133, 120 | 0, 3, 3, 3 |
@@ -239,6 +240,8 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | RoundRectGM | 96.27% | = | 1 | 1,039,733 / 1,080,000 | 0, 192, 245, 242 | 0, 20, 18, 19 |
 | RRectClipDrawPaintGM | 80.05% | -0.56% | 1 | 52,463 / 65,536 | 0, 159, 230, 236 | 0, 7, 11, 19 |
 | RRectGM | 89.06% | -0.02% | 1 | 518,487 / 582,200 | 0, 149, 150, 150 | 0, 24, 23, 18 |
+| RtifDistortGM | 83.67% | (new) | 16 | 313,759 / 375,000 | 0, 196, 243, 249 | 0, 92, 86, 106 |
+| RtifUnsharpGM | 58.21% | (new) | 16 | 76,301 / 131,072 | 0, 255, 255, 255 | 0, 45, 46, 44 |
 | RuntimeColorFilterGM | 16.92% | = | 1 | 66,529 / 393,216 | 0, 246, 248, 248 | 0, 71, 80, 75 |
 | RuntimeFunctionsGM | 10.72% | = | 4 | 7,028 / 65,536 | 0, 109, 22, 22 | 0, 34, 13, 11 |
 | RuntimeIntrinsicsCommonGM | 95.90% | = | 1 | 514,587 / 536,575 | 0, 255, 255, 255 | 0, 87, 81, 93 |
