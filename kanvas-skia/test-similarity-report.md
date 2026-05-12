@@ -31,6 +31,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | BigMatrixGM | 90.00% | = | 1 | 2,250 / 2,500 | 0, 82, 114, 54 | 0, 26, 19, 17 |
 | BigRectGM | 95.53% | = | 1 | 38,811 / 40,625 | 0, 212, 242, 13 | 0, 31, 25, 4 |
 | BigTextGM | 98.02% | = | 8 | 301,121 / 307,200 | 0, 215, 244, 237 | 0, 121, 126, 106 |
+| BitmapImageGM | 100.00% | (new) | 8 | 1,048,576 / 1,048,576 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | BitmapPremulGM | 100.00% | = | 2 | 262,144 / 262,144 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | BitmapRectRoundingGM | 100.00% | = | 1 | 307,200 / 307,200 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | BitmapRectTestGM | 98.50% | = | 1 | 75,648 / 76,800 | 0, 255, 255, 255 | 0, 255, 255, 255 |
@@ -40,6 +41,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | Blur2RectsGM | 95.92% | = | 1 | 335,708 / 350,000 | 0, 30, 30, 30 | 0, 9, 9, 9 |
 | Blur2RectsNonNinepatchGM | 94.97% | = | 1 | 332,398 / 350,000 | 0, 179, 179, 179 | 0, 11, 11, 11 |
 | BlurCirclesGM | 85.86% | = | 1 | 774,900 / 902,500 | 0, 59, 59, 59 | 0, 11, 11, 11 |
+| BlurImageVMaskGM | 88.18% | (new) | 8 | 740,699 / 840,000 | 0, 95, 96, 96 | 0, 14, 14, 14 |
 | BlurLargeRRectsGM | 36.00% | = | 1 | 32,404 / 90,000 | 0, 124, 135, 112 | 0, 22, 21, 22 |
 | BlurPositioningGM | 98.00% | = | 2 | 235,208 / 240,000 | 0, 130, 130, 130 | 0, 36, 36, 36 |
 | BlurQuickRejectGM | 99.08% | = | 1 | 89,170 / 90,000 | 0, 9, 10, 11 | 0, 1, 2, 2 |
