@@ -31,6 +31,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | BigMatrixGM | 90.00% | = | 1 | 2,250 / 2,500 | 0, 82, 114, 54 | 0, 26, 19, 17 |
 | BigRectGM | 95.53% | = | 1 | 38,811 / 40,625 | 0, 212, 242, 13 | 0, 31, 25, 4 |
 | BigTextGM | 98.02% | = | 8 | 301,121 / 307,200 | 0, 215, 244, 237 | 0, 121, 126, 106 |
+| BitmapPremulGM | 100.00% | = | 2 | 262,144 / 262,144 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | BitmapRectRoundingGM | 100.00% | = | 1 | 307,200 / 307,200 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | BitmapRectTestGM | 98.50% | = | 1 | 75,648 / 76,800 | 0, 255, 255, 255 | 0, 255, 255, 255 |
 | BitmapSubsetShaderGM | 97.44% | = | 1 | 63,860 / 65,536 | 0, 60, 98, 180 | 0, 2, 2, 3 |
