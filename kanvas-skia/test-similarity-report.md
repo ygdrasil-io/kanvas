@@ -33,6 +33,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | BigTextGM | 98.02% | = | 8 | 301,121 / 307,200 | 0, 215, 244, 237 | 0, 121, 126, 106 |
 | BitmapRectRoundingGM | 100.00% | = | 1 | 307,200 / 307,200 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | BitmapRectTestGM | 98.50% | = | 1 | 75,648 / 76,800 | 0, 255, 255, 255 | 0, 255, 255, 255 |
+| BitmapSubsetShaderGM | 97.44% | = | 1 | 63,860 / 65,536 | 0, 60, 98, 180 | 0, 2, 2, 3 |
 | Blur2RectsGM | 95.92% | = | 1 | 335,708 / 350,000 | 0, 30, 30, 30 | 0, 9, 9, 9 |
 | Blur2RectsNonNinepatchGM | 94.97% | = | 1 | 332,398 / 350,000 | 0, 179, 179, 179 | 0, 11, 11, 11 |
 | BlurCirclesGM | 85.86% | = | 1 | 774,900 / 902,500 | 0, 59, 59, 59 | 0, 11, 11, 11 |
@@ -126,6 +127,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | DestColorGM | 35.75% | = | 1 | 146,426 / 409,600 | 0, 255, 255, 255 | 0, 55, 66, 61 |
 | DistantClipGM | 100.00% | = | 1 | 10,000 / 10,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | DrawBitmapRect3 | 100.00% | = | 1 | 307,200 / 307,200 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| DrawBitmapRectSkbug4734GM | 100.00% | = | 1 | 4,096 / 4,096 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | DrawableGM | 98.46% | = | 1 | 48,736 / 49,500 | 0, 53, 49, 5 | 0, 17, 14, 2 |
 | DrawlinesWithLocalMatrixGM | 54.72% | = | 8 | 136,807 / 250,000 | 0, 56, 179, 231 | 0, 16, 10, 13 |
 | DropShadowImageFilterGM | 81.28% | = | 1 | 213,289 / 262,400 | 0, 255, 255, 255 | 0, 97, 96, 90 |
@@ -165,6 +167,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | LightingGM | 37.70% | = | 1 | 164,227 / 435,600 | 0, 255, 255, 255 | 0, 44, 47, 36 |
 | LineClosePathGM | 87.25% | -0.02% | 1 | 421,943 / 483,600 | 0, 205, 160, 239 | 0, 91, 72, 104 |
 | LinePathGM | 87.28% | -0.02% | 1 | 422,102 / 483,600 | 0, 205, 160, 239 | 0, 91, 72, 105 |
+| LocalMatrixImageShaderGM | 100.00% | = | 1 | 62,500 / 62,500 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | LongWavyLineGM | 99.52% | -0.01% | 1 | 260,891 / 262,144 | 0, 65, 64, 64 | 0, 20, 20, 20 |
 | LumaFilterGM | 41.84% | = | 1 | 105,438 / 252,000 | 0, 255, 255, 255 | 0, 23, 29, 15 |
 | LuminosityOverflowGM | 100.00% | = | 1 | 65,536 / 65,536 | 0, 0, 0, 0 | 0, 0, 0, 0 |
@@ -205,6 +208,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | RRectGM | 89.06% | -0.02% | 1 | 518,487 / 582,200 | 0, 149, 150, 150 | 0, 24, 23, 18 |
 | RadialGradientPrecisionGM | 4.92% | = | 1 | 1,966 / 40,000 | 0, 18, 17, 15 | 0, 10, 10, 8 |
 | RectPolyStrokeGM | 97.43% | -0.01% | 1 | 1,030,831 / 1,058,000 | 0, 255, 255, 255 | 0, 70, 75, 61 |
+| RepeatedBitmapGM | 99.98% | = | 1 | 331,706 / 331,776 | 0, 223, 223, 222 | 0, 139, 126, 131 |
 | RgbwSweepGradientGM | 100.00% | = | 1 | 10,000 / 10,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | RotatedCubicPathGM | 99.40% | = | 1 | 39,758 / 40,000 | 0, 70, 68, 48 | 0, 14, 19, 9 |
 | RoundRectGM | 96.27% | = | 1 | 1,039,733 / 1,080,000 | 0, 192, 245, 242 | 0, 20, 18, 19 |
