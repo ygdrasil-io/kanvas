@@ -121,6 +121,26 @@ public class SkRegion private constructor(
         return !isEmpty()
     }
 
+    /**
+     * Shift every pixel of this region by `(dx, dy)`. Mirrors Skia's
+     * `SkRegion::translate(int dx, int dy)`. Empty regions are
+     * unaffected. The canonical form is preserved : `(top, bottom)`
+     * shifts by `dy` ; every `(left, right)` interval shifts by `dx` ;
+     * the relative order of bands and intervals is invariant.
+     */
+    public fun translate(dx: Int, dy: Int) {
+        if (isEmpty()) return
+        if (dx == 0 && dy == 0) return
+        bands = bands.map { b ->
+            val xs = IntArray(b.xs.size) { i -> b.xs[i] + dx }
+            Band(b.top + dy, b.bottom + dy, xs)
+        }
+        fBounds = SkIRect(
+            fBounds.left + dx, fBounds.top + dy,
+            fBounds.right + dx, fBounds.bottom + dy,
+        )
+    }
+
     // ─── State queries ─────────────────────────────────────────────
 
     /** `true` if the region covers no pixels. */
