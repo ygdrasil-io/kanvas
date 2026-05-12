@@ -34,6 +34,8 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | BitmapRectRoundingGM | 100.00% | = | 1 | 307,200 / 307,200 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | BitmapRectTestGM | 98.50% | = | 1 | 75,648 / 76,800 | 0, 255, 255, 255 | 0, 255, 255, 255 |
 | BitmapSubsetShaderGM | 97.44% | = | 1 | 63,860 / 65,536 | 0, 60, 98, 180 | 0, 2, 2, 3 |
+| BitmapTiledFractionalHorizontalManualGM | 100.00% | (new) | 1 | 410,260 / 410,260 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| BitmapTiledFractionalVerticalManualGM | 100.00% | (new) | 1 | 410,260 / 410,260 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | Blur2RectsGM | 95.92% | = | 1 | 335,708 / 350,000 | 0, 30, 30, 30 | 0, 9, 9, 9 |
 | Blur2RectsNonNinepatchGM | 94.97% | = | 1 | 332,398 / 350,000 | 0, 179, 179, 179 | 0, 11, 11, 11 |
 | BlurCirclesGM | 85.86% | = | 1 | 774,900 / 902,500 | 0, 59, 59, 59 | 0, 11, 11, 11 |
@@ -137,6 +139,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | DRRectSmallInnerGM | 96.45% | -0.05% | 1 | 100,020 / 103,700 | 0, 75, 76, 76 | 0, 22, 22, 22 |
 | EmptyPathGM | 87.64% | = | 1 | 147,239 / 168,000 | 0, 193, 193, 193 | 0, 47, 44, 54 |
 | EmptyShaderGM | 65.87% | = | 1 | 7,420 / 11,264 | 0, 155, 185, 180 | 0, 117, 173, 77 |
+| EncodeGM | 100.00% | (new) | 8 | 614,381 / 614,400 | 0, 255, 255, 255 | 0, 255, 255, 255 |
 | FadeFilterGM | 75.00% | = | 1 | 49,152 / 65,536 | 0, 115, 115, 115 | 0, 115, 115, 115 |
 | FatPathFillGM | 53.66% | = | 1 | 74,183 / 138,240 | 0, 202, 196, 237 | 0, 107, 131, 138 |
 | FiddleGM | 100.00% | = | 1 | 65,536 / 65,536 | 0, 0, 0, 0 | 0, 0, 0, 0 |
@@ -155,6 +158,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | HairModesGM | 72.19% | = | 1 | 221,779 / 307,200 | 0, 212, 242, 237 | 0, 31, 36, 40 |
 | HardstopGradientShaderGM | 28.76% | = | 1 | 75,384 / 262,144 | 0, 63, 43, 48 | 0, 28, 20, 20 |
 | HardstopGradientsManyGM | 12.79% | = | 1 | 255,818 / 2,000,000 | 0, 28, 20, 4 | 0, 17, 12, 2 |
+| ImageBlurTiledGM | 70.81% | (new) | 1 | 217,514 / 307,200 | 0, 162, 162, 162 | 0, 11, 11, 11 |
 | ImageDitherGM | 14.44% | = | 1 | 6,750 / 46,750 | 0, 255, 255, 255 | 0, 184, 184, 184 |
 | ImageFiltersUnpremulGM | 100.00% | = | 32 | 4,096 / 4,096 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | InnerJoinGeometryGM | 97.92% | = | 1 | 685,452 / 700,000 | 0, 255, 255, 255 | 0, 78, 67, 63 |
@@ -282,6 +286,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ThinRectsGM | 92.10% | = | 1 | 70,736 / 76,800 | 0, 18, 17, 16 | 0, 12, 12, 10 |
 | ThinRoundRectsGM | 92.14% | = | 1 | 70,765 / 76,800 | 0, 82, 81, 81 | 0, 28, 33, 23 |
 | ThinStrokedRectsGM | 88.87% | = | 1 | 68,251 / 76,800 | 0, 202, 196, 237 | 0, 63, 28, 16 |
+| TiledScaledBitmapGM | 99.13% | (new) | 1 | 620,407 / 625,856 | 0, 51, 51, 51 | 0, 10, 10, 10 |
 | TilemodesAlphaGM | 77.34% | = | 2 | 202,741 / 262,144 | 0, 10, 11, 19 | 0, 3, 2, 3 |
 | TinyBitmapGM | 0.00% | = | 1 | 0 / 10,000 | 0, 10, 15, 9 | 0, 10, 15, 9 |
 | TrickyCubicStrokesButtMiterGM | 97.87% | = | 1 | 978,684 / 1,000,000 | 0, 244, 246, 249 | 0, 116, 111, 115 |
