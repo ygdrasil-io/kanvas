@@ -3,321 +3,236 @@
 Statut du portage des Graphics Modules (GM) C++ de Skia vers `kanvas-skia/src/main/kotlin/org/skia/tests/`.
 
 **Source de référence** : `/Users/chaos/workspace/kanvas-forge/skia-main/gm/` (437 fichiers `.cpp`)
-**Cible** : `kanvas-skia/src/main/kotlin/org/skia/tests/*GM.kt` (250 GMs Kotlin sur `origin/master`)
-**Dernière mise à jour** : après merge des PRs #304/305/306/307/308/309 (vagues 1-3 de portage) + bulk-mark des bloqueurs connus
+**Cible** : `kanvas-skia/src/main/kotlin/org/skia/tests/*GM.kt` (295 GMs Kotlin sur `origin/master`)
+**Snapshot** : post-merge vagues A→R (PRs #304-309, #321-322, #328-333) + phases G1, G2, G3, G4a, G4b, G5, G7, G9b mergées
 
 ## Résumé
 
 | Statut | Fichiers `.cpp` | Pourcentage |
 |---|---:|---:|
-| ✅ Porté (≥ 1 GM mappé) | 166 | 37% |
-| 🚧 Bloqué par API manquante / lacune impl. / ressource indisponible | 119 | 27% |
-| ❌ Non tenté | 152 | 36% |
+| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 208 | 47% |
+| 🚧 Bloqué par API manquante / dépendance externe | 118 | 27% |
+| ❌ Non tenté (potentiellement portable) | 111 | 26% |
 | **Total** | **437** | **100%** |
 
-GMs Kotlin sans correspondance dans le tree de référence : **30** (probablement issus d'une version Skia plus récente).
+GMs Kotlin sans correspondance dans le tree de référence (probablement issus d'une version Skia plus récente) : **20**.
 
-## Mini-plan d'ajout des API manquantes
+## Progression depuis le snapshot initial
 
-Priorité par ROI (nombre de `.cpp` débloqués par chaque API), puis par complexité d'intégration. Les phases peuvent être conduites en parallèle entre elles, mais chaque phase a ses propres dépendances internes.
+| Étape | Date | `.cpp` portés | Δ |
+|---|---|---:|---:|
+| Snapshot initial (post-D2) | 2026-05-12 (matin) | 148 / 437 (34%) | — |
+| Après vagues A→F + bulk-mark | 2026-05-12 (midi) | 166 / 437 (38%) | +18 |
+| Après phases G1-G9b + vagues I-R | 2026-05-12 (soir) | 208 / 437 (48%) | +42 |
 
-### Pondération par bloqueur
+**Vagues livrées** (mon stream + workstreams parallèles) :
+- Vagues A→F (mes batch initiaux) : 15 ports
+- Vagues I-A, I-B (parallèle) : 8 ports (image-loading utilisateurs)
+- Vagues K (#321/#323), L (#322/#327) : ~7 nouveaux ports + upgrades
+- Vagues M, N, O, P, Q, R (mon stream) : **34 GMs** sur 35 tentés (1 skippé : `unpremul`)
 
-| Bloqueur | `.cpp` impactés |
-|---|---:|
-| Chargement d'images (`ToolUtils::GetResourceAsImage` / `GetResourceAsBitmap` / `MakeTextureImage` / `draw_checkerboard`) | 65 |
-| `SkCubicResampler` + cubic `SkSamplingOptions` | 9 |
-| `SkPicture::makeShader` | 8 |
-| Alpha8 `SkBitmap`/`SkImage` | 6 |
-| `kBGRA_8888` `SkBitmap` | 5 |
-| `SkCanvas::experimental_DrawEdgeAAQuad` + `QuadAAFlags` | 5 |
-| `SkRegion::*` (`translate`, `op`, `SkCanvas::clipRegion`) | 4 |
-| `SkParsePath::FromSVGString` | 3 |
-| `SkCanvas::SaveLayerRec` avec `fBackdrop` | 2 |
-| `SkImageFilters::Blur(tileMode, cropRect)` | 2 |
-| `kRGBA_4444` colortype | 2 |
-| `SkOverdrawColorFilter` | 2 |
-| `SkShaderMaskFilter::Make` | 1 |
-| `SkCanvas::clipShader` | 1 |
-| `SkTableMaskFilter` | 1 |
-| Lacunes `SkBitmapDevice` (`drawPaint` ignore `paint.imageFilter`, `compositeFrom` ignore `paint.colorFilter`) | 2 |
-| `SkCanvas::readPixels` + `MarkGMGood`/`MarkGMBad` | 1 |
-| Mip-LOD raster + `SkSamplingOptions::Aniso` + `SkImage::withDefaultMipmaps` | 1 |
+## APIs ajoutées (phases G mergées)
 
-### Phase G1 — Chargement d'images (ROI : 65 `.cpp`)
+| Phase | API | PR | Impact |
+|---|---|---|---|
+| **G1** | `ToolUtils::GetResourceAsImage/AsBitmap` + ressources `kanvas/src/test/resources/images/` | merged | débloque ~65 GMs image-dépendants |
+| **G2** | `SkCubicResampler` + cubic `SkSamplingOptions` | #319 | débloque `bicubic`, sampling cubique |
+| **G3** | `SkPicture::makeShader` | #315 | débloque `bug6643`, `pictureshadercache`, etc. |
+| **G4a** | `kAlpha_8` `SkBitmap` accessors | #311 | débloque `colorfilteralpha8`, `skbug_12212`, `overdrawcolorfilter` |
+| **G4b** | `kBGRA_8888` `SkBitmap` accessors | #316 | débloque `skbug_9819` |
+| **G5** | `SkCanvas::experimental_DrawEdgeAAQuad` + `QuadAAFlags` | #317 | débloque `crbug_1167277`, `crbug_1174186`, `crbug_1162942`, `crbug_1177833` |
+| **G7** | `SkBitmapDevice` routing de `paint.colorFilter` (saveLayer) + `paint.imageFilter` (drawPaint) | #314 | débloque `crbug_918512`, `imagefiltersunpremul` |
+| **G9b** | `SkOverdrawColorFilter` | #313 | débloque `overdrawcolorfilter` |
 
-L'unique plus gros débloqueur. Les PNG/JPG sources d'upstream Skia se trouvent dans `kanvas/src/test/resources/images/` (à confirmer) — il suffit de lire les bytes via `ClassLoader.getResourceAsStream` et de passer par `SkCodec.MakeFromData`.
+## APIs en PR ouverte (à merger)
 
-**Tâches** :
-1. `ToolUtils.GetResourceAsImage(path: String): SkImage?` — `SkCodec.MakeFromData(bytes).getImage()`
-2. `ToolUtils.GetResourceAsBitmap(path: String, dst: SkBitmap): Boolean`
-3. `ToolUtils.MakeTextureImage(canvas, image): SkImage` — no-op en backend raster (renvoyer `image`)
-4. `ToolUtils.draw_checkerboard(canvas, c1: SkColor, c2: SkColor, size: Int)` — boucle de `drawRect` simple
-5. (optionnel) `ToolUtils.GetResourceAsData(path)` pour les usages qui veulent les bytes bruts
+| Phase | API | PR | Impact |
+|---|---|---|---|
+| G4c | `kRGBA_4444` `SkBitmap` accessors | #326 | débloque `copy_to_4444` |
+| G6 | `SkCanvas::SaveLayerRec` avec `fBackdrop` + `SkImageFilters::Blur(σ, σ, tileMode, ..., cropRect)` | #324 | débloque `crbug_1313579`, `crbug_1174354`, `complexclip_blur_tiled` |
+| G8 | `SkRegion` ops + `SkCanvas::clipRegion` | #325 | débloque `clip_sierpinski_region`, `drawregion`, `drawregionmodes` |
 
-**Effort** : ~½ journée. Aucune nouvelle infrastructure de rendu — c'est de la plomberie I/O.
-**Débloque** : tous les GMs marqués "Chargement d'images (...)".
-
-### Phase G2 — Bicubic sampling (ROI : 9 `.cpp`)
-
-**Tâches** :
-1. `data class SkCubicResampler(val B: Float, val C: Float)` + factories `Mitchell()`, `CatmullRom()`
-2. Étendre `SkSamplingOptions` avec un champ `cubic: SkCubicResampler?` ; `useCubic = cubic != null`
-3. Câbler le bicubic dans le sampler de `SkBitmapDevice` (chemin `drawImageRect` + `drawImage`) et `SkImage.makeShader`/`SkBitmapShader`
-4. Tests de non-régression sur GMs déjà passants pour s'assurer que le chemin nearest/linear reste inchangé
-
-**Effort** : 1-2 jours. Nouveau noyau de filtrage 4×4 pondéré par les coefficients (B, C).
-
-### Phase G3 — `SkPicture::makeShader` (ROI : 8 `.cpp`)
-
-**Tâches** :
-1. Confirmer que `SkPicture` et `SkPictureRecorder` existent en `:kanvas-skia` (`grep -r SkPicture kanvas-skia/src/main`)
-2. Implémenter `SkPicture.makeShader(tileX, tileY, filter, localMatrix? = null, tile? = null): SkShader`
-3. Stratégie : replay la picture dans un `SkBitmap` à la dimension de `tile` (ou `cullRect` par défaut) puis ré-utiliser `SkBitmapShader`
-4. Gestion du cache (réutiliser la même `SkBitmap` si la picture n'a pas changé)
-
-**Effort** : 1 jour. Réutilise l'infra image-shader existante.
-
-### Phase G4 — Colortypes alternatifs (ROI : 6 + 5 + 2 = 13 `.cpp`)
-
-**Tâches** :
-1. **`kAlpha_8`** (6 GMs) : ajouter un backing-array `ByteArray` dans `SkBitmap`, faire en sorte que `getPixel`/`setPixel`/`eraseColor` lisent/écrivent l'alpha-seul (RGB forcé à 0). Adapter `SkImage.Make` pour propager l'alpha-only.
-2. **`kBGRA_8888`** (5 GMs) : ajouter un backing-array `IntArray` ou conversion à la volée. Pour le raster CPU, BGRA est juste un swap d'octets — implémentable comme overlay sur l'array RGBA existant.
-3. **`kRGBA_4444`** (2 GMs) : plus bas ROI, peut attendre. Pack 4-bit/canal.
-
-**Effort** : 1-2 jours pour Alpha8 + BGRA. 4444 = ½ journée supplémentaire.
-
-### Phase G5 — Edge AA quad (ROI : 5 `.cpp`)
-
-**Tâches** :
-1. Enum `QuadAAFlags { kLeft, kTop, kRight, kBottom, kNone, kAll }` (bitflags)
-2. `SkCanvas.experimental_DrawEdgeAAQuad(rect, clip: Array<SkPoint>?, aaFlags, color, mode)`
-3. Géométrie : pour chaque arête, désactiver l'AA si le flag correspondant est absent (mise à 1.0 du coverage)
-4. Si `clip != null`, convertir le quad en path et rasteriser avec les arêtes AA sélectives
-
-**Effort** : 1-2 jours. Nécessite un chemin de rasterisation distinct du standard `drawRect`/`drawPath`.
-
-### Phase G6 — `SaveLayerRec` avec backdrop (ROI : 2 `.cpp`, mais débloque le pattern usuel des effets de backdrop blur)
-
-**Tâches** :
-1. `data class SaveLayerRec(bounds: SkRect?, paint: SkPaint?, backdrop: SkImageFilter?, flags: SaveLayerFlags = 0)`
-2. `SkCanvas.saveLayer(rec: SaveLayerRec): Int`
-3. Sémantique du backdrop : avant de rediriger les draws vers la nouvelle layer, passer les pixels du parent device à travers `backdrop` et écrire le résultat comme état initial de la layer
-4. Étendre `SkImageFilters.Blur(σx, σy, tileMode = kDecal, cropRect: SkIRect? = null, input: SkImageFilter? = null)`
-
-**Effort** : 1 jour. Le plus délicat est la sémantique "copy + filter" lors du saveLayer.
-
-### Phase G7 — Lacunes `SkBitmapDevice` (ROI : 2-3 `.cpp` + qualité accrue de plusieurs ports)
-
-Pas une nouvelle API — câblage manquant dans le device existant.
-
-**Tâches** :
-1. `SkBitmapDevice.compositeFrom` (`kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt:440`) : appliquer `paint?.colorFilter` entre `applyAlpha` et `dispatchBlend`, en miroir du chemin per-draw (l. 214)
-2. `SkBitmapDevice.drawPaint` : router vers `saveLayer(paint) + drawPaint(plain) + restore` quand `paint.imageFilter != null`
-
-**Effort** : ½ journée. Pure plomberie. Améliore aussi la similarité des ports `Crbug1156804`, `Crbug905548` déjà mergés.
-
-### Phase G8 — `SkRegion` + clipping (ROI : 4 `.cpp`)
-
-**Tâches** :
-1. `SkRegion.translate(dx: Int, dy: Int)` — décalage in-place de toutes les bandes
-2. `SkRegion.op(rect: SkIRect, op: SkRegion.Op)` — union/intersect/diff entre region et rect
-3. `SkCanvas.clipRegion(region: SkRegion, op: SkClipOp = kIntersect)` — clip à partir d'une region (chemin clip-stack existant peut passer par un masque alpha rasterisé)
-
-**Effort** : 1-2 jours. La rasterisation de `SkRegion` en clip est la partie subtile (pas d'AA, bandes Y-monotones).
-
-### Phase G9 — Petits bloqueurs unitaires (ROI : 1-3 `.cpp` chacun)
-
-Chacun ½ à 1 journée :
-- **`SkParsePath::FromSVGString`** (3 GMs) : parser SVG path string ; existe en Skia comme utilitaire texte
-- **`SkCanvas::clipShader(shader, op)`** (1 GM) : clip par-pixel via shader — plus complexe, peut-être à différer
-- **`SkShaderMaskFilter::Make`** (1 GM) : mask filter qui sample le shader interne aux coords du mask
-- **`SkTableMaskFilter`** (1 GM) : factory `ByteArray(256) → SkMaskFilter`, lookup byte-à-byte
-- **`SkOverdrawColorFilter::MakeWithSkColors`** (2 GMs) : `IntArray(6) → SkColorFilter` indexé par alpha (1..6)
-- **`SkCanvas::readPixels(dst, x, y)`** (1 GM) : blit device → bitmap avec conversion couleur
-- **`MarkGMGood`/`MarkGMBad`** (1 GM) : helpers dans `org.skia.tests.GM`, dessin de check vert/rouge
-
-### Phase G10 — Anisotropic / mipmap (ROI : 1 `.cpp` mais variantes multiples bloquées)
-
-**Tâches** :
-1. Pré-calculer les niveaux de mip dans `SkImage.makeShader` quand `SkSamplingOptions.mipmap != kNone`
-2. `SkSamplingOptions.Aniso(maxAniso: Int)` + sampler à empreinte elliptique
-3. `SkImage.withDefaultMipmaps(): SkImage` — pré-build de la pyramide
-
-**Effort** : 2-3 jours. Le plus loin du raster pur. À traiter en dernier si le ROI ne justifie pas l'avancement.
-
-### Chemin recommandé
-
-- **Tier S** (à faire dans la foulée) : **G1** (image loading, 65 unlocks)
-- **Tier A** (gros gain, complexité modérée) : **G2** (bicubic, 9 unlocks), **G3** (picture shader, 8 unlocks), **G4** (Alpha8 + BGRA, 11 unlocks)
-- **Tier B** (gain moyen) : **G5** (edge AA quad, 5 unlocks), **G6** (saveLayerRec, 2-3 unlocks), **G8** (SkRegion, 4 unlocks)
-- **Tier C** (gain mineur, pratiquable en parallèle) : **G7** (lacunes device), **G9** (petits bloqueurs)
-- **Tier D** (différable) : **G10** (mip/aniso)
-
-Après G1+G2+G3+G4 → **~89 GMs supplémentaires débloqués** soit ~20% de couverture en plus (167 → ~256, soit ~58% de couverture totale).
-
-## APIs manquantes — Catalogue détaillé
+## APIs encore à ajouter (catalogue cumulatif des manques)
 
 ### API publiques upstream à ajouter
 
-| API Skia upstream | Header upstream | Suggestion `:kanvas-skia` |
-|---|---|---|
-| `SkRegion::translate(int, int)` + `SkCanvas::clipRegion` | `include/core/SkRegion.h`, `include/core/SkCanvas.h` | `SkRegion.translate(dx, dy)` + `SkCanvas.clipRegion(region, op = kIntersect)` |
-| `SkPicture::makeShader(...)` | `include/core/SkPicture.h` | `SkPicture.makeShader(tileX, tileY, filter, localMatrix? = null, tile? = null): SkShader` |
-| `SkCanvas::experimental_DrawEdgeAAQuad(...)` + `QuadAAFlags` | `include/core/SkCanvas.h` | enum `QuadAAFlags` + méthode `experimental_DrawEdgeAAQuad(rect, clip?, aaFlags, color, mode)` |
-| `SkTableMaskFilter::Create(uint8_t[256])` | `include/effects/SkTableMaskFilter.h` | `SkTableMaskFilter(ByteArray(256)): SkMaskFilter` |
-| `SkCanvas::SaveLayerRec` avec `fBackdrop` | `include/core/SkCanvas.h` | `data class SaveLayerRec(bounds?, paint?, backdrop?, flags)` + `SkCanvas.saveLayer(SaveLayerRec)` |
-| `SkImageFilters::Blur(σx, σy, tileMode, input, cropRect)` | `include/effects/SkImageFilters.h` | étendre `Blur` avec `tileMode = kDecal, cropRect: SkIRect? = null` |
-| `SkOverdrawColorFilter::MakeWithSkColors` | `include/effects/SkOverdrawColorFilter.h` | `SkOverdrawColorFilter.MakeWithSkColors(IntArray(6)): SkColorFilter` |
-| `SkCanvas::clipShader(sk_sp<SkShader>)` | `include/core/SkCanvas.h` | `SkCanvas.clipShader(shader, op = kIntersect)` |
-| `SkShaderMaskFilter::Make(sk_sp<SkShader>)` | `include/effects/SkShaderMaskFilter.h` | `SkShaderMaskFilter` impl. `SkMaskFilter` qui échantillonne son shader aux coords du mask |
-| `SkCubicResampler` + cubic `SkSamplingOptions` | `include/core/SkSamplingOptions.h` | étendre `SkSamplingOptions` avec `cubic: SkCubicResampler?` ; câbler `SkBitmapDevice`/`SkImage.makeShader` |
-| `SkParsePath::FromSVGString` | `include/utils/SkParsePath.h` | parser de string SVG path → `SkPath?` |
-| `SkCanvas::readPixels(dst, x, y)` | `include/core/SkCanvas.h` | `SkCanvas.readPixels(dst: SkBitmap, x, y): Boolean` |
-| `ToolUtils::GetResourceAsImage` / `GetResourceAsBitmap` / `MakeTextureImage` / `draw_checkerboard` | `tools/Resources.h`, `tools/ToolUtils.h` | helpers de chargement de PNG/JPG depuis `kanvas/src/test/resources/images/` |
+| API Skia upstream | Header upstream | GM(s) bloqué(s) | Suggestion `:kanvas-skia` |
+|---|---|---|---|
+| `SkTableMaskFilter::Create(uint8_t[256])` | `include/effects/SkTableMaskFilter.h` | `tablemaskfilter` | factory `ByteArray(256) → SkMaskFilter` |
+| `SkShaderMaskFilter::Make(sk_sp<SkShader>)` | `include/effects/SkShaderMaskFilter.h` | `shadermaskfilter` | impl. `SkMaskFilter` qui échantillonne son shader aux coords mask |
+| `SkCanvas::clipShader(sk_sp<SkShader>)` | `include/core/SkCanvas.h` | `clipshader` | `SkCanvas.clipShader(shader, op = kIntersect)` |
+| `SkM44` + `SkCanvas::concat(SkM44)` + `SkM44::{Perspective, LookAt, Rotate, Translate}` | `include/core/SkM44.h` | `sk3d_simple`, `crbug_224618` | `data class SkM44(16 floats)` + ops + `SkCanvas.concat(SkM44)` |
+| `SkPath::contains(x, y): Boolean` | `include/core/SkPath.h` | `hittestpath` | winding-number ray-cast sur le verb stream |
+| `SkCanvas::readPixels(dst, x, y): Boolean` | `include/core/SkCanvas.h` | `unpremul`, `skbug_9819`, `encode_platform` | blit + conversion couleur depuis le device |
+| `SkShaders::CoordClamp` + `SkImage::makeSubset` + `SkImage::withDefaultMipmaps` | `include/core/SkImage.h` | `coordclampshader` | 3 gaps indépendants |
+| `SkCanvas::drawImageNine(image, center, dst, filter, paint?)` | `include/core/SkCanvas.h` | `ninepatchstretch` | lattice-stretch des 9 cellules |
+| `SkImageFilter::makeWithLocalMatrix(matrix)` | `include/core/SkImageFilter.h` | `localmatriximagefilter` | wraps `this` en pré-composant la matrice |
+| `SkCanvas::discard()` | `include/core/SkCanvas.h` | `discard` | raster fallback no-op ou `bitmap.eraseColor(0)` |
+| `SkCanvas::drawGlyphs` / `drawGlyphsRSXform` | `include/core/SkCanvas.h` | `drawglyphs` (déjà porté avec workaround) | API native plus directe |
+| `SkSamplingOptions::Aniso(maxAniso: Int)` + mip LOD chaîne `SkImage` | `include/core/SkSamplingOptions.h` | `anisotropic_image_scale_*` variants, `filterindiabox`, `bigtileimagefilter` | extension `SkSamplingOptions.aniso` + pré-compute mip pyramid |
+| Image encoders (`SkPngEncoder`, `SkJpegEncoder`, `SkImage::encodeToData`) | `include/encode/*.h` | `encode_alpha_jpeg`, `encode_platform` | besoin de PR dédié |
+| `SkParsePath::FromSVGString` | `include/utils/SkParsePath.h` | (déjà porté `crbug_691386` avec workaround) | parser SVG path |
 
-### Lacunes d'implémentation (API existe, intégration incomplète)
+### Lacunes d'intégration (API existe, intégration incomplète)
 
-| Symptôme | Fichier `:kanvas-skia` |
-|---|---|
-| `SkBitmapDevice.compositeFrom` ignore `paint.colorFilter` (layer-paint) | `kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt:440` |
-| `SkBitmapDevice.drawPaint` ignore `paint.imageFilter` | `kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt` |
-| `kAlpha_8` `SkBitmap.getPixel/setPixel/eraseColor` lèvent unsupported | `SkBitmap` |
-| `kBGRA_8888` `SkBitmap` non supporté côté backing-array | `SkBitmap` |
-| Mipmap LOD non sélectionné dans `SkBitmapShader`/`drawImageRect` quand `SkSamplingOptions.mipmap != kNone` | `SkBitmapShader`, `SkBitmapDevice` |
-| `SkSamplingOptions::Aniso(maxAniso: Int)` absent | `SkSamplingOptions` |
-| `SkImage::withDefaultMipmaps()` absent | `SkImage` |
+- **Gradient lerp linear-space** — `SkLinearGradient.lookupStop` / `lerpPremul` interpole en sRGB 8 bits ; cause perte de qualité sur `transparency_check` (13%). Besoin : overload `SkColor4f` ou décodage/réencodage transfer-function-aware autour du lerp.
+- **`SkBitmapDevice.drawImageRect` sous CTM non-axis-aligned** — court-circuit qui drop le draw quand la matrice n'est pas alignée sur les axes (cf TODO `SkCanvas.kt:798`). Impacte `filterindiabox` (cellule rotation 30°).
+- **Variable-font scaler consumption** — `SkFontVariation` stocké mais non consommé par le AWT scaler ; bloque `fontscalerdistortable`.
 
-## Méthodologie
+## Catégories des GMs encore bloqués
 
-- ✅ **Porté** : ≥ 1 `*GM.kt` correspond au `.cpp` après normalisation (lowercase, sans `_`/`-`), ou contient un `DEF_SIMPLE_GM`/`DEF_GM` du `.cpp` à l'intérieur du fichier. La conformité visuelle n'est pas garantie — voir `MIGRATION_PLAN.md` pour le suivi de qualité.
-- 🚧 **Bloqué** : un agent a tenté le portage et abandonné faute d'API `:kanvas-skia`, **ou** le scan automatique a détecté un bloqueur dur (dépendance image, `experimental_DrawEdgeAAQuad`, `SkRegion`, `SkParsePath::FromSVGString`, etc.).
-- ❌ **Non tenté** : reste à analyser ; à terme rejoindra ✅ ou 🚧.
+| Bloqueur | Nb `.cpp` |
+|---|---:|
+| GM GPU-only (Ganesh-specific) | 18 |
+| (résolu G3) — revoir port | 18 |
+| (résolu G2) — revoir port | 12 |
+| (résolu G4a) — revoir port | 9 |
+| `SkPicture` recording / culling (variable) | 7 |
+| `SkImageFilters::Blur(σ, σ, tileMode, ...)` (Phase G6) | 7 |
+| Variable-font scaler consumption | 7 |
+| `SkRegion::*` (Phase G8 en PR #325) | 6 |
+| (résolu G4b) — revoir port | 5 |
+| `SkM44` + `SkCanvas::concat(SkM44)` | 4 |
+| `kRGBA_4444` (Phase G4c en PR #326) | 4 |
+| `SkParsePath::FromSVGString` | 3 |
+| `SkShaderMaskFilter::Make` | 3 |
+| (résolu G5) — revoir port | 2 |
+| `SkPath::contains(x, y)` | 2 |
+| `SkCanvas::readPixels` | 2 |
+| `SkCanvas::SaveLayerRec` avec `fBackdrop` (Phase G6 en PR #324) | 1 |
+| `SkCanvas::discard` | 1 |
+| GM Bazel-only (pas de PNG de référence) | 1 |
+| GM PDF-only (annotations) | 1 |
+| `SkImageFilter::makeWithLocalMatrix` | 1 |
+| `SkCanvas::drawImageNine` / `drawImageLattice` | 1 |
+| (résolu G9b) — revoir port | 1 |
+| `SkTableMaskFilter` | 1 |
+| Video decoder (non-applicable) | 1 |
 
-## Table de portage
+## Table de portage complète
 
-| `.cpp` source | Statut | GMs Kotlin | Bloqué par |
+| `.cpp` source | Statut | GMs Kotlin | Note |
 |---|:---:|---|---|
-| `3d.cpp` | ❌ | — | — |
+| `3d.cpp` | 🚧 | — | `SkM44` + `SkCanvas::concat(SkM44)` |
 | `aaa.cpp` | ✅ | `AnalyticAntialiasConvexGM.kt`, `AnalyticAntialiasGeneralGM.kt`, `AnalyticAntialiasInverseGM.kt` | — |
 | `aaclip.cpp` | ✅ | `AaclipGM.kt`, `ClipCubicGM.kt` | — |
-| `aarecteffect.cpp` | ❌ | — | — |
+| `aarecteffect.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `aarectmodes.cpp` | ✅ | `AaRectModesGM.kt` | — |
 | `aaxfermodes.cpp` | ✅ | `AAXfermodesGM.kt` | — |
 | `addarc.cpp` | ✅ | `AddArcGM.kt`, `FillCircleGM.kt`, `StrokeCircleGM.kt` | — |
-| `all_bitmap_configs.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `alpha_image.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `all_bitmap_configs.cpp` | 🚧 | — | (résolu G4a) — revoir port |
+| `alpha_image.cpp` | ❌ | — | — |
 | `alphagradients.cpp` | ✅ | `AlphaGradientsGM.kt` | — |
 | `analytic_gradients.cpp` | ✅ | `AnalyticGradientShaderGM.kt` | — |
 | `androidblendmodes.cpp` | ✅ | `AndroidBlendModesGM.kt` | — |
 | `animated_gif.cpp` | ❌ | — | — |
-| `animated_image_orientation.cpp` | ❌ | — | — |
-| `animatedimageblurs.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `anisotropic.cpp` | ✅ | `AnisotropicMipGM.kt` | — |
+| `animated_image_orientation.cpp` | 🚧 | — | `SkPicture` recording / culling (variable) |
+| `animatedimageblurs.cpp` | 🚧 | — | `SkImageFilters::Blur(σ, σ, tileMode, ...)` (Phase G6) |
+| `anisotropic.cpp` | ❌ | — | — |
 | `annotated_text.cpp` | ✅ | `AnnotatedTextGM.kt` | — |
 | `arcofzorro.cpp` | ✅ | `ArcOfZorroGM.kt` | — |
 | `arcto.cpp` | ✅ | `ArcToGM.kt`, `Bug593049GM.kt` | — |
 | `arithmode.cpp` | ✅ | `ArithmodeGM.kt`, `ArithmodeBlenderGM.kt` | — |
-| `asyncrescaleandread.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `attributes.cpp` | ❌ | — | — |
+| `asyncrescaleandread.cpp` | 🚧 | — | (résolu G4b) — revoir port |
+| `attributes.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `b_119394958.cpp` | ✅ | `B119394958GM.kt` | — |
-| `backdrop.cpp` | ❌ | — | — |
+| `backdrop.cpp` | 🚧 | — | `SkImageFilters::Blur(σ, σ, tileMode, ...)` (Phase G6) |
 | `backdrop_imagefilter_croprect.cpp` | ❌ | — | — |
 | `badpaint.cpp` | ✅ | `BadPaintGM.kt` | — |
 | `batchedconvexpaths.cpp` | ✅ | `BatchedConvexPathsGM.kt` | — |
 | `bc1_transparency.cpp` | ❌ | — | — |
-| `beziereffects.cpp` | ❌ | — | — |
+| `beziereffects.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `beziers.cpp` | ✅ | `BeziersGM.kt` | — |
-| `bicubic.cpp` | 🚧 | — | `SkCubicResampler`, `SkImage::makeShader` |
+| `bicubic.cpp` | ✅ | `BicubicGM.kt` | — |
 | `bigblurs.cpp` | ✅ | `BigBlursGM.kt` | — |
 | `bigmatrix.cpp` | ✅ | `BigMatrixGM.kt` | — |
 | `bigrect.cpp` | ✅ | `BigRectGM.kt` | — |
-| `bigrrectaaeffect.cpp` | ❌ | — | — |
+| `bigrrectaaeffect.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `bigtext.cpp` | ✅ | `BigTextGM.kt` | — |
-| `bigtileimagefilter.cpp` | ❌ | — | — |
-| `bitmapcopy.cpp` | 🚧 | — | Alpha8 `SkBitmap`/`SkImage` |
-| `bitmapfilters.cpp` | 🚧 | — | colortype `kRGBA_4444` |
-| `bitmapimage.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `bitmappremul.cpp` | 🚧 | — | colortype `kRGBA_4444` |
+| `bigtileimagefilter.cpp` | ✅ | `BigTileImageFilterGM.kt` | — |
+| `bitmapcopy.cpp` | 🚧 | — | (résolu G4a) — revoir port |
+| `bitmapfilters.cpp` | 🚧 | — | `kRGBA_4444` (Phase G4c en PR #326) |
+| `bitmapimage.cpp` | ❌ | — | — |
+| `bitmappremul.cpp` | 🚧 | — | `kRGBA_4444` (Phase G4c en PR #326) |
 | `bitmaprect.cpp` | ✅ | `BitmapRectRoundingGM.kt`, `DrawBitmapRect3GM.kt` | — |
 | `bitmaprecttest.cpp` | ✅ | `BitmapRectTestGM.kt` | — |
-| `bitmapshader.cpp` | 🚧 | — | `SkPicture::makeShader` |
-| `bitmaptiled.cpp` | ❌ | — | — |
-| `bleed.cpp` | 🚧 | — | `SkCubicResampler` |
+| `bitmapshader.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `bitmaptiled.cpp` | ✅ | `BitmapTiledGM.kt` | — |
+| `bleed.cpp` | 🚧 | — | (résolu G2) — revoir port |
 | `blurcircles.cpp` | ✅ | `BlurCirclesGM.kt` | — |
 | `blurcircles2.cpp` | ❌ | — | — |
 | `blurignorexform.cpp` | ❌ | — | — |
-| `blurimagevmask.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `blurimagevmask.cpp` | ❌ | — | — |
 | `blurpositioning.cpp` | ✅ | `BlurPositioningGM.kt` | — |
 | `blurquickreject.cpp` | ✅ | `BlurQuickRejectGM.kt` | — |
 | `blurrect.cpp` | ❌ | — | — |
 | `blurredclippedcircle.cpp` | ✅ | `BlurredClippedCircleGM.kt` | — |
-| `blurroundrect.cpp` | ✅ | `SimpleBlurRoundRectGM.kt` | — |
+| `blurroundrect.cpp` | ✅ | `BlurLargeRRectsGM.kt`, `SimpleBlurRoundRectGM.kt` | — |
 | `blurs.cpp` | ✅ | `Blur2RectsGM.kt`, `Blur2RectsNonNinepatchGM.kt` | — |
 | `blurtextsmallradii.cpp` | ✅ | `BlurTextSmallRadiiGM.kt` | — |
-| `bmpfilterqualityrepeat.cpp` | 🚧 | — | `SkCubicResampler` |
+| `bmpfilterqualityrepeat.cpp` | ✅ | `BmpFilterQualityRepeatGM.kt` | — |
 | `bug12866.cpp` | ✅ | `Bug12866GM.kt`, `Bug40810065GM.kt` | — |
 | `bug5252.cpp` | ✅ | `Bug5252GM.kt` | — |
 | `bug530095.cpp` | ✅ | `Bug530095GM.kt`, `Bug591993GM.kt` | — |
 | `bug615686.cpp` | ✅ | `Bug615686GM.kt` | — |
-| `bug6643.cpp` | 🚧 | — | `SkPicture::makeShader` |
+| `bug6643.cpp` | ✅ | `Bug6643GM.kt` | — |
 | `bug6783.cpp` | ✅ | `Bug6783GM.kt` | — |
 | `bug9331.cpp` | ✅ | `Bug9331GM.kt` | — |
 | `circle_sizes.cpp` | ✅ | `CircleSizesGM.kt` | — |
-| `circulararcs.cpp` | ✅ | `Bug406747427GM.kt`, `CircularArcsGM.kt`, `OneBadArcGM.kt` | — |
+| `circulararcs.cpp` | ✅ | `Bug406747427GM.kt`, `CircularArcsGM.kt`, `Crbug1472747GM.kt`, `Crbug888453GM.kt`, `OneBadArcGM.kt` | — |
 | `circularclips.cpp` | ✅ | `CircularClipsGM.kt` | — |
-| `clear_swizzle.cpp` | ❌ | — | — |
-| `clip_error.cpp` | ❌ | — | — |
-| `clip_sierpinski_region.cpp` | 🚧 | — | `SkRegion::translate`, `SkCanvas::clipRegion` |
+| `clear_swizzle.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
+| `clip_error.cpp` | ✅ | `ClipErrorGM.kt` | — |
+| `clip_sierpinski_region.cpp` | 🚧 | — | `SkRegion::*` (Phase G8 en PR #325) |
 | `clip_strokerect.cpp` | ✅ | `ClipStrokeRectGM.kt` | — |
 | `clipdrawdraw.cpp` | ✅ | `ClipDrawDrawGM.kt` | — |
-| `clippedbitmapshaders.cpp` | 🚧 | — | `SkCubicResampler` |
-| `clipshader.cpp` | 🚧 | — | `SkCanvas::clipShader` |
-| `clockwise.cpp` | ❌ | — | — |
+| `clippedbitmapshaders.cpp` | 🚧 | — | (résolu G2) — revoir port |
+| `clipshader.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `clockwise.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `closedcappedhairlines.cpp` | ❌ | — | — |
 | `collapsepaths.cpp` | ✅ | `CollapsePathsGM.kt` | — |
 | `color4f.cpp` | ❌ | — | — |
 | `coloremoji.cpp` | ❌ | — | — |
 | `coloremoji_blendmodes.cpp` | ❌ | — | — |
-| `colorfilteralpha8.cpp` | 🚧 | — | Alpha8 `SkBitmap`/`SkImage` |
-| `colorfilterimagefilter.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `colorfilters.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `colorfilteralpha8.cpp` | ✅ | `ColorFilterAlpha8GM.kt` | — |
+| `colorfilterimagefilter.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `colorfilters.cpp` | ❌ | — | — |
 | `colormatrix.cpp` | ✅ | `ColorMatrixGM.kt` | — |
-| `colorspace.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `colorspace.cpp` | ❌ | — | — |
 | `colorwheel.cpp` | ✅ | `ColorWheelNativeGM.kt` | — |
-| `colrv1.cpp` | ❌ | — | — |
-| `complexclip.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `colrv1.cpp` | 🚧 | — | Variable-font scaler consumption |
+| `complexclip.cpp` | 🚧 | — | (résolu G3) — revoir port |
 | `complexclip2.cpp` | ❌ | — | — |
 | `complexclip3.cpp` | ❌ | — | — |
 | `complexclip4.cpp` | ❌ | — | — |
 | `complexclip_blur_tiled.cpp` | ❌ | — | — |
 | `composecolorfilter.cpp` | ✅ | `ComposeColorFilterGM.kt` | — |
-| `composeshader.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `compositor_quads.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `compressed_textures.cpp` | 🚧 | — | `SkCubicResampler` |
+| `composeshader.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `compositor_quads.cpp` | 🚧 | — | (résolu G5) — revoir port |
+| `compressed_textures.cpp` | 🚧 | — | (résolu G2) — revoir port |
 | `concavepaths.cpp` | ✅ | `ConcavePathsGM.kt` | — |
-| `conicpaths.cpp` | ✅ | `ArcCircleGapGM.kt`, `ConicPathsGM.kt`, `LargeCircleGM.kt`, `LargeOvalsGM.kt` | — |
-| `constcolorprocessor.cpp` | ❌ | — | — |
+| `conicpaths.cpp` | ✅ | `ArcCircleGapGM.kt`, `ConicPathsGM.kt`, `Crbug640176GM.kt`, `LargeCircleGM.kt`, `LargeOvalsGM.kt` | — |
+| `constcolorprocessor.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `convex_all_line_paths.cpp` | ✅ | `ConvexLineOnlyPathsGM.kt` | — |
 | `convexpaths.cpp` | ✅ | `ConvexPathsGM.kt` | — |
 | `convexpolyclip.cpp` | ❌ | — | — |
-| `convexpolyeffect.cpp` | ❌ | — | — |
-| `coordclampshader.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `copy_to_4444.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `convexpolyeffect.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
+| `coordclampshader.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `copy_to_4444.cpp` | 🚧 | — | `kRGBA_4444` (Phase G4c en PR #326) |
 | `crbug_1041204.cpp` | ✅ | `Crbug10141204GM.kt` | — |
 | `crbug_1073670.cpp` | ✅ | `Crbug1073670GM.kt` | — |
 | `crbug_1086705.cpp` | ✅ | `Crbug1086705GM.kt` | — |
 | `crbug_1113794.cpp` | ✅ | `Crbug1113794GM.kt` | — |
 | `crbug_1139750.cpp` | ✅ | `Crbug1139750GM.kt` | — |
 | `crbug_1156804.cpp` | ✅ | `Crbug1156804GM.kt` | — |
-| `crbug_1162942.cpp` | 🚧 | — | `SkCanvas::experimental_DrawEdgeAAQuad` |
-| `crbug_1167277.cpp` | 🚧 | — | `SkCanvas::experimental_DrawEdgeAAQuad` + `QuadAAFlags` |
-| `crbug_1174186.cpp` | 🚧 | — | `SkCanvas::experimental_DrawEdgeAAQuad` |
-| `crbug_1174354.cpp` | 🚧 | — | `SkCanvas::SaveLayerRec` avec `fBackdrop` |
-| `crbug_1177833.cpp` | 🚧 | — | `SkCanvas::experimental_DrawEdgeAAQuad` |
+| `crbug_1162942.cpp` | ✅ | `Crbug1162942GM.kt` | — |
+| `crbug_1167277.cpp` | ✅ | `Crbug1167277GM.kt` | — |
+| `crbug_1174186.cpp` | ✅ | `Crbug1174186GM.kt` | — |
+| `crbug_1174354.cpp` | 🚧 | — | `SkCanvas::SaveLayerRec` avec `fBackdrop` (Phase G6 en PR #324) |
+| `crbug_1177833.cpp` | ✅ | `Crbug1177833GM.kt` | — |
 | `crbug_1257515.cpp` | ✅ | `Crbug1257515GM.kt` | — |
-| `crbug_1313579.cpp` | 🚧 | — | `SkCanvas::SaveLayerRec` avec `fBackdrop`, `SkImageFilters::Blur(tileMode, cropRect)` |
-| `crbug_224618.cpp` | ❌ | — | — |
+| `crbug_1313579.cpp` | 🚧 | — | `SkImageFilters::Blur(σ, σ, tileMode, ...)` (Phase G6) |
+| `crbug_224618.cpp` | 🚧 | — | `SkM44` + `SkCanvas::concat(SkM44)` |
 | `crbug_478659067.cpp` | ❌ | — | — |
 | `crbug_691386.cpp` | ✅ | `Crbug691386GM.kt` | — |
 | `crbug_788500.cpp` | ✅ | `Crbug788500GM.kt` | — |
@@ -329,50 +244,50 @@ Après G1+G2+G3+G4 → **~89 GMs supplémentaires débloqués** soit ~20% de cou
 | `crbug_905548.cpp` | ✅ | `Crbug905548GM.kt` | — |
 | `crbug_908646.cpp` | ✅ | `Crbug908646GM.kt` | — |
 | `crbug_913349.cpp` | ✅ | `Crbug913349GM.kt` | — |
-| `crbug_918512.cpp` | 🚧 | — | `SkBitmapDevice.compositeFrom` ne lit pas `paint.colorFilter` (gap impl.) |
+| `crbug_918512.cpp` | ✅ | `Crbug918512GM.kt` | — |
 | `crbug_938592.cpp` | ✅ | `Crbug938592GM.kt` | — |
 | `crbug_946965.cpp` | ✅ | `Crbug946965GM.kt` | — |
 | `crbug_947055.cpp` | ✅ | `Crbug947055GM.kt` | — |
 | `crbug_996140.cpp` | ✅ | `Crbug996140GM.kt` | — |
-| `crop_imagefilter.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `crop_imagefilter.cpp` | 🚧 | — | `SkPath::contains(x, y)` |
 | `croppedrects.cpp` | ✅ | `CroppedRectsGM.kt` | — |
-| `crosscontextimage.cpp` | ❌ | — | — |
+| `crosscontextimage.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `cubicpaths.cpp` | ✅ | `Bug5099GM.kt`, `Bug6083GM.kt`, `ClippedCubicGM.kt`, `ClippedCubic2GM.kt`, `CubicClosePathGM.kt`, `CubicPathGM.kt`, `CubicPathShaderGM.kt` | — |
 | `daa.cpp` | ❌ | — | — |
 | `dashcircle.cpp` | ❌ | — | — |
 | `dashcubics.cpp` | 🚧 | — | `SkParsePath::FromSVGString` |
-| `dashing.cpp` | ✅ | `DashingGM.kt`, `LongWavyLineGM.kt`, `PathEffectGM.kt` | — |
+| `dashing.cpp` | ✅ | `DashingGM.kt`, `LongWavyLineGM.kt` | — |
 | `degeneratesegments.cpp` | ❌ | — | — |
 | `destcolor.cpp` | ✅ | `DestColorGM.kt` | — |
 | `dftext.cpp` | ❌ | — | — |
 | `dftext_blob_persp.cpp` | ❌ | — | — |
-| `discard.cpp` | ❌ | — | — |
+| `discard.cpp` | 🚧 | — | `SkCanvas::discard` |
 | `displacement.cpp` | ❌ | — | — |
 | `distantclip.cpp` | ✅ | `DistantClipGM.kt` | — |
-| `draw_bitmap_rect_skbug4374.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `draw_bitmap_rect_skbug4374.cpp` | ✅ | `DrawBitmapRectSkbug4734GM.kt` | — |
 | `drawable.cpp` | ✅ | `DrawableGM.kt` | — |
-| `drawatlas.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `drawatlas.cpp` | 🚧 | — | Variable-font scaler consumption |
 | `drawatlascolor.cpp` | ❌ | — | — |
-| `drawbitmaprect.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `drawglyphs.cpp` | ❌ | — | — |
-| `drawimageset.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `drawbitmaprect.cpp` | ❌ | — | — |
+| `drawglyphs.cpp` | ✅ | `DrawGlyphsGM.kt` | — |
+| `drawimageset.cpp` | 🚧 | — | (résolu G4a) — revoir port |
 | `drawlines_with_local_matrix.cpp` | ✅ | `DrawlinesWithLocalMatrixGM.kt` | — |
-| `drawminibitmaprect.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `drawquadset.cpp` | 🚧 | — | `SkCanvas::experimental_DrawEdgeAAQuad` |
-| `drawregion.cpp` | 🚧 | — | `SkRegion::*` API |
-| `drawregionmodes.cpp` | 🚧 | — | `SkRegion::*` API |
+| `drawminibitmaprect.cpp` | ❌ | — | — |
+| `drawquadset.cpp` | 🚧 | — | (résolu G5) — revoir port |
+| `drawregion.cpp` | 🚧 | — | `SkRegion::*` (Phase G8 en PR #325) |
+| `drawregionmodes.cpp` | 🚧 | — | `SkRegion::*` (Phase G8 en PR #325) |
 | `dropshadowimagefilter.cpp` | ✅ | `DropShadowImageFilterGM.kt` | — |
 | `drrect.cpp` | ✅ | `DRRectGM.kt` | — |
 | `drrect_small_inner.cpp` | ✅ | `DRRectSmallInnerGM.kt` | — |
-| `dstreadshuffle.cpp` | 🚧 | — | colortype `kBGRA_8888` |
-| `ducky_yuv_blend.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `dstreadshuffle.cpp` | 🚧 | — | (résolu G4b) — revoir port |
+| `ducky_yuv_blend.cpp` | ❌ | — | — |
 | `emboss.cpp` | ❌ | — | — |
 | `emptypath.cpp` | ✅ | `EmptyPathGM.kt` | — |
 | `emptyshader.cpp` | ✅ | `EmptyShaderGM.kt` | — |
-| `encode.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `encode_alpha_jpeg.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `encode_color_types.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `encode_platform.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `encode.cpp` | ✅ | `EncodeGM.kt` | — |
+| `encode_alpha_jpeg.cpp` | 🚧 | — | `SkCanvas::readPixels` |
+| `encode_color_types.cpp` | 🚧 | — | `kRGBA_4444` (Phase G4c en PR #326) |
+| `encode_platform.cpp` | ❌ | — | — |
 | `encode_srgb.cpp` | ❌ | — | — |
 | `exoticformats.cpp` | ❌ | — | — |
 | `fadefilter.cpp` | ✅ | `FadeFilterGM.kt` | — |
@@ -381,172 +296,172 @@ Après G1+G2+G3+G4 → **~89 GMs supplémentaires débloqués** soit ~20% de cou
 | `fillrect_gradient.cpp` | ✅ | `FillrectGradientGM.kt` | — |
 | `filltypes.cpp` | ✅ | `FillTypeGM.kt`, `FillTypesGM.kt` | — |
 | `filltypespersp.cpp` | ✅ | `FillTypePerspGM.kt` | — |
-| `filterbug.cpp` | 🚧 | — | `SkPicture::makeShader` |
-| `filterfastbounds.cpp` | ❌ | — | — |
-| `filterindiabox.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `filterbug.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `filterfastbounds.cpp` | 🚧 | — | `SkPicture` recording / culling (variable) |
+| `filterindiabox.cpp` | ✅ | `FilterIndiaBoxGM.kt` | — |
 | `flippity.cpp` | ❌ | — | — |
-| `fontations.cpp` | ❌ | — | — |
-| `fontations_ft_compare.cpp` | ❌ | — | — |
+| `fontations.cpp` | 🚧 | — | Variable-font scaler consumption |
+| `fontations_ft_compare.cpp` | 🚧 | — | Variable-font scaler consumption |
 | `fontcache.cpp` | ❌ | — | — |
-| `fontmgr.cpp` | ❌ | — | — |
+| `fontmgr.cpp` | 🚧 | — | Variable-font scaler consumption |
 | `fontregen.cpp` | ❌ | — | — |
-| `fontscaler.cpp` | ❌ | — | — |
-| `fontscalerdistortable.cpp` | ❌ | — | — |
-| `fp_sample_chaining.cpp` | ❌ | — | — |
-| `fpcoordinateoverride.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `fwidth_squircle.cpp` | ❌ | — | — |
+| `fontscaler.cpp` | ✅ | `FontScalerGM.kt` | — |
+| `fontscalerdistortable.cpp` | 🚧 | — | Variable-font scaler consumption |
+| `fp_sample_chaining.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
+| `fpcoordinateoverride.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
+| `fwidth_squircle.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `gammatext.cpp` | ❌ | — | — |
 | `getpostextpath.cpp` | ✅ | `GetPosTextPathGM.kt` | — |
 | `giantbitmap.cpp` | ❌ | — | — |
 | `glyph_pos.cpp` | ❌ | — | — |
 | `gm.cpp` | ❌ | — | — |
-| `gpu_blur_utils.cpp` | ❌ | — | — |
+| `gpu_blur_utils.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `gradient_dirty_laundry.cpp` | ❌ | — | — |
 | `gradient_matrix.cpp` | ❌ | — | — |
 | `gradients.cpp` | ✅ | `ClampedGradientsGM.kt`, `GradientsGM.kt`, `RgbwSweepGradientGM.kt`, `SmallColorStopGM.kt`, `SweepTilingGM.kt` | — |
 | `gradients_2pt_conical.cpp` | ❌ | — | — |
 | `gradients_degenerate.cpp` | ❌ | — | — |
 | `gradients_no_texture.cpp` | ❌ | — | — |
-| `gradtext.cpp` | ✅ | `ChromeGradTextGM.kt`, `GradTextGM.kt` | — |
-| `graphite_replay.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `graphitestart.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `grayscalejpg.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `gradtext.cpp` | ✅ | `GradTextGM.kt` | — |
+| `graphite_replay.cpp` | ❌ | — | — |
+| `graphitestart.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `grayscalejpg.cpp` | ✅ | `GrayscaleJpgGM.kt` | — |
 | `hairlines.cpp` | ✅ | `HairlineSubdivGM.kt`, `HairlinesGM.kt`, `SquareHairGM.kt` | — |
 | `hairmodes.cpp` | ✅ | `HairModesGM.kt` | — |
 | `hardstop_gradients.cpp` | ✅ | `HardstopGradientShaderGM.kt` | — |
 | `hardstop_gradients_many.cpp` | ✅ | `HardstopGradientsManyGM.kt` | — |
-| `hdr_pip_blur.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `hdr_pip_blur.cpp` | 🚧 | — | `SkImageFilters::Blur(σ, σ, tileMode, ...)` (Phase G6) |
 | `hello_bazel_world.cpp` | 🚧 | — | GM Bazel-only (pas de PNG de référence) |
 | `highcontrastfilter.cpp` | ❌ | — | — |
-| `hittestpath.cpp` | ❌ | — | — |
-| `hsl.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `hugepath.cpp` | ❌ | — | — |
-| `image.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `image_pict.cpp` | ❌ | — | — |
-| `image_shader.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `imageblur.cpp` | ❌ | — | — |
+| `hittestpath.cpp` | 🚧 | — | `SkPath::contains(x, y)` |
+| `hsl.cpp` | ❌ | — | — |
+| `hugepath.cpp` | ✅ | `PathHugeCrbug800804GM.kt` | — |
+| `image.cpp` | 🚧 | — | (résolu G2) — revoir port |
+| `image_pict.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
+| `image_shader.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `imageblur.cpp` | ✅ | `ImageBlurGM.kt` | — |
 | `imageblur2.cpp` | ❌ | — | — |
-| `imageblurclampmode.cpp` | ❌ | — | — |
-| `imageblurrepeatmode.cpp` | ❌ | — | — |
-| `imageblurtiled.cpp` | ❌ | — | — |
+| `imageblurclampmode.cpp` | 🚧 | — | `SkImageFilters::Blur(σ, σ, tileMode, ...)` (Phase G6) |
+| `imageblurrepeatmode.cpp` | 🚧 | — | `SkImageFilters::Blur(σ, σ, tileMode, ...)` (Phase G6) |
+| `imageblurtiled.cpp` | ✅ | `ImageBlurTiledGM.kt` | — |
 | `imagedither.cpp` | ✅ | `ImageDitherGM.kt` | — |
-| `imagefilters.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `imagefiltersbase.cpp` | 🚧 | — | `SkCubicResampler` |
-| `imagefiltersclipped.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `imagefilters.cpp` | 🚧 | — | `SkShaderMaskFilter::Make` |
+| `imagefiltersbase.cpp` | 🚧 | — | (résolu G2) — revoir port |
+| `imagefiltersclipped.cpp` | 🚧 | — | `SkImageFilters::Blur(σ, σ, tileMode, ...)` (Phase G6) |
 | `imagefilterscropexpand.cpp` | ❌ | — | — |
 | `imagefilterscropped.cpp` | ❌ | — | — |
 | `imagefiltersgraph.cpp` | ❌ | — | — |
 | `imagefiltersscaled.cpp` | ❌ | — | — |
 | `imagefiltersstroked.cpp` | ❌ | — | — |
-| `imagefilterstransformed.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `imagefiltersunpremul.cpp` | 🚧 | — | `SkBitmapDevice.drawPaint` ignore `paint.imageFilter` (gap impl.) |
-| `imagefromyuvtextures.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `imagefilterstransformed.cpp` | 🚧 | — | `SkM44` + `SkCanvas::concat(SkM44)` |
+| `imagefiltersunpremul.cpp` | ✅ | `ImageFiltersUnpremulGM.kt` | — |
+| `imagefromyuvtextures.cpp` | 🚧 | — | (résolu G3) — revoir port |
 | `imagemagnifier.cpp` | ❌ | — | — |
-| `imagemakewithfilter.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `imagemasksubset.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `imagemakewithfilter.cpp` | 🚧 | — | `SkRegion::*` (Phase G8 en PR #325) |
+| `imagemasksubset.cpp` | 🚧 | — | (résolu G4a) — revoir port |
 | `imageresizetiled.cpp` | ❌ | — | — |
 | `imagesource.cpp` | ❌ | — | — |
 | `imagesource2.cpp` | ❌ | — | — |
-| `internal_links.cpp` | ❌ | — | — |
+| `internal_links.cpp` | 🚧 | — | GM PDF-only (annotations) |
 | `inverseclip.cpp` | ✅ | `InverseClipGM.kt` | — |
 | `inversepaths.cpp` | ✅ | `InversePathsGM.kt`, `InverseWindingmodeFiltersGM.kt` | — |
 | `jpg_color_cube.cpp` | ❌ | — | — |
 | `kawase_blur_rt.cpp` | ✅ | `KawaseBlurRtGM.kt` | — |
-| `labyrinth.cpp` | ❌ | — | — |
+| `labyrinth.cpp` | ✅ | `LabyrinthGM.kt` | — |
 | `largeclippedpath.cpp` | ✅ | `LargeClippedPathGM.kt` | — |
 | `largeglyphblur.cpp` | ✅ | `LargeGlyphBlurGM.kt` | — |
-| `lattice.cpp` | 🚧 | — | colortype `kBGRA_8888` |
-| `lazytiling.cpp` | ❌ | — | — |
+| `lattice.cpp` | 🚧 | — | (résolu G4b) — revoir port |
+| `lazytiling.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `lcdblendmodes.cpp` | ❌ | — | — |
-| `lcdoverlap.cpp` | ❌ | — | — |
+| `lcdoverlap.cpp` | ✅ | `LcdOverlapGM.kt` | — |
 | `lcdtext.cpp` | ❌ | — | — |
 | `lighting.cpp` | ✅ | `LightingGM.kt` | — |
 | `linepaths.cpp` | ✅ | `LinePathGM.kt` | — |
-| `localmatriximagefilter.cpp` | ❌ | — | — |
-| `localmatriximageshader.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `localmatrixshader.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `localmatriximagefilter.cpp` | 🚧 | — | `SkImageFilter::makeWithLocalMatrix` |
+| `localmatriximageshader.cpp` | ✅ | `LocalMatrixImageShaderGM.kt` | — |
+| `localmatrixshader.cpp` | 🚧 | — | (résolu G3) — revoir port |
 | `lumafilter.cpp` | ✅ | `LumaFilterGM.kt` | — |
 | `luminosity.cpp` | ✅ | `LuminosityOverflowGM.kt` | — |
-| `mac_aa_explorer.cpp` | 🚧 | — | Alpha8 `SkBitmap`/`SkImage` |
-| `make_raster_image.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `makecolorspace.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `mac_aa_explorer.cpp` | 🚧 | — | (résolu G4a) — revoir port |
+| `make_raster_image.cpp` | ✅ | `MakeRasterImageGM.kt` | — |
+| `makecolorspace.cpp` | ❌ | — | — |
 | `mandoline.cpp` | ❌ | — | — |
 | `manypathatlases.cpp` | ❌ | — | — |
 | `manypaths.cpp` | ✅ | `ManyCirclesGM.kt`, `ManyRRectsGM.kt` | — |
 | `matrixconvolution.cpp` | ❌ | — | — |
 | `matriximagefilter.cpp` | ✅ | `MatrixImageFilterGM.kt` | — |
-| `mesh.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `mipmap.cpp` | 🚧 | — | `SkCubicResampler` |
+| `mesh.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `mipmap.cpp` | 🚧 | — | (résolu G2) — revoir port |
 | `mirrortile.cpp` | ✅ | `MirrorTileGM.kt` | — |
 | `mixedtextblobs.cpp` | ❌ | — | — |
 | `mixercolorfilter.cpp` | ❌ | — | — |
 | `modecolorfilters.cpp` | ❌ | — | — |
 | `morphology.cpp` | ✅ | `MorphologyGM.kt` | — |
-| `nearesthalfpixelimage.cpp` | 🚧 | — | Alpha8 `SkBitmap`/`SkImage` |
+| `nearesthalfpixelimage.cpp` | 🚧 | — | (résolu G4a) — revoir port |
 | `nested.cpp` | ✅ | `NestedGM.kt` | — |
-| `ninepatchstretch.cpp` | ❌ | — | — |
+| `ninepatchstretch.cpp` | 🚧 | — | `SkCanvas::drawImageNine` / `drawImageLattice` |
 | `nonclosedpaths.cpp` | ✅ | `NonClosedPathsGM.kt` | — |
 | `offsetimagefilter.cpp` | ❌ | — | — |
-| `orientation.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `orientation.cpp` | ❌ | — | — |
 | `ovals.cpp` | ✅ | `OvalGM.kt` | — |
-| `overdrawcanvas.cpp` | 🚧 | — | `SkOverdrawColorFilter` |
-| `overdrawcolorfilter.cpp` | 🚧 | — | `SkOverdrawColorFilter`, Alpha8 `SkImage` |
+| `overdrawcanvas.cpp` | 🚧 | — | (résolu G9b) — revoir port |
+| `overdrawcolorfilter.cpp` | ✅ | `OverdrawColorFilterGM.kt` | — |
 | `overstroke.cpp` | ❌ | — | — |
-| `p3.cpp` | ❌ | — | — |
+| `p3.cpp` | 🚧 | — | `SkCanvas::readPixels` |
 | `palette.cpp` | ❌ | — | — |
 | `patch.cpp` | ✅ | `PatchAlphaTestGM.kt`, `PatchPrimitiveGM.kt` | — |
 | `path_stroke_with_zero_length.cpp` | 🚧 | — | `SkParsePath::FromSVGString` |
 | `patharcto.cpp` | 🚧 | — | `SkParsePath::FromSVGString` |
-| `pathcontourstart.cpp` | ❌ | — | — |
-| `patheffects.cpp` | ❌ | — | — |
-| `pathfill.cpp` | ✅ | `Bug7792GM.kt`, `RotatedCubicPathGM.kt` | — |
+| `pathcontourstart.cpp` | ✅ | `ContourStartGM.kt` | — |
+| `patheffects.cpp` | ✅ | `PathEffectGM.kt` | — |
+| `pathfill.cpp` | ✅ | `Bug7792GM.kt`, `PathArcToSkbug9077GM.kt`, `PathSkbug11859GM.kt`, `PathSkbug11886GM.kt`, `RotatedCubicPathGM.kt` | — |
 | `pathinterior.cpp` | ✅ | `PathInteriorGM.kt` | — |
 | `pathmaskcache.cpp` | ✅ | `PathMaskCacheGM.kt` | — |
-| `pathmeasure.cpp` | 🚧 | — | Upstream désactivé (`#if 0`) — pas de PNG de référence |
+| `pathmeasure.cpp` | ❌ | — | — |
 | `pathopsblend.cpp` | ✅ | `PathOpsBlendGM.kt` | — |
-| `pathopsinverse.cpp` | ✅ | `PathOpsInverseGM.kt` | — |
-| `pathreverse.cpp` | ❌ | — | — |
+| `pathopsinverse.cpp` | ✅ | `PathOpsInverseGM.kt`, `PathOpsSkbug10155GM.kt` | — |
+| `pathreverse.cpp` | ✅ | `PathReverseGM.kt` | — |
 | `pdf_never_embed.cpp` | ❌ | — | — |
 | `perlinnoise.cpp` | ✅ | `PerlinNoiseGM.kt`, `PerlinNoiseRotatedGM.kt` | — |
-| `perspimages.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `perspshaders.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `perspimages.cpp` | 🚧 | — | (résolu G2) — revoir port |
+| `perspshaders.cpp` | 🚧 | — | (résolu G2) — revoir port |
 | `persptext.cpp` | ❌ | — | — |
 | `picture.cpp` | ✅ | `PictureGM.kt`, `PictureCullRectGM.kt` | — |
-| `pictureimagefilter.cpp` | ❌ | — | — |
-| `pictureimagegenerator.cpp` | ❌ | — | — |
-| `pictureshader.cpp` | 🚧 | — | `SkPicture::makeShader` |
-| `pictureshadercache.cpp` | 🚧 | — | `SkPicture::makeShader` |
-| `pictureshadertile.cpp` | 🚧 | — | `SkPicture::makeShader` |
+| `pictureimagefilter.cpp` | 🚧 | — | `SkPicture` recording / culling (variable) |
+| `pictureimagegenerator.cpp` | 🚧 | — | `SkPicture` recording / culling (variable) |
+| `pictureshader.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `pictureshadercache.cpp` | ✅ | `PictureShaderCacheGM.kt` | — |
+| `pictureshadertile.cpp` | 🚧 | — | (résolu G3) — revoir port |
 | `plus.cpp` | ✅ | `PlusMergesAaGM.kt` | — |
-| `points.cpp` | ❌ | — | — |
+| `points.cpp` | ✅ | `PointsGM.kt`, `PointsMaskFilterGM.kt` | — |
 | `poly2poly.cpp` | ❌ | — | — |
 | `polygonoffset.cpp` | ❌ | — | — |
 | `polygons.cpp` | ✅ | `ConjoinedPolygonsGM.kt`, `PolygonsGM.kt` | — |
-| `postercircle.cpp` | ❌ | — | — |
-| `preservefillrule.cpp` | ❌ | — | — |
+| `postercircle.cpp` | 🚧 | — | `SkM44` + `SkCanvas::concat(SkM44)` |
+| `preservefillrule.cpp` | ✅ | `PreserveFillRuleGM.kt` | — |
 | `quadpaths.cpp` | ✅ | `QuadClosePathGM.kt`, `QuadPathGM.kt` | — |
 | `radial_gradient_precision.cpp` | ✅ | `RadialGradientPrecisionGM.kt` | — |
 | `rasterhandleallocator.cpp` | ❌ | — | — |
-| `readpixels.cpp` | 🚧 | — | colortype `kBGRA_8888` |
-| `recordopts.cpp` | ❌ | — | — |
+| `readpixels.cpp` | 🚧 | — | (résolu G4b) — revoir port |
+| `recordopts.cpp` | 🚧 | — | `SkPicture` recording / culling (variable) |
 | `rect_poly_stroke.cpp` | ✅ | `RectPolyStrokeGM.kt` | — |
-| `rectangletexture.cpp` | 🚧 | — | `SkPicture::makeShader` |
-| `rendertomipmappedyuvimageplanes.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `repeated_bitmap.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `resizeimagefilter.cpp` | 🚧 | — | `SkCubicResampler` |
-| `rippleshadergm.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `rectangletexture.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `rendertomipmappedyuvimageplanes.cpp` | 🚧 | — | (résolu G4a) — revoir port |
+| `repeated_bitmap.cpp` | ✅ | `RepeatedBitmapGM.kt` | — |
+| `resizeimagefilter.cpp` | 🚧 | — | (résolu G2) — revoir port |
+| `rippleshadergm.cpp` | ❌ | — | — |
 | `roundrects.cpp` | ✅ | `RoundRectGM.kt` | — |
 | `rrect.cpp` | ✅ | `RRectGM.kt` | — |
 | `rrectclipdrawpaint.cpp` | ✅ | `RRectClipDrawPaintGM.kt` | — |
-| `rrects.cpp` | ❌ | — | — |
-| `rsxtext.cpp` | 🚧 | — | `SkPicture::makeShader` |
+| `rrects.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
+| `rsxtext.cpp` | 🚧 | — | (résolu G3) — revoir port |
 | `runtimecolorfilter.cpp` | ✅ | `RuntimeColorFilterGM.kt` | — |
 | `runtimefunctions.cpp` | ✅ | `RuntimeFunctionsGM.kt` | — |
-| `runtimeimagefilter.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `runtimeimagefilter.cpp` | ❌ | — | — |
 | `runtimeintrinsics.cpp` | ✅ | `RuntimeIntrinsicsCommonGM.kt`, `RuntimeIntrinsicsExponentialGM.kt`, `RuntimeIntrinsicsGeometricGM.kt`, `RuntimeIntrinsicsMatrixGM.kt`, `RuntimeIntrinsicsRelationalGM.kt`, `RuntimeIntrinsicsTrigGM.kt` | — |
-| `runtimeshader.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `runtimeshader.cpp` | 🚧 | — | (résolu G4a) — revoir port |
 | `samplerstress.cpp` | ❌ | — | — |
-| `savelayer.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `savelayer.cpp` | 🚧 | — | `SkShaderMaskFilter::Make` |
 | `scaledemoji.cpp` | ❌ | — | — |
 | `scaledemoji_rendering.cpp` | ❌ | — | — |
 | `scaledrects.cpp` | ✅ | `ClipLargeRectGM.kt`, `ScaledRectsGM.kt` | — |
@@ -556,117 +471,107 @@ Après G1+G2+G3+G4 → **~89 GMs supplémentaires débloqués** soit ~20% de cou
 | `shadertext3.cpp` | ❌ | — | — |
 | `shadowutils.cpp` | ❌ | — | — |
 | `shallowgradient.cpp` | ❌ | — | — |
-| `shapes.cpp` | ✅ | `InnerShapesGM.kt`, `SimpleShapesGM.kt` | — |
+| `shapes.cpp` | ❌ | — | — |
 | `sharedcorners.cpp` | ❌ | — | — |
-| `showmiplevels.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `simpleaaclip.cpp` | 🚧 | — | `SkRegion::*` API |
+| `showmiplevels.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `simpleaaclip.cpp` | 🚧 | — | `SkRegion::*` (Phase G8 en PR #325) |
 | `simplerect.cpp` | ✅ | `SimpleRectGM.kt` | — |
 | `skbug1719.cpp` | ✅ | `Skbug1719GM.kt` | — |
-| `skbug_12212.cpp` | 🚧 | — | `SkBitmap` accessors pour `kAlpha_8` (gap impl.) |
+| `skbug_12212.cpp` | ✅ | `Skbug12212GM.kt` | — |
 | `skbug_257.cpp` | ❌ | — | — |
 | `skbug_4868.cpp` | ✅ | `Skbug4868GM.kt` | — |
 | `skbug_5321.cpp` | ✅ | `Skbug5321GM.kt` | — |
-| `skbug_8664.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `skbug_8664.cpp` | ✅ | `Skbug8664GM.kt` | — |
 | `skbug_8955.cpp` | ✅ | `Skbug8955GM.kt` | — |
 | `skbug_9319.cpp` | ✅ | `Skbug9319GM.kt` | — |
-| `skbug_9819.cpp` | 🚧 | — | `kBGRA_8888` `SkBitmap`, `SkCanvas::readPixels` |
+| `skbug_9819.cpp` | ✅ | `Skbug9819GM.kt` | — |
 | `slug.cpp` | ❌ | — | — |
 | `smallarc.cpp` | ✅ | `SmallArcGM.kt` | — |
 | `smallcircles.cpp` | ✅ | `SmallCirclesGM.kt` | — |
 | `smallpaths.cpp` | ✅ | `SmallPathsGM.kt` | — |
 | `spritebitmap.cpp` | ✅ | `SpriteBitmapGM.kt` | — |
 | `srcmode.cpp` | ❌ | — | — |
-| `srgb.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `srgb.cpp` | ❌ | — | — |
 | `stlouisarch.cpp` | ✅ | `StLouisArchGM.kt` | — |
 | `stringart.cpp` | ✅ | `StringArtGM.kt` | — |
 | `stroke_rect_shader.cpp` | ✅ | `StrokeRectShaderGM.kt` | — |
 | `strokedlines.cpp` | ❌ | — | — |
 | `strokefill.cpp` | ✅ | `Bug339297GM.kt`, `Bug6987GM.kt` | — |
-| `strokerect.cpp` | ❌ | — | — |
+| `strokerect.cpp` | ✅ | `StrokerectAnisotropic5408GM.kt` | — |
 | `strokerect_anisotropic.cpp` | ✅ | `StrokerectAnisotropicGM.kt` | — |
 | `strokerects.cpp` | ✅ | `StrokeRectsGM.kt` | — |
-| `strokes.cpp` | ✅ | `CubicStrokeGM.kt`, `InnerJoinGeometryGM.kt`, `QuadCapGM.kt`, `Skbug12244GM.kt`, `StrokesGM.kt`, `Strokes2GM.kt`, `Strokes4GM.kt`, `TeenyStrokesGM.kt`, `ZeroLineStrokeGM.kt` | — |
-| `stroketext.cpp` | ❌ | — | — |
-| `subsetshader.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `strokes.cpp` | ✅ | `B340982297GM.kt`, `CubicStrokeGM.kt`, `InnerJoinGeometryGM.kt`, `QuadCapGM.kt`, `Skbug12244GM.kt`, `StrokesGM.kt`, `Strokes2GM.kt`, `Strokes4GM.kt`, `TeenyStrokesGM.kt`, `ZeroLineStrokeGM.kt` | — |
+| `stroketext.cpp` | 🚧 | — | Variable-font scaler consumption |
+| `subsetshader.cpp` | ✅ | `BitmapSubsetShaderGM.kt` | — |
 | `surface.cpp` | ❌ | — | — |
-| `swizzle.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `swizzle.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `tablecolorfilter.cpp` | ❌ | — | — |
 | `tablemaskfilter.cpp` | 🚧 | — | `SkTableMaskFilter` |
 | `tallstretchedbitmaps.cpp` | ❌ | — | — |
 | `testgradient.cpp` | ✅ | `TestGradientGM.kt` | — |
-| `texelsubset.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `texelsubset.cpp` | 🚧 | — | GM GPU-only (Ganesh-specific) |
 | `text_scale_skew.cpp` | ✅ | `TextScaleSkewGM.kt` | — |
 | `textblob.cpp` | ✅ | `TextBlobGM.kt` | — |
 | `textblobblockreordering.cpp` | ✅ | `TextBlobBlockReorderingGM.kt` | — |
 | `textblobcolortrans.cpp` | ✅ | `TextBlobColorTransGM.kt` | — |
-| `textblobgeometrychange.cpp` | ❌ | — | — |
+| `textblobgeometrychange.cpp` | ✅ | `TextBlobGeometryChangeGM.kt` | — |
 | `textblobmixedsizes.cpp` | ❌ | — | — |
 | `textblobrandomfont.cpp` | ❌ | — | — |
 | `textblobshader.cpp` | ✅ | `TextBlobShaderGM.kt` | — |
 | `textblobtransforms.cpp` | ❌ | — | — |
-| `textblobuseaftergpufree.cpp` | ❌ | — | — |
+| `textblobuseaftergpufree.cpp` | ✅ | `TextBlobUseAfterGpuFreeGM.kt` | — |
 | `texteffects.cpp` | ❌ | — | — |
 | `thinconcavepaths.cpp` | ✅ | `ThinConcavePathsGM.kt` | — |
 | `thinrects.cpp` | ✅ | `ThinRectsGM.kt` | — |
 | `thinstrokedrects.cpp` | ✅ | `ThinStrokedRectsGM.kt` | — |
-| `tiledscaledbitmap.cpp` | 🚧 | — | `SkCubicResampler` |
+| `tiledscaledbitmap.cpp` | ✅ | `TiledScaledBitmapGM.kt` | — |
 | `tileimagefilter.cpp` | ❌ | — | — |
-| `tilemodes.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `tilemodes_alpha.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `tilemodes_scaled.cpp` | 🚧 | — | `SkCubicResampler` |
+| `tilemodes.cpp` | 🚧 | — | (résolu G2) — revoir port |
+| `tilemodes_alpha.cpp` | ✅ | `TilemodesAlphaGM.kt` | — |
+| `tilemodes_scaled.cpp` | 🚧 | — | (résolu G2) — revoir port |
 | `tinybitmap.cpp` | ✅ | `TinyBitmapGM.kt` | — |
-| `transparency.cpp` | ❌ | — | — |
-| `trickycubicstrokes.cpp` | ✅ | `TrickyCubicStrokesGM.kt` | — |
+| `transparency.cpp` | ✅ | `TransparencyCheckGM.kt` | — |
+| `trickycubicstrokes.cpp` | ✅ | `TrickyCubicStrokesGM.kt`, `TrickyCubicStrokesLargeRadiusGM.kt` | — |
 | `typeface.cpp` | ❌ | — | — |
-| `unpremul.cpp` | 🚧 | — | colortype `kBGRA_8888` |
-| `userfont.cpp` | ❌ | — | — |
+| `unpremul.cpp` | 🚧 | — | (résolu G4b) — revoir port |
+| `userfont.cpp` | 🚧 | — | `SkPicture` recording / culling (variable) |
 | `variedtext.cpp` | ❌ | — | — |
-| `vertices.cpp` | ✅ | `VerticesPerspectiveGM.kt` | — |
-| `verylargebitmap.cpp` | ❌ | — | — |
-| `video_decoder.cpp` | ❌ | — | — |
-| `wacky_yuv_formats.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `vertices.cpp` | ✅ | `Skbug13047GM.kt`, `VerticesCollapsedGM.kt`, `VerticesPerspectiveGM.kt` | — |
+| `verylargebitmap.cpp` | 🚧 | — | `SkPicture` recording / culling (variable) |
+| `video_decoder.cpp` | 🚧 | — | Video decoder (non-applicable) |
+| `wacky_yuv_formats.cpp` | 🚧 | — | (résolu G2) — revoir port |
 | `widebuttcaps.cpp` | ✅ | `WideButtCapsGM.kt` | — |
-| `windowrectangles.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
+| `windowrectangles.cpp` | 🚧 | — | `SkRegion::*` (Phase G8 en PR #325) |
 | `workingspace.cpp` | ❌ | — | — |
 | `xfermodeimagefilter.cpp` | ❌ | — | — |
 | `xfermodes.cpp` | ✅ | `XfermodesGM.kt` | — |
 | `xfermodes2.cpp` | ❌ | — | — |
 | `xfermodes3.cpp` | ❌ | — | — |
 | `ycbcrimage.cpp` | ❌ | — | — |
-| `yuv420_odd_dim.cpp` | 🚧 | — | Chargement d'images (`ToolUtils::GetResource*` indisponible) |
-| `yuvtorgbsubset.cpp` | 🚧 | — | Alpha8 `SkBitmap`/`SkImage` |
+| `yuv420_odd_dim.cpp` | 🚧 | — | (résolu G3) — revoir port |
+| `yuvtorgbsubset.cpp` | 🚧 | — | (résolu G4a) — revoir port |
 
-## GMs Kotlin sans `.cpp` correspondant
+## GMs Kotlin sans `.cpp` correspondant (20)
 
-Ces 30 fichiers `*GM.kt` n'ont pas pu être rattachés à un `.cpp` du tree de référence (probablement issus d'une version Skia plus récente, ou correspondant à des bugs/crbug pas encore présents en upstream local) :
+Ces fichiers `*GM.kt` n'ont pas pu être rattachés à un `.cpp` du tree de référence (probablement issus d'une version Skia plus récente, ou variantes nommées différemment de l'enregistrement upstream) :
 
-- `B340982297GM.kt`
-- `BlurLargeRRectsGM.kt`
+- `AnisotropicMipGM.kt`
+- `ChromeGradTextGM.kt`
 - `ConicalGradients2ptInsideGM.kt`
 - `ConicalGradients2ptOutsideGM.kt`
 - `CornerDiscretePathEffectGM.kt`
-- `Crbug10141204GM.kt`
-- `Crbug1472747GM.kt`
-- `Crbug640176GM.kt`
-- `Crbug888453GM.kt`
 - `ImageFilterBlurDropShadowGM.kt`
 - `ImageFilterOffsetGM.kt`
-- `PathArcToSkbug9077GM.kt`
+- `InnerShapesGM.kt`
 - `PathCapsFillsGridGM.kt`
-- `PathHugeCrbug800804GM.kt`
 - `PathInvFillGM.kt`
-- `PathOpsSkbug10155GM.kt`
-- `PathSkbug11859GM.kt`
-- `PathSkbug11886GM.kt`
-- `PlusMergesAaGM.kt`
 - `ShallowGradientConicalGM.kt`
+- `ShallowGradientLinearGM.kt`
 - `ShallowGradientLinearNoditherGM.kt`
+- `ShallowGradientRadialGM.kt`
 - `ShallowGradientRadialNoditherGM.kt`
 - `ShallowGradientSweepGM.kt`
-- `Skbug13047GM.kt`
+- `SimpleShapesGM.kt`
 - `StrokeRectsRotatedGM.kt`
-- `StrokerectAnisotropic5408GM.kt`
 - `ThinRoundRectsGM.kt`
-- `TrickyCubicStrokesLargeRadiusGM.kt`
-- `VerticesCollapsedGM.kt`
 - `ZeroControlStrokeGM.kt`
