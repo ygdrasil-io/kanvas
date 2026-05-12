@@ -7,3 +7,5 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | BlurTextSmallRadiiGM | 87.03% | = | 1 | 13,054 / 15,000 | 0, 76, 28, 84 | 0, 19, 6, 16 |
 | Crbug1156804GM | 72.91% | = | 1 | 45,567 / 62,500 | 0, 25, 14, 28 | 0, 6, 3, 6 |
 | Crbug905548GM | 49.61% | = | 1 | 9,922 / 20,000 | 0, 124, 124, 124 | 0, 12, 12, 12 |
+| DrawableGM | 98.46% | = | 1 | 48,736 / 49,500 | 0, 53, 49, 5 | 0, 17, 14, 2 |
+| LargeGlyphBlurGM | 58.06% | = | 1 | 668,795 / 1,152,000 | 0, 152, 152, 152 | 0, 8, 8, 8 |
