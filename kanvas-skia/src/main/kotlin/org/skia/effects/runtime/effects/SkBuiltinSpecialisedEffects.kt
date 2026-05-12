@@ -58,6 +58,7 @@ public object SkBuiltinSpecialisedEffects {
         SkRuntimeEffectDispatch.register(STRETCH_COLORS_BLENDER_SKSL) { StretchColorsBlenderImpl }
         SkRuntimeEffectDispatch.register(KAWASE_BLUR_SHADER_SKSL) { KawaseBlurShaderImpl }
         SkRuntimeEffectDispatch.register(KAWASE_MIX_SHADER_SKSL) { KawaseMixShaderImpl }
+        SkRuntimeEffectDispatch.register(RUNTIME_FUNCTIONS_SHADER_SKSL) { RuntimeFunctionsShaderImpl }
     }
 
     // ─── destcolor.cpp invert blender ────────────────────────────────
@@ -265,6 +266,128 @@ public object SkBuiltinSpecialisedEffects {
                 fG = original.fG * one + blurred.fG * mix,
                 fB = original.fB * one + blurred.fB * mix,
                 fA = original.fA * one + blurred.fA * mix,
+            )
+        }
+    }
+
+    // ─── runtimefunctions.cpp procedural shader ──────────────────────
+
+    /**
+     * Verbatim from `gm/runtimefunctions.cpp::RUNTIME_FUNCTIONS_SRC`
+     * (`@notargs`' Twitter procedural shader). Single half4 uniform
+     * (`iResolution`), no children, no childcalls. The inner helper
+     * `f(vec3)` does the heavy lifting per-pixel ; `main(...)` iterates
+     * it 32 times to march a 3D point along a viewing direction.
+     */
+    public const val RUNTIME_FUNCTIONS_SHADER_SKSL: String = """
+        // Source: @notargs https://twitter.com/notargs/status/1250468645030858753
+        uniform half4 iResolution;
+        const float iTime = 0;
+
+        float f(vec3 p) {
+            p.z -= iTime * 10.;
+            float a = p.z * .1;
+            p.xy *= mat2(cos(a), sin(a), -sin(a), cos(a));
+            return .1 - length(cos(p.xy) + sin(p.yz));
+        }
+
+        half4 main(vec2 fragcoord) {
+            vec3 d = .5 - fragcoord.xy1 / iResolution.y;
+            vec3 p=vec3(0);
+            for (int i = 0; i < 32; i++) {
+              p += f(p) * d;
+            }
+            return ((sin(p) + vec3(2, 5, 9)) / length(p)).xyz1;
+        }
+    """
+
+    public object RuntimeFunctionsShaderImpl : SkRuntimeImpl {
+        // Single uniform : half4 iResolution, offset 0, size 16, half-precision.
+        override val uniforms: List<SkRuntimeEffect.Uniform> = listOf(
+            SkRuntimeEffect.Uniform(
+                name = "iResolution",
+                offset = 0,
+                type = SkRuntimeEffect.Uniform.Type.kFloat4,
+                count = 1,
+                flags = SkRuntimeEffect.Uniform.kHalfPrecision_Flag,
+            ),
+        )
+        override val children: List<SkRuntimeEffect.Child> = emptyList()
+        override val flags: Int = SkRuntimeEffect.kAllowShader_Flag
+
+        override fun shade(
+            coords: SkPoint?,
+            srcColor: SkColor4f?,
+            dstColor: SkColor4f?,
+            uniforms: ByteBuffer,
+            children: Array<ChildResolver>,
+        ): SkColor4f {
+            val xy = coords ?: return SkColor4f.kBlack
+
+            // iResolution.y — the only component read.
+            uniforms.position(4)
+            val iResY = uniforms.float
+
+            // vec3 d = .5 - fragcoord.xy1 / iResolution.y;
+            // fragcoord.xy1 == vec3(fragcoord.x, fragcoord.y, 1.0).
+            val invY = 1f / iResY
+            var dx = 0.5f - xy.fX * invY
+            var dy = 0.5f - xy.fY * invY
+            var dz = 0.5f - invY
+
+            // vec3 p = vec3(0).
+            var px = 0f
+            var py = 0f
+            var pz = 0f
+
+            // 32 marches. f(p) — itself mutates a local copy of p
+            // (SkSL pass-by-value), so we don't bleed back into the
+            // outer loop's p (matches upstream's `p.z -= iTime*10`
+            // and `p.xy *= mat2(...)` being scoped to the helper).
+            // iTime == 0 (const), so `p.z -= 0` is a no-op.
+            for (i in 0 until 32) {
+                // f(p)
+                // p.z -= iTime * 10. ; iTime == 0 → unchanged.
+                val fpz = pz
+                val a = fpz * 0.1f
+                val ca = kotlin.math.cos(a)
+                val sa = kotlin.math.sin(a)
+                // p.xy *= mat2(cos(a), sin(a), -sin(a), cos(a))
+                // column-major SkSL : columns [ca, sa] and [-sa, ca]
+                //   matrix = [[ca, -sa], [sa, ca]] (row form)
+                // row-vector × mat : new.x = px*ca + py*sa
+                //                    new.y = px*(-sa) + py*ca
+                val rx = px * ca + py * sa
+                val ry = px * (-sa) + py * ca
+
+                // .1 - length(cos(p.xy) + sin(p.yz))
+                // cos(p.xy) = (cos(rx), cos(ry))
+                // sin(p.yz) = (sin(ry), sin(fpz))
+                // (here `p.xy` and `p.yz` reference the *rotated*
+                // local p — upstream mutates p in-place then sums
+                // cos(p.xy) + sin(p.yz)).
+                val ax = kotlin.math.cos(rx) + kotlin.math.sin(ry)
+                val ay = kotlin.math.cos(ry) + kotlin.math.sin(fpz)
+                val len = kotlin.math.sqrt(ax * ax + ay * ay)
+                val fpv = 0.1f - len
+
+                // p += f(p) * d
+                px += fpv * dx
+                py += fpv * dy
+                pz += fpv * dz
+            }
+
+            // return ((sin(p) + vec3(2,5,9)) / length(p)).xyz1
+            val sx = kotlin.math.sin(px) + 2f
+            val sy = kotlin.math.sin(py) + 5f
+            val sz = kotlin.math.sin(pz) + 9f
+            val plen = kotlin.math.sqrt(px * px + py * py + pz * pz)
+            val invLen = if (plen == 0f) 0f else 1f / plen
+            return SkColor4f(
+                fR = sx * invLen,
+                fG = sy * invLen,
+                fB = sz * invLen,
+                fA = 1f,
             )
         }
     }
