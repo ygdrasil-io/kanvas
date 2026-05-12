@@ -114,6 +114,15 @@ public class SkBitmapShader internal constructor(
         val stepX = inv.sx
         val stepY = inv.ky
 
+        val cubic = sampling.cubic
+        if (cubic != null) {
+            for (i in 0 until count) {
+                dst[i] = sampleCubic8(lx, ly, w, h, cubic)
+                lx += stepX
+                ly += stepY
+            }
+            return
+        }
         when (sampling.filter) {
             SkFilterMode.kNearest -> {
                 for (i in 0 until count) {
@@ -149,6 +158,16 @@ public class SkBitmapShader internal constructor(
         val stepY = inv.ky
 
         var di = 0
+        val cubic = sampling.cubic
+        if (cubic != null) {
+            for (i in 0 until count) {
+                sampleCubicF16(lx, ly, w, h, cubic, dst, di)
+                di += 4
+                lx += stepX
+                ly += stepY
+            }
+            return
+        }
         when (sampling.filter) {
             SkFilterMode.kNearest -> {
                 for (i in 0 until count) {
@@ -192,6 +211,8 @@ public class SkBitmapShader internal constructor(
     override fun sampleAtLocal(lx: Float, ly: Float): SkColor {
         val w = image.width
         val h = image.height
+        val cubic = sampling.cubic
+        if (cubic != null) return sampleCubic8(lx, ly, w, h, cubic)
         return when (sampling.filter) {
             SkFilterMode.kNearest -> {
                 val (sxi, syi, decalled) = sampleCoordsNearest(lx, ly, w, h)
@@ -298,6 +319,119 @@ public class SkBitmapShader internal constructor(
             val v11 = if (dx1 || dy1) 0f else src[(iy1 * w + ix1) * 4 + chan]
             out[off + chan] = w00 * v00 + w10 * v10 + w01 * v01 + w11 * v11
         }
+    }
+
+    /**
+     * Bicubic sample at fractional coords `(lx, ly)` from [xformedPixels]
+     * — 8-bit ARGB output. Convolves the 4×4 neighbourhood around the
+     * sample point with the [SkCubicBC] kernel (Mitchell when
+     * `(B, C) = (1/3, 1/3)`, Catmull-Rom when `(B, C) = (0, 1/2)`),
+     * with per-channel weights normalised by the sum of the kernel
+     * (handles minor numerical drift away from 1.0). Each output
+     * channel is clamped to `[0, 255]` to absorb the kernel's
+     * negative-lobe overshoot.
+     */
+    private fun sampleCubic8(lx: Float, ly: Float, w: Int, h: Int, cubic: SkCubicResampler): SkColor {
+        val xf = lx - 0.5f
+        val yf = ly - 0.5f
+        val ix = floor(xf).toInt()
+        val iy = floor(yf).toInt()
+        val fx = xf - ix
+        val fy = yf - iy
+
+        // Pre-compute 1-D kernel weights along x and y. The 4 samples are
+        // at offsets ix-1, ix, ix+1, ix+2 from the sample point ; in
+        // kernel-space the distances are |t| = (1+fx), fx, (1-fx), (2-fx).
+        val wx0 = SkCubicBC.weight(1f + fx, cubic.B, cubic.C)
+        val wx1 = SkCubicBC.weight(fx,       cubic.B, cubic.C)
+        val wx2 = SkCubicBC.weight(1f - fx,  cubic.B, cubic.C)
+        val wx3 = SkCubicBC.weight(2f - fx,  cubic.B, cubic.C)
+        val wy0 = SkCubicBC.weight(1f + fy, cubic.B, cubic.C)
+        val wy1 = SkCubicBC.weight(fy,       cubic.B, cubic.C)
+        val wy2 = SkCubicBC.weight(1f - fy,  cubic.B, cubic.C)
+        val wy3 = SkCubicBC.weight(2f - fy,  cubic.B, cubic.C)
+
+        var sumA = 0f; var sumR = 0f; var sumG = 0f; var sumB = 0f; var sumW = 0f
+        for (j in 0..3) {
+            val iyj = iy + j - 1
+            val wy = when (j) { 0 -> wy0; 1 -> wy1; 2 -> wy2; else -> wy3 }
+            val (syi, decalY) = applyTileNearest(iyj.toFloat() + 0.5f, h, tileY)
+            for (i in 0..3) {
+                val ixi = ix + i - 1
+                val wx = when (i) { 0 -> wx0; 1 -> wx1; 2 -> wx2; else -> wx3 }
+                val (sxi, decalX) = applyTileNearest(ixi.toFloat() + 0.5f, w, tileX)
+                val wt = wx * wy
+                if (decalX || decalY) {
+                    sumW += wt
+                    continue
+                }
+                val c = xformedPixels[syi * w + sxi]
+                sumA += wt * SkColorGetA(c)
+                sumR += wt * SkColorGetR(c)
+                sumG += wt * SkColorGetG(c)
+                sumB += wt * SkColorGetB(c)
+                sumW += wt
+            }
+        }
+        // sumW is mathematically 1.0 but we divide defensively to absorb
+        // tiny FP drift (matches upstream's "normalize cubic weights"
+        // step in SkRasterPipeline).
+        val invW = if (sumW != 0f) 1f / sumW else 0f
+        val a = (sumA * invW + 0.5f).toInt().coerceIn(0, 255)
+        val r = (sumR * invW + 0.5f).toInt().coerceIn(0, 255)
+        val g = (sumG * invW + 0.5f).toInt().coerceIn(0, 255)
+        val b = (sumB * invW + 0.5f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(a, r, g, b)
+    }
+
+    /** Bicubic sample, premul-float output (no byte quantization). */
+    private fun sampleCubicF16(
+        lx: Float, ly: Float, w: Int, h: Int, cubic: SkCubicResampler,
+        out: FloatArray, off: Int,
+    ) {
+        val xf = lx - 0.5f
+        val yf = ly - 0.5f
+        val ix = floor(xf).toInt()
+        val iy = floor(yf).toInt()
+        val fx = xf - ix
+        val fy = yf - iy
+
+        val wx0 = SkCubicBC.weight(1f + fx, cubic.B, cubic.C)
+        val wx1 = SkCubicBC.weight(fx,       cubic.B, cubic.C)
+        val wx2 = SkCubicBC.weight(1f - fx,  cubic.B, cubic.C)
+        val wx3 = SkCubicBC.weight(2f - fx,  cubic.B, cubic.C)
+        val wy0 = SkCubicBC.weight(1f + fy, cubic.B, cubic.C)
+        val wy1 = SkCubicBC.weight(fy,       cubic.B, cubic.C)
+        val wy2 = SkCubicBC.weight(1f - fy,  cubic.B, cubic.C)
+        val wy3 = SkCubicBC.weight(2f - fy,  cubic.B, cubic.C)
+
+        val acc = FloatArray(4)
+        var sumW = 0f
+        val src = xformedPixelsF16
+        for (j in 0..3) {
+            val iyj = iy + j - 1
+            val wy = when (j) { 0 -> wy0; 1 -> wy1; 2 -> wy2; else -> wy3 }
+            val (syi, decalY) = applyTileNearest(iyj.toFloat() + 0.5f, h, tileY)
+            for (i in 0..3) {
+                val ixi = ix + i - 1
+                val wx = when (i) { 0 -> wx0; 1 -> wx1; 2 -> wx2; else -> wx3 }
+                val wt = wx * wy
+                sumW += wt
+                if (decalY) continue
+                val (sxi, decalX) = applyTileNearest(ixi.toFloat() + 0.5f, w, tileX)
+                if (decalX) continue
+                val o = (syi * w + sxi) * 4
+                acc[0] += wt * src[o]
+                acc[1] += wt * src[o + 1]
+                acc[2] += wt * src[o + 2]
+                acc[3] += wt * src[o + 3]
+            }
+        }
+        val invW = if (sumW != 0f) 1f / sumW else 0f
+        out[off]     = (acc[0] * invW).coerceIn(0f, 1f)
+        out[off + 1] = (acc[1] * invW).coerceIn(0f, 1f)
+        out[off + 2] = (acc[2] * invW).coerceIn(0f, 1f)
+        out[off + 3] = (acc[3] * invW).coerceIn(0f, 1f)
     }
 
     /** Mathematical modulo: result is always in `[0, m)` for `m > 0`. */
