@@ -10,9 +10,9 @@ Statut du portage des Graphics Modules (GM) C++ de Skia vers `kanvas-skia/src/ma
 
 | Statut | Fichiers `.cpp` | Pourcentage |
 |---|---:|---:|
-| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 232 | 53% |
-| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 97 | 22% |
-| ❌ Non tenté (potentiellement portable) | 108 | 25% |
+| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 241 | 55% |
+| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 98 | 22% |
+| ❌ Non tenté (potentiellement portable) | 98 | 22% |
 | **Total** | **437** | **100%** |
 
 GMs Kotlin sans correspondance dans le tree de référence (probablement issus d'une version Skia plus récente) : **30**.
@@ -27,9 +27,10 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 | Phases G2, G4b, G5 + vagues K/L | 208 / 437 | 47% |
 | Phases G4c, G6, G8 + vagues K-bis, L | 215 / 437 | 49% |
 | Phases G10 + H1 (assets + 4 ports) | 215 / 437 | 49% |
-| **H1 complet (10 ports) + H3 wave 1 (9 ports)** | **232 / 437** | **53%** |
+| H1 complet (10 ports) + H3 wave 1 (9 ports) | 232 / 437 | 53% |
+| **H3 wave 2 (9 ports + 1 skip SkM44)** | **241 / 437** | **55%** |
 
-**Gain net** : +84 GMs en 3 jours (de 34% à 53% de couverture).
+**Gain net** : +93 GMs en 3 jours (de 34% à 55% de couverture).
 
 ## Phases d'API — toutes mergées ✅
 
@@ -111,6 +112,12 @@ Chaque sous-tâche est petite (½-1 jour). Toutes parallélisables car touchent 
 | H2.17 — `SkColorFilters.Lighting(mul, add)` factory direct | 1+ | `SkColorFilters.kt` |
 | H2.18 — `SkBitmap` color types `kRGB_565`, `kGray_8` | 1+ | `SkBitmap.kt` |
 | H2.19 — `ToolUtils.copy_to` + `create_checkerboard_image` helpers | nombreux | `ToolUtils.kt` |
+| H2.20 — `SkM44` (matrice 4×4 perspective) + `SkCanvas` integration | 1+ | nouvelle classe + `SkCanvas.kt` |
+| H2.21 — `SkCanvas` rotation/perspective `drawImageRect` (CTM non axis-aligned) | 1+ | `SkBitmapDevice.kt` (H1.5 lié) |
+| H2.22 — `androidFramework_setDeviceClipRestriction` + `SkCanvasPriv::ResetClip` | 1 | `SkCanvas.kt` |
+| H2.23 — `SkCanvas.drawAtlas` colors + blendMode (Phase I5.3 deferred) | 1+ | `SkBitmapDevice.kt` |
+| H2.24 — `SkImageFilters.DisplacementMap(..., cropRect)` 6-arg overload | 1 | `SkImageFilters.kt` |
+| H2.25 — `ToolUtils.makeSurface(canvas, info)` colour-space-matched helper | nombreux | `ToolUtils.kt` |
 
 ### Phase H1.5 — Suivis fidélité (qualité de ports)
 
@@ -225,9 +232,9 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `colrv1.cpp` | ❌ | — | — |
 | `complexclip.cpp` | 🚧 | — | `SkCanvas::clipShader` |
 | `complexclip2.cpp` | ✅ | `ComplexClip2GM.kt` (6 variants rect/rrect/path × bw/aa) | — |
-| `complexclip3.cpp` | ❌ | — | — |
-| `complexclip4.cpp` | ❌ | — | — |
-| `complexclip_blur_tiled.cpp` | ❌ | — | — |
+| `complexclip3.cpp` | ✅ | `ComplexClip3GM.kt` (simple + complex) | — |
+| `complexclip4.cpp` | ✅ | `ComplexClip4GM.kt` (bw + aa, approx) | — (manque `setDeviceClipRestriction` + `ResetClip`) |
+| `complexclip_blur_tiled.cpp` | ✅ | `ComplexClipBlurTiledGM.kt` | — |
 | `composecolorfilter.cpp` | ✅ | `ComposeColorFilterGM.kt` | — |
 | `composeshader.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
 | `compositor_quads.cpp` | 🚧 | — | YUV multi-plane (`tools/gpu/YUVUtils`) |
@@ -254,7 +261,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `crbug_1177833.cpp` | ✅ | `Crbug1177833GM.kt` | — |
 | `crbug_1257515.cpp` | ✅ | `Crbug1257515GM.kt` | — |
 | `crbug_1313579.cpp` | ✅ | `Crbug1313579GM.kt` | — |
-| `crbug_224618.cpp` | ❌ | — | — |
+| `crbug_224618.cpp` | 🚧 | — | `SkM44` (4×4 perspective matrix) + perspective `drawImageRect` |
 | `crbug_478659067.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `crbug_691386.cpp` | ✅ | `Crbug691386GM.kt` | — |
 | `crbug_788500.cpp` | ✅ | `Crbug788500GM.kt` | — |
@@ -275,7 +282,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `croppedrects.cpp` | ✅ | `CroppedRectsGM.kt` | — |
 | `crosscontextimage.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `cubicpaths.cpp` | ✅ | `Bug5099GM.kt`, `Bug6083GM.kt`, `ClippedCubicGM.kt`, `ClippedCubic2GM.kt`, `CubicClosePathGM.kt`, `CubicPathGM.kt`, `CubicPathShaderGM.kt` | — |
-| `daa.cpp` | ❌ | — | — |
+| `daa.cpp` | ✅ | `DaaGM.kt` | — |
 | `dashcircle.cpp` | ✅ | `DashCircleGM.kt` | — |
 | `dashcubics.cpp` | ✅ | `DashCubicsGM.kt` | — |
 | `dashing.cpp` | ✅ | `DashingGM.kt`, `LongWavyLineGM.kt`, `PathEffectGM.kt` | — |
@@ -284,24 +291,24 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `dftext.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `dftext_blob_persp.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `discard.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `displacement.cpp` | ❌ | — | — |
+| `displacement.cpp` | ✅ | `DisplacementGM.kt` | — |
 | `distantclip.cpp` | ✅ | `DistantClipGM.kt` | — |
 | `draw_bitmap_rect_skbug4374.cpp` | ✅ | `DrawBitmapRectSkbug4734GM.kt` | — |
 | `drawable.cpp` | ✅ | `DrawableGM.kt` | — |
-| `drawatlas.cpp` | ❌ | — | — |
-| `drawatlascolor.cpp` | ❌ | — | — |
+| `drawatlas.cpp` | ✅ | `DrawAtlasGM.kt` | — |
+| `drawatlascolor.cpp` | ✅ | `DrawAtlasColorGM.kt` | — (partiel : tint couleur ignoré, Phase I5.3) |
 | `drawbitmaprect.cpp` | 🚧 | — | `SkImage::makeSubset` |
 | `drawglyphs.cpp` | ✅ | `DrawGlyphsGM.kt` | — |
 | `drawimageset.cpp` | 🚧 | — | `SkImage::makeSubset` |
 | `drawlines_with_local_matrix.cpp` | ✅ | `DrawlinesWithLocalMatrixGM.kt` | — |
-| `drawminibitmaprect.cpp` | ❌ | — | — |
+| `drawminibitmaprect.cpp` | ✅ | `DrawMiniBitmapRectGM.kt` (bw + aa) | — |
 | `drawquadset.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `drawregion.cpp` | 🚧 | — | `SkCanvas::drawRegion` |
 | `drawregionmodes.cpp` | 🚧 | — | `SkCanvas::drawRegion` |
 | `dropshadowimagefilter.cpp` | ✅ | `DropShadowImageFilterGM.kt` | — |
 | `drrect.cpp` | ✅ | `DRRectGM.kt` | — |
 | `drrect_small_inner.cpp` | ✅ | `DRRectSmallInnerGM.kt` | — |
-| `dstreadshuffle.cpp` | ❌ | — | — |
+| `dstreadshuffle.cpp` | ✅ | `DstReadShuffleGM.kt` | — |
 | `ducky_yuv_blend.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `emboss.cpp` | ✅ | `EmbossGM.kt` | — |
 | `emptypath.cpp` | ✅ | `EmptyPathGM.kt` | — |
