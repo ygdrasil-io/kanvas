@@ -42,6 +42,7 @@ public class SkImageInfo private constructor(
         SkColorType.kAlpha_8 -> 1
         SkColorType.kARGB_4444 -> 2
         SkColorType.kRGBA_8888 -> 4
+        SkColorType.kBGRA_8888 -> 4
         SkColorType.kRGBA_F16Norm -> 8
         else -> error("bytesPerPixel: unsupported colorType $colorType")
     }
@@ -130,6 +131,7 @@ public class SkImageInfo private constructor(
 
         private fun defaultAlphaTypeFor(ct: SkColorType): SkAlphaType = when (ct) {
             SkColorType.kRGBA_8888 -> SkAlphaType.kUnpremul
+            SkColorType.kBGRA_8888 -> SkAlphaType.kUnpremul
             SkColorType.kRGBA_F16Norm -> SkAlphaType.kPremul
             SkColorType.kAlpha_8 -> SkAlphaType.kPremul
             SkColorType.kARGB_4444 -> SkAlphaType.kPremul
