@@ -39,6 +39,8 @@ public class SkImageInfo private constructor(
 
     /** Bytes per pixel implied by [colorType]. */
     public fun bytesPerPixel(): Int = when (colorType) {
+        SkColorType.kAlpha_8 -> 1
+        SkColorType.kARGB_4444 -> 2
         SkColorType.kRGBA_8888 -> 4
         SkColorType.kRGBA_F16Norm -> 8
         else -> error("bytesPerPixel: unsupported colorType $colorType")
@@ -115,9 +117,22 @@ public class SkImageInfo private constructor(
             colorSpace: SkColorSpace = SkColorSpace.makeSRGB(),
         ): SkImageInfo = Make(width, height, SkColorType.kRGBA_8888, SkAlphaType.kPremul, colorSpace)
 
+        /**
+         * Mirrors Skia's `SkImageInfo::MakeA8(w, h)` — alpha-only,
+         * single-byte-per-pixel image info. Alpha type defaults to
+         * premultiplied (matches upstream).
+         */
+        public fun MakeA8(
+            width: Int,
+            height: Int,
+            colorSpace: SkColorSpace = SkColorSpace.makeSRGB(),
+        ): SkImageInfo = Make(width, height, SkColorType.kAlpha_8, SkAlphaType.kPremul, colorSpace)
+
         private fun defaultAlphaTypeFor(ct: SkColorType): SkAlphaType = when (ct) {
             SkColorType.kRGBA_8888 -> SkAlphaType.kUnpremul
             SkColorType.kRGBA_F16Norm -> SkAlphaType.kPremul
+            SkColorType.kAlpha_8 -> SkAlphaType.kPremul
+            SkColorType.kARGB_4444 -> SkAlphaType.kPremul
             else -> SkAlphaType.kUnknown
         }
     }

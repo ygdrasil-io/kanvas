@@ -60,6 +60,15 @@ public class SkBitmap(
         if (colorType == SkColorType.kARGB_4444) ShortArray(width * height) else ShortArray(0)
 
     /**
+     * Backing storage for [SkColorType.kAlpha_8] (Phase G4a). One
+     * unsigned byte per pixel interpreted as alpha; RGB is implicitly
+     * `(0, 0, 0)` when read out as an [SkColor] (see [getPixel]).
+     * Empty array for any other colour type.
+     */
+    public val pixelsA8: ByteArray =
+        if (colorType == SkColorType.kAlpha_8) ByteArray(width * height) else ByteArray(0)
+
+    /**
      * Legacy alias for [pixels8888]. Kept for source-compatibility with
      * pre-Phase-6 callers; equivalent to `pixels8888` and *only* meaningful
      * when [colorType] is [SkColorType.kRGBA_8888].
@@ -130,6 +139,13 @@ public class SkBitmap(
                 // Quantize to 4 bits per channel (premul) and pack.
                 pixels4444.fill(packARGB4444Premul(a, r, g, b))
             }
+            SkColorType.kAlpha_8 -> {
+                // Alpha-only — RGB is dropped. `a` is in `[0, 1]` after
+                // the (identity for sRGB → working) xform; quantize to 8
+                // bits and broadcast.
+                val ai = (a * 255f + 0.5f).toInt().coerceIn(0, 255)
+                pixelsA8.fill(ai.toByte())
+            }
             else -> error("SkBitmap.eraseColor unsupported for colorType=$colorType")
         }
     }
@@ -188,6 +204,11 @@ public class SkBitmap(
                 val b = (pb * invA * 256f).toInt().coerceIn(0, 255)
                 SkColorSetARGB(a, r, g, b)
             }
+            SkColorType.kAlpha_8 -> {
+                // Alpha-only — RGB forced to 0. The byte is unsigned 0..255.
+                val a = pixelsA8[y * width + x].toInt() and 0xFF
+                SkColorSetARGB(a, 0, 0, 0)
+            }
             else -> error("SkBitmap.getPixel unsupported for colorType=$colorType")
         }
     }
@@ -210,6 +231,10 @@ public class SkBitmap(
                 pixelsF16[i + 1] = SkColorGetG(c) / 255f * a
                 pixelsF16[i + 2] = SkColorGetB(c) / 255f * a
                 pixelsF16[i + 3] = a
+            }
+            SkColorType.kAlpha_8 -> {
+                // Alpha-only — RGB of `c` is discarded.
+                pixelsA8[y * width + x] = SkColorGetA(c).toByte()
             }
             else -> error("SkBitmap.setPixel unsupported for colorType=$colorType")
         }
@@ -312,6 +337,19 @@ public class SkBitmap(
             SkBitmap(w, h, colorSpace)
         public fun Make(w: Int, h: Int, colorSpace: SkColorSpace, colorType: SkColorType): SkBitmap =
             SkBitmap(w, h, colorSpace, colorType)
+
+        /**
+         * Mirrors Skia's `SkBitmap::allocPixels(const SkImageInfo&)`.
+         *
+         * Upstream `allocPixels` mutates an empty `SkBitmap` in place. Our
+         * Kotlin `SkBitmap` binds its backing arrays at construction, so we
+         * surface the same idiom as a factory : `SkBitmap.allocPixels(info)`
+         * returns a fresh bitmap whose storage matches [info]. Use this when
+         * porting C++ code that follows the `SkBitmap bm; bm.allocPixels(info);`
+         * pattern (e.g. `gm/colorfilteralpha8.cpp`).
+         */
+        public fun allocPixels(info: SkImageInfo): SkBitmap =
+            SkBitmap(info.width, info.height, info.colorSpace, info.colorType)
 
         // ─── ARGB_4444 helpers (Phase C5) ────────────────────────────
 
