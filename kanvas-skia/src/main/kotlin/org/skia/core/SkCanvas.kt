@@ -452,6 +452,119 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         }
     }
 
+    /**
+     * Mirrors Skia's `SkCanvas::clipRegion(deviceRgn, op)`.
+     *
+     * Unlike [clipRect] / [clipPath] / [clipRRect], `clipRegion` is
+     * expressed in **device** coordinates — the CTM is *not* applied
+     * to [region]. This is what makes it useful for callers that have
+     * already accumulated a complex (multi-rect) clip and want to bind
+     * it into the clip stack without having a single transformable
+     * shape (cf. Skia GM `clip_sierpinski_region`, which builds 81
+     * rects and then rotates the canvas — `clipRegion` snaps the clip
+     * to the pre-rotation device pixels).
+     *
+     * Implementation : the region is materialised into an [SkAAClip]
+     * (full `0xFF` coverage everywhere ; gaps inside the bounds are
+     * `0x00`). For [SkClipOp.kIntersect] (the default), the new AA
+     * clip composes with any existing one via [SkRegion.Op.kIntersect]
+     * and the device-clip bbox is intersected with the region's
+     * bounds. For [SkClipOp.kDifference], the existing clip is
+     * promoted to an AA clip (synthesised from the device-clip bbox
+     * if absent) and the region is subtracted ; the device-clip bbox
+     * stays put (cutting a hole inside doesn't shrink the outer
+     * bound).
+     */
+    public open fun clipRegion(region: SkRegion, op: SkClipOp = SkClipOp.kIntersect) {
+        val s = top
+        if (region.isEmpty()) {
+            when (op) {
+                SkClipOp.kIntersect -> {
+                    // Intersect with empty → empty clip.
+                    s.clip = SkIRect.MakeLTRB(s.clip.left, s.clip.top, s.clip.left, s.clip.top)
+                    s.aaClip = null
+                }
+                SkClipOp.kDifference -> {
+                    // Difference with empty → unchanged.
+                }
+            }
+            return
+        }
+        // [region] is in **global/canvas** device coords (i.e. the
+        // outermost canvas's pixel grid). When the active state is a
+        // layer, we need to translate the region by the negative of
+        // the cumulative layer origin so it lands on the layer's local
+        // device grid before joining the clip stack. Mirrors Skia's
+        // `SkBitmapDevice::clipRegion` (see `src/core/SkBitmapDevice.cpp`).
+        val (ox, oy) = cumulativeLayerOrigin()
+        val deviceRegion = if (ox == 0 && oy == 0) {
+            region
+        } else {
+            SkRegion(region).also { it.translate(-ox, -oy) }
+        }
+        when (op) {
+            SkClipOp.kIntersect -> clipRegionIntersect(s, deviceRegion)
+            SkClipOp.kDifference -> clipRegionDifference(s, deviceRegion)
+        }
+    }
+
+    /**
+     * Sum of every active layer's `(originX, originY)` walking the
+     * `save` stack from the root down. Used to translate canvas-space
+     * coords (passed to `clipRegion`) into the current layer's local
+     * device grid. The root canvas has origin `(0, 0)`.
+     */
+    private fun cumulativeLayerOrigin(): Pair<Int, Int> {
+        var ox = 0
+        var oy = 0
+        for (st in stack) {
+            val l = st.layer ?: continue
+            ox += l.originX
+            oy += l.originY
+        }
+        return ox to oy
+    }
+
+    private fun clipRegionIntersect(s: State, region: SkRegion) {
+        val rb = region.getBounds()
+        val newClipBbox = SkIRect.MakeLTRB(
+            maxOf(s.clip.left, rb.left),
+            maxOf(s.clip.top, rb.top),
+            minOf(s.clip.right, rb.right),
+            minOf(s.clip.bottom, rb.bottom),
+        )
+        val w = newClipBbox.right - newClipBbox.left
+        val h = newClipBbox.bottom - newClipBbox.top
+        if (w <= 0 || h <= 0) {
+            s.clip = SkIRect.MakeLTRB(s.clip.left, s.clip.top, s.clip.left, s.clip.top)
+            s.aaClip = null
+            return
+        }
+        val regionAaClip = SkAAClip(region)
+        val parent = s.aaClip
+        s.aaClip = if (parent == null) {
+            regionAaClip
+        } else {
+            val combined = SkAAClip(parent)
+            combined.op(regionAaClip, SkRegion.Op.kIntersect)
+            combined
+        }
+        s.clip = newClipBbox
+    }
+
+    private fun clipRegionDifference(s: State, region: SkRegion) {
+        val w = s.clip.right - s.clip.left
+        val h = s.clip.bottom - s.clip.top
+        if (w <= 0 || h <= 0) {
+            s.aaClip = null
+            return
+        }
+        val regionAaClip = SkAAClip(region)
+        val combined = SkAAClip(s.aaClip ?: SkAAClip(s.clip))
+        combined.op(regionAaClip, SkRegion.Op.kDifference)
+        s.aaClip = combined
+    }
+
     /** Bind the active state's AA clip onto the device before each draw. */
     private fun bindClip(s: State) {
         s.device.setActiveClip(s.aaClip)
