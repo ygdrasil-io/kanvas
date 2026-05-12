@@ -151,6 +151,61 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val b = clip.bottom.coerceAtMost(height)
         if (l >= r || t >= b) return
 
+        // Phase G7 — when `paint.imageFilter` is set, route through an
+        // implicit saveLayer / drawPaint / restore so the layer's filter
+        // pass is applied. Mirror of [SkCanvas.restore] for layers with
+        // an image filter. The inner draw happens into a fresh device
+        // sized to the clip; we then run the filter on its snapshot and
+        // composite the filtered image back with the paint's blend mode
+        // / alpha / colour filter (imageFilter stripped to avoid
+        // infinite recursion).
+        val imageFilter = paint.imageFilter
+        if (imageFilter != null) {
+            val layerW = r - l
+            val layerH = b - t
+            val layerBitmap = SkBitmap(layerW, layerH, bitmap.colorSpace, bitmap.colorType)
+                .also { it.eraseColor(0) }
+            val layerDevice = SkBitmapDevice(layerBitmap)
+            // Inner paint: clear the image filter to avoid infinite
+            // recursion; also clear the blend mode / colour filter / alpha
+            // so the inner pass writes the unmodified paint colour /
+            // shader to the layer. Those properties take effect at the
+            // outer composite step below.
+            val innerPaint = paint.copy().apply {
+                this.imageFilter = null
+                this.colorFilter = null
+                this.blendMode = SkBlendMode.kSrc
+                this.alpha = 0xFF
+            }
+            val innerClip = SkIRect.MakeLTRB(0, 0, layerW, layerH)
+            // Inner CTM is the parent CTM shifted by -(l, t) so a parent
+            // device-space point lands at layer coords.
+            val innerCtm = ctm.copy(tx = ctm.tx - l, ty = ctm.ty - t)
+            layerDevice.drawPaint(innerCtm, innerClip, innerPaint)
+            val snapshot = layerBitmap.asImage()
+            val filterResult = imageFilter.filterImage(snapshot, ctm)
+            val filteredImg = filterResult.image
+            val filteredBitmap = SkBitmap(
+                filteredImg.width, filteredImg.height,
+                bitmap.colorSpace, bitmap.colorType,
+            )
+            for (yp in 0 until filteredImg.height) {
+                for (xp in 0 until filteredImg.width) {
+                    filteredBitmap.setPixel(xp, yp, filteredImg.peekPixel(xp, yp))
+                }
+            }
+            val filteredDevice = SkBitmapDevice(filteredBitmap)
+            val proxyPaint = paint.copy().apply { this.imageFilter = null }
+            compositeFrom(
+                filteredDevice,
+                l + filterResult.offsetX,
+                t + filterResult.offsetY,
+                clip,
+                proxyPaint,
+            )
+            return
+        }
+
         val shader = paint.shader
         if (shader != null) {
             // Shader path. paint.alpha modulates the shader output (Skia's
@@ -447,12 +502,15 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val paintAlpha = paint?.alpha ?: 0xFF
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
         val blender = paint?.blender
+        val colorFilter = paint?.colorFilter
         // For "normal" modes (kSrcOver et al.), a fully transparent paint
         // alpha makes every src contribution vanish, so we can short-circuit
         // entirely. Modes like kClear / kSrcIn still need to walk the layer
         // bounds (they zero dst regardless of src alpha), so we let those
-        // through and rely on the inner-loop guard.
-        val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
+        // through and rely on the inner-loop guard. A colour filter may
+        // produce non-trivial output for transparent input, so we also
+        // skip the short-circuit when one is present.
+        val mustBlendZero = modeAffectsZeroAlphaSrc(mode) || colorFilter != null
         if (paintAlpha == 0 && !mustBlendZero) return
         val l = maxOf(clip.left, originX, 0)
         val t = maxOf(clip.top, originY, 0)
@@ -467,7 +525,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         for (y in t until b) {
             for (x in l until r) {
                 val sample = src.bitmap.getPixel(x - originX, y - originY)
-                val effective = if (paintAlpha == 0xFF) sample else applyAlpha(sample, paintAlpha)
+                var effective = if (paintAlpha == 0xFF) sample else applyAlpha(sample, paintAlpha)
+                effective = applyColorFilter(colorFilter, effective)
                 if (effective ushr 24 == 0 && !mustBlendZero) continue
                 dispatchBlend(x, y, effective, mode, blender)
             }
