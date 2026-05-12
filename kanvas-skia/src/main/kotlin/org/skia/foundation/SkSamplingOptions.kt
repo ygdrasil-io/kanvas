@@ -19,6 +19,13 @@ public data class SkSamplingOptions(
     public val filter: SkFilterMode = SkFilterMode.kNearest,
     public val mipmap: SkMipmapMode = SkMipmapMode.kNone,
     public val cubic: SkCubicResampler? = null,
+    /**
+     * Phase G10 — when non-zero, the sampler uses an N-tap shortcut
+     * along the texture-space ellipse major axis with `N = maxAniso`.
+     * `0` means "no aniso" (regular point / bilinear / mip sampling
+     * applies). Construct via [Aniso] to enforce the clamping rules.
+     */
+    public val maxAniso: Int = 0,
 ) {
 
     /**
@@ -27,7 +34,10 @@ public data class SkSamplingOptions(
      * sets `useCubic = true` and the linear/nearest mode is irrelevant
      * — we record `kNearest` / `kNone` as a placeholder.
      */
-    public constructor(cubic: SkCubicResampler) : this(SkFilterMode.kNearest, SkMipmapMode.kNone, cubic)
+    public constructor(cubic: SkCubicResampler) : this(SkFilterMode.kNearest, SkMipmapMode.kNone, cubic, 0)
+
+    /** `true` when this sampler is an anisotropic sampler (see [Aniso]). */
+    public val useAniso: Boolean get() = maxAniso > 0
 
     public companion object {
         /** `SkSamplingOptions(kNearest, kNone, cubic = null)` — Skia's default. */
@@ -35,5 +45,22 @@ public data class SkSamplingOptions(
 
         public fun nearest(): SkSamplingOptions = SkSamplingOptions(SkFilterMode.kNearest)
         public fun linear(): SkSamplingOptions = SkSamplingOptions(SkFilterMode.kLinear)
+
+        /**
+         * Phase G10 — mirrors Skia's `SkSamplingOptions::Aniso(int maxAniso)`
+         * factory. Selects anisotropic sampling with up to [maxAniso] taps
+         * along the texture-space ellipse major axis. Upstream clamps
+         * `maxAniso` to `>= 1` ; kanvas-skia matches that clamp.
+         *
+         * The raster implementation is an N-tap shortcut along the
+         * major-axis direction averaged with a per-tap mip-LOD pick
+         * derived from the minor-axis footprint — pragmatic for a CPU
+         * raster path (full elliptical weighted average kernels are
+         * not yet ported).
+         */
+        public fun Aniso(maxAniso: Int): SkSamplingOptions {
+            val n = maxAniso.coerceAtLeast(1)
+            return SkSamplingOptions(SkFilterMode.kLinear, SkMipmapMode.kLinear, cubic = null, maxAniso = n)
+        }
     }
 }

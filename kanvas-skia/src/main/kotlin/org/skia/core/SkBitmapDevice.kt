@@ -605,6 +605,45 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val devH = devDst.bottom - devDst.top
         val srcW = src.right - src.left
         val srcH = src.bottom - src.top
+        // Phase G10 — anisotropic sampling : axis-aligned `drawImageRect`
+        // has per-axis scale = (srcW / devW) and (srcH / devH). Pick the
+        // larger as the **major** ; the N-tap along that axis averages
+        // bilinear samples from the mip level that band-limits the
+        // **minor** axis. This is the same shortcut the shader path
+        // takes — see [SkBitmapShader.sampleAniso8].
+        if (sampling.useAniso && image.levelCount() > 1) {
+            drawImageRectAniso(image, src, devDst, sampling, paint, clip, ix0, iy0, ix1, iy1)
+            return
+        }
+        // Phase G10 — mip LOD : when the destination is small enough
+        // that the source/dst ratio crosses a power-of-two, snap the
+        // input image to the matching mip level and proceed with the
+        // existing nearest/linear/bicubic raster path. The
+        // [SkBitmapShader] mip selection covers the more general CTM
+        // cases ; here we only need axis-aligned scaling.
+        if (sampling.mipmap != org.skia.foundation.SkMipmapMode.kNone &&
+            image.levelCount() > 1) {
+            val rawScaleX = srcW / devW
+            val rawScaleY = srcH / devH
+            val sMax = kotlin.math.max(rawScaleX, rawScaleY)
+            if (sMax > 1f) {
+                val level = kotlin.math.floor(
+                    kotlin.math.ln(sMax) / kotlin.math.ln(2f)
+                ).toInt().coerceIn(0, image.levelCount() - 1)
+                if (level > 0) {
+                    val mip = imageMipLevel(image, level)
+                    val mipScaleX = mip.width.toFloat() / image.width
+                    val mipScaleY = mip.height.toFloat() / image.height
+                    val mippedSrc = SkRect.MakeLTRB(
+                        src.left * mipScaleX, src.top * mipScaleY,
+                        src.right * mipScaleX, src.bottom * mipScaleY,
+                    )
+                    val innerPaint = paint?.copy()
+                    drawImageRect(mip, mippedSrc, devDst, sampling, innerPaint, constraint, clip)
+                    return
+                }
+            }
+        }
         val scaleX = srcW / devW
         val scaleY = srcH / devH
 
@@ -779,6 +818,128 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val out = IntArray(image.width * image.height)
         for (i in out.indices) out[i] = transformPaintColor(image.pixels[i])
         return out
+    }
+
+    /**
+     * Phase G10 — return a fresh [SkImage] backed by the requested mip
+     * level's pre-rendered pixel buffer. The colour-type metadata of
+     * the original image carries through. The returned image has no
+     * mip pyramid attached (we already chose the level).
+     */
+    private fun imageMipLevel(image: SkImage, level: Int): SkImage {
+        val levels = image.mipLevels ?: return image
+        if (level <= 0 || level >= levels.size) return image
+        val lvl = levels[level]
+        return SkImage(lvl.width, lvl.height, lvl.pixels, image.colorType)
+    }
+
+    /**
+     * Phase G10 — `drawImageRect` with [SkSamplingOptions.useAniso].
+     * Walks the device-pixel grid like the kLinear branch, but per
+     * device pixel takes an N-tap average along the texture-space
+     * major axis on the band-limited mip level chosen from the
+     * minor-axis footprint. Mirrors [SkBitmapShader.sampleAniso8].
+     */
+    private fun drawImageRectAniso(
+        image: SkImage,
+        src: SkRect,
+        devDst: SkRect,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+        clip: SkIRect,
+        ix0: Int, iy0: Int, ix1: Int, iy1: Int,
+    ) {
+        val devW = devDst.right - devDst.left
+        val devH = devDst.bottom - devDst.top
+        val srcW = src.right - src.left
+        val srcH = src.bottom - src.top
+        val scaleX = srcW / devW
+        val scaleY = srcH / devH
+        // Major / minor in level-0 source units per device pixel.
+        val majorLen = kotlin.math.max(scaleX, scaleY)
+        val minorLen = kotlin.math.min(scaleX, scaleY)
+        val n = sampling.maxAniso
+        val perTap = if (n > 0) majorLen / n.toFloat() else majorLen
+        val effective = kotlin.math.max(minorLen, perTap)
+        val level = if (effective > 1f) {
+            kotlin.math.floor(
+                kotlin.math.ln(effective) / kotlin.math.ln(2f)
+            ).toInt().coerceIn(0, image.levelCount() - 1)
+        } else 0
+        val mip = if (level > 0) imageMipLevel(image, level) else image
+        val mipScaleX = mip.width.toFloat() / image.width
+        val mipScaleY = mip.height.toFloat() / image.height
+
+        val paintAlpha = paint?.alpha ?: 0xFF
+        val colorFilter = paint?.colorFilter
+        if (paintAlpha == 0 && colorFilter == null) return
+        val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
+        val blender = paint?.blender
+        val needsXform = !xformSteps.flags.isIdentity
+        val deferXform = colorFilter != null && needsXform
+        val devPixels = if (deferXform) mip.pixels else imagePixelsInDeviceColorSpace(mip)
+        val mustBlendZero = modeAffectsZeroAlphaSrc(mode) || colorFilter != null
+        val maxX = mip.width - 1
+        val maxY = mip.height - 1
+
+        // The aniso N-tap walks along the **major** axis at each device pixel.
+        val majorIsX = scaleX >= scaleY
+        for (py in iy0 until iy1) {
+            val srcYbase = src.top + (py + 0.5f - devDst.top) * scaleY
+            for (px in ix0 until ix1) {
+                val srcXbase = src.left + (px + 0.5f - devDst.left) * scaleX
+                var sumA = 0f; var sumR = 0f; var sumG = 0f; var sumB = 0f
+                for (k in 0 until n) {
+                    val t = if (n == 1) 0f else (k.toFloat() / (n - 1)) - 0.5f
+                    val sxF: Float
+                    val syF: Float
+                    if (majorIsX) {
+                        sxF = (srcXbase + t * scaleX) * mipScaleX
+                        syF = srcYbase * mipScaleY
+                    } else {
+                        sxF = srcXbase * mipScaleX
+                        syF = (srcYbase + t * scaleY) * mipScaleY
+                    }
+                    // Bilinear sample on the chosen mip level.
+                    val xf = sxF - 0.5f
+                    val yf = syF - 0.5f
+                    val ix = floor(xf).coerceIn(0, maxX)
+                    val ixn = (ix + 1).coerceAtMost(maxX)
+                    val fx = (xf - floor(xf).toFloat()).coerceIn(0f, 1f)
+                    val iy = floor(yf).coerceIn(0, maxY)
+                    val iyn = (iy + 1).coerceAtMost(maxY)
+                    val fy = (yf - floor(yf).toFloat()).coerceIn(0f, 1f)
+                    val c00 = devPixels[iy * mip.width + ix]
+                    val c10 = devPixels[iy * mip.width + ixn]
+                    val c01 = devPixels[iyn * mip.width + ix]
+                    val c11 = devPixels[iyn * mip.width + ixn]
+                    val ifx = 1f - fx; val ify = 1f - fy
+                    val w00 = ifx * ify; val w10 = fx * ify
+                    val w01 = ifx * fy;  val w11 = fx * fy
+                    sumA += SkColorGetA(c00) * w00 + SkColorGetA(c10) * w10 +
+                            SkColorGetA(c01) * w01 + SkColorGetA(c11) * w11
+                    sumR += SkColorGetR(c00) * w00 + SkColorGetR(c10) * w10 +
+                            SkColorGetR(c01) * w01 + SkColorGetR(c11) * w11
+                    sumG += SkColorGetG(c00) * w00 + SkColorGetG(c10) * w10 +
+                            SkColorGetG(c01) * w01 + SkColorGetG(c11) * w11
+                    sumB += SkColorGetB(c00) * w00 + SkColorGetB(c10) * w10 +
+                            SkColorGetB(c01) * w01 + SkColorGetB(c11) * w11
+                }
+                val invN = 1f / n
+                val a = (sumA * invN + 0.5f).toInt().coerceIn(0, 255)
+                val r = (sumR * invN + 0.5f).toInt().coerceIn(0, 255)
+                val g = (sumG * invN + 0.5f).toInt().coerceIn(0, 255)
+                val b = (sumB * invN + 0.5f).toInt().coerceIn(0, 255)
+                var sample = applyAlpha(SkColorSetARGB(a, r, g, b), paintAlpha)
+                if (colorFilter != null) sample = colorFilter.filterColor(sample)
+                if (deferXform) sample = transformPaintColor(sample)
+                if (sample ushr 24 == 0 && !mustBlendZero) continue
+                dispatchBlend(px, py, sample, mode, blender)
+            }
+        }
+        // Reference [clip] to keep the parameter visible for future extension
+        // (the (ix0/iy0/ix1/iy1) range already incorporates [clip]).
+        @Suppress("UNUSED_VARIABLE") val unused = clip
     }
 
     /** Modulate `src.alpha` by `paintAlpha / 255`, leaving RGB unchanged. */
