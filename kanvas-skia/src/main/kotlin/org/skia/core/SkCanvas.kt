@@ -17,6 +17,7 @@ import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextEncoding
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix
+import org.skia.math.SkPoint
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import kotlin.math.ceil as kCeil
@@ -549,6 +550,67 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
             .addRRect(outer, SkPathDirection.kCW)
             .addRRect(inner, SkPathDirection.kCCW)
         drawPath(builder.detach(), paint)
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::experimental_DrawEdgeAAQuad`
+     * ([include/core/SkCanvas.h](https://github.com/google/skia/blob/main/include/core/SkCanvas.h)) :
+     *
+     * ```cpp
+     * void experimental_DrawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4],
+     *                                  QuadAAFlags aaFlags, SkColor color, SkBlendMode mode);
+     * ```
+     *
+     * Draws either the [rect] (when [clip] is `null`) or the 4-point
+     * quadrilateral [clip] filled with solid [color] under the given blend
+     * [mode]. Edge AA is controlled by [aaFlags] (a bitmask of
+     * [QuadAAFlags] values).
+     *
+     * **Per-edge AA semantics.** Upstream's CPU device implementation
+     * (`SkDevice::drawEdgeAAQuad` in `src/core/SkDevice.cpp`) takes the
+     * all-or-nothing shortcut for raster — AA is enabled iff every edge is
+     * flagged (`aa == kAll_QuadAAFlags`). Per-edge AA is a GPU-only feature
+     * that avoids seaming in tiled composited layers; raster mirrors it
+     * with hard edges whenever any edge has AA disabled. We follow upstream
+     * verbatim, so the per-edge GM repros (`crbug_1167277`, `crbug_1174186`,
+     * `crbug_1162942`) match the reference renders exactly.
+     *
+     * **Clip points.** When [clip] is non-null its four points are taken in
+     * order **top-left, top-right, bottom-right, bottom-left** (the
+     * `SkRect::toQuad` order — see the upstream comment at
+     * `include/core/SkCanvas.h:1755-1758`). The resulting closed polygon
+     * is filled with the solid colour.
+     */
+    public open fun experimental_DrawEdgeAAQuad(
+        rect: SkRect,
+        clip: Array<SkPoint>?,
+        aaFlags: Int,
+        color: SkColor,
+        mode: SkBlendMode,
+    ) {
+        // Match upstream's CPU shortcut: AA only when every edge is flagged.
+        // Per-edge AA is GPU-only; raster intentionally drops to hard edges
+        // for any partial flag combination to avoid seaming.
+        val paint = SkPaint().apply {
+            this.color = color
+            this.blendMode = mode
+            this.isAntiAlias = aaFlags == QuadAAFlags.kAll_QuadAAFlags
+        }
+        if (clip != null) {
+            require(clip.size == 4) {
+                "experimental_DrawEdgeAAQuad: clip must contain exactly 4 points, got ${clip.size}"
+            }
+            // Closed polygon through the 4 clip points (TL, TR, BR, BL).
+            val pts = arrayOf(
+                clip[0].fX to clip[0].fY,
+                clip[1].fX to clip[1].fY,
+                clip[2].fX to clip[2].fY,
+                clip[3].fX to clip[3].fY,
+            )
+            drawPath(SkPath.Polygon(pts, isClosed = true), paint)
+        } else {
+            drawRect(rect, paint)
+        }
     }
 
     /**
