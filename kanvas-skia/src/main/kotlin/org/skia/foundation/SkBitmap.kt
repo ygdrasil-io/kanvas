@@ -69,6 +69,27 @@ public class SkBitmap(
         if (colorType == SkColorType.kAlpha_8) ByteArray(width * height) else ByteArray(0)
 
     /**
+     * Backing storage for [SkColorType.kBGRA_8888] (Phase G4b).
+     *
+     * Same shape as [pixels8888] : one `Int` per pixel, **non-premul**,
+     * stored in Pascal-Argb (`0xAARRGGBB`) order — *identical* to the
+     * `kRGBA_8888` representation. The `kBGRA_8888` colour type only
+     * affects the *external byte order* (the order in which the channels
+     * appear in a packed `uint32_t` on disk / on the wire — `A, R, G, B`
+     * vs `A, B, G, R` on a little-endian host), which matters when
+     * encoding to or decoding from a PNG / wire buffer. Internally, all
+     * `:kanvas-skia` consumers ([SkBitmapShader], the raster device, the
+     * colour-filter pipeline) read pixels via the colorType-aware
+     * [getPixel] accessor (or the [SkImage.Make] snapshot, which itself
+     * delegates to [getPixel] for non-8888 sources), so a single
+     * Pascal-Argb backing store is correct for both colour types.
+     *
+     * Empty array for any other colour type.
+     */
+    public val pixelsBGRA8888: IntArray =
+        if (colorType == SkColorType.kBGRA_8888) IntArray(width * height) else IntArray(0)
+
+    /**
      * Legacy alias for [pixels8888]. Kept for source-compatibility with
      * pre-Phase-6 callers; equivalent to `pixels8888` and *only* meaningful
      * when [colorType] is [SkColorType.kRGBA_8888].
@@ -118,6 +139,16 @@ public class SkBitmap(
                 val gi = (g * 255f + 0.5f).toInt().coerceIn(0, 255)
                 val bi = (b * 255f + 0.5f).toInt().coerceIn(0, 255)
                 pixels8888.fill(SkColorSetARGB(ai, ri, gi, bi))
+            }
+            SkColorType.kBGRA_8888 -> {
+                // BGRA shares the same in-memory Pascal-Argb representation
+                // as RGBA — only the external byte ordering differs (see
+                // [pixelsBGRA8888]'s KDoc). Reuse the 8888 fast path.
+                val ai = (a * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val ri = (r * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val gi = (g * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val bi = (b * 255f + 0.5f).toInt().coerceIn(0, 255)
+                pixelsBGRA8888.fill(SkColorSetARGB(ai, ri, gi, bi))
             }
             SkColorType.kRGBA_F16Norm -> {
                 // Premultiply the (potentially xformed) channels and fill.
@@ -181,6 +212,7 @@ public class SkBitmap(
         require(x in 0 until width && y in 0 until height) { "($x, $y) outside ${width}x$height" }
         return when (colorType) {
             SkColorType.kRGBA_8888 -> pixels8888[y * width + x]
+            SkColorType.kBGRA_8888 -> pixelsBGRA8888[y * width + x]
             SkColorType.kARGB_4444 -> unpackARGB4444Premul(pixels4444[y * width + x])
             SkColorType.kRGBA_F16Norm -> {
                 // Convert premul float → non-premul 8-bit ARGB SkColor. Use
@@ -217,6 +249,7 @@ public class SkBitmap(
         if (x !in 0 until width || y !in 0 until height) return
         when (colorType) {
             SkColorType.kRGBA_8888 -> pixels8888[y * width + x] = c
+            SkColorType.kBGRA_8888 -> pixelsBGRA8888[y * width + x] = c
             SkColorType.kARGB_4444 -> {
                 val a = SkColorGetA(c) / 255f
                 val r = SkColorGetR(c) / 255f
