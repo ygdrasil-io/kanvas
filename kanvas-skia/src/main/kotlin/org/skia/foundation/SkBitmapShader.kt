@@ -3,6 +3,9 @@ package org.skia.foundation
 import org.skia.core.SkColorSpaceXformSteps
 import org.skia.math.SkMatrix
 import kotlin.math.floor
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.sqrt
 
 /**
  * Image shader (`SkBitmap.makeShader` / `SkImage.makeShader`) — Phase 5g.
@@ -44,6 +47,10 @@ public class SkBitmapShader internal constructor(
      * Pre-transformed source pixels, working colour space, **non-premul**
      * 8-bit ARGB. Built once in [setupForDraw]. Same length and same row
      * stride as [image.pixels].
+     *
+     * Always points to `xformedLevels8[0]` — kept as a separate field so
+     * the pre-mip code paths (which never touched the pyramid) compile
+     * unchanged.
      */
     private val xformedPixels: IntArray = IntArray(image.width * image.height)
 
@@ -55,15 +62,27 @@ public class SkBitmapShader internal constructor(
      */
     private val xformedPixelsF16: FloatArray = FloatArray(image.width * image.height * 4)
 
-    override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
-        super.setupForDraw(canvasCtm, xform)
-        val src = image.pixels
+    /**
+     * Phase G10 — xform'd byte pixels per mip level. `xformedLevels8[0]`
+     * always equals [xformedPixels]. Levels 1+ exist only when the
+     * underlying [image] carries a mip pyramid built via
+     * [SkImage.withDefaultMipmaps].
+     */
+    private lateinit var xformedLevels8: Array<IntArray>
+
+    /**
+     * Phase G10 — xform'd float-premul pixels per mip level. Sibling
+     * of [xformedLevels8] for the F16 sampler path.
+     * `xformedLevelsF16[0]` always equals [xformedPixelsF16].
+     */
+    private lateinit var xformedLevelsF16: Array<FloatArray>
+
+    private fun applyXformByte(src: IntArray, dst: IntArray, xform: SkColorSpaceXformSteps) {
         val rgba = FloatArray(4)
         for (i in src.indices) {
             val c = src[i]
-            // sRGB → working colour space (8-bit out, non-premul).
             if (xform.flags.isIdentity) {
-                xformedPixels[i] = c
+                dst[i] = c
             } else {
                 rgba[0] = SkColorGetR(c) / 255f
                 rgba[1] = SkColorGetG(c) / 255f
@@ -74,30 +93,114 @@ public class SkBitmapShader internal constructor(
                 val outR = (rgba[0] * 255f + 0.5f).toInt().coerceIn(0, 255)
                 val outG = (rgba[1] * 255f + 0.5f).toInt().coerceIn(0, 255)
                 val outB = (rgba[2] * 255f + 0.5f).toInt().coerceIn(0, 255)
-                xformedPixels[i] = SkColorSetARGB(outA, outR, outG, outB)
+                dst[i] = SkColorSetARGB(outA, outR, outG, outB)
             }
-            // Float path: keep full precision through the xform, then premul.
+        }
+    }
+
+    private fun applyXformFloat(src: IntArray, dst: FloatArray, xform: SkColorSpaceXformSteps) {
+        val rgba = FloatArray(4)
+        for (i in src.indices) {
+            val c = src[i]
             val a = SkColorGetA(c) / 255f
             val r = SkColorGetR(c) / 255f
             val g = SkColorGetG(c) / 255f
             val b = SkColorGetB(c) / 255f
             if (xform.flags.isIdentity) {
                 val o = i * 4
-                xformedPixelsF16[o]     = r * a
-                xformedPixelsF16[o + 1] = g * a
-                xformedPixelsF16[o + 2] = b * a
-                xformedPixelsF16[o + 3] = a
+                dst[o]     = r * a
+                dst[o + 1] = g * a
+                dst[o + 2] = b * a
+                dst[o + 3] = a
             } else {
                 rgba[0] = r; rgba[1] = g; rgba[2] = b; rgba[3] = a
                 xform.apply(rgba)
                 val outA = rgba[3]
                 val o = i * 4
-                xformedPixelsF16[o]     = rgba[0] * outA
-                xformedPixelsF16[o + 1] = rgba[1] * outA
-                xformedPixelsF16[o + 2] = rgba[2] * outA
-                xformedPixelsF16[o + 3] = outA
+                dst[o]     = rgba[0] * outA
+                dst[o + 1] = rgba[1] * outA
+                dst[o + 2] = rgba[2] * outA
+                dst[o + 3] = outA
             }
         }
+    }
+
+    override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
+        super.setupForDraw(canvasCtm, xform)
+        applyXformByte(image.pixels, xformedPixels, xform)
+        applyXformFloat(image.pixels, xformedPixelsF16, xform)
+
+        // Build xform'd mip pyramid (level 0 reuses the buffers above).
+        val mip = image.mipLevels
+        if (mip == null || mip.size <= 1) {
+            xformedLevels8 = arrayOf(xformedPixels)
+            xformedLevelsF16 = arrayOf(xformedPixelsF16)
+        } else {
+            xformedLevels8 = Array(mip.size) { i ->
+                if (i == 0) xformedPixels else {
+                    val lvl = mip[i]
+                    val out = IntArray(lvl.width * lvl.height)
+                    applyXformByte(lvl.pixels, out, xform)
+                    out
+                }
+            }
+            xformedLevelsF16 = Array(mip.size) { i ->
+                if (i == 0) xformedPixelsF16 else {
+                    val lvl = mip[i]
+                    val out = FloatArray(lvl.width * lvl.height * 4)
+                    applyXformFloat(lvl.pixels, out, xform)
+                    out
+                }
+            }
+        }
+    }
+
+    // ────────────────── G10 — mip LOD selection helpers ──────────────────
+
+    /**
+     * Phase G10 — pick a mip level from the device→local Jacobian.
+     *
+     * `s = max(|∂u/∂x|, |∂v/∂y|)` is the per-axis source-step magnitude
+     * — for an axis-aligned scale, exactly the source/destination ratio.
+     * The mip level is `floor(log2(s))` clamped to `[0, numLevels-1]`.
+     *
+     * Returns `0` when the source has no mip pyramid (single-level
+     * image) or the sampler isn't requesting mips.
+     */
+    private fun pickMipLevel(): Int {
+        if (sampling.mipmap == SkMipmapMode.kNone) return 0
+        val numLevels = xformedLevels8.size
+        if (numLevels <= 1) return 0
+        val inv = deviceToLocal ?: return 0
+        // `inv` is the device→local matrix : column lengths give source-
+        // step-per-device-pixel. For an axis-aligned source/dst, that is
+        // exactly `srcW / dstW` (horizontal) and `srcH / dstH` (vertical).
+        val sx = sqrt(inv.sx * inv.sx + inv.ky * inv.ky)
+        val sy = sqrt(inv.kx * inv.kx + inv.sy * inv.sy)
+        val s = max(sx, sy)
+        if (s <= 1f) return 0
+        // `log2(s)` via `ln(s) / ln(2)`. Floor and clamp.
+        val level = floor(ln(s) / LN2).toInt()
+        return level.coerceIn(0, numLevels - 1)
+    }
+
+    /**
+     * Phase G10 — aniso shortcut. Returns `Pair(majorDx, majorDy)` in
+     * **local** space — the major-axis step in source pixels per
+     * device-space pixel. Magnitude is the *minor* axis length so the
+     * N-tap average covers the elliptical footprint along the longer
+     * axis. When the footprint is isotropic we fall back to the major
+     * being the larger of `(∂u/∂x, ∂v/∂y)`.
+     */
+    private fun anisoMajorStep(): Pair<Float, Float> {
+        val inv = deviceToLocal ?: return 0f to 0f
+        // Two column vectors of the inverse map : how a one-pixel step
+        // in device-x and device-y maps to local space.
+        val cx0 = inv.sx; val cx1 = inv.ky
+        val cy0 = inv.kx; val cy1 = inv.sy
+        val lx = sqrt(cx0 * cx0 + cx1 * cx1)
+        val ly = sqrt(cy0 * cy0 + cy1 * cy1)
+        return if (lx >= ly) (cx0 to cx1) else (cy0 to cy1)
     }
 
     override fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray) {
@@ -114,6 +217,19 @@ public class SkBitmapShader internal constructor(
         val stepX = inv.sx
         val stepY = inv.ky
 
+        // Phase G10 — anisotropic shortcut : N-tap average along the
+        // major axis of the texture-space ellipse.
+        if (sampling.useAniso && xformedLevels8.size > 1) {
+            val (mdx, mdy) = anisoMajorStep()
+            val n = sampling.maxAniso
+            for (i in 0 until count) {
+                dst[i] = sampleAniso8(lx, ly, mdx, mdy, n)
+                lx += stepX
+                ly += stepY
+            }
+            return
+        }
+
         val cubic = sampling.cubic
         if (cubic != null) {
             for (i in 0 until count) {
@@ -123,6 +239,34 @@ public class SkBitmapShader internal constructor(
             }
             return
         }
+
+        // Phase G10 — mip LOD selection (linear/nearest filter still
+        // governs the in-level sampling).
+        val level = pickMipLevel()
+        if (level > 0) {
+            val lvlW = xformedLevelW(level)
+            val lvlH = xformedLevelH(level)
+            val mipScaleX = lvlW.toFloat() / w
+            val mipScaleY = lvlH.toFloat() / h
+            when (sampling.filter) {
+                SkFilterMode.kNearest -> {
+                    for (i in 0 until count) {
+                        dst[i] = sampleNearestAtLevel8(lx * mipScaleX, ly * mipScaleY, level)
+                        lx += stepX
+                        ly += stepY
+                    }
+                }
+                SkFilterMode.kLinear -> {
+                    for (i in 0 until count) {
+                        dst[i] = sampleLinearAtLevel8(lx * mipScaleX, ly * mipScaleY, level)
+                        lx += stepX
+                        ly += stepY
+                    }
+                }
+            }
+            return
+        }
+
         when (sampling.filter) {
             SkFilterMode.kNearest -> {
                 for (i in 0 until count) {
@@ -158,6 +302,20 @@ public class SkBitmapShader internal constructor(
         val stepY = inv.ky
 
         var di = 0
+
+        // Phase G10 — aniso shortcut.
+        if (sampling.useAniso && xformedLevelsF16.size > 1) {
+            val (mdx, mdy) = anisoMajorStep()
+            val n = sampling.maxAniso
+            for (i in 0 until count) {
+                sampleAnisoF16(lx, ly, mdx, mdy, n, dst, di)
+                di += 4
+                lx += stepX
+                ly += stepY
+            }
+            return
+        }
+
         val cubic = sampling.cubic
         if (cubic != null) {
             for (i in 0 until count) {
@@ -168,6 +326,35 @@ public class SkBitmapShader internal constructor(
             }
             return
         }
+
+        // Phase G10 — mip LOD selection.
+        val level = pickMipLevel()
+        if (level > 0) {
+            val lvlW = xformedLevelW(level)
+            val lvlH = xformedLevelH(level)
+            val mipScaleX = lvlW.toFloat() / w
+            val mipScaleY = lvlH.toFloat() / h
+            when (sampling.filter) {
+                SkFilterMode.kNearest -> {
+                    for (i in 0 until count) {
+                        sampleNearestAtLevelF16(lx * mipScaleX, ly * mipScaleY, level, dst, di)
+                        di += 4
+                        lx += stepX
+                        ly += stepY
+                    }
+                }
+                SkFilterMode.kLinear -> {
+                    for (i in 0 until count) {
+                        sampleLinearAtLevelF16(lx * mipScaleX, ly * mipScaleY, level, dst, di)
+                        di += 4
+                        lx += stepX
+                        ly += stepY
+                    }
+                }
+            }
+            return
+        }
+
         when (sampling.filter) {
             SkFilterMode.kNearest -> {
                 for (i in 0 until count) {
@@ -438,5 +625,203 @@ public class SkBitmapShader internal constructor(
     private fun mod(n: Int, m: Int): Int {
         val r = n % m
         return if (r < 0) r + m else r
+    }
+
+    // ────────────────────── G10 — per-level samplers ─────────────────────
+
+    private fun xformedLevelW(level: Int): Int =
+        image.mipLevels?.get(level)?.width ?: image.width
+
+    private fun xformedLevelH(level: Int): Int =
+        image.mipLevels?.get(level)?.height ?: image.height
+
+    /**
+     * Nearest sample at integer mip `level`. The `(lx, ly)` coords are
+     * already scaled into that level's local space by the caller.
+     */
+    private fun sampleNearestAtLevel8(lx: Float, ly: Float, level: Int): SkColor {
+        val w = xformedLevelW(level)
+        val h = xformedLevelH(level)
+        val (sxi, decalX) = applyTileNearest(lx, w, tileX)
+        val (syi, decalY) = applyTileNearest(ly, h, tileY)
+        if (decalX || decalY) return 0
+        return xformedLevels8[level][syi * w + sxi]
+    }
+
+    /** Bilinear sample at integer mip `level`. */
+    private fun sampleLinearAtLevel8(lx: Float, ly: Float, level: Int): SkColor {
+        val w = xformedLevelW(level)
+        val h = xformedLevelH(level)
+        val src = xformedLevels8[level]
+        val xf = lx - 0.5f
+        val yf = ly - 0.5f
+        val x0 = floor(xf).toInt()
+        val y0 = floor(yf).toInt()
+        val fx = xf - x0
+        val fy = yf - y0
+        val (ix0, dx0) = applyTileNearest(x0.toFloat() + 0.5f, w, tileX)
+        val (ix1, dx1) = applyTileNearest((x0 + 1).toFloat() + 0.5f, w, tileX)
+        val (iy0, dy0) = applyTileNearest(y0.toFloat() + 0.5f, h, tileY)
+        val (iy1, dy1) = applyTileNearest((y0 + 1).toFloat() + 0.5f, h, tileY)
+        val ifx = 1f - fx; val ify = 1f - fy
+        val c00 = if (dx0 || dy0) 0 else src[iy0 * w + ix0]
+        val c10 = if (dx1 || dy0) 0 else src[iy0 * w + ix1]
+        val c01 = if (dx0 || dy1) 0 else src[iy1 * w + ix0]
+        val c11 = if (dx1 || dy1) 0 else src[iy1 * w + ix1]
+        val w00 = ifx * ify; val w10 = fx * ify
+        val w01 = ifx * fy;  val w11 = fx * fy
+        val a = (SkColorGetA(c00) * w00 + SkColorGetA(c10) * w10 +
+                 SkColorGetA(c01) * w01 + SkColorGetA(c11) * w11 + 0.5f).toInt().coerceIn(0, 255)
+        val r = (SkColorGetR(c00) * w00 + SkColorGetR(c10) * w10 +
+                 SkColorGetR(c01) * w01 + SkColorGetR(c11) * w11 + 0.5f).toInt().coerceIn(0, 255)
+        val g = (SkColorGetG(c00) * w00 + SkColorGetG(c10) * w10 +
+                 SkColorGetG(c01) * w01 + SkColorGetG(c11) * w11 + 0.5f).toInt().coerceIn(0, 255)
+        val b = (SkColorGetB(c00) * w00 + SkColorGetB(c10) * w10 +
+                 SkColorGetB(c01) * w01 + SkColorGetB(c11) * w11 + 0.5f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(a, r, g, b)
+    }
+
+    private fun sampleNearestAtLevelF16(lx: Float, ly: Float, level: Int, out: FloatArray, off: Int) {
+        val w = xformedLevelW(level)
+        val h = xformedLevelH(level)
+        val (sxi, decalX) = applyTileNearest(lx, w, tileX)
+        val (syi, decalY) = applyTileNearest(ly, h, tileY)
+        if (decalX || decalY) {
+            out[off] = 0f; out[off + 1] = 0f; out[off + 2] = 0f; out[off + 3] = 0f
+            return
+        }
+        val src = xformedLevelsF16[level]
+        val o = (syi * w + sxi) * 4
+        out[off]     = src[o]
+        out[off + 1] = src[o + 1]
+        out[off + 2] = src[o + 2]
+        out[off + 3] = src[o + 3]
+    }
+
+    private fun sampleLinearAtLevelF16(lx: Float, ly: Float, level: Int, out: FloatArray, off: Int) {
+        val w = xformedLevelW(level)
+        val h = xformedLevelH(level)
+        val src = xformedLevelsF16[level]
+        val xf = lx - 0.5f
+        val yf = ly - 0.5f
+        val x0 = floor(xf).toInt()
+        val y0 = floor(yf).toInt()
+        val fx = xf - x0
+        val fy = yf - y0
+        val (ix0, dx0) = applyTileNearest(x0.toFloat() + 0.5f, w, tileX)
+        val (ix1, dx1) = applyTileNearest((x0 + 1).toFloat() + 0.5f, w, tileX)
+        val (iy0, dy0) = applyTileNearest(y0.toFloat() + 0.5f, h, tileY)
+        val (iy1, dy1) = applyTileNearest((y0 + 1).toFloat() + 0.5f, h, tileY)
+        val ifx = 1f - fx; val ify = 1f - fy
+        val w00 = ifx * ify; val w10 = fx * ify
+        val w01 = ifx * fy;  val w11 = fx * fy
+        for (chan in 0..3) {
+            val v00 = if (dx0 || dy0) 0f else src[(iy0 * w + ix0) * 4 + chan]
+            val v10 = if (dx1 || dy0) 0f else src[(iy0 * w + ix1) * 4 + chan]
+            val v01 = if (dx0 || dy1) 0f else src[(iy1 * w + ix0) * 4 + chan]
+            val v11 = if (dx1 || dy1) 0f else src[(iy1 * w + ix1) * 4 + chan]
+            out[off + chan] = w00 * v00 + w10 * v10 + w01 * v01 + w11 * v11
+        }
+    }
+
+    // ─────────────────────── G10 — aniso sampler ─────────────────────────
+
+    /**
+     * Phase G10 — N-tap anisotropic sample. Walks `n` steps along the
+     * texture-space major axis `(mdx, mdy)` (in source pixels per
+     * device pixel), averaging linear samples taken from the mip level
+     * that matches the **minor**-axis footprint. This is a pragmatic
+     * raster shortcut — upstream Skia raster uses a similar
+     * simplification (the WeightedFilter path).
+     */
+    private fun sampleAniso8(cx: Float, cy: Float, mdx: Float, mdy: Float, n: Int): SkColor {
+        // Pick a mip level off the **shorter** of the two ellipse axes
+        // so the minor-axis frequency is band-limited before the N-tap
+        // along-major average.
+        val mipLevel = pickMipLevelForAniso(mdx, mdy, n)
+        val lvlW = xformedLevelW(mipLevel)
+        val lvlH = xformedLevelH(mipLevel)
+        val mipScaleX = lvlW.toFloat() / image.width
+        val mipScaleY = lvlH.toFloat() / image.height
+        // Steps in level-space.
+        val sdx = mdx * mipScaleX
+        val sdy = mdy * mipScaleY
+        // N taps centered on (cx, cy), spanning the major axis once
+        // (`t ∈ [-0.5, 0.5]`).
+        var sumA = 0f; var sumR = 0f; var sumG = 0f; var sumB = 0f
+        for (k in 0 until n) {
+            // Distribute taps uniformly in [-0.5, 0.5] * majorLength.
+            val t = if (n == 1) 0f else (k.toFloat() / (n - 1)) - 0.5f
+            val sx = cx * mipScaleX + t * sdx
+            val sy = cy * mipScaleY + t * sdy
+            val s = sampleLinearAtLevel8(sx, sy, mipLevel)
+            sumA += SkColorGetA(s)
+            sumR += SkColorGetR(s)
+            sumG += SkColorGetG(s)
+            sumB += SkColorGetB(s)
+        }
+        val inv = 1f / n
+        val a = (sumA * inv + 0.5f).toInt().coerceIn(0, 255)
+        val r = (sumR * inv + 0.5f).toInt().coerceIn(0, 255)
+        val g = (sumG * inv + 0.5f).toInt().coerceIn(0, 255)
+        val b = (sumB * inv + 0.5f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(a, r, g, b)
+    }
+
+    private fun sampleAnisoF16(
+        cx: Float, cy: Float, mdx: Float, mdy: Float, n: Int,
+        out: FloatArray, off: Int,
+    ) {
+        val mipLevel = pickMipLevelForAniso(mdx, mdy, n)
+        val lvlW = xformedLevelW(mipLevel)
+        val lvlH = xformedLevelH(mipLevel)
+        val mipScaleX = lvlW.toFloat() / image.width
+        val mipScaleY = lvlH.toFloat() / image.height
+        val sdx = mdx * mipScaleX
+        val sdy = mdy * mipScaleY
+        val tmp = FloatArray(4)
+        var a = 0f; var r = 0f; var g = 0f; var b = 0f
+        for (k in 0 until n) {
+            val t = if (n == 1) 0f else (k.toFloat() / (n - 1)) - 0.5f
+            val sx = cx * mipScaleX + t * sdx
+            val sy = cy * mipScaleY + t * sdy
+            sampleLinearAtLevelF16(sx, sy, mipLevel, tmp, 0)
+            r += tmp[0]; g += tmp[1]; b += tmp[2]; a += tmp[3]
+        }
+        val inv = 1f / n
+        out[off]     = r * inv
+        out[off + 1] = g * inv
+        out[off + 2] = b * inv
+        out[off + 3] = a * inv
+    }
+
+    /**
+     * Pick the mip level for an N-tap aniso. The minor-axis footprint
+     * is `max(majorLen / N, minorLen)` so the chosen level is
+     * `floor(log2(minorLen))` — enough mips that the N taps along the
+     * major axis evenly cover the elliptical footprint without
+     * undersampling the orthogonal direction.
+     */
+    private fun pickMipLevelForAniso(mdx: Float, mdy: Float, n: Int): Int {
+        val numLevels = xformedLevels8.size
+        if (numLevels <= 1) return 0
+        val inv = deviceToLocal ?: return 0
+        val cx0 = inv.sx; val cx1 = inv.ky
+        val cy0 = inv.kx; val cy1 = inv.sy
+        val lx = sqrt(cx0 * cx0 + cx1 * cx1)
+        val ly = sqrt(cy0 * cy0 + cy1 * cy1)
+        val majorLen = sqrt(mdx * mdx + mdy * mdy)
+        // The "minor" axis length — the smaller of the two column norms.
+        val minorLen = if (lx >= ly) ly else lx
+        // Effective per-tap minor-axis footprint.
+        val perTap = if (n > 0) majorLen / n.toFloat() else majorLen
+        val effective = max(minorLen, perTap)
+        if (effective <= 1f) return 0
+        val level = floor(ln(effective) / LN2).toInt()
+        return level.coerceIn(0, numLevels - 1)
+    }
+
+    private companion object {
+        private val LN2: Float = kotlin.math.ln(2.0).toFloat()
     }
 }
