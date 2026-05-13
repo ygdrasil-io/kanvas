@@ -74,6 +74,18 @@ public object SkRawDecoder {
     /** Number of leading bytes [IsRaw] needs to evaluate the TIFF header. */
     private const val SNIFF_LEN = 4
 
+    /**
+     * R-suivi.47 — [SkCodec.Decoder] registration record for RAW. The
+     * registry installs this **after** the more specific formats since
+     * the TIFF-like signature overlaps with plain TIFF files. `make`
+     * returns `null` until R-suivi.28 wires up libraw / dng_sdk.
+     */
+    internal val RegistryEntry: SkCodec.Decoder = object : SkCodec.Decoder {
+        override val name: String = "raw"
+        override fun matches(data: ByteArray): Boolean = IsRaw(data)
+        override fun make(data: ByteArray): SkCodec? = Decode(data)
+    }
+
     private fun matchesRaw(data: ByteArray, length: Int): Boolean {
         if (length < 4) return false
         // Little-endian TIFF : 'I' 'I' 0x2A 0x00.

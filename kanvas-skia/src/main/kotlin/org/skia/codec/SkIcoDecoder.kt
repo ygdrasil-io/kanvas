@@ -68,6 +68,17 @@ public object SkIcoDecoder {
     /** Number of leading bytes [IsIco] needs to evaluate the ICONDIR header. */
     private const val SNIFF_LEN = 6
 
+    /**
+     * R-suivi.47 — [SkCodec.Decoder] registration record for ICO/CUR.
+     * Auto-installed into [SkCodec.Decoders] at class-init time. `make`
+     * returns `null` until R-suivi.28 wires up the directory parser.
+     */
+    internal val RegistryEntry: SkCodec.Decoder = object : SkCodec.Decoder {
+        override val name: String = "ico"
+        override fun matches(data: ByteArray): Boolean = IsIco(data)
+        override fun make(data: ByteArray): SkCodec? = Decode(data)
+    }
+
     private fun matchesIco(data: ByteArray, length: Int): Boolean {
         if (length < SNIFF_LEN) return false
         // Reserved field bytes 0..1 must be zero.

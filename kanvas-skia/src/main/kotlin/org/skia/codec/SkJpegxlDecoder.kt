@@ -70,6 +70,17 @@ public object SkJpegxlDecoder {
         0x0D, 0x0A, 0x87.toByte(), 0x0A,
     )
 
+    /**
+     * R-suivi.47 — [SkCodec.Decoder] registration record for JPEG-XL.
+     * Auto-installed into [SkCodec.Decoders] at class-init time. `make`
+     * returns `null` until R-suivi.28 wires up libjxl.
+     */
+    internal val RegistryEntry: SkCodec.Decoder = object : SkCodec.Decoder {
+        override val name: String = "jpegxl"
+        override fun matches(data: ByteArray): Boolean = IsJpegxl(data)
+        override fun make(data: ByteArray): SkCodec? = Decode(data)
+    }
+
     private fun matchesJpegxl(data: ByteArray, length: Int): Boolean {
         // Raw codestream : two-byte marker FF 0A.
         if (length >= 2 &&
