@@ -5,13 +5,19 @@
 
 ## Résumé exécutif
 
-| Catégorie | Count |
-|---|---:|
-| **Classes manquantes entièrement** (non-GPU, public) | **47** |
-| **Méthodes manquantes** (classe présente) | **~110** |
-| **Overloads manquants** (signature partielle) | **~35** |
-| **Champs / enums manquants** | **~20** |
-| Total APIs publiques upstream non-GPU auditées | ~95 headers |
+| Catégorie | Count audit | Restant après R1 + R2.1 |
+|---|---:|---:|
+| **Classes manquantes entièrement** (non-GPU, public) | 47 | 33 |
+| **Méthodes manquantes** (classe présente) | ~110 | ~100 |
+| **Overloads manquants** (signature partielle) | ~35 | ~32 |
+| **Champs / enums manquants** | ~20 | ~17 |
+| Total APIs publiques upstream non-GPU auditées | ~95 headers | — |
+
+**Progression** :
+- ✅ Phase R1 complète (25/25, mergée). 14 nouvelles classes + 11 méthodes/champs/overloads.
+- 🔄 Phase R2 : 1/20 (R2.1 PathMeasure mergée), 5 items en vol (batch 3 : Pixmap, PixelRef, ImageGenerator, Images, Surfaces, 3DView, Camera3D, ColorMatrix).
+- ⏳ Phase R3 : 0/11.
+- ⚠️ Phase R-suivi (nouvelle, après R1) : 10 items partiels/stub à compléter — voir Section 5.
 
 Plus du tiers de la surface publique Skia non-GPU n'est pas portée. Le module
 `:kanvas-skia` est correctement dimensionné pour exécuter les GMs **2D rasterisés
@@ -731,44 +737,65 @@ simples** mais s'écarte fortement de l'API upstream sur tout ce qui touche aux 
 
 > Ordonné par ROI : impact GMs × inverse(effort).
 
-### Phase R1 — Quick wins (effort S, impact moyen, désengorge la longue traîne H2)
-1. **R1.1** `SkColorFilters.LinearToSRGBGamma` + `SRGBToLinearGamma` (H2.7)
-2. **R1.2** `SkColorFilters.Lighting(mul, add)` factory (H2.17)
-3. **R1.3** `SkColorFilters.Lerp(t, dst?, src?)` nullable overload (H2.33)
-4. **R1.4** `SkShaders.Color(SkColor)` (H2.16) — créer l'object factory
-5. **R1.5** `SkShaders.CoordClamp(shader, rect)` (H2.10)
-6. **R1.6** `SkTableMaskFilter` (H2.9)
-7. **R1.7** `SkShaderMaskFilter` (H2.5)
-8. **R1.8** `SkHighContrastFilter` (H2.32)
-9. **R1.9** `SkPath.contains(scalar, scalar)` (H2.29)
-10. **R1.10** `SaveLayerRec.scaleFactor` champ (H2.27)
-11. **R1.11** `SkMaskFilter.MakeBlur(style, sigma, respectCTM)` overload (H2.13)
-12. **R1.12** `SkBitmap.colorType` `kRGB_565`/`kGray_8` (H2.18)
-13. **R1.13** `SkCubicMap` (Section 1.3)
-14. **R1.14** `SkUnPreMultiply` (Section 1.26)
-15. **R1.15** `SkAnnotation` (no-op) (Section 1.12)
-16. **R1.16** `SkParse` (Section 1.33)
-17. **R1.17** `SkNWayCanvas` (Section 1.32)
-18. **R1.18** `SkCanvasStateUtils` (Section 1.29)
-19. **R1.19** `SkPaint.canComputeFastBounds` + `computeFastBounds` (H2.26)
-20. **R1.20** `SkImageFilter.computeFastBounds` (H2.26)
-21. **R1.21** `SkCapabilities` + `SkGraphics` (Sections 1.21, 1.22 — no-ops)
-22. **R1.22** `SkExecutor` (no-op, Section 1.23)
-23. **R1.23** `SkPathUtils.FillPathWithPaint` (Section 1.5)
-24. **R1.24** `SkTiledImageUtils` (Section 1.46)
-25. **R1.25** `SkPixmapUtils` (Section 1.45)
+### Phase R1 — Quick wins ✅ **COMPLET** (25/25, mergée via PRs #358–#363)
+
+1. ✅ **R1.1** `SkColorFilters.LinearToSRGBGamma` + `SRGBToLinearGamma` (PR #359)
+2. ✅ **R1.2** `SkColorFilters.Lighting(mul, add)` factory (PR #359)
+3. ✅ **R1.3** `SkColorFilters.Lerp(t, dst?, src?)` nullable overload (PR #359, voir R-suivi)
+4. ✅ **R1.4** `SkShaders.Color(SkColor)` (PR #359)
+5. ✅ **R1.5** `SkShaders.CoordClamp(shader, rect)` (PR #359, voir R-suivi pour F16)
+6. ✅ **R1.6** `SkTableMaskFilter` (PR #358)
+7. ✅ **R1.7** `SkShaderMaskFilter` (PR #358)
+8. ✅ **R1.8** `SkHighContrastFilter` (PR #358)
+9. ✅ **R1.9** `SkPath.contains(scalar, scalar)` (PR #360)
+10. ✅ **R1.10** `SaveLayerRec.scaleFactor` champ (PR #360)
+11. ✅ **R1.11** `SkMaskFilter.MakeBlur(style, sigma, respectCTM)` overload (PR #360)
+12. ✅ **R1.12** `SkBitmap.colorType` `kRGB_565`/`kGray_8` (PR #360)
+13. ✅ **R1.13** `SkCubicMap` (PR #358)
+14. ✅ **R1.14** `SkUnPreMultiply` (PR #358)
+15. ✅ **R1.15** `SkAnnotation` (PR #363)
+16. ✅ **R1.16** `SkParse` (PR #363)
+17. ✅ **R1.17** `SkNWayCanvas` (PR #363, voir R-suivi pour overrides différés)
+18. ✅ **R1.18** `SkCanvasStateUtils` (PR #363, stub — voir R-suivi)
+19. ✅ **R1.19** `SkPaint.canComputeFastBounds` + `computeFastBounds` (PR #360)
+20. ✅ **R1.20** `SkImageFilter.computeFastBounds` (PR #360)
+21. ✅ **R1.21** `SkCapabilities` + `SkGraphics` (PR #363, stubs — voir R-suivi)
+22. ✅ **R1.22** `SkExecutor` (PR #363)
+23. ✅ **R1.23** `SkPathUtils.FillPathWithPaint` (PR #362, voir R-suivi pour cullRect)
+24. ✅ **R1.24** `SkTiledImageUtils` (PR #362, shim — voir R-suivi pour tiling réel)
+25. ✅ **R1.25** `SkPixmapUtils` (PR #362, 2/8 origins — voir R-suivi)
+
+### Phase R-suivi — Items partiels / stubs de R1 à compléter
+
+Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire compiler les GMs, mais devront être levés pour la conformité fonctionnelle complète.
+
+1. **R-suivi.1** `SkColorFilters.Lerp` : la version nullable utilise un `SkIdentityColorFilter` interne pour remplacer `null` côté upstream — fonctionne mais n'est pas le pass-through bit-exact que ferait `nullptr` upstream.
+2. **R-suivi.2** `SkCoordClampShader` : path F16 forwardé via path byte → perte de précision sur sources HDR. À reprendre quand F16 dans les shaders est prioritaire.
+3. **R-suivi.3** `SkNWayCanvas` : seules les méthodes draw de base sont forwardées. **TODO** : `onDrawAtlas`, `onDrawVertices`, `onDrawTextBlob`, `onDrawDrawable`, `onDrawAnnotation`, `onDrawShadow`, `onDrawSlug`, `onDrawImageLattice`.
+4. **R-suivi.4** `SkCanvasStateUtils` : full stub (`Capture` → null, `MakeFrom` → null). À implémenter quand un cas d'usage l'exige (multi-process canvas state migration).
+5. **R-suivi.5** `SkCapabilities` : stub minimal (SkSL 100, pas d'extensions). À enrichir au fur et à mesure que les capabilities sont consultées.
+6. **R-suivi.6** `SkGraphics` : stubs sur les getters de cache (`GetResourceCacheTotalBytesUsed` → 0). À câbler quand un cache réel sera introduit.
+7. **R-suivi.7** `SkPathUtils.FillPathWithPaint` : argument `cullRect` ignoré (pas de knob `cullRect` sur `SkPathEffect` actuel). À reprendre quand l'API `SkPathEffect.filterPath(..., cullRect)` est complète.
+8. **R-suivi.8** `SkTiledImageUtils` : thin shim sur `SkCanvas.drawImage` — pas de tiling effectif. Pertinent si support GPU est ajouté ou pour cas où l'image dépasse 2 Go.
+9. **R-suivi.9** `SkPixmapUtils.Orient` : seuls `kTopLeft` (identity) et `kBottomLeft` (vertical flip) implémentés. **TODO** : `kTopRight`, `kBottomRight`, `kLeftTop`, `kRightTop`, `kRightBottom`, `kLeftBottom` (6/8 origins EXIF).
+10. **R-suivi.10** `SkNoDrawCanvas` (utilisé par `SkNWayCanvas`) — vérifier la complétude des overrides protégés.
+
+Effort estimé : 1-2 jours total (tous indépendants, parallélisables).
 
 ### Phase R2 — Classes moyennes (effort M, impact fort)
-1. **R2.1** `SkPathMeasure` + `SkContourMeasure` (Section 1.2) — débloque TextOnPath, dashing évolué
-2. **R2.2** `SkColorMatrix` + intégration `SkColorFilters.Matrix(SkColorMatrix)` (Section 1.14)
-3. **R2.3** `SkPixmap` (Section 1.10) — préreq de `SkBitmap.peekPixels`
-4. **R2.4** `SkPixelRef` (Section 1.11) — préreq `installPixels`
-5. **R2.5** `SkImageGenerator` (Section 1.20 / H2.6)
-6. **R2.6** `SkImages` factory object (Section 2.13)
-7. **R2.7** `SkSurfaces` factory object (Section 2.14)
+
+**Progression** : 1/20 (R2.1 ✅), 3 en cours (PR ouvertes), 16 restants.
+
+1. ✅ **R2.1** `SkPathMeasure` + `SkContourMeasure` (PR #361)
+2. **R2.2** `SkColorMatrix` + intégration `SkColorFilters.Matrix(SkColorMatrix)` (Section 1.14) — **en cours batch 3-C**
+3. **R2.3** `SkPixmap` (Section 1.10) — préreq de `SkBitmap.peekPixels` — **en cours batch 3-A**
+4. **R2.4** `SkPixelRef` (Section 1.11) — préreq `installPixels` — **en cours batch 3-A**
+5. **R2.5** `SkImageGenerator` (Section 1.20 / H2.6) — **en cours batch 3-A**
+6. **R2.6** `SkImages` factory object (Section 2.13) — **en cours batch 3-B**
+7. **R2.7** `SkSurfaces` factory object (Section 2.14) — **en cours batch 3-B**
 8. **R2.8** `SkShaders` factory object complet (Section 2.12)
 9. **R2.9** `SkPathIter` (Section 1.4)
-10. **R2.10** `Sk3DView` / `SkCamera3D` (Section 1.31)
+10. **R2.10** `Sk3DView` / `SkCamera3D` (Section 1.31) — **en cours batch 3-C**
 11. **R2.11** `SkBitmap.installPixels`, `extractSubset`, `extractAlpha`, `peekPixels` (Section 2.4)
 12. **R2.12** `SkImage.makeSubset`, `makeColorSpace`, `encodeToData`, `readPixels` (Sections 2.5, H2.3, H2.14)
 13. **R2.13** `SkCanvas.drawRegion`, `drawImageNine` (H2.8, H2.11)
