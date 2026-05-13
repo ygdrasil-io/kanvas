@@ -5,19 +5,19 @@
 
 ## Résumé exécutif
 
-| Catégorie | Count audit | Restant après R1 + R2 (presque complet) |
+| Catégorie | Count audit | Restant après R1 + R2 complet |
 |---|---:|---:|
-| **Classes manquantes entièrement** (non-GPU, public) | 47 | 13 |
-| **Méthodes manquantes** (classe présente) | ~110 | ~55 |
-| **Overloads manquants** (signature partielle) | ~35 | ~12 |
-| **Champs / enums manquants** | ~20 | ~12 |
+| **Classes manquantes entièrement** (non-GPU, public) | 47 | 11 |
+| **Méthodes manquantes** (classe présente) | ~110 | ~50 |
+| **Overloads manquants** (signature partielle) | ~35 | ~10 |
+| **Champs / enums manquants** | ~20 | ~10 |
 | Total APIs publiques upstream non-GPU auditées | ~95 headers | — |
 
 **Progression** :
 - ✅ Phase R1 complète (25/25, mergée).
-- 🔄 Phase R2 : **18/20 ✅ ou en vol** (R2.1–R2.7, 2.10–2.20 sauf R2.8, R2.9). 2 restants (R2.8 SkShaders advanced, R2.9 SkPathIter).
-- ⏳ Phase R3 : 0/11.
-- ⚠️ Phase R-suivi : **23 items** partiels/stub à compléter — voir Section 5.
+- ✅ Phase R2 complète (20/20 ✅ ou ouverte). PRs #361, #365–#367, #369–#371, #373–#375, #378, #379.
+- 🔄 Phase R3 : 1/11 (R3.1 SkM44 classe via #377, intégration Canvas différée R3.1-bis).
+- ⚠️ Phase R-suivi : **27 items** partiels/stub à compléter — voir Section 5.
 
 Plus du tiers de la surface publique Skia non-GPU n'est pas portée. Le module
 `:kanvas-skia` est correctement dimensionné pour exécuter les GMs **2D rasterisés
@@ -802,15 +802,22 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 22. **R-suivi.22** `SkSerialProcs` / `SkDeserialProcs` : data classes seules ; pas consommées par `SkPicture.serialize` / `SkPicture.MakeFromData` (ces méthodes ignorent les procs pour l'instant).
 23. **R-suivi.23** `SkWebpEncoder` : full stub (encode → null). JVM n'a pas d'encodeur WebP natif et TwelveMonkeys imageio-webp est decoder-only. Pistes : embarquer libwebp via JNI ou exiger un encoder externe côté caller.
 
+**Ajouts batch 6 (R2.8, R2.9, R3.1)** :
+
+24. **R-suivi.24** `SkV3` du PR #366 n'avait été créé que dans `kanvas/src/generated/` (legacy module), **pas** dans `:kanvas-skia/math/`. Corrigé en marge de #377 via merge conflict — à confirmer en relecture qu'il n'y a pas d'autres types de #366 dans la même situation (`SkColorMatrix`, `Sk3DView`, `SkCamera3D` ?).
+25. **R-suivi.25** `SkPath.IterVerb` collision avec `SkPath.Verb` existant : le storage enum (6 valeurs) et l'iterator enum (7 valeurs avec `kDoneVerb`) sont distincts. Réconciliation à choisir : renommer le storage en `SkPath.StorageVerb` pour libérer `SkPath.Verb` côté iterator (upstream-compat), ou garder le nommage actuel.
+26. **R-suivi.26** `SkImagesTest.kt` cassé sur master post-R2.12 (#371) : `encodeToData` extension top-level supprimée, remplacée par la méthode membre. Fix dans #378/#379. À vérifier qu'aucun autre call site n'utilise l'ancienne extension.
+27. **R-suivi.27** R3.1-bis : intégration `SkCanvas.concat(SkM44)`, `setMatrix(SkM44)`, `getLocalToDevice()` etc. — différée pour éviter conflit avec PR #375 (`SkCanvas` batch 5-A). À ouvrir post-#375 mergé.
+
 Effort estimé : 3-4 jours total (tous indépendants, parallélisables).
 
 ### Découvertes inattendues
 
 - **`SkPngEncoder` + `SkJpegEncoder` existaient déjà** dans `kanvas-skia` (probablement issus d'une phase D3.x antérieure non documentée dans ce plan). L'item R2.20 / Section 1.35 est donc réduit à **`SkWebpEncoder` seul** (Png+Jpeg ✅ déjà présents).
 
-### Phase R2 — Classes moyennes (effort M, impact fort)
+### Phase R2 — Classes moyennes (effort M, impact fort) ✅ **COMPLET**
 
-**Progression** : **18/20 ✅** (mergés + en vol), 2 restants (R2.8, R2.9).
+**Progression** : **20/20** ✅ (mergés + ouverts). R2 phase complète.
 
 1. ✅ **R2.1** `SkPathMeasure` + `SkContourMeasure` (PR #361)
 2. ✅ **R2.2** `SkColorMatrix` (PR #366) — classe seule, intégration `SkColorFilters.Matrix(SkColorMatrix)` → R-suivi.16
@@ -819,8 +826,8 @@ Effort estimé : 3-4 jours total (tous indépendants, parallélisables).
 5. ✅ **R2.5** `SkImageGenerator` (PR #365)
 6. ✅ **R2.6** `SkImages` factory object (PR #367, R-suivi.12 stubs)
 7. ✅ **R2.7** `SkSurfaces` factory object (PR #367, R-suivi.13/14)
-8. **R2.8** `SkShaders` factory object complet — partiel via R1-B (#359), reste facteurs avancés (`Empty`, `Lerp`, `Blend`, `MakeFractalNoise`, `MakePerlinNoise`, etc.)
-9. **R2.9** `SkPathIter` (verb iterator)
+8. 🔄 **R2.8** `SkShaders` factory complet (PR #379, R-suivi.27 commit anomaly) — Empty, Color4f, Blend, MakeFractalNoise, MakeTurbulence
+9. 🔄 **R2.9** `SkPath.Iter` + `RawIter` + `IterVerb` enum (PR #378, R-suivi.25 enum collision)
 10. ✅ **R2.10** `Sk3DView` / `SkCamera3D` (PR #366, R-suivi.15)
 11. ✅ **R2.11** `SkBitmap.installPixels`, `extractSubset`, `extractAlpha`, `peekPixels` (PR #369, R-suivi.17/18)
 12. ✅ **R2.12** `SkImage.makeSubset`, `makeColorSpace`, `encodeToData`, `readPixels` (PR #371, R-suivi.19)
@@ -834,7 +841,10 @@ Effort estimé : 3-4 jours total (tous indépendants, parallélisables).
 20. 🔄 **R2.20** ~~`SkPngEncoder` / `SkJpegEncoder`~~ déjà présents ; `SkWebpEncoder` stub (PR #373 ouverte, R-suivi.23)
 
 ### Phase R3 — Grandes classes / sous-systèmes (effort L/XL)
-1. **R3.1** `SkM44` complet + intégration `SkCanvas.concat(m44)` / `setMatrix(m44)` (Section 1.1)
+
+**Progression** : 1/11 (R3.1 classe ouverte, intégration `SkCanvas` différée à R3.1-bis).
+
+1. 🔄 **R3.1** `SkM44` + `SkV2` + `SkV4` classes (PR #377). **R3.1-bis** restant : intégration `SkCanvas.concat(m44)` / `setMatrix(m44)`.
 2. **R3.2** `SkFontMgr` + `SkFontStyleSet` + plate-forme fontconfig (Section 1.6)
 3. **R3.3** `SkCustomTypefaceBuilder` (Section 1.7) — post-R3.2
 4. **R3.4** `SkStream` / `SkWStream` arbre complet (Section 1.24)
