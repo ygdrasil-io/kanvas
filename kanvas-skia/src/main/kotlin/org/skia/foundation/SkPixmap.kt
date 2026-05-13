@@ -179,22 +179,47 @@ public class SkPixmap {
     /**
      * Mirrors `SkPixmap::scalePixels(const SkPixmap& dst, const SkSamplingOptions&)`.
      *
-     * Performs a nearest-neighbour resample from `this` to [dst]. The
-     * upstream implementation honours [sampling] (linear, mipmap,
-     * cubic) ; kanvas-skia exposes the same surface but falls back to
-     * nearest for the moment — sufficient for the only consumer
-     * ([SkImageGenerator.getPixels] when the destination info differs
-     * in size) and easy to upgrade later without an API break.
+     * Resamples `this` into [dst] honouring [sampling] :
+     *  - `sampling.cubic != null` → bicubic Mitchell-Netravali kernel
+     *    using [SkCubicBC] with the `(B, C)` from
+     *    [SkSamplingOptions.cubic]. Matches upstream's `useCubic`
+     *    branch (cubic takes precedence over filter/mipmap).
+     *  - `sampling.filter == SkFilterMode.kLinear` → bilinear blend
+     *    of the four texels surrounding the sub-pixel sample.
+     *  - otherwise → nearest-neighbour (Skia's default sampling).
+     *
+     * The [SkSamplingOptions.mipmap] and [SkSamplingOptions.maxAniso]
+     * fields are ignored — pixmaps are single-level, mipmaps and
+     * anisotropy are a higher-level texture concept.
+     *
+     * Sub-pixel sampling uses Skia's "half-pixel centre" convention :
+     * destination texel centre `(dx + 0.5)` maps to source coordinate
+     * `((dx + 0.5) * sw / dw)`, then re-centred by subtracting `0.5`
+     * to land on a texel grid. Out-of-bounds samples clamp to the
+     * edge (matches upstream's `SkTileMode::kClamp` default for
+     * `scalePixels`).
      */
     public fun scalePixels(dst: SkPixmap, sampling: SkSamplingOptions): Boolean {
         if (colorType() == SkColorType.kUnknown || dst.colorType() == SkColorType.kUnknown) return false
         val sw = width(); val sh = height()
         val dw = dst.width(); val dh = dst.height()
         if (sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return false
-        // Nearest-neighbour fallback (sampling parameter accepted but
-        // ignored — see KDoc). Map dst-centre → src-centre, then round.
+        return when {
+            sampling.cubic != null -> scaleCubic(dst, sampling.cubic)
+            sampling.filter == SkFilterMode.kLinear -> scaleBilinear(dst)
+            else -> scaleNearest(dst)
+        }
+    }
+
+    /**
+     * Nearest-neighbour resample — Skia's default when
+     * `SkSamplingOptions()` is used with no arguments. Map
+     * destination texel-centre to source coords and round.
+     */
+    private fun scaleNearest(dst: SkPixmap): Boolean {
+        val sw = width(); val sh = height()
+        val dw = dst.width(); val dh = dst.height()
         for (dy in 0 until dh) {
-            // sy = ((dy + 0.5) * sh / dh) - 0.5 ; clamp to source bounds.
             val syF = ((dy + 0.5) * sh / dh) - 0.5
             val sy = syF.toInt().coerceIn(0, sh - 1)
             for (dx in 0 until dw) {
@@ -204,6 +229,125 @@ public class SkPixmap {
             }
         }
         return true
+    }
+
+    /**
+     * Bilinear resample — 4-tap blend of the texels surrounding the
+     * sub-pixel source coordinate. The sub-pixel position uses the
+     * half-pixel centre convention (matches Skia's
+     * `SkBitmapProcState_matrix.h` bilinear path).
+     */
+    private fun scaleBilinear(dst: SkPixmap): Boolean {
+        val sw = width(); val sh = height()
+        val dw = dst.width(); val dh = dst.height()
+        for (dy in 0 until dh) {
+            // Source y-coordinate of destination centre, re-centred.
+            val syF = ((dy + 0.5) * sh / dh) - 0.5
+            val syFloor = kotlin.math.floor(syF)
+            val sy0Raw = syFloor.toInt()
+            val sy1Raw = sy0Raw + 1
+            val sy0 = sy0Raw.coerceIn(0, sh - 1)
+            val sy1 = sy1Raw.coerceIn(0, sh - 1)
+            // When the sample falls outside [0, sh-1], both texels
+            // clamp to the same edge — ty becomes irrelevant. Keep
+            // the raw fractional offset for in-range samples.
+            val ty = (syF - syFloor).toFloat().coerceIn(0f, 1f)
+            for (dx in 0 until dw) {
+                val sxF = ((dx + 0.5) * sw / dw) - 0.5
+                val sxFloor = kotlin.math.floor(sxF)
+                val sx0Raw = sxFloor.toInt()
+                val sx1Raw = sx0Raw + 1
+                val sx0 = sx0Raw.coerceIn(0, sw - 1)
+                val sx1 = sx1Raw.coerceIn(0, sw - 1)
+                val tx = (sxF - sxFloor).toFloat().coerceIn(0f, 1f)
+                val c00 = readPixel(sx0, sy0)
+                val c10 = readPixel(sx1, sy0)
+                val c01 = readPixel(sx0, sy1)
+                val c11 = readPixel(sx1, sy1)
+                dst.writePixel(dx, dy, lerp2D(c00, c10, c01, c11, tx, ty))
+            }
+        }
+        return true
+    }
+
+    /**
+     * Bicubic resample — 16-tap (4×4) Mitchell-Netravali kernel using
+     * [SkCubicBC.weight]. The `(B, C)` parameters select a member of
+     * the cubic family (Mitchell, Catmull-Rom, …) ; see
+     * [SkCubicResampler]. Out-of-grid taps clamp to the nearest edge
+     * texel (Skia's default tile mode for `scalePixels`).
+     */
+    private fun scaleCubic(dst: SkPixmap, cubic: SkCubicResampler): Boolean {
+        val sw = width(); val sh = height()
+        val dw = dst.width(); val dh = dst.height()
+        val B = cubic.B; val C = cubic.C
+        for (dy in 0 until dh) {
+            val syF = ((dy + 0.5) * sh / dh) - 0.5
+            val syBase = kotlin.math.floor(syF).toInt()
+            val fy = (syF - syBase).toFloat()
+            // Weights for the 4 rows at offsets -1, 0, 1, 2 from syBase.
+            val wy0 = SkCubicBC.weight(1f + fy, B, C)
+            val wy1 = SkCubicBC.weight(fy, B, C)
+            val wy2 = SkCubicBC.weight(1f - fy, B, C)
+            val wy3 = SkCubicBC.weight(2f - fy, B, C)
+            for (dx in 0 until dw) {
+                val sxF = ((dx + 0.5) * sw / dw) - 0.5
+                val sxBase = kotlin.math.floor(sxF).toInt()
+                val fx = (sxF - sxBase).toFloat()
+                val wx0 = SkCubicBC.weight(1f + fx, B, C)
+                val wx1 = SkCubicBC.weight(fx, B, C)
+                val wx2 = SkCubicBC.weight(1f - fx, B, C)
+                val wx3 = SkCubicBC.weight(2f - fx, B, C)
+                // Accumulate as floats in non-premul ARGB. Cubic
+                // weights can overshoot [0, 1] (Catmull-Rom), so
+                // clamp on write-back.
+                var a = 0f; var r = 0f; var g = 0f; var b = 0f
+                for (j in 0..3) {
+                    val sy = (syBase + j - 1).coerceIn(0, sh - 1)
+                    val wy = when (j) { 0 -> wy0; 1 -> wy1; 2 -> wy2; else -> wy3 }
+                    for (i in 0..3) {
+                        val sx = (sxBase + i - 1).coerceIn(0, sw - 1)
+                        val wx = when (i) { 0 -> wx0; 1 -> wx1; 2 -> wx2; else -> wx3 }
+                        val w = wx * wy
+                        val c = readPixel(sx, sy)
+                        a += SkColorGetA(c) * w
+                        r += SkColorGetR(c) * w
+                        g += SkColorGetG(c) * w
+                        b += SkColorGetB(c) * w
+                    }
+                }
+                // Round-half-up before truncation so 254.985 lands
+                // on 255, not 254 (Mitchell weights sum to 1.0 only
+                // within float precision — a constant-colour source
+                // must round-trip exactly).
+                val ai = (a + 0.5f).toInt().coerceIn(0, 255)
+                val ri = (r + 0.5f).toInt().coerceIn(0, 255)
+                val gi = (g + 0.5f).toInt().coerceIn(0, 255)
+                val bi = (b + 0.5f).toInt().coerceIn(0, 255)
+                dst.writePixel(dx, dy, SkColorSetARGB(ai, ri, gi, bi))
+            }
+        }
+        return true
+    }
+
+    /**
+     * Bilinear interpolation of four ARGB pixels arranged on a unit
+     * square at corners `(0,0)`, `(1,0)`, `(0,1)`, `(1,1)`. Each
+     * channel is interpolated independently in non-premultiplied
+     * space.
+     */
+    private fun lerp2D(c00: SkColor, c10: SkColor, c01: SkColor, c11: SkColor, tx: Float, ty: Float): SkColor {
+        fun lerp(a: Int, b: Int, t: Float): Int = (a + (b - a) * t + 0.5f).toInt().coerceIn(0, 255)
+        fun blend(get: (SkColor) -> Int): Int {
+            val top = lerp(get(c00), get(c10), tx).toFloat()
+            val bot = lerp(get(c01), get(c11), tx).toFloat()
+            return (top + (bot - top) * ty + 0.5f).toInt().coerceIn(0, 255)
+        }
+        val a = blend(::SkColorGetA)
+        val r = blend(::SkColorGetR)
+        val g = blend(::SkColorGetG)
+        val b = blend(::SkColorGetB)
+        return SkColorSetARGB(a, r, g, b)
     }
 
     /**
