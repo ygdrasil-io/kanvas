@@ -567,11 +567,34 @@ public class SkBitmap(
                     }
                 }
             }
-            // F16Norm ingress would require a uint16 → float32 half-float
-            // decode (no helper in kanvas-skia yet). Until that lands —
-            // and given no current consumer needs it — F16 installPixels
-            // reports failure. Mask-filter / extractAlpha-style scope
-            // creep avoidance.
+            SkColorType.kRGBA_F16Norm -> {
+                // R-suivi.17 — F16 ingress. The buffer carries 8 bytes per
+                // pixel : 4 IEEE 754 binary16 (half-float) channels in
+                // R, G, B, A order, **premultiplied** (Skia's
+                // `kRGBA_F16_SkColorType` default alpha type is `kPremul`).
+                // Decode each half-float to a 32-bit float and write into
+                // [pixelsF16] in the same R-G-B-A premul layout.
+                for (y in 0 until height) {
+                    val rowOff = y * rowBytes
+                    val dstRow = y * width * 4
+                    for (x in 0 until width) {
+                        val src = rowOff + x * bpp
+                        val dst = dstRow + x * 4
+                        // ByteBuffer is little-endian (set above) — getShort
+                        // reads the half-float bits as a signed 16-bit
+                        // integer in the host order, which matches the
+                        // upstream `uint16_t*` layout on a LE host.
+                        val rh = buf.getShort(src)
+                        val gh = buf.getShort(src + 2)
+                        val bh = buf.getShort(src + 4)
+                        val ah = buf.getShort(src + 6)
+                        pixelsF16[dst] = halfToFloat(rh)
+                        pixelsF16[dst + 1] = halfToFloat(gh)
+                        pixelsF16[dst + 2] = halfToFloat(bh)
+                        pixelsF16[dst + 3] = halfToFloat(ah)
+                    }
+                }
+            }
             else -> return false
         }
         _pixelRef = SkPixelRef(width, height, pixels, rowBytes)
@@ -771,6 +794,130 @@ public class SkBitmap(
          */
         public fun allocPixels(info: SkImageInfo): SkBitmap =
             SkBitmap(info.width, info.height, info.colorSpace, info.colorType)
+
+        // ─── F16 (half-float) helpers (R-suivi.17) ──────────────────
+        //
+        // IEEE 754 binary16 ↔ binary32 conversion. Java 21 ships
+        // `Float.float16ToFloat` / `floatToFloat16` ; kanvas-skia targets
+        // JDK 17, so we implement the bit-level dance here.
+        //
+        // Reference : the Skia / Halide / SkHalf implementation
+        // (`include/private/SkHalf.h`). We follow the same fast-path
+        // structure :
+        //  - sign bit lifted to bit 31
+        //  - exponent + mantissa shifted left 13 bits and re-biased by
+        //    `(127 - 15) << 23` = `0x38000000`
+        //  - subnormals (exp == 0, mantissa != 0) are renormalised so
+        //    they survive the round-trip
+        //  - infinities / NaN (exp == 0x1F) get the `0xFF` exponent so
+        //    they round-trip as ±∞ / NaN.
+
+        /**
+         * Decode an IEEE 754 binary16 (half-float) bit pattern (held in
+         * a `Short`) to a 32-bit `Float`. Subnormal halves are
+         * renormalised ; ±∞ and NaN round-trip. Mirrors Skia's
+         * `SkHalfToFloat` (`SkHalf.h`) — bit-exact for normals, matches
+         * upstream's "force exp=0xFF for inf/NaN" branch.
+         */
+        internal fun halfToFloat(h: Short): Float {
+            val bits = h.toInt() and 0xFFFF
+            val sign = (bits and 0x8000) shl 16
+            val exp = (bits ushr 10) and 0x1F
+            val mant = bits and 0x3FF
+            return when (exp) {
+                0 -> {
+                    // Zero or subnormal. Zero → ±0.0f ; subnormal →
+                    // renormalise by stepping the exponent up while
+                    // the leading mantissa bit is zero.
+                    if (mant == 0) {
+                        java.lang.Float.intBitsToFloat(sign)
+                    } else {
+                        var m = mant
+                        var e = 1
+                        while ((m and 0x400) == 0) {
+                            m = m shl 1
+                            e--
+                        }
+                        m = m and 0x3FF
+                        // Re-bias the exponent : f32_exp = h_exp + (127 - 15).
+                        val f32Exp = (e + (127 - 15)) shl 23
+                        val f32Mant = m shl 13
+                        java.lang.Float.intBitsToFloat(sign or f32Exp or f32Mant)
+                    }
+                }
+                0x1F -> {
+                    // Infinity (mant == 0) or NaN. Use the maximum
+                    // exponent ; preserve the mantissa so NaN payloads
+                    // survive (zero mantissa → ±∞).
+                    val f32Exp = 0xFF shl 23
+                    val f32Mant = mant shl 13
+                    java.lang.Float.intBitsToFloat(sign or f32Exp or f32Mant)
+                }
+                else -> {
+                    // Normal — re-bias exponent by `127 - 15` then shift
+                    // the mantissa to fill the 23 bits of the binary32
+                    // mantissa field.
+                    val f32Exp = (exp + (127 - 15)) shl 23
+                    val f32Mant = mant shl 13
+                    java.lang.Float.intBitsToFloat(sign or f32Exp or f32Mant)
+                }
+            }
+        }
+
+        /**
+         * Encode a 32-bit `Float` as an IEEE 754 binary16 bit pattern
+         * (held in a `Short`). Inverse of [halfToFloat] — values whose
+         * magnitude exceeds the half-float range saturate to ±∞ ;
+         * subnormals at the binary32 → binary16 boundary flush to ±0.
+         * Round-to-nearest-even (mantissa rounding via `+ 0x1000`).
+         */
+        internal fun floatToHalf(f: Float): Short {
+            val bits = java.lang.Float.floatToRawIntBits(f)
+            val sign = (bits ushr 16) and 0x8000
+            val exp32 = (bits ushr 23) and 0xFF
+            val mant32 = bits and 0x7FFFFF
+            return when {
+                // NaN or infinity.
+                exp32 == 0xFF -> {
+                    val mant16 = if (mant32 != 0) ((mant32 ushr 13) or 0x200) else 0
+                    (sign or 0x7C00 or mant16).toShort()
+                }
+                // Overflow → saturate to ±inf. Half max exponent = 30 in
+                // unbiased terms (15 + 15) ; in biased binary32 that's
+                // `15 + 127 = 142` (i.e. exp32 - 127 > 15  →  exp32 > 142).
+                exp32 > 142 -> (sign or 0x7C00).toShort()
+                // Underflow → flush to ±0 (binary32 < smallest half
+                // subnormal ≈ 2^-24 → exp32 < (127 - 24) = 103).
+                exp32 < 103 -> sign.toShort()
+                // Subnormal half : exp32 in [103, 113).
+                exp32 < 113 -> {
+                    // Re-emit as a subnormal half. The implicit 1 bit of
+                    // the binary32 mantissa becomes part of the half
+                    // mantissa ; we then right-shift by `1 + (113 - exp32)`
+                    // bits and round-half-up.
+                    val mantWithImplicit = mant32 or 0x800000
+                    val shift = 14 + (113 - exp32)
+                    val rounded = (mantWithImplicit + (1 shl (shift - 1))) ushr shift
+                    (sign or rounded).toShort()
+                }
+                // Normal half — re-bias exponent by `127 - 15` and round
+                // the mantissa to 10 bits. Round-half-up (`+ 0x1000`) ; the
+                // round-half-to-even refinement is omitted (matches Skia's
+                // `_mm_cvtps_ph` precision in the SSE path).
+                else -> {
+                    val expHalf = (exp32 - (127 - 15)) shl 10
+                    val mantHalf = (mant32 + 0x1000) ushr 13
+                    // If the rounding bumped the mantissa past 0x3FF we
+                    // need to roll into the exponent.
+                    if (mantHalf > 0x3FF) {
+                        // Mantissa overflow lifts exponent by one.
+                        (sign or (expHalf + (1 shl 10)) or (mantHalf and 0x3FF)).toShort()
+                    } else {
+                        (sign or expHalf or mantHalf).toShort()
+                    }
+                }
+            }
+        }
 
         // ─── ARGB_4444 helpers (Phase C5) ────────────────────────────
 
