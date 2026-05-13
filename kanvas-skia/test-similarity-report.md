@@ -10,3 +10,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ImageMagnifierCroppedGM | 90.56% | (new) | 1 | 59,352 / 65,536 | 0, 43, 13, 242 | 0, 43, 13, 242 |
 | ImageMagnifierGM | 71.77% | (new) | 8 | 179,420 / 250,000 | 0, 179, 243, 249 | 0, 95, 85, 114 |
 | ImageResizeTiledGM | 83.61% | (new) | 8 | 256,856 / 307,200 | 0, 255, 255, 255 | 0, 202, 202, 202 |
+| MixerCFGM | 30.71% | (new) | 1 | 331,636 / 1,080,000 | 0, 216, 238, 249 | 0, 92, 79, 100 |
+| OffsetImageFilterGM | 84.51% | (new) | 1 | 50,703 / 60,000 | 0, 165, 154, 193 | 0, 100, 98, 116 |
+| OverdrawCanvasGM | 85.31% | (new) | 1 | 213,263 / 250,000 | 0, 187, 187, 187 | 0, 19, 52, 59 |
+| ShallowAnglePathArcToGM | 99.88% | (new) | 1 | 89,889 / 90,000 | 0, 255, 255, 255 | 0, 255, 255, 255 |
