@@ -223,4 +223,28 @@ public object SkImages {
      */
     public fun DeferredFromGenerator(generator: SkImageGenerator): SkImage? =
         SkImageGeneratorImages.DeferredFromGenerator(generator)
+
+    /**
+     * Mirrors Skia's
+     * `SkImages::TextureFromYUVAPixmaps` / `SkImages::RasterFromYUVAPixmaps`
+     * landing point — a single entry that materialises a YUV(A) multi-
+     * plane source into an immutable raster [SkImage].
+     *
+     * The raster backend has no separate YUV draw path, so we eagerly
+     * convert via [SkYUVAPixmaps.toRGBA8888] and wrap the resulting 8888
+     * bitmap with [RasterFromBitmap]. Returns `null` when the supplied
+     * [pixmaps] reports `isValid() == false`. Throws
+     * [IllegalStateException] (propagated from
+     * [SkYUVAPixmaps.toRGBA8888]) for plane configs we don't yet
+     * support (interleaved / alpha-bearing).
+     *
+     * R-suivi.41 lands the bitmap-bridge path ; a future R-suivi entry
+     * can wire a direct `SkBitmapDevice.drawImageYUVA(...)` for
+     * intermediate-buffer-free draws.
+     */
+    public fun YUVA(pixmaps: SkYUVAPixmaps): SkImage? {
+        if (!pixmaps.isValid()) return null
+        val rgba = pixmaps.toRGBA8888()
+        return RasterFromBitmap(rgba)
+    }
 }
