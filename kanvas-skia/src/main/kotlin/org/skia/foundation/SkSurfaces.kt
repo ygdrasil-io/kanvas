@@ -22,10 +22,9 @@ import java.nio.ByteBuffer
  * `WrapMetalLayer`, …) are intentionally out of scope — `:kanvas-skia`
  * is a raster facade.
  *
- * **Deferred items** (Phase R2 batch3-B) :
- *  - [WrapPixels] with the `SkPixmap` overload uses `Any` to side-step
- *    the unmerged-type compile dependency, and throws `TODO(R2-B)` until
- *    the parallel R2 batch3-A lands `SkPixmap`.
+ * **R-suivi.13 cleanup** — the [SkPixmap]-overload of [WrapPixels] landed
+ * alongside its dependency and delegates to the byte-buffer form via
+ * `pixmap.addr()` / `pixmap.rowBytes()`.
  */
 public object SkSurfaces {
 
@@ -126,15 +125,16 @@ public object SkSurfaces {
      * Mirrors Skia's inline overload
      * `SkSurfaces::WrapPixels(const SkPixmap&, const SkSurfaceProps*)`.
      *
-     * **Stub** : `SkPixmap` is being added by Phase R2 batch3-A — see
-     * the kdoc on [SkSurfaces]. Once the type lands, change `pixmap`
-     * from `Any` to `SkPixmap` and delegate to the byte-buffer
-     * [WrapPixels] using `pixmap.info()`, `pixmap.writable_addr()`,
-     * `pixmap.rowBytes()`.
+     * Delegates to the byte-buffer [WrapPixels] overload using
+     * `pixmap.info()`, `pixmap.addr()` and `pixmap.rowBytes()`. As with
+     * the byte-buffer form, kanvas-skia copies the pixels eagerly (no
+     * zero-copy ByteBuffer path on the raster backend) and invokes
+     * [releaseProc] immediately after the copy. Returns `null` when the
+     * pixmap is empty or carries an unsupported colour type — see the
+     * byte-buffer overload for the validity rules.
      */
-    public fun WrapPixels(pixmap: Any, releaseProc: (() -> Unit)? = null): SkSurface? {
-        TODO("R2-B: depends on SkPixmap (parallel R2 batch3-A); will delegate once SkPixmap lands")
-    }
+    public fun WrapPixels(pixmap: SkPixmap, releaseProc: (() -> Unit)? = null): SkSurface? =
+        WrapPixels(pixmap.info(), pixmap.addr(), pixmap.rowBytes(), releaseProc)
 
     /**
      * Mirrors Skia's `SkSurfaces::Null(int width, int height)`.

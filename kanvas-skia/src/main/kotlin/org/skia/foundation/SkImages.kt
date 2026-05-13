@@ -2,7 +2,6 @@ package org.skia.foundation
 
 import org.skia.codec.SkCodec
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * Mirrors Skia's
@@ -22,15 +21,11 @@ import java.nio.ByteOrder
  * `RenderTarget*`, `CrossContext*`, `PromiseTexture*`) are intentionally
  * out of scope — `:kanvas-skia` is a raster facade.
  *
- * **Deferred items** (Phase R2 batch3-B) :
- *  - [RasterFromPixmap] / [RasterFromPixmapCopy] are stubbed against
- *    `SkPixmap`, which is being added by the parallel R2 batch3-A. The
- *    Kotlin signatures use `Any` to avoid a compile-time dependency on
- *    the unmerged type and throw a `TODO(R2-B)` until the batch lands.
- *  - [DeferredFromGenerator] is stubbed against `SkImageGenerator`,
- *    likewise unmerged — currently throws `TODO(R2-B)`.
- *  - `RasterFromCompressedTextureData` is **out of scope** (GPU-only
- *    compression formats) and is not exposed here.
+ * **R-suivi.12 cleanup** — the [RasterFromPixmap] / [RasterFromPixmapCopy]
+ * / [DeferredFromGenerator] factories landed alongside their
+ * dependencies ([SkPixmap], [SkImageGenerator]). `RasterFromCompressedTextureData`
+ * remains **out of scope** (GPU-only compression formats) and is not
+ * exposed here.
  */
 public object SkImages {
 
@@ -51,26 +46,60 @@ public object SkImages {
      * `SkImages::RasterFromPixmap(const SkPixmap&, RasterReleaseProc,
      * ReleaseContext)`.
      *
-     * **Stub** : `SkPixmap` is being added by Phase R2 batch3-A — see
-     * the kdoc on [SkImages] for the full status. Once the type lands,
-     * change the `pixmap` parameter type from `Any` to `SkPixmap` and
-     * replace the body with the actual share-pixels implementation
-     * (`releaseProc` is invoked when the [SkImage] is unreachable).
+     * Wraps [pixmap]'s pixels into a fresh raster [SkImage]. Upstream's
+     * contract is "no copy ; the caller keeps the buffer alive until
+     * `releaseProc` is invoked when the image is no longer referenced".
+     * The kanvas-skia raster backend has no zero-copy ByteBuffer path
+     * ([SkImage]'s storage is always an `IntArray` of Pascal-Argb pixels
+     * — see [SkImage.pixels] KDoc), so we eagerly snapshot the pixmap
+     * into the image's internal buffer and invoke [releaseProc]
+     * immediately after the snapshot completes. This matches
+     * [RasterFromData]'s already-documented divergence from upstream's
+     * zero-copy share. Returns `null` if [pixmap] is empty
+     * (`width == 0 || height == 0`) or has [SkColorType.kUnknown].
      */
-    public fun RasterFromPixmap(pixmap: Any, releaseProc: (() -> Unit)? = null): SkImage? {
-        TODO("R2-B: depends on SkPixmap (parallel R2 batch3-A); will share-pixels once SkPixmap lands")
+    public fun RasterFromPixmap(pixmap: SkPixmap, releaseProc: (() -> Unit)? = null): SkImage? {
+        val image = snapshotPixmap(pixmap) ?: return null
+        releaseProc?.invoke()
+        return image
     }
 
     /**
-     * Mirrors Skia's
-     * `SkImages::RasterFromPixmapCopy(const SkPixmap&)`.
+     * Mirrors Skia's `SkImages::RasterFromPixmapCopy(const SkPixmap&)`.
      *
-     * **Stub** : see [RasterFromPixmap] — the parallel R2 batch3-A
-     * adds `SkPixmap`. Once merged, this method copies the pixmap's
-     * pixels into a fresh [SkImage].
+     * Explicitly copies [pixmap]'s pixels into a fresh raster [SkImage].
+     * Functionally identical to [RasterFromPixmap] in kanvas-skia (we
+     * always copy — see [RasterFromPixmap] KDoc for the rationale) but
+     * doesn't accept a release proc since there's no shared buffer to
+     * release. Returns `null` for empty or unknown-colour-type pixmaps.
      */
-    public fun RasterFromPixmapCopy(pixmap: Any): SkImage? {
-        TODO("R2-B: depends on SkPixmap (parallel R2 batch3-A); will copy-pixels once SkPixmap lands")
+    public fun RasterFromPixmapCopy(pixmap: SkPixmap): SkImage? = snapshotPixmap(pixmap)
+
+    /**
+     * Walk the pixmap's bytes once and produce a Pascal-Argb [IntArray]
+     * suitable for the [SkImage] constructor. Shared between
+     * [RasterFromPixmap] and [RasterFromPixmapCopy] — both routes copy
+     * eagerly (see [RasterFromPixmap] KDoc).
+     */
+    private fun snapshotPixmap(pixmap: SkPixmap): SkImage? {
+        val info = pixmap.info()
+        if (info.isEmpty()) return null
+        if (info.colorType == SkColorType.kUnknown) return null
+        val w = info.width
+        val h = info.height
+        val pixels = IntArray(w * h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                pixels[y * w + x] = pixmap.getColor(x, y)
+            }
+        }
+        return SkImage(
+            width = w,
+            height = h,
+            pixels = pixels,
+            colorType = info.colorType,
+            colorSpace = info.colorSpace,
+        )
     }
 
     /**
@@ -181,12 +210,17 @@ public object SkImages {
      * Mirrors Skia's
      * `SkImages::DeferredFromGenerator(std::unique_ptr<SkImageGenerator>)`.
      *
-     * **Stub** : `SkImageGenerator` is not yet on master. Once the type
-     * lands, change `generator` from `Any` to `SkImageGenerator` and
-     * delegate to the generator's `getPixels` / equivalent to produce
-     * an [SkImage] backed by the generator's decoded output.
+     * Delegates to [SkImageGeneratorImages.DeferredFromGenerator] —
+     * the original landing site for this factory (kept as the canonical
+     * implementation so the cross-cutting [SkImages] aggregator doesn't
+     * duplicate the byte-buffer plumbing).
+     *
+     * Despite the upstream name ("deferred"), the kanvas-skia raster
+     * backend decodes the generator eagerly into an 8888 [SkImage]
+     * (see [SkImageGeneratorImages.DeferredFromGenerator] KDoc).
+     * Returns `null` if the generator reports an empty info or fails
+     * to produce pixels.
      */
-    public fun DeferredFromGenerator(generator: Any): SkImage? {
-        TODO("R2-B: depends on SkImageGenerator (not yet on master); will delegate to generator.getPixels once it lands")
-    }
+    public fun DeferredFromGenerator(generator: SkImageGenerator): SkImage? =
+        SkImageGeneratorImages.DeferredFromGenerator(generator)
 }

@@ -3,13 +3,15 @@ package org.skia.foundation
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.codec.SkEncodedImageFormat
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
- * Phase R2 batch3-B — unit tests for [SkImages] static factories.
+ * Phase R2 batch3-B (+ R-suivi.12 cleanup) — unit tests for [SkImages]
+ * static factories.
  *
  * Coverage :
  *  - [SkImages.RasterFromBitmap] snapshots the source pixels and rejects
@@ -19,8 +21,12 @@ import java.nio.ByteBuffer
  *    unsupported colour types.
  *  - [SkImages.DeferredFromEncodedData] decodes a PNG-encoded byte stream
  *    via the registered codec family.
- *  - The pixmap / generator stubs throw `NotImplementedError` (`TODO`)
- *    pending the parallel R2 batch3-A merge.
+ *  - [SkImages.RasterFromPixmap] / [SkImages.RasterFromPixmapCopy] snapshot
+ *    a pixmap into a fresh [SkImage] (kanvas-skia copies eagerly — see
+ *    [SkImages.RasterFromPixmap] KDoc).
+ *  - [SkImages.DeferredFromGenerator] decodes a generator into a fresh
+ *    [SkImage], matching the dedicated
+ *    [SkImageGeneratorImages.DeferredFromGenerator] entry point.
  */
 class SkImagesTest {
 
@@ -129,25 +135,116 @@ class SkImagesTest {
         assertNull(SkImages.DeferredFromEncodedData(nonsense))
     }
 
+    // ─── R-suivi.12 — RasterFromPixmap / RasterFromPixmapCopy / DeferredFromGenerator ───
+
+    /**
+     * Build a `width × height` RGBA_8888 [SkPixmap] whose pixels encode
+     * `((10 + x * 10), (20 + y * 20), 0x30, 0xFF)` (R, G, B, A) — same
+     * shape as the [RasterFromData] fixture so the assertions can match.
+     */
+    private fun buildSamplePixmap(width: Int, height: Int): SkPixmap {
+        val info = SkImageInfo.Make(width, height, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul)
+        val rowBytes = info.minRowBytes()
+        val buf = ByteBuffer.allocate(rowBytes * height).order(ByteOrder.LITTLE_ENDIAN)
+        for (y in 0 until height) for (x in 0 until width) {
+            val off = y * rowBytes + x * 4
+            buf.put(off, (10 + x * 10).toByte())
+            buf.put(off + 1, (20 + y * 20).toByte())
+            buf.put(off + 2, 0x30.toByte())
+            buf.put(off + 3, 0xFF.toByte())
+        }
+        return SkPixmap(info, buf, rowBytes)
+    }
+
     @Test
-    fun `RasterFromPixmap stub throws TODO until SkPixmap lands`() {
-        // R2-B : SkPixmap is being added by parallel batch3-A.
-        assertThrows(NotImplementedError::class.java) {
-            SkImages.RasterFromPixmap(Any())
+    fun `RasterFromPixmap snapshots pixmap pixels and invokes release proc`() {
+        val pixmap = buildSamplePixmap(3, 2)
+        var released = false
+        val image = SkImages.RasterFromPixmap(pixmap) { released = true }
+        assertNotNull(image)
+        assertEquals(3, image!!.width)
+        assertEquals(2, image.height)
+        assertTrue(released, "releaseProc must fire after the eager copy")
+        for (y in 0 until 2) for (x in 0 until 3) {
+            val expected = (0xFF shl 24) or
+                ((10 + x * 10) shl 16) or
+                ((20 + y * 20) shl 8) or
+                0x30
+            assertEquals(expected, image.peekPixel(x, y), "($x, $y)")
         }
     }
 
     @Test
-    fun `RasterFromPixmapCopy stub throws TODO until SkPixmap lands`() {
-        assertThrows(NotImplementedError::class.java) {
-            SkImages.RasterFromPixmapCopy(Any())
+    fun `RasterFromPixmap returns null for an empty pixmap`() {
+        val empty = SkPixmap()
+        assertNull(SkImages.RasterFromPixmap(empty))
+    }
+
+    @Test
+    fun `RasterFromPixmapCopy snapshots pixmap pixels without release proc`() {
+        val pixmap = buildSamplePixmap(2, 2)
+        val image = SkImages.RasterFromPixmapCopy(pixmap)
+        assertNotNull(image)
+        for (y in 0 until 2) for (x in 0 until 2) {
+            val expected = (0xFF shl 24) or
+                ((10 + x * 10) shl 16) or
+                ((20 + y * 20) shl 8) or
+                0x30
+            assertEquals(expected, image!!.peekPixel(x, y), "($x, $y)")
         }
     }
 
     @Test
-    fun `DeferredFromGenerator stub throws TODO until SkImageGenerator lands`() {
-        assertThrows(NotImplementedError::class.java) {
-            SkImages.DeferredFromGenerator(Any())
+    fun `RasterFromPixmapCopy returns null for an empty pixmap`() {
+        assertNull(SkImages.RasterFromPixmapCopy(SkPixmap()))
+    }
+
+    /** Tiny in-memory generator yielding a deterministic 8888 pattern. */
+    private class CheckerGenerator(info: SkImageInfo) : SkImageGenerator(info) {
+        override fun onGetPixels(info: SkImageInfo, pixels: ByteBuffer, rowBytes: Int): Boolean {
+            for (y in 0 until info.height) {
+                for (x in 0 until info.width) {
+                    val off = y * rowBytes + x * 4
+                    // Black/white checkerboard.
+                    val on = ((x xor y) and 1) == 0
+                    val v: Byte = if (on) 0xFF.toByte() else 0x00.toByte()
+                    pixels.put(off, v)       // R
+                    pixels.put(off + 1, v)   // G
+                    pixels.put(off + 2, v)   // B
+                    pixels.put(off + 3, 0xFF.toByte()) // A
+                }
+            }
+            return true
+        }
+    }
+
+    @Test
+    fun `DeferredFromGenerator decodes generator pixels into an SkImage`() {
+        val info = SkImageInfo.Make(2, 2, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul)
+        val gen = CheckerGenerator(info)
+        val image = SkImages.DeferredFromGenerator(gen)
+        assertNotNull(image)
+        assertEquals(2, image!!.width)
+        assertEquals(2, image.height)
+        // Verify the checker pattern survived the round-trip.
+        val white = (0xFF shl 24) or (0xFF shl 16) or (0xFF shl 8) or 0xFF
+        val black = (0xFF shl 24)
+        assertEquals(white, image.peekPixel(0, 0))
+        assertEquals(black, image.peekPixel(1, 0))
+        assertEquals(black, image.peekPixel(0, 1))
+        assertEquals(white, image.peekPixel(1, 1))
+    }
+
+    @Test
+    fun `DeferredFromGenerator matches SkImageGeneratorImages factory`() {
+        val info = SkImageInfo.Make(3, 3, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul)
+        val genA = CheckerGenerator(info)
+        val genB = CheckerGenerator(info)
+        val viaImages = SkImages.DeferredFromGenerator(genA)
+        val viaDedicated = SkImageGeneratorImages.DeferredFromGenerator(genB)
+        assertNotNull(viaImages); assertNotNull(viaDedicated)
+        for (y in 0 until 3) for (x in 0 until 3) {
+            assertEquals(viaDedicated!!.peekPixel(x, y), viaImages!!.peekPixel(x, y), "($x, $y)")
         }
     }
 }
