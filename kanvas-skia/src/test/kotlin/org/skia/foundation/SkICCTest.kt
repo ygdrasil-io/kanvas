@@ -8,12 +8,12 @@ import org.skia.skcms.SkNamedTransferFn
 import java.nio.ByteBuffer
 
 /**
- * R2.16 verification suite for [SkICC].
+ * R-suivi.21 verification suite for [SkICC].
  *
- * The surface is a stub today — these tests pin the contract that
- * a future ICC body port must keep honouring : the header layout,
- * the sentinel `acsp` signature, and the "parsing returns null"
- * contract.
+ * Pins the public contract : the header layout, the sentinel `acsp`
+ * signature, the "parsing returns null" stub, and (since R-suivi.21)
+ * the tag-table emission. See [SkICCWriteToICCTagTableTest] for the
+ * deep parse of the tag-table itself.
  */
 class SkICCTest {
 
@@ -36,9 +36,12 @@ class SkICCTest {
     }
 
     @Test
-    fun `WriteToICC returns the canonical 128-byte ICC v4 header`() {
+    fun `WriteToICC emits at least the v4 header plus a tag table`() {
         val bytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
-        assertEquals(SkICC.HEADER_SIZE, bytes.size, "stub must emit exactly the v4 header")
+        // Header (128) + tag count (4) + at least one tag table entry (12).
+        assert(bytes.size >= SkICC.HEADER_SIZE + 4 + SkICC.TAG_TABLE_ENTRY_SIZE) {
+            "expected header + tag table; got ${bytes.size} bytes"
+        }
     }
 
     @Test
@@ -58,7 +61,8 @@ class SkICCTest {
                 (bytes[1].toInt() and 0xFF shl 16) or
                 (bytes[2].toInt() and 0xFF shl 8) or
                 (bytes[3].toInt() and 0xFF)
-        assertEquals(SkICC.HEADER_SIZE, size)
+        // The size field must match the actual byte count.
+        assertEquals(bytes.size, size)
     }
 
     @Test
