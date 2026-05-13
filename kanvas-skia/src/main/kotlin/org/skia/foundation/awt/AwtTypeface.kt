@@ -75,6 +75,15 @@ internal class AwtTypeface internal constructor(
     internal val glyphPathCache: GlyphPathCache = GlyphPathCache()
 
     /**
+     * R-suivi.43 — does this typeface carry a glyph for the Unicode
+     * code point [cp]? Routes through AWT `Font.canDisplay(int)` which
+     * answers true when the font has a non-`.notdef` glyph for the
+     * code point. Used by [JvmAwtFontMgr.matchFamilyStyleCharacter] to
+     * validate a candidate family before returning it.
+     */
+    internal fun canDisplayCodepoint(cp: Int): Boolean = baseFont.canDisplay(cp)
+
+    /**
      * Mirrors `SkFont::measureText` — returns advance width, optionally
      * fills [bounds] with the **tight glyph visual bbox** (matching Skia,
      * which returns visual not logical bounds). The visual-bbox path
