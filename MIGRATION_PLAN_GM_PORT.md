@@ -10,9 +10,9 @@ Statut du portage des Graphics Modules (GM) C++ de Skia vers `kanvas-skia/src/ma
 
 | Statut | Fichiers `.cpp` | Pourcentage |
 |---|---:|---:|
-| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 257 | 59% |
-| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 100 | 23% |
-| ❌ Non tenté (potentiellement portable) | 80 | 18% |
+| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 265 | 61% |
+| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 102 | 23% |
+| ❌ Non tenté (potentiellement portable) | 70 | 16% |
 | **Total** | **437** | **100%** |
 
 GMs Kotlin sans correspondance dans le tree de référence (probablement issus d'une version Skia plus récente) : **30**.
@@ -30,9 +30,10 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 | H1 complet (10 ports) + H3 wave 1 (9 ports) | 232 / 437 | 53% |
 | H3 wave 2 (9 ports + 1 skip SkM44) | 241 / 437 | 55% |
 | H3 wave 3 (7 ports + 1 skip computeFastBounds) | 248 / 437 | 57% |
-| **H3 wave 4 (9 ports + 1 skip SkPath.contains)** | **257 / 437** | **59%** |
+| H3 wave 4 (9 ports + 1 skip SkPath.contains) | 257 / 437 | 59% |
+| **H3 wave 5 (8 ports + 2 skip HighContrastFilter / `#if 0`)** | **265 / 437** | **61%** |
 
-**Gain net** : +109 GMs en 3 jours (de 34% à 59% de couverture).
+**Gain net** : +117 GMs en 3 jours (de 34% à 61% de couverture).
 
 ## Phases d'API — toutes mergées ✅
 
@@ -126,6 +127,9 @@ Chaque sous-tâche est petite (½-1 jour). Toutes parallélisables car touchent 
 | H2.29 — `SkPath.contains(scalar, scalar)` | 1 | `SkPath.kt` |
 | H2.30 — Gradient `r==0` / sweep `start==end` graceful tile-mode fill | 1+ | `SkRadialGradient.kt`, `SkSweepGradient.kt` |
 | H2.31 — `kRepeat` tile mode pour `SkImageFilters.Blur` (parité Skia) | 1+ | `SkImageFilters.kt` (H1.5) |
+| H2.32 — `SkHighContrastFilter` | 1 | nouvelle classe |
+| H2.33 — `SkColorFilters.Lerp(t, dst?, src?)` overload nullable | 1+ | `SkColorFilters.kt` |
+| H2.34 — `SkImageFilters.{Offset,Magnifier,…}(..., cropRect)` overloads non-Blur | nombreux | `SkImageFilters.kt` |
 
 ### Phase H1.5 — Suivis fidélité (qualité de ports)
 
@@ -369,7 +373,7 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `hardstop_gradients_many.cpp` | ✅ | `HardstopGradientsManyGM.kt` | — |
 | `hdr_pip_blur.cpp` | ❌ | — | — |
 | `hello_bazel_world.cpp` | 🚧 | — | GM Bazel-only (pas de PNG de référence) |
-| `highcontrastfilter.cpp` | ❌ | — | — |
+| `highcontrastfilter.cpp` | 🚧 | — | `SkHighContrastFilter` absent |
 | `hittestpath.cpp` | 🚧 | — | `SkPath.contains(scalar, scalar)` |
 | `hsl.cpp` | ✅ | `HSLGM.kt` | — |
 | `hugepath.cpp` | ✅ | `HugePathCrbug800804GM.kt`, `PathHugeAaGM.kt`, `PathHugeAaManualGM.kt` | — |
@@ -387,16 +391,16 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `imagefiltersclipped.cpp` | ✅ | `ImageFiltersClippedGM.kt` | — |
 | `imagefilterscropexpand.cpp` | ✅ | `ImageFiltersCropExpandGM.kt` | — (cropRect wrappé `Crop`) |
 | `imagefilterscropped.cpp` | ✅ | `ImageFiltersCroppedGM.kt` | — (cropRect wrappé `Crop`) |
-| `imagefiltersgraph.cpp` | ❌ | — | — |
-| `imagefiltersscaled.cpp` | ❌ | — | — |
+| `imagefiltersgraph.cpp` | ✅ | `ImageFiltersGraphGM.kt` | — (cropRect wrappé `Crop`) |
+| `imagefiltersscaled.cpp` | ✅ | `ImageFiltersScaledGM.kt` | — |
 | `imagefiltersstroked.cpp` | ❌ | — | — |
 | `imagefilterstransformed.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
 | `imagefiltersunpremul.cpp` | ✅ | `ImageFiltersUnpremulGM.kt` | — |
 | `imagefromyuvtextures.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `imagemagnifier.cpp` | ❌ | — | — |
+| `imagemagnifier.cpp` | ✅ | `ImageMagnifierGM.kt`, `ImageMagnifierCroppedGM.kt`, `ImageMagnifierBoundsGM.kt` | — |
 | `imagemakewithfilter.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `imagemasksubset.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `imageresizetiled.cpp` | ❌ | — | — |
+| `imageresizetiled.cpp` | ✅ | `ImageResizeTiledGM.kt` | — |
 | `imagesource.cpp` | ✅ | `ImageSourceGM.kt` | — |
 | `imagesource2.cpp` | ❌ | — | — |
 | `internal_links.cpp` | ❌ | — | — |
@@ -431,30 +435,30 @@ Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beau
 | `mipmap.cpp` | ❌ | — | — |
 | `mirrortile.cpp` | ✅ | `MirrorTileGM.kt` | — |
 | `mixedtextblobs.cpp` | ❌ | — | — |
-| `mixercolorfilter.cpp` | ❌ | — | — |
+| `mixercolorfilter.cpp` | ✅ | `MixerCFGM.kt` | — (30 % : `Lerp` non-nullable workaround) |
 | `modecolorfilters.cpp` | ✅ | `ModeColorFiltersGM.kt` | — (44 % : divergence saveLayer + `SrcOver` bgPaint) |
 | `morphology.cpp` | ✅ | `MorphologyGM.kt` | — |
 | `nearesthalfpixelimage.cpp` | ❌ | — | — |
 | `nested.cpp` | ✅ | `NestedGM.kt` | — |
 | `ninepatchstretch.cpp` | 🚧 | — | `SkCanvas::drawImageNine` |
 | `nonclosedpaths.cpp` | ✅ | `NonClosedPathsGM.kt` | — |
-| `offsetimagefilter.cpp` | ❌ | — | — |
+| `offsetimagefilter.cpp` | ✅ | `OffsetImageFilterGM.kt` | — (cropRect wrappé `Crop`) |
 | `orientation.cpp` | 🚧 | — | `SkImageGenerator` / `DeferredFromGenerator` |
 | `ovals.cpp` | ✅ | `OvalGM.kt` | — |
-| `overdrawcanvas.cpp` | ❌ | — | — |
+| `overdrawcanvas.cpp` | ✅ | `OverdrawCanvasGM.kt` | — |
 | `overdrawcolorfilter.cpp` | ✅ | `OverdrawColorFilterGM.kt` | — |
 | `overstroke.cpp` | ❌ | — | — |
 | `p3.cpp` | ❌ | — | — |
 | `palette.cpp` | ❌ | — | — |
 | `patch.cpp` | ✅ | `PatchAlphaTestGM.kt`, `PatchPrimitiveGM.kt` | — |
 | `path_stroke_with_zero_length.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `patharcto.cpp` | ❌ | — | — |
+| `patharcto.cpp` | ✅ | `ShallowAnglePathArcToGM.kt` | — |
 | `pathcontourstart.cpp` | ✅ | `ContourStartGM.kt` | — |
 | `patheffects.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `pathfill.cpp` | ✅ | `Bug7792GM.kt`, `RotatedCubicPathGM.kt` | — |
 | `pathinterior.cpp` | ✅ | `PathInteriorGM.kt` | — |
 | `pathmaskcache.cpp` | ✅ | `PathMaskCacheGM.kt` | — |
-| `pathmeasure.cpp` | ❌ | — | — |
+| `pathmeasure.cpp` | 🚧 | — | Hors scope upstream : `#if 0` autour de `PathMeasure_explosion`, pas de `DEF_GM` |
 | `pathopsblend.cpp` | ✅ | `PathOpsBlendGM.kt` | — |
 | `pathopsinverse.cpp` | ✅ | `PathOpsInverseGM.kt` | — |
 | `pathreverse.cpp` | ✅ | `PathReverseGM.kt` | — |
