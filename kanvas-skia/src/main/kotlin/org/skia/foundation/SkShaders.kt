@@ -236,6 +236,14 @@ internal class SkColorShader(private val srcColor: SkColor) : SkShader() {
     }
 
     override fun sampleAtLocal(lx: Float, ly: Float): SkColor = workingColor
+
+    override fun sampleAtLocalF16(lx: Float, ly: Float, dst: FloatArray, dstOffset: Int) {
+        require(dst.size >= dstOffset + 4)
+        dst[dstOffset]     = workingColorF16[0]
+        dst[dstOffset + 1] = workingColorF16[1]
+        dst[dstOffset + 2] = workingColorF16[2]
+        dst[dstOffset + 3] = workingColorF16[3]
+    }
 }
 
 /**
@@ -295,20 +303,32 @@ internal class SkCoordClampShader(
 
     override fun shadeRowF16(devX: Int, devY: Int, count: Int, dst: FloatArray) {
         require(dst.size >= count * 4) { "dst too small: ${dst.size} < ${count * 4}" }
-        // Fall back to the byte path then promote — the wrapper's
-        // job is to clamp coords, not to preserve F16 precision; if a
-        // GM needs F16-precise clamped shading we can add a
-        // child.sampleAtLocalF16 hook.
-        val tmp = IntArray(count)
-        shadeRow(devX, devY, count, tmp)
+        // R-suivi.2 — Direct F16 sampling : walk device-space coords,
+        // map them into local space, clamp into [rect] in float space,
+        // then ask the child for its premul-float sample at that
+        // local point via [sampleAtLocalF16]. No byte intermediate, so
+        // HDR sources (with components > 1.0) preserve precision —
+        // the previous implementation routed through `shadeRow` which
+        // quantised every channel to 8-bit before promoting back to
+        // float, losing every above-1.0 component on the way.
+        val inv = deviceToLocal
+        if (inv == null) {
+            for (i in 0 until count * 4) dst[i] = 0f
+            return
+        }
+        val y0 = devY + 0.5f
+        val x0 = devX + 0.5f
+        val stepX = inv.sx
+        val stepY = inv.ky
+        var lx = inv.sx * x0 + inv.kx * y0 + inv.tx
+        var ly = inv.ky * x0 + inv.sy * y0 + inv.ty
         var di = 0
         for (i in 0 until count) {
-            val c = tmp[i]
-            val a = SkColorGetA(c) / 255f
-            dst[di]     = SkColorGetR(c) / 255f * a
-            dst[di + 1] = SkColorGetG(c) / 255f * a
-            dst[di + 2] = SkColorGetB(c) / 255f * a
-            dst[di + 3] = a
+            val cx = lx.coerceIn(rect.left, rect.right)
+            val cy = ly.coerceIn(rect.top, rect.bottom)
+            child.sampleAtLocalF16(cx, cy, dst, di)
+            lx += stepX
+            ly += stepY
             di += 4
         }
     }
@@ -318,6 +338,15 @@ internal class SkCoordClampShader(
             lx.coerceIn(rect.left, rect.right),
             ly.coerceIn(rect.top, rect.bottom),
         )
+
+    override fun sampleAtLocalF16(lx: Float, ly: Float, dst: FloatArray, dstOffset: Int) {
+        child.sampleAtLocalF16(
+            lx.coerceIn(rect.left, rect.right),
+            ly.coerceIn(rect.top, rect.bottom),
+            dst,
+            dstOffset,
+        )
+    }
 }
 
 /**

@@ -75,6 +75,31 @@ public abstract class SkShader internal constructor(
     public open fun sampleAtLocal(@Suppress("UNUSED_PARAMETER") lx: Float, @Suppress("UNUSED_PARAMETER") ly: Float): SkColor = 0
 
     /**
+     * R-suivi.2 — float-domain counterpart of [sampleAtLocal]. Writes
+     * four premultiplied floats (R, G, B, A in `[0, 1]`, in working
+     * colour space) at `dst[dstOffset ..< dstOffset+4]`.
+     *
+     * Default implementation : forward to [sampleAtLocal] and unpack
+     * the 8-bit ARGB into premul floats — same precision loss as the
+     * byte path. Subclasses with a native F16 sampling pipeline
+     * (e.g. gradients, [org.skia.foundation.SkBitmapShader] over a
+     * kRGBA_F16Norm bitmap) override this to skip the byte round-trip.
+     *
+     * Used by wrapper shaders (e.g. `SkCoordClampShader`) that need
+     * to sample the child at an arbitrary local point in F16 space
+     * without going through a byte intermediate.
+     */
+    public open fun sampleAtLocalF16(lx: Float, ly: Float, dst: FloatArray, dstOffset: Int) {
+        require(dst.size >= dstOffset + 4) { "dst too small at offset $dstOffset" }
+        val c = sampleAtLocal(lx, ly)
+        val a = SkColorGetA(c) / 255f
+        dst[dstOffset]     = SkColorGetR(c) / 255f * a
+        dst[dstOffset + 1] = SkColorGetG(c) / 255f * a
+        dst[dstOffset + 2] = SkColorGetB(c) / 255f * a
+        dst[dstOffset + 3] = a
+    }
+
+    /**
      * Phase 6b: float version of [shadeRow], called by the device when
      * compositing into a `kRGBA_F16Norm` bitmap. Writes 4 floats per pixel
      * (R, G, B, A — **premultiplied**, in the bitmap's working colour space,

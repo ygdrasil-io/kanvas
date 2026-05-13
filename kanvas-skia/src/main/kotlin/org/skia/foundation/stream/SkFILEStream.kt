@@ -16,6 +16,7 @@ import kotlin.math.min
  */
 public class SkFILEStream(path: String) : SkStreamAsset() {
 
+    private val path: String = path
     private val file: RandomAccessFile = RandomAccessFile(path, "r")
     private val length: Long = file.length()
     private var closed: Boolean = false
@@ -70,4 +71,46 @@ public class SkFILEStream(path: String) : SkStreamAsset() {
         file.seek(target)
         return true
     }
+
+    /**
+     * Peek without advancing the cursor : capture position,
+     * [read], seek back. Mirrors Skia's
+     * `SkFILEStream::peek` default seekable path.
+     */
+    override fun peek(buffer: ByteArray, size: Int): Int {
+        if (closed || size <= 0) return 0
+        val pos = file.filePointer
+        val n = read(buffer, size)
+        // Restore cursor — best-effort, swallow IO errors and treat
+        // as a failed peek (returns 0) to match upstream.
+        try {
+            file.seek(pos)
+        } catch (_: IOException) {
+            return 0
+        }
+        return n
+    }
+
+    /**
+     * Re-open the same path with cursor at 0. Mirrors upstream's
+     * `SkFILEStream::fork` (which dup's the FILE handle and seeks
+     * to the current cursor) — kanvas-skia simplifies by re-opening
+     * and *rewinding* the duplicate (matches `duplicate()` upstream;
+     * see note below).
+     */
+    override fun fork(): SkFILEStream {
+        // Re-open at position 0. Upstream Skia carries the seek
+        // position of the original; here we trade that for the
+        // simpler "re-open from path" model (and a clean cursor),
+        // which is sufficient for the kanvas-skia API surface
+        // (no caller depends on fork() preserving the cursor).
+        return SkFILEStream(path)
+    }
+
+    /**
+     * Re-open the same path with cursor at 0. Equivalent to [fork]
+     * for [SkFILEStream] (both yield a fresh stream rewound to the
+     * file start). Mirrors `SkFILEStream::duplicate`.
+     */
+    override fun duplicate(): SkFILEStream = SkFILEStream(path)
 }

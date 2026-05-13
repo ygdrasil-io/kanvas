@@ -43,6 +43,23 @@ public class SkPath internal constructor(
     internal val conicWeights: FloatArray,
     public val fillType: SkPathFillType,
 ) {
+    /**
+     * Storage-side verb enum — mirrors upstream's modern `SkPathVerb`
+     * enum class (`include/core/SkPathTypes.h:60-67`), the 6-value
+     * internal enum that drives every `addRect` / `moveTo` / etc.
+     *
+     * Distinct from the iterator-result [IterVerb] (which mirrors the
+     * legacy upstream `SkPath::Verb` — same six entries plus a
+     * `kDoneVerb` sentinel). For upstream-aligned naming, see the
+     * file-scope typealiases [SkPathVerb] (= this enum) and
+     * [SkPathStorageVerb] (= this enum, the R-suivi.25 alias).
+     *
+     * Note on naming : upstream confusingly uses both `SkPathVerb`
+     * (6-value, in `SkPathTypes.h`) **and** `SkPath::Verb` (7-value,
+     * iter-result, in `SkPath.h:692-700`). kanvas-skia keeps them
+     * distinct as [Verb] (storage, 6) and [IterVerb] (iter, 7); see
+     * file footer for the alias rationale.
+     */
     public enum class Verb(public val pointCount: Int) {
         kMove(1),
         kLine(1),
@@ -1546,3 +1563,57 @@ public class SkPath internal constructor(
             .detach()
     }
 }
+
+// -- Upstream-aligned typealiases (R-suivi.25) ------------------------------
+//
+// Upstream Skia ships *two* verb enums that both confusingly bear the name
+// `Verb` somewhere in their path:
+//
+//   - `SkPathVerb`         (`include/core/SkPathTypes.h:60-67`) — 6 values,
+//                          the modern storage enum used by `SkPath::Raw`,
+//                          `SkPath::verbs()`, etc. No `kDone` sentinel.
+//   - `SkPath::Verb`       (`include/core/SkPath.h:692-700`)    — 7 values,
+//                          the legacy iter-result enum returned by
+//                          `SkPath::Iter::next`. Adds the `kDone_Verb`
+//                          sentinel returned once the verb stream is
+//                          exhausted.
+//
+// kanvas-skia maps these to two distinct nested enums:
+//
+//   - `SkPath.Verb`     (6 values, storage)   ↔ upstream `SkPathVerb`
+//   - `SkPath.IterVerb` (7 values, iter)       ↔ upstream `SkPath::Verb`
+//
+// The R-suivi.25 work item asked for an upstream-perfect rename
+// (`SkPath.Verb` → `SkPath.StorageVerb`, `SkPath.IterVerb` → `SkPath.Verb`).
+// In practice that cascades to ~455 callsites across 50 files and would
+// collide with parallel-agent work (SkCanvas / SkBitmapDevice / codec
+// drives `SkPath.Verb` heavily). The typealiases below cover the
+// upstream-naming half of the contract without churn — see PR R-suivi for
+// the rationale + a TODO for a future no-other-agents-in-flight rename.
+
+/**
+ * Upstream `SkPathVerb` alias (`include/core/SkPathTypes.h:60-67`).
+ * Points at the 6-value storage enum [SkPath.Verb]. Use this name when
+ * porting C++ code that references `SkPathVerb` directly so the call
+ * sites stay readable.
+ */
+public typealias SkPathVerb = SkPath.Verb
+
+/**
+ * Conceptually upstream's `SkPath::Verb` (the 7-value iter-result enum,
+ * `include/core/SkPath.h:692-700`). Aliases the 7-value [SkPath.IterVerb]
+ * so port code reading `SkPath::Verb` can write [SkPathIterVerb] here.
+ *
+ * Not exposed as a nested `SkPath.Verb` alias because that name already
+ * resolves to the storage enum [SkPath.Verb]; the file-scope alias is
+ * the closest we can get without the full rename cascade (see R-suivi
+ * notes above).
+ */
+public typealias SkPathIterVerb = SkPath.IterVerb
+
+/**
+ * Explicit-name alias for the storage [SkPath.Verb] (the R-suivi.25
+ * proposed rename, kept here as an alias for callers who want the
+ * unambiguous `StorageVerb` label without ambiguity with iter verbs).
+ */
+public typealias SkPathStorageVerb = SkPath.Verb
