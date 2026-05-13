@@ -35,4 +35,22 @@ public data class SaveLayerRec(
     public val paint: SkPaint? = null,
     public val backdrop: SkImageFilter? = null,
     public val flags: SaveLayerFlags = 0,
+    /**
+     * Phase R1-C — mirrors Skia's private
+     * `SaveLayerRec::fExperimentalBackdropScale`
+     * (`include/core/SkCanvas.h::SaveLayerRec` — see `internalDrawDeviceWithFilter`'s
+     * `scaleFactor` parameter, `include/core/SkCanvas.h:2654-2660`).
+     *
+     * Uniform downscale applied to the layer's **backdrop snapshot**
+     * before it's run through [backdrop] and pasted into the new layer.
+     * Larger values (`scaleFactor < 1`) downsample the snapshot, which
+     * speeds up the filter and produces a slightly softer / blockier
+     * starting point ; `1.0` (the default) takes the snapshot at full
+     * resolution.
+     *
+     * Used by upstream's `backdrop_scalefactor.cpp` GM. Default
+     * `1.0f` matches the existing two-arg `saveLayer(bounds, paint)`
+     * overload's previous behaviour.
+     */
+    public val scaleFactor: Float = 1f,
 )

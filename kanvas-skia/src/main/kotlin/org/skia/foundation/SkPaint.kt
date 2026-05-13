@@ -2,6 +2,7 @@ package org.skia.foundation
 
 import org.skia.core.SkAlphaType
 import org.skia.core.SkColorSpaceXformSteps
+import org.skia.math.SkRect
 import org.skia.math.SkScalar
 
 /**
@@ -270,6 +271,107 @@ public class SkPaint() {
         }
         else -> false
     }
+
+    // ─── Fast bounds (Phase R1-C) ───────────────────────────────────
+
+    /**
+     * Mirrors Skia's
+     * [`SkPaint::canComputeFastBounds`](https://github.com/google/skia/blob/main/include/core/SkPaint.h#L609).
+     * Returns `true` when [computeFastBounds] can produce a tight
+     * conservative bound without "extensive computation". The
+     * conservative path bails on paints whose effects can grow the
+     * bounds in non-trivial ways — currently any [pathEffect] (an
+     * arbitrary dash / corner / discrete effect can extend bounds by
+     * an unknown amount).
+     *
+     * Other effects ([maskFilter] / [imageFilter]) have well-defined
+     * `margin` / `computeFastBounds` queries and so are still
+     * considered fast.
+     */
+    public fun canComputeFastBounds(): Boolean {
+        // Skia bails when fPathEffect != null and the effect's
+        // `computeFastBounds` returns false ; our path effects don't
+        // implement that, so we bail on any non-null pathEffect.
+        if (pathEffect != null) return false
+        return true
+    }
+
+    /**
+     * Mirrors Skia's
+     * [`SkPaint::computeFastBounds(const SkRect&, SkRect*)`](https://github.com/google/skia/blob/main/include/core/SkPaint.h#L635).
+     * Returns the [orig] geometry's bounds inflated by everything the
+     * paint can grow it by :
+     *
+     *  - Stroke : `± strokeWidth / 2` per side, plus a miter-join allowance
+     *    of `± strokeWidth * miter * 0.5` when [strokeJoin] is
+     *    [Join.kMiter_Join] (kept inside the stroke-half-width for the
+     *    common bevel / round cases).
+     *  - [maskFilter] : `± margin` per side (e.g. Gaussian blur's
+     *    `ceil(3·sigma)` ; see [SkMaskFilter.margin]).
+     *  - [imageFilter] : delegated to [SkImageFilter.computeFastBounds].
+     *
+     * [storage] is mutated and returned when the paint actually
+     * inflates the bounds ; when there's nothing to inflate (fill-only
+     * paint, no filters), the original [orig] is returned untouched —
+     * matches upstream's "returned ref is either `orig` or `storage`"
+     * contract.
+     */
+    public fun computeFastBounds(orig: SkRect, storage: SkRect?): SkRect {
+        // Style + filter math is identical to upstream's
+        // `SkPaint::doComputeFastBounds` (private — `src/core/SkPaint.cpp`).
+        // We track per-side outsets independently so a future imageFilter
+        // with asymmetric bounds can be added cleanly.
+        var l = orig.left; var t = orig.top
+        var r = orig.right; var b = orig.bottom
+        // Stroke inflation.
+        if (style != Style.kFill_Style) {
+            // hairline (strokeWidth == 0) needs +0.5 / -0.5 per side.
+            val halfWidth = if (strokeWidth > 0f) strokeWidth * 0.5f else 0.5f
+            val miterPad = if (strokeJoin == Join.kMiter_Join) {
+                halfWidth * strokeMiter.coerceAtLeast(1f) - halfWidth
+            } else 0f
+            val pad = halfWidth + miterPad
+            l -= pad; t -= pad; r += pad; b += pad
+        }
+        // Mask-filter inflation : the rasteriser pads the mask by `margin`
+        // pixels per side, so the on-screen footprint grows by the same.
+        val mf = maskFilter
+        if (mf != null) {
+            val m = mf.margin().toFloat()
+            l -= m; t -= m; r += m; b += m
+        }
+        // Image-filter inflation : delegate to the filter's own
+        // `computeFastBounds` (defaults to the identity on the base class ;
+        // filters override).
+        val imf = imageFilter
+        val intermediate = if (l == orig.left && t == orig.top &&
+            r == orig.right && b == orig.bottom && imf == null
+        ) {
+            // No inflation requested — return `orig` untouched (matches
+            // Skia's "returned ref is either orig or storage" contract).
+            return orig
+        } else {
+            val dst = storage ?: SkRect.MakeLTRB(l, t, r, b)
+            dst.left = l; dst.top = t; dst.right = r; dst.bottom = b
+            dst
+        }
+        if (imf != null) {
+            val filtered = imf.computeFastBounds(intermediate)
+            intermediate.left = filtered.left
+            intermediate.top = filtered.top
+            intermediate.right = filtered.right
+            intermediate.bottom = filtered.bottom
+        }
+        return intermediate
+    }
+
+    /**
+     * Convenience overload returning a fresh [SkRect] (no caller-supplied
+     * storage). Useful from Kotlin where the explicit storage pointer
+     * adds noise.
+     */
+    public fun computeFastBounds(orig: SkRect): SkRect =
+        computeFastBounds(orig, SkRect.MakeLTRB(0f, 0f, 0f, 0f))
 
     // ─── Lifecycle ──────────────────────────────────────────────────
 

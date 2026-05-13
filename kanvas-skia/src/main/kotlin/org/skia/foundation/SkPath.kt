@@ -661,6 +661,148 @@ public class SkPath internal constructor(
     }
 
     /**
+     * Point-in-path test mirroring `SkPath::contains(SkScalar, SkScalar)`
+     * (`include/core/SkPath.h:1026-1031`). Returns `true` when `(x, y)` is
+     * inside the path under the current [fillType] — non-zero winding
+     * rule for [SkPathFillType.kWinding], parity (even-odd) for
+     * [SkPathFillType.kEvenOdd], and complement-of-inside for the
+     * inverse variants.
+     *
+     * Curves (`kQuad`, `kConic`, `kCubic`) are flattened into short
+     * line segments (16 samples per curve) before crossing the ray —
+     * matches Skia's intent without dragging in the upstream polynomial
+     * root solver. For the canonical conics produced by `addOval` /
+     * `addRRect` / `arcTo` (weight `√2/2`, control at the bbox corner),
+     * the curve never extends past the (start, end, control) bbox, so
+     * 16-sample line subdivision is well below the pixel-size threshold
+     * needed by the `hittestpath.cpp` GM.
+     *
+     * Used by the upstream `hittestpath` GM and any client doing path
+     * pick-correlation.
+     */
+    public fun contains(x: SkScalar, y: SkScalar): Boolean {
+        if (verbs.isEmpty()) return fillType.isInverse()
+        // Quick bbox reject (only for non-inverse rules — the inverse
+        // fills the complement and a point outside the bbox is *in*).
+        if (!fillType.isInverse()) {
+            val bb = computeBounds()
+            if (x < bb.left || x > bb.right || y < bb.top || y > bb.bottom) return false
+        }
+        // Cast a horizontal ray to the right; count signed crossings
+        // (for winding) or just bit-toggle (for even-odd).
+        // For each contour segment (line, or flattened curve), test
+        // whether the segment crosses the horizontal line `y = py`
+        // strictly between its endpoints' y values.
+        var winding = 0
+        var crossings = 0
+        var px = 0f; var py = 0f          // current pen
+        var mx = 0f; var my = 0f          // contour start (move target)
+        var coordIdx = 0
+        var weightIdx = 0
+
+        fun crossSegment(x0: Float, y0: Float, x1: Float, y1: Float) {
+            // Skip horizontal segments — they can't be crossed by the ray.
+            if (y0 == y1) return
+            // The segment must straddle `y` (half-open per Skia's
+            // convention to avoid double-counting at vertices). We pick
+            // `y0 <= y < y1` for upward edges and `y1 <= y < y0` for
+            // downward edges.
+            val upward = y1 > y0
+            val (lo, hi) = if (upward) y0 to y1 else y1 to y0
+            if (y < lo || y >= hi) return
+            // X-coord at intersection.
+            val t = (y - y0) / (y1 - y0)
+            val xi = x0 + t * (x1 - x0)
+            if (xi > x) {
+                crossings++
+                winding += if (upward) 1 else -1
+            }
+        }
+
+        for (verb in verbs) {
+            when (verb) {
+                Verb.kMove -> {
+                    mx = coords[coordIdx++]; my = coords[coordIdx++]
+                    px = mx; py = my
+                }
+                Verb.kLine -> {
+                    val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
+                    crossSegment(px, py, ex, ey)
+                    px = ex; py = ey
+                }
+                Verb.kQuad -> {
+                    val cx = coords[coordIdx++]; val cy = coords[coordIdx++]
+                    val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
+                    // 16 line subdivisions of the quadratic Bézier.
+                    var prevX = px; var prevY = py
+                    val n = 16
+                    for (k in 1..n) {
+                        val t = k.toFloat() / n
+                        val u = 1f - t
+                        val xq = u * u * px + 2f * u * t * cx + t * t * ex
+                        val yq = u * u * py + 2f * u * t * cy + t * t * ey
+                        crossSegment(prevX, prevY, xq, yq)
+                        prevX = xq; prevY = yq
+                    }
+                    px = ex; py = ey
+                }
+                Verb.kConic -> {
+                    val cx = coords[coordIdx++]; val cy = coords[coordIdx++]
+                    val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
+                    val w = conicWeights[weightIdx++]
+                    var prevX = px; var prevY = py
+                    val n = 16
+                    for (k in 1..n) {
+                        val t = k.toFloat() / n
+                        val u = 1f - t
+                        val numW = u * u + 2f * u * t * w + t * t
+                        val xc = (u * u * px + 2f * u * t * w * cx + t * t * ex) / numW
+                        val yc = (u * u * py + 2f * u * t * w * cy + t * t * ey) / numW
+                        crossSegment(prevX, prevY, xc, yc)
+                        prevX = xc; prevY = yc
+                    }
+                    px = ex; py = ey
+                }
+                Verb.kCubic -> {
+                    val c1x = coords[coordIdx++]; val c1y = coords[coordIdx++]
+                    val c2x = coords[coordIdx++]; val c2y = coords[coordIdx++]
+                    val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
+                    var prevX = px; var prevY = py
+                    val n = 16
+                    for (k in 1..n) {
+                        val t = k.toFloat() / n
+                        val u = 1f - t
+                        val xc = u * u * u * px +
+                            3f * u * u * t * c1x +
+                            3f * u * t * t * c2x +
+                            t * t * t * ex
+                        val yc = u * u * u * py +
+                            3f * u * u * t * c1y +
+                            3f * u * t * t * c2y +
+                            t * t * t * ey
+                        crossSegment(prevX, prevY, xc, yc)
+                        prevX = xc; prevY = yc
+                    }
+                    px = ex; py = ey
+                }
+                Verb.kClose -> {
+                    // Implicit line back to (mx, my).
+                    crossSegment(px, py, mx, my)
+                    px = mx; py = my
+                }
+            }
+        }
+        val inside = if (fillType.isEvenOdd()) (crossings and 1) != 0 else winding != 0
+        return if (fillType.isInverse()) !inside else inside
+    }
+
+    /**
+     * `SkPoint` overload of [contains]. Mirrors `SkPath::contains(SkPoint)`
+     * (`include/core/SkPath.h:1026`).
+     */
+    public fun contains(point: SkPoint): Boolean = contains(point.fX, point.fY)
+
+    /**
      * Translated copy. Mirrors Skia's `SkPath::makeOffset(dx, dy)` —
      * verbs and conic weights are preserved untouched, only point
      * coordinates shift. Returns `this` when both deltas are zero

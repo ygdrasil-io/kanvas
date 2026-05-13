@@ -69,6 +69,33 @@ public class SkBitmap(
         if (colorType == SkColorType.kAlpha_8) ByteArray(width * height) else ByteArray(0)
 
     /**
+     * Backing storage for [SkColorType.kRGB_565] (Phase R1-C). One
+     * `Short` per pixel : `[R:15..11 G:10..5 B:4..0]` per Skia's
+     * `kRGB_565_SkColorType` layout (BGR data packed into a LE 16-bit
+     * word, see `include/core/SkColorType.h`). 5-bit channels widen to
+     * 8-bit via `v * 8 | v >> 2` (R, B) and `v * 4 | v >> 4` (G) on
+     * read-out — matches Skia's `SkColor16to32` quantisation in
+     * `src/core/SkBitmap.cpp`. Alpha is always 255 (`kOpaque`).
+     *
+     * Empty array for any other colour type.
+     */
+    public val pixels565: ShortArray =
+        if (colorType == SkColorType.kRGB_565) ShortArray(width * height) else ShortArray(0)
+
+    /**
+     * Backing storage for [SkColorType.kGray_8] (Phase R1-C). One
+     * unsigned byte per pixel interpreted as luminance ; on read-out
+     * the byte is replicated to all three RGB channels and alpha is
+     * forced to 255 (`kOpaque`). Mirrors Skia's `kGray_8_SkColorType`
+     * (`include/core/SkColorType.h`) used by `gm/all_bitmap_configs.cpp`
+     * and `gm/bitmapfilters.cpp`.
+     *
+     * Empty array for any other colour type.
+     */
+    public val pixelsGray8: ByteArray =
+        if (colorType == SkColorType.kGray_8) ByteArray(width * height) else ByteArray(0)
+
+    /**
      * Backing storage for [SkColorType.kBGRA_8888] (Phase G4b).
      *
      * Same shape as [pixels8888] : one `Int` per pixel, **non-premul**,
@@ -177,6 +204,18 @@ public class SkBitmap(
                 val ai = (a * 255f + 0.5f).toInt().coerceIn(0, 255)
                 pixelsA8.fill(ai.toByte())
             }
+            SkColorType.kRGB_565 -> {
+                // Phase R1-C — 565 has no alpha channel ; we drop `a` and
+                // quantise the (post-xform) RGB channels to 5/6/5 bits.
+                pixels565.fill(packRGB565(r, g, b))
+            }
+            SkColorType.kGray_8 -> {
+                // Phase R1-C — luminance from Rec.601 weights, then drop
+                // alpha. Matches Skia's `SkColorToLuminance` (`src/core/SkColor.cpp`).
+                val ly = (r * 0.299f + g * 0.587f + b * 0.114f).coerceIn(0f, 1f)
+                val li = (ly * 255f + 0.5f).toInt().coerceIn(0, 255)
+                pixelsGray8.fill(li.toByte())
+            }
             else -> error("SkBitmap.eraseColor unsupported for colorType=$colorType")
         }
     }
@@ -241,6 +280,15 @@ public class SkBitmap(
                 val a = pixelsA8[y * width + x].toInt() and 0xFF
                 SkColorSetARGB(a, 0, 0, 0)
             }
+            SkColorType.kRGB_565 -> {
+                // Phase R1-C — unpack 5/6/5 bits to 8-bit RGB ; alpha = 255.
+                unpackRGB565(pixels565[y * width + x])
+            }
+            SkColorType.kGray_8 -> {
+                // Phase R1-C — replicate luminance to all 3 RGB channels ; alpha = 255.
+                val l = pixelsGray8[y * width + x].toInt() and 0xFF
+                SkColorSetARGB(0xFF, l, l, l)
+            }
             else -> error("SkBitmap.getPixel unsupported for colorType=$colorType")
         }
     }
@@ -268,6 +316,22 @@ public class SkBitmap(
             SkColorType.kAlpha_8 -> {
                 // Alpha-only — RGB of `c` is discarded.
                 pixelsA8[y * width + x] = SkColorGetA(c).toByte()
+            }
+            SkColorType.kRGB_565 -> {
+                // Phase R1-C — drop alpha, quantise to 5/6/5 bits.
+                pixels565[y * width + x] = packRGB565(
+                    SkColorGetR(c) / 255f,
+                    SkColorGetG(c) / 255f,
+                    SkColorGetB(c) / 255f,
+                )
+            }
+            SkColorType.kGray_8 -> {
+                // Phase R1-C — Rec.601 luminance.
+                val r = SkColorGetR(c)
+                val g = SkColorGetG(c)
+                val b = SkColorGetB(c)
+                val l = ((r * 77 + g * 150 + b * 29) shr 8).coerceIn(0, 255)
+                pixelsGray8[y * width + x] = l.toByte()
             }
             else -> error("SkBitmap.setPixel unsupported for colorType=$colorType")
         }
@@ -305,6 +369,21 @@ public class SkBitmap(
                 out[1] = ((packed shr 8) and 0xF) / 15f
                 out[2] = ((packed shr 4) and 0xF) / 15f
                 out[3] = (packed and 0xF) / 15f
+            }
+            SkColorType.kRGB_565 -> {
+                // Phase R1-C — unpack 5/6/5 bits then divide ; alpha is
+                // implicit opaque (premul or not — `1`).
+                val p = pixels565[y * width + x].toInt() and 0xFFFF
+                out[0] = ((p shr 11) and 0x1F) / 31f
+                out[1] = ((p shr 5) and 0x3F) / 63f
+                out[2] = (p and 0x1F) / 31f
+                out[3] = 1f
+            }
+            SkColorType.kGray_8 -> {
+                // Phase R1-C — single luminance channel replicated to RGB ;
+                // alpha is opaque (1).
+                val l = (pixelsGray8[y * width + x].toInt() and 0xFF) / 255f
+                out[0] = l; out[1] = l; out[2] = l; out[3] = 1f
             }
             else -> error("getPixelF16 unsupported for colorType=$colorType")
         }
@@ -416,6 +495,38 @@ public class SkBitmap(
          * the premul values are unpremul'd by dividing the colour
          * channels by alpha.
          */
+        // ─── RGB_565 helpers (Phase R1-C) ────────────────────────────
+
+        /**
+         * Pack non-premultiplied float channels `(r, g, b) ∈ [0, 1]` into
+         * a 16-bit `Short` with bit layout `[R:15..11 G:10..5 B:4..0]`.
+         * Round-to-nearest quantisation per channel ; inputs are clamped
+         * to `[0, 1]` first. Alpha is implicit opaque (`SkAlphaType.kOpaque`).
+         */
+        internal fun packRGB565(r: Float, g: Float, b: Float): Short {
+            val r5 = (r.coerceIn(0f, 1f) * 31f + 0.5f).toInt()
+            val g6 = (g.coerceIn(0f, 1f) * 63f + 0.5f).toInt()
+            val b5 = (b.coerceIn(0f, 1f) * 31f + 0.5f).toInt()
+            return ((r5 shl 11) or (g6 shl 5) or b5).toShort()
+        }
+
+        /**
+         * Unpack a 16-bit RGB_565 short to an opaque 8-bit `SkColor`.
+         * Widens 5 → 8 bits via `(v << 3) | (v >> 2)` (R, B) and 6 → 8
+         * via `(v << 2) | (v >> 4)` (G) — Skia's standard `SkColor16to32`
+         * (`src/core/SkBitmap.cpp`).
+         */
+        internal fun unpackRGB565(packed: Short): SkColor {
+            val p = packed.toInt() and 0xFFFF
+            val r5 = (p shr 11) and 0x1F
+            val g6 = (p shr 5) and 0x3F
+            val b5 = p and 0x1F
+            val r8 = (r5 shl 3) or (r5 shr 2)
+            val g8 = (g6 shl 2) or (g6 shr 4)
+            val b8 = (b5 shl 3) or (b5 shr 2)
+            return SkColorSetARGB(0xFF, r8, g8, b8)
+        }
+
         internal fun unpackARGB4444Premul(packed: Short): SkColor {
             val p = packed.toInt() and 0xFFFF
             val r4 = (p shr 12) and 0xF

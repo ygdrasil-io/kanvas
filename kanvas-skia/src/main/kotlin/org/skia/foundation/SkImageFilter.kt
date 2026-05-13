@@ -1,6 +1,7 @@
 package org.skia.foundation
 
 import org.skia.math.SkMatrix
+import org.skia.math.SkRect
 
 /**
  * Mirrors Skia's
@@ -53,6 +54,25 @@ public abstract class SkImageFilter {
      * when the filter has no effect (e.g. zero-displacement Offset).
      */
     public abstract fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult
+
+    /**
+     * Phase R1-C — mirrors Skia's
+     * [`SkImageFilter::computeFastBounds`](https://github.com/google/skia/blob/main/include/core/SkImageFilter.h#L90).
+     * Given a source rectangle [src], return the conservative
+     * device-space bounds the filter's output will cover. Filters that
+     * grow / displace the image (e.g. blur, offset) override this to
+     * inflate / translate the rect ; the base-class default mirrors
+     * Skia's "union of all input bounds" semantics — for the kanvas-skia
+     * port the conservative fallback is `src` itself (we don't model
+     * input-DAG bounds here), which is the right answer for filters
+     * whose output footprint matches the input.
+     *
+     * The result is used by [SkPaint.computeFastBounds] to give the
+     * rasteriser a quickReject rectangle that includes every pixel the
+     * filter pipeline could possibly draw. Used by
+     * `gm/filterfastbounds.cpp`.
+     */
+    public open fun computeFastBounds(src: SkRect): SkRect = src
 
     /**
      * Result of [filterImage] : the transformed image plus the
