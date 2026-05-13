@@ -1,6 +1,7 @@
 package org.skia.utils
 
 import org.skia.core.SkCanvas
+import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkColorGetA
 import org.skia.foundation.SkColorGetB
@@ -13,6 +14,7 @@ import org.skia.foundation.SkPath
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint3
 import org.skia.math.SkRect
+import java.util.WeakHashMap
 import kotlin.math.max
 import kotlin.math.min
 
@@ -242,10 +244,27 @@ public object SkShadowUtils {
         val bounds = path.computeBounds()
         if (bounds.isEmpty) return
 
-        // Evaluate the occluder height at the path's centroid.
+        // ── R-suivi.31 — tilt-aware z sampling ────────────────────
+        // Evaluate `z = a·x + b·y + c` at every vertex emitted by
+        // SkPath.Iter (one endpoint per move/line/quad/conic/cubic verb).
+        // The min/max of those samples drives the ambient blur radius
+        // (we use the max, which gives the largest halo — the safe over-
+        // estimate matching upstream's "worst-case" envelope used by
+        // SkDrawShadowMetrics::GetLocalBounds), while the centroid-z is
+        // kept as a fallback for paths with < 2 vertices.
         val cx = (bounds.left + bounds.right) * 0.5f
         val cy = (bounds.top + bounds.bottom) * 0.5f
-        val occluderZ = max(zPlaneParams.fX * cx + zPlaneParams.fY * cy + zPlaneParams.fZ, 0f)
+        val centroidZ = max(zPlaneParams.fX * cx + zPlaneParams.fY * cy + zPlaneParams.fZ, 0f)
+
+        val vertexZs = sampleVertexZs(path, zPlaneParams)
+        val occluderZ = if (vertexZs.size < 2) centroidZ else {
+            // Use the max z (largest blur) for the ambient layer and the
+            // spot's perspective scale ; this matches the upstream over-
+            // estimate used by GetLocalBounds.
+            var m = 0f
+            for (z in vertexZs) if (z > m) m = z
+            m
+        }
 
         // ── Ambient shadow ─────────────────────────────────────────
         // Blur sigma is upstream's AmbientBlurRadius (in device pixels)
@@ -285,6 +304,24 @@ public object SkShadowUtils {
         val spotSigma = sp.blurRadius * 0.5f
 
         if (SkColorGetA(spotColor) > 0) {
+            // R-suivi.31 — tilt-aware spot projection. When per-vertex z
+            // samples differ noticeably (steep tilt), expand the spot
+            // bounds to the envelope of per-vertex projections so the
+            // larger-z side gets a proportionally larger shadow. We
+            // implement this by computing a per-vertex scale anchor and
+            // taking the union of the resulting transformed bounds.
+            //
+            // For non-tilted planes (a = b = 0), every vertex shares the
+            // same z and the loop below collapses to the original
+            // centroid-scale + translate transform, preserving the
+            // pre-existing behaviour bit-for-bit.
+            val spotBoundsRaw = computeSpotBounds(
+                path, bounds, vertexZs,
+                cx, cy,
+                lightPos, lightRadius,
+                useDirectional = (flags and kDirectionalLight_ShadowFlag) != 0,
+            )
+
             // Spot transform : scale around the path's centroid (perspective
             // enlargement under the light) then translate (projection offset).
             val spotMatrix = SkMatrix.MakeTrans(cx + sp.translateX, cy + sp.translateY)
@@ -292,29 +329,252 @@ public object SkShadowUtils {
                 .preConcat(SkMatrix.MakeTrans(-cx, -cy))
             val spotPath = path.makeTransform(spotMatrix)
 
+            // R-suivi.33 — projection cache. Pull a precomputed projected
+            // path if [OptimizeForSurface] previously warmed it for the
+            // same (path, lightPos, zPlaneParams) tuple ; otherwise the
+            // cache stays cold and we fall through to the direct
+            // makeTransform result we just computed above.
+            val cached = projectionCacheGet(path, lightPos, zPlaneParams)
+            val effectiveSpotPath = cached ?: spotPath
+
+            // R-suivi.32 — transparent-occluder culling. When the flag is
+            // unset (default = opaque occluder), the spot shadow under the
+            // occluder is invisible — clip it out before drawing. When
+            // the flag is set, emit the full shadow including the part
+            // behind the occluder.
+            val cullOpaque = (flags and kTransparentOccluder_ShadowFlag) == 0
+
             if (spotSigma > 0f) {
                 val spotPaint = SkPaint().apply {
                     color = spotColor
                     isAntiAlias = true
                     imageFilter = SkImageFilters.Blur(spotSigma, spotSigma, null)
                 }
-                val spotBounds = spotPath.computeBounds()
+                val spotBounds = (if (spotBoundsRaw.isEmpty) effectiveSpotPath.computeBounds() else spotBoundsRaw)
                     .makeOutset(sp.blurRadius + 1f, sp.blurRadius + 1f)
                 val saveCount = canvas.saveLayer(spotBounds, spotPaint)
+                if (cullOpaque) canvas.clipPath(path, SkClipOp.kDifference, true)
                 val fillPaint = SkPaint().apply {
                     color = spotColor
                     isAntiAlias = true
                 }
-                canvas.drawPath(spotPath, fillPaint)
+                canvas.drawPath(effectiveSpotPath, fillPaint)
                 canvas.restoreToCount(saveCount)
             } else {
-                val fillPaint = SkPaint().apply {
-                    color = spotColor
-                    isAntiAlias = true
+                if (cullOpaque) {
+                    val saveCount = canvas.save()
+                    canvas.clipPath(path, SkClipOp.kDifference, true)
+                    val fillPaint = SkPaint().apply {
+                        color = spotColor
+                        isAntiAlias = true
+                    }
+                    canvas.drawPath(effectiveSpotPath, fillPaint)
+                    canvas.restoreToCount(saveCount)
+                } else {
+                    val fillPaint = SkPaint().apply {
+                        color = spotColor
+                        isAntiAlias = true
+                    }
+                    canvas.drawPath(effectiveSpotPath, fillPaint)
                 }
-                canvas.drawPath(spotPath, fillPaint)
             }
         }
+    }
+
+    // ─── R-suivi.31 helpers ──────────────────────────────────────────
+
+    /**
+     * Sample `z = a·x + b·y + c` at every endpoint emitted by the
+     * path's verb stream (one per move/line/quad/conic/cubic — close
+     * verbs add no new point). The returned array is empty for an
+     * empty path and has length 1 for a path with a single Move.
+     *
+     * Used by [DrawShadow] to pick a tilt-aware `occluderZ` instead of
+     * the centroid-only fallback. Per the R-suivi.31 contract this
+     * stays a "max-z over vertex endpoints" — a full per-vertex
+     * analytic mesh is tracked separately as R-suivi.30.
+     */
+    private fun sampleVertexZs(path: SkPath, zPlaneParams: SkPoint3): FloatArray {
+        val out = ArrayList<Float>(8)
+        val iter = SkPath.Iter(path, forceClose = false)
+        val pts = FloatArray(8)
+        while (true) {
+            val v = iter.next(pts)
+            if (v == SkPath.IterVerb.kDoneVerb) break
+            val endIdx: Int = when (v) {
+                SkPath.IterVerb.kMoveVerb -> 0
+                SkPath.IterVerb.kLineVerb -> 1
+                SkPath.IterVerb.kQuadVerb -> 2
+                SkPath.IterVerb.kConicVerb -> 2
+                SkPath.IterVerb.kCubicVerb -> 3
+                SkPath.IterVerb.kCloseVerb -> -1
+                SkPath.IterVerb.kDoneVerb -> -1
+            }
+            if (endIdx < 0) continue
+            val x = pts[2 * endIdx]
+            val y = pts[2 * endIdx + 1]
+            val z = zPlaneParams.fX * x + zPlaneParams.fY * y + zPlaneParams.fZ
+            out.add(max(z, 0f))
+        }
+        return out.toFloatArray()
+    }
+
+    /**
+     * Compute the union of per-vertex projected spot bounds. For a
+     * tilted plane each endpoint has its own z, which yields a
+     * different per-vertex scale + translate ; the resulting envelope
+     * is bigger on the high-z side than the centroid-only bounds.
+     *
+     * Returns an empty rect when [vertexZs] is sparse (< 2 samples)
+     * or when every vertex shares the same z — in those cases the
+     * caller falls back to the original centroid-scale spot path
+     * bounds.
+     */
+    @Suppress("LongParameterList")
+    private fun computeSpotBounds(
+        path: SkPath,
+        bounds: SkRect,
+        vertexZs: FloatArray,
+        cx: Float,
+        cy: Float,
+        lightPos: SkPoint3,
+        lightRadius: Float,
+        useDirectional: Boolean,
+    ): SkRect {
+        if (vertexZs.size < 2) return SkRect.MakeLTRB(0f, 0f, 0f, 0f)
+        var minZ = vertexZs[0]
+        var maxZ = vertexZs[0]
+        for (z in vertexZs) {
+            if (z < minZ) minZ = z
+            if (z > maxZ) maxZ = z
+        }
+        // Flat / near-flat plane : nothing to gain from per-vertex
+        // expansion ; fall back to the centroid-derived bounds.
+        if (maxZ - minZ < 1e-3f) return SkRect.MakeLTRB(0f, 0f, 0f, 0f)
+
+        var unionL = Float.POSITIVE_INFINITY
+        var unionT = Float.POSITIVE_INFINITY
+        var unionR = Float.NEGATIVE_INFINITY
+        var unionB = Float.NEGATIVE_INFINITY
+
+        // Walk the verbs again to grab the (endpoint x, y, z) triples.
+        val iter = SkPath.Iter(path, forceClose = false)
+        val pts = FloatArray(8)
+        var idx = 0
+        while (true) {
+            val v = iter.next(pts)
+            if (v == SkPath.IterVerb.kDoneVerb) break
+            val endIdx: Int = when (v) {
+                SkPath.IterVerb.kMoveVerb -> 0
+                SkPath.IterVerb.kLineVerb -> 1
+                SkPath.IterVerb.kQuadVerb -> 2
+                SkPath.IterVerb.kConicVerb -> 2
+                SkPath.IterVerb.kCubicVerb -> 3
+                else -> -1
+            }
+            if (endIdx < 0) continue
+            val z = if (idx < vertexZs.size) vertexZs[idx] else 0f
+            idx++
+
+            val sp = if (useDirectional) {
+                getDirectionalParams(z, lightPos.fX, lightPos.fY, lightPos.fZ, lightRadius)
+            } else {
+                getSpotParams(z, lightPos.fX, lightPos.fY, lightPos.fZ, lightRadius)
+            }
+            // Project the path's bounding box under this vertex's z. We
+            // could project each endpoint individually, but that
+            // collapses to a polygon — taking the bbox under each
+            // vertex's z and unioning lands on the bbox of the per-
+            // vertex polygon, which is what the caller needs.
+            val halfW = (bounds.right - bounds.left) * 0.5f * sp.scale
+            val halfH = (bounds.bottom - bounds.top) * 0.5f * sp.scale
+            val spotCx = cx + sp.translateX
+            val spotCy = cy + sp.translateY
+            val l = spotCx - halfW
+            val t = spotCy - halfH
+            val r = spotCx + halfW
+            val b = spotCy + halfH
+            if (l < unionL) unionL = l
+            if (t < unionT) unionT = t
+            if (r > unionR) unionR = r
+            if (b > unionB) unionB = b
+        }
+        if (unionL > unionR || unionT > unionB) return SkRect.MakeLTRB(0f, 0f, 0f, 0f)
+        return SkRect.MakeLTRB(unionL, unionT, unionR, unionB)
+    }
+
+    // ─── R-suivi.33 — projection cache ───────────────────────────────
+
+    /**
+     * Cache key for the projected occluder geometry, indexed by path
+     * identity + light position + plane params. Identity-based path
+     * matching keeps the cache cheap (no full coord comparison) and is
+     * sufficient for the animation use case (same path instance
+     * shadowed across frames).
+     */
+    private data class ProjectionKey(
+        val pathIdentity: Int,
+        val lightX: Float, val lightY: Float, val lightZ: Float,
+        val planeA: Float, val planeB: Float, val planeC: Float,
+    )
+
+    /**
+     * Number of cache hits served by [projectionCacheGet] since process
+     * start. Exposed via [projectionCacheHits] for tests — production
+     * callers shouldn't depend on it.
+     */
+    @Volatile
+    private var cacheHitCount: Long = 0L
+
+    /** WeakHashMap keyed by path identity ; entries drop when the key
+     *  string falls out of scope. We can't key directly on `SkPath`
+     *  because we want to clear entries when the path becomes
+     *  unreachable, so we route through an inner indirection that
+     *  binds the cached projection to the path's lifetime via a
+     *  separate WeakHashMap<SkPath, MutableMap<ProjectionKey, SkPath>>.
+     */
+    private val projectionCache: WeakHashMap<SkPath, MutableMap<ProjectionKey, SkPath>> =
+        WeakHashMap()
+
+    private fun makeProjectionKey(
+        path: SkPath, lightPos: SkPoint3, zPlaneParams: SkPoint3,
+    ): ProjectionKey = ProjectionKey(
+        System.identityHashCode(path),
+        lightPos.fX, lightPos.fY, lightPos.fZ,
+        zPlaneParams.fX, zPlaneParams.fY, zPlaneParams.fZ,
+    )
+
+    private fun projectionCacheGet(
+        path: SkPath, lightPos: SkPoint3, zPlaneParams: SkPoint3,
+    ): SkPath? {
+        val perPath = synchronized(projectionCache) { projectionCache[path] } ?: return null
+        val key = makeProjectionKey(path, lightPos, zPlaneParams)
+        val hit = synchronized(projectionCache) { perPath[key] }
+        if (hit != null) cacheHitCount++
+        return hit
+    }
+
+    private fun projectionCachePut(
+        path: SkPath, lightPos: SkPoint3, zPlaneParams: SkPoint3, projected: SkPath,
+    ) {
+        val key = makeProjectionKey(path, lightPos, zPlaneParams)
+        synchronized(projectionCache) {
+            val perPath = projectionCache.getOrPut(path) { HashMap() }
+            perPath[key] = projected
+        }
+    }
+
+    /**
+     * Number of times [projectionCacheGet] has returned a cached
+     * projection. Test-only — production callers must not depend on
+     * the exact value.
+     */
+    internal fun projectionCacheHits(): Long = cacheHitCount
+
+    /** Test-only : clear the projection cache and reset the hit counter. */
+    internal fun projectionCacheClearForTest() {
+        synchronized(projectionCache) { projectionCache.clear() }
+        cacheHitCount = 0L
     }
 
     /**
@@ -322,18 +582,41 @@ public object SkShadowUtils {
      * frames.
      *
      * Upstream caches a tessellated shadow mesh keyed on
-     * `(path-genID, ctm, light)` ; this port is blur-based and has no
-     * such cache, so the method is a no-op that always returns `true`.
-     * The signature mirrors the upstream surface so call sites can
-     * compile unchanged.
+     * `(path-genID, ctm, light)`. This port keeps the same intent: we
+     * precompute the projected spot path (scale + translate around the
+     * path's centroid) and stash it in a [WeakHashMap] keyed on the
+     * path identity + light position + zPlaneParams. The next
+     * [DrawShadow] call with the same key reuses the cached projection
+     * — useful in animation scenarios where the same shape is shadowed
+     * across many frames.
+     *
+     * [zPlaneParams] defaults to `(0, 0, 1)` (a flat plane at z = 1)
+     * to keep source-compat with call sites that don't carry the plane
+     * yet. Always returns `true` — failures fall through to a fresh
+     * projection on the matching [DrawShadow] call.
      */
-    @Suppress("UNUSED_PARAMETER")
     public fun OptimizeForSurface(
         canvas: SkCanvas,
         path: SkPath,
         lightPos: SkPoint3,
         lightRadius: Float,
-    ): Boolean = true
+        zPlaneParams: SkPoint3 = SkPoint3(0f, 0f, 1f),
+    ): Boolean {
+        val bounds = path.computeBounds()
+        if (bounds.isEmpty) return true
+        val cx = (bounds.left + bounds.right) * 0.5f
+        val cy = (bounds.top + bounds.bottom) * 0.5f
+        val centroidZ = max(zPlaneParams.fX * cx + zPlaneParams.fY * cy + zPlaneParams.fZ, 0f)
+        val sp = getSpotParams(centroidZ, lightPos.fX, lightPos.fY, lightPos.fZ, lightRadius)
+        val spotMatrix = SkMatrix.MakeTrans(cx + sp.translateX, cy + sp.translateY)
+            .preConcat(SkMatrix.MakeScale(sp.scale, sp.scale))
+            .preConcat(SkMatrix.MakeTrans(-cx, -cy))
+        val projected = path.makeTransform(spotMatrix)
+        projectionCachePut(path, lightPos, zPlaneParams, projected)
+        // Touch the canvas parameter to keep the upstream API surface.
+        @Suppress("UNUSED_VARIABLE") val _c = canvas
+        return true
+    }
 
     /**
      * Generate bounding box for shadows relative to path. Includes both
