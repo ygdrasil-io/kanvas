@@ -9,6 +9,7 @@ import org.skia.foundation.SK_ColorRED
 import org.skia.foundation.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
+import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 
 /**
@@ -58,12 +59,12 @@ class SkAutoCanvasRestoreTest {
     @Test
     fun `withSave reverts CTM mutations`() {
         val c = newCanvas()
-        val before = c.getTotalMatrix()
+        val before = (c.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity)
         c.withSave {
             translate(10f, 5f)
             scale(2f, 3f)
         }
-        assertEquals(before, c.getTotalMatrix())
+        assertEquals(before, (c.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity))
     }
 
     @Test

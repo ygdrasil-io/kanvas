@@ -12,10 +12,10 @@ import org.skia.foundation.SkImageInfo
 /**
  * Unit tests for [SkPixmapUtils.Orient] and [SkPixmapUtils.SwapWidthHeight].
  *
- * Origin coverage (per R1 contract) :
- *  - [SkEncodedOrigin.kTopLeft]    : identity copy.
- *  - [SkEncodedOrigin.kBottomLeft] : vertical flip.
- *  - All other origins             : return `false` (TODO follow-up).
+ * Origin coverage (R-suivi.9 complete — all 8 origins implemented).
+ * See [SkPixmapUtilsOrientAllOriginsTest] for exhaustive coverage of
+ * the six rotation/transpose origins on a 4×4 source ; this file keeps
+ * the original 2×2 row-flip smoke tests.
  */
 class SkPixmapUtilsTest {
 
@@ -58,15 +58,6 @@ class SkPixmapUtilsTest {
         // Source row 1 (blue) should now be at the top (y = 0).
         assertEquals(opaqueBlue, dst.getPixel(0, 0))
         assertEquals(opaqueBlue, dst.getPixel(1, 0))
-    }
-
-    @Test
-    fun `Orient with unimplemented origin returns false`() {
-        val src = twoToneBitmap()
-        val dst = SkBitmap(2, 2)
-        // kBottomRight (180°) is not implemented in R1.
-        val ok = SkPixmapUtils.Orient(dst, src, SkEncodedOrigin.kBottomRight)
-        assertFalse(ok)
     }
 
     @Test
