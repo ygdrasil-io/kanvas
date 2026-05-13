@@ -2,7 +2,6 @@ package org.skia.foundation
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -62,13 +61,15 @@ class SkFontMgrTest {
     }
 
     @Test
-    fun `matchFamilyStyleCharacter returns null (R3 fallback deferred)`() {
+    fun `matchFamilyStyleCharacter resolves Latin code points (R-suivi 43)`() {
         val mgr = SkFontMgr.RefDefault()
         val tf = mgr.matchFamilyStyleCharacter(
             null, SkFontStyle.Normal(), null, 'A'.code,
         )
-        // AWT has no codepoint→font fallback API ; see JvmAwtFontMgr KDoc.
-        assertNull(tf)
+        // R-suivi.43 — JvmAwtFontMgr now ships an
+        // AwtFontFallbackTable script-bucketed fallback chain backed by
+        // the bundled Liberation TTFs.
+        assertNotNull(tf, "Latin 'A' must resolve to some typeface via fallback")
     }
 
     @Test
