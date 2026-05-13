@@ -30,7 +30,9 @@ class SkPDFGradientsTest {
         val paint = SkPaint().apply { shader = grad }
 
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of FlateDecode so the content stream
+        // is greppable for the `cs` / `scn` pattern selection ops.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val canvas = doc.beginPage(100f, 100f)
         canvas.drawRect(SkRect.MakeWH(100f, 100f), paint)
         doc.close()
@@ -92,7 +94,9 @@ class SkPDFGradientsTest {
         )
         val paint = SkPaint().apply { shader = grad }
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of FlateDecode so the content stream
+        // is greppable for the `cs` / `scn` pattern selection ops.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val c = doc.beginPage(50f, 50f)
         c.drawRect(SkRect.MakeWH(50f, 50f), paint)
         doc.close()
