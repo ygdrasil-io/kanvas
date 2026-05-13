@@ -1,14 +1,24 @@
 package org.skia.utils
 
 import org.skia.core.SkCanvas
+import org.skia.core.SkDrawable
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkFilterMode
+import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRSXform
+import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkTextBlob
+import org.skia.foundation.SkTextEncoding
+import org.skia.foundation.SkVertices
+import org.skia.math.SkIRect
+import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 
@@ -95,4 +105,75 @@ public open class SkNoDrawCanvas(
         blendMode: SkBlendMode,
         paint: SkPaint,
     ) {}
+
+    // ─── R-suivi.10 — additional no-op overrides ──────────────────────────
+    // Upstream's SkNoDrawCanvas overrides every SkCanvas virtual to be a
+    // no-op so analysis passes never trigger rasterisation. The base
+    // SkCanvas implementations would otherwise (e.g.) translate
+    // `drawAtlas` into per-quad `drawPath` calls on the dummy device. We
+    // short-circuit each remaining draw entry point here.
+
+    override fun drawRegion(region: SkRegion, paint: SkPaint) {}
+
+    override fun drawImageNine(
+        image: SkImage,
+        center: SkIRect,
+        dst: SkRect,
+        filterMode: SkFilterMode,
+        paint: SkPaint?,
+    ) {}
+
+    override fun drawAtlas(
+        image: SkImage,
+        xform: Array<SkRSXform>,
+        src: Array<SkRect>,
+        colors: IntArray?,
+        blendMode: SkBlendMode,
+        sampling: SkSamplingOptions,
+        cullRect: SkRect?,
+        paint: SkPaint?,
+    ) {}
+
+    override fun drawVertices(
+        vertices: SkVertices,
+        blendMode: SkBlendMode,
+        paint: SkPaint,
+    ) {}
+
+    override fun drawString(
+        str: String,
+        x: SkScalar,
+        y: SkScalar,
+        font: SkFont,
+        paint: SkPaint,
+    ) {}
+
+    override fun drawSimpleText(
+        text: String,
+        byteLength: Int,
+        encoding: SkTextEncoding,
+        x: SkScalar,
+        y: SkScalar,
+        font: SkFont,
+        paint: SkPaint,
+    ) {}
+
+    override fun drawTextBlob(
+        blob: SkTextBlob,
+        x: SkScalar,
+        y: SkScalar,
+        paint: SkPaint,
+    ) {}
+
+    override fun drawDrawable(drawable: SkDrawable, matrix: SkMatrix?) {}
+
+    override fun drawDrawable(drawable: SkDrawable, x: SkScalar, y: SkScalar) {}
+
+    override fun drawAnnotation(rect: SkRect, key: String, value: ByteArray?) {}
+
+    // Note: clipRect / clipPath / clipRRect / clipRegion / clipShader are
+    // *not* overridden — SkNoDrawCanvas keeps an accurate clip stack so
+    // [getDeviceClipBounds] / [getLocalClipBounds] return meaningful
+    // values during analysis passes, matching upstream's
+    // "conservative clipping" contract.
 }
