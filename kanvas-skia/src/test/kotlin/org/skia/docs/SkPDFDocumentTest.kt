@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkColor
-import org.skia.foundation.SkDynamicMemoryWStream
+import org.skia.foundation.stream.SkDynamicMemoryWStream
 import org.skia.foundation.SkPaint
 import org.skia.math.SkRect
 
@@ -34,7 +34,7 @@ class SkPDFDocumentTest {
         doc.endPage()
 
         doc.close()
-        val bytes = stream.toBytes()
+        val bytes = stream.toByteArray()
         val text = bytes.asLatin1()
 
         assertTrue(bytes.isNotEmpty(), "PDF must be non-empty")
@@ -52,7 +52,7 @@ class SkPDFDocumentTest {
         val stream = SkDynamicMemoryWStream()
         val doc = SkPDF.MakeDocument(stream)
         doc.close()
-        val text = stream.toBytes().asLatin1()
+        val text = stream.toByteArray().asLatin1()
         assertTrue(text.startsWith("%PDF-1.4"))
         assertTrue(text.trimEnd().endsWith("%%EOF"))
         assertTrue(text.contains("/Count 0"))
@@ -66,7 +66,7 @@ class SkPDFDocumentTest {
         assertNotNull(doc)
         doc.beginPage(10f, 10f)
         doc.close()
-        assertTrue(stream.toBytes().isNotEmpty())
+        assertTrue(stream.toByteArray().isNotEmpty())
     }
 
     @Test
@@ -78,7 +78,7 @@ class SkPDFDocumentTest {
         val canvas = doc.beginPage(100f, 100f)
         canvas.drawRect(SkRect.MakeWH(10f, 10f), SkPaint())
         doc.close()
-        val text = stream.toBytes().asLatin1()
+        val text = stream.toByteArray().asLatin1()
         assertTrue(text.startsWith("%PDF-1.4"))
     }
 
@@ -100,7 +100,7 @@ class SkPDFDocumentTest {
         val c = doc.beginPage(100f, 100f)
         c.drawRect(SkRect.MakeLTRB(0f, 0f, 50f, 50f), SkPaint())
         doc.close()
-        val text = stream.toBytes().asLatin1()
+        val text = stream.toByteArray().asLatin1()
         // The 're' operator (PDF rectangle) must appear somewhere in
         // the content stream.
         assertTrue(text.contains(" re "), "Content stream must contain a 're' rectangle op")
@@ -117,7 +117,7 @@ class SkPDFDocumentTest {
             doc.endPage()
         }
         doc.close()
-        val text = stream.toBytes().asLatin1()
+        val text = stream.toByteArray().asLatin1()
         assertTrue(text.contains("/Count 5"))
     }
 
@@ -129,7 +129,7 @@ class SkPDFDocumentTest {
         val p = SkPaint().apply { color = 0xFFFF0000.toInt() } // pure red
         c.drawRect(SkRect.MakeWH(5f, 5f), p)
         doc.close()
-        val text = stream.toBytes().asLatin1()
+        val text = stream.toByteArray().asLatin1()
         // Pure red → "1 0 0 rg" (non-stroke color).
         assertTrue(text.contains("1 0 0 rg"), "Expected non-stroke red color command, got:\n$text")
     }
@@ -145,7 +145,7 @@ class SkPDFDocumentTest {
             .close()
         c.drawPath(pathBuilder.detach(), SkPaint())
         doc.close()
-        val text = stream.toBytes().asLatin1()
+        val text = stream.toByteArray().asLatin1()
         assertTrue(text.contains(" c\n") || text.contains(" c "), "Expected 'c' cubic operator")
     }
 

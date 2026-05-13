@@ -88,30 +88,8 @@ public abstract class SkDocument {
     protected abstract fun onAbort()
 }
 
-/**
- * Minimal binary write sink — stand-in for upstream `SkWStream` until
- * `SkWStream` ships proper on master (tracked by PR #382). The PDF
- * backend writes to this interface; convenience adapters wrap a
- * `ByteArrayOutputStream` or a `java.io.OutputStream`.
- *
- * R3.6 simplification — only `write(ByteArray)` and `bytesWritten()`
- * are exposed; no seek, no flush hooks, no `SkStream` read counterpart.
- * Promoted to a real `SkWStream` once PR #382 lands.
- */
-public interface SkWStreamMinimal {
-    /** Write [bytes] (or a slice of it) to the sink. */
-    public fun write(bytes: ByteArray, offset: Int = 0, length: Int = bytes.size)
-    /** Total bytes written so far. */
-    public fun bytesWritten(): Long
-}
-
-/** [SkWStreamMinimal] backed by an in-memory [java.io.ByteArrayOutputStream]. */
-public class SkDynamicMemoryWStream : SkWStreamMinimal {
-    private val baos = java.io.ByteArrayOutputStream()
-    override fun write(bytes: ByteArray, offset: Int, length: Int) {
-        baos.write(bytes, offset, length)
-    }
-    override fun bytesWritten(): Long = baos.size().toLong()
-    /** Snapshot the buffered bytes. */
-    public fun toBytes(): ByteArray = baos.toByteArray()
-}
+// R-suivi.42 — the local `SkWStreamMinimal` / `SkDynamicMemoryWStream`
+// stand-ins were dropped now that the real
+// [org.skia.foundation.stream.SkWStream] /
+// [org.skia.foundation.stream.SkDynamicMemoryWStream] from PR #382 are on
+// master. Backends should depend on `SkWStream` directly.

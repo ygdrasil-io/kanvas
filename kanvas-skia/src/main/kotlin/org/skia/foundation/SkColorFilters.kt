@@ -52,6 +52,19 @@ public object SkColorFilters {
     }
 
     /**
+     * Mirrors Skia's `SkColorFilters::Matrix(const SkColorMatrix&)`
+     * overload. Delegates to the 20-float form via
+     * [SkColorMatrix.getRowMajor], so the resulting filter is bit-
+     * identical to the one produced from
+     * `Matrix(matrix.toFloatArray())`.
+     */
+    public fun Matrix(matrix: SkColorMatrix): SkColorFilter {
+        val rowMajor = FloatArray(20)
+        matrix.getRowMajor(rowMajor)
+        return Matrix(rowMajor)
+    }
+
+    /**
      * Mirrors Skia's `SkColorFilters::TableARGB(...)`. Each of A / R /
      * G / B is mapped through its own 256-entry LUT after the input
      * is quantised to 8 bits per channel. Pass `null` for any channel
