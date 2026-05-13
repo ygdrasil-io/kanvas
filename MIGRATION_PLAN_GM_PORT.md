@@ -57,26 +57,15 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 
 ## Bloqueurs restants — catalogue par ROI
 
-Pondération par nombre de `.cpp` impactés.
+Pondération par nombre de `.cpp` impactés. Le catalogue détaillé classe-par-classe vit dans [`API_REMEDIATION_PLAN.md`](API_REMEDIATION_PLAN.md) — cette section ne garde que la vue d'ensemble.
 
 | Bloqueur | `.cpp` | Type |
 |---|---:|---|
 | GPU-only (`DEF_SIMPLE_GPU_GM`, pas de PNG de référence raster) | 62 | **n/a** (intransposable) |
-| `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` | 6 | API publique |
-| Encodeurs image (`SkJpegEncoder`/`SkPngEncoder`/`SkWebpEncoder`) | 5 | API publique |
-| `SkImage::makeSubset` | 4 | API publique |
-| `SkCanvas::clipShader` (per-pixel clip) | 4 | API publique |
-| `SkShaderMaskFilter::Make` | 2 | API publique |
-| `SkImageGenerator` / `SkImages::DeferredFromGenerator` | 2 | API publique |
-| `SkColorFilters::LinearToSRGBGamma` / `SRGBToLinearGamma` | 2 | API publique |
-| `SkCanvas::drawRegion` (distinct de `clipRegion`) | 2 | API publique |
-| `SkTableMaskFilter` | 1 | API publique |
-| `SkShaders::CoordClamp` | 1 | API publique |
-| `SkCanvas::drawImageNine` (9-patch raster) | 1 | API publique |
-| YUV multi-plane (`tools/gpu/YUVUtils`) | 1 | API publique |
+| Surface API publique manquante (47 classes, ~110 méthodes, ~35 overloads, ~20 champs/enums) | ~40 | API publique — voir `API_REMEDIATION_PLAN.md` |
 | GM Bazel-only | 1 | n/a |
 
-**Net** : 62 GMs GPU-only intransposables, **32 GMs** sur 13 APIs publiques à ajouter (cohorte H2 ci-dessous).
+**Net** : 62 GMs GPU-only intransposables ; le reste des `🚧` (~40 cpps) sera levé par les phases R1 → R3 de `API_REMEDIATION_PLAN.md`.
 
 ## Petits gaps de fidélité révélés par H1
 
@@ -90,54 +79,39 @@ Pas des APIs manquantes — des comportements existants qui dégradent la simila
 
 ## Plan résiduel
 
-### Phase H2 — 13 APIs publiques unitaires (~32 GMs débloquables)
+### Phase H2 / R — Combler la surface d'API publique upstream
 
-Chaque sous-tâche est petite (½-1 jour). Toutes parallélisables car touchent des fichiers distincts.
+Le catalogue H2 accumulé au fil des vagues H3 (34 sous-tâches) est désormais **consolidé et étendu** dans un document dédié : [`API_REMEDIATION_PLAN.md`](API_REMEDIATION_PLAN.md).
 
-| Sous-tâche | ROI | Fichier(s) impacté(s) |
-|---|---:|---|
-| H2.1 — `SkShader.makeWithLocalMatrix` + `SkImageFilter.makeWithLocalMatrix` | 6 | `SkShader.kt`, `SkImageFilter.kt` |
-| H2.2 — Encodeurs `SkJpegEncoder`/`SkPngEncoder`/`SkWebpEncoder` | 5 | nouveau package `org.skia.encode` |
-| H2.3 — `SkImage.makeSubset` | 4 | `SkImage.kt` |
-| H2.4 — `SkCanvas.clipShader(shader, op)` | 4 | `SkCanvas.kt`, clip-stack |
-| H2.5 — `SkShaderMaskFilter.Make(shader)` | 2 | nouvelle classe |
-| H2.6 — `SkImageGenerator` + `SkImages.DeferredFromGenerator` | 2 | nouveau package |
-| H2.7 — `SkColorFilters.LinearToSRGBGamma` / `SRGBToLinearGamma` | 2 | `SkColorFilters.kt` |
-| H2.8 — `SkCanvas.drawRegion(region, paint)` | 2 | `SkCanvas.kt` |
-| H2.9 — `SkTableMaskFilter.Create(ByteArray(256))` | 1 | nouvelle classe |
-| H2.10 — `SkShaders.CoordClamp(shader, rect)` | 1 | `SkShaders.kt` |
-| H2.11 — `SkCanvas.drawImageNine(image, center, dstRect)` | 1 | `SkCanvas.kt`, 9-patch raster |
-| H2.12 — YUV multi-plane support | 1 | beaucoup |
-| H2.13 — `SkMaskFilter.MakeBlur(style, sigma, respectCTM)` overload | 3 | `SkMaskFilter.kt` (BlurIgnoreXform → ~99 %) |
-| H2.14 — `SkImage.makeColorSpace` + `SkCanvas.makeSurface(info)` + `imageInfo().colorSpace()` | 1 | `SkImage.kt`, `SkCanvas.kt` |
-| H2.15 — `SkMipmapBuilder` + `SkImage.attachTo` | 1 | nouvelle classe |
-| H2.16 — `SkShaders.Color(c)` (constant-color shader factory) | 1+ | `SkShaders.kt` |
-| H2.17 — `SkColorFilters.Lighting(mul, add)` factory direct | 1+ | `SkColorFilters.kt` |
-| H2.18 — `SkBitmap` color types `kRGB_565`, `kGray_8` | 1+ | `SkBitmap.kt` |
-| H2.19 — `ToolUtils.copy_to` + `create_checkerboard_image` helpers | nombreux | `ToolUtils.kt` |
-| H2.20 — `SkM44` (matrice 4×4 perspective) + `SkCanvas` integration | 1+ | nouvelle classe + `SkCanvas.kt` |
-| H2.21 — `SkCanvas` rotation/perspective `drawImageRect` (CTM non axis-aligned) | 1+ | `SkBitmapDevice.kt` (H1.5 lié) |
-| H2.22 — `androidFramework_setDeviceClipRestriction` + `SkCanvasPriv::ResetClip` | 1 | `SkCanvas.kt` |
-| H2.23 — `SkCanvas.drawAtlas` colors + blendMode (Phase I5.3 deferred) | 1+ | `SkBitmapDevice.kt` |
-| H2.24 — `SkImageFilters.DisplacementMap(..., cropRect)` 6-arg overload | 1 | `SkImageFilters.kt` |
-| H2.25 — `ToolUtils.makeSurface(canvas, info)` colour-space-matched helper | nombreux | `ToolUtils.kt` |
-| H2.26 — `SkPaint.computeFastBounds` + `SkImageFilter.computeFastBounds` | 1+ | `SkPaint.kt`, `SkImageFilter.kt` |
-| H2.27 — `SaveLayerRec.scaleFactor` (ScaledBackdropLayer) | 1 | `SaveLayerRec.kt`, `SkBitmapDevice.kt` |
-| H2.28 — Bicubic + tile-mode `SkBitmapShader` (fidelity) | nombreux | `SkBitmapShader.kt` (H1.5 lié) |
-| H2.29 — `SkPath.contains(scalar, scalar)` | 1 | `SkPath.kt` |
-| H2.30 — Gradient `r==0` / sweep `start==end` graceful tile-mode fill | 1+ | `SkRadialGradient.kt`, `SkSweepGradient.kt` |
-| H2.31 — `kRepeat` tile mode pour `SkImageFilters.Blur` (parité Skia) | 1+ | `SkImageFilters.kt` (H1.5) |
-| H2.32 — `SkHighContrastFilter` | 1 | nouvelle classe |
-| H2.33 — `SkColorFilters.Lerp(t, dst?, src?)` overload nullable | 1+ | `SkColorFilters.kt` |
-| H2.34 — `SkImageFilters.{Offset,Magnifier,…}(..., cropRect)` overloads non-Blur | nombreux | `SkImageFilters.kt` |
+**Synthèse audit (2026-05-13)** :
+
+| Catégorie | Count |
+|---|---:|
+| Classes manquantes entièrement (non-GPU public) | 47 |
+| Méthodes manquantes (classe présente) | ~110 |
+| Overloads manquants | ~35 |
+| Champs / enums manquants | ~20 |
+
+**Séquencement** :
+- **Phase R1** — Quick wins (25 items, effort S) : factories `SkColorFilters` / `SkShaders`, `SkTableMaskFilter`, `SkShaderMaskFilter`, `SkHighContrastFilter`, `SkPath.contains`, `MakeBlur(respectCTM)`, color types `kRGB_565`/`kGray_8`, `SkPaint.computeFastBounds`, …
+- **Phase R2** — Classes moyennes (20 items, effort M) : `SkPathMeasure`, `SkColorMatrix`, `SkPixmap`/`SkPixelRef`, `SkImageGenerator`, `SkImage.makeSubset`/`makeColorSpace`, `SkCanvas.drawRegion`/`drawImageNine`/`clipShader`, factories `SkImages` / `SkSurfaces` / `SkShaders`, `Sk3DView`, `SkICC`, `SkColorSpace.MakeSRGB`, `SkWebpEncoder`, …
+- **Phase R3** — Grandes classes (11 items, effort L/XL) : `SkM44` complet, `SkFontMgr` + fontconfig, `SkCustomTypefaceBuilder`, `SkStream`/`SkWStream`, `SkAndroidCodec`, `SkDocument` + PDF, `SkShadowUtils`, `SkRasterHandleAllocator`, décodeurs étendus (AVIF / JpegXL / RAW / ICO), YUV multi-plane.
+
+Voir `API_REMEDIATION_PLAN.md` pour les signatures précises, les en-têtes upstream, et l'annexe brute fichier par fichier.
 
 ### Phase H1.5 — Suivis fidélité (qualité de ports)
 
 Les 5 petits gaps listés ci-dessus. Chacun ½ journée. Effort cumulé : 2-3 jours, gain en similarité sur ~10+ ports déjà livrés.
 
-### Phase H3 — Vagues de ports continues (~128 GMs non tentés)
+### Phase H3 — Vagues de ports continues (~70 GMs non tentés)
 
-Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. Beaucoup devraient passer maintenant que toutes les APIs principales sont présentes. Certains révéleront de nouveaux blockers à intégrer au catalogue au fil de l'eau.
+Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. **5 vagues livrées** (wave 1 → wave 5, +42 ports cumulés). Reste 70 cpps `❌` à attaquer.
+
+Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bloquer** des cpps avant d'envoyer un agent dessus :
+- Cpps mentionnant `SkM44` / `Sk3DView` / `Camera3D` → 🚧 (`SkM44` est R3.1)
+- Cpps mentionnant `SkFontMgr` / `SkCustomTypeface` → 🚧 (`SkFontMgr` est R3.2)
+- Cpps mentionnant codecs alternatifs (`SkAndroidCodec`, AVIF, …) → 🚧 (R3.5, R3.10)
+- Reste devrait être portable sans nouveau gros bloqueur.
 
 ### Hors scope définitif
 
