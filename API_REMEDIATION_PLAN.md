@@ -5,19 +5,19 @@
 
 ## Résumé exécutif
 
-| Catégorie | Count audit | Restant après R1 + batch3 R2 |
+| Catégorie | Count audit | Restant après R1 + batch 4 R2 |
 |---|---:|---:|
-| **Classes manquantes entièrement** (non-GPU, public) | 47 | 25 |
-| **Méthodes manquantes** (classe présente) | ~110 | ~95 |
-| **Overloads manquants** (signature partielle) | ~35 | ~31 |
-| **Champs / enums manquants** | ~20 | ~16 |
+| **Classes manquantes entièrement** (non-GPU, public) | 47 | 22 |
+| **Méthodes manquantes** (classe présente) | ~110 | ~80 |
+| **Overloads manquants** (signature partielle) | ~35 | ~18 |
+| **Champs / enums manquants** | ~20 | ~15 |
 | Total APIs publiques upstream non-GPU auditées | ~95 headers | — |
 
 **Progression** :
 - ✅ Phase R1 complète (25/25, mergée).
-- 🔄 Phase R2 : 5/20 ✅ (R2.1 PathMeasure, R2.3 Pixmap, R2.4 PixelRef, R2.5 ImageGenerator, mergées) + 2 en vol (#366 3D/ColorMatrix, #367 Images/Surfaces). 13 restants.
+- 🔄 Phase R2 : **11/20 ✅** (R2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.10, 2.11, 2.15) + 1 en vol (#371 R2.12). 8 restants.
 - ⏳ Phase R3 : 0/11.
-- ⚠️ Phase R-suivi : **16 items** partiels/stub à compléter — voir Section 5.
+- ⚠️ Phase R-suivi : **19 items** partiels/stub à compléter — voir Section 5.
 
 Plus du tiers de la surface publique Skia non-GPU n'est pas portée. Le module
 `:kanvas-skia` est correctement dimensionné pour exécuter les GMs **2D rasterisés
@@ -789,32 +789,42 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 15. **R-suivi.15** `Sk3DView.getMatrix(matrix)` et `SkCamera3D.patchToMatrix(quad, matrix)` retournent un `SkMatrix` au lieu de muter un out-param (convention immutable kanvas-skia). Adaptation justifiée mais à valider quand un GM 3D sera porté.
 16. **R-suivi.16** `SkColorMatrix` n'est pas encore intégré dans `SkColorFilters.Matrix(SkColorMatrix)`. La classe existe (#366) mais la factory de SkColorFilters reçoit toujours un `FloatArray(20)`. Petite tâche : ajouter l'overload qui accepte `SkColorMatrix`.
 
+**Ajouts batch 4 (R2.11 + R2.15 mergés, R2.12 ouvert)** :
+
+17. **R-suivi.17** `SkBitmap.installPixels` : ingress F16 gated off (`SkColorType.kRGBA_F16`) — pas de helper half-float dans le pipeline. Reprendre quand F16 devient cible.
+18. **R-suivi.18** `SkBitmap.extractAlpha` avec `paint.maskFilter` non-null retourne `false` — pipeline blur-mask absent. **TODO** : intégrer `SkMaskFilter` dans `extractAlpha`.
+19. **R-suivi.19** `SkImage.encodeToData` ne supporte que PNG + JPEG (encodeurs déjà présents). WEBP / GIF / BMP / WBMP / HEIF / AVIF / JPEGXL → null. WEBP est R2.20, les autres relèvent de R3.10 (décodeurs étendus).
+
 Effort estimé : 2-3 jours total (tous indépendants, parallélisables).
+
+### Découvertes inattendues
+
+- **`SkPngEncoder` + `SkJpegEncoder` existaient déjà** dans `kanvas-skia` (probablement issus d'une phase D3.x antérieure non documentée dans ce plan). L'item R2.20 / Section 1.35 est donc réduit à **`SkWebpEncoder` seul** (Png+Jpeg ✅ déjà présents).
 
 ### Phase R2 — Classes moyennes (effort M, impact fort)
 
-**Progression** : 5/20 ✅, 2 en cours (#366, #367), 13 restants.
+**Progression** : 11/20 ✅ mergés (#361, #365, #366, #367, #369, #370) + 1 en vol (#371), 8 restants.
 
 1. ✅ **R2.1** `SkPathMeasure` + `SkContourMeasure` (PR #361)
-2. 🔄 **R2.2** `SkColorMatrix` (classe : PR #366 ouverte) + intégration `SkColorFilters.Matrix(SkColorMatrix)` **différée** → voir R-suivi.16
-3. ✅ **R2.3** `SkPixmap` (PR #365, voir R-suivi.11 pour `scalePixels` nearest-neighbor)
+2. ✅ **R2.2** `SkColorMatrix` (PR #366) — classe seule, intégration `SkColorFilters.Matrix(SkColorMatrix)` → R-suivi.16
+3. ✅ **R2.3** `SkPixmap` (PR #365, R-suivi.11 `scalePixels`)
 4. ✅ **R2.4** `SkPixelRef` (PR #365)
-5. ✅ **R2.5** `SkImageGenerator` (PR #365, exposé via `SkImageGeneratorImages.DeferredFromGenerator`)
-6. 🔄 **R2.6** `SkImages` factory object (PR #367 ouverte, 3 stubs `TODO(R2-B)` voir R-suivi.12)
-7. 🔄 **R2.7** `SkSurfaces` factory object (PR #367 ouverte, 1 stub `TODO(R2-B)` + `Null` sentinel voir R-suivi.13/14)
-8. **R2.8** `SkShaders` factory object complet (Section 2.12) — partiellement couvert par R1-B (#359), reste les facteurs avancés
-9. **R2.9** `SkPathIter` (Section 1.4)
-10. 🔄 **R2.10** `Sk3DView` / `SkCamera3D` (PR #366 ouverte, voir R-suivi.15 pour API immutable)
-11. **R2.11** `SkBitmap.installPixels`, `extractSubset`, `extractAlpha`, `peekPixels` (Section 2.4)
-12. **R2.12** `SkImage.makeSubset`, `makeColorSpace`, `encodeToData`, `readPixels` (Sections 2.5, H2.3, H2.14)
-13. **R2.13** `SkCanvas.drawRegion`, `drawImageNine` (H2.8, H2.11)
-14. **R2.14** `SkCanvas.clipShader` (H2.4)
-15. **R2.15** `SkImageFilters` overloads cropRect non-Blur (H2.24, H2.34)
-16. **R2.16** `SkICC` (Section 1.34)
-17. **R2.17** `SkSerialProcs` / `SkDeserialProcs` (Section 1.25)
-18. **R2.18** `SkRegion.getBoundaryPath`, iterators (Section 2.24)
-19. **R2.19** `SkColorSpace` factory complet (`MakeSRGB`, `MakeSRGBLinear`, `MakeRGB`) (Section 2.25)
-20. **R2.20** `SkWebpEncoder` (Section 1.35 / H2.2 résidu)
+5. ✅ **R2.5** `SkImageGenerator` (PR #365)
+6. ✅ **R2.6** `SkImages` factory object (PR #367, R-suivi.12 stubs)
+7. ✅ **R2.7** `SkSurfaces` factory object (PR #367, R-suivi.13/14)
+8. **R2.8** `SkShaders` factory object complet — partiel via R1-B (#359), reste facteurs avancés
+9. **R2.9** `SkPathIter`
+10. ✅ **R2.10** `Sk3DView` / `SkCamera3D` (PR #366, R-suivi.15)
+11. ✅ **R2.11** `SkBitmap.installPixels`, `extractSubset`, `extractAlpha`, `peekPixels` (PR #369, R-suivi.17/18)
+12. 🔄 **R2.12** `SkImage.makeSubset`, `makeColorSpace`, `encodeToData`, `readPixels` (PR #371 ouverte, R-suivi.19)
+13. **R2.13** `SkCanvas.drawRegion`, `drawImageNine`
+14. **R2.14** `SkCanvas.clipShader`
+15. ✅ **R2.15** `SkImageFilters` overloads cropRect non-Blur (PR #370, 13/13 factories)
+16. **R2.16** `SkICC`
+17. **R2.17** `SkSerialProcs` / `SkDeserialProcs`
+18. **R2.18** `SkRegion.getBoundaryPath`, iterators
+19. **R2.19** `SkColorSpace` factory complet (`MakeSRGB`, `MakeSRGBLinear`, `MakeRGB`)
+20. **R2.20** ~~`SkPngEncoder` / `SkJpegEncoder`~~ déjà présents — réduit à `SkWebpEncoder` seul
 
 ### Phase R3 — Grandes classes / sous-systèmes (effort L/XL)
 1. **R3.1** `SkM44` complet + intégration `SkCanvas.concat(m44)` / `setMatrix(m44)` (Section 1.1)
