@@ -1,6 +1,7 @@
 package org.skia.foundation
 
 import org.skia.math.SkMatrix
+import org.skia.math.SkRect
 
 /**
  * Mirrors Skia's
@@ -48,6 +49,26 @@ public abstract class SkPathEffect {
      * object as a no-op is allowed.
      */
     public abstract fun filterPath(input: SkPath, ctm: SkMatrix): SkPath?
+
+    /**
+     * Cull-rect aware overload. Mirrors Skia's upstream
+     * `SkPathEffect::filterPath(SkPath* dst, const SkPath& src,
+     * SkStrokeRec*, const SkRect* cullR, const SkMatrix& ctm)` —
+     * the cull rect is a hint that lets the effect skip generating
+     * geometry guaranteed to fall outside the destination's clip.
+     *
+     * Default implementation ignores [cullRect] and delegates to the
+     * 2-arg [filterPath]. Effects that benefit from culling — e.g.
+     * [SkDashPathEffect] (R-suivi.7), 1-D path effects (TODO), 2-D
+     * path effects (TODO) — override this to short-circuit segments
+     * outside the rect.
+     *
+     * R-suivi.7 introduces this overload. Until each subclass adopts
+     * it explicitly, callers can pass `cullRect = null` to opt out of
+     * culling (the default behaviour is identical to the 2-arg call).
+     */
+    public open fun filterPath(input: SkPath, ctm: SkMatrix, cullRect: SkRect?): SkPath? =
+        filterPath(input, ctm)
 
     public companion object {
         /**
@@ -106,6 +127,11 @@ internal class SkComposePathEffect(
         val mid = inner.filterPath(input, ctm) ?: input
         return outer.filterPath(mid, ctm) ?: mid
     }
+
+    override fun filterPath(input: SkPath, ctm: SkMatrix, cullRect: SkRect?): SkPath? {
+        val mid = inner.filterPath(input, ctm, cullRect) ?: input
+        return outer.filterPath(mid, ctm, cullRect) ?: mid
+    }
 }
 
 /**
@@ -117,9 +143,12 @@ internal class SkSumPathEffect(
     private val first: SkPathEffect,
     private val second: SkPathEffect,
 ) : SkPathEffect() {
-    override fun filterPath(input: SkPath, ctm: SkMatrix): SkPath? {
-        val a = first.filterPath(input, ctm) ?: input
-        val b = second.filterPath(input, ctm) ?: input
+    override fun filterPath(input: SkPath, ctm: SkMatrix): SkPath? =
+        filterPath(input, ctm, cullRect = null)
+
+    override fun filterPath(input: SkPath, ctm: SkMatrix, cullRect: SkRect?): SkPath? {
+        val a = first.filterPath(input, ctm, cullRect) ?: input
+        val b = second.filterPath(input, ctm, cullRect) ?: input
         if (a.isEmpty() && b.isEmpty()) return null
         if (a.isEmpty()) return b
         if (b.isEmpty()) return a
