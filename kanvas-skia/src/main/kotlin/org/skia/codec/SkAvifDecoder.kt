@@ -80,6 +80,19 @@ public object SkAvifDecoder {
     /** Number of leading bytes [IsAvif] needs to evaluate the ISO-BMFF brand. */
     private const val SNIFF_LEN = 12
 
+    /**
+     * R-suivi.47 — [SkCodec.Decoder] registration record for AVIF.
+     * Auto-installed into [SkCodec.Decoders] at class-init time. Its
+     * `make` returns `null` since the real libavif back-end is
+     * R-suivi.28 ; the routing slot exists so future PRs can call
+     * [SkCodec.Decoders.register] with a real entry of the same name.
+     */
+    internal val RegistryEntry: SkCodec.Decoder = object : SkCodec.Decoder {
+        override val name: String = "avif"
+        override fun matches(data: ByteArray): Boolean = IsAvif(data)
+        override fun make(data: ByteArray): SkCodec? = Decode(data)
+    }
+
     private fun matchesAvif(data: ByteArray, length: Int): Boolean {
         if (length < SNIFF_LEN) return false
         // Box-type bytes 4..7 must be 'ftyp'.

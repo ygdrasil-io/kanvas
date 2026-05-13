@@ -137,7 +137,7 @@ public abstract class SkCodec internal constructor() {
          * [InputStream.readBytes].
          */
         public fun MakeFromData(data: ByteArray): SkCodec? {
-            for (decoder in Decoders) {
+            for (decoder in Decoders.all()) {
                 if (decoder.matches(data)) {
                     return decoder.make(data)
                 }
@@ -157,19 +157,34 @@ public abstract class SkCodec internal constructor() {
          */
         public fun MakeFromStream(stream: InputStream): SkCodec? =
             MakeFromData(stream.readBytes())
+    }
 
-        /**
-         * The set of registered concrete decoders. Order matters only
-         * insofar as the first match wins ; in practice each format's
-         * signature is non-overlapping (PNG `\x89PNG\r\n\x1a\n`, JPEG
-         * `\xFF\xD8\xFF`, …) so we can keep the registry as a simple
-         * list.
-         *
-         * `internal` — exposed to the per-format implementations under
-         * `org.skia.codec.<format>` so they can plug themselves in here
-         * without a separate registration step.
-         */
-        internal val Decoders: List<Decoder> = listOf(
+    /**
+     * Registry of concrete decoders consulted by [MakeFromData].
+     *
+     * **R-suivi.47** — the registry exposes a public [Decoders.register]
+     * entry-point so additional formats wired up after the initial
+     * D3.1–D3.4 batch (AVIF, JPEG-XL, RAW, ICO — see the stubs under
+     * `org.skia.codec.{SkAvifDecoder, SkJpegxlDecoder, SkRawDecoder,
+     * SkIcoDecoder}`) can plug themselves in without editing this
+     * file. Built-in decoders self-register at class-init time via
+     * the eager-initialised list below.
+     *
+     * Order matters only insofar as the first match wins ; in
+     * practice each format's signature is non-overlapping (PNG
+     * `\x89PNG\r\n\x1a\n`, JPEG `\xFF\xD8\xFF`, …) so we can keep
+     * the registry as a simple list. Late-registered decoders are
+     * appended to the end ; the WBMP entry intentionally stays
+     * last because its signature is the loosest of the built-ins.
+     *
+     * **Lifetime** : the registry is a process-wide singleton ; a
+     * `register` call survives for the lifetime of the JVM. Tests that
+     * install custom decoders should call [unregister] (or restore the
+     * original entry via a second [register]) in `@AfterEach` to keep
+     * sibling tests deterministic.
+     */
+    public object Decoders {
+        private val entries: MutableList<Decoder> = mutableListOf(
             SkPngCodec.Decoder,
             SkJpegCodec.Decoder,
             SkGifCodec.Decoder,
@@ -177,28 +192,96 @@ public abstract class SkCodec internal constructor() {
             SkWebpCodec.Decoder,
             // WBMP last : its signature ("type 0, fixed-header byte
             // with bits 0..4+7 zero, valid VLQ width/height") is
-            // looser than every other format above, so we let strong
-            // signatures match first.
+            // looser than every other format above, so we let
+            // strong signatures match first.
             SkWbmpCodec.Decoder,
         )
+
+        /**
+         * Snapshot of the registered decoders, in dispatch order.
+         * Returned as a read-only list — mutate the registry via
+         * [register] / [unregister].
+         */
+        @Synchronized
+        public fun all(): List<Decoder> = entries.toList()
+
+        /**
+         * Append a [decoder] to the dispatch list. Mirrors upstream's
+         * `SkCodecs::Register` — call once at static-init time per
+         * format. Calling [register] with the same [Decoder.name]
+         * twice replaces the prior registration (so a real back-end
+         * can transparently supersede its stub).
+         */
+        @Synchronized
+        public fun register(decoder: Decoder) {
+            val existing = entries.indexOfFirst { it.name == decoder.name }
+            if (existing >= 0) {
+                entries[existing] = decoder
+            } else {
+                entries.add(decoder)
+            }
+        }
+
+        /**
+         * Drop the decoder named [name]. No-op if no such decoder is
+         * registered. Returns `true` when an entry was removed.
+         */
+        @Synchronized
+        public fun unregister(name: String): Boolean =
+            entries.removeAll { it.name == name }
+
+        /** True if any decoder named [name] is currently registered. */
+        @Synchronized
+        public fun contains(name: String): Boolean =
+            entries.any { it.name == name }
+
+        /**
+         * Lookup and dispatch helper — sniffs [data] against every
+         * registered decoder in order and returns the first match's
+         * `make` result (or `null` if no signature matches / the
+         * matched decoder's `make` returns `null`). Equivalent to
+         * [SkCodec.MakeFromData].
+         */
+        public fun dispatch(data: ByteArray): SkCodec? = MakeFromData(data)
+
+        init {
+            // Wire in the four extended-format stub decoders
+            // (R-suivi.47). Their `make` returns `null` because the
+            // back-ends aren't implemented yet (R-suivi.28) — but
+            // registering them now reserves the routing slot, so a
+            // real back-end PR can drop in via [register] without
+            // changing the SkCodec.kt dispatch table.
+            register(SkAvifDecoder.RegistryEntry)
+            register(SkJpegxlDecoder.RegistryEntry)
+            register(SkIcoDecoder.RegistryEntry)
+            // RAW last — its signature ("TIFF-like II*\0 / MM\0*")
+            // overlaps with real TIFF files, so register it after
+            // the more specific formats.
+            register(SkRawDecoder.RegistryEntry)
+        }
     }
 
     /**
      * Mirrors `SkCodecs::Decoder` — the registration record a concrete
      * format publishes to the [SkCodec] dispatcher.
+     *
+     * R-suivi.47 — promoted from `internal` to `public` so external
+     * codec back-ends (libavif, libjxl, libraw, ICO directory parser…)
+     * can build their own [Decoder] and plug it into [SkCodec.Decoders]
+     * without sitting under `org.skia.codec.<format>`.
      */
-    internal interface Decoder {
+    public interface Decoder {
         /** Short identifier ("png", "jpeg", …) — useful for diagnostics. */
-        val name: String
+        public val name: String
 
         /** True if [data]'s magic bytes match this decoder's format. */
-        fun matches(data: ByteArray): Boolean
+        public fun matches(data: ByteArray): Boolean
 
         /**
          * Build the concrete codec for [data]. May still return `null`
          * if the bytes pass [matches] but fail format-specific
          * validation (e.g. truncated PNG header).
          */
-        fun make(data: ByteArray): SkCodec?
+        public fun make(data: ByteArray): SkCodec?
     }
 }
