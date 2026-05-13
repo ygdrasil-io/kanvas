@@ -91,4 +91,58 @@ class SkFILEStreamTest {
         assertFalse(stream.isValid())
         assertEquals(0, stream.read(ByteArray(4), 4))
     }
+
+    @Test
+    fun `peek does not advance the file cursor`(@TempDir tmp: Path) {
+        val payload = ByteArray(16) { it.toByte() }
+        val file = File(tmp.toFile(), "peek.bin").apply { writeBytes(payload) }
+        val stream = SkFILEStream(file.absolutePath)
+        try {
+            stream.seek(4L)
+            val buf = ByteArray(4)
+            assertEquals(4, stream.peek(buf, 4))
+            assertArrayEquals(byteArrayOf(4, 5, 6, 7), buf)
+            // Cursor must be back at 4 after peek.
+            assertEquals(4L, stream.getPosition())
+            // A read immediately after peek returns the same bytes.
+            val readBuf = ByteArray(4)
+            stream.read(readBuf, 4)
+            assertArrayEquals(buf, readBuf)
+            assertEquals(8L, stream.getPosition())
+        } finally {
+            stream.close()
+        }
+    }
+
+    @Test
+    fun `fork and duplicate re-open the file at position zero`(@TempDir tmp: Path) {
+        val payload = ByteArray(8) { (it + 1).toByte() }
+        val file = File(tmp.toFile(), "fork.bin").apply { writeBytes(payload) }
+        val orig = SkFILEStream(file.absolutePath)
+        try {
+            orig.seek(5L)
+            val forked = orig.fork()
+            try {
+                assertEquals(0L, forked.getPosition(), "fork rewinds the copy")
+                val buf = ByteArray(3)
+                forked.read(buf, 3)
+                assertArrayEquals(byteArrayOf(1, 2, 3), buf)
+                // Original is untouched.
+                assertEquals(5L, orig.getPosition())
+            } finally {
+                forked.close()
+            }
+            val dup = orig.duplicate()
+            try {
+                assertEquals(0L, dup.getPosition())
+                val buf = ByteArray(2)
+                dup.read(buf, 2)
+                assertArrayEquals(byteArrayOf(1, 2), buf)
+            } finally {
+                dup.close()
+            }
+        } finally {
+            orig.close()
+        }
+    }
 }

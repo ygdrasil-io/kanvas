@@ -10,9 +10,16 @@ package org.skia.foundation.stream
  * [SkStreamSeekable] adds random access via [seek] / [move], and
  * [SkStreamAsset] additionally guarantees [getLength].
  *
- * The Kotlin port deliberately omits Skia's `peek` and `duplicate`
- * methods — they are not used by the kanvas-skia API surface and
- * would add implementation complexity for no current consumer.
+ * Upstream `peek` and `duplicate` are exposed here as `open`
+ * methods on the base class (R-suivi.29). The base implementations
+ * are best-effort fallbacks:
+ *  - [peek] returns 0 unless the stream is seekable (it cannot
+ *    "un-read" bytes otherwise);
+ *  - [fork] / [duplicate] throw `UnsupportedOperationException`
+ *    unless the subclass overrides them.
+ *
+ * Concrete subclasses ([SkMemoryStream], [SkFILEStream]) override
+ * all three to provide the upstream semantics.
  */
 public abstract class SkStream {
 
@@ -68,12 +75,50 @@ public abstract class SkStream {
     }
 
     /**
+     * Reads up to [size] bytes into [buffer] **without** advancing
+     * the cursor. Mirrors Skia's `SkStream::peek` (`SkStream.h`).
+     *
+     * The base implementation requires the stream to be seekable :
+     * it captures the current position, performs a [read], then
+     * [SkStreamSeekable.seek]s back. Streams that don't support
+     * seeking return `0` (matching upstream's default).
+     *
+     * Subclasses with cheaper peek paths (e.g. [SkMemoryStream]
+     * just slices from `offset`) override this.
+     */
+    public open fun peek(buffer: ByteArray, size: Int): Int {
+        if (size <= 0) return 0
+        if (!hasPosition()) return 0
+        // Only seekable streams can "un-read" via a seek-back. The
+        // default base class doesn't expose seek(); fall back to 0.
+        if (this !is SkStreamSeekable) return 0
+        val pos = getPosition()
+        val n = read(buffer, size)
+        // Seek back to the original position. If the seek fails the
+        // stream is in an inconsistent state; mirror upstream by
+        // returning 0 (the peek is considered unsuccessful).
+        if (!seek(pos)) return 0
+        return n
+    }
+
+    /**
      * Returns a fresh stream over the same content, positioned the
      * same as this one. Throws on subclasses that cannot fork
      * (e.g. forward-only streams).
      */
     public open fun fork(): SkStream =
         throw UnsupportedOperationException("fork() not supported by ${this::class.simpleName}")
+
+    /**
+     * Alias for [fork] — upstream Skia exposes both names. By
+     * default delegates to [fork] so subclasses only need to
+     * implement one; subclasses are free to override [duplicate]
+     * separately if their semantics differ (e.g. shared-position vs.
+     * independent-position copies).
+     *
+     * Mirrors Skia's `SkStream::duplicate` (`SkStream.h`).
+     */
+    public open fun duplicate(): SkStream = fork()
 
     private companion object {
         private const val SKIP_SCRATCH_SIZE = 4096
