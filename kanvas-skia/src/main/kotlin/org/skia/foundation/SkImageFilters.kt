@@ -635,6 +635,198 @@ public object SkImageFilters {
         lightColor = lightColor, surfaceScale = surfaceScale,
         kdOrKs = ks, isDiffuse = false, shininess = shininess, input = input,
     )
+
+    // ─── R2.15 — cropRect overloads ───────────────────────────────────
+    //
+    // Upstream `SkImageFilters.h` exposes a trailing `const CropRect&
+    // cropRect = {}` parameter on most factories. Per the upstream
+    // header comment (l.154-158) :
+    //
+    //   "The optional CropRect argument for many of the factories is
+    //    equivalent to creating the filter without a CropRect and then
+    //    wrapping it in ::Crop(rect, kDecal). Explicitly adding the
+    //    CropRect to the filter graph allows for early bounds-querying
+    //    optimisations, but otherwise the two are semantically
+    //    equivalent."
+    //
+    // Each overload below preserves the existing factory's behaviour
+    // when `cropRect == null` and wraps the result in `Crop(cropRect,
+    // kDecal, filter)` otherwise. The existing (non-cropRect) overloads
+    // are kept intact for backwards source-compat.
+    //
+    // `Blur` already exposes cropRect natively (see line 82+), so it's
+    // not duplicated here.
+
+    /** Mirrors `SkImageFilters::Offset(dx, dy, input, cropRect)`. */
+    public fun Offset(
+        dx: Float, dy: Float,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = Offset(dx, dy, input)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /** Mirrors `SkImageFilters::ColorFilter(cf, input, cropRect)`. */
+    public fun ColorFilter(
+        cf: SkColorFilter,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = ColorFilter(cf, input)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /** Mirrors `SkImageFilters::Compose(outer, inner, cropRect)`. */
+    public fun Compose(
+        outer: SkImageFilter?,
+        inner: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter? {
+        val filter = Compose(outer, inner)
+        if (cropRect == null) return filter
+        return Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /** Mirrors `SkImageFilters::MatrixTransform(matrix, sampling, input, cropRect)`. */
+    public fun MatrixTransform(
+        matrix: SkMatrix,
+        sampling: SkSamplingOptions,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter? {
+        val filter = MatrixTransform(matrix, sampling, input)
+        if (cropRect == null) return filter
+        return Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /** Mirrors `SkImageFilters::DropShadow(dx, dy, σx, σy, color, input, cropRect)`. */
+    public fun DropShadow(
+        dx: Float, dy: Float,
+        sigmaX: Float, sigmaY: Float,
+        color: SkColor,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = DropShadow(dx, dy, sigmaX, sigmaY, color, input)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /** Mirrors `SkImageFilters::Magnifier(lensBounds, zoom, inset, sampling, input, cropRect)`. */
+    public fun Magnifier(
+        lensBounds: SkRect,
+        zoomAmount: SkScalar,
+        inset: SkScalar,
+        sampling: SkSamplingOptions,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = Magnifier(lensBounds, zoomAmount, inset, sampling, input)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /** Mirrors `SkImageFilters::Blend(mode, bg, fg, cropRect)`. */
+    public fun Blend(
+        mode: SkBlendMode,
+        bg: SkImageFilter?,
+        fg: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = Blend(mode, bg, fg)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /** Mirrors `SkImageFilters::Erode(rx, ry, input, cropRect)`. */
+    public fun Erode(
+        rx: Int, ry: Int,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = Erode(rx, ry, input)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /** Mirrors `SkImageFilters::Dilate(rx, ry, input, cropRect)`. */
+    public fun Dilate(
+        rx: Int, ry: Int,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = Dilate(rx, ry, input)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /**
+     * Mirrors `SkImageFilters::DisplacementMap(xCh, yCh, scale,
+     * displacement, color, cropRect)`.
+     */
+    public fun DisplacementMap(
+        xChannelSelector: SkColorChannel,
+        yChannelSelector: SkColorChannel,
+        scale: SkScalar,
+        displacement: SkImageFilter?,
+        color: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = DisplacementMap(xChannelSelector, yChannelSelector, scale, displacement, color)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /**
+     * Mirrors `SkImageFilters::MatrixConvolution(kernelSize, kernel,
+     * gain, bias, kernelOffset, tileMode, convolveAlpha, input,
+     * cropRect)`.
+     */
+    public fun MatrixConvolution(
+        kernelSize: SkISize,
+        kernel: FloatArray,
+        gain: SkScalar,
+        bias: SkScalar,
+        kernelOffset: SkIPoint,
+        tileMode: SkTileMode,
+        convolveAlpha: Boolean,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = MatrixConvolution(
+            kernelSize, kernel, gain, bias, kernelOffset,
+            tileMode, convolveAlpha, input,
+        )
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /**
+     * Mirrors `SkImageFilters::PointLitDiffuse(location, lightColor,
+     * surfaceScale, kd, input, cropRect)`.
+     */
+    public fun PointLitDiffuse(
+        location: FloatArray,
+        lightColor: SkColor,
+        surfaceScale: SkScalar,
+        kd: SkScalar,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = PointLitDiffuse(location, lightColor, surfaceScale, kd, input)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
+
+    /**
+     * Mirrors `SkImageFilters::PointLitSpecular(location, lightColor,
+     * surfaceScale, ks, shininess, input, cropRect)`.
+     */
+    public fun PointLitSpecular(
+        location: FloatArray,
+        lightColor: SkColor,
+        surfaceScale: SkScalar,
+        ks: SkScalar,
+        shininess: SkScalar,
+        input: SkImageFilter?,
+        cropRect: SkRect?,
+    ): SkImageFilter {
+        val filter = PointLitSpecular(location, lightColor, surfaceScale, ks, shininess, input)
+        return if (cropRect == null) filter else Crop(cropRect, SkTileMode.kDecal, filter)
+    }
 }
 
 // -- Phase C1.7 — Lighting helpers (Float3 ops, light shapes) ----------------
