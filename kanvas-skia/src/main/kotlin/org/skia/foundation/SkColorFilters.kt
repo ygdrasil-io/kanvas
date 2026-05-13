@@ -1,21 +1,27 @@
 package org.skia.foundation
 
+import kotlin.math.pow
+
 /**
  * Mirrors Skia's
  * [`SkColorFilters`](https://github.com/google/skia/blob/main/include/core/SkColorFilter.h)
  * factory namespace — the canonical set of [SkColorFilter] builders.
  *
- * Phase 7a (Group A foundation) ships :
+ * Ships (Phase 7a foundation + R1-B follow-up):
  *  - [Matrix] — 4 × 5 affine colour matrix (RGBA in, RGBA + bias out).
  *  - [Table] — independent per-channel 256-entry LUT for ARGB.
  *  - [Compose] — `outer ∘ inner`.
- *  - [Lerp] — `lerp(weight, dst, src)`.
+ *  - [Lerp] — `lerp(weight, dst, src)` (non-null and nullable overloads).
  *  - [Blend] — apply [SkBlendMode] with a fixed `colour` as src and the
  *    pixel as dst — covers e.g. tinting via `SkBlendMode.kModulate`.
+ *  - [Lighting] — `c * mul + add`, RGB-only (alpha untouched).
+ *  - [LinearToSRGBGamma] / [SRGBToLinearGamma] — IEC 61966-2-1 transfer
+ *    function and its inverse, applied per RGB channel (alpha is left
+ *    alone). Useful for hand-rolled linear-space compositing where the
+ *    raster surface is still 8-bit sRGB-encoded.
  *
- * Phase 7a does **not** ship `Lighting`, `HSLAMatrix`,
- * `LinearToSRGBGamma`, or `SRGBToLinearGamma` — they're trivial
- * follow-ups in subsequent slices.
+ * R1-B does **not** ship `HSLAMatrix` — deferred to a later slice when
+ * we need it for the upstream colour-matrix GMs.
  */
 public object SkColorFilters {
 
@@ -109,11 +115,154 @@ public object SkColorFilters {
     public fun Blend(colour: SkColor, mode: SkBlendMode): SkColorFilter =
         SkBlendColorFilter(colour, mode)
 
+    /**
+     * Mirrors Skia's `SkColorFilters::Lighting(SkColor mul, SkColor add)`.
+     * Multiplies each RGB channel of the input by the corresponding byte
+     * from [mul] (treated as `[0, 1]` after `/ 255`), then adds the byte
+     * from [add] (same scaling). Alpha is **untouched** — the upstream
+     * implementation explicitly ignores the alpha channel of both args.
+     *
+     * Equivalent to `Matrix(diag(mulR, mulG, mulB, 1) + bias(addR, addG, addB, 0))`.
+     * The output is not clamped here — the device clamps before storage.
+     */
+    public fun Lighting(mul: SkColor, add: SkColor): SkColorFilter {
+        val mr = SkColorGetR(mul) / 255f
+        val mg = SkColorGetG(mul) / 255f
+        val mb = SkColorGetB(mul) / 255f
+        val ar = SkColorGetR(add) / 255f
+        val ag = SkColorGetG(add) / 255f
+        val ab = SkColorGetB(add) / 255f
+        return Matrix(
+            floatArrayOf(
+                mr, 0f, 0f, 0f, ar,
+                0f, mg, 0f, 0f, ag,
+                0f, 0f, mb, 0f, ab,
+                0f, 0f, 0f, 1f, 0f,
+            ),
+        )
+    }
+
+    /**
+     * Mirrors Skia's `SkColorFilters::LinearToSRGBGamma`. Applies the
+     * IEC 61966-2-1 sRGB encoding curve to each RGB channel — i.e.
+     * treats the input channel as linear-light intensity and encodes it
+     * to sRGB-display-referred. Alpha is passed through unchanged
+     * (this is a per-channel non-linear function, not a matrix).
+     *
+     * Implementation is a dedicated [SkSRGBGammaColorFilter] subclass
+     * — a matrix can't express the non-linear segment cleanly.
+     */
+    public fun LinearToSRGBGamma(): SkColorFilter = SkSRGBGammaColorFilter(toSRGB = true)
+
+    /**
+     * Mirrors Skia's `SkColorFilters::SRGBToLinearGamma` — inverse of
+     * [LinearToSRGBGamma]. Treats each RGB channel as sRGB-encoded and
+     * decodes it back to linear light.
+     */
+    public fun SRGBToLinearGamma(): SkColorFilter = SkSRGBGammaColorFilter(toSRGB = false)
+
+    /**
+     * Nullable overload of [Lerp] that mirrors Skia's upstream
+     * `SkColorFilters::Lerp(float, sk_sp<SkColorFilter>, sk_sp<SkColorFilter>)`
+     * exactly :
+     *  - if both filters are `null`, returns `null` (no work to do).
+     *  - if [t] is `NaN`, returns `null` (Skia rejects NaN weights).
+     *  - if `t <= 0`, returns [dst] (or `null` when [dst] is `null` —
+     *    a `null` filter side means "use the unfiltered input").
+     *  - if `t >= 1`, returns [src] (same null-handling).
+     *  - otherwise builds an interpolating filter ; a `null` side is
+     *    treated as the identity colour filter (input pass-through),
+     *    matching Skia's runtime-effect behaviour where a null child
+     *    sample evaluates to the original colour.
+     *
+     * `@JvmName` keeps this overload distinguishable from the non-null
+     * variant at the bytecode level (both share the same erased Kotlin
+     * signature otherwise — same JVM mangling rule as Kotlin's stdlib
+     * nullable overloads).
+     */
+    @JvmName("LerpNullable")
+    public fun Lerp(t: Float, dst: SkColorFilter?, src: SkColorFilter?): SkColorFilter? {
+        if (dst == null && src == null) return null
+        if (t.isNaN()) return null
+        if (dst === src) return dst
+        if (t <= 0f) return dst
+        if (t >= 1f) return src
+        return SkLerpColorFilter(t, dst ?: kIdentity, src ?: kIdentity)
+    }
+
     /** Lazy identity LUT shared by [TableARGB] for null channels. */
     private val identityTable: ByteArray = ByteArray(256) { it.toByte() }
+
+    /**
+     * Identity colour filter — used by the nullable [Lerp] overload as
+     * a substitute for `null` children. Defined here (rather than as a
+     * top-level singleton) so it's scoped to the factory namespace.
+     */
+    private val kIdentity: SkColorFilter = SkIdentityColorFilter
 }
 
 // -- Internal concrete implementations --------------------------------------
+
+/**
+ * Identity colour filter — returns its input unchanged. Used by the
+ * nullable [SkColorFilters.Lerp] overload as a stand-in for `null`
+ * children (matching Skia's runtime-effect behaviour where a null
+ * child sample evaluates to the source colour).
+ */
+internal object SkIdentityColorFilter : SkColorFilter() {
+    override fun filterColor4f(src: SkColor4f): SkColor4f = src
+    override fun isAlphaUnchanged(): Boolean = true
+}
+
+/**
+ * Per-channel IEC 61966-2-1 sRGB transfer function (or its inverse).
+ *
+ * The forward direction (`toSRGB = true`) maps linear light `L ∈ [0, 1]`
+ * to sRGB-encoded `E ∈ [0, 1]` :
+ *
+ * ```
+ *   E = 12.92 * L                       (L <= 0.0031308)
+ *   E = 1.055 * L^(1/2.4) - 0.055       (L  > 0.0031308)
+ * ```
+ *
+ * The reverse direction (`toSRGB = false`) is the standard inverse :
+ *
+ * ```
+ *   L = E / 12.92                       (E <= 0.04045)
+ *   L = ((E + 0.055) / 1.055)^2.4       (E  > 0.04045)
+ * ```
+ *
+ * Out-of-range inputs are passed through (`< 0` or `> 1`) — Skia
+ * clamps at the storage boundary, not here.
+ */
+internal class SkSRGBGammaColorFilter(private val toSRGB: Boolean) : SkColorFilter() {
+
+    override fun filterColor4f(src: SkColor4f): SkColor4f {
+        val fn: (Float) -> Float = if (toSRGB) ::linearToSrgb else ::srgbToLinear
+        return SkColor4f(fn(src.fR), fn(src.fG), fn(src.fB), src.fA)
+    }
+
+    override fun isAlphaUnchanged(): Boolean = true
+
+    private companion object {
+        fun linearToSrgb(c: Float): Float {
+            if (c.isNaN()) return c
+            if (c <= 0f) return c
+            if (c >= 1f) return c
+            return if (c <= 0.0031308f) 12.92f * c
+            else 1.055f * c.pow(1f / 2.4f) - 0.055f
+        }
+
+        fun srgbToLinear(c: Float): Float {
+            if (c.isNaN()) return c
+            if (c <= 0f) return c
+            if (c >= 1f) return c
+            return if (c <= 0.04045f) c / 12.92f
+            else ((c + 0.055f) / 1.055f).pow(2.4f)
+        }
+    }
+}
+
 
 /**
  * 4 × 5 affine colour matrix. Operates on non-premul `[0, 1]` floats ;
