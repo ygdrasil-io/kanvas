@@ -40,7 +40,9 @@ public class SkImageInfo private constructor(
     /** Bytes per pixel implied by [colorType]. */
     public fun bytesPerPixel(): Int = when (colorType) {
         SkColorType.kAlpha_8 -> 1
+        SkColorType.kGray_8 -> 1
         SkColorType.kARGB_4444 -> 2
+        SkColorType.kRGB_565 -> 2
         SkColorType.kRGBA_8888 -> 4
         SkColorType.kBGRA_8888 -> 4
         SkColorType.kRGBA_F16Norm -> 8
@@ -147,12 +149,39 @@ public class SkImageInfo private constructor(
             colorSpace: SkColorSpace = SkColorSpace.makeSRGB(),
         ): SkImageInfo = Make(width, height, SkColorType.kARGB_4444, SkAlphaType.kPremul, colorSpace)
 
+        /**
+         * Phase R1-C — convenience factory for `kRGB_565` image info.
+         * Mirrors Skia's `SkImageInfo::Make(w, h, kRGB_565_SkColorType, kOpaque_SkAlphaType)`
+         * (used by `gm/all_bitmap_configs.cpp`, `gm/bitmapfilters.cpp`).
+         * Alpha type is forced to opaque — 565 has no alpha channel.
+         */
+        public fun MakeRGB565(
+            width: Int,
+            height: Int,
+            colorSpace: SkColorSpace = SkColorSpace.makeSRGB(),
+        ): SkImageInfo = Make(width, height, SkColorType.kRGB_565, SkAlphaType.kOpaque, colorSpace)
+
+        /**
+         * Phase R1-C — convenience factory for `kGray_8` image info.
+         * Mirrors Skia's `SkImageInfo::Make(w, h, kGray_8_SkColorType, kOpaque_SkAlphaType)`
+         * (used by `gm/all_bitmap_configs.cpp`, `gm/bitmapcopy.cpp`).
+         * Alpha type is forced to opaque — Gray8 has no alpha channel.
+         */
+        public fun MakeGray8(
+            width: Int,
+            height: Int,
+            colorSpace: SkColorSpace = SkColorSpace.makeSRGB(),
+        ): SkImageInfo = Make(width, height, SkColorType.kGray_8, SkAlphaType.kOpaque, colorSpace)
+
         private fun defaultAlphaTypeFor(ct: SkColorType): SkAlphaType = when (ct) {
             SkColorType.kRGBA_8888 -> SkAlphaType.kUnpremul
             SkColorType.kBGRA_8888 -> SkAlphaType.kUnpremul
             SkColorType.kRGBA_F16Norm -> SkAlphaType.kPremul
             SkColorType.kAlpha_8 -> SkAlphaType.kPremul
             SkColorType.kARGB_4444 -> SkAlphaType.kPremul
+            // Phase R1-C — 565 and Gray8 are always opaque (no alpha channel).
+            SkColorType.kRGB_565 -> SkAlphaType.kOpaque
+            SkColorType.kGray_8 -> SkAlphaType.kOpaque
             else -> SkAlphaType.kUnknown
         }
     }

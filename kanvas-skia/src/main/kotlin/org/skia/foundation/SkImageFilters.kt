@@ -706,6 +706,19 @@ internal class SkOffsetImageFilter(
             offsetY = upstream.offsetY + sy,
         )
     }
+
+    /**
+     * Phase R1-C — translate the upstream bounds by (dx, dy). Mirrors
+     * Skia's `SkOffsetImageFilter::onFilterNodeBounds`
+     * (`src/effects/imagefilters/SkOffsetImageFilter.cpp`).
+     */
+    override fun computeFastBounds(src: org.skia.math.SkRect): org.skia.math.SkRect {
+        val base = input?.computeFastBounds(src) ?: src
+        return org.skia.math.SkRect.MakeLTRB(
+            base.left + dx, base.top + dy,
+            base.right + dx, base.bottom + dy,
+        )
+    }
 }
 
 /**
@@ -757,6 +770,14 @@ internal class SkComposeImageFilter(
             offsetY = midResult.offsetY + outResult.offsetY,
         )
     }
+
+    /**
+     * Phase R1-C — `outer(inner(src))` bounds. Mirrors Skia's
+     * `SkComposeImageFilter::computeFastBounds`
+     * (`src/effects/imagefilters/SkComposeImageFilter.cpp`).
+     */
+    override fun computeFastBounds(src: org.skia.math.SkRect): org.skia.math.SkRect =
+        outer.computeFastBounds(inner.computeFastBounds(src))
 }
 
 // -- Phase 7d.2 ----------------------------------------------------------
@@ -775,6 +796,21 @@ internal class SkBlurImageFilter(
     private val radiusY: Int = kotlin.math.ceil(3.0 * sigmaY).toInt().coerceAtLeast(0)
     private val kernelX: FloatArray = gaussianKernel1D(sigmaX, radiusX)
     private val kernelY: FloatArray = gaussianKernel1D(sigmaY, radiusY)
+
+    /**
+     * Phase R1-C — inflate the upstream bounds by `±radius` per axis
+     * (the kernel's `3σ` extent). Mirrors Skia's
+     * `SkBlurImageFilter::onFilterNodeBounds`
+     * (`src/effects/imagefilters/SkBlurImageFilter.cpp`). Used by
+     * `gm/filterfastbounds.cpp`.
+     */
+    override fun computeFastBounds(src: org.skia.math.SkRect): org.skia.math.SkRect {
+        val base = input?.computeFastBounds(src) ?: src
+        return org.skia.math.SkRect.MakeLTRB(
+            base.left - radiusX, base.top - radiusY,
+            base.right + radiusX, base.bottom + radiusY,
+        )
+    }
 
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
@@ -942,6 +978,26 @@ internal class SkDropShadowImageFilter(
     private val color: SkColor,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    /**
+     * Phase R1-C — output covers `src ∪ (src offset by (dx, dy) and
+     * inflated by ±3σ)`. Mirrors Skia's
+     * `SkDropShadowImageFilter::onFilterNodeBounds`
+     * (`src/effects/imagefilters/SkDropShadowImageFilter.cpp`).
+     */
+    override fun computeFastBounds(src: org.skia.math.SkRect): org.skia.math.SkRect {
+        val base = input?.computeFastBounds(src) ?: src
+        val rx = kotlin.math.ceil(3.0 * sigmaX).toFloat()
+        val ry = kotlin.math.ceil(3.0 * sigmaY).toFloat()
+        val sl = base.left + dx - rx
+        val st = base.top + dy - ry
+        val sr = base.right + dx + rx
+        val sb = base.bottom + dy + ry
+        return org.skia.math.SkRect.MakeLTRB(
+            minOf(base.left, sl), minOf(base.top, st),
+            maxOf(base.right, sr), maxOf(base.bottom, sb),
+        )
+    }
+
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
         val srcImg = upstream.image
@@ -1013,6 +1069,14 @@ internal class SkImageImageFilter(
     private val dstRect: SkRect,
     private val sampling: SkSamplingOptions,
 ) : SkImageFilter() {
+
+    /**
+     * Phase R1-C — image source filters always output the
+     * [dstRect] regardless of the input bounds. Mirrors Skia's
+     * `SkImageImageFilter::onFilterNodeBounds`
+     * (`src/effects/imagefilters/SkImageImageFilter.cpp`).
+     */
+    override fun computeFastBounds(src: SkRect): SkRect = dstRect
 
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val outW = kotlin.math.max(1, kotlin.math.ceil(dstRect.width().toDouble()).toInt())
