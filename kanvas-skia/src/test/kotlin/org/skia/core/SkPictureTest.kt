@@ -395,15 +395,15 @@ class SkPictureTest {
     }
 
     @Test
-    fun `recordingCanvas getTotalMatrix reflects intra-recording state`() {
+    fun `recordingCanvas getLocalToDeviceAsMatrix reflects intra-recording state`() {
         // The recording canvas must keep its CTM up to date so that GMs
-        // querying canvas.getTotalMatrix() during onDraw see sensible
+        // querying canvas.getLocalToDeviceAsMatrix() during onDraw see sensible
         // values (Skia upstream contract).
         val recorder = SkPictureRecorder()
         val rec = recorder.beginRecording(8f, 8f)
         rec.translate(3f, 5f)
         rec.scale(2f, 2f)
-        val m = rec.getTotalMatrix()
+        val m = rec.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity
         // Confirm it's not the identity — the exact matrix algebra is
         // already covered by SkMatrix tests; we just need to know that
         // state ops mutate the matrix during recording.
