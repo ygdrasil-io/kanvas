@@ -16,8 +16,10 @@
 **Progression** :
 - ✅ Phase R1 complète (25/25, mergée).
 - ✅ Phase R2 complète (20/20 mergée).
-- 🔄 Phase R3 : **9/11 ✅ ou ouvert**. 3 restants (R3.2 SkFontMgr+fontconfig, R3.3 SkCustomTypefaceBuilder, R3.10 codecs étendus).
-- ⚠️ Phase R-suivi : **42 items** partiels/stub à compléter — voir Section 5.
+- 🔄 Phase R3 : **12/12 ✅ ou ouvert** — toutes les classes/méthodes upstream non-GPU sont implémentées ou stubbées ; simplifications listées en R-suivi.
+- ⚠️ Phase R-suivi : **47 items** partiels/stub à compléter — voir Section 5.
+
+**Phases R1+R2+R3 du plan de remédiation terminées côté API surface.** Travail restant : finalisation de la fidélité (R-suivi) + reprise des ports GMs (Phase H3 et suivantes).
 
 Plus du tiers de la surface publique Skia non-GPU n'est pas portée. Le module
 `:kanvas-skia` est correctement dimensionné pour exécuter les GMs **2D rasterisés
@@ -830,7 +832,15 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 41. **R-suivi.41** YUV → RGB conversion + draw path nécessite nouvelle branche dans `SkBitmapDevice`. `SkYUVAPixmaps` est holder seul.
 42. **R-suivi.42** `SkDocument` local stand-in `SkWStreamMinimal` / `SkDynamicMemoryWStream` créés dans #386 car #382 (vrai `SkWStream`) pas mergée au moment. À remplacer post-#382.
 
-Effort estimé : 4-5 jours total (tous indépendants, parallélisables).
+**Ajouts batch 9 (R3.2, R3.3, R3.10)** :
+
+43. **R-suivi.43** `SkFontMgr.matchFamilyStyleCharacter` retourne `null` sur le backend AWT par défaut (`JvmAwtFontMgr`) : AWT n'expose pas d'API codepoint→font de fallback. Pistes : binder fontconfig (Linux), CoreText (macOS), DirectWrite (Windows), ou maintenir une table de fallback intégrée. Bloquant pour les GMs qui tirent sur la fallback chain (`fallbackBlank`, `emoji_typeface`).
+44. **R-suivi.44** `SkFontMgr.makeFromData` / `makeFromStream` / `makeFromFile` ignorent le paramètre `ttcIndex` : `Font.createFont(TRUETYPE_FONT, …)` d'AWT prend toujours la face 0 d'un TrueType Collection. Pistes : parser `.ttc` à la main (12 octets d'en-tête + offsets), ou attendre intégration FreeType.
+45. **R-suivi.45** `SkFontMgr.makeFromStream` prend un `java.io.InputStream` au lieu d'un `SkStream` (différé à R3.4 au moment du PR). À aligner post-R3.4 mergée.
+46. **R-suivi.46** `SkCustomTypefaceBuilder` (R3.3) + `SkUserTypeface` : les hooks internes de `SkTypeface` sont pluggés mais le rendu de glyphes custom via `SkCanvas.drawString` (qui route via `SkFont` + AWT) **n'est pas wired** end-to-end. À reprendre quand un GM custom-typeface sera porté.
+47. **R-suivi.47** `SkAvifDecoder` / `SkJpegxlDecoder` / `SkRawDecoder` / `SkIcoDecoder` (R3.10) : enregistrement dans `SkCodec.Decoders` non wired (les `Decode` stubs voleraient les matches d'un futur décodeur réel). Pistes : binder libavif / libjxl / libraw / parser ICO directory natif, puis registrer.
+
+Effort estimé : 5-6 jours total (tous indépendants, parallélisables).
 
 ### Découvertes inattendues
 
@@ -863,19 +873,19 @@ Effort estimé : 4-5 jours total (tous indépendants, parallélisables).
 
 ### Phase R3 — Grandes classes / sous-systèmes (effort L/XL)
 
-**Progression** : **9/11 ✅ ou ouvert** : R3.1 (#377), R3.1-bis (#381), R3.4 (#382), R3.5 (#387), R3.6 (#386), R3.7 (#383), R3.8 (#385), R3.9 (#385), R3.11 (#387). Restants : **R3.2** (SkFontMgr), **R3.3** (SkCustomTypefaceBuilder), **R3.10** (codecs étendus).
+**Progression** : **12/12 ✅ ou ouvert** — Phase R3 **COMPLET** côté API surface. Tous les items mergés ou en PR ouverte.
 
 1. ✅ **R3.1** `SkM44` + `SkV2` + `SkV4` classes (PR #377)
    - 🔄 **R3.1-bis** intégration `SkCanvas.concat(m44)` / `setMatrix(m44)` / `getLocalToDevice` (PR #381, R-suivi.28)
-2. **R3.2** `SkFontMgr` + `SkFontStyleSet` + plate-forme fontconfig (Section 1.6)
-3. **R3.3** `SkCustomTypefaceBuilder` (Section 1.7) — post-R3.2
+2. 🔄 **R3.2** `SkFontMgr` + `SkFontStyleSet` + JVM AWT default backend (PR #391, R-suivi.43/44/45)
+3. 🔄 **R3.3** `SkCustomTypefaceBuilder` + `SkUserTypeface` (PR #390, R-suivi.46)
 4. 🔄 **R3.4** `SkStream` / `SkWStream` arbre complet (PR #382, 8 classes, R-suivi.29)
 5. 🔄 **R3.5** `SkAndroidCodec` (PR #387, R-suivi.34/35)
-6. 🔄 **R3.6** `SkDocument` + sink PDF (PR #386, R-suivi.36–40 + .42 simplifications)
+6. 🔄 **R3.6** `SkDocument` + sink PDF (PR #386, R-suivi.36–40, .42)
 7. 🔄 **R3.7** `SkShadowUtils` (PR #383, blur-based, R-suivi.30–33)
 8. 🔄 **R3.8** `SkRasterHandleAllocator` (PR #385)
 9. 🔄 **R3.9** `SkRecorder` / `SkCPURecorder` / `SkCPUContext` (PR #385)
-10. **R3.10** Décodeurs étendus : `SkAvifDecoder` (1.38), `SkJpegxlDecoder` (1.41), `SkRawDecoder` (1.40), `SkIcoDecoder` (1.39)
+10. 🔄 **R3.10** Décodeurs étendus : `SkAvifDecoder`, `SkJpegxlDecoder`, `SkRawDecoder`, `SkIcoDecoder` (PR #389, signature-check seul, R-suivi.47)
 11. 🔄 **R3.11** YUV multi-plane (`SkYUVAInfo`, `SkYUVAPixmaps`) (PR #387, R-suivi.41 YUV→RGB draw)
 
 ### Critères de promotion entre phases
