@@ -63,13 +63,22 @@ public class SkYUVAPixmaps(
      * sampled `(Y, U, V)` triplet to linear `[0, 1]` RGB is selected by
      * [SkYUVAInfo.yuvColorSpace] — see [yuvToRgbMatrix].
      *
-     * Currently supports the three-plane configs ([SkYUVAInfo.PlaneConfig.kY_U_V],
-     * `kY_V_U`). Bi-planar (`kY_UV` / `kY_VU`), interleaved, and
-     * alpha-bearing configs raise [IllegalStateException] — a follow-up
-     * R-suivi item.
+     * Supports every [SkYUVAInfo.PlaneConfig] enum value :
+     *  - **Three-plane** (`kY_U_V` / `kY_V_U`) — Y at plane 0, U/V at
+     *    planes 1/2 (or 2/1) as single-channel `kAlpha_8` planes.
+     *  - **Bi-planar** (`kY_UV` / `kY_VU`) — Y at plane 0, packed UV
+     *    (or VU) at plane 1 with `bytesPerPixel == 2` (R-suivi.48).
+     *  - **Interleaved** (`kYUV` / `kUYV`) — single plane carrying
+     *    YUV (or UYV) with `bytesPerPixel == 3` ; subsampling must be
+     *    `k444` (single-plane interleaved configs only support 4:4:4 —
+     *    enforced by [SkYUVAInfo]).
+     *  - **Alpha-bearing** (`kY_U_V_A`, `kY_V_U_A`, `kY_UV_A`, `kY_VU_A`,
+     *    `kYUVA`, `kUYVA`) — same Y/UV layout as the alpha-less variants
+     *    plus an A plane (separate or interleaved). The alpha is sampled
+     *    per-pixel and applied as a non-premul ARGB alpha channel.
      *
-     * The returned bitmap is opaque (alpha = 255) ; alpha-plane carrying
-     * configs are not yet wired through.
+     * The returned bitmap is opaque (alpha = 255) for alpha-less configs
+     * and carries the per-pixel alpha for `*_A` / `YUVA` / `UYVA`.
      */
     public fun toRGBA8888(): SkBitmap {
         check(isValid()) { "SkYUVAPixmaps.toRGBA8888 requires isValid()=true" }
@@ -80,32 +89,186 @@ public class SkYUVAPixmaps(
         val rgba = SkBitmap(w, h, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
         val mx = yuvToRgbMatrix(info.yuvColorSpace)
 
-        when (info.planeConfig) {
-            SkYUVAInfo.PlaneConfig.kY_U_V,
-            SkYUVAInfo.PlaneConfig.kY_V_U,
-            -> {
-                val uIdx = if (info.planeConfig == SkYUVAInfo.PlaneConfig.kY_U_V) 1 else 2
-                val vIdx = if (info.planeConfig == SkYUVAInfo.PlaneConfig.kY_U_V) 2 else 1
-                val yPlane = planes[0]
-                val uPlane = planes[uIdx]
-                val vPlane = planes[vIdx]
-                val (fxU, fyU) = info.planeSubsamplingFactors(uIdx)
-                val (fxV, fyV) = info.planeSubsamplingFactors(vIdx)
-                for (y in 0 until h) {
-                    for (x in 0 until w) {
-                        val yVal = readChannel(yPlane, x, y, 0)
-                        val uVal = readChannel(uPlane, x / fxU, y / fyU, 0)
-                        val vVal = readChannel(vPlane, x / fxV, y / fyV, 0)
-                        rgba.setPixel(x, y, applyMatrix(mx, yVal, uVal, vVal))
-                    }
-                }
+        // Helper closures share the per-pixel write-back so each branch
+        // only computes a (Y, U, V, A) sample and we hand the rest to
+        // applyMatrix + setPixel.
+        val ys = FloatArray(1); val us = FloatArray(1); val vs = FloatArray(1); val as_ = FloatArray(1)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                sampleYUVA(x, y, ys, us, vs, as_)
+                val rgb = applyMatrix(mx, ys[0], us[0], vs[0])
+                val ai = (as_[0] * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val color = (ai shl 24) or (rgb and 0x00FFFFFF)
+                rgba.setPixel(x, y, color)
             }
-            else -> error(
-                "SkYUVAPixmaps.toRGBA8888 not yet implemented for planeConfig=${info.planeConfig} " +
-                    "(bi-planar, interleaved and alpha configs are R-suivi follow-ups)",
-            )
         }
         return rgba
+    }
+
+    /**
+     * Sample the (Y, U, V, A) quadruplet for source pixel `(x, y)` from
+     * this pixmap's planes, dispatched on [SkYUVAInfo.planeConfig].
+     * Alpha defaults to `1.0` for alpha-less configs. Outputs land in
+     * the supplied 1-element float arrays (avoiding per-pixel boxing).
+     */
+    private fun sampleYUVA(
+        x: Int,
+        y: Int,
+        outY: FloatArray,
+        outU: FloatArray,
+        outV: FloatArray,
+        outA: FloatArray,
+    ) {
+        outA[0] = 1f
+        when (val cfg = info.planeConfig) {
+            SkYUVAInfo.PlaneConfig.kY_U_V,
+            SkYUVAInfo.PlaneConfig.kY_V_U,
+            -> sampleThreePlane(x, y, cfg, outY, outU, outV, alphaPlaneIdx = -1, outA)
+            SkYUVAInfo.PlaneConfig.kY_UV,
+            SkYUVAInfo.PlaneConfig.kY_VU,
+            -> sampleBiPlane(x, y, cfg, outY, outU, outV, alphaPlaneIdx = -1, outA)
+            SkYUVAInfo.PlaneConfig.kYUV,
+            SkYUVAInfo.PlaneConfig.kUYV,
+            -> sampleInterleaved(x, y, cfg, outY, outU, outV, outA, hasAlpha = false)
+            SkYUVAInfo.PlaneConfig.kY_U_V_A,
+            SkYUVAInfo.PlaneConfig.kY_V_U_A,
+            -> sampleThreePlane(
+                x, y, cfg, outY, outU, outV,
+                alphaPlaneIdx = 3, outA,
+            )
+            SkYUVAInfo.PlaneConfig.kY_UV_A,
+            SkYUVAInfo.PlaneConfig.kY_VU_A,
+            -> sampleBiPlane(
+                x, y, cfg, outY, outU, outV,
+                alphaPlaneIdx = 2, outA,
+            )
+            SkYUVAInfo.PlaneConfig.kYUVA,
+            SkYUVAInfo.PlaneConfig.kUYVA,
+            -> sampleInterleaved(x, y, cfg, outY, outU, outV, outA, hasAlpha = true)
+            SkYUVAInfo.PlaneConfig.kUnknown -> error("unsupported planeConfig=kUnknown")
+        }
+    }
+
+    /**
+     * Three-plane sampler — Y at plane 0, U/V at planes 1/2 (or 2/1
+     * for `kY_V_U` / `kY_V_U_A`). `alphaPlaneIdx >= 0` reads the alpha
+     * sample from the corresponding plane (full-resolution, single
+     * channel) ; `alphaPlaneIdx < 0` leaves [outA] untouched (1.0).
+     */
+    private fun sampleThreePlane(
+        x: Int,
+        y: Int,
+        cfg: SkYUVAInfo.PlaneConfig,
+        outY: FloatArray,
+        outU: FloatArray,
+        outV: FloatArray,
+        alphaPlaneIdx: Int,
+        outA: FloatArray,
+    ) {
+        val uIdx: Int
+        val vIdx: Int
+        when (cfg) {
+            SkYUVAInfo.PlaneConfig.kY_U_V, SkYUVAInfo.PlaneConfig.kY_U_V_A -> {
+                uIdx = 1; vIdx = 2
+            }
+            SkYUVAInfo.PlaneConfig.kY_V_U, SkYUVAInfo.PlaneConfig.kY_V_U_A -> {
+                uIdx = 2; vIdx = 1
+            }
+            else -> error("sampleThreePlane: unexpected cfg=$cfg")
+        }
+        val (fxU, fyU) = info.planeSubsamplingFactors(uIdx)
+        val (fxV, fyV) = info.planeSubsamplingFactors(vIdx)
+        outY[0] = readChannel(planes[0], x, y, 0)
+        outU[0] = readChannel(planes[uIdx], x / fxU, y / fyU, 0)
+        outV[0] = readChannel(planes[vIdx], x / fxV, y / fyV, 0)
+        if (alphaPlaneIdx >= 0) {
+            // Alpha plane is full-resolution single-channel — no
+            // subsampling to undo.
+            outA[0] = readChannel(planes[alphaPlaneIdx], x, y, 0)
+        }
+    }
+
+    /**
+     * Bi-planar sampler — Y at plane 0 (single channel), UV (or VU) at
+     * plane 1 packed as 2 bytes/pixel. `alphaPlaneIdx >= 0` reads the
+     * alpha from a separate full-resolution plane (`kY_UV_A` / `kY_VU_A`).
+     */
+    private fun sampleBiPlane(
+        x: Int,
+        y: Int,
+        cfg: SkYUVAInfo.PlaneConfig,
+        outY: FloatArray,
+        outU: FloatArray,
+        outV: FloatArray,
+        alphaPlaneIdx: Int,
+        outA: FloatArray,
+    ) {
+        val uChannel: Int
+        val vChannel: Int
+        when (cfg) {
+            SkYUVAInfo.PlaneConfig.kY_UV, SkYUVAInfo.PlaneConfig.kY_UV_A -> {
+                uChannel = 0; vChannel = 1
+            }
+            SkYUVAInfo.PlaneConfig.kY_VU, SkYUVAInfo.PlaneConfig.kY_VU_A -> {
+                uChannel = 1; vChannel = 0
+            }
+            else -> error("sampleBiPlane: unexpected cfg=$cfg")
+        }
+        val (fxUV, fyUV) = info.planeSubsamplingFactors(1)
+        outY[0] = readChannel(planes[0], x, y, 0)
+        // Plane 1 carries 2 bytes/pixel (U + V interleaved). readChannel
+        // walks bytesPerPixel internally, so passing the channel offset
+        // (0 or 1) does the right thing.
+        outU[0] = readChannel(planes[1], x / fxUV, y / fyUV, uChannel)
+        outV[0] = readChannel(planes[1], x / fxUV, y / fyUV, vChannel)
+        if (alphaPlaneIdx >= 0) {
+            outA[0] = readChannel(planes[alphaPlaneIdx], x, y, 0)
+        }
+    }
+
+    /**
+     * Interleaved single-plane sampler — `kYUV` / `kUYV` / `kYUVA` /
+     * `kUYVA`. Subsampling must be `k444` (the upstream `SkYUVAInfo`
+     * rule, returns `(0, 0)` factors otherwise — we read at
+     * full resolution and rely on the validator). When [hasAlpha] is
+     * true, reads a 4th channel from the same plane.
+     */
+    private fun sampleInterleaved(
+        x: Int,
+        y: Int,
+        cfg: SkYUVAInfo.PlaneConfig,
+        outY: FloatArray,
+        outU: FloatArray,
+        outV: FloatArray,
+        outA: FloatArray,
+        hasAlpha: Boolean,
+    ) {
+        // Channel order : YUV / UYV / YUVA / UYVA.
+        val yChannel: Int
+        val uChannel: Int
+        val vChannel: Int
+        val aChannel: Int
+        when (cfg) {
+            SkYUVAInfo.PlaneConfig.kYUV -> {
+                yChannel = 0; uChannel = 1; vChannel = 2; aChannel = -1
+            }
+            SkYUVAInfo.PlaneConfig.kUYV -> {
+                yChannel = 1; uChannel = 0; vChannel = 2; aChannel = -1
+            }
+            SkYUVAInfo.PlaneConfig.kYUVA -> {
+                yChannel = 0; uChannel = 1; vChannel = 2; aChannel = 3
+            }
+            SkYUVAInfo.PlaneConfig.kUYVA -> {
+                yChannel = 1; uChannel = 0; vChannel = 2; aChannel = 3
+            }
+            else -> error("sampleInterleaved: unexpected cfg=$cfg")
+        }
+        outY[0] = readChannel(planes[0], x, y, yChannel)
+        outU[0] = readChannel(planes[0], x, y, uChannel)
+        outV[0] = readChannel(planes[0], x, y, vChannel)
+        if (hasAlpha && aChannel >= 0) {
+            outA[0] = readChannel(planes[0], x, y, aChannel)
+        }
     }
 
     public companion object {

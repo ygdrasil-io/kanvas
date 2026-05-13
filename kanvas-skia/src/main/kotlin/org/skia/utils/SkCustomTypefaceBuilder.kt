@@ -1,8 +1,11 @@
 package org.skia.utils
 
+import org.skia.core.SkCanvas
 import org.skia.core.SkDrawable
+import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkFontStyle
+import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkTextEncoding
@@ -278,6 +281,112 @@ internal class SkUserTypeface internal constructor(
     public fun boundsForGlyph(glyphId: Int): SkRect? =
         slots.getOrNull(glyphId)?.bounds
 
+    /**
+     * `true` iff the typeface contains at least one drawable glyph
+     * (set via [SkCustomTypefaceBuilder.setGlyph] with a [SkDrawable]
+     * argument). Drawable glyphs need a separate render hook
+     * ([drawDrawableGlyphs] / [SkCanvas.drawCustomTypefaceText]) since
+     * they don't fit the path-fill pipeline that [makeTextPath] feeds.
+     *
+     * R-suivi.49 — used by [SkCanvas.drawString] to switch dispatch
+     * from `drawPath` to the per-glyph drawable walker when needed.
+     */
+    public fun hasDrawableGlyphs(): Boolean = slots.any { it.drawable != null }
+
+    /**
+     * R-suivi.49 — drawable-glyph render hook.
+     *
+     * Renders [text] onto [canvas] at baseline `(x, y)` using [font]'s
+     * size / scaleX / skewX parameters, walking each code-point and
+     * dispatching path glyphs through [SkCanvas.drawPath] (matching the
+     * legacy [makeTextPath] → `drawPath` pipeline) and drawable glyphs
+     * through [SkDrawable.draw] inside a save / translate / restore
+     * block. Mirrors upstream's
+     * `SkUserTypeface::SkUserScalerContext::generateImage` dispatch in
+     * `src/utils/SkCustomTypeface.cpp:generateGlyphRecord` — except
+     * upstream renders into a glyph mask cache, while we render straight
+     * onto the canvas (no mask cache yet).
+     *
+     * Each glyph's transform :
+     *  1. translate to `(x + cursor * sx, y)` ;
+     *  2. scale by `(sx, sy)` so the drawable's source-unit bounds map
+     *     onto the requested font size ;
+     *  3. apply [font]'s `skewX` as an X-shear after the scale (matches
+     *     the matrix [makeTextPath] composes for path glyphs).
+     *
+     * For path glyphs we fall through to the legacy path-fill route so
+     * mixed runs (some path, some drawable) render coherently.
+     *
+     * Drawable glyphs whose [SkDrawable] is `null` are skipped (treated
+     * as zero-width — matches upstream's "missing record" branch).
+     */
+    public fun drawDrawableGlyphs(
+        canvas: SkCanvas,
+        text: String,
+        x: SkScalar,
+        y: SkScalar,
+        font: SkFont,
+        paint: SkPaint,
+    ) {
+        if (text.isEmpty()) return
+        val sx = font.size * font.scaleX
+        val sy = font.size
+        val skewX = font.skewX
+        var cursorAdvance = 0f
+        var i = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            val gid = unicharToGlyphId[cp] ?: 0
+            val slot = slots.getOrNull(gid)
+            if (slot != null) {
+                val emitX = x + cursorAdvance * sx
+                if (slot.drawable != null) {
+                    // Drawable glyph : save / transform / draw / restore.
+                    val saveCount = canvas.getSaveCount()
+                    canvas.save()
+                    try {
+                        // Transform composition matches the path-glyph
+                        // matrix in [makeTextPath] :
+                        //   T(emitX, y) · scale(sx, sy) · shear(skewX, 0)
+                        // We apply via translate + concat for clarity (the
+                        // result is identical to MakeAll under associative
+                        // matrix compose — kanvas-skia's CTM concat is
+                        // post-multiply in the Skia sense).
+                        canvas.translate(emitX, y)
+                        if (skewX != 0f || sx != 1f || sy != 1f) {
+                            val m = SkMatrix.MakeAll(
+                                sx, sy * skewX, 0f,
+                                0f, sy, 0f,
+                                0f, 0f, 1f,
+                            )
+                            canvas.concat(m)
+                        }
+                        slot.drawable.draw(canvas)
+                    } finally {
+                        canvas.restoreToCount(saveCount)
+                    }
+                } else if (slot.path != null && !slot.path.isEmpty()) {
+                    // Path glyph in a mixed run — fall through to the
+                    // standard path-fill pipeline. Build the per-glyph
+                    // path with the same transform composition as
+                    // [makeTextPath] and dispatch via drawPath.
+                    val builder = SkPathBuilder()
+                    val m = SkMatrix.MakeAll(
+                        sx, sy * skewX, emitX,
+                        0f, sy, y,
+                        0f, 0f, 1f,
+                    )
+                    builder.addPath(slot.path, m)
+                    canvas.drawPath(builder.detach(), paint)
+                }
+                // Cursor advance applies whether the slot rendered or not
+                // (drawable / empty / path) — matches the .notdef contract.
+                cursorAdvance += slot.advance
+            }
+            i += Character.charCount(cp)
+        }
+    }
+
     // ---- SkTypeface hooks ----------------------------------------------------
 
     override fun unicharsToGlyphsInternal(
@@ -453,5 +562,42 @@ internal class SkUserTypeface internal constructor(
         metrics.fStrikeoutThickness = this.metrics.fStrikeoutThickness * size
         metrics.fStrikeoutPosition = this.metrics.fStrikeoutPosition * size
         return (this.metrics.fDescent - this.metrics.fAscent + this.metrics.fLeading) * size
+    }
+}
+
+/**
+ * R-suivi.49 — public draw entry point for [SkCustomTypefaceBuilder]-
+ * produced typefaces that contain drawable glyphs.
+ *
+ * Renders [text] onto the receiver canvas at baseline `(x, y)` using
+ * [font]'s typeface, size and skew parameters. Path glyphs follow the
+ * legacy [SkCanvas.drawString] pipeline (fill via [SkCanvas.drawPath]) ;
+ * drawable glyphs invoke their [SkDrawable.draw] hook inside a
+ * scoped save / translate / scale / restore block (see
+ * [SkUserTypeface.drawDrawableGlyphs] for the per-glyph contract).
+ *
+ * If the font's typeface is **not** an [SkCustomTypefaceBuilder]-
+ * produced typeface, this falls back to [SkCanvas.drawString] verbatim
+ * — the extension is safe to call on any canvas / font pair, and acts
+ * as a drop-in upgrade only when the typeface actually carries
+ * drawable glyphs.
+ *
+ * Wiring this hook into [SkCanvas.drawString] itself (so callers don't
+ * need the explicit extension) requires editing `SkCanvas.kt`, which
+ * is outside this batch's edit allowlist — tracked as a follow-up
+ * R-suivi item.
+ */
+public fun SkCanvas.drawCustomTypefaceText(
+    text: String,
+    x: SkScalar,
+    y: SkScalar,
+    font: SkFont,
+    paint: SkPaint,
+) {
+    val tf = font.typeface
+    if (tf is SkUserTypeface && tf.hasDrawableGlyphs()) {
+        tf.drawDrawableGlyphs(this, text, x, y, font, paint)
+    } else {
+        drawString(text, x, y, font, paint)
     }
 }
