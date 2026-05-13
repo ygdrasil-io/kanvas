@@ -17,7 +17,10 @@
 - ✅ Phase R1 complète (25/25, mergée).
 - ✅ Phase R2 complète (20/20 mergée).
 - 🔄 Phase R3 : **12/12 ✅ ou ouvert** — toutes les classes/méthodes upstream non-GPU sont implémentées ou stubbées ; simplifications listées en R-suivi.
-- ⚠️ Phase R-suivi : **47 items** partiels/stub à compléter — voir Section 5.
+- 🔄 Phase R-suivi : **30 / 50 items ✅** (S1-S4 batches). Reste 20 items :
+  - Petits : .2 F16 shader, .17 SkBitmap F16 ingress, .19 SkImage encoders étendus, .25 SkPath.Verb collision, .26 SkImagesTest, .29 SkStream peek/duplicate
+  - Moyens : .4 SkCanvasStateUtils, .8 SkTiledImageUtils tiling, .22 SkSerialProcs consumption, .34/.35 SkAndroidCodec sampling, .47 codec registry, .48 YUV bi-planar, .49 SkUserTypeface drawable, .50 SkCanvas virtuals manquants
+  - Gros : .23 SkWebpEncoder real (JNI), .30 SkShadowUtils analytic mesh, .36 SkPDF text, .40 SkPDF compression/encryption
 
 **Phases R1+R2+R3 du plan de remédiation terminées côté API surface.** Travail restant : finalisation de la fidélité (R-suivi) + reprise des ports GMs (Phase H3 et suivantes).
 
@@ -771,36 +774,36 @@ simples** mais s'écarte fortement de l'API upstream sur tout ce qui touche aux 
 
 Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire compiler les GMs, mais devront être levés pour la conformité fonctionnelle complète.
 
-1. **R-suivi.1** `SkColorFilters.Lerp` : la version nullable utilise un `SkIdentityColorFilter` interne pour remplacer `null` côté upstream — fonctionne mais n'est pas le pass-through bit-exact que ferait `nullptr` upstream.
+1. ✅ **R-suivi.1** `SkColorFilters.Lerp` pass-through implémenté (PR #400). `SkPassThroughLerpFilter` interne ; `nullptr` upstream → vrai pass-through au lieu d'identity filter.
 2. **R-suivi.2** `SkCoordClampShader` : path F16 forwardé via path byte → perte de précision sur sources HDR. À reprendre quand F16 dans les shaders est prioritaire.
-3. **R-suivi.3** `SkNWayCanvas` : seules les méthodes draw de base sont forwardées. **TODO** : `onDrawAtlas`, `onDrawVertices`, `onDrawTextBlob`, `onDrawDrawable`, `onDrawAnnotation`, `onDrawShadow`, `onDrawSlug`, `onDrawImageLattice`.
+3. ✅ **R-suivi.3** `SkNWayCanvas` overrides étendus (PR #397). Forwarding ajouté pour `drawAtlas`, `drawVertices`, `drawTextBlob`, `drawDrawable`, `drawAnnotation`, `drawRegion`. `drawShadow`/`drawSlug`/`drawImageLattice` flagués TODO (virtuals non exposés sur `SkCanvas`).
 4. **R-suivi.4** `SkCanvasStateUtils` : full stub (`Capture` → null, `MakeFrom` → null). À implémenter quand un cas d'usage l'exige (multi-process canvas state migration).
-5. **R-suivi.5** `SkCapabilities` : stub minimal (SkSL 100, pas d'extensions). À enrichir au fur et à mesure que les capabilities sont consultées.
-6. **R-suivi.6** `SkGraphics` : stubs sur les getters de cache (`GetResourceCacheTotalBytesUsed` → 0). À câbler quand un cache réel sera introduit.
-7. **R-suivi.7** `SkPathUtils.FillPathWithPaint` : argument `cullRect` ignoré (pas de knob `cullRect` sur `SkPathEffect` actuel). À reprendre quand l'API `SkPathEffect.filterPath(..., cullRect)` est complète.
+5. ✅ **R-suivi.5** `SkCapabilities` enrichie (PR #404). 13 flags individuels + `SkSLVersion.k330`.
+6. ✅ **R-suivi.6** `SkGraphics` cache implémenté (PR #404). `LinkedHashMap` FIFO 128 MiB + eviction + `DumpMemoryStatistics`.
+7. ✅ **R-suivi.7** `SkPathEffect.filterPath(..., cullRect)` overload + `SkDashPathEffect` AABB culling + `SkPathUtils.FillPathWithPaint` un-drop cullRect (PR #400).
 8. **R-suivi.8** `SkTiledImageUtils` : thin shim sur `SkCanvas.drawImage` — pas de tiling effectif. Pertinent si support GPU est ajouté ou pour cas où l'image dépasse 2 Go.
-9. ✅ **R-suivi.9** `SkPixmapUtils.Orient` : les 8 origines EXIF sont câblées (PR R-suivi batch S1-C). `kTopRight` / `kBottomRight` / `kBottomLeft` / `kTopLeft` + rotations/transpose `kLeftTop` / `kRightTop` / `kRightBottom` / `kLeftBottom`. Test `SkPixmapUtilsOrientAllOriginsTest` couvre les 8 mappings sur un bitmap 4×4 + un cas de mismatch swap-style.
-10. **R-suivi.10** `SkNoDrawCanvas` (utilisé par `SkNWayCanvas`) — vérifier la complétude des overrides protégés.
+9. ✅ **R-suivi.9** `SkPixmapUtils.Orient` : les 8 origines EXIF sont câblées (PR #395). `SkPixmapUtilsOrientAllOriginsTest` couvre les 8 mappings.
+10. ✅ **R-suivi.10** `SkNoDrawCanvas` overrides complétés (PR #397). No-ops pour `drawRegion`, `drawImageNine`, `drawAtlas`, `drawVertices`, `drawString`, `drawSimpleText`, `drawTextBlob`, `drawDrawable`, `drawAnnotation`.
 
 **Ajouts batch 3 (R2.3 → R2.10)** :
 
-11. **R-suivi.11** `SkPixmap.scalePixels` accepte `SkSamplingOptions` mais l'ignore (toujours nearest-neighbor). Reprendre avec un vrai sampler quand `SkImage.scalePixels` est fait.
-12. **R-suivi.12** `SkImages` : 3 factories en `TODO(R2-B)` car dépendaient de `SkPixmap` / `SkImageGenerator` non encore mergés au moment du batch — `RasterFromPixmap`, `RasterFromPixmapCopy`, `DeferredFromGenerator`. Re-câbler maintenant que #365 est mergé.
-13. **R-suivi.13** `SkSurfaces.WrapPixels(pixmap)` : même cas, `TODO(R2-B)` à débloquer post-#365.
-14. **R-suivi.14** `SkSurfaces.Null` retourne un `SkSurface` non-nullable au lieu du `nullptr` upstream ; `makeImageSnapshot()` renvoie une image zero-pixel sentinel. À reprendre quand un cas d'usage légitime se présente.
-15. **R-suivi.15** `Sk3DView.getMatrix(matrix)` et `SkCamera3D.patchToMatrix(quad, matrix)` retournent un `SkMatrix` au lieu de muter un out-param (convention immutable kanvas-skia). Adaptation justifiée mais à valider quand un GM 3D sera porté.
-16. **R-suivi.16** `SkColorMatrix` n'est pas encore intégré dans `SkColorFilters.Matrix(SkColorMatrix)`. La classe existe (#366) mais la factory de SkColorFilters reçoit toujours un `FloatArray(20)`. Petite tâche : ajouter l'overload qui accepte `SkColorMatrix`.
+11. ✅ **R-suivi.11** `SkPixmap.scalePixels` bilinéaire + cubic Mitchell-Netravali (PR #398). `nearest-neighbor` reste fallback.
+12. ✅ **R-suivi.12** `SkImages.{RasterFromPixmap,RasterFromPixmapCopy,DeferredFromGenerator}` implémentés (PR #393).
+13. ✅ **R-suivi.13** `SkSurfaces.WrapPixels(pixmap)` implémenté (PR #393).
+14. ✅ **R-suivi.14** `SkSurfaces.NullOrNull` factory ajoutée (PR #398, Option A additive). `Null` legacy conservée pour source-compat.
+15. ✅ **R-suivi.15** `Sk3DView` immutable doc + `getMatrixCopy` convenience (PR #400). Adaptation validée + KDoc.
+16. ✅ **R-suivi.16** `SkColorFilters.Matrix(SkColorMatrix)` overload ajouté (PR #393). Bit-identique à `Matrix(rowMajor: FloatArray)`.
 
 **Ajouts batch 4 (R2.11 + R2.15 mergés, R2.12 ouvert)** :
 
 17. **R-suivi.17** `SkBitmap.installPixels` : ingress F16 gated off (`SkColorType.kRGBA_F16`) — pas de helper half-float dans le pipeline. Reprendre quand F16 devient cible.
-18. **R-suivi.18** `SkBitmap.extractAlpha` avec `paint.maskFilter` non-null retourne `false` — pipeline blur-mask absent. **TODO** : intégrer `SkMaskFilter` dans `extractAlpha`.
+18. ✅ **R-suivi.18** `SkBitmap.extractAlpha` avec `paint.maskFilter` implémenté (PR #394). `SkMaskFilter.filterMask(SkBitmap, ctm, offset)` helper + halo expansion sur dst.
 19. **R-suivi.19** `SkImage.encodeToData` ne supporte que PNG + JPEG (encodeurs déjà présents). WEBP / GIF / BMP / WBMP / HEIF / AVIF / JPEGXL → null. WEBP est R2.20, les autres relèvent de R3.10 (décodeurs étendus).
 
 **Ajouts batch 5 (R2.13/14, R2.16/17/18/19/20 mergés/ouverts)** :
 
-20. **R-suivi.20** `SkCanvas.clipShader` : modulation de couverture wired uniquement sur `drawPaint` ; les autres entry points (`drawRect` / `drawPath` / `drawImage`) propagent l'état mais sautent la modulation. À étendre quand les rasterizers de chaque entry point sont touchés.
-21. **R-suivi.21** `SkICC` : `Make` renvoie null (parsing ICC absent), `WriteToICC` émet uniquement les 128 octets d'en-tête v4.3 sans tag-table. Implémentation complète des tags `desc` / `wtpt` / `rXYZ` / `gXYZ` / `bXYZ` / `rTRC` / `gTRC` / `bTRC` requise pour fidélité.
+20. ✅ **R-suivi.20** `SkCanvas.clipShader` full rasterizer wiring (PR #394). Modulation dans les 5 blend funnels (`blend`, `blendCustom`, `blendF16`, `blendF16Premul`, `blendF16PremulMode`) → tous les entry points l'honorent automatiquement.
+21. ✅ **R-suivi.21** `SkICC` tag-table v4.3 complète (PR #404). Tags : desc, wtpt, rXYZ, gXYZ, bXYZ, rTRC, gTRC, bTRC, cprt ; TRC `para` type-4.
 22. **R-suivi.22** `SkSerialProcs` / `SkDeserialProcs` : data classes seules ; pas consommées par `SkPicture.serialize` / `SkPicture.MakeFromData` (ces méthodes ignorent les procs pour l'instant).
 23. **R-suivi.23** `SkWebpEncoder` : full stub (encode → null). JVM n'a pas d'encodeur WebP natif et TwelveMonkeys imageio-webp est decoder-only. Pistes : embarquer libwebp via JNI ou exiger un encoder externe côté caller.
 
@@ -816,31 +819,37 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 28. ✅ **R-suivi.28** `@Deprecated getTotalMatrix()` migration (PR R-suivi batch S1-C). Call-sites tests (`SkAutoCanvasRestoreTest`, `SkDrawableTest`, `SkPictureTest`, `SkCanvasWrappersTest`) et `SkSVGCanvas` migrés vers `getLocalToDeviceAsMatrix() ?: SkMatrix.Identity`. Les wrappers `SkRecordingCanvas` / `SkNoDrawCanvas` / `SkPaintFilterCanvas` / `SkOverdrawCanvas` ne contenaient que des références doc (KDoc), pas d'appels deprecated. `SkCanvasSkM44Test` conserve un appel intentionnel sous `@Suppress("DEPRECATION")`. 0 deprecation warning restant sur `compileKotlin` / `compileTestKotlin`.
 29. **R-suivi.29** `SkStream` : `peek`, `duplicate`, classe `SkStreamMemory` distincte non portés (non référencés par l'API surface kanvas-skia). À revisiter si un consommateur futur en a besoin.
 30. **R-suivi.30** `SkShadowUtils.DrawShadow` : implémentation **blur-based** (non analytic-mesh). `kGeometricOnly_ShadowFlag` no-op. Per-pixel parity non garantie.
-31. **R-suivi.31** `SkShadowUtils.DrawShadow` : `zPlaneParams` évalué au centroïde, pas par-vertex.
-32. **R-suivi.32** `SkShadowUtils.kTransparentOccluder_ShadowFlag` : ne déclenche pas le culling opaque-behind-occluder.
-33. **R-suivi.33** `SkShadowUtils.OptimizeForSurface` : no-op stub.
+31. ✅ **R-suivi.31** `SkShadowUtils.zPlaneParams` per-verb sampling (PR #401). Walks `SkPath.Iter`, max-z ambient, union spot bboxes.
+32. ✅ **R-suivi.32** `SkShadowUtils.kTransparentOccluder` flag implémenté (PR #401). `canvas.clipPath(path, kDifference)` dans spot layer quand flag unset.
+33. ✅ **R-suivi.33** `SkShadowUtils.OptimizeForSurface` cache (PR #401). `WeakHashMap<SkPath, Map<ProjectionKey, SkPath>>` via identityHashCode.
 
 **Ajouts batch 8 (R3.5, R3.6, R3.8, R3.9, R3.11)** :
 
 34. **R-suivi.34** `SkAndroidCodec.getAndroidPixels` retourne `kUnimplemented` quand `sampleSize > 1` ou `subset != null`. Full path nécessite API "raw bytes → SkBitmap" allocator-free.
 35. **R-suivi.35** Smart sample-size picker pour `SkAndroidCodec.computeSampleSize` — currently plain power-of-2 (vs upstream libjpeg DCT-scale rounding).
 36. **R-suivi.36** `SkPDF` : text shaping = no-op. Pipeline R3.2 SkFontMgr requis pour activer.
-37. **R-suivi.37** `SkPDF` : images = no-op. Implémentation : encoder via `SkJpegEncoder` puis embed `/Filter /DCTDecode` XObject.
-38. **R-suivi.38** `SkPDF` : gradients/shaders ignorés. Implémentation : émettre `pattern` PDF (axial/radial).
-39. **R-suivi.39** `SkPDF` : quad/conic linéarisés en lignes. Implémentation : émettre `c` (cubic bezier) PDF natif.
+37. ✅ **R-suivi.37** `SkPDF` images JPEG/DCT XObject (PR #402). Encode via `SkJpegEncoder` q=90 puis embed `/Filter /DCTDecode`.
+38. ✅ **R-suivi.38** `SkPDF` linear gradients via `/Pattern` (PR #402). Type 2 axial + Type 3 stitching pour ≥3 stops.
+39. ✅ **R-suivi.39** `SkPDF` natif cubic operators (PR #402). `m`/`l`/`c`/`h` ; quad degree-elevated cubic lossless ; conic 4-segment De Casteljau.
 40. **R-suivi.40** `SkPDF` : pas de compression/encryption/PDF-A/XMP/structure tree/outline ; CTM non rejoué.
-41. **R-suivi.41** YUV → RGB conversion + draw path nécessite nouvelle branche dans `SkBitmapDevice`. `SkYUVAPixmaps` est holder seul.
-42. **R-suivi.42** `SkDocument` local stand-in `SkWStreamMinimal` / `SkDynamicMemoryWStream` créés dans #386 car #382 (vrai `SkWStream`) pas mergée au moment. À remplacer post-#382.
+41. ✅ **R-suivi.41** YUV → RGB conversion (PR #405). `SkYUVAPixmaps.toRGBA8888()` + 7 YUVColorSpace matrices + `SkImages.YUVA` factory. Bi-planar/interleaved/alpha → voir R-suivi.48.
+42. ✅ **R-suivi.42** `SkDocument` SkWStream stand-in cleanup (PR #393). Imports `org.skia.foundation.stream.*` à la place.
 
 **Ajouts batch 9 (R3.2, R3.3, R3.10)** :
 
-43. **R-suivi.43** `SkFontMgr.matchFamilyStyleCharacter` retourne `null` sur le backend AWT par défaut (`JvmAwtFontMgr`) : AWT n'expose pas d'API codepoint→font de fallback. Pistes : binder fontconfig (Linux), CoreText (macOS), DirectWrite (Windows), ou maintenir une table de fallback intégrée. Bloquant pour les GMs qui tirent sur la fallback chain (`fallbackBlank`, `emoji_typeface`).
-44. **R-suivi.44** `SkFontMgr.makeFromData` / `makeFromStream` / `makeFromFile` ignorent le paramètre `ttcIndex` : `Font.createFont(TRUETYPE_FONT, …)` d'AWT prend toujours la face 0 d'un TrueType Collection. Pistes : parser `.ttc` à la main (12 octets d'en-tête + offsets), ou attendre intégration FreeType.
-45. **R-suivi.45** `SkFontMgr.makeFromStream` prend un `java.io.InputStream` au lieu d'un `SkStream` (différé à R3.4 au moment du PR). À aligner post-R3.4 mergée.
-46. **R-suivi.46** `SkCustomTypefaceBuilder` (R3.3) + `SkUserTypeface` : les hooks internes de `SkTypeface` sont pluggés mais le rendu de glyphes custom via `SkCanvas.drawString` (qui route via `SkFont` + AWT) **n'est pas wired** end-to-end. À reprendre quand un GM custom-typeface sera porté.
+43. ✅ **R-suivi.43** `SkFontMgr` minimal fallback table (PR #399). `AwtFontFallbackTable` par script (Latin/CJK/Arabic/Devanagari/Emoji/Symbol). Native fontconfig/CoreText/DirectWrite restent en suivi.
+44. ✅ **R-suivi.44** TTC `ttcIndex` parsing (PR #399). Magic `ttcf` + header + offsets table.
+45. ✅ **R-suivi.45** `SkFontMgr.makeFromStream(SkStream)` overload `open` (PR #399). Drain → `SkData.MakeWithCopy`.
+46. ✅ **R-suivi.46** `SkCustomTypefaceBuilder` glyph draw wiring (PR #403). `SkUserTypeface.makeTextPath` override → routes via `SkFont.makeTextPath` natif sans toucher AWT path.
 47. **R-suivi.47** `SkAvifDecoder` / `SkJpegxlDecoder` / `SkRawDecoder` / `SkIcoDecoder` (R3.10) : enregistrement dans `SkCodec.Decoders` non wired (les `Decode` stubs voleraient les matches d'un futur décodeur réel). Pistes : binder libavif / libjxl / libraw / parser ICO directory natif, puis registrer.
 
-Effort estimé : 5-6 jours total (tous indépendants, parallélisables).
+**Ajouts batch S1-S4 (nouveaux items découverts)** :
+
+48. **R-suivi.48** `SkYUVAPixmaps.toRGBA8888()` ne supporte pas les configurations bi-planaires (`kY_UV` / `kY_VU`), interleaved (`kYUV` / `kUYV`), ou alpha (`kY_U_V_A` etc.) — `IllegalStateException`. Nécessite 2-channel pixmap support dans `SkImageInfo.bytesPerPixel`.
+49. **R-suivi.49** `SkUserTypeface.makeTextPath` n'implémente pas le rendu de glyphes via `SkDrawable` (uniquement `SkPath`). Drawable-based glyphs → no-op silencieux pour l'instant.
+50. **R-suivi.50** `SkCanvas` virtuals manquants découverts par `SkNWayCanvas` (R-suivi.3) : `onDrawShadow`/`onDrawShadowRec`, `onDrawSlug`, `onDrawImageLattice` (exists in `:kanvas` legacy), `onDrawPicture`. À ajouter sur `SkCanvas` puis re-câbler dans `SkNWayCanvas` + `SkNoDrawCanvas`.
+
+Effort estimé : 4-5 jours total restants pour les non-✅.
 
 ### Découvertes inattendues
 
