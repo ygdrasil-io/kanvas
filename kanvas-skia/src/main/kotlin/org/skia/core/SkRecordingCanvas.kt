@@ -227,4 +227,15 @@ internal class SkRecordingCanvas(
         // only the paint (mutable).
         records += SkRecord.DrawTextBlob(blob, x, y, paint.copy())
     }
+
+    override fun drawPicture(picture: SkPicture, matrix: SkMatrix?, paint: SkPaint?) {
+        // R-suivi.22 — record a *reference* to the sub-picture rather
+        // than flattening its ops into our own record list. Preserves
+        // the sub-picture identity so [SkPicture.serialize] can route
+        // it through [SkSerialProcs.picture]. The base-class default
+        // would otherwise call `picture.playback(this)`, which would
+        // re-enter our recording overrides and inline every nested op
+        // — losing the sub-picture boundary.
+        records += SkRecord.DrawPicture(picture, matrix, paint?.copy())
+    }
 }
