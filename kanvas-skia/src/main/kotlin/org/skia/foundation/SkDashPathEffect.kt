@@ -1,6 +1,9 @@
 package org.skia.foundation
 
 import org.skia.math.SkMatrix
+import org.skia.math.SkRect
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -68,7 +71,20 @@ public class SkDashPathEffect private constructor(
         }
     }
 
-    override fun filterPath(input: SkPath, ctm: SkMatrix): SkPath? {
+    override fun filterPath(input: SkPath, ctm: SkMatrix): SkPath? =
+        filterPath(input, ctm, cullRect = null)
+
+    /**
+     * Cull-rect aware override (R-suivi.7). After the standard dash
+     * decomposition, any emitted `moveTo + lineTo` pair whose segment
+     * AABB lies entirely outside [cullRect] is dropped from the output.
+     * This is a coarse but correct culling pass — segments that
+     * straddle the cull rect are kept verbatim (the stroker will clip
+     * them downstream).
+     *
+     * `cullRect = null` ⇒ identical behaviour to the 2-arg form.
+     */
+    override fun filterPath(input: SkPath, ctm: SkMatrix, cullRect: SkRect?): SkPath? {
         // Degenerate cases — the dash decomposition produces no segments.
         // We return an EMPTY path (not null) because returning null tells
         // the device to use the input unchanged, which would be wrong :
@@ -128,7 +144,79 @@ public class SkDashPathEffect private constructor(
                 }
             }
         }
+        val detached = out.detach()
+        return if (cullRect != null) cullDashedPath(detached, cullRect) else detached
+    }
+
+    /**
+     * Drop `moveTo + lineTo` pairs from [path] whose entire segment AABB
+     * falls outside [cullRect]. Segments that straddle the rect are
+     * preserved unchanged ; the rasteriser clips them on the storage edge.
+     *
+     * The dash output is — by construction — a sequence of
+     * `moveTo(x0,y0) ; lineTo(x1,y1)` pairs (one pair per "on" sub-segment).
+     * That assumption is exploited here to short-circuit the segment scan ;
+     * if a future refactor of [filterPath] ever changes the output shape,
+     * this helper must be revisited.
+     */
+    private fun cullDashedPath(path: SkPath, cullRect: SkRect): SkPath {
+        if (path.isEmpty()) return path
+        val out = SkPathBuilder()
+        var coordIdx = 0
+        var pendingMoveX = 0f; var pendingMoveY = 0f
+        var i = 0
+        val verbs = path.verbs
+        while (i < verbs.size) {
+            val v = verbs[i]
+            when (v) {
+                SkPath.Verb.kMove -> {
+                    pendingMoveX = path.coords[coordIdx++]
+                    pendingMoveY = path.coords[coordIdx++]
+                    // Look ahead — if the next verb is kLine, decide together.
+                    if (i + 1 < verbs.size && verbs[i + 1] == SkPath.Verb.kLine) {
+                        val nx = path.coords[coordIdx++]
+                        val ny = path.coords[coordIdx++]
+                        if (segmentIntersectsRect(pendingMoveX, pendingMoveY, nx, ny, cullRect)) {
+                            out.moveTo(pendingMoveX, pendingMoveY)
+                            out.lineTo(nx, ny)
+                        }
+                        i += 2
+                        continue
+                    } else {
+                        // Standalone move (rare for dash output) — emit as-is.
+                        out.moveTo(pendingMoveX, pendingMoveY)
+                    }
+                }
+                SkPath.Verb.kLine -> {
+                    // Defensive : shouldn't be reached given the moveTo-then-lineTo
+                    // pairing above, but keep correctness if the output shape changes.
+                    val nx = path.coords[coordIdx++]
+                    val ny = path.coords[coordIdx++]
+                    if (segmentIntersectsRect(pendingMoveX, pendingMoveY, nx, ny, cullRect)) {
+                        out.lineTo(nx, ny)
+                    }
+                    pendingMoveX = nx; pendingMoveY = ny
+                }
+                SkPath.Verb.kQuad,
+                SkPath.Verb.kConic -> { coordIdx += 4 }
+                SkPath.Verb.kCubic -> { coordIdx += 6 }
+                SkPath.Verb.kClose -> { /* no coords */ }
+            }
+            i++
+        }
         return out.detach()
+    }
+
+    /** Fast AABB-vs-rect overlap (inclusive). */
+    private fun segmentIntersectsRect(
+        x0: Float, y0: Float, x1: Float, y1: Float, r: SkRect,
+    ): Boolean {
+        val segL = min(x0, x1); val segR = max(x0, x1)
+        val segT = min(y0, y1); val segB = max(y0, y1)
+        // No overlap if segment AABB is strictly outside r on any axis.
+        if (segR < r.left() || segL > r.right()) return false
+        if (segB < r.top() || segT > r.bottom()) return false
+        return true
     }
 
     /**

@@ -255,6 +255,43 @@ public class SkCamera3D {
     /**
      * Project a patch (origin + tangent frame) into 2D space.
      * `quad` must contain exactly 3 vectors — `[U, V, origin]`.
+     *
+     * ## Immutable-adaptation note (R-suivi.15)
+     *
+     * Upstream's signature is :
+     *
+     * ```cpp
+     *   void SkCamera3D::patchToMatrix(const SkPatch3D&, SkMatrix* matrix) const;
+     * ```
+     *
+     * — the caller passes a mutable [SkMatrix] out-param and the
+     * implementation calls `matrix->set(...)` nine times to write the
+     * 3×3 projection in place. That contract is **incompatible** with
+     * kanvas-skia's immutable [SkMatrix] : a `set` on the field would
+     * have to allocate a new instance, which defeats the upstream
+     * out-param optimisation.
+     *
+     * The kanvas-skia adaptation **returns** the matrix instead. The
+     * resulting [SkMatrix] is independent of any later mutation of the
+     * camera state ([reset], [update], or writes to the public
+     * [location] / [axis] / [zenith] / [observer] fields) — call
+     * [patchToMatrix] again to recompute the projection after the
+     * camera has been retargeted.
+     *
+     * Idiom :
+     *
+     * ```kotlin
+     *   val m: SkMatrix = camera.patchToMatrix(arrayOf(u, v, origin))
+     *   canvas.concat(m)
+     * ```
+     *
+     * rather than the upstream :
+     *
+     * ```cpp
+     *   SkMatrix m;
+     *   camera.patchToMatrix(patch, &m);
+     *   canvas->concat(m);
+     * ```
      */
     public fun patchToMatrix(quad: Array<SkV3>): SkMatrix {
         require(quad.size == 3) { "patchToMatrix expects 3 SkV3 (U, V, origin), got ${quad.size}" }
@@ -321,14 +358,64 @@ public class Sk3DView {
 
     /**
      * Project the accumulated 4×4 transform back into a 2D `SkMatrix`
-     * using the embedded camera. Equivalent to upstream's
-     * `Sk3DView::getMatrix(SkMatrix*)`.
+     * using the embedded camera.
+     *
+     * ## Immutable-adaptation note (R-suivi.15)
+     *
+     * Upstream's signature is :
+     *
+     * ```cpp
+     *   void Sk3DView::getMatrix(SkMatrix* matrix) const;
+     * ```
+     *
+     * The caller hands a mutable [SkMatrix] out-param ; the
+     * implementation forwards to
+     * [SkCamera3D.patchToMatrix][SkCamera3D.patchToMatrix] which writes
+     * all nine 3×3 elements in place via `matrix->set(...)`. That
+     * out-param contract is **incompatible** with kanvas-skia's
+     * immutable [SkMatrix] — see the long-form note on
+     * [SkCamera3D.patchToMatrix].
+     *
+     * The kanvas-skia adaptation **returns** the matrix. The returned
+     * value is independent of any later [Sk3DView] mutation
+     * ([translate], [rotateX] / [rotateY] / [rotateZ], [save] /
+     * [restore]) — call [getMatrix] again after the view has been
+     * mutated to fetch the new projection.
+     *
+     * Idiom :
+     *
+     * ```kotlin
+     *   val m: SkMatrix = view.getMatrix()
+     *   canvas.concat(m)
+     * ```
+     *
+     * rather than the upstream :
+     *
+     * ```cpp
+     *   SkMatrix m;
+     *   view.getMatrix(&m);
+     *   canvas->concat(m);
+     * ```
+     *
+     * For ergonomic parity with the upstream signature, see also
+     * [getMatrixCopy] — same behaviour, parameter-less convenience
+     * wrapper that returns the matrix value rather than mutating an
+     * out-param.
      */
     public fun getMatrix(): SkMatrix {
         val patch = SkPatch3D()
         patch.transform(fStack.last())
         return fCamera.patchToMatrixInternal(patch)
     }
+
+    /**
+     * Parameter-less convenience wrapper around [getMatrix] (R-suivi.15).
+     * Identical behaviour — included as a self-documenting entry point
+     * that makes the immutable-return contract explicit at the call
+     * site (the name hints "build the matrix and return it" rather
+     * than "fill an out-param"). No additional allocation cost.
+     */
+    public fun getMatrixCopy(): SkMatrix = getMatrix()
 
     /** Concat [getMatrix] onto the provided canvas. */
     public fun applyToCanvas(canvas: SkCanvas) {

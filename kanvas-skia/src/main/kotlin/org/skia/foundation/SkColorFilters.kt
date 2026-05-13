@@ -177,16 +177,38 @@ public object SkColorFilters {
     /**
      * Nullable overload of [Lerp] that mirrors Skia's upstream
      * `SkColorFilters::Lerp(float, sk_sp<SkColorFilter>, sk_sp<SkColorFilter>)`
-     * exactly :
-     *  - if both filters are `null`, returns `null` (no work to do).
-     *  - if [t] is `NaN`, returns `null` (Skia rejects NaN weights).
-     *  - if `t <= 0`, returns [dst] (or `null` when [dst] is `null` —
-     *    a `null` filter side means "use the unfiltered input").
-     *  - if `t >= 1`, returns [src] (same null-handling).
-     *  - otherwise builds an interpolating filter ; a `null` side is
-     *    treated as the identity colour filter (input pass-through),
-     *    matching Skia's runtime-effect behaviour where a null child
-     *    sample evaluates to the original colour.
+     * exactly. Per upstream's `SkColorFilter.cpp` :
+     *
+     * ```
+     *  sk_sp<SkColorFilter> SkColorFilters::Lerp(float t,
+     *      sk_sp<SkColorFilter> cf0, sk_sp<SkColorFilter> cf1) {
+     *      if (!cf0 && !cf1) return nullptr;
+     *      ...
+     *  }
+     * ```
+     *
+     * A `nullptr` child in the upstream code path means **"use the
+     * unfiltered input"** (true pass-through), **NOT** "apply the
+     * identity colour filter". The distinction matters because :
+     *  - `lerp(t, null, src)` should evaluate to
+     *    `lerp(t, input, src.filter(input))` — i.e. blend the *raw*
+     *    pixel with the filtered version.
+     *  - Substituting `kIdentity` for `null` is *also* correct for the
+     *    pure-Skia identity filter (which by definition returns its
+     *    input unchanged), but it conflates two semantically different
+     *    things and breaks symmetry with the upstream `nullptr` test
+     *    inside `SkBlendModeColorFilter` and other consumers that
+     *    inspect the children.
+     *
+     * Behaviour after this refactor :
+     *  - both `null` ⇒ returns `null` (no-op).
+     *  - [t] is `NaN`           ⇒ returns `null` (Skia rejects NaN).
+     *  - `t <= 0`               ⇒ returns [dst] verbatim (may be `null`
+     *                              ⇒ pass-through on the dst side).
+     *  - `t >= 1`               ⇒ returns [src] verbatim (same).
+     *  - both non-null          ⇒ existing [SkLerpColorFilter] (2-arg).
+     *  - exactly one `null`     ⇒ new [SkPassThroughLerpFilter] that
+     *    blends the input with the filtered side.
      *
      * `@JvmName` keeps this overload distinguishable from the non-null
      * variant at the bytecode level (both share the same erased Kotlin
@@ -200,31 +222,68 @@ public object SkColorFilters {
         if (dst === src) return dst
         if (t <= 0f) return dst
         if (t >= 1f) return src
-        return SkLerpColorFilter(t, dst ?: kIdentity, src ?: kIdentity)
+        if (dst != null && src != null) return SkLerpColorFilter(t, dst, src)
+        // Exactly one of dst / src is null. Build a pass-through lerp
+        // that treats the null side as the *unfiltered* input.
+        return SkPassThroughLerpFilter(t, dstSide = dst, srcSide = src)
     }
 
     /** Lazy identity LUT shared by [TableARGB] for null channels. */
     private val identityTable: ByteArray = ByteArray(256) { it.toByte() }
-
-    /**
-     * Identity colour filter — used by the nullable [Lerp] overload as
-     * a substitute for `null` children. Defined here (rather than as a
-     * top-level singleton) so it's scoped to the factory namespace.
-     */
-    private val kIdentity: SkColorFilter = SkIdentityColorFilter
 }
 
 // -- Internal concrete implementations --------------------------------------
 
 /**
- * Identity colour filter — returns its input unchanged. Used by the
- * nullable [SkColorFilters.Lerp] overload as a stand-in for `null`
- * children (matching Skia's runtime-effect behaviour where a null
- * child sample evaluates to the source colour).
+ * Identity colour filter — returns its input unchanged. Kept as an
+ * internal utility for tests and future consumers ; the nullable
+ * [SkColorFilters.Lerp] overload (R-suivi.1) no longer routes `null`
+ * children through this filter — see [SkPassThroughLerpFilter] for
+ * the true pass-through path.
  */
 internal object SkIdentityColorFilter : SkColorFilter() {
     override fun filterColor4f(src: SkColor4f): SkColor4f = src
     override fun isAlphaUnchanged(): Boolean = true
+}
+
+/**
+ * Linear blend `lerp(t, A, B)` where one of A / B is the *unfiltered*
+ * input (true upstream pass-through for a `nullptr` filter side) and
+ * the other is `child.filterColor4f(input)`.
+ *
+ * Exactly one of [dstSide] / [srcSide] is non-null — the [SkColorFilters.Lerp]
+ * factory guarantees this. The non-null side is named after its role
+ * in the lerp formula : at `t == 0` the dst-side dominates, at `t == 1`
+ * the src-side dominates.
+ *
+ * Mirrors Skia's `SkBlendModeColorFilter::Make(SkBlendMode::kSrcOver, ...)`
+ * trick for pass-through children — the runtime effect that backs
+ * `Lerp` upstream evaluates a `null` child to the original colour,
+ * which is exactly what this filter does.
+ */
+internal class SkPassThroughLerpFilter(
+    private val t: Float,
+    private val dstSide: SkColorFilter?,
+    private val srcSide: SkColorFilter?,
+) : SkColorFilter() {
+    init {
+        check(t in 0f..1f) { "t must be in [0, 1], got $t" }
+        check((dstSide == null) != (srcSide == null)) {
+            "exactly one of dstSide / srcSide must be null"
+        }
+    }
+
+    override fun filterColor4f(src: SkColor4f): SkColor4f {
+        val a = dstSide?.filterColor4f(src) ?: src
+        val b = srcSide?.filterColor4f(src) ?: src
+        val u = 1f - t
+        return SkColorFloats(
+            a.fR * u + b.fR * t,
+            a.fG * u + b.fG * t,
+            a.fB * u + b.fB * t,
+            a.fA * u + b.fA * t,
+        )
+    }
 }
 
 /**
