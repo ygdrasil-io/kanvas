@@ -6,8 +6,10 @@ import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkRegion
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
@@ -71,6 +73,21 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
          * — see [SkAAClip] for the run-encoded representation.
          */
         var aaClip: SkAAClip? = null,
+        /**
+         * Phase R2.14 — per-pixel shader-driven clip. When non-null,
+         * a draw's per-pixel coverage is additionally multiplied by
+         * `clipShader.shadeRow(devX, devY).alpha / 255`. Captured
+         * together with the CTM at `clipShader()` call time so the
+         * shader's local-to-device mapping is frozen at that point
+         * (matches Skia's "clip is taken in current CTM" semantics).
+         * Save / saveLayer inherit by reference ; `clipShader()` always
+         * replaces the slot, so parent states stay untouched.
+         */
+        var clipShader: SkShader? = null,
+        /** CTM snapshot captured when [clipShader] was set. */
+        var clipShaderCtm: SkMatrix = SkMatrix.Identity,
+        /** Clip-op for the bound [clipShader]. */
+        var clipShaderOp: SkClipOp = SkClipOp.kIntersect,
     )
 
     /**
@@ -133,7 +150,13 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         // aaClip shared by reference — clipPath / clipRRect always
         // allocates a fresh SkAAClip before mutating (op() with the
         // path's own AA clip), so the parent's stays untouched.
-        stack.addLast(State(s.matrix, s.clip.copy(), s.device, aaClip = s.aaClip))
+        stack.addLast(State(
+            s.matrix, s.clip.copy(), s.device,
+            aaClip = s.aaClip,
+            clipShader = s.clipShader,
+            clipShaderCtm = s.clipShaderCtm,
+            clipShaderOp = s.clipShaderOp,
+        ))
         return stack.size - 2
     }
 
@@ -570,6 +593,56 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         s.device.setActiveClip(s.aaClip)
     }
 
+    // ─── Phase R2.14 — clipShader ─────────────────────────────────────────
+    //
+    // Mirrors Skia's `SkCanvas::clipShader(sk_sp<SkShader>, SkClipOp)`
+    // (`include/core/SkCanvas.h:1140`). Pixels where the bound shader's
+    // alpha is zero are clipped out ; intermediate alpha values modulate
+    // per-pixel coverage. The shader is frozen against the current CTM
+    // at call time (Skia semantics : the clip's local-to-device mapping
+    // doesn't follow subsequent CTM mutations).
+    //
+    // R2 minimal end-to-end wiring : the shader is honoured by
+    // [drawPaint] — the simplest draw entry point, easiest to validate.
+    // R-suivi : extend the per-pixel modulation to [drawRect] / [drawPath]
+    // / [drawImageRect] and friends by routing through a new
+    // [SkBitmapDevice] clip-shader hook. For R2 only [drawPaint] applies
+    // the modulation ; other draws ignore the clip shader (TODO).
+
+    /**
+     * Mirrors Skia's `SkCanvas::clipShader(shader, op)`. Adds a per-pixel
+     * shader to the active clip stack. With [SkClipOp.kIntersect] (the
+     * default), the new clip equals the existing clip intersected with
+     * the shader's alpha channel ; with [SkClipOp.kDifference], it
+     * equals the existing clip minus the shader's alpha (i.e. cut out
+     * pixels where the shader is opaque).
+     *
+     * **Scope (R2)** : only [drawPaint] honours the clip shader end-to-
+     * end. Other draw entry points (rect / path / image) accept the call
+     * but currently skip the shader-modulation step ; this is tracked as
+     * an R-suivi TODO.
+     */
+    public open fun clipShader(shader: SkShader, op: SkClipOp = SkClipOp.kIntersect) {
+        val s = top
+        // R2 simplification : multiple clipShader() calls inside the
+        // same save() frame replace each other ; Skia would stack them
+        // with SkComposeShader / kSrcIn. Save/restore inheritance still
+        // works because the slot is snapshotted into each new State.
+        // R-suivi : honour stacking when callers need it.
+        s.clipShader = shader
+        s.clipShaderCtm = s.matrix
+        s.clipShaderOp = op
+    }
+
+    /** Internal read-only accessor for tests / device wiring. */
+    internal fun activeClipShader(): SkShader? = top.clipShader
+
+    /** Internal accessor for the CTM that was active when the clipShader was set. */
+    internal fun activeClipShaderCtm(): SkMatrix = top.clipShaderCtm
+
+    /** Internal accessor for the active clipShader's [SkClipOp]. */
+    internal fun activeClipShaderOp(): SkClipOp = top.clipShaderOp
+
     public open fun drawRect(rect: SkRect, paint: SkPaint) {
         val s = top
         // Fast path requires : axis-aligned CTM, no shader, no path
@@ -917,6 +990,148 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         val devDst = SkRect.MakeLTRB(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
         bindClip(s)
         s.device.drawImageRect(image, src, devDst, sampling, paint, constraint, s.clip)
+    }
+
+    // ─── Phase R2.13 — drawRegion / drawImageNine ─────────────────────────
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawRegion(region, paint)`
+     * (`include/core/SkCanvas.h:1427`). The region is expressed in
+     * **canvas-local** coordinates (Skia's contract — same as the
+     * shapes accepted by `drawRect` / `drawPath`). Implementation :
+     * walk the region's rectangle decomposition via
+     * [SkRegion.Iterator] and emit one [drawRect] per rect.
+     *
+     * The active CTM is honoured (each rect is mapped through it),
+     * matching Skia's `SkDevice::drawRegion` which delegates to
+     * per-rect drawing. Empty regions are a no-op.
+     */
+    public open fun drawRegion(region: SkRegion, paint: SkPaint) {
+        if (region.isEmpty()) return
+        val it = SkRegion.Iterator(region)
+        while (!it.done()) {
+            val r = it.rect()
+            drawRect(
+                SkRect.MakeLTRB(
+                    r.left.toFloat(), r.top.toFloat(),
+                    r.right.toFloat(), r.bottom.toFloat(),
+                ),
+                paint,
+            )
+            it.next()
+        }
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::drawImageNine(image, center, dst, filter, paint)`
+     * (`include/core/SkCanvas.h:1642`) — 9-patch raster.
+     *
+     * The [image] is divided by [center] into 9 quads :
+     *  - 4 corners — drawn at their original (1:1) size into the
+     *    matching corners of [dst] ;
+     *  - 4 edges — stretched along exactly one axis to fill the gap
+     *    between the corners ;
+     *  - 1 middle — stretched along both axes to fill the inner
+     *    rectangle.
+     *
+     * Implementation : compute the 9 source / destination sub-rects
+     * and dispatch each through [drawImageRect] with the requested
+     * [filterMode] (mapped to an `SkSamplingOptions`). Sub-rects with
+     * zero width / height are skipped (matches Skia — if [center] is
+     * flush against an edge, that side's strip just disappears).
+     *
+     * [center] is clamped to the image's bounds upstream (Skia's
+     * `SkLatticeIter::Valid` rejects out-of-range centers). We
+     * additionally guard by clamping if a misbehaving caller passes
+     * an out-of-range rect, falling back to a plain `drawImageRect`.
+     */
+    public open fun drawImageNine(
+        image: SkImage,
+        center: SkIRect,
+        dst: SkRect,
+        filterMode: SkFilterMode,
+        paint: SkPaint? = null,
+    ) {
+        val iw = image.width
+        val ih = image.height
+        // Clamp center to the image bounds (defensive — Skia upstream
+        // asserts the caller already validated).
+        val cl = center.left.coerceIn(0, iw)
+        val ct = center.top.coerceIn(0, ih)
+        val cr = center.right.coerceIn(cl, iw)
+        val cb = center.bottom.coerceIn(ct, ih)
+        // Degenerate center — fall back to plain drawImageRect.
+        if (cl >= cr || ct >= cb) {
+            drawImageRect(
+                image,
+                SkRect.MakeWH(iw.toFloat(), ih.toFloat()),
+                dst,
+                SkSamplingOptions(filterMode),
+                paint,
+                SrcRectConstraint.kStrict,
+            )
+            return
+        }
+
+        // Corner pixel widths from the source image.
+        val leftSrcW = cl
+        val rightSrcW = iw - cr
+        val topSrcH = ct
+        val bottomSrcH = ih - cb
+
+        // Destination geometry. The corner strips keep their source
+        // dimensions ; the middle stretches to fill what's left. Skia
+        // proportionally shrinks corners that wouldn't otherwise fit
+        // (combined corner > dst); we mirror that with a uniform scale.
+        val dstW = dst.right - dst.left
+        val dstH = dst.bottom - dst.top
+        val horizCornerSrc = (leftSrcW + rightSrcW).toFloat()
+        val vertCornerSrc = (topSrcH + bottomSrcH).toFloat()
+        val sx = if (horizCornerSrc > dstW) dstW / horizCornerSrc else 1f
+        val sy = if (vertCornerSrc > dstH) dstH / vertCornerSrc else 1f
+        val leftDstW = leftSrcW * sx
+        val rightDstW = rightSrcW * sx
+        val topDstH = topSrcH * sy
+        val bottomDstH = bottomSrcH * sy
+
+        // Source x bands : [0, cl), [cl, cr), [cr, iw)
+        // Source y bands : [0, ct), [ct, cb), [cb, ih)
+        val sxs = floatArrayOf(0f, cl.toFloat(), cr.toFloat(), iw.toFloat())
+        val sys = floatArrayOf(0f, ct.toFloat(), cb.toFloat(), ih.toFloat())
+        // Destination x bands : align corners 1:1 (possibly uniformly
+        // scaled down), the middle fills the gap.
+        val dxs = floatArrayOf(
+            dst.left,
+            dst.left + leftDstW,
+            dst.right - rightDstW,
+            dst.right,
+        )
+        val dys = floatArrayOf(
+            dst.top,
+            dst.top + topDstH,
+            dst.bottom - bottomDstH,
+            dst.bottom,
+        )
+
+        val sampling = SkSamplingOptions(filterMode)
+        for (row in 0..2) {
+            for (col in 0..2) {
+                val sLeft = sxs[col];   val sTop = sys[row]
+                val sRight = sxs[col + 1]; val sBottom = sys[row + 1]
+                val dLeft = dxs[col];   val dTop = dys[row]
+                val dRight = dxs[col + 1]; val dBottom = dys[row + 1]
+                if (sRight <= sLeft || sBottom <= sTop) continue
+                if (dRight <= dLeft || dBottom <= dTop) continue
+                drawImageRect(
+                    image,
+                    SkRect.MakeLTRB(sLeft, sTop, sRight, sBottom),
+                    SkRect.MakeLTRB(dLeft, dTop, dRight, dBottom),
+                    sampling,
+                    paint,
+                    SrcRectConstraint.kStrict,
+                )
+            }
+        }
     }
 
     /**
@@ -1372,7 +1587,12 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     public open fun drawPaint(paint: SkPaint) {
         val s = top
         bindClip(s)
-        s.device.drawPaint(s.matrix, s.clip, paint)
+        s.device.drawPaint(
+            s.matrix, s.clip, paint,
+            clipShader = s.clipShader,
+            clipShaderCtm = s.clipShaderCtm,
+            clipShaderOp = s.clipShaderOp,
+        )
     }
 
     /**
