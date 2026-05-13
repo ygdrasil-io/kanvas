@@ -245,11 +245,25 @@ public class SkRegion private constructor(
      * decomposition of [rgn] in band-major, then interval-major
      * order. Snapshots the bands list at construction time — mutating
      * the source region during iteration is undefined.
+     *
+     * R2.18 — adds [rgn], [rewind], [reset] to match upstream's full
+     * `SkRegion::Iterator` surface.
      */
-    public class Iterator(rgn: SkRegion) {
-        private val bands: List<Band> = rgn.bands
+    public class Iterator {
+        private var fRgn: SkRegion? = null
+        private var bands: List<Band> = emptyList()
         private var bandIdx: Int = 0
         private var intervalIdx: Int = 0
+
+        /** Default ctor — produces an empty / [done] iterator. Reset before use. */
+        public constructor() {
+            this.fRgn = null
+            this.bands = emptyList()
+        }
+
+        public constructor(rgn: SkRegion) {
+            reset(rgn)
+        }
 
         /** `true` once the iterator has emitted every rectangle. */
         public fun done(): Boolean = bandIdx >= bands.size
@@ -275,6 +289,151 @@ public class SkRegion private constructor(
                 intervalIdx = 0
             }
         }
+
+        /** The region this iterator walks, or `null` if default-constructed. */
+        public fun rgn(): SkRegion? = fRgn
+
+        /** Reset to start ; returns `true` iff the source region was non-null. */
+        public fun rewind(): Boolean {
+            bandIdx = 0
+            intervalIdx = 0
+            return fRgn != null
+        }
+
+        /** Point this iterator at [region] and rewind. */
+        public fun reset(region: SkRegion) {
+            fRgn = region
+            bands = region.bands
+            bandIdx = 0
+            intervalIdx = 0
+        }
+    }
+
+    /**
+     * Mirrors Skia's `SkRegion::Cliperator`. Walks the rectangle
+     * decomposition of [region], clipped against [clip]. Each emitted
+     * [rect] is the intersection of the underlying region rect and
+     * [clip] ; rectangles that don't intersect [clip] are skipped.
+     */
+    public class Cliperator(region: SkRegion, private val clip: SkIRect) {
+        private val iter = Iterator(region)
+        private var current: SkIRect? = null
+
+        init { advanceToValid() }
+
+        public fun done(): Boolean = current == null
+
+        /** Current rectangle (clipped). Undefined if [done]. */
+        public fun rect(): SkIRect = current
+            ?: throw NoSuchElementException("SkRegion.Cliperator exhausted")
+
+        public fun next() {
+            if (current == null) return
+            iter.next()
+            advanceToValid()
+        }
+
+        private fun advanceToValid() {
+            while (!iter.done()) {
+                val r = iter.rect()
+                val l = maxOf(r.left, clip.left)
+                val t = maxOf(r.top, clip.top)
+                val ri = minOf(r.right, clip.right)
+                val b = minOf(r.bottom, clip.bottom)
+                if (l < ri && t < b) {
+                    current = SkIRect(l, t, ri, b)
+                    return
+                }
+                iter.next()
+            }
+            current = null
+        }
+    }
+
+    /**
+     * Mirrors Skia's `SkRegion::Spanerator`. For a single horizontal
+     * scanline [y], walks the X spans of [region] clipped to
+     * `[left, right)`. Calling [next] populates `(outLeft, outRight)`
+     * with the next intersected span and returns `true`, or returns
+     * `false` once exhausted.
+     */
+    public class Spanerator(region: SkRegion, y: Int, left: Int, right: Int) {
+        private val spans: IntArray
+        private var cursor: Int = 0
+        private val clipLeft: Int = left
+        private val clipRight: Int = right
+
+        init {
+            spans = if (left >= right) EMPTY else region.findScanlineSpans(y)
+        }
+
+        /**
+         * Returns the next clipped span. The single-int-array return
+         * cell `(outLeft, outRight)` is preferred in Skia ; we encode
+         * the result as `(left, right)` via the [Span] data class for
+         * Kotlin ergonomics. Returns `null` once exhausted.
+         */
+        public fun next(): Span? {
+            while (cursor + 1 < spans.size) {
+                val l = maxOf(spans[cursor], clipLeft)
+                val r = minOf(spans[cursor + 1], clipRight)
+                cursor += 2
+                if (l < r) return Span(l, r)
+            }
+            return null
+        }
+
+        /**
+         * Mirrors upstream's `bool next(int* left, int* right)` signature
+         * — writes the next span into the two-element array [outLR]
+         * (`[0] = left`, `[1] = right`) and returns `true`, or returns
+         * `false` once exhausted. `outLR` may be `null` to advance
+         * without reading the result.
+         */
+        public fun next(outLR: IntArray?): Boolean {
+            val s = next() ?: return false
+            if (outLR != null && outLR.size >= 2) {
+                outLR[0] = s.left
+                outLR[1] = s.right
+            }
+            return true
+        }
+
+        public data class Span(val left: Int, val right: Int)
+
+        private companion object {
+            val EMPTY: IntArray = IntArray(0)
+        }
+    }
+
+    /**
+     * Trace the outline of this region into [builder] as a sequence
+     * of `addRect(...)` calls — one rectangle per region piece.
+     *
+     * Returns `true` iff the region is non-empty (matches upstream's
+     * `SkRegion::addBoundaryPath(SkPathBuilder*)` return contract).
+     * Mirror of `include/core/SkRegion.h:190`.
+     */
+    public fun addBoundaryPath(builder: SkPathBuilder): Boolean {
+        if (isEmpty()) return false
+        val it = Iterator(this)
+        while (!it.done()) {
+            val r = it.rect()
+            builder.addRect(org.skia.math.SkRect.Make(r))
+            it.next()
+        }
+        return true
+    }
+
+    /**
+     * Return the boundary of this region as a freshly built [SkPath].
+     * Empty region yields an empty path. Mirror of upstream
+     * `SkRegion::getBoundaryPath()` (`include/core/SkRegion.h:195`).
+     */
+    public fun getBoundaryPath(): SkPath {
+        val b = SkPathBuilder()
+        addBoundaryPath(b)
+        return b.detach()
     }
 
     // ─── Set ops (Phase I3.1.b) ────────────────────────────────────
@@ -792,6 +951,23 @@ public class SkRegion private constructor(
             }
         }
         out.add(Band(top, bottom, xs))
+    }
+
+    /**
+     * Helper for [Spanerator] — collect the X spans of [region]
+     * at scanline `y` (half-open, `[top, bottom)`). Returns an
+     * even-length sorted `IntArray` of `(left, right)` pairs, or
+     * an empty array if no band covers `y`.
+     */
+    internal fun findScanlineSpans(y: Int): IntArray {
+        if (isEmpty()) return IntArray(0)
+        if (y < fBounds.top || y >= fBounds.bottom) return IntArray(0)
+        for (band in bands) {
+            if (y < band.top) return IntArray(0)
+            if (y >= band.bottom) continue
+            return band.xs.copyOf()
+        }
+        return IntArray(0)
     }
 
     private companion object {
