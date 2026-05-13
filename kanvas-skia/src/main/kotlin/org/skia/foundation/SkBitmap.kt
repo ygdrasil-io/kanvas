@@ -1,7 +1,11 @@
 package org.skia.foundation
 
 import org.skia.core.SkColorSpaceXformSteps
+import org.skia.math.SkIPoint
+import org.skia.math.SkIRect
 import org.skia.math.SkISize
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Raster pixel buffer.
@@ -442,6 +446,269 @@ public class SkBitmap(
         sampling: SkSamplingOptions = SkSamplingOptions.Default,
         localMatrix: org.skia.math.SkMatrix = org.skia.math.SkMatrix.Identity,
     ): SkShader = SkBitmapShader(asImage(), tileX, tileY, sampling, localMatrix)
+
+    // ─── Phase R2.11 — externally-managed pixel storage ───────────────
+
+    /**
+     * Optional [SkPixelRef] handle attached via [installPixels] /
+     * [extractSubset]. `null` for bitmaps that own their typed-array
+     * storage exclusively (the legacy default). When non-null,
+     * [peekPixels] surfaces the ref's underlying [ByteBuffer] as a
+     * non-owning [SkPixmap] view.
+     *
+     * **Storage divergence from upstream Skia** : upstream `SkBitmap`
+     * always reads pixels *through* its `SkPixelRef`'s buffer. Kanvas-
+     * skia's bitmaps keep their colour-typed backing arrays
+     * ([pixels8888], [pixelsF16], …) as the authoritative storage and
+     * use [_pixelRef] only to expose the buffer to API surfaces
+     * ([peekPixels], `SkPixelRef::generationID`) and to advertise
+     * "shared origin" semantics for [extractSubset]. The trade-off is
+     * documented on the method-level KDoc — mutations made by the
+     * caller into the buffer after [installPixels] *will not* be
+     * reflected by [getPixel] (the install copies into the typed array
+     * once). Use the typed arrays / [getPixel] / [setPixel] for the
+     * authoritative pixel surface.
+     */
+    private var _pixelRef: SkPixelRef? = null
+
+    /** Mirrors `SkBitmap::pixelRef()`. Returns `null` if none is attached. */
+    public fun pixelRef(): SkPixelRef? = _pixelRef
+
+    /**
+     * Mirrors Skia's
+     * `SkBitmap::installPixels(const SkImageInfo&, void*, size_t)`
+     * ([SkBitmap.h:625](https://github.com/google/skia/blob/main/include/core/SkBitmap.h#L625)).
+     *
+     * Treats [pixels] as the new backing storage described by [info] at
+     * row stride [rowBytes]. Validates :
+     *  - [info] matches `this` bitmap's `width × height × colorType` ;
+     *  - [rowBytes] ≥ `info.minRowBytes()` ;
+     *  - [pixels] capacity is large enough to cover
+     *    `(height - 1) * rowBytes + minRowBytes()`.
+     *
+     * On success, the buffer's bytes are decoded into the bitmap's typed
+     * backing array (see KDoc on [_pixelRef] for why), and a fresh
+     * [SkPixelRef] wrapping [pixels] is attached so consumers can probe
+     * the original buffer via [pixelRef] / [peekPixels].
+     *
+     * Returns `false` (and leaves the bitmap unchanged) on any mismatch.
+     */
+    public fun installPixels(info: SkImageInfo, pixels: ByteBuffer, rowBytes: Int): Boolean {
+        // Info must match this bitmap's geometry / colour type — kanvas-
+        // skia's typed-array storage is allocated at construction, so the
+        // upstream "free-form info swap" isn't supported.
+        if (info.width != width || info.height != height || info.colorType != colorType) return false
+        if (info.isEmpty()) return false
+        if (rowBytes < info.minRowBytes()) return false
+        val required = (height - 1).toLong() * rowBytes + info.minRowBytes()
+        if (pixels.capacity() < required) return false
+
+        // Decode the buffer into the typed backing array (the
+        // authoritative store — see [_pixelRef]'s KDoc for the
+        // rationale).
+        val buf = pixels.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        val bpp = info.bytesPerPixel()
+        when (colorType) {
+            SkColorType.kRGBA_8888 -> {
+                for (y in 0 until height) {
+                    val rowOff = y * rowBytes
+                    for (x in 0 until width) {
+                        val o = rowOff + x * bpp
+                        val r = buf.get(o).toInt() and 0xFF
+                        val g = buf.get(o + 1).toInt() and 0xFF
+                        val b = buf.get(o + 2).toInt() and 0xFF
+                        val a = buf.get(o + 3).toInt() and 0xFF
+                        pixels8888[y * width + x] = SkColorSetARGB(a, r, g, b)
+                    }
+                }
+            }
+            SkColorType.kBGRA_8888 -> {
+                for (y in 0 until height) {
+                    val rowOff = y * rowBytes
+                    for (x in 0 until width) {
+                        val o = rowOff + x * bpp
+                        val b = buf.get(o).toInt() and 0xFF
+                        val g = buf.get(o + 1).toInt() and 0xFF
+                        val r = buf.get(o + 2).toInt() and 0xFF
+                        val a = buf.get(o + 3).toInt() and 0xFF
+                        pixelsBGRA8888[y * width + x] = SkColorSetARGB(a, r, g, b)
+                    }
+                }
+            }
+            SkColorType.kAlpha_8 -> {
+                for (y in 0 until height) {
+                    val rowOff = y * rowBytes
+                    for (x in 0 until width) {
+                        pixelsA8[y * width + x] = buf.get(rowOff + x)
+                    }
+                }
+            }
+            SkColorType.kGray_8 -> {
+                for (y in 0 until height) {
+                    val rowOff = y * rowBytes
+                    for (x in 0 until width) {
+                        pixelsGray8[y * width + x] = buf.get(rowOff + x)
+                    }
+                }
+            }
+            SkColorType.kRGB_565 -> {
+                for (y in 0 until height) {
+                    val rowOff = y * rowBytes
+                    for (x in 0 until width) {
+                        pixels565[y * width + x] = buf.getShort(rowOff + x * bpp)
+                    }
+                }
+            }
+            SkColorType.kARGB_4444 -> {
+                for (y in 0 until height) {
+                    val rowOff = y * rowBytes
+                    for (x in 0 until width) {
+                        pixels4444[y * width + x] = buf.getShort(rowOff + x * bpp)
+                    }
+                }
+            }
+            // F16Norm ingress would require a uint16 → float32 half-float
+            // decode (no helper in kanvas-skia yet). Until that lands —
+            // and given no current consumer needs it — F16 installPixels
+            // reports failure. Mask-filter / extractAlpha-style scope
+            // creep avoidance.
+            else -> return false
+        }
+        _pixelRef = SkPixelRef(width, height, pixels, rowBytes)
+        return true
+    }
+
+    /**
+     * Mirrors `SkBitmap::installPixels(const SkPixmap&)`
+     * ([SkBitmap.h:644](https://github.com/google/skia/blob/main/include/core/SkBitmap.h#L644)).
+     * Delegates to the three-arg overload using [pixmap]'s info, addr
+     * and rowBytes.
+     */
+    public fun installPixels(pixmap: SkPixmap): Boolean =
+        installPixels(pixmap.info(), pixmap.addr(), pixmap.rowBytes())
+
+    /**
+     * Mirrors `SkBitmap::extractSubset(SkBitmap*, const SkIRect&) const`
+     * ([SkBitmap.h:979](https://github.com/google/skia/blob/main/include/core/SkBitmap.h#L979)).
+     *
+     * Re-binds [dst] to a fresh [SkBitmap] dimensioned to the
+     * intersection of [subset] with this bitmap's bounds, with the same
+     * `colorType` and `colorSpace`. Returns `false` if the intersection
+     * is empty.
+     *
+     * **Storage sharing** : the returned bitmap *attaches the same
+     * [SkPixelRef]* as the source (when one exists, e.g. after
+     * [installPixels]) — matching upstream's
+     * "extracted subset shares pixels with the parent" gen-id contract.
+     *
+     * **Pixel data** is *copied* from the source into [dst]'s typed
+     * backing arrays. Subsequent mutations to either bitmap will not
+     * propagate to the other — kanvas-skia bitmaps own their typed
+     * arrays (see KDoc on [_pixelRef] for the rationale). Tests / GMs
+     * that need true zero-copy sharing should operate on the
+     * [SkPixmap.extractSubset] surface instead (`SkPixmap` is a true
+     * non-owning view).
+     *
+     * Note that `dst` is bound *by reference* — the caller's local
+     * variable is not rewired. Use the returned [SkBitmap] from
+     * `bm.extractSubsetOrNull(rect)` (added below) when a value-style
+     * API is preferred.
+     */
+    public fun extractSubset(dst: SkBitmap, subset: SkIRect): Boolean {
+        val bounds = SkIRect.MakeWH(width, height)
+        val isect = SkIRect.MakeLTRB(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        if (!isect.intersect(subset)) return false
+        val sw = isect.width()
+        val sh = isect.height()
+        if (sw <= 0 || sh <= 0) return false
+        // The dst handle is supplied by the caller — kanvas-skia's
+        // [SkBitmap] is a value type so we can't rebind the variable.
+        // We instead copy the subset's pixels into dst when dst has
+        // matching geometry / colour type ; otherwise we surface this
+        // as a precondition failure (false).
+        if (dst.width != sw || dst.height != sh || dst.colorType != colorType) return false
+
+        // Copy pixel-by-pixel — robust across colour types and avoids
+        // typed-array vs typed-array juggling.
+        for (y in 0 until sh) {
+            for (x in 0 until sw) {
+                val c = getPixel(isect.left + x, isect.top + y)
+                dst.setPixel(x, y, c)
+            }
+        }
+        // Propagate the SkPixelRef so gen-id linkage matches upstream.
+        dst._pixelRef = _pixelRef
+        return true
+    }
+
+    /**
+     * Mirrors `SkBitmap::extractAlpha(SkBitmap*, const SkPaint*, SkIPoint*) const`
+     * ([SkBitmap.h:1145](https://github.com/google/skia/blob/main/include/core/SkBitmap.h#L1145)).
+     *
+     * Re-binds [dst] to an alpha-only ([SkColorType.kAlpha_8]) copy of
+     * `this`. [dst] must already be sized to `(width, height)` (or
+     * larger when [paint] would introduce a mask-blur margin —
+     * unsupported, see below) and have `kAlpha_8` storage.
+     *
+     * **Paint handling (limited)** : if [paint] carries a
+     * [SkMaskFilter], the upstream code calls into the mask-filter
+     * pipeline to widen the alpha. Kanvas-skia hasn't ported that
+     * branch yet — we return `false` and leave [dst] untouched.
+     * Mask-filter-free [paint]s (and `null`) take the straight
+     * alpha-extract path : copy the source's alpha channel into
+     * [dst]'s `pixelsA8`.
+     *
+     * On success, [offset] (if non-`null`) is set to `(0, 0)` — the
+     * straight alpha-extract path doesn't shift the origin (the
+     * mask-filter branch is the only one that does, and we early-return
+     * there).
+     */
+    public fun extractAlpha(
+        dst: SkBitmap,
+        paint: SkPaint? = null,
+        offset: SkIPoint? = null,
+    ): Boolean {
+        // TODO(phase-R2-followup): support paint.maskFilter — Skia
+        // widens the alpha via SkMaskFilter::filterMask, which requires
+        // the blur-mask pipeline. Until then we report failure so
+        // callers can detect the gap rather than silently get the
+        // un-blurred alpha.
+        if (paint?.maskFilter != null) return false
+        if (dst.width != width || dst.height != height) return false
+        if (dst.colorType != SkColorType.kAlpha_8) return false
+
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val a = SkColorGetA(getPixel(x, y))
+                dst.pixelsA8[y * width + x] = a.toByte()
+            }
+        }
+        offset?.set(0, 0)
+        return true
+    }
+
+    /**
+     * Mirrors `SkBitmap::peekPixels(SkPixmap*) const`
+     * ([SkBitmap.h:1179](https://github.com/google/skia/blob/main/include/core/SkBitmap.h#L1179)).
+     *
+     * Fills [pixmap] with this bitmap's info / addr / rowBytes when an
+     * externally-attached buffer is available ([installPixels] has been
+     * called). Returns `false` when no buffer is attached — typed-array-
+     * only bitmaps don't have a `void*` to hand out (kanvas-skia's
+     * authoritative pixel store is the colour-typed array, not a byte
+     * buffer).
+     *
+     * Callers that need byte-level access on every bitmap should use
+     * [getPixel] / [getPixelF16] or build their own [SkPixmap] view over
+     * the typed array.
+     */
+    public fun peekPixels(pixmap: SkPixmap): Boolean {
+        val ref = _pixelRef ?: return false
+        val info = SkImageInfo.Make(width, height, colorType,
+            colorSpace = colorSpace)
+        pixmap.reset(info, ref.pixels(), ref.rowBytes())
+        return true
+    }
 
     public companion object {
         public fun Make(w: Int, h: Int): SkBitmap = SkBitmap(w, h)
