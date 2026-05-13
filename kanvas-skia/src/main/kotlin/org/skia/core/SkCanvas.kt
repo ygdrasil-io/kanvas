@@ -19,6 +19,7 @@ import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextEncoding
 import org.skia.math.SkIRect
+import org.skia.math.SkM44
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
@@ -63,6 +64,24 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         var matrix: SkMatrix,
         var clip: SkIRect,
         var device: SkBitmapDevice,
+        /**
+         * R3.1-bis — full 4×4 CTM, **only** populated when an actual
+         * 3D/perspective component has been introduced via
+         * [concat] / [setMatrix] overloads taking an [SkM44]. When
+         * `null`, the 3×3 [matrix] field is the authoritative CTM and
+         * every 2D fast path keeps using it as before. Any 2D matrix
+         * mutator ([translate], [scale], [rotate], [skew], the
+         * `concat(SkMatrix)` / `setMatrix(SkMatrix)` overloads,
+         * [resetMatrix]) clears this slot — the 4×4 representation is
+         * derived on demand from [matrix] in [getLocalToDevice] when
+         * the slot is empty.
+         *
+         * Wiring the 4×4 into the rasteriser is out of scope for
+         * R3.1-bis ; this field is purely an API-surface store so
+         * `getLocalToDevice()` round-trips a previously-set
+         * perspective matrix.
+         */
+        var m44: SkM44? = null,
         /** Non-null iff this state was opened by `saveLayer`. */
         var layer: Layer? = null,
         /**
@@ -109,8 +128,24 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
 
     private val top: State get() = stack.last()
 
-    /** Read-only access to the current CTM. */
-    public open fun getTotalMatrix(): SkMatrix = top.matrix
+    /**
+     * Read-only access to the current CTM as a 3×3 [SkMatrix].
+     *
+     * **Deprecated** — mirrors Skia's
+     * [`SkCanvas::getTotalMatrix`](https://github.com/google/skia/blob/main/include/core/SkCanvas.h#L2288)
+     * (gated by `SK_SUPPORT_LEGACY_GETTOTALMATRIX` upstream). New
+     * code should call [getLocalToDevice] (full 4×4) or
+     * [getLocalToDeviceAsMatrix] (3×3 affine, null on perspective).
+     *
+     * Returns the 3×3 drop of [getLocalToDevice], falling back to the
+     * identity matrix if the 4×4 has no defined 3×3 image. Retained
+     * for upstream API parity and existing internal call sites.
+     */
+    @Deprecated(
+        message = "Use getLocalToDevice() (SkM44) or getLocalToDeviceAsMatrix() (SkMatrix?).",
+        replaceWith = ReplaceWith("getLocalToDevice()"),
+    )
+    public open fun getTotalMatrix(): SkMatrix = getLocalToDevice().asM33() ?: SkMatrix.Identity
 
     /**
      * Current clip bounds in **device** coordinates — i.e. the
@@ -152,6 +187,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         // path's own AA clip), so the parent's stays untouched.
         stack.addLast(State(
             s.matrix, s.clip.copy(), s.device,
+            m44 = s.m44?.let { SkM44(it) },
             aaClip = s.aaClip,
             clipShader = s.clipShader,
             clipShaderCtm = s.clipShaderCtm,
@@ -226,17 +262,20 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     public open fun translate(dx: SkScalar, dy: SkScalar) {
         val s = top
         s.matrix = s.matrix.preTranslate(dx, dy)
+        s.m44 = null
     }
 
     public open fun scale(sx: SkScalar, sy: SkScalar) {
         val s = top
         s.matrix = s.matrix.preScale(sx, sy)
+        s.m44 = null
     }
 
     /** Mirrors Skia's `SkCanvas::rotate(deg)` — pre-concat with a rotation around the origin. */
     public open fun rotate(deg: SkScalar) {
         val s = top
         s.matrix = s.matrix.preRotate(deg)
+        s.m44 = null
     }
 
     /**
@@ -246,30 +285,118 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     public open fun rotate(deg: SkScalar, px: SkScalar, py: SkScalar) {
         val s = top
         s.matrix = s.matrix.preRotate(deg, px, py)
+        s.m44 = null
     }
 
     /** Mirrors Skia's `SkCanvas::skew(sx, sy)` — pre-concat with a skew. */
     public open fun skew(sx: SkScalar, sy: SkScalar) {
         val s = top
         s.matrix = s.matrix.preSkew(sx, sy)
+        s.m44 = null
     }
 
     /** Mirrors Skia's `SkCanvas::concat(SkMatrix)` — pre-concat with `mat`. */
     public open fun concat(mat: SkMatrix) {
         val s = top
         s.matrix = s.matrix.preConcat(mat)
+        s.m44 = null
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::concat(const SkM44&)` — post-concat the
+     * current 4×4 CTM with [m44].
+     *
+     * If the canvas's CTM is still purely affine (no prior
+     * `concat(SkM44)` / `setMatrix(SkM44)` with perspective), the
+     * existing 3×3 [SkMatrix] is promoted to an [SkM44] first via
+     * [SkM44.setM33], then `this · m44` is stored in the per-state
+     * slot. Skia's `concat` is a *pre-multiply* (the new transform
+     * applies *before* the existing CTM in mapping order) — see
+     * `SkCanvas::concat44` in `src/core/SkCanvas.cpp`.
+     *
+     * The 3×3 [State.matrix] field is also refreshed (via
+     * [SkM44.asM33]) so existing 2D draw paths keep working for the
+     * affine subset.
+     */
+    public open fun concat(m44: SkM44) {
+        val s = top
+        val current = s.m44 ?: SkM44(s.matrix)
+        // Pre-multiply: this = current · m44 (i.e. m44 applies first).
+        current.preConcat(m44)
+        s.m44 = current
+        // Keep the legacy 3×3 in sync — the rasteriser still reads it
+        // for the affine fast paths. Perspective info that would not
+        // round-trip is intentionally dropped here (mapped via asM33)
+        // but the full 4×4 is preserved in `m44`.
+        s.matrix = current.asM33() ?: SkMatrix.Identity
     }
 
     /** Mirrors Skia's `SkCanvas::setMatrix(SkMatrix)` — replaces the CTM wholesale. */
     public open fun setMatrix(mat: SkMatrix) {
         val s = top
         s.matrix = mat
+        s.m44 = null
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::setMatrix(const SkM44&)` — replaces the
+     * CTM with [m44]. Any prior matrix state (including 4×4
+     * perspective) is overwritten.
+     */
+    public open fun setMatrix(m44: SkM44) {
+        val s = top
+        s.m44 = SkM44(m44)
+        s.matrix = m44.asM33() ?: SkMatrix.Identity
     }
 
     /** Mirrors Skia's `SkCanvas::resetMatrix()`. */
     public open fun resetMatrix() {
         val s = top
         s.matrix = SkMatrix.Identity
+        s.m44 = null
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::getLocalToDevice()` — return the full
+     * 4×4 CTM, including any perspective / Z component installed via
+     * the [SkM44] overloads. When no [SkM44] is active in the current
+     * state, the 3×3 [SkMatrix] is promoted on the fly.
+     */
+    public open fun getLocalToDevice(): SkM44 {
+        val s = top
+        return s.m44?.let { SkM44(it) } ?: SkM44(s.matrix)
+    }
+
+    /**
+     * Return the 3×3 affine drop of the current CTM, or `null` if the
+     * CTM carries true 3D / perspective content that would not survive
+     * the projection. Mirrors Skia's
+     * `SkCanvas::getLocalToDeviceAs3x3()`, but Kotlin-nullable so the
+     * caller can detect perspective without inspecting the matrix
+     * itself.
+     *
+     * The CTM is treated as "perspective" when any of the following
+     * 4×4 entries diverge from their identity values:
+     *  * column 2 = `(0, 0, 1, 0)` (z-output stays at z);
+     *  * row 2    = `(0, 0, 1, 0)` (z-input is ignored);
+     *  * the bottom row's z entry (`fMat[11]`) is non-zero (z
+     *    contributes to the homogeneous divide).
+     *
+     * When only [SkMatrix]-shaped perspective is present (`persp0`,
+     * `persp1`, `persp2`), the M44 still round-trips through 3×3 so
+     * this method returns the affine version.
+     */
+    public open fun getLocalToDeviceAsMatrix(): SkMatrix? {
+        val s = top
+        val m = s.m44 ?: return s.matrix
+        // True 3D / perspective sentinel: any of the M44 entries that
+        // wouldn't survive `asM33()` round-tripping for a (x, y, 0, 1)
+        // input are non-default.
+        val r = m.fMat
+        val isFlat =
+            r[2]  == 0f && r[6]  == 0f && r[10] == 1f && r[14] == 0f &&
+            r[8]  == 0f && r[9]  == 0f && r[11] == 0f
+        return if (isFlat) m.asM33() else null
     }
 
     /**
