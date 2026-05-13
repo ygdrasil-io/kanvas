@@ -666,6 +666,7 @@ public class SkRegion private constructor(
                         hasContour = false
                     }
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         if (hasContour) addEdgeIfNonHorizontal(out, px, py, cx, cy)

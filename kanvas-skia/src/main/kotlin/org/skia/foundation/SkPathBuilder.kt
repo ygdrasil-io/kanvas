@@ -838,6 +838,7 @@ public class SkPathBuilder public constructor() {
                     )
                 }
                 SkPath.Verb.kClose -> close()
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
     }
@@ -895,6 +896,7 @@ public class SkPathBuilder public constructor() {
                     cubicTo(x1, y1, x2, y2, x3, y3)
                 }
                 SkPath.Verb.kClose -> close()
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
     }

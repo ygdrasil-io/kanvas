@@ -329,6 +329,7 @@ public class SkContourMeasureIter {
                     break
                 }
                 SkPath.Verb.kMove -> error("unreachable") // loop guard already exits.
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
             if (v != SkPath.Verb.kClose) verbIndex++
         }
@@ -368,6 +369,7 @@ public class SkContourMeasureIter {
             SkPath.Verb.kConic -> { coordIndex += 4; weightIndex++ }
             SkPath.Verb.kCubic -> coordIndex += 6
             SkPath.Verb.kClose -> { /* no points */ }
+            SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
         }
         verbIndex++
     }

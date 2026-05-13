@@ -269,6 +269,7 @@ class SkPath1DPathEffectMorphTest {
                     out.add(x to y)
                 }
                 SkPath.Verb.kClose -> { /* no coords consumed */ }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         return out

@@ -425,6 +425,7 @@ internal fun flattenContours(
             SkPath.Verb.kClose -> {
                 if (hasContour) finalize(closed = true)
             }
+            SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
         }
     }
     if (hasContour) finalize(closed = false)

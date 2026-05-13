@@ -89,6 +89,7 @@ public class SkDiscretePathEffect private constructor(
                     penX = contourStartX; penY = contourStartY
                     emittedPenInContour = false
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         // Touching `emittedPenInContour` keeps the local-var unused

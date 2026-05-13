@@ -889,18 +889,18 @@ internal class PdfDocument(
      * Phase R-suivi.39 — walk the path verbs and emit native PDF
      * operators :
      *
-     *  - [SkPath.IterVerb.kMoveVerb] → `x y m`
-     *  - [SkPath.IterVerb.kLineVerb] → `x y l`
-     *  - [SkPath.IterVerb.kQuadVerb] → degree-elevated to a cubic
+     *  - [SkPath.Verb.kMove] → `x y m`
+     *  - [SkPath.Verb.kLine] → `x y l`
+     *  - [SkPath.Verb.kQuad] → degree-elevated to a cubic
      *    `c1 c2 e c` ; standard formula
      *    `cubic = (p0, p0 + 2/3·(p1−p0), p2 + 2/3·(p1−p2), p2)`.
-     *  - [SkPath.IterVerb.kCubicVerb] → `c1 c2 e c`
-     *  - [SkPath.IterVerb.kConicVerb] → subdivided into 4 quads via De
+     *  - [SkPath.Verb.kCubic] → `c1 c2 e c`
+     *  - [SkPath.Verb.kConic] → subdivided into 4 quads via De
      *    Casteljau then each promoted to a cubic. The result is a
      *    visually-close cubic approximation (max error scales with the
      *    sharpness of the conic ; 4 segments is enough for the typical
      *    rounded-rect / arc use cases seen in GMs).
-     *  - [SkPath.IterVerb.kCloseVerb] → `h`
+     *  - [SkPath.Verb.kClose] → `h`
      */
     private fun appendPathVerbs(sb: StringBuilder, path: SkPath, pageHeight: Float) {
         val iter = SkPath.Iter(path, false)
@@ -908,15 +908,15 @@ internal class PdfDocument(
         while (true) {
             val verb = iter.next(pts)
             when (verb) {
-                SkPath.IterVerb.kMoveVerb -> {
+                SkPath.Verb.kMove -> {
                     sb.append(formatNum(pts[0])).append(' ')
                         .append(formatNum(pageHeight - pts[1])).append(" m\n")
                 }
-                SkPath.IterVerb.kLineVerb -> {
+                SkPath.Verb.kLine -> {
                     sb.append(formatNum(pts[2])).append(' ')
                         .append(formatNum(pageHeight - pts[3])).append(" l\n")
                 }
-                SkPath.IterVerb.kQuadVerb -> {
+                SkPath.Verb.kQuad -> {
                     // Degree-elevate quadratic (p0, p1, p2) to cubic
                     // (p0, p0 + 2/3·(p1−p0), p2 + 2/3·(p1−p2), p2).
                     val p0x = pts[0]; val p0y = pts[1]
@@ -928,10 +928,10 @@ internal class PdfDocument(
                     val c2y = p2y + 2f / 3f * (p1y - p2y)
                     appendCubic(sb, c1x, c1y, c2x, c2y, p2x, p2y, pageHeight)
                 }
-                SkPath.IterVerb.kCubicVerb -> {
+                SkPath.Verb.kCubic -> {
                     appendCubic(sb, pts[2], pts[3], pts[4], pts[5], pts[6], pts[7], pageHeight)
                 }
-                SkPath.IterVerb.kConicVerb -> {
+                SkPath.Verb.kConic -> {
                     // Subdivide the rational quadratic into N quads via
                     // uniform-t evaluation in homogeneous space, then
                     // degree-elevate each quad to a cubic. 4 segments
@@ -942,8 +942,8 @@ internal class PdfDocument(
                         iter.conicWeight(), pageHeight,
                     )
                 }
-                SkPath.IterVerb.kCloseVerb -> sb.append("h\n")
-                SkPath.IterVerb.kDoneVerb -> return
+                SkPath.Verb.kClose -> sb.append("h\n")
+                SkPath.Verb.kDone -> return
             }
         }
     }

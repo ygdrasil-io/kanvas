@@ -121,6 +121,7 @@ public class SkCornerPathEffect private constructor(
                     contourClosed = false
                     contourStartX = ex; contourStartY = ey
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         // Final flush for the trailing (potentially open) polyline.

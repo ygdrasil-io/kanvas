@@ -235,6 +235,7 @@ internal class SkOpEdgeBuilder(
                     closeContour(curve[0], curveStart)
                     lastCurve = false
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         if (!fAllowOpenContours && lastCurve) closeContour(curve[0], curveStart)
@@ -296,6 +297,7 @@ internal class SkOpEdgeBuilder(
                     ptIdx += 3
                 }
                 SkPath.Verb.kClose -> if (!close()) return false
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         fContourBuilder.flush()
