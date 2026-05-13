@@ -157,6 +157,60 @@ public class SkColorSpace private constructor(
         public fun makeSRGBLinear(): SkColorSpace = sRGBLinearSingleton
 
         /**
+         * Create the canonical sRGB color space. Mirror of upstream
+         * `static sk_sp<SkColorSpace> SkColorSpace::MakeSRGB()`
+         * ([include/core/SkColorSpace.h:279](file:///Users/chaos/workspace/kanvas-forge/skia-main/include/core/SkColorSpace.h)).
+         * Returns the cached singleton (same instance as [makeSRGB]).
+         *
+         * R2.19 — PascalCase factory mirror of the C++ static naming
+         * convention.
+         */
+        public fun MakeSRGB(): SkColorSpace = sRGBSingleton
+
+        /**
+         * Create an sRGB-gamut color space with linear (`g=1`) transfer
+         * function. Mirror of upstream
+         * `static sk_sp<SkColorSpace> SkColorSpace::MakeSRGBLinear()`
+         * ([include/core/SkColorSpace.h:284](file:///Users/chaos/workspace/kanvas-forge/skia-main/include/core/SkColorSpace.h)).
+         * Returns the cached singleton (same instance as [makeSRGBLinear]).
+         */
+        public fun MakeSRGBLinear(): SkColorSpace = sRGBLinearSingleton
+
+        /**
+         * Create an `SkColorSpace` from an [SkColorSpaceTransferFn] and
+         * an [SkColorSpacePrimaries] gamut descriptor. Mirror of upstream
+         * `static sk_sp<SkColorSpace> SkColorSpace::MakeRGB(const skcms_TransferFunction&, const skcms_Matrix3x3&)`
+         * ([include/core/SkColorSpace.h:289](file:///Users/chaos/workspace/kanvas-forge/skia-main/include/core/SkColorSpace.h)) ;
+         * the only difference is that this overload accepts the gamut
+         * as primaries (the more user-friendly representation) and
+         * derives the `toXYZD50` matrix internally via
+         * [SkColorSpacePrimaries.toXYZD50].
+         *
+         * Returns `null` if the transfer function is invalid (matches
+         * [makeRGB]'s contract) or if the primaries are degenerate
+         * (the implied `toXYZD50` matrix would be singular).
+         *
+         * R2.19.
+         */
+        public fun MakeRGB(
+            transferFn: SkColorSpaceTransferFn,
+            gamut: SkColorSpacePrimaries,
+        ): SkColorSpace? {
+            val toXYZ = gamut.toXYZD50() ?: return null
+            return makeRGB(transferFn.toSkcms(), toXYZ)
+        }
+
+        /**
+         * Convenience overload of [MakeRGB] that takes a `skcms`
+         * matrix directly (no intermediate primaries conversion).
+         * Delegates to [makeRGB].
+         */
+        public fun MakeRGB(
+            transferFn: SkColorSpaceTransferFn,
+            toXYZ: SkcmsMatrix3x3,
+        ): SkColorSpace? = makeRGB(transferFn.toSkcms(), toXYZ)
+
+        /**
          * Create an `SkColorSpace` from CICP code points (ITU-T H.273
          * tables 2 and 3). Returns `null` if either id is not in the
          * supported tables, or if `MakeRGB` rejects the resulting
