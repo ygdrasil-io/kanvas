@@ -14,13 +14,12 @@ import org.skia.core.SkPicture
  * serialiser", matching upstream's contract for a `null` function
  * pointer.
  *
- * **Status — surface only** : the per-object serialiser machinery
- * (`SkPicture.serialize(procs)`, `SkPicture.MakeFromData(data,
- * procs)`, `SkImage::Make*Encoded(procs)`) is **not** consumed by
- * the R2 batch — only the configuration struct is exposed so a
- * downstream port that needs to *declare* a hook can compile. The
- * matching consumption is scheduled for the picture-serialisation
- * slice (out of scope here, tracked in R-suivi).
+ * **Status — R-suivi.22 / S6-C** : the [image] / [picture] /
+ * [typeface] procs are wired through [SkPicture.serialize] /
+ * [SkPicture.MakeFromData] — each fires once per embedded blob,
+ * with its `*Ctx` threaded through. `SkImage::Make*Encoded(procs)`
+ * is still surface-only — that lives further upstream of the
+ * picture path.
  *
  * **Field shape** — each "proc" is a `(object, ctx) → SkData?`
  * function ; `imageCtx` / `pictureCtx` / `typefaceCtx` carry the
@@ -38,14 +37,16 @@ public data class SkSerialProcs(
     val image: ((SkImage, Any?) -> SkData?)? = null,
     /**
      * Mirror of `SkSerialPictureProc`. Called when a nested picture
-     * is reached during serialisation ; return `null` to use
-     * upstream's internal format.
+     * is reached during serialisation ; return `null` to fall back
+     * to the recursive default (`subPicture.serialize(procs)`).
+     * Wired through [SkPicture.serialize] as of R-suivi.22 / S6-C.
      */
     val picture: ((SkPicture, Any?) -> SkData?)? = null,
     /**
      * Mirror of `SkSerialTypefaceProc`. Called when a typeface is
-     * encountered ; return `null` to use upstream's internal
-     * typeface stream.
+     * encountered ; return `null` to emit a zero-length placeholder
+     * blob (no default typeface serialiser is wired yet — see
+     * R-suivi). Reached via every text-bearing record's font.
      */
     val typeface: ((SkTypeface, Any?) -> SkData?)? = null,
     /** Opaque context handed to [image]. Matches upstream's `fImageCtx`. */
@@ -66,9 +67,9 @@ public data class SkSerialProcs(
  * to Skia's default decoder, exactly mirroring upstream's contract
  * for a `null` function pointer.
  *
- * Same R2 caveat as [SkSerialProcs] — the surface is exposed so
- * call sites that *declare* a deserialisation hook can compile, but
- * `SkPicture.MakeFromData(data, procs)` doesn't consume it yet.
+ * Wired through [SkPicture.MakeFromData] as of R-suivi.22 / S6-C —
+ * each proc fires once per encoded blob, in encounter order, with
+ * its `*Ctx` threaded through.
  */
 public data class SkDeserialProcs(
     /**
