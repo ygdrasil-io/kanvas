@@ -2,6 +2,8 @@ package org.skia.utils
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkDrawable
+import org.skia.core.SkLattice
+import org.skia.core.SkPicture
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
@@ -16,9 +18,12 @@ import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextEncoding
+import org.skia.foundation.SkTextSlug
 import org.skia.foundation.SkVertices
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix
+import org.skia.math.SkPoint
+import org.skia.math.SkPoint3
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 
@@ -170,6 +175,36 @@ public open class SkNoDrawCanvas(
     override fun drawDrawable(drawable: SkDrawable, x: SkScalar, y: SkScalar) {}
 
     override fun drawAnnotation(rect: SkRect, key: String, value: ByteArray?) {}
+
+    // ─── R-suivi.50 — drawShadow / drawSlug / drawImageLattice / drawPicture ─
+    // No-op overrides : analysis passes shouldn't trigger the base-class
+    // delegation to SkShadowUtils / picture playback / drawTextBlob.
+
+    override fun drawShadow(
+        path: SkPath,
+        zPlaneParams: SkPoint3,
+        lightPos: SkPoint3,
+        lightRadius: SkScalar,
+        ambientColor: SkColor,
+        spotColor: SkColor,
+        flags: Int,
+    ) {}
+
+    override fun drawSlug(slug: SkTextSlug, origin: SkPoint) {}
+
+    override fun drawImageLattice(
+        image: SkImage,
+        lattice: SkLattice,
+        dst: SkRect,
+        filterMode: SkFilterMode,
+        paint: SkPaint?,
+    ) {}
+
+    override fun drawPicture(
+        picture: SkPicture,
+        matrix: SkMatrix?,
+        paint: SkPaint?,
+    ) {}
 
     // Note: clipRect / clipPath / clipRRect / clipRegion / clipShader are
     // *not* overridden — SkNoDrawCanvas keeps an accurate clip stack so
