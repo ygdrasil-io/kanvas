@@ -355,6 +355,15 @@ internal class AwtTypeface internal constructor(
     }
 
     /**
+     * Returns true if the AWT [baseFont] reports a glyph for the given
+     * Unicode codepoint. Used by [org.skia.foundation.awt.JvmAwtFontMgr]
+     * to walk the per-script fallback chain in
+     * [org.skia.foundation.SkFontMgr.matchFamilyStyleCharacter].
+     */
+    internal fun canDisplayCodepoint(codepoint: Int): Boolean =
+        baseFont.canDisplay(codepoint)
+
+    /**
      * Phase I4.2 — shape one bidi run via `Font.layoutGlyphVector(...,
      * Font.LAYOUT_LEFT_TO_RIGHT | LAYOUT_RIGHT_TO_LEFT)`, AWT's bidi-
      * aware shaping entry point. AWT performs basic kerning + ligature
