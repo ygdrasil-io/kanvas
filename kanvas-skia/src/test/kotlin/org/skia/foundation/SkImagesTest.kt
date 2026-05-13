@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.skia.codec.SkEncodedImageFormat
-import org.skia.encode.encodeToData
 import java.nio.ByteBuffer
 
 /**
@@ -112,7 +111,9 @@ class SkImagesTest {
             source.pixels[y * 4 + x] =
                 (0xFF shl 24) or ((x * 50) shl 16) or ((y * 60) shl 8) or 0x40
         }
-        val pngBytes = source.asImage().encodeToData(SkEncodedImageFormat.kPNG)!!
+        val pngBytes = source.asImage()
+            .encodeToData(SkEncodedImageFormat.kPNG, quality = 100)!!
+            .toByteArray()
         val image = SkImages.DeferredFromEncodedData(ByteBuffer.wrap(pngBytes))
         assertNotNull(image)
         assertEquals(4, image!!.width)
