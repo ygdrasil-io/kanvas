@@ -50,20 +50,20 @@ class SkCanvasWrappersTest {
     fun `NoDrawCanvas keeps the matrix and clip stack accurate`() {
         val canvas = SkNoDrawCanvas(800, 600)
         // Before any state ops : identity.
-        assertTrue(canvas.getTotalMatrix().isIdentity)
+        assertTrue((canvas.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).isIdentity)
         canvas.translate(50f, 100f)
         // Translate produced a non-identity CTM ; the wrapper sees it
         // via its own state stack (no target to forward to).
-        val m = canvas.getTotalMatrix()
+        val m = (canvas.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity)
         assertFalse(m.isIdentity)
         assertEquals(50f, m.tx)
         assertEquals(100f, m.ty)
         // save / restore restores the previous state.
         val saveCount = canvas.save()
         canvas.scale(2f, 2f)
-        assertNotEquals(50f, canvas.getTotalMatrix().sx) // sx mutated by scale
+        assertNotEquals(50f, (canvas.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).sx) // sx mutated by scale
         canvas.restoreToCount(saveCount)
-        assertEquals(1f, canvas.getTotalMatrix().sx) // back to pre-scale
+        assertEquals(1f, (canvas.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).sx) // back to pre-scale
     }
 
     // ─── SkPaintFilterCanvas ──────────────────────────────────────────
@@ -115,18 +115,18 @@ class SkCanvasWrappersTest {
         val filter = SkPaintFilterCanvas(target) { _ -> true }
         filter.translate(10f, 20f)
         // Both wrapper and target see the translate.
-        assertEquals(10f, filter.getTotalMatrix().tx)
-        assertEquals(20f, filter.getTotalMatrix().ty)
-        assertEquals(10f, target.getTotalMatrix().tx)
-        assertEquals(20f, target.getTotalMatrix().ty)
+        assertEquals(10f, (filter.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).tx)
+        assertEquals(20f, (filter.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).ty)
+        assertEquals(10f, (target.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).tx)
+        assertEquals(20f, (target.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).ty)
         // save / restore round-trip.
         val sc = filter.save()
         filter.scale(2f, 2f)
-        assertEquals(2f, filter.getTotalMatrix().sx)
-        assertEquals(2f, target.getTotalMatrix().sx)
+        assertEquals(2f, (filter.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).sx)
+        assertEquals(2f, (target.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).sx)
         filter.restoreToCount(sc)
-        assertEquals(1f, filter.getTotalMatrix().sx)
-        assertEquals(1f, target.getTotalMatrix().sx)
+        assertEquals(1f, (filter.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).sx)
+        assertEquals(1f, (target.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity).sx)
     }
 
     @Test

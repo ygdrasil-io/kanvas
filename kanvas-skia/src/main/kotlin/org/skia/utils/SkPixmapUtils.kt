@@ -7,7 +7,7 @@ import org.skia.foundation.SkImageInfo
 /**
  * Mirrors Skia's
  * [`SkPixmapUtils`](https://github.com/google/skia/blob/main/include/codec/SkPixmapUtils.h)
- * namespace (R1 port).
+ * namespace (R1 port, R-suivi.9 extension).
  *
  * Two helpers :
  *
@@ -26,14 +26,26 @@ import org.skia.foundation.SkImageInfo
  * + width/height/colourType). Two callers/types end up forwarding through
  * the same code path with no loss of semantics.
  *
- * **R1 origin support** :
- *  - [SkEncodedOrigin.kTopLeft] : identity copy (full coverage).
- *  - [SkEncodedOrigin.kBottomLeft] : vertical flip (reflect across x —
- *    full coverage).
- *  - All other origins : flagged TODO; the call returns `false` and
- *    leaves [dst] untouched. Plumbing the remaining six (180° rotate,
- *    90° rotations, transpose-style reflections) is a follow-up — see
- *    `SkEncodedOriginToMatrix` for the per-origin recipes.
+ * **Origin support (R-suivi.9 complete — all 8 EXIF origins)** :
+ *  - [SkEncodedOrigin.kTopLeft]     : identity copy.
+ *  - [SkEncodedOrigin.kTopRight]    : horizontal flip (reflect across y).
+ *  - [SkEncodedOrigin.kBottomRight] : 180° rotation.
+ *  - [SkEncodedOrigin.kBottomLeft]  : vertical flip (reflect across x).
+ *  - [SkEncodedOrigin.kLeftTop]     : transpose.
+ *  - [SkEncodedOrigin.kRightTop]    : 90° CW rotation.
+ *  - [SkEncodedOrigin.kRightBottom] : anti-transpose (transpose + 180°).
+ *  - [SkEncodedOrigin.kLeftBottom]  : 90° CCW rotation.
+ *
+ * The four origins that include a 90° rotation
+ * ([SkEncodedOrigin.swapsWidthHeight] true) require `dst` to be
+ * pre-allocated with `width = src.height` and `height = src.width`.
+ *
+ * The discrete pixel formulas mirror upstream's
+ * `SkEncodedOriginToMatrix` (see [SkEncodedOrigin.toMatrix]) applied to
+ * the centre of each source pixel : `(sx, sy) → (sx + 0.5, sy + 0.5) →
+ * apply matrix → floor`. For the integer translation components used
+ * by these eight origins, this collapses to the closed-form `(sw-1-sx)`
+ * / `(sh-1-sy)` reflection terms used below.
  */
 public object SkPixmapUtils {
 
@@ -41,16 +53,17 @@ public object SkPixmapUtils {
      * Copy [src] into [dst], applying the orientation transform [origin].
      *
      * Returns `false` (and leaves [dst] unmodified) when :
-     *  - [src] and [dst] don't have compatible dimensions / colour type
-     *    for the requested orientation, or
-     *  - [origin] is one of the 90°-rotated / transposed origins that
-     *    R1 doesn't implement yet.
-     *
-     * **Caller contract** : [dst] must already be allocated. For an
-     * orientation with no width/height swap, `dst.width == src.width` and
-     * `dst.height == src.height`. For a swap-style orientation (currently
-     * unimplemented in R1) callers will eventually need to pre-allocate a
-     * `dst` whose dimensions match [SwapWidthHeight].
+     *  - [src] and [dst] don't have compatible [SkBitmap.colorType], or
+     *  - [src] and [dst] don't have compatible dimensions for the
+     *    requested orientation. Specifically :
+     *      * For an orientation **without** width/height swap, `dst`
+     *        must satisfy `dst.width == src.width` and `dst.height ==
+     *        src.height`.
+     *      * For a swap-style orientation (90° rotation / transpose,
+     *        see [SkEncodedOrigin.swapsWidthHeight]), `dst` must
+     *        satisfy `dst.width == src.height` and `dst.height ==
+     *        src.width` — i.e. the dimensions produced by
+     *        [SwapWidthHeight].
      */
     public fun Orient(dst: SkBitmap, src: SkBitmap, origin: SkEncodedOrigin): Boolean {
         if (dst.colorType != src.colorType) return false
@@ -60,31 +73,76 @@ public object SkPixmapUtils {
             if (dst.width != src.width || dst.height != src.height) return false
         }
 
-        return when (origin) {
+        val sw = src.width
+        val sh = src.height
+
+        when (origin) {
             SkEncodedOrigin.kTopLeft -> {
-                // Identity copy : pixel (x, y) -> (x, y).
-                for (y in 0 until src.height) {
-                    for (x in 0 until src.width) {
-                        dst.setPixel(x, y, src.getPixel(x, y))
+                // Identity copy : (sx, sy) -> (sx, sy).
+                for (sy in 0 until sh) {
+                    for (sx in 0 until sw) {
+                        dst.setPixel(sx, sy, src.getPixel(sx, sy))
                     }
                 }
-                true
+            }
+            SkEncodedOrigin.kTopRight -> {
+                // Horizontal flip : (sx, sy) -> (sw-1-sx, sy).
+                for (sy in 0 until sh) {
+                    for (sx in 0 until sw) {
+                        dst.setPixel(sw - 1 - sx, sy, src.getPixel(sx, sy))
+                    }
+                }
+            }
+            SkEncodedOrigin.kBottomRight -> {
+                // 180° rotation : (sx, sy) -> (sw-1-sx, sh-1-sy).
+                for (sy in 0 until sh) {
+                    for (sx in 0 until sw) {
+                        dst.setPixel(sw - 1 - sx, sh - 1 - sy, src.getPixel(sx, sy))
+                    }
+                }
             }
             SkEncodedOrigin.kBottomLeft -> {
-                // Reflected across x : pixel (x, y) -> (x, h-1-y).
-                val h = src.height
-                for (y in 0 until h) {
-                    for (x in 0 until src.width) {
-                        dst.setPixel(x, h - 1 - y, src.getPixel(x, y))
+                // Vertical flip : (sx, sy) -> (sx, sh-1-sy).
+                for (sy in 0 until sh) {
+                    for (sx in 0 until sw) {
+                        dst.setPixel(sx, sh - 1 - sy, src.getPixel(sx, sy))
                     }
                 }
-                true
             }
-            // TODO(R1 follow-up) implement the remaining six origins :
-            //   kTopRight, kBottomRight (in-place reflections)
-            //   kLeftTop, kRightTop, kRightBottom, kLeftBottom (90° rotations)
-            else -> false
+            SkEncodedOrigin.kLeftTop -> {
+                // Transpose : (sx, sy) -> (sy, sx). dst is (sh, sw).
+                for (sy in 0 until sh) {
+                    for (sx in 0 until sw) {
+                        dst.setPixel(sy, sx, src.getPixel(sx, sy))
+                    }
+                }
+            }
+            SkEncodedOrigin.kRightTop -> {
+                // 90° CW rotation : (sx, sy) -> (sh-1-sy, sx). dst is (sh, sw).
+                for (sy in 0 until sh) {
+                    for (sx in 0 until sw) {
+                        dst.setPixel(sh - 1 - sy, sx, src.getPixel(sx, sy))
+                    }
+                }
+            }
+            SkEncodedOrigin.kRightBottom -> {
+                // Anti-transpose (transpose + 180°) : (sx, sy) -> (sh-1-sy, sw-1-sx). dst is (sh, sw).
+                for (sy in 0 until sh) {
+                    for (sx in 0 until sw) {
+                        dst.setPixel(sh - 1 - sy, sw - 1 - sx, src.getPixel(sx, sy))
+                    }
+                }
+            }
+            SkEncodedOrigin.kLeftBottom -> {
+                // 90° CCW rotation : (sx, sy) -> (sy, sw-1-sx). dst is (sh, sw).
+                for (sy in 0 until sh) {
+                    for (sx in 0 until sw) {
+                        dst.setPixel(sy, sw - 1 - sx, src.getPixel(sx, sy))
+                    }
+                }
+            }
         }
+        return true
     }
 
     /**

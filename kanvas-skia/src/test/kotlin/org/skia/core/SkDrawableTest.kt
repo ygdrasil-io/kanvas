@@ -105,10 +105,10 @@ class SkDrawableTest {
     fun `drawDrawable preserves the canvas CTM after return`() {
         val canvas = SkCanvas(bitmap())
         canvas.translate(7f, 11f)
-        val ctmBefore = canvas.getTotalMatrix()
+        val ctmBefore = (canvas.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity)
         val d = RectDrawable(SkRect.MakeXYWH(0f, 0f, 1f, 1f), SK_ColorBLACK)
         canvas.drawDrawable(d, SkMatrix.MakeTrans(100f, 200f))
-        val ctmAfter = canvas.getTotalMatrix()
+        val ctmAfter = (canvas.getLocalToDeviceAsMatrix() ?: SkMatrix.Identity)
         assertEquals(ctmBefore.tx, ctmAfter.tx, 0.0001f, "tx must be preserved across drawDrawable")
         assertEquals(ctmBefore.ty, ctmAfter.ty, 0.0001f, "ty must be preserved across drawDrawable")
     }

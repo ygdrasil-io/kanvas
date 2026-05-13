@@ -46,7 +46,7 @@ import java.util.Locale
  *  - CTM : every draw with a non-identity matrix gets a
  *    `transform="matrix(a b c d e f)"` attribute. We do **not** emit
  *    `<g>` wrappers per `save()` / `restore()` in this slice — the
- *    state stack is still tracked for [getTotalMatrix] correctness,
+ *    state stack is still tracked for [getLocalToDevice] correctness,
  *    and B2.3 (clip) will introduce wrappers where they make sense.
  *  - SkPath verbs : `kMove → M`, `kLine → L`, `kQuad → Q`, `kCubic →
  *    C`, `kClose → Z`. `kConic` is approximated by splitting into
@@ -269,7 +269,7 @@ public open class SkSVGCanvas(
      * CTMs omit the attr to keep the SVG readable.
      */
     private fun appendClipTransform(out: Writer) {
-        val m = getTotalMatrix()
+        val m = getLocalToDeviceAsMatrix() ?: SkMatrix.Identity
         if (!m.isIdentity) {
             out.append(" transform=\"").append(matrixToSvg(m)).append('"')
         }
@@ -379,7 +379,7 @@ public open class SkSVGCanvas(
         // all read `href` natively today (SVG 2.0+ default), so we
         // emit just `href` to keep the file readable.
         out.append(" href=\"").append(dataUrl).append('"')
-        val m = getTotalMatrix()
+        val m = getLocalToDeviceAsMatrix() ?: SkMatrix.Identity
         if (!m.isIdentity) {
             out.append(" transform=\"").append(matrixToSvg(m)).append('"')
         }
@@ -514,7 +514,7 @@ public open class SkSVGCanvas(
             out.append(' ').append(paintAttrs)
         }
         // CTM as a per-draw transform attr when non-identity.
-        val m = getTotalMatrix()
+        val m = getLocalToDeviceAsMatrix() ?: SkMatrix.Identity
         if (!m.isIdentity) {
             out.append(' ').append("transform=\"").append(matrixToSvg(m)).append('"')
         }

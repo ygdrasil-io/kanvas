@@ -779,7 +779,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 6. **R-suivi.6** `SkGraphics` : stubs sur les getters de cache (`GetResourceCacheTotalBytesUsed` → 0). À câbler quand un cache réel sera introduit.
 7. **R-suivi.7** `SkPathUtils.FillPathWithPaint` : argument `cullRect` ignoré (pas de knob `cullRect` sur `SkPathEffect` actuel). À reprendre quand l'API `SkPathEffect.filterPath(..., cullRect)` est complète.
 8. **R-suivi.8** `SkTiledImageUtils` : thin shim sur `SkCanvas.drawImage` — pas de tiling effectif. Pertinent si support GPU est ajouté ou pour cas où l'image dépasse 2 Go.
-9. **R-suivi.9** `SkPixmapUtils.Orient` : seuls `kTopLeft` (identity) et `kBottomLeft` (vertical flip) implémentés. **TODO** : `kTopRight`, `kBottomRight`, `kLeftTop`, `kRightTop`, `kRightBottom`, `kLeftBottom` (6/8 origins EXIF).
+9. ✅ **R-suivi.9** `SkPixmapUtils.Orient` : les 8 origines EXIF sont câblées (PR R-suivi batch S1-C). `kTopRight` / `kBottomRight` / `kBottomLeft` / `kTopLeft` + rotations/transpose `kLeftTop` / `kRightTop` / `kRightBottom` / `kLeftBottom`. Test `SkPixmapUtilsOrientAllOriginsTest` couvre les 8 mappings sur un bitmap 4×4 + un cas de mismatch swap-style.
 10. **R-suivi.10** `SkNoDrawCanvas` (utilisé par `SkNWayCanvas`) — vérifier la complétude des overrides protégés.
 
 **Ajouts batch 3 (R2.3 → R2.10)** :
@@ -813,7 +813,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 
 **Ajouts batch 7 (R3.1-bis, R3.4, R3.7)** :
 
-28. **R-suivi.28** `@Deprecated getTotalMatrix()` génère warnings sur 8 call-sites (`SkAutoCanvasRestoreTest`, `SkDrawableTest`, `SkPictureTest`, `SkCanvasWrappersTest`, `SkSVGCanvas`, `SkRecordingCanvas`, `SkNoDrawCanvas`, `SkPaintFilterCanvas`). Migration vers `getLocalToDevice()` / `getLocalToDeviceAsMatrix()`.
+28. ✅ **R-suivi.28** `@Deprecated getTotalMatrix()` migration (PR R-suivi batch S1-C). Call-sites tests (`SkAutoCanvasRestoreTest`, `SkDrawableTest`, `SkPictureTest`, `SkCanvasWrappersTest`) et `SkSVGCanvas` migrés vers `getLocalToDeviceAsMatrix() ?: SkMatrix.Identity`. Les wrappers `SkRecordingCanvas` / `SkNoDrawCanvas` / `SkPaintFilterCanvas` / `SkOverdrawCanvas` ne contenaient que des références doc (KDoc), pas d'appels deprecated. `SkCanvasSkM44Test` conserve un appel intentionnel sous `@Suppress("DEPRECATION")`. 0 deprecation warning restant sur `compileKotlin` / `compileTestKotlin`.
 29. **R-suivi.29** `SkStream` : `peek`, `duplicate`, classe `SkStreamMemory` distincte non portés (non référencés par l'API surface kanvas-skia). À revisiter si un consommateur futur en a besoin.
 30. **R-suivi.30** `SkShadowUtils.DrawShadow` : implémentation **blur-based** (non analytic-mesh). `kGeometricOnly_ShadowFlag` no-op. Per-pixel parity non garantie.
 31. **R-suivi.31** `SkShadowUtils.DrawShadow` : `zPlaneParams` évalué au centroïde, pas par-vertex.
