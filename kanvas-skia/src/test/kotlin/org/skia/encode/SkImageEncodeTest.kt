@@ -13,14 +13,20 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
 
 /**
- * D3.6 verification suite for [SkImage.encodeToData].
+ * D3.6 / R2.12 verification suite for `SkImage::encodeToData`.
  *
- * Covers the convenience-wrapper contract :
+ * Phase R2.12 promoted the historical [SkImage.encodeToData] extension
+ * to a member returning `SkData?` (matching the upstream
+ * `sk_sp<SkData>` shape). This file still lives in the encode package
+ * because the round-trip assertions need [SkCodec] and the per-format
+ * encoders, but the call site now goes through the [SkImage] member.
+ *
+ * Covers :
  *  - default format (PNG) round-trips byte-identical via [SkCodec].
  *  - JPEG dispatch honours the [quality] argument (lower → smaller).
  *  - Unsupported formats (GIF / BMP / WBMP / WEBP / …) return `null`
  *    rather than crashing — encoders are PNG / JPEG only.
- *  - The wrapper agrees pixel-for-pixel with calling
+ *  - The member agrees pixel-for-pixel with calling
  *    [SkPngEncoder.Encode] directly (so it really is just plumbing,
  *    no transformation in between).
  */
@@ -29,10 +35,11 @@ class SkImageEncodeTest {
     @Test
     fun `default format is PNG and round-trips byte-identical`() {
         val image = makeImage(8, 8)
-        val bytes = image.encodeToData()
-        assertNotNull(bytes)
+        val data = image.encodeToData()
+        assertNotNull(data)
+        val bytes = data!!.toByteArray()
         // PNG signature.
-        assertEquals(0x89.toByte(), bytes!![0])
+        assertEquals(0x89.toByte(), bytes[0])
         assertEquals(0x50.toByte(), bytes[1])
         // Decoded pixels must equal what the image exposes via peekPixel.
         val codec = SkCodec.MakeFromData(bytes)!!
@@ -51,8 +58,8 @@ class SkImageEncodeTest {
     @Test
     fun `JPEG format honours the quality argument`() {
         val image = makeImage(64, 64)
-        val highQ = image.encodeToData(SkEncodedImageFormat.kJPEG, quality = 100)!!
-        val lowQ = image.encodeToData(SkEncodedImageFormat.kJPEG, quality = 25)!!
+        val highQ = image.encodeToData(SkEncodedImageFormat.kJPEG, quality = 100)!!.toByteArray()
+        val lowQ = image.encodeToData(SkEncodedImageFormat.kJPEG, quality = 25)!!.toByteArray()
         assertTrue(
             lowQ.size < highQ.size,
             "low-quality JPEG must be smaller : q=25 → ${lowQ.size}, q=100 → ${highQ.size}",
@@ -66,17 +73,17 @@ class SkImageEncodeTest {
     fun `unsupported formats return null`() {
         val image = makeImage(2, 2)
         // GIF / BMP / WBMP have decoders (D3.3) but no encoders.
-        assertNull(image.encodeToData(SkEncodedImageFormat.kGIF))
-        assertNull(image.encodeToData(SkEncodedImageFormat.kBMP))
-        assertNull(image.encodeToData(SkEncodedImageFormat.kWBMP))
+        assertNull(image.encodeToData(SkEncodedImageFormat.kGIF, 100))
+        assertNull(image.encodeToData(SkEncodedImageFormat.kBMP, 100))
+        assertNull(image.encodeToData(SkEncodedImageFormat.kWBMP, 100))
         // WEBP is not in the codec family at all (D3.4 deferred).
-        assertNull(image.encodeToData(SkEncodedImageFormat.kWEBP))
+        assertNull(image.encodeToData(SkEncodedImageFormat.kWEBP, 100))
     }
 
     @Test
     fun `PNG output agrees with calling SkPngEncoder Encode directly`() {
         val image = makeImage(4, 4)
-        val viaConvenience = image.encodeToData(SkEncodedImageFormat.kPNG)!!
+        val viaMember = image.encodeToData(SkEncodedImageFormat.kPNG, 100)!!.toByteArray()
         // Reconstruct the bitmap the wrapper builds internally (sRGB,
         // 8888, image.peekPixel for every pixel).
         val bitmap = SkBitmap(4, 4, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
@@ -85,7 +92,7 @@ class SkImageEncodeTest {
         }
         val viaDirect = SkPngEncoder.Encode(bitmap)!!
         assertEquals(
-            viaConvenience.toList(),
+            viaMember.toList(),
             viaDirect.toList(),
             "encodeToData must be a thin wrapper — no transformation",
         )

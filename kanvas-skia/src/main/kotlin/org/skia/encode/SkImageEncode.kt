@@ -7,39 +7,28 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
 
 /**
- * Convenience wrapper over the D3.5 encoders — the
- * `SkImage::encodeToData(format, quality)` entry point upstream
- * Skia exposes for the "I just want bytes" call site.
+ * Phase R2.12 helper — produces the raw `ByteArray` for
+ * [SkImage.encodeToData], factored out so the member method on
+ * [SkImage] (which returns the upstream-shaped `sk_sp<SkData>` /
+ * Kotlin [org.skia.foundation.SkData]) can share its pixel-snapshot
+ * + per-format dispatch with the historical D3.6 surface.
  *
- * Lives on the `org.skia.encode` side rather than as an instance
- * method on [SkImage] so that the [org.skia.foundation] package
- * stays free of any dependency on the encoder / codec layers
- * (`encode` depends on `foundation`, not the other way round).
- *
- * Dispatch table :
- *  - [SkEncodedImageFormat.kPNG] → [SkPngEncoder.Encode] with
- *    default options ([quality] is ignored — PNG is lossless).
- *  - [SkEncodedImageFormat.kJPEG] → [SkJpegEncoder.Encode] with
- *    `SkJpegEncoder.Options(quality = quality)`.
- *  - Every other format returns `null` ; the codec family ships
- *    decoders only for GIF / BMP / WBMP, encoders are out of
- *    scope for D3.6.
- *
- * The returned bytes encode a snapshot of the image's pixel buffer
- * tagged sRGB ([SkImage] is always 8888 with no colour-space slot,
- * which mirrors upstream's choice for the convenience overload).
- * Workflows that need to encode a non-sRGB working-space bitmap
- * call the per-format encoders directly with their own
- * `SkBitmap`.
+ * The wrapper takes the same single snapshot ([SkImage.peekPixel]
+ * into a fresh `SkBitmap` tagged sRGB) the previous extension built,
+ * then routes through [SkPngEncoder] or [SkJpegEncoder]. Returns
+ * `null` for any unsupported [SkEncodedImageFormat] — the codec
+ * family ships decoders only for GIF / BMP / WBMP, no encoders ;
+ * WEBP / HEIF / AVIF / JPEGXL aren't in the codec family at all.
  */
-public fun SkImage.encodeToData(
-    format: SkEncodedImageFormat = SkEncodedImageFormat.kPNG,
-    quality: Int = 100,
+internal fun encodeImageToBytes(
+    image: SkImage,
+    format: SkEncodedImageFormat,
+    quality: Int,
 ): ByteArray? {
-    val bitmap = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
-    for (y in 0 until height) {
-        for (x in 0 until width) {
-            bitmap.pixels[y * width + x] = peekPixel(x, y)
+    val bitmap = SkBitmap(image.width, image.height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
+    for (y in 0 until image.height) {
+        for (x in 0 until image.width) {
+            bitmap.pixels[y * image.width + x] = image.peekPixel(x, y)
         }
     }
     return when (format) {
