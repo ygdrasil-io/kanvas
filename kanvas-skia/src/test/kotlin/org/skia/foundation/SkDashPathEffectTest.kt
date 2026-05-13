@@ -64,8 +64,8 @@ class SkDashPathEffectTest {
         assertNotNull(out)
         // Each "on" dash = 1 moveTo + 1 lineTo = 2 verbs.
         // 5 dashes × 2 = 10 verbs.
-        val moveCount = out!!.verbs.count { it == SkPath.Verb.kMove }
-        val lineCount = out.verbs.count { it == SkPath.Verb.kLine }
+        val moveCount = out!!.verbs.count { it == SkPath.StorageVerb.kMove }
+        val lineCount = out.verbs.count { it == SkPath.StorageVerb.kLine }
         assertEquals(5, moveCount, "expected 5 dashes (moveTo)")
         assertEquals(5, lineCount, "expected 5 dash bodies (lineTo)")
     }
@@ -79,8 +79,8 @@ class SkDashPathEffectTest {
         val out = pe.filterPath(input, identity)
         assertNotNull(out)
         // Expect 2 on-segments : 0..10 and 20..25.
-        assertEquals(2, out!!.verbs.count { it == SkPath.Verb.kMove })
-        assertEquals(2, out.verbs.count { it == SkPath.Verb.kLine })
+        assertEquals(2, out!!.verbs.count { it == SkPath.StorageVerb.kMove })
+        assertEquals(2, out.verbs.count { it == SkPath.StorageVerb.kLine })
         // Verify the truncated dash's endpoint is at x=25.
         val coords = out.coords
         // Last lineTo target.
@@ -101,7 +101,7 @@ class SkDashPathEffectTest {
         val out = pe.filterPath(input, identity)
         assertNotNull(out)
         // 2 on-segments expected.
-        assertEquals(2, out!!.verbs.count { it == SkPath.Verb.kMove })
+        assertEquals(2, out!!.verbs.count { it == SkPath.StorageVerb.kMove })
     }
 
     @Test
@@ -148,8 +148,8 @@ class SkDashPathEffectTest {
             .detach()
         val out = pe.filterPath(input, identity)
         assertNotNull(out)
-        assertEquals(2, out!!.verbs.count { it == SkPath.Verb.kMove }, "expected 2 dashes")
-        assertEquals(2, out.verbs.count { it == SkPath.Verb.kLine })
+        assertEquals(2, out!!.verbs.count { it == SkPath.StorageVerb.kMove }, "expected 2 dashes")
+        assertEquals(2, out.verbs.count { it == SkPath.StorageVerb.kLine })
     }
 
     @Test
@@ -169,8 +169,8 @@ class SkDashPathEffectTest {
         assertNotNull(out)
         // First dash (0..10 horizontal) is emitted ; second segment
         // (10..20 down) is in the "off" half.
-        assertEquals(1, out!!.verbs.count { it == SkPath.Verb.kMove })
-        assertEquals(1, out.verbs.count { it == SkPath.Verb.kLine })
+        assertEquals(1, out!!.verbs.count { it == SkPath.StorageVerb.kMove })
+        assertEquals(1, out.verbs.count { it == SkPath.StorageVerb.kLine })
         // Validate the dash endpoint at (10, 0).
         val coords = out.coords
         assertEquals(10f, coords[2], 1e-4f)
@@ -194,7 +194,7 @@ class SkDashPathEffectTest {
         // is approximate. We want at least 4 (the "ideal" count for a
         // straight-line equivalent) and bound at 12 (worst-case
         // fine subdivision).
-        val dashCount = out!!.verbs.count { it == SkPath.Verb.kMove }
+        val dashCount = out!!.verbs.count { it == SkPath.StorageVerb.kMove }
         assertTrue(dashCount in 4..12) {
             "quad dashing: expected 4..12 dashes, got $dashCount"
         }

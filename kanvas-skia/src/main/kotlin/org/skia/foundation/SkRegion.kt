@@ -626,40 +626,40 @@ public class SkRegion private constructor(
         val weights = path.conicWeights
         for (verb in path.verbs) {
             when (verb) {
-                SkPath.Verb.kMove -> {
+                SkPath.StorageVerb.kMove -> {
                     if (hasContour) addEdgeIfNonHorizontal(out, px, py, cx, cy)
                     px = coords[coordIdx++]
                     py = coords[coordIdx++]
                     cx = px; cy = py
                     hasContour = true
                 }
-                SkPath.Verb.kLine -> {
+                SkPath.StorageVerb.kLine -> {
                     val nx = coords[coordIdx++]
                     val ny = coords[coordIdx++]
                     addEdgeIfNonHorizontal(out, px, py, nx, ny)
                     px = nx; py = ny
                 }
-                SkPath.Verb.kQuad -> {
+                SkPath.StorageVerb.kQuad -> {
                     val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
                     val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
                     flattenQuadEdge(out, px, py, x1, y1, x2, y2, depth = 0)
                     px = x2; py = y2
                 }
-                SkPath.Verb.kConic -> {
+                SkPath.StorageVerb.kConic -> {
                     val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
                     val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
                     weightIdx++  // conic weight unused — flattened as a quad approximation
                     flattenQuadEdge(out, px, py, x1, y1, x2, y2, depth = 0)
                     px = x2; py = y2
                 }
-                SkPath.Verb.kCubic -> {
+                SkPath.StorageVerb.kCubic -> {
                     val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
                     val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
                     val x3 = coords[coordIdx++]; val y3 = coords[coordIdx++]
                     flattenCubicEdge(out, px, py, x1, y1, x2, y2, x3, y3, depth = 0)
                     px = x3; py = y3
                 }
-                SkPath.Verb.kClose -> {
+                SkPath.StorageVerb.kClose -> {
                     if (hasContour) {
                         addEdgeIfNonHorizontal(out, px, py, cx, cy)
                         px = cx; py = cy

@@ -99,27 +99,27 @@ public class SkDashPathEffect private constructor(
 
         for (verb in input.verbs) {
             when (verb) {
-                SkPath.Verb.kMove -> {
+                SkPath.StorageVerb.kMove -> {
                     penX = input.coords[coordIdx++]
                     penY = input.coords[coordIdx++]
                     contourStartX = penX
                     contourStartY = penY
                     distFromContourStart = 0f
                 }
-                SkPath.Verb.kLine -> {
+                SkPath.StorageVerb.kLine -> {
                     val nx = input.coords[coordIdx++]
                     val ny = input.coords[coordIdx++]
                     distFromContourStart = dashLine(out, penX, penY, nx, ny, distFromContourStart)
                     penX = nx; penY = ny
                 }
-                SkPath.Verb.kQuad -> {
+                SkPath.StorageVerb.kQuad -> {
                     val cx = input.coords[coordIdx++]; val cy = input.coords[coordIdx++]
                     val ex = input.coords[coordIdx++]; val ey = input.coords[coordIdx++]
                     distFromContourStart = dashQuad(out,
                         penX, penY, cx, cy, ex, ey, distFromContourStart)
                     penX = ex; penY = ey
                 }
-                SkPath.Verb.kConic -> {
+                SkPath.StorageVerb.kConic -> {
                     // Conic w is in conicWeights ; we flatten as a quad
                     // (drops the rational denominator — visually-close for
                     // moderate weights, exact for w == 1).
@@ -129,7 +129,7 @@ public class SkDashPathEffect private constructor(
                         penX, penY, cx, cy, ex, ey, distFromContourStart)
                     penX = ex; penY = ey
                 }
-                SkPath.Verb.kCubic -> {
+                SkPath.StorageVerb.kCubic -> {
                     val c1x = input.coords[coordIdx++]; val c1y = input.coords[coordIdx++]
                     val c2x = input.coords[coordIdx++]; val c2y = input.coords[coordIdx++]
                     val ex = input.coords[coordIdx++]; val ey = input.coords[coordIdx++]
@@ -137,7 +137,7 @@ public class SkDashPathEffect private constructor(
                         penX, penY, c1x, c1y, c2x, c2y, ex, ey, distFromContourStart)
                     penX = ex; penY = ey
                 }
-                SkPath.Verb.kClose -> {
+                SkPath.StorageVerb.kClose -> {
                     distFromContourStart = dashLine(out, penX, penY,
                         contourStartX, contourStartY, distFromContourStart)
                     penX = contourStartX; penY = contourStartY
@@ -169,11 +169,11 @@ public class SkDashPathEffect private constructor(
         while (i < verbs.size) {
             val v = verbs[i]
             when (v) {
-                SkPath.Verb.kMove -> {
+                SkPath.StorageVerb.kMove -> {
                     pendingMoveX = path.coords[coordIdx++]
                     pendingMoveY = path.coords[coordIdx++]
                     // Look ahead — if the next verb is kLine, decide together.
-                    if (i + 1 < verbs.size && verbs[i + 1] == SkPath.Verb.kLine) {
+                    if (i + 1 < verbs.size && verbs[i + 1] == SkPath.StorageVerb.kLine) {
                         val nx = path.coords[coordIdx++]
                         val ny = path.coords[coordIdx++]
                         if (segmentIntersectsRect(pendingMoveX, pendingMoveY, nx, ny, cullRect)) {
@@ -187,7 +187,7 @@ public class SkDashPathEffect private constructor(
                         out.moveTo(pendingMoveX, pendingMoveY)
                     }
                 }
-                SkPath.Verb.kLine -> {
+                SkPath.StorageVerb.kLine -> {
                     // Defensive : shouldn't be reached given the moveTo-then-lineTo
                     // pairing above, but keep correctness if the output shape changes.
                     val nx = path.coords[coordIdx++]
@@ -197,10 +197,10 @@ public class SkDashPathEffect private constructor(
                     }
                     pendingMoveX = nx; pendingMoveY = ny
                 }
-                SkPath.Verb.kQuad,
-                SkPath.Verb.kConic -> { coordIdx += 4 }
-                SkPath.Verb.kCubic -> { coordIdx += 6 }
-                SkPath.Verb.kClose -> { /* no coords */ }
+                SkPath.StorageVerb.kQuad,
+                SkPath.StorageVerb.kConic -> { coordIdx += 4 }
+                SkPath.StorageVerb.kCubic -> { coordIdx += 6 }
+                SkPath.StorageVerb.kClose -> { /* no coords */ }
             }
             i++
         }

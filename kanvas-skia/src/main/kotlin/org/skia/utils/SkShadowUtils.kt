@@ -400,15 +400,15 @@ public object SkShadowUtils {
         val pts = FloatArray(8)
         while (true) {
             val v = iter.next(pts)
-            if (v == SkPath.IterVerb.kDoneVerb) break
+            if (v == SkPath.Verb.kDoneVerb) break
             val endIdx: Int = when (v) {
-                SkPath.IterVerb.kMoveVerb -> 0
-                SkPath.IterVerb.kLineVerb -> 1
-                SkPath.IterVerb.kQuadVerb -> 2
-                SkPath.IterVerb.kConicVerb -> 2
-                SkPath.IterVerb.kCubicVerb -> 3
-                SkPath.IterVerb.kCloseVerb -> -1
-                SkPath.IterVerb.kDoneVerb -> -1
+                SkPath.Verb.kMoveVerb -> 0
+                SkPath.Verb.kLineVerb -> 1
+                SkPath.Verb.kQuadVerb -> 2
+                SkPath.Verb.kConicVerb -> 2
+                SkPath.Verb.kCubicVerb -> 3
+                SkPath.Verb.kCloseVerb -> -1
+                SkPath.Verb.kDoneVerb -> -1
             }
             if (endIdx < 0) continue
             val x = pts[2 * endIdx]
@@ -463,13 +463,13 @@ public object SkShadowUtils {
         var idx = 0
         while (true) {
             val v = iter.next(pts)
-            if (v == SkPath.IterVerb.kDoneVerb) break
+            if (v == SkPath.Verb.kDoneVerb) break
             val endIdx: Int = when (v) {
-                SkPath.IterVerb.kMoveVerb -> 0
-                SkPath.IterVerb.kLineVerb -> 1
-                SkPath.IterVerb.kQuadVerb -> 2
-                SkPath.IterVerb.kConicVerb -> 2
-                SkPath.IterVerb.kCubicVerb -> 3
+                SkPath.Verb.kMoveVerb -> 0
+                SkPath.Verb.kLineVerb -> 1
+                SkPath.Verb.kQuadVerb -> 2
+                SkPath.Verb.kConicVerb -> 2
+                SkPath.Verb.kCubicVerb -> 3
                 else -> -1
             }
             if (endIdx < 0) continue

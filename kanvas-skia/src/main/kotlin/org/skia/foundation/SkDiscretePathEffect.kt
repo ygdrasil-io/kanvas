@@ -43,7 +43,7 @@ public class SkDiscretePathEffect private constructor(
 
         for (verb in input.verbs) {
             when (verb) {
-                SkPath.Verb.kMove -> {
+                SkPath.StorageVerb.kMove -> {
                     penX = input.coords[coordIdx++]
                     penY = input.coords[coordIdx++]
                     contourStartX = penX
@@ -51,13 +51,13 @@ public class SkDiscretePathEffect private constructor(
                     out.moveTo(penX, penY)
                     emittedPenInContour = true
                 }
-                SkPath.Verb.kLine -> {
+                SkPath.StorageVerb.kLine -> {
                     val nx = input.coords[coordIdx++]
                     val ny = input.coords[coordIdx++]
                     jitterLine(out, penX, penY, nx, ny, rng)
                     penX = nx; penY = ny
                 }
-                SkPath.Verb.kQuad -> {
+                SkPath.StorageVerb.kQuad -> {
                     val cx = input.coords[coordIdx++]
                     val cy = input.coords[coordIdx++]
                     val ex = input.coords[coordIdx++]
@@ -65,7 +65,7 @@ public class SkDiscretePathEffect private constructor(
                     jitterQuad(out, penX, penY, cx, cy, ex, ey, rng)
                     penX = ex; penY = ey
                 }
-                SkPath.Verb.kConic -> {
+                SkPath.StorageVerb.kConic -> {
                     val cx = input.coords[coordIdx++]
                     val cy = input.coords[coordIdx++]
                     val ex = input.coords[coordIdx++]
@@ -73,7 +73,7 @@ public class SkDiscretePathEffect private constructor(
                     jitterQuad(out, penX, penY, cx, cy, ex, ey, rng)
                     penX = ex; penY = ey
                 }
-                SkPath.Verb.kCubic -> {
+                SkPath.StorageVerb.kCubic -> {
                     val c1x = input.coords[coordIdx++]
                     val c1y = input.coords[coordIdx++]
                     val c2x = input.coords[coordIdx++]
@@ -83,7 +83,7 @@ public class SkDiscretePathEffect private constructor(
                     jitterCubic(out, penX, penY, c1x, c1y, c2x, c2y, ex, ey, rng)
                     penX = ex; penY = ey
                 }
-                SkPath.Verb.kClose -> {
+                SkPath.StorageVerb.kClose -> {
                     jitterLine(out, penX, penY, contourStartX, contourStartY, rng)
                     out.close()
                     penX = contourStartX; penY = contourStartY

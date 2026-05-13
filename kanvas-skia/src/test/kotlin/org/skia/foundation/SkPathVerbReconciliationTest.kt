@@ -9,7 +9,7 @@ import kotlin.reflect.KClass
 
 /**
  * R-suivi.25 — verifies that the two upstream verb enums (storage 6-value
- * [SkPath.Verb] and iter 7-value [SkPath.IterVerb]) are exposed with the
+ * [SkPath.StorageVerb] and iter 7-value [SkPath.Verb]) are exposed with the
  * expected entry counts and that the file-scope typealiases ([SkPathVerb],
  * [SkPathStorageVerb], [SkPathIterVerb]) resolve to the right targets.
  */
@@ -17,7 +17,7 @@ class SkPathVerbReconciliationTest {
 
     @Test
     fun `storage Verb has exactly six entries matching upstream SkPathVerb`() {
-        val entries = SkPath.Verb.entries
+        val entries = SkPath.StorageVerb.entries
         assertEquals(6, entries.size, "storage Verb must mirror upstream SkPathVerb (6 entries)")
         // Order matters — upstream's SkPathVerb enum-class values are in
         // this exact order so a future numeric cast (e.g. for `verbs()`)
@@ -32,7 +32,7 @@ class SkPathVerbReconciliationTest {
 
     @Test
     fun `iter Verb has exactly seven entries matching upstream SkPath colon colon Verb`() {
-        val entries = SkPath.IterVerb.entries
+        val entries = SkPath.Verb.entries
         assertEquals(7, entries.size, "iter Verb must mirror upstream SkPath::Verb (7 entries)")
         // kDoneVerb is the upstream sentinel returned once the verb
         // stream is exhausted ; absent from the storage enum.
@@ -46,17 +46,18 @@ class SkPathVerbReconciliationTest {
         // points added per verb. Our enum exposes [pointCount] as the
         // equivalent — the storage-side count, not the iter
         // "pts[4]" stride.
-        assertEquals(1, SkPath.Verb.kMove.pointCount)
-        assertEquals(1, SkPath.Verb.kLine.pointCount)
-        assertEquals(2, SkPath.Verb.kQuad.pointCount)
-        assertEquals(2, SkPath.Verb.kConic.pointCount)
-        assertEquals(3, SkPath.Verb.kCubic.pointCount)
-        assertEquals(0, SkPath.Verb.kClose.pointCount)
+        assertEquals(1, SkPath.StorageVerb.kMove.pointCount)
+        assertEquals(1, SkPath.StorageVerb.kLine.pointCount)
+        assertEquals(2, SkPath.StorageVerb.kQuad.pointCount)
+        assertEquals(2, SkPath.StorageVerb.kConic.pointCount)
+        assertEquals(3, SkPath.StorageVerb.kCubic.pointCount)
+        assertEquals(0, SkPath.StorageVerb.kClose.pointCount)
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun `SkPathVerb typealias resolves to the storage enum`() {
-        val storageClass: KClass<SkPath.Verb> = SkPath.Verb::class
+        val storageClass: KClass<SkPath.StorageVerb> = SkPath.StorageVerb::class
         val aliasClass: KClass<SkPathVerb> = SkPathVerb::class
         // Both names must point at the same JVM class — typealiases
         // are erased at compile time, so a class-literal comparison is
@@ -64,19 +65,21 @@ class SkPathVerbReconciliationTest {
         assertSame(storageClass.java, aliasClass.java)
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun `SkPathStorageVerb typealias resolves to the storage enum`() {
-        val storageClass: KClass<SkPath.Verb> = SkPath.Verb::class
+        val storageClass: KClass<SkPath.StorageVerb> = SkPath.StorageVerb::class
         val aliasClass: KClass<SkPathStorageVerb> = SkPathStorageVerb::class
         assertSame(storageClass.java, aliasClass.java)
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun `SkPathIterVerb typealias resolves to the iter enum`() {
-        val iterClass: KClass<SkPath.IterVerb> = SkPath.IterVerb::class
+        val iterClass: KClass<SkPath.Verb> = SkPath.Verb::class
         val aliasClass: KClass<SkPathIterVerb> = SkPathIterVerb::class
         assertSame(iterClass.java, aliasClass.java)
         // Sanity : the two enums are *distinct* classes.
-        assertNotEquals(SkPath.Verb::class.java, SkPath.IterVerb::class.java)
+        assertNotEquals(SkPath.StorageVerb::class.java, SkPath.Verb::class.java)
     }
 }

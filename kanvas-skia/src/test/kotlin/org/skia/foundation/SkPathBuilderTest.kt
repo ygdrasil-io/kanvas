@@ -34,7 +34,7 @@ class SkPathBuilderTest {
             .close()
             .detach()
         assertArrayEquals(
-            arrayOf(SkPath.Verb.kMove, SkPath.Verb.kLine, SkPath.Verb.kLine, SkPath.Verb.kClose),
+            arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine, SkPath.StorageVerb.kLine, SkPath.StorageVerb.kClose),
             p.verbs,
         )
         assertArrayEquals(floatArrayOf(10f, 20f, 30f, 40f, 50f, 60f), p.coords)
@@ -48,7 +48,7 @@ class SkPathBuilderTest {
             .cubicTo(10f, 20f, 0f, 20f, 0f, 10f)
             .detach()
         assertArrayEquals(
-            arrayOf(SkPath.Verb.kMove, SkPath.Verb.kQuad, SkPath.Verb.kCubic),
+            arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kQuad, SkPath.StorageVerb.kCubic),
             p.verbs,
         )
         // 1 (move) + 2 (quad) + 3 (cubic) = 6 logical points = 12 floats.
@@ -61,7 +61,7 @@ class SkPathBuilderTest {
             .moveTo(0f, 0f)
             .conicTo(10f, 0f, 10f, 10f, 1f)
             .detach()
-        assertArrayEquals(arrayOf(SkPath.Verb.kMove, SkPath.Verb.kQuad), p.verbs)
+        assertArrayEquals(arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kQuad), p.verbs)
         assertEquals(0, p.conicWeights.size)
     }
 
@@ -72,7 +72,7 @@ class SkPathBuilderTest {
             .moveTo(0f, 0f)
             .conicTo(10f, 0f, 10f, 10f, w)
             .detach()
-        assertArrayEquals(arrayOf(SkPath.Verb.kMove, SkPath.Verb.kConic), p.verbs)
+        assertArrayEquals(arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kConic), p.verbs)
         assertArrayEquals(floatArrayOf(w), p.conicWeights, 0f)
     }
 
@@ -86,10 +86,10 @@ class SkPathBuilderTest {
     fun `lineTo on empty contour implicitly emits a moveTo at origin`() {
         val p = SkPathBuilder().lineTo(10f, 10f).detach()
         // First verb must be kMove inserted at (0, 0).
-        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
         assertEquals(0f, p.coords[0])
         assertEquals(0f, p.coords[1])
-        assertEquals(SkPath.Verb.kLine, p.verbs[1])
+        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
     }
 
     @Test
@@ -118,8 +118,8 @@ class SkPathBuilderTest {
         val ccw = SkPathBuilder().addRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f), SkPathDirection.kCCW).detach()
         // Both are 1 move + 3 line + 1 close.
         val expected = arrayOf(
-            SkPath.Verb.kMove, SkPath.Verb.kLine, SkPath.Verb.kLine,
-            SkPath.Verb.kLine, SkPath.Verb.kClose,
+            SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine, SkPath.StorageVerb.kLine,
+            SkPath.StorageVerb.kLine, SkPath.StorageVerb.kClose,
         )
         assertArrayEquals(expected, cw.verbs)
         assertArrayEquals(expected, ccw.verbs)
@@ -136,9 +136,9 @@ class SkPathBuilderTest {
         // 1 move + 4 conic + 1 close — matches SkPathRawShapes::Oval verb stream.
         assertArrayEquals(
             arrayOf(
-                SkPath.Verb.kMove,
-                SkPath.Verb.kConic, SkPath.Verb.kConic, SkPath.Verb.kConic, SkPath.Verb.kConic,
-                SkPath.Verb.kClose,
+                SkPath.StorageVerb.kMove,
+                SkPath.StorageVerb.kConic, SkPath.StorageVerb.kConic, SkPath.StorageVerb.kConic, SkPath.StorageVerb.kConic,
+                SkPath.StorageVerb.kClose,
             ),
             p.verbs,
         )
@@ -157,7 +157,7 @@ class SkPathBuilderTest {
         // First point of contour at (right, centerY) = (10, 5).
         assertEquals(10f, p.coords[0], 1e-4f)
         assertEquals(5f, p.coords[1], 1e-4f)
-        assertEquals(SkPath.Verb.kConic, p.verbs[1])
+        assertEquals(SkPath.StorageVerb.kConic, p.verbs[1])
     }
 
     @Test
@@ -167,7 +167,7 @@ class SkPathBuilderTest {
         val sweepDeg = 60f
         val p = SkPathBuilder().addArc(rect, startDeg, sweepDeg).detach()
         // First verb is a moveTo (forceMoveTo behaviour of addArc).
-        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
         // Compare moveTo to the analytic point on the unit circle scaled by rx/ry.
         val cx = 50f; val cy = 50f; val rx = 50f; val ry = 50f
         val theta = startDeg.toDouble() * PI / 180.0
@@ -176,7 +176,7 @@ class SkPathBuilderTest {
         assertEquals(expectedX, p.coords[0], 1e-3f)
         assertEquals(expectedY, p.coords[1], 1e-3f)
         // 60° sweep fits in a single ≤90° segment → exactly one conic.
-        assertEquals(SkPath.Verb.kConic, p.verbs[1])
+        assertEquals(SkPath.StorageVerb.kConic, p.verbs[1])
         assertEquals(2, p.verbs.size)
         // Weight is cos(sweep/2) = cos(30°) ≈ 0.866.
         assertEquals(1, p.conicWeights.size)
@@ -189,10 +189,10 @@ class SkPathBuilderTest {
         val p = SkPathBuilder()
             .addArc(SkRect.MakeLTRB(0f, 0f, 100f, 100f), 0f, 270f)
             .detach()
-        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
         // 1 move + 3 conic.
         assertEquals(4, p.verbs.size)
-        assertTrue(p.verbs.drop(1).all { it == SkPath.Verb.kConic })
+        assertTrue(p.verbs.drop(1).all { it == SkPath.StorageVerb.kConic })
         // Each segment is 90° → weight = cos(45°) = √2/2.
         val expectedWeight = kotlin.math.sqrt(2.0).toFloat() * 0.5f
         for (w in p.conicWeights) assertEquals(expectedWeight, w, 1e-4f)
@@ -205,9 +205,9 @@ class SkPathBuilderTest {
             .arcTo(SkRect.MakeLTRB(0f, 0f, 100f, 100f), 0f, 90f, forceMoveTo = false)
             .detach()
         // Sequence: move, line (join to (100, 50)), conic.
-        assertEquals(SkPath.Verb.kMove, p.verbs[0])
-        assertEquals(SkPath.Verb.kLine, p.verbs[1])
-        assertEquals(SkPath.Verb.kConic, p.verbs[2])
+        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
+        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
+        assertEquals(SkPath.StorageVerb.kConic, p.verbs[2])
     }
 
     @Test
@@ -254,7 +254,7 @@ class SkPathBuilderTest {
     @Test
     fun `SkPath Line factory emits two verbs and two points`() {
         val p = SkPath.Line(0f to 0f, 10f to 10f)
-        assertArrayEquals(arrayOf(SkPath.Verb.kMove, SkPath.Verb.kLine), p.verbs)
+        assertArrayEquals(arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine), p.verbs)
         assertArrayEquals(floatArrayOf(0f, 0f, 10f, 10f), p.coords)
     }
 
@@ -268,7 +268,7 @@ class SkPathBuilderTest {
             .lineTo(30f, 40f)
             .detach()
         assertArrayEquals(
-            arrayOf(SkPath.Verb.kMove, SkPath.Verb.kLine),
+            arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine),
             p.verbs,
         )
         // The single retained move must carry the *last* point.
@@ -287,8 +287,8 @@ class SkPathBuilderTest {
             .detach()
         assertArrayEquals(
             arrayOf(
-                SkPath.Verb.kMove, SkPath.Verb.kLine, SkPath.Verb.kClose,
-                SkPath.Verb.kMove, SkPath.Verb.kLine,
+                SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine, SkPath.StorageVerb.kClose,
+                SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine,
             ),
             p.verbs,
         )
@@ -315,9 +315,9 @@ class SkPathBuilderTest {
             .arcTo(130f, 150f, 180f, 160f, 60f)
             .detach()
         // Expected verb prefix: kMove, kLine, kLine, kClose, kMove, ...
-        assertEquals(SkPath.Verb.kMove, p.verbs[0])
-        assertEquals(SkPath.Verb.kClose, p.verbs[3])
-        assertEquals(SkPath.Verb.kMove, p.verbs[4])
+        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
+        assertEquals(SkPath.StorageVerb.kClose, p.verbs[3])
+        assertEquals(SkPath.StorageVerb.kMove, p.verbs[4])
         // The implicit moveTo's point must equal the just-closed contour
         // start (20, 20), not the arc's first tangent point.
         // Coords layout: 1×move(2) + 2×line(2+2) + 0×close + implicit move(2)
@@ -327,8 +327,8 @@ class SkPathBuilderTest {
         // Arc must actually emit downstream geometry (line + conic), not
         // bail out as the legacy port did. Tangent arcTo (Skia parity):
         // exactly 1 lineTo + 1 conicTo.
-        assertEquals(SkPath.Verb.kLine, p.verbs[5])
-        assertEquals(SkPath.Verb.kConic, p.verbs[6])
+        assertEquals(SkPath.StorageVerb.kLine, p.verbs[5])
+        assertEquals(SkPath.StorageVerb.kConic, p.verbs[6])
     }
 
     @Test

@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * Coverage for the R2.9 verb iterators — [SkPath.Iter], [SkPath.RawIter],
- * and the [SkPath.IterVerb] enum they emit. Mirrors the behaviours
+ * and the [SkPath.Verb] enum they emit. Mirrors the behaviours
  * required by the upstream `SkPath::Iter` / `SkPath::RawIter` contract
  * (`include/core/SkPath.h:774-1018`).
  */
@@ -30,11 +30,11 @@ class SkPathIterTest {
         val verbs = drainVerbs(it)
         assertEquals(
             listOf(
-                SkPath.IterVerb.kMoveVerb,
-                SkPath.IterVerb.kLineVerb,
-                SkPath.IterVerb.kLineVerb,
-                SkPath.IterVerb.kLineVerb,
-                SkPath.IterVerb.kDoneVerb,
+                SkPath.Verb.kMoveVerb,
+                SkPath.Verb.kLineVerb,
+                SkPath.Verb.kLineVerb,
+                SkPath.Verb.kLineVerb,
+                SkPath.Verb.kDoneVerb,
             ),
             verbs,
         )
@@ -49,16 +49,16 @@ class SkPathIterTest {
         val it = SkPath.Iter(path)
         val pts = FloatArray(8)
 
-        assertEquals(SkPath.IterVerb.kMoveVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kMoveVerb, it.next(pts))
         assertEquals(1f, pts[0]); assertEquals(2f, pts[1])
 
-        assertEquals(SkPath.IterVerb.kLineVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kLineVerb, it.next(pts))
         // pts[0..1] = last pen, pts[2..3] = end
         assertEquals(1f, pts[0]); assertEquals(2f, pts[1])
         assertEquals(3f, pts[2]); assertEquals(4f, pts[3])
         assertFalse(it.isCloseLine())
 
-        assertEquals(SkPath.IterVerb.kDoneVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kDoneVerb, it.next(pts))
     }
 
     @Test
@@ -73,12 +73,12 @@ class SkPathIterTest {
         val verbs = drainVerbs(it)
         assertEquals(
             listOf(
-                SkPath.IterVerb.kMoveVerb,
-                SkPath.IterVerb.kLineVerb,
-                SkPath.IterVerb.kLineVerb,
-                SkPath.IterVerb.kLineVerb,   // synthetic close-line back to (0,0)
-                SkPath.IterVerb.kCloseVerb,
-                SkPath.IterVerb.kDoneVerb,
+                SkPath.Verb.kMoveVerb,
+                SkPath.Verb.kLineVerb,
+                SkPath.Verb.kLineVerb,
+                SkPath.Verb.kLineVerb,   // synthetic close-line back to (0,0)
+                SkPath.Verb.kCloseVerb,
+                SkPath.Verb.kDoneVerb,
             ),
             verbs,
         )
@@ -96,15 +96,15 @@ class SkPathIterTest {
         // Walk past move + 2 explicit lines.
         repeat(3) { iter.next(pts) }
         // Synthetic line back to (0, 0).
-        assertEquals(SkPath.IterVerb.kLineVerb, iter.next(pts))
+        assertEquals(SkPath.Verb.kLineVerb, iter.next(pts))
         assertEquals(10f, pts[0]); assertEquals(10f, pts[1])
         assertEquals(0f, pts[2]);  assertEquals(0f, pts[3])
         assertTrue(iter.isCloseLine())
         // Then the synthetic close.
-        assertEquals(SkPath.IterVerb.kCloseVerb, iter.next(pts))
+        assertEquals(SkPath.Verb.kCloseVerb, iter.next(pts))
         assertEquals(0f, pts[0]); assertEquals(0f, pts[1])
         // Done.
-        assertEquals(SkPath.IterVerb.kDoneVerb, iter.next(pts))
+        assertEquals(SkPath.Verb.kDoneVerb, iter.next(pts))
     }
 
     @Test
@@ -120,11 +120,11 @@ class SkPathIterTest {
         // so autoClose emits a bare kCloseVerb (no synthetic line).
         assertEquals(
             listOf(
-                SkPath.IterVerb.kMoveVerb,
-                SkPath.IterVerb.kLineVerb,
-                SkPath.IterVerb.kLineVerb,   // synthetic line: (10,0) → (0,0)
-                SkPath.IterVerb.kCloseVerb,
-                SkPath.IterVerb.kDoneVerb,
+                SkPath.Verb.kMoveVerb,
+                SkPath.Verb.kLineVerb,
+                SkPath.Verb.kLineVerb,   // synthetic line: (10,0) → (0,0)
+                SkPath.Verb.kCloseVerb,
+                SkPath.Verb.kDoneVerb,
             ),
             verbs,
         )
@@ -179,12 +179,12 @@ class SkPathIterTest {
         val it = SkPath.Iter(pathA)
         // Drain pathA.
         val pts = FloatArray(8)
-        while (it.next(pts) != SkPath.IterVerb.kDoneVerb) { /* drain */ }
+        while (it.next(pts) != SkPath.Verb.kDoneVerb) { /* drain */ }
         it.setPath(pathB, forceClose = false)
-        assertEquals(SkPath.IterVerb.kMoveVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kMoveVerb, it.next(pts))
         assertEquals(2f, pts[0]); assertEquals(2f, pts[1])
-        assertEquals(SkPath.IterVerb.kLineVerb, it.next(pts))
-        assertEquals(SkPath.IterVerb.kDoneVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kLineVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kDoneVerb, it.next(pts))
     }
 
     @Test
@@ -192,7 +192,7 @@ class SkPathIterTest {
         val empty = SkPathBuilder().detach()
         val it = SkPath.Iter(empty)
         val pts = FloatArray(8)
-        assertEquals(SkPath.IterVerb.kDoneVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kDoneVerb, it.next(pts))
         assertNull(it.next())
     }
 
@@ -209,15 +209,15 @@ class SkPathIterTest {
         val it = SkPath.RawIter(path)
         val pts = FloatArray(8)
 
-        assertEquals(SkPath.IterVerb.kMoveVerb, it.next(pts))
-        assertEquals(SkPath.IterVerb.kConicVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kMoveVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kConicVerb, it.next(pts))
         // Control point at (1, 1), end at (1, 0).
         assertEquals(0f, pts[0]); assertEquals(1f, pts[1])
         assertEquals(1f, pts[2]); assertEquals(1f, pts[3])
         assertEquals(1f, pts[4]); assertEquals(0f, pts[5])
         assertEquals(w, it.conicWeight(), 1e-6f)
 
-        assertEquals(SkPath.IterVerb.kDoneVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kDoneVerb, it.next(pts))
     }
 
     @Test
@@ -232,10 +232,10 @@ class SkPathIterTest {
         val verbs = drainRawVerbs(it)
         assertEquals(
             listOf(
-                SkPath.IterVerb.kMoveVerb,
-                SkPath.IterVerb.kLineVerb,
-                SkPath.IterVerb.kLineVerb,
-                SkPath.IterVerb.kDoneVerb,
+                SkPath.Verb.kMoveVerb,
+                SkPath.Verb.kLineVerb,
+                SkPath.Verb.kLineVerb,
+                SkPath.Verb.kDoneVerb,
             ),
             verbs,
         )
@@ -245,13 +245,13 @@ class SkPathIterTest {
     fun `RawIter peek returns the next verb without advancing`() {
         val path = SkPathBuilder().moveTo(0f, 0f).lineTo(1f, 0f).detach()
         val it = SkPath.RawIter(path)
-        assertEquals(SkPath.IterVerb.kMoveVerb, it.peek())
+        assertEquals(SkPath.Verb.kMoveVerb, it.peek())
         // peek again — still kMoveVerb (no advance).
-        assertEquals(SkPath.IterVerb.kMoveVerb, it.peek())
+        assertEquals(SkPath.Verb.kMoveVerb, it.peek())
         it.next(FloatArray(8))
-        assertEquals(SkPath.IterVerb.kLineVerb, it.peek())
+        assertEquals(SkPath.Verb.kLineVerb, it.peek())
         it.next(FloatArray(8))
-        assertEquals(SkPath.IterVerb.kDoneVerb, it.peek())
+        assertEquals(SkPath.Verb.kDoneVerb, it.peek())
     }
 
     @Test
@@ -260,32 +260,32 @@ class SkPathIterTest {
         val pathB = SkPathBuilder().moveTo(5f, 5f).detach()
         val it = SkPath.RawIter(pathA)
         val pts = FloatArray(8)
-        while (it.next(pts) != SkPath.IterVerb.kDoneVerb) { /* drain */ }
+        while (it.next(pts) != SkPath.Verb.kDoneVerb) { /* drain */ }
         it.setPath(pathB)
-        assertEquals(SkPath.IterVerb.kMoveVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kMoveVerb, it.next(pts))
         assertEquals(5f, pts[0]); assertEquals(5f, pts[1])
-        assertEquals(SkPath.IterVerb.kDoneVerb, it.next(pts))
+        assertEquals(SkPath.Verb.kDoneVerb, it.next(pts))
     }
 
     // --- helpers -----------------------------------------------------------
 
-    private fun drainVerbs(it: SkPath.Iter): List<SkPath.IterVerb> {
-        val out = mutableListOf<SkPath.IterVerb>()
+    private fun drainVerbs(it: SkPath.Iter): List<SkPath.Verb> {
+        val out = mutableListOf<SkPath.Verb>()
         val pts = FloatArray(8)
-        var v: SkPath.IterVerb
+        var v: SkPath.Verb
         do {
             v = it.next(pts); out += v
-        } while (v != SkPath.IterVerb.kDoneVerb)
+        } while (v != SkPath.Verb.kDoneVerb)
         return out
     }
 
-    private fun drainRawVerbs(it: SkPath.RawIter): List<SkPath.IterVerb> {
-        val out = mutableListOf<SkPath.IterVerb>()
+    private fun drainRawVerbs(it: SkPath.RawIter): List<SkPath.Verb> {
+        val out = mutableListOf<SkPath.Verb>()
         val pts = FloatArray(8)
-        var v: SkPath.IterVerb
+        var v: SkPath.Verb
         do {
             v = it.next(pts); out += v
-        } while (v != SkPath.IterVerb.kDoneVerb)
+        } while (v != SkPath.Verb.kDoneVerb)
         return out
     }
 }

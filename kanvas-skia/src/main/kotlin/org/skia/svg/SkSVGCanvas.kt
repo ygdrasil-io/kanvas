@@ -945,20 +945,20 @@ public open class SkSVGCanvas(
             var wi = 0
             for (verb in path.verbs) {
                 when (verb) {
-                    SkPath.Verb.kMove -> {
+                    SkPath.StorageVerb.kMove -> {
                         if (sb.isNotEmpty()) sb.append(' ')
                         sb.append('M').append(' ')
                         sb.append(formatScalar(path.coords[ci])).append(' ')
                         sb.append(formatScalar(path.coords[ci + 1]))
                         ci += 2
                     }
-                    SkPath.Verb.kLine -> {
+                    SkPath.StorageVerb.kLine -> {
                         sb.append(' ').append('L').append(' ')
                         sb.append(formatScalar(path.coords[ci])).append(' ')
                         sb.append(formatScalar(path.coords[ci + 1]))
                         ci += 2
                     }
-                    SkPath.Verb.kQuad -> {
+                    SkPath.StorageVerb.kQuad -> {
                         sb.append(' ').append('Q').append(' ')
                         sb.append(formatScalar(path.coords[ci])).append(' ')
                         sb.append(formatScalar(path.coords[ci + 1])).append(' ')
@@ -966,7 +966,7 @@ public open class SkSVGCanvas(
                         sb.append(formatScalar(path.coords[ci + 3]))
                         ci += 4
                     }
-                    SkPath.Verb.kCubic -> {
+                    SkPath.StorageVerb.kCubic -> {
                         sb.append(' ').append('C').append(' ')
                         sb.append(formatScalar(path.coords[ci])).append(' ')
                         sb.append(formatScalar(path.coords[ci + 1])).append(' ')
@@ -976,7 +976,7 @@ public open class SkSVGCanvas(
                         sb.append(formatScalar(path.coords[ci + 5]))
                         ci += 6
                     }
-                    SkPath.Verb.kConic -> {
+                    SkPath.StorageVerb.kConic -> {
                         // Conic-to-cubic via the kReimann-Roth-style
                         // approximation : interpret the rational
                         // quadratic with weight w as a cubic that
@@ -1004,7 +1004,7 @@ public open class SkSVGCanvas(
                         )
                         ci += 4
                     }
-                    SkPath.Verb.kClose -> sb.append(' ').append('Z')
+                    SkPath.StorageVerb.kClose -> sb.append(' ').append('Z')
                 }
             }
             return sb.toString()

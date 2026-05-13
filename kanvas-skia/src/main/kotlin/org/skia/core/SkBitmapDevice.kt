@@ -1736,7 +1736,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val weights = path.conicWeights
         for (verb in path.verbs) {
             when (verb) {
-                SkPath.Verb.kMove -> {
+                SkPath.StorageVerb.kMove -> {
                     if (hasContour) {
                         addEdge(out, px, py, cx, cy)  // implicit close
                     }
@@ -1747,14 +1747,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     cx = x; cy = y
                     hasContour = true
                 }
-                SkPath.Verb.kLine -> {
+                SkPath.StorageVerb.kLine -> {
                     val sx0 = coords[coordIdx++]; val sy0 = coords[coordIdx++]
                     val x = ax * sx0 + bx * sy0 + cx0
                     val y = ay * sx0 + by * sy0 + cy0
                     addEdge(out, px, py, x, y)
                     px = x; py = y
                 }
-                SkPath.Verb.kQuad -> {
+                SkPath.StorageVerb.kQuad -> {
                     val sx1 = coords[coordIdx++]; val sy1 = coords[coordIdx++]
                     val sx2 = coords[coordIdx++]; val sy2 = coords[coordIdx++]
                     val x1 = ax * sx1 + bx * sy1 + cx0; val y1 = ay * sx1 + by * sy1 + cy0
@@ -1762,7 +1762,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     flattenQuad(out, px, py, x1, y1, x2, y2, depth = 0)
                     px = x2; py = y2
                 }
-                SkPath.Verb.kConic -> {
+                SkPath.StorageVerb.kConic -> {
                     val sx1 = coords[coordIdx++]; val sy1 = coords[coordIdx++]
                     val sx2 = coords[coordIdx++]; val sy2 = coords[coordIdx++]
                     val w = weights[weightIdx++]
@@ -1771,7 +1771,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     flattenConic(out, px, py, x1, y1, x2, y2, w)
                     px = x2; py = y2
                 }
-                SkPath.Verb.kCubic -> {
+                SkPath.StorageVerb.kCubic -> {
                     val sx1 = coords[coordIdx++]; val sy1 = coords[coordIdx++]
                     val sx2 = coords[coordIdx++]; val sy2 = coords[coordIdx++]
                     val sx3 = coords[coordIdx++]; val sy3 = coords[coordIdx++]
@@ -1781,7 +1781,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     flattenCubic(out, px, py, x1, y1, x2, y2, x3, y3, depth = 0)
                     px = x3; py = y3
                 }
-                SkPath.Verb.kClose -> {
+                SkPath.StorageVerb.kClose -> {
                     if (hasContour) {
                         addEdge(out, px, py, cx, cy)
                         px = cx; py = cy
@@ -1852,19 +1852,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
 
         for (verb in path.verbs) {
             when (verb) {
-                SkPath.Verb.kMove -> {
+                SkPath.StorageVerb.kMove -> {
                     if (hasContour) addEdge(out, px, py, cx, cy)
                     project(coords[coordIdx++], coords[coordIdx++])
                     px = outX; py = outY
                     cx = outX; cy = outY
                     hasContour = true
                 }
-                SkPath.Verb.kLine -> {
+                SkPath.StorageVerb.kLine -> {
                     project(coords[coordIdx++], coords[coordIdx++])
                     addEdge(out, px, py, outX, outY)
                     px = outX; py = outY
                 }
-                SkPath.Verb.kQuad -> {
+                SkPath.StorageVerb.kQuad -> {
                     project(coords[coordIdx++], coords[coordIdx++])
                     val x1 = outX; val y1 = outY
                     project(coords[coordIdx++], coords[coordIdx++])
@@ -1872,7 +1872,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     flattenQuad(out, px, py, x1, y1, x2, y2, depth = 0)
                     px = x2; py = y2
                 }
-                SkPath.Verb.kConic -> {
+                SkPath.StorageVerb.kConic -> {
                     project(coords[coordIdx++], coords[coordIdx++])
                     val x1 = outX; val y1 = outY
                     project(coords[coordIdx++], coords[coordIdx++])
@@ -1881,7 +1881,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     flattenConic(out, px, py, x1, y1, x2, y2, w)
                     px = x2; py = y2
                 }
-                SkPath.Verb.kCubic -> {
+                SkPath.StorageVerb.kCubic -> {
                     project(coords[coordIdx++], coords[coordIdx++])
                     val x1 = outX; val y1 = outY
                     project(coords[coordIdx++], coords[coordIdx++])
@@ -1891,7 +1891,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                     flattenCubic(out, px, py, x1, y1, x2, y2, x3, y3, depth = 0)
                     px = x3; py = y3
                 }
-                SkPath.Verb.kClose -> {
+                SkPath.StorageVerb.kClose -> {
                     if (hasContour) {
                         addEdge(out, px, py, cx, cy)
                         px = cx; py = cy

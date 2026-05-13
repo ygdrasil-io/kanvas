@@ -392,37 +392,37 @@ internal fun flattenContours(
 
     for (verb in path.verbs) {
         when (verb) {
-            SkPath.Verb.kMove -> {
+            SkPath.StorageVerb.kMove -> {
                 if (hasContour) finalize(closed = false)
                 px = coords[coordIdx++]; py = coords[coordIdx++]
                 current.add(px); current.add(py)
                 hasContour = true
             }
-            SkPath.Verb.kLine -> {
+            SkPath.StorageVerb.kLine -> {
                 px = coords[coordIdx++]; py = coords[coordIdx++]
                 current.add(px); current.add(py)
             }
-            SkPath.Verb.kQuad -> {
+            SkPath.StorageVerb.kQuad -> {
                 val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
                 val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
                 flattenQuad(current, px, py, x1, y1, x2, y2, 0, flatnessSq)
                 px = x2; py = y2
             }
-            SkPath.Verb.kConic -> {
+            SkPath.StorageVerb.kConic -> {
                 val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
                 val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
                 val w = weights[weightIdx++]
                 flattenConic(current, px, py, x1, y1, x2, y2, w, conicSteps)
                 px = x2; py = y2
             }
-            SkPath.Verb.kCubic -> {
+            SkPath.StorageVerb.kCubic -> {
                 val x1 = coords[coordIdx++]; val y1 = coords[coordIdx++]
                 val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
                 val x3 = coords[coordIdx++]; val y3 = coords[coordIdx++]
                 flattenCubic(current, px, py, x1, y1, x2, y2, x3, y3, 0, flatnessSq)
                 px = x3; py = y3
             }
-            SkPath.Verb.kClose -> {
+            SkPath.StorageVerb.kClose -> {
                 if (hasContour) finalize(closed = true)
             }
         }

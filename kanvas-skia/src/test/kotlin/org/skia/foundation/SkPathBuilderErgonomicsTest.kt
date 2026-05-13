@@ -97,12 +97,12 @@ class SkPathBuilderErgonomicsTest {
     fun `polylineTo on empty builder seeds with implicit moveTo at origin`() {
         val pts = arrayOf(1f to 2f, 3f to 4f, 5f to 6f)
         val p = SkPathBuilder().polylineTo(pts).detach()
-        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
         assertEquals(0f, p.coords[0]); assertEquals(0f, p.coords[1])
         // Followed by 3 lineTos.
-        assertEquals(SkPath.Verb.kLine, p.verbs[1])
-        assertEquals(SkPath.Verb.kLine, p.verbs[2])
-        assertEquals(SkPath.Verb.kLine, p.verbs[3])
+        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
+        assertEquals(SkPath.StorageVerb.kLine, p.verbs[2])
+        assertEquals(SkPath.StorageVerb.kLine, p.verbs[3])
         assertArrayEquals(floatArrayOf(0f, 0f, 1f, 2f, 3f, 4f, 5f, 6f), p.coords)
     }
 
@@ -113,7 +113,7 @@ class SkPathBuilderErgonomicsTest {
             .polylineTo(arrayOf(20f to 10f, 20f to 20f))
             .detach()
         assertArrayEquals(
-            arrayOf(SkPath.Verb.kMove, SkPath.Verb.kLine, SkPath.Verb.kLine),
+            arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine, SkPath.StorageVerb.kLine),
             p.verbs,
         )
     }
@@ -129,7 +129,7 @@ class SkPathBuilderErgonomicsTest {
     @Test
     fun `addLine emits move then line`() {
         val p = SkPathBuilder().addLine(1f, 2f, 3f, 4f).detach()
-        assertArrayEquals(arrayOf(SkPath.Verb.kMove, SkPath.Verb.kLine), p.verbs)
+        assertArrayEquals(arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine), p.verbs)
         assertArrayEquals(floatArrayOf(1f, 2f, 3f, 4f), p.coords)
     }
 
@@ -188,7 +188,7 @@ class SkPathBuilderErgonomicsTest {
         // After offset, contour start is (15, 10); close rewinds the pen there.
         // Verify by adding a fresh moveTo+lineTo that asserts pen reset.
         // Simpler: just check that the close is recorded.
-        assertEquals(SkPath.Verb.kClose, p.verbs.last())
+        assertEquals(SkPath.StorageVerb.kClose, p.verbs.last())
     }
 
     // --- transform ------------------------------------------------------
@@ -249,7 +249,7 @@ class SkPathBuilderErgonomicsTest {
         val b = SkPathBuilder()
         b.setLastPt(7f, 8f)
         val p = b.detach()
-        assertArrayEquals(arrayOf(SkPath.Verb.kMove), p.verbs)
+        assertArrayEquals(arrayOf(SkPath.StorageVerb.kMove), p.verbs)
         assertArrayEquals(floatArrayOf(7f, 8f), p.coords)
     }
 

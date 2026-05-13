@@ -39,7 +39,7 @@ class SkPathSvgArcTest {
             .detach()
         // Expect kMove + kLine (no conic).
         assertEquals(2, p.verbs.size)
-        assertEquals(SkPath.Verb.kLine, p.verbs[1])
+        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
         assertEquals(50f, p.coords[2], 1e-4f)
         assertEquals(50f, p.coords[3], 1e-4f)
     }
@@ -51,7 +51,7 @@ class SkPathSvgArcTest {
             .arcTo(10f, 0f, 0f, SMALL, SkPathDirection.kCW, 50f, 50f)
             .detach()
         assertEquals(2, p.verbs.size)
-        assertEquals(SkPath.Verb.kLine, p.verbs[1])
+        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
     }
 
     @Test
@@ -62,7 +62,7 @@ class SkPathSvgArcTest {
             .detach()
         // No conic — falls through to lineTo (which is a no-op self-line).
         assertEquals(2, p.verbs.size)
-        assertEquals(SkPath.Verb.kLine, p.verbs[1])
+        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
     }
 
     // --- Quarter-circle arcs -------------------------------------------
@@ -75,7 +75,7 @@ class SkPathSvgArcTest {
             .arcTo(1f, 1f, 0f, SMALL, SkPathDirection.kCW, 0f, 1f)
             .detach()
         // 1 conic for ≤120° span.
-        assertTrue(p.verbs.contains(SkPath.Verb.kConic), "must emit a conic")
+        assertTrue(p.verbs.contains(SkPath.StorageVerb.kConic), "must emit a conic")
         val (ex, ey) = lastConicEnd(p)
         assertEquals(0f, ex, 1e-4f)
         assertEquals(1f, ey, 1e-4f)
@@ -105,7 +105,7 @@ class SkPathSvgArcTest {
             .moveTo(1f, 0f)
             .arcTo(1f, 1f, 0f, LARGE, SkPathDirection.kCW, -1f, 0f)
             .detach()
-        val conics = p.verbs.count { it == SkPath.Verb.kConic }
+        val conics = p.verbs.count { it == SkPath.StorageVerb.kConic }
         assertTrue(conics >= 2, "half circle should emit ≥ 2 conics, got $conics")
         val (ex, ey) = lastConicEnd(p)
         assertEquals(-1f, ex, 1e-4f)
@@ -122,7 +122,7 @@ class SkPathSvgArcTest {
             .moveTo(1f, 0f)
             .arcTo(1f, 1f, 0f, LARGE, SkPathDirection.kCW, 0f, 1f)
             .detach()
-        val conics = p.verbs.count { it == SkPath.Verb.kConic }
+        val conics = p.verbs.count { it == SkPath.StorageVerb.kConic }
         assertTrue(conics >= 3, "large arc should emit ≥ 3 conics, got $conics")
     }
 

@@ -55,7 +55,7 @@ class SkPath1D2DPathEffectTest {
         val out = pe.filterPath(horizontalLine, identity)!!
         // Each stamp emits 1 moveTo + 3 lineTos + 1 close = 5 verbs.
         // 6 stamps → 30 verbs.
-        val moveCount = out.verbs.count { it == SkPath.Verb.kMove }
+        val moveCount = out.verbs.count { it == SkPath.StorageVerb.kMove }
         assertEquals(6, moveCount, "expected 6 stamps for 100 units / 20 advance")
     }
 
@@ -86,7 +86,7 @@ class SkPath1D2DPathEffectTest {
         val pe = SkPath1DPathEffect.Make(boxStamp, 20f, 10f,
             SkPath1DPathEffect.Style.kTranslate)!!
         val out = pe.filterPath(horizontalLine, identity)!!
-        val moveCount = out.verbs.count { it == SkPath.Verb.kMove }
+        val moveCount = out.verbs.count { it == SkPath.StorageVerb.kMove }
         assertEquals(5, moveCount, "expected 5 stamps for phase=10 advance=20")
     }
 
@@ -103,7 +103,7 @@ class SkPath1D2DPathEffectTest {
         val out = pe.filterPath(twoLines, identity)!!
         // Stamps at (0, 0), (20, 0), (40, 0), (0, 50), (20, 50), (40, 50) = 6.
         // Each stamp = 1 moveTo + 3 lineTo + 1 close.
-        val moveCount = out.verbs.count { it == SkPath.Verb.kMove }
+        val moveCount = out.verbs.count { it == SkPath.StorageVerb.kMove }
         assertEquals(6, moveCount)
     }
 
@@ -146,7 +146,7 @@ class SkPath1D2DPathEffectTest {
             .detach()
         val pe = SkPath2DPathEffect.Make(SkMatrix.MakeScale(20f, 20f), boxStamp)!!
         val out = pe.filterPath(rect, identity)!!
-        val stampCount = out.verbs.count { it == SkPath.Verb.kMove }
+        val stampCount = out.verbs.count { it == SkPath.StorageVerb.kMove }
         // 16 stamps expected (4 columns × 4 rows).
         assertEquals(16, stampCount,
             "expected 16 stamps for 50×50 bbox / 20-unit grid")
@@ -160,7 +160,7 @@ class SkPath1D2DPathEffectTest {
             .detach()
         val pe = SkPath2DPathEffect.Make(SkMatrix.MakeScale(50f, 50f), boxStamp)!!
         val out = pe.filterPath(rect, identity)!!
-        val stampCount = out.verbs.count { it == SkPath.Verb.kMove }
+        val stampCount = out.verbs.count { it == SkPath.StorageVerb.kMove }
         // [0/50..50/50] = [0..1] → ceil/floor → range [0..1] = 2×2.
         assertEquals(4, stampCount)
     }

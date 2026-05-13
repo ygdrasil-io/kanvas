@@ -68,9 +68,9 @@ class SkStrokerTest {
         val out = stroker(2f).stroke(src)
         // Single open contour → single closed sub-contour: M, L, L, L, close = 5 verbs.
         val verbCounts = out.verbs.groupingBy { it }.eachCount()
-        assertEquals(1, verbCounts[SkPath.Verb.kMove])
-        assertEquals(3, verbCounts[SkPath.Verb.kLine])  // 1 along left side + 1 cap + 1 along right side reverse
-        assertEquals(1, verbCounts[SkPath.Verb.kClose])
+        assertEquals(1, verbCounts[SkPath.StorageVerb.kMove])
+        assertEquals(3, verbCounts[SkPath.StorageVerb.kLine])  // 1 along left side + 1 cap + 1 along right side reverse
+        assertEquals(1, verbCounts[SkPath.StorageVerb.kClose])
 
         // Bounding box: 0,−1 to 10,1 (width=2 → halfW=1)
         val b = bbox(out)
@@ -85,8 +85,8 @@ class SkStrokerTest {
         val src = SkPath.Rect(org.skia.math.SkRect.MakeLTRB(10f, 10f, 30f, 30f))
         val out = stroker(2f).stroke(src)
         // Two closed sub-contours = 2 moveTo + 2 close.
-        val moves = out.verbs.count { it == SkPath.Verb.kMove }
-        val closes = out.verbs.count { it == SkPath.Verb.kClose }
+        val moves = out.verbs.count { it == SkPath.StorageVerb.kMove }
+        val closes = out.verbs.count { it == SkPath.StorageVerb.kClose }
         assertEquals(2, moves, "outer + inner ring → 2 moveTo")
         assertEquals(2, closes, "both rings closed")
 
@@ -110,7 +110,7 @@ class SkStrokerTest {
         //              L (cap to right[end]), L (right[end-1]), L (right[mid] miter),
         //              L (right[start]), close.
         // i.e. one moveTo + 6 lineTo + close.
-        val lines = out.verbs.count { it == SkPath.Verb.kLine }
+        val lines = out.verbs.count { it == SkPath.StorageVerb.kLine }
         // With miters on both inside and outside corners (single point each), we get:
         //   left polyline: 3 points (start, miter, end)
         //   right polyline: 3 points (start, miter, end)

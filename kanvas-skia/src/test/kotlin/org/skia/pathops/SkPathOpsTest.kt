@@ -392,7 +392,7 @@ class SkPathOpsTest {
         assertEquals(org.skia.foundation.SkPathFillType.kWinding, r!!.fillType)
         // Sanity check : two contours survive (outer + reversed inner).
         var moves = 0
-        for (v in r.verbs) if (v == org.skia.foundation.SkPath.Verb.kMove) ++moves
+        for (v in r.verbs) if (v == org.skia.foundation.SkPath.StorageVerb.kMove) ++moves
         assertEquals(2, moves)
     }
 

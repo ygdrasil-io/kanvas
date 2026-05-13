@@ -119,7 +119,7 @@ internal fun contourBounds(path: SkPath): List<AsWindingContour> {
     }
     for (v in path.verbs) {
         when (v) {
-            SkPath.Verb.kMove -> {
+            SkPath.StorageVerb.kMove -> {
                 if (hasBounds) {
                     result.add(AsWindingContour(bounds, lastStart, verbStart))
                     lastStart = verbStart
@@ -130,23 +130,23 @@ internal fun contourBounds(path: SkPath): List<AsWindingContour> {
                 coordIdx += 2
                 extend(x, y)
             }
-            SkPath.Verb.kLine -> {
+            SkPath.StorageVerb.kLine -> {
                 val x = path.coords[coordIdx]; val y = path.coords[coordIdx + 1]
                 coordIdx += 2; extend(x, y)
             }
-            SkPath.Verb.kQuad, SkPath.Verb.kConic -> {
+            SkPath.StorageVerb.kQuad, SkPath.StorageVerb.kConic -> {
                 repeat(2) {
                     extend(path.coords[coordIdx], path.coords[coordIdx + 1])
                     coordIdx += 2
                 }
             }
-            SkPath.Verb.kCubic -> {
+            SkPath.StorageVerb.kCubic -> {
                 repeat(3) {
                     extend(path.coords[coordIdx], path.coords[coordIdx + 1])
                     coordIdx += 2
                 }
             }
-            SkPath.Verb.kClose -> { /* no points */ }
+            SkPath.StorageVerb.kClose -> { /* no points */ }
         }
         ++verbStart
     }
@@ -238,54 +238,54 @@ internal fun getDirection(path: SkPath, contour: AsWindingContour): AsWindingDir
         if (verbCount < contour.verbStart || verbCount >= contour.verbEnd) {
             // Still need to advance the coord cursor.
             when (v) {
-                SkPath.Verb.kMove -> {
+                SkPath.StorageVerb.kMove -> {
                     penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
                     coordIdx += 2
                 }
-                SkPath.Verb.kLine -> {
+                SkPath.StorageVerb.kLine -> {
                     penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
                     coordIdx += 2
                 }
-                SkPath.Verb.kQuad, SkPath.Verb.kConic -> {
+                SkPath.StorageVerb.kQuad, SkPath.StorageVerb.kConic -> {
                     coordIdx += 2 // control
                     penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
                     coordIdx += 2
                 }
-                SkPath.Verb.kCubic -> {
+                SkPath.StorageVerb.kCubic -> {
                     coordIdx += 4 // 2 controls
                     penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
                     coordIdx += 2
                 }
-                SkPath.Verb.kClose -> { /* no points */ }
+                SkPath.StorageVerb.kClose -> { /* no points */ }
             }
             continue
         }
         when (v) {
-            SkPath.Verb.kMove -> {
+            SkPath.StorageVerb.kMove -> {
                 penX = path.coords[coordIdx]; penY = path.coords[coordIdx + 1]
                 coordIdx += 2
             }
-            SkPath.Verb.kLine -> {
+            SkPath.StorageVerb.kLine -> {
                 val ex = path.coords[coordIdx]; val ey = path.coords[coordIdx + 1]
                 coordIdx += 2
                 totalSignedArea += (penY - ey) * (penX + ex)
                 penX = ex; penY = ey
             }
-            SkPath.Verb.kQuad, SkPath.Verb.kConic -> {
+            SkPath.StorageVerb.kQuad, SkPath.StorageVerb.kConic -> {
                 coordIdx += 2 // skip control
                 val ex = path.coords[coordIdx]; val ey = path.coords[coordIdx + 1]
                 coordIdx += 2
                 totalSignedArea += (penY - ey) * (penX + ex)
                 penX = ex; penY = ey
             }
-            SkPath.Verb.kCubic -> {
+            SkPath.StorageVerb.kCubic -> {
                 coordIdx += 4 // skip 2 controls
                 val ex = path.coords[coordIdx]; val ey = path.coords[coordIdx + 1]
                 coordIdx += 2
                 totalSignedArea += (penY - ey) * (penX + ex)
                 penX = ex; penY = ey
             }
-            SkPath.Verb.kClose -> { /* no points */ }
+            SkPath.StorageVerb.kClose -> { /* no points */ }
         }
     }
     return if (totalSignedArea < 0) AsWindingDirection.kCCW else AsWindingDirection.kCW
@@ -308,7 +308,7 @@ internal fun getDirection(path: SkPath, contour: AsWindingContour): AsWindingDir
  * stored coords), and the conic weight (1.0 for non-conic verbs).
  */
 internal data class AsWindingVerbRec(
-    val verb: SkPath.Verb,
+    val verb: SkPath.StorageVerb,
     val pts: Array<SkPoint>,
     val weight: Float,
     val verbIndex: Int,
@@ -335,13 +335,13 @@ internal inline fun forEachVerb(
     for (v in path.verbs) {
         ++verbIndex
         when (v) {
-            SkPath.Verb.kMove -> {
+            SkPath.StorageVerb.kMove -> {
                 val x = path.coords[coordIdx]; val y = path.coords[coordIdx + 1]
                 coordIdx += 2
                 body(AsWindingVerbRec(v, arrayOf(SkPoint(x, y)), 1f, verbIndex))
                 penX = x; penY = y
             }
-            SkPath.Verb.kLine -> {
+            SkPath.StorageVerb.kLine -> {
                 val x = path.coords[coordIdx]; val y = path.coords[coordIdx + 1]
                 coordIdx += 2
                 body(AsWindingVerbRec(v,
@@ -349,7 +349,7 @@ internal inline fun forEachVerb(
                     1f, verbIndex))
                 penX = x; penY = y
             }
-            SkPath.Verb.kQuad -> {
+            SkPath.StorageVerb.kQuad -> {
                 val cx = path.coords[coordIdx]; val cy = path.coords[coordIdx + 1]
                 val ex = path.coords[coordIdx + 2]; val ey = path.coords[coordIdx + 3]
                 coordIdx += 4
@@ -358,7 +358,7 @@ internal inline fun forEachVerb(
                     1f, verbIndex))
                 penX = ex; penY = ey
             }
-            SkPath.Verb.kConic -> {
+            SkPath.StorageVerb.kConic -> {
                 val cx = path.coords[coordIdx]; val cy = path.coords[coordIdx + 1]
                 val ex = path.coords[coordIdx + 2]; val ey = path.coords[coordIdx + 3]
                 coordIdx += 4
@@ -368,7 +368,7 @@ internal inline fun forEachVerb(
                     w, verbIndex))
                 penX = ex; penY = ey
             }
-            SkPath.Verb.kCubic -> {
+            SkPath.StorageVerb.kCubic -> {
                 val c1x = path.coords[coordIdx]; val c1y = path.coords[coordIdx + 1]
                 val c2x = path.coords[coordIdx + 2]; val c2y = path.coords[coordIdx + 3]
                 val ex = path.coords[coordIdx + 4]; val ey = path.coords[coordIdx + 5]
@@ -379,7 +379,7 @@ internal inline fun forEachVerb(
                     1f, verbIndex))
                 penX = ex; penY = ey
             }
-            SkPath.Verb.kClose -> {
+            SkPath.StorageVerb.kClose -> {
                 body(AsWindingVerbRec(v, arrayOf(SkPoint(penX, penY)), 1f, verbIndex))
             }
         }
@@ -391,10 +391,10 @@ internal inline fun forEachVerb(
  * a curve verb adds. Mirrors `VerbPtCount`
  * (`SkPathOpsAsWinding.cpp:52`) — line=1, quad=2, conic=2, cubic=3.
  */
-private fun verbPtCount(verb: SkPath.Verb): Int = when (verb) {
-    SkPath.Verb.kLine -> 1
-    SkPath.Verb.kQuad, SkPath.Verb.kConic -> 2
-    SkPath.Verb.kCubic -> 3
+private fun verbPtCount(verb: SkPath.StorageVerb): Int = when (verb) {
+    SkPath.StorageVerb.kLine -> 1
+    SkPath.StorageVerb.kQuad, SkPath.StorageVerb.kConic -> 2
+    SkPath.StorageVerb.kCubic -> 3
     else -> 0
 }
 
@@ -410,8 +410,8 @@ internal fun leftEdge(rec: AsWindingVerbRec): SkPoint {
     val pts = rec.pts
     val verb = rec.verb
     return when (verb) {
-        SkPath.Verb.kLine -> if (pts[0].fX < pts[1].fX) pts[0] else pts[1]
-        SkPath.Verb.kQuad -> {
+        SkPath.StorageVerb.kLine -> if (pts[0].fX < pts[1].fX) pts[0] else pts[1]
+        SkPath.StorageVerb.kQuad -> {
             val q = SkDQuad().apply { set(pts[0], pts[1], pts[2]) }
             if (q.monotonicInX()) {
                 if (pts[0].fX < pts[2].fX) pts[0] else pts[2]
@@ -423,7 +423,7 @@ internal fun leftEdge(rec: AsWindingVerbRec): SkPoint {
                 else if (pts[0].fX < pts[2].fX) pts[0] else pts[2]
             }
         }
-        SkPath.Verb.kConic -> {
+        SkPath.StorageVerb.kConic -> {
             val c = SkDConic().apply { set(pts[0], pts[1], pts[2], rec.weight) }
             if (c.monotonicInX()) {
                 if (pts[0].fX < pts[2].fX) pts[0] else pts[2]
@@ -436,7 +436,7 @@ internal fun leftEdge(rec: AsWindingVerbRec): SkPoint {
                 else if (pts[0].fX < pts[2].fX) pts[0] else pts[2]
             }
         }
-        SkPath.Verb.kCubic -> {
+        SkPath.StorageVerb.kCubic -> {
             val cu = SkDCubic().apply { set(pts[0], pts[1], pts[2], pts[3]) }
             if (!cu.monotonicInX()) {
                 val tValues = DoubleArray(2)
@@ -521,11 +521,11 @@ internal fun containsEdge(rec: AsWindingVerbRec, edge: SkPoint): Int {
 }
 
 /** Map a path verb to the equivalent segment verb for [CurveIntercept]. */
-private fun verbToSegVerb(v: SkPath.Verb): SkOpSegment.SegVerb = when (v) {
-    SkPath.Verb.kLine -> SkOpSegment.SegVerb.kLine
-    SkPath.Verb.kQuad -> SkOpSegment.SegVerb.kQuad
-    SkPath.Verb.kConic -> SkOpSegment.SegVerb.kConic
-    SkPath.Verb.kCubic -> SkOpSegment.SegVerb.kCubic
+private fun verbToSegVerb(v: SkPath.StorageVerb): SkOpSegment.SegVerb = when (v) {
+    SkPath.StorageVerb.kLine -> SkOpSegment.SegVerb.kLine
+    SkPath.StorageVerb.kQuad -> SkOpSegment.SegVerb.kQuad
+    SkPath.StorageVerb.kConic -> SkOpSegment.SegVerb.kConic
+    SkPath.StorageVerb.kCubic -> SkOpSegment.SegVerb.kCubic
     else -> SkOpSegment.SegVerb.kUnset
 }
 
@@ -533,15 +533,15 @@ private fun verbToSegVerb(v: SkPath.Verb): SkOpSegment.SegVerb = when (v) {
 private fun curvePointXAtT(rec: AsWindingVerbRec, t: Double): Float {
     val pts = rec.pts
     return when (rec.verb) {
-        SkPath.Verb.kLine -> {
+        SkPath.StorageVerb.kLine -> {
             val u = 1.0 - t
             (u * pts[0].fX + t * pts[1].fX).toFloat()
         }
-        SkPath.Verb.kQuad ->
+        SkPath.StorageVerb.kQuad ->
             SkDQuad().apply { set(pts[0], pts[1], pts[2]) }.ptAtT(t).x.toFloat()
-        SkPath.Verb.kConic ->
+        SkPath.StorageVerb.kConic ->
             SkDConic().apply { set(pts[0], pts[1], pts[2], rec.weight) }.ptAtT(t).x.toFloat()
-        SkPath.Verb.kCubic ->
+        SkPath.StorageVerb.kCubic ->
             SkDCubic().apply { set(pts[0], pts[1], pts[2], pts[3]) }.ptAtT(t).x.toFloat()
         else -> 0f
     }
@@ -551,12 +551,12 @@ private fun curvePointXAtT(rec: AsWindingVerbRec, t: Double): Float {
 private fun curveSlopeYAtT(rec: AsWindingVerbRec, t: Double): Double {
     val pts = rec.pts
     return when (rec.verb) {
-        SkPath.Verb.kLine -> (pts[1].fY - pts[0].fY).toDouble()
-        SkPath.Verb.kQuad ->
+        SkPath.StorageVerb.kLine -> (pts[1].fY - pts[0].fY).toDouble()
+        SkPath.StorageVerb.kQuad ->
             SkDQuad().apply { set(pts[0], pts[1], pts[2]) }.dxdyAtT(t).y
-        SkPath.Verb.kConic ->
+        SkPath.StorageVerb.kConic ->
             SkDConic().apply { set(pts[0], pts[1], pts[2], rec.weight) }.dxdyAtT(t).y
-        SkPath.Verb.kCubic ->
+        SkPath.StorageVerb.kCubic ->
             SkDCubic().apply { set(pts[0], pts[1], pts[2], pts[3]) }.dxdyAtT(t).y
         else -> 0.0
     }
@@ -593,8 +593,8 @@ internal fun nextEdge(
         if (rec.verbIndex < contour.verbStart) return@forEachVerb
         if (rec.verbIndex >= contour.verbEnd) return@forEachVerb
         val verb = rec.verb
-        if (verb != SkPath.Verb.kLine && verb != SkPath.Verb.kQuad &&
-            verb != SkPath.Verb.kConic && verb != SkPath.Verb.kCubic) {
+        if (verb != SkPath.StorageVerb.kLine && verb != SkPath.StorageVerb.kQuad &&
+            verb != SkPath.StorageVerb.kConic && verb != SkPath.StorageVerb.kCubic) {
             return@forEachVerb
         }
         // Horizontal edge filter.
@@ -744,7 +744,7 @@ internal fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkP
         }
         ptCursor -= n
         when (v) {
-            SkPath.Verb.kMove -> {
+            SkPath.StorageVerb.kMove -> {
                 if (needClose) {
                     builder.close()
                     needClose = false
@@ -752,11 +752,11 @@ internal fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkP
                 needMove = true
                 ptCursor += 1 // restore so next iter's "needMove" reads it
             }
-            SkPath.Verb.kLine -> {
+            SkPath.StorageVerb.kLine -> {
                 val x = src.coords[ptCursor * 2]; val y = src.coords[ptCursor * 2 + 1]
                 builder.lineTo(x, y)
             }
-            SkPath.Verb.kQuad -> {
+            SkPath.StorageVerb.kQuad -> {
                 // Original verb : pts[0] = pen, pts[1] = control, pts[2] = end.
                 // Reversed : start at original end, control = original control,
                 // end = original pen. For builder.quadTo(c, e), c = pts[1]
@@ -766,7 +766,7 @@ internal fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkP
                 val ex = src.coords[ptCursor * 2]; val ey = src.coords[ptCursor * 2 + 1]
                 builder.quadTo(c1x, c1y, ex, ey)
             }
-            SkPath.Verb.kConic -> {
+            SkPath.StorageVerb.kConic -> {
                 conicCursor -= 1
                 val w = src.conicWeights[conicCursor]
                 val c1x = src.coords[(ptCursor + 1) * 2]
@@ -774,7 +774,7 @@ internal fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkP
                 val ex = src.coords[ptCursor * 2]; val ey = src.coords[ptCursor * 2 + 1]
                 builder.conicTo(c1x, c1y, ex, ey, w)
             }
-            SkPath.Verb.kCubic -> {
+            SkPath.StorageVerb.kCubic -> {
                 // pts[0..3] = pen, c1, c2, end. Reversed : end → c2 → c1 → pen.
                 // builder.cubicTo(c1, c2, e) emits (orig c2, orig c1, orig pen).
                 val c2x = src.coords[(ptCursor + 2) * 2]
@@ -784,7 +784,7 @@ internal fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkP
                 val ex = src.coords[ptCursor * 2]; val ey = src.coords[ptCursor * 2 + 1]
                 builder.cubicTo(c2x, c2y, c1x, c1y, ex, ey)
             }
-            SkPath.Verb.kClose -> {
+            SkPath.StorageVerb.kClose -> {
                 needClose = true
             }
         }
@@ -792,12 +792,12 @@ internal fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkP
     }
 }
 
-private fun ptsInVerb(v: SkPath.Verb): Int = when (v) {
-    SkPath.Verb.kMove -> 1
-    SkPath.Verb.kLine -> 1
-    SkPath.Verb.kQuad, SkPath.Verb.kConic -> 2
-    SkPath.Verb.kCubic -> 3
-    SkPath.Verb.kClose -> 0
+private fun ptsInVerb(v: SkPath.StorageVerb): Int = when (v) {
+    SkPath.StorageVerb.kMove -> 1
+    SkPath.StorageVerb.kLine -> 1
+    SkPath.StorageVerb.kQuad, SkPath.StorageVerb.kConic -> 2
+    SkPath.StorageVerb.kCubic -> 3
+    SkPath.StorageVerb.kClose -> 0
 }
 
 /**
@@ -847,37 +847,37 @@ private class AsWindingVerbCursor(private val src: SkPath) {
     fun emitNext(builder: org.skia.foundation.SkPathBuilder) {
         val v = src.verbs[verbIdx++]
         when (v) {
-            SkPath.Verb.kMove -> {
+            SkPath.StorageVerb.kMove -> {
                 val x = src.coords[coordIdx]; val y = src.coords[coordIdx + 1]
                 coordIdx += 2
                 builder.moveTo(x, y); penX = x; penY = y
             }
-            SkPath.Verb.kLine -> {
+            SkPath.StorageVerb.kLine -> {
                 val x = src.coords[coordIdx]; val y = src.coords[coordIdx + 1]
                 coordIdx += 2
                 builder.lineTo(x, y); penX = x; penY = y
             }
-            SkPath.Verb.kQuad -> {
+            SkPath.StorageVerb.kQuad -> {
                 val cx = src.coords[coordIdx]; val cy = src.coords[coordIdx + 1]
                 val ex = src.coords[coordIdx + 2]; val ey = src.coords[coordIdx + 3]
                 coordIdx += 4
                 builder.quadTo(cx, cy, ex, ey); penX = ex; penY = ey
             }
-            SkPath.Verb.kConic -> {
+            SkPath.StorageVerb.kConic -> {
                 val cx = src.coords[coordIdx]; val cy = src.coords[coordIdx + 1]
                 val ex = src.coords[coordIdx + 2]; val ey = src.coords[coordIdx + 3]
                 coordIdx += 4
                 val w = src.conicWeights[conicIdx++]
                 builder.conicTo(cx, cy, ex, ey, w); penX = ex; penY = ey
             }
-            SkPath.Verb.kCubic -> {
+            SkPath.StorageVerb.kCubic -> {
                 val c1x = src.coords[coordIdx]; val c1y = src.coords[coordIdx + 1]
                 val c2x = src.coords[coordIdx + 2]; val c2y = src.coords[coordIdx + 3]
                 val ex = src.coords[coordIdx + 4]; val ey = src.coords[coordIdx + 5]
                 coordIdx += 6
                 builder.cubicTo(c1x, c1y, c2x, c2y, ex, ey); penX = ex; penY = ey
             }
-            SkPath.Verb.kClose -> { builder.close() }
+            SkPath.StorageVerb.kClose -> { builder.close() }
         }
     }
 }

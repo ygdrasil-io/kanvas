@@ -364,7 +364,7 @@ public object SkPathOps {
         // even-odd-vs-winding distinction is moot — area is the same.
         var contourCount = 0
         for (v in path.verbs) {
-            if (v == SkPath.Verb.kMove) {
+            if (v == SkPath.StorageVerb.kMove) {
                 if (++contourCount > 1) break
             }
         }

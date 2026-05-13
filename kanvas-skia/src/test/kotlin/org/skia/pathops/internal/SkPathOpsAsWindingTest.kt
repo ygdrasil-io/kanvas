@@ -111,7 +111,7 @@ class SkPathOpsAsWindingTest {
     @Test
     fun `leftEdge on a horizontal line picks the smaller-X endpoint`() {
         val rec = AsWindingVerbRec(
-            org.skia.foundation.SkPath.Verb.kLine,
+            org.skia.foundation.SkPath.StorageVerb.kLine,
             arrayOf(org.skia.math.SkPoint(10f, 5f), org.skia.math.SkPoint(0f, 5f)),
             1f, 0,
         )
@@ -154,13 +154,13 @@ class SkPathOpsAsWindingTest {
         // Expect : moveTo(start) + 4 lineTo (in reverse order) + close.
         // First verb is kMove, second-to-last verb (before close) is the
         // line back to (0, 0).
-        assertEquals(org.skia.foundation.SkPath.Verb.kMove, r.verbs[0])
+        assertEquals(org.skia.foundation.SkPath.StorageVerb.kMove, r.verbs[0])
         // Last point (in reversed walk) is the original moveTo (0, 0)
         // — which is the **first** lineTo target after the moveTo of the
         // reversed path. Concretely the reversed sequence is :
         // moveTo(0,0) → lineTo(0,10) → lineTo(10,10) → lineTo(10,0) → lineTo(0,0) → close.
-        val moves = r.verbs.count { it == org.skia.foundation.SkPath.Verb.kMove }
-        val lines = r.verbs.count { it == org.skia.foundation.SkPath.Verb.kLine }
+        val moves = r.verbs.count { it == org.skia.foundation.SkPath.StorageVerb.kMove }
+        val lines = r.verbs.count { it == org.skia.foundation.SkPath.StorageVerb.kLine }
         assertEquals(1, moves)
         assertEquals(4, lines)
     }
