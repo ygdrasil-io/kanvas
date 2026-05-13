@@ -149,9 +149,39 @@ public object SkSurfaces {
      * throw `IllegalArgumentException` to surface the misuse loudly
      * at the call site (Kotlin idiom — null isn't a graceful fallback
      * for a programming error here).
+     *
+     * **Fidelity note (R-suivi.14)** : upstream's
+     * [`SkNullSurface::onNewImageSnapshot`](https://github.com/google/skia/blob/main/src/image/SkSurface_Null.cpp#L37)
+     * returns `nullptr` ; we return a zero-pixel `kRGBA_8888` image
+     * sized to this surface. Pixels are `0x00000000` (transparent
+     * black) — semantically equivalent to upstream's null (caller
+     * gets no useful pixel data either way) without forcing every
+     * caller through nullable handling. See [NullOrNull] when null is
+     * the desired sentinel (e.g. when porting C++ call sites that
+     * test the `SkSurfaces::Null` return for null).
      */
     public fun Null(width: Int, height: Int): SkSurface {
         require(width > 0 && height > 0) { "Null surface dimensions must be positive ; got ${width}x$height" }
+        return NullSurface(width, height)
+    }
+
+    /**
+     * Mirrors Skia's `SkSurfaces::Null(int width, int height)` with
+     * upstream's exact nullable contract :
+     *  - `width < 1 || height < 1` → returns `null` (matches
+     *    upstream's `if (width < 1 || height < 1) return nullptr`).
+     *  - otherwise → a discard surface identical to [Null] (canvas
+     *    accepts draws but produces no rendered output ; snapshot is
+     *    a zero-pixel image — see [Null]'s fidelity note).
+     *
+     * Provided alongside [Null] (rather than replacing it) so the
+     * existing non-nullable factory stays source-compatible with
+     * earlier kanvas-skia consumers. Reach for [NullOrNull] when
+     * porting a C++ call site that uses `if (auto s = SkSurfaces::Null(...))`
+     * style null-checks.
+     */
+    public fun NullOrNull(width: Int, height: Int): SkSurface? {
+        if (width < 1 || height < 1) return null
         return NullSurface(width, height)
     }
 }
