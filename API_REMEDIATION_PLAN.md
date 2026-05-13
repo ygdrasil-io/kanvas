@@ -5,19 +5,19 @@
 
 ## Résumé exécutif
 
-| Catégorie | Count audit | Restant après R1 + R2 complet |
+| Catégorie | Count audit | Restant après R1 + R2 + R3 batch 7 |
 |---|---:|---:|
-| **Classes manquantes entièrement** (non-GPU, public) | 47 | 11 |
-| **Méthodes manquantes** (classe présente) | ~110 | ~50 |
-| **Overloads manquants** (signature partielle) | ~35 | ~10 |
-| **Champs / enums manquants** | ~20 | ~10 |
+| **Classes manquantes entièrement** (non-GPU, public) | 47 | 7 |
+| **Méthodes manquantes** (classe présente) | ~110 | ~40 |
+| **Overloads manquants** (signature partielle) | ~35 | ~8 |
+| **Champs / enums manquants** | ~20 | ~8 |
 | Total APIs publiques upstream non-GPU auditées | ~95 headers | — |
 
 **Progression** :
 - ✅ Phase R1 complète (25/25, mergée).
-- ✅ Phase R2 complète (20/20 ✅ ou ouverte). PRs #361, #365–#367, #369–#371, #373–#375, #378, #379.
-- 🔄 Phase R3 : 1/11 (R3.1 SkM44 classe via #377, intégration Canvas différée R3.1-bis).
-- ⚠️ Phase R-suivi : **27 items** partiels/stub à compléter — voir Section 5.
+- ✅ Phase R2 complète (20/20 mergée).
+- 🔄 Phase R3 : **4/11 ✅ ou ouvert** (R3.1 #377, R3.1-bis #381, R3.4 #382, R3.7 #383). 7 restants.
+- ⚠️ Phase R-suivi : **33 items** partiels/stub à compléter — voir Section 5.
 
 Plus du tiers de la surface publique Skia non-GPU n'est pas portée. Le module
 `:kanvas-skia` est correctement dimensionné pour exécuter les GMs **2D rasterisés
@@ -807,7 +807,16 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 24. **R-suivi.24** `SkV3` du PR #366 n'avait été créé que dans `kanvas/src/generated/` (legacy module), **pas** dans `:kanvas-skia/math/`. Corrigé en marge de #377 via merge conflict — à confirmer en relecture qu'il n'y a pas d'autres types de #366 dans la même situation (`SkColorMatrix`, `Sk3DView`, `SkCamera3D` ?).
 25. **R-suivi.25** `SkPath.IterVerb` collision avec `SkPath.Verb` existant : le storage enum (6 valeurs) et l'iterator enum (7 valeurs avec `kDoneVerb`) sont distincts. Réconciliation à choisir : renommer le storage en `SkPath.StorageVerb` pour libérer `SkPath.Verb` côté iterator (upstream-compat), ou garder le nommage actuel.
 26. **R-suivi.26** `SkImagesTest.kt` cassé sur master post-R2.12 (#371) : `encodeToData` extension top-level supprimée, remplacée par la méthode membre. Fix dans #378/#379. À vérifier qu'aucun autre call site n'utilise l'ancienne extension.
-27. **R-suivi.27** R3.1-bis : intégration `SkCanvas.concat(SkM44)`, `setMatrix(SkM44)`, `getLocalToDevice()` etc. — différée pour éviter conflit avec PR #375 (`SkCanvas` batch 5-A). À ouvrir post-#375 mergé.
+27. **R-suivi.27** R3.1-bis : intégration `SkCanvas.concat(SkM44)`, `setMatrix(SkM44)`, `getLocalToDevice()` etc. — ✅ livré via #381.
+
+**Ajouts batch 7 (R3.1-bis, R3.4, R3.7)** :
+
+28. **R-suivi.28** `@Deprecated getTotalMatrix()` génère des warnings sur 8 call-sites : `SkAutoCanvasRestoreTest`, `SkDrawableTest`, `SkPictureTest`, `SkCanvasWrappersTest`, `SkSVGCanvas`, `SkRecordingCanvas`, `SkNoDrawCanvas`, `SkPaintFilterCanvas`. Migration à faire vers `getLocalToDevice()` / `getLocalToDeviceAsMatrix()`.
+29. **R-suivi.29** `SkStream` : `peek`, `duplicate`, classe `SkStreamMemory` distincte non portés (non référencés par l'API surface kanvas-skia). À revisiter si un consommateur futur en a besoin.
+30. **R-suivi.30** `SkShadowUtils.DrawShadow` : implémentation **blur-based** (non analytic-mesh). `kGeometricOnly_ShadowFlag` est no-op. Per-pixel parity avec upstream non garantie.
+31. **R-suivi.31** `SkShadowUtils.DrawShadow` : `zPlaneParams` évalué au centroïde du path, pas par-vertex. Bon pour occluder rect/convexe simple ; dégradé sur paths complexes avec tilt prononcé.
+32. **R-suivi.32** `SkShadowUtils.kTransparentOccluder_ShadowFlag` : ne déclenche pas le culling opaque-behind-occluder. Workaround par l'appelant.
+33. **R-suivi.33** `SkShadowUtils.OptimizeForSurface` : no-op stub (pas de cache analytic-mesh à amorcer).
 
 Effort estimé : 3-4 jours total (tous indépendants, parallélisables).
 
@@ -842,15 +851,16 @@ Effort estimé : 3-4 jours total (tous indépendants, parallélisables).
 
 ### Phase R3 — Grandes classes / sous-systèmes (effort L/XL)
 
-**Progression** : 1/11 (R3.1 classe ouverte, intégration `SkCanvas` différée à R3.1-bis).
+**Progression** : **4/11 ✅ ou en vol** : R3.1 (#377), R3.1-bis (#381), R3.4 (#382), R3.7 (#383). Restants : R3.2, R3.3, R3.5, R3.6, R3.8, R3.9, R3.10, R3.11.
 
-1. 🔄 **R3.1** `SkM44` + `SkV2` + `SkV4` classes (PR #377). **R3.1-bis** restant : intégration `SkCanvas.concat(m44)` / `setMatrix(m44)`.
+1. ✅ **R3.1** `SkM44` + `SkV2` + `SkV4` classes (PR #377)
+   - 🔄 **R3.1-bis** intégration `SkCanvas.concat(m44)` / `setMatrix(m44)` / `getLocalToDevice` (PR #381, R-suivi.28 deprecated getTotalMatrix call-sites)
 2. **R3.2** `SkFontMgr` + `SkFontStyleSet` + plate-forme fontconfig (Section 1.6)
 3. **R3.3** `SkCustomTypefaceBuilder` (Section 1.7) — post-R3.2
-4. **R3.4** `SkStream` / `SkWStream` arbre complet (Section 1.24)
+4. 🔄 **R3.4** `SkStream` / `SkWStream` arbre complet (PR #382, 8 classes, R-suivi.29 omits)
 5. **R3.5** `SkAndroidCodec` (Section 1.37)
 6. **R3.6** `SkDocument` + sink PDF (Section 1.9)
-7. **R3.7** `SkShadowUtils` (Section 1.30)
+7. 🔄 **R3.7** `SkShadowUtils` (PR #383, blur-based simplifié, R-suivi.30–33)
 8. **R3.8** `SkRasterHandleAllocator` (Section 1.27)
 9. **R3.9** `SkRecorder` / `SkCPURecorder` / `SkCPUContext` (Section 1.28)
 10. **R3.10** Décodeurs étendus : `SkAvifDecoder` (1.38), `SkJpegxlDecoder` (1.41), `SkRawDecoder` (1.40), `SkIcoDecoder` (1.39)
