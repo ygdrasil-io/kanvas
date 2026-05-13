@@ -96,6 +96,51 @@ public abstract class SkMaskFilter {
      * before allocating the mask buffer.
      */
     public abstract fun margin(): Int
+
+    /**
+     * Phase R1-C — `true` if the filter's sigma scales with the CTM
+     * (Skia default). When `false`, [withCtmScale] returns a filter
+     * whose effective sigma is divided by the CTM scale so the blur
+     * radius stays in source-pixel units regardless of the canvas
+     * transform. Mirrors the `respectCTM` knob on Skia's
+     * `SkMaskFilter::MakeBlur(style, sigma, respectCTM)` factory
+     * (`include/core/SkMaskFilter.h:30-35`).
+     *
+     * The rasteriser walks the mask filter in device space (sigma in
+     * device pixels), so this defaults to `true` ; `SkBlurMaskFilter`
+     * built with `respectCTM = false` overrides to `false` and
+     * provides a [withCtmScale] that rescales the sigma.
+     */
+    public open val respectCTM: Boolean get() = true
+
+    /**
+     * Phase R1-C — when [respectCTM] is `false`, return a filter
+     * whose effective sigma is `sigma / scale` (so a CTM scale of 2
+     * shrinks the blur radius by half — keeping the on-screen blur
+     * footprint constant in source coordinates). When [respectCTM]
+     * is `true` (the default), returns `this` unchanged.
+     *
+     * The device calls this with `ctm.computeMaxScale()` before
+     * invoking [filterMask] / [margin] — `respectCTM = false` then
+     * propagates a *new* mask filter with the rescaled radius.
+     */
+    public open fun withCtmScale(@Suppress("UNUSED_PARAMETER") scale: Float): SkMaskFilter = this
+
+    public companion object {
+        /**
+         * Mirrors Skia's
+         * [`SkMaskFilter::MakeBlur(style, sigma, respectCTM)`](https://github.com/google/skia/blob/main/include/core/SkMaskFilter.h)
+         * (`include/core/SkMaskFilter.h:34-35`) — convenience pass-through
+         * to [SkBlurMaskFilter.Make] so client code can spell the upstream
+         * idiom verbatim. `respectCTM` defaults to `true` (Skia default) ;
+         * `respectCTM = false` produces a filter whose blur radius is in
+         * **source-pixel** units regardless of the active canvas CTM.
+         *
+         * Used by `gm/blurignorexform.cpp`.
+         */
+        public fun MakeBlur(style: SkBlurStyle, sigma: Float, respectCTM: Boolean = true): SkMaskFilter? =
+            SkBlurMaskFilter.Make(style, sigma, respectCTM)
+    }
 }
 
 /**

@@ -1103,10 +1103,18 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val srcBounds = path.computeBounds()
         val devBounds = ctm.mapRect(srcBounds)
         val scale = ctm.computeMaxScale().coerceAtLeast(1f)
+        // Phase R1-C — if the mask filter ignores the CTM (i.e. its
+        // sigma is in source-pixel units), rescale it now so its
+        // `margin()` and `filterMask` calls below operate in
+        // device-pixel units. When `respectCTM = true` (the default)
+        // this is a no-op.
+        val effectiveMaskFilter = if (!maskFilter.respectCTM) {
+            maskFilter.withCtmScale(scale)
+        } else maskFilter
         val strokeExpand = if (paint.style != SkPaint.Style.kFill_Style) {
             (paint.strokeWidth * scale * 0.5f) + 1f
         } else 1f
-        val margin = maskFilter.margin()
+        val margin = effectiveMaskFilter.margin()
         var ml = floor(devBounds.left - strokeExpand).toInt() - margin
         var mt = floor(devBounds.top - strokeExpand).toInt() - margin
         var mr = ceil(devBounds.right + strokeExpand).toInt() + margin
@@ -1162,9 +1170,9 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         //    return three planes (alpha + multiply + additive) and
         //    take the [Format.k3D] branch.
         val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
-        when (maskFilter.format) {
+        when (effectiveMaskFilter.format) {
             org.skia.foundation.SkMaskFilter.Format.kA8 -> {
-                val blurred = maskFilter.filterMask(srcMask, maskW, maskH)
+                val blurred = effectiveMaskFilter.filterMask(srcMask, maskW, maskH)
                 val rgb = effectiveColor and 0x00FFFFFF
                 for (y in 0 until maskH) {
                     val devY = mt + y
@@ -1178,7 +1186,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 }
             }
             org.skia.foundation.SkMaskFilter.Format.k3D -> {
-                val mask3d = maskFilter.filterMask3D(srcMask, maskW, maskH)
+                val mask3d = effectiveMaskFilter.filterMask3D(srcMask, maskW, maskH)
                 // Composite per pixel : `src.rgb = paint.rgb × multiply / 255 + additive`,
                 // `src.a = paint.a × mask.alpha / 255` ; then blend.
                 val paintR = (effectiveColor ushr 16) and 0xFF

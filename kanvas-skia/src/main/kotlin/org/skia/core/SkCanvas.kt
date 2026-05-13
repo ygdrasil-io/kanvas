@@ -1629,7 +1629,10 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         // image filter, and pastes the (possibly displaced + resized)
         // result back into the layer at the correct origin.
         if (backdrop != null) {
-            seedLayerFromBackdrop(s.device, layerDevice, originX, originY, w, h, backdrop, s.matrix)
+            seedLayerFromBackdrop(
+                s.device, layerDevice, originX, originY, w, h, backdrop, s.matrix,
+                scaleFactor = rec.scaleFactor,
+            )
         }
 
         // Layer-local CTM: the parent matrix post-translated by `-origin`,
@@ -1677,6 +1680,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         h: Int,
         backdrop: SkImageFilter,
         ctm: SkMatrix,
+        scaleFactor: Float = 1f,
     ) {
         // Snapshot parent's pixels in the layer bbox. Out-of-parent
         // samples come back as 0 (transparent) — matching upstream's
@@ -1692,13 +1696,57 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
                 snapBuf[y * w + x] = parent.bitmap.getPixel(px, py)
             }
         }
-        val snapImg = SkImage(w, h, snapBuf)
+        // Phase R1-C — apply `scaleFactor` downscale to the snapshot
+        // **before** running the filter. Matches upstream's
+        // `internalDrawDeviceWithFilter(scaleFactor=...)` pipeline
+        // (`include/core/SkCanvas.h:2654-2660`) : the snapshot is
+        // downsampled to `(w*scale × h*scale)`, the filter runs at
+        // that lower resolution, then the result is pasted back at
+        // 1/scaleFactor (i.e. upsampled to the full layer footprint).
+        // `scaleFactor == 1.0` is the fast path (no-op) — every existing
+        // backdrop test stays bit-iso with the pre-Phase-R1-C output.
+        val scale = scaleFactor.coerceIn(0.01f, 1f)
+        val snapImg: SkImage = if (scale >= 1f) {
+            SkImage(w, h, snapBuf)
+        } else {
+            // Box-average downscale to `(sw × sh)`. Sufficient precision
+            // for the GM-only use case ; upstream uses a higher-quality
+            // mipmap but the difference is sub-pixel for the GM diff.
+            val sw = (w * scale + 0.5f).toInt().coerceAtLeast(1)
+            val sh = (h * scale + 0.5f).toInt().coerceAtLeast(1)
+            val down = IntArray(sw * sh)
+            for (yi in 0 until sh) {
+                val sy = (yi.toFloat() / scale).toInt().coerceIn(0, h - 1)
+                for (xi in 0 until sw) {
+                    val sx = (xi.toFloat() / scale).toInt().coerceIn(0, w - 1)
+                    down[yi * sw + xi] = snapBuf[sy * w + sx]
+                }
+            }
+            SkImage(sw, sh, down)
+        }
         val filtered = backdrop.filterImage(snapImg, ctm)
-        val filteredImg = filtered.image
+        var filteredImg = filtered.image
+        var dx = filtered.offsetX
+        var dy = filtered.offsetY
+        // Upsample back to the layer's resolution if we downscaled.
+        if (scale < 1f) {
+            val inv = 1f / scale
+            val upW = (filteredImg.width * inv + 0.5f).toInt().coerceAtLeast(1)
+            val upH = (filteredImg.height * inv + 0.5f).toInt().coerceAtLeast(1)
+            val up = IntArray(upW * upH)
+            for (yi in 0 until upH) {
+                val sy = (yi * scale).toInt().coerceIn(0, filteredImg.height - 1)
+                for (xi in 0 until upW) {
+                    val sx = (xi * scale).toInt().coerceIn(0, filteredImg.width - 1)
+                    up[yi * upW + xi] = filteredImg.peekPixel(sx, sy)
+                }
+            }
+            filteredImg = SkImage(upW, upH, up)
+            dx = (dx * inv + 0.5f).toInt()
+            dy = (dy * inv + 0.5f).toInt()
+        }
         // Paste filtered pixels into the layer bitmap at the offset the
         // filter reported, clamped to the layer's bounds.
-        val dx = filtered.offsetX
-        val dy = filtered.offsetY
         val fw = filteredImg.width
         val fh = filteredImg.height
         val l = maxOf(0, dx); val t = maxOf(0, dy)

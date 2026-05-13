@@ -39,10 +39,28 @@ import kotlin.math.exp
 public class SkBlurMaskFilter private constructor(
     private val style: SkBlurStyle,
     private val sigma: Float,
+    private val respectCTMFlag: Boolean = true,
 ) : SkMaskFilter() {
 
     private val radius: Int = ceil(3.0 * sigma).toInt().coerceAtLeast(1)
     private val kernel: FloatArray = gaussianKernel1D(sigma, radius)
+
+    override val respectCTM: Boolean get() = respectCTMFlag
+
+    /**
+     * Phase R1-C — when `respectCTM = false` (constructed via
+     * [Make] with the 3-arg overload), the device calls this with the
+     * active CTM's max scale ; we return a *new* blur filter whose
+     * effective sigma is `sigma / scale`, so the blur radius stays
+     * constant in source-pixel units. When `respectCTM = true`, the
+     * filter is returned unchanged.
+     */
+    override fun withCtmScale(scale: Float): SkMaskFilter {
+        if (respectCTMFlag) return this
+        if (scale <= 0f || !scale.isFinite() || scale == 1f) return this
+        val scaledSigma = (sigma / scale).coerceAtLeast(1e-3f)
+        return SkBlurMaskFilter(style, scaledSigma, respectCTMFlag = false)
+    }
 
     override fun margin(): Int = radius
 
@@ -71,6 +89,22 @@ public class SkBlurMaskFilter private constructor(
         public fun Make(style: SkBlurStyle, sigma: Float): SkMaskFilter? {
             if (!sigma.isFinite() || sigma <= 0f) return null
             return SkBlurMaskFilter(style, sigma)
+        }
+
+        /**
+         * Phase R1-C — 3-arg overload mirroring Skia's
+         * `SkMaskFilter::MakeBlur(style, sigma, respectCTM)`
+         * (`include/core/SkMaskFilter.h:34-35`). When `respectCTM` is
+         * `false`, the device subsequently calls [SkMaskFilter.withCtmScale]
+         * to rescale `sigma` by `1 / ctmScale` so the on-screen blur
+         * footprint stays constant in source-pixel units regardless of
+         * the active canvas CTM.
+         *
+         * Used by `gm/blurignorexform.cpp` (3 variants — 99 % similarity).
+         */
+        public fun Make(style: SkBlurStyle, sigma: Float, respectCTM: Boolean): SkMaskFilter? {
+            if (!sigma.isFinite() || sigma <= 0f) return null
+            return SkBlurMaskFilter(style, sigma, respectCTMFlag = respectCTM)
         }
 
         /**
