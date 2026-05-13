@@ -129,4 +129,21 @@ public sealed class SkRecord {
         public val y: SkScalar,
         public val paint: SkPaint,
     ) : SkRecord()
+
+    /**
+     * R-suivi.22 — `SkCanvas::drawPicture`. Carries a reference to the
+     * sub-picture (immutable, share-safe), the optional pre-multiply
+     * matrix, and an optional paint for `saveLayer`-style composition.
+     *
+     * Recording a sub-picture as a *reference* (rather than flattening
+     * its ops into the outer record list at recording time) is what
+     * lets [SkPicture.serialize] route the sub-picture through
+     * [org.skia.foundation.SkSerialProcs.picture] — the proc fires
+     * once per `DrawPicture` op encountered.
+     */
+    public class DrawPicture(
+        public val picture: org.skia.core.SkPicture,
+        public val matrix: SkMatrix?,
+        public val paint: SkPaint?,
+    ) : SkRecord()
 }

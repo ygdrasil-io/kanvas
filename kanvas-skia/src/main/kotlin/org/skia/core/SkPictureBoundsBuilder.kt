@@ -163,6 +163,7 @@ internal object SkPictureBoundsBuilder {
                 is SkRecord.DrawString -> out[i] = cullRect
                 is SkRecord.DrawSimpleText -> out[i] = cullRect
                 is SkRecord.DrawTextBlob -> out[i] = cullRect
+                is SkRecord.DrawPicture -> out[i] = cullRect
             }
         }
         return out
