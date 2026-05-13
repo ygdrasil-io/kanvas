@@ -4,8 +4,10 @@ import org.skia.core.SkDrawable
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTypeface
+import org.skia.math.SkMatrix
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 
@@ -315,6 +317,79 @@ internal class SkUserTypeface internal constructor(
         // composing them through real `SkFont` will need to handle the
         // scale themselves. Documented in CONTEXT.md / API plan §1.7.
         return pathForGlyph(glyphId)
+    }
+
+    /**
+     * Internal hook used by [org.skia.core.SkCanvas.drawString] →
+     * [org.skia.foundation.SkFont.makeTextPath]. Routes each character
+     * of [text] through the stored glyph table : for each code-point
+     *  1. resolve `unichar → glyphId` (unknown → 0 = `.notdef`) ;
+     *  2. fetch the stored [SkPath] (drawable glyphs are skipped — they
+     *     don't have an outline to fold into the path-fill pipeline) ;
+     *  3. scale the source-units path by `(size * scaleX, size)` and
+     *     translate it by the cursor position, accumulating advances
+     *     in source units along the way.
+     *
+     * Mirrors the path-rendering branch of upstream's
+     * `SkUserTypeface::SkUserScalerContext::generatePath` (returns the
+     * stored `rec.fPath.makeTransform(fMatrix)` where `fMatrix` carries
+     * the size scale) — minus the upem normalisation, because
+     * `:kanvas-skia` keeps user paths in 1-unit source space.
+     *
+     * Returns `null` for empty input or when every code-point resolved
+     * to an empty / drawable glyph (no outline to render).
+     */
+    override fun makeTextPath(
+        text: String,
+        x: SkScalar,
+        y: SkScalar,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+        isSubpixel: Boolean,
+    ): SkPath? {
+        if (text.isEmpty()) return null
+        // skewX is folded into the scale matrix as an X-shear ; mirrors
+        // AwtTypeface.derivedFont where `tx.shear(shx, 0)` is composed
+        // after the `scale(scaleX, 1)`.
+        val sx = size * scaleX
+        val sy = size
+        val builder = SkPathBuilder()
+        var cursorAdvance = 0f
+        var anyGlyph = false
+        var i = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            val gid = unicharToGlyphId[cp] ?: 0
+            val slot = slots.getOrNull(gid)
+            if (slot != null && slot.path != null && !slot.path.isEmpty()) {
+                // Compose the per-glyph transform :
+                //   1. scale source units → device (sx, sy) ;
+                //   2. translate to baseline cursor (x + advance*sx, y) ;
+                //   3. fold skewX as an X-shear (kx column = sy * skewX,
+                //      matching upstream's `AffineTransform.shear(shx, 0)`
+                //      composed after scale).
+                // Y-axis isn't scaled by scaleX (only X dimension is).
+                val emitX = x + cursorAdvance * sx
+                val m = SkMatrix.MakeAll(
+                    sx, sy * skewX, emitX,
+                    0f, sy, y,
+                    0f, 0f, 1f,
+                )
+                builder.addPath(slot.path, m)
+                anyGlyph = true
+            }
+            // Advance the cursor whether or not the slot has an outline
+            // (drawable glyphs still advance ; missing glyphs use slot 0
+            // advance per the .notdef contract).
+            if (slot != null) {
+                cursorAdvance += slot.advance
+            }
+            i += Character.charCount(cp)
+        }
+        if (!anyGlyph) return null
+        val out = builder.detach()
+        return if (out.isEmpty()) null else out
     }
 
     override fun measureTextInternal(
