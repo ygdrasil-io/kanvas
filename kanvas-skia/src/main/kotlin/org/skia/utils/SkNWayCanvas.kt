@@ -1,6 +1,7 @@
 package org.skia.utils
 
 import org.skia.core.SkCanvas
+import org.skia.core.SkDrawable
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
@@ -8,7 +9,11 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkRSXform
+import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkTextBlob
+import org.skia.foundation.SkVertices
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
@@ -200,7 +205,63 @@ public open class SkNWayCanvas(width: Int, height: Int) : SkNoDrawCanvas(width, 
         children.forEach { it.drawPatch(cubics, colors, texCoords, blendMode, paint) }
     }
 
-    // TODO(R2): forward drawAtlas, drawVertices, drawTextBlob, drawDrawable,
-    //           drawAnnotation, drawShadow, drawSlug, image-lattice / image-set
-    //           overloads. Not currently used by the GM critical path.
+    override fun drawRegion(region: SkRegion, paint: SkPaint) {
+        children.forEach { it.drawRegion(region, paint) }
+    }
+
+    // ─── R-suivi.3 — deferred draw overrides now forwarded ────────────────
+
+    /** Forwards [drawAtlas] to every child canvas (R-suivi.3). */
+    override fun drawAtlas(
+        image: SkImage,
+        xform: Array<SkRSXform>,
+        src: Array<SkRect>,
+        colors: IntArray?,
+        blendMode: SkBlendMode,
+        sampling: SkSamplingOptions,
+        cullRect: SkRect?,
+        paint: SkPaint?,
+    ) {
+        children.forEach { it.drawAtlas(image, xform, src, colors, blendMode, sampling, cullRect, paint) }
+    }
+
+    /** Forwards [drawVertices] to every child canvas (R-suivi.3). */
+    override fun drawVertices(
+        vertices: SkVertices,
+        blendMode: SkBlendMode,
+        paint: SkPaint,
+    ) {
+        children.forEach { it.drawVertices(vertices, blendMode, paint) }
+    }
+
+    /** Forwards [drawTextBlob] to every child canvas (R-suivi.3). */
+    override fun drawTextBlob(
+        blob: SkTextBlob,
+        x: SkScalar,
+        y: SkScalar,
+        paint: SkPaint,
+    ) {
+        children.forEach { it.drawTextBlob(blob, x, y, paint) }
+    }
+
+    /** Forwards [drawDrawable] (with optional matrix) to every child canvas (R-suivi.3). */
+    override fun drawDrawable(drawable: SkDrawable, matrix: org.skia.math.SkMatrix?) {
+        children.forEach { it.drawDrawable(drawable, matrix) }
+    }
+
+    /** Forwards the `(x, y)` [drawDrawable] convenience overload to every child canvas (R-suivi.3). */
+    override fun drawDrawable(drawable: SkDrawable, x: SkScalar, y: SkScalar) {
+        children.forEach { it.drawDrawable(drawable, x, y) }
+    }
+
+    /** Forwards [drawAnnotation] to every child canvas (R-suivi.3). */
+    override fun drawAnnotation(rect: SkRect, key: String, value: ByteArray?) {
+        children.forEach { it.drawAnnotation(rect, key, value) }
+    }
+
+    // TODO(R-suivi): SkCanvas in :kanvas-skia does not yet expose drawShadow,
+    //                drawSlug, or drawImageLattice as overridable virtuals.
+    //                Once they land, add forwarding overrides here mirroring
+    //                upstream's `SkNWayCanvas::onDrawShadowRec` /
+    //                `onDrawSlug` / `onDrawImageLattice2`.
 }
