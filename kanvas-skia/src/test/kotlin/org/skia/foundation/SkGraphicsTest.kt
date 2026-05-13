@@ -33,12 +33,14 @@ class SkGraphicsTest {
     }
 
     @Test
-    fun `resource cache reports zero used`() {
+    fun `resource cache starts empty`() {
+        SkGraphics.PurgeResourceCache()
         assertEquals(0L, SkGraphics.GetResourceCacheTotalBytesUsed())
     }
 
     @Test
-    fun `DumpMemoryStatistics writes nothing`() {
+    fun `DumpMemoryStatistics reports the resource-cache size and budget`() {
+        SkGraphics.PurgeResourceCache()
         var calls = 0
         val sink = object : SkGraphics.SkTraceMemoryDump {
             override fun dumpNumericValue(dumpName: String, valueName: String, units: String, value: Long) {
@@ -46,11 +48,12 @@ class SkGraphicsTest {
             }
         }
         SkGraphics.DumpMemoryStatistics(sink)
-        assertEquals(0, calls)
+        // Now reports size/budget/entries (R-suivi.6).
+        assertEquals(3, calls)
     }
 
     @Test
-    fun `PurgeAllCaches and PurgeFontCache are no-ops`() {
+    fun `PurgeAllCaches and PurgeFontCache run without throwing`() {
         SkGraphics.PurgeAllCaches()
         SkGraphics.PurgeFontCache()
         SkGraphics.PurgePinnedFontCache()
