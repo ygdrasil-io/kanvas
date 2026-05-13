@@ -99,6 +99,36 @@ public abstract class SkFontMgr protected constructor() {
     public abstract fun makeFromStream(stream: InputStream, ttcIndex: Int = 0): SkTypeface?
 
     /**
+     * R-suivi.45 — SkStream overload of [makeFromStream]. Drains the
+     * stream to a `ByteArray` and routes through [makeFromData]. Subclasses
+     * with a memory-backed [org.skia.foundation.stream.SkStreamAsset] can
+     * override to avoid the copy.
+     *
+     * Mirrors upstream's `sk_sp<SkTypeface> SkFontMgr::makeFromStream(
+     * std::unique_ptr<SkStreamAsset>, int)` once the kanvas-skia [SkStream]
+     * hierarchy is the canonical byte source.
+     */
+    public open fun makeFromStream(
+        stream: org.skia.foundation.stream.SkStream,
+        ttcIndex: Int = 0,
+    ): SkTypeface? {
+        val bytes = drainSkStream(stream)
+        if (bytes.isEmpty()) return null
+        return makeFromData(SkData.MakeWithCopy(bytes), ttcIndex)
+    }
+
+    private fun drainSkStream(stream: org.skia.foundation.stream.SkStream): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(4096)
+        while (!stream.isAtEnd()) {
+            val n = stream.read(buf, buf.size)
+            if (n <= 0) break
+            out.write(buf, 0, n)
+        }
+        return out.toByteArray()
+    }
+
+    /**
      * Mirrors `sk_sp<SkTypeface> SkFontMgr::makeFromFile(const char[],
      * int ttcIndex) const`. Returns `null` when the file is missing or
      * the contents are not recognised.
