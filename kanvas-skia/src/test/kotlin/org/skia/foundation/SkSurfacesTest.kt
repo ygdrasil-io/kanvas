@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.math.SkRect
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Phase R2 batch3-B — unit tests for [SkSurfaces] static factories.
@@ -130,10 +131,49 @@ class SkSurfacesTest {
         }
     }
 
+    // ─── R-suivi.13 — WrapPixels(SkPixmap) ─────────────────────────────
+
     @Test
-    fun `WrapPixels pixmap overload stub throws TODO until SkPixmap lands`() {
-        assertThrows(NotImplementedError::class.java) {
-            SkSurfaces.WrapPixels(Any())
+    fun `WrapPixels(SkPixmap) reads pixels into a writable raster surface`() {
+        val width = 3
+        val height = 2
+        val info = SkImageInfo.Make(width, height, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul)
+        val rowBytes = info.minRowBytes()
+        val buf = ByteBuffer.allocate(rowBytes * height).order(ByteOrder.LITTLE_ENDIAN)
+        for (y in 0 until height) for (x in 0 until width) {
+            val off = y * rowBytes + x * 4
+            buf.put(off, 0x11.toByte())
+            buf.put(off + 1, 0x22.toByte())
+            buf.put(off + 2, 0x33.toByte())
+            buf.put(off + 3, 0xFF.toByte())
         }
+        val pixmap = SkPixmap(info, buf, rowBytes)
+
+        var released = false
+        val surface = SkSurfaces.WrapPixels(pixmap) { released = true }
+        assertNotNull(surface)
+        assertEquals(width, surface!!.width)
+        assertEquals(height, surface.height)
+        assertTrue(released, "releaseProc must fire after the eager copy")
+
+        val snapshot = surface.makeImageSnapshot()
+        val expected = (0xFF shl 24) or (0x11 shl 16) or (0x22 shl 8) or 0x33
+        for (y in 0 until height) for (x in 0 until width) {
+            assertEquals(expected, snapshot.peekPixel(x, y), "($x, $y)")
+        }
+
+        // The surface is writable — draw a fully-opaque red rect and
+        // verify a fresh snapshot reflects the new pixels.
+        val redPaint = SkPaint(SK_ColorRED).apply { blendMode = SkBlendMode.kSrc }
+        surface.canvas.drawRect(SkRect.MakeWH(width.toFloat(), height.toFloat()), redPaint)
+        val after = surface.makeImageSnapshot()
+        for (y in 0 until height) for (x in 0 until width) {
+            assertEquals(SK_ColorRED, after.peekPixel(x, y), "($x, $y) after draw")
+        }
+    }
+
+    @Test
+    fun `WrapPixels(SkPixmap) returns null for an empty pixmap`() {
+        assertNull(SkSurfaces.WrapPixels(SkPixmap()))
     }
 }

@@ -4,12 +4,11 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkDocument
-import org.skia.foundation.SkDynamicMemoryWStream
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkSamplingOptions
-import org.skia.foundation.SkWStreamMinimal
+import org.skia.foundation.stream.SkWStream
 import org.skia.math.SkRect
 
 /**
@@ -60,7 +59,7 @@ public object SkPDF {
      *
      * PDF pages are sized in point units (1pt = 1/72 inch).
      */
-    public fun MakeDocument(stream: SkWStreamMinimal, metadata: Metadata = Metadata()): SkDocument =
+    public fun MakeDocument(stream: SkWStream, metadata: Metadata = Metadata()): SkDocument =
         PdfDocument(stream, metadata)
 }
 
@@ -125,7 +124,7 @@ internal sealed interface PageOp {
 
 /** Top-level PDF document — drives writing into the user's stream. */
 internal class PdfDocument(
-    private val stream: SkWStreamMinimal,
+    private val stream: SkWStream,
     private val metadata: SkPDF.Metadata,
 ) : SkDocument() {
 
@@ -253,7 +252,7 @@ internal class PdfDocument(
     }
 
     private fun writeBytes(bytes: ByteArray) {
-        stream.write(bytes)
+        stream.write(bytes, bytes.size)
         streamCursor += bytes.size
     }
 
