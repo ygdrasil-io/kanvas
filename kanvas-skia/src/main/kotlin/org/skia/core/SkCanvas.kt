@@ -715,9 +715,15 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         s.aaClip = combined
     }
 
-    /** Bind the active state's AA clip onto the device before each draw. */
+    /**
+     * Bind the active state's AA clip + clip-shader onto the device
+     * before each draw. R-suivi.20 — extended to push the clip-shader
+     * (frozen CTM + op) so every draw entry point (drawRect, drawPath,
+     * drawImage, …) honours the shader, not just [drawPaint].
+     */
     private fun bindClip(s: State) {
         s.device.setActiveClip(s.aaClip)
+        s.device.setActiveClipShader(s.clipShader, s.clipShaderCtm, s.clipShaderOp)
     }
 
     // ─── Phase R2.14 — clipShader ─────────────────────────────────────────
@@ -729,12 +735,15 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     // at call time (Skia semantics : the clip's local-to-device mapping
     // doesn't follow subsequent CTM mutations).
     //
-    // R2 minimal end-to-end wiring : the shader is honoured by
-    // [drawPaint] — the simplest draw entry point, easiest to validate.
-    // R-suivi : extend the per-pixel modulation to [drawRect] / [drawPath]
-    // / [drawImageRect] and friends by routing through a new
-    // [SkBitmapDevice] clip-shader hook. For R2 only [drawPaint] applies
-    // the modulation ; other draws ignore the clip shader (TODO).
+    // R-suivi.20 — full rasterizer wiring : the clip shader is now
+    // applied per-pixel inside the device's blend funnels (see
+    // `SkBitmapDevice.setActiveClipShader` + the `activeClipShader`
+    // check inside [blend] / [blendCustom] / [blendF16*]). Every draw
+    // entry point (drawRect / drawPath / drawImage / drawOval /
+    // drawRRect / drawArc / drawLine / drawPoints / drawPaint /
+    // drawImageRect / drawString …) routes through `bindClip` which
+    // pushes the shader onto the device. No per-entry-point opt-in
+    // required.
 
     /**
      * Mirrors Skia's `SkCanvas::clipShader(shader, op)`. Adds a per-pixel
@@ -744,10 +753,12 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * equals the existing clip minus the shader's alpha (i.e. cut out
      * pixels where the shader is opaque).
      *
-     * **Scope (R2)** : only [drawPaint] honours the clip shader end-to-
-     * end. Other draw entry points (rect / path / image) accept the call
-     * but currently skip the shader-modulation step ; this is tracked as
-     * an R-suivi TODO.
+     * **Scope (R-suivi.20)** : every draw entry point honours the clip
+     * shader — `drawRect`, `drawPath`, `drawImage`, `drawOval`,
+     * `drawRRect`, `drawArc`, `drawLine`, `drawPoints`, `drawPaint`,
+     * `drawImageRect`, `drawString`, … Per-pixel modulation is applied
+     * inside the device's blend funnels, so all rasteriser flavours
+     * (8-bit / F16 / custom blender) carry the coverage uniformly.
      */
     public open fun clipShader(shader: SkShader, op: SkClipOp = SkClipOp.kIntersect) {
         val s = top
@@ -1714,12 +1725,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     public open fun drawPaint(paint: SkPaint) {
         val s = top
         bindClip(s)
-        s.device.drawPaint(
-            s.matrix, s.clip, paint,
-            clipShader = s.clipShader,
-            clipShaderCtm = s.clipShaderCtm,
-            clipShaderOp = s.clipShaderOp,
-        )
+        s.device.drawPaint(s.matrix, s.clip, paint)
     }
 
     /**

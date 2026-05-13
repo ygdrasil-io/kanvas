@@ -646,44 +646,86 @@ public class SkBitmap(
      * ([SkBitmap.h:1145](https://github.com/google/skia/blob/main/include/core/SkBitmap.h#L1145)).
      *
      * Re-binds [dst] to an alpha-only ([SkColorType.kAlpha_8]) copy of
-     * `this`. [dst] must already be sized to `(width, height)` (or
-     * larger when [paint] would introduce a mask-blur margin —
-     * unsupported, see below) and have `kAlpha_8` storage.
+     * `this`. [dst] must have `kAlpha_8` storage. Two sizing modes :
      *
-     * **Paint handling (limited)** : if [paint] carries a
-     * [SkMaskFilter], the upstream code calls into the mask-filter
-     * pipeline to widen the alpha. Kanvas-skia hasn't ported that
-     * branch yet — we return `false` and leave [dst] untouched.
-     * Mask-filter-free [paint]s (and `null`) take the straight
-     * alpha-extract path : copy the source's alpha channel into
-     * [dst]'s `pixelsA8`.
+     *  - **No [SkPaint.maskFilter]** : [dst] must be `width × height`.
+     *    The source's alpha channel is copied into [dst]. [offset] (if
+     *    non-`null`) is set to `(0, 0)` — origin unchanged.
      *
-     * On success, [offset] (if non-`null`) is set to `(0, 0)` — the
-     * straight alpha-extract path doesn't shift the origin (the
-     * mask-filter branch is the only one that does, and we early-return
-     * there).
+     *  - **With [SkPaint.maskFilter]** (R-suivi.18) : the source alpha
+     *    is first dumped into a buffer expanded by the filter's
+     *    [SkMaskFilter.margin] on every side, the filter widens it (e.g.
+     *    Gaussian blur), and the result is copied into [dst]. [dst] may
+     *    be sized either to the source dimensions (the filtered halo is
+     *    cropped at the source bounds) or to the margin-expanded
+     *    dimensions `width + 2·margin × height + 2·margin` (the full
+     *    halo is preserved). [offset] is set to `(-margin, -margin)` —
+     *    where [dst]'s `(0, 0)` lies relative to the source's `(0, 0)`
+     *    — so callers compositing the alpha back over the original
+     *    geometry can shift accordingly.
      */
     public fun extractAlpha(
         dst: SkBitmap,
         paint: SkPaint? = null,
         offset: SkIPoint? = null,
     ): Boolean {
-        // TODO(phase-R2-followup): support paint.maskFilter — Skia
-        // widens the alpha via SkMaskFilter::filterMask, which requires
-        // the blur-mask pipeline. Until then we report failure so
-        // callers can detect the gap rather than silently get the
-        // un-blurred alpha.
-        if (paint?.maskFilter != null) return false
-        if (dst.width != width || dst.height != height) return false
         if (dst.colorType != SkColorType.kAlpha_8) return false
 
+        val maskFilter = paint?.maskFilter
+        if (maskFilter == null) {
+            // Fast path — straight alpha-channel copy.
+            if (dst.width != width || dst.height != height) return false
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val a = SkColorGetA(getPixel(x, y))
+                    dst.pixelsA8[y * width + x] = a.toByte()
+                }
+            }
+            offset?.set(0, 0)
+            return true
+        }
+
+        // R-suivi.18 — mask-filter path. Produce the source's A8 plane
+        // in-line, run it through `SkMaskFilter.filterMask` (which
+        // returns a margin-expanded bitmap), then blit the relevant
+        // window into [dst]. [dst] may be sized to either the source
+        // bounds (cropped halo) or the margin-expanded bounds (full
+        // halo) — both shapes are valid in upstream's contract.
+        val srcA8 = SkBitmap(width, height, colorSpace, SkColorType.kAlpha_8)
         for (y in 0 until height) {
             for (x in 0 until width) {
-                val a = SkColorGetA(getPixel(x, y))
-                dst.pixelsA8[y * width + x] = a.toByte()
+                srcA8.pixelsA8[y * width + x] = SkColorGetA(getPixel(x, y)).toByte()
             }
         }
-        offset?.set(0, 0)
+        val mfOffset = SkIPoint()
+        val filtered = maskFilter.filterMask(srcA8, offset = mfOffset)
+        val m = -mfOffset.fX  // === maskFilter.margin()
+
+        // Accept dst sized to source bounds OR to margin-expanded bounds.
+        val expW = filtered.width
+        val expH = filtered.height
+        when {
+            dst.width == expW && dst.height == expH -> {
+                // Full halo : copy verbatim. Origin is at (-m, -m) of
+                // the source.
+                System.arraycopy(filtered.pixelsA8, 0, dst.pixelsA8, 0, expW * expH)
+                offset?.set(-m, -m)
+            }
+            dst.width == width && dst.height == height -> {
+                // Cropped halo : copy the central source-sized window.
+                // Origin is still at (-m, -m) so callers know the halo
+                // outside the source bounds was discarded (this matches
+                // Skia's contract — `offset` denotes where the mask's
+                // (0, 0) sits relative to the source).
+                for (y in 0 until height) {
+                    val srcRow = (y + m) * expW + m
+                    val dstRow = y * width
+                    System.arraycopy(filtered.pixelsA8, srcRow, dst.pixelsA8, dstRow, width)
+                }
+                offset?.set(-m, -m)
+            }
+            else -> return false
+        }
         return true
     }
 

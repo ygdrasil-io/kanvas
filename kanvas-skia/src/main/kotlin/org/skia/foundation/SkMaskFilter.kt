@@ -1,5 +1,8 @@
 package org.skia.foundation
 
+import org.skia.math.SkIPoint
+import org.skia.math.SkMatrix
+
 /**
  * Mirrors Skia's
  * [`SkMaskFilter`](https://github.com/google/skia/blob/main/include/core/SkMaskFilter.h)
@@ -125,6 +128,65 @@ public abstract class SkMaskFilter {
      * propagates a *new* mask filter with the rescaled radius.
      */
     public open fun withCtmScale(@Suppress("UNUSED_PARAMETER") scale: Float): SkMaskFilter = this
+
+    /**
+     * R-suivi.18 — bitmap-level convenience wrapper around [filterMask].
+     * Reads the alpha channel of [srcBitmap] (which may be any colour
+     * type — for non-[SkColorType.kAlpha_8] inputs we sample the alpha
+     * via [SkBitmap.getPixel]), runs [filterMask] on the resulting byte
+     * buffer (expanded by [margin] pixels per side so the kernel never
+     * overflows), and returns a fresh [SkColorType.kAlpha_8] bitmap
+     * holding the filtered coverage.
+     *
+     * The returned bitmap is `srcBitmap.width + 2 * margin` ×
+     * `srcBitmap.height + 2 * margin` ; the original `(0, 0)` of the
+     * source lands at `(margin, margin)` of the returned bitmap. When
+     * [offset] is non-null, it is set to `(-margin, -margin)` so the
+     * caller knows where the new mask's origin sits relative to the
+     * source.
+     *
+     * The [ctm] argument is currently ignored — kanvas-skia's blur
+     * filter operates in source-pixel units inside this helper (the
+     * device-CTM-aware path is the per-draw `filterMask(ByteArray)`
+     * variant invoked by the rasteriser). Reserved for future
+     * filters whose kernel depends on the canvas transform.
+     */
+    public fun filterMask(
+        srcBitmap: SkBitmap,
+        @Suppress("UNUSED_PARAMETER") ctm: SkMatrix = SkMatrix.Identity,
+        offset: SkIPoint? = null,
+    ): SkBitmap {
+        val srcW = srcBitmap.width
+        val srcH = srcBitmap.height
+        val m = margin()
+        val expW = srcW + 2 * m
+        val expH = srcH + 2 * m
+        // Extract the source's alpha channel into a margin-expanded
+        // 8-bit coverage buffer (zero-padded on all four sides).
+        val srcAlpha = ByteArray(expW * expH)
+        if (srcBitmap.colorType == SkColorType.kAlpha_8) {
+            // Fast path : raw byte copy of the existing A8 plane,
+            // placed at (margin, margin) inside the expanded buffer.
+            for (y in 0 until srcH) {
+                val dstRow = (y + m) * expW + m
+                val srcRow = y * srcW
+                System.arraycopy(srcBitmap.pixelsA8, srcRow, srcAlpha, dstRow, srcW)
+            }
+        } else {
+            // General path : sample alpha via getPixel.
+            for (y in 0 until srcH) {
+                val dstRow = (y + m) * expW + m
+                for (x in 0 until srcW) {
+                    srcAlpha[dstRow + x] = SkColorGetA(srcBitmap.getPixel(x, y)).toByte()
+                }
+            }
+        }
+        val filtered = filterMask(srcAlpha, expW, expH)
+        val out = SkBitmap(expW, expH, srcBitmap.colorSpace, SkColorType.kAlpha_8)
+        System.arraycopy(filtered, 0, out.pixelsA8, 0, filtered.size)
+        offset?.set(-m, -m)
+        return out
+    }
 
     public companion object {
         /**

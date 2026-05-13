@@ -14,14 +14,15 @@ import org.skia.foundation.SkShader
 import org.skia.math.SkMatrix
 
 /**
- * Phase R2.14 — `SkCanvas.clipShader(shader, op)` end-to-end through
- * `drawPaint`. The clip shader's alpha channel modulates per-pixel
- * coverage : opaque pixels of the shader keep the draw ; transparent
- * pixels clip it out.
+ * Phase R2.14 + R-suivi.20 — `SkCanvas.clipShader(shader, op)` end-to-end
+ * through every draw entry point. The clip shader's alpha channel
+ * modulates per-pixel coverage : opaque pixels of the shader keep the
+ * draw ; transparent pixels clip it out.
  *
- * R2 minimal scope : only `drawPaint` honours the clip shader. Other
- * draw entry points accept the call (no exceptions) but skip the
- * modulation — see PR body for the R-suivi follow-up.
+ * R-suivi.20 extends the original R2 wiring (drawPaint only) to
+ * drawRect / drawPath / drawImage / drawOval / drawRRect / drawArc /
+ * drawLine / drawPoints — every rasterizer flavour, since the
+ * modulation now lives inside the device's blend funnels.
  */
 class SkCanvasClipShaderTest {
 
@@ -112,5 +113,113 @@ class SkCanvasClipShaderTest {
                 assertEquals(expected, bm.getPixel(x, y), "($x,$y)")
             }
         }
+    }
+
+    // ─── R-suivi.20 — clipShader rasterizer wiring for non-drawPaint draws ─
+
+    @Test
+    fun `clipShader masks drawRect by shader alpha`() {
+        val bm = SkBitmap(10, 6).also { it.eraseColor(SK_ColorWHITE) }
+        val canvas = SkCanvas(bm)
+        canvas.save()
+        canvas.clipShader(VerticalSplitAlphaShader(5))
+        canvas.drawRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 6f), SkPaint(SK_ColorRED))
+        canvas.restore()
+        for (y in 0 until 6) {
+            for (x in 0 until 10) {
+                val expected = if (x >= 5) SK_ColorRED else SK_ColorWHITE
+                assertEquals(expected, bm.getPixel(x, y), "($x,$y)")
+            }
+        }
+    }
+
+    @Test
+    fun `clipShader masks drawPath by shader alpha`() {
+        val bm = SkBitmap(10, 6).also { it.eraseColor(SK_ColorWHITE) }
+        val canvas = SkCanvas(bm)
+        // Build an axis-aligned rectangular path covering the bitmap.
+        val path = org.skia.foundation.SkPath.Rect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 6f))
+        canvas.save()
+        canvas.clipShader(VerticalSplitAlphaShader(5))
+        canvas.drawPath(path, SkPaint(SK_ColorRED))
+        canvas.restore()
+        for (y in 0 until 6) {
+            for (x in 0 until 10) {
+                val expected = if (x >= 5) SK_ColorRED else SK_ColorWHITE
+                assertEquals(expected, bm.getPixel(x, y), "($x,$y)")
+            }
+        }
+    }
+
+    @Test
+    fun `clipShader masks drawImage by shader alpha`() {
+        // Build a solid-red source image.
+        val srcBm = SkBitmap(10, 6).also { it.eraseColor(SK_ColorRED) }
+        val srcImage = srcBm.asImage()
+        val dstBm = SkBitmap(10, 6).also { it.eraseColor(SK_ColorWHITE) }
+        val canvas = SkCanvas(dstBm)
+        canvas.save()
+        canvas.clipShader(VerticalSplitAlphaShader(5))
+        canvas.drawImage(srcImage, 0f, 0f, paint = SkPaint())
+        canvas.restore()
+        for (y in 0 until 6) {
+            for (x in 0 until 10) {
+                val expected = if (x >= 5) SK_ColorRED else SK_ColorWHITE
+                assertEquals(expected, dstBm.getPixel(x, y), "($x,$y)")
+            }
+        }
+    }
+
+    @Test
+    fun `clipShader masks drawOval by shader alpha`() {
+        val bm = SkBitmap(10, 6).also { it.eraseColor(SK_ColorWHITE) }
+        val canvas = SkCanvas(bm)
+        canvas.save()
+        canvas.clipShader(VerticalSplitAlphaShader(5))
+        canvas.drawOval(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 6f), SkPaint(SK_ColorRED))
+        canvas.restore()
+        // Left half (x<5) must remain white ; right half should contain
+        // at least one red pixel from the oval interior.
+        var sawRed = false
+        for (y in 0 until 6) {
+            for (x in 0 until 5) {
+                assertEquals(SK_ColorWHITE, bm.getPixel(x, y), "left-half ($x,$y) must stay white")
+            }
+            for (x in 5 until 10) {
+                if (bm.getPixel(x, y) == SK_ColorRED) sawRed = true
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(sawRed, "right half should contain at least one red pixel")
+    }
+
+    @Test
+    fun `clipShader masks drawLine by shader alpha`() {
+        val bm = SkBitmap(10, 6).also { it.eraseColor(SK_ColorWHITE) }
+        val canvas = SkCanvas(bm)
+        canvas.save()
+        canvas.clipShader(VerticalSplitAlphaShader(5))
+        // Horizontal line across the full width at y=3 with a thick stroke
+        // so a sufficient pixel area lights up regardless of AA edges.
+        val paint = SkPaint(SK_ColorRED).apply {
+            style = SkPaint.Style.kStroke_Style
+            strokeWidth = 2f
+            isAntiAlias = false
+        }
+        canvas.drawLine(0f, 3f, 10f, 3f, paint)
+        canvas.restore()
+        // Left half (x<5) must remain white.
+        for (y in 0 until 6) {
+            for (x in 0 until 5) {
+                assertEquals(SK_ColorWHITE, bm.getPixel(x, y), "left-half ($x,$y) must stay white")
+            }
+        }
+        // Right half must contain at least one red pixel from the stroke.
+        var sawRed = false
+        for (y in 0 until 6) {
+            for (x in 5 until 10) {
+                if (bm.getPixel(x, y) == SK_ColorRED) sawRed = true
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(sawRed, "stroke should leave red in the right half")
     }
 }
