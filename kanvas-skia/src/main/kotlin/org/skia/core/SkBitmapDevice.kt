@@ -3,6 +3,7 @@ package org.skia.core
 import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkColor4f
 import org.skia.foundation.SkColorFilter
@@ -142,8 +143,22 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * [ctm] is the current canvas matrix; only used when [paint] has a
      * shader (the shader's `setupForDraw` needs it to compute the
      * `device → local` transform).
+     *
+     * Phase R2.14 — optional [clipShader] mixin. When non-null, per-pixel
+     * coverage is additionally multiplied by `clipShader.alpha / 255`
+     * (or `1 - alpha / 255` when [clipShaderOp] is [SkClipOp.kDifference]).
+     * The shader is bound against [clipShaderCtm] (captured at the
+     * `SkCanvas.clipShader()` call site), not the current [ctm]. This
+     * matches Skia's "clip is frozen at call time" semantics.
      */
-    public fun drawPaint(ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
+    public fun drawPaint(
+        ctm: SkMatrix,
+        clip: SkIRect,
+        paint: SkPaint,
+        clipShader: SkShader? = null,
+        clipShaderCtm: SkMatrix = SkMatrix.Identity,
+        clipShaderOp: SkClipOp = SkClipOp.kIntersect,
+    ) {
         val mode = paint.blendMode
         val blender = paint.blender
         val l = clip.left.coerceAtLeast(0)
@@ -151,6 +166,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         val r = clip.right.coerceAtMost(width)
         val b = clip.bottom.coerceAtMost(height)
         if (l >= r || t >= b) return
+
+        // Phase R2.14 — prime the clipShader against its frozen CTM so
+        // subsequent `shadeRow` calls return alpha in canvas-local space.
+        // The variable is captured by the per-row helper [clipShaderAlpha]
+        // below.
+        if (clipShader != null) {
+            clipShader.setupForDraw(clipShaderCtm, xformSteps)
+        }
+        // Returns the 0..255 coverage byte from the clipShader at device
+        // pixel (x, y). 255 = fully visible, 0 = clipped out. Honours
+        // [clipShaderOp] : kIntersect uses the shader's alpha as-is ;
+        // kDifference inverts it.
+        val clipShaderRow: IntArray? = if (clipShader != null) IntArray(r - l) else null
 
         // Phase G7 — when `paint.imageFilter` is set, route through an
         // implicit saveLayer / drawPaint / restore so the layer's filter
@@ -231,13 +259,21 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
                 for (y in t until b) {
                     shader.shadeRowF16(l, y, rowWidth, rowF16)
+                    if (clipShader != null) clipShader.shadeRow(l, y, rowWidth, clipShaderRow!!)
                     for (xOff in 0 until rowWidth) {
                         val si = xOff * 4
-                        val sa = rowF16[si + 3] * paintAlphaF
+                        val csCov = if (clipShaderRow != null) {
+                            val raw = SkColorGetA(clipShaderRow[xOff])
+                            when (clipShaderOp) {
+                                SkClipOp.kIntersect -> raw / 255f
+                                SkClipOp.kDifference -> (255 - raw) / 255f
+                            }
+                        } else 1f
+                        val sa = rowF16[si + 3] * paintAlphaF * csCov
                         if (sa <= 0f && !mustBlendZero) continue
-                        val sr = rowF16[si]     * paintAlphaF
-                        val sg = rowF16[si + 1] * paintAlphaF
-                        val sb = rowF16[si + 2] * paintAlphaF
+                        val sr = rowF16[si]     * paintAlphaF * csCov
+                        val sg = rowF16[si + 1] * paintAlphaF * csCov
+                        val sb = rowF16[si + 2] * paintAlphaF * csCov
                         blendF16PremulMode(l + xOff, y, sr, sg, sb, sa, mode)
                     }
                 }
@@ -246,12 +282,16 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                 val paintAlpha = paint.alpha
                 for (y in t until b) {
                     shader.shadeRow(l, y, rowWidth, row)
+                    if (clipShader != null) clipShader.shadeRow(l, y, rowWidth, clipShaderRow!!)
                     for (xOff in 0 until rowWidth) {
                         val src = row[xOff]
                         val srcA = SkColorGetA(src)
                         if (srcA == 0) continue
-                        val effA = if (paintAlpha == 0xFF) srcA
+                        var effA = if (paintAlpha == 0xFF) srcA
                             else (srcA * paintAlpha + 127) / 255
+                        if (clipShaderRow != null) {
+                            effA = applyClipShaderCoverage(effA, clipShaderRow[xOff], clipShaderOp)
+                        }
                         if (effA == 0) continue
                         dispatchBlend(l + xOff, y, (effA shl 24) or (src and 0x00FFFFFF), mode, blender)
                     }
@@ -269,9 +309,38 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         // gamut. Closing this gap was the docstring TODO of Phase 7a.
         val color = transformPaintColor(applyColorFilter(paint.colorFilter, paint.color))
         if (SkColorGetA(color) == 0 && !modeAffectsZeroAlphaSrc(mode)) return
-        for (y in t until b) {
-            for (x in l until r) dispatchBlend(x, y, color, mode, blender)
+        if (clipShaderRow != null) {
+            val baseA = SkColorGetA(color)
+            val rgb = color and 0x00FFFFFF
+            for (y in t until b) {
+                clipShader!!.shadeRow(l, y, r - l, clipShaderRow)
+                for (xOff in 0 until r - l) {
+                    val effA = applyClipShaderCoverage(baseA, clipShaderRow[xOff], clipShaderOp)
+                    if (effA == 0 && !modeAffectsZeroAlphaSrc(mode)) continue
+                    dispatchBlend(l + xOff, y, (effA shl 24) or rgb, mode, blender)
+                }
+            }
+        } else {
+            for (y in t until b) {
+                for (x in l until r) dispatchBlend(x, y, color, mode, blender)
+            }
         }
+    }
+
+    /**
+     * Phase R2.14 — combine an existing per-pixel source alpha [srcA]
+     * (0..255) with a clip-shader sample [shaderArgb] under [op]. The
+     * shader's alpha channel modulates coverage : `kIntersect` keeps
+     * pixels where the shader is opaque, `kDifference` keeps pixels
+     * where it is transparent.
+     */
+    private fun applyClipShaderCoverage(srcA: Int, shaderArgb: Int, op: SkClipOp): Int {
+        val cov = SkColorGetA(shaderArgb)
+        val effective = when (op) {
+            SkClipOp.kIntersect -> cov
+            SkClipOp.kDifference -> 255 - cov
+        }
+        return (srcA * effective + 127) / 255
     }
 
     /**
