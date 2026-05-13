@@ -27,11 +27,11 @@ import org.skia.math.SkScalar
  *  - paint style is [SkPaint.Style.kFill_Style] → `dst = mid` (no stroke).
  *
  * R1 simplifications :
- *  - The optional [cullRect] argument is accepted for API parity but is
- *    not yet threaded through to [org.skia.foundation.SkPathEffect.filterPath]
- *    — kanvas-skia's [SkPathEffect][org.skia.foundation.SkPathEffect]
- *    interface doesn't expose a cull-rect knob yet (`filterPath` takes only
- *    the input + CTM).
+ *  - The optional [cullRect] argument is now (R-suivi.7) forwarded to
+ *    [org.skia.foundation.SkPathEffect.filterPath]. Effects that
+ *    benefit from culling (e.g. [org.skia.foundation.SkDashPathEffect])
+ *    override the 3-arg overload to clip their output ; effects that
+ *    don't fall through to the 2-arg form which ignores the rect.
  *  - The `ctm` parameter in upstream is replaced by a scalar [resScale]
  *    (the same hint [SkStroker.fromPaint] takes). Callers with a real CTM
  *    can pass `ctm.computeMaxScale()`. Identity ⇒ `1f`.
@@ -54,8 +54,12 @@ public object SkPathUtils {
      * @param paint   provides stroke parameters (width, cap, join, miter,
      *                style) and the optional path effect to pre-apply.
      * @param dstPath the destination builder — reset, then filled.
-     * @param cullRect optional bounds passed through to the path effect.
-     *                 R1 : accepted but currently ignored — see class doc.
+     * @param cullRect optional bounds passed through to the path effect
+     *                 (forwarded as of R-suivi.7). Effects that support
+     *                 culling skip emitting geometry outside [cullRect] ;
+     *                 effects that don't fall back to the 2-arg
+     *                 [org.skia.foundation.SkPathEffect.filterPath] which
+     *                 ignores the rect.
      * @param resScale CTM-scale hint forwarded to [SkStroker.fromPaint].
      *                 Defaults to `1f` (identity CTM). Real callers pass
      *                 `ctm.computeMaxScale()`.
@@ -67,15 +71,12 @@ public object SkPathUtils {
         cullRect: SkRect? = null,
         resScale: SkScalar = 1f,
     ): Boolean {
-        // R1: cullRect is part of the upstream signature but not yet
-        // plumbed through SkPathEffect.filterPath. Accept-and-discard.
-        @Suppress("UNUSED_PARAMETER") val _cull = cullRect
-
-        // Stage 1 : path effect (optional).
+        // Stage 1 : path effect (optional). cullRect is forwarded to the
+        // 3-arg overload so dashing/etc. can cull device-outside geometry.
         val effect = paint.pathEffect
         val ctm: SkMatrix = SkMatrix.I()
         val midPath: SkPath = if (effect != null) {
-            effect.filterPath(srcPath, ctm) ?: srcPath
+            effect.filterPath(srcPath, ctm, cullRect) ?: srcPath
         } else {
             srcPath
         }
