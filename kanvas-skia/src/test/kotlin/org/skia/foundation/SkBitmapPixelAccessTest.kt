@@ -238,14 +238,56 @@ class SkBitmapPixelAccessTest {
     }
 
     @Test
-    fun `extractAlpha returns false when paint has maskFilter`() {
-        val src = SkBitmap(2, 2)
+    fun `extractAlpha with maskFilter cropped to source bounds softens edges`() {
+        // R-suivi.18 — extractAlpha now honours paint.maskFilter. Build a
+        // small opaque square, run a Gaussian blur of sigma=1.0 (margin=3)
+        // and verify the corner pixel has been attenuated relative to the
+        // unfiltered alpha (which would be 255).
+        val src = SkBitmap(4, 4)
         src.eraseColor(SK_ColorWHITE)
-        val dst = SkBitmap(2, 2, SkColorSpace.makeSRGB(), SkColorType.kAlpha_8)
+        val dst = SkBitmap(4, 4, SkColorSpace.makeSRGB(), SkColorType.kAlpha_8)
         val paint = SkPaint().apply {
             maskFilter = SkMaskFilter.MakeBlur(SkBlurStyle.kNormal, 1f)
         }
-        assertFalse(src.extractAlpha(dst, paint, null))
+        val offset = SkIPoint()
+        assertTrue(src.extractAlpha(dst, paint, offset))
+        // Margin for sigma=1 is ceil(3·1) = 3 → offset is (-3, -3).
+        assertEquals(-3, offset.fX)
+        assertEquals(-3, offset.fY)
+        // Center pixel stays close to fully opaque (blur of a fully
+        // opaque interior near the centre).
+        val centre = dst.pixelsA8[1 * 4 + 1].toInt() and 0xFF
+        assertTrue(centre > 200, "centre alpha should remain high, got $centre")
+        // Corner pixel sits on the path's outer boundary and has been
+        // attenuated by the blur kernel.
+        val corner = dst.pixelsA8[0].toInt() and 0xFF
+        assertTrue(corner < 255, "corner alpha should be < 255, got $corner")
+    }
+
+    @Test
+    fun `extractAlpha with maskFilter into margin-expanded dst preserves halo`() {
+        // When dst is sized to the margin-expanded bounds, the entire blur
+        // halo lands inside dst (no cropping). Verify pixels outside the
+        // source's source-coordinate bounds (i.e. inside the margin band)
+        // carry non-zero coverage from the blur.
+        val src = SkBitmap(2, 2)
+        src.eraseColor(SK_ColorWHITE)
+        val sigma = 1f
+        val margin = kotlin.math.ceil(3.0 * sigma).toInt() // = 3
+        val expW = 2 + 2 * margin
+        val expH = 2 + 2 * margin
+        val dst = SkBitmap(expW, expH, SkColorSpace.makeSRGB(), SkColorType.kAlpha_8)
+        val paint = SkPaint().apply {
+            maskFilter = SkMaskFilter.MakeBlur(SkBlurStyle.kNormal, sigma)
+        }
+        val offset = SkIPoint()
+        assertTrue(src.extractAlpha(dst, paint, offset))
+        assertEquals(-margin, offset.fX)
+        assertEquals(-margin, offset.fY)
+        // The pixel one row above the source's top edge (inside the halo)
+        // must carry some non-zero coverage from the blur.
+        val haloAbove = dst.pixelsA8[(margin - 1) * expW + margin].toInt() and 0xFF
+        assertTrue(haloAbove > 0, "halo-above pixel should be > 0, got $haloAbove")
     }
 
     @Test
