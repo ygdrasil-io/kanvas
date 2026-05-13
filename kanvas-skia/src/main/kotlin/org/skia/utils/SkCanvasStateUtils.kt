@@ -1,6 +1,10 @@
 package org.skia.utils
 
 import org.skia.core.SkCanvas
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkSurfaces
+import org.skia.math.SkMatrix
+import org.skia.math.SkRect
 
 /**
  * Iso-aligned port of Skia's `SkCanvasStateUtils`
@@ -12,44 +16,92 @@ import org.skia.core.SkCanvas
  * Skia treats this as a niche API — `MakeFromCanvasState` is only
  * implemented when `SK_SUPPORT_LEGACY_DRAWFILTER` is on.
  *
- * **R1 status — stub only.** The public surface is exposed so GM
- * ports and downstream callers compile, but every method is a
- * no-op:
- *  * [CaptureCanvasState] returns `null`
- *  * [MakeFromCanvasState] returns `null`
- *  * [ReleaseCanvasState] is a no-op
+ * **Phase R-suivi.4 — real implementation.** [SkCanvasState] is now
+ * a plain Kotlin data class carrying the CTM (3×3 [SkMatrix]), the
+ * device-space clip bounds, the canvas save count, and the canvas
+ * dimensions. [MakeFromCanvasState] reconstitutes a fresh raster
+ * canvas from that snapshot — same dimensions, same CTM, same clip.
  *
- * If a future port needs the actual round-trip (unlikely — none of
- * the GMs exercise it) this can be reimplemented on top of
- * [org.skia.core.SkBitmapDevice].
+ * The cross-process IPC use case isn't supported : upstream's opaque
+ * pointer survives a `dlopen()`-boundary, but our [SkCanvasState] is
+ * a plain JVM object and is only useful within a single process.
+ * Every kanvas-skia GM that calls into this API does so
+ * intra-process, so this restriction is moot in practice.
  */
 public object SkCanvasStateUtils {
 
-    /** Opaque token representing a captured canvas state. R1: unused stub. */
-    public class SkCanvasState internal constructor()
+    /**
+     * Snapshot of an [SkCanvas]'s portable state. Captures the CTM
+     * (as a 3×3 affine matrix — perspective is dropped), the device-
+     * space clip bounds, the save-stack depth, and the canvas
+     * dimensions. The pixel buffer itself is **not** captured ;
+     * [MakeFromCanvasState] always produces a fresh zero-initialised
+     * raster surface (matches Skia's `MakeFromCanvasState` contract :
+     * "the new canvas has no pixels of its own").
+     */
+    public data class SkCanvasState(
+        val matrix: SkMatrix,
+        val clipBounds: SkRect,
+        val saveCount: Int,
+        val width: Int,
+        val height: Int,
+    )
 
     /**
-     * Capture the current state of [canvas] into an opaque token.
+     * Capture the current state of [canvas] into a portable snapshot.
      *
-     * R1 stub — always returns `null`. Matches upstream's behaviour
-     * for unsupported device types.
+     * Returns `null` when the canvas's CTM carries perspective
+     * components that don't round-trip to a 3×3 [SkMatrix] — matches
+     * upstream's behaviour for unsupported device types (Skia returns
+     * `nullptr` when the device can't be marshalled across the API
+     * boundary).
      */
-    @Suppress("UNUSED_PARAMETER")
-    public fun CaptureCanvasState(canvas: SkCanvas): SkCanvasState? = null
+    public fun CaptureCanvasState(canvas: SkCanvas): SkCanvasState? {
+        val matrix = canvas.getLocalToDeviceAsMatrix() ?: return null
+        return SkCanvasState(
+            matrix = matrix,
+            clipBounds = SkRect.Make(canvas.getDeviceClipBounds()),
+            saveCount = canvas.getSaveCount(),
+            width = canvas.width,
+            height = canvas.height,
+        )
+    }
 
     /**
      * Reconstruct an [SkCanvas] from a state captured by
-     * [CaptureCanvasState]. R1 stub — always returns `null`.
+     * [CaptureCanvasState]. The new canvas is backed by a fresh
+     * `kRGBA_8888 / kPremul` raster surface sized to match the
+     * source canvas. The CTM and clip rectangle are reapplied so
+     * subsequent draws land in the same coordinate space as the
+     * original canvas (modulo perspective, which is intentionally
+     * not captured).
+     *
+     * Returns `null` when [state] is `null` or its dimensions are
+     * non-positive (matches upstream's null-on-invalid contract).
+     * The caller owns the new canvas — there is no shared backing
+     * with the source.
      */
-    @Suppress("UNUSED_PARAMETER")
-    public fun MakeFromCanvasState(state: SkCanvasState?): SkCanvas? = null
+    public fun MakeFromCanvasState(state: SkCanvasState?): SkCanvas? {
+        if (state == null) return null
+        if (state.width <= 0 || state.height <= 0) return null
+        val info = SkImageInfo.MakeN32Premul(state.width, state.height)
+        val surface = SkSurfaces.Raster(info) ?: return null
+        val canvas = surface.canvas
+        canvas.setMatrix(state.matrix)
+        canvas.clipRect(state.clipBounds)
+        return canvas
+    }
 
     /**
      * Release the memory associated with a captured state.
-     * R1 stub — no-op (no native memory is allocated).
+     * No-op — the JVM's garbage collector reclaims [SkCanvasState]
+     * automatically. Retained for API parity with the upstream C++
+     * `Release` step, where the opaque `SkCanvasState*` is heap-
+     * allocated by the security-handler-style ownership model.
      */
     @Suppress("UNUSED_PARAMETER")
     public fun ReleaseCanvasState(state: SkCanvasState?) {
-        // No-op. The R1 stub never allocates anything.
+        // No-op : the JVM GC reclaims the captured state when its
+        // last reference drops.
     }
 }

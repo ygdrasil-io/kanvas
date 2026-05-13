@@ -30,7 +30,9 @@ class SkPDFImagesTest {
         val image = bmp.asImage()
 
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of content-stream FlateDecode so the
+        // `cm` / `Do` operators are greppable as raw text.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val canvas = doc.beginPage(50f, 50f)
         canvas.drawImage(image, 5f, 5f)
         doc.endPage()
@@ -77,7 +79,9 @@ class SkPDFImagesTest {
         val a = SkBitmap(2, 2).apply { setPixel(0, 0, 0xFFFF0000.toInt()) }.asImage()
         val b = SkBitmap(3, 3).apply { setPixel(0, 0, 0xFF00FF00.toInt()) }.asImage()
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of content-stream FlateDecode so the
+        // `cm` / `Do` operators are greppable as raw text.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val canvas = doc.beginPage(100f, 100f)
         canvas.drawImage(a, 10f, 10f)
         canvas.drawImage(b, 50f, 50f)

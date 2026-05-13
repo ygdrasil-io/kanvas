@@ -27,7 +27,9 @@ class SkPDFCubicTest {
             .close()
             .detach()
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of FlateDecode so the content stream is
+        // greppable for `m` / `l` / `c` operators.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val c = doc.beginPage(100f, 100f)
         c.drawPath(path, SkPaint())
         doc.close()
@@ -44,7 +46,9 @@ class SkPDFCubicTest {
             .close()
             .detach()
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of FlateDecode so the content stream is
+        // greppable for `m` / `l` / `c` operators.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val c = doc.beginPage(100f, 100f)
         c.drawPath(path, SkPaint())
         doc.close()
@@ -68,7 +72,9 @@ class SkPDFCubicTest {
             .close()
             .detach()
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of FlateDecode so the content stream is
+        // greppable for `m` / `l` / `c` operators.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val c = doc.beginPage(100f, 100f)
         c.drawPath(path, SkPaint())
         doc.close()
@@ -86,7 +92,9 @@ class SkPDFCubicTest {
             .lineTo(50f, 50f)
             .detach()
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of FlateDecode so the content stream is
+        // greppable for `m` / `l` / `c` operators.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val c = doc.beginPage(100f, 100f)
         c.drawPath(path, SkPaint())
         doc.close()
