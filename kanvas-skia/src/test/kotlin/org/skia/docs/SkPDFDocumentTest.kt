@@ -96,7 +96,9 @@ class SkPDFDocumentTest {
     @Test
     fun `rect draw emits rectangle command in content stream`() {
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of FlateDecode compression so we can
+        // grep the raw operator stream for `re` / `f`.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val c = doc.beginPage(100f, 100f)
         c.drawRect(SkRect.MakeLTRB(0f, 0f, 50f, 50f), SkPaint())
         doc.close()
@@ -124,7 +126,8 @@ class SkPDFDocumentTest {
     @Test
     fun `color components are emitted in 0_1 range`() {
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of compression to inspect operators.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val c = doc.beginPage(10f, 10f)
         val p = SkPaint().apply { color = 0xFFFF0000.toInt() } // pure red
         c.drawRect(SkRect.MakeWH(5f, 5f), p)
@@ -137,7 +140,8 @@ class SkPDFDocumentTest {
     @Test
     fun `cubic verb emits c operator`() {
         val stream = SkDynamicMemoryWStream()
-        val doc = SkPDF.MakeDocument(stream)
+        // R-suivi.40 — opt out of compression to inspect operators.
+        val doc = SkPDF.MakeDocument(stream, SkPDF.Metadata(compress = false))
         val c = doc.beginPage(100f, 100f)
         val pathBuilder = org.skia.foundation.SkPathBuilder()
             .moveTo(0f, 0f)
