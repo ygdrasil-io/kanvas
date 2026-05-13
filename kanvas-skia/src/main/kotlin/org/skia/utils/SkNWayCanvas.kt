@@ -2,9 +2,12 @@ package org.skia.utils
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkDrawable
+import org.skia.core.SkLattice
+import org.skia.core.SkPicture
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
+import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
@@ -13,8 +16,11 @@ import org.skia.foundation.SkRSXform
 import org.skia.foundation.SkRegion
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextBlob
+import org.skia.foundation.SkTextSlug
 import org.skia.foundation.SkVertices
+import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
+import org.skia.math.SkPoint3
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 
@@ -259,9 +265,47 @@ public open class SkNWayCanvas(width: Int, height: Int) : SkNoDrawCanvas(width, 
         children.forEach { it.drawAnnotation(rect, key, value) }
     }
 
-    // TODO(R-suivi): SkCanvas in :kanvas-skia does not yet expose drawShadow,
-    //                drawSlug, or drawImageLattice as overridable virtuals.
-    //                Once they land, add forwarding overrides here mirroring
-    //                upstream's `SkNWayCanvas::onDrawShadowRec` /
-    //                `onDrawSlug` / `onDrawImageLattice2`.
+    // ─── R-suivi.50 — drawShadow / drawSlug / drawImageLattice / drawPicture ─
+    // Mirrors upstream's `SkNWayCanvas::onDrawShadowRec` / `onDrawSlug` /
+    // `onDrawImageLattice2` / `onDrawPicture` — fan-out to every child.
+
+    /** Forwards [drawShadow] to every child canvas (R-suivi.50). */
+    override fun drawShadow(
+        path: SkPath,
+        zPlaneParams: SkPoint3,
+        lightPos: SkPoint3,
+        lightRadius: SkScalar,
+        ambientColor: SkColor,
+        spotColor: SkColor,
+        flags: Int,
+    ) {
+        children.forEach {
+            it.drawShadow(path, zPlaneParams, lightPos, lightRadius, ambientColor, spotColor, flags)
+        }
+    }
+
+    /** Forwards [drawSlug] to every child canvas (R-suivi.50). */
+    override fun drawSlug(slug: SkTextSlug, origin: SkPoint) {
+        children.forEach { it.drawSlug(slug, origin) }
+    }
+
+    /** Forwards [drawImageLattice] to every child canvas (R-suivi.50). */
+    override fun drawImageLattice(
+        image: SkImage,
+        lattice: SkLattice,
+        dst: SkRect,
+        filterMode: SkFilterMode,
+        paint: SkPaint?,
+    ) {
+        children.forEach { it.drawImageLattice(image, lattice, dst, filterMode, paint) }
+    }
+
+    /** Forwards [drawPicture] to every child canvas (R-suivi.50). */
+    override fun drawPicture(
+        picture: SkPicture,
+        matrix: SkMatrix?,
+        paint: SkPaint?,
+    ) {
+        children.forEach { it.drawPicture(picture, matrix, paint) }
+    }
 }
