@@ -147,6 +147,7 @@ internal fun contourBounds(path: SkPath): List<AsWindingContour> {
                 }
             }
             SkPath.Verb.kClose -> { /* no points */ }
+            SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
         }
         ++verbStart
     }
@@ -257,6 +258,7 @@ internal fun getDirection(path: SkPath, contour: AsWindingContour): AsWindingDir
                     coordIdx += 2
                 }
                 SkPath.Verb.kClose -> { /* no points */ }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
             continue
         }
@@ -286,6 +288,7 @@ internal fun getDirection(path: SkPath, contour: AsWindingContour): AsWindingDir
                 penX = ex; penY = ey
             }
             SkPath.Verb.kClose -> { /* no points */ }
+            SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
         }
     }
     return if (totalSignedArea < 0) AsWindingDirection.kCCW else AsWindingDirection.kCW
@@ -382,6 +385,7 @@ internal inline fun forEachVerb(
             SkPath.Verb.kClose -> {
                 body(AsWindingVerbRec(v, arrayOf(SkPoint(penX, penY)), 1f, verbIndex))
             }
+            SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
         }
     }
 }
@@ -787,6 +791,7 @@ internal fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkP
             SkPath.Verb.kClose -> {
                 needClose = true
             }
+            SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
         }
         --i
     }
@@ -798,6 +803,7 @@ private fun ptsInVerb(v: SkPath.Verb): Int = when (v) {
     SkPath.Verb.kQuad, SkPath.Verb.kConic -> 2
     SkPath.Verb.kCubic -> 3
     SkPath.Verb.kClose -> 0
+    SkPath.Verb.kDone -> 0
 }
 
 /**
@@ -878,6 +884,7 @@ private class AsWindingVerbCursor(private val src: SkPath) {
                 builder.cubicTo(c1x, c1y, c2x, c2y, ex, ey); penX = ex; penY = ey
             }
             SkPath.Verb.kClose -> { builder.close() }
+            SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
         }
     }
 }

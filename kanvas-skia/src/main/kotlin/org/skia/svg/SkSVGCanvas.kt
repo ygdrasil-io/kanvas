@@ -1005,6 +1005,7 @@ public open class SkSVGCanvas(
                         ci += 4
                     }
                     SkPath.Verb.kClose -> sb.append(' ').append('Z')
+                    SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
                 }
             }
             return sb.toString()

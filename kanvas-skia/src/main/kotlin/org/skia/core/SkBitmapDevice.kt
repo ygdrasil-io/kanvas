@@ -1788,6 +1788,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         hasContour = false
                     }
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         if (hasContour) addEdge(out, px, py, cx, cy)
@@ -1898,6 +1899,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
                         hasContour = false
                     }
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         if (hasContour) addEdge(out, px, py, cx, cy)

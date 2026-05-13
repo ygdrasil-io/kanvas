@@ -44,21 +44,27 @@ public class SkPath internal constructor(
     public val fillType: SkPathFillType,
 ) {
     /**
-     * Storage-side verb enum — mirrors upstream's modern `SkPathVerb`
-     * enum class (`include/core/SkPathTypes.h:60-67`), the 6-value
-     * internal enum that drives every `addRect` / `moveTo` / etc.
+     * Verb enum mirroring upstream `SkPath::Verb`
+     * (`include/core/SkPath.h:692-700`). Seven entries:
      *
-     * Distinct from the iterator-result [IterVerb] (which mirrors the
-     * legacy upstream `SkPath::Verb` — same six entries plus a
-     * `kDoneVerb` sentinel). For upstream-aligned naming, see the
-     * file-scope typealiases [SkPathVerb] (= this enum) and
-     * [SkPathStorageVerb] (= this enum, the R-suivi.25 alias).
+     * - `kMove`, `kLine`, `kQuad`, `kConic`, `kCubic`, `kClose` — the
+     *   six "real" verbs that appear in the [verbs] storage array
+     *   (and in upstream's modern `SkPathVerb`,
+     *   `include/core/SkPathTypes.h:60-67`).
+     * - `kDone` — sentinel returned by [Iter.next] / [RawIter.next]
+     *   once the verb stream is exhausted; never stored in [verbs].
      *
-     * Note on naming : upstream confusingly uses both `SkPathVerb`
-     * (6-value, in `SkPathTypes.h`) **and** `SkPath::Verb` (7-value,
-     * iter-result, in `SkPath.h:692-700`). kanvas-skia keeps them
-     * distinct as [Verb] (storage, 6) and [IterVerb] (iter, 7); see
-     * file footer for the alias rationale.
+     * R-suivi.25 follow-up unified the previous split between
+     * `Verb` (6) and `Verb` (7) into this single enum,
+     * matching upstream Skia where storage code uses the 6 "real"
+     * values and only iterators ever produce `kDone`.
+     *
+     * The [pointCount] field carries the storage-side point count
+     * (number of `(x, y)` pairs each verb appends to the [coords]
+     * stream); it is `0` for both [kClose] and [kDone] since neither
+     * adds storage points. For the iterator-side `pts[4]` stride
+     * (which differs — e.g. `kLine` writes 2 iter-points but only
+     * adds 1 storage point), see [Iter.pointsForIterVerb].
      */
     public enum class Verb(public val pointCount: Int) {
         kMove(1),
@@ -67,6 +73,7 @@ public class SkPath internal constructor(
         kConic(2),   // control + end (with weight in conicWeights)
         kCubic(3),   // 2 controls + end
         kClose(0),
+        kDone(0),    // iterator sentinel — never stored
     }
 
     /**
@@ -255,6 +262,7 @@ public class SkPath internal constructor(
                     sb.append(")\n")
                 }
                 Verb.kClose -> sb.append("close()\n")
+                Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         sb.append("}")
@@ -290,6 +298,7 @@ public class SkPath internal constructor(
                 Verb.kConic -> mask = mask or 4
                 Verb.kCubic -> mask = mask or 8
                 Verb.kMove, Verb.kClose -> {}
+                Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         return mask
@@ -672,6 +681,7 @@ public class SkPath internal constructor(
                     px = ex; py = ey
                 }
                 Verb.kClose -> {}
+                Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         return SkRect.MakeLTRB(minX, minY, maxX, maxY)
@@ -807,6 +817,7 @@ public class SkPath internal constructor(
                     crossSegment(px, py, mx, my)
                     px = mx; py = my
                 }
+                Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         val inside = if (fillType.isEvenOdd()) (crossings and 1) != 0 else winding != 0
@@ -894,27 +905,6 @@ public class SkPath internal constructor(
         tryMakeTransform(SkMatrix.MakeScale(sx, sy))
 
     /**
-     * Iterator-result enum mirroring upstream `SkPath::Verb`
-     * (`include/core/SkPath.h:692-700`). Distinct from the storage-side
-     * [Verb] (which mirrors upstream's `SkPathVerb`, the modern internal
-     * enum) by carrying the extra [kDoneVerb] sentinel returned by
-     * [Iter.next] / [RawIter.next] once the verb stream is exhausted.
-     *
-     * The seven entries match upstream's `kMove_Verb` … `kDone_Verb`
-     * (the upstream `_Verb` suffix is reflowed to a trailing `Verb`
-     * here to match the kanvas-skia style guide for enum entries).
-     */
-    public enum class IterVerb {
-        kMoveVerb,
-        kLineVerb,
-        kQuadVerb,
-        kConicVerb,
-        kCubicVerb,
-        kCloseVerb,
-        kDoneVerb,
-    }
-
-    /**
      * Walks the verb stream and produces verbs / control-point tuples,
      * mirroring upstream `SkPath::Iter` (`include/core/SkPath.h:774-872`,
      * impl in `src/core/SkPath.cpp:398-577`).
@@ -923,24 +913,24 @@ public class SkPath internal constructor(
      * the control points required to redraw the verb. The point layout
      * matches upstream's `SkPoint pts[4]` convention: the verb's
      * **starting** point is `pts[0]` (= last pen position) except for
-     * [IterVerb.kMoveVerb], where `pts[0]` is the move target. Point
+     * [Verb.kMove], where `pts[0]` is the move target. Point
      * counts per verb (each point = 2 floats):
      *
      * | Verb        | Points written | Float pairs                                  |
      * |-------------|----------------|----------------------------------------------|
-     * | `kMoveVerb` | 1              | (move target)                                |
-     * | `kLineVerb` | 2              | (last pt, end)                               |
-     * | `kQuadVerb` | 3              | (last pt, ctrl, end)                         |
-     * | `kConicVerb`| 3              | (last pt, ctrl, end) — weight via [conicWeight] |
-     * | `kCubicVerb`| 4              | (last pt, ctrl1, ctrl2, end)                 |
-     * | `kCloseVerb`| 1              | (move target — the contour origin)           |
-     * | `kDoneVerb` | 0              | (sentinel — stream exhausted)                |
+     * | `kMove` | 1              | (move target)                                |
+     * | `kLine` | 2              | (last pt, end)                               |
+     * | `kQuad` | 3              | (last pt, ctrl, end)                         |
+     * | `kConic`| 3              | (last pt, ctrl, end) — weight via [conicWeight] |
+     * | `kCubic`| 4              | (last pt, ctrl1, ctrl2, end)                 |
+     * | `kClose`| 1              | (move target — the contour origin)           |
+     * | `kDone` | 0              | (sentinel — stream exhausted)                |
      *
      * If [forceClose] is `true`, [Iter] inserts the synthetic verbs
-     * needed to close every open contour: a [IterVerb.kLineVerb] from
+     * needed to close every open contour: a [Verb.kLine] from
      * the last point back to the move target (only if those points
      * differ — exposed via [isCloseLine]), followed by a
-     * [IterVerb.kCloseVerb]. The behaviour matches upstream's `fForceClose`
+     * [Verb.kClose]. The behaviour matches upstream's `fForceClose`
      * + `autoClose` (`SkPath.cpp:462-481`).
      *
      * @param path        the path to iterate
@@ -988,24 +978,24 @@ public class SkPath internal constructor(
         }
 
         /**
-         * Conic weight for the most recently returned [IterVerb.kConicVerb].
+         * Conic weight for the most recently returned [Verb.kConic].
          * Result is undefined if [next] has not yet returned a conic verb.
          */
         public fun conicWeight(): Float = lastConicWeight
 
         /**
-         * True if the most recently returned [IterVerb.kLineVerb] was a
+         * True if the most recently returned [Verb.kLine] was a
          * synthetic line emitted by [forceClose] (or by hitting a
-         * [Verb.kClose] whose endpoints didn't coincide with the contour's
-         * move target). Mirrors `SkPath::Iter::isCloseLine`
+         * [Verb.kClose] whose endpoints didn't coincide with the
+         * contour's move target). Mirrors `SkPath::Iter::isCloseLine`
          * (`SkPath.h:838-847`).
          */
         public fun isCloseLine(): Boolean = closeLine
 
         /**
          * True if the remaining verbs in the current contour include a
-         * [Verb.kClose] before the next [Verb.kMove] (or if [forceClose]
-         * is set). Mirrors `SkPath::Iter::isClosedContour`
+         * [Verb.kClose] before the next [Verb.kMove] (or if
+         * [forceClose] is set). Mirrors `SkPath::Iter::isClosedContour`
          * (`SkPath.cpp:434-460`).
          */
         public fun isClosedContour(): Boolean {
@@ -1033,33 +1023,33 @@ public class SkPath internal constructor(
          * Returns the synthetic verb produced. Writes the verb's points
          * into [pts] starting at offset 0.
          */
-        private fun autoClose(pts: FloatArray): IterVerb {
+        private fun autoClose(pts: FloatArray): Verb {
             if (lastX != moveToX || lastY != moveToY) {
                 // NaN-vs-NaN: upstream treats both NaN endpoints as
                 // identical and emits the kClose directly rather than
                 // a degenerate kLine. We replicate that behaviour.
                 if (lastX.isNaN() || lastY.isNaN() || moveToX.isNaN() || moveToY.isNaN()) {
-                    return IterVerb.kCloseVerb
+                    return Verb.kClose
                 }
                 pts[0] = lastX; pts[1] = lastY
                 pts[2] = moveToX; pts[3] = moveToY
                 lastX = moveToX; lastY = moveToY
                 closeLine = true
-                return IterVerb.kLineVerb
+                return Verb.kLine
             }
             pts[0] = moveToX; pts[1] = moveToY
-            return IterVerb.kCloseVerb
+            return Verb.kClose
         }
 
         /**
          * Advance the iterator one verb. Writes the verb's control
          * points into [pts] (see the table on [Iter] for layout).
-         * Returns [IterVerb.kDoneVerb] when the verb stream is exhausted
+         * Returns [Verb.kDone] when the verb stream is exhausted
          * (and any pending [forceClose] tail has been flushed).
          *
          * [pts] must be at least 8 floats long (4 points × 2 floats).
          */
-        public fun next(pts: FloatArray): IterVerb {
+        public fun next(pts: FloatArray): Verb {
             require(pts.size >= 8) { "pts must hold at least 8 floats (4 points)" }
             val verbs = path.verbs
             val coords = path.coords
@@ -1069,11 +1059,11 @@ public class SkPath internal constructor(
                 // Verb stream exhausted — flush a pending forceClose tail.
                 if (needClose) {
                     val v = autoClose(pts)
-                    if (v == IterVerb.kLineVerb) return v
+                    if (v == Verb.kLine) return v
                     needClose = false
-                    return IterVerb.kCloseVerb
+                    return Verb.kClose
                 }
-                return IterVerb.kDoneVerb
+                return Verb.kDone
             }
 
             var verb = verbs[verbIdx]
@@ -1086,12 +1076,12 @@ public class SkPath internal constructor(
                         // previous contour before consuming this Move.
                         verbIdx--
                         val syn = autoClose(pts)
-                        if (syn == IterVerb.kCloseVerb) needClose = false
+                        if (syn == Verb.kClose) needClose = false
                         return syn
                     }
                     if (verbIdx >= verbs.size) {
                         // Trailing kMove with no following geometry — done.
-                        return IterVerb.kDoneVerb
+                        return Verb.kDone
                     }
                     val mx = coords[coordIdx++]
                     val my = coords[coordIdx++]
@@ -1100,7 +1090,7 @@ public class SkPath internal constructor(
                     pts[0] = mx; pts[1] = my
                     needClose = forceClose
                     closeLine = false
-                    return IterVerb.kMoveVerb
+                    return Verb.kMove
                 }
                 Verb.kLine -> {
                     val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
@@ -1108,7 +1098,7 @@ public class SkPath internal constructor(
                     pts[2] = ex;    pts[3] = ey
                     lastX = ex; lastY = ey
                     closeLine = false
-                    return IterVerb.kLineVerb
+                    return Verb.kLine
                 }
                 Verb.kQuad -> {
                     val c1x = coords[coordIdx++]; val c1y = coords[coordIdx++]
@@ -1117,7 +1107,7 @@ public class SkPath internal constructor(
                     pts[2] = c1x;   pts[3] = c1y
                     pts[4] = ex;    pts[5] = ey
                     lastX = ex; lastY = ey
-                    return IterVerb.kQuadVerb
+                    return Verb.kQuad
                 }
                 Verb.kConic -> {
                     val c1x = coords[coordIdx++]; val c1y = coords[coordIdx++]
@@ -1127,7 +1117,7 @@ public class SkPath internal constructor(
                     pts[4] = ex;    pts[5] = ey
                     lastConicWeight = weights[weightIdx++]
                     lastX = ex; lastY = ey
-                    return IterVerb.kConicVerb
+                    return Verb.kConic
                 }
                 Verb.kCubic -> {
                     val c1x = coords[coordIdx++]; val c1y = coords[coordIdx++]
@@ -1138,11 +1128,11 @@ public class SkPath internal constructor(
                     pts[4] = c2x;   pts[5] = c2y
                     pts[6] = ex;    pts[7] = ey
                     lastX = ex; lastY = ey
-                    return IterVerb.kCubicVerb
+                    return Verb.kCubic
                 }
                 Verb.kClose -> {
                     val syn = autoClose(pts)
-                    if (syn == IterVerb.kLineVerb) {
+                    if (syn == Verb.kLine) {
                         // Re-emit the explicit kClose on the next call.
                         verbIdx--
                     } else {
@@ -1151,6 +1141,9 @@ public class SkPath internal constructor(
                     lastX = moveToX; lastY = moveToY
                     return syn
                 }
+                Verb.kDone -> error(
+                    "kDone is an iterator-only sentinel and must never appear in the storage verbs[] array",
+                )
             }
         }
 
@@ -1160,10 +1153,10 @@ public class SkPath internal constructor(
          * Allocates a fresh [SkPoint] array sized to the verb's point
          * count (1, 2, 3, 4, 0 for kDone — see the table on [Iter]).
          */
-        public fun next(): Pair<IterVerb, Array<SkPoint>>? {
+        public fun next(): Pair<Verb, Array<SkPoint>>? {
             val pts = FloatArray(8)
             val verb = next(pts)
-            if (verb == IterVerb.kDoneVerb) return null
+            if (verb == Verb.kDone) return null
             val n = pointsForIterVerb(verb)
             val out = Array(n) { i -> SkPoint(pts[2 * i], pts[2 * i + 1]) }
             return verb to out
@@ -1208,28 +1201,28 @@ public class SkPath internal constructor(
         }
 
         /**
-         * Conic weight for the most recent [IterVerb.kConicVerb] returned
+         * Conic weight for the most recent [Verb.kConic] returned
          * from [next]. Result is undefined before any conic verb.
          */
         public fun conicWeight(): Float = lastConicWeight
 
         /**
          * Peek at the next verb without advancing. Returns
-         * [IterVerb.kDoneVerb] when the stream is exhausted.
+         * [Verb.kDone] when the stream is exhausted.
          */
-        public fun peek(): IterVerb {
+        public fun peek(): Verb {
             val verbs = path.verbs
-            if (verbIdx >= verbs.size) return IterVerb.kDoneVerb
-            return iterVerbOf(verbs[verbIdx])
+            if (verbIdx >= verbs.size) return Verb.kDone
+            return verbs[verbIdx]
         }
 
         /** Advance the iterator one verb, writing points into [pts]. */
-        public fun next(pts: FloatArray): IterVerb {
+        public fun next(pts: FloatArray): Verb {
             require(pts.size >= 8) { "pts must hold at least 8 floats (4 points)" }
             val verbs = path.verbs
             val coords = path.coords
             val weights = path.conicWeights
-            if (verbIdx >= verbs.size) return IterVerb.kDoneVerb
+            if (verbIdx >= verbs.size) return Verb.kDone
             val verb = verbs[verbIdx++]
             when (verb) {
                 Verb.kMove -> {
@@ -1237,14 +1230,14 @@ public class SkPath internal constructor(
                     moveToX = mx; moveToY = my
                     lastX = mx; lastY = my
                     pts[0] = mx; pts[1] = my
-                    return IterVerb.kMoveVerb
+                    return Verb.kMove
                 }
                 Verb.kLine -> {
                     val ex = coords[coordIdx++]; val ey = coords[coordIdx++]
                     pts[0] = lastX; pts[1] = lastY
                     pts[2] = ex;    pts[3] = ey
                     lastX = ex; lastY = ey
-                    return IterVerb.kLineVerb
+                    return Verb.kLine
                 }
                 Verb.kQuad -> {
                     val c1x = coords[coordIdx++]; val c1y = coords[coordIdx++]
@@ -1253,7 +1246,7 @@ public class SkPath internal constructor(
                     pts[2] = c1x;   pts[3] = c1y
                     pts[4] = ex;    pts[5] = ey
                     lastX = ex; lastY = ey
-                    return IterVerb.kQuadVerb
+                    return Verb.kQuad
                 }
                 Verb.kConic -> {
                     val c1x = coords[coordIdx++]; val c1y = coords[coordIdx++]
@@ -1263,7 +1256,7 @@ public class SkPath internal constructor(
                     pts[4] = ex;    pts[5] = ey
                     lastConicWeight = weights[weightIdx++]
                     lastX = ex; lastY = ey
-                    return IterVerb.kConicVerb
+                    return Verb.kConic
                 }
                 Verb.kCubic -> {
                     val c1x = coords[coordIdx++]; val c1y = coords[coordIdx++]
@@ -1274,7 +1267,7 @@ public class SkPath internal constructor(
                     pts[4] = c2x;   pts[5] = c2y
                     pts[6] = ex;    pts[7] = ey
                     lastX = ex; lastY = ey
-                    return IterVerb.kCubicVerb
+                    return Verb.kCubic
                 }
                 Verb.kClose -> {
                     // Upstream RawIter emits kClose with pts[0] = the
@@ -1282,16 +1275,19 @@ public class SkPath internal constructor(
                     // point). We do the same.
                     pts[0] = lastX; pts[1] = lastY
                     lastX = moveToX; lastY = moveToY
-                    return IterVerb.kCloseVerb
+                    return Verb.kClose
                 }
+                Verb.kDone -> error(
+                    "kDone is an iterator-only sentinel and must never appear in the storage verbs[] array",
+                )
             }
         }
 
         /** Kotlin-friendly overload — see [Iter.next]. */
-        public fun next(): Pair<IterVerb, Array<SkPoint>>? {
+        public fun next(): Pair<Verb, Array<SkPoint>>? {
             val pts = FloatArray(8)
             val verb = next(pts)
-            if (verb == IterVerb.kDoneVerb) return null
+            if (verb == Verb.kDone) return null
             val n = pointsForIterVerb(verb)
             val out = Array(n) { i -> SkPoint(pts[2 * i], pts[2 * i + 1]) }
             return verb to out
@@ -1303,27 +1299,21 @@ public class SkPath internal constructor(
          * Number of [SkPoint] entries written by [Iter.next] / [RawIter.next]
          * for the given iterator verb (matches upstream's `pts[4]`
          * convention — `pts[0]` is the verb's start point, except for
-         * [IterVerb.kMoveVerb] / [IterVerb.kCloseVerb] which store only
-         * the move target).
+         * [Verb.kMove] / [Verb.kClose] which store only the move target).
+         *
+         * Distinct from [Verb.pointCount], which is the storage-side
+         * point count (e.g. `kLine` adds 1 storage point but writes 2
+         * iter points; `kClose` adds 0 storage points but writes 1
+         * iter point — the contour origin).
          */
-        internal fun pointsForIterVerb(verb: IterVerb): Int = when (verb) {
-            IterVerb.kMoveVerb -> 1
-            IterVerb.kLineVerb -> 2
-            IterVerb.kQuadVerb -> 3
-            IterVerb.kConicVerb -> 3
-            IterVerb.kCubicVerb -> 4
-            IterVerb.kCloseVerb -> 1
-            IterVerb.kDoneVerb -> 0
-        }
-
-        /** Map a storage-side [Verb] onto its [IterVerb] equivalent. */
-        internal fun iterVerbOf(v: Verb): IterVerb = when (v) {
-            Verb.kMove -> IterVerb.kMoveVerb
-            Verb.kLine -> IterVerb.kLineVerb
-            Verb.kQuad -> IterVerb.kQuadVerb
-            Verb.kConic -> IterVerb.kConicVerb
-            Verb.kCubic -> IterVerb.kCubicVerb
-            Verb.kClose -> IterVerb.kCloseVerb
+        internal fun pointsForIterVerb(verb: Verb): Int = when (verb) {
+            Verb.kMove -> 1
+            Verb.kLine -> 2
+            Verb.kQuad -> 3
+            Verb.kConic -> 3
+            Verb.kCubic -> 4
+            Verb.kClose -> 1
+            Verb.kDone -> 0
         }
 
         /** Cached empty path — used as the [Iter] / [RawIter] default ctor arg. */
@@ -1564,56 +1554,48 @@ public class SkPath internal constructor(
     }
 }
 
-// -- Upstream-aligned typealiases (R-suivi.25) ------------------------------
+// -- Deprecated typealiases (R-suivi.25 + follow-up) ------------------------
 //
-// Upstream Skia ships *two* verb enums that both confusingly bear the name
-// `Verb` somewhere in their path:
+// R-suivi.25 originally split the verb names into a 6-value
+// `SkPath.StorageVerb` (storage) and a 7-value `SkPath.Verb` (iter), to
+// mirror upstream's `SkPathVerb` vs `SkPath::Verb` enums. The R-suivi.25
+// follow-up unified them into a single 7-value [SkPath.Verb] matching
+// upstream Skia (storage code uses the 6 "real" values; only iterators
+// ever produce `kDone`).
 //
-//   - `SkPathVerb`         (`include/core/SkPathTypes.h:60-67`) — 6 values,
-//                          the modern storage enum used by `SkPath::Raw`,
-//                          `SkPath::verbs()`, etc. No `kDone` sentinel.
-//   - `SkPath::Verb`       (`include/core/SkPath.h:692-700`)    — 7 values,
-//                          the legacy iter-result enum returned by
-//                          `SkPath::Iter::next`. Adds the `kDone_Verb`
-//                          sentinel returned once the verb stream is
-//                          exhausted.
-//
-// kanvas-skia maps these to two distinct nested enums:
-//
-//   - `SkPath.Verb`     (6 values, storage)   ↔ upstream `SkPathVerb`
-//   - `SkPath.IterVerb` (7 values, iter)       ↔ upstream `SkPath::Verb`
-//
-// The R-suivi.25 work item asked for an upstream-perfect rename
-// (`SkPath.Verb` → `SkPath.StorageVerb`, `SkPath.IterVerb` → `SkPath.Verb`).
-// In practice that cascades to ~455 callsites across 50 files and would
-// collide with parallel-agent work (SkCanvas / SkBitmapDevice / codec
-// drives `SkPath.Verb` heavily). The typealiases below cover the
-// upstream-naming half of the contract without churn — see PR R-suivi for
-// the rationale + a TODO for a future no-other-agents-in-flight rename.
+// The typealiases below preserve source-compatibility for any external
+// consumer that adopted the pre-rename file-scope names; new code should
+// reference [SkPath.Verb] directly.
 
 /**
- * Upstream `SkPathVerb` alias (`include/core/SkPathTypes.h:60-67`).
- * Points at the 6-value storage enum [SkPath.Verb]. Use this name when
- * porting C++ code that references `SkPathVerb` directly so the call
- * sites stay readable.
+ * Pre-R-suivi.25 file-scope alias for the verb enum. Identical to the
+ * nested [SkPath.Verb].
  */
+@Deprecated(
+    message = "Use SkPath.Verb directly (R-suivi.25 rename).",
+    replaceWith = ReplaceWith("SkPath.Verb", "org.skia.foundation.SkPath"),
+)
 public typealias SkPathVerb = SkPath.Verb
 
 /**
- * Conceptually upstream's `SkPath::Verb` (the 7-value iter-result enum,
- * `include/core/SkPath.h:692-700`). Aliases the 7-value [SkPath.IterVerb]
- * so port code reading `SkPath::Verb` can write [SkPathIterVerb] here.
- *
- * Not exposed as a nested `SkPath.Verb` alias because that name already
- * resolves to the storage enum [SkPath.Verb]; the file-scope alias is
- * the closest we can get without the full rename cascade (see R-suivi
- * notes above).
+ * Pre-R-suivi.25 file-scope alias for the iter verb enum. Identical to
+ * the nested [SkPath.Verb] (which is now the unified 7-value enum
+ * mirroring upstream `SkPath::Verb`).
  */
-public typealias SkPathIterVerb = SkPath.IterVerb
+@Deprecated(
+    message = "Use SkPath.Verb directly (R-suivi.25 rename).",
+    replaceWith = ReplaceWith("SkPath.Verb", "org.skia.foundation.SkPath"),
+)
+public typealias SkPathIterVerb = SkPath.Verb
 
 /**
- * Explicit-name alias for the storage [SkPath.Verb] (the R-suivi.25
- * proposed rename, kept here as an alias for callers who want the
- * unambiguous `StorageVerb` label without ambiguity with iter verbs).
+ * Pre-R-suivi.25-follow-up alias for the storage verb enum. The split
+ * into a separate `StorageVerb` was reverted; this alias now resolves
+ * to the unified [SkPath.Verb] (which exposes the same `kMove`,
+ * `kLine`, ... `kClose` entries plus the `kDone` iterator sentinel).
  */
+@Deprecated(
+    message = "Use SkPath.Verb directly (R-suivi.25 follow-up unified the enum).",
+    replaceWith = ReplaceWith("SkPath.Verb", "org.skia.foundation.SkPath"),
+)
 public typealias SkPathStorageVerb = SkPath.Verb

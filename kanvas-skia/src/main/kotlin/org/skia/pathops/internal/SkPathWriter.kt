@@ -472,6 +472,7 @@ internal class SkPathWriter(fillType: SkPathFillType) {
                 SkPath.Verb.kClose ->
                     error("reverseExtend : kClose inside a partial contour is unexpected")
                 SkPath.Verb.kMove -> Unit // unreachable (filtered above)
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
     }

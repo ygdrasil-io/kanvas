@@ -193,6 +193,7 @@ public class SkPath1DPathEffect private constructor(
                 SkPath.Verb.kClose -> {
                     out.close()
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
     }
@@ -355,6 +356,7 @@ public class SkPath1DPathEffect private constructor(
                     pushPoint(startX, startY)
                     penX = startX; penY = startY
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         finishContour()

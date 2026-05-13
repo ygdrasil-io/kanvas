@@ -142,6 +142,7 @@ public class SkDashPathEffect private constructor(
                         contourStartX, contourStartY, distFromContourStart)
                     penX = contourStartX; penY = contourStartY
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         val detached = out.detach()
@@ -201,6 +202,7 @@ public class SkDashPathEffect private constructor(
                 SkPath.Verb.kConic -> { coordIdx += 4 }
                 SkPath.Verb.kCubic -> { coordIdx += 6 }
                 SkPath.Verb.kClose -> { /* no coords */ }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
             i++
         }
