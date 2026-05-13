@@ -54,8 +54,8 @@ class SkPathStartIndexTest {
             val p = SkPathBuilder().addRect(rect, SkPathDirection.kCW, i).detach()
             assertArrayEquals(
                 arrayOf(
-                    SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine, SkPath.StorageVerb.kLine,
-                    SkPath.StorageVerb.kLine, SkPath.StorageVerb.kClose,
+                    SkPath.Verb.kMove, SkPath.Verb.kLine, SkPath.Verb.kLine,
+                    SkPath.Verb.kLine, SkPath.Verb.kClose,
                 ),
                 p.verbs, "verbs for startIndex=$i",
             )
@@ -98,9 +98,9 @@ class SkPathStartIndexTest {
     @Test
     fun `addOval verb stream is invariant across startIndex values`() {
         val expectedVerbs = arrayOf(
-            SkPath.StorageVerb.kMove,
-            SkPath.StorageVerb.kConic, SkPath.StorageVerb.kConic, SkPath.StorageVerb.kConic, SkPath.StorageVerb.kConic,
-            SkPath.StorageVerb.kClose,
+            SkPath.Verb.kMove,
+            SkPath.Verb.kConic, SkPath.Verb.kConic, SkPath.Verb.kConic, SkPath.Verb.kConic,
+            SkPath.Verb.kClose,
         )
         for (i in 0..3) {
             val p = SkPathBuilder().addOval(rect, SkPathDirection.kCW, i).detach()
@@ -125,10 +125,10 @@ class SkPathStartIndexTest {
         val rrect = SkRRect.MakeRectXY(rect, 10f, 10f)
         val p = SkPathBuilder().addRRect(rrect).detach()
         assertEquals(10, p.verbs.size)
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
-        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
-        assertEquals(SkPath.StorageVerb.kConic, p.verbs[2])
-        assertEquals(SkPath.StorageVerb.kClose, p.verbs[9])
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.Verb.kLine, p.verbs[1])
+        assertEquals(SkPath.Verb.kConic, p.verbs[2])
+        assertEquals(SkPath.Verb.kClose, p.verbs[9])
     }
 
     @Test
@@ -137,7 +137,7 @@ class SkPathStartIndexTest {
         for (i in intArrayOf(0, 2, 4, 6)) {
             val p = SkPathBuilder().addRRect(rrect, SkPathDirection.kCW, i).detach()
             assertEquals(10, p.verbs.size, "verbs.size for startIndex=$i")
-            assertEquals(SkPath.StorageVerb.kLine, p.verbs[1], "first segment after move for startIndex=$i")
+            assertEquals(SkPath.Verb.kLine, p.verbs[1], "first segment after move for startIndex=$i")
         }
     }
 
@@ -147,16 +147,16 @@ class SkPathStartIndexTest {
         for (i in intArrayOf(1, 3, 5, 7)) {
             val p = SkPathBuilder().addRRect(rrect, SkPathDirection.kCW, i).detach()
             assertEquals(9, p.verbs.size, "verbs.size for startIndex=$i (ConicStart)")
-            assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
-            assertEquals(SkPath.StorageVerb.kConic, p.verbs[1], "first segment after move for startIndex=$i")
+            assertEquals(SkPath.Verb.kMove, p.verbs[0])
+            assertEquals(SkPath.Verb.kConic, p.verbs[1], "first segment after move for startIndex=$i")
             // Verify alternating: kMove, kConic, kLine, kConic, kLine, kConic, kLine, kConic, kClose.
             val expected = arrayOf(
-                SkPath.StorageVerb.kMove,
-                SkPath.StorageVerb.kConic, SkPath.StorageVerb.kLine,
-                SkPath.StorageVerb.kConic, SkPath.StorageVerb.kLine,
-                SkPath.StorageVerb.kConic, SkPath.StorageVerb.kLine,
-                SkPath.StorageVerb.kConic,
-                SkPath.StorageVerb.kClose,
+                SkPath.Verb.kMove,
+                SkPath.Verb.kConic, SkPath.Verb.kLine,
+                SkPath.Verb.kConic, SkPath.Verb.kLine,
+                SkPath.Verb.kConic, SkPath.Verb.kLine,
+                SkPath.Verb.kConic,
+                SkPath.Verb.kClose,
             )
             assertArrayEquals(expected, p.verbs, "verbs for startIndex=$i")
         }
@@ -169,7 +169,7 @@ class SkPathStartIndexTest {
         val rrect = SkRRect.MakeRectXY(rect, 10f, 10f)
         val p = SkPathBuilder().addRRect(rrect, SkPathDirection.kCCW, 0).detach()
         assertEquals(9, p.verbs.size)
-        assertEquals(SkPath.StorageVerb.kConic, p.verbs[1])
+        assertEquals(SkPath.Verb.kConic, p.verbs[1])
     }
 
     // --- isRRect detector — both LineStart and ConicStart ---------------
@@ -271,7 +271,7 @@ class SkPathStartIndexTest {
         // Default = 0 → LineStart, move at (l + tlRx, t) = (10, 0).
         assertEquals(10f, a.coords[0], 1e-4f)
         assertEquals(0f, a.coords[1], 1e-4f)
-        assertEquals(SkPath.StorageVerb.kLine, a.verbs[1])
+        assertEquals(SkPath.Verb.kLine, a.verbs[1])
     }
 
     @Test

@@ -138,14 +138,14 @@ public class SkPath1DPathEffect private constructor(
         // recompute every point from the source.
         for (verb in stamp.verbs) {
             when (verb) {
-                SkPath.StorageVerb.kMove -> {
+                SkPath.Verb.kMove -> {
                     val sx = stamp.coords[coordIdx++]
                     val sy = stamp.coords[coordIdx++]
                     val m = morphPoint(contour, d, sx, sy)
                     out.moveTo(m[0], m[1])
                     penX = sx; penY = sy
                 }
-                SkPath.StorageVerb.kLine -> {
+                SkPath.Verb.kLine -> {
                     // Upgrade to degenerate quad : control = midpoint.
                     val ex = stamp.coords[coordIdx++]
                     val ey = stamp.coords[coordIdx++]
@@ -156,7 +156,7 @@ public class SkPath1DPathEffect private constructor(
                     out.quadTo(mc[0], mc[1], me[0], me[1])
                     penX = ex; penY = ey
                 }
-                SkPath.StorageVerb.kQuad -> {
+                SkPath.Verb.kQuad -> {
                     val cx = stamp.coords[coordIdx++]
                     val cy = stamp.coords[coordIdx++]
                     val ex = stamp.coords[coordIdx++]
@@ -166,7 +166,7 @@ public class SkPath1DPathEffect private constructor(
                     out.quadTo(mc[0], mc[1], me[0], me[1])
                     penX = ex; penY = ey
                 }
-                SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kConic -> {
                     val cx = stamp.coords[coordIdx++]
                     val cy = stamp.coords[coordIdx++]
                     val ex = stamp.coords[coordIdx++]
@@ -177,7 +177,7 @@ public class SkPath1DPathEffect private constructor(
                     out.conicTo(mc[0], mc[1], me[0], me[1], w)
                     penX = ex; penY = ey
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     val c1x = stamp.coords[coordIdx++]
                     val c1y = stamp.coords[coordIdx++]
                     val c2x = stamp.coords[coordIdx++]
@@ -190,9 +190,10 @@ public class SkPath1DPathEffect private constructor(
                     out.cubicTo(m1[0], m1[1], m2[0], m2[1], me[0], me[1])
                     penX = ex; penY = ey
                 }
-                SkPath.StorageVerb.kClose -> {
+                SkPath.Verb.kClose -> {
                     out.close()
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
     }
@@ -309,20 +310,20 @@ public class SkPath1DPathEffect private constructor(
 
         for (verb in input.verbs) {
             when (verb) {
-                SkPath.StorageVerb.kMove -> {
+                SkPath.Verb.kMove -> {
                     finishContour()
                     penX = input.coords[coordIdx++]
                     penY = input.coords[coordIdx++]
                     startX = penX; startY = penY
                     pushPoint(penX, penY)
                 }
-                SkPath.StorageVerb.kLine -> {
+                SkPath.Verb.kLine -> {
                     val nx = input.coords[coordIdx++]
                     val ny = input.coords[coordIdx++]
                     pushPoint(nx, ny)
                     penX = nx; penY = ny
                 }
-                SkPath.StorageVerb.kQuad -> {
+                SkPath.Verb.kQuad -> {
                     val cx = input.coords[coordIdx++]
                     val cy = input.coords[coordIdx++]
                     val ex = input.coords[coordIdx++]
@@ -330,7 +331,7 @@ public class SkPath1DPathEffect private constructor(
                     flattenQuad(penX, penY, cx, cy, ex, ey) { x, y -> pushPoint(x, y) }
                     penX = ex; penY = ey
                 }
-                SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kConic -> {
                     val cx = input.coords[coordIdx++]
                     val cy = input.coords[coordIdx++]
                     val ex = input.coords[coordIdx++]
@@ -341,7 +342,7 @@ public class SkPath1DPathEffect private constructor(
                     flattenQuad(penX, penY, cx, cy, ex, ey) { x, y -> pushPoint(x, y) }
                     penX = ex; penY = ey
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     val c1x = input.coords[coordIdx++]
                     val c1y = input.coords[coordIdx++]
                     val c2x = input.coords[coordIdx++]
@@ -351,10 +352,11 @@ public class SkPath1DPathEffect private constructor(
                     flattenCubic(penX, penY, c1x, c1y, c2x, c2y, ex, ey) { x, y -> pushPoint(x, y) }
                     penX = ex; penY = ey
                 }
-                SkPath.StorageVerb.kClose -> {
+                SkPath.Verb.kClose -> {
                     pushPoint(startX, startY)
                     penX = startX; penY = startY
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         finishContour()

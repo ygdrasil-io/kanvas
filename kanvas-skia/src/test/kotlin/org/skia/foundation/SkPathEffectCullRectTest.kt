@@ -50,8 +50,8 @@ class SkPathEffectCullRectTest {
         val cull = SkRect(25f, -1f, 75f, 1f)
         val out = pe.filterPath(input, identity, cull)
         assertNotNull(out)
-        val moves = out!!.verbs.count { it == SkPath.StorageVerb.kMove }
-        val lines = out.verbs.count { it == SkPath.StorageVerb.kLine }
+        val moves = out!!.verbs.count { it == SkPath.Verb.kMove }
+        val lines = out.verbs.count { it == SkPath.Verb.kLine }
         assertEquals(3, moves, "kept 3 of 5 dashes")
         assertEquals(3, lines, "kept 3 of 5 dashes")
     }

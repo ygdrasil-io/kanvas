@@ -47,7 +47,7 @@ class SkCornerPathEffectTest {
         val input = SkPathBuilder().moveTo(0f, 0f).lineTo(100f, 0f).detach()
         val out = pe.filterPath(input, identity)!!
         // Expect : kMove + kLine, no kQuad.
-        assertTrue(out.verbs.count { it == SkPath.StorageVerb.kQuad } == 0) {
+        assertTrue(out.verbs.count { it == SkPath.Verb.kQuad } == 0) {
             "single segment should not introduce a quad, got verbs=${out.verbs.toList()}"
         }
     }
@@ -64,7 +64,7 @@ class SkCornerPathEffectTest {
             .detach()
         val out = pe.filterPath(input, identity)!!
         // Expect : kMove(0,0), kLine(40,0), kQuad(50,0; 50,10), kLine(50,50).
-        assertTrue(out.verbs.contains(SkPath.StorageVerb.kQuad)) {
+        assertTrue(out.verbs.contains(SkPath.Verb.kQuad)) {
             "interior vertex of L-shape should be smoothed, got verbs=${out.verbs.toList()}"
         }
     }
@@ -82,7 +82,7 @@ class SkCornerPathEffectTest {
             .close()
             .detach()
         val out = pe.filterPath(input, identity)!!
-        val quadCount = out.verbs.count { it == SkPath.StorageVerb.kQuad }
+        val quadCount = out.verbs.count { it == SkPath.Verb.kQuad }
         assertTrue(quadCount == 4) {
             "closed quad polygon expected 4 smoothed corners, got $quadCount " +
                 "(verbs=${out.verbs.toList()})"
@@ -101,7 +101,7 @@ class SkCornerPathEffectTest {
             .lineTo(100f, 50f)
             .detach()
         val out = pe.filterPath(input, identity)!!
-        val quadCount = out.verbs.count { it == SkPath.StorageVerb.kQuad }
+        val quadCount = out.verbs.count { it == SkPath.Verb.kQuad }
         assertTrue(quadCount == 2) {
             "open polyline of 4 points should smooth 2 interior corners, got $quadCount"
         }

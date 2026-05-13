@@ -50,12 +50,12 @@ class SkPathBuilderRRectTest {
         // Mirrors gRRectVerbs_LineStart in src/core/SkPathRawShapes.cpp:90-97
         // (1 move + 4 (line + conic) + 1 close = 10 verbs).
         val expected = arrayOf(
-            SkPath.StorageVerb.kMove,
-            SkPath.StorageVerb.kLine, SkPath.StorageVerb.kConic,   // top edge + TR corner
-            SkPath.StorageVerb.kLine, SkPath.StorageVerb.kConic,   // right edge + BR corner
-            SkPath.StorageVerb.kLine, SkPath.StorageVerb.kConic,   // bottom edge + BL corner
-            SkPath.StorageVerb.kLine, SkPath.StorageVerb.kConic,   // left edge + TL corner
-            SkPath.StorageVerb.kClose,
+            SkPath.Verb.kMove,
+            SkPath.Verb.kLine, SkPath.Verb.kConic,   // top edge + TR corner
+            SkPath.Verb.kLine, SkPath.Verb.kConic,   // right edge + BR corner
+            SkPath.Verb.kLine, SkPath.Verb.kConic,   // bottom edge + BL corner
+            SkPath.Verb.kLine, SkPath.Verb.kConic,   // left edge + TL corner
+            SkPath.Verb.kClose,
         )
         assertArrayEquals(expected, p.verbs)
         // 4 conic weights, all √2/2.
@@ -82,8 +82,8 @@ class SkPathBuilderRRectTest {
         assertEquals(cw.coords[0], ccw.coords[0])
         assertEquals(cw.coords[1], ccw.coords[1])
         // CW: next verb is lineTo (top edge); CCW: next verb is conicTo (TL corner reversed).
-        assertEquals(SkPath.StorageVerb.kLine, cw.verbs[1])
-        assertEquals(SkPath.StorageVerb.kConic, ccw.verbs[1])
+        assertEquals(SkPath.Verb.kLine, cw.verbs[1])
+        assertEquals(SkPath.Verb.kConic, ccw.verbs[1])
     }
 
     @Test
@@ -146,8 +146,8 @@ class SkPathBuilderRRectTest {
         val rrect = SkRRect.MakeRect(SkRect.MakeLTRB(0f, 0f, 10f, 10f))
         val p = SkPathBuilder().addRRect(rrect).detach()
         assertEquals(5, p.verbs.size)
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
-        assertTrue(p.verbs.drop(1).take(3).all { it == SkPath.StorageVerb.kLine })
-        assertEquals(SkPath.StorageVerb.kClose, p.verbs[4])
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertTrue(p.verbs.drop(1).take(3).all { it == SkPath.Verb.kLine })
+        assertEquals(SkPath.Verb.kClose, p.verbs[4])
     }
 }

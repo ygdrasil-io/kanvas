@@ -433,7 +433,7 @@ internal class SkPathWriter(fillType: SkPathFillType) {
         for (i in verbs.indices) {
             pointStart[i + 1] = pointStart[i] + verbs[i].pointCount * 2
             weightStart[i + 1] = weightStart[i] +
-                if (verbs[i] == SkPath.StorageVerb.kConic) 1 else 0
+                if (verbs[i] == SkPath.Verb.kConic) 1 else 0
         }
         // The reversed contour starts at the LAST emitted point.
         val tail = pointStart.last()
@@ -446,7 +446,7 @@ internal class SkPathWriter(fillType: SkPathFillType) {
         // Walk verbs backward, emitting each verb's reversal.
         for (i in verbs.indices.reversed()) {
             val v = verbs[i]
-            if (v == SkPath.StorageVerb.kMove) continue
+            if (v == SkPath.Verb.kMove) continue
             val pStart = pointStart[i]
             // Endpoint of the reversed verb = start point of the
             // forward verb = last point of the previous verb in the
@@ -454,24 +454,25 @@ internal class SkPathWriter(fillType: SkPathFillType) {
             val endX = coords[pStart - 2]
             val endY = coords[pStart - 1]
             when (v) {
-                SkPath.StorageVerb.kLine -> dest.lineTo(endX, endY)
-                SkPath.StorageVerb.kQuad -> {
+                SkPath.Verb.kLine -> dest.lineTo(endX, endY)
+                SkPath.Verb.kQuad -> {
                     val cx = coords[pStart]; val cy = coords[pStart + 1]
                     dest.quadTo(cx, cy, endX, endY)
                 }
-                SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kConic -> {
                     val cx = coords[pStart]; val cy = coords[pStart + 1]
                     val w = weights[weightStart[i]]
                     dest.conicTo(cx, cy, endX, endY, w)
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     val c1x = coords[pStart];     val c1y = coords[pStart + 1]
                     val c2x = coords[pStart + 2]; val c2y = coords[pStart + 3]
                     dest.cubicTo(c2x, c2y, c1x, c1y, endX, endY)
                 }
-                SkPath.StorageVerb.kClose ->
+                SkPath.Verb.kClose ->
                     error("reverseExtend : kClose inside a partial contour is unexpected")
-                SkPath.StorageVerb.kMove -> Unit // unreachable (filtered above)
+                SkPath.Verb.kMove -> Unit // unreachable (filtered above)
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
     }

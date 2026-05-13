@@ -80,7 +80,7 @@ class SkDiscretePathEffectTest {
         val input = SkPathBuilder().moveTo(0f, 0f).lineTo(100f, 0f).detach()
         val out = pe.filterPath(input, identity)!!
         // kMove + 10 * kLine.
-        val lineCount = out.verbs.count { it == SkPath.StorageVerb.kLine }
+        val lineCount = out.verbs.count { it == SkPath.Verb.kLine }
         assertEquals(10, lineCount, "expected 10 sub-segments for length 100 / segLength 10")
     }
 
@@ -125,8 +125,8 @@ class SkDiscretePathEffectTest {
         val out = pe.filterPath(input, identity)!!
         // Final verb should be kClose, and we should have jitter on
         // the closing edge (40, 40) → (0, 0).
-        assertEquals(SkPath.StorageVerb.kClose, out.verbs.last())
-        val lineCount = out.verbs.count { it == SkPath.StorageVerb.kLine }
+        assertEquals(SkPath.Verb.kClose, out.verbs.last())
+        val lineCount = out.verbs.count { it == SkPath.Verb.kLine }
         assertTrue(lineCount >= 3) {
             "closed contour should have at least 3 jittered subsegments, got $lineCount"
         }

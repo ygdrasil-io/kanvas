@@ -139,7 +139,7 @@ class SkPathWriterTest {
         val path = w.nativePath()
         assertFalse(path.isEmpty())
         // Path contains a quad verb.
-        assertTrue(path.verbs.contains(SkPath.StorageVerb.kQuad))
+        assertTrue(path.verbs.contains(SkPath.Verb.kQuad))
     }
 
     @Test
@@ -153,7 +153,7 @@ class SkPathWriterTest {
         w.cubicTo(pt(0f, 5f), pt(10f, 5f), b)
         w.deferredLine(aClose)
         w.finishContour()
-        assertTrue(w.nativePath().verbs.contains(SkPath.StorageVerb.kCubic))
+        assertTrue(w.nativePath().verbs.contains(SkPath.Verb.kCubic))
     }
 
     @Test
@@ -168,7 +168,7 @@ class SkPathWriterTest {
         w.deferredLine(aClose)
         w.finishContour()
         val path = w.nativePath()
-        assertTrue(path.verbs.contains(SkPath.StorageVerb.kConic))
+        assertTrue(path.verbs.contains(SkPath.Verb.kConic))
         assertEquals(0.7071f, path.conicWeights[0])
     }
 
@@ -198,7 +198,7 @@ class SkPathWriterTest {
         val path = w.nativePath()
         // Without collapse we'd expect 4 lines (a→b, b→c, c→d, d→aClose).
         // With the b→c collapse, only 3 are emitted : c, d, aClose.
-        val lineCount = path.verbs.count { it == SkPath.StorageVerb.kLine }
+        val lineCount = path.verbs.count { it == SkPath.Verb.kLine }
         assertEquals(3, lineCount)
     }
 
@@ -232,7 +232,7 @@ class SkPathWriterTest {
         // Single partial : assemble matches the start to the end of the
         // same partial, emitting the contour as-is and adding a close.
         assertTrue(path.isLastContourClosed())
-        assertEquals(2, path.verbs.count { it == SkPath.StorageVerb.kLine })
+        assertEquals(2, path.verbs.count { it == SkPath.Verb.kLine })
     }
 
     @Test
@@ -253,7 +253,7 @@ class SkPathWriterTest {
         val path = w.nativePath()
         // After assemble : A → B → B' (kExtend, lineTo) → A' (kExtend) → close.
         assertTrue(path.isLastContourClosed())
-        assertEquals(3, path.verbs.count { it == SkPath.StorageVerb.kLine })
+        assertEquals(3, path.verbs.count { it == SkPath.Verb.kLine })
     }
 
     @Test
@@ -275,7 +275,7 @@ class SkPathWriterTest {
         val path = w.nativePath()
         // After assemble : A → B → B' (reverseExtend → lineTo) → A' → close.
         assertTrue(path.isLastContourClosed())
-        assertEquals(3, path.verbs.count { it == SkPath.StorageVerb.kLine })
+        assertEquals(3, path.verbs.count { it == SkPath.Verb.kLine })
     }
 
     @Test
@@ -298,6 +298,6 @@ class SkPathWriterTest {
         assertTrue(path.isLastContourClosed())
         // The quad survives the assembly — emitted once during partial0's
         // forward walk.
-        assertEquals(1, path.verbs.count { it == SkPath.StorageVerb.kQuad })
+        assertEquals(1, path.verbs.count { it == SkPath.Verb.kQuad })
     }
 }

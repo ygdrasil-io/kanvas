@@ -28,11 +28,11 @@ class SkPathExtrasTest {
             .rMoveTo(10f, 0f)        // pen = (25, 15) → starts new contour
             .rLineTo(0f, 5f)         // pen = (25, 20)
             .detach()
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
-        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
-        assertEquals(SkPath.StorageVerb.kLine, p.verbs[2])
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[3])
-        assertEquals(SkPath.StorageVerb.kLine, p.verbs[4])
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.Verb.kLine, p.verbs[1])
+        assertEquals(SkPath.Verb.kLine, p.verbs[2])
+        assertEquals(SkPath.Verb.kMove, p.verbs[3])
+        assertEquals(SkPath.Verb.kLine, p.verbs[4])
         // Coords: (10,10)(15,10)(15,15)(25,15)(25,20)
         assertEquals(15f, p.coords[2], 1e-4f)
         assertEquals(10f, p.coords[3], 1e-4f)
@@ -51,8 +51,8 @@ class SkPathExtrasTest {
             .rQuadTo(5f, 0f, 5f, 5f)         // ctrl=(15,10), end=(15,15)
             .rCubicTo(0f, 5f, -5f, 5f, -5f, 10f) // ctrls=(15,20),(10,20), end=(10,25)
             .detach()
-        assertEquals(SkPath.StorageVerb.kQuad, p.verbs[1])
-        assertEquals(SkPath.StorageVerb.kCubic, p.verbs[2])
+        assertEquals(SkPath.Verb.kQuad, p.verbs[1])
+        assertEquals(SkPath.Verb.kCubic, p.verbs[2])
         // Quad: control (15,10), end (15,15)
         assertEquals(15f, p.coords[2], 1e-4f)
         assertEquals(10f, p.coords[3], 1e-4f)
@@ -73,7 +73,7 @@ class SkPathExtrasTest {
             .moveTo(10f, 10f)
             .rConicTo(5f, 0f, 5f, 5f, 0.7f)
             .detach()
-        assertEquals(SkPath.StorageVerb.kConic, p.verbs[1])
+        assertEquals(SkPath.Verb.kConic, p.verbs[1])
         assertEquals(15f, p.coords[2], 1e-4f)
         assertEquals(10f, p.coords[3], 1e-4f)
         assertEquals(15f, p.coords[4], 1e-4f)
@@ -88,10 +88,10 @@ class SkPathExtrasTest {
         // same primitive, so rLineTo(5, 5) ends up at (5, 5) with the implicit
         // moveTo at (0, 0).
         val p = SkPathBuilder().rLineTo(5f, 5f).detach()
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
         assertEquals(0f, p.coords[0])
         assertEquals(0f, p.coords[1])
-        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
+        assertEquals(SkPath.Verb.kLine, p.verbs[1])
         assertEquals(5f, p.coords[2])
         assertEquals(5f, p.coords[3])
     }
@@ -102,7 +102,7 @@ class SkPathExtrasTest {
     fun `tangent arcTo on empty path emits a moveTo and returns`() {
         val p = SkPathBuilder().arcTo(10f, 10f, 20f, 10f, 5f).detach()
         assertEquals(1, p.verbs.size)
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
         assertEquals(10f, p.coords[0])
         assertEquals(10f, p.coords[1])
     }
@@ -113,8 +113,8 @@ class SkPathExtrasTest {
             .moveTo(0f, 0f)
             .arcTo(10f, 0f, 10f, 10f, 0f)
             .detach()
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
-        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.Verb.kLine, p.verbs[1])
         assertEquals(10f, p.coords[2])
         assertEquals(0f, p.coords[3])
     }
@@ -132,11 +132,11 @@ class SkPathExtrasTest {
             .arcTo(10f, 0f, 10f, 10f, 2f)
             .detach()
         // Mirrors src/core/SkPathBuilder.cpp:477-511 — exactly 1 line + 1 conic.
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
-        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.Verb.kLine, p.verbs[1])
         assertEquals(8f, p.coords[2], 1e-3f)
         assertEquals(0f, p.coords[3], 1e-3f)
-        assertEquals(SkPath.StorageVerb.kConic, p.verbs[2])
+        assertEquals(SkPath.Verb.kConic, p.verbs[2])
         assertEquals(3, p.verbs.size)
         // Conic control = p1 = (10, 0); end = T1 = (10, 2).
         // Coords: move(2) + line(2) + conic(control(2) + end(2)) = 8 floats.
@@ -156,8 +156,8 @@ class SkPathExtrasTest {
             .moveTo(0f, 0f)
             .arcTo(10f, 0f, 20f, 0f, 5f)   // P0, p1, p2 all on Y=0 → collinear
             .detach()
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
-        assertEquals(SkPath.StorageVerb.kLine, p.verbs[1])
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.Verb.kLine, p.verbs[1])
         assertEquals(10f, p.coords[2])
         assertEquals(0f, p.coords[3])
         assertEquals(2, p.verbs.size)

@@ -69,7 +69,7 @@ class SkStrokerCapsJoinsTest {
     fun `kRound_Cap emits two cubic Beziers per cap end`() {
         val src = SkPathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).detach()
         val out = stroker(width = 2f, cap = SkPaint.Cap.kRound_Cap).stroke(src)
-        val cubics = out.verbs.count { it == SkPath.StorageVerb.kCubic }
+        val cubics = out.verbs.count { it == SkPath.Verb.kCubic }
         // 2 cubics per cap × 2 caps (start + end) = 4 cubic verbs.
         assertEquals(4, cubics, "kRound_Cap → 2 cubics per cap × 2 caps = 4")
     }
@@ -111,8 +111,8 @@ class SkStrokerCapsJoinsTest {
             .detach()
         val miterOut = stroker(width = 2f, join = SkPaint.Join.kMiter_Join).stroke(src)
         val bevelOut = stroker(width = 2f, join = SkPaint.Join.kBevel_Join).stroke(src)
-        val miterLines = miterOut.verbs.count { it == SkPath.StorageVerb.kLine }
-        val bevelLines = bevelOut.verbs.count { it == SkPath.StorageVerb.kLine }
+        val miterLines = miterOut.verbs.count { it == SkPath.Verb.kLine }
+        val bevelLines = bevelOut.verbs.count { it == SkPath.Verb.kLine }
         // Bevel adds one extra vertex per side at the corner → 2 extra lineTo.
         assertEquals(miterLines + 2, bevelLines)
     }
@@ -140,8 +140,8 @@ class SkStrokerCapsJoinsTest {
             .detach()
         val miterOut = stroker(width = 2f, join = SkPaint.Join.kMiter_Join).stroke(src)
         val roundOut = stroker(width = 2f, join = SkPaint.Join.kRound_Join).stroke(src)
-        val miterLines = miterOut.verbs.count { it == SkPath.StorageVerb.kLine }
-        val roundLines = roundOut.verbs.count { it == SkPath.StorageVerb.kLine }
+        val miterLines = miterOut.verbs.count { it == SkPath.Verb.kLine }
+        val roundLines = roundOut.verbs.count { it == SkPath.Verb.kLine }
         // Round adds ~8 line segments per side per corner. With one corner ×
         // two sides we expect roundLines − miterLines ≈ 16 − 2 (the miter
         // emitted a single point per side). 14 ≤ Δ ≤ 18 covers rounding.
@@ -157,8 +157,8 @@ class SkStrokerCapsJoinsTest {
         val src = SkPath.Rect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f))
         val out = stroker(width = 2f, join = SkPaint.Join.kRound_Join).stroke(src)
         // Two closed sub-contours.
-        assertEquals(2, out.verbs.count { it == SkPath.StorageVerb.kMove })
-        assertEquals(2, out.verbs.count { it == SkPath.StorageVerb.kClose })
+        assertEquals(2, out.verbs.count { it == SkPath.Verb.kMove })
+        assertEquals(2, out.verbs.count { it == SkPath.Verb.kClose })
         // Bbox: outer ring extends by halfW=1 in every direction.
         val b = bbox(out)
         assertEquals(-1f, b[0], 1e-3f)

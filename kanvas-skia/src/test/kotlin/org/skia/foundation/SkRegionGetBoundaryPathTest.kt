@@ -32,9 +32,9 @@ class SkRegionGetBoundaryPathTest {
 
         // 1 rect = kMove + 3 × kLine + kClose = 5 verbs.
         assertEquals(5, path.countVerbs())
-        assertEquals(SkPath.StorageVerb.kMove, path.verbs[0])
-        for (i in 1..3) assertEquals(SkPath.StorageVerb.kLine, path.verbs[i])
-        assertEquals(SkPath.StorageVerb.kClose, path.verbs[4])
+        assertEquals(SkPath.Verb.kMove, path.verbs[0])
+        for (i in 1..3) assertEquals(SkPath.Verb.kLine, path.verbs[i])
+        assertEquals(SkPath.Verb.kClose, path.verbs[4])
     }
 
     @Test
@@ -47,9 +47,9 @@ class SkRegionGetBoundaryPathTest {
         val path = rgn.getBoundaryPath()
         // 3 rect contours = 3 × 5 = 15 verbs.
         assertEquals(15, path.countVerbs())
-        val moveCount = path.verbs.count { it == SkPath.StorageVerb.kMove }
-        val lineCount = path.verbs.count { it == SkPath.StorageVerb.kLine }
-        val closeCount = path.verbs.count { it == SkPath.StorageVerb.kClose }
+        val moveCount = path.verbs.count { it == SkPath.Verb.kMove }
+        val lineCount = path.verbs.count { it == SkPath.Verb.kLine }
+        val closeCount = path.verbs.count { it == SkPath.Verb.kClose }
         assertEquals(3, moveCount)
         assertEquals(9, lineCount)
         assertEquals(3, closeCount)

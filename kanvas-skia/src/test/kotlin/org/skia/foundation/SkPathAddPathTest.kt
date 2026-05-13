@@ -54,9 +54,9 @@ class SkPathAddPathTest {
             .detach()
         // After dest's close, source's leading kMove should remain.
         // Verb stream prefix: kMove, kLine, kClose, then src verbs in order.
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[0])
-        assertEquals(SkPath.StorageVerb.kClose, p.verbs[2])
-        assertEquals(SkPath.StorageVerb.kMove, p.verbs[3])
+        assertEquals(SkPath.Verb.kMove, p.verbs[0])
+        assertEquals(SkPath.Verb.kClose, p.verbs[2])
+        assertEquals(SkPath.Verb.kMove, p.verbs[3])
     }
 
     // --- kAppend with offset / matrix ----------------------------------
@@ -116,12 +116,12 @@ class SkPathAddPathTest {
         // Expected: kMove(0,0), kLine(10,10), kLine(100,100), kLine(110,100), kLine(110,110), kClose.
         assertArrayEquals(
             arrayOf(
-                SkPath.StorageVerb.kMove,
-                SkPath.StorageVerb.kLine,  // dest's lineTo(10, 10)
-                SkPath.StorageVerb.kLine,  // bridge to src's first move target
-                SkPath.StorageVerb.kLine,
-                SkPath.StorageVerb.kLine,
-                SkPath.StorageVerb.kClose,
+                SkPath.Verb.kMove,
+                SkPath.Verb.kLine,  // dest's lineTo(10, 10)
+                SkPath.Verb.kLine,  // bridge to src's first move target
+                SkPath.Verb.kLine,
+                SkPath.Verb.kLine,
+                SkPath.Verb.kClose,
             ),
             p.verbs,
         )
@@ -155,10 +155,10 @@ class SkPathAddPathTest {
         // then implicit kMove(0,0) (Phase 1.2), kLine(50,50) (bridge), kLine(60,60).
         assertArrayEquals(
             arrayOf(
-                SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine, SkPath.StorageVerb.kClose,
-                SkPath.StorageVerb.kMove,    // ensureContour after close
-                SkPath.StorageVerb.kLine,    // bridge to src's first move target
-                SkPath.StorageVerb.kLine,    // src's lineTo
+                SkPath.Verb.kMove, SkPath.Verb.kLine, SkPath.Verb.kClose,
+                SkPath.Verb.kMove,    // ensureContour after close
+                SkPath.Verb.kLine,    // bridge to src's first move target
+                SkPath.Verb.kLine,    // src's lineTo
             ),
             p.verbs,
         )
@@ -181,12 +181,12 @@ class SkPathAddPathTest {
         val p = dest.addPath(src, SkMatrix.Identity, SkPath.AddPathMode.kExtend).detach()
         assertArrayEquals(
             arrayOf(
-                SkPath.StorageVerb.kMove,    // dest
-                SkPath.StorageVerb.kLine,    // dest
-                SkPath.StorageVerb.kLine,    // bridge (replaces 1st src move)
-                SkPath.StorageVerb.kLine,    // src 1st contour line
-                SkPath.StorageVerb.kMove,    // src 2nd contour move (kept!)
-                SkPath.StorageVerb.kLine,    // src 2nd contour line
+                SkPath.Verb.kMove,    // dest
+                SkPath.Verb.kLine,    // dest
+                SkPath.Verb.kLine,    // bridge (replaces 1st src move)
+                SkPath.Verb.kLine,    // src 1st contour line
+                SkPath.Verb.kMove,    // src 2nd contour move (kept!)
+                SkPath.Verb.kLine,    // src 2nd contour line
             ),
             p.verbs,
         )
@@ -198,7 +198,7 @@ class SkPathAddPathTest {
     fun `addPath with empty source is a no-op (kAppend)`() {
         val empty = SkPathBuilder().detach()
         val dest = SkPathBuilder().moveTo(0f, 0f).lineTo(1f, 1f).addPath(empty).detach()
-        assertArrayEquals(arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine), dest.verbs)
+        assertArrayEquals(arrayOf(SkPath.Verb.kMove, SkPath.Verb.kLine), dest.verbs)
     }
 
     @Test
@@ -208,7 +208,7 @@ class SkPathAddPathTest {
             .moveTo(0f, 0f).lineTo(1f, 1f)
             .addPath(empty, SkMatrix.Identity, SkPath.AddPathMode.kExtend)
             .detach()
-        assertArrayEquals(arrayOf(SkPath.StorageVerb.kMove, SkPath.StorageVerb.kLine), dest.verbs)
+        assertArrayEquals(arrayOf(SkPath.Verb.kMove, SkPath.Verb.kLine), dest.verbs)
     }
 
     // --- AddPathMode enum identity --------------------------------------

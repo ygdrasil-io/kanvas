@@ -198,7 +198,7 @@ public class SkContourMeasure internal constructor(
  */
 public class SkContourMeasureIter {
 
-    private var verbs: Array<SkPath.StorageVerb> = emptyArray()
+    private var verbs: Array<SkPath.Verb> = emptyArray()
     private var coords: FloatArray = FloatArray(0)
     private var conicWeights: FloatArray = FloatArray(0)
     private var forceClosed: Boolean = false
@@ -256,13 +256,13 @@ public class SkContourMeasureIter {
     private fun buildNext(): SkContourMeasure? {
         // Skip leading non-move verbs (defensive — well-formed paths
         // always start a contour with kMove).
-        while (verbIndex < verbs.size && verbs[verbIndex] != SkPath.StorageVerb.kMove) {
+        while (verbIndex < verbs.size && verbs[verbIndex] != SkPath.Verb.kMove) {
             consume(verbs[verbIndex])
         }
         if (verbIndex >= verbs.size) return null
 
         // Consume the kMove.
-        check(verbs[verbIndex] == SkPath.StorageVerb.kMove)
+        check(verbs[verbIndex] == SkPath.Verb.kMove)
         penX = coords[coordIndex]
         penY = coords[coordIndex + 1]
         coordIndex += 2
@@ -276,23 +276,23 @@ public class SkContourMeasureIter {
         var explicitlyClosed = false
 
         // Walk until the next kMove or the end of the verb stream.
-        while (verbIndex < verbs.size && verbs[verbIndex] != SkPath.StorageVerb.kMove) {
+        while (verbIndex < verbs.size && verbs[verbIndex] != SkPath.Verb.kMove) {
             val v = verbs[verbIndex]
             when (v) {
-                SkPath.StorageVerb.kLine -> {
+                SkPath.Verb.kLine -> {
                     val x = coords[coordIndex]; val y = coords[coordIndex + 1]
                     coordIndex += 2
                     total = addLineTo(pts, cum, total, x, y)
                     penX = x; penY = y
                 }
-                SkPath.StorageVerb.kQuad -> {
+                SkPath.Verb.kQuad -> {
                     val x1 = coords[coordIndex]; val y1 = coords[coordIndex + 1]
                     val x2 = coords[coordIndex + 2]; val y2 = coords[coordIndex + 3]
                     coordIndex += 4
                     total = flattenQuad(pts, cum, total, penX, penY, x1, y1, x2, y2)
                     penX = x2; penY = y2
                 }
-                SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kConic -> {
                     val x1 = coords[coordIndex]; val y1 = coords[coordIndex + 1]
                     val x2 = coords[coordIndex + 2]; val y2 = coords[coordIndex + 3]
                     coordIndex += 4
@@ -308,7 +308,7 @@ public class SkContourMeasureIter {
                     }
                     penX = x2; penY = y2
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     val x1 = coords[coordIndex]; val y1 = coords[coordIndex + 1]
                     val x2 = coords[coordIndex + 2]; val y2 = coords[coordIndex + 3]
                     val x3 = coords[coordIndex + 4]; val y3 = coords[coordIndex + 5]
@@ -319,7 +319,7 @@ public class SkContourMeasureIter {
                     )
                     penX = x3; penY = y3
                 }
-                SkPath.StorageVerb.kClose -> {
+                SkPath.Verb.kClose -> {
                     explicitlyClosed = true
                     // Emit a line back to the contour start if we're not already there.
                     if (penX != startX || penY != startY) {
@@ -328,9 +328,10 @@ public class SkContourMeasureIter {
                     verbIndex++
                     break
                 }
-                SkPath.StorageVerb.kMove -> error("unreachable") // loop guard already exits.
+                SkPath.Verb.kMove -> error("unreachable") // loop guard already exits.
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
-            if (v != SkPath.StorageVerb.kClose) verbIndex++
+            if (v != SkPath.Verb.kClose) verbIndex++
         }
 
         val finalClosed = explicitlyClosed || forceClosed
@@ -360,14 +361,15 @@ public class SkContourMeasureIter {
      * Consume the verb at [verbIndex] without recording into any
      * contour — used to fast-forward over malformed leading verbs.
      */
-    private fun consume(v: SkPath.StorageVerb) {
+    private fun consume(v: SkPath.Verb) {
         when (v) {
-            SkPath.StorageVerb.kMove -> coordIndex += 2
-            SkPath.StorageVerb.kLine -> coordIndex += 2
-            SkPath.StorageVerb.kQuad -> coordIndex += 4
-            SkPath.StorageVerb.kConic -> { coordIndex += 4; weightIndex++ }
-            SkPath.StorageVerb.kCubic -> coordIndex += 6
-            SkPath.StorageVerb.kClose -> { /* no points */ }
+            SkPath.Verb.kMove -> coordIndex += 2
+            SkPath.Verb.kLine -> coordIndex += 2
+            SkPath.Verb.kQuad -> coordIndex += 4
+            SkPath.Verb.kConic -> { coordIndex += 4; weightIndex++ }
+            SkPath.Verb.kCubic -> coordIndex += 6
+            SkPath.Verb.kClose -> { /* no points */ }
+            SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
         }
         verbIndex++
     }

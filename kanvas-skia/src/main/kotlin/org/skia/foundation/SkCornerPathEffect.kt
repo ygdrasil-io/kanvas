@@ -57,7 +57,7 @@ public class SkCornerPathEffect private constructor(
 
         for (verb in input.verbs) {
             when (verb) {
-                SkPath.StorageVerb.kMove -> {
+                SkPath.Verb.kMove -> {
                     flushPolyline(out, contourPts, contourClosed)
                     val mx = input.coords[coordIdx++]
                     val my = input.coords[coordIdx++]
@@ -66,20 +66,20 @@ public class SkCornerPathEffect private constructor(
                     contourStartX = mx; contourStartY = my
                     pen = floatArrayOf(mx, my)
                 }
-                SkPath.StorageVerb.kLine -> {
+                SkPath.Verb.kLine -> {
                     val nx = input.coords[coordIdx++]
                     val ny = input.coords[coordIdx++]
                     contourPts.add(floatArrayOf(nx, ny))
                     pen = floatArrayOf(nx, ny)
                 }
-                SkPath.StorageVerb.kClose -> {
+                SkPath.Verb.kClose -> {
                     contourClosed = true
                     flushPolyline(out, contourPts, contourClosed)
                     contourPts = mutableListOf()
                     contourClosed = false
                     pen = floatArrayOf(contourStartX, contourStartY)
                 }
-                SkPath.StorageVerb.kQuad -> {
+                SkPath.Verb.kQuad -> {
                     flushPolyline(out, contourPts, contourClosed)
                     val cx = input.coords[coordIdx++]
                     val cy = input.coords[coordIdx++]
@@ -92,7 +92,7 @@ public class SkCornerPathEffect private constructor(
                     contourClosed = false
                     contourStartX = ex; contourStartY = ey
                 }
-                SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kConic -> {
                     flushPolyline(out, contourPts, contourClosed)
                     val cx = input.coords[coordIdx++]
                     val cy = input.coords[coordIdx++]
@@ -106,7 +106,7 @@ public class SkCornerPathEffect private constructor(
                     contourClosed = false
                     contourStartX = ex; contourStartY = ey
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     flushPolyline(out, contourPts, contourClosed)
                     val c1x = input.coords[coordIdx++]
                     val c1y = input.coords[coordIdx++]
@@ -121,6 +121,7 @@ public class SkCornerPathEffect private constructor(
                     contourClosed = false
                     contourStartX = ex; contourStartY = ey
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         // Final flush for the trailing (potentially open) polyline.

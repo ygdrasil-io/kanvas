@@ -81,8 +81,8 @@ class SkPath1DPathEffectMorphTest {
 
         // Both place 6 stamps along a 100-unit line at advance=20
         // (positions 0, 20, 40, 60, 80, 100).
-        val morphMoves = morphOut.verbs.count { it == SkPath.StorageVerb.kMove }
-        val translateMoves = translateOut.verbs.count { it == SkPath.StorageVerb.kMove }
+        val morphMoves = morphOut.verbs.count { it == SkPath.Verb.kMove }
+        val translateMoves = translateOut.verbs.count { it == SkPath.Verb.kMove }
         assertEquals(translateMoves, morphMoves,
             "morph and translate must produce the same stamp count on a straight input")
         assertEquals(6, morphMoves)
@@ -149,7 +149,7 @@ class SkPath1DPathEffectMorphTest {
         // First verb is the moveTo of the first stamp at d = 0.
         // Box's first vertex is (-2, -2) ; clamped d = 0, normal = (0,1),
         // morph = (0, -2).
-        assertTrue(out.verbs.first() == SkPath.StorageVerb.kMove)
+        assertTrue(out.verbs.first() == SkPath.Verb.kMove)
         assertEquals(0f, out.coords[0], 0.001f, "clamped morph X must equal contour start X = 0")
         assertEquals(-2f, out.coords[1], 0.001f, "morph Y is sy = -2 along the +Y normal")
     }
@@ -172,10 +172,10 @@ class SkPath1DPathEffectMorphTest {
         // output verbs should contain quads, not lines, after each move.
         val verbs = out.verbs
         // Find the first move-then-quad and verify it's a quad.
-        val firstMove = verbs.indexOf(SkPath.StorageVerb.kMove)
+        val firstMove = verbs.indexOf(SkPath.Verb.kMove)
         assertTrue(firstMove >= 0, "expected at least one move in morph output")
         assertEquals(
-            SkPath.StorageVerb.kQuad, verbs[firstMove + 1],
+            SkPath.Verb.kQuad, verbs[firstMove + 1],
             "morph upgrades kLine to kQuad (control = midpoint)",
         )
     }
@@ -196,9 +196,9 @@ class SkPath1DPathEffectMorphTest {
         // We can extract the first quad's control point.
         // verbs = [kMove, kQuad, ...]
         val verbs = out.verbs
-        val moveIdx = verbs.indexOf(SkPath.StorageVerb.kMove)
+        val moveIdx = verbs.indexOf(SkPath.Verb.kMove)
         assertTrue(moveIdx >= 0)
-        assertEquals(SkPath.StorageVerb.kQuad, verbs[moveIdx + 1])
+        assertEquals(SkPath.Verb.kQuad, verbs[moveIdx + 1])
         // Coords for moveIdx, quadIdx :
         // move consumes 2 floats, quad consumes 4. So the quad's ctrl
         // point sits at coords[2..3] and end at [4..5].
@@ -225,7 +225,7 @@ class SkPath1DPathEffectMorphTest {
             SkPath1DPathEffect.Style.kMorph)!!
         val out = pe.filterPath(twoLines, identity)!!
         // Same as kTranslate test : 3+3 = 6 stamps.
-        val moves = out.verbs.count { it == SkPath.StorageVerb.kMove }
+        val moves = out.verbs.count { it == SkPath.Verb.kMove }
         assertEquals(6, moves, "morph must reset per contour just like translate / rotate")
     }
 
@@ -245,30 +245,31 @@ class SkPath1DPathEffectMorphTest {
         for (v in path.verbs) {
             if (out.size >= take) break
             when (v) {
-                SkPath.StorageVerb.kMove -> {
+                SkPath.Verb.kMove -> {
                     val x = path.coords[coordIdx++]
                     val y = path.coords[coordIdx++]
                     out.add(x to y)
                 }
-                SkPath.StorageVerb.kLine -> {
+                SkPath.Verb.kLine -> {
                     val x = path.coords[coordIdx++]
                     val y = path.coords[coordIdx++]
                     out.add(x to y)
                 }
-                SkPath.StorageVerb.kQuad, SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kQuad, SkPath.Verb.kConic -> {
                     coordIdx += 2 // skip ctrl
                     val x = path.coords[coordIdx++]
                     val y = path.coords[coordIdx++]
-                    if (v == SkPath.StorageVerb.kConic) weightIdx++
+                    if (v == SkPath.Verb.kConic) weightIdx++
                     out.add(x to y)
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     coordIdx += 4 // skip 2 ctrls
                     val x = path.coords[coordIdx++]
                     val y = path.coords[coordIdx++]
                     out.add(x to y)
                 }
-                SkPath.StorageVerb.kClose -> { /* no coords consumed */ }
+                SkPath.Verb.kClose -> { /* no coords consumed */ }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         return out

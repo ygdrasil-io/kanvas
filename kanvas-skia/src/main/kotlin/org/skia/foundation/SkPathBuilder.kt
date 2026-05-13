@@ -40,7 +40,7 @@ public class SkPathBuilder public constructor() {
      */
     public enum class ArcSize { kSmall_ArcSize, kLarge_ArcSize }
 
-    private val verbs: ArrayList<SkPath.StorageVerb> = ArrayList()
+    private val verbs: ArrayList<SkPath.Verb> = ArrayList()
     private val coords: ArrayList<SkScalar> = ArrayList()
     private val conicWeights: ArrayList<SkScalar> = ArrayList()
     private var fillType: SkPathFillType = SkPathFillType.kWinding
@@ -138,12 +138,12 @@ public class SkPathBuilder public constructor() {
         // Mirrors SkPathBuilder.cpp:136-156 — if the previous verb is also a
         // move, replace its point in place. Each contour can carry at most
         // one move verb (the last one specified).
-        if (verbs.isNotEmpty() && verbs.last() == SkPath.StorageVerb.kMove) {
+        if (verbs.isNotEmpty() && verbs.last() == SkPath.Verb.kMove) {
             val n = coords.size
             coords[n - 2] = x
             coords[n - 1] = y
         } else {
-            verbs.add(SkPath.StorageVerb.kMove); coords.add(x); coords.add(y)
+            verbs.add(SkPath.Verb.kMove); coords.add(x); coords.add(y)
         }
         lastX = x; lastY = y
         contourX = x; contourY = y
@@ -152,7 +152,7 @@ public class SkPathBuilder public constructor() {
 
     public fun lineTo(x: SkScalar, y: SkScalar): SkPathBuilder = apply {
         ensureContour()
-        verbs.add(SkPath.StorageVerb.kLine); coords.add(x); coords.add(y)
+        verbs.add(SkPath.Verb.kLine); coords.add(x); coords.add(y)
         lastX = x; lastY = y
     }
 
@@ -160,7 +160,7 @@ public class SkPathBuilder public constructor() {
         x1: SkScalar, y1: SkScalar, x2: SkScalar, y2: SkScalar,
     ): SkPathBuilder = apply {
         ensureContour()
-        verbs.add(SkPath.StorageVerb.kQuad)
+        verbs.add(SkPath.Verb.kQuad)
         coords.add(x1); coords.add(y1)
         coords.add(x2); coords.add(y2)
         lastX = x2; lastY = y2
@@ -182,7 +182,7 @@ public class SkPathBuilder public constructor() {
                 quadTo(x1, y1, x2, y2)
             }
             else -> {
-                verbs.add(SkPath.StorageVerb.kConic)
+                verbs.add(SkPath.Verb.kConic)
                 coords.add(x1); coords.add(y1)
                 coords.add(x2); coords.add(y2)
                 conicWeights.add(w)
@@ -197,7 +197,7 @@ public class SkPathBuilder public constructor() {
         x3: SkScalar, y3: SkScalar,
     ): SkPathBuilder = apply {
         ensureContour()
-        verbs.add(SkPath.StorageVerb.kCubic)
+        verbs.add(SkPath.Verb.kCubic)
         coords.add(x1); coords.add(y1)
         coords.add(x2); coords.add(y2)
         coords.add(x3); coords.add(y3)
@@ -206,7 +206,7 @@ public class SkPathBuilder public constructor() {
 
     public fun close(): SkPathBuilder = apply {
         if (hasContour) {
-            verbs.add(SkPath.StorageVerb.kClose)
+            verbs.add(SkPath.Verb.kClose)
             lastX = contourX; lastY = contourY
             hasContour = false
         }
@@ -221,7 +221,7 @@ public class SkPathBuilder public constructor() {
         if (pts.isEmpty()) return@apply
         ensureContour()
         for (p in pts) {
-            verbs.add(SkPath.StorageVerb.kLine)
+            verbs.add(SkPath.Verb.kLine)
             coords.add(p.first); coords.add(p.second)
             lastX = p.first; lastY = p.second
         }
@@ -786,7 +786,7 @@ public class SkPathBuilder public constructor() {
         val extending = mode == SkPath.AddPathMode.kExtend && !this@SkPathBuilder.isEmpty()
         for (verb in path.verbs) {
             when (verb) {
-                SkPath.StorageVerb.kMove -> {
+                SkPath.Verb.kMove -> {
                     val x0 = src[coordIdx++]; val y0 = src[coordIdx++]
                     val mx = if (identity) x0 else sx * x0 + kx * y0 + tx
                     val my = if (identity) y0 else ky * x0 + sy * y0 + ty
@@ -801,12 +801,12 @@ public class SkPathBuilder public constructor() {
                     }
                     firstMoveSeen = true
                 }
-                SkPath.StorageVerb.kLine -> {
+                SkPath.Verb.kLine -> {
                     val x1 = src[coordIdx++]; val y1 = src[coordIdx++]
                     if (identity) lineTo(x1, y1)
                     else lineTo(sx * x1 + kx * y1 + tx, ky * x1 + sy * y1 + ty)
                 }
-                SkPath.StorageVerb.kQuad -> {
+                SkPath.Verb.kQuad -> {
                     val x1 = src[coordIdx++]; val y1 = src[coordIdx++]
                     val x2 = src[coordIdx++]; val y2 = src[coordIdx++]
                     if (identity) quadTo(x1, y1, x2, y2)
@@ -815,7 +815,7 @@ public class SkPathBuilder public constructor() {
                         sx * x2 + kx * y2 + tx, ky * x2 + sy * y2 + ty,
                     )
                 }
-                SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kConic -> {
                     val x1 = src[coordIdx++]; val y1 = src[coordIdx++]
                     val x2 = src[coordIdx++]; val y2 = src[coordIdx++]
                     val w = path.conicWeights[weightIdx++]
@@ -826,7 +826,7 @@ public class SkPathBuilder public constructor() {
                         w,
                     )
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     val x1 = src[coordIdx++]; val y1 = src[coordIdx++]
                     val x2 = src[coordIdx++]; val y2 = src[coordIdx++]
                     val x3 = src[coordIdx++]; val y3 = src[coordIdx++]
@@ -837,7 +837,8 @@ public class SkPathBuilder public constructor() {
                         sx * x3 + kx * y3 + tx, ky * x3 + sy * y3 + ty,
                     )
                 }
-                SkPath.StorageVerb.kClose -> close()
+                SkPath.Verb.kClose -> close()
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
     }
@@ -875,26 +876,27 @@ public class SkPathBuilder public constructor() {
         val src = path.coords
         for (verb in path.verbs) {
             when (verb) {
-                SkPath.StorageVerb.kMove -> moveTo(src[coordIdx++] + dx, src[coordIdx++] + dy)
-                SkPath.StorageVerb.kLine -> lineTo(src[coordIdx++] + dx, src[coordIdx++] + dy)
-                SkPath.StorageVerb.kQuad -> {
+                SkPath.Verb.kMove -> moveTo(src[coordIdx++] + dx, src[coordIdx++] + dy)
+                SkPath.Verb.kLine -> lineTo(src[coordIdx++] + dx, src[coordIdx++] + dy)
+                SkPath.Verb.kQuad -> {
                     val x1 = src[coordIdx++] + dx; val y1 = src[coordIdx++] + dy
                     val x2 = src[coordIdx++] + dx; val y2 = src[coordIdx++] + dy
                     quadTo(x1, y1, x2, y2)
                 }
-                SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kConic -> {
                     val x1 = src[coordIdx++] + dx; val y1 = src[coordIdx++] + dy
                     val x2 = src[coordIdx++] + dx; val y2 = src[coordIdx++] + dy
                     val w = path.conicWeights[weightIdx++]
                     conicTo(x1, y1, x2, y2, w)
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     val x1 = src[coordIdx++] + dx; val y1 = src[coordIdx++] + dy
                     val x2 = src[coordIdx++] + dx; val y2 = src[coordIdx++] + dy
                     val x3 = src[coordIdx++] + dx; val y3 = src[coordIdx++] + dy
                     cubicTo(x1, y1, x2, y2, x3, y3)
                 }
-                SkPath.StorageVerb.kClose -> close()
+                SkPath.Verb.kClose -> close()
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
     }
@@ -1035,7 +1037,7 @@ public class SkPathBuilder public constructor() {
      */
     private fun ensureContour() {
         if (hasContour) return
-        if (verbs.isNotEmpty() && verbs.last() == SkPath.StorageVerb.kClose) {
+        if (verbs.isNotEmpty() && verbs.last() == SkPath.Verb.kClose) {
             // [contourX, contourY] still holds the start of the contour we just
             // closed — close() doesn't reset it, only flips hasContour.
             moveTo(contourX, contourY)

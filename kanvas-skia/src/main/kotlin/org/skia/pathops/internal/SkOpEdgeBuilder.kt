@@ -46,7 +46,7 @@ internal class SkOpEdgeBuilder(
 ) {
 
     private val fContourBuilder: SkOpContourBuilder = SkOpContourBuilder(fContoursHead)
-    private val fPathVerbs: MutableList<SkPath.StorageVerb> = mutableListOf()
+    private val fPathVerbs: MutableList<SkPath.Verb> = mutableListOf()
     private val fPathPts: MutableList<SkPoint> = mutableListOf()
     private val fWeights: MutableList<Float> = mutableListOf()
 
@@ -133,13 +133,13 @@ internal class SkOpEdgeBuilder(
      */
     private fun closeContour(curveEnd: SkPoint, curveStart: SkPoint) {
         if (!approximatelyEqualSkPt(curveEnd, curveStart)) {
-            fPathVerbs.add(SkPath.StorageVerb.kLine)
+            fPathVerbs.add(SkPath.Verb.kLine)
             fPathPts.add(curveStart)
         } else {
             // Snap or back-out the trailing line so endpoint matches start.
             val verbCount = fPathVerbs.size
             val ptsCount = fPathPts.size
-            if (SkPath.StorageVerb.kLine == fPathVerbs[verbCount - 1]
+            if (SkPath.Verb.kLine == fPathVerbs[verbCount - 1]
                 && fPathPts[ptsCount - 2] == curveStart
             ) {
                 fPathVerbs.removeAt(verbCount - 1)
@@ -148,7 +148,7 @@ internal class SkOpEdgeBuilder(
                 fPathPts[ptsCount - 1] = curveStart
             }
         }
-        fPathVerbs.add(SkPath.StorageVerb.kClose)
+        fPathVerbs.add(SkPath.Verb.kClose)
     }
 
     /**
@@ -174,7 +174,7 @@ internal class SkOpEdgeBuilder(
         var weightIdx = 0
         for (rawVerb in fPath.verbs) {
             when (rawVerb) {
-                SkPath.StorageVerb.kMove -> {
+                SkPath.Verb.kMove -> {
                     if (!fAllowOpenContours && lastCurve) closeContour(curve[0], curveStart)
                     fPathVerbs.add(rawVerb)
                     val px = fPath.coords[coordIdx++]
@@ -184,14 +184,14 @@ internal class SkOpEdgeBuilder(
                     curveStart = curve[0]
                     lastCurve = false
                 }
-                SkPath.StorageVerb.kLine -> {
+                SkPath.Verb.kLine -> {
                     val ex = fPath.coords[coordIdx++]
                     val ey = fPath.coords[coordIdx++]
                     curve[1] = forceSmallToZero(SkPoint(ex, ey))
                     if (approximatelyEqualSkPt(curve[0], curve[1])) {
                         // Skip degenerate ; back-fill curve[0] if last verb wasn't kLine/kMove.
                         val lastVerb = if (fPathVerbs.isNotEmpty()) fPathVerbs.last() else null
-                        if (lastVerb != SkPath.StorageVerb.kLine && lastVerb != SkPath.StorageVerb.kMove
+                        if (lastVerb != SkPath.Verb.kLine && lastVerb != SkPath.Verb.kMove
                             && fPathPts.isNotEmpty()
                         ) {
                             fPathPts[fPathPts.size - 1] = curve[1]
@@ -204,7 +204,7 @@ internal class SkOpEdgeBuilder(
                     curve[0] = curve[1]
                     lastCurve = true
                 }
-                SkPath.StorageVerb.kQuad -> {
+                SkPath.Verb.kQuad -> {
                     curve[1] = forceSmallToZero(SkPoint(fPath.coords[coordIdx++], fPath.coords[coordIdx++]))
                     curve[2] = forceSmallToZero(SkPoint(fPath.coords[coordIdx++], fPath.coords[coordIdx++]))
                     fPathVerbs.add(rawVerb)
@@ -212,7 +212,7 @@ internal class SkOpEdgeBuilder(
                     curve[0] = curve[2]
                     lastCurve = true
                 }
-                SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kConic -> {
                     curve[1] = forceSmallToZero(SkPoint(fPath.coords[coordIdx++], fPath.coords[coordIdx++]))
                     curve[2] = forceSmallToZero(SkPoint(fPath.coords[coordIdx++], fPath.coords[coordIdx++]))
                     val w = fPath.conicWeights[weightIdx++]
@@ -222,7 +222,7 @@ internal class SkOpEdgeBuilder(
                     curve[0] = curve[2]
                     lastCurve = true
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     curve[1] = forceSmallToZero(SkPoint(fPath.coords[coordIdx++], fPath.coords[coordIdx++]))
                     curve[2] = forceSmallToZero(SkPoint(fPath.coords[coordIdx++], fPath.coords[coordIdx++]))
                     curve[3] = forceSmallToZero(SkPoint(fPath.coords[coordIdx++], fPath.coords[coordIdx++]))
@@ -231,10 +231,11 @@ internal class SkOpEdgeBuilder(
                     curve[0] = curve[3]
                     lastCurve = true
                 }
-                SkPath.StorageVerb.kClose -> {
+                SkPath.Verb.kClose -> {
                     closeContour(curve[0], curveStart)
                     lastCurve = false
                 }
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         if (!fAllowOpenContours && lastCurve) closeContour(curve[0], curveStart)
@@ -255,7 +256,7 @@ internal class SkOpEdgeBuilder(
             if (i == fSecondHalf) fOperand = true
             val verb = fPathVerbs[i]
             when (verb) {
-                SkPath.StorageVerb.kMove -> {
+                SkPath.Verb.kMove -> {
                     if (contour.count() != 0) {
                         if (fAllowOpenContours) complete()
                         else if (!close()) return false
@@ -269,33 +270,34 @@ internal class SkOpEdgeBuilder(
                     ptIdx += moveToPtrBump
                     moveToPtrBump = 1
                 }
-                SkPath.StorageVerb.kLine -> {
+                SkPath.Verb.kLine -> {
                     // pts[ptIdx] is the segment start (previous verb's end / the
                     // move target for the first verb of a contour) ;
                     // pts[ptIdx + 1] is the line's terminal point.
                     fContourBuilder.addLine(arrayOf(fPathPts[ptIdx], fPathPts[ptIdx + 1]))
                     ptIdx += 1
                 }
-                SkPath.StorageVerb.kQuad -> {
+                SkPath.Verb.kQuad -> {
                     fContourBuilder.addQuad(arrayOf(
                         fPathPts[ptIdx], fPathPts[ptIdx + 1], fPathPts[ptIdx + 2],
                     ))
                     ptIdx += 2
                 }
-                SkPath.StorageVerb.kConic -> {
+                SkPath.Verb.kConic -> {
                     val w = fWeights[weightIdx++]
                     fContourBuilder.addConic(arrayOf(
                         fPathPts[ptIdx], fPathPts[ptIdx + 1], fPathPts[ptIdx + 2],
                     ), w)
                     ptIdx += 2
                 }
-                SkPath.StorageVerb.kCubic -> {
+                SkPath.Verb.kCubic -> {
                     fContourBuilder.addCubic(arrayOf(
                         fPathPts[ptIdx], fPathPts[ptIdx + 1], fPathPts[ptIdx + 2], fPathPts[ptIdx + 3],
                     ))
                     ptIdx += 3
                 }
-                SkPath.StorageVerb.kClose -> if (!close()) return false
+                SkPath.Verb.kClose -> if (!close()) return false
+                SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
         fContourBuilder.flush()
