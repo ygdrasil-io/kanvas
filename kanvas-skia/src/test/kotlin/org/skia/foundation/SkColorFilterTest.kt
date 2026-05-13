@@ -326,4 +326,154 @@ class SkColorFilterTest {
             assertTrue(e.message?.contains("256") == true)
         }
     }
+
+    // -- SkColorFilters.Lighting (R1-B) -------------------------------------
+
+    @Test
+    fun `Lighting with mul=white add=black is identity for RGB and alpha`() {
+        val cf = SkColorFilters.Lighting(SK_ColorWHITE, SkColorSetARGB(0, 0, 0, 0))
+        val src = SkColor4f(0.4f, 0.7f, 0.2f, 0.8f)
+        assertColorClose(src, cf.filterColor4f(src), tag = "lighting identity")
+    }
+
+    @Test
+    fun `Lighting multiplies RGB by mul byte-normalized`() {
+        // mul = 50% grey ⇒ each channel halves; add = black ⇒ no bias.
+        val cf = SkColorFilters.Lighting(SkColorSetARGB(0xFF, 0x80, 0x80, 0x80), 0)
+        val out = cf.filterColor4f(SkColor4f(1f, 1f, 1f, 1f))
+        // 0x80 / 0xFF ≈ 0.5019608
+        assertColorClose(SkColor4f(0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 1f), out,
+            eps = 0.001f, tag = "Lighting mul=grey")
+    }
+
+    @Test
+    fun `Lighting adds add-color bias per channel`() {
+        // mul = white (identity), add = (32, 64, 96).
+        val cf = SkColorFilters.Lighting(SK_ColorWHITE, SkColorSetARGB(0, 32, 64, 96))
+        val out = cf.filterColor4f(SkColor4f(0.1f, 0.1f, 0.1f, 1f))
+        val expR = 0.1f + 32f / 255f
+        val expG = 0.1f + 64f / 255f
+        val expB = 0.1f + 96f / 255f
+        assertColorClose(SkColor4f(expR, expG, expB, 1f), out,
+            eps = 0.001f, tag = "Lighting add bias")
+    }
+
+    @Test
+    fun `Lighting ignores the alpha bytes of mul and add`() {
+        // Passing different alphas in `mul`/`add` must not affect the result —
+        // upstream Skia explicitly ignores alpha.
+        val cfA = SkColorFilters.Lighting(0xFF808080.toInt(), 0xFF204060.toInt())
+        val cfB = SkColorFilters.Lighting(0x00808080, 0x00204060)
+        val src = SkColor4f(0.3f, 0.4f, 0.5f, 0.6f)
+        assertColorClose(cfA.filterColor4f(src), cfB.filterColor4f(src),
+            tag = "Lighting alpha-byte invariance")
+    }
+
+    // -- SkColorFilters.LinearToSRGBGamma / SRGBToLinearGamma (R1-B) --------
+
+    @Test
+    fun `LinearToSRGBGamma matches reference values for 0_5 linear`() {
+        val cf = SkColorFilters.LinearToSRGBGamma()
+        // sRGB encoding of 0.5 linear is ≈ 0.7353569.
+        val out = cf.filterColor4f(SkColor4f(0.5f, 0.5f, 0.5f, 1f))
+        assertColorClose(SkColor4f(0.7353569f, 0.7353569f, 0.7353569f, 1f),
+            out, eps = 0.001f, tag = "linear 0.5 → sRGB")
+    }
+
+    @Test
+    fun `SRGBToLinearGamma matches reference values for 0_7353 sRGB`() {
+        val cf = SkColorFilters.SRGBToLinearGamma()
+        val out = cf.filterColor4f(SkColor4f(0.7353569f, 0.7353569f, 0.7353569f, 1f))
+        assertColorClose(SkColor4f(0.5f, 0.5f, 0.5f, 1f), out, eps = 0.001f,
+            tag = "sRGB 0.7353 → linear")
+    }
+
+    @Test
+    fun `gamma filters are round-trip inverses`() {
+        val toSrgb = SkColorFilters.LinearToSRGBGamma()
+        val toLinear = SkColorFilters.SRGBToLinearGamma()
+        for (v in floatArrayOf(0f, 0.01f, 0.1f, 0.3f, 0.5f, 0.7f, 0.9f, 1f)) {
+            val src = SkColor4f(v, v, v, 1f)
+            val round = toLinear.filterColor4f(toSrgb.filterColor4f(src))
+            assertColorClose(src, round, eps = 0.002f, tag = "round-trip $v")
+        }
+    }
+
+    @Test
+    fun `gamma filters preserve alpha`() {
+        val cf = SkColorFilters.LinearToSRGBGamma()
+        val out = cf.filterColor4f(SkColor4f(0.2f, 0.5f, 0.9f, 0.42f))
+        assertEquals(0.42f, out.fA, "alpha preserved")
+        assertTrue(cf.isAlphaUnchanged())
+        assertTrue(SkColorFilters.SRGBToLinearGamma().isAlphaUnchanged())
+    }
+
+    @Test
+    fun `gamma filters keep 0 and 1 fixed`() {
+        val toSrgb = SkColorFilters.LinearToSRGBGamma()
+        val toLinear = SkColorFilters.SRGBToLinearGamma()
+        assertColorClose(SkColor4f(0f, 0f, 0f, 1f),
+            toSrgb.filterColor4f(SkColor4f(0f, 0f, 0f, 1f)), tag = "0 → 0")
+        assertColorClose(SkColor4f(1f, 1f, 1f, 1f),
+            toSrgb.filterColor4f(SkColor4f(1f, 1f, 1f, 1f)), tag = "1 → 1")
+        assertColorClose(SkColor4f(0f, 0f, 0f, 1f),
+            toLinear.filterColor4f(SkColor4f(0f, 0f, 0f, 1f)), tag = "0 → 0 inv")
+        assertColorClose(SkColor4f(1f, 1f, 1f, 1f),
+            toLinear.filterColor4f(SkColor4f(1f, 1f, 1f, 1f)), tag = "1 → 1 inv")
+    }
+
+    // -- SkColorFilters.Lerp nullable overload (R1-B) -----------------------
+
+    @Test
+    fun `Lerp nullable returns null when both filters are null`() {
+        assertEquals(null, SkColorFilters.Lerp(0.5f, null, null))
+    }
+
+    @Test
+    fun `Lerp nullable returns null when weight is NaN`() {
+        // Pass at least one null to force resolution to the nullable overload.
+        val cf: SkColorFilter? = SkColorFilters.LinearToSRGBGamma()
+        assertEquals(null, SkColorFilters.Lerp(Float.NaN, cf, null))
+        assertEquals(null, SkColorFilters.Lerp(Float.NaN, null, cf))
+        assertEquals(null, SkColorFilters.Lerp(Float.NaN, null, null))
+    }
+
+    @Test
+    fun `Lerp nullable short-circuits at t=0 to dst`() {
+        val dst: SkColorFilter? = SkColorFilters.LinearToSRGBGamma()
+        val src: SkColorFilter? = SkColorFilters.SRGBToLinearGamma()
+        assertEquals(dst, SkColorFilters.Lerp(0f, dst, src))
+        assertEquals(dst, SkColorFilters.Lerp(-0.1f, dst, src))
+        assertEquals(null, SkColorFilters.Lerp(0f, null, src),
+            "null dst at t=0 means no filter")
+    }
+
+    @Test
+    fun `Lerp nullable short-circuits at t=1 to src`() {
+        val dst: SkColorFilter? = SkColorFilters.LinearToSRGBGamma()
+        val src: SkColorFilter? = SkColorFilters.SRGBToLinearGamma()
+        assertEquals(src, SkColorFilters.Lerp(1f, dst, src))
+        assertEquals(src, SkColorFilters.Lerp(1.5f, dst, src))
+        assertEquals(null, SkColorFilters.Lerp(1f, dst, null),
+            "null src at t=1 means no filter")
+    }
+
+    @Test
+    fun `Lerp nullable identity-substitutes null sides at intermediate weights`() {
+        // dst = null (identity), src = SrcOver with RED ⇒ lerp(0.5, src, RED)
+        // = halfway between original and red.
+        val srcFilter = SkColorFilters.Blend(SK_ColorRED, SkBlendMode.kSrcOver)
+        val cf = SkColorFilters.Lerp(0.5f, null, srcFilter)
+        val input = SkColor4f(0f, 0f, 1f, 1f)  // pure blue
+        val expected = SkColor4f(0.5f, 0f, 0.5f, 1f)  // halfway to red
+        assertColorClose(expected, cf!!.filterColor4f(input), eps = 0.01f,
+            tag = "null dst treated as identity")
+    }
+
+    @Test
+    fun `Lerp nullable returns non-null filter when one side is non-null`() {
+        val srcFilter = SkColorFilters.LinearToSRGBGamma()
+        val cf = SkColorFilters.Lerp(0.3f, null, srcFilter)
+        assertTrue(cf != null)
+    }
 }
