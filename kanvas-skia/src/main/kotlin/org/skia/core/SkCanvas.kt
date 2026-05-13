@@ -2170,4 +2170,129 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
     public open fun drawAnnotation(rect: SkRect, key: String, value: ByteArray?) {
         // Raster sinks ignore annotations — see KDoc.
     }
+
+    // ─── R-suivi.50 — drawShadow / drawSlug / drawImageLattice / drawPicture ─
+
+    /**
+     * Mirrors Skia's `SkCanvas::private_draw_shadow_rec` /
+     * `SkShadowUtils::DrawShadow` entry point — render the two-layer
+     * (ambient + spot) shadow cast by [path] under the elevation
+     * plane [zPlaneParams], lit by the source at [lightPos] with
+     * disc radius [lightRadius]. The default delegates to the
+     * functional [org.skia.utils.SkShadowUtils.DrawShadow]
+     * implementation ; subclasses ([org.skia.utils.SkNWayCanvas],
+     * [org.skia.utils.SkNoDrawCanvas], recording / SVG sinks)
+     * override for forwarding, no-op or capture semantics.
+     *
+     * See [org.skia.utils.SkShadowUtils.DrawShadow] for the meaning
+     * of [zPlaneParams] / [lightPos] / [lightRadius] /
+     * [ambientColor] / [spotColor] / [flags].
+     */
+    public open fun drawShadow(
+        path: SkPath,
+        zPlaneParams: org.skia.math.SkPoint3,
+        lightPos: org.skia.math.SkPoint3,
+        lightRadius: SkScalar,
+        ambientColor: SkColor,
+        spotColor: SkColor,
+        flags: Int = 0,
+    ) {
+        org.skia.utils.SkShadowUtils.DrawShadow(
+            this, path, zPlaneParams, lightPos, lightRadius,
+            ambientColor, spotColor, flags,
+        )
+    }
+
+    /**
+     * Mirrors Skia's
+     * [`SkCanvas::drawSlug`](https://github.com/google/skia/blob/main/include/core/SkCanvas.h)
+     * — replay a pre-compiled glyph slug into this canvas at
+     * [origin]. The default impl delegates to
+     * [org.skia.foundation.SkTextSlug.replay], which re-issues the
+     * captured `drawTextBlob`. Subclasses ([org.skia.utils.SkNWayCanvas],
+     * [org.skia.utils.SkNoDrawCanvas], recording sinks) override
+     * for forwarding, no-op or capture semantics.
+     */
+    public open fun drawSlug(
+        slug: org.skia.foundation.SkTextSlug,
+        origin: SkPoint = SkPoint(0f, 0f),
+    ) {
+        slug.replay(this, origin)
+    }
+
+    /**
+     * Mirrors Skia's
+     * [`SkCanvas::drawImageLattice`](https://github.com/google/skia/blob/main/include/core/SkCanvas.h)
+     * — render [image] partitioned by [lattice] to fit inside [dst].
+     *
+     * **R-suivi.50 minimal default** : the full N × M lattice
+     * tessellation is deferred ; the default implementation
+     * degenerates to a plain [drawImageRect] over the entire [dst]
+     * with [filterMode]. This loses fixed-corner / non-stretch
+     * behaviour but keeps the API surface present so subclasses
+     * can override and do the right thing (e.g. recording sinks
+     * capture the lattice verbatim ; the future raster lattice
+     * impl will tessellate here).
+     */
+    public open fun drawImageLattice(
+        image: SkImage,
+        lattice: SkLattice,
+        dst: SkRect,
+        filterMode: SkFilterMode = SkFilterMode.kNearest,
+        paint: SkPaint? = null,
+    ) {
+        // Suppress the unused-parameter warning while the full
+        // tessellation lands : the lattice descriptor is held by
+        // the recording-canvas override, which captures it intact.
+        @Suppress("UNUSED_VARIABLE")
+        val _lattice = lattice
+        drawImageRect(
+            image,
+            SkRect.MakeWH(image.width.toFloat(), image.height.toFloat()),
+            dst,
+            SkSamplingOptions(filterMode),
+            paint,
+            SrcRectConstraint.kStrict,
+        )
+    }
+
+    /**
+     * Mirrors Skia's
+     * [`SkCanvas::drawPicture`](https://github.com/google/skia/blob/main/include/core/SkCanvas.h)
+     * — replay every recorded op in [picture] into this canvas,
+     * optionally pre-multiplied by [matrix] and wrapped in a
+     * [saveLayer] using [paint] (when non-null).
+     *
+     * The default impl wraps [SkPicture.playback] in a
+     * `save / concat / playback / restore` sequence so the
+     * picture's internal CTM mutations don't leak out. When
+     * [paint] is non-null we open a `saveLayer` over
+     * [SkPicture.cullRect] so blend / alpha / image-filter on
+     * the paint applies uniformly to the picture's composite —
+     * matches upstream `SkCanvasPriv::DrawPictureWithMatrixAndPaint`.
+     *
+     * Subclasses ([org.skia.utils.SkNWayCanvas],
+     * [org.skia.utils.SkNoDrawCanvas], recording sinks) override
+     * for forwarding, no-op or capture semantics.
+     */
+    public open fun drawPicture(
+        picture: SkPicture,
+        matrix: SkMatrix? = null,
+        paint: SkPaint? = null,
+    ) {
+        val saveCount = getSaveCount()
+        save()
+        try {
+            if (matrix != null) concat(matrix)
+            if (paint != null) {
+                saveLayer(picture.cullRect, paint)
+                picture.playback(this)
+                restore()
+            } else {
+                picture.playback(this)
+            }
+        } finally {
+            restoreToCount(saveCount)
+        }
+    }
 }
