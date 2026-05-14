@@ -17,7 +17,13 @@
 - ✅ Phase R1 complète (25/25, mergée).
 - ✅ Phase R2 complète (20/20 mergée).
 - 🔄 Phase R3 : **12/12 ✅ ou ouvert** — toutes les classes/méthodes upstream non-GPU sont implémentées ou stubbées ; simplifications listées en R-suivi.
-- 🎯 Phase R-suivi : **47 / 50 ✅ ou stub-acceptable** (94 %, post-S6). 3 items en suivi documenté : .23 (`SkWebpEncoder` stub, alt JNI/pure-Java), .25 (typealiases en place, full rename différé), .30 (`SkShadowUtils` blur-based, mesh analytic non porté). Voir Section 5 sous-section "Items en stub".
+- 🎉 Phase R-suivi : **50 / 50 ✅** (100 %). Plan de remédiation API **closed côté implémentation**.
+
+Le module `:kanvas-skia` couvre désormais l'intégralité de la surface API publique upstream Skia non-GPU, sauf :
+- `SkWebpEncoder.kLossy` (VP8 lossy) : `Custom(callback)` factory permet plug-in libwebp via JNI consommateur ; sortie pure-Kotlin = lossless seul.
+- Décodeurs AVIF / JpegXL / RAW étendus : registry public `SkCodec.Decoders.register(...)` permet plug-in via JNI consommateur.
+- `SkShadowTessellator` convexité uniquement : paths concaves/self-intersect → fallback blur legacy.
+- `SkPath.IterVerb` typealias `@Deprecated` toujours là pour source-compat (rename mécanique complet livré dans #414).
 
 **Phases R1+R2+R3 du plan de remédiation terminées côté API surface.** Travail restant : finalisation de la fidélité (R-suivi) + reprise des ports GMs (Phase H3 et suivantes).
 
@@ -802,7 +808,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 20. ✅ **R-suivi.20** `SkCanvas.clipShader` full rasterizer wiring (PR #394). Modulation dans les 5 blend funnels (`blend`, `blendCustom`, `blendF16`, `blendF16Premul`, `blendF16PremulMode`) → tous les entry points l'honorent automatiquement.
 21. ✅ **R-suivi.21** `SkICC` tag-table v4.3 complète (PR #404). Tags : desc, wtpt, rXYZ, gXYZ, bXYZ, rTRC, gTRC, bTRC, cprt ; TRC `para` type-4.
 22. ✅ **R-suivi.22** (S5-C PR #409 (image) + S6-C PR #411 (picture+typeface)) — `SkSerialProcs` / `SkDeserialProcs` consommés par `SkPicture.serialize` / `MakeFromData` (image + picture + typeface procs).
-23. 🟡 **R-suivi.23** `SkWebpEncoder` : **stub volontaire** (encode → null). Voir section "Items en stub — alternatives pure-Java vs JNI". Effort pure-Kotlin lossless ≈ 5-7 j ; lossy VP8 + lossless ≈ 15-20 j ; binding JNI libwebp ≈ 2-3 j.
+23. ✅ **R-suivi.23** (PR #416) — `SkWebpEncoder` pure-Kotlin lossless (RIFF + VP8L bitstream, 1 Huffman group, no LZ77, no transformations) + `Custom(callback)` factory pour brancher libwebp via JNI côté caller. `kLossy` reste null (VP8 lossy = 5-7 kLOC bit-exact DCT/quantizer, hors scope explicite). Voir notes implem dans la section "Items en stub" pour les surprises (TwelveMonkeys 0-bit Huffman, reverseBits LSB-first).
 
 **Ajouts batch 6 (R2.8, R2.9, R3.1)** :
 
@@ -815,7 +821,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 
 28. ✅ **R-suivi.28** `@Deprecated getTotalMatrix()` migration (PR R-suivi batch S1-C). Call-sites tests (`SkAutoCanvasRestoreTest`, `SkDrawableTest`, `SkPictureTest`, `SkCanvasWrappersTest`) et `SkSVGCanvas` migrés vers `getLocalToDeviceAsMatrix() ?: SkMatrix.Identity`. Les wrappers `SkRecordingCanvas` / `SkNoDrawCanvas` / `SkPaintFilterCanvas` / `SkOverdrawCanvas` ne contenaient que des références doc (KDoc), pas d'appels deprecated. `SkCanvasSkM44Test` conserve un appel intentionnel sous `@Suppress("DEPRECATION")`. 0 deprecation warning restant sur `compileKotlin` / `compileTestKotlin`.
 29. ✅ **R-suivi.29** (S5-C PR #409) — `SkStream` peek + duplicate/fork (base + `SkMemoryStream` + `SkFILEStream`).
-30. 🟡 **R-suivi.30** `SkShadowUtils.DrawShadow` reste **blur-based** (non analytic-mesh). `kGeometricOnly_ShadowFlag` no-op. Effort pure-Kotlin port `SkShadowTessellator.cpp` (~800 LOC) : **3-5 j**.
+30. ✅ **R-suivi.30** (PR #415) — `SkShadowTessellator.kt` pure-Kotlin (494 LOC + 128 wiring) : tessellation analytique (ambient + spot mesh via `SkVertices` déjà présent en I5.3). `kGeometricOnly_ShadowFlag` + `kTransparentOccluder_ShadowFlag` enfin honorés. Blur-based devient `LegacyDrawShadow` private fallback. **Simplifications flaguées en suivi : convex-only (concave/self-intersect → blur fallback ; port `SkOffsetSimplePolygon` + `SkTriangulateSimplePolygon` ~1.5 kLOC out of scope), Bezier midpoint subdivision (vs upstream `quadraticPointCount`, équivalent à 0.2px), pas de radial arc step aux turns convexes pointus**.
 31. ✅ **R-suivi.31** `SkShadowUtils.zPlaneParams` per-verb sampling (PR #401). Walks `SkPath.Iter`, max-z ambient, union spot bboxes.
 32. ✅ **R-suivi.32** `SkShadowUtils.kTransparentOccluder` flag implémenté (PR #401). `canvas.clipPath(path, kDifference)` dans spot layer quand flag unset.
 33. ✅ **R-suivi.33** `SkShadowUtils.OptimizeForSurface` cache (PR #401). `WeakHashMap<SkPath, Map<ProjectionKey, SkPath>>` via identityHashCode.
@@ -846,32 +852,50 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 49. ✅ **R-suivi.49** (S6-B PR #412) — Drawable typeface rendering (`hasDrawableGlyphs` + `drawDrawableGlyphs` hook + extension `SkCanvas.drawCustomTypefaceText`).
 50. ✅ **R-suivi.50** (S5-A PR #407) — `SkCanvas.{drawShadow, drawSlug, drawImageLattice, drawPicture}` virtuals + nouveaux types `SkTextSlug` / `SkLattice` + NWay/NoDraw overrides.
 
-**Status global R-suivi** : **47 / 50 ✅ ou stub-acceptable** (94 %). 3 items en suivi : .23 (`SkWebpEncoder` stub), .25 (rename mécanique différé), .30 (`SkShadowUtils` analytic mesh). Voir section "Items en stub — alternatives pure-Java vs JNI" ci-dessous.
+**Status global R-suivi** : **🎉 50 / 50 ✅** (100 %). Plan de remédiation API **closed côté implémentation**.
+
+Sous-items restants (non-bloquants) :
+- `SkWebpEncoder.kLossy` : pure-Kotlin VP8 lossy hors scope ; `Custom(callback)` permet plug-in JNI libwebp
+- Décodeurs AVIF / JpegXL / RAW étendus : codecs lourds, registry `SkCodec.Decoders.register(...)` permet plug-in JNI consommateur
+- `SkShadowTessellator` convexité uniquement : paths concaves → fallback blur legacy
+- Détails dans la section "Items implémentés en pure-Kotlin avec limitations documentées" ci-dessous.
 
 ---
 
-### Items en stub — alternatives pure-Java vs JNI
+### Items implémentés en pure-Kotlin avec limitations documentées
 
-Cette section documente les items où un stub a été shipé pour ne pas bloquer le pipeline et énumère les options d'implémentation réelle.
+Cette section liste les items où l'implémentation pure-Kotlin a été shipped avec des limitations explicites — chacun ouvre la porte à un plug-in JNI consommateur ou à un travail futur.
 
-#### R-suivi.23 — `SkWebpEncoder`
+#### R-suivi.23 — `SkWebpEncoder` ✅ pure-Kotlin lossless + Custom callback (PR #416)
 
-**État** : object Kotlin avec API surface complète exposée ; tous les `Encode(...)` retournent `null`/`false`.
+**Livré** :
+- Lossless WebP encoder pur Kotlin (RIFF + VP8L bitstream, 1 Huffman group, no LZ77, no transformations) — sortie ~30-50% plus grosse que libwebp mais valide.
+- `SkWebpEncoder.Custom(callback)` factory pour brancher libwebp via JNI sans imposer la dépendance.
 
-**Pourquoi stub** : la JVM n'expose aucun encodeur WebP natif (TwelveMonkeys imageio-webp est decoder-only). Pas de pure-Java upstream existant.
+**Limitations documentées** :
+- `kLossy` (VP8) reste null. Port pure-Kotlin = 5-7 kLOC bit-exact DCT/quantizer (hors scope explicite). Consommateurs : utiliser `Custom(callback)` avec libwebp via JNI (effort 2-3 j côté caller).
 
-| Option | Effort | Avantage | Inconvénient |
-|---|---|---|---|
-| Pure-Kotlin lossless seul | 5-7 j | Pas de native binding | Pas de mode lossy ; sortie ~30-50 % plus grosse que WebP lossy |
-| Pure-Kotlin lossy VP8 + lossless | 15-20 j | Parité fonctionnelle complète | Codec entier à porter (~5-7000 LOC) ; précision DCT/quantizer à valider |
-| JNI binding libwebp | 2-3 j | Vitesse + parité Skia | Dépendance native multi-platform |
-| Wrapper `SkWebpEncoder.Custom(callback)` | 1 j | Decouple ; caller fournit l'impl | Pas de default fonctionnel |
+**Surprises techniques durant l'implem** (notes pour mainteneurs) :
+- TwelveMonkeys imageio-webp decoder rejette les Huffman simple-codes à 0-bit/pixel (libwebp les accepte). Workaround : promotion 1-symbol → 2-symbol simple code, sentinel jamais émis. Coût : +1 bit/pixel sur monochrome.
+- `reverseBits` requis pour Huffman canonique en bitstream LSB-first VP8L (canonical = MSB-first par défaut, packed LSB-first dans bytes par VP8L spec).
+- Bonus : overload `EncodeAsData` (retour `SkData?`) ajouté pour cohérence avec `SkImage.encodeToData` upstream.
 
-**Recommandation** : ship le wrapper `Custom(callback)` (option 4) avec un fallback pure-Kotlin lossless (option 1) ; le callback permet d'enregistrer libwebp ou autre côté consommateur sans imposer la dépendance.
+#### R-suivi.30 — `SkShadowUtils` analytic mesh ✅ pure-Kotlin (PR #415)
+
+**Livré** :
+- `SkShadowTessellator.kt` (494 LOC) — port pure-Kotlin du tessellateur upstream.
+- Mesh ambient + spot via `SkVertices` (déjà présent en I5.3).
+- `kGeometricOnly_ShadowFlag` et `kTransparentOccluder_ShadowFlag` enfin honorés (étaient no-op sur le blur-based).
+- Blur-based devient `LegacyDrawShadow` private fallback.
+
+**Limitations documentées** :
+- **Convex-only tessellator** : paths concaves / self-intersecting → fallback automatique au blur legacy. Port upstream `SkOffsetSimplePolygon` + `SkTriangulateSimplePolygon` (~1.5 kLOC) explicitly out of scope.
+- Bezier flattening via midpoint subdivision (vs upstream `quadraticPointCount` / `SkAutoConicToQuads`). Visuellement équivalent à 0.2 px tolerance.
+- Pas de radial arc step aux turns convexes pointus (vs upstream `addArc` / `SkComputeRadialSteps`). Vertex bisectors avec miter-length compensation à la place.
 
 #### R-suivi.47 (suivi des decoders réels) — AVIF / JpegXL / RAW
 
-**État** : `SkCodec.Decoders` registry public exposé (S5-B #408). 4 stubs (`SkAvifDecoder`, `SkJpegxlDecoder`, `SkRawDecoder`, `SkIcoDecoder`) self-register avec `IsXxx()` réel + `Decode()` → null. Real decoders ne sont pas encore pluggés.
+**État** : `SkCodec.Decoders` registry public exposé (S5-B #408). 4 stubs (`SkAvifDecoder`, `SkJpegxlDecoder`, `SkRawDecoder`, `SkIcoDecoder`) self-register avec `IsXxx()` réel + `Decode()` → null. Real decoders restent à brancher.
 
 | Format | Effort pure-Kotlin | Effort JNI |
 |---|---|---|
@@ -883,13 +907,7 @@ Cette section documente les items où un stub a été shipé pour ne pas bloquer
 
 **Recommandation** :
 - **ICO** : pure-Kotlin (1 j, faible coût)
-- **AVIF / JpegXL / RAW étendu** : ship `SkCodec.Decoders.register(custom)` extension qui permet à un consommateur d'enregistrer libavif/libjxl/libraw via JNI sans imposer la dépendance ; le registry self-register pattern (S5-B #408) gère le re-routing automatique.
-
-#### R-suivi.30 — `SkShadowUtils` analytic mesh
-
-**État** : implémentation blur-based avec FRP gauss + per-verb z sampling + occluder culling (S3-C #401). `kGeometricOnly_ShadowFlag` no-op.
-
-**Alternative** : port pure-Kotlin de `src/utils/SkShadowTessellator.cpp` (~800 LOC, géométrie pure, pas de native deps). Effort **3-5 j**. À faire si la fidélité shadow devient critique pour un GM porté.
+- **AVIF / JpegXL / RAW étendu** : utiliser `SkCodec.Decoders.register(custom)` côté consommateur pour brancher libavif/libjxl/libraw via JNI ; registry pattern self-register de S5-B #408 gère le re-routing automatique.
 
 #### R-suivi.25 — `SkPath.Verb` rename complet
 
