@@ -2,6 +2,7 @@ package org.skia.tools
 
 import org.skia.codec.SkCodec
 import org.skia.core.SkCanvas
+import org.skia.core.SkSurface
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColor
@@ -13,10 +14,14 @@ import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkTypeface
 import org.skia.foundation.awt.LiberationFontMgr
+import org.skia.math.SkMatrix
 import org.skia.math.SkScalar
 import kotlin.math.floor
 
@@ -297,6 +302,38 @@ public object ToolUtils {
      */
     public fun draw_checkerboard(canvas: SkCanvas, c1: SkColor, c2: SkColor, size: Int) {
         require(size > 0) { "draw_checkerboard size must be > 0 ; got $size" }
+        val paint = SkPaint()
+        paint.shader = create_checkerboard_shader(c1, c2, size)
+        paint.blendMode = SkBlendMode.kSrc
+        canvas.drawPaint(paint)
+    }
+
+    // ─── S7-B promoted helpers ────────────────────────────────────────────
+    //
+    // The four entry points below were previously inlined in 4-5 GM
+    // ports each (`OffsetImageFilterGM.makeStringImage`,
+    // `OffsetImageFilterGM.makeCheckerboardImage`,
+    // `Skbug257GM.rotatedCheckerboardShader`, `ImageFiltersClippedGM.<inline>`,
+    // `LcdBlendGM.<inline>`, `VerticesPerspectiveGM.<inline>`, …).
+    // Promoted here to mirror upstream's
+    // `tools/ToolUtils.{h,cpp}` and `tools/fonts/FontToolUtils.{h,cpp}`
+    // helpers and let the GM ports drop their per-class duplicates.
+
+    /**
+     * Mirrors Skia's `sk_sp<SkShader> create_checkerboard_shader(SkColor c1,
+     * SkColor c2, int size)` (`tools/ToolUtils.cpp:152`).
+     *
+     * Builds a `2*size × 2*size` 8888 bitmap with `(c1, c2)` in opposite
+     * quadrants — the same recipe upstream uses — and wraps it in a
+     * [SkTileMode.kRepeat] image shader sampled with the default options.
+     * The resulting shader paints a `size`-px checker pattern that tiles
+     * infinitely in both axes.
+     *
+     * `size` must be positive ; mirrors upstream's implicit
+     * `allocPixels(2*size, 2*size)` contract.
+     */
+    public fun create_checkerboard_shader(c1: SkColor, c2: SkColor, size: Int): SkShader {
+        require(size > 0) { "create_checkerboard_shader size must be > 0 ; got $size" }
         val tile = SkBitmap(2 * size, 2 * size)
         tile.eraseColor(c1)
         // Fill the off-diagonal quadrants with c2 (matches upstream's
@@ -308,9 +345,88 @@ public object ToolUtils {
                 tile.setPixel(x + size, y + size, c2)
             }
         }
-        val paint = SkPaint()
-        paint.shader = tile.makeShader(SkTileMode.kRepeat, SkTileMode.kRepeat)
-        paint.blendMode = SkBlendMode.kSrc
-        canvas.drawPaint(paint)
+        return tile.makeShader(SkTileMode.kRepeat, SkTileMode.kRepeat)
+    }
+
+    /**
+     * Convenience companion to [create_checkerboard_shader] with a local
+     * matrix that scales by [scale] and rotates by [angleDegrees] around
+     * the origin. Previously inlined in `Skbug257GM` (which used a
+     * hard-coded `0.75 × rotate30` transform) — promoted here as the
+     * generalised form.
+     *
+     * No upstream counterpart : Skia uses `create_checkerboard_shader`
+     * + a paint-side shader-local-matrix, which our [SkBitmap.makeShader]
+     * exposes via the `localMatrix` parameter. Fold that step into a
+     * single helper so direct ports compile without re-deriving the
+     * matrix recipe.
+     */
+    public fun rotated_checkerboard_shader(
+        c1: SkColor,
+        c2: SkColor,
+        size: Int,
+        angleDegrees: SkScalar,
+        scale: SkScalar = 1f,
+    ): SkShader {
+        require(size > 0) { "rotated_checkerboard_shader size must be > 0 ; got $size" }
+        val tile = SkBitmap(2 * size, 2 * size)
+        tile.eraseColor(c1)
+        for (y in 0 until size) {
+            for (x in 0 until size) {
+                tile.setPixel(x, y, c2)
+                tile.setPixel(x + size, y + size, c2)
+            }
+        }
+        val matrix = SkMatrix.MakeScale(scale, scale).preRotate(angleDegrees)
+        return tile.makeShader(
+            SkTileMode.kRepeat, SkTileMode.kRepeat,
+            SkSamplingOptions.Default, matrix,
+        )
+    }
+
+    /**
+     * Mirrors Skia's `sk_sp<SkImage> create_checkerboard_image(int w, int h,
+     * SkColor c1, SkColor c2, int checkSize)` (`tools/ToolUtils.cpp:170`).
+     *
+     * Allocates a [w]×[h] N32-premul raster surface, fills it with the
+     * checker pattern via [draw_checkerboard], snapshots to an [SkImage].
+     * Same call-graph as upstream — the surface owns the pixels, the
+     * snapshot transfers ownership to the returned image.
+     */
+    public fun create_checkerboard_image(
+        w: Int, h: Int, c1: SkColor, c2: SkColor, checkSize: Int,
+    ): SkImage {
+        require(w > 0 && h > 0) { "create_checkerboard_image: w/h must be > 0 ; got ($w, $h)" }
+        val surface = SkSurface.MakeRaster(SkImageInfo.MakeN32Premul(w, h))
+        draw_checkerboard(surface.canvas, c1, c2, checkSize)
+        return surface.makeImageSnapshot()
+    }
+
+    /**
+     * Mirrors Skia's `sk_sp<SkImage> CreateStringImage(int w, int h, SkColor c,
+     * int x, int y, int textSize, const char* str)`
+     * (`tools/fonts/FontToolUtils.cpp:267`).
+     *
+     * Allocates an N32-premul raster surface of size [w]×[h], clears it
+     * to transparent, draws [text] in [color] at the portable typeface
+     * at [textSize] anchored at `(x, y)` (text baseline coords), and
+     * snapshots to an [SkImage].
+     *
+     * Previously inlined as `makeStringImage` in `OffsetImageFilterGM`
+     * and similar GM ports — promoted here so future ports of upstream
+     * call sites compile verbatim.
+     */
+    public fun CreateStringImage(
+        w: Int, h: Int, color: SkColor,
+        x: Int, y: Int, textSize: Int, text: String,
+    ): SkImage {
+        require(w > 0 && h > 0) { "CreateStringImage: w/h must be > 0 ; got ($w, $h)" }
+        val surface = SkSurface.MakeRaster(SkImageInfo.MakeN32Premul(w, h))
+        val canvas = surface.canvas
+        canvas.clear(0x00000000)
+        val paint = SkPaint().apply { this.color = color }
+        val font = SkFont(DefaultPortableTypeface(), textSize.toFloat())
+        canvas.drawString(text, x.toFloat(), y.toFloat(), font, paint)
+        return surface.makeImageSnapshot()
     }
 }

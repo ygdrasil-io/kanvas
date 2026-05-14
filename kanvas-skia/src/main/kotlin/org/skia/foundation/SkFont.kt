@@ -1,5 +1,6 @@
 package org.skia.foundation
 
+import org.skia.math.SkPoint
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 
@@ -159,4 +160,116 @@ public class SkFont(
     public fun getSpacing(): SkScalar = getMetrics(SkFontMetrics())
 
     public fun copy(): SkFont = SkFont(this)
+
+    // ───────────────────────── S7-B helpers ──────────────────────────────
+    //
+    // The four entry points below were previously inlined in every
+    // text-bearing GM port (`GlyphPosGM`, `StrokeTextGM`, `TextEffectsGM`,
+    // `UserFontGM`, `DrawGlyphsGM`, …) — the same recipe each time:
+    // `text.codePoints()` → [unicharsToGlyphs] → cumulative widths via
+    // [getWidth]. Promoting them to first-class [SkFont] methods mirrors
+    // upstream Skia's `SkFont::textToGlyphs / getPos / getXPos / getWidths`
+    // (`SkFont.h` ~lines 245-310) and lets the GM ports drop ~6 LOC each.
+
+    /**
+     * Mirrors Skia's
+     * [`int SkFont::textToGlyphs(const void* text, size_t byteLength, SkTextEncoding,
+     *  SkGlyphID glyphs[], int maxGlyphCount)`](https://github.com/google/skia/blob/main/include/core/SkFont.h)
+     * (`SkFont.h` ~line 245), simplified to return a freshly-allocated
+     * `IntArray` for clean Kotlin idiom (callers don't pre-size).
+     *
+     * Walks each Unicode code point in [text] and resolves it to a
+     * font-local glyph ID via the typeface's char-to-glyph map. Code
+     * points absent from the font map to `0` (the upstream `.notdef`
+     * sentinel).
+     *
+     * Only [SkTextEncoding.kUTF8] / [SkTextEncoding.kUTF16] / [SkTextEncoding.kUTF32]
+     * are honoured — [SkTextEncoding.kGlyphID] short-circuits to a no-op
+     * "text already is glyph IDs" passthrough by interpreting [text]'s
+     * UTF-16 char codes as raw glyph IDs (mirrors upstream's
+     * `kGlyphID_SkTextEncoding` shortcut). For our AWT-backed pipeline
+     * the three Unicode encodings collapse to the same `String.codePoints()`
+     * walk because Kotlin `String` is already Unicode internally.
+     *
+     * Returned array length equals the input code-point count (≤
+     * `text.length`, less for surrogate pairs in [SkTextEncoding.kUTF16]).
+     */
+    public fun textToGlyphs(
+        text: String,
+        encoding: SkTextEncoding = SkTextEncoding.kUTF8,
+    ): IntArray {
+        if (text.isEmpty()) return IntArray(0)
+        if (encoding == SkTextEncoding.kGlyphID) {
+            // text's char codes are already glyph IDs — direct copy.
+            return IntArray(text.length) { text[it].code and 0xFFFF }
+        }
+        val codepoints = text.codePoints().toArray()
+        val n = codepoints.size
+        val glyphsShort = ShortArray(n)
+        typeface.unicharsToGlyphsInternal(codepoints, n, glyphsShort)
+        return IntArray(n) { glyphsShort[it].toInt() and 0xFFFF }
+    }
+
+    /**
+     * Mirrors Skia's
+     * [`void SkFont::getPos(const SkGlyphID glyphs[], int count, SkPoint pos[],
+     *  SkPoint origin = {0, 0})`](https://github.com/google/skia/blob/main/include/core/SkFont.h)
+     * (`SkFont.h` ~line 290) — returns a freshly-allocated array for
+     * Kotlin ergonomics rather than the upstream out-param.
+     *
+     * Per-glyph baseline-aligned positions: each glyph's `(x, y)` is
+     * `(origin.x + cumulative-advance, origin.y)` where the cumulative
+     * advance accumulates [getWidth] for each preceding glyph. The
+     * `[i]`th `SkPoint` is the origin for glyph `[i]`.
+     *
+     * Empty input returns an empty array.
+     */
+    public fun getPos(
+        glyphs: IntArray,
+        origin: SkPoint = SkPoint(0f, 0f),
+    ): Array<SkPoint> {
+        if (glyphs.isEmpty()) return emptyArray()
+        val out = Array(glyphs.size) { SkPoint(0f, 0f) }
+        var x = origin.fX
+        for (i in glyphs.indices) {
+            out[i] = SkPoint(x, origin.fY)
+            x += typeface.getGlyphWidthInternal(glyphs[i], size, scaleX, skewX)
+        }
+        return out
+    }
+
+    /**
+     * Mirrors Skia's
+     * [`void SkFont::getXPos(const SkGlyphID glyphs[], int count, SkScalar xpos[],
+     *  SkScalar origin = 0)`](https://github.com/google/skia/blob/main/include/core/SkFont.h)
+     * (`SkFont.h` ~line 297). Cheaper variant of [getPos] when the caller
+     * only needs X coordinates (constant baseline Y).
+     *
+     * Returns `[origin, origin + w0, origin + w0 + w1, …]` of length
+     * `glyphs.size`.
+     */
+    public fun getXPos(glyphs: IntArray, origin: SkScalar = 0f): FloatArray {
+        if (glyphs.isEmpty()) return FloatArray(0)
+        val out = FloatArray(glyphs.size)
+        var x = origin
+        for (i in glyphs.indices) {
+            out[i] = x
+            x += typeface.getGlyphWidthInternal(glyphs[i], size, scaleX, skewX)
+        }
+        return out
+    }
+
+    /**
+     * Mirrors Skia's
+     * [`void SkFont::getWidths(const SkGlyphID glyphs[], int count, SkScalar widths[])`](https://github.com/google/skia/blob/main/include/core/SkFont.h)
+     * (`SkFont.h` ~line 273). Returns a per-glyph advance-width array of
+     * the same length as [glyphs] — cheaper than [getXPos] when the
+     * caller wants per-glyph deltas rather than cumulative origins.
+     */
+    public fun getWidths(glyphs: IntArray): FloatArray {
+        if (glyphs.isEmpty()) return FloatArray(0)
+        return FloatArray(glyphs.size) { i ->
+            typeface.getGlyphWidthInternal(glyphs[i], size, scaleX, skewX)
+        }
+    }
 }
