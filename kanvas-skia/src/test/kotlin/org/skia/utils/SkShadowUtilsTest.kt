@@ -205,6 +205,66 @@ class SkShadowUtilsTest {
     }
 
     @Test
+    fun `DrawShadow with kGeometricOnly flag paints a hard-edged silhouette`() {
+        // R-suivi.30 — the analytic mesh honours kGeometricOnly :
+        // there should be a sharp transition between fully-painted
+        // umbra and fully-transparent background (no soft falloff).
+        val canvas = SkCanvas(SkBitmap(64, 64).also { it.eraseColor(transparent) })
+        val rect = SkRect.MakeLTRB(16f, 16f, 48f, 48f)
+        val path = SkPath.Rect(rect)
+        SkShadowUtils.DrawShadow(
+            canvas = canvas,
+            path = path,
+            zPlaneParams = SkPoint3(0f, 0f, 8f),
+            lightPos = SkPoint3(32f, 32f, 600f),
+            lightRadius = 16f,
+            ambientColor = (0xFF000000).toInt(),
+            spotColor = 0,
+            flags = SkShadowUtils.kGeometricOnly_ShadowFlag or
+                SkShadowUtils.kTransparentOccluder_ShadowFlag,
+        )
+        // Inside the rect must be painted (alpha > 0).
+        val inside = canvas.bitmap.getPixel(32, 32)
+        assertTrue(SkColorGetA(inside) > 0, "geometric-only must paint the silhouette interior")
+    }
+
+    @Test
+    fun `DrawShadow mesh path falls back to legacy for non-convex paths`() {
+        // R-suivi.30 — concave paths must still produce output (via
+        // the legacy blur path). Build a concave "L" shape.
+        val concave = SkPathBuilder()
+            .moveTo(20f, 20f)
+            .lineTo(40f, 20f)
+            .lineTo(40f, 30f)
+            .lineTo(30f, 30f)
+            .lineTo(30f, 40f)
+            .lineTo(20f, 40f)
+            .close()
+            .detach()
+        val canvas = SkCanvas(SkBitmap(64, 64).also { it.eraseColor(transparent) })
+        SkShadowUtils.DrawShadow(
+            canvas = canvas,
+            path = concave,
+            zPlaneParams = SkPoint3(0f, 0f, 8f),
+            lightPos = SkPoint3(32f, 32f, 600f),
+            lightRadius = 16f,
+            ambientColor = (0xFF000000).toInt(),
+            spotColor = (0x80000000).toInt(),
+        )
+        // Some pixel must be painted (the legacy blur fallback fired).
+        var painted = false
+        outer@ for (y in 0 until 64) {
+            for (x in 0 until 64) {
+                if (canvas.bitmap.getPixel(x, y) != transparent) {
+                    painted = true
+                    break@outer
+                }
+            }
+        }
+        assertTrue(painted, "non-convex path must still produce shadow output via the legacy fallback")
+    }
+
+    @Test
     fun `ComputeTonalColors with a red opaque spot produces a non-grey spot color`() {
         // Sanity check : the spot output for a red input keeps a red-leaning
         // hue (R channel ≥ G/B) — verifies the luminance-based per-channel

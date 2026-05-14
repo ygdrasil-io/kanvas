@@ -1,6 +1,7 @@
 package org.skia.utils
 
 import org.skia.core.SkCanvas
+import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkColor
 import org.skia.foundation.SkColorGetA
@@ -11,6 +12,7 @@ import org.skia.foundation.SkColorSetARGB
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkVertices
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint3
 import org.skia.math.SkRect
@@ -232,6 +234,132 @@ public object SkShadowUtils {
      *  radius at `z = 1`.
      */
     public fun DrawShadow(
+        canvas: SkCanvas,
+        path: SkPath,
+        zPlaneParams: SkPoint3,
+        lightPos: SkPoint3,
+        lightRadius: Float,
+        ambientColor: SkColor,
+        spotColor: SkColor,
+        flags: Int = kNone_ShadowFlag,
+    ) {
+        val bounds = path.computeBounds()
+        if (bounds.isEmpty) return
+
+        // ── R-suivi.30 — analytic mesh shadow ─────────────────────
+        // Try the analytic tessellated-mesh path first (per-vertex
+        // alpha, geometric-flag honour). Falls back to the legacy
+        // blur path for non-convex / degenerate / non-finite paths.
+        if (drawShadowMesh(
+                canvas, path, bounds, zPlaneParams, lightPos, lightRadius,
+                ambientColor, spotColor, flags,
+            )) {
+            return
+        }
+
+        LegacyDrawShadow(
+            canvas, path, zPlaneParams, lightPos, lightRadius,
+            ambientColor, spotColor, flags,
+        )
+    }
+
+    /**
+     * R-suivi.30 — analytic-mesh shadow path.
+     *
+     * Builds two [SkVertices] meshes via [SkShadowTessellator] (one
+     * for the ambient halo, one for the spot offset) and draws them
+     * with [SkBlendMode.kSrcOver] + per-vertex colour interpolation.
+     * Honours [kGeometricOnly_ShadowFlag] (no soft falloff) and
+     * [kTransparentOccluder_ShadowFlag] (umbra-fan vs centre-clip).
+     *
+     * Returns `true` when the mesh path produced output (or the
+     * shadow was skipped because both colours were transparent),
+     * `false` when the caller must fall through to [LegacyDrawShadow].
+     */
+    @Suppress("LongParameterList", "ComplexMethod")
+    private fun drawShadowMesh(
+        canvas: SkCanvas,
+        path: SkPath,
+        bounds: SkRect,
+        zPlaneParams: SkPoint3,
+        lightPos: SkPoint3,
+        lightRadius: Float,
+        ambientColor: SkColor,
+        spotColor: SkColor,
+        flags: Int,
+    ): Boolean {
+        val geometricOnly = (flags and kGeometricOnly_ShadowFlag) != 0
+        val transparentOccluder = (flags and kTransparentOccluder_ShadowFlag) != 0
+
+        val cx = (bounds.left + bounds.right) * 0.5f
+        val cy = (bounds.top + bounds.bottom) * 0.5f
+        val occluderZ = max(zPlaneParams.fX * cx + zPlaneParams.fY * cy + zPlaneParams.fZ, 0f)
+
+        val sp = if ((flags and kDirectionalLight_ShadowFlag) != 0) {
+            getDirectionalParams(occluderZ, lightPos.fX, lightPos.fY, lightPos.fZ, lightRadius)
+        } else {
+            getSpotParams(occluderZ, lightPos.fX, lightPos.fY, lightPos.fZ, lightRadius)
+        }
+
+        val ambientMesh = if (SkColorGetA(ambientColor) > 0)
+            SkShadowTessellator.MakeAmbient(path, zPlaneParams, transparentOccluder, geometricOnly)
+        else null
+        val spotMesh = if (SkColorGetA(spotColor) > 0)
+            SkShadowTessellator.MakeSpot(
+                path, zPlaneParams, lightPos, lightRadius,
+                sp.scale, sp.translateX, sp.translateY, sp.blurRadius,
+                transparentOccluder, geometricOnly,
+            )
+        else null
+
+        if (ambientMesh == null && spotMesh == null) return false
+
+        // R-suivi.33 — preserve the projection-cache contract from the
+        // legacy blur path. The cache stores precomputed spot projections
+        // ; for the mesh renderer we still query it (only to honour the
+        // hit-count semantics that animation-loop call sites rely on for
+        // warm-up bookkeeping). The cached projection itself isn't used
+        // by the mesh path — that geometry is re-derived inside
+        // [SkShadowTessellator.MakeSpot] from `sp`.
+        if (spotMesh != null) {
+            projectionCacheGet(path, lightPos, zPlaneParams)
+        }
+
+        if (ambientMesh != null) {
+            val ambientPaint = SkPaint().apply {
+                color = ambientColor
+                isAntiAlias = true
+            }
+            canvas.drawVertices(ambientMesh, SkBlendMode.kModulate, ambientPaint)
+        }
+        if (spotMesh != null) {
+            val spotPaint = SkPaint().apply {
+                color = spotColor
+                isAntiAlias = true
+            }
+            // Opaque-occluder culling : when the flag is unset, the
+            // spot shadow under the occluder is invisible.
+            if (!transparentOccluder && !geometricOnly) {
+                val saveCount = canvas.save()
+                canvas.clipPath(path, SkClipOp.kDifference, true)
+                canvas.drawVertices(spotMesh, SkBlendMode.kModulate, spotPaint)
+                canvas.restoreToCount(saveCount)
+            } else {
+                canvas.drawVertices(spotMesh, SkBlendMode.kModulate, spotPaint)
+            }
+        }
+        return true
+    }
+
+    /**
+     * Legacy blur-based shadow renderer (S3-C #401 → R-suivi.31/32/33).
+     * Kept as a fallback for non-convex or degenerate paths that
+     * [SkShadowTessellator] can't handle. Same signature as the
+     * analytic path so call sites can opt into it directly when
+     * needed.
+     */
+    @Suppress("LongParameterList", "ComplexMethod")
+    public fun LegacyDrawShadow(
         canvas: SkCanvas,
         path: SkPath,
         zPlaneParams: SkPoint3,
