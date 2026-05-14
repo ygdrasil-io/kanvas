@@ -251,6 +251,42 @@ public class SkBitmap(
     @Volatile
     private var eraseColorXformCache: SkColorSpaceXformSteps? = null
 
+    /**
+     * Mirrors Skia's `SkBitmap::eraseArea(const SkIRect&, SkColor)`
+     * ([include/core/SkBitmap.h](https://github.com/google/skia/blob/main/include/core/SkBitmap.h)).
+     *
+     * Fills every pixel of [area] (intersected with the bitmap bounds)
+     * with [color]. The colour is interpreted as a non-premultiplied
+     * sRGB ARGB integer (Skia's [SkColor] convention) and routed
+     * through [setPixel], so the bitmap's [colorType] / [colorSpace]
+     * conversion rules apply uniformly with the per-pixel writer
+     * (i.e. F16 pixels store premul floats, ARGB_4444 quantises to
+     * 4 bits per channel, and so on).
+     *
+     * Out-of-bounds rectangles are clipped silently ; an empty
+     * intersection is a no-op (matches upstream's
+     * `if (area.isEmpty()) return ;` early bail).
+     *
+     * Used in upstream by [`gm/skbug_257.cpp`](https://github.com/google/skia/blob/main/gm/skbug_257.cpp)
+     * (off-diagonal checker quadrants), [`gm/lcdblendmodes.cpp`]
+     * (LCD-text background bands), and a handful of other GMs that
+     * paint a few large solid blocks before the per-glyph rendering
+     * step.
+     */
+    public fun eraseArea(area: SkIRect, color: SkColor) {
+        // Clip to the bitmap's bounds. `intersect` mutates the receiver,
+        // so we work on a fresh copy to avoid surprising the caller —
+        // [SkIRect] is a `data class` so `copy()` is cheap.
+        val clipped = area.copy()
+        if (!clipped.intersect(SkIRect.MakeWH(width, height))) return
+        if (clipped.isEmpty) return
+        for (y in clipped.top until clipped.bottom) {
+            for (x in clipped.left until clipped.right) {
+                setPixel(x, y, color)
+            }
+        }
+    }
+
     public fun getPixel(x: Int, y: Int): SkColor {
         require(x in 0 until width && y in 0 until height) { "($x, $y) outside ${width}x$height" }
         return when (colorType) {
