@@ -4,6 +4,13 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
+| ConicalGradients2ptEdgeMirrorGM | 80.31% | = | 1 | 549,792 / 684,600 | 0, 130, 130, 130 | 0, 32, 21, 12 |
+| ConicalGradients2ptEdgeRepeatGM | 80.27% | = | 1 | 549,525 / 684,600 | 0, 151, 186, 130 | 0, 32, 22, 13 |
+| ConicalGradients2ptInsideDitherGM | 82.34% | = | 1 | 563,724 / 684,600 | 0, 63, 43, 46 | 0, 32, 21, 12 |
+| ConicalGradients2ptInsideMirrorGM | 76.42% | = | 1 | 523,170 / 684,600 | 0, 63, 43, 46 | 0, 30, 20, 12 |
+| ConicalGradients2ptInsideRepeatGM | 76.38% | = | 1 | 522,868 / 684,600 | 0, 63, 43, 46 | 0, 30, 21, 12 |
+| ConicalGradients2ptOutsideMirrorGM | 86.68% | = | 1 | 593,412 / 684,600 | 0, 157, 242, 236 | 0, 41, 48, 46 |
+| ConicalGradients2ptOutsideRepeatGM | 86.94% | = | 1 | 595,202 / 684,600 | 0, 251, 251, 252 | 0, 40, 38, 38 |
 | GiantBitmapClampBilerpRotate | 87.34% | (new) | 4 | 268,294 / 307,200 | 0, 255, 255, 255 | 0, 153, 174, 165 |
 | GiantBitmapClampBilerpScale | 88.13% | (new) | 4 | 270,720 / 307,200 | 0, 255, 255, 255 | 0, 154, 171, 169 |
 | GiantBitmapClampPointRotate | 87.94% | (new) | 4 | 270,161 / 307,200 | 0, 255, 255, 255 | 0, 158, 181, 172 |
@@ -36,13 +43,17 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ScaledTilemodesGM | 93.75% | = | 8 | 726,026 / 774,400 | 0, 187, 187, 187 | 0, 15, 9, 18 |
 | ShaderText3GM | 84.92% | (new) | 8 | 647,632 / 762,600 | 0, 217, 224, 217 | 0, 18, 28, 25 |
 | SharedCornersGM | 96.54% | (new) | 4 | 700,098 / 725,200 | 0, 99, 84, 28 | 0, 18, 15, 5 |
+| SimpleAaclipPathGM | 98.99% | = | 1 | 118,788 / 120,000 | 0, 161, 161, 161 | 0, 53, 52, 52 |
+| SimpleAaclipRectGM | 99.00% | = | 1 | 118,797 / 120,000 | 0, 197, 161, 161 | 0, 59, 54, 53 |
 | Skbug257GM | 93.72% | (new) | 8 | 245,694 / 262,144 | 0, 255, 255, 255 | 0, 239, 238, 239 |
 | SrcModeGM | 88.42% | = | 1 | 430,093 / 486,400 | 0, 255, 255, 255 | 0, 60, 64, 62 |
 | StrokeRectGM | 93.64% | = | 1 | 970,100 / 1,036,000 | 0, 131, 196, 237 | 0, 41, 52, 57 |
 | TableColorFilterGM | 59.61% | = | 8 | 688,471 / 1,155,000 | 0, 127, 128, 157 | 0, 33, 16, 25 |
+| TallStretchedBitmapsGM | 87.95% | = | 1 | 443,002 / 503,700 | 0, 251, 253, 248 | 0, 11, 12, 12 |
 | TextEffectsGM | 96.77% | (new) | 8 | 1,976,471 / 2,042,400 | 0, 255, 255, 255 | 0, 73, 74, 74 |
 | TileImageFilterGM | 79.54% | (new) | 8 | 63,628 / 80,000 | 0, 202, 186, 150 | 0, 101, 125, 54 |
 | TilemodesGM | 98.95% | = | 8 | 487,618 / 492,800 | 0, 185, 185, 185 | 0, 36, 34, 37 |
 | VeryLargeBitmapGM | 94.15% | (new) | 4 | 282,459 / 300,000 | 0, 7, 11, 11 | 0, 3, 4, 3 |
+| XfermodeImageFilterGM | 82.53% | = | 1 | 346,628 / 420,000 | 0, 207, 197, 207 | 0, 40, 53, 63 |
 | Xfermodes2GM | 52.09% | = | 8 | 112,586 / 216,125 | 0, 188, 187, 187 | 0, 31, 21, 7 |
 | Xfermodes3GM | 94.54% | = | 8 | 723,640 / 765,450 | 0, 121, 165, 175 | 0, 35, 41, 47 |

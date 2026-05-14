@@ -33,4 +33,34 @@ class ConicalGradients2ptTest {
     @Test
     fun `gradients_2pt_conical_inside_nodither matches reference`() =
         runGm(ConicalGradients2ptInsideGM(), "ConicalGradients2ptInsideGM", 75.0)
+
+    // ─── Tile-mode variants added in H3 wave 10B ────────────────────
+
+    @Test
+    fun `gradients_2pt_conical_inside matches reference`() =
+        runGm(ConicalGradients2ptInsideDitherGM(), "ConicalGradients2ptInsideDitherGM", 82.2)
+
+    @Test
+    fun `gradients_2pt_conical_inside_repeat matches reference`() =
+        runGm(ConicalGradients2ptInsideRepeatGM(), "ConicalGradients2ptInsideRepeatGM", 76.2)
+
+    @Test
+    fun `gradients_2pt_conical_inside_mirror matches reference`() =
+        runGm(ConicalGradients2ptInsideMirrorGM(), "ConicalGradients2ptInsideMirrorGM", 76.3)
+
+    @Test
+    fun `gradients_2pt_conical_outside_repeat matches reference`() =
+        runGm(ConicalGradients2ptOutsideRepeatGM(), "ConicalGradients2ptOutsideRepeatGM", 86.8)
+
+    @Test
+    fun `gradients_2pt_conical_outside_mirror matches reference`() =
+        runGm(ConicalGradients2ptOutsideMirrorGM(), "ConicalGradients2ptOutsideMirrorGM", 86.5)
+
+    @Test
+    fun `gradients_2pt_conical_edge_repeat matches reference`() =
+        runGm(ConicalGradients2ptEdgeRepeatGM(), "ConicalGradients2ptEdgeRepeatGM", 80.1)
+
+    @Test
+    fun `gradients_2pt_conical_edge_mirror matches reference`() =
+        runGm(ConicalGradients2ptEdgeMirrorGM(), "ConicalGradients2ptEdgeMirrorGM", 80.2)
 }
