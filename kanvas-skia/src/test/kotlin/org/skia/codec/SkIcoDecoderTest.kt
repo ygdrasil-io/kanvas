@@ -8,11 +8,11 @@ import org.skia.foundation.SkData
 import java.io.ByteArrayInputStream
 
 /**
- * R3.10 verification suite for [SkIcoDecoder] — the [SkIcoDecoder.IsIco]
- * sniff must match the 6-byte ICONDIR header for both ICO (type=1) and
- * CUR (type=2) variants and reject other byte streams.
- * [SkIcoDecoder.Decode] is a stub : every overload returns `null` until
- * the multi-image ICO parser lands (R-suivi.28).
+ * R3.10 + S7-A verification suite for [SkIcoDecoder] — the
+ * [SkIcoDecoder.IsIco] sniff must match the 6-byte ICONDIR header for
+ * both ICO (type=1) and CUR (type=2) variants and reject other byte
+ * streams. [SkIcoDecoder.Decode] returns `null` for malformed inputs ;
+ * the real-decode path is exercised by [SkIcoDecoderRealTest].
  */
 class SkIcoDecoderTest {
 
@@ -70,11 +70,14 @@ class SkIcoDecoderTest {
     }
 
     @Test
-    fun `Decode is stubbed to null for every overload`() {
-        val bytes = icoHeader(count = 1)
-        assertNull(SkIcoDecoder.Decode(bytes))
-        assertNull(SkIcoDecoder.Decode(SkData.MakeWithCopy(bytes)))
-        assertNull(SkIcoDecoder.Decode(ByteArrayInputStream(bytes)))
+    fun `Decode returns null for malformed inputs`() {
+        // Header-only ICO (no directory entries actually present) — the
+        // sniff passes (`count >= 1`) but the directory walk fails.
+        val headerOnly = icoHeader(count = 1)
+        assertNull(SkIcoDecoder.Decode(headerOnly))
+        // Also fails for non-ICO byte streams.
         assertNull(SkIcoDecoder.Decode("garbage".toByteArray()))
+        assertNull(SkIcoDecoder.Decode(ByteArrayInputStream("garbage".toByteArray())))
+        assertNull(SkIcoDecoder.Decode(SkData.MakeWithCopy("garbage".toByteArray())))
     }
 }

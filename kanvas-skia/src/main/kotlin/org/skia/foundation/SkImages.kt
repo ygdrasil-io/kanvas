@@ -1,6 +1,10 @@
 package org.skia.foundation
 
 import org.skia.codec.SkCodec
+import org.skia.core.SkCanvas
+import org.skia.core.SkPicture
+import org.skia.math.SkISize
+import org.skia.math.SkMatrix
 import java.nio.ByteBuffer
 
 /**
@@ -246,5 +250,88 @@ public object SkImages {
         if (!pixmaps.isValid()) return null
         val rgba = pixmaps.toRGBA8888()
         return RasterFromBitmap(rgba)
+    }
+
+    /**
+     * Mirrors Skia's `SkImage::BitDepth` enum
+     * ([include/core/SkImage.h](https://github.com/google/skia/blob/main/include/core/SkImage.h)).
+     * Selects the per-channel storage of [DeferredFromPicture]'s
+     * backing surface — 8-bit unsigned ([kU8]) or 16-bit half-float
+     * ([kF16]).
+     */
+    public enum class BitDepth { kU8, kF16 }
+
+    /**
+     * Mirrors Skia's
+     * `SkImages::DeferredFromPicture(picture, dimensions, matrix,
+     * paint, bitDepth, colorSpace, props)`
+     * ([include/core/SkImage.h](https://github.com/google/skia/blob/main/include/core/SkImage.h)).
+     *
+     * Materialises [picture] into a fresh raster [SkImage] sized to
+     * [dimensions], with optional [matrix] / [paint] applied to the
+     * playback canvas. The bitmap is allocated in the colour type
+     * implied by [bitDepth] ([SkColorType.kRGBA_8888] for [BitDepth.kU8]
+     * or [SkColorType.kRGBA_F16Norm] for [BitDepth.kF16]) and tagged
+     * with [colorSpace] (defaulting to sRGB when omitted, matching
+     * upstream's `colorSpace == nullptr` fall-back).
+     *
+     * **Deferred → eager** : despite the name, the kanvas-skia raster
+     * backend rasterises immediately into the backing bitmap — there
+     * is no on-demand-render-on-draw path. The trade-off matches the
+     * other `Deferred*` factories ([DeferredFromEncodedData],
+     * [DeferredFromGenerator]).
+     *
+     * **Surface-properties divergence** : Skia upstream takes an
+     * `SkSurfaceProps` arg controlling LCD-text geometry / pixel
+     * geometry. The kanvas-skia raster backend has no equivalent
+     * surface-prop knob (LCD subpixel rendering downgrades to plain
+     * AA — see [`org.skia.foundation.SkFont`]), so the parameter is
+     * not exposed here. A future R-suivi entry can wire it up if a
+     * GM ever needs distinct LCD geometry per deferred-picture image.
+     *
+     * Returns `null` when [dimensions] is empty (`width <= 0` or
+     * `height <= 0`).
+     */
+    public fun DeferredFromPicture(
+        picture: SkPicture,
+        dimensions: SkISize,
+        matrix: SkMatrix? = null,
+        paint: SkPaint? = null,
+        bitDepth: BitDepth = BitDepth.kU8,
+        colorSpace: SkColorSpace = SkColorSpace.makeSRGB(),
+    ): SkImage? {
+        if (dimensions.width <= 0 || dimensions.height <= 0) return null
+        val colorType = when (bitDepth) {
+            BitDepth.kU8 -> SkColorType.kRGBA_8888
+            BitDepth.kF16 -> SkColorType.kRGBA_F16Norm
+        }
+        val bitmap = SkBitmap(
+            width = dimensions.width,
+            height = dimensions.height,
+            colorSpace = colorSpace,
+            colorType = colorType,
+        )
+        val canvas = SkCanvas(bitmap)
+        // Wipe the snapshot to fully transparent so the picture's own
+        // alpha is preserved (matches `SkPicture.makeShader`).
+        canvas.clear(SK_ColorTRANSPARENT)
+        // Apply the optional [matrix] before [paint] : upstream uses
+        // an `SkPaint` saveLayer for the [paint] arg (so its filters /
+        // colour filter wrap the playback) and prepends [matrix] to
+        // the canvas. Without a real saveLayer-with-paint hook into
+        // the canvas surface we emulate via `saveLayer(null, paint)`
+        // — this matches the upstream contract for the common case
+        // where [paint] only carries a colour-filter / image-filter
+        // (the GMs that would call DeferredFromPicture today, e.g.
+        // PictureImageFilterGM, do not pass a paint).
+        if (matrix != null) canvas.concat(matrix)
+        if (paint != null) {
+            canvas.saveLayer(null, paint)
+            picture.playback(canvas)
+            canvas.restore()
+        } else {
+            picture.playback(canvas)
+        }
+        return SkImage.Make(bitmap)
     }
 }
