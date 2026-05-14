@@ -87,9 +87,32 @@ public object SkPDF {
          * the user and owner password for the V=4 R=4 standard
          * security handler — split owner/user passwords are a
          * follow-up.
+         *
+         * Cipher strength is selected via [encryptionStrength].
          */
         val encryptionPassword: String? = null,
+        /**
+         * S7-C — when [encryptionPassword] is non-`null`, picks
+         * between AES-128 (V=4 R=4 — default, matches R-suivi.40) and
+         * AES-256 (V=5 R=5 — adds SHA-256-based key derivation +
+         * 32-byte file key). No effect when [encryptionPassword] is
+         * `null` (no encryption).
+         */
+        val encryptionStrength: EncryptionStrength = EncryptionStrength.kAES128,
     )
+
+    /**
+     * S7-C — AES cipher strength selector for [Metadata.encryptionStrength].
+     * Mirrors upstream's `SkPDF::Metadata::EncryptionStrength` enum
+     * (V=4 R=4 = AES-128, V=5 R=5 = AES-256 per ISO 32000-1 7.6.4).
+     */
+    public enum class EncryptionStrength {
+        /** V=4 R=4 — 128-bit AES key, MD5-based key derivation. */
+        kAES128,
+
+        /** V=5 R=5 — 256-bit AES key, SHA-256-based key derivation. */
+        kAES256,
+    }
 
     /**
      * Create a PDF-backed document writing into [stream]. The stream
@@ -554,10 +577,15 @@ internal class PdfDocument(
         val fileIdHex = computeFileId()
         val fileIdBytes = hexDecode(fileIdHex)
 
-        // 4) Set up the AES-128 file encryption key, if requested.
-        val aes: PdfAes128? = encryptId?.let { _ ->
+        // 4) Set up the AES file encryption key, if requested. Picks
+        //    AES-128 (V=4 R=4) or AES-256 (V=5 R=5) per
+        //    [SkPDF.Metadata.encryptionStrength].
+        val aes: PdfEncryption? = encryptId?.let { _ ->
             val pwd = metadata.encryptionPassword!!
-            PdfAes128.create(pwd, fileIdBytes)
+            when (metadata.encryptionStrength) {
+                SkPDF.EncryptionStrength.kAES128 -> PdfAes128.create(pwd, fileIdBytes)
+                SkPDF.EncryptionStrength.kAES256 -> PdfAes256.create(pwd, fileIdBytes)
+            }
         }
 
         // 5) Body objects (in id order — they were appended in id order
@@ -621,7 +649,7 @@ internal class PdfDocument(
      * into the dictionary on the fly so [encodeImageXObject] /
      * [onEndPage] can stay agnostic to compression / encryption.
      */
-    private fun writeIndirectObject(obj: IndirectObject, aes: PdfAes128?) {
+    private fun writeIndirectObject(obj: IndirectObject, aes: PdfEncryption?) {
         val payload = obj.streamPayload
         if (payload == null) {
             writeBytes(obj.bodyBytes)
@@ -731,19 +759,28 @@ internal class PdfDocument(
     }
 
     /**
-     * Build the standard-security `/Encrypt` dict for AES-128 (V=4 R=4).
-     * Carries the AES `/CFM` selector under the named crypt filter
-     * `/StdCF`, and binds it to both streams (`/StmF`) and strings
-     * (`/StrF`). Permission flags are `-4` (everything allowed) for
-     * the minimal backend ; finer-grained perms are a follow-up.
+     * Build the standard-security `/Encrypt` dict. Routes to the
+     * AES-128 (V=4 R=4) or AES-256 (V=5 R=5) layout per the encryption
+     * handler's [PdfEncryption.encryptDictParams]. Both layouts bind
+     * the cipher to streams (`/StmF`) and strings (`/StrF`) under the
+     * named filter `/StdCF` and emit `-4` permission flags
+     * (everything allowed) — finer-grained perms are a follow-up.
      */
-    private fun buildEncryptDict(aes: PdfAes128): String {
-        return "<</Filter /Standard /V 4 /R 4 /Length 128 " +
-            "/CF <</StdCF <</CFM /AESV2 /Length 16 /AuthEvent /DocOpen>>>> " +
-            "/StmF /StdCF /StrF /StdCF " +
-            "/O <${aes.oEntryHex}> " +
-            "/U <${aes.uEntryHex}> " +
-            "/P -4>>"
+    private fun buildEncryptDict(aes: PdfEncryption): String {
+        val p = aes.encryptDictParams()
+        val sb = StringBuilder()
+        sb.append("<</Filter /Standard /V ").append(p.v).append(" /R ").append(p.r)
+            .append(" /Length ").append(p.lengthBits).append(' ')
+            .append("/CF <</StdCF <</CFM /").append(p.cfm).append(" /Length ").append(p.cfLength)
+            .append(" /AuthEvent /DocOpen>>>> ")
+            .append("/StmF /StdCF /StrF /StdCF ")
+            .append("/O <").append(p.oEntryHex).append("> ")
+            .append("/U <").append(p.uEntryHex).append(">")
+        if (p.oeEntryHex != null) sb.append(" /OE <").append(p.oeEntryHex).append('>')
+        if (p.ueEntryHex != null) sb.append(" /UE <").append(p.ueEntryHex).append('>')
+        if (p.permsEntryHex != null) sb.append(" /Perms <").append(p.permsEntryHex).append('>')
+        sb.append(" /P -4>>")
+        return sb.toString()
     }
 
     override fun onAbort() {
@@ -1070,6 +1107,37 @@ internal class PdfDocument(
     }
 }
 
+// ── PDF AES standard-security helpers ─────────────────────────────────────
+
+/**
+ * Common contract for the PDF Standard Security Handler implementations.
+ * Both [PdfAes128] (V=4 R=4) and [PdfAes256] (V=5 R=5) implement this so
+ * the writer ([PdfDocument.onClose] / [PdfDocument.writeIndirectObject])
+ * can stay handler-agnostic.
+ */
+internal interface PdfEncryption {
+    /** Encrypt [data] for the indirect object with id [objNum]. */
+    fun encryptObject(data: ByteArray, objNum: Int): ByteArray
+
+    /** Parameters used to render the PDF `/Encrypt` dictionary. */
+    fun encryptDictParams(): EncryptDictParams
+
+    /** Field bag describing one Encrypt-dict layout. */
+    data class EncryptDictParams(
+        val v: Int,
+        val r: Int,
+        val lengthBits: Int,
+        val cfm: String,
+        val cfLength: Int,
+        val oEntryHex: String,
+        val uEntryHex: String,
+        // V=5 only — AES-256 carries OE / UE / Perms in the dict.
+        val oeEntryHex: String? = null,
+        val ueEntryHex: String? = null,
+        val permsEntryHex: String? = null,
+    )
+}
+
 // ── R-suivi.40 — PDF AES-128 standard-security helpers ────────────────────
 
 /** Lower-case hex of a byte array (no separators). */
@@ -1121,7 +1189,15 @@ internal class PdfAes128 private constructor(
     private val fileKey: ByteArray,
     val oEntryHex: String,
     val uEntryHex: String,
-) {
+) : PdfEncryption {
+
+    override fun encryptDictParams(): PdfEncryption.EncryptDictParams =
+        PdfEncryption.EncryptDictParams(
+            v = 4, r = 4, lengthBits = 128,
+            cfm = "AESV2", cfLength = 16,
+            oEntryHex = oEntryHex, uEntryHex = uEntryHex,
+        )
+
     companion object {
         private val PWD_PAD = byteArrayOf(
             0x28, 0xBF.toByte(), 0x4E, 0x5E, 0x4E, 0x75, 0x8A.toByte(), 0x41,
@@ -1197,7 +1273,7 @@ internal class PdfAes128 private constructor(
      * from `objNum` + the first 4 bytes of [data] so test snapshots
      * stay reproducible across runs.
      */
-    fun encryptObject(data: ByteArray, objNum: Int): ByteArray {
+    override fun encryptObject(data: ByteArray, objNum: Int): ByteArray {
         val key = perObjectKey(objNum)
         val iv = ByteArray(16)
         // Deterministic IV : MD5 of (objNum || data prefix). Cheap to
