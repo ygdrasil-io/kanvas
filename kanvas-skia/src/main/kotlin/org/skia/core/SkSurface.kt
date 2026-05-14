@@ -8,6 +8,7 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkSurfaceProps
 
 /**
  * Mirrors Skia's
@@ -39,7 +40,28 @@ import org.skia.foundation.SkSamplingOptions
 public abstract class SkSurface protected constructor(
     public val width: Int,
     public val height: Int,
+    /**
+     * Surface-level pixel-geometry / behaviour hints. Mirrors upstream's
+     * `SkSurfaceProps* fProps` member ; `null` (the default) is the
+     * upstream "no opinion" sentinel and collapses LCD-text rendering
+     * to greyscale (see [SkSurfaceProps] for the bigger picture).
+     *
+     * Inherited by sub-surfaces created via
+     * [org.skia.core.SkCanvas.makeSurface] when the caller doesn't
+     * pass their own override.
+     */
+    private val _surfaceProps: SkSurfaceProps? = null,
 ) {
+
+    /**
+     * Mirrors Skia's `SkSurface::props()` — returns this surface's
+     * pixel geometry / behaviour hints, or a default-constructed
+     * [SkSurfaceProps] (`flags = 0`, `pixelGeometry = kUnknown`) when
+     * the surface was created without an explicit props value. The
+     * default matches upstream's `SkSurface::props()` zero-fill
+     * fallback for surfaces that pre-date the props plumbing.
+     */
+    public fun props(): SkSurfaceProps = _surfaceProps ?: SkSurfaceProps()
     /**
      * The canvas that draws into this surface. Every call returns the
      * same [SkCanvas] instance (Skia's contract — clients may cache it
@@ -99,14 +121,16 @@ public abstract class SkSurface protected constructor(
         /**
          * Allocate a raster surface with a freshly created backing
          * [SkBitmap] sized and configured per [info]. The bitmap is
-         * zero-initialised.
+         * zero-initialised. When [props] is non-null its
+         * [SkSurfaceProps.pixelGeometry] / [SkSurfaceProps.flags]
+         * round-trip via [SkSurface.props].
          *
-         * Mirrors Skia's `SkSurface::MakeRaster(info)`.
+         * Mirrors Skia's `SkSurface::MakeRaster(info, props?)`.
          */
-        public fun MakeRaster(info: SkImageInfo): SkSurface {
+        public fun MakeRaster(info: SkImageInfo, props: SkSurfaceProps? = null): SkSurface {
             require(!info.isEmpty()) { "MakeRaster: empty info $info" }
             val bitmap = SkBitmap(info.width, info.height, info.colorSpace, info.colorType)
-            return RasterSurface(info, bitmap)
+            return RasterSurface(info, bitmap, props)
         }
 
         /**
@@ -130,7 +154,7 @@ public abstract class SkSurface protected constructor(
          * Mirrors Skia's `SkSurface::MakeRasterDirect(info, pixels,
          * rowBytes)` collapsed onto our [SkBitmap] type.
          */
-        public fun MakeRasterDirect(bitmap: SkBitmap): SkSurface {
+        public fun MakeRasterDirect(bitmap: SkBitmap, props: SkSurfaceProps? = null): SkSurface {
             val info = SkImageInfo.Make(
                 bitmap.width,
                 bitmap.height,
@@ -138,7 +162,7 @@ public abstract class SkSurface protected constructor(
                 inferAlphaType(bitmap.colorType),
                 bitmap.colorSpace,
             )
-            return RasterSurface(info, bitmap)
+            return RasterSurface(info, bitmap, props)
         }
 
         private fun inferAlphaType(ct: SkColorType): SkAlphaType = when (ct) {
@@ -156,8 +180,9 @@ public abstract class SkSurface protected constructor(
 private class RasterSurface(
     private val info: SkImageInfo,
     private val bitmap: SkBitmap,
-) : SkSurface(info.width, info.height) {
-    private val cachedCanvas: SkCanvas = SkCanvas(bitmap)
+    props: SkSurfaceProps? = null,
+) : SkSurface(info.width, info.height, props) {
+    private val cachedCanvas: SkCanvas = SkCanvas(bitmap, props)
 
     override val canvas: SkCanvas get() = cachedCanvas
 
