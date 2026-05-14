@@ -37,6 +37,7 @@ public sealed class ConicalGradients2ptVariantGM(
     private val gmName: String,
     private val makers: List<(Array<SkPoint>, ConicalGrad2ptData, SkTileMode, SkMatrix) -> SkShader?>,
     private val dither: Boolean,
+    private val tileMode: SkTileMode = SkTileMode.kClamp,
 ) : GM() {
 
     override fun getName(): String = gmName
@@ -59,7 +60,7 @@ public sealed class ConicalGradients2ptVariantGM(
                 } else {
                     SkMatrix.Identity
                 }
-                val shader = makers[j](pts, gConicalGrad2ptData[i], SkTileMode.kClamp, localMatrix)
+                val shader = makers[j](pts, gConicalGrad2ptData[i], tileMode, localMatrix)
                 if (shader != null) {
                     val paint = SkPaint().apply {
                         isAntiAlias = true
@@ -213,8 +214,6 @@ public sealed class ConicalGradients2ptVariantGM(
         // ─── Shared data ────────────────────────────────────────────
 
         private fun midpoint(a: Float, b: Float): Float = (a + b) * 0.5f
-
-        protected data class ConicalGrad2ptData(val colors: IntArray, val positions: FloatArray)
 
         @JvmStatic
         protected val gColorsBasic: IntArray = intArrayOf(
