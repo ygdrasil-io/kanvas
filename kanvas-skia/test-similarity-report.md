@@ -4,5 +4,5 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
-| __TestToolingFixtureAlpha | 87.50% | +1.30% | - | - | - | - |
-| __TestToolingFixtureBeta | 99.42% | +0.12% | 32 | 9,942 / 10,000 | 0, 12, 5, 7 | 0, 4, 2, 3 |
+| composeshader_bitmap | 53.83% | (new) | 16 | 4,710 / 8,750 | 0, 211, 240, 179 | 0, 59, 56, 24 |
+| composeshader_bitmap_lm | 53.83% | (new) | 16 | 4,710 / 8,750 | 0, 211, 240, 179 | 0, 59, 56, 24 |
