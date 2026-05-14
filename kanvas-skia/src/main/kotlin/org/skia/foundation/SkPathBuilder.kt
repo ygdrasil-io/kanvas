@@ -912,6 +912,40 @@ public class SkPathBuilder public constructor() {
         return path
     }
 
+    /**
+     * **Conservative axis-aligned bounding box** over every stored
+     * point (control points included) — same control-point-walk
+     * convention as [SkPath.computeBounds]. Mirrors Skia's
+     * `SkPathBuilder::computeBounds`
+     * ([include/core/SkPathBuilder.h](https://github.com/google/skia/blob/main/include/core/SkPathBuilder.h)).
+     *
+     * Walks the builder's coord buffer once without allocating a
+     * snapshot path — saves a verb-array clone + coords-clone +
+     * conic-weights-clone over the previous workaround
+     * (`builder.snapshot().computeBounds()` used by `SharedCorners`).
+     *
+     * Empty builder → an empty rect at the origin (matches
+     * [SkPath.computeBounds] / `SkRect::MakeEmpty()`).
+     */
+    public fun computeBounds(): SkRect {
+        if (coords.isEmpty()) return SkRect.MakeLTRB(0f, 0f, 0f, 0f)
+        var minX = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        var i = 0
+        val n = coords.size
+        while (i < n) {
+            val x = coords[i]; val y = coords[i + 1]
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+            i += 2
+        }
+        return SkRect.MakeLTRB(minX, minY, maxX, maxY)
+    }
+
     /** Return a copy of the current accumulated path without resetting. */
     public fun snapshot(): SkPath = SkPath(
         verbs = verbs.toTypedArray(),
