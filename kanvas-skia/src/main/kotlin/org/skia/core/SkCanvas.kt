@@ -17,6 +17,7 @@ import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathDirection
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkTextEncoding
 import org.skia.math.SkIRect
 import org.skia.math.SkM44
@@ -46,9 +47,47 @@ import kotlin.math.floor as kFloor
  * [drawPath] (4-vertex polygon). The fast path through [SkBitmapDevice.drawRect]
  * stays for axis-aligned matrices, which covers every Phase 0–3 GM.
  */
-public open class SkCanvas(rootDevice: SkBitmapDevice) {
+public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfaceProps? = null) {
 
-    public constructor(bitmap: SkBitmap) : this(SkBitmapDevice(bitmap))
+    public constructor(bitmap: SkBitmap) : this(SkBitmapDevice(bitmap), null)
+    public constructor(bitmap: SkBitmap, surfaceProps: SkSurfaceProps?) : this(SkBitmapDevice(bitmap), surfaceProps)
+
+    /**
+     * Captured at construction time — the [SkSurface]'s pixel-geometry /
+     * behaviour hints, inherited by sub-surfaces created via
+     * [makeSurface] when the caller doesn't pass their own override.
+     * `null` here means "no opinion" and matches upstream's
+     * `nullptr fProps` sentinel ; [surfaceProps] returns a
+     * default-constructed [SkSurfaceProps] in that case.
+     */
+    private val _surfaceProps: SkSurfaceProps? = surfaceProps
+
+    /**
+     * Mirrors Skia's `SkCanvas::getProps()` — returns this canvas's
+     * (parent surface's) pixel-geometry / behaviour hints, defaulted
+     * to a zero-fill [SkSurfaceProps] when the canvas was constructed
+     * without an explicit value (matches upstream's
+     * `if (!fProps) return SkSurfaceProps()` fallback).
+     */
+    public open fun surfaceProps(): SkSurfaceProps = _surfaceProps ?: SkSurfaceProps()
+
+    /**
+     * Mirrors Skia's
+     * [`SkCanvas::makeSurface`](https://github.com/google/skia/blob/main/include/core/SkCanvas.h#L295)
+     * — return a new raster surface "compatible with this canvas"
+     * (matching colour type / colour space, inheriting the canvas's
+     * [SkSurfaceProps] when [props] is `null`). Used by GMs like
+     * `Xfermodes3GM` and `hdr_pip_blur` to spin up an off-screen pad
+     * the same shape and colour profile as their main canvas, blit a
+     * filtered draw into it, then composite back.
+     *
+     * Returns `null` when [info] is empty — matches Skia's validity
+     * contract on `SkSurface::makeSurface`.
+     */
+    public open fun makeSurface(info: org.skia.foundation.SkImageInfo, props: SkSurfaceProps? = null): SkSurface? {
+        if (info.isEmpty()) return null
+        return org.skia.foundation.SkSurfaces.Raster(info, rowBytes = 0, props = props ?: this.surfaceProps())
+    }
 
     /** The root (backing) device. Layers push their own devices on the stack. */
     public val device: SkBitmapDevice = rootDevice
@@ -2225,14 +2264,33 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
      * [`SkCanvas::drawImageLattice`](https://github.com/google/skia/blob/main/include/core/SkCanvas.h)
      * — render [image] partitioned by [lattice] to fit inside [dst].
      *
-     * **R-suivi.50 minimal default** : the full N × M lattice
-     * tessellation is deferred ; the default implementation
-     * degenerates to a plain [drawImageRect] over the entire [dst]
-     * with [filterMode]. This loses fixed-corner / non-stretch
-     * behaviour but keeps the API surface present so subclasses
-     * can override and do the right thing (e.g. recording sinks
-     * capture the lattice verbatim ; the future raster lattice
-     * impl will tessellate here).
+     * **S7-C N × M tessellation** : reads `lattice.xDivs` /
+     * `lattice.yDivs` to slice the source image into
+     * `(N+1) × (M+1)` rectangles. Slices whose row + column indices are
+     * both **even** are *fixed* (corner-like — they keep their source
+     * pixel size). Every other slice **stretches** to fill the
+     * remaining destination space — matches upstream
+     * `src/core/SkCanvas.cpp::onDrawImageLattice` + `SkLatticeIter`.
+     *
+     * The total fixed width along x = sum of source widths of
+     * fixed-x slices. The remaining `dst.width - totalFixedX` is
+     * distributed between the stretchable x-slices, each receiving
+     * `flexW × (slice.srcWidth / totalFlexX_src)`. Same calculation
+     * along y. When `dst` is too small to fit the corner sum the
+     * remainder collapses to zero (slices degenerate to zero-width)
+     * — matches upstream's "shrink corners" behaviour.
+     *
+     * Per-slice [SkLattice.RectType] is honoured :
+     *
+     *  - `kDefault` → `drawImageRect(src, dst)` with [filterMode].
+     *  - `kTransparent` → skip the slice (destination untouched).
+     *  - `kFixedColor` → fill the destination rect with the matching
+     *    [SkLattice.colors] entry under SrcOver.
+     *
+     * Falls back to a plain [drawImageRect] over the full destination
+     * when the lattice is degenerate (no divs, mismatched arrays,
+     * out-of-bounds divs) — matches upstream's
+     * `SkLatticeIter::Valid` reject path.
      */
     public open fun drawImageLattice(
         image: SkImage,
@@ -2241,19 +2299,154 @@ public open class SkCanvas(rootDevice: SkBitmapDevice) {
         filterMode: SkFilterMode = SkFilterMode.kNearest,
         paint: SkPaint? = null,
     ) {
-        // Suppress the unused-parameter warning while the full
-        // tessellation lands : the lattice descriptor is held by
-        // the recording-canvas override, which captures it intact.
-        @Suppress("UNUSED_VARIABLE")
-        val _lattice = lattice
-        drawImageRect(
-            image,
-            SkRect.MakeWH(image.width.toFloat(), image.height.toFloat()),
-            dst,
-            SkSamplingOptions(filterMode),
-            paint,
-            SrcRectConstraint.kStrict,
-        )
+        val srcBounds = lattice.bounds ?: SkIRect.MakeWH(image.width, image.height)
+        val srcL = srcBounds.left.toFloat()
+        val srcT = srcBounds.top.toFloat()
+        val srcR = srcBounds.right.toFloat()
+        val srcB = srcBounds.bottom.toFloat()
+        val srcW = srcR - srcL
+        val srcH = srcB - srcT
+        if (srcW <= 0f || srcH <= 0f || dst.isEmpty) return
+
+        // Reject divs that fall outside the source rect — matches upstream's
+        // SkLatticeIter::Valid rejection. Empty divs is fine — the lattice
+        // collapses to a single 1×1 grid (the whole source).
+        val xDivsValid = lattice.xDivs.all { it > srcL.toInt() && it < srcR.toInt() } &&
+            isStrictlyIncreasing(lattice.xDivs)
+        val yDivsValid = lattice.yDivs.all { it > srcT.toInt() && it < srcB.toInt() } &&
+            isStrictlyIncreasing(lattice.yDivs)
+        if (!xDivsValid || !yDivsValid) {
+            drawImageRect(
+                image,
+                SkRect.MakeLTRB(srcL, srcT, srcR, srcB),
+                dst,
+                SkSamplingOptions(filterMode),
+                paint,
+                SrcRectConstraint.kStrict,
+            )
+            return
+        }
+
+        // Build (N+1) and (M+1) source-side slice positions.
+        val xs = IntArray(lattice.xDivs.size + 2)
+        xs[0] = srcL.toInt()
+        for (i in lattice.xDivs.indices) xs[i + 1] = lattice.xDivs[i]
+        xs[xs.size - 1] = srcR.toInt()
+        val ys = IntArray(lattice.yDivs.size + 2)
+        ys[0] = srcT.toInt()
+        for (i in lattice.yDivs.indices) ys[i + 1] = lattice.yDivs[i]
+        ys[ys.size - 1] = srcB.toInt()
+
+        val nCols = xs.size - 1
+        val nRows = ys.size - 1
+        val expectedCells = nCols * nRows
+        val rectTypes = lattice.rectTypes
+        val colors = lattice.colors
+        if (rectTypes != null && rectTypes.size != expectedCells) {
+            // Mis-sized rectTypes — degenerate fallback (matches upstream
+            // SkLatticeIter::Valid reject).
+            drawImageRect(
+                image,
+                SkRect.MakeLTRB(srcL, srcT, srcR, srcB),
+                dst,
+                SkSamplingOptions(filterMode),
+                paint,
+                SrcRectConstraint.kStrict,
+            )
+            return
+        }
+
+        // Compute the destination slice positions.
+        // Even-indexed slices are fixed (corner-like) ; odd-indexed
+        // slices stretch. Per upstream : slice index `i` is fixed iff
+        // `i` is even (0, 2, 4 …) for both axes.
+        val dstXs = computeDstSlicePositions(xs, dst.left, dst.right)
+        val dstYs = computeDstSlicePositions(ys, dst.top, dst.bottom)
+
+        // Walk the (M+1) × (N+1) cells.
+        for (row in 0 until nRows) {
+            val sy0 = ys[row].toFloat()
+            val sy1 = ys[row + 1].toFloat()
+            val dy0 = dstYs[row]
+            val dy1 = dstYs[row + 1]
+            if (dy1 <= dy0) continue
+            for (col in 0 until nCols) {
+                val sx0 = xs[col].toFloat()
+                val sx1 = xs[col + 1].toFloat()
+                val dx0 = dstXs[col]
+                val dx1 = dstXs[col + 1]
+                if (dx1 <= dx0) continue
+                val cellIdx = row * nCols + col
+                val type = rectTypes?.get(cellIdx) ?: SkLattice.RectType.kDefault
+                when (type) {
+                    SkLattice.RectType.kTransparent -> {
+                        // Skip — destination stays untouched.
+                    }
+                    SkLattice.RectType.kFixedColor -> {
+                        val c = colors?.getOrNull(cellIdx) ?: 0
+                        val fillPaint = SkPaint().apply { color = c }
+                        drawRect(SkRect.MakeLTRB(dx0, dy0, dx1, dy1), fillPaint)
+                    }
+                    SkLattice.RectType.kDefault -> {
+                        drawImageRect(
+                            image,
+                            SkRect.MakeLTRB(sx0, sy0, sx1, sy1),
+                            SkRect.MakeLTRB(dx0, dy0, dx1, dy1),
+                            SkSamplingOptions(filterMode),
+                            paint,
+                            SrcRectConstraint.kStrict,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun isStrictlyIncreasing(divs: IntArray): Boolean {
+        for (i in 1 until divs.size) if (divs[i] <= divs[i - 1]) return false
+        return true
+    }
+
+    /**
+     * Compute the destination-side slice positions for a 9-patch /
+     * N-patch row or column. Even slices keep their source pixel
+     * width (corners) ; odd slices share the remaining destination
+     * proportional to their source widths. When destination is
+     * narrower than the corner sum, fixed slices shrink uniformly to
+     * fit and odd slices collapse to zero — matches upstream's
+     * `SkLatticeIter::computeDstSlices`.
+     */
+    private fun computeDstSlicePositions(srcEdges: IntArray, dstStart: Float, dstEnd: Float): FloatArray {
+        val n = srcEdges.size - 1 // slice count
+        val widths = FloatArray(n)
+        var totalFixed = 0f
+        var totalFlex = 0f
+        for (i in 0 until n) {
+            widths[i] = (srcEdges[i + 1] - srcEdges[i]).toFloat()
+            if (i % 2 == 0) totalFixed += widths[i] else totalFlex += widths[i]
+        }
+        val dstSpan = dstEnd - dstStart
+        val flexSpan = (dstSpan - totalFixed).coerceAtLeast(0f)
+        val out = FloatArray(srcEdges.size)
+        out[0] = dstStart
+        if (totalFixed > dstSpan && totalFixed > 0f) {
+            // Shrink fixed slices uniformly to fit ; flex slices collapse.
+            val shrink = dstSpan / totalFixed
+            for (i in 0 until n) {
+                val w = if (i % 2 == 0) widths[i] * shrink else 0f
+                out[i + 1] = out[i] + w
+            }
+        } else {
+            for (i in 0 until n) {
+                val w = if (i % 2 == 0) widths[i]
+                else if (totalFlex > 0f) flexSpan * (widths[i] / totalFlex)
+                else 0f
+                out[i + 1] = out[i] + w
+            }
+        }
+        // Snap last edge to dstEnd to absorb fp drift.
+        out[out.size - 1] = dstEnd
+        return out
     }
 
     /**

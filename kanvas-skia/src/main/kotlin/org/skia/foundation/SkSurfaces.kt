@@ -43,10 +43,10 @@ public object SkSurfaces {
      * Returns `null` when [info] is empty (width or height ≤ 0) —
      * matches Skia's validity contract.
      */
-    public fun Raster(info: SkImageInfo, rowBytes: Int = 0): SkSurface? {
+    public fun Raster(info: SkImageInfo, rowBytes: Int = 0, props: SkSurfaceProps? = null): SkSurface? {
         if (info.isEmpty()) return null
         if (rowBytes != 0 && rowBytes < info.minRowBytes()) return null
-        return SkSurface.MakeRaster(info)
+        return SkSurface.MakeRaster(info, props)
     }
 
     /**
