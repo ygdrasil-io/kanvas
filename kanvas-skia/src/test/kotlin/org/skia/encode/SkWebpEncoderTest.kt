@@ -2,50 +2,178 @@ package org.skia.encode
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import javax.imageio.ImageIO
 
 /**
- * R2.20 verification suite for [SkWebpEncoder].
+ * R-suivi.23 verification suite for [SkWebpEncoder].
  *
- * The encoder body is a stub today — the JVM has no built-in WebP
- * encoder and TwelveMonkeys' `imageio-webp` ships only a decoder.
- * These tests pin :
- *   - the stub returns `null` / `false` for every overload,
- *   - the surface accepts every well-formed input without throwing,
- *   - the [SkWebpEncoder.Options] `quality` invariant is enforced,
- *   - the [SkWebpEncoder.Compression] enum keeps both lossy / lossless
- *     spellings for future-proofing call sites.
- *
- * A future "WebP encoder body" slice will turn the null returns into
- * real bytes — the tests above will then be tightened to require a
- * VP8 magic header.
+ * Covers :
+ *  - the [SkWebpEncoder.Compression.kLossless] path produces a real
+ *    VP8L bitstream wrapped in a RIFF/WEBP container, and round-trips
+ *    pixel-identical through the TwelveMonkeys `imageio-webp` decoder ;
+ *  - the RIFF header carries the correct magic bytes and the VP8L
+ *    signature byte sits at offset 20 ;
+ *  - the [SkWebpEncoder.Custom] hook short-circuits the built-in
+ *    encoder when registered and falls back to it after `Custom(null)` ;
+ *  - the [SkWebpEncoder.Compression.kLossy] path returns `null`
+ *    (left as TODO — see encoder kdoc) ;
+ *  - the legacy [SkWebpEncoder.Options] invariants are still enforced.
  */
 class SkWebpEncoderTest {
 
+    @AfterEach
+    fun clearCustomEncoder() {
+        // Tests register Custom callbacks ; restore the built-in
+        // before the next test runs so cross-test state can't leak.
+        SkWebpEncoder.Custom(null)
+    }
+
     @Test
-    fun `Encode(SkImage) returns null on the stub`() {
-        val bitmap = makeGradient(4, 4)
+    fun `lossless encode produces a valid RIFF WEBP VP8L header`() {
+        val bitmap = makeGradient(16, 16)
+        val bytes = SkWebpEncoder.Encode(
+            bitmap,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless, 100f),
+        )
+        assertNotNull(bytes)
+        assertTrue(bytes!!.size > 20, "encoder must produce ≥ 21 bytes (RIFF + chunk hdr)")
+        assertEquals('R'.code.toByte(), bytes[0])
+        assertEquals('I'.code.toByte(), bytes[1])
+        assertEquals('F'.code.toByte(), bytes[2])
+        assertEquals('F'.code.toByte(), bytes[3])
+        assertEquals('W'.code.toByte(), bytes[8])
+        assertEquals('E'.code.toByte(), bytes[9])
+        assertEquals('B'.code.toByte(), bytes[10])
+        assertEquals('P'.code.toByte(), bytes[11])
+        assertEquals('V'.code.toByte(), bytes[12])
+        assertEquals('P'.code.toByte(), bytes[13])
+        assertEquals('8'.code.toByte(), bytes[14])
+        assertEquals('L'.code.toByte(), bytes[15])
+        // VP8L signature byte sits right after the 4-byte chunk size.
+        assertEquals(0x2F.toByte(), bytes[20])
+    }
+
+    @Test
+    fun `lossless encode round-trips pixel-identical through ImageIO`() {
+        val src = makeGradient(16, 16)
+        val bytes = SkWebpEncoder.Encode(
+            src,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless, 100f),
+        )
+        assertNotNull(bytes, "lossless encode must succeed")
+        val decoded = ImageIO.read(ByteArrayInputStream(bytes!!))
+        assertNotNull(decoded, "TwelveMonkeys must decode the produced WebP")
+        assertEquals(src.width, decoded!!.width)
+        assertEquals(src.height, decoded.height)
+        for (y in 0 until src.height) {
+            for (x in 0 until src.width) {
+                val expected = src.getPixel(x, y)
+                val actual = decoded.getRGB(x, y)
+                assertEquals(
+                    expected,
+                    actual,
+                    "lossless WebP must round-trip ($x,$y) byte-identical : " +
+                        "expected 0x${expected.toUInt().toString(16)}, got 0x${actual.toUInt().toString(16)}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `lossless encode round-trips a single-color image`() {
+        // 1-color image exercises the single-symbol Huffman path —
+        // the green / red / blue / alpha codes each have only one
+        // used symbol, so the simple-code branch with num_symbols=1
+        // is taken. The decoder must still read the right pixel
+        // values back even though no bits are emitted per pixel.
+        val bitmap = SkBitmap(8, 8, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
+        val color = 0x80112233.toInt()  // alpha=0x80, R=0x11, G=0x22, B=0x33
+        for (i in bitmap.pixels.indices) bitmap.pixels[i] = color
+        val bytes = SkWebpEncoder.Encode(
+            bitmap,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+        )
+        assertNotNull(bytes)
+        val decoded = ImageIO.read(ByteArrayInputStream(bytes!!))
+        assertNotNull(decoded)
+        for (y in 0 until 8) for (x in 0 until 8) {
+            assertEquals(color, decoded!!.getRGB(x, y))
+        }
+    }
+
+    @Test
+    fun `lossless encode round-trips a 1x1 image`() {
+        val bitmap = SkBitmap(1, 1, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
+        bitmap.pixels[0] = 0xFF7F00FF.toInt()
+        val bytes = SkWebpEncoder.Encode(
+            bitmap,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+        )
+        assertNotNull(bytes)
+        val decoded = ImageIO.read(ByteArrayInputStream(bytes!!))
+        assertNotNull(decoded)
+        assertEquals(1, decoded!!.width)
+        assertEquals(1, decoded.height)
+        assertEquals(0xFF7F00FF.toInt(), decoded.getRGB(0, 0))
+    }
+
+    @Test
+    fun `lossless encode via SkImage matches encode via SkBitmap`() {
+        val bitmap = makeGradient(8, 8)
         val image = SkImage.Make(bitmap)
-        assertNull(SkWebpEncoder.Encode(image))
-        assertNull(
-            SkWebpEncoder.Encode(
-                image,
-                SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless, 80f),
-            ),
+        val viaBitmap = SkWebpEncoder.Encode(
+            bitmap,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+        )
+        val viaImage = SkWebpEncoder.Encode(
+            image,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+        )
+        assertNotNull(viaBitmap)
+        assertNotNull(viaImage)
+        assertEquals(
+            viaBitmap!!.toList(),
+            viaImage!!.toList(),
+            "bitmap and image paths must produce identical bytes",
         )
     }
 
     @Test
-    fun `Encode(SkBitmap) returns null on the stub`() {
+    fun `lossless encode to OutputStream agrees with encode to ByteArray`() {
         val bitmap = makeGradient(4, 4)
-        assertNull(SkWebpEncoder.Encode(bitmap))
+        val viaBytes = SkWebpEncoder.Encode(
+            bitmap,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+        )!!
+        val baos = ByteArrayOutputStream()
+        assertTrue(
+            SkWebpEncoder.Encode(
+                baos,
+                bitmap,
+                SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+            ),
+        )
+        assertEquals(viaBytes.toList(), baos.toByteArray().toList())
+    }
+
+    @Test
+    fun `lossy encode returns null without a Custom override`() {
+        // VP8 lossy is out of scope for the pure-Kotlin port — see
+        // the encoder kdoc. The kLossy path is reserved for future
+        // work (or a libwebp JNI binding via Custom).
+        val bitmap = makeGradient(4, 4)
         assertNull(
             SkWebpEncoder.Encode(
                 bitmap,
@@ -55,11 +183,105 @@ class SkWebpEncoderTest {
     }
 
     @Test
-    fun `Encode to OutputStream returns false on the stub and leaves the stream untouched`() {
+    fun `Custom callback overrides the built-in encoder for every compression mode`() {
+        // The Custom hook takes precedence over the built-in for any
+        // requested compression, including kLossless — consumers may
+        // want to plug in libwebp's optimized lossless encoder.
+        val sentinel = byteArrayOf(1, 2, 3, 4, 5)
+        var captured: Pair<Int, SkWebpEncoder.Compression>? = null
+        SkWebpEncoder.Custom { bm, opts ->
+            captured = bm.width to opts.compression
+            sentinel
+        }
+        val bitmap = makeGradient(7, 11)
+        val lossy = SkWebpEncoder.Encode(
+            bitmap,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossy),
+        )
+        assertEquals(sentinel.toList(), lossy!!.toList())
+        assertEquals(7, captured!!.first)
+        assertEquals(SkWebpEncoder.Compression.kLossy, captured!!.second)
+
+        val lossless = SkWebpEncoder.Encode(
+            bitmap,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+        )
+        assertEquals(sentinel.toList(), lossless!!.toList())
+        assertEquals(SkWebpEncoder.Compression.kLossless, captured!!.second)
+    }
+
+    @Test
+    fun `Custom null falls back to the built-in lossless encoder`() {
+        SkWebpEncoder.Custom { _, _ -> byteArrayOf(0xCA.toByte(), 0xFE.toByte()) }
+        val bitmap = makeGradient(4, 4)
+        val withCustom = SkWebpEncoder.Encode(
+            bitmap,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+        )
+        assertEquals(listOf(0xCA.toByte(), 0xFE.toByte()), withCustom!!.toList())
+
+        SkWebpEncoder.Custom(null)
+        val builtin = SkWebpEncoder.Encode(
+            bitmap,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+        )
+        assertNotNull(builtin)
+        // Built-in must be a real WebP, not the 2-byte sentinel.
+        assertTrue(builtin!!.size > 20)
+        assertEquals('R'.code.toByte(), builtin[0])
+    }
+
+    @Test
+    fun `Custom callback returning null surfaces as Encode null`() {
+        // A soft failure from the Custom callback must propagate up to
+        // the caller — the built-in is NOT used as a fallback (the
+        // callback is authoritative once registered).
+        SkWebpEncoder.Custom { _, _ -> null }
+        val bitmap = makeGradient(4, 4)
+        assertNull(
+            SkWebpEncoder.Encode(
+                bitmap,
+                SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+            ),
+        )
+    }
+
+    @Test
+    fun `EncodeAsData wraps the byte array in SkData`() {
+        val bitmap = makeGradient(8, 8)
+        val image = SkImage.Make(bitmap)
+        val data = SkWebpEncoder.EncodeAsData(
+            image,
+            SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
+        )
+        assertNotNull(data)
+        // Sanity : the wrapped bytes start with the RIFF header.
+        assertEquals('R'.code.toByte(), data!!.byteAt(0))
+        assertEquals('I'.code.toByte(), data.byteAt(1))
+    }
+
+    @Test
+    fun `EncodeAsData returns null when the encoder returns null`() {
+        val bitmap = makeGradient(4, 4)
+        val image = SkImage.Make(bitmap)
+        // Default options are kLossy → returns null without a Custom
+        // hook installed.
+        assertNull(SkWebpEncoder.EncodeAsData(image))
+    }
+
+    @Test
+    fun `Encode to OutputStream returns false when underlying encode returns null`() {
+        // No Custom hook + kLossy → null bytes → no write, false return.
         val bitmap = makeGradient(2, 2)
         val baos = ByteArrayOutputStream()
-        assertFalse(SkWebpEncoder.Encode(baos, bitmap))
-        assertEquals(0, baos.size(), "stub must not write any bytes")
+        assertFalse(
+            SkWebpEncoder.Encode(
+                baos,
+                bitmap,
+                SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossy),
+            ),
+        )
+        assertEquals(0, baos.size(), "no bytes must be written when encode fails")
     }
 
     @Test
@@ -77,7 +299,6 @@ class SkWebpEncoderTest {
         assertThrows(IllegalArgumentException::class.java) {
             SkWebpEncoder.Options(quality = 100.01f)
         }
-        // Both endpoints are valid.
         SkWebpEncoder.Options(quality = 0f)
         SkWebpEncoder.Options(quality = 100f)
     }
@@ -85,7 +306,6 @@ class SkWebpEncoderTest {
     @Test
     fun `Compression enum carries both lossy and lossless`() {
         assertEquals(2, SkWebpEncoder.Compression.entries.size)
-        // Both spellings must round-trip valueOf.
         assertEquals(
             SkWebpEncoder.Compression.kLossy,
             SkWebpEncoder.Compression.valueOf("kLossy"),
