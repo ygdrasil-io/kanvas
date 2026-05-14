@@ -821,7 +821,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 
 28. ✅ **R-suivi.28** `@Deprecated getTotalMatrix()` migration (PR R-suivi batch S1-C). Call-sites tests (`SkAutoCanvasRestoreTest`, `SkDrawableTest`, `SkPictureTest`, `SkCanvasWrappersTest`) et `SkSVGCanvas` migrés vers `getLocalToDeviceAsMatrix() ?: SkMatrix.Identity`. Les wrappers `SkRecordingCanvas` / `SkNoDrawCanvas` / `SkPaintFilterCanvas` / `SkOverdrawCanvas` ne contenaient que des références doc (KDoc), pas d'appels deprecated. `SkCanvasSkM44Test` conserve un appel intentionnel sous `@Suppress("DEPRECATION")`. 0 deprecation warning restant sur `compileKotlin` / `compileTestKotlin`.
 29. ✅ **R-suivi.29** (S5-C PR #409) — `SkStream` peek + duplicate/fork (base + `SkMemoryStream` + `SkFILEStream`).
-30. ✅ **R-suivi.30** (PR #415) — `SkShadowTessellator.kt` pure-Kotlin (494 LOC + 128 wiring) : tessellation analytique (ambient + spot mesh via `SkVertices` déjà présent en I5.3). `kGeometricOnly_ShadowFlag` + `kTransparentOccluder_ShadowFlag` enfin honorés. Blur-based devient `LegacyDrawShadow` private fallback. **Simplifications flaguées en suivi : convex-only (concave/self-intersect → blur fallback ; port `SkOffsetSimplePolygon` + `SkTriangulateSimplePolygon` ~1.5 kLOC out of scope), Bezier midpoint subdivision (vs upstream `quadraticPointCount`, équivalent à 0.2px), pas de radial arc step aux turns convexes pointus**.
+30. ✅ **R-suivi.30** (PR #415 + S7-C #435 follow-up) — `SkShadowTessellator.kt` pure-Kotlin (494 + 323 = 817 LOC). Tessellation analytique convex (#415) **+ ear-clipping triangulator pour concave** (S7-C #435). 5-point star + U-shape concaves OK ; self-intersecting tombent en blur. Bezier midpoint vs upstream `quadraticPointCount` reste équivalent ~0.2 px ; pas de radial arc step aux convex pointus.
 31. ✅ **R-suivi.31** `SkShadowUtils.zPlaneParams` per-verb sampling (PR #401). Walks `SkPath.Iter`, max-z ambient, union spot bboxes.
 32. ✅ **R-suivi.32** `SkShadowUtils.kTransparentOccluder` flag implémenté (PR #401). `canvas.clipPath(path, kDifference)` dans spot layer quand flag unset.
 33. ✅ **R-suivi.33** `SkShadowUtils.OptimizeForSurface` cache (PR #401). `WeakHashMap<SkPath, Map<ProjectionKey, SkPath>>` via identityHashCode.
@@ -834,7 +834,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 37. ✅ **R-suivi.37** `SkPDF` images JPEG/DCT XObject (PR #402). Encode via `SkJpegEncoder` q=90 puis embed `/Filter /DCTDecode`.
 38. ✅ **R-suivi.38** `SkPDF` linear gradients via `/Pattern` (PR #402). Type 2 axial + Type 3 stitching pour ≥3 stops.
 39. ✅ **R-suivi.39** `SkPDF` natif cubic operators (PR #402). `m`/`l`/`c`/`h` ; quad degree-elevated cubic lossless ; conic 4-segment De Casteljau.
-40. ✅ **R-suivi.40** (S6-A PR #410) — `SkPDF` Flate compression (`Deflater`) + AES-128 encryption (`PdfAes128`, V=4 R=4).
+40. ✅ **R-suivi.40** (S6-A PR #410 + S7-C PR #435 follow-up) — `SkPDF` Flate compression (`Deflater`) + AES-128 (V=4 R=4) **+ AES-256 (V=5 R=5)** via `PdfAes256.kt` (243 LOC, SHA-256 key derivation, `/CFM /AESV3`). Choisi via `Metadata.encryptionStrength = kAES128 | kAES256`.
 41. ✅ **R-suivi.41** YUV → RGB conversion (PR #405). `SkYUVAPixmaps.toRGBA8888()` + 7 YUVColorSpace matrices + `SkImages.YUVA` factory. Bi-planar/interleaved/alpha → voir R-suivi.48.
 42. ✅ **R-suivi.42** `SkDocument` SkWStream stand-in cleanup (PR #393). Imports `org.skia.foundation.stream.*` à la place.
 
@@ -844,21 +844,40 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 44. ✅ **R-suivi.44** TTC `ttcIndex` parsing (PR #399). Magic `ttcf` + header + offsets table.
 45. ✅ **R-suivi.45** `SkFontMgr.makeFromStream(SkStream)` overload `open` (PR #399). Drain → `SkData.MakeWithCopy`.
 46. ✅ **R-suivi.46** `SkCustomTypefaceBuilder` glyph draw wiring (PR #403). `SkUserTypeface.makeTextPath` override → routes via `SkFont.makeTextPath` natif sans toucher AWT path.
-47. ✅ **R-suivi.47** (S5-B PR #408 (registry) + R-suivi.A pour decoders réels) — Codec decoders registry public (`SkCodec.Decoders.register/unregister/dispatch`). 4 stubs self-register ; **decoders réels = items à part** : voir section JNI alternatives.
+47. ✅ **R-suivi.47** (S5-B PR #408 registry + S7-A PR #433 ICO real) — Codec decoders registry public (`SkCodec.Decoders.register/unregister/dispatch`). **`SkIcoDecoder.Decode` real (pure-Kotlin)** : ICONDIR + entries, PNG payloads → `SkPngCodec`, BMP payloads → header synth → `SkBmpCodec`. AVIF/JpegXL/RAW restent stubs (codecs lourds, plug-in via registry).
 
 **Ajouts batch S1-S4 (nouveaux items découverts)** :
 
 48. ✅ **R-suivi.48** (S6-B PR #412) — YUV all 12 non-`kUnknown` PlaneConfig (bi-planar / interleaved / alpha planes propagated).
 49. ✅ **R-suivi.49** (S6-B PR #412) — Drawable typeface rendering (`hasDrawableGlyphs` + `drawDrawableGlyphs` hook + extension `SkCanvas.drawCustomTypefaceText`).
-50. ✅ **R-suivi.50** (S5-A PR #407) — `SkCanvas.{drawShadow, drawSlug, drawImageLattice, drawPicture}` virtuals + nouveaux types `SkTextSlug` / `SkLattice` + NWay/NoDraw overrides.
+50. ✅ **R-suivi.50** (S5-A PR #407 + S7-C PR #435 follow-up) — `SkCanvas.{drawShadow, drawSlug, drawImageLattice, drawPicture}` virtuals + nouveaux types `SkTextSlug` / `SkLattice` + NWay/NoDraw overrides. **`drawImageLattice` full N×M tessellation livrée en S7-C** (corner-fixed + edge-stretch + centre-stretch ; honors kDefault/Transparent/FixedColor).
 
-**Status global R-suivi** : **🎉 50 / 50 ✅** (100 %). Plan de remédiation API **closed côté implémentation**.
+**Status global R-suivi** : **🎉 50 / 50 ✅** (100 %) + **14 items "post-S7" supplémentaires** ✅ (helpers/promotions découverts pendant H3 waves 6-12).
 
 Sous-items restants (non-bloquants) :
 - `SkWebpEncoder.kLossy` : pure-Kotlin VP8 lossy hors scope ; `Custom(callback)` permet plug-in JNI libwebp
-- Décodeurs AVIF / JpegXL / RAW étendus : codecs lourds, registry `SkCodec.Decoders.register(...)` permet plug-in JNI consommateur
-- `SkShadowTessellator` convexité uniquement : paths concaves → fallback blur legacy
+- Décodeurs AVIF / JpegXL / RAW étendus : codecs lourds, registry `SkCodec.Decoders.register(...)` permet plug-in JNI consommateur (ICO ✅ pure-Kotlin via S7-A #433)
+- `SkShadowTessellator` self-intersecting paths : fallback blur (concave handled depuis S7-C #435 via ear-clipping triangulator)
 - Détails dans la section "Items implémentés en pure-Kotlin avec limitations documentées" ci-dessous.
+
+### Phase S7 — Items helpers/promotions discovered en H3 waves 6-12 ✅ COMPLET (14/14)
+
+Découverts pendant les ports GMs ; promus depuis inline duplicates ou ajoutés pour fidélité. Mergés via PRs #433 (S7-A), #434 (S7-B), #435 (S7-C).
+
+51. ✅ **post-S7.1** `org.skia.foundation.SkGeometry` — `chopQuadAt/CubicAt/ConicAt` promu depuis MandolineGM private (S7-A)
+52. ✅ **post-S7.2** `SkBitmap.eraseArea(SkIRect, SkColor)` — flagué par Skbug257/LcdBlend (S7-A)
+53. ✅ **post-S7.3** `SkPathBuilder.computeBounds()` — walk coords sans snapshot (S7-A)
+54. ✅ **post-S7.4** `SkImages.DeferredFromPicture(picture, dimensions, …)` + `SkImages.BitDepth` enum (S7-A)
+55. ✅ **post-S7.5** `SkIcoDecoder.Decode` real impl pure-Kotlin (S7-A) — voir R-suivi.47
+56. ✅ **post-S7.6** `SkFont.{textToGlyphs, getPos, getXPos, getWidths}` (S7-B) — drop ~6 LOC boilerplate par GM text-bearing
+57. ✅ **post-S7.7** `SkTextBlob.getIntercepts(bounds, paint?)` (S7-B) — débloque `texteffects.cpp` GM
+58. ✅ **post-S7.8** ToolUtils helpers promote (`create_checkerboard_shader/image`, `rotated_checkerboard_shader`, `CreateStringImage`) depuis 4-5 inline duplicates (S7-B)
+59. ✅ **post-S7.9** `SkSurfaceProps` + `SkPixelGeometry` enum (S7-C) — wired dans `SkSurface.MakeRaster` + `SkCanvas` ctor
+60. ✅ **post-S7.10** `SkCanvas.makeSurface(info, props?)` (S7-C) — sub-surface inherits parent props
+61. ✅ **post-S7.11** `SkCanvas.drawImageLattice` full N×M tessellation (S7-C) — voir R-suivi.50
+62. ✅ **post-S7.12** SkPDF AES-256 (V=5) `PdfAes256.kt` (S7-C) — voir R-suivi.40
+63. ✅ **post-S7.13** SkShadowTessellator concave paths via ear-clipping (S7-C) — voir R-suivi.30
+64. ✅ **post-S7.14** `SkTextEncoding` enum (S7-B) — déjà présent, vérifié
 
 ---
 
