@@ -4,16 +4,18 @@ Statut du portage des Graphics Modules (GM) C++ de Skia vers `kanvas-skia/src/ma
 
 **Source de référence** : `/Users/chaos/workspace/kanvas-forge/skia-main/gm/` (437 fichiers `.cpp`)
 **Cible** : `kanvas-skia/src/main/kotlin/org/skia/tests/*GM.kt` (310 GMs Kotlin sur `origin/master`)
-**Snapshot** : post-merge **13 phases d'API** (G1-G10 + G9a/b) + **H1 complet** (10 GMs image-asset) + **H3 wave 1** (9 cpps, 11 variants)
+**Snapshot** : post-merge **13 phases d'API** (G1-G10 + G9a/b) + **H1 complet** + **H3 waves 1-12 toutes mergées** + **API_REMEDIATION_PLAN.md complet (50/50 R-suivi ✅)**
 
 ## Résumé
 
 | Statut | Fichiers `.cpp` | Pourcentage |
 |---|---:|---:|
-| ✅ Porté (≥ 1 `*GM.kt` rattaché) | 265 | 61% |
-| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | 102 | 23% |
-| ❌ Non tenté (potentiellement portable) | 70 | 16% |
-| **Total** | **437** | **100%** |
+| ✅ Porté (≥ 1 `*GM.kt` rattaché) | **319** | **73 %** |
+| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | **118** | **27 %** |
+| ❌ Non tenté (potentiellement portable) | **0** | **0 %** |
+| **Total** | **437** | **100 %** |
+
+🎯 **Phase H3 EXHAUSTÉE** — chaque cpp a été soit porté, soit explicitement classifié.
 
 GMs Kotlin sans correspondance dans le tree de référence (probablement issus d'une version Skia plus récente) : **30**.
 
@@ -31,9 +33,16 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 | H3 wave 2 (9 ports + 1 skip SkM44) | 241 / 437 | 55% |
 | H3 wave 3 (7 ports + 1 skip computeFastBounds) | 248 / 437 | 57% |
 | H3 wave 4 (9 ports + 1 skip SkPath.contains) | 257 / 437 | 59% |
-| **H3 wave 5 (8 ports + 2 skip HighContrastFilter / `#if 0`)** | **265 / 437** | **61%** |
+| H3 wave 5 (8 ports + 2 skip HighContrastFilter / `#if 0`) | 265 / 437 | 61% |
+| H3 wave 6 (9 ports + 1 skip palette/COLR) | 274 / 437 | 63% |
+| H3 wave 7 (10 ports + 0 skip) | 284 / 437 | 65% |
+| H3 wave 8 (10 ports + 0 skip) | 294 / 437 | 67% |
+| H3 wave 9 (10 ports + 1 skip textblob_intercepts) | 304 / 437 | 70% |
+| H3 wave 10 (9 ports + 1 skip workingspace) | 313 / 437 | 72% |
+| H3 wave 11 (3 ports + 7 skips emoji/anim/codec/HDR) | 316 / 437 | 72% |
+| **H3 wave 12 (3 ports + 7 skips font infra/runtime effect)** | **319 / 437** | **73 %** |
 
-**Gain net** : +117 GMs en 3 jours (de 34% à 61% de couverture).
+**Gain net depuis snapshot initial** : +171 GMs (de 34 % à 73 % de couverture). **Tous les `❌` épuisés** — chaque cpp est désormais soit ✅ soit 🚧.
 
 ## Phases d'API — toutes mergées ✅
 
@@ -103,15 +112,27 @@ Voir `API_REMEDIATION_PLAN.md` pour les signatures précises, les en-têtes upst
 
 Les 5 petits gaps listés ci-dessus. Chacun ½ journée. Effort cumulé : 2-3 jours, gain en similarité sur ~10+ ports déjà livrés.
 
-### Phase H3 — Vagues de ports continues (~70 GMs non tentés)
+### Phase H3 — Vagues de ports continues ✅ **EXHAUSTÉE** (12 vagues, 0 ❌ restant)
 
-Sortie d'agents 2×5 en parallèle, triage par taille de cpp et catégorie. **5 vagues livrées** (wave 1 → wave 5, +42 ports cumulés). Reste 70 cpps `❌` à attaquer.
+**12 vagues livrées** (wave 1 → wave 12, ~104 cpps portés cumulés depuis snapshot post-G10). Les `❌` "non tentés" sont tous adressés.
 
-Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bloquer** des cpps avant d'envoyer un agent dessus :
-- Cpps mentionnant `SkM44` / `Sk3DView` / `Camera3D` → 🚧 (`SkM44` est R3.1)
-- Cpps mentionnant `SkFontMgr` / `SkCustomTypeface` → 🚧 (`SkFontMgr` est R3.2)
-- Cpps mentionnant codecs alternatifs (`SkAndroidCodec`, AVIF, …) → 🚧 (R3.5, R3.10)
-- Reste devrait être portable sans nouveau gros bloqueur.
+Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-block) :
+- **Codec animé** : `SkCodec.getFrameInfo` + per-frame `getPixels(Options{frameIndex})` non exposés (animated_gif, animated_image_orientation)
+- **`SkAnimatedImage` module** : non porté (animated_image_orientation)
+- **`SkVideoDecoder`** : FFmpeg + GrContext only, pas de CPU path (video_decoder)
+- **`SkImages.MakeWithFilter`** + `canvas.makeSurface` + `makeTemporaryImage` + HDR PQ retag (hdr_pip_blur)
+- **COLR v1** + `SkFontArguments::VariationPosition` + `SkTypeface.makeClone(args)` (palette, colrv1, scaledemoji×2, fontscalerdistortable)
+- **Color emoji typefaces** (CBDT/Sbix/ColrV0/Svg) (scaledemoji, coloremoji_blendmodes)
+- **`SkRuntimeEffect` SkSL parser** (rippleshadergm)
+- **`LiberationFontMgr` portable public surface** (fontmgr_*)
+- **Fontations Rust crate binding** (fontations, fontations_ft_compare)
+- **`SkTypeface.getKerningPairAdjustments`** (typefacestyles_kerning)
+- **`SkTextBlob.getIntercepts`** (textblob_intercepts skip dans texteffects)
+- **macOS-specific CGContext/CTFont** (mac_aa_fonts variant)
+- **`SkColorFilter::makeWithWorkingColorSpace` family** (workingspace)
+- **`SkAAClip` Skia-internal** (simpleaaclip_aaclip variant)
+- **`SkInsetConvexPolygon` + `SkOffsetSimplePolygon`** (polygonoffset hi-fi)
+- **`PlanetTypeface` + `ReallyBigA.ttf` resource** (mixedtextblobs)
 
 ### Hors scope définitif
 
@@ -128,7 +149,7 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 
 | `.cpp` source | Statut | GMs Kotlin | Bloqué par |
 |---|:---:|---|---|
-| `3d.cpp` | ❌ | — | — |
+| `3d.cpp` | ✅ | `Sk3dSimpleGM.kt` | — |
 | `aaa.cpp` | ✅ | `AnalyticAntialiasConvexGM.kt`, `AnalyticAntialiasGeneralGM.kt`, `AnalyticAntialiasInverseGM.kt` | — |
 | `aaclip.cpp` | ✅ | `AaclipGM.kt`, `ClipCubicGM.kt` | — |
 | `aarecteffect.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
@@ -140,9 +161,9 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `alphagradients.cpp` | ✅ | `AlphaGradientsGM.kt` | — |
 | `analytic_gradients.cpp` | ✅ | `AnalyticGradientShaderGM.kt` | — |
 | `androidblendmodes.cpp` | ✅ | `AndroidBlendModesGM.kt` | — |
-| `animated_gif.cpp` | ❌ | — | — |
-| `animated_image_orientation.cpp` | ❌ | — | — |
-| `animatedimageblurs.cpp` | ❌ | — | — |
+| `animated_gif.cpp` | 🚧 | — | SkCodec.getFrameInfo + per-frame getPixels(Options{frameIndex, priorFrame}) non exposés |
+| `animated_image_orientation.cpp` | 🚧 | — | SkAnimatedImage module + EXIF-aware SkAndroidCodec non portés |
+| `animatedimageblurs.cpp` | ✅ | `AnimatedImageBlursGM.kt` | — (t=0 snapshot) |
 | `anisotropic.cpp` | ✅ | `AnisoMipsGM.kt`, `AnisotropicImageScaleAnisoGM.kt`, `AnisotropicImageScaleLinearGM.kt`, `AnisotropicImageScaleMipGM.kt`, `AnisotropicMipGM.kt` | — |
 | `annotated_text.cpp` | ✅ | `AnnotatedTextGM.kt` | — |
 | `arcofzorro.cpp` | ✅ | `ArcOfZorroGM.kt` | — |
@@ -208,14 +229,14 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `collapsepaths.cpp` | ✅ | `CollapsePathsGM.kt` | — |
 | `color4f.cpp` | ✅ | `Color4fGM.kt` | — |
 | `coloremoji.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `coloremoji_blendmodes.cpp` | ❌ | — | — |
+| `coloremoji_blendmodes.cpp` | 🚧 | — | EmojiSample/Format infra non portée |
 | `colorfilteralpha8.cpp` | ✅ | `ColorFilterAlpha8GM.kt` | — |
 | `colorfilterimagefilter.cpp` | ✅ | `ColorFilterImageFilterGM.kt` | — |
 | `colorfilters.cpp` | ✅ | `ColorFiltersGM.kt` (lightingcolorfilter) | — |
 | `colormatrix.cpp` | ✅ | `ColorMatrixGM.kt` | — |
 | `colorspace.cpp` | 🚧 | — | `SkImage.makeColorSpace` + `SkCanvas.makeSurface(info)` absents |
 | `colorwheel.cpp` | ✅ | `ColorWheelNativeGM.kt` | — |
-| `colrv1.cpp` | ❌ | — | — |
+| `colrv1.cpp` | 🚧 | — | COLR v1 emoji + variable axes |
 | `complexclip.cpp` | 🚧 | — | `SkCanvas::clipShader` |
 | `complexclip2.cpp` | ✅ | `ComplexClip2GM.kt` (6 variants rect/rrect/path × bw/aa) | — |
 | `complexclip3.cpp` | ✅ | `ComplexClip3GM.kt` (simple + complex) | — |
@@ -315,28 +336,28 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `filterfastbounds.cpp` | 🚧 | — | `SkPaint.computeFastBounds` + `SkImageFilter.computeFastBounds` |
 | `filterindiabox.cpp` | ✅ | `FilterIndiaBoxGM.kt` | — |
 | `flippity.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `fontations.cpp` | ❌ | — | — |
-| `fontations_ft_compare.cpp` | ❌ | — | — |
+| `fontations.cpp` | 🚧 | — | Fontations Rust crate non bound |
+| `fontations_ft_compare.cpp` | 🚧 | — | Fontations crate non bound |
 | `fontcache.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `fontmgr.cpp` | ❌ | — | — |
+| `fontmgr.cpp` | 🚧 | — | LiberationFontMgr internal ; pas de portable family API public |
 | `fontregen.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `fontscaler.cpp` | ✅ | `FontScalerGM.kt` | — |
-| `fontscalerdistortable.cpp` | ❌ | — | — |
+| `fontscalerdistortable.cpp` | 🚧 | — | SkFontArguments::VariationPosition + makeClone (variable fonts) manquants |
 | `fp_sample_chaining.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `fpcoordinateoverride.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `fwidth_squircle.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `gammatext.cpp` | ❌ | — | — |
+| `gammatext.cpp` | ✅ | `GammatextGM.kt, GammatextColorShaderGM.kt` | — |
 | `getpostextpath.cpp` | ✅ | `GetPosTextPathGM.kt` | — |
-| `giantbitmap.cpp` | ❌ | — | — |
-| `glyph_pos.cpp` | ❌ | — | — |
+| `giantbitmap.cpp` | ✅ | `GiantBitmapGM.kt (12 variants Clamp/Mirror/Repeat × Bilerp/Point × Scale/Rotate)` | — |
+| `glyph_pos.cpp` | ✅ | `GlyphPosGM.kt (6 variants h/n × b/s/f)` | — |
 | `gm.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `gpu_blur_utils.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `gradient_dirty_laundry.cpp` | ✅ | `GradientDirtyLaundryGM.kt` | — |
 | `gradient_matrix.cpp` | ✅ | `GradientMatrixGM.kt` | — (66 % : tiles tile-mode fallback `paint.color`) |
 | `gradients.cpp` | ✅ | `ClampedGradientsGM.kt`, `GradientsGM.kt`, `RgbwSweepGradientGM.kt`, `SmallColorStopGM.kt`, `SweepTilingGM.kt` | — |
-| `gradients_2pt_conical.cpp` | ❌ | — | — |
+| `gradients_2pt_conical.cpp` | ✅ | `Gradients2ptConicalGM.kt (7 variants inside/outside/edge × kClamp/kRepeat/kMirror)` | — |
 | `gradients_degenerate.cpp` | ✅ | `DegenerateGradientGM.kt` | — (61 % : Radial r=0 / Sweep s==e rejetés, fallback color) |
-| `gradients_no_texture.cpp` | ❌ | — | — |
+| `gradients_no_texture.cpp` | ✅ | `GradientsNoTextureGM.kt` | — |
 | `gradtext.cpp` | ✅ | `ChromeGradTextGM.kt`, `GradTextGM.kt` | — |
 | `graphite_replay.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `graphitestart.cpp` | 🚧 | — | `SkColorFilters::LinearToSRGBGamma`/`SRGBToLinearGamma` |
@@ -345,7 +366,7 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `hairmodes.cpp` | ✅ | `HairModesGM.kt` | — |
 | `hardstop_gradients.cpp` | ✅ | `HardstopGradientShaderGM.kt` | — |
 | `hardstop_gradients_many.cpp` | ✅ | `HardstopGradientsManyGM.kt` | — |
-| `hdr_pip_blur.cpp` | ❌ | — | — |
+| `hdr_pip_blur.cpp` | 🚧 | — | SkImages.MakeWithFilter + canvas.makeSurface + makeTemporaryImage + HDR PQ retag flow |
 | `hello_bazel_world.cpp` | 🚧 | — | GM Bazel-only (pas de PNG de référence) |
 | `highcontrastfilter.cpp` | 🚧 | — | `SkHighContrastFilter` absent |
 | `hittestpath.cpp` | 🚧 | — | `SkPath.contains(scalar, scalar)` |
@@ -361,13 +382,13 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `imageblurtiled.cpp` | ✅ | `ImageBlurTiledGM.kt` | — |
 | `imagedither.cpp` | ✅ | `ImageDitherGM.kt` | — |
 | `imagefilters.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `imagefiltersbase.cpp` | ❌ | — | — |
+| `imagefiltersbase.cpp` | ✅ | `ImageFiltersBaseGM.kt` | — |
 | `imagefiltersclipped.cpp` | ✅ | `ImageFiltersClippedGM.kt` | — |
 | `imagefilterscropexpand.cpp` | ✅ | `ImageFiltersCropExpandGM.kt` | — (cropRect wrappé `Crop`) |
 | `imagefilterscropped.cpp` | ✅ | `ImageFiltersCroppedGM.kt` | — (cropRect wrappé `Crop`) |
 | `imagefiltersgraph.cpp` | ✅ | `ImageFiltersGraphGM.kt` | — (cropRect wrappé `Crop`) |
 | `imagefiltersscaled.cpp` | ✅ | `ImageFiltersScaledGM.kt` | — |
-| `imagefiltersstroked.cpp` | ❌ | — | — |
+| `imagefiltersstroked.cpp` | ✅ | `ImageFiltersStrokedGM.kt` | — |
 | `imagefilterstransformed.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
 | `imagefiltersunpremul.cpp` | ✅ | `ImageFiltersUnpremulGM.kt` | — |
 | `imagefromyuvtextures.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
@@ -376,8 +397,8 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `imagemasksubset.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `imageresizetiled.cpp` | ✅ | `ImageResizeTiledGM.kt` | — |
 | `imagesource.cpp` | ✅ | `ImageSourceGM.kt` | — |
-| `imagesource2.cpp` | ❌ | — | — |
-| `internal_links.cpp` | ❌ | — | — |
+| `imagesource2.cpp` | ✅ | `ImageSource2GM.kt (4 variants None/Low/Med/High)` | — (22-24% : sampler kernel divergence) |
+| `internal_links.cpp` | ✅ | `InternalLinksGM.kt` | — |
 | `inverseclip.cpp` | ✅ | `InverseClipGM.kt` | — |
 | `inversepaths.cpp` | ✅ | `InversePathsGM.kt`, `InverseWindingmodeFiltersGM.kt` | — |
 | `jpg_color_cube.cpp` | 🚧 | — | Encodeurs image (`SkJpegEncoder`/`SkPngEncoder`/`SkWebpEncoder`) |
@@ -387,9 +408,9 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `largeglyphblur.cpp` | ✅ | `LargeGlyphBlurGM.kt` | — |
 | `lattice.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `lazytiling.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `lcdblendmodes.cpp` | ❌ | — | — |
+| `lcdblendmodes.cpp` | ✅ | `LcdBlendGM.kt` | — |
 | `lcdoverlap.cpp` | ✅ | `LcdOverlapGM.kt` | — |
-| `lcdtext.cpp` | ❌ | — | — |
+| `lcdtext.cpp` | ✅ | `LcdTextGM.kt` | — |
 | `lighting.cpp` | ✅ | `LightingGM.kt` | — |
 | `linepaths.cpp` | ✅ | `LinePathGM.kt` | — |
 | `localmatriximagefilter.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
@@ -397,22 +418,22 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `localmatrixshader.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
 | `lumafilter.cpp` | ✅ | `LumaFilterGM.kt` | — |
 | `luminosity.cpp` | ✅ | `LuminosityOverflowGM.kt` | — |
-| `mac_aa_explorer.cpp` | ❌ | — | — |
+| `mac_aa_explorer.cpp` | ✅ | `MacaaColorsGM.kt` | — (partial : MacAAFontsGM = #ifdef SK_BUILD_FOR_MAC) |
 | `make_raster_image.cpp` | ✅ | `MakeRasterImageGM.kt` | — |
 | `makecolorspace.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `mandoline.cpp` | ❌ | — | — |
+| `mandoline.cpp` | ✅ | `MandolineGM.kt` | — |
 | `manypathatlases.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `manypaths.cpp` | ✅ | `ManyCirclesGM.kt`, `ManyRRectsGM.kt` | — |
 | `matrixconvolution.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `matriximagefilter.cpp` | ✅ | `MatrixImageFilterGM.kt` | — |
 | `mesh.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `mipmap.cpp` | ❌ | — | — |
+| `mipmap.cpp` | ✅ | `MipmapGM.kt, MipmapSrgbGM.kt, MipmapGray8SrgbGM.kt` | — |
 | `mirrortile.cpp` | ✅ | `MirrorTileGM.kt` | — |
-| `mixedtextblobs.cpp` | ❌ | — | — |
+| `mixedtextblobs.cpp` | 🚧 | — | PlanetTypeface + ReallyBigA.ttf resource non portés |
 | `mixercolorfilter.cpp` | ✅ | `MixerCFGM.kt` | — (30 % : `Lerp` non-nullable workaround) |
 | `modecolorfilters.cpp` | ✅ | `ModeColorFiltersGM.kt` | — (44 % : divergence saveLayer + `SrcOver` bgPaint) |
 | `morphology.cpp` | ✅ | `MorphologyGM.kt` | — |
-| `nearesthalfpixelimage.cpp` | ❌ | — | — |
+| `nearesthalfpixelimage.cpp` | ✅ | `NearestHalfPixelImageGM.kt` | — |
 | `nested.cpp` | ✅ | `NestedGM.kt` | — |
 | `ninepatchstretch.cpp` | 🚧 | — | `SkCanvas::drawImageNine` |
 | `nonclosedpaths.cpp` | ✅ | `NonClosedPathsGM.kt` | — |
@@ -421,9 +442,9 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `ovals.cpp` | ✅ | `OvalGM.kt` | — |
 | `overdrawcanvas.cpp` | ✅ | `OverdrawCanvasGM.kt` | — |
 | `overdrawcolorfilter.cpp` | ✅ | `OverdrawColorFilterGM.kt` | — |
-| `overstroke.cpp` | ❌ | — | — |
-| `p3.cpp` | ❌ | — | — |
-| `palette.cpp` | ❌ | — | — |
+| `overstroke.cpp` | ✅ | `OverStrokeGM.kt` | — |
+| `p3.cpp` | ✅ | `P3GM.kt, P3OvalsGM.kt` | — |
+| `palette.cpp` | 🚧 | — | COLR v1 emoji typeface + SkFontArguments::Palette + SkTypeface.makeClone(args) |
 | `patch.cpp` | ✅ | `PatchAlphaTestGM.kt`, `PatchPrimitiveGM.kt` | — |
 | `path_stroke_with_zero_length.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `patharcto.cpp` | ✅ | `ShallowAnglePathArcToGM.kt` | — |
@@ -436,35 +457,35 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `pathopsblend.cpp` | ✅ | `PathOpsBlendGM.kt` | — |
 | `pathopsinverse.cpp` | ✅ | `PathOpsInverseGM.kt` | — |
 | `pathreverse.cpp` | ✅ | `PathReverseGM.kt` | — |
-| `pdf_never_embed.cpp` | ❌ | — | — |
+| `pdf_never_embed.cpp` | ✅ | `PdfNeverEmbedGM.kt` | — |
 | `perlinnoise.cpp` | ✅ | `PerlinNoiseGM.kt`, `PerlinNoiseRotatedGM.kt` | — |
 | `perspimages.cpp` | 🚧 | — | `SkImage::makeSubset` |
 | `perspshaders.cpp` | ✅ | `PerspShadersGM.kt` | — (H1.5 : `drawImage` sous perspective drop) |
-| `persptext.cpp` | ❌ | — | — |
+| `persptext.cpp` | ✅ | `PerspTextGM.kt, PerspTextMinimalGM.kt` | — |
 | `picture.cpp` | ✅ | `PictureGM.kt`, `PictureCullRectGM.kt` | — |
-| `pictureimagefilter.cpp` | ❌ | — | — |
+| `pictureimagefilter.cpp` | ✅ | `PictureImageFilterGM.kt` | — |
 | `pictureimagegenerator.cpp` | 🚧 | — | `SkImageGenerator` / `DeferredFromGenerator` |
 | `pictureshader.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
 | `pictureshadercache.cpp` | ✅ | `PictureShaderCacheGM.kt` | — |
-| `pictureshadertile.cpp` | ❌ | — | — |
+| `pictureshadertile.cpp` | ✅ | `PictureShaderTileGM.kt` | — |
 | `plus.cpp` | ✅ | `PlusMergesAaGM.kt` | — |
 | `points.cpp` | ✅ | `PointsGM.kt` | — |
-| `poly2poly.cpp` | ❌ | — | — |
-| `polygonoffset.cpp` | ❌ | — | — |
+| `poly2poly.cpp` | ✅ | `Poly2PolyGM.kt` | — |
+| `polygonoffset.cpp` | ✅ | `PolygonOffsetGM.kt (convex + simple)` | — (centroid-shrink approx ; SkInsetConvexPolygon/SkOffsetSimplePolygon non portés) |
 | `polygons.cpp` | ✅ | `ConjoinedPolygonsGM.kt`, `PolygonsGM.kt` | — |
-| `postercircle.cpp` | ❌ | — | — |
+| `postercircle.cpp` | ✅ | `PosterCircleGM.kt` | — |
 | `preservefillrule.cpp` | ✅ | `PreserveFillRuleGM.kt` | — |
 | `quadpaths.cpp` | ✅ | `QuadClosePathGM.kt`, `QuadPathGM.kt` | — |
 | `radial_gradient_precision.cpp` | ✅ | `RadialGradientPrecisionGM.kt` | — |
-| `rasterhandleallocator.cpp` | ❌ | — | — |
+| `rasterhandleallocator.cpp` | ✅ | `RasterAllocatorGM.kt` | — |
 | `readpixels.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `recordopts.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `rect_poly_stroke.cpp` | ✅ | `RectPolyStrokeGM.kt` | — |
 | `rectangletexture.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `rendertomipmappedyuvimageplanes.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `repeated_bitmap.cpp` | ✅ | `RepeatedBitmapGM.kt` | — |
-| `resizeimagefilter.cpp` | ❌ | — | — |
-| `rippleshadergm.cpp` | ❌ | — | — |
+| `resizeimagefilter.cpp` | ✅ | `ResizeImageFilterGM.kt` | — |
+| `rippleshadergm.cpp` | 🚧 | — | RippleShader.rts (SkRuntimeEffect SkSL parser non porté) |
 | `roundrects.cpp` | ✅ | `RoundRectGM.kt` | — |
 | `rrect.cpp` | ✅ | `RRectGM.kt` | — |
 | `rrectclipdrawpaint.cpp` | ✅ | `RRectClipDrawPaintGM.kt` | — |
@@ -475,25 +496,25 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `runtimeimagefilter.cpp` | ✅ | `RtifDistortGM.kt`, `RtifUnsharpGM.kt` | — |
 | `runtimeintrinsics.cpp` | ✅ | `RuntimeIntrinsicsCommonGM.kt`, `RuntimeIntrinsicsExponentialGM.kt`, `RuntimeIntrinsicsGeometricGM.kt`, `RuntimeIntrinsicsMatrixGM.kt`, `RuntimeIntrinsicsRelationalGM.kt`, `RuntimeIntrinsicsTrigGM.kt` | — |
 | `runtimeshader.cpp` | 🚧 | — | `SkCanvas::clipShader` |
-| `samplerstress.cpp` | ❌ | — | — |
+| `samplerstress.cpp` | ✅ | `SamplerStressGM.kt` | — |
 | `savelayer.cpp` | 🚧 | — | `SkShaderMaskFilter` |
-| `scaledemoji.cpp` | ❌ | — | — |
-| `scaledemoji_rendering.cpp` | ❌ | — | — |
+| `scaledemoji.cpp` | 🚧 | — | CBDT/Sbix/ColrV0/Svg emoji typefaces |
+| `scaledemoji_rendering.cpp` | 🚧 | — | CBDT/Sbix/ColrV0/Svg emoji typefaces |
 | `scaledrects.cpp` | ✅ | `ClipLargeRectGM.kt`, `ScaledRectsGM.kt` | — |
 | `scaledstrokes.cpp` | ✅ | `ScaledStrokesGM.kt` | — |
 | `shadermaskfilter.cpp` | 🚧 | — | `SkShaderMaskFilter` |
 | `shaderpath.cpp` | ✅ | `ShaderPathGM.kt` | — |
-| `shadertext3.cpp` | ❌ | — | — |
-| `shadowutils.cpp` | ❌ | — | — |
-| `shallowgradient.cpp` | ❌ | — | — |
+| `shadertext3.cpp` | ✅ | `ShaderText3GM.kt` | — |
+| `shadowutils.cpp` | ✅ | `ShadowUtilsGM.kt (NoOccluders / Occluders / Grayscale)` | — |
+| `shallowgradient.cpp` | ✅ | `ShallowGradientConicalGM.kt, ShallowGradientSweepGM.kt` | — (déjà porté antérieurement) |
 | `shapes.cpp` | ✅ | `InnerShapesGM.kt`, `SimpleShapesGM.kt` | — |
-| `sharedcorners.cpp` | ❌ | — | — |
+| `sharedcorners.cpp` | ✅ | `SharedCornersGM.kt` | — |
 | `showmiplevels.cpp` | 🚧 | — | `SkMipmapBuilder` + `SkImage.attachTo` absents |
-| `simpleaaclip.cpp` | ❌ | — | — |
+| `simpleaaclip.cpp` | ✅ | `SimpleAaClipRectGM.kt, SimpleAaClipPathGM.kt` | — (_aaclip flavour skip : SkAAClip Skia-internal) |
 | `simplerect.cpp` | ✅ | `SimpleRectGM.kt` | — |
 | `skbug1719.cpp` | ✅ | `Skbug1719GM.kt` | — |
 | `skbug_12212.cpp` | ✅ | `Skbug12212GM.kt` | — |
-| `skbug_257.cpp` | ❌ | — | — |
+| `skbug_257.cpp` | ✅ | `Skbug257GM.kt` | — |
 | `skbug_4868.cpp` | ✅ | `Skbug4868GM.kt` | — |
 | `skbug_5321.cpp` | ✅ | `Skbug5321GM.kt` | — |
 | `skbug_8664.cpp` | ✅ | `Skbug8664GM.kt` | — |
@@ -505,24 +526,24 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `smallcircles.cpp` | ✅ | `SmallCirclesGM.kt` | — |
 | `smallpaths.cpp` | ✅ | `SmallPathsGM.kt` | — |
 | `spritebitmap.cpp` | ✅ | `SpriteBitmapGM.kt` | — |
-| `srcmode.cpp` | ❌ | — | — |
+| `srcmode.cpp` | ✅ | `SrcModeGM.kt` | — |
 | `srgb.cpp` | 🚧 | — | `SkColorFilters::LinearToSRGBGamma`/`SRGBToLinearGamma` |
 | `stlouisarch.cpp` | ✅ | `StLouisArchGM.kt` | — |
 | `stringart.cpp` | ✅ | `StringArtGM.kt` | — |
 | `stroke_rect_shader.cpp` | ✅ | `StrokeRectShaderGM.kt` | — |
-| `strokedlines.cpp` | ❌ | — | — |
+| `strokedlines.cpp` | ✅ | `StrokedLinesGM.kt (drawPath + drawPoints)` | — |
 | `strokefill.cpp` | ✅ | `Bug339297GM.kt`, `Bug6987GM.kt` | — |
-| `strokerect.cpp` | ❌ | — | — |
+| `strokerect.cpp` | ✅ | `StrokeRectGM.kt` | — |
 | `strokerect_anisotropic.cpp` | ✅ | `StrokerectAnisotropicGM.kt` | — |
 | `strokerects.cpp` | ✅ | `StrokeRectsGM.kt` | — |
 | `strokes.cpp` | ✅ | `CubicStrokeGM.kt`, `InnerJoinGeometryGM.kt`, `QuadCapGM.kt`, `Skbug12244GM.kt`, `StrokesGM.kt`, `Strokes2GM.kt`, `Strokes4GM.kt`, `TeenyStrokesGM.kt`, `ZeroLineStrokeGM.kt` | — |
-| `stroketext.cpp` | ❌ | — | — |
+| `stroketext.cpp` | ✅ | `StrokeTextGM.kt` | — (dash-on-text panel no-op) |
 | `subsetshader.cpp` | ✅ | `BitmapSubsetShaderGM.kt` | — |
 | `surface.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `swizzle.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `tablecolorfilter.cpp` | ❌ | — | — |
+| `tablecolorfilter.cpp` | ✅ | `TableColorFilterGM.kt` | — |
 | `tablemaskfilter.cpp` | 🚧 | — | `SkTableMaskFilter` |
-| `tallstretchedbitmaps.cpp` | ❌ | — | — |
+| `tallstretchedbitmaps.cpp` | ✅ | `TallStretchedBitmapsGM.kt` | — |
 | `testgradient.cpp` | ✅ | `TestGradientGM.kt` | — |
 | `texelsubset.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `text_scale_skew.cpp` | ✅ | `TextScaleSkewGM.kt` | — |
@@ -533,35 +554,35 @@ Nouveau triage : maintenant qu'on a `API_REMEDIATION_PLAN.md`, on peut **pré-bl
 | `textblobmixedsizes.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `textblobrandomfont.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `textblobshader.cpp` | ✅ | `TextBlobShaderGM.kt` | — |
-| `textblobtransforms.cpp` | ❌ | — | — |
+| `textblobtransforms.cpp` | ✅ | `TextBlobTransformsGM.kt` | — |
 | `textblobuseaftergpufree.cpp` | ✅ | `TextBlobUseAfterGpuFreeGM.kt` | — |
-| `texteffects.cpp` | ❌ | — | — |
+| `texteffects.cpp` | ✅ | `TextEffectsGM.kt (FancyBlobUnderline)` | — (textblob_intercepts skip : SkTextBlob.getIntercepts manquant) |
 | `thinconcavepaths.cpp` | ✅ | `ThinConcavePathsGM.kt` | — |
 | `thinrects.cpp` | ✅ | `ThinRectsGM.kt` | — |
 | `thinstrokedrects.cpp` | ✅ | `ThinStrokedRectsGM.kt` | — |
 | `tiledscaledbitmap.cpp` | ✅ | `TiledScaledBitmapGM.kt` | — |
-| `tileimagefilter.cpp` | ❌ | — | — |
-| `tilemodes.cpp` | ❌ | — | — |
+| `tileimagefilter.cpp` | ✅ | `TileImageFilterGM.kt` | — |
+| `tilemodes.cpp` | ✅ | `TilemodesGM.kt` | — |
 | `tilemodes_alpha.cpp` | ✅ | `TilemodesAlphaGM.kt` | — |
-| `tilemodes_scaled.cpp` | ❌ | — | — |
+| `tilemodes_scaled.cpp` | ✅ | `ScaledTilemodesGM.kt` | — |
 | `tinybitmap.cpp` | ✅ | `TinyBitmapGM.kt` | — |
 | `transparency.cpp` | ✅ | `TransparencyCheckGM.kt` | — |
 | `trickycubicstrokes.cpp` | ✅ | `TrickyCubicStrokesGM.kt` | — |
-| `typeface.cpp` | ❌ | — | — |
-| `unpremul.cpp` | ❌ | — | — |
-| `userfont.cpp` | ❌ | — | — |
-| `variedtext.cpp` | ❌ | — | — |
+| `typeface.cpp` | ✅ | `TypefaceStylesGM.kt, TypefaceStylingGM.kt` | — (typefacestyles_kerning skip : SkTypeface.getKerningPairAdjustments manquant) |
+| `unpremul.cpp` | ✅ | `UnpremulGM.kt` | — |
+| `userfont.cpp` | ✅ | `UserFontGM.kt` | — (R-suivi.49 SkCustomTypeface drawable hook) |
+| `variedtext.cpp` | ✅ | `VariedTextGM.kt (4 variants Clipped/IgnorableClip × Lcd/NoLcd)` | — |
 | `vertices.cpp` | ✅ | `VerticesCollapsedGM.kt`, `VerticesPerspectiveGM.kt` | — |
-| `verylargebitmap.cpp` | ❌ | — | — |
-| `video_decoder.cpp` | ❌ | — | — |
+| `verylargebitmap.cpp` | ✅ | `VeryLargeBitmapGM.kt` | — |
+| `video_decoder.cpp` | 🚧 | — | SkVideoDecoder = FFmpeg + GrContext only ; pas de CPU path |
 | `wacky_yuv_formats.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `widebuttcaps.cpp` | ✅ | `WideButtCapsGM.kt` | — |
 | `windowrectangles.cpp` | 🚧 | — | `SkCanvas::clipShader` |
-| `workingspace.cpp` | ❌ | — | — |
-| `xfermodeimagefilter.cpp` | ❌ | — | — |
+| `workingspace.cpp` | 🚧 | — | SkColorFilter::makeWithWorkingColorSpace + SkShader::makeWithWorkingColorSpace + SkWorkingColorSpaceShader |
+| `xfermodeimagefilter.cpp` | ✅ | `XfermodeImageFilterGM.kt` | — (Blend(cropRect) substitué Crop(kDecal)) |
 | `xfermodes.cpp` | ✅ | `XfermodesGM.kt` | — |
-| `xfermodes2.cpp` | ❌ | — | — |
-| `xfermodes3.cpp` | ❌ | — | — |
+| `xfermodes2.cpp` | ✅ | `Xfermodes2GM.kt` | — (premul SkPMColor patterns reconstructs) |
+| `xfermodes3.cpp` | ✅ | `Xfermodes3GM.kt` | — |
 | `ycbcrimage.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `yuv420_odd_dim.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `yuvtorgbsubset.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
