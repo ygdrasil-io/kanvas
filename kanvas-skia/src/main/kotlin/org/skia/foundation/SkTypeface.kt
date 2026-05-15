@@ -120,6 +120,29 @@ public open class SkTypeface protected constructor() {
     ): SkScalar = 0f
 
     /**
+     * Mirrors Skia's
+     * [`SkTypeface::getKerningPairAdjustments`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h)
+     * — returns the OpenType `kern` table pair adjustments for a sequence
+     * of [glyphs] (each adjustment is in source-space FUnits applied
+     * between glyph `i` and glyph `i + 1`, so the returned array has
+     * `glyphs.size - 1` entries).
+     *
+     * **R-final.7 status — JNI required, returns `null`** :
+     *
+     * AWT does not expose the OpenType `kern` table directly. Reading
+     * pair adjustments would require parsing the raw font binary (the
+     * `kern` and `GPOS` tables) — out of scope for the pure-JVM port
+     * (FreeType / HarfBuzz handle this upstream). Returning `null`
+     * matches Skia's contract for typefaces that don't carry a `kern`
+     * table : the caller should fall back to advance-only positioning.
+     *
+     * Concrete subclasses backed by a font binary loader (eventual
+     * Fontations / FreeType JNI bridge — see `STUB.FONTATIONS` in
+     * `API_FINALIZATION_PLAN.md`) may override.
+     */
+    public open fun getKerningPairAdjustments(glyphs: ShortArray): IntArray? = null
+
+    /**
      * Internal hook for [SkFont.getMetrics] — base class fills [metrics]
      * with zeros and returns 0 (the recommended line spacing).
      */

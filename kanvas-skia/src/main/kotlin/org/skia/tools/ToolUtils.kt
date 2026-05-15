@@ -156,6 +156,40 @@ public object ToolUtils {
     public fun DefaultPortableTypeface(): SkTypeface = LiberationFontMgr.getDefault()
 
     /**
+     * Mirrors `ToolUtils::CreateTypefaceFromResource(path, style)`
+     * (`tools/fonts/FontToolUtils.cpp`).
+     *
+     * Reads the encoded TTF/OTF bytes from the classpath at [path]
+     * (relative to the resource root, e.g. `"fonts/ReallyBigA.ttf"`)
+     * and wraps them as an AWT-backed [SkTypeface]. Returns `null` when
+     * the resource is missing or AWT cannot parse the font (corrupt
+     * file, or a colour-emoji format like CBDT / Sbix / COLRv1 that AWT
+     * doesn't support — those need the JNI-backed FreeType pipeline,
+     * see `STUB.EMOJI_TABLES` in `API_FINALIZATION_PLAN.md`).
+     */
+    public fun CreateTypefaceFromResource(
+        path: String,
+        style: SkFontStyle = SkFontStyle.Normal(),
+    ): SkTypeface? {
+        val data = GetResourceAsData(path) ?: return null
+        return org.skia.foundation.awt.AwtTypeface.createFromBytes(data.toByteArray(), style)
+    }
+
+    /**
+     * Mirrors `ToolUtils::PlanetTypeface()` (`tools/fonts/FontToolUtils.cpp`).
+     *
+     * **R-final.7 status — STUB.EMOJI_TABLES, returns `null`** :
+     * upstream loads `planetcolr.ttf` / `planetsbix.ttf` / `planetcbdt.ttf`
+     * which are colour-emoji fonts (COLRv0 / Sbix / CBDT formats). AWT's
+     * font scaler doesn't grok colour bitmap glyph tables, so the
+     * resource load succeeds but rendering would just emit `.notdef`
+     * boxes. Returning `null` lets callers detect the absence and skip
+     * the colour-emoji draw path (matches upstream's null-check
+     * semantics — see `gm/mixedtextblobs.cpp:94`).
+     */
+    public fun PlanetTypeface(): SkTypeface? = null
+
+    /**
      * Mirrors `ToolUtils::DefaultPortableFont()`. Convenience wrapper —
      * a [SkFont] using [DefaultPortableTypeface] at the requested size
      * (default 12pt, matching upstream). Edging defaults to `kAntiAlias`.
