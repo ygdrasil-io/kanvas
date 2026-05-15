@@ -10,14 +10,13 @@ import org.skia.testing.TestUtils
 /**
  * Tests for the R-final.5 [OrientationGM] family.
  *
- * **Pixel-fidelity caveat.** kanvas-skia's [org.skia.codec.jpeg.SkJpegCodec]
- * does not yet apply the EXIF `Orientation` tag (queued for R-final.8).
- * Until that lands the rendered tiles will display the un-rotated raw
- * JPEG content (each tile rotated relative to its label), so similarity
- * vs. the upstream `orientation_444.png` / `respect_orientation_jpeg.png`
- * references is **expected to be low**. The tests therefore use a
- * permissive floor and rely on the [SimilarityTracker] ratchet to
- * detect regressions.
+ * **R-final.8 EXIF fix.** [org.skia.codec.jpeg.SkJpegCodec] now parses
+ * the EXIF Orientation tag (0x0112) and applies the corresponding
+ * rotation/flip to the decoded pixels via
+ * [org.skia.utils.SkPixmapUtils.Orient]. The tests retain a permissive
+ * `floor` parameter so the [SimilarityTracker] ratchet drives the
+ * monotonic improvement record — the fix is expected to lift both GMs
+ * well above the pre-R-final.8 19.87 % baseline.
  */
 class OrientationTest {
 
