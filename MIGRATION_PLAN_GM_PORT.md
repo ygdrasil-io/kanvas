@@ -4,18 +4,21 @@ Statut du portage des Graphics Modules (GM) C++ de Skia vers `kanvas-skia/src/ma
 
 **Source de référence** : `/Users/chaos/workspace/kanvas-forge/skia-main/gm/` (437 fichiers `.cpp`)
 **Cible** : `kanvas-skia/src/main/kotlin/org/skia/tests/*GM.kt` (310 GMs Kotlin sur `origin/master`)
-**Snapshot** : post-merge **13 phases d'API** (G1-G10 + G9a/b) + **H1 complet** + **H3 waves 1-12 toutes mergées** + **API_REMEDIATION_PLAN.md complet (50/50 R-suivi ✅)**
+**Snapshot** : post-merge **13 phases d'API** (G1-G10 + G9a/b) + **H1 complet** + **H3 waves 1-12 toutes mergées** + **API_REMEDIATION_PLAN.md complet (64/64 R-suivi ✅, archivé)** + **API_FINALIZATION_PLAN.md complet (10/10 sprints R-final + R-final.S, +43 GMs)**
 
 ## Résumé
 
 | Statut | Fichiers `.cpp` | Pourcentage |
 |---|---:|---:|
-| ✅ Porté (≥ 1 `*GM.kt` rattaché) | **319** | **73 %** |
-| 🚧 Bloqué (API manquante / GPU-only / asset / PNG ref) | **118** | **27 %** |
+| ✅ Porté (≥ 1 `*GM.kt` rattaché) | **357** | **82 %** |
+| 🚧 Bloqué (GPU-only / stub JNI / asset manquant / PNG ref dégénérée) | **80** | **18 %** |
 | ❌ Non tenté (potentiellement portable) | **0** | **0 %** |
 | **Total** | **437** | **100 %** |
 
-🎯 **Phase H3 EXHAUSTÉE** — chaque cpp a été soit porté, soit explicitement classifié.
+🎯 **Phase R-final EXHAUSTÉE** — décomposition des 80 🚧 résiduels :
+- **67 GPU-only** — renvoyées vers `MIGRATION_PLAN_GPU_WEBGPU.md`
+- **8 stub-JNI** — `R-final.S` a livré les stubs en compile-only (`@Ignore` côté tests) ; les 10 GMs squelettes attendent les vraies dépendances (libwebp lossy, FFmpeg, Fontations, COLR v1, emoji tables, SkSL, LiberationFontMgr, AAClip)
+- **5 résiduels post-R-final** — `drawimageset` (F6), `perspimages` (F7), `rsxtext` (F2), `flightAnim/stoplight` (F11+F12) — voir follow-ups F1-F12 dans `API_FINALIZATION_PLAN.md` § 7
 
 GMs Kotlin sans correspondance dans le tree de référence (probablement issus d'une version Skia plus récente) : **30**.
 
@@ -40,9 +43,19 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 | H3 wave 9 (10 ports + 1 skip textblob_intercepts) | 304 / 437 | 70% |
 | H3 wave 10 (9 ports + 1 skip workingspace) | 313 / 437 | 72% |
 | H3 wave 11 (3 ports + 7 skips emoji/anim/codec/HDR) | 316 / 437 | 72% |
-| **H3 wave 12 (3 ports + 7 skips font infra/runtime effect)** | **319 / 437** | **73 %** |
+| H3 wave 12 (3 ports + 7 skips font infra/runtime effect) | 319 / 437 | 73 % |
+| R-final.1 — clipShader + drawRegion + contains + drawImageNine (PR #438) | 327 / 437 | 75 % |
+| R-final.2 — makeWithLocalMatrix shader/filter (PR #439) | 335 / 437 | 77 % |
+| R-final.3 — Color management (PR #440) | 336 / 437 | 77 % |
+| R-final.4 — Image helpers + ShaderMaskFilter (PR #441) | 341 / 437 | 78 % |
+| R-final.5 — Generators + mipmaps + GIF anim (PR #443) | 346 / 437 | 79 % |
+| R-final.6 — Encodeurs via javax.imageio (PR #442) | 351 / 437 | 80 % |
+| R-final.7 — Misc raster (M44 persp + CoordClamp + HighContrast + TableMaskFilter, PR #445) | 356 / 437 | 81 % |
+| R-final.8 — SkAnimatedImage + EXIF + YUVUtils (PR #444) | 357 / 437 | 82 % |
+| R-final.9 — Variable fonts + HDR pipeline (PR #447) | 357 / 437 | 82 % (+ 2 GMs in-progress — variantes Distortable.ttf / HDR PQ) |
+| **R-final.S — JNI stubs documented (PR #446)** | **357 / 437** | **82 %** (10 squelettes compile-only) |
 
-**Gain net depuis snapshot initial** : +171 GMs (de 34 % à 73 % de couverture). **Tous les `❌` épuisés** — chaque cpp est désormais soit ✅ soit 🚧.
+**Gain net depuis snapshot initial** : +209 GMs (de 34 % à 82 % de couverture). **Tous les `❌` épuisés** — chaque cpp est désormais soit ✅ soit 🚧 (résiduel justifié).
 
 ## Phases d'API — toutes mergées ✅
 
@@ -161,8 +174,8 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `alphagradients.cpp` | ✅ | `AlphaGradientsGM.kt` | — |
 | `analytic_gradients.cpp` | ✅ | `AnalyticGradientShaderGM.kt` | — |
 | `androidblendmodes.cpp` | ✅ | `AndroidBlendModesGM.kt` | — |
-| `animated_gif.cpp` | 🚧 | — | SkCodec.getFrameInfo + per-frame getPixels(Options{frameIndex, priorFrame}) non exposés |
-| `animated_image_orientation.cpp` | 🚧 | — | SkAnimatedImage module + EXIF-aware SkAndroidCodec non portés |
+| `animated_gif.cpp` | ✅ | `AnimatedGifGM.kt` | R-final.5 — 100% similarity |
+| `animated_image_orientation.cpp` | ✅ | `AnimatedImageOrientationGM.kt` | R-final.8 — via SkAnimatedImage + EXIF |
 | `animatedimageblurs.cpp` | ✅ | `AnimatedImageBlursGM.kt` | — (t=0 snapshot) |
 | `anisotropic.cpp` | ✅ | `AnisoMipsGM.kt`, `AnisotropicImageScaleAnisoGM.kt`, `AnisotropicImageScaleLinearGM.kt`, `AnisotropicImageScaleMipGM.kt`, `AnisotropicMipGM.kt` | — |
 | `annotated_text.cpp` | ✅ | `AnnotatedTextGM.kt` | — |
@@ -223,7 +236,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `clip_strokerect.cpp` | ✅ | `ClipStrokeRectGM.kt` | — |
 | `clipdrawdraw.cpp` | ✅ | `ClipDrawDrawGM.kt`, `ClipRegionGM.kt` | — |
 | `clippedbitmapshaders.cpp` | ✅ | `ClippedBitmapShadersGM.kt` (6 variants : clamp/mirror/tile × low/hq) | — |
-| `clipshader.cpp` | 🚧 | — | `SkCanvas::clipShader` |
+| `clipshader.cpp` | ✅ | `ClipShaderGM.kt` | R-final.1 — floor ~50% (bug F1: SkRuntimeEffect.makeShader localMatrix forward/inverse) |
 | `clockwise.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `closedcappedhairlines.cpp` | 🚧 | — | Pas de PNG de référence dans `original-888/` |
 | `collapsepaths.cpp` | ✅ | `CollapsePathsGM.kt` | — |
@@ -237,14 +250,14 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `colorspace.cpp` | 🚧 | — | `SkImage.makeColorSpace` + `SkCanvas.makeSurface(info)` absents |
 | `colorwheel.cpp` | ✅ | `ColorWheelNativeGM.kt` | — |
 | `colrv1.cpp` | 🚧 | — | COLR v1 emoji + variable axes |
-| `complexclip.cpp` | 🚧 | — | `SkCanvas::clipShader` |
+| `complexclip.cpp` | ✅ | `ComplexClipGM.kt × 8 (bw/aa × invert × layer)` | R-final.1 |
 | `complexclip2.cpp` | ✅ | `ComplexClip2GM.kt` (6 variants rect/rrect/path × bw/aa) | — |
 | `complexclip3.cpp` | ✅ | `ComplexClip3GM.kt` (simple + complex) | — |
 | `complexclip4.cpp` | ✅ | `ComplexClip4GM.kt` (bw + aa, approx) | — (manque `setDeviceClipRestriction` + `ResetClip`) |
 | `complexclip_blur_tiled.cpp` | ✅ | `ComplexClipBlurTiledGM.kt` | — |
 | `composecolorfilter.cpp` | ✅ | `ComposeColorFilterGM.kt` | — |
-| `composeshader.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
-| `compositor_quads.cpp` | 🚧 | — | YUV multi-plane (`tools/gpu/YUVUtils`) |
+| `composeshader.cpp` | ✅ | `ComposeShaderGM.kt, ComposeShaderBitmapGM.kt × 2` | R-final.2 |
+| `compositor_quads.cpp` | ✅ | `CompositorQuadsImageGM.kt` | R-final.8 — port minimal (full = F6 experimental_DrawEdgeAAImageSet) |
 | `compressed_textures.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `concavepaths.cpp` | ✅ | `ConcavePathsGM.kt` | — |
 | `conicpaths.cpp` | ✅ | `ArcCircleGapGM.kt`, `ConicPathsGM.kt`, `LargeCircleGM.kt`, `LargeOvalsGM.kt` | — |
@@ -253,7 +266,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `convexpaths.cpp` | ✅ | `ConvexPathsGM.kt` | — |
 | `convexpolyclip.cpp` | ✅ | `ConvexPolyClipGM.kt` | — |
 | `convexpolyeffect.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `coordclampshader.cpp` | 🚧 | — | `SkShaders::CoordClamp` |
+| `coordclampshader.cpp` | ✅ | `CoordClampShaderGM.kt` | R-final.7 |
 | `copy_to_4444.cpp` | ✅ | `CopyTo4444GM.kt` | — |
 | `crbug_1041204.cpp` | ✅ | `Crbug10141204GM.kt` | — |
 | `crbug_1073670.cpp` | ✅ | `Crbug1073670GM.kt` | — |
@@ -268,7 +281,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `crbug_1177833.cpp` | ✅ | `Crbug1177833GM.kt` | — |
 | `crbug_1257515.cpp` | ✅ | `Crbug1257515GM.kt` | — |
 | `crbug_1313579.cpp` | ✅ | `Crbug1313579GM.kt` | — |
-| `crbug_224618.cpp` | 🚧 | — | `SkM44` (4×4 perspective matrix) + perspective `drawImageRect` |
+| `crbug_224618.cpp` | ✅ | `Crbug224618GM.kt` | R-final.7 — perspective via SkM44 |
 | `crbug_478659067.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `crbug_691386.cpp` | ✅ | `Crbug691386GM.kt` | — |
 | `crbug_788500.cpp` | ✅ | `Crbug788500GM.kt` | — |
@@ -285,7 +298,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `crbug_946965.cpp` | ✅ | `Crbug946965GM.kt` | — |
 | `crbug_947055.cpp` | ✅ | `Crbug947055GM.kt` | — |
 | `crbug_996140.cpp` | ✅ | `Crbug996140GM.kt` | — |
-| `crop_imagefilter.cpp` | 🚧 | — | `SkImage::makeSubset` |
+| `crop_imagefilter.cpp` | ✅ | `CropImageFilterGM.kt × 4 SkTileMode pairs` | R-final.4 |
 | `croppedrects.cpp` | ✅ | `CroppedRectsGM.kt` | — |
 | `crosscontextimage.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `cubicpaths.cpp` | ✅ | `Bug5099GM.kt`, `Bug6083GM.kt`, `ClippedCubicGM.kt`, `ClippedCubic2GM.kt`, `CubicClosePathGM.kt`, `CubicPathGM.kt`, `CubicPathShaderGM.kt` | — |
@@ -304,14 +317,14 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `drawable.cpp` | ✅ | `DrawableGM.kt` | — |
 | `drawatlas.cpp` | ✅ | `DrawAtlasGM.kt` | — |
 | `drawatlascolor.cpp` | ✅ | `DrawAtlasColorGM.kt` | — (partiel : tint couleur ignoré, Phase I5.3) |
-| `drawbitmaprect.cpp` | 🚧 | — | `SkImage::makeSubset` |
+| `drawbitmaprect.cpp` | ✅ | `DrawBitmapRectGM.kt × 4 procs` | R-final.4 |
 | `drawglyphs.cpp` | ✅ | `DrawGlyphsGM.kt` | — |
 | `drawimageset.cpp` | 🚧 | — | `SkImage::makeSubset` |
 | `drawlines_with_local_matrix.cpp` | ✅ | `DrawlinesWithLocalMatrixGM.kt` | — |
 | `drawminibitmaprect.cpp` | ✅ | `DrawMiniBitmapRectGM.kt` (bw + aa) | — |
 | `drawquadset.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `drawregion.cpp` | 🚧 | — | `SkCanvas::drawRegion` |
-| `drawregionmodes.cpp` | 🚧 | — | `SkCanvas::drawRegion` |
+| `drawregion.cpp` | ✅ | `DrawRegionGM.kt` | R-final.1 |
+| `drawregionmodes.cpp` | ✅ | `DrawRegionModesGM.kt` | R-final.1 |
 | `dropshadowimagefilter.cpp` | ✅ | `DropShadowImageFilterGM.kt` | — |
 | `drrect.cpp` | ✅ | `DRRectGM.kt` | — |
 | `drrect_small_inner.cpp` | ✅ | `DRRectSmallInnerGM.kt` | — |
@@ -321,10 +334,10 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `emptypath.cpp` | ✅ | `EmptyPathGM.kt` | — |
 | `emptyshader.cpp` | ✅ | `EmptyShaderGM.kt` | — |
 | `encode.cpp` | ✅ | `EncodeGM.kt` | — |
-| `encode_alpha_jpeg.cpp` | 🚧 | — | Encodeurs image (`SkJpegEncoder`/`SkPngEncoder`/`SkWebpEncoder`) |
-| `encode_color_types.cpp` | 🚧 | — | Encodeurs image (`SkJpegEncoder`/`SkPngEncoder`/`SkWebpEncoder`) |
-| `encode_platform.cpp` | 🚧 | — | Encodeurs image (`SkJpegEncoder`/`SkPngEncoder`/`SkWebpEncoder`) |
-| `encode_srgb.cpp` | 🚧 | — | Encodeurs image (`SkJpegEncoder`/`SkPngEncoder`/`SkWebpEncoder`) |
+| `encode_alpha_jpeg.cpp` | ✅ | `EncodeAlphaJpegGM.kt` | R-final.6 — 83.53% via javax.imageio |
+| `encode_color_types.cpp` | ✅ | `EncodeColorTypesGM.kt` | R-final.6 — webp-lossless variant |
+| `encode_platform.cpp` | ✅ | `EncodePlatformGM.kt` | R-final.6 — 80.17% |
+| `encode_srgb.cpp` | ✅ | `EncodeSrgbGM.kt (png+jpg variants)` | R-final.6 |
 | `exoticformats.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `fadefilter.cpp` | ✅ | `FadeFilterGM.kt` | — |
 | `fatpathfill.cpp` | ✅ | `FatPathFillGM.kt` | — |
@@ -333,7 +346,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `filltypes.cpp` | ✅ | `FillTypeGM.kt`, `FillTypesGM.kt` | — |
 | `filltypespersp.cpp` | ✅ | `FillTypePerspGM.kt` | — |
 | `filterbug.cpp` | ✅ | `FilterBugGM.kt` | — |
-| `filterfastbounds.cpp` | 🚧 | — | `SkPaint.computeFastBounds` + `SkImageFilter.computeFastBounds` |
+| `filterfastbounds.cpp` | ✅ | `FilterFastBoundsGM.kt` | R-final.4 |
 | `filterindiabox.cpp` | ✅ | `FilterIndiaBoxGM.kt` | — |
 | `flippity.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `fontations.cpp` | 🚧 | — | Fontations Rust crate non bound |
@@ -342,7 +355,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `fontmgr.cpp` | 🚧 | — | LiberationFontMgr internal ; pas de portable family API public |
 | `fontregen.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `fontscaler.cpp` | ✅ | `FontScalerGM.kt` | — |
-| `fontscalerdistortable.cpp` | 🚧 | — | SkFontArguments::VariationPosition + makeClone (variable fonts) manquants |
+| `fontscalerdistortable.cpp` | ✅ | `FontScalerDistortableGM.kt` | R-final.9 — AWT 4 axes (wght/wdth/slnt/ital) |
 | `fp_sample_chaining.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `fpcoordinateoverride.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `fwidth_squircle.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
@@ -366,10 +379,10 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `hairmodes.cpp` | ✅ | `HairModesGM.kt` | — |
 | `hardstop_gradients.cpp` | ✅ | `HardstopGradientShaderGM.kt` | — |
 | `hardstop_gradients_many.cpp` | ✅ | `HardstopGradientsManyGM.kt` | — |
-| `hdr_pip_blur.cpp` | 🚧 | — | SkImages.MakeWithFilter + canvas.makeSurface + makeTemporaryImage + HDR PQ retag flow |
+| `hdr_pip_blur.cpp` | ✅ | `HdrPipBlurGM.kt` | R-final.9 — MakeWithFilter + makeTemporaryImage + MakePqHdr |
 | `hello_bazel_world.cpp` | 🚧 | — | GM Bazel-only (pas de PNG de référence) |
-| `highcontrastfilter.cpp` | 🚧 | — | `SkHighContrastFilter` absent |
-| `hittestpath.cpp` | 🚧 | — | `SkPath.contains(scalar, scalar)` |
+| `highcontrastfilter.cpp` | ✅ | `HighContrastFilterGM.kt` | R-final.7 |
+| `hittestpath.cpp` | ✅ | `HitTestPathGM.kt` | R-final.1 |
 | `hsl.cpp` | ✅ | `HSLGM.kt` | — |
 | `hugepath.cpp` | ✅ | `HugePathCrbug800804GM.kt`, `PathHugeAaGM.kt`, `PathHugeAaManualGM.kt` | — |
 | `image.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
@@ -389,7 +402,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `imagefiltersgraph.cpp` | ✅ | `ImageFiltersGraphGM.kt` | — (cropRect wrappé `Crop`) |
 | `imagefiltersscaled.cpp` | ✅ | `ImageFiltersScaledGM.kt` | — |
 | `imagefiltersstroked.cpp` | ✅ | `ImageFiltersStrokedGM.kt` | — |
-| `imagefilterstransformed.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
+| `imagefilterstransformed.cpp` | ✅ | `ImageFiltersTransformedGM.kt` | R-final.2 |
 | `imagefiltersunpremul.cpp` | ✅ | `ImageFiltersUnpremulGM.kt` | — |
 | `imagefromyuvtextures.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `imagemagnifier.cpp` | ✅ | `ImageMagnifierGM.kt`, `ImageMagnifierCroppedGM.kt`, `ImageMagnifierBoundsGM.kt` | — |
@@ -401,7 +414,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `internal_links.cpp` | ✅ | `InternalLinksGM.kt` | — |
 | `inverseclip.cpp` | ✅ | `InverseClipGM.kt` | — |
 | `inversepaths.cpp` | ✅ | `InversePathsGM.kt`, `InverseWindingmodeFiltersGM.kt` | — |
-| `jpg_color_cube.cpp` | 🚧 | — | Encodeurs image (`SkJpegEncoder`/`SkPngEncoder`/`SkWebpEncoder`) |
+| `jpg_color_cube.cpp` | ✅ | `JpgColorCubeGM.kt` | R-final.6 — 100% |
 | `kawase_blur_rt.cpp` | ✅ | `KawaseBlurRtGM.kt` | — |
 | `labyrinth.cpp` | ✅ | `LabyrinthGM.kt` | — |
 | `largeclippedpath.cpp` | ✅ | `LargeClippedPathGM.kt` | — |
@@ -413,9 +426,9 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `lcdtext.cpp` | ✅ | `LcdTextGM.kt` | — |
 | `lighting.cpp` | ✅ | `LightingGM.kt` | — |
 | `linepaths.cpp` | ✅ | `LinePathGM.kt` | — |
-| `localmatriximagefilter.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
+| `localmatriximagefilter.cpp` | ✅ | `LocalMatrixImageFilterGM.kt` | R-final.2 |
 | `localmatriximageshader.cpp` | ✅ | `LocalMatrixImageShaderGM.kt` | — |
-| `localmatrixshader.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
+| `localmatrixshader.cpp` | ✅ | `LocalMatrixShaderGM.kt` | R-final.2 — 4 shader-topology factories |
 | `lumafilter.cpp` | ✅ | `LumaFilterGM.kt` | — |
 | `luminosity.cpp` | ✅ | `LuminosityOverflowGM.kt` | — |
 | `mac_aa_explorer.cpp` | ✅ | `MacaaColorsGM.kt` | — (partial : MacAAFontsGM = #ifdef SK_BUILD_FOR_MAC) |
@@ -429,16 +442,16 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `mesh.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `mipmap.cpp` | ✅ | `MipmapGM.kt, MipmapSrgbGM.kt, MipmapGray8SrgbGM.kt` | — |
 | `mirrortile.cpp` | ✅ | `MirrorTileGM.kt` | — |
-| `mixedtextblobs.cpp` | 🚧 | — | PlanetTypeface + ReallyBigA.ttf resource non portés |
+| `mixedtextblobs.cpp` | ✅ | `MixedTextBlobsGM.kt` | R-final.7 — sans variante color-emoji (PlanetTypeface non-AWT) |
 | `mixercolorfilter.cpp` | ✅ | `MixerCFGM.kt` | — (30 % : `Lerp` non-nullable workaround) |
 | `modecolorfilters.cpp` | ✅ | `ModeColorFiltersGM.kt` | — (44 % : divergence saveLayer + `SrcOver` bgPaint) |
 | `morphology.cpp` | ✅ | `MorphologyGM.kt` | — |
 | `nearesthalfpixelimage.cpp` | ✅ | `NearestHalfPixelImageGM.kt` | — |
 | `nested.cpp` | ✅ | `NestedGM.kt` | — |
-| `ninepatchstretch.cpp` | 🚧 | — | `SkCanvas::drawImageNine` |
+| `ninepatchstretch.cpp` | ✅ | `NinePatchStretchGM.kt` | R-final.1 — degenerate drawImageLattice 3×3 |
 | `nonclosedpaths.cpp` | ✅ | `NonClosedPathsGM.kt` | — |
 | `offsetimagefilter.cpp` | ✅ | `OffsetImageFilterGM.kt` | — (cropRect wrappé `Crop`) |
-| `orientation.cpp` | 🚧 | — | `SkImageGenerator` / `DeferredFromGenerator` |
+| `orientation.cpp` | ✅ | `Orientation444GM.kt, RespectOrientationJpegGM.kt` | R-final.5 (ports) + R-final.8 (EXIF fix → 100%) |
 | `ovals.cpp` | ✅ | `OvalGM.kt` | — |
 | `overdrawcanvas.cpp` | ✅ | `OverdrawCanvasGM.kt` | — |
 | `overdrawcolorfilter.cpp` | ✅ | `OverdrawColorFilterGM.kt` | — |
@@ -464,8 +477,8 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `persptext.cpp` | ✅ | `PerspTextGM.kt, PerspTextMinimalGM.kt` | — |
 | `picture.cpp` | ✅ | `PictureGM.kt`, `PictureCullRectGM.kt` | — |
 | `pictureimagefilter.cpp` | ✅ | `PictureImageFilterGM.kt` | — |
-| `pictureimagegenerator.cpp` | 🚧 | — | `SkImageGenerator` / `DeferredFromGenerator` |
-| `pictureshader.cpp` | 🚧 | — | `SkShader::makeWithLocalMatrix` / `SkImageFilter::makeWithLocalMatrix` |
+| `pictureimagegenerator.cpp` | ✅ | `PictureImageGeneratorGM.kt` | R-final.5 — 83% (manque F10 SkTextUtils.GetPath) |
+| `pictureshader.cpp` | ✅ | `PictureShaderGM.kt × 3 (incl. _localwrapper, _alpha)` | R-final.2 |
 | `pictureshadercache.cpp` | ✅ | `PictureShaderCacheGM.kt` | — |
 | `pictureshadertile.cpp` | ✅ | `PictureShaderTileGM.kt` | — |
 | `plus.cpp` | ✅ | `PlusMergesAaGM.kt` | — |
@@ -495,21 +508,21 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `runtimefunctions.cpp` | ✅ | `RuntimeFunctionsGM.kt` | — |
 | `runtimeimagefilter.cpp` | ✅ | `RtifDistortGM.kt`, `RtifUnsharpGM.kt` | — |
 | `runtimeintrinsics.cpp` | ✅ | `RuntimeIntrinsicsCommonGM.kt`, `RuntimeIntrinsicsExponentialGM.kt`, `RuntimeIntrinsicsGeometricGM.kt`, `RuntimeIntrinsicsMatrixGM.kt`, `RuntimeIntrinsicsRelationalGM.kt`, `RuntimeIntrinsicsTrigGM.kt` | — |
-| `runtimeshader.cpp` | 🚧 | — | `SkCanvas::clipShader` |
+| `runtimeshader.cpp` | ✅ | `RuntimeShaderGM.kt` | R-final.1 — floor ~50% (bug F1: localMatrix forward/inverse) |
 | `samplerstress.cpp` | ✅ | `SamplerStressGM.kt` | — |
-| `savelayer.cpp` | 🚧 | — | `SkShaderMaskFilter` |
+| `savelayer.cpp` | ✅ | `SaveLayerGM.kt (savelayer_initfromprev)` | R-final.4 |
 | `scaledemoji.cpp` | 🚧 | — | CBDT/Sbix/ColrV0/Svg emoji typefaces |
 | `scaledemoji_rendering.cpp` | 🚧 | — | CBDT/Sbix/ColrV0/Svg emoji typefaces |
 | `scaledrects.cpp` | ✅ | `ClipLargeRectGM.kt`, `ScaledRectsGM.kt` | — |
 | `scaledstrokes.cpp` | ✅ | `ScaledStrokesGM.kt` | — |
-| `shadermaskfilter.cpp` | 🚧 | — | `SkShaderMaskFilter` |
+| `shadermaskfilter.cpp` | ✅ | `ShaderMaskFilterGM.kt` | R-final.4 |
 | `shaderpath.cpp` | ✅ | `ShaderPathGM.kt` | — |
 | `shadertext3.cpp` | ✅ | `ShaderText3GM.kt` | — |
 | `shadowutils.cpp` | ✅ | `ShadowUtilsGM.kt (NoOccluders / Occluders / Grayscale)` | — |
 | `shallowgradient.cpp` | ✅ | `ShallowGradientConicalGM.kt, ShallowGradientSweepGM.kt` | — (déjà porté antérieurement) |
 | `shapes.cpp` | ✅ | `InnerShapesGM.kt`, `SimpleShapesGM.kt` | — |
 | `sharedcorners.cpp` | ✅ | `SharedCornersGM.kt` | — |
-| `showmiplevels.cpp` | 🚧 | — | `SkMipmapBuilder` + `SkImage.attachTo` absents |
+| `showmiplevels.cpp` | ✅ | `ShowMipLevelsGM.kt` | R-final.5 — 78% |
 | `simpleaaclip.cpp` | ✅ | `SimpleAaClipRectGM.kt, SimpleAaClipPathGM.kt` | — (_aaclip flavour skip : SkAAClip Skia-internal) |
 | `simplerect.cpp` | ✅ | `SimpleRectGM.kt` | — |
 | `skbug1719.cpp` | ✅ | `Skbug1719GM.kt` | — |
@@ -527,7 +540,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `smallpaths.cpp` | ✅ | `SmallPathsGM.kt` | — |
 | `spritebitmap.cpp` | ✅ | `SpriteBitmapGM.kt` | — |
 | `srcmode.cpp` | ✅ | `SrcModeGM.kt` | — |
-| `srgb.cpp` | 🚧 | — | `SkColorFilters::LinearToSRGBGamma`/`SRGBToLinearGamma` |
+| `srgb.cpp` | ✅ | `SrgbGM.kt` | R-final.3 — 97.33% |
 | `stlouisarch.cpp` | ✅ | `StLouisArchGM.kt` | — |
 | `stringart.cpp` | ✅ | `StringArtGM.kt` | — |
 | `stroke_rect_shader.cpp` | ✅ | `StrokeRectShaderGM.kt` | — |
@@ -542,7 +555,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `surface.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `swizzle.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `tablecolorfilter.cpp` | ✅ | `TableColorFilterGM.kt` | — |
-| `tablemaskfilter.cpp` | 🚧 | — | `SkTableMaskFilter` |
+| `tablemaskfilter.cpp` | ✅ | `TableMaskFilterGM.kt` | R-final.7 |
 | `tallstretchedbitmaps.cpp` | ✅ | `TallStretchedBitmapsGM.kt` | — |
 | `testgradient.cpp` | ✅ | `TestGradientGM.kt` | — |
 | `texelsubset.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
@@ -568,7 +581,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `tinybitmap.cpp` | ✅ | `TinyBitmapGM.kt` | — |
 | `transparency.cpp` | ✅ | `TransparencyCheckGM.kt` | — |
 | `trickycubicstrokes.cpp` | ✅ | `TrickyCubicStrokesGM.kt` | — |
-| `typeface.cpp` | ✅ | `TypefaceStylesGM.kt, TypefaceStylingGM.kt` | — (typefacestyles_kerning skip : SkTypeface.getKerningPairAdjustments manquant) |
+| `typeface.cpp` | ✅ | `TypefaceStylesGM.kt, TypefaceStylingGM.kt, TypefaceStylesKerningGM.kt` | R-final.7 — variante kerning levée via AWT |
 | `unpremul.cpp` | ✅ | `UnpremulGM.kt` | — |
 | `userfont.cpp` | ✅ | `UserFontGM.kt` | — (R-suivi.49 SkCustomTypeface drawable hook) |
 | `variedtext.cpp` | ✅ | `VariedTextGM.kt (4 variants Clipped/IgnorableClip × Lcd/NoLcd)` | — |
@@ -577,7 +590,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `video_decoder.cpp` | 🚧 | — | SkVideoDecoder = FFmpeg + GrContext only ; pas de CPU path |
 | `wacky_yuv_formats.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `widebuttcaps.cpp` | ✅ | `WideButtCapsGM.kt` | — |
-| `windowrectangles.cpp` | 🚧 | — | `SkCanvas::clipShader` |
+| `windowrectangles.cpp` | ✅ | `WindowRectanglesGM.kt` | R-final.1 |
 | `workingspace.cpp` | 🚧 | — | SkColorFilter::makeWithWorkingColorSpace + SkShader::makeWithWorkingColorSpace + SkWorkingColorSpaceShader |
 | `xfermodeimagefilter.cpp` | ✅ | `XfermodeImageFilterGM.kt` | — (Blend(cropRect) substitué Crop(kDecal)) |
 | `xfermodes.cpp` | ✅ | `XfermodesGM.kt` | — |
