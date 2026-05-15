@@ -209,6 +209,20 @@ public class SkBitmapShader internal constructor(
             for (i in 0 until count) dst[i] = 0
             return
         }
+        // R-final.7 — perspective deviceToLocal : the affine accumulator path
+        // below ignores the persp row entirely. Route per-pixel through
+        // [sampleAtLocal] which honours tile / filter / mip selection on
+        // the homogeneous-divide local coordinate.
+        if (inv.hasPerspective()) {
+            val y0p = devY + 0.5f
+            var x0p = devX + 0.5f
+            for (i in 0 until count) {
+                val (lxp, lyp) = inv.mapXY(x0p, y0p)
+                dst[i] = sampleAtLocal(lxp, lyp)
+                x0p += 1f
+            }
+            return
+        }
         val w = image.width; val h = image.height
         val x0 = devX + 0.5f
         val y0 = devY + 0.5f
@@ -291,6 +305,20 @@ public class SkBitmapShader internal constructor(
         val inv = deviceToLocal
         if (inv == null) {
             for (i in 0 until count * 4) dst[i] = 0f
+            return
+        }
+        // R-final.7 — perspective path : per-pixel sampling through
+        // [sampleAtLocalF16]. See `shadeRow` for the rationale.
+        if (inv.hasPerspective()) {
+            val y0p = devY + 0.5f
+            var x0p = devX + 0.5f
+            var diP = 0
+            for (i in 0 until count) {
+                val (lxp, lyp) = inv.mapXY(x0p, y0p)
+                sampleAtLocalF16(lxp, lyp, dst, diP)
+                x0p += 1f
+                diP += 4
+            }
             return
         }
         val w = image.width; val h = image.height

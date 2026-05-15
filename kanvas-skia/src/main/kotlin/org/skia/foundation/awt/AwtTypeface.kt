@@ -434,5 +434,22 @@ internal class AwtTypeface internal constructor(
 
         /** Singleton AWT-backed default typeface. */
         internal val DEFAULT: AwtTypeface = AwtTypeface(makeDefaultBase())
+
+        /**
+         * R-final.7 — build an AWT-backed typeface from raw TTF/OTF
+         * bytes. Mirrors upstream's `SkTypeface::MakeFromStream` /
+         * `SkFontMgr::makeFromData` path. Returns `null` if AWT can't
+         * parse the bytes (corrupt or unsupported font format — AWT only
+         * grokes TrueType / OpenType outlines, not bitmap CBDT/Sbix or
+         * COLRv1).
+         */
+        fun createFromBytes(bytes: ByteArray, style: SkFontStyle = SkFontStyle.Normal()): AwtTypeface? {
+            val baseFont = try {
+                Font.createFont(Font.TRUETYPE_FONT, bytes.inputStream())
+            } catch (e: Exception) {
+                return null
+            }
+            return AwtTypeface(baseFont, style)
+        }
     }
 }
