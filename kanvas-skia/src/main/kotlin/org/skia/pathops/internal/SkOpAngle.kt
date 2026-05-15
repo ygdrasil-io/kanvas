@@ -1148,7 +1148,30 @@ internal class SkOpAngle {
             }
             last = cursor
             if (last === this) {
-                if (flipAmbiguity) return false // FAIL_IF analogue
+                if (flipAmbiguity) {
+                    // FAIL_IF analogue. Upstream `SkOpAngle::insert` returns
+                    // false here, which propagates up through
+                    // `SkOpSegment::sortAngles` →
+                    // `SkPathOpsCommon::HandleCoincidence` → `Op` and aborts
+                    // the whole operation with a `null` result. Empirically,
+                    // for inputs like `cubicOp35d` (two crossing cubics where
+                    // a self-intersection in one cubic creates a 4-way ring
+                    // whose tangent geometry never triggers the
+                    // `tangentsAmbiguous` flag), this fail-fast leaves the
+                    // ring orphaned with no inserted entry, which is no
+                    // better than appending the angle somewhere "wrong" — the
+                    // downstream walker may still produce a reasonable
+                    // boolean result. Mark the angle (and ring) unorderable
+                    // and insert just after `this` ; matches the spirit of
+                    // the upstream "fix pathops unsortable angles" pass
+                    // (`ea2a6323bc`).
+                    angle.fUnorderable = true
+                    this.fUnorderable = true
+                    val after = fNext!!
+                    fNext = angle
+                    angle.fNext = after
+                    return true
+                }
                 flipAmbiguity = true
             }
             cursor = cursor.fNext!!
