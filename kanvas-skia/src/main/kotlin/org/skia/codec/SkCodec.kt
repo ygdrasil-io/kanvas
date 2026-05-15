@@ -87,6 +87,20 @@ public abstract class SkCodec internal constructor() {
      */
     public abstract fun getICCProfile(): SkcmsICCProfile?
 
+    /**
+     * The EXIF Orientation tag carried by the encoded stream — i.e. how
+     * the source pixels were stored relative to the scene's intended
+     * top-left. Mirrors `SkEncodedOrigin SkCodec::getOrigin() const`.
+     *
+     * **Default :** [SkEncodedOrigin.kTopLeft] — the encoded grid is
+     * already upright. Format-specific subclasses with EXIF-aware
+     * decoders ([org.skia.codec.jpeg.SkJpegCodec]) override to surface
+     * the parsed value ; callers that wish to materialise the rotation
+     * post-decode can compose [SkEncodedOrigin.toMatrix] /
+     * [org.skia.utils.SkPixmapUtils.Orient].
+     */
+    public open fun getOrigin(): SkEncodedOrigin = SkEncodedOrigin.kTopLeft
+
     public fun dimensions(): SkISize = getInfo().dimensions()
     public fun bounds(): SkIRect = getInfo().bounds()
 

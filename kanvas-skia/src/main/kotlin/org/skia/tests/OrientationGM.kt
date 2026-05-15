@@ -32,14 +32,15 @@ import org.skia.tools.ToolUtils
  * [ToolUtils.GetResourceAsImage] path and ships alongside as a
  * smoke-test of the same eight JPEGs through the canonical decode.
  *
- * **EXIF caveat.** kanvas-skia's [SkJpegCodec] does **not** apply the
- * EXIF orientation tag during decode (queued for R-final.8 — see
- * `API_FINALIZATION_PLAN.md` § "Animated images + EXIF + YUV"). Until
- * that lands, the rendered tiles will display the *raw* pre-transformed
- * content (each tile rotated relative to its label) — the GMs serve as
- * compile-time exercises of the [SkImageGenerator] /
- * [SkCodecImageGenerator] / [SkImages.DeferredFromGenerator] surface,
- * with full pixel-fidelity ratcheted in once EXIF lands.
+ * **EXIF (R-final.8 fix).** As of R-final.8, kanvas-skia's
+ * [org.skia.codec.jpeg.SkJpegCodec] now parses the EXIF Orientation
+ * tag (0x0112) out of the APP1 segment and applies the corresponding
+ * rotation/flip to the decoded pixels via
+ * [org.skia.utils.SkPixmapUtils.Orient] — surfaced through
+ * [org.skia.codec.SkCodec.getOrigin]. Both GMs are therefore expected
+ * to render at high pixel-fidelity vs. the upstream PNG references
+ * (each of the eight tiles displays the same RGB-quadrant + corner-
+ * label layout, only the centre digit changes).
  */
 public class Orientation444GM : GM() {
 

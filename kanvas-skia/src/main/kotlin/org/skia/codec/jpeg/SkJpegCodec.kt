@@ -2,6 +2,7 @@ package org.skia.codec.jpeg
 
 import org.skia.codec.SkCodec
 import org.skia.codec.SkEncodedImageFormat
+import org.skia.codec.SkEncodedOrigin
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -9,6 +10,7 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
 import org.skia.skcms.SkcmsICCProfile
 import org.skia.skcms.skcmsParse
+import org.skia.utils.SkPixmapUtils
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
@@ -45,13 +47,26 @@ import javax.imageio.ImageIO
 public class SkJpegCodec internal constructor(
     private val image: BufferedImage,
     private val iccProfile: SkcmsICCProfile?,
+    private val origin: SkEncodedOrigin,
 ) : SkCodec() {
+
+    /**
+     * Logical (post-orientation) dimensions. For an EXIF orientation
+     * that includes a 90° rotation ([SkEncodedOrigin.swapsWidthHeight])
+     * the decoded grid's `(w, h)` ends up swapped relative to the
+     * stored JPEG `(w, h)` ; [getInfo] / [getPixels] surface this
+     * post-orientation view so callers see the visually-correct image.
+     */
+    private val logicalWidth: Int =
+        if (origin.swapsWidthHeight()) image.height else image.width
+    private val logicalHeight: Int =
+        if (origin.swapsWidthHeight()) image.width else image.height
 
     private val cachedInfo: SkImageInfo by lazy {
         val cs = iccProfile?.let { SkColorSpace.make(it) } ?: SkColorSpace.makeSRGB()
         SkImageInfo.Make(
-            width = image.width,
-            height = image.height,
+            width = logicalWidth,
+            height = logicalHeight,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
             colorSpace = cs,
@@ -63,6 +78,14 @@ public class SkJpegCodec internal constructor(
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG
 
     override fun getICCProfile(): SkcmsICCProfile? = iccProfile
+
+    /**
+     * Mirrors `SkCodec::getOrigin()`. Returns the EXIF Orientation tag
+     * parsed out of the JPEG's APP1 segment at decode time, or
+     * [SkEncodedOrigin.kTopLeft] if the file carried no EXIF or the
+     * Orientation tag was absent / out of range.
+     */
+    override fun getOrigin(): SkEncodedOrigin = origin
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (dst.width != info.width || dst.height != info.height) {
@@ -78,8 +101,28 @@ public class SkJpegCodec internal constructor(
         // pixels regardless of the underlying buffer, with the alpha
         // byte set to 0xFF for opaque sources. JPEG is always opaque,
         // so this lands as 0xFFRRGGBB — exactly what kRGBA_8888 wants.
-        image.getRGB(0, 0, image.width, image.height, dst.pixels, 0, image.width)
-        return Result.kSuccess
+        if (origin == SkEncodedOrigin.kTopLeft) {
+            image.getRGB(0, 0, image.width, image.height, dst.pixels, 0, image.width)
+            return Result.kSuccess
+        }
+        // Non-trivial EXIF orientation : decode into an intermediate
+        // bitmap matching the stored grid, then route through the
+        // existing SkPixmapUtils.Orient transform to re-orient onto
+        // `dst` (whose width/height are the post-orientation logical
+        // dimensions). This mirrors upstream's "pixels are rotated /
+        // mirrored to match the EXIF tag" contract for `getPixels`.
+        val raw = SkBitmap(
+            width = image.width,
+            height = image.height,
+            colorSpace = info.colorSpace,
+            colorType = SkColorType.kRGBA_8888,
+        )
+        image.getRGB(0, 0, image.width, image.height, raw.pixels, 0, image.width)
+        return if (SkPixmapUtils.Orient(dst, raw, origin)) {
+            Result.kSuccess
+        } else {
+            Result.kInvalidParameters
+        }
     }
 
     /**
@@ -119,7 +162,8 @@ public class SkJpegCodec internal constructor(
                 null
             } ?: return null
             val profile = extractIccProfile(data)?.let { skcmsParse(it) }
-            return SkJpegCodec(image, profile)
+            val origin = extractExifOrigin(data) ?: SkEncodedOrigin.kTopLeft
+            return SkJpegCodec(image, profile, origin)
         }
 
         // ─── ICC profile reconstruction ───────────────────────────────
@@ -133,8 +177,152 @@ public class SkJpegCodec internal constructor(
             0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x00,
         )
 
+        private const val APP1 = 0xE1.toByte()
         private const val APP2 = 0xE2.toByte()
         private const val SOS = 0xDA.toByte()
+
+        // ─── EXIF orientation parsing (R-final.8) ─────────────────────
+
+        /**
+         * 6-byte `Exif\0\0` signature opening every APP1 EXIF segment
+         * per the JEITA Exif 2.32 spec (`Exif` ASCII + two NUL pad
+         * bytes). Followed by a standard TIFF header.
+         */
+        private val EXIF_SIG: ByteArray = byteArrayOf(
+            0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
+        )
+
+        /** TIFF tag 0x0112 — `Orientation` (Exif 2.32 §4.6.4 A). */
+        private const val EXIF_ORIENTATION_TAG: Int = 0x0112
+
+        /** TIFF type 3 — `SHORT` (16-bit unsigned). */
+        private const val TIFF_TYPE_SHORT: Int = 3
+
+        /**
+         * Walk the JPEG marker stream looking for an APP1 segment whose
+         * payload starts with the [EXIF_SIG] signature, then parse the
+         * embedded TIFF header to extract the `Orientation` tag (0x0112)
+         * from the first Image File Directory.
+         *
+         * Returns `null` when the file carries no EXIF, the EXIF block
+         * is malformed, the Orientation tag is absent, or the parsed
+         * value is outside `1..8`. The caller (Decoder.make) treats a
+         * `null` return as "default top-left".
+         *
+         * The parser is intentionally conservative — it bails on any
+         * unexpected layout rather than guessing, matching upstream
+         * `SkExif::Parse`'s defensive behaviour for the Origin field.
+         */
+        private fun extractExifOrigin(bytes: ByteArray): SkEncodedOrigin? {
+            if (bytes.size < 4 || bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) {
+                return null
+            }
+            var p = 2 // past SOI
+            while (p + 1 < bytes.size) {
+                if (bytes[p] != 0xFF.toByte()) return null
+                val marker = bytes[p + 1]
+                p += 2
+                if (marker == 0xD8.toByte() || marker == 0xD9.toByte() ||
+                    marker == 0x01.toByte() ||
+                    (marker.toInt() and 0xFF) in 0xD0..0xD7
+                ) {
+                    if (marker == 0xD9.toByte()) break
+                    continue
+                }
+                if (marker == SOS) break
+                if (p + 2 > bytes.size) return null
+                val segLen = ((bytes[p].toInt() and 0xFF) shl 8) or
+                    (bytes[p + 1].toInt() and 0xFF)
+                if (segLen < 2 || p + segLen > bytes.size) return null
+                val payloadStart = p + 2
+                val payloadEnd = p + segLen
+                if (marker == APP1 && payloadEnd - payloadStart >= EXIF_SIG.size + 8 &&
+                    matchesAt(bytes, payloadStart, EXIF_SIG)
+                ) {
+                    val origin = parseExifTiffForOrigin(bytes, payloadStart + EXIF_SIG.size, payloadEnd)
+                    if (origin != null) return origin
+                    // Some encoders emit multiple APP1 segments (XMP,
+                    // etc.) ; keep walking in case a later one is the
+                    // EXIF block. Spec-compliant streams put EXIF first.
+                }
+                p = payloadEnd
+            }
+            return null
+        }
+
+        /**
+         * Parse the TIFF block embedded in an EXIF APP1 payload (offsets
+         * `[tiffStart, end)`). Returns the `Orientation` tag (0x0112)
+         * value as an [SkEncodedOrigin], or `null` if the TIFF is
+         * malformed / the tag is absent / the value is out of range.
+         *
+         * The TIFF header is :
+         *  - 2 bytes : byte-order mark — `MM` (big-endian) or `II`
+         *    (little-endian).
+         *  - 2 bytes : magic `0x002A` in the active endianness.
+         *  - 4 bytes : offset (from `tiffStart`) of the first IFD.
+         *
+         * Each IFD entry is 12 bytes : tag (2) + type (2) + count (4) +
+         * value/offset (4). For `count*sizeof(type) <= 4`, the value
+         * is stored inline ; otherwise the 4-byte field is an offset
+         * into the same TIFF block. The Orientation tag is `count=1`,
+         * `type=SHORT`, so the value lives in the first 2 bytes of
+         * the inline field (in active endianness).
+         */
+        private fun parseExifTiffForOrigin(
+            bytes: ByteArray,
+            tiffStart: Int,
+            end: Int,
+        ): SkEncodedOrigin? {
+            if (tiffStart + 8 > end) return null
+            val b0 = bytes[tiffStart].toInt() and 0xFF
+            val b1 = bytes[tiffStart + 1].toInt() and 0xFF
+            val littleEndian = when {
+                b0 == 0x49 && b1 == 0x49 -> true   // 'II'
+                b0 == 0x4D && b1 == 0x4D -> false  // 'MM'
+                else -> return null
+            }
+            val magic = readU16(bytes, tiffStart + 2, littleEndian)
+            if (magic != 0x002A) return null
+            val ifdOffset = readU32(bytes, tiffStart + 4, littleEndian)
+            val ifdAt = tiffStart + ifdOffset
+            if (ifdAt + 2 > end) return null
+            val count = readU16(bytes, ifdAt, littleEndian)
+            val entriesStart = ifdAt + 2
+            if (entriesStart + 12 * count > end) return null
+            for (i in 0 until count) {
+                val entry = entriesStart + 12 * i
+                val tag = readU16(bytes, entry, littleEndian)
+                if (tag != EXIF_ORIENTATION_TAG) continue
+                val type = readU16(bytes, entry + 2, littleEndian)
+                val cnt = readU32(bytes, entry + 4, littleEndian)
+                if (type != TIFF_TYPE_SHORT || cnt != 1) return null
+                // SHORT count=1 — value is in the first 2 bytes of the
+                // 4-byte value field, in active endianness.
+                val raw = readU16(bytes, entry + 8, littleEndian)
+                if (raw < 1 || raw > 8) return null
+                return SkEncodedOrigin.fromExifValue(raw)
+            }
+            return null
+        }
+
+        private fun readU16(bytes: ByteArray, at: Int, littleEndian: Boolean): Int {
+            val b0 = bytes[at].toInt() and 0xFF
+            val b1 = bytes[at + 1].toInt() and 0xFF
+            return if (littleEndian) (b1 shl 8) or b0 else (b0 shl 8) or b1
+        }
+
+        private fun readU32(bytes: ByteArray, at: Int, littleEndian: Boolean): Int {
+            val b0 = bytes[at].toInt() and 0xFF
+            val b1 = bytes[at + 1].toInt() and 0xFF
+            val b2 = bytes[at + 2].toInt() and 0xFF
+            val b3 = bytes[at + 3].toInt() and 0xFF
+            return if (littleEndian) {
+                (b3 shl 24) or (b2 shl 16) or (b1 shl 8) or b0
+            } else {
+                (b0 shl 24) or (b1 shl 16) or (b2 shl 8) or b3
+            }
+        }
 
         /**
          * Walk the JPEG marker stream and reconstruct the embedded ICC
