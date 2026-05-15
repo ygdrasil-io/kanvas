@@ -16,6 +16,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | AnalyticAntialiasInverseGM | 99.97% | = | 1 | 639,794 / 640,000 | 0, 24, 60, 60 | 0, 11, 28, 26 |
 | AnalyticGradientShaderGM | 62.21% | = | 1 | 326,160 / 524,288 | 0, 198, 234, 198 | 0, 9, 9, 7 |
 | AndroidBlendModesGM | 97.04% | = | 1 | 1,271,870 / 1,310,720 | 0, 177, 177, 177 | 0, 29, 19, 10 |
+| AnimatedGifGM | 100.00% | = | 4 | 2,452,480 / 2,452,480 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | AnimatedImageBlursGM | 92.41% | = | 8 | 242,244 / 262,144 | 0, 56, 56, 56 | 0, 12, 12, 12 |
 | AnisoMipsGM | 98.04% | = | 8 | 132,556 / 135,200 | 0, 107, 119, 123 | 0, 28, 24, 26 |
 | AnisotropicImageScaleAnisoGM | 54.64% | = | 8 | 396,855 / 726,280 | 0, 255, 255, 255 | 0, 86, 86, 86 |
@@ -230,12 +231,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | EmbossGM | 70.29% | = | 1 | 50,610 / 72,000 | 0, 116, 122, 121 | 0, 8, 5, 6 |
 | EmptyPathGM | 87.64% | = | 1 | 147,239 / 168,000 | 0, 193, 193, 193 | 0, 47, 44, 54 |
 | EmptyShaderGM | 65.87% | = | 1 | 7,420 / 11,264 | 0, 155, 185, 180 | 0, 117, 173, 77 |
-| EncodeAlphaJpegGM | 83.53% | = | 64 | 66,820 / 80,000 | 0, 249, 254, 253 | 0, 116, 103, 105 |
-| EncodeColorTypesWebpLosslessGM | 50.89% | = | 16 | 58,360 / 114,688 | 0, 236, 253, 245 | 0, 79, 98, 97 |
 | EncodeGM | 100.00% | = | 8 | 614,381 / 614,400 | 0, 255, 255, 255 | 0, 255, 255, 255 |
-| EncodePlatformGM | 80.17% | = | 64 | 788,108 / 983,040 | 0, 254, 254, 255 | 0, 118, 140, 168 |
-| EncodeSrgbJpgGM | 84.30% | = | 64 | 414,366 / 491,520 | 0, 149, 154, 169 | 0, 89, 89, 89 |
-| EncodeSrgbPngGM | 74.18% | = | 32 | 364,606 / 491,520 | 0, 159, 174, 217 | 0, 73, 72, 75 |
 | FadeFilterGM | 75.00% | = | 1 | 49,152 / 65,536 | 0, 115, 115, 115 | 0, 115, 115, 115 |
 | FatPathFillGM | 53.66% | = | 1 | 74,183 / 138,240 | 0, 202, 196, 237 | 0, 107, 131, 138 |
 | FiddleGM | 100.00% | = | 1 | 65,536 / 65,536 | 0, 0, 0, 0 | 0, 0, 0, 0 |
@@ -315,7 +311,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | InverseClipGM | 99.30% | = | 1 | 158,887 / 160,000 | 0, 140, 152, 11 | 0, 50, 51, 4 |
 | InversePathsGM | 78.72% | = | 1 | 755,686 / 960,000 | 0, 237, 211, 250 | 0, 196, 155, 225 |
 | InverseWindingmodeFiltersGM | 58.75% | = | 1 | 15,040 / 25,600 | 0, 255, 255, 255 | 0, 191, 191, 191 |
-| JpgColorCubeGM | 100.00% | = | 64 | 262,144 / 262,144 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | KawaseBlurRtGM | 70.83% | = | 1 | 696,320 / 983,040 | 0, 253, 253, 253 | 0, 93, 102, 102 |
 | LabyrinthButtGM | 100.00% | = | 8 | 210,000 / 210,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | LabyrinthRoundGM | 99.50% | = | 8 | 208,951 / 210,000 | 0, 193, 176, 174 | 0, 54, 49, 49 |
@@ -356,6 +351,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | NonClosedPathsGM | 96.82% | -0.01% | 1 | 2,267,829 / 2,342,400 | 0, 255, 255, 255 | 0, 56, 55, 55 |
 | OffsetImageFilterGM | 84.51% | = | 1 | 50,703 / 60,000 | 0, 165, 154, 193 | 0, 100, 98, 116 |
 | OneBadArcGM | 83.67% | = | 1 | 8,367 / 10,000 | 0, 34, 100, 108 | 0, 15, 28, 21 |
+| Orientation444GM | 19.87% | = | 4 | 12,719 / 64,000 | 0, 255, 255, 255 | 0, 101, 128, 114 |
 | OvalGM | 94.66% | = | 1 | 1,022,349 / 1,080,000 | 0, 209, 245, 242 | 0, 23, 21, 23 |
 | OverStrokeGM | 83.48% | = | 1 | 208,710 / 250,000 | 0, 255, 255, 255 | 0, 98, 91, 102 |
 | OverdrawCanvasGM | 85.31% | = | 1 | 213,263 / 250,000 | 0, 187, 187, 187 | 0, 19, 52, 59 |
@@ -388,6 +384,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | PictureCullRectGM | 86.11% | = | 1 | 12,400 / 14,400 | 0, 29, 44, 3 | 0, 25, 18, 2 |
 | PictureGM | 28.15% | = | 1 | 15,200 / 54,000 | 0, 53, 43, 38 | 0, 30, 18, 21 |
 | PictureImageFilterGM | 62.16% | = | 4 | 111,896 / 180,000 | 0, 255, 255, 255 | 0, 120, 120, 120 |
+| PictureImageGeneratorGM | 83.07% | = | 4 | 828,725 / 997,600 | 0, 239, 239, 239 | 0, 147, 149, 149 |
 | PictureShaderCacheGM | 97.62% | = | 8 | 9,762 / 10,000 | 0, 50, 180, 198 | 0, 26, 70, 69 |
 | PictureShaderTileGM | 48.54% | = | 4 | 233,005 / 480,000 | 0, 255, 255, 255 | 0, 193, 206, 198 |
 | PlusMergesAaGM | 69.48% | = | 1 | 45,536 / 65,536 | 0, 52, 44, 18 | 0, 13, 5, 2 |
@@ -410,6 +407,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | RectPolyStrokeGM | 97.43% | -0.01% | 1 | 1,030,831 / 1,058,000 | 0, 255, 255, 255 | 0, 70, 75, 61 |
 | RepeatedBitmapGM | 99.98% | = | 1 | 331,706 / 331,776 | 0, 223, 223, 222 | 0, 139, 126, 131 |
 | ResizeImageFilterGM | 81.06% | = | 16 | 51,068 / 63,000 | 0, 145, 245, 68 | 0, 80, 140, 35 |
+| RespectOrientationJpegGM | 19.87% | = | 4 | 12,719 / 64,000 | 0, 255, 255, 255 | 0, 101, 128, 114 |
 | RgbwSweepGradientGM | 100.00% | = | 1 | 10,000 / 10,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | RotatedCubicPathGM | 99.40% | = | 1 | 39,758 / 40,000 | 0, 70, 68, 48 | 0, 14, 19, 9 |
 | RoundRectGM | 96.27% | = | 1 | 1,039,733 / 1,080,000 | 0, 192, 245, 242 | 0, 20, 18, 19 |
@@ -445,6 +443,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ShallowGradientSweepDitherGM | 99.99% | = | 1 | 639,929 / 640,000 | 0, 2, 2, 2 | 0, 1, 1, 1 |
 | ShallowGradientSweepNoDitherGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | SharedCornersGM | 96.54% | = | 4 | 700,098 / 725,200 | 0, 99, 84, 28 | 0, 18, 15, 5 |
+| ShowMipLevelsGM | 78.30% | = | 4 | 858,204 / 1,096,100 | 0, 255, 255, 255 | 0, 17, 51, 44 |
 | SimpleAaclipPathGM | 98.99% | = | 1 | 118,788 / 120,000 | 0, 161, 161, 161 | 0, 53, 52, 52 |
 | SimpleAaclipRectGM | 99.00% | = | 1 | 118,797 / 120,000 | 0, 197, 161, 161 | 0, 59, 54, 53 |
 | SimpleBlurRoundRectGM | 68.05% | = | 1 | 340,262 / 500,000 | 0, 99, 148, 170 | 0, 14, 10, 22 |

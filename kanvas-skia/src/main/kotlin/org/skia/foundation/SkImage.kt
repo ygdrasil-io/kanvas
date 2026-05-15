@@ -80,6 +80,21 @@ public class SkImage internal constructor(
     public fun levelCount(): Int = mipLevels?.size ?: 1
 
     /**
+     * Mirrors Skia's `SkImage::imageInfo()` — returns a fresh
+     * [SkImageInfo] describing this image's geometry / colour-type /
+     * colour-space tagging. The alpha type is fixed to
+     * [SkAlphaType.kUnpremul] (kanvas-skia's [SkImage] always stores
+     * non-premultiplied 8888 pixels — see [SkImage] KDoc).
+     */
+    public fun imageInfo(): SkImageInfo = SkImageInfo.Make(
+        width = width,
+        height = height,
+        colorType = colorType,
+        alphaType = SkAlphaType.kUnpremul,
+        colorSpace = colorSpace,
+    )
+
+    /**
      * Phase G10 — pre-build a box-filtered mip pyramid down to 1×1.
      * Each level halves the previous (round-down, minimum 1) and stores
      * a fresh `IntArray` so the pyramid is self-contained.

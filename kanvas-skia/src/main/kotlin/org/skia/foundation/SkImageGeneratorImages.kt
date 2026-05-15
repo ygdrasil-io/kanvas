@@ -1,7 +1,65 @@
 package org.skia.foundation
 
+import org.skia.codec.SkCodec
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+
+/**
+ * A concrete [SkImageGenerator] backed by an [SkCodec] — mirrors
+ * Skia's `SkCodecImageGenerator` (`src/codec/SkCodecImageGenerator.h`).
+ *
+ * Decodes the codec on demand into the destination buffer ; the codec's
+ * own [SkCodec.getInfo] drives the generator's reported [SkImageInfo].
+ *
+ * **Use** : pair with [SkImageGeneratorImages.DeferredFromGenerator]
+ * (or the [SkImages.DeferredFromGenerator] alias) to produce a
+ * deferred-decoded [SkImage] from raw encoded bytes.
+ */
+public class SkCodecImageGenerator private constructor(
+    private val codec: SkCodec,
+) : SkImageGenerator(codec.getInfo()) {
+
+    override fun onGetPixels(info: SkImageInfo, pixels: ByteBuffer, rowBytes: Int): Boolean {
+        val bm = SkBitmap(
+            width = info.width,
+            height = info.height,
+            colorSpace = info.colorSpace,
+            colorType = SkColorType.kRGBA_8888,
+        )
+        val res = codec.getPixels(codec.getInfo(), bm)
+        if (res != SkCodec.Result.kSuccess) return false
+        // Pack the 32-bit pixels into the destination ByteBuffer in
+        // RGBA byte order (matches the buffer layout the upstream
+        // generator's [getPixels] consumers expect).
+        val width = info.width
+        val height = info.height
+        for (y in 0 until height) {
+            val rowOff = y * rowBytes
+            for (x in 0 until width) {
+                val c = bm.pixels[y * width + x]
+                val off = rowOff + x * 4
+                pixels.put(off, SkColorGetR(c).toByte())
+                pixels.put(off + 1, SkColorGetG(c).toByte())
+                pixels.put(off + 2, SkColorGetB(c).toByte())
+                pixels.put(off + 3, SkColorGetA(c).toByte())
+            }
+        }
+        return true
+    }
+
+    public companion object {
+        /**
+         * Mirrors Skia's
+         * `SkCodecImageGenerator::MakeFromEncodedCodec(sk_sp<SkData>)`.
+         * Returns `null` when the bytes cannot be sniffed by any
+         * registered [SkCodec] decoder.
+         */
+        public fun MakeFromEncodedCodec(data: ByteArray): SkCodecImageGenerator? {
+            val codec = SkCodec.MakeFromData(data) ?: return null
+            return SkCodecImageGenerator(codec)
+        }
+    }
+}
 
 /**
  * Static factories for [SkImage] creation that hinge on an
