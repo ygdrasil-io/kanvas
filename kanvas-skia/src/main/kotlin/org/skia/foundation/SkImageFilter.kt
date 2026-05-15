@@ -88,4 +88,83 @@ public abstract class SkImageFilter {
         public val offsetX: Int = 0,
         public val offsetY: Int = 0,
     )
+
+    /**
+     * R-final.2 — mirrors Skia's
+     * [`SkImageFilter::makeWithLocalMatrix`](https://github.com/google/skia/blob/main/src/effects/imagefilters/...)
+     * (factored as `SkLocalMatrixImageFilter::Make(matrix, this)` in
+     * upstream).
+     *
+     * Returns a new filter that, when invoked, behaves as if the
+     * canvas CTM had been pre-concatenated with [matrix] before the
+     * child filter ran. The wrapped filter sees the augmented CTM in
+     * its own [filterImage], so its sampling coordinates are
+     * `(matrix · ctm)^-1` relative to device space.
+     *
+     * **Identity** : a no-op — returns `this` directly.
+     *
+     * **Singular** : a matrix that has no inverse can't be undone, so
+     * we return `this` unchanged (mirrors upstream's `nullptr` short-
+     * circuit when [SkMatrix.invert] fails).
+     *
+     * **Folding** : if `this` is already a [SkLocalMatrixImageFilter],
+     * the two matrices fold into one wrapper rather than nesting —
+     * see [SkLocalMatrixImageFilter.fold] in the implementation.
+     */
+    public fun makeWithLocalMatrix(matrix: SkMatrix): SkImageFilter {
+        if (matrix.isIdentity) return this
+        if (matrix.invert() == null) return this
+        if (this is SkLocalMatrixImageFilter) {
+            // Fold: the new outer matrix multiplies on the left of the
+            // existing wrapper matrix. ConcatLocalMatrices(parent,
+            // child) = parent · child (matches upstream
+            // SkShaderBase::ConcatLocalMatrices semantics — same
+            // convention reused for image filters).
+            return SkLocalMatrixImageFilter(matrix.preConcat(localMatrix), child)
+        }
+        return SkLocalMatrixImageFilter(matrix, this)
+    }
+}
+
+/**
+ * R-final.2 — mirrors Skia's
+ * [`SkLocalMatrixImageFilter`](https://github.com/google/skia/blob/main/src/core/SkLocalMatrixImageFilter.cpp).
+ *
+ * Wraps a child image filter and pre-concatenates [localMatrix] into
+ * the canvas matrix passed to [filterImage]. The child filter receives
+ * the augmented CTM, so any per-draw matrix-dependent setup (offset
+ * scaling, blur sigma scaling, …) sees the same coordinate system as
+ * if the caller had `canvas.concat(localMatrix)` before invoking the
+ * filter.
+ *
+ * **CTM augmentation only** — we do **not** rasterise the source image
+ * through the local matrix. That mirrors upstream's contract :
+ * `localMatrix` adjusts the *parameter space* of the child filter (so
+ * an `Offset(8, 8)` child sees its 8-px displacement scaled by the
+ * outer matrix) without re-sampling the source image itself. Filters
+ * whose output footprint depends on the matrix (e.g. blur sigma scaled
+ * by max-scale, drop-shadow displacement) react automatically because
+ * they read their `ctm` argument inside [filterImage].
+ *
+ * Public via the [SkImageFilter.makeWithLocalMatrix] factory ; not
+ * constructible directly so call sites cannot bypass the folding step.
+ */
+internal class SkLocalMatrixImageFilter(
+    val localMatrix: SkMatrix,
+    val child: SkImageFilter,
+) : SkImageFilter() {
+
+    override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult =
+        child.filterImage(src, ctm.preConcat(localMatrix))
+
+    override fun computeFastBounds(src: SkRect): SkRect {
+        // Mirror upstream `SkLocalMatrixImageFilter::computeFastBounds` :
+        // map the source bounds by `localMatrix^-1`, ask the child for
+        // its bounds in that intermediate space, then map back by
+        // `localMatrix`. The inverse is guaranteed to exist because
+        // [SkImageFilter.makeWithLocalMatrix] rejects singular matrices.
+        val inv = localMatrix.invert() ?: return child.computeFastBounds(src)
+        val localBounds = inv.mapRect(src)
+        return localMatrix.mapRect(child.computeFastBounds(localBounds))
+    }
 }

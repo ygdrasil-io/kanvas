@@ -127,6 +127,116 @@ public abstract class SkShader internal constructor(
             di += 4
         }
     }
+
+    /**
+     * R-final.2 — mirrors Skia's
+     * [`SkShader::makeWithLocalMatrix`](https://github.com/google/skia/blob/main/src/shaders/SkShader.cpp#L26).
+     *
+     * Returns a new shader that, when sampled, behaves as if the input
+     * `(canvasCtm)` had been pre-multiplied with [matrix] before being
+     * mapped into this shader's local space. Equivalent to
+     * `paint.shader = baseShader` and drawing under
+     * `canvas.concat(matrix)`, but bound to the shader instance — the
+     * canvas CTM stays untouched.
+     *
+     * **Folding** (matches upstream) : if `this` is already a
+     * [SkLocalMatrixShader] (or any shader that exposes itself as one
+     * via [makeAsALocalMatrixShader]), the two matrices fold into a
+     * single `outer × inner` localMatrix wrapped around the original
+     * proxy — no double wrapping. This keeps the per-draw inverse
+     * computation a single 3×3 multiply instead of an N-deep chain.
+     *
+     * Identity is treated as a no-op : returning `this` directly avoids
+     * an unnecessary wrapper allocation when callers route a default
+     * `SkMatrix.Identity` through this method.
+     */
+    public fun makeWithLocalMatrix(matrix: SkMatrix): SkShader {
+        if (matrix.isIdentity) return this
+        // Upstream `makeWithLocalMatrix` first asks the shader if it can
+        // be re-expressed as a (proxy, localMatrix) pair via
+        // `makeAsALocalMatrixShader`. If so, it folds the new matrix
+        // into the existing localMatrix and re-wraps the proxy ; this
+        // avoids stacking N wrappers when callers chain the call.
+        val (baseShader, foldedMatrix) = makeAsALocalMatrixShader()?.let { (proxy, childLm) ->
+            // ConcatLocalMatrices(parent, child) = parent · child.
+            proxy to matrix.preConcat(childLm)
+        } ?: (this to matrix)
+        return SkLocalMatrixShader(baseShader, foldedMatrix)
+    }
+
+    /**
+     * R-final.2 — mirrors Skia's
+     * [`SkShaderBase::makeAsALocalMatrixShader`](https://github.com/google/skia/blob/main/src/shaders/SkShaderBase.h#L383).
+     *
+     * If this shader can be represented as `(proxy, localMatrix)` —
+     * i.e. it's structurally a [SkLocalMatrixShader] wrapper — return
+     * the unwrapped pair so callers (notably [makeWithLocalMatrix])
+     * can fold rather than nest. The default returns `null` (most
+     * shaders are not local-matrix wrappers).
+     */
+    public open fun makeAsALocalMatrixShader(): Pair<SkShader, SkMatrix>? = null
+}
+
+/**
+ * R-final.2 — mirrors Skia's
+ * [`SkLocalMatrixShader`](https://github.com/google/skia/blob/main/src/shaders/SkLocalMatrixShader.cpp).
+ *
+ * Wraps a child [SkShader] and pre-concatenates [localMatrix] into the
+ * canvas CTM at draw setup time. The wrapped shader's per-pixel sampler
+ * (`shadeRow` / `sampleAtLocal` / their F16 variants) runs unchanged —
+ * its `deviceToLocal` inverse is just computed from the augmented CTM
+ * passed via [setupForDraw], so this wrapper costs one extra 3×3
+ * multiply per draw and zero per-pixel overhead.
+ *
+ * Public via the [org.skia.foundation.SkShader.makeWithLocalMatrix]
+ * factory ; not constructible directly so call sites cannot bypass the
+ * folding step that prevents N-deep wrapper stacks.
+ */
+internal class SkLocalMatrixShader(
+    private val wrappedShader: SkShader,
+    private val wrapperLocalMatrix: SkMatrix,
+) : SkShader() {
+
+    override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
+        // Default `super.setupForDraw` would compute `(ctm · this.localMatrix)^-1`,
+        // but this wrapper has no localMatrix of its own (the parent
+        // ctor defaults to Identity) — instead we forward the augmented
+        // ctm `(ctm · wrapperLocalMatrix)` to the child, which then
+        // composes it with its own localMatrix as usual.
+        super.setupForDraw(canvasCtm, xform)
+        wrappedShader.setupForDraw(canvasCtm.preConcat(wrapperLocalMatrix), xform)
+    }
+
+    override fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray) {
+        wrappedShader.shadeRow(devX, devY, count, dst)
+    }
+
+    override fun shadeRowF16(devX: Int, devY: Int, count: Int, dst: FloatArray) {
+        wrappedShader.shadeRowF16(devX, devY, count, dst)
+    }
+
+    override fun sampleAtLocal(lx: Float, ly: Float): SkColor {
+        // Apply the wrapper localMatrix ourselves : `sampleAtLocal`
+        // bypasses the per-draw `deviceToLocal` chain (it's the
+        // "sample at this local point" entry point), so the wrapper
+        // matrix needs to be applied here directly rather than via
+        // `setupForDraw`.
+        val (mlx, mly) = wrapperLocalMatrix.mapXY(lx, ly)
+        return wrappedShader.sampleAtLocal(mlx, mly)
+    }
+
+    override fun sampleAtLocalF16(lx: Float, ly: Float, dst: FloatArray, dstOffset: Int) {
+        val (mlx, mly) = wrapperLocalMatrix.mapXY(lx, ly)
+        wrappedShader.sampleAtLocalF16(mlx, mly, dst, dstOffset)
+    }
+
+    /**
+     * Expose the wrapped (proxy, localMatrix) so
+     * [SkShader.makeWithLocalMatrix] can fold a new matrix into the
+     * existing chain rather than stack a second wrapper.
+     */
+    override fun makeAsALocalMatrixShader(): Pair<SkShader, SkMatrix> =
+        wrappedShader to wrapperLocalMatrix
 }
 
 // ---------------------------------------------------------------------------
