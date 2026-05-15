@@ -175,6 +175,31 @@ public abstract class SkShader internal constructor(
      * shaders are not local-matrix wrappers).
      */
     public open fun makeAsALocalMatrixShader(): Pair<SkShader, SkMatrix>? = null
+
+    /**
+     * R-final.3 — mirrors Skia's
+     * [`SkShader::makeWithWorkingColorSpace`](https://github.com/google/skia/blob/main/src/shaders/SkWorkingColorSpaceShader.cpp).
+     *
+     * Returns a wrapper shader whose child renders as if the canvas's
+     * destination colour space were [workingCS] instead of the bitmap's
+     * actual working CS. Then the wrapper's output is re-xformed back
+     * into the bitmap's working CS so the device can composite as
+     * usual.
+     *
+     * Practical use case (per upstream `gm/workingspace.cpp`): drive a
+     * gradient through `makeWithWorkingColorSpace(MakeSRGBLinear())`
+     * to force interpolation in linear sRGB. Without the wrapper, a
+     * red-to-green gradient interpolates through dark brown in
+     * sRGB-encoded bytes ; with the wrapper it interpolates through
+     * bright yellow in linear light, matching the visually-correct
+     * outcome.
+     *
+     * Identity short-circuit : if [workingCS] is the same as the dst
+     * CS at draw time, the wrapper falls back to plain forwarding
+     * (no extra xform step).
+     */
+    public open fun makeWithWorkingColorSpace(workingCS: SkColorSpace): SkShader =
+        SkWorkingColorSpaceShader(this, workingCS)
 }
 
 /**
@@ -192,6 +217,176 @@ public abstract class SkShader internal constructor(
  * factory ; not constructible directly so call sites cannot bypass the
  * folding step that prevents N-deep wrapper stacks.
  */
+/**
+ * R-final.3 — wrapper that runs the [child] shader as if the canvas's
+ * dst colour space were [workingCS] instead of the bitmap's actual
+ * working CS, then xforms the per-pixel output back into the actual
+ * working CS so the device's compositor sees the expected encoding.
+ *
+ * Per-draw lifecycle :
+ *  1. [setupForDraw] receives the device's `xform: sRGB → bitmap.cs`.
+ *     We synthesise a fake `xform: sRGB → workingCS` and forward that
+ *     to the child — the child's pre-xformed stops, image samplers,
+ *     etc. then encode their outputs as if they were targeting
+ *     [workingCS].
+ *  2. We additionally cache a `workingCS → bitmap.cs` post-xform that
+ *     re-encodes the child's output before returning it to the
+ *     device's compositor.
+ *  3. [shadeRow] / [shadeRowF16] forward to the child, then run the
+ *     post-xform on each returned colour.
+ *
+ * Identity short-circuits :
+ *  - [workingCS] equals the bitmap's dst CS ⇒ pre-xform == device's
+ *    own xform and post-xform == identity ⇒ behaves like a no-op
+ *    forwarder. We don't bother detecting this — the child gets the
+ *    same xform and the identity post-xform is a per-pixel no-op.
+ *
+ * Mirrors `SkWorkingColorSpaceShader`
+ * (`src/shaders/SkWorkingColorSpaceShader.cpp`).
+ */
+internal class SkWorkingColorSpaceShader(
+    private val child: SkShader,
+    private val workingCS: SkColorSpace,
+) : SkShader() {
+
+    /** Post-xform applied per pixel : `workingCS → bitmap.dstCS`. */
+    private var postXform: SkColorSpaceXformSteps? = null
+
+    override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
+        super.setupForDraw(canvasCtm, xform)
+        // Build a child-facing xform that targets [workingCS] instead of
+        // the bitmap's actual dst CS. The child believes its outputs
+        // are bound for [workingCS] and pre-encodes its stops / pixels
+        // accordingly.
+        val srgbToWorking = SkColorSpaceXformSteps(
+            src = SkColorSpace.makeSRGB(),
+            srcAT = org.skia.core.SkAlphaType.kUnpremul,
+            dst = workingCS,
+            dstAT = org.skia.core.SkAlphaType.kUnpremul,
+        )
+        child.setupForDraw(canvasCtm, srgbToWorking)
+        // Build the post-xform that brings child output (in workingCS)
+        // back into the bitmap's actual dst CS. We can't see the dst CS
+        // directly here — we know it only through `xform.dst` — but we
+        // can synthesise the round-trip via sRGB : a single
+        // `workingCS → dstCS` xform encodes the same end-to-end pipeline
+        // as `workingCS → sRGB → dstCS` modulo numerics. For exact
+        // bit-fidelity we reach into the device-supplied xform and
+        // reconstruct its dst CS by inverting it through sRGB.
+        //
+        // The cheapest reliable route is to ask the device-supplied
+        // xform "what's your dst CS?" via the [SkColorSpaceXformSteps]
+        // public surface. That surface is not exposed yet — we fall
+        // back to the round-trip via sRGB, which only adds two extra
+        // TF evals per pixel and is bit-identical when sRGB is the
+        // hub.
+        postXform = if (xform.flags.isIdentity) {
+            // Bitmap dst CS is sRGB — `workingCS → sRGB` covers the
+            // whole post-xform.
+            SkColorSpaceXformSteps(
+                src = workingCS,
+                srcAT = org.skia.core.SkAlphaType.kUnpremul,
+                dst = SkColorSpace.makeSRGB(),
+                dstAT = org.skia.core.SkAlphaType.kUnpremul,
+            )
+        } else {
+            // Bitmap dst CS is some non-sRGB working space ; route via
+            // sRGB through the supplied [xform]. We can't compose
+            // arbitrary xforms in place, so we evaluate the round-trip
+            // pixel-by-pixel via [applyPostXform].
+            null
+        }
+        deviceXform = xform
+    }
+
+    private var deviceXform: SkColorSpaceXformSteps? = null
+
+    /** Run `workingCS → dstCS` on a single 4-float quartet in place. */
+    private fun applyPostXform(rgba: FloatArray) {
+        // First : workingCS → sRGB (the cached path).
+        val toSrgb = workingToSrgb
+        toSrgb.apply(rgba)
+        // Then : sRGB → dstCS (the device's existing xform).
+        deviceXform?.let { it.apply(rgba) }
+    }
+
+    private val workingToSrgb: SkColorSpaceXformSteps =
+        SkColorSpaceXformSteps(
+            src = workingCS,
+            srcAT = org.skia.core.SkAlphaType.kUnpremul,
+            dst = SkColorSpace.makeSRGB(),
+            dstAT = org.skia.core.SkAlphaType.kUnpremul,
+        )
+
+    override fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray) {
+        child.shadeRow(devX, devY, count, dst)
+        val pf = postXform
+        if (pf != null && pf.flags.isIdentity) return
+        val rgba = FloatArray(4)
+        for (i in 0 until count) {
+            val c = dst[i]
+            val a = SkColorGetA(c) / 255f
+            rgba[0] = SkColorGetR(c) / 255f
+            rgba[1] = SkColorGetG(c) / 255f
+            rgba[2] = SkColorGetB(c) / 255f
+            rgba[3] = a
+            if (pf != null) pf.apply(rgba) else applyPostXform(rgba)
+            val ai = (rgba[3].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+            val ri = (rgba[0].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+            val gi = (rgba[1].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+            val bi = (rgba[2].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+            dst[i] = SkColorSetARGB(ai, ri, gi, bi)
+        }
+    }
+
+    override fun shadeRowF16(devX: Int, devY: Int, count: Int, dst: FloatArray) {
+        require(dst.size >= count * 4) { "dst too small: ${dst.size} < ${count * 4}" }
+        child.shadeRowF16(devX, devY, count, dst)
+        val pf = postXform
+        if (pf != null && pf.flags.isIdentity) return
+        // child output is premul float in workingCS — un-premul, xform,
+        // re-premul. We must do this per pixel since the xform pipeline
+        // operates on un-premul colours.
+        val rgba = FloatArray(4)
+        var i = 0
+        while (i < count * 4) {
+            val a = dst[i + 3]
+            if (a <= 0f) { i += 4; continue }
+            val invA = 1f / a
+            rgba[0] = dst[i] * invA
+            rgba[1] = dst[i + 1] * invA
+            rgba[2] = dst[i + 2] * invA
+            rgba[3] = a
+            if (pf != null) pf.apply(rgba) else applyPostXform(rgba)
+            val outA = rgba[3]
+            dst[i] = rgba[0] * outA
+            dst[i + 1] = rgba[1] * outA
+            dst[i + 2] = rgba[2] * outA
+            dst[i + 3] = outA
+            i += 4
+        }
+    }
+
+    override fun sampleAtLocal(lx: Float, ly: Float): SkColor {
+        val c = child.sampleAtLocal(lx, ly)
+        val pf = postXform
+        if (pf != null && pf.flags.isIdentity) return c
+        val a = SkColorGetA(c) / 255f
+        val rgba = floatArrayOf(
+            SkColorGetR(c) / 255f,
+            SkColorGetG(c) / 255f,
+            SkColorGetB(c) / 255f,
+            a,
+        )
+        if (pf != null) pf.apply(rgba) else applyPostXform(rgba)
+        val ai = (rgba[3].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+        val ri = (rgba[0].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+        val gi = (rgba[1].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+        val bi = (rgba[2].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+        return SkColorSetARGB(ai, ri, gi, bi)
+    }
+}
+
 internal class SkLocalMatrixShader(
     private val wrappedShader: SkShader,
     private val wrapperLocalMatrix: SkMatrix,

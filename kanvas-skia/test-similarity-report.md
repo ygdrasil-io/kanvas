@@ -137,6 +137,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ComplexClipBwLayerInvertGM | 94.92% | = | 1 | 287,261 / 302,640 | 0, 219, 219, 220 | 0, 13, 16, 13 |
 | ComposeCFIFGM | 0.66% | = | 1 | 800 / 120,800 | 0, 234, 253, 255 | 0, 72, 69, 66 |
 | ComposeColorFilterGM | 0.00% | = | 1 | 0 / 40,000 | 0, 178, 228, 242 | 0, 87, 72, 104 |
+| ComposeShaderGM | 32.04% | = | 16 | 4,614 / 14,400 | 0, 63, 43, 45 | 0, 46, 30, 30 |
 | ConcavePathsGM | 98.85% | -0.02% | 1 | 296,549 / 300,000 | 0, 64, 65, 65 | 0, 13, 12, 12 |
 | ConicPathsGM | 95.54% | -0.00% | 1 | 843,806 / 883,200 | 0, 255, 255, 255 | 0, 11, 11, 11 |
 | ConicalGradients2ptEdgeGM | 92.88% | = | 1 | 635,850 / 684,600 | 0, 63, 43, 46 | 0, 32, 20, 11 |
@@ -282,6 +283,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ImageFiltersGraphGM | 76.36% | = | 1 | 68,727 / 90,000 | 0, 255, 255, 255 | 0, 101, 79, 44 |
 | ImageFiltersScaledGM | 61.01% | = | 1 | 435,612 / 714,000 | 0, 255, 255, 255 | 0, 60, 65, 129 |
 | ImageFiltersStrokedGM | 91.44% | = | 4 | 393,178 / 430,000 | 0, 255, 255, 255 | 0, 133, 145, 125 |
+| ImageFiltersTransformedGM | 64.73% | = | 8 | 169,693 / 262,144 | 0, 251, 254, 253 | 0, 128, 135, 150 |
 | ImageFiltersUnpremulGM | 100.00% | = | 32 | 4,096 / 4,096 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ImageMagnifierBoundsGM | 66.19% | = | 8 | 260,276 / 393,216 | 0, 251, 251, 247 | 0, 55, 57, 60 |
 | ImageMagnifierCroppedGM | 90.56% | = | 1 | 59,352 / 65,536 | 0, 43, 13, 242 | 0, 43, 13, 242 |
@@ -314,7 +316,9 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | LightingGM | 37.70% | = | 1 | 164,227 / 435,600 | 0, 255, 255, 255 | 0, 44, 47, 36 |
 | LineClosePathGM | 87.25% | -0.02% | 1 | 421,943 / 483,600 | 0, 205, 160, 239 | 0, 91, 72, 104 |
 | LinePathGM | 87.28% | -0.02% | 1 | 422,102 / 483,600 | 0, 205, 160, 239 | 0, 91, 72, 105 |
+| LocalMatrixImageFilterGM | 81.49% | = | 8 | 333,763 / 409,600 | 0, 202, 196, 237 | 0, 36, 119, 141 |
 | LocalMatrixImageShaderGM | 100.00% | = | 1 | 62,500 / 62,500 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| LocalMatrixShaderGM | 67.65% | = | 8 | 365,288 / 540,000 | 0, 208, 208, 241 | 0, 108, 22, 177 |
 | LongWavyLineGM | 99.52% | -0.01% | 1 | 260,891 / 262,144 | 0, 65, 64, 64 | 0, 20, 20, 20 |
 | LumaFilterGM | 41.84% | = | 1 | 105,438 / 252,000 | 0, 255, 255, 255 | 0, 23, 29, 15 |
 | LuminosityOverflowGM | 100.00% | = | 1 | 65,536 / 65,536 | 0, 0, 0, 0 | 0, 0, 0, 0 |
@@ -449,6 +453,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | SpriteBitmapGM | 91.57% | = | 1 | 281,311 / 307,200 | 0, 181, 231, 237 | 0, 52, 100, 104 |
 | SquareHairGM | 96.66% | -0.01% | 1 | 83,513 / 86,400 | 0, 255, 255, 255 | 0, 55, 54, 54 |
 | SrcModeGM | 88.42% | = | 1 | 430,093 / 486,400 | 0, 255, 255, 255 | 0, 60, 64, 62 |
+| SrgbGM | 97.33% | = | 8 | 382,712 / 393,216 | 0, 15, 16, 17 | 0, 8, 7, 9 |
 | StLouisArchGM | 94.43% | -0.07% | 1 | 61,888 / 65,536 | 0, 107, 108, 108 | 0, 15, 15, 15 |
 | StringArtGM | 82.20% | = | 1 | 159,148 / 193,600 | 0, 152, 117, 178 | 0, 12, 9, 14 |
 | StrokeCircleGM | 90.21% | -0.00% | 1 | 243,919 / 270,400 | 0, 73, 63, 75 | 0, 8, 8, 10 |
@@ -511,3 +516,8 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | XfermodesGM | 90.08% | = | 1 | 1,021,801 / 1,134,300 | 0, 89, 84, 172 | 0, 12, 9, 25 |
 | ZeroControlStrokeGM | 99.48% | = | 1 | 318,344 / 320,000 | 0, 53, 196, 237 | 0, 8, 24, 26 |
 | ZeroLineStrokeGM | 93.75% | = | 1 | 10,125 / 10,800 | 0, 255, 255, 255 | 0, 203, 203, 203 |
+| composeshader_bitmap | 53.83% | = | 16 | 4,710 / 8,750 | 0, 211, 240, 179 | 0, 59, 56, 24 |
+| composeshader_bitmap_lm | 53.83% | = | 16 | 4,710 / 8,750 | 0, 211, 240, 179 | 0, 59, 56, 24 |
+| pictureshader | 32.61% | = | 8 | 661,942 / 2,030,000 | 0, 148, 190, 241 | 0, 80, 38, 116 |
+| pictureshader_alpha | 31.56% | = | 8 | 640,574 / 2,030,000 | 0, 86, 94, 110 | 0, 67, 51, 76 |
+| pictureshader_localwrapper | 32.61% | = | 8 | 661,942 / 2,030,000 | 0, 148, 190, 241 | 0, 80, 38, 116 |
