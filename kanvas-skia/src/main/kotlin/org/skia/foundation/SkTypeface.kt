@@ -143,6 +143,36 @@ public open class SkTypeface protected constructor() {
     public open fun getKerningPairAdjustments(glyphs: ShortArray): IntArray? = null
 
     /**
+     * Mirrors Skia's
+     * [`SkTypeface::makeClone(const SkFontArguments&)`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h).
+     *
+     * Returns a new typeface that's the result of applying [args] to
+     * `this` — for variable fonts that means the clone's `fvar` axes
+     * land at the design coordinates carried by
+     * [SkFontArguments.variationDesignPosition], and (when supported)
+     * the requested [SkFontArguments.collectionIndex] face is selected
+     * from a `.ttc` collection.
+     *
+     * **Base-class default — no-op identity** : returns `this` unchanged.
+     * That matches Skia's contract for typefaces backed by formats with
+     * no variation tables (the kanvas-skia [MakeEmpty] sentinel falls
+     * here ; concrete subclasses with a real font binary override).
+     *
+     * Concrete subclasses override the fast path in
+     * `AwtTypeface.makeClone(...)`, which maps the standard
+     * `wght` / `wdth` / `slnt` / `ital` axes onto AWT
+     * `java.awt.font.TextAttribute` values via `Font.deriveFont(Map<...>)`.
+     * Axes AWT cannot honour (`opsz`, `GRAD`, `XHGT`, custom) are
+     * silently dropped — see the AWT-typeface KDoc for the per-axis
+     * mapping table.
+     *
+     * Returns `null` if the clone cannot be produced (e.g. the underlying
+     * font format rejects the requested arguments). The base default
+     * never returns `null`.
+     */
+    public open fun makeClone(args: SkFontArguments): SkTypeface? = this
+
+    /**
      * Internal hook for [SkFont.getMetrics] — base class fills [metrics]
      * with zeros and returns 0 (the recommended line spacing).
      */

@@ -1,7 +1,9 @@
 package org.skia.foundation.awt
 
+import org.skia.foundation.SkFontArguments
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkFontStyle
+import org.skia.foundation.SkFontVariation
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkTextEncoding
@@ -9,8 +11,9 @@ import org.skia.foundation.SkTypeface
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import java.awt.Font
-import java.awt.geom.AffineTransform
 import java.awt.font.FontRenderContext
+import java.awt.font.TextAttribute
+import java.awt.geom.AffineTransform
 import kotlin.math.floor
 
 /**
@@ -414,6 +417,96 @@ internal class AwtTypeface internal constructor(
             charClusters = charClusters,
             advanceX = end.x.toFloat(),
         )
+    }
+
+    /**
+     * R-final.9 — apply [args] to this AWT-backed typeface.
+     *
+     * **Variation axes** (`SkFontArguments::VariationPosition`) are
+     * mapped onto AWT [TextAttribute] values via `Font.deriveFont(Map)` :
+     *
+     *  | Skia tag  | AWT attribute            | Conversion                                 |
+     *  |-----------|--------------------------|--------------------------------------------|
+     *  | `wght`    | [TextAttribute.WEIGHT]   | linear remap `[100..900] → [0.5f..2.5f]`   |
+     *  | `wdth`    | [TextAttribute.WIDTH]    | linear remap `[50..200] → [0.5f..1.5f]`    |
+     *  | `slnt`    | [TextAttribute.POSTURE]  | `slnt-degrees / -90f` (Skia degrees CCW    |
+     *  |           |                          |  → AWT shear ratio)                        |
+     *  | `ital`    | [TextAttribute.POSTURE]  | `0` → `0f`, `1` → `0.2f` (AWT italic)      |
+     *  | `opsz`    | (none)                   | dropped — AWT has no optical-size knob     |
+     *  | `GRAD`    | (none)                   | dropped — vendor grade extension           |
+     *  | `XHGT`    | (none)                   | dropped — design x-height axis             |
+     *  | other     | (none)                   | dropped — unknown to AWT                   |
+     *
+     * Multiple coordinates on the same axis : the **last** wins, which
+     * matches Skia's deterministic-iteration semantics. Axes AWT can't
+     * model are silently ignored — the returned typeface still honours
+     * the axes that mapped successfully (matching Skia's "best effort"
+     * contract for backends with limited variation support).
+     *
+     * **Collection index** (`SkFontArguments::fCollectionIndex`) is
+     * dropped — AWT's `Font` always exposes face 0 of a `.ttc` file ;
+     * we keep `this`'s baseFont (already-loaded face 0) regardless.
+     *
+     * **Palette** (`SkFontArguments::Palette`) is ignored — COLR v0/v1
+     * support is gated on `STUB.COLR_V1` (see `API_FINALIZATION_PLAN.md`).
+     *
+     * Returns a new [AwtTypeface] sharing the same [SkFontStyle] as the
+     * source. Never returns `null` — even if every axis is unmappable
+     * the result is a clone of the base font (an identity transform).
+     */
+    override fun makeClone(args: SkFontArguments): SkTypeface {
+        val coords = args.variationDesignPosition.coordinates
+        if (coords.isEmpty()) {
+            // Identity clone — return a fresh wrapper around the same
+            // baseFont so caller-side identity comparisons don't alias
+            // (`Font.deriveFont(0f).hashCode() != original.hashCode()`),
+            // matching Skia's "always a fresh sk_sp" contract.
+            return AwtTypeface(baseFont.deriveFont(baseFont.size2D), fontStyle)
+        }
+        val attrs = HashMap<TextAttribute, Any>()
+        for (coord in coords) {
+            when (SkFontVariation.Tag(coord.axis).toString()) {
+                "wght" -> {
+                    // Skia design value spans roughly 100..900 (typographic
+                    // weight). AWT's [TextAttribute.WEIGHT] uses 0.5f..2.5f
+                    // (REGULAR = 1.0). Linear remap centred on REGULAR/400.
+                    val w = coord.value.coerceIn(1f, 1000f)
+                    attrs[TextAttribute.WEIGHT] = ((w - 400f) / 500f) + 1f
+                }
+                "wdth" -> {
+                    // Skia: 50..200 (% of normal). AWT: 0.5f..1.5f.
+                    val w = coord.value.coerceIn(50f, 200f)
+                    attrs[TextAttribute.WIDTH] = w / 100f
+                }
+                "slnt" -> {
+                    // Skia: degrees counterclockwise (negative = forward).
+                    // AWT [TextAttribute.POSTURE] is a shear ratio (0 =
+                    // upright, 0.2 ≈ standard italic). Approximate via
+                    // `-degrees/90` so a +14° forward slant lands near
+                    // AWT's 0.156 (close to ITALIC = 0.2).
+                    attrs[TextAttribute.POSTURE] = coord.value / -90f
+                }
+                "ital" -> {
+                    // ital is a binary (0 or 1) ; map onto AWT's POSTURE
+                    // standard italic ratio 0.2 (matches REGULAR vs ITALIC).
+                    attrs[TextAttribute.POSTURE] =
+                        if (coord.value >= 0.5f) TextAttribute.POSTURE_OBLIQUE else TextAttribute.POSTURE_REGULAR
+                }
+                else -> {
+                    // opsz, GRAD, XHGT, XOPQ, YOPQ, custom — AWT has no
+                    // matching TextAttribute. Drop silently. A future JNI
+                    // backend (FreeType / Fontations) can honour these by
+                    // overriding `makeClone` itself ; meanwhile we keep
+                    // the GM compiling without the axis applied.
+                }
+            }
+        }
+        if (attrs.isEmpty()) {
+            // Every coordinate was unmappable — return a fresh wrapper
+            // (same as the empty-coordinates branch above).
+            return AwtTypeface(baseFont.deriveFont(baseFont.size2D), fontStyle)
+        }
+        return AwtTypeface(baseFont.deriveFont(attrs), fontStyle)
     }
 
     internal companion object {

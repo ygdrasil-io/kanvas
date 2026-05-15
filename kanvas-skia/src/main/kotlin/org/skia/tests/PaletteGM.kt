@@ -26,15 +26,16 @@ public class PaletteGM : GM() {
     override fun getISize(): SkISize = SkISize.Make(512, 256)
 
     override fun onDraw(canvas: SkCanvas?) {
-        // Compile-pin the SkFontArguments.Palette surface.
-        val args = SkFontArguments(
-            palette = SkFontArguments.Palette(
-                index = 1,
-                overrides = listOf(
-                    SkFontArguments.PaletteOverride(index = 0, color = SK_ColorRED),
-                ),
-            ),
-        )
+        // Compile-pin the SkFontArguments.Palette surface (mutable
+        // builder API landed in R-final.9, see SkFontArguments.kt).
+        val args = SkFontArguments().also { fa ->
+            fa.palette = SkFontArguments.Palette().also { p ->
+                p.index = 1
+                p.overrides = listOf(
+                    SkFontArguments.Palette.Override(index = 0, color = SK_ColorRED),
+                )
+            }
+        }
         // Silence "unused" lint without leaking lazy-init oddities.
         @Suppress("UNUSED_VARIABLE") val _kept = args
         // Touch the stubbed dispatch — throws STUB.COLR_V1 at runtime.
