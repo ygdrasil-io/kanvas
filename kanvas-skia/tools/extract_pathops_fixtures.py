@@ -265,6 +265,106 @@ def parse_numbers(s: str) -> list[float]:
 # in a preprocessing pass so the per-line regex sees a normal number.
 SK_BITS2FLOAT_RE = re.compile(r"SkBits2Float\s*\(\s*0[xX]([0-9A-Fa-f]+)\s*\)")
 
+# `SkScalar xA = 0.65f;` — named scalar constant declaration. We
+# collect these into a substitution dict in a pre-pass, then replace
+# token references in subsequent geometry calls so the per-line parser
+# only sees raw numbers. Only matches simple numeric-literal RHS — any
+# arithmetic / function call / cast on the RHS leaves the declaration
+# unparsed (it's safer to skip the fixture than to evaluate C++
+# expressions). Trailing `f` suffix is tolerated.
+SK_SCALAR_DECL_RE = re.compile(
+    r"^\s*(?:static\s+)?(?:const\s+)?SkScalar\s+(\w+)\s*=\s*"
+    r"(" + NUMBER + r")\s*;\s*$",
+)
+
+# `SkPoint pts[] = { {x,y}, {x,y}, ... };` — array literal of
+# 2-component points. We collect the (x, y) pairs into a substitution
+# table indexed by array name + integer index. References look like
+# `pts[0].fX`, `pts[0].fY`, or bare `pts[0]` (which expands to a comma-
+# separated `x, y` pair so e.g. `moveTo(pts[0])` becomes
+# `moveTo(x, y)`). Only matches single-line declarations after the
+# multi-line statement joiner has collapsed continuation lines.
+SK_POINT_ARRAY_DECL_RE = re.compile(
+    r"^\s*SkPoint\s+(\w+)\s*\[\s*\]\s*=\s*\{(.*?)\}\s*;\s*$",
+)
+# Match each `{x, y}` element inside the array initialiser body.
+SK_POINT_ELEM_RE = re.compile(
+    r"\{\s*(" + NUMBER + r")\s*,\s*(" + NUMBER + r")\s*\}",
+)
+
+
+def apply_named_scalar_subst(line: str, scalars: dict[str, str]) -> str:
+    """
+    Replace each whole-word occurrence of a scalar name in [scalars]
+    with its literal value. Word-boundary anchors avoid clobbering
+    identifiers that *contain* a scalar name as a substring
+    (e.g. `xAxis` shouldn't match `xA`). The substitution dict is
+    populated by [collect_named_scalars] in a top-of-fixture pre-pass.
+    """
+    if not scalars:
+        return line
+    # Build a single alternation, longest-name-first, so `xAB` matches
+    # before `xA` if both are defined.
+    keys = sorted(scalars.keys(), key=len, reverse=True)
+    pattern = re.compile(r"\b(?:" + "|".join(re.escape(k) for k in keys) + r")\b")
+    return pattern.sub(lambda m: scalars[m.group(0)], line)
+
+
+def apply_point_array_subst(
+    line: str,
+    arrays: dict[str, list[tuple[str, str]]],
+) -> str:
+    """
+    Replace `<name>[<idx>].fX` / `.fY` / bare `<name>[<idx>]` refs with
+    their stored coordinate literals. Bare-element form expands to a
+    comma-separated `x, y` pair so the surrounding call site (e.g.
+    `path.moveTo(pts[0])`) parses as a normal 2-arg moveTo. Out-of-
+    bounds indices are left untouched — the per-line parser will
+    reject the fixture as unparseable, which is the correct behaviour
+    (skip rather than silently fabricate a value).
+    """
+    if not arrays:
+        return line
+    # `<name>[<idx>].fX` / `.fY` first — they shadow the bare form
+    # match below (which would otherwise eat the `.fX` suffix as a
+    # separate ref).
+    def replace_field(m: re.Match) -> str:
+        name, idx_str, field = m.group(1), m.group(2), m.group(3)
+        arr = arrays.get(name)
+        if arr is None:
+            return m.group(0)
+        try:
+            idx = int(idx_str)
+            x, y = arr[idx]
+        except (ValueError, IndexError):
+            return m.group(0)
+        return x if field == "fX" else y
+
+    name_alt = "|".join(re.escape(n) for n in arrays.keys())
+    field_pat = re.compile(
+        r"\b(" + name_alt + r")\s*\[\s*(\d+)\s*\]\s*\.\s*(fX|fY)\b",
+    )
+    line = field_pat.sub(replace_field, line)
+
+    # Bare `<name>[<idx>]` form — expand to `x, y` so callers passing
+    # a whole SkPoint get two scalar args. This is exactly what Skia's
+    # `path.moveTo(SkPoint)` overload does behind the scenes.
+    def replace_bare(m: re.Match) -> str:
+        name, idx_str = m.group(1), m.group(2)
+        arr = arrays.get(name)
+        if arr is None:
+            return m.group(0)
+        try:
+            idx = int(idx_str)
+            x, y = arr[idx]
+        except (ValueError, IndexError):
+            return m.group(0)
+        return f"{x}, {y}"
+
+    bare_pat = re.compile(r"\b(" + name_alt + r")\s*\[\s*(\d+)\s*\]")
+    line = bare_pat.sub(replace_bare, line)
+    return line
+
 
 def expand_sk_bits2float(line: str) -> str:
     """
@@ -370,6 +470,17 @@ def parse_fixture(name: str, body: list[str]) -> tuple[Fixture | None, str | Non
     # tagged "_a", the second "_b" (in declaration / first-use order),
     # so `path` and `pathB` (or `path1` and `path2` etc.) are stable.
     var_to_slot: dict[str, str] = {}
+    # Per-fixture substitution tables populated as we walk the body :
+    #   - [named_scalars] : `SkScalar xA = 0.65f;` → {"xA": "0.65"}.
+    #     Later geometry calls that reference `xA` are rewritten before
+    #     per-line regex matching.
+    #   - [point_arrays]  : `SkPoint pts[] = { {5,6}, ... };` →
+    #     {"pts": [("5", "6"), ...]}. References like `pts[0].fX`,
+    #     `pts[0].fY`, and bare `pts[0]` are expanded inline.
+    # Both dicts only grow ; once a name is recorded, every subsequent
+    # line in this fixture's body sees the substitution.
+    named_scalars: dict[str, str] = {}
+    point_arrays: dict[str, list[tuple[str, str]]] = {}
 
     def slot_for(var: str) -> str | None:
         if var not in var_to_slot:
@@ -399,6 +510,33 @@ def parse_fixture(name: str, body: list[str]) -> tuple[Fixture | None, str | Non
         # single largest skip category once addRect / Rect-factory /
         # multi-line cubics are handled.
         line = expand_sk_bits2float(line)
+        # `SkScalar <name> = <literal>;` declarations — collect into
+        # the substitution dict and skip. Must run BEFORE the generic
+        # `unparseable line` fallback or these would abort the fixture.
+        m = SK_SCALAR_DECL_RE.match(line)
+        if m:
+            var, val = m.group(1), m.group(2)
+            named_scalars[var] = val.rstrip("f")
+            continue
+        # `SkPoint <name>[] = { {x, y}, ... };` array literals —
+        # collect the (x, y) pairs into the substitution dict. Indices
+        # are 0-based ; bare `<name>[<i>]` references and `.fX`/`.fY`
+        # field accesses expand inline on later lines.
+        m = SK_POINT_ARRAY_DECL_RE.match(line)
+        if m:
+            arr_name = m.group(1)
+            body_str = m.group(2)
+            elems: list[tuple[str, str]] = []
+            for em in SK_POINT_ELEM_RE.finditer(body_str):
+                elems.append((em.group(1).rstrip("f"), em.group(2).rstrip("f")))
+            if elems:
+                point_arrays[arr_name] = elems
+            continue
+        # Apply collected substitutions BEFORE per-line regex matching.
+        # Order : point-array first (it can introduce new commas the
+        # scalar pass doesn't care about), then named scalars.
+        line = apply_point_array_subst(line, point_arrays)
+        line = apply_named_scalar_subst(line, named_scalars)
         # Variable declarations.
         m = DECL_RE.match(line)
         if m:
@@ -596,6 +734,15 @@ def join_multiline_statements(body: list[str]) -> list[str]:
     out: list[str] = []
     buffer: list[str] = []
     depth = 0
+    # When a line starts an `SkPoint <name>[] = {` array initialiser
+    # that doesn't close on the same line, we'd normally flush
+    # immediately (the paren-depth tracker doesn't care about braces).
+    # We add a separate "brace-init" mode that latches on until a
+    # matching `};` is seen, then flushes the joined block. This is
+    # narrowly scoped to SkPoint array literals — generic brace
+    # tracking would mistakenly fold control-flow blocks together.
+    in_brace_init = False
+    array_init_re = re.compile(r"^\s*SkPoint\s+\w+\s*\[\s*\]\s*=\s*\{")
     for raw in body:
         # Strip line comments (`// …`) before counting parens — a
         # `// (oops)` would otherwise unbalance the depth tracker.
@@ -603,6 +750,23 @@ def join_multiline_statements(body: list[str]) -> list[str]:
         line_open_minus_close = stripped.count("(") - stripped.count(")")
         new_depth = depth + line_open_minus_close
         buffer.append(raw.rstrip())
+        # Detect entry into an SkPoint-array brace block. We only enter
+        # if this is the first line of the buffer (i.e. we're not in
+        # the middle of an open paren statement) and the line opens but
+        # doesn't close the array init.
+        if not in_brace_init and len(buffer) == 1 and depth == 0:
+            if array_init_re.match(stripped) and "};" not in stripped:
+                in_brace_init = True
+        if in_brace_init:
+            # Stay latched until we see the closing `};` on this line.
+            if "};" in stripped:
+                in_brace_init = False
+                joined = " ".join(s.strip() for s in buffer if s.strip())
+                if joined:
+                    out.append(joined)
+                buffer = []
+                depth = 0
+            continue
         if new_depth <= 0:
             # Statement boundary : flush whatever's in the buffer as
             # one joined line. Empty / brace-only lines flush to

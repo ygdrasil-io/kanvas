@@ -21898,7 +21898,7 @@
   "skipped": [
     {
       "name": "rRect1",
-      "reason": "unparseable line: 'SkScalar xA = 0.65f;'"
+      "reason": "unparseable line: 'SkRect rects[5];'"
     },
     {
       "name": "loopEdge2",
@@ -21922,7 +21922,7 @@
     },
     {
       "name": "cubicOp130a",
-      "reason": "unparseable line: 'SkPoint pts[] = { {5,6}, {4,6}, {3,0}, {2,1} };'"
+      "reason": "unparseable line: 'complex_to_quads(pts, &path);'"
     },
     {
       "name": "rRect1x",
@@ -21930,7 +21930,7 @@
     },
     {
       "name": "loops33iMod",
-      "reason": "unparseable line: 'SkPoint pts[] = {{2, 6}, {1, 2}, {7.16666698f, 6.66666698f}, {-4.66666651f, 7.66666651f},'"
+      "reason": "unparseable line: 'bool up = false;'"
     },
     {
       "name": "loops33iAsQuads",
