@@ -1,6 +1,13 @@
 package org.skia.encode
 
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorGetA
+import org.skia.foundation.SkColorGetB
+import org.skia.foundation.SkColorGetG
+import org.skia.foundation.SkColorGetR
+import org.skia.foundation.SkColorSetARGB
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.stream.SkWStream
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -38,8 +45,13 @@ import javax.imageio.stream.MemoryCacheImageOutputStream
  * **Alpha handling** : JPEG cannot carry alpha. ImageIO's writer
  * rejects ARGB inputs ; we work around that by projecting the
  * source bitmap onto an opaque `TYPE_INT_RGB` `BufferedImage`
- * before writing, which is equivalent to upstream's
- * [Options.AlphaOption.kIgnore] (alpha channel is dropped).
+ * before writing. The projection respects [Options.alphaOption] :
+ *  - [AlphaOption.kIgnore] drops alpha — RGB pixels are emitted as
+ *    if the source were opaque. Matches upstream's "ignore" path.
+ *  - [AlphaOption.kBlendOnBlack] composites the source onto a black
+ *    background — `(R, G, B) → (R*α/255, G*α/255, B*α/255)`. Matches
+ *    upstream's libjpeg-turbo "blend on black" path used by the
+ *    `encode-alpha-jpeg` GM.
  */
 public object SkJpegEncoder {
 
@@ -50,7 +62,10 @@ public object SkJpegEncoder {
 
         /**
          * Composite the source pixmap onto a black background before
-         * encoding. Currently advisory — see class kdoc.
+         * encoding. RGB channels are scaled by `alpha / 255` so a
+         * fully-transparent pixel encodes to black and a fully-opaque
+         * pixel preserves its colour exactly. Honoured by both the
+         * SkBitmap and SkPixmap entry points.
          */
         kBlendOnBlack,
     }
@@ -101,18 +116,13 @@ public object SkJpegEncoder {
      */
     public fun Encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
         // Project the bitmap onto an opaque TYPE_INT_RGB image —
-        // ImageIO's JPEG writer rejects alpha-bearing buffered
-        // images, so this is equivalent to upstream's
-        // AlphaOption.kIgnore (the alpha byte from the unpremul 8888
-        // source is dropped on copy).
-        val argb = EncoderSupport.bitmapToBufferedImage(src)
-        val opaque = BufferedImage(src.width, src.height, BufferedImage.TYPE_INT_RGB)
-        val g = opaque.createGraphics()
-        try {
-            g.drawImage(argb, 0, 0, null)
-        } finally {
-            g.dispose()
-        }
+        // ImageIO's JPEG writer rejects alpha-bearing buffered images.
+        // The projection respects [Options.alphaOption] : kIgnore drops
+        // alpha (Graphics2D draws over a black canvas, but the source
+        // is rendered without compositing-by-alpha because the input is
+        // already laid out as packed ARGB), kBlendOnBlack scales RGB by
+        // alpha/255 before the channel-drop.
+        val opaque = projectToOpaque(src, options.alphaOption)
         val writers = ImageIO.getImageWritersByFormatName("jpeg")
         if (!writers.hasNext()) return false
         val writer = writers.next()
@@ -131,5 +141,73 @@ public object SkJpegEncoder {
         } finally {
             writer.dispose()
         }
+    }
+
+    /**
+     * Project [src] into an opaque `TYPE_INT_RGB` [BufferedImage],
+     * honouring [alphaOption]. Each pixel is read as non-premultiplied
+     * 8-bit ARGB via [SkBitmap.getPixel] (which already handles every
+     * supported colour type — 8888 / BGRA / 4444 / 565 / Alpha8 / F16),
+     * then the RGB channels are emitted into the destination either
+     * verbatim ([AlphaOption.kIgnore]) or scaled by `alpha / 255`
+     * ([AlphaOption.kBlendOnBlack]).
+     */
+    private fun projectToOpaque(src: SkBitmap, alphaOption: AlphaOption): BufferedImage {
+        val out = BufferedImage(src.width, src.height, BufferedImage.TYPE_INT_RGB)
+        val rgb = IntArray(src.width * src.height)
+        for (y in 0 until src.height) {
+            for (x in 0 until src.width) {
+                val argb = src.getPixel(x, y)
+                val a = SkColorGetA(argb)
+                val r = SkColorGetR(argb)
+                val g = SkColorGetG(argb)
+                val b = SkColorGetB(argb)
+                rgb[y * src.width + x] = when (alphaOption) {
+                    AlphaOption.kIgnore -> SkColorSetARGB(0xFF, r, g, b)
+                    AlphaOption.kBlendOnBlack -> {
+                        val rr = (r * a + 127) / 255
+                        val gg = (g * a + 127) / 255
+                        val bb = (b * a + 127) / 255
+                        SkColorSetARGB(0xFF, rr, gg, bb)
+                    }
+                }
+            }
+        }
+        out.setRGB(0, 0, src.width, src.height, rgb, 0, src.width)
+        return out
+    }
+
+    // ── R-final.6 overloads : SkPixmap + SkWStream ───────────────────────
+
+    /**
+     * Encode [src]'s pixels into [stream]. Returns `true` on success.
+     * Mirrors upstream's `bool SkJpegEncoder::Encode(SkWStream*, const
+     * SkPixmap&, const Options&)`. See class kdoc for the list of
+     * honoured options ([Options.quality] and [Options.alphaOption])
+     * and the advisory ones ([Options.downsample]).
+     */
+    public fun Encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
+        val bitmap = EncoderSupport.pixmapToBitmap(src) ?: return false
+        return Encode(stream, bitmap, options)
+    }
+
+    /**
+     * Encode [src]'s pixels and return the JPEG bytes, or `null` on
+     * encoder failure. Convenience wrapper for upstream's
+     * `sk_sp<SkData> SkJpegEncoder::Encode(const SkPixmap&, const
+     * Options&)`.
+     */
+    public fun Encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
+        val bitmap = EncoderSupport.pixmapToBitmap(src) ?: return null
+        return Encode(bitmap, options)
+    }
+
+    /**
+     * Convenience overload — writes the encoded bytes into [stream] via
+     * the [SkWStream.write] contract instead of an [OutputStream].
+     */
+    public fun Encode(stream: SkWStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
+        val bytes = Encode(src, options) ?: return false
+        return stream.write(bytes, bytes.size)
     }
 }
