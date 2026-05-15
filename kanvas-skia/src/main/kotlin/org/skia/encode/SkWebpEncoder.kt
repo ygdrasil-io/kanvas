@@ -222,10 +222,41 @@ public object SkWebpEncoder {
         if (width > 16384 || height > 16384) return null
         return when (options.compression) {
             Compression.kLossless -> WebpLosslessEncoder.encode(argb, width, height)
-            // TODO(R-suivi.23) : VP8 lossy. Use [Custom] in the
-            // meantime to bind a native libwebp encoder.
+            // R-final.S — STUB.WEBP_LOSSY. The VP8 lossy encoder needs
+            // bit-exact DCT / quantizer arithmetic that lives outside
+            // a pure-JVM port. The dispatch returns `null` here for
+            // back-compat (existing call sites and the
+            // [SkWebpEncoderTest] suite assume the soft-failure
+            // contract). Consumers that want to *fail loud* on the
+            // missing path call [requireLossy] instead. To plug a
+            // real encoder, register a libwebp JNI binding via
+            // [Custom] (the [customEncoder] short-circuit at the top
+            // of this method runs before this dispatch).
             Compression.kLossy -> null
         }
+    }
+
+    /**
+     * R-final.S **STUB.WEBP_LOSSY** sharp-edge entry-point. Routes
+     * to [Encode] ; if it returns `null` (because no [Custom] hook is
+     * registered and the built-in lossy path is unimplemented),
+     * throws [NotImplementedError] tagged `STUB.WEBP_LOSSY` so the
+     * gap is visible at the call site rather than silently producing
+     * an empty asset. Use this from GMs / tests that *require* a
+     * working lossy WebP encode.
+     *
+     * See [`API_FINALIZATION_PLAN.md`](../../../../../../../../API_FINALIZATION_PLAN.md)
+     * § STUB.WEBP_LOSSY.
+     */
+    @Suppress("FunctionName")
+    public fun requireLossy(bitmap: SkBitmap, options: Options = defaultOptions): ByteArray {
+        require(options.compression == Compression.kLossy) {
+            "requireLossy() must be called with options.compression = kLossy, got ${options.compression}"
+        }
+        return Encode(bitmap, options) ?: throw NotImplementedError(
+            "STUB.WEBP_LOSSY: requires libwebp via JNI — see API_FINALIZATION_PLAN.md " +
+                "(register a libwebp binding via SkWebpEncoder.Custom(...) to override).",
+        )
     }
 }
 
