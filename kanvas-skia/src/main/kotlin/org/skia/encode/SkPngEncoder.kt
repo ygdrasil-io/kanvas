@@ -1,6 +1,8 @@
 package org.skia.encode
 
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import javax.imageio.ImageIO
@@ -108,5 +110,47 @@ public object SkPngEncoder {
         } catch (_: Throwable) {
             false
         }
+    }
+
+    // ── R-final.6 overloads : SkPixmap + SkWStream ───────────────────────
+    //
+    // The plan calls for `SkPngEncoder.Encode(stream, pixmap, options)` to
+    // mirror the upstream `SkWStream*` + `SkPixmap` signature. The Kotlin
+    // implementation routes through the existing SkBitmap path : the pixmap
+    // is materialised into a fresh 8888 bitmap via `getColor` (which honours
+    // the source colour type), then re-uses the proven ImageIO write
+    // pipeline. Slow for huge images but correct for the GM-sized inputs
+    // that exercise this overload.
+
+    /**
+     * Encode [src]'s pixels into [stream]. Returns `true` on success.
+     * Mirrors upstream's `bool SkPngEncoder::Encode(SkWStream*, const
+     * SkPixmap&, const Options&)`. The caller retains ownership of
+     * [stream]. See class kdoc for the list of honoured / advisory
+     * options (none of [Options]' fields are wired to ImageIO today).
+     */
+    public fun Encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
+        val bitmap = EncoderSupport.pixmapToBitmap(src) ?: return false
+        return Encode(stream, bitmap, options)
+    }
+
+    /**
+     * Encode [src]'s pixels into [bytes]. Returns `null` if encoding
+     * fails. Convenience wrapper for the upstream `sk_sp<SkData>
+     * SkPngEncoder::Encode(const SkPixmap&, const Options&)` shape.
+     */
+    public fun Encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
+        val bitmap = EncoderSupport.pixmapToBitmap(src) ?: return null
+        return Encode(bitmap, options)
+    }
+
+    /**
+     * Convenience overload — writes the encoded bytes into [stream] via
+     * the [SkWStream.write] contract instead of an [OutputStream].
+     * Useful for call sites already plumbing the foundation type.
+     */
+    public fun Encode(stream: SkWStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
+        val bytes = Encode(src, options) ?: return false
+        return stream.write(bytes, bytes.size)
     }
 }
