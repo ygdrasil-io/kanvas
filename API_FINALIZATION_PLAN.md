@@ -196,15 +196,37 @@ Pour chaque API ci-dessous, créer la signature publique correcte qui jette `thr
 
 ## 6. Suivi
 
-| Sprint | Statut | PR | Commentaires |
+| Sprint | Statut | PR | GMs ✅ | Commentaires |
+|---|---|---|---:|---|
+| R-final.1 — Quick wins shader/clip/region | ☑ | #438 | 8 | 4 APIs déjà présentes (audit) → 100% portage. ClipShader/RuntimeShader floor abaissé : bug `localMatrix` forward/inverse (follow-up F1) |
+| R-final.2 — LocalMatrix wrappers | ☑ | #439 | 8 | 1 bonus (`ComposeShaderBitmapGM(true)`). RsxText skip → besoin `SkTextBlobBuilder.allocRunRSXform` (F2) |
+| R-final.3 — Color management | ☑ | #440 | 1 | 2/4 APIs déjà présentes. 3 GMs skipped : ColorSpaceGM PNG ref dégénérée (structurel), GraphiteStartGM sans PNG ref (structurel) + manque `MakeGaussian` (F5), WorkingSpaceGM = registry SkSL custom (F4) |
+| R-final.4 — Image helpers + ShaderMaskFilter | ☑ | #441 | 5 | Toutes APIs déjà présentes (audit) → 100% portage (11 tests). Skips : DrawImageSet = `experimental_DrawEdgeAAImageSet` (F6), PerspImages = perspective drawImageRect (F7) |
+| R-final.5 — Generators + mipmaps + GIF anim | ☑ | #443 | 5 | 1 bonus (`RespectOrientationJpegGM`). AnimatedGif 100%, GIF89a disposal honoré. Manque `SkTextUtils.GetPath` (F10) |
+| R-final.6 — Encodeurs via `javax.imageio` | ☑ | #442 | 5 | JpgColorCubeGM 100%. Bonus fix bug latent `EncoderSupport.bitmapToBufferedImage`. Follow-ups : iCCP chunk (F8), per-bitmap alpha-type tag (F9) |
+| R-final.7 — Misc raster | ☑ | #445 | 6 | SkM44 perspective déjà présent. PlanetTypeface skipped (color-emoji non-AWT). 5 améliorations sur scores existants au merge |
+| R-final.8 — Animated images + EXIF + YUV | ☑ | #444 | 1 + 2 ratchets up | Orientation444GM + RespectOrientationJpegGM **19.87% → 100%** grâce au fix EXIF. SkEncodedOrigin + SkPixmapUtils.Orient déjà présents. CompositorQuads minimal port (full = `experimental_DrawEdgeAAImageSet`, F6). 2 GMs skip : assets `flightAnim.gif` + `stoplight_h.webp` non vendored (F11) + animated WebP (F12) |
+| R-final.9 — Variable fonts + HDR pipeline | ☑ | #447 | 2 | SkFontArguments + makeClone via AWT TextAttribute (4 axes : wght/wdth/slnt/ital). Axes opsz/GRAD/XHGT/XOPQ/YOPQ silently dropped (limite AWT). Asset Distortable.ttf vendored. SkColorSpace.MakePqHdr() (BT.2100 + Rec.2020) |
+| R-final.S — Stubs JNI documentés | ☑ | #446 | 0 (10 squelettes) | 8 stubs créés : WEBP_LOSSY, FFMPEG, FONTATIONS, COLR_V1, EMOJI_TABLES, SKSL, LIBERATION_FM, AAClip. 10 GM squelettes `@Ignore("STUB.X")` |
+| **Plan refresh (clôture)** | ☑ | (cette PR) | — | Refresh + archivage |
+
+**Total** : **11 PRs ouvertes** ; **+43 GMs** portées (319 → **362 / 437 = 83 %**).
+
+## 7. Follow-ups consolidés
+
+Ces items ont été découverts au fil des sprints R-final.1 → R-final.9 et n'ont pas été traités dans le scope du plan. Ils restent à pousser dans un sprint dédié post-R-final si la couverture doit grimper au-delà de 83 %.
+
+| ID | Découvert | API / item | Impact GM |
 |---|---|---|---|
-| R-final.1 — Quick wins shader/clip/region | ☐ | — | |
-| R-final.2 — LocalMatrix wrappers | ☐ | — | |
-| R-final.3 — Color management | ☐ | — | |
-| R-final.4 — Image helpers + ShaderMaskFilter | ☐ | — | |
-| R-final.5 — Generators + mipmaps + GIF anim | ☐ | — | |
-| R-final.6 — Encodeurs via `javax.imageio` | ☐ | — | |
-| R-final.7 — Misc raster | ☐ | — | |
-| R-final.8 — Animated images + EXIF + YUV | ☐ | — | |
-| R-final.9 — Variable fonts + HDR pipeline | ☐ | — | |
-| R-final.S — Stubs JNI documentés | ☐ | — | |
+| **F1** | R-final.1 | `SkRuntimeEffect.makeShader(localMatrix)` applique forward au lieu d'inverse | floor ClipShaderGM + RuntimeShaderGM (~50% au lieu de ~95%) |
+| **F2** | R-final.2 | `SkTextBlobBuilder.allocRunRSXform(font, count)` manquant | RsxTextGM (rsx_blob_shader) |
+| **F3** | R-final.3 | `SkBitmapDevice.imagePixelsInDeviceColorSpace` ne respecte pas `image.colorSpace` | latent ; sprint dédié de recalibrage requis (MipmapGray8SrgbGM régressait au fix) |
+| **F4** | R-final.3 | Registry SkSL runtime-effect dynamique (hash & dispatch arbitrary user SkSL) | WorkingSpaceGM + RippleShaderGM |
+| **F5** | R-final.3 | `SkColorFilterPriv.MakeGaussian` | GraphiteStartGM cellule 4 |
+| **F6** | R-final.4 | `experimental_DrawEdgeAAImageSet` + `SkCanvas.ImageSetEntry` | DrawImageSetGM + CompositorQuadsImageGM full |
+| **F7** | R-final.4 | Perspective `drawImageRect` raster (CTM non axis-aligned) | PerspImagesGM + persp* GMs |
+| **F8** | R-final.6 | iCCP chunk embedding dans `SkPngEncoder` | EncodeSrgbGM (+10-15%) |
+| **F9** | R-final.6 | Per-bitmap alpha-type tag sur `SkBitmap` | EncodeAlphaJpegGM + EncodeColorTypesGM (+30-40%) |
+| **F10** | R-final.5 | `SkTextUtils.GetPath` | PictureImageGeneratorGM (wordmark upstream) |
+| **F11** | R-final.8 | Vendored assets manquants : `flightAnim.gif` + `stoplight_h.webp` | FlightAnimatedImageGM + StoplightAnimatedImageGM |
+| **F12** | R-final.8 | `SkWebpCodec` multi-frame (animated WebP) | StoplightAnimatedImageGM |
