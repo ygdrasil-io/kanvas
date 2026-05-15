@@ -374,10 +374,29 @@ class PathOpsRegressionRunner {
          *    (0.7 pp cushion). Sole remaining null-return : `cubicOp35d`
          *    (two crossing cubics with sub-pixel intersection — needs
          *    deeper algorithmic debug ; tracked separately).
+         *  - **D1.4 cubicOp35d FAIL_IF debug pass** (no fixture-count
+         *    change) : `SkOpAngle.insert` no longer aborts with `false`
+         *    when its inner 2-pass walk fails to find an insertion slot.
+         *    Upstream's `FAIL_IF(flipAmbiguity)` path relies on
+         *    `tangentsAmbiguous` (set by `tangentsDiverge` in
+         *    `convexHullOverlaps` / `checkParallel`) to flip the sort
+         *    decision and break the cycle. For `cubicOp35d` the geometry
+         *    creates a 4-way intersection ring (cubic B self-intersects
+         *    its closing line near its start point, splitting cubic B
+         *    into 4 sub-segments and yielding 4 angles at the cubic-cubic
+         *    intersection) whose tangent magnitudes never enter the
+         *    ambiguous 50..200 band — so the flip never fires and the
+         *    insert fails. Mirror the spirit of upstream's "fix pathops
+         *    unsortable angles" pass (`ea2a6323bc`) : mark the new angle
+         *    + receiver as unorderable and insert just after the receiver
+         *    rather than aborting. The downstream walker handles the
+         *    unorderable flag gracefully. Survival jumps **334 → 335 /
+         *    335 = 100 %**. Floor bumped 99 % → 100 % (no cushion ; any
+         *    new regression must be diagnosed).
          *
          * Bump the floor monotonically as future debug passes land.
          */
-        private const val INITIAL_SURVIVAL_FLOOR: Double = 0.99
+        private const val INITIAL_SURVIVAL_FLOOR: Double = 1.00
 
         /**
          * Floor for the pixel-parity ratchet. See
