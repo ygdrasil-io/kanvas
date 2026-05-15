@@ -19,6 +19,7 @@ import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkTextEncoding
+import org.skia.foundation.SkTileMode
 import org.skia.math.SkIRect
 import org.skia.math.SkM44
 import org.skia.math.SkMatrix
@@ -1144,10 +1145,26 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
 
     /**
      * Mirrors Skia's `SkCanvas::drawImageRect(image, src, dst, sampling, paint, constraint)`.
-     * Under axis-aligned matrices the dst rect is mapped through the CTM to
-     * an axis-aligned device rect (current code path). Under non-axis-aligned
-     * matrices the call is dropped — true rotated `drawImageRect` would need
-     * texture-space sampling with an inverse matrix (deferred).
+     *
+     * Three CTM regimes :
+     *  1. **Axis-aligned** — `dst` is mapped through the CTM to an axis-aligned
+     *     device rect and routed through the device's bulk `drawImageRect`
+     *     (fast path).
+     *  2. **Non-axis-aligned (rotated / skewed / perspective)** — R-final.7 :
+     *     re-route through [drawPath] of `SkPath.Rect(dst)` filled by an
+     *     image shader whose [SkShader] local-matrix maps `src → dst`. The
+     *     existing path rasteriser already handles arbitrary CTMs (perspective
+     *     included), and the shader pipeline samples the image at every
+     *     covered device pixel via the device-to-local inverse — net effect
+     *     is a projection-warp of the source rect into the destination
+     *     polygon under the current CTM.
+     *
+     * The [paint] is honoured for everything that's not the colour /
+     * shader (e.g. blend mode, alpha) — the shader assignment overrides
+     * any user-supplied shader. [constraint] is currently ignored on the
+     * perspective path (it only matters for the bulk-rect filter
+     * over-sampling guard, which doesn't kick in for the per-pixel
+     * shader path).
      */
     public open fun drawImageRect(
         image: SkImage,
@@ -1159,7 +1176,31 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
     ) {
         val s = top
         if (!s.matrix.isAxisAligned) {
-            // TODO(phase 4b+) rotated drawImageRect — needs sampler with inverse CTM.
+            // R-final.7 — perspective / rotated path : route through drawRect
+            // with an image-shader bound to the src→dst local matrix. The
+            // shader maps every device pixel back through the CTM⁻¹ and the
+            // localMatrix⁻¹ to its src-image sample.
+            //
+            // Local matrix : maps `dst` → `src` so that when the shader
+            // samples at local-space point `p` (which is `dst` coords after
+            // the canvas inverts the CTM), it reads from the corresponding
+            // `src` pixel. SkBitmapShader composes `localMatrix⁻¹` with
+            // `deviceToLocal` so we pass the src-to-dst mapping (the shader
+            // inverts it internally as part of its sample pipeline).
+            val srcToDst = SkMatrix.MakeRectToRect(src, dst, SkMatrix.ScaleToFit.kFill_ScaleToFit)
+            if (srcToDst == null) return
+            val shader = image.makeShader(
+                SkTileMode.kClamp,
+                SkTileMode.kClamp,
+                sampling,
+                srcToDst,
+            )
+            val effective = (paint?.copy() ?: SkPaint()).apply {
+                this.shader = shader
+            }
+            // Use drawPath directly to avoid drawRect's fast-path which
+            // would re-enter and short-circuit on a null shader.
+            drawPath(SkPath.Rect(dst), effective)
             return
         }
         val (x0, y0) = s.matrix.mapXY(dst.left, dst.top)
