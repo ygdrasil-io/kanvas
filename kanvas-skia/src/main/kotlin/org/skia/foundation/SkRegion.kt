@@ -407,20 +407,57 @@ public class SkRegion private constructor(
     }
 
     /**
-     * Trace the outline of this region into [builder] as a sequence
-     * of `addRect(...)` calls — one rectangle per region piece.
+     * Trace the outline of this region into [builder] as one closed
+     * contour per connected component (so L-shaped or hole-bearing
+     * regions emit a single non-convex contour rather than one rect
+     * per band-interval). Returns `true` iff the region is non-empty.
      *
-     * Returns `true` iff the region is non-empty (matches upstream's
-     * `SkRegion::addBoundaryPath(SkPathBuilder*)` return contract).
-     * Mirror of `include/core/SkRegion.h:190`.
+     * Mirror of upstream `SkRegion::addBoundaryPath(SkPathBuilder*)`
+     * (`src/core/SkRegion_path.cpp:558-609`) — same edge-pair-per-rect
+     * extraction, same `(fX, top)` sort key, same `find_link` / `extract_path`
+     * stitcher. The fast paths for empty / single-rect regions match
+     * upstream byte-for-byte.
      */
     public fun addBoundaryPath(builder: SkPathBuilder): Boolean {
         if (isEmpty()) return false
-        val it = Iterator(this)
-        while (!it.done()) {
-            val r = it.rect()
-            builder.addRect(org.skia.math.SkRect.Make(r))
-            it.next()
+
+        if (isRect()) {
+            builder.addRect(org.skia.math.SkRect.Make(getBounds()))
+            return true
+        }
+
+        // Build the edge list — two vertical edges per rect. The left
+        // edge runs bottom → top (going *up*) and the right edge runs
+        // top → bottom (going *down*). This sign convention lets
+        // `find_link` connect a vertical edge's `fY0` end to the
+        // horizontal-neighbour vertical edge whose `fY1` matches —
+        // forming a single counter-clockwise contour per component.
+        val edges = ArrayList<BoundaryEdge>(computeRegionComplexity() * 2)
+        val iter = Iterator(this)
+        while (!iter.done()) {
+            val r = iter.rect()
+            edges.add(BoundaryEdge(x = r.left,  y0 = r.bottom, y1 = r.top))
+            edges.add(BoundaryEdge(x = r.right, y0 = r.top,    y1 = r.bottom))
+            iter.next()
+        }
+
+        // Sort by (fX asc, then top() = min(fY0, fY1) asc) — matches
+        // upstream's `EdgeLT` comparator.
+        edges.sortWith(BOUNDARY_EDGE_LT)
+
+        // Pair each edge with its successor on the contour. After this
+        // pass every edge has `next` non-null and `flags` == kCompleteLink.
+        for (i in edges.indices) findBoundaryLink(edges, i)
+
+        builder.incReserve(edges.size * 2)
+
+        // Walk the linked cycles, emitting one closed contour per cycle.
+        var remaining = edges.size
+        var cursor = 0
+        while (remaining > 0) {
+            // Skip already-consumed edges (flags reset to 0 by extractor).
+            while (edges[cursor].flags == 0) cursor++
+            remaining -= extractBoundaryContour(edges, cursor, builder)
         }
         return true
     }
@@ -428,12 +465,125 @@ public class SkRegion private constructor(
     /**
      * Return the boundary of this region as a freshly built [SkPath].
      * Empty region yields an empty path. Mirror of upstream
-     * `SkRegion::getBoundaryPath()` (`include/core/SkRegion.h:195`).
+     * `SkRegion::getBoundaryPath()` (`src/core/SkRegion_path.cpp:611-615`).
      */
     public fun getBoundaryPath(): SkPath {
         val b = SkPathBuilder()
         addBoundaryPath(b)
         return b.detach()
+    }
+
+    /**
+     * One vertical edge of the region boundary. `x` is the X coordinate ;
+     * `(y0, y1)` is the directed Y span (going up for left-of-rect edges,
+     * down for right-of-rect edges — the sign carries the winding).
+     *
+     * `flags` tracks which ends have been linked (see [kY0Link] /
+     * [kY1Link] / [kCompleteLink]) ; `next` is the successor on the
+     * stitched contour cycle. Mirrors upstream's anonymous `struct Edge`
+     * in `src/core/SkRegion_path.cpp:452-478`.
+     */
+    private class BoundaryEdge(val x: Int, val y0: Int, val y1: Int) {
+        var flags: Int = 0
+        var next: Int = -1  // index into the edge ArrayList ; -1 = unlinked
+
+        fun top(): Int = if (y0 < y1) y0 else y1
+    }
+
+    /**
+     * Link the edge at [baseIdx]'s two ends to neighbouring edges on
+     * the contour. Mirrors upstream's `find_link`
+     * (`src/core/SkRegion_path.cpp:480-520`) — after this call both
+     * ends of `edges[baseIdx]` are paired with a sibling, and `flags`
+     * is `kCompleteLink`.
+     *
+     * Termination is guaranteed by the upstream invariant that for
+     * every edge there exists a *later* edge in the sorted array whose
+     * end-Y matches the unpaired end of `base` (because every region
+     * pixel boundary segment is shared by exactly two horizontally
+     * adjacent vertical edges in the next-X column over).
+     */
+    private fun findBoundaryLink(edges: ArrayList<BoundaryEdge>, baseIdx: Int) {
+        val base = edges[baseIdx]
+        if (base.flags == kCompleteLink) return
+
+        val y0 = base.y0
+        val y1 = base.y1
+
+        // Link `base.y0` — search forward for an edge with matching y1
+        // that hasn't yet had its y1 linked.
+        if ((base.flags and kY0Link) == 0) {
+            var e = baseIdx
+            while (true) {
+                e++
+                check(e < edges.size) { "SkRegion.addBoundaryPath: malformed edge list (y0 link unmatched)" }
+                val cand = edges[e]
+                if ((cand.flags and kY1Link) == 0 && y0 == cand.y1) {
+                    cand.next = baseIdx
+                    cand.flags = cand.flags or kY1Link
+                    break
+                }
+            }
+        }
+
+        // Link `base.y1` — search forward for an edge with matching y0
+        // that hasn't yet had its y0 linked.
+        if ((base.flags and kY1Link) == 0) {
+            var e = baseIdx
+            while (true) {
+                e++
+                check(e < edges.size) { "SkRegion.addBoundaryPath: malformed edge list (y1 link unmatched)" }
+                val cand = edges[e]
+                if ((cand.flags and kY0Link) == 0 && y1 == cand.y0) {
+                    base.next = e
+                    cand.flags = cand.flags or kY0Link
+                    break
+                }
+            }
+        }
+        base.flags = kCompleteLink
+    }
+
+    /**
+     * Walk the contour cycle starting at [startIdx], emitting one
+     * closed contour into [builder] (`moveTo` + alternating V/H
+     * `lineTo` pairs + `close`). Returns the number of edges consumed
+     * (= edges in this cycle), so the caller can decrement its
+     * remaining-edge budget. Mirrors upstream's `extract_path`
+     * (`src/core/SkRegion_path.cpp:522-550`).
+     *
+     * Colinear-vertex skipping : when consecutive edges share an `x`
+     * (i.e. the contour continues vertically through their shared
+     * Y vertex), the intermediate `lineTo` pair is suppressed.
+     */
+    private fun extractBoundaryContour(
+        edges: ArrayList<BoundaryEdge>, startIdx: Int, builder: SkPathBuilder,
+    ): Int {
+        var prevIdx = startIdx
+        var prev = edges[prevIdx]
+        var edge = edges[prev.next]
+        var edgeIdx = prev.next
+
+        var count = 1
+        builder.moveTo(prev.x.toFloat(), prev.y0.toFloat())
+        prev.flags = 0  // mark consumed
+
+        do {
+            if (prev.x != edge.x || prev.y1 != edge.y0) {  // skip collinear
+                builder.lineTo(prev.x.toFloat(), prev.y1.toFloat())  // V
+                builder.lineTo(edge.x.toFloat(), edge.y0.toFloat())  // H
+            }
+            prevIdx = edgeIdx
+            prev = edge
+            edgeIdx = prev.next
+            edge = edges[edgeIdx]
+            count++
+            prev.flags = 0  // mark consumed
+        } while (edgeIdx != startIdx)
+
+        builder.lineTo(prev.x.toFloat(), prev.y1.toFloat())  // V (final)
+        builder.close()
+        return count
     }
 
     // ─── Set ops (Phase I3.1.b) ────────────────────────────────────
@@ -985,5 +1135,25 @@ public class SkRegion private constructor(
          * stable at typical region sizes.
          */
         private const val PATH_FLATTEN_TOL_SQ: Float = 0.25f
+
+        // ── Boundary-path edge-link state ──────────────────────────
+        // Mirrors upstream's `Edge::kY0Link / kY1Link / kCompleteLink`
+        // (`src/core/SkRegion_path.cpp:453-457`).
+        private const val kY0Link: Int = 0x01
+        private const val kY1Link: Int = 0x02
+        private const val kCompleteLink: Int = kY0Link or kY1Link
+
+        /**
+         * Edge sort key used by [addBoundaryPath] — primary by `x`,
+         * tie-break by `top()` (the smaller of `y0` / `y1`). Edges
+         * sharing the same `x` are *vertically* contiguous neighbours
+         * on the contour ; sorting them by `top()` makes
+         * [findBoundaryLink] find its partner by linear scan within
+         * the same `x` group. Mirrors upstream's `EdgeLT`
+         * (`src/core/SkRegion_path.cpp:552-556`).
+         */
+        private val BOUNDARY_EDGE_LT: Comparator<BoundaryEdge> = Comparator { a, b ->
+            if (a.x == b.x) a.top().compareTo(b.top()) else a.x.compareTo(b.x)
+        }
     }
 }
