@@ -6,6 +6,7 @@ import org.skia.codec.jpeg.SkJpegCodec
 import org.skia.codec.png.SkPngCodec
 import org.skia.codec.wbmp.SkWbmpCodec
 import org.skia.codec.webp.SkWebpCodec
+import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
 import org.skia.math.SkIRect
@@ -108,6 +109,81 @@ public abstract class SkCodec internal constructor() {
     public fun getPixels(dst: SkBitmap): Result = getPixels(getInfo(), dst)
 
     /**
+     * Mirrors `SkCodec::Result SkCodec::getPixels(const SkImageInfo&,
+     * void*, size_t, const Options*)`. The Kotlin signature folds
+     * `(dst, rowBytes)` into [SkBitmap] (see [getPixels] above) and
+     * adds the [opts] hook for animated decoders. Default base-class
+     * behaviour ignores [opts] and dispatches to the single-frame path
+     * — only multi-frame codecs ([SkGifCodec], future WebP-anim)
+     * override.
+     */
+    public open fun getPixels(info: SkImageInfo, dst: SkBitmap, opts: Options): Result =
+        getPixels(info, dst)
+
+    /**
+     * Mirrors `SkCodec::Options`
+     * ([include/codec/SkCodec.h](https://github.com/google/skia/blob/main/include/codec/SkCodec.h#L336)).
+     *
+     * Drives a single decode call. Only the per-frame fields that the
+     * raster facade understands are surfaced ; subset / zero-init
+     * /priorFrame-cache size / scanline arguments stay collapsed onto
+     * sensible defaults until a GM consumer needs them.
+     *
+     * **Fields** :
+     *  - [frameIndex] — which frame of an animated codec to decode.
+     *    Default `0` matches the upstream "first frame" contract for
+     *    static codecs.
+     *  - [priorFrame] — index of the frame whose pixels are already
+     *    present in the destination bitmap, used by the codec to skip
+     *    decoding the dependency chain. [kNoFrame] (the default) tells
+     *    the codec it must reconstruct the prior frames itself.
+     */
+    public data class Options(
+        val frameIndex: Int = 0,
+        val priorFrame: Int = kNoFrame,
+    )
+
+    /**
+     * Mirrors `SkCodec::FrameInfo`
+     * ([include/codec/SkCodec.h](https://github.com/google/skia/blob/main/include/codec/SkCodec.h#L684)).
+     *
+     * Per-frame metadata returned by [getFrameInfo]. The kanvas-skia
+     * surface keeps the four fields the GM consumers (`AnimatedGifGM`,
+     * `AnimCodecPlayerExifGM`) actually look at — required-frame back-
+     * reference, frame duration in milliseconds, alpha type, and the
+     * dirty rectangle. Disposal / blend / fully-received flags stay
+     * elided until a downstream consumer needs them.
+     */
+    public data class FrameInfo(
+        val requiredFrame: Int = kNoFrame,
+        val durationMs: Int = 0,
+        val alphaType: SkAlphaType = SkAlphaType.kUnpremul,
+        val frameRect: SkIRect = SkIRect.MakeEmpty(),
+    )
+
+    /**
+     * Mirrors `SkCodec::getFrameCount()` — number of frames in the
+     * encoded stream. Static formats return `1` ; multi-frame formats
+     * (GIF, animated WebP) return their actual frame count.
+     */
+    public open fun getFrameCount(): Int = 1
+
+    /**
+     * Mirrors `SkCodec::getFrameInfo()` (vector overload). Static
+     * codecs return a single-element list describing the lone frame ;
+     * multi-frame codecs ([SkGifCodec]) override with the real per-
+     * frame metadata.
+     */
+    public open fun getFrameInfo(): List<FrameInfo> = listOf(
+        FrameInfo(
+            requiredFrame = kNoFrame,
+            durationMs = 0,
+            alphaType = getInfo().alphaType,
+            frameRect = SkIRect.MakeWH(getInfo().width, getInfo().height),
+        ),
+    )
+
+    /**
      * Allocate a fresh [SkBitmap] matching `info` and decode into it.
      * Mirrors upstream's `std::tuple<sk_sp<SkImage>, SkCodec::Result>
      * SkCodec::getImage(const SkImageInfo&)`. Returns `(null, result)`
@@ -127,6 +203,13 @@ public abstract class SkCodec internal constructor() {
     }
 
     public companion object {
+
+        /**
+         * Mirrors `SkCodec::kNoFrame` — sentinel for [Options.priorFrame]
+         * and [FrameInfo.requiredFrame] indicating the absence of a
+         * back-reference / dependency frame.
+         */
+        public const val kNoFrame: Int = -1
 
         /**
          * Sniff the leading bytes of [data] and return a codec that can
