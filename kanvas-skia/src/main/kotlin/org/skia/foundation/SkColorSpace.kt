@@ -157,6 +157,32 @@ public class SkColorSpace private constructor(
         public fun makeSRGBLinear(): SkColorSpace = sRGBLinearSingleton
 
         /**
+         * R-final.9 — convenience factory for the canonical HDR PQ
+         * colorspace : the SMPTE ST 2084 PQ EOTF
+         * ([SkNamedTransferFn.kPQ]) tagged on the BT.2020 / Rec.2020
+         * gamut ([SkNamedGamut.kRec2020]). Equivalent to
+         *
+         * ```kotlin
+         * SkColorSpace.makeRGB(SkNamedTransferFn.kPQ, SkNamedGamut.kRec2020)
+         * ```
+         *
+         * but expressed as a named factory because the BT.2100 PQ-on-
+         * Rec.2020 pairing is the standard HDR signal carrier (Android
+         * `kHdrPqColorSpace`, Apple HLG/PQ pipelines, the
+         * `gm/hdr_pip_blur.cpp` GM, …). The transfer function is the
+         * sentinel-encoded form (`g = -5`) recognised by
+         * [org.skia.skcms.classify] / [org.skia.core.SkColorSpaceXformSteps]
+         * — actual tone mapping happens at conversion time inside the
+         * xform-steps pipeline. No tone mapping is required for the
+         * `hdr_pip_blur` GM ; the colorspace tag alone differentiates
+         * the PQ-encoded input from the SDR background pass.
+         *
+         * Mirror of upstream `SkColorSpace::MakeRGB(SkNamedTransferFn::kPQ,
+         * SkNamedGamut::kRec2020)`.
+         */
+        public fun MakePqHdr(): SkColorSpace = pqHdrSingleton
+
+        /**
          * Create the canonical sRGB color space. Mirror of upstream
          * `static sk_sp<SkColorSpace> SkColorSpace::MakeSRGB()`
          * ([include/core/SkColorSpace.h:279](file:///Users/chaos/workspace/kanvas-forge/skia-main/include/core/SkColorSpace.h)).
@@ -411,5 +437,14 @@ public class SkColorSpace private constructor(
 
         private val sRGBLinearSingleton: SkColorSpace =
             SkColorSpace(SkNamedTransferFn.kLinear, SkNamedGamut.kSRGB)
+
+        /**
+         * Canonical HDR PQ singleton — see [MakePqHdr] for context. Built
+         * directly (not via [makeRGB]) because we want the constructor's
+         * verbatim TF + gamut to round-trip without a chance of the snap
+         * heuristics rewriting the PQ sentinel to sRGB-ish.
+         */
+        private val pqHdrSingleton: SkColorSpace =
+            SkColorSpace(SkNamedTransferFn.kPQ, SkNamedGamut.kRec2020)
     }
 }

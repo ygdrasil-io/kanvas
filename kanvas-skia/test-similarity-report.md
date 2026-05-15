@@ -252,6 +252,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | FilterFastBoundsGM | 89.45% | = | 1 | 563,544 / 630,000 | 0, 250, 254, 223 | 0, 109, 121, 114 |
 | FilterIndiaBoxGM | 97.96% | = | 8 | 86,595 / 88,400 | 0, 255, 255, 255 | 0, 20, 20, 20 |
 | FlightAnimatedImageGM | 0.53% | = | 4 | 55,319 / 10,342,656 | 0, 197, 190, 232 | 0, 92, 133, 85 |
+| FontScalerDistortableGM | 89.60% | = | 4 | 344,949 / 385,000 | 0, 255, 255, 255 | 0, 134, 134, 134 |
 | FontScalerGM | 82.04% | = | 1 | 892,143 / 1,087,500 | 0, 255, 255, 255 | 0, 65, 60, 67 |
 | GammatextColorShaderGM | 80.16% | = | 8 | 66,132 / 82,500 | 0, 106, 101, 105 | 0, 20, 19, 23 |
 | GammatextGM | 31.83% | = | 8 | 156,430 / 491,520 | 0, 223, 214, 213 | 0, 16, 17, 17 |
@@ -285,6 +286,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | HairlinesGM | 97.68% | -0.01% | 1 | 1,526,219 / 1,562,500 | 0, 255, 255, 255 | 0, 23, 23, 23 |
 | HardstopGradientShaderGM | 28.76% | = | 1 | 75,384 / 262,144 | 0, 63, 43, 48 | 0, 28, 20, 20 |
 | HardstopGradientsManyGM | 12.79% | = | 1 | 255,818 / 2,000,000 | 0, 28, 20, 4 | 0, 17, 12, 2 |
+| HdrPipBlurGM | 70.62% | = | 8 | 162,699 / 230,400 | 0, 101, 73, 115 | 0, 16, 12, 14 |
 | HighContrastFilterGM | 52.05% | = | 1 | 174,897 / 336,000 | 0, 255, 255, 255 | 0, 61, 59, 64 |
 | HitTestPathGM | 85.87% | = | 1 | 276,494 / 322,000 | 0, 164, 236, 237 | 0, 57, 47, 22 |
 | HslGM | 35.54% | = | 8 | 244,554 / 688,200 | 0, 255, 255, 255 | 0, 21, 16, 9 |

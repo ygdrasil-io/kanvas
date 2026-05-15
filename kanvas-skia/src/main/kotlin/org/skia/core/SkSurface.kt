@@ -98,6 +98,32 @@ public abstract class SkSurface protected constructor(
     public abstract fun imageInfo(): SkImageInfo
 
     /**
+     * Mirrors Skia's
+     * [`SkSurface::makeTemporaryImage()`](https://github.com/google/skia/blob/main/include/core/SkSurface.h)
+     * — return an [SkImage] backed by the **same** storage as this
+     * surface's pixels, suitable for short-lived sampling within the
+     * same draw operation that produced the surface contents.
+     *
+     * Upstream uses this on GPU configs to avoid an extra texture
+     * allocation when the caller wants to feed the just-drawn surface
+     * back into a follow-up draw (e.g. as a blur input). The contract
+     * is **"the returned image is only valid until the next draw to
+     * the surface"** — the caller must not retain it across mutations.
+     *
+     * **kanvas-skia raster behaviour** : with no GPU texture cache to
+     * recycle, the lightest implementation is to delegate to
+     * [makeImageSnapshot] which already produces a fresh raster
+     * [SkImage] holding its own copy of the pixels (so the "same
+     * storage" sharing degrades to "same pixel values at this point in
+     * time", which is the strictly safer outcome). Callers porting GMs
+     * that use `makeTemporaryImage` (`gm/hdr_pip_blur.cpp`) get the
+     * expected visual result without having to special-case the raster
+     * backend ; the only divergence is the cost (one extra IntArray
+     * copy per call), which is benign for GM tests.
+     */
+    public open fun makeTemporaryImage(): SkImage = makeImageSnapshot()
+
+    /**
      * Replay an [SkDeferredDisplayList] into this surface's canvas.
      * Returns `true` iff the DDL's characterization matches this
      * surface's [imageInfo] (and the playback ran). Returns `false`
