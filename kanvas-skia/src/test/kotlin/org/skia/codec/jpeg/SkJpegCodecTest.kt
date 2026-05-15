@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.codec.SkCodec
 import org.skia.codec.SkEncodedImageFormat
+import org.skia.codec.SkEncodedOrigin
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
@@ -178,6 +179,59 @@ class SkJpegCodecTest {
         assertEquals(SkCodec.Result.kInvalidParameters, codec.getPixels(info, wrongType))
     }
 
+    // ─── EXIF orientation (R-final.8) ─────────────────────────────────
+
+    @Test
+    fun `getOrigin defaults to kTopLeft on a JPEG with no EXIF`() {
+        val codec = SkCodec.MakeFromData(synthJpeg(width = 8, height = 6))
+        assertNotNull(codec)
+        assertEquals(SkEncodedOrigin.kTopLeft, codec!!.getOrigin())
+    }
+
+    @Test
+    fun `getOrigin parses EXIF Orientation tag (big-endian, kRightTop)`() {
+        // Orientation = 6 → kRightTop (90° CW rotation).
+        val bytes = jpegWithExifOrientation(orientation = 6, littleEndian = false)
+        val codec = SkCodec.MakeFromData(bytes)
+        assertNotNull(codec)
+        assertEquals(SkEncodedOrigin.kRightTop, codec!!.getOrigin())
+    }
+
+    @Test
+    fun `getOrigin parses EXIF Orientation tag (little-endian, kLeftBottom)`() {
+        // Orientation = 8 → kLeftBottom (90° CCW rotation).
+        val bytes = jpegWithExifOrientation(orientation = 8, littleEndian = true)
+        val codec = SkCodec.MakeFromData(bytes)
+        assertNotNull(codec)
+        assertEquals(SkEncodedOrigin.kLeftBottom, codec!!.getOrigin())
+    }
+
+    @Test
+    fun `dimensions swap when EXIF Orientation indicates 90 degree rotation`() {
+        // Source JPEG is 8x6 ; with kRightTop applied, the logical
+        // post-orientation dimensions surface as 6x8.
+        val bytes = jpegWithExifOrientation(orientation = 6, littleEndian = false)
+        val codec = SkCodec.MakeFromData(bytes)!!
+        assertEquals(6, codec.dimensions().width)
+        assertEquals(8, codec.dimensions().height)
+    }
+
+    @Test
+    fun `getPixels rotates pixels for kRightTop orientation`() {
+        val bytes = jpegWithExifOrientation(orientation = 6, littleEndian = false)
+        val codec = SkCodec.MakeFromData(bytes)!!
+        val info = codec.getInfo()
+        // Allocate a bitmap matching the *post-orientation* dimensions
+        // (the codec's getInfo reports the rotated logical view).
+        val dst = SkBitmap(info.width, info.height, info.colorSpace, SkColorType.kRGBA_8888)
+        val res = codec.getPixels(info, dst)
+        assertEquals(SkCodec.Result.kSuccess, res)
+        // Sanity : the post-orient bitmap dimensions are 6x8 (rotated
+        // from the encoded 8x6).
+        assertEquals(6, dst.width)
+        assertEquals(8, dst.height)
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────
 
     /**
@@ -217,6 +271,92 @@ class SkJpegCodecTest {
      * conventions) and everything after, up to but not including the
      * next marker.
      */
+    /**
+     * Splice an `APP1` EXIF segment carrying a single TIFF IFD with
+     * the [orientation] (1..8) tag (0x0112) into a fresh synthetic
+     * JPEG. The TIFF block uses the active byte-order [littleEndian]
+     * encoding and is otherwise minimal — one IFD with one entry.
+     *
+     * Layout (big-endian variant) :
+     * ```
+     * FF E1 <segLen:2 BE>
+     *   "Exif\0\0"
+     *   "MM" 00 2A 00 00 00 08      // TIFF header : IFD0 at offset 8
+     *   00 01                       // 1 IFD entry
+     *     01 12  00 03  00 00 00 01  XX XX 00 00   // tag=0x0112 type=SHORT count=1 value=XXXX
+     *   00 00 00 00                  // next IFD offset = 0
+     * ```
+     */
+    private fun jpegWithExifOrientation(orientation: Int, littleEndian: Boolean): ByteArray {
+        val base = synthJpeg(width = 8, height = 6)
+        val app1 = makeApp1ExifOrientation(orientation, littleEndian)
+        // Splice APP1 immediately after the SOI (FFD8) marker — that's
+        // where every spec-compliant encoder places it.
+        val out = ByteArrayOutputStream()
+        out.write(base, 0, 2)              // SOI
+        out.write(app1, 0, app1.size)      // our APP1
+        out.write(base, 2, base.size - 2)  // rest of original JPEG
+        return out.toByteArray()
+    }
+
+    /** Build the bytes of an APP1 EXIF segment (see [jpegWithExifOrientation]). */
+    private fun makeApp1ExifOrientation(orientation: Int, littleEndian: Boolean): ByteArray {
+        val exifSig = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00) // "Exif\0\0"
+        // TIFF header (8 bytes) + 1 IFD : 2 (count) + 12 (entry) + 4 (next IFD off).
+        val tiff = ByteArray(8 + 2 + 12 + 4)
+        // Byte order mark.
+        if (littleEndian) {
+            tiff[0] = 0x49; tiff[1] = 0x49 // 'II'
+            // Magic 0x002A LE.
+            tiff[2] = 0x2A; tiff[3] = 0x00
+            // IFD offset = 8 (LE).
+            tiff[4] = 0x08; tiff[5] = 0x00; tiff[6] = 0x00; tiff[7] = 0x00
+            // count = 1 (LE).
+            tiff[8] = 0x01; tiff[9] = 0x00
+            // entry tag = 0x0112 (LE).
+            tiff[10] = 0x12; tiff[11] = 0x01
+            // entry type = 3 (SHORT, LE).
+            tiff[12] = 0x03; tiff[13] = 0x00
+            // entry count = 1 (LE).
+            tiff[14] = 0x01; tiff[15] = 0x00; tiff[16] = 0x00; tiff[17] = 0x00
+            // entry value (SHORT inline, LE) — first 2 bytes of the 4-byte field.
+            tiff[18] = (orientation and 0xFF).toByte()
+            tiff[19] = ((orientation ushr 8) and 0xFF).toByte()
+            tiff[20] = 0; tiff[21] = 0
+            // next IFD offset = 0.
+            tiff[22] = 0; tiff[23] = 0; tiff[24] = 0; tiff[25] = 0
+        } else {
+            tiff[0] = 0x4D; tiff[1] = 0x4D // 'MM'
+            tiff[2] = 0x00; tiff[3] = 0x2A
+            // IFD offset = 8 (BE).
+            tiff[4] = 0; tiff[5] = 0; tiff[6] = 0; tiff[7] = 0x08
+            // count = 1.
+            tiff[8] = 0x00; tiff[9] = 0x01
+            // tag.
+            tiff[10] = 0x01; tiff[11] = 0x12
+            // type SHORT (3).
+            tiff[12] = 0x00; tiff[13] = 0x03
+            // count = 1.
+            tiff[14] = 0; tiff[15] = 0; tiff[16] = 0; tiff[17] = 0x01
+            // value (BE).
+            tiff[18] = ((orientation ushr 8) and 0xFF).toByte()
+            tiff[19] = (orientation and 0xFF).toByte()
+            tiff[20] = 0; tiff[21] = 0
+            // next IFD offset = 0.
+            tiff[22] = 0; tiff[23] = 0; tiff[24] = 0; tiff[25] = 0
+        }
+        val payloadLen = exifSig.size + tiff.size
+        val segLen = 2 + payloadLen
+        val out = ByteArray(2 + segLen)
+        out[0] = 0xFF.toByte()
+        out[1] = 0xE1.toByte()
+        out[2] = ((segLen ushr 8) and 0xFF).toByte()
+        out[3] = (segLen and 0xFF).toByte()
+        exifSig.copyInto(out, destinationOffset = 4)
+        tiff.copyInto(out, destinationOffset = 4 + exifSig.size)
+        return out
+    }
+
     private fun makeApp2IccChunk(chunkIndex: Int, chunkCount: Int, payload: ByteArray): ByteArray {
         val iccSig = byteArrayOf(
             0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x00,
