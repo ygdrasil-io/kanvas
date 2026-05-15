@@ -3,6 +3,8 @@ package org.skia.foundation
 import org.skia.codec.SkCodec
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
+import org.skia.math.SkIPoint
+import org.skia.math.SkIRect
 import org.skia.math.SkISize
 import org.skia.math.SkMatrix
 import java.nio.ByteBuffer
@@ -292,6 +294,95 @@ public object SkImages {
      * Returns `null` when [dimensions] is empty (`width <= 0` or
      * `height <= 0`).
      */
+    /**
+     * Mirrors Skia's
+     * [`SkImages::MakeWithFilter(image, filter, subset, clipBounds, outSubset, outOffset)`](https://github.com/google/skia/blob/main/src/image/SkImage_Lazy.cpp).
+     *
+     * Applies [filter] to [image] over the source rectangle [subset]
+     * (relative to [image]) and returns a fresh raster [SkImage]
+     * containing the portion of the filter's output that intersects
+     * [clipBounds] (also in [image]-local coords). The filter's output
+     * may grow beyond [subset] (e.g. blur expands by `±radius`) — the
+     * intersection with [clipBounds] is the final raster's footprint.
+     *
+     * **Out parameters** :
+     *  - [outSubset]  — when non-null, set to the rectangle in
+     *                  [image]-local coords that the returned raster
+     *                  represents. For a blur this is `subset` inflated
+     *                  by `±sigma*3` then intersected with [clipBounds].
+     *  - [outOffset]  — when non-null, set to the offset (in
+     *                  [image]-local coords) of the returned raster's
+     *                  top-left corner. The caller composites the
+     *                  returned image at `(outOffset.x, outOffset.y)`.
+     *
+     * **Pipeline** : we route through the existing [SkImageFilter] /
+     * [SkPaint] machinery — the canonical raster code path is
+     * `Surface(clipBounds-sized) → drawImage(image - subset, paint{filter})
+     * → snapshot()`. That funnels every filter (blur, drop-shadow,
+     * colour-matrix, …) through the same code as a draw-time filter
+     * application, keeping the visual result bit-identical to a
+     * `canvas.drawImage(image, paint{filter})` call.
+     *
+     * Returns `null` when [filter] is `null` (mirrors upstream's
+     * "filter == nullptr → nullptr" early-out — the caller is supposed
+     * to skip the call when there's no filter), or when [clipBounds]
+     * intersects [subset]'s filter output to an empty rect.
+     */
+    public fun MakeWithFilter(
+        image: SkImage,
+        filter: SkImageFilter?,
+        subset: SkIRect,
+        clipBounds: SkIRect,
+        outSubset: SkIRect? = null,
+        outOffset: SkIPoint? = null,
+    ): SkImage? {
+        if (filter == null) return null
+        if (subset.isEmpty || clipBounds.isEmpty) return null
+
+        // 1) Apply the filter to the requested subset of the input.
+        //    We feed a `subset`-cropped view of the source as the filter's
+        //    input image so the filter sees only the relevant region.
+        val srcSubset = image.makeSubset(subset) ?: return null
+        val result = filter.filterImage(srcSubset, SkMatrix.I())
+
+        // 2) Compute the filter's output rect in image-local coords :
+        //    starts at `subset.topLeft + result.offset`, sized by the
+        //    filtered image's dimensions.
+        val filteredW = result.image.width
+        val filteredH = result.image.height
+        val outputRect = SkIRect(
+            left = subset.left + result.offsetX,
+            top = subset.top + result.offsetY,
+            right = subset.left + result.offsetX + filteredW,
+            bottom = subset.top + result.offsetY + filteredH,
+        )
+
+        // 3) Intersect with clipBounds.
+        val cl = maxOf(outputRect.left, clipBounds.left)
+        val ct = maxOf(outputRect.top, clipBounds.top)
+        val cr = minOf(outputRect.right, clipBounds.right)
+        val cb = minOf(outputRect.bottom, clipBounds.bottom)
+        if (cl >= cr || ct >= cb) return null
+        val intersect = SkIRect(cl, ct, cr, cb)
+
+        // 4) Slice the filtered image to the intersected region (in
+        //    filtered-image-local coords : subtract the output rect's
+        //    top-left).
+        val sliceLeft = intersect.left - outputRect.left
+        val sliceTop = intersect.top - outputRect.top
+        val sliceRight = intersect.right - outputRect.left
+        val sliceBottom = intersect.bottom - outputRect.top
+        val sliced = result.image.makeSubset(
+            SkIRect(sliceLeft, sliceTop, sliceRight, sliceBottom)
+        ) ?: return null
+
+        // 5) Fill the out-params.
+        outSubset?.setLTRB(0, 0, intersect.width(), intersect.height())
+        outOffset?.let { it.fX = intersect.left; it.fY = intersect.top }
+
+        return sliced
+    }
+
     public fun DeferredFromPicture(
         picture: SkPicture,
         dimensions: SkISize,
