@@ -4,9 +4,6 @@ plugins {
     id("org.jetbrains.kotlinx.atomicfu") version "0.32.1"
 }
 
-repositories {
-    mavenCentral()
-}
 
 dependencies {
     implementation(kotlin("stdlib"))
