@@ -28,9 +28,17 @@ import io.ygdrasil.webgpu.PipelineLayoutDescriptor
 import io.ygdrasil.webgpu.RenderPassColorAttachment
 import io.ygdrasil.webgpu.RenderPassDescriptor
 import io.ygdrasil.webgpu.RenderPipelineDescriptor
+import io.ygdrasil.webgpu.Extent3D
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureSampleType
+import io.ygdrasil.webgpu.GPUTextureUsage
+import io.ygdrasil.webgpu.GPUTextureView
+import io.ygdrasil.webgpu.GPUTextureViewDimension
 import io.ygdrasil.webgpu.GPUVertexFormat
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
+import io.ygdrasil.webgpu.TextureBindingLayout
+import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.VertexAttribute
 import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
@@ -94,10 +102,46 @@ public class SkWebGpuDevice(
     private val context: WebGpuContext,
     override val width: Int,
     override val height: Int,
+    /**
+     * G6.1 — when `true`, the final present pass applies the
+     * sRGB → linear → Rec.2020 → encoded transform so readback bytes
+     * are in `DM_REFERENCE_COLOR_SPACE` (cross-test convention).
+     * When `false`, the present pass is an identity copy — readback
+     * bytes stay in raw sRGB primaries (what unit tests expect).
+     * `WebGpuSink` (cross-tests) flips this to `true` ; everything
+     * else stays on the raw sRGB default.
+     */
+    private val applyColorspaceTransform: Boolean = false,
 ) : SkDevice, AutoCloseable {
 
+    /**
+     * Final readback target -- the present pass writes here, then we
+     * `copyTextureToBuffer` from its `colorTexture`. After G6.1, draws
+     * no longer target this texture directly ; they target
+     * [intermediateTexture] and the present pass copies through the
+     * sRGB → Rec.2020 transform.
+     */
     private val target: HeadlessTarget =
         HeadlessTarget(context, width, height, GPUTextureFormat.RGBA8Unorm)
+
+    /**
+     * G6.1 intermediate render target. Draws (rect / polygon / aa-polygon)
+     * target this texture. The present pass then samples it via
+     * `textureLoad` and writes the colorspace-converted result to
+     * `target.colorTexture`. Usage = RenderAttachment (for draws) +
+     * TextureBinding (for the present pass).
+     */
+    private val intermediateTexture: GPUTexture = context.device.createTexture(
+        TextureDescriptor(
+            size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+            format = GPUTextureFormat.RGBA8Unorm,
+            usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+            label = "SkWebGpuDevice.intermediate",
+        ),
+    )
+
+    /** Persistent view of [intermediateTexture] for the present bind group. */
+    private val intermediateView: GPUTextureView = intermediateTexture.createView()
 
     /**
      * Clear value used by the first render pass of every [flush]. White
@@ -317,6 +361,62 @@ public class SkWebGpuDevice(
                 ),
             )
         }
+
+    // ─── Present pass (G6.1) — sRGB→Rec.2020 transform on readback ─────────
+
+    private val presentShader: GPUShaderModule = loadShader(
+        if (applyColorspaceTransform) "shaders/present_pass.wgsl"
+        else "shaders/present_identity.wgsl",
+    )
+
+    private val presentBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Fragment,
+                    texture = TextureBindingLayout(
+                        sampleType = GPUTextureSampleType.UnfilterableFloat,
+                        viewDimension = GPUTextureViewDimension.TwoD,
+                        multisampled = false,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    private val presentPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(presentBindGroupLayout)),
+    )
+
+    private val presentPipeline: GPURenderPipeline = context.device.createRenderPipeline(
+        RenderPipelineDescriptor(
+            layout = presentPipelineLayout,
+            vertex = VertexState(module = presentShader, entryPoint = "vs_main"),
+            fragment = FragmentState(
+                module = presentShader,
+                entryPoint = "fs_main",
+                targets = listOf(
+                    ColorTargetState(
+                        format = GPUTextureFormat.RGBA8Unorm,
+                        // Replace, not blend -- the present pass writes a
+                        // fresh colorspace-converted frame.
+                        blend = blendAddBoth(GPUBlendFactor.One, GPUBlendFactor.Zero),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    /** Persistent bind group : binds [intermediateView] to fragment slot 0. */
+    private val presentBindGroup = context.device.createBindGroup(
+        BindGroupDescriptor(
+            layout = presentBindGroupLayout,
+            entries = listOf(
+                BindGroupEntry(binding = 0u, resource = intermediateView),
+            ),
+        ),
+    )
 
     // ─── AA polygon pipeline (G3.3b.2a) — per-fragment edge coverage ──────
 
@@ -804,7 +904,10 @@ public class SkWebGpuDevice(
      */
     public fun flush(): ByteArray = runBlocking {
         val encoder = context.device.createCommandEncoder()
-        val colorView = target.colorTexture.createView()
+        // G6.1 — draws target the *intermediate* texture ; the final
+        // present pass below samples it, applies the sRGB → Rec.2020
+        // transform, and writes to `target.colorTexture` for readback.
+        val colorView = intermediateView
 
         if (pending.isEmpty()) {
             // Explicit clear pass so the caller can read back the background.
@@ -891,6 +994,30 @@ public class SkWebGpuDevice(
                 }
                 end()
             }
+        }
+
+        // G6.1 present pass : transform sRGB intermediate to Rec.2020
+        // final, in a fragment shader (textureLoad + transform + write).
+        // Replaces the G6.0 CPU loop in WebGpuSink. Targets
+        // `target.colorTexture` so the existing readback machinery picks
+        // up the colorspace-converted pixels unchanged.
+        val finalView = target.colorTexture.createView()
+        encoder.beginRenderPass(
+            RenderPassDescriptor(
+                colorAttachments = listOf(
+                    RenderPassColorAttachment(
+                        view = finalView,
+                        loadOp = GPULoadOp.Clear,
+                        clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                        storeOp = GPUStoreOp.Store,
+                    ),
+                ),
+            ),
+        ) {
+            setPipeline(presentPipeline)
+            setBindGroup(0u, presentBindGroup)
+            draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+            end()
         }
 
         target.encodeCopyToStaging(encoder)
@@ -1039,9 +1166,13 @@ public class SkWebGpuDevice(
         polygonPipelineCache.clear()
         aaPolygonPipelineCache.values.forEach { it.close() }
         aaPolygonPipelineCache.clear()
+        presentPipeline.close()
         rectShader.close()
         polygonShader.close()
         aaPolygonShader.close()
+        presentShader.close()
+        intermediateView.close()
+        intermediateTexture.close()
         target.close()
     }
 
