@@ -1,9 +1,9 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorTRANSPARENT
+import org.graphiks.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkImageFilter
@@ -13,8 +13,8 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRadialGradient
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
 import kotlin.math.sqrt
 
 /**
@@ -125,7 +125,7 @@ public class TableColorFilterGM : GM() {
             canvas.drawImage(bm.asImage(), x, y, SkSamplingOptions.Default, null)
             return
         }
-        val layerBounds = org.skia.math.SkRect.MakeXYWH(x, y, bm.width.toFloat(), bm.height.toFloat())
+        val layerBounds = org.graphiks.math.SkRect.MakeXYWH(x, y, bm.width.toFloat(), bm.height.toFloat())
         canvas.saveLayer(layerBounds, paint)
         canvas.drawImage(bm.asImage(), x, y, SkSamplingOptions.Default, null)
         canvas.restore()

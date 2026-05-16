@@ -4,19 +4,19 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorTRANSPARENT
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorTRANSPARENT
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Phase G6 — unit-level coverage of [SaveLayerRec] with a non-null

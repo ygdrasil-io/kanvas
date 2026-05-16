@@ -2,10 +2,10 @@ package org.skia.foundation
 
 
 
-import org.skia.math.SkColorChannel
+import org.graphiks.math.SkColorChannel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 
 /**
  * C1.5 verification suite — DisplacementMap.

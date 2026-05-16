@@ -8,7 +8,7 @@ import org.skia.encode.SkPngEncoder
 import org.skia.encode.SkWebpEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

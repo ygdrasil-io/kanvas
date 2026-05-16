@@ -6,9 +6,9 @@ import org.skia.codec.SkCodec
 import org.skia.foundation.SkEncodedOrigin
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorSetARGB
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
+import org.graphiks.math.SkColorSetARGB
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 import kotlin.math.floor
 

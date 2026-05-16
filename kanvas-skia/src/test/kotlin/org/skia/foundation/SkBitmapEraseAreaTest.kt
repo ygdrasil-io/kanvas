@@ -2,7 +2,7 @@ package org.skia.foundation
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 
 /**
  * S7-A verification suite for [SkBitmap.eraseArea] — fills inside the

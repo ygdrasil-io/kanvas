@@ -2,7 +2,7 @@ package org.skia.gpu
 
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 

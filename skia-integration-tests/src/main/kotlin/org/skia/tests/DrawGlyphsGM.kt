@@ -8,8 +8,8 @@ import org.skia.foundation.SkRSXform
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextBlobBuilder
 import org.skia.foundation.SkTypeface
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
 import org.skia.tools.ToolUtils
 import kotlin.math.PI
 import kotlin.math.cos

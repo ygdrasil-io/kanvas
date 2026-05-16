@@ -6,10 +6,10 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO

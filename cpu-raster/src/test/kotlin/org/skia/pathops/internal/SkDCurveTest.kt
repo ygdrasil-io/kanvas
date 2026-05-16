@@ -1,13 +1,13 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDPoint
+import org.graphiks.math.SkDPoint
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Unit tests for [SkDCurve], [SkDCurveSweep], and the verb-dispatched

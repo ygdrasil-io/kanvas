@@ -2,19 +2,19 @@ package org.skia.foundation
 
 
 
-import org.skia.math.between
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
+import org.graphiks.math.between
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkAlphaType as CoreAlphaType
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 

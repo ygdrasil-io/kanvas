@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer

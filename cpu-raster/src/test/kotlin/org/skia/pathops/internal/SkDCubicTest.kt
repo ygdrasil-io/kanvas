@@ -2,7 +2,7 @@ package org.skia.pathops.internal
 
 
 
-import org.skia.math.SkDPoint
+import org.graphiks.math.SkDPoint
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -211,7 +211,7 @@ class SkDCubicTest {
     @Test
     fun `toFloatPoints converts to single precision and reports finiteness`() {
         val c = cubicOf(0.0, 0.0, 1.5, 2.5, 3.5, 4.5, 5.0, 6.0)
-        val out = Array(4) { org.skia.math.SkPoint() }
+        val out = Array(4) { org.graphiks.math.SkPoint() }
         assertTrue(c.toFloatPoints(out))
         assertEquals(0f, out[0].fX); assertEquals(0f, out[0].fY)
         assertEquals(1.5f, out[1].fX); assertEquals(2.5f, out[1].fY)

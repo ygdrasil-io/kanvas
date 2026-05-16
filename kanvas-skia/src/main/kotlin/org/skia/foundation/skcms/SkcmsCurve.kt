@@ -1,5 +1,5 @@
 package org.skia.foundation.skcms
-import org.skia.math.SkcmsTransferFunction
+import org.graphiks.math.SkcmsTransferFunction
 
 /**
  * Bit-compatible port of `skcms_Curve`

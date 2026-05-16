@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 
 /**
  * Iso-aligned port of Skia's
@@ -692,7 +692,7 @@ public class SkAAClip private constructor(
 
         // 4× supersample : scale path into a temp region whose pixels
         // correspond to original sub-pixels.
-        val scaled = path.makeTransform(org.skia.math.SkMatrix.MakeScale(4f, 4f))
+        val scaled = path.makeTransform(org.graphiks.math.SkMatrix.MakeScale(4f, 4f))
         val ssClip = SkRegion(SkIRect(origLeft * 4, origTop * 4, origRight * 4, origBot * 4))
         // Use the non-inverse half of the fill rule for raster — we
         // complement the coverage buffer afterwards.

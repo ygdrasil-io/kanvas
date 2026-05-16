@@ -28,12 +28,12 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.FLT_EPSILON_ORDERABLE_ERR
-import org.skia.math.SkDPoint
+import org.graphiks.math.FLT_EPSILON_ORDERABLE_ERR
+import org.graphiks.math.SkDPoint
 import kotlin.math.abs
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /** Path-op fill mask. Mirrors `enum SkPathOpsMask`. */
 internal object SkPathOpsMask {

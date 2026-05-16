@@ -1,7 +1,7 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkAlphaType
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import kotlin.math.abs
 
 /**

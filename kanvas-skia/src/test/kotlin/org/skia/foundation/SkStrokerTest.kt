@@ -1,7 +1,7 @@
 package org.skia.foundation
 
 
-import org.skia.math.between
+import org.graphiks.math.between
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -84,7 +84,7 @@ class SkStrokerTest {
 
     @Test
     fun `closed rect strokes to outer + inner sub-contours`() {
-        val src = SkPath.Rect(org.skia.math.SkRect.MakeLTRB(10f, 10f, 30f, 30f))
+        val src = SkPath.Rect(org.graphiks.math.SkRect.MakeLTRB(10f, 10f, 30f, 30f))
         val out = stroker(2f).stroke(src)
         // Two closed sub-contours = 2 moveTo + 2 close.
         val moves = out.verbs.count { it == SkPath.Verb.kMove }
@@ -149,7 +149,7 @@ class SkStrokerTest {
 
     @Test
     fun `stroked closed contour fillType is winding`() {
-        val src = SkPath.Rect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f))
+        val src = SkPath.Rect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f))
         val out = stroker(2f).stroke(src)
         assertEquals(SkPathFillType.kWinding, out.fillType,
             "stroker output relies on winding-rule cancellation between outer & inner rings")
@@ -157,7 +157,7 @@ class SkStrokerTest {
 
     @Test
     fun `strokes are not the same as fills`() {
-        val src = SkPath.Rect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f))
+        val src = SkPath.Rect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f))
         val out = stroker(2f).stroke(src)
         // The verb count differs: source is 1 move + 3 line + 1 close = 5 verbs.
         // The stroked outline is 2 sub-contours, each 1 move + 4 line + 1 close = 12 verbs.

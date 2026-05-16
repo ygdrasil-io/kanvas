@@ -8,8 +8,8 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
-import org.skia.math.SkIRect
-import org.skia.math.SkRect
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkRect
 import org.skia.utils.SkPixmapUtils
 
 /**

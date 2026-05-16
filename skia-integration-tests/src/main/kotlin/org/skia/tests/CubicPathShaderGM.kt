@@ -3,8 +3,8 @@ package org.skia.tests
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
 
 /**
  * Port of Skia's `gm/cubicpaths.cpp::CubicPathShaderGM` (1240 × 390).

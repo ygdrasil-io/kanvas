@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 import org.skia.tools.SkDiscretePathEffect
 
 /**

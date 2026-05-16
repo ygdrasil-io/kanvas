@@ -19,11 +19,11 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.DBL_EPSILON
-import org.skia.math.NotAlmostEqualUlps
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
-import org.skia.math.approximately_zero
+import org.graphiks.math.DBL_EPSILON
+import org.graphiks.math.NotAlmostEqualUlps
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.approximately_zero
 import kotlin.math.sqrt
 
 internal class SkLineParameters {

@@ -1,14 +1,14 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColorChannel
+import org.graphiks.math.SkColorChannel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import org.skia.math.SkIPoint
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 
 /**
  * Phase R2.15 — verifies the `cropRect: SkRect?` trailing-parameter

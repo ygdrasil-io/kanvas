@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 
 /**
  * Iso-aligned port of Skia's
@@ -422,7 +422,7 @@ public class SkRegion private constructor(
         if (isEmpty()) return false
 
         if (isRect()) {
-            builder.addRect(org.skia.math.SkRect.Make(getBounds()))
+            builder.addRect(org.graphiks.math.SkRect.Make(getBounds()))
             return true
         }
 

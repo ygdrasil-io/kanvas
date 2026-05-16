@@ -8,8 +8,8 @@ import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTypeface
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 import java.awt.Font
 import java.awt.font.FontRenderContext
 import java.awt.font.TextAttribute

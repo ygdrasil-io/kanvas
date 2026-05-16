@@ -1,7 +1,7 @@
 @file:JvmName("SkcmsA2BEval")
 
 package org.skia.foundation.skcms
-import org.skia.math.SkcmsMatrix3x4
+import org.graphiks.math.SkcmsMatrix3x4
 
 /**
  * Phase F4 of `MIGRATION_PLAN_COLORSPACE_PORT.md` — multi-dimensional

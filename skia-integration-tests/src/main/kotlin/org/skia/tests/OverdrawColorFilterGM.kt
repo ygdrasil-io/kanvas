@@ -3,11 +3,11 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.effects.SkOverdrawColorFilter
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Port of upstream Skia's

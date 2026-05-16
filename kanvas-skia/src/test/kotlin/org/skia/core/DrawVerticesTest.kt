@@ -1,7 +1,7 @@
 package org.skia.core
 
 
-import org.skia.math.between
+import org.graphiks.math.between
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -11,7 +11,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkVertices
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Phase I5.3.a — `SkCanvas.drawVertices` solid-color path semantics.

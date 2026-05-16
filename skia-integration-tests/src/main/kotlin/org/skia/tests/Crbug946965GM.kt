@@ -3,8 +3,8 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/crbug_946965.cpp::crbug_946965` (DEF_SIMPLE_GM,

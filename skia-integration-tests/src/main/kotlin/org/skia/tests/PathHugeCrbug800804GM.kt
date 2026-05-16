@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Port of Skia's `gm/hugepath.cpp::path_huge_crbug_800804`

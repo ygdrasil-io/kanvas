@@ -1,12 +1,12 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/blurs.cpp::DEF_SIMPLE_GM(BlurSmallSigma, …, 512, 256)`.

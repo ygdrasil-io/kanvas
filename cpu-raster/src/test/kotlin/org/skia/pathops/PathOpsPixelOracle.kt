@@ -2,14 +2,14 @@ package org.skia.pathops
 
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 
 /**
  * D1.4 pixel-parity oracle for [SkPathOps.Op].

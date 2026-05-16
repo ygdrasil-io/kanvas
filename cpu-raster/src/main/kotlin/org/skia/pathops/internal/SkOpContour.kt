@@ -27,8 +27,8 @@
  */
 package org.skia.pathops.internal
 
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 internal open class SkOpContour : Comparable<SkOpContour> {
 

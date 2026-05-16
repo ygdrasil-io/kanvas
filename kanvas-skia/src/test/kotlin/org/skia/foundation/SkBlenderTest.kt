@@ -2,11 +2,11 @@ package org.skia.foundation
 
 
 
-import org.skia.math.between
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorRED
-import org.skia.math.SkColor4f
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.between
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SkColor4f
+import org.graphiks.math.SkColorSetARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import kotlin.math.abs
 
 /**

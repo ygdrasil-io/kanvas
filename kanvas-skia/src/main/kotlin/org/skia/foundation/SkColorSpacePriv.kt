@@ -3,8 +3,8 @@
 package org.skia.foundation
 
 import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.math.SkcmsMatrix3x3
-import org.skia.math.SkcmsTransferFunction
+import org.graphiks.math.SkcmsMatrix3x3
+import org.graphiks.math.SkcmsTransferFunction
 import kotlin.math.abs
 
 /**

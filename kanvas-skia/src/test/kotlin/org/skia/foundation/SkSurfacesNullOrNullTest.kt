@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Phase R-suivi.14 — exercises [SkSurfaces.NullOrNull], the nullable

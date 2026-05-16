@@ -1,8 +1,8 @@
 package org.skia.foundation
 
 import org.skia.core.SkCanvas
-import org.skia.math.SkIRect
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkMatrix
 
 /**
  * Iso-aligned port of Skia's `SkRasterHandleAllocator`

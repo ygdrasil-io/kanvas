@@ -8,12 +8,12 @@ import org.junit.jupiter.api.Test
 import org.skia.effects.runtime.ChildResolver
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
-import org.skia.math.SkColor
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkData
 import org.skia.foundation.SkShader
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs

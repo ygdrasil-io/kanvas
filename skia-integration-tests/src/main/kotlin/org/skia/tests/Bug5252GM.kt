@@ -5,8 +5,8 @@ import org.skia.core.withSave
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/bug5252.cpp::bug5252` (500 × 500).

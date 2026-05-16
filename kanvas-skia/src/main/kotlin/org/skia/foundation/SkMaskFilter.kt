@@ -1,9 +1,9 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColorGetA
-import org.skia.math.SkIPoint
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkMatrix
 
 /**
  * Mirrors Skia's

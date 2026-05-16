@@ -5,7 +5,7 @@ import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkRegion
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
@@ -20,12 +20,12 @@ import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkIRect
-import org.skia.math.SkM44
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkM44
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
 
@@ -1102,7 +1102,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * the caller emitted those calls themselves, so honouring of
      * paint shaders / blend modes / clipPath stays uniform.
      */
-    public open fun drawPoints(mode: PointMode, points: Array<org.skia.math.SkPoint>, paint: SkPaint) {
+    public open fun drawPoints(mode: PointMode, points: Array<org.graphiks.math.SkPoint>, paint: SkPaint) {
         if (points.isEmpty()) return
         when (mode) {
             PointMode.kPoints -> {
@@ -1454,7 +1454,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             //   dst.y = sSin*x + sCos*y + (ty − sSin*sr.left − sCos*sr.top)
             val tx = xf.fTx - xf.fSCos * sr.left + xf.fSSin * sr.top
             val ty = xf.fTy - xf.fSSin * sr.left - xf.fSCos * sr.top
-            val srcToDst = org.skia.math.SkMatrix(
+            val srcToDst = org.graphiks.math.SkMatrix(
                 sx = xf.fSCos, kx = -xf.fSSin, tx = tx,
                 ky = xf.fSSin, sy = xf.fSCos, ty = ty,
             )
@@ -1640,9 +1640,9 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      *                  texture combination.
      */
     public open fun drawPatch(
-        cubics: Array<org.skia.math.SkPoint>,
+        cubics: Array<org.graphiks.math.SkPoint>,
         colors: IntArray?,
-        texCoords: Array<org.skia.math.SkPoint>?,
+        texCoords: Array<org.graphiks.math.SkPoint>?,
         blendMode: SkBlendMode,
         paint: SkPaint,
     ) {
@@ -1651,8 +1651,8 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         if (texCoords != null) require(texCoords.size == 4) { "drawPatch : texCoords must have 4 entries, got ${texCoords.size}" }
 
         val n = PATCH_TESS_N
-        val verts = ArrayList<org.skia.math.SkPoint>((n + 1) * (n + 1))
-        val tCoords = if (texCoords != null) ArrayList<org.skia.math.SkPoint>((n + 1) * (n + 1)) else null
+        val verts = ArrayList<org.graphiks.math.SkPoint>((n + 1) * (n + 1))
+        val tCoords = if (texCoords != null) ArrayList<org.graphiks.math.SkPoint>((n + 1) * (n + 1)) else null
         val cArr = if (colors != null) IntArray((n + 1) * (n + 1)) else null
 
         for (j in 0..n) {
@@ -1703,7 +1703,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * and (left/right) edge pairs, and `B` is the bilinear blend of
      * the 4 corners.
      */
-    private fun coonsSurfaceAt(cubics: Array<org.skia.math.SkPoint>, s: SkScalar, t: SkScalar): org.skia.math.SkPoint {
+    private fun coonsSurfaceAt(cubics: Array<org.graphiks.math.SkPoint>, s: SkScalar, t: SkScalar): org.graphiks.math.SkPoint {
         // Top : cubics[0] → cubics[3] at parameter s.
         val top = cubicAt(cubics, 0, s)
         // Bottom : cubics[6] → cubics[9] at parameter (1 - s) (so s
@@ -1727,7 +1727,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             (1f - s) * t * p01.fX + s * t * p11.fX
         val bY = (1f - s) * (1f - t) * p00.fY + s * (1f - t) * p10.fY +
             (1f - s) * t * p01.fY + s * t * p11.fY
-        return org.skia.math.SkPoint(lcX + ldX - bX, lcY + ldY - bY)
+        return org.graphiks.math.SkPoint(lcX + ldX - bX, lcY + ldY - bY)
     }
 
     /**
@@ -1735,7 +1735,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * cubics[i0+2], cubics[i0+3]]` at parameter `t`. The standard
      * Bernstein polynomial form keeps the algorithm trivial.
      */
-    private fun cubicAt(cubics: Array<org.skia.math.SkPoint>, i0: Int, t: SkScalar): org.skia.math.SkPoint {
+    private fun cubicAt(cubics: Array<org.graphiks.math.SkPoint>, i0: Int, t: SkScalar): org.graphiks.math.SkPoint {
         val u = 1f - t
         val b0 = u * u * u
         val b1 = 3f * u * u * t
@@ -1745,7 +1745,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val p1 = cubics[i0 + 1]
         val p2 = cubics[i0 + 2]
         val p3 = cubics[i0 + 3]
-        return org.skia.math.SkPoint(
+        return org.graphiks.math.SkPoint(
             b0 * p0.fX + b1 * p1.fX + b2 * p2.fX + b3 * p3.fX,
             b0 * p0.fY + b1 * p1.fY + b2 * p2.fY + b3 * p3.fY,
         )
@@ -1757,7 +1757,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * stays connected). Same Bernstein evaluation as [cubicAt],
      * just with a discontiguous index pattern.
      */
-    private fun cubicAtLeftEdge(cubics: Array<org.skia.math.SkPoint>, t: SkScalar): org.skia.math.SkPoint {
+    private fun cubicAtLeftEdge(cubics: Array<org.graphiks.math.SkPoint>, t: SkScalar): org.graphiks.math.SkPoint {
         val u = 1f - t
         val b0 = u * u * u
         val b1 = 3f * u * u * t
@@ -1767,20 +1767,20 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val p1 = cubics[10]
         val p2 = cubics[11]
         val p3 = cubics[0]
-        return org.skia.math.SkPoint(
+        return org.graphiks.math.SkPoint(
             b0 * p0.fX + b1 * p1.fX + b2 * p2.fX + b3 * p3.fX,
             b0 * p0.fY + b1 * p1.fY + b2 * p2.fY + b3 * p3.fY,
         )
     }
 
-    private fun bilerpPoint(corners: Array<org.skia.math.SkPoint>, s: SkScalar, t: SkScalar): org.skia.math.SkPoint {
+    private fun bilerpPoint(corners: Array<org.graphiks.math.SkPoint>, s: SkScalar, t: SkScalar): org.graphiks.math.SkPoint {
         // corners : 0 = top-left, 1 = top-right, 2 = bottom-right, 3 = bottom-left.
         val p00 = corners[0]; val p10 = corners[1]; val p11 = corners[2]; val p01 = corners[3]
         val w00 = (1f - s) * (1f - t)
         val w10 = s * (1f - t)
         val w01 = (1f - s) * t
         val w11 = s * t
-        return org.skia.math.SkPoint(
+        return org.graphiks.math.SkPoint(
             w00 * p00.fX + w10 * p10.fX + w01 * p01.fX + w11 * p11.fX,
             w00 * p00.fY + w10 * p10.fY + w01 * p01.fY + w11 * p11.fY,
         )
@@ -1791,23 +1791,23 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val w10 = s * (1f - t)
         val w01 = (1f - s) * t
         val w11 = s * t
-        val a = (org.skia.math.SkColorGetA(corners[0]) * w00 +
-            org.skia.math.SkColorGetA(corners[1]) * w10 +
-            org.skia.math.SkColorGetA(corners[2]) * w11 +
-            org.skia.math.SkColorGetA(corners[3]) * w01).toInt().coerceIn(0, 255)
-        val r = (org.skia.math.SkColorGetR(corners[0]) * w00 +
-            org.skia.math.SkColorGetR(corners[1]) * w10 +
-            org.skia.math.SkColorGetR(corners[2]) * w11 +
-            org.skia.math.SkColorGetR(corners[3]) * w01).toInt().coerceIn(0, 255)
-        val g = (org.skia.math.SkColorGetG(corners[0]) * w00 +
-            org.skia.math.SkColorGetG(corners[1]) * w10 +
-            org.skia.math.SkColorGetG(corners[2]) * w11 +
-            org.skia.math.SkColorGetG(corners[3]) * w01).toInt().coerceIn(0, 255)
-        val b = (org.skia.math.SkColorGetB(corners[0]) * w00 +
-            org.skia.math.SkColorGetB(corners[1]) * w10 +
-            org.skia.math.SkColorGetB(corners[2]) * w11 +
-            org.skia.math.SkColorGetB(corners[3]) * w01).toInt().coerceIn(0, 255)
-        return org.skia.math.SkColorSetARGB(a, r, g, b)
+        val a = (org.graphiks.math.SkColorGetA(corners[0]) * w00 +
+            org.graphiks.math.SkColorGetA(corners[1]) * w10 +
+            org.graphiks.math.SkColorGetA(corners[2]) * w11 +
+            org.graphiks.math.SkColorGetA(corners[3]) * w01).toInt().coerceIn(0, 255)
+        val r = (org.graphiks.math.SkColorGetR(corners[0]) * w00 +
+            org.graphiks.math.SkColorGetR(corners[1]) * w10 +
+            org.graphiks.math.SkColorGetR(corners[2]) * w11 +
+            org.graphiks.math.SkColorGetR(corners[3]) * w01).toInt().coerceIn(0, 255)
+        val g = (org.graphiks.math.SkColorGetG(corners[0]) * w00 +
+            org.graphiks.math.SkColorGetG(corners[1]) * w10 +
+            org.graphiks.math.SkColorGetG(corners[2]) * w11 +
+            org.graphiks.math.SkColorGetG(corners[3]) * w01).toInt().coerceIn(0, 255)
+        val b = (org.graphiks.math.SkColorGetB(corners[0]) * w00 +
+            org.graphiks.math.SkColorGetB(corners[1]) * w10 +
+            org.graphiks.math.SkColorGetB(corners[2]) * w11 +
+            org.graphiks.math.SkColorGetB(corners[3]) * w01).toInt().coerceIn(0, 255)
+        return org.graphiks.math.SkColorSetARGB(a, r, g, b)
     }
 
     private companion object {
@@ -2338,8 +2338,8 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      */
     public open fun drawShadow(
         path: SkPath,
-        zPlaneParams: org.skia.math.SkPoint3,
-        lightPos: org.skia.math.SkPoint3,
+        zPlaneParams: org.graphiks.math.SkPoint3,
+        lightPos: org.graphiks.math.SkPoint3,
         lightRadius: SkScalar,
         ambientColor: SkColor,
         spotColor: SkColor,

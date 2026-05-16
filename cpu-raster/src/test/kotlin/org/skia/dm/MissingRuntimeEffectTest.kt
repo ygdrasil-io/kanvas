@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 import org.skia.tests.GM
 
 /**

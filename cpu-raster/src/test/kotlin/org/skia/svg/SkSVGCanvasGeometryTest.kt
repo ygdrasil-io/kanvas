@@ -5,12 +5,12 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLACK
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkRRect
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import java.io.ByteArrayInputStream
 import java.io.StringWriter
 import javax.xml.parsers.DocumentBuilderFactory

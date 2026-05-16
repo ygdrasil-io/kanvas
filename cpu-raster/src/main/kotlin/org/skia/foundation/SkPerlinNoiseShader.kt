@@ -1,11 +1,11 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkScalar
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkScalar
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt

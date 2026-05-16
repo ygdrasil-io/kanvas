@@ -7,8 +7,8 @@ import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextBlobBuilder
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 
 /**

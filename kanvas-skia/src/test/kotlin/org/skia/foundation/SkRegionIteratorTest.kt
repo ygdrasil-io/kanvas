@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 
 /**
  * R2.18 — extra coverage on `SkRegion.Iterator` (`rgn`, `rewind`,

@@ -1,13 +1,13 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColor
-import org.skia.math.SkColor4f
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColor4f
+import org.graphiks.math.SkColorSetARGB
 import org.skia.core.SkAlphaType
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 
 /**
  * Iso-aligned port of Skia's `SkPaint`

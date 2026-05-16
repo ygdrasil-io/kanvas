@@ -3,17 +3,17 @@ package org.skia.tests
 import org.skia.core.SaveLayerFlags
 import org.skia.core.SaveLayerRec
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorCYAN
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorMAGENTA
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorCYAN
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorMAGENTA
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/backdrop_imagefilter_croprect.cpp::
@@ -46,7 +46,7 @@ public class BackdropImagefilterCroprectGM : GM() {
 // -- shared helpers ---------------------------------------------------
 
 @Suppress("UNUSED_PARAMETER")
-internal fun makeInvertFilter(crop: org.skia.math.SkIRect?): SkImageFilter {
+internal fun makeInvertFilter(crop: org.graphiks.math.SkIRect?): SkImageFilter {
     val matrix = floatArrayOf(
         -1f, 0f, 0f, 0f, 1f,
         0f, -1f, 0f, 0f, 1f,
@@ -59,7 +59,7 @@ internal fun makeInvertFilter(crop: org.skia.math.SkIRect?): SkImageFilter {
     } else cf
 }
 
-internal fun makeBlurFilter(crop: org.skia.math.SkIRect?): SkImageFilter? {
+internal fun makeBlurFilter(crop: org.graphiks.math.SkIRect?): SkImageFilter? {
     // Different sigmas to make rotated CTM visible
     return SkImageFilters.Blur(16f, 4f, org.skia.foundation.SkTileMode.kDecal, null, crop)
 }
@@ -74,7 +74,7 @@ internal fun drawBackdropFilterGm(
     canvas: SkCanvas,
     outsetX: Float,
     outsetY: Float,
-    factory: (org.skia.math.SkIRect?) -> SkImageFilter?,
+    factory: (org.graphiks.math.SkIRect?) -> SkImageFilter?,
 ) {
     val origin = SkPoint(150f, 150f)
     val clip = SkRect.MakeXYWH(-50f, -50f, 400f, 150f)

@@ -7,14 +7,14 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColor4f
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColor4f
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 import java.nio.ByteBuffer
 
 /**

@@ -1,14 +1,14 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorCYAN
-import org.skia.math.SK_ColorDKGRAY
-import org.skia.math.SK_ColorGRAY
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorMAGENTA
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorYELLOW
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorCYAN
+import org.graphiks.math.SK_ColorDKGRAY
+import org.graphiks.math.SK_ColorGRAY
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorMAGENTA
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorYELLOW
 import org.skia.foundation.SkDashPathEffect
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
@@ -19,9 +19,9 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSurfaces
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/crop_imagefilter.cpp::CropImageFilterGM` (16
@@ -189,7 +189,7 @@ public class CropImageFilterGM(
         val surface = SkSurfaces.Raster(info) ?: return null
         val ir = if (contentTile == SkTileMode.kDecal) contentBounds.roundOut() else contentBounds.roundIn()
         val content = image.makeSubset(ir) ?: return null
-        val lm = org.skia.math.SkMatrix.MakeTrans(contentBounds.left, contentBounds.top)
+        val lm = org.graphiks.math.SkMatrix.MakeTrans(contentBounds.left, contentBounds.top)
         val tiledShader = content.makeShader(contentTile, contentTile, SkSamplingOptions(SkFilterMode.kNearest), lm)
         val tiledPaint = SkPaint().apply { shader = tiledShader }
         val sc = surface.canvas
@@ -223,7 +223,7 @@ public class CropImageFilterGM(
         run {
             val cropImage = makeCroppedImage(image, contentBounds, inputMode, cropRect)
             if (cropImage != null) {
-                val lm = org.skia.math.SkMatrix.MakeTrans(cropRect.left, cropRect.top)
+                val lm = org.graphiks.math.SkMatrix.MakeTrans(cropRect.left, cropRect.top)
                 val tiledPaint = SkPaint().apply {
                     shader = cropImage.makeShader(outputMode, outputMode,
                         SkSamplingOptions(SkFilterMode.kNearest), lm)

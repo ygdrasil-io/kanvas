@@ -1,7 +1,7 @@
 package org.skia.foundation
 
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt

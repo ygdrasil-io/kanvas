@@ -2,8 +2,8 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkEmbossMaskFilter
@@ -12,7 +12,7 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

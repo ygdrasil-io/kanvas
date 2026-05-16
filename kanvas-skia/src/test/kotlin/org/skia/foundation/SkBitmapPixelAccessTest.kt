@@ -1,13 +1,13 @@
 package org.skia.foundation
 
 
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -15,8 +15,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkIPoint
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkIRect
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

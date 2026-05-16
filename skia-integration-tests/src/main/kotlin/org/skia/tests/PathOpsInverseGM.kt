@@ -5,9 +5,9 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
-import org.skia.math.colorToRGB565
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.colorToRGB565
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 import org.skia.pathops.SkPathOp
 import org.skia.pathops.SkPathOps
 

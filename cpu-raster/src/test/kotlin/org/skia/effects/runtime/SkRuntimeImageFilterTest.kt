@@ -4,11 +4,11 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageFilter
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
 import java.nio.ByteBuffer
 import kotlin.math.abs
 

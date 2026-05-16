@@ -5,14 +5,14 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Q3.2 verification suite for [SkPictureRecorder] / [SkPicture]
@@ -56,9 +56,9 @@ class SkPictureBBHCullTest {
             super.drawOval(oval, paint)
         }
         override fun drawCircle(
-            cx: org.skia.math.SkScalar,
-            cy: org.skia.math.SkScalar,
-            radius: org.skia.math.SkScalar,
+            cx: org.graphiks.math.SkScalar,
+            cy: org.graphiks.math.SkScalar,
+            radius: org.graphiks.math.SkScalar,
             paint: SkPaint,
         ) {
             drawCount++

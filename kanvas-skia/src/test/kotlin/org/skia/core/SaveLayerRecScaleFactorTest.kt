@@ -3,9 +3,9 @@ package org.skia.core
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorGetG
+import org.graphiks.math.SkColorGetG
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
@@ -38,7 +38,7 @@ class SaveLayerRecScaleFactorTest {
                 for (x in 0 until 40 step 4) {
                     if (((x + y) / 4) and 1 == 0) {
                         drawRect(
-                            org.skia.math.SkRect.MakeLTRB(
+                            org.graphiks.math.SkRect.MakeLTRB(
                                 x.toFloat(), y.toFloat(), (x + 4).toFloat(), (y + 4).toFloat(),
                             ),
                             green,

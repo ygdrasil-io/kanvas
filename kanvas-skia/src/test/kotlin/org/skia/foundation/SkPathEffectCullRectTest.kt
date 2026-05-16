@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 
 /**
  * R-suivi.7 — coverage for [SkPathEffect.filterPath]'s new `cullRect`

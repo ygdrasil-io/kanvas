@@ -2,9 +2,9 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkAlphaType
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkColorFilters
-import org.skia.math.SkColorMatrix
+import org.graphiks.math.SkColorMatrix
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkFilterMode
@@ -18,11 +18,11 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkIPoint
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.tools.ToolUtils

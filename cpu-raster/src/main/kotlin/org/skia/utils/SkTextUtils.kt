@@ -4,7 +4,7 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTextEncoding
-import org.skia.math.SkScalar
+import org.graphiks.math.SkScalar
 
 /**
  * Mirrors Skia's `SkTextUtils` (`include/utils/SkTextUtils.h` /

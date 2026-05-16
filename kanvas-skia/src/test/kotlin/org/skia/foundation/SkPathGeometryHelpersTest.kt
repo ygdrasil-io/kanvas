@@ -7,9 +7,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Slice 3.6 — geometry helpers on `SkPath` (Skia parity):

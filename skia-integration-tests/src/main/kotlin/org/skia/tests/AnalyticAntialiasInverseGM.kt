@@ -1,11 +1,11 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Port of Skia's `gm/aaa.cpp::analytic_antialias_inverse` (800 × 800).

@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.math.SkcmsTransferFunction
+import org.graphiks.math.SkcmsTransferFunction
 
 /**
  * Bit-compatible alias for `skcms_TransferFunction` exposed under the

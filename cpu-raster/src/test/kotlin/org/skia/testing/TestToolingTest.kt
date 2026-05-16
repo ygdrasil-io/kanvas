@@ -4,9 +4,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import java.io.File
 import javax.imageio.ImageIO

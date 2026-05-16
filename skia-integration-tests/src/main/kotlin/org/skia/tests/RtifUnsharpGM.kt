@@ -9,8 +9,8 @@ import org.skia.foundation.SkImageFilters
 import org.skia.effects.runtime.SkRuntimeImageFilters
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 
 /**

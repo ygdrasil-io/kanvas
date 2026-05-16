@@ -1,8 +1,8 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -163,13 +163,13 @@ class SkDConicLineIntersectionTest {
     fun `conicLine SkPoint façade accepts SkPoint arrays`() {
         val ix = SkIntersections()
         val a = arrayOf(
-            org.skia.math.SkPoint(fX = 1f, fY = 0f),
-            org.skia.math.SkPoint(fX = 1f, fY = 1f),
-            org.skia.math.SkPoint(fX = 0f, fY = 1f),
+            org.graphiks.math.SkPoint(fX = 1f, fY = 0f),
+            org.graphiks.math.SkPoint(fX = 1f, fY = 1f),
+            org.graphiks.math.SkPoint(fX = 0f, fY = 1f),
         )
         val b = arrayOf(
-            org.skia.math.SkPoint(fX = 0f, fY = 0.5f),
-            org.skia.math.SkPoint(fX = 1f, fY = 0.5f),
+            org.graphiks.math.SkPoint(fX = 0f, fY = 0.5f),
+            org.graphiks.math.SkPoint(fX = 1f, fY = 0.5f),
         )
         assertEquals(1, ix.conicLine(a, arcWeight, b))
     }

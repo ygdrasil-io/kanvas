@@ -1,11 +1,11 @@
 package org.skia.utils
 
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorTRANSPARENT
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkVertices
-import org.skia.math.SkPoint
-import org.skia.math.SkPoint3
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkPoint3
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min

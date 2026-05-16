@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * R2.17 verification suite for [SkSerialProcs] / [SkDeserialProcs].

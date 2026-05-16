@@ -1,8 +1,8 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -157,14 +157,14 @@ class SkDCubicLineIntersectionTest {
     fun `cubicLine SkPoint façade accepts SkPoint arrays`() {
         val ix = SkIntersections()
         val a = arrayOf(
-            org.skia.math.SkPoint(fX = 0f, fY = 0f),
-            org.skia.math.SkPoint(fX = 0f, fY = 1000f),
-            org.skia.math.SkPoint(fX = 100f, fY = 1000f),
-            org.skia.math.SkPoint(fX = 100f, fY = 0f),
+            org.graphiks.math.SkPoint(fX = 0f, fY = 0f),
+            org.graphiks.math.SkPoint(fX = 0f, fY = 1000f),
+            org.graphiks.math.SkPoint(fX = 100f, fY = 1000f),
+            org.graphiks.math.SkPoint(fX = 100f, fY = 0f),
         )
         val b = arrayOf(
-            org.skia.math.SkPoint(fX = 0f, fY = 375f),
-            org.skia.math.SkPoint(fX = 100f, fY = 375f),
+            org.graphiks.math.SkPoint(fX = 0f, fY = 375f),
+            org.graphiks.math.SkPoint(fX = 100f, fY = 375f),
         )
         assertEquals(2, ix.cubicLine(a, b))
     }

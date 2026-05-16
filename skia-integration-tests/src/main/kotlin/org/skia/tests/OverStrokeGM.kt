@@ -1,17 +1,17 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorMAGENTA
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorMAGENTA
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathMeasure
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
-import org.skia.math.SkVector
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkVector
 import org.skia.utils.SkPathUtils
 
 /**

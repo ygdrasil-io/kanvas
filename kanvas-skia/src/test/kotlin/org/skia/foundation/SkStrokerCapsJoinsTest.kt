@@ -154,7 +154,7 @@ class SkStrokerCapsJoinsTest {
         // 10×10 closed rect, strokeWidth=2 → halfW=1. Round joins on the four
         // corners produce arcs on the outer ring (and small "wedge" overlaps
         // on the inner ring that the winding fill handles).
-        val src = SkPath.Rect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f))
+        val src = SkPath.Rect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f))
         val out = stroker(width = 2f, join = SkPaint.Join.kRound_Join).stroke(src)
         // Two closed sub-contours.
         assertEquals(2, out.verbs.count { it == SkPath.Verb.kMove })

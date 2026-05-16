@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

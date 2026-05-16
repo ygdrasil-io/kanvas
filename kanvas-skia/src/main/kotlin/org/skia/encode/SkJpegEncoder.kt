@@ -1,11 +1,11 @@
 package org.skia.encode
 
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkPixmap
 import org.skia.foundation.stream.SkWStream
 import java.awt.image.BufferedImage

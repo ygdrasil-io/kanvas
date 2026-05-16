@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 
 /**
  * Phase G8 — focused coverage for [SkRegion.op] + [SkRegion.translate].

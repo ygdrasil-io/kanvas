@@ -1,8 +1,8 @@
 package org.skia.core
 
-import org.skia.math.SkPoint
-import org.skia.math.SkScalarAbs
-import org.skia.math.SkScalarNearlyEqual
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkScalarAbs
+import org.graphiks.math.SkScalarNearlyEqual
 import kotlin.math.abs
 import kotlin.math.pow
 

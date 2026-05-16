@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Slice 3.2 — `SkPathFillType` helpers + immutable fill-type API on

@@ -1,7 +1,7 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 /**
  * Stable factory functions for [SkBlender]. Mirrors Skia's
  * [`SkBlenders`](https://github.com/google/skia/blob/main/include/effects/SkBlenders.h)

@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Tests for the free `SkAnnotate*` functions in

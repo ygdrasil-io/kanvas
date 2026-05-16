@@ -4,9 +4,9 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkIRect
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 
 /**
  * Backend-agnostic drawing surface — the bridge between [SkCanvas] and a

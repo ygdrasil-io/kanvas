@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkPaint
 
 /**
@@ -57,7 +57,7 @@ class DrawPaintTest {
             SkWebGpuDevice(ctx, W, H).use { device ->
                 device.setBackground(SK_ColorWHITE)
                 val canvas = SkCanvas(device)
-                canvas.clipRect(org.skia.math.SkRect.MakeLTRB(10f, 10f, 30f, 30f))
+                canvas.clipRect(org.graphiks.math.SkRect.MakeLTRB(10f, 10f, 30f, 30f))
                 canvas.drawPaint(paint)
                 device.flush()
             }

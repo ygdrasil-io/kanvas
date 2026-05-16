@@ -4,14 +4,14 @@ import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkClipOp
-import org.skia.math.SkColor
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkColorFilter
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkCubicBC
 import org.skia.foundation.SkFilterMode
@@ -22,9 +22,9 @@ import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkShader
 import org.skia.foundation.SkStroker
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkIRect
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
 
@@ -651,7 +651,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             // Offset scales its (dx, dy) by the canvas's max scale).
             // We pass identity since the offset will be applied
             // directly in device coords.
-            val result = imageFilter.filterImage(image, org.skia.math.SkMatrix.Identity)
+            val result = imageFilter.filterImage(image, org.graphiks.math.SkMatrix.Identity)
             // Shift devDst by the filter's offset.
             val newDevDst = SkRect.MakeLTRB(
                 devDst.left + result.offsetX,
@@ -1221,7 +1221,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         //    paint's stroke params + AA. The recursion guard is the
         //    cleared maskFilter on the inner paint.
         val whitePaint = paint.copy().apply {
-            color = org.skia.math.SK_ColorWHITE
+            color = org.graphiks.math.SK_ColorWHITE
             blendMode = SkBlendMode.kSrc
             this.maskFilter = null
             shader = null
@@ -2436,8 +2436,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         }
 
         val dstByte = bitmap.getPixel(x, y)
-        val src4f = org.skia.math.SkColor4f.FromColor(srcByte)
-        val dst4f = org.skia.math.SkColor4f.FromColor(dstByte)
+        val src4f = org.graphiks.math.SkColor4f.FromColor(srcByte)
+        val dst4f = org.graphiks.math.SkColor4f.FromColor(dstByte)
         val out4f = blender.blend(src4f, dst4f)
         bitmap.setPixel(x, y, out4f.toSkColor())
     }

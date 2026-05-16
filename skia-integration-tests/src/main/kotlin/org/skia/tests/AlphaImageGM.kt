@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorCYAN
+import org.graphiks.math.SK_ColorCYAN
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
@@ -11,7 +11,7 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Port of Skia's `gm/alpha_image.cpp::DEF_SIMPLE_GM(alpha_image, …, 256, 256)`.

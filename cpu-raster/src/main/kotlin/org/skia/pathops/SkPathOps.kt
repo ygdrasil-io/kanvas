@@ -27,7 +27,7 @@ package org.skia.pathops
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import org.skia.pathops.internal.AddIntersectTs
 import org.skia.pathops.internal.ContourHeadRef
 import org.skia.pathops.internal.HandleCoincidence

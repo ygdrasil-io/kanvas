@@ -25,23 +25,23 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.AlmostEqualUlps
-import org.skia.math.BUMP_EPSILON
-import org.skia.math.NotAlmostDequalUlps
-import org.skia.math.NotAlmostEqualUlpsPin
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
-import org.skia.math.SkPinT
-import org.skia.math.approximately_equal
-import org.skia.math.approximately_zero
-import org.skia.math.between
-import org.skia.math.more_roughly_equal
-import org.skia.math.precisely_between
-import org.skia.math.precisely_equal
-import org.skia.math.precisely_zero
-import org.skia.math.zero_or_one
+import org.graphiks.math.AlmostEqualUlps
+import org.graphiks.math.BUMP_EPSILON
+import org.graphiks.math.NotAlmostDequalUlps
+import org.graphiks.math.NotAlmostEqualUlpsPin
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.SkPinT
+import org.graphiks.math.approximately_equal
+import org.graphiks.math.approximately_zero
+import org.graphiks.math.between
+import org.graphiks.math.more_roughly_equal
+import org.graphiks.math.precisely_between
+import org.graphiks.math.precisely_equal
+import org.graphiks.math.precisely_zero
+import org.graphiks.math.zero_or_one
 import kotlin.math.abs
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 internal class SkIntersections {
 
@@ -710,7 +710,7 @@ internal class SkIntersections {
     // ─── SkPoint façade methods for SkDQuad ─────────────────────────
 
     /** Mirrors `SkIntersections::quadLine(SkPoint a[3], SkPoint b[2])`. */
-    fun quadLine(a: Array<org.skia.math.SkPoint>, b: Array<org.skia.math.SkPoint>): Int {
+    fun quadLine(a: Array<org.graphiks.math.SkPoint>, b: Array<org.graphiks.math.SkPoint>): Int {
         require(a.size >= 3 && b.size >= 2)
         val quad = SkDQuad().set(a[0], a[1], a[2])
         val line = SkDLine().set(b[0], b[1])
@@ -718,7 +718,7 @@ internal class SkIntersections {
     }
 
     /** Mirrors `SkIntersections::quadHorizontal(SkPoint a[3], left, right, y, flipped)`. */
-    fun quadHorizontal(a: Array<org.skia.math.SkPoint>, left: Float, right: Float, y: Float, flipped: Boolean): Int {
+    fun quadHorizontal(a: Array<org.graphiks.math.SkPoint>, left: Float, right: Float, y: Float, flipped: Boolean): Int {
         require(a.size >= 3)
         val quad = SkDQuad().set(a[0], a[1], a[2])
         fMax = 2
@@ -726,7 +726,7 @@ internal class SkIntersections {
     }
 
     /** Mirrors `SkIntersections::quadVertical(SkPoint a[3], top, bottom, x, flipped)`. */
-    fun quadVertical(a: Array<org.skia.math.SkPoint>, top: Float, bottom: Float, x: Float, flipped: Boolean): Int {
+    fun quadVertical(a: Array<org.graphiks.math.SkPoint>, top: Float, bottom: Float, x: Float, flipped: Boolean): Int {
         require(a.size >= 3)
         val quad = SkDQuad().set(a[0], a[1], a[2])
         fMax = 2
@@ -736,7 +736,7 @@ internal class SkIntersections {
     // ─── SkPoint façade methods for SkDCubic ────────────────────────
 
     /** Mirrors `SkIntersections::cubicLine(SkPoint a[4], SkPoint b[2])`. */
-    fun cubicLine(a: Array<org.skia.math.SkPoint>, b: Array<org.skia.math.SkPoint>): Int {
+    fun cubicLine(a: Array<org.graphiks.math.SkPoint>, b: Array<org.graphiks.math.SkPoint>): Int {
         require(a.size >= 4 && b.size >= 2)
         val cubic = SkDCubic().set(a[0], a[1], a[2], a[3])
         val line = SkDLine().set(b[0], b[1])
@@ -745,7 +745,7 @@ internal class SkIntersections {
     }
 
     /** Mirrors `SkIntersections::cubicHorizontal(SkPoint a[4], left, right, y, flipped)`. */
-    fun cubicHorizontal(a: Array<org.skia.math.SkPoint>, left: Float, right: Float, y: Float, flipped: Boolean): Int {
+    fun cubicHorizontal(a: Array<org.graphiks.math.SkPoint>, left: Float, right: Float, y: Float, flipped: Boolean): Int {
         require(a.size >= 4)
         val cubic = SkDCubic().set(a[0], a[1], a[2], a[3])
         fMax = 3
@@ -753,7 +753,7 @@ internal class SkIntersections {
     }
 
     /** Mirrors `SkIntersections::cubicVertical(SkPoint a[4], top, bottom, x, flipped)`. */
-    fun cubicVertical(a: Array<org.skia.math.SkPoint>, top: Float, bottom: Float, x: Float, flipped: Boolean): Int {
+    fun cubicVertical(a: Array<org.graphiks.math.SkPoint>, top: Float, bottom: Float, x: Float, flipped: Boolean): Int {
         require(a.size >= 4)
         val cubic = SkDCubic().set(a[0], a[1], a[2], a[3])
         fMax = 3
@@ -763,7 +763,7 @@ internal class SkIntersections {
     // ─── SkPoint façade methods for SkDConic ────────────────────────
 
     /** Mirrors `SkIntersections::conicLine(SkPoint a[3], SkScalar weight, SkPoint b[2])`. */
-    fun conicLine(a: Array<org.skia.math.SkPoint>, weight: Float, b: Array<org.skia.math.SkPoint>): Int {
+    fun conicLine(a: Array<org.graphiks.math.SkPoint>, weight: Float, b: Array<org.graphiks.math.SkPoint>): Int {
         require(a.size >= 3 && b.size >= 2)
         val conic = SkDConic().set(a[0], a[1], a[2], weight)
         val line = SkDLine().set(b[0], b[1])
@@ -773,7 +773,7 @@ internal class SkIntersections {
 
     /** Mirrors `SkIntersections::conicHorizontal(SkPoint a[3], SkScalar weight, left, right, y, flipped)`. */
     fun conicHorizontal(
-        a: Array<org.skia.math.SkPoint>, weight: Float,
+        a: Array<org.graphiks.math.SkPoint>, weight: Float,
         left: Float, right: Float, y: Float, flipped: Boolean,
     ): Int {
         require(a.size >= 3)
@@ -784,7 +784,7 @@ internal class SkIntersections {
 
     /** Mirrors `SkIntersections::conicVertical(SkPoint a[3], SkScalar weight, top, bottom, x, flipped)`. */
     fun conicVertical(
-        a: Array<org.skia.math.SkPoint>, weight: Float,
+        a: Array<org.graphiks.math.SkPoint>, weight: Float,
         top: Float, bottom: Float, x: Float, flipped: Boolean,
     ): Int {
         require(a.size >= 3)

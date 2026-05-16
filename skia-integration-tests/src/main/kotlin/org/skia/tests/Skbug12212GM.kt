@@ -2,14 +2,14 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.math.SK_ColorCYAN
+import org.graphiks.math.SK_ColorCYAN
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextBlobBuilder
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

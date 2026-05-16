@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLACK
 import org.skia.foundation.SkCornerPathEffect
 import org.skia.foundation.SkDashPathEffect
 import org.skia.tools.SkDiscretePathEffect
@@ -12,9 +12,9 @@ import org.skia.foundation.SkPath2DPathEffect
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathDirection
 import org.skia.foundation.SkPathEffect
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/patheffects.cpp::PathEffectGM` (800 × 600).

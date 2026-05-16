@@ -5,7 +5,7 @@ import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

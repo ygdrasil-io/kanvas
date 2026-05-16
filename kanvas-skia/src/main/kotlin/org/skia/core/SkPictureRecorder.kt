@@ -1,6 +1,6 @@
 package org.skia.core
 
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import kotlin.math.ceil
 
 /**

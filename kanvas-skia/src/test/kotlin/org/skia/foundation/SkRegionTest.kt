@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 
 /**
  * Phase I3.1.a — covers the core data model + queries on [SkRegion].
@@ -348,7 +348,7 @@ class SkRegionTest {
     @Test
     fun `setPath empty clip yields empty region`() {
         val r = SkRegion(SkIRect(0, 0, 10, 10))
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
         assertFalse(r.setPath(path, SkRegion()))
         assertTrue(r.isEmpty())
     }
@@ -356,7 +356,7 @@ class SkRegionTest {
     @Test
     fun `setPath rectangular path matches its bounds when clip is generous`() {
         val r = SkRegion()
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
         val clip = SkRegion(SkIRect(-100, -100, 100, 100))
         assertTrue(r.setPath(path, clip))
         // Pixel-center inclusion : pixels (0..9) × (0..9) are in.
@@ -369,7 +369,7 @@ class SkRegionTest {
     @Test
     fun `setPath rect intersects with clip`() {
         val r = SkRegion()
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 100f, 100f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 100f, 100f)).detach()
         val clip = SkRegion(SkIRect(20, 30, 60, 80))
         assertTrue(r.setPath(path, clip))
         assertEquals(SkIRect(20, 30, 60, 80), r.getBounds())
@@ -378,7 +378,7 @@ class SkRegionTest {
     @Test
     fun `setPath path entirely outside clip yields empty`() {
         val r = SkRegion()
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(200f, 200f, 300f, 300f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(200f, 200f, 300f, 300f)).detach()
         val clip = SkRegion(SkIRect(0, 0, 100, 100))
         assertFalse(r.setPath(path, clip))
         assertTrue(r.isEmpty())
@@ -411,7 +411,7 @@ class SkRegionTest {
         // 100x100 clip with a 20x20 inverse-fill rect path → clip with
         // a hole.
         val path = SkPathBuilder()
-            .addRect(org.skia.math.SkRect.MakeLTRB(40f, 40f, 60f, 60f))
+            .addRect(org.graphiks.math.SkRect.MakeLTRB(40f, 40f, 60f, 60f))
             .setFillType(SkPathFillType.kInverseWinding)
             .detach()
         val r = SkRegion()
@@ -434,8 +434,8 @@ class SkRegionTest {
         // Two stacked rects sharing an edge — net should still be one
         // rect after canonicalisation.
         val path = SkPathBuilder()
-            .addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 5f))
-            .addRect(org.skia.math.SkRect.MakeLTRB(0f, 5f, 10f, 10f))
+            .addRect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 5f))
+            .addRect(org.graphiks.math.SkRect.MakeLTRB(0f, 5f, 10f, 10f))
             .detach()
         val r = SkRegion()
         val clip = SkRegion(SkIRect(-100, -100, 100, 100))

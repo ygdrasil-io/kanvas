@@ -6,9 +6,9 @@ import org.skia.core.SkPictureRecorder
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/picture.cpp::PictureGM` (`pictures`, 450 × 120).

@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 import kotlin.math.sqrt
 
 /**

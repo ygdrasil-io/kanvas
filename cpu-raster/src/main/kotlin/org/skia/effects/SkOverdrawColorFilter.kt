@@ -1,13 +1,13 @@
 package org.skia.effects
 
-import org.skia.math.SkColor
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkColorFilter
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SK_ColorTRANSPARENT
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SK_ColorTRANSPARENT
 
 /**
  * Mirrors Skia's

@@ -1,11 +1,11 @@
 package org.skia.effects.runtime
 
 import org.skia.foundation.SkBlender
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkData
 import org.skia.foundation.SkShader
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

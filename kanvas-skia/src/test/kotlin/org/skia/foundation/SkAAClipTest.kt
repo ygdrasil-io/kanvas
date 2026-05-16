@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 
 /**
  * Phase I3.2.a — covers the core data model + read-only / promotion
@@ -195,7 +195,7 @@ class SkAAClipTest {
     fun `coverage on subpixel-positioned AA rect returns fractional alpha at edges`() {
         // Rect [0.5, 0.5, 9.5, 9.5] doAA=true → edge pixels get half coverage.
         val c = SkAAClip()
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0.5f, 0.5f, 9.5f, 9.5f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(0.5f, 0.5f, 9.5f, 9.5f)).detach()
         c.setPath(path, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true)
         // Centre pixel (4, 4) is fully inside → 255.
         assertEquals(255, c.coverage(4, 4))
@@ -219,7 +219,7 @@ class SkAAClipTest {
     @Test
     fun `setPath empty clip yields empty regardless of doAA`() {
         val c = SkAAClip()
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
         assertFalse(c.setPath(path, SkRegion(), doAA = false))
         assertTrue(c.isEmpty())
         assertFalse(c.setPath(path, SkRegion(), doAA = true))
@@ -229,7 +229,7 @@ class SkAAClipTest {
     @Test
     fun `setPath rect doAA false delegates through SkRegion+setRegion`() {
         val c = SkAAClip()
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f)).detach()
         assertTrue(c.setPath(path, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = false))
         assertEquals(SkIRect(0, 0, 10, 10), c.getBounds())
         assertTrue(c.isRect())
@@ -240,7 +240,7 @@ class SkAAClipTest {
         // An integer-aligned rect path under 4×4 supersampling → every
         // sub-sample inside, all alpha=255, single rect band.
         val c = SkAAClip()
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(2f, 3f, 12f, 13f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(2f, 3f, 12f, 13f)).detach()
         assertTrue(c.setPath(path, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true))
         assertEquals(SkIRect(2, 3, 12, 13), c.getBounds())
         assertTrue(c.isRect())
@@ -251,7 +251,7 @@ class SkAAClipTest {
         // Rect [0.5, 0.5, 9.5, 9.5] : centre integer pixels are full
         // coverage, edge pixels (rows 0/9, cols 0/9) get half coverage.
         val c = SkAAClip()
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0.5f, 0.5f, 9.5f, 9.5f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(0.5f, 0.5f, 9.5f, 9.5f)).detach()
         assertTrue(c.setPath(path, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true))
         // Bounds clip to the integer span [0, 10) × [0, 10).
         assertEquals(SkIRect(0, 0, 10, 10), c.getBounds())
@@ -265,7 +265,7 @@ class SkAAClipTest {
     @Test
     fun `setPath path entirely outside clip yields empty`() {
         val c = SkAAClip()
-        val path = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(200f, 200f, 300f, 300f)).detach()
+        val path = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(200f, 200f, 300f, 300f)).detach()
         assertFalse(c.setPath(path, SkRegion(SkIRect(0, 0, 100, 100)), doAA = true))
         assertTrue(c.isEmpty())
     }
@@ -276,7 +276,7 @@ class SkAAClipTest {
         // coverage at hole interior should be 0, outside hole 0xFF.
         val c = SkAAClip()
         val path = SkPathBuilder()
-            .addRect(org.skia.math.SkRect.MakeLTRB(40f, 40f, 50f, 50f))
+            .addRect(org.graphiks.math.SkRect.MakeLTRB(40f, 40f, 50f, 50f))
             .setFillType(SkPathFillType.kInverseWinding)
             .detach()
         val clip = SkRegion(SkIRect(0, 0, 100, 100))
@@ -369,11 +369,11 @@ class SkAAClipTest {
         // Both clips have fractional edges from setPath ; intersect
         // should multiply edge alphas (a * b / 255).
         val a = SkAAClip()
-        val pa = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(0.5f, 0.5f, 9.5f, 9.5f)).detach()
+        val pa = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(0.5f, 0.5f, 9.5f, 9.5f)).detach()
         a.setPath(pa, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true)
 
         val b = SkAAClip()
-        val pb = SkPathBuilder().addRect(org.skia.math.SkRect.MakeLTRB(2f, 2f, 8f, 8f)).detach()
+        val pb = SkPathBuilder().addRect(org.graphiks.math.SkRect.MakeLTRB(2f, 2f, 8f, 8f)).detach()
         b.setPath(pb, SkRegion(SkIRect(-100, -100, 100, 100)), doAA = true)
 
         assertTrue(a.op(b, SkRegion.Op.kIntersect))

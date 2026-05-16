@@ -1,8 +1,8 @@
 package org.skia.core
 
 import org.skia.foundation.SkPaint
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 
 /**
  * Computes per-op device-space bounds for the records of an

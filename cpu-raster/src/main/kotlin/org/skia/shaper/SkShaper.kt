@@ -3,7 +3,7 @@ package org.skia.shaper
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextBlobBuilder
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Mirrors Skia's

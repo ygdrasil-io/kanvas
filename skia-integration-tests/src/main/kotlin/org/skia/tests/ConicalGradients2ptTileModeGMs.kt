@@ -3,8 +3,8 @@ package org.skia.tests
 import org.skia.foundation.SkConicalGradient
 import org.skia.foundation.SkShader
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
 
 /**
  * Additional `gm/gradients_2pt_conical.cpp::ConicalGradientsGM` variants

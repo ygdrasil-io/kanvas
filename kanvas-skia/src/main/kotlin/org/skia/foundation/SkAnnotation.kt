@@ -1,8 +1,8 @@
 package org.skia.foundation
 
 import org.skia.core.SkCanvas
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Iso-aligned port of Skia's free-function annotation API in

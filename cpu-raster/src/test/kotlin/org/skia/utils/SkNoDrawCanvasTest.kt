@@ -3,8 +3,8 @@ package org.skia.utils
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.skia.core.SkDrawable
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
@@ -13,8 +13,8 @@ import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextBlobBuilder
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkVertices
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * R-suivi.10 — verify that [SkNoDrawCanvas] overrides every draw entry

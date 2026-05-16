@@ -4,7 +4,7 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.SkRandom
 import kotlin.math.PI
 import kotlin.math.cos

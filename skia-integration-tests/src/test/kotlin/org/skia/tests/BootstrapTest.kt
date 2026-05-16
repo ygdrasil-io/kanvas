@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.testing.TestUtils
 
 /**

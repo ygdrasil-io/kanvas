@@ -1,9 +1,9 @@
 package org.skia.utils
 
-import org.skia.math.SkColor
-import org.skia.math.SkColorSetARGB
-import org.skia.math.SkColorSetRGB
-import org.skia.math.SkScalar
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetRGB
+import org.graphiks.math.SkScalar
 
 /**
  * Iso-aligned port of Skia's `SkParse`

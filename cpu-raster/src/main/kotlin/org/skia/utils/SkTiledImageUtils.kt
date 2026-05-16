@@ -5,9 +5,9 @@ import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkIRect
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 
 /**
  * Mirrors Skia's
