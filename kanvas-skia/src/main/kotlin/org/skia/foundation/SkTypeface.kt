@@ -38,7 +38,7 @@ public open class SkTypeface protected constructor() {
      * `internal` because callers should always go through [SkFont.measureText]
      * (the API surface that mirrors upstream).
      */
-    internal open fun measureTextInternal(
+    public open fun measureTextInternal(
         text: String,
         byteLength: Int,
         encoding: SkTextEncoding,
@@ -66,7 +66,7 @@ public open class SkTypeface protected constructor() {
      *
      * `internal` because the public API is [org.skia.core.SkCanvas.drawString].
      */
-    internal open fun makeTextPath(
+    public open fun makeTextPath(
         text: String,
         x: SkScalar,
         y: SkScalar,
@@ -85,7 +85,7 @@ public open class SkTypeface protected constructor() {
      * Returns `null` if the glyph has no path (e.g. zero-width or the
      * base [MakeEmpty] typeface). Concrete typefaces override.
      */
-    internal open fun getGlyphPathInternal(
+    public open fun getGlyphPathInternal(
         glyphId: Int,
         size: SkScalar,
         scaleX: SkScalar,
@@ -99,7 +99,7 @@ public open class SkTypeface protected constructor() {
      * Base class fills [glyphs] with zeros (the upstream "missing
      * glyph" / `.notdef` index). Concrete typefaces override.
      */
-    internal open fun unicharsToGlyphsInternal(
+    public open fun unicharsToGlyphsInternal(
         unichars: IntArray,
         count: Int,
         glyphs: ShortArray,
@@ -112,7 +112,7 @@ public open class SkTypeface protected constructor() {
      * glyph in source coords at the given size/scaleX/skewX. Base
      * class returns 0.
      */
-    internal open fun getGlyphWidthInternal(
+    public open fun getGlyphWidthInternal(
         glyphId: Int,
         size: SkScalar,
         scaleX: SkScalar,
@@ -176,7 +176,7 @@ public open class SkTypeface protected constructor() {
      * Internal hook for [SkFont.getMetrics] — base class fills [metrics]
      * with zeros and returns 0 (the recommended line spacing).
      */
-    internal open fun getMetricsInternal(metrics: SkFontMetrics, size: SkScalar): SkScalar {
+    public open fun getMetricsInternal(metrics: SkFontMetrics, size: SkScalar): SkScalar {
         metrics.fFlags = 0
         metrics.fTop = 0f
         metrics.fAscent = 0f
