@@ -312,10 +312,17 @@ public class SkWebGpuDevice(
         SkBlendMode.kSrc -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.Zero)
         SkBlendMode.kSrcOver -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.OneMinusSrcAlpha)
         SkBlendMode.kDstOver -> blendAddBoth(src = GPUBlendFactor.OneMinusDstAlpha, dst = GPUBlendFactor.One)
+        // G3.3a.1 — kPlus is `out = clamp(src + dst, 0, 1)` per Skia
+        // (`SkBlendMode.kPlus`). In premul-in / premul-out (our convention),
+        // `(srcFactor=One, dstFactor=One, op=Add)` evaluates exactly to
+        // that clamped sum. The G2.2 plan note about "kPlus needs
+        // fragment-side blending" turned out to be over-conservative for
+        // the premul case.
+        SkBlendMode.kPlus -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.One)
         else -> error(
-            "SkWebGpuDevice (G2.2): blend mode $mode not supported yet. " +
-                "G2.2 covers WebGPU-native Porter-Duff (kClear / kSrc / kSrcOver / kDstOver). " +
-                "kPlus / kScreen / kModulate / etc. require fragment-side blending and land in a " +
+            "SkWebGpuDevice : blend mode $mode not supported yet. " +
+                "Supported : kClear / kSrc / kSrcOver / kDstOver (G2.2), kPlus (G3.3a.1). " +
+                "kScreen / kModulate / etc. require fragment-side blending and land in a " +
                 "later G-phase; see MIGRATION_PLAN_GPU_WEBGPU.md G2.",
         )
     }
