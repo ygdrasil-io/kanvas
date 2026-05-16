@@ -346,11 +346,21 @@ Au lieu d'ear-clipping côté CPU (~200-300 LOC d'algorithme géométrique), j'u
 - [x] **Impact mesuré** : Skbug12244GM **90.33 → 99.29 (+8.96 %)**. Le hole est correctement exclu. Reste ~160 pixels (0.71 %) — AA edge mismatch (reference rasterized avec AA, notre fill non-AA binary). G3.3b.3 (AA stencil-and-cover) closerait ce gap.
 - [x] **Backward compat** : single-contour paths inchangés (gardent fan-tess + AA path G3.3a). Tous les 29 tests `:gpu-raster:test` PASS.
 
+### G3.3b.2c — Cross-test BatchedConvexPathsGM ✅
+
+Validation end-to-end du feature stack convex AA (G3.3b.1 + G3.3b.2a) par un GM upstream non trivial.
+
+- [x] **`BatchedConvexPathsWebGpuTest`** : 10 single-contour convex cubic-Bezier polygons, scales décroissants, translucent SrcOver stacking on black. Exercise G3.3b.1 cubic flattening + G3.3b.2a AA polygon coverage + G2.1 translucent SrcOver + G6.0/G6.1 colorspace en un seul GM.
+- [x] **Score** : **99.94 %** (~160 pixels de drift, sub-channel, sur les bords AA des cubiques). Ratché à floor=99.85.
+- [x] **FillTypeGM / ConcavePathsGM** : tentés, bloqués par features deferred — FillTypeGM exerce `kInverseWinding` (cf G3.3b.2b throw line 1005), ConcavePathsGM exerce AA multi-contour (cf G3.3b.2b throw line 998). Repris dans G3.3b.3.
+
 ### G3.3b.3 — AA multi-contour + future tessellation (à venir)
 
-- [ ] **AA stencil-and-cover** : sample-mask AA dans le cover pass, OU per-fragment edge coverage en mode multi-contour. Closerait les ~160 pixels de drift sur Skbug12244GM.
+- [ ] **AA stencil-and-cover** : sample-mask AA dans le cover pass, OU per-fragment edge coverage en mode multi-contour. Closerait les ~160 pixels de drift sur Skbug12244GM. Débloquerait `ConcavePathsGM` (tenté en G3.3b.2c, blocked).
+- [ ] **kEvenOdd cover pipeline** : `stencilReadMask = 0x01` au lieu de `0xFF`, compare Equal-to-1. Code prêt mais reverté en G3.3b.2c (pas de GM en scope).
+- [ ] **Inverse fill types** (`kInverseWinding`, `kInverseEvenOdd`) : cover quad = viewport entier, stencil compare flip Equal-0. Débloquerait `FillTypeGM` (tenté en G3.3b.2c, blocked).
 - [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
-- [ ] **Tests** : `ConcavePathsGM`, `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family.
+- [ ] **Tests** : `ConcavePathsGM`, `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family, `FillTypeGM`.
 
 ### G3.4 — Stroke générique via SkStroker (à venir, après G3.3b)
 
@@ -362,7 +372,8 @@ Au lieu d'ear-clipping côté CPU (~200-300 LOC d'algorithme géométrique), j'u
 - [x] G3.3a : 3 tests neufs (PolygonFillTest : quad + triangle + curve-throws). drawPath skeleton convex polygon débloqué. ScaledRectsGM toujours bloqué par kPlus.
 - [x] G3.3b.1 : Bezier flattening (Quad / Cubic / Conic). 1 test converti + 1 test neuf. Curves rendent. Concave + AA = G3.3b.2.
 - [x] G3.3b.2a : AA polygon coverage (convex, single-contour) via bbox + fragment edge-distance. 2 tests neufs (AaPolygonFillTest). Pas de bump immédiat sur les ratchet entries (les GMs existants n'ont pas isAntiAlias=true sur leurs paths).
-- [ ] G3.3b.2b : concave triangulation + multi-contour + hole handling → ≥ 5 path GMs verts à ≥ 85%, Skbug12244GM bump attendu.
+- [x] G3.3b.2b : multi-contour via stencil-and-cover (winding count, holes naturally handled). Skbug12244GM 90.33 → 99.29 (+8.96).
+- [x] G3.3b.2c : cross-test `BatchedConvexPathsGM` 99.94 % — feature stack convex AA validé end-to-end sur 10 cubic Bezier polygons translucides.
 - [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---
