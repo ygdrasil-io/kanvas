@@ -234,19 +234,37 @@ Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et qu
 
 ## Phase G3 — Path tessellation + fill
 
-**But** : `drawPath` GPU. Décision D2 = CPU tessellate.
+**But** : `drawPath` GPU + stroke. Décision D2 = CPU tessellate (pour le path générique).
 
-- [ ] **`PathTessellator`** dans `kanvas-skia-gpu` :
+### G3.1 — Rect stroke (sans path tessellation) ✅
+
+**Shortcut payant.** L'audit des 4 GMs cibles G2 a montré que stroke bloque 2/4 GMs (BigRectGM, ClipStrokeRectGM) et drawPath aucun. Pour les **rect-strokes axis-aligned**, on peut décomposer en 4 fill-rects sans passer par SkStroker — match exact de [SkBitmapDevice.strokeRect](kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt) (annular outer/inner pour `sw > 0`, 4 1-pixel edges sur `floor(c)` pour hairline `sw <= 0`).
+
+- [x] [SkWebGpuDevice.drawRect](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt) dispatch sur `paint.style` : `kFill_Style` → `drawFillRect` (G2.3a) ; `kStroke_Style` → `drawStrokeRect` ; `kStrokeAndFill_Style` → les deux.
+- [x] `drawStrokeRect` : outer = rect ± half-strokeWidth, inner = rect ∓ half. 4 fill sous-rects (top/bottom/left/right) avec corners couverts par top/bottom uniquement. Si inner empty → un seul fill sur outer.
+- [x] `drawHairlineRect` (`sw <= 0`) : 4 1-pixel edges sur `floor()` integer coords, forcés non-AA. Match `SkScan::HairLineRgn`. AA hairline (sub-pixel coverage) reporté en follow-up.
+- [x] [RectStrokeTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RectStrokeTest.kt) — 3 sous-tests : hairline, thin (sw=2), thick (sw=50, inner empty).
+- [x] [BigRectWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BigRectWebGpuTest.kt) — cross-test contre `original-888/bigrect.png`. Score **70.70%** — debloqué mais en dessous du G2 90% target. 3 sources de drift restantes : AA hairline approximé non-AA, stroke-AA corner convention, colorspace sRGB vs Rec.2020 (G6).
+- [x] Ratchet `BigRectGM=70.7` ajouté.
+
+### G3.2 — drawPath générique (à venir)
+
+- [ ] **`PathTessellator`** dans `:gpu-raster` :
   - [ ] Réutilise `SkBitmapDevice.buildEdges` (flatten Bézier en polylines) — extraire en helper public.
   - [ ] Triangulation polygone-à-trous via libtess2 algorithme (ou ear-clipping si convex-only initial slice). Sortie : `FloatArray` de positions (x, y) en device coords.
   - [ ] Cache intra-frame : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
-- [ ] **Upload + draw** : `GPUBuffer` vertex, draw triangles, fragment = solid color (réutilise pipeline Phase G2 + remplace input quad par triangles).
+- [ ] **Upload + draw** : `GPUBuffer` vertex, draw triangles, fragment = solid color (réutilise pipeline G2 + nouveau path = liste de triangles au lieu de full-screen Bjorke).
 - [ ] **AA paths** — coverage edge en fragment shader via distance-to-edge ; ou distance field si MSAA off. À profiler sur `ConcavePathsGM` (cible Phase 3a master).
-- [ ] **Stroke** — réutilise `SkStroker` (Phase 3c master) côté CPU pour produire le path outline → tessellate comme un fill normal.
 - [ ] **Tests** : `ConcavePathsGM`, `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family.
 
+### G3.3 — Stroke générique via SkStroker (à venir, après G3.2)
+
+- [ ] **Stroke** — réutilise `SkStroker` (Phase 3c master) côté CPU pour produire le path outline → tessellate via G3.2 comme un fill. Débloque les strokes non-rect (paths) + AA hairlines correctes.
+
 ### Vérification G3
-- [ ] ≥ 5 path GMs verts sur GPU avec scores ≥ 85%.
+- [x] G3.1 : 4 tests neufs (3 unit stroke + 1 cross-test BigRectGM). Stroke axis-aligned débloqué.
+- [ ] G3.2 : ≥ 5 path GMs verts sur GPU avec scores ≥ 85%.
+- [ ] G3.3 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---
 
