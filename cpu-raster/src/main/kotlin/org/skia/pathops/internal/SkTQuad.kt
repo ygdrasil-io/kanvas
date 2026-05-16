@@ -7,6 +7,10 @@
  */
 package org.skia.pathops.internal
 
+
+import org.skia.math.SkDLine
+import org.skia.math.SkDPoint
+import org.skia.math.SkDVector
 internal class SkTQuad(var quad: SkDQuad = SkDQuad()) : SkTCurve {
 
     override fun pointCount(): Int = SkDQuad.kPointCount

@@ -11,7 +11,7 @@
  * are ported as Kotlin operator funs since they're cheap and the
  * pathops tests will use them.
  */
-package org.skia.pathops.internal
+package org.skia.math
 
 import kotlin.math.max
 import kotlin.math.min
@@ -25,7 +25,7 @@ import org.skia.math.SkPoint
  * Field names use Kotlin convention (`x` / `y`) ; in upstream they are
  * `fX` / `fY`.
  */
-internal data class SkDVector(var x: Double, var y: Double) {
+public data class SkDVector(var x: Double, var y: Double) {
 
     constructor() : this(0.0, 0.0)
 
@@ -95,7 +95,7 @@ internal data class SkDVector(var x: Double, var y: Double) {
  * Double-precision 2D point. Mirrors
  * [`SkDPoint`](https://github.com/google/skia/blob/main/src/pathops/SkPathOpsPoint.h#L102).
  */
-internal data class SkDPoint(var x: Double, var y: Double) {
+public data class SkDPoint(var x: Double, var y: Double) {
 
     constructor() : this(0.0, 0.0)
 
@@ -219,7 +219,12 @@ internal data class SkDPoint(var x: Double, var y: Double) {
             return roughly_zero_when_compared_to(largestDiff.toDouble(), largest.toDouble())
         }
     }
-}
 
-/** Vector difference of two points. Mirrors `operator-(SkDPoint, SkDPoint)`. */
-internal operator fun SkDPoint.minus(b: SkDPoint): SkDVector = SkDVector(x - b.x, y - b.y)
+    /**
+     * Vector difference of two points. Mirrors
+     * `operator-(SkDPoint, SkDPoint)`. Moved from top-level extension
+     * into SkDPoint at math-3 since cross-module imports of extension
+     * operators are awkward — member operators are auto-resolved.
+     */
+    public operator fun minus(b: SkDPoint): SkDVector = SkDVector(x - b.x, y - b.y)
+}

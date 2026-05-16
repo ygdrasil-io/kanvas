@@ -9,7 +9,7 @@
  * convenience overloads. The actual line ↔ line / line ↔ curve
  * intersections live in subsequent slices (D1.1.b / D1.1.c).
  */
-package org.skia.pathops.internal
+package org.skia.math
 
 import kotlin.math.max
 import kotlin.math.min
@@ -21,7 +21,7 @@ import org.skia.math.SkPoint
  * Mirrors
  * [`SkDLine`](https://github.com/google/skia/blob/main/src/pathops/SkPathOpsLine.h#L14).
  */
-internal data class SkDLine(val pts: Array<SkDPoint> = arrayOf(SkDPoint(), SkDPoint())) {
+public data class SkDLine(val pts: Array<SkDPoint> = arrayOf(SkDPoint(), SkDPoint())) {
 
     init {
         require(pts.size == 2) { "SkDLine requires exactly 2 points (got ${pts.size})" }
