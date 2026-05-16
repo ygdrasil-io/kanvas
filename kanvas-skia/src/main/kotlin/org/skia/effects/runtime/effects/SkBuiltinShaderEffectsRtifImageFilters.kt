@@ -22,7 +22,7 @@ import kotlin.math.sin
  * `SkImageFilters::RuntimeShader(...)` factory (i.e. an image-filter
  * DAG node) rather than the shader-of-a-paint factory. They share the
  * runtime-effect impl/dispatch machinery but the consuming surface
- * differs : the [org.skia.foundation.SkRuntimeImageFilter] resolves
+ * differs : the [org.skia.effects.runtime.SkRuntimeImageFilter] resolves
  * children as filtered images, not local-coord shaders.
  */
 public object SkBuiltinShaderEffectsRtifImageFilters {

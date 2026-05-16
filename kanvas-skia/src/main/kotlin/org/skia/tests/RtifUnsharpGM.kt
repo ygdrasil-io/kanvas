@@ -6,6 +6,7 @@ import org.skia.effects.runtime.SkRuntimeEffectBuilder
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsRtifImageFilters
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilters
+import org.skia.effects.runtime.SkRuntimeImageFilters
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkISize
@@ -58,7 +59,7 @@ public class RtifUnsharpGM : GM() {
         val blurredSrc = SkImageFilters.Blur(1f, 1f, input = null)
         val childNames = arrayOf("content", "blurred")
         val childNodes = arrayOf<SkImageFilter?>(null, blurredSrc)
-        val sharpened = SkImageFilters.RuntimeShader(builder, childNames, childNodes)
+        val sharpened = SkRuntimeImageFilters.RuntimeShader(builder, childNames, childNodes)
 
         // Raw image at (0, 0), then sharpened image at (256, 0) via
         // saveLayer{paint{imageFilter}} containing the source image.

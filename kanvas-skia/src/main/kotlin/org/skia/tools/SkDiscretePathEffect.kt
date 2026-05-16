@@ -1,7 +1,9 @@
-package org.skia.foundation
+package org.skia.tools
 
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathBuilder
+import org.skia.foundation.SkPathEffect
 import org.skia.math.SkMatrix
-import org.skia.tools.SkRandom
 import kotlin.math.sqrt
 
 /**
