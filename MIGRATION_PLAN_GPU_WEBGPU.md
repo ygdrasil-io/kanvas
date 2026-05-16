@@ -126,30 +126,43 @@ Aucun shader template (gradient, bitmap, blend) ne hardcode "Rec.2020". Ils reç
 
 **But** : extraire `SkDevice` comme interface, garder `SkBitmapDevice` comme impl raster, ajouter `SkWebGpuDevice` comme impl GPU. `SkCanvas` accepte les deux. `BigRectGM` passe sur les deux backends.
 
-### Refactor `SkDevice`
-- [ ] Extraire interface `SkDevice` depuis [SkBitmapDevice.kt](kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt) : signatures publiques `drawRect`, `drawPaint`, `drawPath`, `drawImageRect`, `compositeFrom`, `deviceClipBounds`. Garder le storage F16/8-bit côté impl.
-- [ ] `SkBitmapDevice` `implements SkDevice` (zéro changement de comportement).
-- [ ] `SkCanvas` reçoit `SkDevice` au lieu de `SkBitmapDevice` concret.
-- [ ] Vérifier : tous les tests Phase 1-6 du master plan passent inchangés.
+Découpée en 3 PRs (G1.0 → G1.1 → G1.2+G1.3) pour rester revue-friendly :
 
-### `SkWebGpuDevice` premier squelette
-- [ ] `org.skia.gpu.webgpu.SkWebGpuDevice(ctx: WebGpuContext, width: Int, height: Int)` :
-  - [ ] Crée `Texture` (color, `rgba16float` selon D3) + `Texture` (stencil8 si on en a besoin Phase G3).
+### G1.0 — Module split ✅
+- [x] Nouveau module `:gpu-raster` (PR [#458](https://github.com/ygdrasil-io/kanvas/pull/458)). Les 4 fichiers G0 (`WebGpuContext`, `HeadlessTarget`, `ClearRedTest`, `clear_red.wgsl`) déplacés depuis `kanvas-skia/src/test/`. Wgpu4k-toolkit + coroutines testImpl + JVM args (`-XstartOnFirstThread` + `--add-opens`) côté `gpu-raster/build.gradle.kts`.
+
+### G1.1 — Interface `SkDevice` ✅
+- [x] Interface [SkDevice](kanvas-skia/src/main/kotlin/org/skia/core/SkDevice.kt) extraite (7 méthodes : `width`, `height`, `deviceClipBounds`, `drawRect`, `drawPaint`, `drawPath`, `drawImageRect`). `compositeFrom` est intentionnellement **hors interface** — elle prend un `SkBitmapDevice` concret en paramètre (le restream pixel-à-pixel suppose un device raster) ; généralisation reportée à G2+ quand la cross-backend composition deviendra utile.
+- [x] [SkBitmapDevice](kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt) `: SkDevice` — uniquement les 7 méthodes interface taguées `override`, zéro changement de comportement.
+- [x] [SkCanvas](kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt) refactor :
+  - Constructeur primaire : `rootDevice: SkDevice` (ouvre la porte au `SkWebGpuDevice` de G1.2).
+  - Storage public `device: SkDevice` (était `SkBitmapDevice`).
+  - State stack `var device: SkDevice` (était `SkBitmapDevice`).
+  - **Helper de cast** `SkDevice.requireBitmap(op)` top-level — lève une erreur claire si un non-raster device entre dans un chemin raster-only.
+  - 7 call sites passent par `requireBitmap(...)` : `bitmap` accessor, restore-imageFilter-snapshot, restore-composite, bindClip (setActiveClip + setActiveClipShader), drawVertices-textured, drawVertices-colored, saveLayer-parent + saveLayer-backdrop + saveLayer-Layer.
+  - Constructeurs secondaires `SkCanvas(bitmap)` et `Layer.parentDevice` restent `SkBitmapDevice` (la composition layer est raster-only par construction).
+- [x] Restauré `include(":gpu-raster")` dans [settings.gradle.kts](settings.gradle.kts) — le include avait été dropped au squash-merge de G1.0.
+- [x] **Vérification** : `./gradlew :kanvas-skia:test :cpu-raster:test :gpu-raster:test` — 0 régression sur les suites raster (10 min, 4000+ tests), `ClearRedTest` GPU toujours vert.
+
+### G1.2 — `SkWebGpuDevice` premier squelette (à venir)
+- [ ] `org.skia.gpu.webgpu.SkWebGpuDevice(ctx: WebGpuContext, width: Int, height: Int) : SkDevice` dans `gpu-raster/src/main/kotlin/` :
+  - [ ] Crée `Texture` (color, `rgba8unorm` pour G1 — `rgba16float` arrive en G6 avec la conversion colorspace).
   - [ ] Gère un `CommandEncoder` cumulatif scoped au cycle de vie du device.
-  - [ ] `flush()` submit + map readback vers `SkBitmap` ARGB8888 ou F16Norm — réutilise la passe finale colorspace de D3.
+  - [ ] `flush()` submit + map readback vers `SkBitmap` ARGB8888 — réutilise [HeadlessTarget](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/HeadlessTarget.kt) (à promouvoir de test/ vers main/ à cette étape).
 - [ ] `drawRect(rect, clip, paint)` :
   - [ ] Pour FILL kSrcOver, color seul (pas de shader, pas d'AA pour ce slice) : un draw indexé d'un quad scissoré au rect arrondi pixel-edge, color uniform.
   - [ ] Shader WGSL `solid_color.wgsl` : vertex pass-through, fragment `return color;`.
   - [ ] Bind group : 1 buffer uniform `(color: vec4f, transform: mat4x4f)`.
+- [ ] `drawPaint` / `drawPath` / `drawImageRect` : stub avec `TODO("G2+")` — interface implémentée mais non fonctionnelle. Le test BigRectGM n'en a pas besoin.
 
-### Cross-test BigRectGM
-- [ ] Nouveau harness `runGmTest` overload qui prend un `DeviceFactory` (raster vs GPU).
+### G1.3 — Cross-test BigRectGM (à venir)
+- [ ] Nouveau harness `runGmTest` overload côté `:gpu-raster/src/test/` qui prend un `DeviceFactory` (raster vs GPU).
 - [ ] Test `BigRectWebGpuTest.kt` : lance `BigRectGM` sur `SkWebGpuDevice`, compare à `bigrect.png` avec tolerance Phase 1.
-- [ ] Nouveau ratchet : `kanvas-skia/test-similarity-scores-webgpu.properties`.
+- [ ] Nouveau ratchet : `gpu-raster/test-similarity-scores-webgpu.properties`.
 
 ### Vérification G1
 - [ ] `BigRectGM` ≥ 90% sur GPU. Le résiduel attendu : pas d'AA encore + différence de pixel-edge rounding entre device-pixels et viewport NDC.
-- [ ] Aucune régression sur les ~80 GMs raster.
+- [x] Aucune régression sur les suites raster (vérifié à chaque PR G1.x).
 
 ---
 
