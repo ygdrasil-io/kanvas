@@ -29,13 +29,16 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
-    // G2.3b — cross-test harness needs :cpu-raster's GM ports
-    // (ThinRectsGM, etc.) + its testing helpers
+    // G2.3b — cross-test harness needs :cpu-raster's testing helpers
     // (compareBitmapsDetailed, loadReferenceBitmap, etc.) which live in
     // :cpu-raster/src/main. testImplementation only — the GPU device
     // itself never depends on the CPU rasterizer, only the cross-tests
     // need it.
     testImplementation(project(":cpu-raster"))
+    // Iter 4 — Skia-mirror GM ports (BigRectGM, ThinRectsGM,
+    // ClipStrokeRectGM, ...) moved out of :cpu-raster into
+    // :skia-integration-tests. Cross-tests need them here.
+    testImplementation(project(":skia-integration-tests"))
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
