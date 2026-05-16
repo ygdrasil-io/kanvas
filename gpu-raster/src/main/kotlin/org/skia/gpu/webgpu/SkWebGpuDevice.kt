@@ -172,16 +172,16 @@ public class SkWebGpuDevice(
 
     override fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         require(!paint.isAntiAlias) {
-            "SkWebGpuDevice (G1.2): AA not supported yet — set paint.isAntiAlias = false. AA arrives in G2."
+            "SkWebGpuDevice (G2.1): AA not supported yet — set paint.isAntiAlias = false. AA arrives in G2.3."
         }
         require(paint.style == SkPaint.Style.kFill_Style) {
-            "SkWebGpuDevice (G1.2): only fill-style supported — got ${paint.style}. Strokes arrive in G2."
+            "SkWebGpuDevice (G2.1): only fill-style supported — got ${paint.style}. Strokes arrive in G3."
         }
+        // G2.1 — translucent SrcOver is supported : the shader premuls
+        // the uniform color and the pipeline blend (src=One,
+        // dst=OneMinusSrcAlpha) does correct SrcOver math. Non-SrcOver
+        // blend modes still TODO (G2.2 pipeline cache).
         val color = paint.color
-        require(SkColorGetA(color) == 0xFF) {
-            "SkWebGpuDevice (G1.2): only opaque colors supported — paint.color alpha is ${SkColorGetA(color)}. " +
-                "Real SrcOver blending is correct in the pipeline but premul handling lands in G2+."
-        }
 
         val l = pixelEdge(rect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
         val t = pixelEdge(rect.top).coerceAtLeast(clip.top).coerceAtLeast(0)

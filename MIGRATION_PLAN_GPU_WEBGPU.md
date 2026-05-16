@@ -170,18 +170,32 @@ Découpée en 3 PRs (G1.0 → G1.1 → G1.2+G1.3) pour rester revue-friendly :
 
 ## Phase G2 — AA + clip + blend modes simples
 
-**But** : rect AA (Phase 2 master plan), `clipRect`, et 9 modes Porter-Duff de base (kSrc / kSrcOver / kDstOver / kSrcIn / kDstIn / kClear / kPlus / kModulate / kScreen).
+**But** : rect AA (Phase 2 master plan), `clipRect` non-axis-aligned, et 9 modes Porter-Duff de base (kSrc / kSrcOver / kDstOver / kSrcIn / kDstIn / kClear / kPlus / kModulate / kScreen).
 
-- [ ] **AA rect** — 2 stratégies à arbitrer en début de phase :
-  - (a) Native MSAA 4×, render target multisamplée, resolve final.
-  - (b) Coverage analytique en fragment shader (port direct de la coverage axis-aligned du raster). Plus fidèle au raster, pas de dépendance MSAA.
-  - Recommandation : **(b)** parce qu'elle maintient pixel-equivalence avec le raster en working space linear.
-- [ ] **Clip** — support `kIntersect` rect-only. Stocké en uniform `vec4f` (clip rect en device coords) + `discard` dans le shader.
-- [ ] **Blend modes Porter-Duff de base** — WebGPU a `BlendComponent` natif pour kSrcOver/kDstOver/kSrc/kClear. Pour kPlus/kScreen/kModulate, basculer sur fragment-side blending (lecture render target via `loadOp = load` + manual blend). Documenter quel mode est natif vs manual.
-- [ ] **Tests** : `ThinRectsGM`, `ClipStrokeRectGM`, `ScaledRectsGM` (déjà 87.79% en raster avec kPlus).
+Découpée en 3 sous-PRs (G2.1 → G2.2 → G2.3) :
+
+### G2.1 — Translucent SrcOver ✅
+- [x] [solid_color.wgsl](gpu-raster/src/main/resources/shaders/solid_color.wgsl) premultiplie maintenant la couleur source dans le fragment shader (`vec4f(c.rgb * c.a, c.a)`). Le pipeline existant `(src=One, dst=OneMinusSrcAlpha)` consomme désormais des valeurs premul et donne la math SrcOver correcte pour n'importe quelle alpha.
+- [x] Drop du `require(SkColorGetA(color) == 0xFF)` côté `SkWebGpuDevice.drawRect`.
+- [x] [TranslucentSrcOverTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TranslucentSrcOverTest.kt) — translucent blue (alpha=0x80) over opaque red, vérifie le pixel intérieur (127, 0, 128, 255) avec tolérance ±1.
+- [x] Render target stocke des valeurs **premul** (conséquence du shader premul + SrcOver). Différence vs `SkBitmap.pixels8888` (non-premul par convention) à signaler : un pass present unpremul est reporté à G6 avec la conversion colorspace.
+
+### G2.2 — Multi-mode pipeline cache + Porter-Duff natifs (à venir)
+- [ ] Cache `Map<SkBlendMode, GPURenderPipeline>` dans `SkWebGpuDevice`. Pipeline créé lazy par mode.
+- [ ] 4 modes WebGPU-natifs : kSrc (src=One, dst=Zero), kSrcOver (déjà), kDstOver (src=OneMinusDstAlpha, dst=One), kClear (src=Zero, dst=Zero).
+- [ ] `SkWebGpuDevice.drawRect` extrait `paint.blendMode` au pending-draw et sélectionne le pipeline correspondant au flush.
+- [ ] Test : draw 2 rects qui se chevauchent avec modes différents, vérifie les pixels résultants.
+
+### G2.3 — AA rect + clip non-axis-aligned (à venir)
+- [ ] **AA rect** — stratégie (b) : coverage analytique en fragment shader. Coverage = `min(dx, 1) * min(dy, 1)` où dx, dy sont les distances aux edges du rect en device pixels. Plus fidèle au raster, pas de dépendance MSAA, maintient pixel-equivalence avec le raster en working space linear.
+- [ ] Drop du `require(!isAntiAlias)` côté `SkWebGpuDevice.drawRect`.
+- [ ] **Clip** — support `kIntersect` rect-only quand le clip est rotated/sheared. Stocké en uniform `vec4f` (clip rect en device coords) + `discard` dans le shader. (Axis-aligned int clip déjà supporté via `setScissorRect` en G1.2.)
+- [ ] **Tests** : reactivate `BigRectGM`, `ThinRectsGM`, `ScaledRectsGM` cross-tests une fois AA + clip rotated en place. Ratchet `gpu-raster/test-similarity-scores-webgpu.properties` créé à cette étape.
 
 ### Vérification G2
-- [ ] Les 4 GMs Phase 1-2 raster portent sur GPU avec scores ≥ 90% chacun.
+- [x] G2.1 : `TranslucentSrcOverTest` PASS, aucune régression `:gpu-raster:test` (ClearRedTest + RectFillCrossTest toujours verts).
+- [ ] G2.2 : 4 modes Porter-Duff natifs verts.
+- [ ] G2.3 : ≥ 4 GMs Phase 1-2 portent sur GPU avec scores ≥ 90% chacun.
 
 ---
 
