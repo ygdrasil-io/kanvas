@@ -53,7 +53,8 @@ class ClipStrokeRectWebGpuTest {
             // plan G2 90% target. Tightened ratchet starts at 96.0 ; the
             // gap to 100% reflects colorspace drift (G6) + AA stroke
             // corner fractional differences.
-            val floor = 96.0
+            // G6.0 colorspace transform → perfect match.
+            val floor = 99.99
             assertTrue(
                 cmp.similarity >= floor,
                 "ClipStrokeRectGM on GPU regressed below ratchet floor : " +

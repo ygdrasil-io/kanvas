@@ -60,7 +60,8 @@ class ThinRectsWebGpuTest {
             // master). Tighter ratchet handling can be added in a follow-up
             // (mirroring SimilarityTracker on the raster side) once the
             // first cohort of GMs is established.
-            val floor = 90.0
+            // G6.0 colorspace transform → perfect match.
+            val floor = 99.99
             assertTrue(
                 cmp.similarity >= floor,
                 "ThinRectsGM on GPU regressed below ratchet floor : " +
