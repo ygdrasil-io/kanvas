@@ -1,26 +1,24 @@
-package org.skia.foundation
+package org.skia.effects.runtime
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.skia.effects.runtime.ChildResolver
-import org.skia.effects.runtime.SkRuntimeEffect
-import org.skia.effects.runtime.SkRuntimeEffectBuilder
-import org.skia.effects.runtime.SkRuntimeEffectDispatch
-import org.skia.effects.runtime.SkRuntimeImpl
+import org.skia.foundation.SkColor4f
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageFilter
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
 import java.nio.ByteBuffer
 import kotlin.math.abs
 
 /**
- * D2.5 smoke tests for [SkImageFilters.RuntimeShader].
+ * D2.5 smoke tests for [SkRuntimeImageFilters.RuntimeShader].
  *
  * Registers a stub "fade-to-blue" runtime shader effect (single
  * `uniform shader child` slot, output = `child.eval(coord) +
  * SkColor4f(0, 0, 0.4, 0)`), wires it through
- * [SkImageFilters.RuntimeShader], and verifies the per-pixel
+ * [SkRuntimeImageFilters.RuntimeShader], and verifies the per-pixel
  * output of [SkImageFilter.filterImage].
  */
 class SkRuntimeImageFilterTest {
@@ -75,7 +73,7 @@ class SkRuntimeImageFilterTest {
         val builder = SkRuntimeEffectBuilder(effect)
 
         // Build the image filter ; child binds to the layer source.
-        val filter = SkImageFilters.RuntimeShader(
+        val filter = SkRuntimeImageFilters.RuntimeShader(
             builder = builder,
             sampleRadius = 0f,
             childShaderName = "child",
@@ -112,7 +110,7 @@ class SkRuntimeImageFilterTest {
         // Same stub effect, accessed via the multi-child overload.
         val effect = SkRuntimeEffect.MakeForShader(FADE_TO_BLUE_SKSL).effect!!
         val builder = SkRuntimeEffectBuilder(effect)
-        val filter = SkImageFilters.RuntimeShader(
+        val filter = SkRuntimeImageFilters.RuntimeShader(
             builder = builder,
             childShaderNames = arrayOf("child"),
             inputs = arrayOf<SkImageFilter?>(null),
@@ -133,7 +131,7 @@ class SkRuntimeImageFilterTest {
         val effect = SkRuntimeEffect.MakeForShader(FADE_TO_BLUE_SKSL).effect!!
         val builder = SkRuntimeEffectBuilder(effect)
         try {
-            SkImageFilters.RuntimeShader(
+            SkRuntimeImageFilters.RuntimeShader(
                 builder = builder,
                 childShaderNames = arrayOf("child", "extra"),
                 inputs = arrayOf<SkImageFilter?>(null),

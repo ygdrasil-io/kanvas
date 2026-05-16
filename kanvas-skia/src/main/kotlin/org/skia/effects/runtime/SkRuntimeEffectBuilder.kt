@@ -165,7 +165,7 @@ public class SkRuntimeEffectBuilder(
 
     /**
      * Public snapshot of the bound uniforms — needed by
-     * [SkImageFilters.RuntimeShader] (Phase D2.5) which builds an
+     * [SkRuntimeImageFilters.RuntimeShader] (Phase D2.5) which builds an
      * image filter that captures the current builder state.
      * Defensive copy ; mutating the builder afterwards doesn't
      * affect the returned [SkData].

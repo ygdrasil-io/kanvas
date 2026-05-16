@@ -14,7 +14,7 @@ import org.skia.testing.TestUtils
  * we don't all ship yet — 1D / 2D / Compose). The bespoke
  * [CornerDiscretePathEffectGM] exercises the
  * [org.skia.foundation.SkCornerPathEffect] +
- * [org.skia.foundation.SkDiscretePathEffect] integration with the
+ * [org.skia.tools.SkDiscretePathEffect] integration with the
  * device's `drawPath` → `pathEffect.filterPath` → stroker → fill
  * pipeline, but doesn't have a reference image.
  *

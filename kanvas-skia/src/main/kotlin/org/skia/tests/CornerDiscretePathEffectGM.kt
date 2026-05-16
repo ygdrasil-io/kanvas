@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SK_ColorBLACK
 import org.skia.foundation.SkCornerPathEffect
-import org.skia.foundation.SkDiscretePathEffect
+import org.skia.tools.SkDiscretePathEffect
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
 import org.skia.math.SkISize
@@ -26,7 +26,7 @@ import org.skia.math.SkISize
  * called only to ensure the pipeline doesn't crash and produces a
  * non-empty bitmap. The unit tests
  * [org.skia.foundation.SkCornerPathEffectTest] +
- * [org.skia.foundation.SkDiscretePathEffectTest] cover the per-effect
+ * [org.skia.tools.SkDiscretePathEffectTest] cover the per-effect
  * correctness at the path level ; this GM is the integration smoke
  * test.
  */
