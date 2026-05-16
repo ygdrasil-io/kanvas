@@ -453,7 +453,7 @@ internal class GradientStopTable(
  * space ARGB into [dst]. Mirrors [org.skia.core.SkBitmapDevice]'s
  * `transformPaintColor` per-pixel logic but batches the iteration.
  */
-internal fun transformStopColors(
+public fun transformStopColors(
     src: IntArray,
     dst: IntArray,
     xform: SkColorSpaceXformSteps,
@@ -488,7 +488,7 @@ internal fun transformStopColors(
  * `colors` must already be in the bitmap's working colour space (caller
  * computes the table once via [transformStopColors]).
  */
-internal fun lookupStop(
+public fun lookupStop(
     t: SkScalar,
     positions: FloatArray,
     colors: IntArray,
@@ -561,7 +561,7 @@ private fun lerpPremul(a: SkColor, b: SkColor, t: Float): SkColor {
 }
 
 /** Distance from `(0, 0)` to `(x, y)`. */
-internal fun length(x: SkScalar, y: SkScalar): SkScalar = sqrt(x * x + y * y)
+public fun length(x: SkScalar, y: SkScalar): SkScalar = sqrt(x * x + y * y)
 
 // ---------------------------------------------------------------------------
 // Phase 6b: float-precision gradient helpers.
@@ -578,7 +578,7 @@ internal fun length(x: SkScalar, y: SkScalar): SkScalar = sqrt(x * x + y * y)
  * `[r, g, b, a]` quartets into [dst] (length `4 × src.size`). Output stays
  * in `[0, 1]` premultiplied float — no byte quantization at any step.
  */
-internal fun transformStopColorsF16(
+public fun transformStopColorsF16(
     src: IntArray,
     dst: FloatArray,
     xform: SkColorSpaceXformSteps,
@@ -611,7 +611,7 @@ internal fun transformStopColorsF16(
  * 8-bit [lookupStop] which has to round-trip because byte premul lerp would
  * over-saturate when alphas differ).
  */
-internal fun lookupStopF16(
+public fun lookupStopF16(
     t: SkScalar,
     positions: FloatArray,
     colorsF16: FloatArray,
