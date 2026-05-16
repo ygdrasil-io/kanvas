@@ -26,7 +26,7 @@ import kotlin.math.sqrt
  * compose, and tile modes other than [SkTileMode.kClamp] (the mode used
  * by every gradient GM in our scope).
  */
-public abstract class SkShader internal constructor(
+public abstract class SkShader protected constructor(
     /**
      * Optional shader-local matrix. The shader's source-space coords map
      * to canvas-source-space via this matrix; the canvas CTM then maps
