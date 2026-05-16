@@ -8,6 +8,7 @@ import org.skia.foundation.SK_ColorBLACK
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilters
+import org.skia.effects.runtime.SkRuntimeImageFilters
 import org.skia.foundation.SkPaint
 import org.skia.math.SkISize
 import org.skia.math.SkMatrix
@@ -114,7 +115,7 @@ public class RtifDistortGM : GM() {
         // Upstream passes childShaderName="" because the SkSL declares
         // a single child. Our API requires the explicit name ; the
         // SkSL declares `uniform shader child`.
-        return SkImageFilters.RuntimeShader(
+        return SkRuntimeImageFilters.RuntimeShader(
             builder,
             sampleRadius = 4f,
             childShaderName = "child",

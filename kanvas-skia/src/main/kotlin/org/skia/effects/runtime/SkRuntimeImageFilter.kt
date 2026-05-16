@@ -1,9 +1,10 @@
-package org.skia.foundation
+package org.skia.effects.runtime
 
-import org.skia.effects.runtime.ChildResolver
-import org.skia.effects.runtime.SkRuntimeEffect
-import org.skia.effects.runtime.SkRuntimeEffectBuilder
-import org.skia.effects.runtime.SkRuntimeShader
+import org.skia.foundation.SkColor4f
+import org.skia.foundation.SkData
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageFilter
+import org.skia.foundation.SkImageFilter.FilterResult
 import org.skia.math.SkMatrix
 
 /**

@@ -4,7 +4,7 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SK_ColorBLACK
 import org.skia.foundation.SkCornerPathEffect
 import org.skia.foundation.SkDashPathEffect
-import org.skia.foundation.SkDiscretePathEffect
+import org.skia.tools.SkDiscretePathEffect
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPath1DPathEffect
