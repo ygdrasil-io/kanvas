@@ -1,6 +1,6 @@
 @file:JvmName("SkcmsParse")
 
-package org.skia.skcms
+package org.skia.foundation.skcms
 
 import kotlin.math.abs
 

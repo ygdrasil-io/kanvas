@@ -1,6 +1,6 @@
 @file:JvmName("SkcmsKnownProfiles")
 
-package org.skia.skcms
+package org.skia.foundation.skcms
 
 import org.skia.foundation.transferFnAlmostEqual
 import org.skia.foundation.xyzAlmostEqual

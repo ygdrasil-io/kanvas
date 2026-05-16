@@ -1,4 +1,4 @@
-package org.skia.skcms
+package org.skia.foundation.skcms
 
 /**
  * Locator for one entry in the ICC tag table.

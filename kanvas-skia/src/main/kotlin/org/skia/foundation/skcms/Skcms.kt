@@ -1,6 +1,6 @@
 @file:JvmName("Skcms")
 
-package org.skia.skcms
+package org.skia.foundation.skcms
 
 import kotlin.math.exp
 import kotlin.math.ln

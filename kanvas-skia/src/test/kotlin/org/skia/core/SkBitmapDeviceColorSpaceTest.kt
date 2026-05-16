@@ -13,8 +13,8 @@ import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkPaint
 import org.skia.math.SkIRect
 import org.skia.math.SkRect
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 
 /**
  * Phase 4 micro-tests: verify that drawing into a Rec.2020 bitmap goes

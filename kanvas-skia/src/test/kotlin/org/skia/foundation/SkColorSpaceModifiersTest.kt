@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 
 /**
  * Phase C of MIGRATION_PLAN_COLORSPACE_PORT.md — modifiers
@@ -116,7 +116,7 @@ class SkColorSpaceModifiersTest {
         org.junit.jupiter.api.Assertions.assertEquals(want, got, msg ?: "")
     }
 
-    private fun assertEquals(want: org.skia.skcms.SkcmsMatrix3x3, got: org.skia.skcms.SkcmsMatrix3x3) {
+    private fun assertEquals(want: org.skia.foundation.skcms.SkcmsMatrix3x3, got: org.skia.foundation.skcms.SkcmsMatrix3x3) {
         for (r in 0 until 3) for (c in 0 until 3) {
             assertEquals(want.vals[r][c], got.vals[r][c], "[$r][$c]")
         }

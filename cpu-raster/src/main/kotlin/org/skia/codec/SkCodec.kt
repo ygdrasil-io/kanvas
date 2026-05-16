@@ -13,7 +13,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
 import org.skia.math.SkIRect
 import org.skia.math.SkISize
-import org.skia.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.SkcmsICCProfile
 import java.io.InputStream
 
 /**

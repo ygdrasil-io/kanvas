@@ -6,9 +6,9 @@ import org.skia.effects.runtime.SkRuntimeEffectDispatch
 import org.skia.effects.runtime.SkRuntimeImpl
 import org.skia.foundation.SkColor4f
 import org.skia.math.SkPoint
-import org.skia.skcms.SkNamedTransferFn
-import org.skia.skcms.skcmsTransferFunctionEval
-import org.skia.skcms.skcmsTransferFunctionInvert
+import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.skcmsTransferFunctionEval
+import org.skia.foundation.skcms.skcmsTransferFunctionInvert
 import java.nio.ByteBuffer
 import kotlin.math.atan
 import kotlin.math.floor

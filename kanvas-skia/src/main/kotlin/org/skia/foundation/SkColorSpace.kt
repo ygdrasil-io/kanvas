@@ -1,13 +1,13 @@
 package org.skia.foundation
 
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
-import org.skia.skcms.SkcmsMatrix3x3
-import org.skia.skcms.SkcmsTFType
-import org.skia.skcms.SkcmsTransferFunction
-import org.skia.skcms.classify
-import org.skia.skcms.skcmsMatrix3x3Concat
-import org.skia.skcms.skcmsTransferFunctionInvert
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkcmsMatrix3x3
+import org.skia.foundation.skcms.SkcmsTFType
+import org.skia.foundation.skcms.SkcmsTransferFunction
+import org.skia.foundation.skcms.classify
+import org.skia.foundation.skcms.skcmsMatrix3x3Concat
+import org.skia.foundation.skcms.skcmsTransferFunctionInvert
 
 /**
  * Bit-compatible port of the chunk of `SkColorSpace` that GM rendering needs:
@@ -139,8 +139,8 @@ public class SkColorSpace private constructor(
     }
 
     private fun computeLazyDst(): LazyDst {
-        val invMat = org.skia.skcms.skcmsMatrix3x3Invert(toXYZD50)
-            ?: org.skia.skcms.skcmsMatrix3x3Invert(SkNamedGamut.kSRGB)!!
+        val invMat = org.skia.foundation.skcms.skcmsMatrix3x3Invert(toXYZD50)
+            ?: org.skia.foundation.skcms.skcmsMatrix3x3Invert(SkNamedGamut.kSRGB)!!
         val invTf = skcmsTransferFunctionInvert(transferFn)
             ?: skcmsTransferFunctionInvert(SkNamedTransferFn.kSRGB)!!
         return LazyDst(invMat, invTf)
@@ -171,7 +171,7 @@ public class SkColorSpace private constructor(
          * `kHdrPqColorSpace`, Apple HLG/PQ pipelines, the
          * `gm/hdr_pip_blur.cpp` GM, …). The transfer function is the
          * sentinel-encoded form (`g = -5`) recognised by
-         * [org.skia.skcms.classify] / [org.skia.core.SkColorSpaceXformSteps]
+         * [org.skia.foundation.skcms.classify] / [org.skia.core.SkColorSpaceXformSteps]
          * — actual tone mapping happens at conversion time inside the
          * xform-steps pipeline. No tone mapping is required for the
          * `hdr_pip_blur` GM ; the colorspace tag alone differentiates
@@ -253,7 +253,7 @@ public class SkColorSpace private constructor(
         }
 
         /**
-         * Build an `SkColorSpace` from a parsed [org.skia.skcms.SkcmsICCProfile].
+         * Build an `SkColorSpace` from a parsed [org.skia.foundation.skcms.SkcmsICCProfile].
          * Mirrors upstream
          * [SkColorSpace.cpp:331-407](file:///Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkColorSpace.cpp),
          * with the Phase F2 subset (no A2B / B2A LUT, no
@@ -274,7 +274,7 @@ public class SkColorSpace private constructor(
          * resolved. Curve-table TRCs (LUT-only profiles) are deferred to
          * Phase F3.
          */
-        public fun make(profile: org.skia.skcms.SkcmsICCProfile): SkColorSpace? {
+        public fun make(profile: org.skia.foundation.skcms.SkcmsICCProfile): SkColorSpace? {
             val useCicp = profile.hasCICP &&
                 profile.cicp.matrixCoefficients == 0 &&
                 profile.cicp.videoFullRangeFlag == 1
@@ -312,9 +312,9 @@ public class SkColorSpace private constructor(
             if (trfn == null && profile.hasTrc) {
                 // All three TRCs must be Parametric and bit-equal. LUT-only
                 // profiles are out of scope for Phase F2.
-                val a = profile.trc[0] as? org.skia.skcms.SkcmsCurve.Parametric
-                val b = profile.trc[1] as? org.skia.skcms.SkcmsCurve.Parametric
-                val c = profile.trc[2] as? org.skia.skcms.SkcmsCurve.Parametric
+                val a = profile.trc[0] as? org.skia.foundation.skcms.SkcmsCurve.Parametric
+                val b = profile.trc[1] as? org.skia.foundation.skcms.SkcmsCurve.Parametric
+                val c = profile.trc[2] as? org.skia.foundation.skcms.SkcmsCurve.Parametric
                 if (a != null && b != null && c != null &&
                     a.parametric == b.parametric && a.parametric == c.parametric) {
                     trfn = a.parametric

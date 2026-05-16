@@ -7,8 +7,8 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
-import org.skia.skcms.SkcmsICCProfile
-import org.skia.skcms.skcmsParse
+import org.skia.foundation.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.skcmsParse
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferUShort
 import java.io.ByteArrayInputStream

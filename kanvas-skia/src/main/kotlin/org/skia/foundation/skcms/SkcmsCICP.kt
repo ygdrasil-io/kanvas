@@ -1,4 +1,4 @@
-package org.skia.skcms
+package org.skia.foundation.skcms
 
 /**
  * Bit-compatible port of `skcms_CICP`

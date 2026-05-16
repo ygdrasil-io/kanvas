@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.skcms.SkcmsTransferFunction
+import org.skia.foundation.skcms.SkcmsTransferFunction
 
 /**
  * Bit-compatible alias for `skcms_TransferFunction` exposed under the

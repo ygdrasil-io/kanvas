@@ -295,8 +295,8 @@ class SkPaintTest {
         // Linear Rec.2020 source — gamut differs from sRGB, so a
         // non-trivial colour will be remapped.
         val rec2020 = SkColorSpace.makeRGB(
-            org.skia.skcms.SkNamedTransferFn.kLinear,
-            org.skia.skcms.SkNamedGamut.kRec2020,
+            org.skia.foundation.skcms.SkNamedTransferFn.kLinear,
+            org.skia.foundation.skcms.SkNamedGamut.kRec2020,
         )!!
         val c = SkColor4f(0.5f, 0.4f, 0.3f, 1f)
         p.setColor4f(c, colorSpace = rec2020)

@@ -60,7 +60,7 @@ class SkNamedPrimariesTest {
         val m = SkNamedPrimaries.kRec709.toXYZD50()
         org.junit.jupiter.api.Assertions.assertNotNull(m)
         org.junit.jupiter.api.Assertions.assertTrue(
-            xyzAlmostEqual(org.skia.skcms.SkNamedGamut.kSRGB, m!!),
+            xyzAlmostEqual(org.skia.foundation.skcms.SkNamedGamut.kSRGB, m!!),
             "kRec709 primaries should produce ~kSRGB-gamut matrix"
         )
     }

@@ -124,8 +124,8 @@ class RunnerTest {
         // SkNamedGamut.kRec2020 / SkNamedTransferFn.kRec2020 correctly.
         val sink = RasterSinkF16(
             colorSpace = SkColorSpace.makeRGB(
-                org.skia.skcms.SkNamedTransferFn.kRec2020,
-                org.skia.skcms.SkNamedGamut.kRec2020,
+                org.skia.foundation.skcms.SkNamedTransferFn.kRec2020,
+                org.skia.foundation.skcms.SkNamedGamut.kRec2020,
             )!!,
         )
         val report = Runner(listOf(sink), listOf(RedSquareGM())).run()

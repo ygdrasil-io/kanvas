@@ -8,7 +8,7 @@ import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
 import org.skia.math.SkIRect
-import org.skia.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.SkcmsICCProfile
 import java.awt.Graphics2D
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
