@@ -1,6 +1,8 @@
 @file:JvmName("SkcmsKnownProfiles")
 
 package org.skia.foundation.skcms
+import org.skia.math.SkcmsTransferFunction
+import org.skia.math.SkcmsMatrix3x3
 
 import org.skia.foundation.transferFnAlmostEqual
 import org.skia.foundation.xyzAlmostEqual

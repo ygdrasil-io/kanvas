@@ -207,8 +207,8 @@ public class Runner(
     }
 
     private fun matrixEquals(
-        a: org.skia.foundation.skcms.SkcmsMatrix3x3,
-        b: org.skia.foundation.skcms.SkcmsMatrix3x3,
+        a: org.skia.math.SkcmsMatrix3x3,
+        b: org.skia.math.SkcmsMatrix3x3,
     ): Boolean {
         for (r in 0 until 3) for (c in 0 until 3) {
             if (a.vals[r][c] != b.vals[r][c]) return false

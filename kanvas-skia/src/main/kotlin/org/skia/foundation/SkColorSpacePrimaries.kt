@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.foundation.skcms.SkcmsMatrix3x3
+import org.skia.math.SkcmsMatrix3x3
 import org.skia.foundation.skcms.skcmsPrimariesToXYZD50
 
 /**
