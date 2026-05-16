@@ -1818,6 +1818,20 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
          * SkVertices's 16-bit index limit.
          */
         private const val PATCH_TESS_N: Int = 8
+
+        init {
+            // Eagerly load :cpu-raster's SkShadowUtils so its `init` block
+            // can register the [drawShadowDispatcher] SPI used by
+            // [SkCanvas.drawShadow]. If :cpu-raster is not on the
+            // classpath the dispatcher stays null and drawShadow throws
+            // a helpful diagnostic. See SkCanvasShadowSpi.kt.
+            try {
+                Class.forName("org.skia.utils.SkShadowUtils")
+            } catch (_: ClassNotFoundException) {
+                // :cpu-raster absent — drawShadow callers will get an
+                // explicit error pointing at the missing dependency.
+            }
+        }
     }
 
     /**
@@ -2331,10 +2345,14 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         spotColor: SkColor,
         flags: Int = 0,
     ) {
-        org.skia.utils.SkShadowUtils.DrawShadow(
-            this, path, zPlaneParams, lightPos, lightRadius,
-            ambientColor, spotColor, flags,
-        )
+        val dispatch = drawShadowDispatcher
+            ?: error(
+                "SkCanvas.drawShadow has no default implementation — " +
+                "add :cpu-raster to the classpath (registers " +
+                "SkShadowUtils.DrawShadow as the default at load-time), " +
+                "or override drawShadow in your subclass."
+            )
+        dispatch(this, path, zPlaneParams, lightPos, lightRadius, ambientColor, spotColor, flags)
     }
 
     /**
