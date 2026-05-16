@@ -33,3 +33,4 @@ include(":cpu-raster")
 // restored here so :gpu-raster:test (ClearRedTest) actually runs.
 include(":gpu-raster")
 include(":skia-integration-tests")
+include(":integration-tests")
