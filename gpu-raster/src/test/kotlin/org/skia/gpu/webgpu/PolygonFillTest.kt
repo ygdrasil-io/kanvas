@@ -105,37 +105,60 @@ class PolygonFillTest {
     }
 
     @Test
-    fun `unsupported curve verbs throw with a pointer to G3 3b`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        // Path with a cubic Bezier -- not supported in G3.3a.
+    fun `cubic-Bezier path flattens into renderable segments (G3 3b 1)`() {
+        // After G3.3b.1, kCubic verbs are flattened into polylines.
+        // We assert at a pixel that is well inside the convex hull of
+        // the path's control points : the cubic from (10,10) to (40,10)
+        // bulges DOWN (control points at (20,30) and (30,30)), so the
+        // closed path is the region under the curve. Pixel (25, 18) is
+        // comfortably inside that region.
         val path = SkPathBuilder()
             .moveTo(10f, 10f)
-            .cubicTo(20f, 5f, 30f, 35f, 40f, 10f)
+            .cubicTo(20f, 30f, 30f, 30f, 40f, 10f)
             .close()
             .detach()
+        val pixels = runSimplePath(path)
+
+        assertEquals(listOf(0, 0, 255, 255), pixels.rgbaAt(25, 18), "well inside the curved bow")
+        // Way above the path : white (the closed region sits below y=10).
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(25, 5), "above the path")
+        // Far outside laterally.
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(50, 18), "right of the path")
+    }
+
+    @Test
+    fun `quadratic-Bezier path flattens into renderable segments`() {
+        // A simple quad: triangle-ish bow with a single control point
+        // pulled up. moveTo(10, 30), quadTo(25, 5, 40, 30), close()
+        // -> the path is a curved-top triangle. Pixel (25, 25) is well
+        // inside.
+        val path = SkPathBuilder()
+            .moveTo(10f, 30f)
+            .quadTo(25f, 5f, 40f, 30f)
+            .close()
+            .detach()
+        val pixels = runSimplePath(path)
+
+        assertEquals(listOf(0, 0, 255, 255), pixels.rgbaAt(25, 25), "interior of curved-top triangle")
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(25, 35), "below the base")
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(50, 50), "far outside")
+    }
+
+    private fun runSimplePath(path: SkPath): ByteArray {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
         val paint = SkPaint().apply {
             color = SK_ColorBLUE
             style = SkPaint.Style.kFill_Style
             isAntiAlias = false
         }
-
-        val thrown = org.junit.jupiter.api.Assertions.assertThrows(
-            IllegalStateException::class.java,
-        ) {
-            context!!.use { ctx ->
-                SkWebGpuDevice(ctx, W, H).use { device ->
-                    device.setBackground(SK_ColorWHITE)
-                    SkCanvas(device).drawPath(path, paint)
-                    device.flush()
-                }
+        return context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawPath(path, paint)
+                device.flush()
             }
         }
-        org.junit.jupiter.api.Assertions.assertTrue(
-            thrown.message?.contains("G3.3b") == true,
-            "expected pointer to G3.3b in error message, got: ${thrown.message}",
-        )
     }
 
     private fun ByteArray.rgbaAt(x: Int, y: Int): List<Int> {
