@@ -199,21 +199,36 @@ Découpée en 3 sous-PRs (G2.1 → G2.2 → G2.3) :
   - Rect AA à edges integer : sanity-check que coverage = 1 partout (degenerate vers le path non-AA).
 - [x] **Backward compat** : 9 tests pré-G2.3a (ClearRedTest + RectFillCrossTest×2 + TranslucentSrcOverTest + BlendModeTest×5) toujours verts byte-pour-byte.
 
-### G2.3b — Clip non-axis-aligned (à venir)
-- [ ] Support `kIntersect` rect-only quand le clip est rotated/sheared. Stocké en uniform supplémentaire (`clip: vec4f` ou matrice) + `discard` dans le shader. (Axis-aligned int clip déjà supporté via `setScissorRect`.)
-- [ ] Test : rect AA sous `canvas.save() + rotate + clipRect + restore`, vérifie que les pixels hors du clip rotated ne sont pas peints.
+### G2.3b — Cross-test harness + ThinRectsGM ✅ (pivoté depuis "rotated clip")
 
-### G2.3c — Cross-test BigRectGM + ratchet (à venir)
-- [ ] Reactivate cross-test sur GMs Phase 1-2 : `BigRectGM`, `ThinRectsGM`, `ScaledRectsGM`.
-- [ ] Harness `runGmTest` à `DeviceFactory` (raster vs GPU) côté `:gpu-raster/src/test/`.
-- [ ] Ratchet `gpu-raster/test-similarity-scores-webgpu.properties` créé à cette étape.
+**Pivot du scope.** Un audit des 4 GMs cibles G2 (BigRectGM, ThinRectsGM, ClipStrokeRectGM, ScaledRectsGM) montre que :
+- **ThinRectsGM** n'a aucun blocker contre la surface G2.3a actuelle (fill+AA seul).
+- **BigRectGM** et **ClipStrokeRectGM** sont bloqués par **stroke** (3/4 GMs).
+- **ScaledRectsGM** est bloqué par `drawPaint` + CTM rotated (1/4 GMs).
+- **Rotated clip** ne débloque que ScaledRectsGM ET ne suffit pas seul (drawPaint manque aussi).
+
+Le slice G2.3b vise désormais le déblocable immédiat (cross-test harness + premier vrai GM vert) au lieu du rotated clip qui ne paie pas. Le rotated clip est reporté à G4+ (quand un GM en scope l'exigera).
+
+- [x] `:gpu-raster` ajoute `testImplementation(project(":cpu-raster"))` + sourceSet `srcDir("../kanvas-legacy/src/test/resources")` pour accéder aux GMs portés et aux PNG de référence `original-888/`.
+- [x] [WebGpuSink](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt) — équivalent GPU de `RasterSinkF16`. `WebGpuSink.draw(context, gm) -> SkBitmap (kRGBA_8888)`. Convertit les bytes RGBA premul du readback en ARGB ints SkBitmap (correct byte-pour-byte pour les GMs n'utilisant que des couleurs opaques — premul == non-premul).
+- [x] [ThinRectsWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ThinRectsWebGpuTest.kt) — rend `ThinRectsGM` via `WebGpuSink`, compare via `TestUtils.compareBitmapsDetailed` à `original-888/thinrects.png` avec tolerance 8 (= `TEXTUAL_GM_TOLERANCE` raster pour absorber l'AA edge drift).
+- [x] [test-similarity-scores-webgpu.properties](gpu-raster/test-similarity-scores-webgpu.properties) ratchet créé. Format = même que `:cpu-raster`. Score initial : **`ThinRectsGM=90.890625`** (juste au-dessus du floor G2 de 90%).
+- [x] Floor 90.0 hardcodé dans le test pour l'instant ; un `SimilarityTracker` GPU-side viendra avec la 2e/3e GM (G3+).
+
+### Note : pourquoi le score n'est "que" 90.89% ?
+
+Drift dominant : la référence PNG est encodée en **DM unified Rec.2020**, le GPU sort actuellement du sRGB-direct RGBA8Unorm. Sur les couleurs saturées (GREEN dans ThinRectsGM), le canal R a une diff jusqu'à 145 entre les 2 encodages. La convergence working-space linear-Rec.2020 GPU est planifiée pour **G6** (cf. D3 du plan). En attendant, tolerance=8 + une majorité de pixels exacts (69807/76800) reste au-dessus du floor.
+
+### G2.3c (futur) — rotated clip (reporté à G4+)
+
+Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et que le payoff justifie le travail (uniform supplémentaire + discard fragment-side). Pas besoin pour le scope G2 actuel ; et tant que SkCanvas projette le clip rotated en AABB conservatif, l'output GPU est correct (over-conservative) pour les GMs qui ne combinent pas rotate + clipRect.
 
 ### Vérification G2
 - [x] G2.1 : `TranslucentSrcOverTest` PASS, aucune régression `:gpu-raster:test` (ClearRedTest + RectFillCrossTest toujours verts).
 - [x] G2.2 : 4 modes Porter-Duff natifs verts via `BlendModeTest` (5 sous-tests dont l'erreur explicite sur mode non-supporté), G2.1/G1.x toujours verts (9 tests total `:gpu-raster:test`).
 - [x] G2.3a : AA rect via coverage analytique vert via `AaRectFillTest` (2 sous-tests sur edges half-integer + integer), backward compat préservée (11 tests total).
-- [ ] G2.3b : clip non-axis-aligned vert.
-- [ ] G2.3c : ≥ 4 GMs Phase 1-2 portent sur GPU avec scores ≥ 90% chacun via cross-test harness.
+- [x] G2.3b : cross-test harness en place + 1er vrai GM vert (`ThinRectsGM` à 90.89%, floor 90%), 12 tests total.
+- [ ] **≥ 4 GMs Phase 1-2 à ≥ 90%** : 1/4 fait (ThinRectsGM). BigRectGM, ClipStrokeRectGM bloquées par stroke (G3) ; ScaledRectsGM bloquée par drawPaint + CTM rotated (G3+).
 
 ---
 
