@@ -51,7 +51,7 @@ import kotlin.math.floor
  * @property advanceX      total run advance — same value as
  *                         `positions[n * 2]` for convenience.
  */
-internal data class AwtShapedRun(
+public data class AwtShapedRun(
     val glyphIds: IntArray,
     val positions: FloatArray,
     val charClusters: IntArray,
@@ -64,7 +64,7 @@ internal data class AwtShapedRun(
     override fun hashCode(): Int = System.identityHashCode(this)
 }
 
-internal class AwtTypeface internal constructor(
+public class AwtTypeface internal constructor(
     private val baseFont: Font,
     public override val fontStyle: SkFontStyle = SkFontStyle.Normal(),
 ) : SkTypeface() {
@@ -383,7 +383,7 @@ internal class AwtTypeface internal constructor(
      *         from. The run advance is `glyphPositions[2*n]` (AWT
      *         appends the post-last-glyph pen position).
      */
-    internal fun shapeAwtRun(
+    public fun shapeAwtRun(
         chars: CharArray,
         start: Int,
         limit: Int,
@@ -509,7 +509,7 @@ internal class AwtTypeface internal constructor(
         return AwtTypeface(baseFont.deriveFont(attrs), fontStyle)
     }
 
-    internal companion object {
+    public companion object {
         /**
          * Single shared `FontRenderContext` — `(null transform, AA on,
          * fractional metrics on)`. Matches what we'll feed to the actual

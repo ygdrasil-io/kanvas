@@ -38,9 +38,9 @@ import kotlin.math.sqrt
  * ```
  */
 public class SkPath internal constructor(
-    internal val verbs: Array<Verb>,
-    internal val coords: FloatArray,
-    internal val conicWeights: FloatArray,
+    public val verbs: Array<Verb>,
+    public val coords: FloatArray,
+    public val conicWeights: FloatArray,
     public val fillType: SkPathFillType,
 ) {
     /**

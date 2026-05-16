@@ -17,7 +17,7 @@ import java.nio.ByteBuffer
 public class SkImage internal constructor(
     public val width: Int,
     public val height: Int,
-    internal val pixels: IntArray,
+    public val pixels: IntArray,
     /**
      * Colour type of the bitmap this image was snapshotted from.
      * Internally the pixel buffer is always 8888 (so [SkBitmapShader] and

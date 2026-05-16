@@ -24,7 +24,7 @@ import kotlin.math.sqrt
  * branches. Returns 4 premultiplied floats per pixel without any byte
  * quantization.
  */
-public class SkBitmapShader internal constructor(
+public class SkBitmapShader public constructor(
     private val image: SkImage,
     private val tileX: SkTileMode,
     private val tileY: SkTileMode,
