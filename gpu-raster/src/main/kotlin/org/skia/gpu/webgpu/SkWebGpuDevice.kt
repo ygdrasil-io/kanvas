@@ -46,6 +46,7 @@ import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkIRect
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
+import kotlin.math.ceil
 import kotlin.math.floor
 
 /**
@@ -111,8 +112,24 @@ public class SkWebGpuDevice(
         )
     }
 
+    /**
+     * One pending draw, accumulated by [drawRect] and replayed by
+     * [flush]. Carries both the scissor rect (integer, in device pixels —
+     * sets the WebGPU `setScissorRect`) and the fractional bounds
+     * (passed to the shader for analytical coverage).
+     *
+     * For non-AA draws : `(fl, ft, fr, fb)` are the pixelEdge-rounded
+     * integers — every interior pixel-center hits the rect by exactly
+     * 0.5, so the shader's coverage formula evaluates to 1.0 and the
+     * output is byte-identical to the pre-G2.3a unconditional path.
+     *
+     * For AA draws : the bounds are the original fractional rect and
+     * the scissor is the conservative floor/ceil bbox, so edge pixels
+     * are visited and get fractional coverage.
+     */
     private data class RectDraw(
         val x: Int, val y: Int, val w: Int, val h: Int,
+        val fl: Float, val ft: Float, val fr: Float, val fb: Float,
         val r: Float, val g: Float, val b: Float, val a: Float,
         val mode: SkBlendMode,
     )
@@ -218,27 +235,53 @@ public class SkWebGpuDevice(
     override fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
 
     override fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
-        require(!paint.isAntiAlias) {
-            "SkWebGpuDevice (G2.1): AA not supported yet — set paint.isAntiAlias = false. AA arrives in G2.3."
-        }
         require(paint.style == SkPaint.Style.kFill_Style) {
             "SkWebGpuDevice (G2.1): only fill-style supported — got ${paint.style}. Strokes arrive in G3."
         }
         // G2.1 — translucent SrcOver supported via premul shader.
-        // G2.2 — paint.blendMode honoured ; see [blendStateFor] for the
-        // current set of supported modes. Unsupported modes throw at
-        // pipeline-creation time inside flush().
+        // G2.2 — paint.blendMode honoured (kClear / kSrc / kSrcOver / kDstOver).
+        // G2.3a — paint.isAntiAlias honoured via analytical coverage in the
+        //          shader. Both AA and non-AA route through the same
+        //          pipeline ; only the bounds passed to the shader and the
+        //          scissor extent differ.
         val color = paint.color
-
-        val l = pixelEdge(rect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
-        val t = pixelEdge(rect.top).coerceAtLeast(clip.top).coerceAtLeast(0)
-        val r = pixelEdge(rect.right).coerceAtMost(clip.right).coerceAtMost(width)
-        val b = pixelEdge(rect.bottom).coerceAtMost(clip.bottom).coerceAtMost(height)
-        if (l >= r || t >= b) return
+        val scissor: IntArray
+        val bounds: FloatArray
+        if (paint.isAntiAlias) {
+            // Conservative scissor : floor/ceil of the fractional rect,
+            // clipped to the integer clip + viewport. Edge pixels that the
+            // rect partially covers must reach the fragment stage so the
+            // shader can compute their fractional coverage.
+            val fl = rect.left.coerceAtLeast(clip.left.toFloat()).coerceAtLeast(0f)
+            val ft = rect.top.coerceAtLeast(clip.top.toFloat()).coerceAtLeast(0f)
+            val fr = rect.right.coerceAtMost(clip.right.toFloat()).coerceAtMost(width.toFloat())
+            val fb = rect.bottom.coerceAtMost(clip.bottom.toFloat()).coerceAtMost(height.toFloat())
+            if (fl >= fr || ft >= fb) return
+            val sl = floor(fl.toDouble()).toInt().coerceAtLeast(0)
+            val st = floor(ft.toDouble()).toInt().coerceAtLeast(0)
+            val sr = ceil(fr.toDouble()).toInt().coerceAtMost(width)
+            val sb = ceil(fb.toDouble()).toInt().coerceAtMost(height)
+            if (sl >= sr || st >= sb) return
+            scissor = intArrayOf(sl, st, sr - sl, sb - st)
+            bounds = floatArrayOf(fl, ft, fr, fb)
+        } else {
+            // Non-AA : pixelEdge rounding matches SkBitmapDevice exactly,
+            // and integer bounds make the shader's coverage formula
+            // collapse to 1.0 for every visited pixel (pixel-centers sit
+            // at least 0.5 device-pixels from any edge, so cov = 1).
+            val l = pixelEdge(rect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
+            val t = pixelEdge(rect.top).coerceAtLeast(clip.top).coerceAtLeast(0)
+            val r = pixelEdge(rect.right).coerceAtMost(clip.right).coerceAtMost(width)
+            val b = pixelEdge(rect.bottom).coerceAtMost(clip.bottom).coerceAtMost(height)
+            if (l >= r || t >= b) return
+            scissor = intArrayOf(l, t, r - l, b - t)
+            bounds = floatArrayOf(l.toFloat(), t.toFloat(), r.toFloat(), b.toFloat())
+        }
 
         pending.add(
             RectDraw(
-                x = l, y = t, w = r - l, h = b - t,
+                x = scissor[0], y = scissor[1], w = scissor[2], h = scissor[3],
+                fl = bounds[0], ft = bounds[1], fr = bounds[2], fb = bounds[3],
                 r = SkColorGetR(color) / 255f,
                 g = SkColorGetG(color) / 255f,
                 b = SkColorGetB(color) / 255f,
@@ -303,14 +346,17 @@ public class SkWebGpuDevice(
         val uniforms = pending.map { rd ->
             val buf = context.device.createBuffer(
                 BufferDescriptor(
-                    size = COLOR_UNIFORM_SIZE,
+                    size = DRAW_UNIFORM_SIZE,
                     usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                    label = "SkWebGpuDevice.color",
+                    label = "SkWebGpuDevice.draw",
                 ),
             )
+            // Layout : color (4 floats, offset 0) + bounds (4 floats,
+            // offset 16). Matches `Uniforms { color, bounds }` in
+            // solid_color.wgsl.
             context.queue.writeBuffer(
                 buf, 0uL,
-                ArrayBuffer.of(floatArrayOf(rd.r, rd.g, rd.b, rd.a)),
+                ArrayBuffer.of(floatArrayOf(rd.r, rd.g, rd.b, rd.a, rd.fl, rd.ft, rd.fr, rd.fb)),
             )
             buf
         }
@@ -370,7 +416,8 @@ public class SkWebGpuDevice(
     }
 
     private companion object {
-        const val COLOR_UNIFORM_SIZE: ULong = 16uL
+        /** Size of the per-draw uniform : `color: vec4f` + `bounds: vec4f` = 32 bytes. */
+        const val DRAW_UNIFORM_SIZE: ULong = 32uL
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 
         /**

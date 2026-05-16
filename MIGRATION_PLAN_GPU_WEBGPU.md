@@ -188,16 +188,32 @@ Découpée en 3 sous-PRs (G2.1 → G2.2 → G2.3) :
 - [x] [BlendModeTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BlendModeTest.kt) — 5 tests : kSrc replace, kClear zero, kSrcOver via le nouveau path, kDstOver (visible sur transparent + invisible sur opaque), unsupported mode (kPlus) throw avec message qui pointe G2.2.
 - [x] **Note** : kPlus / kScreen / kModulate / kSrcIn / kDstIn / etc. throw avec message explicite — leur support demande fragment-side blending (`loadOp=Load` + manual blend) et arrive en G2.3 ou suivant.
 
-### G2.3 — AA rect + clip non-axis-aligned (à venir)
-- [ ] **AA rect** — stratégie (b) : coverage analytique en fragment shader. Coverage = `min(dx, 1) * min(dy, 1)` où dx, dy sont les distances aux edges du rect en device pixels. Plus fidèle au raster, pas de dépendance MSAA, maintient pixel-equivalence avec le raster en working space linear.
-- [ ] Drop du `require(!isAntiAlias)` côté `SkWebGpuDevice.drawRect`.
-- [ ] **Clip** — support `kIntersect` rect-only quand le clip est rotated/sheared. Stocké en uniform `vec4f` (clip rect en device coords) + `discard` dans le shader. (Axis-aligned int clip déjà supporté via `setScissorRect` en G1.2.)
-- [ ] **Tests** : reactivate `BigRectGM`, `ThinRectsGM`, `ScaledRectsGM` cross-tests une fois AA + clip rotated en place. Ratchet `gpu-raster/test-similarity-scores-webgpu.properties` créé à cette étape.
+### G2.3a — AA rect via coverage analytique ✅
+- [x] [solid_color.wgsl](gpu-raster/src/main/resources/shaders/solid_color.wgsl) unifié : un seul shader pour AA et non-AA. Uniform passe de `(color: vec4f)` à `(color: vec4f, bounds: vec4f)` = 32 bytes.
+- [x] Fragment stage calcule la coverage analytique axis-aligned : `cov_x = clamp(min(pos.x + 0.5, r) - max(pos.x - 0.5, l), 0, 1)` (intersection length entre le pixel `[p, p+1]` et le rect, comme `SkBitmapDevice`). `coverage = cov_x * cov_y`. Le shader applique `coverage` à l'alpha premul.
+- [x] Drop du `require(!isAntiAlias)`. [SkWebGpuDevice.drawRect](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt) branche maintenant 2 chemins :
+  - **AA** : bounds = rect fractionnel ; scissor conservateur = `(floor(l), floor(t), ceil(r) - floor(l), ceil(b) - floor(t))` ; les pixels edge sont visités et reçoivent leur coverage.
+  - **Non-AA** : pixelEdge rounding (`floor(c + 0.5)`) ; bounds = mêmes ints ; scissor = `(l, t, r - l, b - t)`. La formule de coverage collapse à 1.0 pour les pixels intérieurs (centre du pixel à ≥ 0.5 d'une edge int) — output **byte-identique** au pre-G2.3a.
+- [x] [AaRectFillTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/AaRectFillTest.kt) — 2 sous-tests :
+  - Rect à edges half-integer (10.5, 10.5, 30.5, 30.5) : edge pixel = coverage 0.5 → `(128, 128, 255, 255)`, corner = coverage 0.25 → `(191, 191, 255, 255)`, interior = coverage 1 → `(0, 0, 255, 255)`.
+  - Rect AA à edges integer : sanity-check que coverage = 1 partout (degenerate vers le path non-AA).
+- [x] **Backward compat** : 9 tests pré-G2.3a (ClearRedTest + RectFillCrossTest×2 + TranslucentSrcOverTest + BlendModeTest×5) toujours verts byte-pour-byte.
+
+### G2.3b — Clip non-axis-aligned (à venir)
+- [ ] Support `kIntersect` rect-only quand le clip est rotated/sheared. Stocké en uniform supplémentaire (`clip: vec4f` ou matrice) + `discard` dans le shader. (Axis-aligned int clip déjà supporté via `setScissorRect`.)
+- [ ] Test : rect AA sous `canvas.save() + rotate + clipRect + restore`, vérifie que les pixels hors du clip rotated ne sont pas peints.
+
+### G2.3c — Cross-test BigRectGM + ratchet (à venir)
+- [ ] Reactivate cross-test sur GMs Phase 1-2 : `BigRectGM`, `ThinRectsGM`, `ScaledRectsGM`.
+- [ ] Harness `runGmTest` à `DeviceFactory` (raster vs GPU) côté `:gpu-raster/src/test/`.
+- [ ] Ratchet `gpu-raster/test-similarity-scores-webgpu.properties` créé à cette étape.
 
 ### Vérification G2
 - [x] G2.1 : `TranslucentSrcOverTest` PASS, aucune régression `:gpu-raster:test` (ClearRedTest + RectFillCrossTest toujours verts).
 - [x] G2.2 : 4 modes Porter-Duff natifs verts via `BlendModeTest` (5 sous-tests dont l'erreur explicite sur mode non-supporté), G2.1/G1.x toujours verts (9 tests total `:gpu-raster:test`).
-- [ ] G2.3 : ≥ 4 GMs Phase 1-2 portent sur GPU avec scores ≥ 90% chacun.
+- [x] G2.3a : AA rect via coverage analytique vert via `AaRectFillTest` (2 sous-tests sur edges half-integer + integer), backward compat préservée (11 tests total).
+- [ ] G2.3b : clip non-axis-aligned vert.
+- [ ] G2.3c : ≥ 4 GMs Phase 1-2 portent sur GPU avec scores ≥ 90% chacun via cross-test harness.
 
 ---
 
