@@ -14,6 +14,7 @@ dependencies {
     // diagnostic tests). testImplementation only affects the test classpath ;
     // the main JAR stays raster-free.
     testImplementation(project(":cpu-raster"))
+    testImplementation(project(":skia-integration-tests"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     // G0 (MIGRATION_PLAN_GPU_WEBGPU.md) — wgpu4k's mapAsync /
