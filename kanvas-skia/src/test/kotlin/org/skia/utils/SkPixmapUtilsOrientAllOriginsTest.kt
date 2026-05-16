@@ -3,7 +3,7 @@ package org.skia.utils
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkEncodedOrigin
+import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkBitmap
 
 /**

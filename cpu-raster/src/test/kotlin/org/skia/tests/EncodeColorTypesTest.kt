@@ -3,7 +3,7 @@ package org.skia.tests
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkEncodedImageFormat
+import org.skia.foundation.SkEncodedImageFormat
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
