@@ -51,10 +51,11 @@ class Skbug12244WebGpuTest {
             // bitmap is unchanged background, so the score isn't
             // catastrophic). G3.3b.2 proper multi-contour tessellation
             // should bump this significantly.
-            // G6.0 colorspace transform → 90.33 %. Remaining drift = the hole
-            // between the two contours still incorrectly filled by fan tess
-            // (G3.3b.2b multi-contour triangulation will close this gap).
-            val floor = 90.0
+            // G3.3b.2b stencil-and-cover → 99.29 %. Hole correctly excluded
+            // via winding count. Remaining ~160 edge pixels differ because
+            // the reference is rasterized with AA but our path fill is
+            // non-AA (binary coverage). AA multi-contour = G3.3b.3.
+            val floor = 99.0
             assertTrue(
                 cmp.similarity >= floor,
                 "Skbug12244GM on GPU regressed below ratchet floor : " +
