@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     implementation(kotlin("stdlib"))
+    implementation(project(":math"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
 
     // D3.4 — WEBP decoding via the TwelveMonkeys ImageIO plugin.
@@ -45,6 +46,7 @@ sourceSets {
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
+
 
 // MIGRATION_PLAN_GPU_WEBGPU.md Phase G0 — GLFW (used by wgpu4k for
 // surface creation, see ClearRedTest / WebGpuContext) requires the

@@ -31,7 +31,7 @@ public class SkM44 {
      * Backing array — 16 floats, column-major.
      * `m[col * 4 + row]` is the element at row `row`, column `col`.
      */
-    internal val fMat: FloatArray = FloatArray(16)
+    public val fMat: FloatArray = FloatArray(16)
 
     // ─── Constructors ──────────────────────────────────────────────────
 
