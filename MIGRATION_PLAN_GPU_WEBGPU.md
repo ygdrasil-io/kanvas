@@ -228,7 +228,7 @@ Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et qu
 - [x] G2.2 : 4 modes Porter-Duff natifs verts via `BlendModeTest` (5 sous-tests dont l'erreur explicite sur mode non-supporté), G2.1/G1.x toujours verts (9 tests total `:gpu-raster:test`).
 - [x] G2.3a : AA rect via coverage analytique vert via `AaRectFillTest` (2 sous-tests sur edges half-integer + integer), backward compat préservée (11 tests total).
 - [x] G2.3b : cross-test harness en place + 1er vrai GM vert (`ThinRectsGM` à 90.89%, floor 90%), 12 tests total.
-- [ ] **≥ 4 GMs Phase 1-2 à ≥ 90%** : **2/4** fait (ThinRectsGM 90.89%, ClipStrokeRectGM 96.60%, après G3.1 + G3.2). BigRectGM débloquée mais à 70.7% (G3.4 attendu). ScaledRectsGM bloquée par CTM rotated + kPlus.
+- [ ] **≥ 4 GMs Phase 1-2 à ≥ 90%** : **2/4** ≥ 90% (ThinRectsGM 90.89%, ClipStrokeRectGM 96.60%). **4/4 runnent sans crash** post-G3.3a.1 : BigRectGM 70.7% (AA hairline + corner conv. → G3.4), ScaledRectsGM 87.79% (AA polygon → G3.3b + colorspace → G6). Le delta ≥ 90% pour les 2 restants est attribué au colorspace + AA polygon coverage.
 
 ---
 
@@ -257,6 +257,16 @@ Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et qu
 - [x] [ClipStrokeRectWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ClipStrokeRectWebGpuTest.kt) — cross-test sur `original-888/clip_strokerect.png`. Score **96.60%**, **au-dessus du target G2 90%**.
 - [x] **Confirmation** : `clipRect(rect, doAntiAlias = true)` sur un rect axis-aligned integer ne crée PAS d'`SkAAClip` côté SkCanvas — la soft-skip de `bindClip` n'est pas déclenchée.
 - [x] Ratchet `ClipStrokeRectGM=96.605` ajouté.
+
+### G3.3a.1 — kPlus blend mode + ScaledRectsGM cross-test ✅ (suite à G3.3a)
+
+Petit follow-up à G3.3a. La note plan G2 disait "kPlus / kScreen / kModulate need fragment-side blending", mais pour kPlus avec premul-in / premul-out (notre convention), `BlendOperation.Add(srcFactor=One, dstFactor=One)` évalue exactement `clamp(src + dst, 0, 1)` = kPlus. Pas besoin de fragment-side blending.
+
+- [x] `blendStateFor(kPlus) = blendAddBoth(One, One)`. Premier mode au-delà des 4 natifs Porter-Duff.
+- [x] `BlendModeTest.unsupported blend mode` migre de kPlus → kModulate (qui reste effectivement bloqué — sa formule `r = s*d` n'a pas de mapping direct sans fragment-side blending).
+- [x] `BlendModeTest.kPlus adds source onto destination with channel saturation` — kSrc(translucent red) puis kPlus(translucent blue), vérifie magenta saturé (128, 0, 128, 255) au centre.
+- [x] [ScaledRectsWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ScaledRectsWebGpuTest.kt) — score **87.79%**, **3e GM cible G2 qui run sans crash**. Drift profile = même bande que BigRectGM (sRGB vs Rec.2020 + edge convention parallelogrammes rotated + pas d'AA polygon coverage encore). En dessous du target G2 90%.
+- [x] Ratchet `ScaledRectsGM=87.79` ajouté.
 
 ### G3.3a — drawPath skeleton : convex polygons, non-AA ✅
 
