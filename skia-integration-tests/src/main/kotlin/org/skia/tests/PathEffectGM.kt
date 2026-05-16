@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLACK
+import org.skia.math.SK_ColorBLACK
 import org.skia.foundation.SkCornerPathEffect
 import org.skia.foundation.SkDashPathEffect
 import org.skia.tools.SkDiscretePathEffect

@@ -8,8 +8,8 @@ import org.junit.jupiter.api.Test
 import org.skia.effects.runtime.ChildResolver
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
-import org.skia.foundation.SkColor
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor
+import org.skia.math.SkColor4f
 import org.skia.foundation.SkData
 import org.skia.foundation.SkShader
 import org.skia.math.SkMatrix

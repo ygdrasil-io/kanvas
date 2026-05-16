@@ -1,5 +1,7 @@
 package org.skia.foundation
 
+
+import org.skia.math.SkColor4f
 /**
  * Mirrors Skia's
  * [`SkLumaColorFilter`](https://github.com/google/skia/blob/main/include/effects/SkLumaColorFilter.h)

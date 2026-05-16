@@ -122,7 +122,7 @@ public class UnpremulGM : GM() {
         c.scale(2f, 2f)
 
         val greenFill = SkPaint().apply {
-            color = org.skia.foundation.SkColorSetRGB(27, 158, 119)
+            color = org.skia.math.SkColorSetRGB(27, 158, 119)
         }
         c.drawCircle(0f, 0f, 12f, greenFill)
 

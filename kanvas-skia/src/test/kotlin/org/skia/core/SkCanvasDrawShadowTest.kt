@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkPath
 import org.skia.math.SkPoint3
 import org.skia.math.SkRect

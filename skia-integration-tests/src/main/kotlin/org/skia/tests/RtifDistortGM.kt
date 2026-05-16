@@ -4,7 +4,7 @@ import org.skia.core.SkCanvas
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectBuilder
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsRtifImageFilters
-import org.skia.foundation.SK_ColorBLACK
+import org.skia.math.SK_ColorBLACK
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilters

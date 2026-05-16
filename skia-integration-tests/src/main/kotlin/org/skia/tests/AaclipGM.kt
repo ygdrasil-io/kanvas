@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SkColorSetRGB
+import org.skia.math.SkColorSetRGB
 import org.skia.foundation.SkPaint
 import org.skia.math.SkISize
 import org.skia.math.SkRect

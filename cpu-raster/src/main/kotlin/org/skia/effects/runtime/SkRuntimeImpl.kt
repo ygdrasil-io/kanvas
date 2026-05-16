@@ -1,6 +1,6 @@
 package org.skia.effects.runtime
 
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor4f
 import org.skia.math.SkPoint
 import java.nio.ByteBuffer
 

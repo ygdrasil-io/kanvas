@@ -1,8 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorCYAN
-import org.skia.foundation.SK_ColorMAGENTA
+import org.skia.math.SK_ColorCYAN
+import org.skia.math.SK_ColorMAGENTA
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathDirection

@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SaveLayerRec
 import org.skia.core.SkCanvas
 import org.skia.core.SkPictureRecorder
-import org.skia.foundation.SK_ColorYELLOW
+import org.skia.math.SK_ColorYELLOW
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSweepGradient

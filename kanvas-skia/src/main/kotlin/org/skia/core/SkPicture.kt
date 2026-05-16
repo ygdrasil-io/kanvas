@@ -1,6 +1,6 @@
 package org.skia.core
 
-import org.skia.foundation.SK_ColorTRANSPARENT
+import org.skia.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkData
 import org.skia.foundation.SkDeserialProcs

@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor4f
 import org.skia.math.SkPoint
 import java.nio.ByteBuffer
 

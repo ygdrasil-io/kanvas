@@ -1,8 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorGRAY
-import org.skia.foundation.SK_ColorRED
+import org.skia.math.SK_ColorGRAY
+import org.skia.math.SK_ColorRED
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkPaint

@@ -1,9 +1,9 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLUE
+import org.skia.math.SK_ColorBLUE
 import org.skia.foundation.SkBlendMode
-import org.skia.foundation.SkColor
+import org.skia.math.SkColor
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder

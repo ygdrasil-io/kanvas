@@ -1,5 +1,7 @@
 package org.skia.foundation
 
+
+import org.skia.math.SkColor4f
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull

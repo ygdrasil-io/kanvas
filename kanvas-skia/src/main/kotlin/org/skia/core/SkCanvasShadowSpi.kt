@@ -1,6 +1,6 @@
 package org.skia.core
 
-import org.skia.foundation.SkColor
+import org.skia.math.SkColor
 import org.skia.foundation.SkPath
 import org.skia.math.SkPoint3
 import org.skia.math.SkScalar

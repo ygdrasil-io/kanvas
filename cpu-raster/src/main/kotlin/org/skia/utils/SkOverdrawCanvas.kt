@@ -2,7 +2,7 @@ package org.skia.utils
 
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBlendMode
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
 
 /**

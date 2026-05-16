@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
 import org.skia.math.SkISize

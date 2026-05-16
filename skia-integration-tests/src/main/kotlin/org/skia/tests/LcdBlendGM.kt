@@ -2,15 +2,15 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorCYAN
-import org.skia.foundation.SK_ColorGREEN
-import org.skia.foundation.SK_ColorMAGENTA
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorCYAN
+import org.skia.math.SK_ColorGREEN
+import org.skia.math.SK_ColorMAGENTA
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkBlendMode_Name
-import org.skia.foundation.SkColor
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor
+import org.skia.math.SkColor4f
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkLinearGradient

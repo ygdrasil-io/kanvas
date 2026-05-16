@@ -1,11 +1,11 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SkColorSetARGB
-import org.skia.foundation.SkColorGetR
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetB
+import org.skia.math.SK_ColorRED
+import org.skia.math.SkColorSetARGB
+import org.skia.math.SkColorGetR
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetB
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
 import org.skia.math.SkISize

@@ -4,14 +4,14 @@ import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkClipOp
-import org.skia.foundation.SkColor
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor
+import org.skia.math.SkColor4f
 import org.skia.foundation.SkColorFilter
-import org.skia.foundation.SkColorGetA
-import org.skia.foundation.SkColorGetB
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetR
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorGetA
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkCubicBC
 import org.skia.foundation.SkFilterMode
@@ -1221,7 +1221,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         //    paint's stroke params + AA. The recursion guard is the
         //    cleared maskFilter on the inner paint.
         val whitePaint = paint.copy().apply {
-            color = org.skia.foundation.SK_ColorWHITE
+            color = org.skia.math.SK_ColorWHITE
             blendMode = SkBlendMode.kSrc
             this.maskFilter = null
             shader = null
@@ -2436,8 +2436,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         }
 
         val dstByte = bitmap.getPixel(x, y)
-        val src4f = org.skia.foundation.SkColor4f.FromColor(srcByte)
-        val dst4f = org.skia.foundation.SkColor4f.FromColor(dstByte)
+        val src4f = org.skia.math.SkColor4f.FromColor(srcByte)
+        val dst4f = org.skia.math.SkColor4f.FromColor(dstByte)
         val out4f = blender.blend(src4f, dst4f)
         bitmap.setPixel(x, y, out4f.toSkColor())
     }

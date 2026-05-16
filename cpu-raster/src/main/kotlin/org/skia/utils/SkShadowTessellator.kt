@@ -1,7 +1,7 @@
 package org.skia.utils
 
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorTRANSPARENT
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkVertices
 import org.skia.math.SkPoint

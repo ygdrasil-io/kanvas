@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorCYAN
+import org.skia.math.SK_ColorCYAN
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle

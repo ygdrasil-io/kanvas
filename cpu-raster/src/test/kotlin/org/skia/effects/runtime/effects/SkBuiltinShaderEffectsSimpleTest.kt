@@ -7,7 +7,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor4f
 import org.skia.foundation.SkData
 import org.skia.foundation.SkShader
 import java.nio.ByteBuffer
@@ -36,7 +36,7 @@ import kotlin.math.sqrt
  * [SkRuntimeEffect.MakeForShader] and call
  * [SkShader.sampleAtLocal] (which bypasses the canvasCtm chain
  * and feeds the local-space point straight into the impl). The
- * returned [org.skia.foundation.SkColor] (8-bit ARGB) is decoded
+ * returned [org.skia.math.SkColor] (8-bit ARGB) is decoded
  * via [SkColor4f.FromColor], so the tolerance accounts for the
  * 1/255 quantisation step.
  */

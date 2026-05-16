@@ -2,7 +2,7 @@ package org.skia.tests
 
 import org.skia.core.QuadAAFlags
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorGREEN
+import org.skia.math.SK_ColorGREEN
 import org.skia.foundation.SkBlendMode
 import org.skia.math.SkISize
 import org.skia.math.SkMatrix

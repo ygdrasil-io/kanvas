@@ -2,11 +2,11 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorBLUE
-import org.skia.foundation.SK_ColorWHITE
-import org.skia.foundation.SK_ColorYELLOW
-import org.skia.foundation.SkColorChannel
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorBLUE
+import org.skia.math.SK_ColorWHITE
+import org.skia.math.SK_ColorYELLOW
+import org.skia.math.SkColorChannel
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageFilter

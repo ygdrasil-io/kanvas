@@ -6,7 +6,7 @@ import org.skia.core.SkLattice
 import org.skia.core.SkPicture
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBlendMode
-import org.skia.foundation.SkColor
+import org.skia.math.SkColor
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint

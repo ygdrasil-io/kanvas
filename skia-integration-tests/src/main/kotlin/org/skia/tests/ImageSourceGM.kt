@@ -2,9 +2,9 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.foundation.SK_ColorBLACK
+import org.skia.math.SK_ColorBLACK
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColor
+import org.skia.math.SkColor
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage

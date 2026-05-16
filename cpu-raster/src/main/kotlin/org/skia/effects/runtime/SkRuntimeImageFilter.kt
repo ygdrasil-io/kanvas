@@ -1,6 +1,6 @@
 package org.skia.effects.runtime
 
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor4f
 import org.skia.foundation.SkData
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageFilter

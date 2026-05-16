@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorTRANSPARENT
+import org.skia.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkCubicResampler
 import org.skia.foundation.SkPaint
