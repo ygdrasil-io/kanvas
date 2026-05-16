@@ -30,6 +30,24 @@ import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
 
 /**
+ * Cast a [SkDevice] down to [SkBitmapDevice] for paths that still need the
+ * raster-only surface (layer composite-back, image-filter snapshots,
+ * `setActiveClip*`, the triangle helpers). Will fail fast with a useful
+ * message once [SkCanvas] is wired to a non-raster device (G1.2+) that
+ * accidentally exercises one of these paths. Generalising any of them
+ * across backends is deferred to the relevant later G-phase.
+ */
+private fun SkDevice.requireBitmap(op: String): SkBitmapDevice =
+    this as? SkBitmapDevice
+        ?: error(
+            "SkCanvas.$op currently requires SkBitmapDevice (CPU raster); " +
+                "current device is ${this::class.simpleName}. " +
+                "See MIGRATION_PLAN_GPU_WEBGPU.md Phase G1.1 — the SkDevice " +
+                "abstraction is intentionally incomplete for layer / filter / " +
+                "triangle paths until a later G-phase generalises them.",
+        )
+
+/**
  * The CTM is now a full 2 × 3 [SkMatrix] (Phase 4b — `rotate` / `skew` /
  * `concat` / `setMatrix` are real, not stubs). A source point `(x, y)` lands
  * at device coordinates `M.mapXY(x, y)`. Phase 1–3's `translate` and `scale`
@@ -48,7 +66,7 @@ import kotlin.math.floor as kFloor
  * [drawPath] (4-vertex polygon). The fast path through [SkBitmapDevice.drawRect]
  * stays for axis-aligned matrices, which covers every Phase 0–3 GM.
  */
-public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfaceProps? = null) {
+public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? = null) {
 
     public constructor(bitmap: SkBitmap) : this(SkBitmapDevice(bitmap), null)
     public constructor(bitmap: SkBitmap, surfaceProps: SkSurfaceProps?) : this(SkBitmapDevice(bitmap), surfaceProps)
@@ -91,9 +109,15 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
     }
 
     /** The root (backing) device. Layers push their own devices on the stack. */
-    public val device: SkBitmapDevice = rootDevice
+    public val device: SkDevice = rootDevice
 
-    public val bitmap: SkBitmap get() = device.bitmap
+    /**
+     * Convenience accessor for the root device's bitmap — only meaningful
+     * when the root is a [SkBitmapDevice] (the common case). Throws when
+     * the canvas is backed by a non-raster device (e.g. `SkWebGpuDevice`
+     * arriving in G1.2).
+     */
+    public val bitmap: SkBitmap get() = device.requireBitmap("bitmap").bitmap
 
     /**
      * One stack entry per `save` / `saveLayer`. Carries the active CTM
@@ -103,7 +127,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
     private data class State(
         var matrix: SkMatrix,
         var clip: SkIRect,
-        var device: SkBitmapDevice,
+        var device: SkDevice,
         /**
          * R3.1-bis — full 4×4 CTM, **only** populated when an actual
          * 3D/perspective component has been introduced via
@@ -266,12 +290,13 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
         val layerPaint = layer.paint
         val imageFilter = layerPaint?.imageFilter
         if (imageFilter != null) {
-            val snapshot = popped.device.bitmap.asImage()
+            val poppedBitmap = popped.device.requireBitmap("restore-imageFilter-snapshot").bitmap
+            val snapshot = poppedBitmap.asImage()
             val filterResult = imageFilter.filterImage(snapshot, top.matrix)
             val filteredImg = filterResult.image
             val filteredBitmap = SkBitmap(
                 filteredImg.width, filteredImg.height,
-                popped.device.bitmap.colorSpace, popped.device.bitmap.colorType,
+                poppedBitmap.colorSpace, poppedBitmap.colorType,
             )
             for (yp in 0 until filteredImg.height) {
                 for (xp in 0 until filteredImg.width) {
@@ -291,7 +316,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
         }
 
         layer.parentDevice.compositeFrom(
-            popped.device,
+            popped.device.requireBitmap("restore-composite"),
             layer.originX,
             layer.originY,
             top.clip,
@@ -762,8 +787,9 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
      * drawImage, …) honours the shader, not just [drawPaint].
      */
     private fun bindClip(s: State) {
-        s.device.setActiveClip(s.aaClip)
-        s.device.setActiveClipShader(s.clipShader, s.clipShaderCtm, s.clipShaderOp)
+        val raster = s.device.requireBitmap("bindClip")
+        raster.setActiveClip(s.aaClip)
+        raster.setActiveClipShader(s.clipShader, s.clipShaderCtm, s.clipShaderOp)
     }
 
     // ─── Phase R2.14 — clipShader ─────────────────────────────────────────
@@ -1491,6 +1517,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
         //   3) neither → I5.3.a solid-colour drawPath fast path.
         if (texCoords != null && shader != null) {
             bindClip(s)
+            val raster = s.device.requireBitmap("drawVertices-textured")
             for (t in 0 until tCount) {
                 val tri = vertices.triangleAt(t)
                 val a = vertices.positions[tri[0]]
@@ -1499,7 +1526,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
                 val uvA = texCoords[tri[0]]
                 val uvB = texCoords[tri[1]]
                 val uvC = texCoords[tri[2]]
-                s.device.drawTexturedTriangle(
+                raster.drawTexturedTriangle(
                     a.fX, a.fY, uvA.fX, uvA.fY, colors?.get(tri[0]),
                     b.fX, b.fY, uvB.fX, uvB.fY, colors?.get(tri[1]),
                     c.fX, c.fY, uvC.fX, uvC.fY, colors?.get(tri[2]),
@@ -1532,12 +1559,13 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
         // [SkBitmapDevice.drawColoredTriangle] with barycentric ARGB
         // interp.
         bindClip(s)
+        val raster = s.device.requireBitmap("drawVertices-colored")
         for (t in 0 until tCount) {
             val tri = vertices.triangleAt(t)
             val a = vertices.positions[tri[0]]
             val b = vertices.positions[tri[1]]
             val c = vertices.positions[tri[2]]
-            s.device.drawColoredTriangle(
+            raster.drawColoredTriangle(
                 a.fX, a.fY, colors[tri[0]],
                 b.fX, b.fY, colors[tri[1]],
                 c.fX, c.fY, colors[tri[2]],
@@ -2050,7 +2078,8 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
         // Inherit the parent's `colorType` so multi-layer composition stays
         // in the same precision regime — under an F16 root, layers are F16
         // too; otherwise both sides remain 8888.
-        val layerBitmap = SkBitmap(w, h, s.device.bitmap.colorSpace, s.device.bitmap.colorType)
+        val sBitmap = s.device.requireBitmap("saveLayer-parent").bitmap
+        val layerBitmap = SkBitmap(w, h, sBitmap.colorSpace, sBitmap.colorType)
             .also { it.eraseColor(0) }
         val layerDevice = SkBitmapDevice(layerBitmap)
         val originX = layerBounds.left
@@ -2063,7 +2092,8 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
         // result back into the layer at the correct origin.
         if (backdrop != null) {
             seedLayerFromBackdrop(
-                s.device, layerDevice, originX, originY, w, h, backdrop, s.matrix,
+                s.device.requireBitmap("saveLayer-backdrop"), layerDevice,
+                originX, originY, w, h, backdrop, s.matrix,
                 scaleFactor = rec.scaleFactor,
             )
         }
@@ -2084,7 +2114,7 @@ public open class SkCanvas(rootDevice: SkBitmapDevice, surfaceProps: SkSurfacePr
                 minOf(h, s.clip.bottom - originY),
             ),
             device = layerDevice,
-            layer = Layer(s.device, originX, originY, paint),
+            layer = Layer(s.device.requireBitmap("saveLayer-Layer"), originX, originY, paint),
         )
         stack.addLast(newState)
         return stack.size - 2
