@@ -100,12 +100,13 @@ class BlendModeTest {
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
-        // kPlus needs fragment-side blending — out of scope for G2.2. The
-        // pipeline cache lazy-creates on first use inside flush(), so the
-        // throw fires there rather than at drawRect.
+        // kModulate (`r = s * d`) is not expressible as a single WebGPU
+        // BlendComponent without fragment-side blending — pick it as the
+        // canary for the "unsupported mode" path now that kPlus has
+        // moved into the supported set (G3.3a.1).
         val paint = SkPaint().apply {
             color = SK_ColorBLUE
-            blendMode = SkBlendMode.kPlus
+            blendMode = SkBlendMode.kModulate
         }
         val thrown = assertThrows(IllegalStateException::class.java) {
             context!!.use { ctx ->
@@ -116,11 +117,57 @@ class BlendModeTest {
             }
         }
         assertTrue(
-            thrown.message?.contains("kPlus") == true &&
-                thrown.message?.contains("G2.2") == true,
-            "error must name the offending mode and point to the right phase, " +
-                "got: ${thrown.message}",
+            thrown.message?.contains("kModulate") == true,
+            "error must name the offending mode, got: ${thrown.message}",
         )
+    }
+
+    @Test
+    fun `kPlus adds source onto destination with channel saturation`() {
+        // Two overlapping translucent rects with kPlus :
+        //   bg = white opaque (premul (1,1,1,1))
+        //   first  draw  : alpha=0x80 red kSrc -> overwrites bg
+        //   second draw  : alpha=0x80 blue kPlus over alpha=0x80 red
+        // For the kPlus check we use a transparent black bg so the math
+        // is easy to reason about.
+        //   bg = transparent (0,0,0,0)
+        //   red  src_premul   = (0x80/0xFF, 0, 0, 0x80/0xFF) ~= (0.502, 0, 0, 0.502)
+        //   blue src_premul   = (0, 0, 0x80/0xFF, 0x80/0xFF) ~= (0, 0, 0.502, 0.502)
+        //   kPlus sum (premul) = (0.502, 0, 0.502, 1.0)  -- alpha saturates
+        //   bytes              = (128, 0, 128, 255 - tolerance for clamping)
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val translucentRed = SkColorSetARGB(0x80, 0xFF, 0x00, 0x00)
+        val translucentBlue = SkColorSetARGB(0x80, 0x00, 0x00, 0xFF)
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SkColorSetARGB(0, 0, 0, 0))
+                val canvas = SkCanvas(device)
+                // Both rects cover the same area. First with kSrc to seed,
+                // then with kPlus to test the channel-saturated add.
+                canvas.drawRect(
+                    SkRect.MakeLTRB(10f, 10f, 30f, 30f),
+                    SkPaint().apply { color = translucentRed; blendMode = SkBlendMode.kSrc },
+                )
+                canvas.drawRect(
+                    SkRect.MakeLTRB(10f, 10f, 30f, 30f),
+                    SkPaint().apply { color = translucentBlue; blendMode = SkBlendMode.kPlus },
+                )
+                device.flush()
+            }
+        }
+
+        // Inside the overlap : kPlus sum of red premul + blue premul.
+        // 128 + 0 = 128 on R, 0 + 0 = 0 on G, 0 + 128 = 128 on B,
+        // 128 + 128 = 255 (clamped) on A. Tolerance +/- 1 for FP rounding.
+        val inside = pixels.rgbaAt(20, 20)
+        assertEquals(128, inside[0], "R channel : red premul preserved")
+        assertEquals(0, inside[1], "G channel : zero")
+        assertEquals(128, inside[2], "B channel : blue premul preserved")
+        assertEquals(255, inside[3], "A channel : 128 + 128 saturates to 255")
+        // Outside : transparent bg untouched.
+        assertEquals(listOf(0, 0, 0, 0), pixels.rgbaAt(50, 50), "outside : bg transparent")
     }
 
     private fun runOneRectOverBg(
