@@ -7,7 +7,7 @@ import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTypeface
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

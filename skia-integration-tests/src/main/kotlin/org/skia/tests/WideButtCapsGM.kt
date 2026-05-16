@@ -2,11 +2,11 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.withSave
-import org.skia.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLACK
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.SkRandom
 
 /**

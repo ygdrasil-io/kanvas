@@ -1,9 +1,9 @@
 package org.skia.foundation
 
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkScalar
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkScalar
 import kotlin.math.PI
 import kotlin.math.atan2
 

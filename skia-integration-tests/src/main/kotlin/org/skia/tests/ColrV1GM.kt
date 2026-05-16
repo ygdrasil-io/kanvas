@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkTypeface
 import org.skia.foundation.colr.SkColrV1
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * R-final.S — **STUB.COLR_V1** consumer GM. Iso-aligned port of

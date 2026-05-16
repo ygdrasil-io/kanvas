@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.skia.core.SkLattice
 import org.skia.core.SkPictureRecorder
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkFont
@@ -13,10 +13,10 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkTextBlobBuilder
 import org.skia.foundation.SkTextSlug
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkPoint3
-import org.skia.math.SkRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkPoint3
+import org.graphiks.math.SkRect
 
 /**
  * R-suivi.50 — verify [SkNoDrawCanvas] no-ops the four new SkCanvas

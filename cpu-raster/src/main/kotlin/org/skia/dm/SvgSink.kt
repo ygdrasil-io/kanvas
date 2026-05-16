@@ -48,10 +48,10 @@ public class SvgSink : Sink {
             // every GM that uses the default would just be noise.
             // Instead, emit the bg only when the GM has overridden it.
             val bg = src.bgColor()
-            if (bg != org.skia.math.SK_ColorWHITE) {
+            if (bg != org.graphiks.math.SK_ColorWHITE) {
                 val paint = org.skia.foundation.SkPaint(bg)
                 canvas.drawRect(
-                    org.skia.math.SkRect.MakeWH(size.width.toFloat(), size.height.toFloat()),
+                    org.graphiks.math.SkRect.MakeWH(size.width.toFloat(), size.height.toFloat()),
                     paint,
                 )
             }

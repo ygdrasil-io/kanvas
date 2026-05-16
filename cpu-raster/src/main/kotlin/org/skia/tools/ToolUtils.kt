@@ -5,11 +5,11 @@ import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkColor
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontStyle
@@ -21,8 +21,8 @@ import org.skia.foundation.SkShader
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkTypeface
 import org.skia.foundation.awt.LiberationFontMgr
-import org.skia.math.SkMatrix
-import org.skia.math.SkScalar
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkScalar
 import kotlin.math.floor
 
 /**

@@ -6,11 +6,11 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * S7-B sprint — covers the four ToolUtils helpers promoted from inline

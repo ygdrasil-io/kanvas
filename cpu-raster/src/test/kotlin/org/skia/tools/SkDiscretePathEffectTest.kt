@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 
 /**
  * Unit tests for [SkDiscretePathEffect] (Phase 7p2).

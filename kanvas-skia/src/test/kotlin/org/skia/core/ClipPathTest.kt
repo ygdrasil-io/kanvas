@@ -4,21 +4,21 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkRRect
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Unit tests for [SkCanvas.clipPath] and [SkCanvas.clipRRect] (Phase 7q).

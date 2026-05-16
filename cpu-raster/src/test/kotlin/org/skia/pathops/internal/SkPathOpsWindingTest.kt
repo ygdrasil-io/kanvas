@@ -1,14 +1,14 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDVector
+import org.graphiks.math.SkDVector
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Unit tests for the foundation pieces of the ray-tracing winding

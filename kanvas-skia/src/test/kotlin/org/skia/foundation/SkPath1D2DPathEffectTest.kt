@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 
 /**
  * Unit tests for [SkPath1DPathEffect] + [SkPath2DPathEffect]

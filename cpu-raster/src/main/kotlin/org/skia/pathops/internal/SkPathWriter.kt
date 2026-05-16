@@ -48,7 +48,7 @@ package org.skia.pathops.internal
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 internal class SkPathWriter(fillType: SkPathFillType) {
 

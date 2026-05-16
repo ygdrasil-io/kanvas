@@ -1,15 +1,15 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Unit tests for [SkIntersections] (Phase D1.1.c).

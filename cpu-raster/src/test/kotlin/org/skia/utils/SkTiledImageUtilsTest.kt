@@ -6,10 +6,10 @@ import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Unit tests for [SkTiledImageUtils]. Verifies that the helpers

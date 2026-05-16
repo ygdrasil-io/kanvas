@@ -2,14 +2,14 @@ package org.skia.tests
 
 import org.skia.core.SaveLayerRec
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/crbug_1313579.cpp::crbug_1313579`.

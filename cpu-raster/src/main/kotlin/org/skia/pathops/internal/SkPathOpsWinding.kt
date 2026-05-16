@@ -25,16 +25,16 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
-import org.skia.math.SkDVector
-import org.skia.math.approximately_between
-import org.skia.math.approximately_equal
-import org.skia.math.approximately_zero
-import org.skia.math.between
-import org.skia.math.roughly_equal
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.SkDVector
+import org.graphiks.math.approximately_between
+import org.graphiks.math.approximately_equal
+import org.graphiks.math.approximately_zero
+import org.graphiks.math.between
+import org.graphiks.math.roughly_equal
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * One of four axis-aligned ray directions. Used by [SkOpRayHit] to

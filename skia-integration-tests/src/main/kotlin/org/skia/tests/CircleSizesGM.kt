@@ -2,7 +2,7 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Port of Skia's `gm/circle_sizes.cpp` (`DEF_SIMPLE_GM(circle_sizes, ...)`).

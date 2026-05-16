@@ -1,11 +1,11 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/crbug_1139750.cpp::crbug_1139750` (DEF_SIMPLE_GM_BG,

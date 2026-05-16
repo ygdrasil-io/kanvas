@@ -3,11 +3,11 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/blurroundrect.cpp::blur_large_rrects`

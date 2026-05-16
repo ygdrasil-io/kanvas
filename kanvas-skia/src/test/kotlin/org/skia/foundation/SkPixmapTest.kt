@@ -2,18 +2,18 @@ package org.skia.foundation
 
 
 
-import org.skia.math.between
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorCYAN
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.between
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorCYAN
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

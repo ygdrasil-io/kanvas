@@ -11,7 +11,7 @@ import org.skia.testing.TestUtils
  * Visual regression for [Poly2PolyGM] (port of upstream
  * `gm/poly2poly.cpp::Poly2PolyGM`).
  *
- * The 4-cell layout exercises [org.skia.math.SkMatrix.MakePolyToPoly]
+ * The 4-cell layout exercises [org.graphiks.math.SkMatrix.MakePolyToPoly]
  * for 1 / 2 / 3 / 4-point fits. The translate, rotate-scale, and
  * affine cells are pixel-faithful; the 4-point perspective cell rides
  * on [org.skia.core.SkCanvas.concat] applying a true projective matrix

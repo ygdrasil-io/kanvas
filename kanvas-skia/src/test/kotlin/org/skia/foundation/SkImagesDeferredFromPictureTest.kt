@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.core.SkPictureRecorder
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * S7-A verification suite for [SkImages.DeferredFromPicture] — the

@@ -4,8 +4,8 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
-import org.skia.math.colorToRGB565
-import org.skia.math.SkISize
+import org.graphiks.math.colorToRGB565
+import org.graphiks.math.SkISize
 import org.skia.tools.SkRandom
 import org.skia.tools.ToolUtils
 

@@ -1,5 +1,5 @@
 package org.skia.foundation.skcms
-import org.skia.math.SkcmsMatrix3x3
+import org.graphiks.math.SkcmsMatrix3x3
 
 /**
  * Bit-compatible port of `SkNamedGamut` — RGB→XYZ matrices Bradford-adapted

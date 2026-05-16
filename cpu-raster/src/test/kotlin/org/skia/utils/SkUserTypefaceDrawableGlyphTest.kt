@@ -8,16 +8,16 @@ import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.core.SkDrawable
 import org.skia.core.SkSurface
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * R-suivi.49 — verifies that drawable-backed glyphs registered via

@@ -1,14 +1,14 @@
 package org.skia.foundation
 
 
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorRED
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

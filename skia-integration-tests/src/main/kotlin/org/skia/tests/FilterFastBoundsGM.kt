@@ -2,13 +2,13 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkPictureRecorder
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorMAGENTA
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
-import org.skia.math.SK_ColorYELLOW
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorMAGENTA
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorYELLOW
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageFilter
@@ -18,10 +18,10 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSurfaces
-import org.skia.math.SkIPoint
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/filterfastbounds.cpp::ImageFilterFastBoundGM` (GM
@@ -174,14 +174,14 @@ public class FilterFastBoundsGM : GM() {
 
     private fun createPaints(paints: MutableList<SkPaint>, source: SkImageFilter?) {
         run {
-            val scale = org.skia.math.SkMatrix.MakeScale(2f, 2f)
+            val scale = org.graphiks.math.SkMatrix.MakeScale(2f, 2f)
             val scaleMIF = SkImageFilters.MatrixTransform(
                 scale, SkSamplingOptions(SkFilterMode.kLinear), source,
             )
             addPaint(paints, scaleMIF)
         }
         run {
-            val rot = org.skia.math.SkMatrix.MakeRotate(-33.3f)
+            val rot = org.graphiks.math.SkMatrix.MakeRotate(-33.3f)
             val rotMIF = SkImageFilters.MatrixTransform(
                 rot, SkSamplingOptions(SkFilterMode.kLinear), source,
             )

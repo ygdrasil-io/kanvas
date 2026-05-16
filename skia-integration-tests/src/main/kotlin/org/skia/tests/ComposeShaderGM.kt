@@ -1,20 +1,20 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkShader
 import org.skia.foundation.SkShaders
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's
@@ -92,7 +92,7 @@ public class ComposeShaderGM : GM() {
      * Mirrors upstream's `make_shader(mode)` — builds the two
      * orthogonal linear gradients and composes them via `SkShaders::Blend`.
      * Upstream uses [SkColor4f] colours ; we route through 8-bit
-     * [org.skia.math.SkColor] ints since [SkLinearGradient.Make]
+     * [org.graphiks.math.SkColor] ints since [SkLinearGradient.Make]
      * takes an `IntArray` here. The half-transparent black is encoded
      * as `argb(0x80, 0, 0, 0)` — same byte representation upstream
      * produces from `{0, 0, 0, 0x80/255.f}`.

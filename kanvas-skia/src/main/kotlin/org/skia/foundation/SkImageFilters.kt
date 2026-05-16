@@ -1,17 +1,17 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColor
-import org.skia.math.SkColorChannel
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColorChannel
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
-import org.skia.math.SkIPoint
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 
 /**
  * Mirrors Skia's
@@ -851,9 +851,9 @@ internal class SkOffsetImageFilter(
      * Skia's `SkOffsetImageFilter::onFilterNodeBounds`
      * (`src/effects/imagefilters/SkOffsetImageFilter.cpp`).
      */
-    override fun computeFastBounds(src: org.skia.math.SkRect): org.skia.math.SkRect {
+    override fun computeFastBounds(src: org.graphiks.math.SkRect): org.graphiks.math.SkRect {
         val base = input?.computeFastBounds(src) ?: src
-        return org.skia.math.SkRect.MakeLTRB(
+        return org.graphiks.math.SkRect.MakeLTRB(
             base.left + dx, base.top + dy,
             base.right + dx, base.bottom + dy,
         )
@@ -915,7 +915,7 @@ internal class SkComposeImageFilter(
      * `SkComposeImageFilter::computeFastBounds`
      * (`src/effects/imagefilters/SkComposeImageFilter.cpp`).
      */
-    override fun computeFastBounds(src: org.skia.math.SkRect): org.skia.math.SkRect =
+    override fun computeFastBounds(src: org.graphiks.math.SkRect): org.graphiks.math.SkRect =
         outer.computeFastBounds(inner.computeFastBounds(src))
 }
 
@@ -943,9 +943,9 @@ internal class SkBlurImageFilter(
      * (`src/effects/imagefilters/SkBlurImageFilter.cpp`). Used by
      * `gm/filterfastbounds.cpp`.
      */
-    override fun computeFastBounds(src: org.skia.math.SkRect): org.skia.math.SkRect {
+    override fun computeFastBounds(src: org.graphiks.math.SkRect): org.graphiks.math.SkRect {
         val base = input?.computeFastBounds(src) ?: src
-        return org.skia.math.SkRect.MakeLTRB(
+        return org.graphiks.math.SkRect.MakeLTRB(
             base.left - radiusX, base.top - radiusY,
             base.right + radiusX, base.bottom + radiusY,
         )
@@ -1061,7 +1061,7 @@ internal class SkMatrixTransformImageFilter(
         val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
         val srcImg = upstream.image
         val mappedRect = matrix.mapRect(
-            org.skia.math.SkRect.MakeWH(srcImg.width.toFloat(), srcImg.height.toFloat())
+            org.graphiks.math.SkRect.MakeWH(srcImg.width.toFloat(), srcImg.height.toFloat())
         )
         val outLeft = kotlin.math.floor(mappedRect.left.toDouble()).toInt()
         val outTop = kotlin.math.floor(mappedRect.top.toDouble()).toInt()
@@ -1123,7 +1123,7 @@ internal class SkDropShadowImageFilter(
      * `SkDropShadowImageFilter::onFilterNodeBounds`
      * (`src/effects/imagefilters/SkDropShadowImageFilter.cpp`).
      */
-    override fun computeFastBounds(src: org.skia.math.SkRect): org.skia.math.SkRect {
+    override fun computeFastBounds(src: org.graphiks.math.SkRect): org.graphiks.math.SkRect {
         val base = input?.computeFastBounds(src) ?: src
         val rx = kotlin.math.ceil(3.0 * sigmaX).toFloat()
         val ry = kotlin.math.ceil(3.0 * sigmaY).toFloat()
@@ -1131,7 +1131,7 @@ internal class SkDropShadowImageFilter(
         val st = base.top + dy - ry
         val sr = base.right + dx + rx
         val sb = base.bottom + dy + ry
-        return org.skia.math.SkRect.MakeLTRB(
+        return org.graphiks.math.SkRect.MakeLTRB(
             minOf(base.left, sl), minOf(base.top, st),
             maxOf(base.right, sr), maxOf(base.bottom, sb),
         )
@@ -1338,7 +1338,7 @@ internal class SkShaderImageFilter(
         // handles its own geometry.
         val device = SkBitmapDevice(bitmap)
         val paint = SkPaint().apply { this.shader = this@SkShaderImageFilter.shader }
-        device.drawPaint(SkMatrix.Identity, org.skia.math.SkIRect.MakeWH(w, h), paint)
+        device.drawPaint(SkMatrix.Identity, org.graphiks.math.SkIRect.MakeWH(w, h), paint)
         return FilterResult(bitmap.asImage(), 0, 0)
     }
 }

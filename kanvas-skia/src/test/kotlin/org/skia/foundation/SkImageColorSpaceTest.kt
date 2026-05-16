@@ -1,15 +1,15 @@
 package org.skia.foundation
 
 
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
-import org.skia.math.SkColor
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull

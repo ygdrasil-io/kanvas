@@ -2,8 +2,8 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SkColorGetA
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SkColorGetA
 import org.skia.testing.TestUtils
 
 /**

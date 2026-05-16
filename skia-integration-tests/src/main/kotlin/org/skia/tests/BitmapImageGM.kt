@@ -5,7 +5,7 @@ import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkImageInfo
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

@@ -7,8 +7,8 @@ import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathDirection
 import org.skia.foundation.SkPathEffect
 import org.skia.foundation.SkPathFillType
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/inversepaths.cpp::inverse_paths` (800 × 1200).

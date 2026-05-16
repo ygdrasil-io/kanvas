@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkPaint
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * G3.1 acceptance tests — axis-aligned rect stroke on GPU.

@@ -2,7 +2,7 @@ package org.skia.core
 
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
@@ -10,9 +10,9 @@ import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextEncoding
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 
 /**
  * Recording variant of [SkCanvas] — every state and draw op is

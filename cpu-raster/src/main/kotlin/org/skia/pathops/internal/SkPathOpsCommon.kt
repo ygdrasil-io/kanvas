@@ -37,9 +37,9 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.AlmostLessOrEqualUlps
-import org.skia.math.AlmostLessUlps
-import org.skia.math.SkRect
+import org.graphiks.math.AlmostLessOrEqualUlps
+import org.graphiks.math.AlmostLessUlps
+import org.graphiks.math.SkRect
 import org.skia.pathops.SkPathOp
 
 /**

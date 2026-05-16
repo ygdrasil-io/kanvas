@@ -5,15 +5,15 @@ import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkClipOp
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 
 /**
  * Proxy [SkCanvas] that intercepts every paint-bearing draw,
@@ -240,7 +240,7 @@ public abstract class SkPaintFilterCanvas(
 
     override fun drawPoints(
         mode: PointMode,
-        points: Array<org.skia.math.SkPoint>,
+        points: Array<org.graphiks.math.SkPoint>,
         paint: SkPaint,
     ) {
         val p = paint.copy()
@@ -283,9 +283,9 @@ public abstract class SkPaintFilterCanvas(
     }
 
     override fun drawPatch(
-        cubics: Array<org.skia.math.SkPoint>,
+        cubics: Array<org.graphiks.math.SkPoint>,
         colors: IntArray?,
-        texCoords: Array<org.skia.math.SkPoint>?,
+        texCoords: Array<org.graphiks.math.SkPoint>?,
         blendMode: SkBlendMode,
         paint: SkPaint,
     ) {

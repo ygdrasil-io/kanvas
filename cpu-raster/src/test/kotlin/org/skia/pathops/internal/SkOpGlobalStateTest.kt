@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Unit tests for [SkOpGlobalState] + plumbing through

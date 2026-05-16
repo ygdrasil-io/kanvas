@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkData
 import org.skia.foundation.emoji.EmojiTypeface
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * R-final.S — **STUB.EMOJI_TABLES** consumer GM. Iso-aligned port of

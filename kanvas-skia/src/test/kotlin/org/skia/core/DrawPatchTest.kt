@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkPaint
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Phase I5.4 — `SkCanvas.drawPatch` (Coons patch tessellation).

@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkEncodedOrigin
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * R3.11 verification suite for [SkYUVAInfo].

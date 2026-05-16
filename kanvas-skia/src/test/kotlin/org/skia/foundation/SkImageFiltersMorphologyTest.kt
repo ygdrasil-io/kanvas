@@ -3,7 +3,7 @@ package org.skia.foundation
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 
 /**
  * C1.4 verification suite — morphology family (Erode + Dilate).

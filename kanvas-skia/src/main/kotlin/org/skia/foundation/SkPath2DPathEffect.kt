@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 import kotlin.math.ceil
 import kotlin.math.floor
 

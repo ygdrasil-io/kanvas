@@ -1,15 +1,15 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorCYAN
-import org.skia.math.SK_ColorGRAY
-import org.skia.math.SK_ColorTRANSPARENT
-import org.skia.math.SK_ColorYELLOW
+import org.graphiks.math.SK_ColorCYAN
+import org.graphiks.math.SK_ColorGRAY
+import org.graphiks.math.SK_ColorTRANSPARENT
+import org.graphiks.math.SK_ColorYELLOW
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkLumaColorFilter
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/crbug_918512.cpp` (`DEF_SIMPLE_GM(crbug_918512, ...)`).

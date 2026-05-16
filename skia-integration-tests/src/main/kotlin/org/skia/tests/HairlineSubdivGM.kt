@@ -1,14 +1,14 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorRED
-import org.skia.math.SkColor
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Port of Skia's `gm/hairlines.cpp::hairline_subdiv` (DEF_SIMPLE_GM,

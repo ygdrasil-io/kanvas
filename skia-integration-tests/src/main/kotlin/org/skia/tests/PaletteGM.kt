@@ -1,11 +1,11 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkFontArguments
 import org.skia.foundation.SkTypeface
 import org.skia.foundation.colr.SkColrV1
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * R-final.S — **STUB.COLR_V1** consumer GM. Iso-aligned port of

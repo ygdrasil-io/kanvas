@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPath
-import org.skia.math.SkPoint3
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint3
+import org.graphiks.math.SkRect
 
 /**
  * R-suivi.33 — verify that [SkShadowUtils.OptimizeForSurface] warms the

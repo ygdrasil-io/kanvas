@@ -1,12 +1,12 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLACK
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Port of Skia's `gm/imagefiltersunpremul.cpp`

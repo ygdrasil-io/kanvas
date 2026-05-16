@@ -8,7 +8,7 @@ import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextBlobBuilder
 import org.skia.foundation.SkTextEncoding
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

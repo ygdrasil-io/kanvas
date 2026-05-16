@@ -1,15 +1,15 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetR
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetR
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 
 /**
  * Unit tests for [SkImageFilters] — Phase 7d.1.

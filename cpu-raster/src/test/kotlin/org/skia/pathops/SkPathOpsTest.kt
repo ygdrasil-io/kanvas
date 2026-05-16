@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Unit tests for [SkPathOps] (chantier D1.0 — package skeleton +

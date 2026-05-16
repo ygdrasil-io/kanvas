@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Unit tests for [SkPathUtils.FillPathWithPaint]. Covers the three

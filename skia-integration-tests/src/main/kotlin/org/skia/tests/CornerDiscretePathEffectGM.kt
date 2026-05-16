@@ -1,12 +1,12 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLACK
 import org.skia.foundation.SkCornerPathEffect
 import org.skia.tools.SkDiscretePathEffect
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Bespoke validation GM for [SkCornerPathEffect] +

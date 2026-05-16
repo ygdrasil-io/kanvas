@@ -35,16 +35,16 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.FLT_EPSILON
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
-import org.skia.math.SkDVector
-import org.skia.math.between
-import org.skia.math.precisely_equal
-import org.skia.math.roughly_equal
-import org.skia.math.zero_or_one
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.FLT_EPSILON
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.SkDVector
+import org.graphiks.math.between
+import org.graphiks.math.precisely_equal
+import org.graphiks.math.roughly_equal
+import org.graphiks.math.zero_or_one
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 import org.skia.pathops.SkPathOp
 
 internal class SkOpSegment : Comparable<SkOpSegment> {

@@ -1,6 +1,6 @@
 package org.skia.tools
 
-import org.skia.math.SkScalar
+import org.graphiks.math.SkScalar
 
 /**
  * Bit-compatible port of Skia's [`SkRandom`](https://github.com/google/skia/blob/main/include/utils/SkRandom.h).

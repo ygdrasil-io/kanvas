@@ -10,12 +10,12 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextEncoding
-import org.skia.math.SkColorSetRGB
-import org.skia.math.SkISize
-import org.skia.math.SkM44
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
-import org.skia.math.SkV3
+import org.graphiks.math.SkColorSetRGB
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkM44
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
+import org.graphiks.math.SkV3
 import org.skia.tools.ToolUtils
 import kotlin.math.PI
 

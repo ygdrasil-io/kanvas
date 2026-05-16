@@ -2,12 +2,12 @@ package org.skia.tests
 
 import org.skia.core.QuadAAFlags
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorGREEN
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/crbug_1174186.cpp` (`DEF_SIMPLE_GM(crbug_1174186, canvas, 1200, 1200)`).

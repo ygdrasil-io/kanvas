@@ -4,8 +4,8 @@ import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/picture.cpp::PictureCullRectGM` (`picture_cull_rect`,

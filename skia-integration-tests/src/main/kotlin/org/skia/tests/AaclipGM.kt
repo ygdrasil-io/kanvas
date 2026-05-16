@@ -1,10 +1,10 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SkColorSetRGB
+import org.graphiks.math.SkColorSetRGB
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/aaclip.cpp::aaclip` (240 × 120).

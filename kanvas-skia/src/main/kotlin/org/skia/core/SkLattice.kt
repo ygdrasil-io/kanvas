@@ -1,7 +1,7 @@
 package org.skia.core
 
-import org.skia.math.SkColor
-import org.skia.math.SkIRect
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkIRect
 
 /**
  * Mirrors Skia's `SkCanvas::Lattice`

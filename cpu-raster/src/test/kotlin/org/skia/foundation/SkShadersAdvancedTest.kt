@@ -1,12 +1,12 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColor4f
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColor4f
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -15,8 +15,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkAlphaType
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
 import kotlin.math.abs
 
 /**

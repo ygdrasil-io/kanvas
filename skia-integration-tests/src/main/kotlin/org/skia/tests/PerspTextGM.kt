@@ -2,15 +2,15 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.withSave
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTextEncoding
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
 import org.skia.tools.ToolUtils
 
 /**

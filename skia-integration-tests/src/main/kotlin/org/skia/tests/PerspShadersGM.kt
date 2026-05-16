@@ -1,12 +1,12 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorYELLOW
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorYELLOW
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkCubicResampler
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
@@ -17,10 +17,10 @@ import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkShader
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/perspshaders.cpp::PerspShadersGM` (registered as

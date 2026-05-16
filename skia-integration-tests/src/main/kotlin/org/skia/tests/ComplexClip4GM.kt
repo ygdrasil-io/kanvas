@@ -1,15 +1,15 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorYELLOW
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorYELLOW
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
-import org.skia.math.SkISize
-import org.skia.math.SkIRect
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/complexclip4.cpp::ComplexClip4GM` (970 × 780).

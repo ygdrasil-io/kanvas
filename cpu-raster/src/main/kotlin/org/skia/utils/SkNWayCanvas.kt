@@ -6,7 +6,7 @@ import org.skia.core.SkLattice
 import org.skia.core.SkPicture
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
@@ -18,11 +18,11 @@ import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextSlug
 import org.skia.foundation.SkVertices
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkPoint3
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkPoint3
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 
 /**
  * Iso-aligned port of Skia's `SkNWayCanvas`
@@ -99,12 +99,12 @@ public open class SkNWayCanvas(width: Int, height: Int) : SkNoDrawCanvas(width, 
         super.skew(sx, sy)
     }
 
-    override fun concat(mat: org.skia.math.SkMatrix) {
+    override fun concat(mat: org.graphiks.math.SkMatrix) {
         children.forEach { it.concat(mat) }
         super.concat(mat)
     }
 
-    override fun setMatrix(mat: org.skia.math.SkMatrix) {
+    override fun setMatrix(mat: org.graphiks.math.SkMatrix) {
         children.forEach { it.setMatrix(mat) }
         super.setMatrix(mat)
     }
@@ -251,7 +251,7 @@ public open class SkNWayCanvas(width: Int, height: Int) : SkNoDrawCanvas(width, 
     }
 
     /** Forwards [drawDrawable] (with optional matrix) to every child canvas (R-suivi.3). */
-    override fun drawDrawable(drawable: SkDrawable, matrix: org.skia.math.SkMatrix?) {
+    override fun drawDrawable(drawable: SkDrawable, matrix: org.graphiks.math.SkMatrix?) {
         children.forEach { it.drawDrawable(drawable, matrix) }
     }
 

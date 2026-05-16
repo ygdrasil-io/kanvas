@@ -1,6 +1,6 @@
 package org.skia.effects
 
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkColorFilter
 
 /**

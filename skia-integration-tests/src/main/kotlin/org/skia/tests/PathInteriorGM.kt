@@ -7,8 +7,8 @@ import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathDirection
 import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkRRect
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/pathinterior.cpp:PathInteriorGM`.

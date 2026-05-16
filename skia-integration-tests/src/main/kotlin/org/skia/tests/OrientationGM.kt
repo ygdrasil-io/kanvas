@@ -4,7 +4,7 @@ import org.skia.core.SkCanvas
 import org.skia.codec.SkCodecImageGenerator
 import org.skia.codec.SkImageGeneratorImages
 import org.skia.foundation.SkImages
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

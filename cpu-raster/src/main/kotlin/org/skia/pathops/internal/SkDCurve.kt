@@ -23,13 +23,13 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.FLT_EPSILON
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
-import org.skia.math.SkDVector
+import org.graphiks.math.FLT_EPSILON
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.SkDVector
 import kotlin.math.abs
 import kotlin.math.max
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Number of control points (excluding the start point at index 0) for

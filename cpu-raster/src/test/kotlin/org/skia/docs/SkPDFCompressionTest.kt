@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkPaint
 import org.skia.foundation.stream.SkDynamicMemoryWStream
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Phase R-suivi.40 — verifies that [SkPDF] honours

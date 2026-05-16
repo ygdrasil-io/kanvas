@@ -1,14 +1,14 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SkColor4f
-import org.skia.math.SkColorSetRGB
+import org.graphiks.math.SkColor4f
+import org.graphiks.math.SkColorSetRGB
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkShaders
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

@@ -1,7 +1,7 @@
 package org.skia.core
 
 import org.skia.foundation.SkPaint
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Kotlin idiom for Skia's `SkAutoCanvasRestore` — captures the

@@ -5,11 +5,11 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
@@ -17,7 +17,7 @@ import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkMipmapMode
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import kotlin.math.floor
 import kotlin.math.ln
 

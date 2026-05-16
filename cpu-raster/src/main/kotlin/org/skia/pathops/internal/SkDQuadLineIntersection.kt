@@ -21,12 +21,12 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
-import org.skia.math.SkPinT
-import org.skia.math.approximately_equal
-import org.skia.math.approximately_one_or_less_double
-import org.skia.math.approximately_zero_or_more_double
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.SkPinT
+import org.graphiks.math.approximately_equal
+import org.graphiks.math.approximately_one_or_less_double
+import org.graphiks.math.approximately_zero_or_more_double
 import kotlin.math.abs
 
 /**

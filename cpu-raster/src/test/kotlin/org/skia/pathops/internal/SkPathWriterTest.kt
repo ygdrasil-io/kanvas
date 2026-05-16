@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Unit tests for [SkPathWriter] (Phase D1.2.i).

@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Mirrors Skia's
@@ -32,8 +32,8 @@ public class SkImageInfo private constructor(
     }
 
     public fun dimensions(): SkISize = SkISize.Make(width, height)
-    public fun bounds(): org.skia.math.SkIRect =
-        org.skia.math.SkIRect.MakeWH(width, height)
+    public fun bounds(): org.graphiks.math.SkIRect =
+        org.graphiks.math.SkIRect.MakeWH(width, height)
     public fun isEmpty(): Boolean = width <= 0 || height <= 0
     public fun isOpaque(): Boolean = alphaType == SkAlphaType.kOpaque
 

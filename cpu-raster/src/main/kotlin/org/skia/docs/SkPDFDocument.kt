@@ -3,7 +3,7 @@ package org.skia.docs
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkDocument
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkLinearGradient
@@ -12,7 +12,7 @@ import org.skia.foundation.SkPath
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkShader
 import org.skia.foundation.stream.SkWStream
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.zip.Deflater

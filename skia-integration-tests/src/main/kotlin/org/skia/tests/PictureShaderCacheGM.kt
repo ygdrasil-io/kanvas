@@ -4,18 +4,18 @@ import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
 import org.skia.core.SkSurface
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.math.SkcmsMatrix3x3
+import org.graphiks.math.SkcmsMatrix3x3
 
 /**
  * Port of Skia's `gm/pictureshadercache.cpp::PictureShaderCacheGM`

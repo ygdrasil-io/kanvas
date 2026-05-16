@@ -2,7 +2,7 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.effects.runtime.SkRuntimeEffect
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * R-final.S — **STUB.SKSL** consumer GM. Iso-aligned port of

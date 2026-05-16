@@ -4,15 +4,15 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkBlendMode_Name
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 import org.skia.utils.SkTextUtils
 

@@ -53,10 +53,10 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
-import org.skia.math.between
-import org.skia.math.zero_or_one
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.between
+import org.graphiks.math.zero_or_one
 internal class SkCoincidentSpans {
     var fNext: SkCoincidentSpans? = null
 

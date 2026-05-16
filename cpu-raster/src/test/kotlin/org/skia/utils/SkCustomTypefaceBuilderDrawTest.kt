@@ -1,22 +1,22 @@
 package org.skia.utils
 
 
-import org.skia.math.between
+import org.graphiks.math.between
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkSurface
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkTypeface
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * R-suivi.46 — verifies that [SkCustomTypefaceBuilder]'s produced

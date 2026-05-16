@@ -1,11 +1,11 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SkColor
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkScalar
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkScalar
 
 /**
  * Port of Skia's `gm/strokes.cpp` (`TeenyStrokesGM`).

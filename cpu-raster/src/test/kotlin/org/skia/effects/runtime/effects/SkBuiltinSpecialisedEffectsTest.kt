@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.skia.effects.runtime.SkRuntimeEffect
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import kotlin.math.abs
 
 /**

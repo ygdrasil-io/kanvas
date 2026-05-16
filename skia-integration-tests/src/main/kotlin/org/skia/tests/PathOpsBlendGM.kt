@@ -1,14 +1,14 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorBLUE
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 import org.skia.pathops.SkPathOp
 import org.skia.pathops.SkPathOps
 

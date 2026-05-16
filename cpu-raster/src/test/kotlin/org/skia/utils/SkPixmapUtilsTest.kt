@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkImageInfo
 
 /**

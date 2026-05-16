@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkTypeface_Fontations
 import org.skia.foundation.stream.SkMemoryStream
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * R-final.S — **STUB.FONTATIONS** consumer GM. Iso-aligned port of

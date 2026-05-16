@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.encode.SkWebpEncoder
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * R-final.S — **STUB.WEBP_LOSSY** consumer GM. Lossy variant of the

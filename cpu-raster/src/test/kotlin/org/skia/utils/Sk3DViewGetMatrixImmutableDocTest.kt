@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test
  * R-suivi.15 — verifies the immutable-adaptation contract of
  * [Sk3DView.getMatrix] / [SkCamera3D.patchToMatrix] :
  *
- *  1. The returned [org.skia.math.SkMatrix] is independent of subsequent
+ *  1. The returned [org.graphiks.math.SkMatrix] is independent of subsequent
  *     mutations of the view (no shared reference / aliasing).
  *  2. The parameter-less convenience method [Sk3DView.getMatrixCopy]
  *     behaves identically to [Sk3DView.getMatrix].
@@ -89,12 +89,12 @@ class Sk3DViewGetMatrixImmutableDocTest {
     @Test
     fun `patchToMatrix returns a value independent of later camera mutations`() {
         val cam = SkCamera3D()
-        val u = org.skia.math.SkV3(1f, 0f, 0f)
-        val v = org.skia.math.SkV3(0f, -1f, 0f)
-        val o = org.skia.math.SkV3(0f, 0f, 0f)
+        val u = org.graphiks.math.SkV3(1f, 0f, 0f)
+        val v = org.graphiks.math.SkV3(0f, -1f, 0f)
+        val o = org.graphiks.math.SkV3(0f, 0f, 0f)
         val m1 = cam.patchToMatrix(arrayOf(u, v, o))
         // Re-target the camera and force a recompute.
-        cam.location = org.skia.math.SkV3(50f, 50f, -300f)
+        cam.location = org.graphiks.math.SkV3(50f, 50f, -300f)
         cam.update()
         val m2 = cam.patchToMatrix(arrayOf(u, v, o))
         // The first matrix must NOT have absorbed the new camera state.

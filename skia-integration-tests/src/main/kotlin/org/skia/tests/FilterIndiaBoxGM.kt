@@ -6,10 +6,10 @@ import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkMipmapMode
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 import org.skia.tools.ToolUtils
 
 /**

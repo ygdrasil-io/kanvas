@@ -2,16 +2,16 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkColor4f
-import org.skia.math.SkColorSetRGB
+import org.graphiks.math.SkColor4f
+import org.graphiks.math.SkColorSetRGB
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkDashPathEffect
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 

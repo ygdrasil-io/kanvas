@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.stream.SkDynamicMemoryWStream
 import org.skia.foundation.SkPaint
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Smoke tests for the minimal PDF 1.4 backend in [SkPDF].

@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin

@@ -1,11 +1,11 @@
 package org.skia.effects.runtime
 
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkData
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilter.FilterResult
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 
 /**
  * Phase D2.5 — `SkImageFilters::RuntimeShader(builder, childShaderName,
@@ -88,7 +88,7 @@ internal class SkRuntimeImageFilter(
             val rowOff = y * w
             for (x in 0 until w) {
                 val c4f = impl.shade(
-                    coords = org.skia.math.SkPoint(x + 0.5f, y + 0.5f),
+                    coords = org.graphiks.math.SkPoint(x + 0.5f, y + 0.5f),
                     srcColor = null,
                     dstColor = null,
                     uniforms = u.duplicate(),

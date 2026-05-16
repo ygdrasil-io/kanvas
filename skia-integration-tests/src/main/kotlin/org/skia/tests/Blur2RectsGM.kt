@@ -6,8 +6,8 @@ import org.skia.foundation.SkBlurStyle
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathDirection
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/blurs.cpp::blur2rects` (700 × 500).

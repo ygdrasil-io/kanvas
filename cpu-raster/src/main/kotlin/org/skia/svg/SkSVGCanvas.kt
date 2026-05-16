@@ -4,10 +4,10 @@ import org.skia.core.SkCanvas
 import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBitmapShader
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
@@ -18,9 +18,9 @@ import org.skia.foundation.SkRRect
 import org.skia.foundation.SkRadialGradient
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 import java.io.Writer
 import java.util.Base64
 import java.util.Locale
@@ -863,14 +863,14 @@ public open class SkSVGCanvas(
          * output noisier than necessary for diff-ability.
          */
         /**
-         * Format an [org.skia.math.SkColor] as a 6-char lower-case
+         * Format an [org.graphiks.math.SkColor] as a 6-char lower-case
          * hex string `"#rrggbb"`. Drops the alpha byte — alpha is
          * surfaced separately as `fill-opacity` / `stroke-opacity` so the
          * channel decomposition stays diff-friendly. The 3-char
          * shorthand (`#rgb`) is intentionally **not** used : tests can
          * grep for the full hex more reliably.
          */
-        public fun colorHex(c: org.skia.math.SkColor): String {
+        public fun colorHex(c: org.graphiks.math.SkColor): String {
             val r = SkColorGetR(c)
             val g = SkColorGetG(c)
             val b = SkColorGetB(c)

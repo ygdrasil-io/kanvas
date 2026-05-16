@@ -14,7 +14,7 @@ import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Unit tests for [SkCustomTypefaceBuilder]. Coverage :

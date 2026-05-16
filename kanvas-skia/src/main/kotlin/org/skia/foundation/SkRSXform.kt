@@ -9,7 +9,7 @@ import kotlin.math.sin
  *
  * A combined Rotation + Scale + Translate transform encoded as four
  * floats. Used by [org.skia.core.SkCanvas.drawAtlas] to position
- * sprites without paying the cost of a full 3×3 [org.skia.math.SkMatrix]
+ * sprites without paying the cost of a full 3×3 [org.graphiks.math.SkMatrix]
  * per draw. The 2×2 affine part is `[[fSCos, -fSSin], [fSSin, fSCos]]`
  * (a uniform-scale + rotation), and the post-transform translation
  * is `(fTx, fTy)`.
