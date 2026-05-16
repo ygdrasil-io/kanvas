@@ -281,12 +281,22 @@ Premier `drawPath` GPU. Scope minimal mais utile : single-contour convex polygon
 
 **Note**. Le clip côté polygon est `setScissorRect` axis-aligned int — comme pour les rects. Pas de point-in-polygon test fragment-side ; la AABB du polygon est honorée par le scissor.
 
-### G3.3b — drawPath élargi : curves, AA, concave (à venir)
+### G3.3b.1 — Bezier flattening ✅
 
-- [ ] **Bézier flattening** : `kQuad`, `kConic`, `kCubic` → polyline subdivision (port de `SkBitmapDevice.flattenBezier` ou équivalent). Réutilise éventuellement `SkBitmapDevice.buildEdges` côté CPU.
-- [ ] **Triangulation polygone-à-trous** via ear-clipping ou libtess2-like (la fan tessellation actuelle est seulement convex-correct ; concave produit des artefacts).
-- [ ] **AA paths** — coverage edge en fragment shader via distance-to-edge ; ou distance field si MSAA off. À profiler sur `ConcavePathsGM` (cible Phase 3a master).
-- [ ] **Multi-contour** paths (chaque `kMove` ouvre un nouveau contour) : aujourd'hui flatten dans une seule liste fan, fait des artefacts. Tessellator vrai à G3.3b.
+Port des algorithmes de subdivision adaptative De Casteljau (quadratic + cubic) et de stepping uniforme (conic) depuis `SkBitmapDevice.buildEdges`. Mêmes constantes (`PATH_FLATNESS = 0.25`, `PATH_FLATNESS_SQ = 0.0625`, `PATH_MAX_DEPTH = 18`, `CONIC_STEPS = 32`).
+
+- [x] `flattenQuadInto` / `flattenCubicInto` dans le companion de `SkWebGpuDevice` — subdivision récursive jusqu'au chord-error ≤ 0.25 px (squared-comparison sans sqrt).
+- [x] `flattenConicInto` — uniform parametric stepping (32 steps), même algo que raster.
+- [x] [`drawPath`](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt) gère maintenant `kMove` / `kLine` / `kQuad` / `kCubic` / `kConic` / `kClose`. Le `else -> error` ne se déclenche plus que pour des verbes inattendus.
+- [x] `PolygonFillTest` migré : le test "curve verb throws" devient deux tests positifs (quadratic + cubic) qui vérifient que la courbe flatten en segments rendables.
+
+**Limitation restante (G3.3b.2)** : la fan tessellation depuis le 1er vertex reste convex-correct uniquement. Pour un path concave (avec courbe ou pas), les triangles du fan vont traverser hors du polygone. ConcavePathsGM scorera bas tant que G3.3b.2 ne livre pas une triangulation propre (ear-clipping ou libtess2-like).
+
+### G3.3b.2 — Concave triangulation + AA (à venir)
+
+- [ ] **Triangulation polygone-à-trous** via ear-clipping ou libtess2-like (remplace la fan tessellation pour les paths non-convexes).
+- [ ] **Multi-contour** paths (chaque `kMove` ouvre un nouveau contour) : tessellator vrai supportant ces cas.
+- [ ] **AA paths** — coverage edge en fragment shader via distance-to-edge ; ou distance field si MSAA off. À profiler sur `ConcavePathsGM`.
 - [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
 - [ ] **Tests** : `ConcavePathsGM`, `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family.
 
@@ -298,7 +308,8 @@ Premier `drawPath` GPU. Scope minimal mais utile : single-contour convex polygon
 - [x] G3.1 : 4 tests neufs (3 unit stroke + 1 cross-test BigRectGM 70.7%). Stroke axis-aligned débloqué.
 - [x] G3.2 : 3 tests neufs (2 drawPaint + 1 ClipStrokeRectGM 96.6%). drawPaint TODO clos, 2e GM cible G2 vert.
 - [x] G3.3a : 3 tests neufs (PolygonFillTest : quad + triangle + curve-throws). drawPath skeleton convex polygon débloqué. ScaledRectsGM toujours bloqué par kPlus.
-- [ ] G3.3b : ≥ 5 path GMs verts sur GPU avec scores ≥ 85% (curves + concave + AA).
+- [x] G3.3b.1 : Bezier flattening (Quad / Cubic / Conic). 1 test converti + 1 test neuf. Curves rendent. Concave + AA = G3.3b.2.
+- [ ] G3.3b.2 : concave triangulation + multi-contour + AA polygon coverage → ≥ 5 path GMs verts à ≥ 85%.
 - [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---

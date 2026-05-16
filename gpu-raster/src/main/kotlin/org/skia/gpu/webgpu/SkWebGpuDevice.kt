@@ -495,31 +495,44 @@ public class SkWebGpuDevice(
     }
 
     /**
-     * G3.3a — minimal `drawPath` skeleton : single-contour **convex
-     * polygon** paths only (Move + Line + Close verbs), **non-AA**,
-     * **fill only**. Walks the verb stream, transforms each point by
-     * [ctm] into device-pixel coords, and fan-tessellates from the
-     * first vertex into a triangle list. Anything more (curves,
-     * concave paths, AA, stroke) throws with a pointer to the phase
-     * that lifts the restriction.
+     * `drawPath` for filled paths on GPU.
+     *
+     * G3.3a — single-contour convex polygon paths (Move + Line + Close),
+     *         non-AA, fill-only ; fan tessellation from the first vertex.
+     * G3.3b.1 — adds Bezier flattening : `kQuad`, `kCubic`, `kConic` verbs
+     *           are subdivided into polyline segments in device space
+     *           (port of `SkBitmapDevice.flatten{Quad,Cubic,Conic}`).
+     *           After flattening, the same fan tessellation runs — so
+     *           **convex curved paths** (ovals, circles, smooth blobs)
+     *           render correctly, but **concave paths still get
+     *           artefacts** until G3.3b.2 introduces ear-clipping or
+     *           libtess2-like triangulation.
+     *
+     * AA path coverage (G3.3b.2) and stroke paths via SkStroker (G3.4)
+     * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
         require(!paint.isAntiAlias) {
-            "SkWebGpuDevice (G3.3a): AA path fill not supported yet — analytical " +
-                "edge coverage for arbitrary polygons lands in G3.3b."
+            "SkWebGpuDevice (G3.3b.1): AA path fill not supported yet — analytical " +
+                "edge coverage for arbitrary polygons lands in G3.3b.2."
         }
         require(paint.style == SkPaint.Style.kFill_Style) {
-            "SkWebGpuDevice (G3.3a): only fill-style paths supported — got ${paint.style}. " +
+            "SkWebGpuDevice (G3.3b.1): only fill-style paths supported — got ${paint.style}. " +
                 "Stroke paths (SkStroker.outline) arrive in G3.4."
         }
 
         // Walk the verb stream once, transform each point by the CTM,
-        // collect device-pixel vertices. Multiple contours are flattened
-        // into a single vertex list (the fan tessellator below treats
-        // them as one polygon — fine for the convex-only scope, may
-        // produce artefacts on concave or multi-contour paths until G3.3b).
+        // collect device-pixel vertices. Curves are subdivided in
+        // device space via [flattenQuadInto] / [flattenCubicInto] /
+        // [flattenConicInto] — same algorithms as
+        // [org.skia.core.SkBitmapDevice.buildEdges] flatteners.
+        // Multiple contours are flattened into a single vertex list
+        // (the fan tessellator treats them as one polygon — fine for
+        // convex single-contour paths, artefacts otherwise until G3.3b.2).
         val devVerts = ArrayList<Float>(path.verbs.size * 2)
         var ci = 0
+        var wi = 0
+        var px = 0f; var py = 0f
         for (verb in path.verbs) {
             when (verb) {
                 SkPath.Verb.kMove, SkPath.Verb.kLine -> {
@@ -527,11 +540,38 @@ public class SkWebGpuDevice(
                     val sy = path.coords[ci++]
                     val (dx, dy) = ctm.mapXY(sx, sy)
                     devVerts.add(dx); devVerts.add(dy)
+                    px = dx; py = dy
+                }
+                SkPath.Verb.kQuad -> {
+                    val sx1 = path.coords[ci++]; val sy1 = path.coords[ci++]
+                    val sx2 = path.coords[ci++]; val sy2 = path.coords[ci++]
+                    val (x1, y1) = ctm.mapXY(sx1, sy1)
+                    val (x2, y2) = ctm.mapXY(sx2, sy2)
+                    flattenQuadInto(devVerts, px, py, x1, y1, x2, y2, 0)
+                    px = x2; py = y2
+                }
+                SkPath.Verb.kCubic -> {
+                    val sx1 = path.coords[ci++]; val sy1 = path.coords[ci++]
+                    val sx2 = path.coords[ci++]; val sy2 = path.coords[ci++]
+                    val sx3 = path.coords[ci++]; val sy3 = path.coords[ci++]
+                    val (x1, y1) = ctm.mapXY(sx1, sy1)
+                    val (x2, y2) = ctm.mapXY(sx2, sy2)
+                    val (x3, y3) = ctm.mapXY(sx3, sy3)
+                    flattenCubicInto(devVerts, px, py, x1, y1, x2, y2, x3, y3, 0)
+                    px = x3; py = y3
+                }
+                SkPath.Verb.kConic -> {
+                    val sx1 = path.coords[ci++]; val sy1 = path.coords[ci++]
+                    val sx2 = path.coords[ci++]; val sy2 = path.coords[ci++]
+                    val weight = path.conicWeights[wi++]
+                    val (x1, y1) = ctm.mapXY(sx1, sy1)
+                    val (x2, y2) = ctm.mapXY(sx2, sy2)
+                    flattenConicInto(devVerts, px, py, x1, y1, x2, y2, weight)
+                    px = x2; py = y2
                 }
                 SkPath.Verb.kClose -> { /* polygon closes implicitly on the fan */ }
                 else -> error(
-                    "SkWebGpuDevice (G3.3a): verb $verb not supported. " +
-                        "Bezier flattening + path tessellation arrives in G3.3b.",
+                    "SkWebGpuDevice (G3.3b.1): verb $verb not supported.",
                 )
             }
         }
@@ -767,6 +807,114 @@ public class SkWebGpuDevice(
         /** Size of the polygon per-draw uniform : `color: vec4f` + `viewport: vec4f` = 32 bytes. */
         const val POLYGON_UNIFORM_SIZE: ULong = 32uL
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
+
+        // ─── G3.3b.1 Bezier flattening (mirrors SkBitmapDevice constants) ───
+
+        /** Chord-error tolerance in device-space pixels. Same as raster. */
+        const val PATH_FLATNESS: Float = 0.25f
+        /** Squared tolerance — comparisons avoid `sqrt`. */
+        const val PATH_FLATNESS_SQ: Float = PATH_FLATNESS * PATH_FLATNESS
+        /** Adaptive subdivision depth bound (safety net ; 4–6 levels typically suffice). */
+        const val PATH_MAX_DEPTH: Int = 18
+        /** Uniform parametric steps for conic flattening. */
+        const val CONIC_STEPS: Int = 32
+
+        /**
+         * Recursive De Casteljau subdivision of a quadratic Bezier into
+         * the `out` vertex list. Each non-flat segment is split at
+         * `t = 0.5` ; flat segments append only their endpoint
+         * `(x2, y2)` since the start `(x0, y0)` is already the last
+         * vertex emitted to `out`.
+         */
+        fun flattenQuadInto(
+            out: ArrayList<Float>,
+            x0: Float, y0: Float,
+            x1: Float, y1: Float,
+            x2: Float, y2: Float,
+            depth: Int,
+        ) {
+            if (depth >= PATH_MAX_DEPTH || quadIsFlat(x0, y0, x1, y1, x2, y2)) {
+                out.add(x2); out.add(y2)
+                return
+            }
+            val m01x = (x0 + x1) * 0.5f; val m01y = (y0 + y1) * 0.5f
+            val m12x = (x1 + x2) * 0.5f; val m12y = (y1 + y2) * 0.5f
+            val mx = (m01x + m12x) * 0.5f; val my = (m01y + m12y) * 0.5f
+            flattenQuadInto(out, x0, y0, m01x, m01y, mx, my, depth + 1)
+            flattenQuadInto(out, mx, my, m12x, m12y, x2, y2, depth + 1)
+        }
+
+        private fun quadIsFlat(
+            x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float,
+        ): Boolean {
+            val dx = x2 - x0; val dy = y2 - y0
+            val chord2 = dx * dx + dy * dy
+            if (chord2 < 1e-12f) return true
+            val cross = (x1 - x0) * dy - (y1 - y0) * dx
+            return (cross * cross) <= PATH_FLATNESS_SQ * chord2
+        }
+
+        /**
+         * Recursive De Casteljau subdivision of a cubic Bezier into
+         * the `out` vertex list. Same pattern as [flattenQuadInto].
+         */
+        fun flattenCubicInto(
+            out: ArrayList<Float>,
+            x0: Float, y0: Float,
+            x1: Float, y1: Float,
+            x2: Float, y2: Float,
+            x3: Float, y3: Float,
+            depth: Int,
+        ) {
+            if (depth >= PATH_MAX_DEPTH || cubicIsFlat(x0, y0, x1, y1, x2, y2, x3, y3)) {
+                out.add(x3); out.add(y3)
+                return
+            }
+            val m01x = (x0 + x1) * 0.5f; val m01y = (y0 + y1) * 0.5f
+            val m12x = (x1 + x2) * 0.5f; val m12y = (y1 + y2) * 0.5f
+            val m23x = (x2 + x3) * 0.5f; val m23y = (y2 + y3) * 0.5f
+            val m012x = (m01x + m12x) * 0.5f; val m012y = (m01y + m12y) * 0.5f
+            val m123x = (m12x + m23x) * 0.5f; val m123y = (m12y + m23y) * 0.5f
+            val mx = (m012x + m123x) * 0.5f; val my = (m012y + m123y) * 0.5f
+            flattenCubicInto(out, x0, y0, m01x, m01y, m012x, m012y, mx, my, depth + 1)
+            flattenCubicInto(out, mx, my, m123x, m123y, m23x, m23y, x3, y3, depth + 1)
+        }
+
+        private fun cubicIsFlat(
+            x0: Float, y0: Float, x1: Float, y1: Float,
+            x2: Float, y2: Float, x3: Float, y3: Float,
+        ): Boolean {
+            val dx = x3 - x0; val dy = y3 - y0
+            val chord2 = dx * dx + dy * dy
+            if (chord2 < 1e-12f) return true
+            val c1 = (x1 - x0) * dy - (y1 - y0) * dx
+            val c2 = (x2 - x0) * dy - (y2 - y0) * dx
+            val maxCross2 = maxOf(c1 * c1, c2 * c2)
+            return maxCross2 <= PATH_FLATNESS_SQ * chord2
+        }
+
+        /**
+         * Conic flattening via uniform parametric stepping. Matches
+         * [org.skia.core.SkBitmapDevice]'s conic flattener : 32 steps
+         * keep visible chord error well below 0.25 px at GM scale.
+         */
+        fun flattenConicInto(
+            out: ArrayList<Float>,
+            x0: Float, y0: Float,
+            x1: Float, y1: Float,
+            x2: Float, y2: Float,
+            w: Float,
+        ) {
+            val n = CONIC_STEPS
+            for (k in 1..n) {
+                val t = k.toFloat() / n
+                val u = 1f - t
+                val numW = u * u + 2f * u * t * w + t * t
+                val numX = u * u * x0 + 2f * u * t * w * x1 + t * t * x2
+                val numY = u * u * y0 + 2f * u * t * w * y1 + t * t * y2
+                out.add(numX / numW); out.add(numY / numW)
+            }
+        }
 
         /**
          * Match [SkBitmapDevice]'s non-AA pixel-edge rule:
