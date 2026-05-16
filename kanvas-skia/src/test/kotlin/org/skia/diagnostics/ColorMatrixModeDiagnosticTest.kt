@@ -7,7 +7,7 @@ import org.skia.foundation.SkColorGetG
 import org.skia.foundation.SkColorGetR
 import org.skia.foundation.SkColorSetARGB
 import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.foundation.skcms.SkcmsTransferFunction
+import org.skia.math.SkcmsTransferFunction
 import org.skia.foundation.skcms.skcmsTransferFunctionEval
 import org.skia.foundation.skcms.skcmsTransferFunctionInvert
 import org.skia.tests.ColorMatrixGM

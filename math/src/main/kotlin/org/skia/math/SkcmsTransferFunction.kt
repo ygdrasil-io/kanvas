@@ -1,4 +1,4 @@
-package org.skia.foundation.skcms
+package org.skia.math
 
 /**
  * Bit-compatible port of `skcms_TransferFunction`. Same field order as upstream.

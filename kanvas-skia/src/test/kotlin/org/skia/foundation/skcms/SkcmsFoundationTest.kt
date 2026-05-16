@@ -1,4 +1,5 @@
 package org.skia.foundation.skcms
+import org.skia.math.SkcmsMatrix3x3
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
