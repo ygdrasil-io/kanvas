@@ -166,6 +166,26 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
     ) : PendingDraw
 
+    /**
+     * AA variant of [PolygonDraw]. `verts` is the fan-tessellated
+     * triangle list (same as non-AA), `edges` is the polygon's
+     * **perimeter** edge equations `(a, b, c, _)` per edge in
+     * `clamp(a*x + b*y + c + 0.5, 0, 1)` form (positive `dist` = inside).
+     * `edgeCount` is the number of meaningful entries in `edges` ; the
+     * remainder is zero-padded up to `MAX_AA_EDGES`. The fragment shader
+     * iterates the edges, takes min(coverage) and modulates the premul
+     * source alpha — matches `SkBitmapDevice`'s analytical coverage
+     * formulation for convex polygons.
+     */
+    private data class AaPolygonDraw(
+        val verts: FloatArray,
+        val edges: FloatArray,   // (a, b, c, _) per edge, length = MAX_AA_EDGES * 4
+        val edgeCount: Int,
+        val scissor: IntArray,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
     private val pending: MutableList<PendingDraw> = mutableListOf()
 
     private fun loadShader(resource: String): GPUShaderModule {
@@ -225,6 +245,18 @@ public class SkWebGpuDevice(
 
     // ─── Polygon pipeline (G3.3a) — vertex buffer in device coords ─────────
 
+    /** Shared vertex buffer layout for both the non-AA and AA polygon pipelines. */
+    private val POLYGON_VERTEX_LAYOUT: VertexBufferLayout = VertexBufferLayout(
+        arrayStride = 8uL, // 2 floats * 4 bytes
+        attributes = listOf(
+            VertexAttribute(
+                shaderLocation = 0u,
+                offset = 0uL,
+                format = GPUVertexFormat.Float32x2,
+            ),
+        ),
+    )
+
     private val polygonShader: GPUShaderModule = loadShader("shaders/solid_polygon.wgsl")
 
     private val polygonBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
@@ -260,21 +292,56 @@ public class SkWebGpuDevice(
                     vertex = VertexState(
                         module = polygonShader,
                         entryPoint = "vs_main",
-                        buffers = listOf(
-                            VertexBufferLayout(
-                                arrayStride = 8uL, // 2 floats * 4 bytes
-                                attributes = listOf(
-                                    VertexAttribute(
-                                        shaderLocation = 0u,
-                                        offset = 0uL,
-                                        format = GPUVertexFormat.Float32x2,
-                                    ),
-                                ),
-                            ),
-                        ),
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
                     ),
                     fragment = FragmentState(
                         module = polygonShader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA8Unorm,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
+    // ─── AA polygon pipeline (G3.3b.2a) — per-fragment edge coverage ──────
+
+    private val aaPolygonShader: GPUShaderModule = loadShader("shaders/aa_polygon.wgsl")
+
+    private val aaPolygonBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                ),
+            ),
+        ),
+    )
+
+    private val aaPolygonPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(aaPolygonBindGroupLayout)),
+    )
+
+    private val aaPolygonPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+
+    private fun aaPolygonPipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        aaPolygonPipelineCache.getOrPut(mode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = aaPolygonPipelineLayout,
+                    vertex = VertexState(
+                        module = aaPolygonShader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = aaPolygonShader,
                         entryPoint = "fs_main",
                         targets = listOf(
                             ColorTargetState(
@@ -512,10 +579,6 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
-        require(!paint.isAntiAlias) {
-            "SkWebGpuDevice (G3.3b.1): AA path fill not supported yet — analytical " +
-                "edge coverage for arbitrary polygons lands in G3.3b.2."
-        }
         require(paint.style == SkPaint.Style.kFill_Style) {
             "SkWebGpuDevice (G3.3b.1): only fill-style paths supported — got ${paint.style}. " +
                 "Stroke paths (SkStroker.outline) arrive in G3.4."
@@ -530,6 +593,7 @@ public class SkWebGpuDevice(
         // (the fan tessellator treats them as one polygon — fine for
         // convex single-contour paths, artefacts otherwise until G3.3b.2).
         val devVerts = ArrayList<Float>(path.verbs.size * 2)
+        var contourCount = 0
         var ci = 0
         var wi = 0
         var px = 0f; var py = 0f
@@ -541,6 +605,7 @@ public class SkWebGpuDevice(
                     val (dx, dy) = ctm.mapXY(sx, sy)
                     devVerts.add(dx); devVerts.add(dy)
                     px = dx; py = dy
+                    if (verb == SkPath.Verb.kMove) contourCount++
                 }
                 SkPath.Verb.kQuad -> {
                     val sx1 = path.coords[ci++]; val sy1 = path.coords[ci++]
@@ -599,17 +664,53 @@ public class SkWebGpuDevice(
         if (scissorL >= scissorR || scissorT >= scissorB) return
 
         val color = paint.color
-        pending.add(
-            PolygonDraw(
-                verts = tri,
-                scissor = intArrayOf(scissorL, scissorT, scissorR - scissorL, scissorB - scissorT),
-                r = SkColorGetR(color) / 255f,
-                g = SkColorGetG(color) / 255f,
-                b = SkColorGetB(color) / 255f,
-                a = SkColorGetA(color) / 255f,
-                mode = paint.blendMode,
-            ),
-        )
+        val rF = SkColorGetR(color) / 255f
+        val gF = SkColorGetG(color) / 255f
+        val bF = SkColorGetB(color) / 255f
+        val aF = SkColorGetA(color) / 255f
+        val scissor = intArrayOf(scissorL, scissorT, scissorR - scissorL, scissorB - scissorT)
+
+        // G3.3b.2a — AA path : compute polygon perimeter edge equations
+        // and route to the analytical-coverage pipeline. Restricted to
+        // single-contour paths within MAX_AA_EDGES vertices ; multi-
+        // contour and very large paths fall back to non-AA fan tess
+        // (G3.3b.2b will lift these restrictions).
+        //
+        // Key trick : the AA path renders the polygon's **bounding box
+        // (slightly inflated)** as 2 triangles instead of the fan tess.
+        // Reason : the fan triangles share their outer edges with the
+        // polygon perimeter ; the GPU rasterizer's top-left edge rule
+        // can exclude pixel centres that sit exactly on those edges,
+        // robbing the fragment shader of the chance to compute their
+        // coverage. The bbox triangles are axis-aligned and inflated
+        // by 1 pixel beyond the polygon ; every pixel near a polygon
+        // edge is reliably rasterized, and the shader's coverage
+        // (`min` over edge equations) masks the bbox down to the
+        // actual polygon shape, with smooth fall-off on the perimeter.
+        if (paint.isAntiAlias && contourCount == 1 && n <= MAX_AA_EDGES) {
+            val edges = FloatArray(MAX_AA_EDGES * 4)
+            buildPerimeterEdges(devVerts, edges)
+            val bboxTri = bboxTrianglesFor(devVerts, width, height)
+            pending.add(
+                AaPolygonDraw(
+                    verts = bboxTri,
+                    edges = edges,
+                    edgeCount = n,
+                    scissor = scissor,
+                    r = rF, g = gF, b = bF, a = aF,
+                    mode = paint.blendMode,
+                ),
+            )
+        } else {
+            pending.add(
+                PolygonDraw(
+                    verts = tri,
+                    scissor = scissor,
+                    r = rF, g = gF, b = bF, a = aF,
+                    mode = paint.blendMode,
+                ),
+            )
+        }
     }
 
     override fun drawImageRect(
@@ -661,6 +762,7 @@ public class SkWebGpuDevice(
             when (d) {
                 is RectDraw -> buildRectDrawResources(d)
                 is PolygonDraw -> buildPolygonDrawResources(d)
+                is AaPolygonDraw -> buildAaPolygonDrawResources(d)
             }
         }
 
@@ -693,6 +795,18 @@ public class SkWebGpuDevice(
                     }
                     is PolygonDraw -> {
                         setPipeline(polygonPipelineFor(d.mode))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
+                        draw((d.verts.size / 2).toUInt())
+                    }
+                    is AaPolygonDraw -> {
+                        setPipeline(aaPolygonPipelineFor(d.mode))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
@@ -791,13 +905,66 @@ public class SkWebGpuDevice(
         return DrawResources(uniform = uniform, bindGroup = bindGroup, vertexBuffer = vertexBuffer)
     }
 
+    private fun buildAaPolygonDrawResources(d: AaPolygonDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = AA_POLYGON_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.aaPolygonDraw",
+            ),
+        )
+        // Layout matches `aa_polygon.wgsl` :
+        //   offset  0 : color    (4 floats)
+        //   offset 16 : viewport (4 floats, only x/y used)
+        //   offset 32 : edgeCount (u32) + 3 u32 padding
+        //   offset 48 : edges[MAX_AA_EDGES] (vec4 each)
+        // Pack the whole thing in one FloatArray ; reinterpret edgeCount's
+        // bits as a float so `floatArrayOf` lays it out at the right
+        // byte offset.
+        val packed = FloatArray(12 + MAX_AA_EDGES * 4)
+        // color
+        packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
+        // viewport
+        packed[4] = width.toFloat(); packed[5] = height.toFloat()
+        packed[6] = 0f; packed[7] = 0f
+        // edgeCount as bit-reinterpreted float (so the byte pattern matches
+        // a u32 in WGSL).
+        packed[8] = Float.fromBits(d.edgeCount)
+        packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
+        // edges
+        System.arraycopy(d.edges, 0, packed, 12, d.edges.size)
+
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = aaPolygonBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        val vertexSize = (d.verts.size * Float.SIZE_BYTES).toULong()
+        val vertexBuffer = context.device.createBuffer(
+            BufferDescriptor(
+                size = vertexSize,
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.aaPolygonVerts",
+            ),
+        )
+        context.queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(d.verts))
+        return DrawResources(uniform = uniform, bindGroup = bindGroup, vertexBuffer = vertexBuffer)
+    }
+
     override fun close() {
         rectPipelineCache.values.forEach { it.close() }
         rectPipelineCache.clear()
         polygonPipelineCache.values.forEach { it.close() }
         polygonPipelineCache.clear()
+        aaPolygonPipelineCache.values.forEach { it.close() }
+        aaPolygonPipelineCache.clear()
         rectShader.close()
         polygonShader.close()
+        aaPolygonShader.close()
         target.close()
     }
 
@@ -806,7 +973,106 @@ public class SkWebGpuDevice(
         const val RECT_UNIFORM_SIZE: ULong = 32uL
         /** Size of the polygon per-draw uniform : `color: vec4f` + `viewport: vec4f` = 32 bytes. */
         const val POLYGON_UNIFORM_SIZE: ULong = 32uL
+        /**
+         * Max polygon vertex count for the AA path. Bounded by the
+         * `array<vec4f, 256>` in `aa_polygon.wgsl` ; circles flattened
+         * to ~32 segments fit easily, even complex curved paths under
+         * normal scales.
+         */
+        const val MAX_AA_EDGES: Int = 256
+        /**
+         * Size of the AA polygon per-draw uniform :
+         *   color (16) + viewport (16) + edgeCount+pad (16) + edges (256*16) = 4144 bytes.
+         */
+        const val AA_POLYGON_UNIFORM_SIZE: ULong = 4144uL // 48 + 256 * 16
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
+
+        /**
+         * Build the polygon perimeter's edge equations in
+         * `a*x + b*y + c = 0` form, normalised so signed distance is
+         * positive *inside* the polygon. Winding (CW vs CCW) is detected
+         * via the polygon's signed area and folded into the sign.
+         *
+         * `out` must have capacity for `MAX_AA_EDGES * 4` floats ; only
+         * the first `n * 4` entries (where `n = devVerts.size / 2`) are
+         * written. Caller guarantees `n <= MAX_AA_EDGES`.
+         */
+        /**
+         * Build a 2-triangle bbox covering the polygon, inflated by 1
+         * device pixel outward and clamped to the viewport. Used by the
+         * AA polygon path so every near-edge pixel reaches the fragment
+         * shader for coverage evaluation.
+         */
+        fun bboxTrianglesFor(
+            devVerts: ArrayList<Float>,
+            viewportW: Int,
+            viewportH: Int,
+        ): FloatArray {
+            val n = devVerts.size / 2
+            var bbL = Float.POSITIVE_INFINITY
+            var bbT = Float.POSITIVE_INFINITY
+            var bbR = Float.NEGATIVE_INFINITY
+            var bbB = Float.NEGATIVE_INFINITY
+            for (i in 0 until n) {
+                val x = devVerts[i * 2]; val y = devVerts[i * 2 + 1]
+                if (x < bbL) bbL = x
+                if (x > bbR) bbR = x
+                if (y < bbT) bbT = y
+                if (y > bbB) bbB = y
+            }
+            // Inflate by 1px outward, clamp to viewport.
+            bbL = (bbL - 1f).coerceAtLeast(0f)
+            bbT = (bbT - 1f).coerceAtLeast(0f)
+            bbR = (bbR + 1f).coerceAtMost(viewportW.toFloat())
+            bbB = (bbB + 1f).coerceAtMost(viewportH.toFloat())
+            return floatArrayOf(
+                bbL, bbT, bbR, bbT, bbR, bbB,
+                bbL, bbT, bbR, bbB, bbL, bbB,
+            )
+        }
+
+        fun buildPerimeterEdges(devVerts: ArrayList<Float>, out: FloatArray) {
+            val n = devVerts.size / 2
+            // Signed area in screen coords (Y-down) :
+            //   > 0 = visually CW polygon, < 0 = visually CCW.
+            // For an "inside = positive signed dist" convention, we need
+            // cross > 0 inside. In screen coords with a CW polygon, the
+            // natural cross product is NEGATIVE inside, so we flip with
+            // orient = -1 when area > 0 (CW). Verified empirically with
+            // a square (10,10)-(30,30) and interior point (20,20).
+            var area2 = 0.0
+            for (i in 0 until n) {
+                val j = if (i + 1 == n) 0 else i + 1
+                area2 += devVerts[i * 2].toDouble() * devVerts[j * 2 + 1] -
+                         devVerts[j * 2].toDouble() * devVerts[i * 2 + 1]
+            }
+            val orient = if (area2 >= 0.0) -1f else 1f
+
+            for (i in 0 until n) {
+                val j = if (i + 1 == n) 0 else i + 1
+                val x0 = devVerts[i * 2]; val y0 = devVerts[i * 2 + 1]
+                val x1 = devVerts[j * 2]; val y1 = devVerts[j * 2 + 1]
+                val dx = x1 - x0; val dy = y1 - y0
+                val len = kotlin.math.sqrt(dx * dx + dy * dy)
+                if (len < 1e-6f) {
+                    // Degenerate edge -- emit a far-positive "always inside"
+                    // equation so it doesn't drag down min coverage.
+                    out[i * 4] = 0f
+                    out[i * 4 + 1] = 0f
+                    out[i * 4 + 2] = 1e9f
+                    out[i * 4 + 3] = 0f
+                } else {
+                    val invLen = 1f / len
+                    val a = orient * dy * invLen
+                    val b = orient * -dx * invLen
+                    val c = -(a * x0 + b * y0)
+                    out[i * 4] = a
+                    out[i * 4 + 1] = b
+                    out[i * 4 + 2] = c
+                    out[i * 4 + 3] = 0f
+                }
+            }
+        }
 
         // ─── G3.3b.1 Bezier flattening (mirrors SkBitmapDevice constants) ───
 
