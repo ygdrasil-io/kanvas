@@ -71,14 +71,14 @@ public data class SkIPoint(public var fX: Int = 0, public var fY: Int = 0) {
         public fun Make(x: Int, y: Int): SkIPoint = SkIPoint(x, y)
 
         /** Pin a 64-bit value to `[Int.MIN_VALUE, Int.MAX_VALUE]`. Skia: `Sk64_pin_to_s32`. */
-        internal fun sk64PinToS32(x: Long): Int = when {
+        public fun sk64PinToS32(x: Long): Int = when {
             x < Int.MIN_VALUE.toLong() -> Int.MIN_VALUE
             x > Int.MAX_VALUE.toLong() -> Int.MAX_VALUE
             else -> x.toInt()
         }
 
-        internal fun sk32SatAdd(a: Int, b: Int): Int = sk64PinToS32(a.toLong() + b.toLong())
-        internal fun sk32SatSub(a: Int, b: Int): Int = sk64PinToS32(a.toLong() - b.toLong())
+        public fun sk32SatAdd(a: Int, b: Int): Int = sk64PinToS32(a.toLong() + b.toLong())
+        public fun sk32SatSub(a: Int, b: Int): Int = sk64PinToS32(a.toLong() - b.toLong())
     }
 }
 

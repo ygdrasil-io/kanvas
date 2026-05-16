@@ -23,4 +23,5 @@ plugins {
 // Excluded from the build (frozen as a read-only reference). Test fixtures
 // under kanvas-legacy/src/test/resources/{images,original-888} are still
 // consumed by :kanvas-skia via a srcDir reference in kanvas-skia/build.gradle.kts.
+include(":math")
 include(":kanvas-skia")

@@ -783,9 +783,9 @@ public data class SkMatrix(
         public const val kATransY: Int = 5
 
         // ─── Internal markers for the min/max scale solver ─────────────
-        internal const val SCALE_KIND_MIN: Int = 0
-        internal const val SCALE_KIND_MAX: Int = 1
-        internal const val SCALE_KIND_BOTH: Int = 2
+        public const val SCALE_KIND_MIN: Int = 0
+        public const val SCALE_KIND_MAX: Int = 1
+        public const val SCALE_KIND_BOTH: Int = 2
 
         /**
          * Build a matrix that maps `src` onto `dst` per the given
@@ -873,7 +873,7 @@ public data class SkMatrix(
          * to a rect (axis-aligned, 90° rotation, or mirror). Skia keeps this
          * bit out of the public 4-bit subset returned by `getType()`.
          */
-        internal const val kRectStaysRect_Mask: Int = 0x10
+        public const val kRectStaysRect_Mask: Int = 0x10
 
         /**
          * Compute the type mask for a 6-tuple affine matrix. Mirrors Skia's
@@ -887,7 +887,7 @@ public data class SkMatrix(
          * rotation. The no-skew branch is simpler: `rectStaysRect` holds iff
          * the primary diagonal is non-zero (translate / scale / mirror).
          */
-        internal fun computeTypeMask(
+        public fun computeTypeMask(
             sx: Float, kx: Float, ky: Float, sy: Float, tx: Float, ty: Float,
             persp0: Float, persp1: Float, persp2: Float,
         ): Int {
@@ -916,7 +916,7 @@ public data class SkMatrix(
         }
 
         /** Skia's `is_degenerate_2x2`. Used by [isSimilarity] / [preservesRightAngles]. */
-        internal fun isDegenerate2x2(sx: Float, kx: Float, ky: Float, sy: Float): Boolean {
+        public fun isDegenerate2x2(sx: Float, kx: Float, ky: Float, sy: Float): Boolean {
             val perpDot = sx * sy - kx * ky
             return SkScalarNearlyZero(perpDot, SK_ScalarNearlyZero * SK_ScalarNearlyZero)
         }
