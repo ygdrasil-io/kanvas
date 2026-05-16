@@ -1,0 +1,2 @@
+org.graphiks.math.SkcmsMatrix3x4	skcms_Matrix3x4	math/src/main/kotlin/SkcmsMatrix3x4.kt:11	modules/skcms/src/skcms_public.h:60
+org.graphiks.math.SkcmsMatrix3x4.vals	skcms_Matrix3x4::vals	math/src/main/kotlin/SkcmsMatrix3x4.kt:11	modules/skcms/src/skcms_public.h:61

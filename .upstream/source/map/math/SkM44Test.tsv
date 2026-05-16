@@ -1,0 +1,18 @@
+org.graphiks.math.SkM44Test	M44Test	math/src/test/kotlin/SkM44Test.kt:12	tests/M44Test.cpp:1
+org.graphiks.math.SkM44Test.default constructor produces identity	M44	math/src/test/kotlin/SkM44Test.kt:28	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.identity factory matches default	M44	math/src/test/kotlin/SkM44Test.kt:37	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.translate factory shifts point	M44	math/src/test/kotlin/SkM44Test.kt:48	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.rotate Z 90 degrees maps unit-X to unit-Y	M44_rotate	math/src/test/kotlin/SkM44Test.kt:61	tests/M44Test.cpp:142
+org.graphiks.math.SkM44Test.rotate falls back to identity for zero axis	Matrix_LookAt	math/src/test/kotlin/SkM44Test.kt:68	tests/MatrixTest.cpp:1100
+org.graphiks.math.SkM44Test.invert of rotation equals its transpose	M44	math/src/test/kotlin/SkM44Test.kt:87	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.invert returns null for singular matrix	M44	math/src/test/kotlin/SkM44Test.kt:95	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.invert of identity is identity	M44	math/src/test/kotlin/SkM44Test.kt:102	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.invert and multiply yields identity	M44	math/src/test/kotlin/SkM44Test.kt:109	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.transpose twice equals original	M44	math/src/test/kotlin/SkM44Test.kt:117	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.row and col round-trip via setRow setCol	M44_v4	math/src/test/kotlin/SkM44Test.kt:128	tests/M44Test.cpp:101
+org.graphiks.math.SkM44Test.rectToRect maps src corners onto dst corners	M44_rectToRect	math/src/test/kotlin/SkM44Test.kt:288	tests/M44Test.cpp:196
+org.graphiks.math.SkM44Test.rectToRect returns identity for empty src	M44_rectToRect	math/src/test/kotlin/SkM44Test.kt:297	tests/M44Test.cpp:196
+org.graphiks.math.SkM44Test.mapRect on translate matches SkRect-shifted	M44_mapRect	math/src/test/kotlin/SkM44Test.kt:207	tests/M44Test.cpp:260
+org.graphiks.math.SkM44Test.mapRect on scale produces scaled bounds	M44_mapRect	math/src/test/kotlin/SkM44Test.kt:215	tests/M44Test.cpp:260
+org.graphiks.math.SkM44Test.lookAt produces invertible matrix for typical eye	Matrix_LookAt	math/src/test/kotlin/SkM44Test.kt:275	tests/MatrixTest.cpp:1100
+org.graphiks.math.SkM44Test.times SkV3 drops translation	M44_v3	math/src/test/kotlin/SkM44Test.kt:351	tests/M44Test.cpp:77

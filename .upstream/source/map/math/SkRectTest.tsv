@@ -1,0 +1,4 @@
+org.graphiks.math.SkRectTest	RectTest	math/src/test/kotlin/SkRectTest.kt:15	tests/RectTest.cpp:1
+org.graphiks.math.SkRectTest.isEmpty when degenerate or NaN	InfRect	math/src/test/kotlin/SkRectTest.kt:48	tests/InfRectTest.cpp:26
+org.graphiks.math.SkRectTest.isSorted vs isFinite	InfRect	math/src/test/kotlin/SkRectTest.kt:57	tests/InfRectTest.cpp:26
+org.graphiks.math.SkRectTest.centerX and centerY use double-precision midpoint	Rect_whOverflow	math/src/test/kotlin/SkRectTest.kt:66	tests/RectTest.cpp:163
