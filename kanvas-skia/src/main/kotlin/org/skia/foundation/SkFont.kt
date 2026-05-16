@@ -114,7 +114,7 @@ public class SkFont(
      * concrete backends can honour it (e.g. snap glyph origins to
      * integer device coords when `false`).
      */
-    internal fun makeTextPath(text: String, x: SkScalar, y: SkScalar): SkPath? =
+    public fun makeTextPath(text: String, x: SkScalar, y: SkScalar): SkPath? =
         typeface.makeTextPath(text, x, y, size, scaleX, skewX, isSubpixel)
 
     /**
