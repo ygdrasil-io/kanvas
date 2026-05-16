@@ -2,10 +2,10 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorTRANSPARENT
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorTRANSPARENT
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkBlendMode_Name
 import org.skia.foundation.SkFont
@@ -14,8 +14,8 @@ import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRSXform
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 
 /**

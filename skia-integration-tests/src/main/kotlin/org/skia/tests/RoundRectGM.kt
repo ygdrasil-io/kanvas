@@ -3,9 +3,9 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import org.skia.tools.SkRandom
 import org.skia.tools.ToolUtils
 
@@ -153,7 +153,7 @@ public class RoundRectGM : GM() {
         // blue / red / green radial gradient at the local origin, radius 20,
         // kClamp.
         val gradient = org.skia.foundation.SkRadialGradient.Make(
-            org.skia.math.SkPoint(0f, 0f), 20f,
+            org.graphiks.math.SkPoint(0f, 0f), 20f,
             intArrayOf(0xFF0000FF.toInt(), 0xFFFF0000.toInt(), 0xFF00FF00.toInt()),
             floatArrayOf(0f, 0.5f, 1f),
             org.skia.foundation.SkTileMode.kClamp,

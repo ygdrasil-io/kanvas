@@ -6,8 +6,8 @@ import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.stream.SkDynamicMemoryWStream
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Phase R-suivi.38 — verify that [SkPDF.MakeDocument] emits a PDF

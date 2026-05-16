@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkFilterMode
-import org.skia.math.SkIRect
-import org.skia.math.SkRect
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkRect
 
 /**
  * Phase R2.13 — `SkCanvas.drawImageNine(image, center, dst, filter, paint)`.

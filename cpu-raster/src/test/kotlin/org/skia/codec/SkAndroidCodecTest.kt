@@ -8,8 +8,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkData
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream

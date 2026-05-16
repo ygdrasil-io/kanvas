@@ -5,7 +5,7 @@ import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

@@ -3,9 +3,9 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 
 /**

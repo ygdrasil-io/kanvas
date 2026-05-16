@@ -7,7 +7,7 @@ import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkData
 import org.skia.foundation.SkShader
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 
 /**
  * Faithful port of Skia's

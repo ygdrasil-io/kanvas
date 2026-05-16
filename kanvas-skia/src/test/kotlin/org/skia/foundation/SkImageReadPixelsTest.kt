@@ -1,8 +1,8 @@
 package org.skia.foundation
 
 
-import org.skia.math.SK_ColorWHITE
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkColorSetARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue

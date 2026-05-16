@@ -1,15 +1,15 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorRED
-import org.skia.math.SkColorSetARGB
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetB
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SkColorSetARGB
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetB
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/circulararcs.cpp::onebadarc` (DEF_SIMPLE_GM,

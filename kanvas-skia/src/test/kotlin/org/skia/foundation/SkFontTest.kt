@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
 import org.skia.foundation.awt.AwtTypeface
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 
 /**

@@ -7,8 +7,8 @@ import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
 import org.skia.tools.ToolUtils
 
 /**

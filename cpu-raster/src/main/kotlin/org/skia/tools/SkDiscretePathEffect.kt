@@ -3,7 +3,7 @@ package org.skia.tools
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathEffect
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 import kotlin.math.sqrt
 
 /**

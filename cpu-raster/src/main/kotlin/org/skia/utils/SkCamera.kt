@@ -1,8 +1,8 @@
 package org.skia.utils
 
 import org.skia.core.SkCanvas
-import org.skia.math.SkMatrix
-import org.skia.math.SkV3
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkV3
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin

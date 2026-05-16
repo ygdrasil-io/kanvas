@@ -4,9 +4,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import org.skia.math.SkIPoint
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
 
 /**
  * C1.6 verification suite — MatrixConvolution.

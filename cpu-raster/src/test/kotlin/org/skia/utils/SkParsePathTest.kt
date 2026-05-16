@@ -1,7 +1,7 @@
 package org.skia.utils
 
 
-import org.skia.math.between
+import org.graphiks.math.between
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull

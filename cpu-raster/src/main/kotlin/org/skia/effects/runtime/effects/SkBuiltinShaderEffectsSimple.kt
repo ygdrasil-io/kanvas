@@ -4,8 +4,8 @@ import org.skia.effects.runtime.ChildResolver
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
 import org.skia.effects.runtime.SkRuntimeImpl
-import org.skia.math.SkColor4f
-import org.skia.math.SkPoint
+import org.graphiks.math.SkColor4f
+import org.graphiks.math.SkPoint
 import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.skcmsTransferFunctionEval
 import org.skia.foundation.skcms.skcmsTransferFunctionInvert

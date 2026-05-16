@@ -7,9 +7,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkM44
-import org.skia.math.SkMatrix
-import org.skia.math.SkV3
+import org.graphiks.math.SkM44
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkV3
 
 /**
  * R3.1-bis — verify that `SkCanvas` correctly stores and exposes the

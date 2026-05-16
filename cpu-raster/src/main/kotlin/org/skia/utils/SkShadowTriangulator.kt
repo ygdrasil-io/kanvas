@@ -1,7 +1,7 @@
 package org.skia.utils
 
 import org.skia.foundation.SkPath
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 import kotlin.math.abs
 import kotlin.math.sqrt
 

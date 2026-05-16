@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkPathBuilder
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Unit tests for [contourBounds] / [inParent] / [isFlatTree]
@@ -112,7 +112,7 @@ class SkPathOpsAsWindingTest {
     fun `leftEdge on a horizontal line picks the smaller-X endpoint`() {
         val rec = AsWindingVerbRec(
             org.skia.foundation.SkPath.Verb.kLine,
-            arrayOf(org.skia.math.SkPoint(10f, 5f), org.skia.math.SkPoint(0f, 5f)),
+            arrayOf(org.graphiks.math.SkPoint(10f, 5f), org.graphiks.math.SkPoint(0f, 5f)),
             1f, 0,
         )
         val lp = leftEdge(rec)
@@ -130,7 +130,7 @@ class SkPathOpsAsWindingTest {
         val contours = contourBounds(p)
         assertEquals(1, contours.size)
         // Reset minXY to ScalarMax so kInitial mode populates it.
-        contours[0].minXY = org.skia.math.SkPoint(AsWindingContour.SK_ScalarMax,
+        contours[0].minXY = org.graphiks.math.SkPoint(AsWindingContour.SK_ScalarMax,
                                                     AsWindingContour.SK_ScalarMax)
         nextEdge(p, contours[0], AsWindingEdge.kInitial)
         // Smallest X is 0 ; first non-horizontal edge with X=0 is the

@@ -1,7 +1,7 @@
 package org.skia.foundation
 
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 
 /**
  * Mirrors Skia's `SkTypeface` (`include/core/SkTypeface.h`).

@@ -5,16 +5,16 @@ import org.skia.core.SkSurface
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectBuilder
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsTrig
-import org.skia.math.SK_ColorWHITE
-import org.skia.math.SkColor4f
-import org.skia.math.SkColorGetR
+import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkColor4f
+import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextEncoding
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 
 /**

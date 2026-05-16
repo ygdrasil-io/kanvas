@@ -5,12 +5,12 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkColorSetARGB
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SkColorSetARGB
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkDashPathEffect
 import org.skia.foundation.SkPaint
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import java.io.PrintStream
 import java.io.ByteArrayOutputStream
 import java.io.StringWriter

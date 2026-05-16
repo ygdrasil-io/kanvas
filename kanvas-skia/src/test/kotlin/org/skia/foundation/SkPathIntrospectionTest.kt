@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkRect
-import org.skia.math.SkVector
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkVector
 
 /**
  * Slice 3.1 — read-only introspection on `SkPath` (Skia parity).

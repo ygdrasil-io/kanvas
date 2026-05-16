@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Slice 3.9 — `SkPath` interpolation + dump helpers (Skia parity).

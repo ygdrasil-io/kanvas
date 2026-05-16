@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin

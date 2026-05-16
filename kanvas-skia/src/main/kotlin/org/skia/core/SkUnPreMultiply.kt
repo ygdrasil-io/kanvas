@@ -1,12 +1,12 @@
 package org.skia.core
 
-import org.skia.math.SkColor
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
-import org.skia.math.SkPMColor
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
+import org.graphiks.math.SkPMColor
 
 /**
  * Mirrors Skia's

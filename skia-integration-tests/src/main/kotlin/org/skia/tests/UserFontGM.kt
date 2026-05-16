@@ -2,7 +2,7 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkDrawable
-import org.skia.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLACK
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkPaint
@@ -11,8 +11,8 @@ import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextBlobBuilder
 import org.skia.foundation.SkTypeface
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 import org.skia.utils.SkCustomTypefaceBuilder
 import org.skia.utils.drawCustomTypefaceText

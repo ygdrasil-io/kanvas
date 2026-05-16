@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkPoint
-import org.skia.math.SkVector
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkVector
 import kotlin.math.PI
 import kotlin.math.abs
 
@@ -149,7 +149,7 @@ class SkContourMeasureTest {
         val m = SkContourMeasureIter(path, forceClosed = false).next()!!
         val len = m.length()
         // Midpoint distance is len/2; position should be (5, 5).
-        val slot = arrayOfNulls<org.skia.math.SkMatrix>(1)
+        val slot = arrayOfNulls<org.graphiks.math.SkMatrix>(1)
         assertTrue(m.getMatrix(len * 0.5f, slot))
         val mx = slot[0]!!
         assertEquals(5f, mx.tx, 1e-2f)

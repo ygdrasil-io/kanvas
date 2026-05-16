@@ -1,5 +1,5 @@
 package org.skia.foundation.skcms
-import org.skia.math.SkcmsTransferFunction
+import org.graphiks.math.SkcmsTransferFunction
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals

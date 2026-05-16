@@ -20,9 +20,9 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.between
-import org.skia.math.zero_or_one
-import org.skia.math.SkPoint
+import org.graphiks.math.between
+import org.graphiks.math.zero_or_one
+import org.graphiks.math.SkPoint
 
 /**
  * One `(point, t)` entry on a curve. Forms a singly-linked "opp

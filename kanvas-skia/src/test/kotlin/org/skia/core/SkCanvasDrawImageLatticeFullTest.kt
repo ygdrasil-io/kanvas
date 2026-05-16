@@ -2,14 +2,14 @@ package org.skia.core
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * S7-C — verifies the full N × M lattice tessellation in

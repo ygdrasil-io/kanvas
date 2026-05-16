@@ -1,5 +1,5 @@
 package org.skia.foundation.skcms
-import org.skia.math.SkcmsMatrix3x4
+import org.graphiks.math.SkcmsMatrix3x4
 
 /**
  * Bit-compatible port of `skcms_B2A`

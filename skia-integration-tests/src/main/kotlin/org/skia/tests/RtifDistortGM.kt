@@ -4,15 +4,15 @@ import org.skia.core.SkCanvas
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectBuilder
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsRtifImageFilters
-import org.skia.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLACK
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilters
 import org.skia.effects.runtime.SkRuntimeImageFilters
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import org.skia.tools.SkRandom
 import org.skia.tools.ToolUtils
 

@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.math.SkcmsMatrix3x3
-import org.skia.math.SkcmsTransferFunction
+import org.graphiks.math.SkcmsMatrix3x3
+import org.graphiks.math.SkcmsTransferFunction
 
 /**
  * Phase B of MIGRATION_PLAN_COLORSPACE_PORT.md — exercise the

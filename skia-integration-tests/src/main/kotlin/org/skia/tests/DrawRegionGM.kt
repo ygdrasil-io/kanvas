@@ -3,9 +3,9 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRegion
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/drawregion.cpp` (`DrawRegionGM`, GM name

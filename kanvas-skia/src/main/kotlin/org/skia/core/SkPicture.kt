@@ -1,6 +1,6 @@
 package org.skia.core
 
-import org.skia.math.SK_ColorTRANSPARENT
+import org.graphiks.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkData
 import org.skia.foundation.SkDeserialProcs
@@ -12,8 +12,8 @@ import org.skia.foundation.SkShader
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkTypeface
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import kotlin.math.ceil
 
 /**

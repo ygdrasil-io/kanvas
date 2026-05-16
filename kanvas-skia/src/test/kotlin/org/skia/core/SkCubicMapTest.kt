@@ -3,7 +3,7 @@ package org.skia.core
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 import kotlin.math.abs
 
 /**

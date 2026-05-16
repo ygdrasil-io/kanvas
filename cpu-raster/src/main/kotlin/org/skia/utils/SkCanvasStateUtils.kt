@@ -3,8 +3,8 @@ package org.skia.utils
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkSurfaces
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 
 /**
  * Iso-aligned port of Skia's `SkCanvasStateUtils`

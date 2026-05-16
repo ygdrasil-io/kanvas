@@ -1,7 +1,7 @@
 package org.skia.foundation
 
 import org.skia.core.SkCanvas
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Mirrors Skia's

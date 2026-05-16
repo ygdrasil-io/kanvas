@@ -5,9 +5,9 @@ import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.effects.SkBuiltinSpecialisedEffects
 import org.skia.foundation.SkData
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkRect
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

@@ -1,16 +1,16 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorWHITE
-import org.skia.math.SK_ColorYELLOW
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorYELLOW
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/testgradient.cpp` (`TestGradientGM`,

@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkPoint
-import org.skia.math.SkVector
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkVector
 
 /**
  * Coverage for [SkPathMeasure] — the single-contour wrapper around

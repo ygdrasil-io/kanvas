@@ -1,18 +1,18 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorCYAN
-import org.skia.math.SK_ColorGRAY
-import org.skia.math.SK_ColorLTGRAY
-import org.skia.math.SK_ColorWHITE
-import org.skia.math.SK_ColorYELLOW
+import org.graphiks.math.SK_ColorCYAN
+import org.graphiks.math.SK_ColorGRAY
+import org.graphiks.math.SK_ColorLTGRAY
+import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorYELLOW
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextBlobBuilder
 import org.skia.foundation.SkTextEncoding
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 import kotlin.math.floor
 

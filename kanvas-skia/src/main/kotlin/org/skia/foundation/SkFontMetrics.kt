@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.math.SkScalar
+import org.graphiks.math.SkScalar
 
 /**
  * Mirrors Skia's `SkFontMetrics` (`include/core/SkFontMetrics.h`).

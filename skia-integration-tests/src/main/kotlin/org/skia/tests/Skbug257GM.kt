@@ -1,23 +1,23 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorCYAN
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorCYAN
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextBlobBuilder
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
-import org.skia.math.SkVector
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
+import org.graphiks.math.SkVector
 import org.skia.tools.ToolUtils
 
 /**

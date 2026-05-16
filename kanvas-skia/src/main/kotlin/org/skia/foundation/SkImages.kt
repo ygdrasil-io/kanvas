@@ -1,13 +1,13 @@
 package org.skia.foundation
 
 
-import org.skia.math.SK_ColorTRANSPARENT
+import org.graphiks.math.SK_ColorTRANSPARENT
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
-import org.skia.math.SkIPoint
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
 import java.nio.ByteBuffer
 
 /**

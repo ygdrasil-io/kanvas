@@ -3,7 +3,7 @@ package org.skia.utils
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
-import org.skia.math.SkV3
+import org.graphiks.math.SkV3
 
 /**
  * Verifies that [SkCamera3D] mirrors the orientation / projection

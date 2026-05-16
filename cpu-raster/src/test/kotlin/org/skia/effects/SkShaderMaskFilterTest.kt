@@ -4,9 +4,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkShader
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 
 /**
  * Exercises [SkShaderMaskFilter] : the filter must multiply incoming

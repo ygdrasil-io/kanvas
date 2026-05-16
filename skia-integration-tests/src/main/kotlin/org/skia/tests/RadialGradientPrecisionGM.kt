@@ -1,13 +1,13 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorGREEN
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRadialGradient
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
 
 /**
  * Port of Skia's `gm/radial_gradient_precision.cpp::radial_gradient_precision`

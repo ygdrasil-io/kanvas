@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkIPoint
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkIRect
 
 /**
  * R-final.9 — sanity tests for [SkImages.MakeWithFilter] and

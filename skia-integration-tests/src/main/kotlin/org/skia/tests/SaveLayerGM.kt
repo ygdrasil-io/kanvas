@@ -5,7 +5,7 @@ import org.skia.core.SaveLayerRec
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
 
 /**

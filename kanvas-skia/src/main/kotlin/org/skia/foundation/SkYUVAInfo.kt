@@ -1,7 +1,7 @@
 package org.skia.foundation
 
 import org.skia.foundation.SkEncodedOrigin
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Mirrors Skia's

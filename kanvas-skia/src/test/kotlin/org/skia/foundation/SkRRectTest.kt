@@ -5,9 +5,9 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
-import org.skia.math.SkVector
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkVector
 
 class SkRRectTest {
 

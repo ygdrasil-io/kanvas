@@ -1,9 +1,9 @@
 package org.skia.core
 
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkPath
-import org.skia.math.SkPoint3
-import org.skia.math.SkScalar
+import org.graphiks.math.SkPoint3
+import org.graphiks.math.SkScalar
 
 /**
  * SPI dispatcher used by [SkCanvas.drawShadow] when no override is

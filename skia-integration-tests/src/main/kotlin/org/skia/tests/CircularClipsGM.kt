@@ -5,8 +5,8 @@ import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathDirection
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/circularclips.cpp::CircularClipsGM` (800 × 200).

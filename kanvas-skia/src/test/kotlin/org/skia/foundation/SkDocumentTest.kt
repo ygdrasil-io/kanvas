@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Tests for the [SkDocument] abstract base — covers the begin/end/close

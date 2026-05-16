@@ -4,9 +4,9 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPerlinNoiseShader
 import org.skia.foundation.SkShader
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/perlinnoise.cpp::PerlinNoiseGM` (220 × 620).

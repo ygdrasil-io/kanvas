@@ -1,22 +1,22 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorCYAN
-import org.skia.math.SK_ColorGREEN
-import org.skia.math.SK_ColorLTGRAY
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
-import org.skia.math.SkColor
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorCYAN
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorLTGRAY
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkRRect
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint3
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint3
+import org.graphiks.math.SkRect
 import org.skia.utils.SkShadowUtils
 import kotlin.math.max
 
@@ -110,7 +110,7 @@ public class ShadowUtilsGM(private val mode: Mode) : GM() {
         val kHeight = 50f
 
         // transform light position relative to canvas
-        val lightXY = canvas.getTotalMatrix().mapXY(org.skia.math.SkPoint.Make(250f, 400f))
+        val lightXY = canvas.getTotalMatrix().mapXY(org.graphiks.math.SkPoint.Make(250f, 400f))
         val lightPos = SkPoint3(lightXY.fX, lightXY.fY, 500f)
 
         canvas.translate(3f * kPad, 3f * kPad)

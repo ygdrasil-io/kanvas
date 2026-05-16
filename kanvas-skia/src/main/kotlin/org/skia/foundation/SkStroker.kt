@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.math.SkScalar
+import org.graphiks.math.SkScalar
 import kotlin.math.PI
 import kotlin.math.acos
 import kotlin.math.ceil

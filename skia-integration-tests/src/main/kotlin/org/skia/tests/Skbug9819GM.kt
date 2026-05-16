@@ -2,11 +2,11 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorSetRGB
+import org.graphiks.math.SkColorSetRGB
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Port of Skia's `gm/skbug_9819.cpp` (`skbug_9819` GM).

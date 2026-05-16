@@ -4,8 +4,8 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkDashPathEffect
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/bug9331.cpp::bug9331` (256 × 256).

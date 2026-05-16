@@ -6,7 +6,7 @@ import org.skia.core.SkLattice
 import org.skia.core.SkPicture
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
-import org.skia.math.SkColor
+import org.graphiks.math.SkColor
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
@@ -20,12 +20,12 @@ import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTextSlug
 import org.skia.foundation.SkVertices
-import org.skia.math.SkIRect
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkPoint3
-import org.skia.math.SkRect
-import org.skia.math.SkScalar
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkPoint3
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkScalar
 
 /**
  * No-op canvas for analysis passes that need the state stack
@@ -83,7 +83,7 @@ public open class SkNoDrawCanvas(
     ) {}
     override fun drawPoints(
         mode: PointMode,
-        points: Array<org.skia.math.SkPoint>,
+        points: Array<org.graphiks.math.SkPoint>,
         paint: SkPaint,
     ) {}
     override fun drawImage(
@@ -104,9 +104,9 @@ public open class SkNoDrawCanvas(
     override fun drawColor(color: SkColor, mode: SkBlendMode) {}
     override fun drawPaint(paint: SkPaint) {}
     override fun drawPatch(
-        cubics: Array<org.skia.math.SkPoint>,
+        cubics: Array<org.graphiks.math.SkPoint>,
         colors: IntArray?,
-        texCoords: Array<org.skia.math.SkPoint>?,
+        texCoords: Array<org.graphiks.math.SkPoint>?,
         blendMode: SkBlendMode,
         paint: SkPaint,
     ) {}

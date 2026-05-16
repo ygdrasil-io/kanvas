@@ -2,14 +2,14 @@ package org.skia.pathops.internal
 
 
 
-import org.skia.math.FLT_EPSILON
-import org.skia.math.SkDPoint
-import org.skia.math.SkDVector
+import org.graphiks.math.FLT_EPSILON
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.SkDVector
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Unit tests for [SkDPoint] / [SkDVector] (Phase D1.1.a).

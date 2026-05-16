@@ -3,11 +3,11 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.core.SkPictureRecorder
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkM44
-import org.skia.math.SkRect
-import org.skia.math.SkSize
-import org.skia.math.SkV3
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkM44
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkSize
+import org.graphiks.math.SkV3
 import kotlin.math.PI
 import kotlin.math.tan
 

@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkRSXform
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * Phase I5.2 — `SkCanvas.drawAtlas` semantics.

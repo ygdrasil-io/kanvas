@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.codec.SkVideoDecoder
 import org.skia.core.SkCanvas
 import org.skia.foundation.stream.SkMemoryStream
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * R-final.S — **STUB.FFMPEG** consumer GM. Iso-aligned port of

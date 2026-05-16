@@ -4,8 +4,8 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/fadefilter.cpp::fadefilter` (256 × 256).

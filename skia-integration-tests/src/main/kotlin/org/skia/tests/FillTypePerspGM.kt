@@ -1,18 +1,18 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorWHITE
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkRadialGradient
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkISize
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * Port of upstream Skia's `gm/filltypespersp.cpp` :

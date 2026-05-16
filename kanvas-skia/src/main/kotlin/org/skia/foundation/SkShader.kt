@@ -1,15 +1,15 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColor
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkMatrix
-import org.skia.math.SkScalar
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkScalar
 import kotlin.math.floor
 import kotlin.math.sqrt
 

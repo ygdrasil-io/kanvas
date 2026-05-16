@@ -3,8 +3,8 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.core.withSave
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 import org.skia.tools.SkRandom
 import org.skia.tools.ToolUtils
 

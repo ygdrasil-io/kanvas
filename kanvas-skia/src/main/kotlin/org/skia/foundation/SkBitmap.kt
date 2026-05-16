@@ -1,16 +1,16 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColor
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkIPoint
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
+import org.graphiks.math.SkIPoint
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -487,7 +487,7 @@ public class SkBitmap(
         tileX: SkTileMode = SkTileMode.kClamp,
         tileY: SkTileMode = SkTileMode.kClamp,
         sampling: SkSamplingOptions = SkSamplingOptions.Default,
-        localMatrix: org.skia.math.SkMatrix = org.skia.math.SkMatrix.Identity,
+        localMatrix: org.graphiks.math.SkMatrix = org.graphiks.math.SkMatrix.Identity,
     ): SkShader = SkBitmapShader(asImage(), tileX, tileY, sampling, localMatrix)
 
     // ─── Phase R2.11 — externally-managed pixel storage ───────────────

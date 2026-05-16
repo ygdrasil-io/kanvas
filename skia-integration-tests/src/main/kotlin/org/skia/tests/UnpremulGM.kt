@@ -8,8 +8,8 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/unpremul.cpp::unpremul` GM
@@ -122,7 +122,7 @@ public class UnpremulGM : GM() {
         c.scale(2f, 2f)
 
         val greenFill = SkPaint().apply {
-            color = org.skia.math.SkColorSetRGB(27, 158, 119)
+            color = org.graphiks.math.SkColorSetRGB(27, 158, 119)
         }
         c.drawCircle(0f, 0f, 12f, greenFill)
 

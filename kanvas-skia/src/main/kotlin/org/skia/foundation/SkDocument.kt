@@ -1,7 +1,7 @@
 package org.skia.foundation
 
 import org.skia.core.SkCanvas
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * High-level API for creating a document-based canvas. Mirrors upstream

@@ -2,13 +2,13 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SrcRectConstraint
-import org.skia.math.SK_ColorBLUE
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/bitmaprect.cpp` (`BitmapRectRounding`).

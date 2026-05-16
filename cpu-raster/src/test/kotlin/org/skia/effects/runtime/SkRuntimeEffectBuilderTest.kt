@@ -7,10 +7,10 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkColorFilter
-import org.skia.math.SkMatrix
-import org.skia.math.SkPoint
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

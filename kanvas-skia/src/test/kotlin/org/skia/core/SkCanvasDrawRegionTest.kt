@@ -2,13 +2,13 @@ package org.skia.core
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorRED
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorRED
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRegion
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 
 /**
  * Phase R2.13 — `SkCanvas.drawRegion(region, paint)` semantics.
@@ -60,7 +60,7 @@ class SkCanvasDrawRegionTest {
             SkPaint(SK_ColorRED),
         )
         SkCanvas(bmRect).drawRect(
-            org.skia.math.SkRect.MakeLTRB(1f, 1f, 8f, 8f),
+            org.graphiks.math.SkRect.MakeLTRB(1f, 1f, 8f, 8f),
             SkPaint(SK_ColorRED),
         )
         assertEquals(bmRect.pixels.toList(), bmRegion.pixels.toList())

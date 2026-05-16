@@ -1,14 +1,14 @@
 package org.skia.foundation
 
 
-import org.skia.math.SkColor
-import org.skia.math.SkColorGetA
-import org.skia.math.SkColorGetB
-import org.skia.math.SkColorGetG
-import org.skia.math.SkColorGetR
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColor
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkEncodedImageFormat
-import org.skia.math.SkIRect
+import org.graphiks.math.SkIRect
 import java.nio.ByteBuffer
 
 /**
@@ -66,7 +66,7 @@ public class SkImage public constructor(
         tileX: SkTileMode = SkTileMode.kClamp,
         tileY: SkTileMode = SkTileMode.kClamp,
         sampling: SkSamplingOptions = SkSamplingOptions.Default,
-        localMatrix: org.skia.math.SkMatrix = org.skia.math.SkMatrix.Identity,
+        localMatrix: org.graphiks.math.SkMatrix = org.graphiks.math.SkMatrix.Identity,
     ): SkShader = SkBitmapShader(this, tileX, tileY, sampling, localMatrix)
 
     /**
@@ -75,7 +75,7 @@ public class SkImage public constructor(
      */
     public fun makeShader(
         sampling: SkSamplingOptions,
-        localMatrix: org.skia.math.SkMatrix = org.skia.math.SkMatrix.Identity,
+        localMatrix: org.graphiks.math.SkMatrix = org.graphiks.math.SkMatrix.Identity,
     ): SkShader = SkBitmapShader(this, SkTileMode.kClamp, SkTileMode.kClamp, sampling, localMatrix)
 
     /**

@@ -2,7 +2,7 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsRelational
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 import org.skia.tests.RuntimeIntrinsicsPlotHelper.columnsToWidth
 import org.skia.tests.RuntimeIntrinsicsPlotHelper.drawShaderCell
 import org.skia.tests.RuntimeIntrinsicsPlotHelper.kPadding

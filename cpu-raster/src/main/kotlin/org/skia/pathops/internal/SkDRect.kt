@@ -13,8 +13,8 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDPoint
-import org.skia.math.approximately_between
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.approximately_between
 import kotlin.math.max
 import kotlin.math.min
 

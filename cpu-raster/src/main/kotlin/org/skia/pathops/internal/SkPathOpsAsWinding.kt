@@ -28,10 +28,10 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.zero_or_one
+import org.graphiks.math.zero_or_one
 import org.skia.foundation.SkPath
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 
 /**
  * One contour of an `AsWinding` input — its bbox + the verb-stream

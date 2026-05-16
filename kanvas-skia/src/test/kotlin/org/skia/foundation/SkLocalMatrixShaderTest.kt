@@ -1,14 +1,14 @@
 package org.skia.foundation
 
 
-import org.skia.math.SK_ColorRED
+import org.graphiks.math.SK_ColorRED
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.skia.core.SkAlphaType
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.math.SkMatrix
+import org.graphiks.math.SkMatrix
 
 /**
  * Unit tests for [SkShader.makeWithLocalMatrix] (R-final.2).

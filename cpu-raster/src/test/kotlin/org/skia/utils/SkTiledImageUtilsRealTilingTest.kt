@@ -7,11 +7,11 @@ import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkRect
+import org.graphiks.math.SkRect
 
 /**
  * R-suivi.8 — verifies that [SkTiledImageUtils.DrawImage] /

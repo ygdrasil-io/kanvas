@@ -1,7 +1,7 @@
 package org.skia.effects.runtime
 
 import org.skia.foundation.SkBlender
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

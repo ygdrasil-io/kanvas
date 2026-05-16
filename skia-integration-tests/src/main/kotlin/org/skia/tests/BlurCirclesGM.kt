@@ -2,12 +2,12 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.withSave
-import org.skia.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLACK
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
 import org.skia.foundation.SkMaskFilter
 import org.skia.foundation.SkPaint
-import org.skia.math.SkISize
+import org.graphiks.math.SkISize
 
 /**
  * Port of Skia's `gm/blurcircles.cpp::BlurCirclesGM` (950 × 950).

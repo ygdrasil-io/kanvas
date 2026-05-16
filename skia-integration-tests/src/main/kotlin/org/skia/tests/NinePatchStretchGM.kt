@@ -5,10 +5,10 @@ import org.skia.core.SkSurface
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
-import org.skia.math.SkRect
-import org.skia.math.SkSize
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
+import org.graphiks.math.SkSize
 
 /**
  * Port of Skia's `gm/ninepatchstretch.cpp` (`NinePatchStretchGM`,

@@ -8,9 +8,9 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDLine
-import org.skia.math.SkDPoint
-import org.skia.math.SkDVector
+import org.graphiks.math.SkDLine
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.SkDVector
 internal class SkTCubic(var cubic: SkDCubic = SkDCubic()) : SkTCurve {
 
     override fun pointCount(): Int = SkDCubic.kPointCount

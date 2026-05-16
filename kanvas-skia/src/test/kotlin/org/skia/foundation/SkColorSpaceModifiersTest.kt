@@ -116,7 +116,7 @@ class SkColorSpaceModifiersTest {
         org.junit.jupiter.api.Assertions.assertEquals(want, got, msg ?: "")
     }
 
-    private fun assertEquals(want: org.skia.math.SkcmsMatrix3x3, got: org.skia.math.SkcmsMatrix3x3) {
+    private fun assertEquals(want: org.graphiks.math.SkcmsMatrix3x3, got: org.graphiks.math.SkcmsMatrix3x3) {
         for (r in 0 until 3) for (c in 0 until 3) {
             assertEquals(want.vals[r][c], got.vals[r][c], "[$r][$c]")
         }

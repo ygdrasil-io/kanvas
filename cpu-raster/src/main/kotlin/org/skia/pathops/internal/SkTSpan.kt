@@ -17,10 +17,10 @@
 package org.skia.pathops.internal
 
 
-import org.skia.math.SkDPoint
-import org.skia.math.approximately_zero_when_compared_to
-import org.skia.math.between
-import org.skia.math.precisely_zero_when_compared_to
+import org.graphiks.math.SkDPoint
+import org.graphiks.math.approximately_zero_when_compared_to
+import org.graphiks.math.between
+import org.graphiks.math.precisely_zero_when_compared_to
 import kotlin.math.abs
 import kotlin.math.max
 

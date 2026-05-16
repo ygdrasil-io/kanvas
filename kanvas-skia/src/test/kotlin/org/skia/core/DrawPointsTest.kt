@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
-import org.skia.math.SkPoint
+import org.graphiks.math.SkPoint
 
 /**
  * Phase I5.1 — `drawPoints` semantics across all three [SkCanvas.PointMode]s.

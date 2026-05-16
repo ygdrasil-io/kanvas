@@ -4,12 +4,12 @@ import org.skia.core.SkCanvas
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.effects.SkBuiltinSpecialisedEffects
 import org.skia.foundation.SkBitmap
-import org.skia.math.SkColorSetARGB
+import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
-import org.skia.math.SkISize
-import org.skia.math.SkRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
 
 /**
  * Port of Skia's `gm/destcolor.cpp::DEF_SIMPLE_GM(destcolor)`.

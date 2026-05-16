@@ -1,11 +1,11 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.math.SK_ColorBLACK
-import org.skia.math.SK_ColorWHITE
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlurStyle
-import org.skia.math.SkColor4f
+import org.graphiks.math.SkColor4f
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
@@ -15,10 +15,10 @@ import org.skia.foundation.SkRadialGradient
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSurfaces
 import org.skia.foundation.SkTileMode
-import org.skia.math.SkIRect
-import org.skia.math.SkISize
-import org.skia.math.SkPoint
-import org.skia.math.SkRect
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 
 /**
@@ -253,7 +253,7 @@ public class DrawBitmapRectGM(
 
             val paint = SkPaint()
             var rect = SkRect.MakeWH(wF, hF)
-            var matrix = org.skia.math.SkMatrix.Identity
+            var matrix = org.graphiks.math.SkMatrix.Identity
             for (i in 0 until 4) {
                 paint.shader = SkRadialGradient.Make(
                     pt, radius, colors, pos, SkTileMode.kRepeat, matrix,
