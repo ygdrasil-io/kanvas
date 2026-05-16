@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkEncodedImageFormat
+import org.skia.codec.SkImageCodecs
+import org.skia.codec.SkImageGeneratorImages
+import org.skia.foundation.SkEncodedImageFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -19,12 +21,12 @@ import java.nio.ByteOrder
  *  - [SkImages.RasterFromData] reads pixels out of a `ByteBuffer` honouring
  *    `rowBytes` (including padding) and rejects mis-sized buffers /
  *    unsupported colour types.
- *  - [SkImages.DeferredFromEncodedData] decodes a PNG-encoded byte stream
+ *  - [SkImageCodecs.DeferredFromEncodedData] decodes a PNG-encoded byte stream
  *    via the registered codec family.
  *  - [SkImages.RasterFromPixmap] / [SkImages.RasterFromPixmapCopy] snapshot
  *    a pixmap into a fresh [SkImage] (kanvas-skia copies eagerly — see
  *    [SkImages.RasterFromPixmap] KDoc).
- *  - [SkImages.DeferredFromGenerator] decodes a generator into a fresh
+ *  - [SkImageGeneratorImages.DeferredFromGenerator] decodes a generator into a fresh
  *    [SkImage], matching the dedicated
  *    [SkImageGeneratorImages.DeferredFromGenerator] entry point.
  */
@@ -120,7 +122,7 @@ class SkImagesTest {
         val pngBytes = source.asImage()
             .encodeToData(SkEncodedImageFormat.kPNG, quality = 100)!!
             .toByteArray()
-        val image = SkImages.DeferredFromEncodedData(ByteBuffer.wrap(pngBytes))
+        val image = SkImageCodecs.DeferredFromEncodedData(ByteBuffer.wrap(pngBytes))
         assertNotNull(image)
         assertEquals(4, image!!.width)
         assertEquals(4, image.height)
@@ -132,7 +134,7 @@ class SkImagesTest {
     @Test
     fun `DeferredFromEncodedData returns null for non-image bytes`() {
         val nonsense = ByteBuffer.wrap("not an image".toByteArray())
-        assertNull(SkImages.DeferredFromEncodedData(nonsense))
+        assertNull(SkImageCodecs.DeferredFromEncodedData(nonsense))
     }
 
     // ─── R-suivi.12 — RasterFromPixmap / RasterFromPixmapCopy / DeferredFromGenerator ───
@@ -222,7 +224,7 @@ class SkImagesTest {
     fun `DeferredFromGenerator decodes generator pixels into an SkImage`() {
         val info = SkImageInfo.Make(2, 2, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul)
         val gen = CheckerGenerator(info)
-        val image = SkImages.DeferredFromGenerator(gen)
+        val image = SkImageGeneratorImages.DeferredFromGenerator(gen)
         assertNotNull(image)
         assertEquals(2, image!!.width)
         assertEquals(2, image.height)
@@ -240,7 +242,7 @@ class SkImagesTest {
         val info = SkImageInfo.Make(3, 3, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul)
         val genA = CheckerGenerator(info)
         val genB = CheckerGenerator(info)
-        val viaImages = SkImages.DeferredFromGenerator(genA)
+        val viaImages = SkImageGeneratorImages.DeferredFromGenerator(genA)
         val viaDedicated = SkImageGeneratorImages.DeferredFromGenerator(genB)
         assertNotNull(viaImages); assertNotNull(viaDedicated)
         for (y in 0 until 3) for (x in 0 until 3) {

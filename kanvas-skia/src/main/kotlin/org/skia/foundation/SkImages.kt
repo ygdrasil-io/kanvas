@@ -1,6 +1,5 @@
 package org.skia.foundation
 
-import org.skia.codec.SkCodec
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.math.SkIPoint
@@ -184,51 +183,15 @@ public object SkImages {
         return SkImage.Make(bitmap)
     }
 
-    /**
-     * Mirrors Skia's
-     * `SkImages::DeferredFromEncodedData(sk_sp<const SkData>,
-     * std::optional<SkAlphaType>)`.
-     *
-     * Decodes the encoded byte stream [encoded] (PNG / JPEG / GIF /
-     * BMP / WBMP / WEBP — see [SkCodec.MakeFromData] for the registered
-     * formats) into a fresh raster [SkImage]. Returns `null` when no
-     * registered codec matches the leading bytes, or when the decode
-     * itself fails. Despite the upstream name ("deferred"), the
-     * `:kanvas-skia` raster backend eagerly decodes — there is no JIT
-     * decode-on-draw path.
-     *
-     * The alpha-type parameter from upstream is omitted ; we use the
-     * codec's natural alpha type (matches `std::nullopt` upstream).
-     */
-    public fun DeferredFromEncodedData(encoded: ByteBuffer): SkImage? {
-        // Materialise the ByteBuffer to a ByteArray without mutating the
-        // caller's read cursor.
-        val view = encoded.duplicate()
-        val bytes = ByteArray(view.remaining())
-        view.get(bytes)
-        val codec = SkCodec.MakeFromData(bytes) ?: return null
-        val (bitmap, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || bitmap == null) return null
-        return SkImage.Make(bitmap)
-    }
+    // `DeferredFromEncodedData(ByteBuffer): SkImage?` factory moved to
+    // [org.skia.codec.SkImageCodecs] (cycle break preparing the
+    // :cpu-raster Gradle module extraction — foundation no longer
+    // imports from codec).
 
-    /**
-     * Mirrors Skia's
-     * `SkImages::DeferredFromGenerator(std::unique_ptr<SkImageGenerator>)`.
-     *
-     * Delegates to [SkImageGeneratorImages.DeferredFromGenerator] —
-     * the original landing site for this factory (kept as the canonical
-     * implementation so the cross-cutting [SkImages] aggregator doesn't
-     * duplicate the byte-buffer plumbing).
-     *
-     * Despite the upstream name ("deferred"), the kanvas-skia raster
-     * backend decodes the generator eagerly into an 8888 [SkImage]
-     * (see [SkImageGeneratorImages.DeferredFromGenerator] KDoc).
-     * Returns `null` if the generator reports an empty info or fails
-     * to produce pixels.
-     */
-    public fun DeferredFromGenerator(generator: SkImageGenerator): SkImage? =
-        SkImageGeneratorImages.DeferredFromGenerator(generator)
+    // `DeferredFromGenerator` factory moved to
+    // [org.skia.codec.SkImageCodecs.DeferredFromGenerator] (cycle break
+    // preparing the :cpu-raster Gradle module extraction — foundation
+    // no longer imports from codec).
 
     /**
      * Mirrors Skia's

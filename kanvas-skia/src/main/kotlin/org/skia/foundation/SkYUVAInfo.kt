@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.codec.SkEncodedOrigin
+import org.skia.foundation.SkEncodedOrigin
 import org.skia.math.SkISize
 
 /**
