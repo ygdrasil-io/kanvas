@@ -286,6 +286,7 @@ Premier `drawPath` GPU. Scope minimal mais utile : single-contour convex polygon
 Petit ramassage de quick wins une fois les curves dispo : exploration ciblée de GMs simples côté `:skia-integration-tests` qui devraient marcher avec la surface actuelle.
 
 - [x] [ThinStrokedRectsWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ThinStrokedRectsWebGpuTest.kt) — 7×8 grid de stroke rects axis-aligned avec sw ∈ {4, 2, 1, 0.5, 0.25, 0.125, 0}, tous AA. Score **87.13%** (drift = colorspace + sub-pixel edge conventions). Ratchet `ThinStrokedRectsGM=87.13` ajouté.
+- [x] [Skbug12244WebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/Skbug12244WebGpuTest.kt) — single `drawPath` avec **multi-contour** line-only (2 contours fermés, l'intérieur est un "hole"). Pre-G3.3b.2, le fan tess flatten les 2 contours en un seul polygon → le hole est rempli. Baseline **70.87%** (la majorité de la bitmap = bg blanc inchangé). Attendu de grimper avec G3.3b.2.
 - [x] **SimpleRectGM dropped**. 10 000 `drawRect` calls saturent le chemin "per-draw render-pass + uniform buffer + bind group" de `flush()`. Le test hangs ou prend des minutes. Plan : ajouter un **bulk-draw path** quand le besoin arrive (instancing ou vertex-buffer with per-vertex color). Cf. note ci-dessous.
 
 #### Follow-up : bulk rendering pour GMs high-draw-count
