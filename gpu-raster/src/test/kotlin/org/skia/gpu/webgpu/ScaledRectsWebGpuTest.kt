@@ -57,7 +57,8 @@ class ScaledRectsWebGpuTest {
             // polygon coverage yet). Sits below the plan's G2 90% target,
             // unblocked when G3.3b lands AA polygon coverage and G6 the
             // working-space convergence.
-            val floor = 87.0
+            // G6.0 colorspace transform → perfect match.
+            val floor = 99.99
             assertTrue(
                 cmp.similarity >= floor,
                 "ScaledRectsGM on GPU regressed below ratchet floor : " +

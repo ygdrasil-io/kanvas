@@ -61,7 +61,9 @@ class BigRectWebGpuTest {
             //    different fractional values at corners.
             //  - Persistent colorspace drift (sRGB vs Rec.2020), to be
             //    resolved in G6.
-            val floor = 70.5
+            // G6.0 colorspace transform → near-perfect (40/40625 pixels still
+            // off, AA hairline + stroke corner edge cases for G3.4).
+            val floor = 99.85
             assertTrue(
                 cmp.similarity >= floor,
                 "BigRectGM on GPU regressed below ratchet floor : " +

@@ -228,7 +228,7 @@ Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et qu
 - [x] G2.2 : 4 modes Porter-Duff natifs verts via `BlendModeTest` (5 sous-tests dont l'erreur explicite sur mode non-supporté), G2.1/G1.x toujours verts (9 tests total `:gpu-raster:test`).
 - [x] G2.3a : AA rect via coverage analytique vert via `AaRectFillTest` (2 sous-tests sur edges half-integer + integer), backward compat préservée (11 tests total).
 - [x] G2.3b : cross-test harness en place + 1er vrai GM vert (`ThinRectsGM` à 90.89%, floor 90%), 12 tests total.
-- [ ] **≥ 4 GMs Phase 1-2 à ≥ 90%** : **2/4** ≥ 90% (ThinRectsGM 90.89%, ClipStrokeRectGM 96.60%). **4/4 runnent sans crash** post-G3.3a.1 : BigRectGM 70.7% (AA hairline + corner conv. → G3.4), ScaledRectsGM 87.79% (AA polygon → G3.3b + colorspace → G6). Le delta ≥ 90% pour les 2 restants est attribué au colorspace + AA polygon coverage.
+- [x] **≥ 4 GMs Phase 1-2 à ≥ 90%** : **4/4 atteint** post-G6.0 (ThinRectsGM 100 %, ClipStrokeRectGM 100 %, ScaledRectsGM 100 %, BigRectGM 99.90 %). Bonus : ThinStrokedRectsGM 94.21 %, Skbug12244GM 90.33 %. **6/6 ratchet entries au-dessus du target G2 90 %**.
 
 ---
 
@@ -397,12 +397,44 @@ Fragment-side analytical edge coverage pour les paths convexes. `paint.isAntiAli
 
 **But** : finir la convergence avec le raster F16 (master plan Phase 6a/6b/6c). Le rendu GPU doit produire des images bit-équivalentes (à 1 ulp près) du rendu raster pour les GMs où le seul shader est `paint.color`.
 
-- [ ] **Render target F16 linear-Rec.2020** confirmé.
+### G6.0 — CPU-side colorspace post-process en WebGpuSink ✅
+
+Slice probe pour valider l'hypothèse "colorspace est le drift dominant" avant d'engager la refacto F16 + render-target. Hypothèse confirmée largement.
+
+[`WebGpuSink.draw`](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt) applique maintenant per-pixel après readback :
+
+1. **sRGB byte → linear sRGB float** : sRGB transfer inverse (`x <= 0.04045 ? x/12.92 : ((x + 0.055) / 1.055)^2.4`).
+2. **linear sRGB → linear Rec.2020** : 3×3 BT.2020 primaries matrix.
+3. **linear Rec.2020 → Rec.2020-encoded byte** : Rec.2020 OETF (`L < 0.0181 ? 4.5*L : 1.0993 * L^0.45 - 0.0993`).
+
+Reference `original-888/*.png` est encodée en `DM_REFERENCE_COLOR_SPACE = Rec.2020 primaries + Rec.2020 transfer` (confirmé via `TestUtils.kt:50`). Le transform aligne le comparison space.
+
+**Impact mesuré (massif) :**
+
+| GM | Avant G6.0 | Après G6.0 | Delta |
+|---|---|---|---|
+| ThinRectsGM | 90.89% | **100.00%** | +9.11 |
+| ClipStrokeRectGM | 96.60% | **100.00%** | +3.40 |
+| ScaledRectsGM | 87.79% | **100.00%** | +12.21 |
+| BigRectGM | 70.70% | **99.90%** | +29.20 🔥 |
+| ThinStrokedRectsGM | 87.19% | **94.21%** | +7.02 |
+| Skbug12244GM | 70.87% | **90.33%** | +19.46 |
+
+**Vérification G2 : 4/4 GMs cibles ≥ 90 % atteint** (4 à 100 %, BigRectGM à 99.90 %). Le target G2 historique est tenu.
+
+Scope appliqué uniquement aux **cross-tests via WebGpuSink** ; les unit tests (`RectFillCrossTest`, `BlendModeTest`, etc.) lisent les bytes raw du device et continuent à comparer dans l'espace pré-transform.
+
+### G6.1 — Future : faire le transform dans le pipeline GPU (à venir)
+
+Le post-process CPU de G6.0 fonctionne mais demande de la boucle byte-par-byte côté JVM. Le plan complet G6 (F16 linear-Rec.2020 working space + present-pass) déplace la conversion dans le GPU :
+
+- [ ] **Render target F16 linear-Rec.2020** au lieu de RGBA8Unorm.
 - [ ] **Final present pass** : compute ou fragment quad qui :
   1. Lit le F16 linear-Rec.2020.
-  2. Applique la matrice de transfert vers Rec.2020 encoded (gamma).
+  2. Applique la Rec.2020 OETF.
   3. Écrit dans `rgba8unorm` SRGB-aware (Rec.2020 8-bit packing).
-- [ ] **Validation pixel-à-pixel** : pour les GMs qui passent en raster avec ≥ 99%, le GPU doit aussi atteindre ≥ 99% à `tolerance=1` ou justifier le drift.
+- [ ] **WebGpuSink** : drop le post-process CPU (devenu redondant).
+- [ ] **Validation pixel-à-pixel** : scores attendus inchangés (le math est le même), bénéfice = perf + cohérence pipeline.
 
 ---
 
