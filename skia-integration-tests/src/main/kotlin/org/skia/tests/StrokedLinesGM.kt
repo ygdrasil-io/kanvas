@@ -1,9 +1,9 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorGREEN
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorGREEN
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlurStyle
 import org.skia.foundation.SkDashPathEffect

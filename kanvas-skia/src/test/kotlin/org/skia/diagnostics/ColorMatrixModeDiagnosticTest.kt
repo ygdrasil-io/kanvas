@@ -1,11 +1,11 @@
 package org.skia.diagnostics
 
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColorGetA
-import org.skia.foundation.SkColorGetB
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetR
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorGetA
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.math.SkcmsTransferFunction
 import org.skia.foundation.skcms.skcmsTransferFunctionEval

@@ -8,7 +8,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectBuilder
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor4f
 import kotlin.math.abs
 
 /**

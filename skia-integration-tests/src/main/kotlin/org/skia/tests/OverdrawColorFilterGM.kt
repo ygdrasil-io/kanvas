@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.effects.SkOverdrawColorFilter
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions

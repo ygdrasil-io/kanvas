@@ -1,10 +1,10 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorCYAN
-import org.skia.foundation.SK_ColorGRAY
-import org.skia.foundation.SK_ColorTRANSPARENT
-import org.skia.foundation.SK_ColorYELLOW
+import org.skia.math.SK_ColorCYAN
+import org.skia.math.SK_ColorGRAY
+import org.skia.math.SK_ColorTRANSPARENT
+import org.skia.math.SK_ColorYELLOW
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkLumaColorFilter
 import org.skia.foundation.SkPaint

@@ -5,11 +5,11 @@ import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
-import org.skia.foundation.SkColor
-import org.skia.foundation.SkColorGetB
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetR
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColor
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontStyle

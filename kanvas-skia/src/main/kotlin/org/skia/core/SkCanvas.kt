@@ -5,7 +5,7 @@ import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkRegion
-import org.skia.foundation.SkColor
+import org.skia.math.SkColor
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
@@ -1791,23 +1791,23 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val w10 = s * (1f - t)
         val w01 = (1f - s) * t
         val w11 = s * t
-        val a = (org.skia.foundation.SkColorGetA(corners[0]) * w00 +
-            org.skia.foundation.SkColorGetA(corners[1]) * w10 +
-            org.skia.foundation.SkColorGetA(corners[2]) * w11 +
-            org.skia.foundation.SkColorGetA(corners[3]) * w01).toInt().coerceIn(0, 255)
-        val r = (org.skia.foundation.SkColorGetR(corners[0]) * w00 +
-            org.skia.foundation.SkColorGetR(corners[1]) * w10 +
-            org.skia.foundation.SkColorGetR(corners[2]) * w11 +
-            org.skia.foundation.SkColorGetR(corners[3]) * w01).toInt().coerceIn(0, 255)
-        val g = (org.skia.foundation.SkColorGetG(corners[0]) * w00 +
-            org.skia.foundation.SkColorGetG(corners[1]) * w10 +
-            org.skia.foundation.SkColorGetG(corners[2]) * w11 +
-            org.skia.foundation.SkColorGetG(corners[3]) * w01).toInt().coerceIn(0, 255)
-        val b = (org.skia.foundation.SkColorGetB(corners[0]) * w00 +
-            org.skia.foundation.SkColorGetB(corners[1]) * w10 +
-            org.skia.foundation.SkColorGetB(corners[2]) * w11 +
-            org.skia.foundation.SkColorGetB(corners[3]) * w01).toInt().coerceIn(0, 255)
-        return org.skia.foundation.SkColorSetARGB(a, r, g, b)
+        val a = (org.skia.math.SkColorGetA(corners[0]) * w00 +
+            org.skia.math.SkColorGetA(corners[1]) * w10 +
+            org.skia.math.SkColorGetA(corners[2]) * w11 +
+            org.skia.math.SkColorGetA(corners[3]) * w01).toInt().coerceIn(0, 255)
+        val r = (org.skia.math.SkColorGetR(corners[0]) * w00 +
+            org.skia.math.SkColorGetR(corners[1]) * w10 +
+            org.skia.math.SkColorGetR(corners[2]) * w11 +
+            org.skia.math.SkColorGetR(corners[3]) * w01).toInt().coerceIn(0, 255)
+        val g = (org.skia.math.SkColorGetG(corners[0]) * w00 +
+            org.skia.math.SkColorGetG(corners[1]) * w10 +
+            org.skia.math.SkColorGetG(corners[2]) * w11 +
+            org.skia.math.SkColorGetG(corners[3]) * w01).toInt().coerceIn(0, 255)
+        val b = (org.skia.math.SkColorGetB(corners[0]) * w00 +
+            org.skia.math.SkColorGetB(corners[1]) * w10 +
+            org.skia.math.SkColorGetB(corners[2]) * w11 +
+            org.skia.math.SkColorGetB(corners[3]) * w01).toInt().coerceIn(0, 255)
+        return org.skia.math.SkColorSetARGB(a, r, g, b)
     }
 
     private companion object {

@@ -1,5 +1,13 @@
 package org.skia.foundation
 
+
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorWHITE
+import org.skia.math.SkColorGetA
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
+import org.skia.math.SkColorSetARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull

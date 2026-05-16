@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColorSetRGB
+import org.skia.math.SkColorSetRGB
 
 /**
  * Unit tests for [SkParse]. Coverage : each free parser in turn,

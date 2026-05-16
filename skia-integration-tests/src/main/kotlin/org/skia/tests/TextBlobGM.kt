@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLUE
+import org.skia.math.SK_ColorBLUE
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPaint

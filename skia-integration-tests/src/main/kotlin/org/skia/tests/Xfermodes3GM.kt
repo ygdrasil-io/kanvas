@@ -2,14 +2,14 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.foundation.SK_ColorBLUE
-import org.skia.foundation.SK_ColorTRANSPARENT
+import org.skia.math.SK_ColorBLUE
+import org.skia.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkBlendMode.Companion.kSkBlendModeCount
 import org.skia.foundation.SkBlendMode_Name
-import org.skia.foundation.SkColor4f
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColor4f
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRadialGradient

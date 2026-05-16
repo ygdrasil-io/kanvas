@@ -4,7 +4,7 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColorFilters
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint

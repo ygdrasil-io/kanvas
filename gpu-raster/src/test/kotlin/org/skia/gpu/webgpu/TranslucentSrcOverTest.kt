@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SK_ColorRED
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
 import org.skia.math.SkRect
 import kotlin.math.abs

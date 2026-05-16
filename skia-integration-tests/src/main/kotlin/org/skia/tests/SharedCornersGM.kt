@@ -1,12 +1,12 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
-import org.skia.foundation.SkColorSetRGB
+import org.skia.math.SkColorSetRGB
 import org.skia.math.SkISize
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint

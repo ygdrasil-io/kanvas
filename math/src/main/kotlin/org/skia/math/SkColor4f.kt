@@ -1,4 +1,4 @@
-package org.skia.foundation
+package org.skia.math
 
 /**
  * Iso-aligned port of Skia's `SkColor4f` (= `SkRGBA4f<kUnpremul_SkAlphaType>`,

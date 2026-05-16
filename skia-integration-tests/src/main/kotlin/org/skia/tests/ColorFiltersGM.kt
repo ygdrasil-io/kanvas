@@ -3,9 +3,9 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkColorFilters
-import org.skia.foundation.SkColorGetB
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetR
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode

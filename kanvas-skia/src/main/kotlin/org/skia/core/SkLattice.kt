@@ -1,6 +1,6 @@
 package org.skia.core
 
-import org.skia.foundation.SkColor
+import org.skia.math.SkColor
 import org.skia.math.SkIRect
 
 /**

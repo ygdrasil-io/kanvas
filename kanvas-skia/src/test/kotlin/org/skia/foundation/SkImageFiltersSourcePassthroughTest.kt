@@ -1,5 +1,8 @@
 package org.skia.foundation
 
+
+import org.skia.math.SK_ColorBLUE
+import org.skia.math.SK_ColorRED
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertSame

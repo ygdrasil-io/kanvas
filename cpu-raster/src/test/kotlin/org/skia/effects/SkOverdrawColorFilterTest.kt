@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSetARGB
-import org.skia.foundation.SK_ColorTRANSPARENT
+import org.skia.math.SkColorSetARGB
+import org.skia.math.SK_ColorTRANSPARENT
 
 /**
  * Verifies [SkOverdrawColorFilter] enforces its alpha-indexed lookup

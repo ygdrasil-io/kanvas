@@ -7,11 +7,11 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColor
-import org.skia.foundation.SkColorGetA
-import org.skia.foundation.SkColorGetR
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetB
+import org.skia.math.SkColor
+import org.skia.math.SkColorGetA
+import org.skia.math.SkColorGetR
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetB
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.math.SkMatrix

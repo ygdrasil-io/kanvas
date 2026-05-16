@@ -1,5 +1,7 @@
 package org.skia.foundation
 
+
+import org.skia.math.SK_ColorTRANSPARENT
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.math.SkIPoint

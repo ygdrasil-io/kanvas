@@ -2,8 +2,8 @@ package org.skia.tests
 
 import org.skia.core.SaveLayerRec
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorGREEN
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorGREEN
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkTileMode
 import org.skia.math.SkIRect

@@ -2,13 +2,13 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SK_ColorTRANSPARENT
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkStroker
-import org.skia.foundation.colorToRGB565
+import org.skia.math.colorToRGB565
 import org.skia.math.SkISize
 import org.skia.math.SkRect
 

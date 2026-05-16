@@ -6,12 +6,12 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorGetA
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorGetA
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
 import org.skia.math.SkMatrix
@@ -150,7 +150,7 @@ class SkCanvasWrappersTest {
     fun `PaintFilterCanvas onFilter sees a copy not the caller's paint`() {
         // onFilter mutates ; caller's original must stay untouched.
         val target = SkCanvas(SkBitmap(40, 40))
-        var sawColor: org.skia.foundation.SkColor = 0
+        var sawColor: org.skia.math.SkColor = 0
         val filter = SkPaintFilterCanvas(target) { paint ->
             sawColor = paint.color
             paint.color = SK_ColorWHITE  // mutate

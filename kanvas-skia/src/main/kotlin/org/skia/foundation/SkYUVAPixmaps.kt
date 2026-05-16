@@ -1,5 +1,8 @@
 package org.skia.foundation
 
+
+import org.skia.math.SkColor
+import org.skia.math.SkColorSetARGB
 /**
  * Mirrors Skia's
  * [`SkYUVAPixmaps`](https://github.com/google/skia/blob/main/include/core/SkYUVAPixmaps.h)

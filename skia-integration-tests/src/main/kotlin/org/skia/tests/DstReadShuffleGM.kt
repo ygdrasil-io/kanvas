@@ -2,10 +2,10 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.foundation.SK_ColorLTGRAY
-import org.skia.foundation.SK_ColorTRANSPARENT
+import org.skia.math.SK_ColorLTGRAY
+import org.skia.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkBlendMode
-import org.skia.foundation.SkColorSetA
+import org.skia.math.SkColorSetA
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint

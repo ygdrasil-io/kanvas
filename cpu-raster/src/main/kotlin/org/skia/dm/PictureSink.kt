@@ -3,7 +3,7 @@ package org.skia.dm
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
-import org.skia.foundation.SkColor
+import org.skia.math.SkColor
 import org.skia.math.SkISize
 import org.skia.math.SkRect
 import org.skia.tests.GM

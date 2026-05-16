@@ -3,9 +3,9 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
 import org.skia.core.SrcRectConstraint
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SK_ColorWHITE
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorWHITE
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath

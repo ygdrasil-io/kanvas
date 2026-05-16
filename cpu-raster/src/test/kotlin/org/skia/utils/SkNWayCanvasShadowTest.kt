@@ -8,8 +8,8 @@ import org.skia.core.SkCanvas
 import org.skia.core.SkLattice
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorRED
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorRED
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage

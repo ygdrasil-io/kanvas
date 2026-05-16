@@ -1,6 +1,6 @@
 package org.skia.effects
 
-import org.skia.foundation.SkColorGetA
+import org.skia.math.SkColorGetA
 import org.skia.foundation.SkMaskFilter
 import org.skia.foundation.SkShader
 

@@ -1,14 +1,14 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorBLUE
-import org.skia.foundation.SK_ColorCYAN
-import org.skia.foundation.SK_ColorGREEN
-import org.skia.foundation.SK_ColorLTGRAY
-import org.skia.foundation.SK_ColorMAGENTA
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SK_ColorYELLOW
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorBLUE
+import org.skia.math.SK_ColorCYAN
+import org.skia.math.SK_ColorGREEN
+import org.skia.math.SK_ColorLTGRAY
+import org.skia.math.SK_ColorMAGENTA
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorYELLOW
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPaint

@@ -1,5 +1,28 @@
 package org.skia.foundation
 
+
+import org.skia.math.SK_AlphaOPAQUE
+import org.skia.math.SK_AlphaTRANSPARENT
+import org.skia.math.SK_ColorBLUE
+import org.skia.math.SK_ColorCYAN
+import org.skia.math.SK_ColorGREEN
+import org.skia.math.SK_ColorMAGENTA
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorWHITE
+import org.skia.math.SK_ColorYELLOW
+import org.skia.math.SkColorChannelFlag
+import org.skia.math.SkColorGetA
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
+import org.skia.math.SkColorSetA
+import org.skia.math.SkColorSetARGB
+import org.skia.math.SkColorToHSV
+import org.skia.math.SkHSVToColor
+import org.skia.math.SkPreMultiplyARGB
+import org.skia.math.SkPreMultiplyColor
+import org.skia.math.SkRGBToHSV
+import org.skia.math.colorToRGB565
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test

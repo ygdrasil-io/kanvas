@@ -1,8 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorBLUE
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorBLUE
 import org.skia.foundation.SkAnnotateLinkToDestination
 import org.skia.foundation.SkAnnotateNamedDestination
 import org.skia.foundation.SkData

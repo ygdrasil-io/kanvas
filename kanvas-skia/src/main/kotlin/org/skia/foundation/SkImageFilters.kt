@@ -1,5 +1,8 @@
 package org.skia.foundation
 
+
+import org.skia.math.SkColor
+import org.skia.math.SkColorChannel
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
