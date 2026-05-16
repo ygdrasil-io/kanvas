@@ -137,13 +137,23 @@ public class SkWebGpuDevice(
 
     /**
      * Scissor rect (integer, device pixels — sets WebGPU `setScissorRect`)
-     * paired with the fractional bounds passed to the shader for
-     * analytical coverage. Non-AA collapses bounds to integers ; AA keeps
-     * the originals and uses the conservative floor/ceil scissor.
+     * paired with the fractional outer + inner bounds passed to the shader
+     * for analytical coverage (`outer_cov - inner_cov`, G3.1.1).
+     *  - **Fill rects** : `outer = rect bounds`, `inner = degenerate
+     *    (l > r, t > b)` so `inner_cov = 0` and coverage collapses to the
+     *    fill-only result.
+     *  - **AA stroke rects / AA hairlines** : `outer = rect ± half_sw`,
+     *    `inner = rect ∓ half_sw` (with `half_sw = 0.5` for hairlines per
+     *    SkBitmapDevice's strokeRectAA convention).
+     *
+     * Non-AA fills collapse outer bounds to pixelEdge-rounded ints, the
+     * shader's coverage formula evaluates to 1.0 for every interior
+     * pixel, so the output is byte-identical to the pre-G3.1.1 path.
      */
     private data class RectDraw(
         val x: Int, val y: Int, val w: Int, val h: Int,
-        val fl: Float, val ft: Float, val fr: Float, val fb: Float,
+        val ol: Float, val ot: Float, val or: Float, val ob: Float,
+        val il: Float, val it: Float, val ir: Float, val ib: Float,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
     ) : PendingDraw
@@ -467,7 +477,56 @@ public class SkWebGpuDevice(
         pending.add(
             RectDraw(
                 x = scissor[0], y = scissor[1], w = scissor[2], h = scissor[3],
-                fl = bounds[0], ft = bounds[1], fr = bounds[2], fb = bounds[3],
+                ol = bounds[0], ot = bounds[1], or = bounds[2], ob = bounds[3],
+                // Fill : degenerate inner bounds -> inner_cov = 0.
+                il = DEGENERATE_INNER, it = DEGENERATE_INNER,
+                ir = -DEGENERATE_INNER, ib = -DEGENERATE_INNER,
+                r = SkColorGetR(color) / 255f,
+                g = SkColorGetG(color) / 255f,
+                b = SkColorGetB(color) / 255f,
+                a = SkColorGetA(color) / 255f,
+                mode = paint.blendMode,
+            ),
+        )
+    }
+
+    /**
+     * G3.1.1 — single annular AA rect draw : outer bounds = `rect ± half_sw`,
+     * inner bounds = `rect ∓ half_sw`. Replaces the G3.1 4-edge fill
+     * decomposition for the AA path so the corner pixels get the same
+     * `outer_cov - inner_cov` coverage as `SkBitmapDevice.strokeRectAA`.
+     * Hairline AA uses the same machinery with effective width 1 (per
+     * SkBitmapDevice's `w = if (strokeWidth <= 0f) 1f else strokeWidth`).
+     */
+    private fun drawAnnularStrokeRect(
+        rect: SkRect, clip: SkIRect, paint: SkPaint, strokeWidth: Float,
+    ) {
+        val half = strokeWidth * 0.5f
+        val outerL = (rect.left - half).coerceAtLeast(clip.left.toFloat()).coerceAtLeast(0f)
+        val outerT = (rect.top - half).coerceAtLeast(clip.top.toFloat()).coerceAtLeast(0f)
+        val outerR = (rect.right + half).coerceAtMost(clip.right.toFloat()).coerceAtMost(width.toFloat())
+        val outerB = (rect.bottom + half).coerceAtMost(clip.bottom.toFloat()).coerceAtMost(height.toFloat())
+        if (outerL >= outerR || outerT >= outerB) return
+        // Inner bounds are NOT clipped to the viewport — the shader's
+        // clamp() handles out-of-range gracefully and inner_cov collapses
+        // to 0 where the inner rect doesn't overlap the fragment.
+        val innerL = rect.left + half
+        val innerT = rect.top + half
+        val innerR = rect.right - half
+        val innerB = rect.bottom - half
+
+        val sl = floor(outerL.toDouble()).toInt().coerceAtLeast(0)
+        val st = floor(outerT.toDouble()).toInt().coerceAtLeast(0)
+        val sr = ceil(outerR.toDouble()).toInt().coerceAtMost(width)
+        val sb = ceil(outerB.toDouble()).toInt().coerceAtMost(height)
+        if (sl >= sr || st >= sb) return
+
+        val color = paint.color
+        pending.add(
+            RectDraw(
+                x = sl, y = st, w = sr - sl, h = sb - st,
+                ol = outerL, ot = outerT, or = outerR, ob = outerB,
+                il = innerL, it = innerT, ir = innerR, ib = innerB,
                 r = SkColorGetR(color) / 255f,
                 g = SkColorGetG(color) / 255f,
                 b = SkColorGetB(color) / 255f,
@@ -493,6 +552,13 @@ public class SkWebGpuDevice(
         val sw = paint.strokeWidth
         if (sw <= 0f) {
             drawHairlineRect(rect, clip, paint)
+            return
+        }
+        // G3.1.1 — AA stroke takes the annular fast path (one draw, exact
+        // SkBitmapDevice corner convention). Non-AA keeps the G3.1 4-edge
+        // decomposition (byte-stable for existing non-AA stroke tests).
+        if (paint.isAntiAlias) {
+            drawAnnularStrokeRect(rect, clip, paint, sw)
             return
         }
 
@@ -524,24 +590,29 @@ public class SkWebGpuDevice(
     }
 
     /**
-     * Hairline rect stroke — `strokeWidth <= 0` in Skia means a 1-device-pixel
-     * outline snapped to floor-style integer coords (matches
-     * `SkScan::HairLineRgn` and [org.skia.core.SkBitmapDevice.strokeRect]'s
-     * hairline branch). Always non-AA in this slice — true AA hairlines are
-     * a follow-up if a GM demands it. The hairline `paint` is swapped to
-     * `isAntiAlias = false` for the sub-draws so the shader's coverage
-     * formula collapses to 1.0 on the integer-aligned 1px edges.
+     * Hairline rect stroke — `strokeWidth <= 0` in Skia means a
+     * 1-device-pixel outline. Two code paths :
+     *  - **Non-AA** : snap edges to floor() integer coords and emit 4
+     *    1-pixel rect fills, matching `SkScan::HairLineRgn` /
+     *    `SkBitmapDevice.strokeRect`'s hairline branch.
+     *  - **AA** (G3.1.1) : route through [drawAnnularStrokeRect] with
+     *    effective `strokeWidth = 1` -- mirrors
+     *    `SkBitmapDevice.strokeRectAA`'s `w = if (sw <= 0f) 1f else sw`
+     *    rule, so sub-pixel coverage matches the raster output.
      */
     private fun drawHairlineRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+        if (paint.isAntiAlias) {
+            drawAnnularStrokeRect(rect, clip, paint, strokeWidth = 1f)
+            return
+        }
         val l = floor(rect.left.toDouble()).toFloat()
         val t = floor(rect.top.toDouble()).toFloat()
         val r = floor(rect.right.toDouble()).toFloat()
         val b = floor(rect.bottom.toDouble()).toFloat()
-        val nonAaPaint = paint.copy().apply { isAntiAlias = false }
-        drawFillRect(SkRect.MakeLTRB(l,     t,     r + 1, t + 1), clip, nonAaPaint) // top
-        drawFillRect(SkRect.MakeLTRB(l,     b,     r + 1, b + 1), clip, nonAaPaint) // bottom
-        drawFillRect(SkRect.MakeLTRB(l,     t + 1, l + 1, b),     clip, nonAaPaint) // left
-        drawFillRect(SkRect.MakeLTRB(r,     t + 1, r + 1, b),     clip, nonAaPaint) // right
+        drawFillRect(SkRect.MakeLTRB(l,     t,     r + 1, t + 1), clip, paint) // top
+        drawFillRect(SkRect.MakeLTRB(l,     b,     r + 1, b + 1), clip, paint) // bottom
+        drawFillRect(SkRect.MakeLTRB(l,     t + 1, l + 1, b),     clip, paint) // left
+        drawFillRect(SkRect.MakeLTRB(r,     t + 1, r + 1, b),     clip, paint) // right
     }
 
     override fun drawPaint(ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
@@ -851,11 +922,17 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.rectDraw",
             ),
         )
-        // Layout : color (4 floats) + bounds (4 floats) = 32 bytes.
-        // Matches `Uniforms { color, bounds }` in solid_color.wgsl.
+        // Layout : color (4) + outerBounds (4) + innerBounds (4) = 48 bytes.
+        // Matches `Uniforms { color, outerBounds, innerBounds }` in
+        // solid_color.wgsl. innerBounds is degenerate for fill draws so
+        // `inner_cov` collapses to 0 in the shader.
         context.queue.writeBuffer(
             buf, 0uL,
-            ArrayBuffer.of(floatArrayOf(d.r, d.g, d.b, d.a, d.fl, d.ft, d.fr, d.fb)),
+            ArrayBuffer.of(floatArrayOf(
+                d.r, d.g, d.b, d.a,
+                d.ol, d.ot, d.or, d.ob,
+                d.il, d.it, d.ir, d.ib,
+            )),
         )
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -969,8 +1046,21 @@ public class SkWebGpuDevice(
     }
 
     private companion object {
-        /** Size of the rect per-draw uniform : `color: vec4f` + `bounds: vec4f` = 32 bytes. */
-        const val RECT_UNIFORM_SIZE: ULong = 32uL
+        /**
+         * Size of the rect per-draw uniform :
+         *   color (16) + outerBounds (16) + innerBounds (16) = 48 bytes.
+         * G3.1.1 bumped from 32 to 48 to carry the optional annular
+         * inner-rect bounds (degenerate for fill draws).
+         */
+        const val RECT_UNIFORM_SIZE: ULong = 48uL
+        /**
+         * Sentinel value for degenerate inner bounds (fill draws). The
+         * shader's `clamp(min(p+1, r) - max(p, l), 0, 1)` naturally
+         * collapses to 0 when `r < l` (and `b < t`), regardless of `p`.
+         * Using a large positive value for l/t and its negation for r/b
+         * keeps the math well-clear of FP precision concerns.
+         */
+        const val DEGENERATE_INNER: Float = 1e10f
         /** Size of the polygon per-draw uniform : `color: vec4f` + `viewport: vec4f` = 32 bytes. */
         const val POLYGON_UNIFORM_SIZE: ULong = 32uL
         /**

@@ -21,9 +21,18 @@
 //
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
+// G3.1.1 -- extended uniform with optional inner-rect cutout for AA
+// stroke / AA hairline rasterization. Coverage at each pixel is
+//   outer_cov - inner_cov   (clamped to [0, 1])
+// which matches SkBitmapDevice.strokeRectAA's annular formulation.
+//
+// Fill rects pass `innerBounds` as a degenerate (l > r) rect ; the
+// shader's clamp(min - max, 0, 1) naturally collapses inner_cov to 0
+// and the result equals the prior fill-only output.
 struct Uniforms {
-    color:  vec4f,   // offset  0 : unpremul ARGB
-    bounds: vec4f,   // offset 16 : (left, top, right, bottom) in device pixels
+    color:       vec4f,   // offset  0 : unpremul ARGB
+    outerBounds: vec4f,   // offset 16 : (l, t, r, b) in device pixels
+    innerBounds: vec4f,   // offset 32 : (l, t, r, b) ; degenerate for fill
 };
 
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
@@ -39,17 +48,19 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // pos.xy is the pixel center : column `p` has center at `p + 0.5`.
     // Intersection length per axis between the pixel [p, p+1] and the
-    // rect edges. clamp to [0, 1] saturates pixels fully inside (1.0)
-    // and pixels fully outside (0.0, killed by scissor anyway).
-    let cov_x = clamp(
-        min(pos.x + 0.5, uniforms.bounds.z) - max(pos.x - 0.5, uniforms.bounds.x),
-        0.0, 1.0,
-    );
-    let cov_y = clamp(
-        min(pos.y + 0.5, uniforms.bounds.w) - max(pos.y - 0.5, uniforms.bounds.y),
-        0.0, 1.0,
-    );
-    let coverage = cov_x * cov_y;
+    // rect edges, clamped to [0, 1]. Outer coverage = full fill area ;
+    // inner coverage = the area to subtract (for stroke / hairline).
+    // For fill rects the inner bounds are degenerate so inner_cov = 0
+    // and the result equals the prior fill output.
+    let ob = uniforms.outerBounds;
+    let outer_cov_x = clamp(min(pos.x + 0.5, ob.z) - max(pos.x - 0.5, ob.x), 0.0, 1.0);
+    let outer_cov_y = clamp(min(pos.y + 0.5, ob.w) - max(pos.y - 0.5, ob.y), 0.0, 1.0);
+
+    let ib = uniforms.innerBounds;
+    let inner_cov_x = clamp(min(pos.x + 0.5, ib.z) - max(pos.x - 0.5, ib.x), 0.0, 1.0);
+    let inner_cov_y = clamp(min(pos.y + 0.5, ib.w) - max(pos.y - 0.5, ib.y), 0.0, 1.0);
+
+    let coverage = max(0.0, outer_cov_x * outer_cov_y - inner_cov_x * inner_cov_y);
 
     // Premul output for SrcOver pipeline (src=One, dst=OneMinusSrcAlpha).
     // Coverage folds into alpha : a partially-covered translucent pixel

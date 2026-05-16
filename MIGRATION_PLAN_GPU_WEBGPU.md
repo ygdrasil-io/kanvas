@@ -236,6 +236,16 @@ Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et qu
 
 **But** : `drawPath` GPU + stroke. Décision D2 = CPU tessellate (pour le path générique).
 
+### G3.1.1 — AA stroke rect via annular coverage ✅ (correctness improvement)
+
+Refactor du chemin AA stroke (et AA hairline) pour matcher exactement `SkBitmapDevice.strokeRectAA`'s annular formulation : `coverage = outer_cov - inner_cov` en un seul draw, au lieu des 4 edge fills de G3.1.
+
+- [x] `solid_color.wgsl` : uniform bumpé de 32 à 48 bytes ; ajoute `innerBounds: vec4f`. Coverage = `max(0, outer_cov_x * outer_cov_y - inner_cov_x * inner_cov_y)`. Fills passent une `innerBounds` dégénérée (l>r, t>b) qui collapse `inner_cov` à 0 → output identique à l'ancien chemin.
+- [x] `drawStrokeRect` (AA path) route vers `drawAnnularStrokeRect` : un seul draw avec `outer = rect ± half_sw`, `inner = rect ∓ half_sw`.
+- [x] `drawHairlineRect` (AA path) route vers `drawAnnularStrokeRect` avec `effective sw = 1` (mirror `SkBitmapDevice.strokeRectAA`'s `w = if (sw <= 0f) 1f else sw`).
+- [x] Non-AA paths inchangés : 4-edge fill pour stroke sw>0, floor-snapped 1-pixel pour hairline sw≤0.
+- [x] **Impact mesuré sur les ratchets** : `ThinStrokedRectsGM` 87.13 → 87.19 (+0.06%). `BigRectGM` 70.70 inchangé — confirme que **colorspace est le drift dominant**, pas l'AA stroke corner ou l'AA hairline. La refacto reste un correctness improvement (math alignée sur raster), pas un score bump majeur.
+
 ### G3.1 — Rect stroke (sans path tessellation) ✅
 
 **Shortcut payant.** L'audit des 4 GMs cibles G2 a montré que stroke bloque 2/4 GMs (BigRectGM, ClipStrokeRectGM) et drawPath aucun. Pour les **rect-strokes axis-aligned**, on peut décomposer en 4 fill-rects sans passer par SkStroker — match exact de [SkBitmapDevice.strokeRect](kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt) (annular outer/inner pour `sw > 0`, 4 1-pixel edges sur `floor(c)` pour hairline `sw <= 0`).
