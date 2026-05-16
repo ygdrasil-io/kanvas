@@ -35,7 +35,10 @@ dependencies {
 
 sourceSets {
     test {
-        resources.srcDir("../kanvas/src/test/resources")
+        // kanvas-legacy is excluded from the build (see settings.gradle.kts)
+        // but its src/test/resources/{images,original-888} are still required
+        // at runtime for kanvas-skia's GMs and DM harness.
+        resources.srcDir("../kanvas-legacy/src/test/resources")
     }
 }
 
