@@ -144,25 +144,27 @@ Découpée en 3 PRs (G1.0 → G1.1 → G1.2+G1.3) pour rester revue-friendly :
 - [x] Restauré `include(":gpu-raster")` dans [settings.gradle.kts](settings.gradle.kts) — le include avait été dropped au squash-merge de G1.0.
 - [x] **Vérification** : `./gradlew :kanvas-skia:test :cpu-raster:test :gpu-raster:test` — 0 régression sur les suites raster (10 min, 4000+ tests), `ClearRedTest` GPU toujours vert.
 
-### G1.2 — `SkWebGpuDevice` premier squelette (à venir)
-- [ ] `org.skia.gpu.webgpu.SkWebGpuDevice(ctx: WebGpuContext, width: Int, height: Int) : SkDevice` dans `gpu-raster/src/main/kotlin/` :
-  - [ ] Crée `Texture` (color, `rgba8unorm` pour G1 — `rgba16float` arrive en G6 avec la conversion colorspace).
-  - [ ] Gère un `CommandEncoder` cumulatif scoped au cycle de vie du device.
-  - [ ] `flush()` submit + map readback vers `SkBitmap` ARGB8888 — réutilise [HeadlessTarget](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/HeadlessTarget.kt) (à promouvoir de test/ vers main/ à cette étape).
-- [ ] `drawRect(rect, clip, paint)` :
-  - [ ] Pour FILL kSrcOver, color seul (pas de shader, pas d'AA pour ce slice) : un draw indexé d'un quad scissoré au rect arrondi pixel-edge, color uniform.
-  - [ ] Shader WGSL `solid_color.wgsl` : vertex pass-through, fragment `return color;`.
-  - [ ] Bind group : 1 buffer uniform `(color: vec4f, transform: mat4x4f)`.
-- [ ] `drawPaint` / `drawPath` / `drawImageRect` : stub avec `TODO("G2+")` — interface implémentée mais non fonctionnelle. Le test BigRectGM n'en a pas besoin.
+### G1.2 — `SkWebGpuDevice` premier squelette ✅
+- [x] [WebGpuContext](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuContext.kt) et [HeadlessTarget](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/HeadlessTarget.kt) promus de `src/test/` à `src/main/`. La dépendance `kotlinx-coroutines-core` correspondante est devenue `implementation` (était `testImplementation`).
+- [x] [SkWebGpuDevice](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt) `(ctx: WebGpuContext, width: Int, height: Int) : SkDevice` :
+  - Texture color `RGBA8Unorm` (`rgba16float` reporté à G6 avec la conversion colorspace), via `HeadlessTarget`.
+  - Pipeline single-color SrcOver (`solid_color.wgsl` : full-screen Bjorke triangle + uniform vec4 color), bind group layout = 1 uniform buffer en fragment stage.
+  - `drawRect(rect, clip, paint)` accumule dans une liste de `RectDraw` (scissor int + RGBA float) avec le même `pixelEdge(c) = floor(c + 0.5)` que `SkBitmapDevice` — non-AA pixel parity exacte.
+  - Guards explicites : `require(!isAntiAlias)`, `require(style == Fill)`, `require(alpha == 0xFF)` avec messages renvoyant vers la phase G2+ qui levera la restriction.
+  - `drawPaint` / `drawPath` / `drawImageRect` : `TODO("G2+/G3/G5")` (interface implémentée, body laissé pour la phase qui débloque le besoin).
+  - `flush(): ByteArray` rejoue les draws : 1 render-pass par draw (WebGPU interdit `queue.writeBuffer` entre 2 draws d'un même render-pass — workaround : uniform buffer + bind group par draw, dynamic-offset reporté à G2+). Le 1er render-pass clear au background ; les suivants `loadOp = Load`. Readback via `copyTextureToBuffer` + `mapAsync` → bytes RGBA tightly-packed.
+- [x] **Ajustement G1.1** : `SkCanvas.bindClip` rendu permissif (`as? SkBitmapDevice ?: return`) pour les non-raster devices. Le clip rect entier (`s.clip`) continue à être propagé en paramètre à chaque draw donc `clipRect` basique fonctionne, mais `setActiveClip(SkAAClip)` et `setActiveClipShader` sont raster-only et silencieusement skippés sur GPU. Couverture AA-clip + clip-shader GPU = G2+.
 
-### G1.3 — Cross-test BigRectGM (à venir)
-- [ ] Nouveau harness `runGmTest` overload côté `:gpu-raster/src/test/` qui prend un `DeviceFactory` (raster vs GPU).
-- [ ] Test `BigRectWebGpuTest.kt` : lance `BigRectGM` sur `SkWebGpuDevice`, compare à `bigrect.png` avec tolerance Phase 1.
-- [ ] Nouveau ratchet : `gpu-raster/test-similarity-scores-webgpu.properties`.
+### G1.3 — Cross-test ✅
+- [x] **Choix de scope** : pas de port BigRectGM (264 rects/call avec stroke + AA + extreme coords + `translate` + `clipRect` mid-draw — tout est out-of-scope G1.2). À la place, [RectFillCrossTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RectFillCrossTest.kt) : 2 tests minimaux qui valident exactement ce que G1.2 livre.
+  - Test 1 : single blue rect on white, raster vs GPU, comparaison bytes RGBA byte-for-byte.
+  - Test 2 : rect partiellement hors viewport, même comparaison — sanity-check sur la math `pixelEdge` + `coerceAtMost(width)`.
+- [x] Pas de ratchet `gpu-raster/test-similarity-scores-webgpu.properties` créé : sur un single rect aligné non-AA opaque la similarité est 100% exacte, le ratchet sera utile dès G2 (AA introduit du drift FP/quantization).
+- [ ] BigRectGM port + harness `runGmTest` à DeviceFactory : déplacés à G2 (une fois AA / strokes disponibles).
 
 ### Vérification G1
-- [ ] `BigRectGM` ≥ 90% sur GPU. Le résiduel attendu : pas d'AA encore + différence de pixel-edge rounding entre device-pixels et viewport NDC.
-- [x] Aucune régression sur les suites raster (vérifié à chaque PR G1.x).
+- [x] `RectFillCrossTest` PASS sur macOS arm64 (Apple M2 Max) — raster et GPU produisent des bytes RGBA identiques.
+- [x] Aucune régression sur les suites raster (vérifié `:kanvas-skia:test :cpu-raster:test :gpu-raster:test`).
 
 ---
 

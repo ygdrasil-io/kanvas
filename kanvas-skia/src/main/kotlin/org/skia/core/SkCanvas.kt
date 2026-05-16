@@ -787,7 +787,15 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * drawImage, …) honours the shader, not just [drawPaint].
      */
     private fun bindClip(s: State) {
-        val raster = s.device.requireBitmap("bindClip")
+        // G1.2 — `setActiveClip` / `setActiveClipShader` are raster-only
+        // (SkAAClip is band-encoded raster coverage; clipShader is a
+        // per-pixel shader sampled at draw time). Non-raster devices
+        // (e.g. SkWebGpuDevice) have no concept of either in G1.2 ; the
+        // integer clip rect (`s.clip`) is still propagated to every draw
+        // call as a parameter, so basic `clipRect` still works across
+        // backends. AA clip + clip-shader support on GPU lands when
+        // SkWebGpuDevice grows shader-side clip evaluation (G2+).
+        val raster = s.device as? SkBitmapDevice ?: return
         raster.setActiveClip(s.aaClip)
         raster.setActiveClipShader(s.clipShader, s.clipShaderCtm, s.clipShaderOp)
     }
