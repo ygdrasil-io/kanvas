@@ -24,6 +24,15 @@
  */
 package org.skia.pathops.internal
 
+
+import org.skia.math.SkDLine
+import org.skia.math.SkDPoint
+import org.skia.math.SkDVector
+import org.skia.math.approximately_between
+import org.skia.math.approximately_equal
+import org.skia.math.approximately_zero
+import org.skia.math.between
+import org.skia.math.roughly_equal
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
 

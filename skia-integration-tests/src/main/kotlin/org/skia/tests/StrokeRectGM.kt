@@ -1,5 +1,7 @@
 package org.skia.tests
 
+
+import org.skia.math.FLT_EPSILON
 import org.skia.core.SkCanvas
 import org.skia.math.SK_ColorGRAY
 import org.skia.math.SK_ColorRED

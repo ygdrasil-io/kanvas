@@ -21,6 +21,15 @@
  */
 package org.skia.pathops.internal
 
+
+import org.skia.math.SkDLine
+import org.skia.math.SkDPoint
+import org.skia.math.SkDVector
+import org.skia.math.approximately_greater_than_one
+import org.skia.math.approximately_less_than_zero
+import org.skia.math.between
+import org.skia.math.precisely_zero
+import org.skia.math.roughly_between
 internal class SkTSect(curve: SkTCurve) {
 
     /** Reference curve that this `SkTSect` represents. */

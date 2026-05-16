@@ -1,5 +1,7 @@
 package org.skia.pathops.internal
 
+
+import org.skia.math.SkDPoint
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import kotlin.math.sqrt

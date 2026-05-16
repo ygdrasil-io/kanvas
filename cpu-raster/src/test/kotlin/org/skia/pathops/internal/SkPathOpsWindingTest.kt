@@ -1,5 +1,7 @@
 package org.skia.pathops.internal
 
+
+import org.skia.math.SkDVector
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame

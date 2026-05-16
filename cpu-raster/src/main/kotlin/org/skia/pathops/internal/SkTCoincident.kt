@@ -10,6 +10,9 @@
  */
 package org.skia.pathops.internal
 
+
+import org.skia.math.SkDLine
+import org.skia.math.SkDPoint
 internal class SkTCoincident {
     private var fPerpPt: SkDPoint = SkDPoint(Double.NaN, Double.NaN)
     private var fPerpT: Double = -1.0

@@ -46,6 +46,17 @@
  */
 package org.skia.pathops.internal
 
+
+import org.skia.math.AlmostBequalUlps
+import org.skia.math.AlmostEqualUlps
+import org.skia.math.SkDLine
+import org.skia.math.SkDPoint
+import org.skia.math.SkDVector
+import org.skia.math.approximately_between_orderable
+import org.skia.math.approximately_equal
+import org.skia.math.approximately_equal_orderable
+import org.skia.math.approximately_zero
+import org.skia.math.between
 internal class SkOpAngle {
 
     /** Path-op include policy. Mirrors `SkOpAngle::IncludeType`. */

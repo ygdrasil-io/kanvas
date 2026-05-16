@@ -27,6 +27,9 @@
  */
 package org.skia.pathops.internal
 
+
+import org.skia.math.FLT_EPSILON_ORDERABLE_ERR
+import org.skia.math.SkDPoint
 import kotlin.math.abs
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType

@@ -18,6 +18,10 @@
  */
 package org.skia.pathops.internal
 
+
+import org.skia.math.SkDLine
+import org.skia.math.SkDPoint
+import org.skia.math.SkDVector
 internal interface SkTCurve {
     /** Number of control points stored (3 for quad/conic, 4 for cubic). */
     fun pointCount(): Int
