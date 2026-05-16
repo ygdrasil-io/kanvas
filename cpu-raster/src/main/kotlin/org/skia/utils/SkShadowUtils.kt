@@ -55,6 +55,18 @@ import kotlin.math.min
  * tracked separately as `SkShadowMetrics` follow-up.
  */
 public object SkShadowUtils {
+
+    init {
+        // Register the default SkCanvas.drawShadow dispatcher. Triggered
+        // when SkShadowUtils is first loaded, which the SkCanvas
+        // companion's `Class.forName` ensures whenever cpu-raster is on
+        // the classpath. See foundation/core/SkCanvasShadowSpi.kt.
+        org.skia.core.drawShadowDispatcher =
+            { c, p, zParams, lightPos, lightRadius, ambient, spot, flags ->
+                DrawShadow(c, p, zParams, lightPos, lightRadius, ambient, spot, flags)
+            }
+    }
+
     /** Mirrors upstream `SkShadowFlags::kNone_ShadowFlag`. */
     public const val kNone_ShadowFlag: Int = 0x00
 
