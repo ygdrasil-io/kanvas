@@ -29,8 +29,25 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
+    // G2.3b — cross-test harness needs :cpu-raster's GM ports
+    // (ThinRectsGM, etc.) + its testing helpers
+    // (compareBitmapsDetailed, loadReferenceBitmap, etc.) which live in
+    // :cpu-raster/src/main. testImplementation only — the GPU device
+    // itself never depends on the CPU rasterizer, only the cross-tests
+    // need it.
+    testImplementation(project(":cpu-raster"))
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
+}
+
+sourceSets {
+    test {
+        // G2.3b — cross-tests load `original-888/<gm>.png` reference
+        // bitmaps via TestUtils.loadReferenceBitmap. Those PNGs live in
+        // :kanvas-legacy (frozen reference assets), same wiring as
+        // :cpu-raster/build.gradle.kts.
+        resources.srcDir("../kanvas-legacy/src/test/resources")
+    }
 }
 
 tasks.withType<JavaCompile> {
