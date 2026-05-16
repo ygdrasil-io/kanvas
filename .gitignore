@@ -4,6 +4,14 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+# wgpu4k-native unpacks libWGPU-<version>.dylib next to the JVM cwd at
+# load time when system Java extension paths are not writable (typical
+# on modern macOS). Cf. ffi.LibraryLoaderKt.findLibraryPath in
+# wgpu4k-native-jvm. Don't commit the extracted binary.
+libWGPU-*.dylib
+libWGPU-*.so
+WGPU-*.dll
+
 ### IntelliJ IDEA ###
 .idea/modules.xml
 .idea/jarRepositories.xml

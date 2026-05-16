@@ -82,31 +82,43 @@ Aucun shader template (gradient, bitmap, blend) ne hardcode "Rec.2020". Ils reç
 
 ---
 
-## Phase G0 — Bootstrap module GPU
+## Phase G0 — Bootstrap module GPU ✅
 
-**But** : un module qui compile, dépend de webgpu-ktypes, instancie un `GPUAdapter` / `GPUDevice` headless, et rend un quad full-screen rouge dans une render target offscreen lue en RAM.
+**But** : un module qui compile, dépend de wgpu4k, instancie un `GPUAdapter` / `GPUDevice` "headless", et rend un quad full-screen rouge dans une render target offscreen lue en RAM.
 
 ### Build & dépendances
-- [ ] Créer `kanvas-skia-gpu/build.gradle.kts` :
-  - [ ] `implementation(project(":kanvas-skia"))` pour réutiliser `SkBitmap` / `SkColor` / `SkRect` / etc.
-  - [ ] `implementation("io.github.wgpu4k:wgpu4k-jvm:<version>")` — pinner la version Beta stable la plus récente (cf. D1).
-  - [ ] Tests JUnit5 (mêmes versions que `kanvas-skia`).
-- [ ] Ajouter au `settings.gradle.kts` racine.
-- [ ] CI : flagger ce module comme `optional` (peut être désactivé si l'env CI n'a pas de driver Vulkan/Metal — fallback raster only).
+- [x] ~~Créer `kanvas-skia-gpu/build.gradle.kts`~~ — **décision G0 reportée** : la surface GPU initiale (~250 LOC, scopée test/) reste dans `kanvas-skia` pour éviter un refactor build prématuré. Le passage en module séparé sera tranché en G1 quand le code GPU touchera le main classpath (extraction `SkDevice` interface). Dépendance `io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT` ajoutée dans [kanvas-skia/build.gradle.kts](kanvas-skia/build.gradle.kts), snapshot repo Sonatype activé dans [settings.gradle.kts](settings.gradle.kts).
+- [x] Tests JUnit5 + `kotlinx-coroutines-core` 1.10.2 (wgpu4k expose `suspend` sur `mapAsync` / `requestDevice` ; les coroutines sont en `implementation` côté wgpu4k, donc invisibles en compile classpath — déclarées explicitement en `testImplementation`).
+- [x] CI : test marqué via `Assumptions.assumeTrue` — skip propre si le driver natif est absent. Module-level optional reporté à la décision G1.
 
 ### Bootstrap WebGPU
-- [ ] `org.skia.gpu.webgpu.WebGpuContext` — singleton qui instancie `Adapter` (request high-performance), `Device` (avec features minimales), `Queue` via l'API wgpu4k. Exposé via `WebGpuContext.create()` retournant `Result<WebGpuContext>` (peut échouer si driver absent).
-- [ ] Test `BootstrapTest.kt` : `WebGpuContext.create()` réussit ou skip via `Assumptions.assumeTrue(...)`.
+- [x] [WebGpuContext.kt](kanvas-skia/src/test/kotlin/org/skia/gpu/webgpu/WebGpuContext.kt) — wrapper sur `glfwContextRenderer(deferredRendering = true)`. **Bootstrap pur-surfaceless impossible** sur wgpu4k 0.2.0 : `WGPU.requestAdapter` déréférence inconditionnellement `surface.handler` (cf. commonNativeMain/WGPU.kt). Le path "deferred GLFW" reste headless en pratique : la fenêtre GLFW est `GLFW_VISIBLE = FALSE`, jamais mappée — elle existe uniquement pour fournir une `NativeSurface` à l'adapter request. Le rendu va dans une texture séparée gérée par `HeadlessTarget` (on contourne `TextureRenderingContext` du toolkit qui hard-code 256×256 par bug).
+- [x] Appel explicite à `ffi.LibraryLoader.load()` avant `WGPU.createInstance()` — sans ça, le static init de `io.ygdrasil.wgpu.Functions` lève `UnsatisfiedLinkError: unresolved symbol wgpuCreateInstance`.
+- [x] Aucun singleton statique pour l'instant — chaque test instancie + close son contexte. Optim reportée tant que la latence d'init (~700 ms sur Apple M2) ne sature pas les itérations.
 
 ### Premier render headless
-- [ ] Shader WGSL inline `clear_red.wgsl` : full-screen triangle, output `vec4(1, 0, 0, 1)`.
-- [ ] `Texture` 64×64 `rgba8unorm`, render pipeline minimal, draw 3 verts.
-- [ ] `Buffer` MAP_READ + copy texture-to-buffer, retour CPU en `IntArray`.
-- [ ] Test `ClearRedTest.kt` : tous pixels = 0xFFFF0000.
+- [x] Shader [clear_red.wgsl](kanvas-skia/src/test/resources/shaders/clear_red.wgsl) — full-screen Bjorke triangle, fragment `vec4(1,0,0,1)`. **ASCII strict obligatoire** : caractères Unicode dans les commentaires WGSL truncatent le code transmis au compilateur (bug FFI string length wgpu4k 0.2.0).
+- [x] `HeadlessTarget` ([HeadlessTarget.kt](kanvas-skia/src/test/kotlin/org/skia/gpu/webgpu/HeadlessTarget.kt)) — texture `rgba8unorm` (`RenderAttachment | CopySrc`), staging buffer `MapRead | CopyDst`, padding 256 bytes/row WebGPU-compliant, de-padding en `readPixels()`.
+- [x] [ClearRedTest.kt](kanvas-skia/src/test/kotlin/org/skia/gpu/webgpu/ClearRedTest.kt) — render-pass `loadOp=Clear(black)` + draw 3 verts du fullscreen tri rouge, puis assertion `RGBA=(255,0,0,255)` strict sur les 4096 pixels.
+
+### Configuration JVM des tests (kanvas-skia/build.gradle.kts)
+- [x] `--add-opens=java.base/java.lang=ALL-UNNAMED` — Rococoa utilise CGLib qui réfléchit sur `ClassLoader.defineClass`. JVM 17+ refuse sans `--add-opens`.
+- [x] `--enable-native-access=ALL-UNNAMED` — silence le warning `System.loadLibrary` depuis `ffi.LibraryLoaderKt`.
+- [x] `-XstartOnFirstThread` (macOS only) — GLFW exige la AppKit main thread (NSApp thread 0). `-XstartOnFirstThread` colle la JVM main thread sur thread 0, JUnit 5 `SameThreadHierarchicalTestExecutorService` enchaîne les tests dessus.
+
+### .gitignore
+- [x] `libWGPU-*.dylib` / `*.so` / `*.dll` ignorés — wgpu4k-native extrait le binaire next-to-cwd quand les paths Java Extensions ne sont pas writable (cas par défaut macOS).
 
 ### Vérification G0
-- [ ] `./gradlew :kanvas-skia-gpu:test` passe (ou skip uniformément si pas de driver).
-- [ ] Un test concret rend un quad rouge offscreen et le valide en RAM.
+- [x] `./gradlew :kanvas-skia:test --tests "org.skia.gpu.webgpu.ClearRedTest"` PASS sur macOS arm64 (Apple M2 Max), 3 runs consecutifs sans flake.
+- [x] Aucune régression sur les 4623 tests raster — `PerspShadersAaGM` / `PerspShadersBwGM` failures pré-existantes sur la branche, validées via `git stash -u` baseline.
+- [x] Test marqué SKIPPED (pas FAILED) quand `WebGpuContext.createOrNull()` retourne null (par exemple : binaires natifs absents, GLFW init impossible sans main thread).
+
+### Post-mortem G0 — surprises notables
+1. **wgpu4k 0.2.0 n'a pas de path "surfaceless"**. Toute la trajectoire G1+ doit assumer une dépendance GLFW transitive (sauf à patcher wgpu4k upstream).
+2. **`TextureRenderingContext` du toolkit hard-code 256×256** — bug connu, à signaler upstream. Pour G1+ on continue à créer la texture nous-mêmes.
+3. **JVM 25 + Rococoa CGLib** nécessite `--add-opens`. Lifting à confirmer sur Linux/Windows si on y déploie.
+4. **WGSL parser sensible aux non-ASCII** — discipline à appliquer à tous les shaders Phase G2+.
 
 ---
 
@@ -281,7 +293,7 @@ Aucun shader template (gradient, bitmap, blend) ne hardcode "Rec.2020". Ils reç
 
 | Phase | But | Cible | État |
 |-------|-----|-------|------|
-| G0    | Bootstrap module + headless WebGPU + clear red | clear test vert | ⬜ |
+| G0    | Bootstrap module + headless WebGPU + clear red | clear test vert | ✅ |
 | G1    | `SkDevice` interface + `SkWebGpuDevice` + BigRectGM | 1 GM GPU | ⬜ |
 | G2    | AA rects + clip + 9 blend modes de base | 4 GMs Phase 1-2 GPU | ⬜ |
 | G3    | Path tessellation CPU + fill + stroke | ≥ 5 path GMs GPU | ⬜ |
