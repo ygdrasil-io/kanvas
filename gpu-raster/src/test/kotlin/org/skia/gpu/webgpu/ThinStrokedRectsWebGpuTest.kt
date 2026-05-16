@@ -46,7 +46,9 @@ class ThinStrokedRectsWebGpuTest {
             // sub-pixel stroke edge conventions vs raster's strokeRectAA.
             // Below the G2 90% target ; expected to climb with G6
             // (colorspace) + AA stroke corner fixes (G3.4).
-            val floor = 87.1
+            // G6.0 colorspace transform → 94.21 %. Remaining drift = sub-pixel
+            // stroke edge convention vs raster's strokeRectAA (G3.4 territory).
+            val floor = 94.0
             assertTrue(
                 cmp.similarity >= floor,
                 "ThinStrokedRectsGM on GPU regressed below ratchet floor : " +
