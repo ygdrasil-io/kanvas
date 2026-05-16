@@ -332,11 +332,23 @@ Fragment-side analytical edge coverage pour les paths convexes. `paint.isAntiAli
 - [x] [AaPolygonFillTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/AaPolygonFillTest.kt) — 2 sous-tests : half-integer edges (fractional coverage attendu) + integer edges (full coverage partout dedans).
 - [x] **Caveat sur le bump des scores existants** : ScaledRectsGM et Skbug12244GM ne bénéficient PAS — leurs paints n'ont pas `isAntiAlias` explicite, et le défaut SkPaint est `false`. L'infrastructure AA est là pour les futurs GMs qui demandent l'AA path explicitement.
 
-### G3.3b.2b — Concave triangulation + multi-contour (à venir)
+### G3.3b.2b — Multi-contour via stencil-and-cover ✅
 
-- [ ] **Triangulation polygone-à-trous** via ear-clipping ou libtess2-like (remplace la fan tessellation pour les paths non-convexes).
-- [ ] **Multi-contour** paths (chaque `kMove` ouvre un nouveau contour) : tessellator vrai supportant ces cas + hole handling (Skbug12244GM bump attendu).
-- [ ] **AA pour concave + multi-contour** : le shader G3.3b.2a fonctionne tel quel (min sur edges), il faut juste alimenter les edge equations correctement pour les multi-contour avec holes (signe à inverser sur les hole contours).
+Au lieu d'ear-clipping côté CPU (~200-300 LOC d'algorithme géométrique), j'utilise l'approche **stencil-and-cover** GPU-native (Ganesh's standard pour les paths arbitraires). Plus simple à coder, gère naturellement les holes via le winding count.
+
+- [x] **Depth-stencil texture** ajoutée à `SkWebGpuDevice` (format `Depth24PlusStencil8`, dimension viewport, usage `RenderAttachment`). Depth never used (`depthCompare = Always`, `depthWriteEnabled = false`) — 8 stencil bits seuls.
+- [x] **stencilWritePipeline** : color writes off (`writeMask = None`), front-face `IncrementWrap`, back-face `DecrementWrap`, compare `Always`. Track winding count.
+- [x] **coverPipelineCache** (par blend mode) : color writes on, stencil compare `NotEqual` avec reference value 0. Fill pixels where winding count != 0 (kWinding fill rule).
+- [x] **`StencilCoverPolygonDraw : PendingDraw`** : `stencilVerts` (per-contour fan tessellation concaténée) + `coverVerts` (bbox 2-triangle quad) + scissor + color + mode.
+- [x] **`fanTessellateContours`** helper : fan-tess chaque contour depuis son propre 1er vertex, concatenated triangles. La winding du contour (CW vs CCW) → triangle face → stencil incr ou decr → holes naturellement gérés.
+- [x] **`drawPath` dispatch** : `contourStarts.size > 1` → stencil & cover ; single contour → existing fan path (G3.3a). AA multi-contour : encore throws (G3.3b.3).
+- [x] **`flush()` render pass** : single render pass avec color + depth-stencil attachments, 2 draws : stencil pass puis cover pass. `setStencilReference(0u)` avant cover. depth-stencil cleared (`Clear` loadOp), discarded after (`Discard` storeOp).
+- [x] **Impact mesuré** : Skbug12244GM **90.33 → 99.29 (+8.96 %)**. Le hole est correctement exclu. Reste ~160 pixels (0.71 %) — AA edge mismatch (reference rasterized avec AA, notre fill non-AA binary). G3.3b.3 (AA stencil-and-cover) closerait ce gap.
+- [x] **Backward compat** : single-contour paths inchangés (gardent fan-tess + AA path G3.3a). Tous les 29 tests `:gpu-raster:test` PASS.
+
+### G3.3b.3 — AA multi-contour + future tessellation (à venir)
+
+- [ ] **AA stencil-and-cover** : sample-mask AA dans le cover pass, OU per-fragment edge coverage en mode multi-contour. Closerait les ~160 pixels de drift sur Skbug12244GM.
 - [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
 - [ ] **Tests** : `ConcavePathsGM`, `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family.
 

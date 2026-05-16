@@ -12,7 +12,13 @@ import io.ygdrasil.webgpu.BufferBindingLayout
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.Color
 import io.ygdrasil.webgpu.ColorTargetState
+import io.ygdrasil.webgpu.DepthStencilState
 import io.ygdrasil.webgpu.FragmentState
+import io.ygdrasil.webgpu.GPUColorWrite
+import io.ygdrasil.webgpu.GPUCompareFunction
+import io.ygdrasil.webgpu.GPUStencilOperation
+import io.ygdrasil.webgpu.RenderPassDepthStencilAttachment
+import io.ygdrasil.webgpu.StencilFaceState
 import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.GPUBlendOperation
@@ -144,6 +150,26 @@ public class SkWebGpuDevice(
     private val intermediateView: GPUTextureView = intermediateTexture.createView()
 
     /**
+     * G3.3b.2b — depth/stencil texture for stencil-and-cover multi-contour
+     * path rendering. The depth bits are never used (`depthCompare = Always`,
+     * `depthWriteEnabled = false`). The 8 stencil bits track the path's
+     * **winding count** during the stencil pass : front-face triangles
+     * increment, back-face triangles decrement (wrapping at 0/255). The
+     * cover pass then writes color where stencil != 0. Format
+     * `depth24plus-stencil8` is the most portable depth-stencil combination
+     * in WebGPU.
+     */
+    private val depthStencilTexture: GPUTexture = context.device.createTexture(
+        TextureDescriptor(
+            size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+            format = GPUTextureFormat.Depth24PlusStencil8,
+            usage = GPUTextureUsage.RenderAttachment,
+            label = "SkWebGpuDevice.depthStencil",
+        ),
+    )
+    private val depthStencilView: GPUTextureView = depthStencilTexture.createView()
+
+    /**
      * Clear value used by the first render pass of every [flush]. White
      * matches Skia's DM convention (GMs that don't override `bgColor()`
      * paint onto a white canvas).
@@ -216,6 +242,25 @@ public class SkWebGpuDevice(
     private data class PolygonDraw(
         val verts: FloatArray,
         val scissor: IntArray, // (x, y, w, h)
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
+    /**
+     * G3.3b.2b — multi-contour / concave path via stencil-and-cover.
+     *  - `stencilVerts` : concatenated fan tessellations of each contour
+     *    (each contour's vertices are fanned from their own first vertex).
+     *    Rendered in the stencil pass with front-face increment + back-face
+     *    decrement → stencil = winding count.
+     *  - `coverVerts` : 2-triangle bbox spanning all contours, slightly
+     *    inflated. Rendered in the cover pass with stencil-compare != 0
+     *    → only pixels inside the path (per winding rule) get the color.
+     *  - `scissor` : axis-aligned device clip rect, applied to both passes.
+     */
+    private data class StencilCoverPolygonDraw(
+        val stencilVerts: FloatArray,
+        val coverVerts: FloatArray,
+        val scissor: IntArray,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
     ) : PendingDraw
@@ -357,6 +402,109 @@ public class SkWebGpuDevice(
                                 blend = blendStateFor(mode),
                             ),
                         ),
+                    ),
+                ),
+            )
+        }
+
+    // ─── Stencil & cover (G3.3b.2b) — multi-contour / concave paths ────────
+
+    /**
+     * Stencil-write pipeline. Front-face triangles increment the stencil
+     * byte (wrap on overflow), back-face triangles decrement. After
+     * rendering all of a path's triangles, the stencil buffer carries
+     * the **winding count** at each pixel. Color writes are masked off ;
+     * the fragment stage runs but its output is discarded.
+     */
+    private val stencilWritePipeline: GPURenderPipeline = context.device.createRenderPipeline(
+        RenderPipelineDescriptor(
+            layout = polygonPipelineLayout,
+            vertex = VertexState(
+                module = polygonShader,
+                entryPoint = "vs_main",
+                buffers = listOf(POLYGON_VERTEX_LAYOUT),
+            ),
+            fragment = FragmentState(
+                module = polygonShader,
+                entryPoint = "fs_main",
+                targets = listOf(
+                    ColorTargetState(
+                        format = GPUTextureFormat.RGBA8Unorm,
+                        blend = blendAddBoth(GPUBlendFactor.One, GPUBlendFactor.Zero),
+                        writeMask = GPUColorWrite.None,
+                    ),
+                ),
+            ),
+            depthStencil = DepthStencilState(
+                format = GPUTextureFormat.Depth24PlusStencil8,
+                depthWriteEnabled = false,
+                depthCompare = GPUCompareFunction.Always,
+                stencilFront = StencilFaceState(
+                    compare = GPUCompareFunction.Always,
+                    failOp = GPUStencilOperation.Keep,
+                    depthFailOp = GPUStencilOperation.Keep,
+                    passOp = GPUStencilOperation.IncrementWrap,
+                ),
+                stencilBack = StencilFaceState(
+                    compare = GPUCompareFunction.Always,
+                    failOp = GPUStencilOperation.Keep,
+                    depthFailOp = GPUStencilOperation.Keep,
+                    passOp = GPUStencilOperation.DecrementWrap,
+                ),
+                stencilReadMask = 0xFFu,
+                stencilWriteMask = 0xFFu,
+            ),
+        ),
+    )
+
+    /**
+     * Cover pipeline cache, one entry per [SkBlendMode]. The fragment
+     * stencil-test compares the stencil byte against the reference (set
+     * to 0 in the render pass) ; non-equal (i.e., winding count != 0)
+     * pixels write their color. Standard `kWinding` fill rule. For
+     * `kEvenOdd` we'd flip the stencil mask to `0x01` and compare
+     * Equal-to-1 ; deferred until a GM in scope needs it.
+     */
+    private val coverPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+
+    private fun coverPipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        coverPipelineCache.getOrPut(mode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = polygonPipelineLayout,
+                    vertex = VertexState(
+                        module = polygonShader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = polygonShader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA8Unorm,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = GPUCompareFunction.NotEqual,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = GPUCompareFunction.NotEqual,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = 0xFFu,
+                        stencilWriteMask = 0xFFu,
                     ),
                 ),
             )
@@ -764,7 +912,11 @@ public class SkWebGpuDevice(
         // (the fan tessellator treats them as one polygon — fine for
         // convex single-contour paths, artefacts otherwise until G3.3b.2).
         val devVerts = ArrayList<Float>(path.verbs.size * 2)
-        var contourCount = 0
+        // Index (in vertex count, devVerts.size / 2) at which each contour
+        // begins. G3.3b.2b's stencil-and-cover path fan-tessellates each
+        // contour separately ; G3.3a's single-fan path uses only the
+        // first entry.
+        val contourStarts = ArrayList<Int>(4)
         var ci = 0
         var wi = 0
         var px = 0f; var py = 0f
@@ -774,9 +926,9 @@ public class SkWebGpuDevice(
                     val sx = path.coords[ci++]
                     val sy = path.coords[ci++]
                     val (dx, dy) = ctm.mapXY(sx, sy)
+                    if (verb == SkPath.Verb.kMove) contourStarts.add(devVerts.size / 2)
                     devVerts.add(dx); devVerts.add(dy)
                     px = dx; py = dy
-                    if (verb == SkPath.Verb.kMove) contourCount++
                 }
                 SkPath.Verb.kQuad -> {
                     val sx1 = path.coords[ci++]; val sy1 = path.coords[ci++]
@@ -814,20 +966,7 @@ public class SkWebGpuDevice(
         val n = devVerts.size / 2
         if (n < 3) return // Degenerate : nothing to fill.
 
-        // Fan tessellation from vertex 0 : triangles (0, 1, 2), (0, 2, 3), …,
-        // (0, n-2, n-1). Convex-correct ; concave paths get artefacts.
-        val triCount = n - 2
-        val tri = FloatArray(triCount * 6)
-        var w = 0
-        for (i in 1 until n - 1) {
-            tri[w++] = devVerts[0]; tri[w++] = devVerts[1]
-            tri[w++] = devVerts[i * 2]; tri[w++] = devVerts[i * 2 + 1]
-            tri[w++] = devVerts[(i + 1) * 2]; tri[w++] = devVerts[(i + 1) * 2 + 1]
-        }
-
         // Honour the device clip via scissor (axis-aligned int clip).
-        // For G3.3a we leave the polygon's triangles intact and let
-        // setScissorRect cull pixels outside `clip`.
         val scissorL = clip.left.coerceAtLeast(0)
         val scissorT = clip.top.coerceAtLeast(0)
         val scissorR = clip.right.coerceAtMost(width)
@@ -841,11 +980,52 @@ public class SkWebGpuDevice(
         val aF = SkColorGetA(color) / 255f
         val scissor = intArrayOf(scissorL, scissorT, scissorR - scissorL, scissorB - scissorT)
 
+        // G3.3b.2b — multi-contour path : stencil-and-cover. Each contour
+        // is fan-tessellated from its own first vertex ; the concatenated
+        // triangle list is rendered into the stencil buffer with
+        // increment/decrement-by-face → stencil holds the winding count.
+        // The cover pass writes color where stencil != 0 (kWinding fill).
+        // Naturally handles holes (opposite-winding inner contour
+        // subtracts from outer winding count).
+        if (contourStarts.size > 1) {
+            require(!paint.isAntiAlias) {
+                "SkWebGpuDevice (G3.3b.2b): AA on multi-contour paths is not " +
+                    "supported yet. Single-contour convex AA paths still work " +
+                    "(G3.3b.2a) ; multi-contour AA is deferred to G3.3b.3 " +
+                    "(stencil-and-cover with sample-mask AA, or proper " +
+                    "triangulation with AA edge coverage)."
+            }
+            val stencilTri = fanTessellateContours(devVerts, contourStarts)
+            val coverTri = bboxTrianglesFor(devVerts, width, height)
+            pending.add(
+                StencilCoverPolygonDraw(
+                    stencilVerts = stencilTri,
+                    coverVerts = coverTri,
+                    scissor = scissor,
+                    r = rF, g = gF, b = bF, a = aF,
+                    mode = paint.blendMode,
+                ),
+            )
+            return
+        }
+
+        // Single-contour : fan tessellation from vertex 0.
+        // Convex-correct ; concave single-contour paths still produce
+        // artefacts (G3.3b.2b's stencil-and-cover path would fix them too
+        // but adds GPU cost ; we keep the cheap fan tess for the common
+        // convex case).
+        val triCount = n - 2
+        val tri = FloatArray(triCount * 6)
+        var w = 0
+        for (i in 1 until n - 1) {
+            tri[w++] = devVerts[0]; tri[w++] = devVerts[1]
+            tri[w++] = devVerts[i * 2]; tri[w++] = devVerts[i * 2 + 1]
+            tri[w++] = devVerts[(i + 1) * 2]; tri[w++] = devVerts[(i + 1) * 2 + 1]
+        }
+
         // G3.3b.2a — AA path : compute polygon perimeter edge equations
         // and route to the analytical-coverage pipeline. Restricted to
-        // single-contour paths within MAX_AA_EDGES vertices ; multi-
-        // contour and very large paths fall back to non-AA fan tess
-        // (G3.3b.2b will lift these restrictions).
+        // single-contour paths within MAX_AA_EDGES vertices.
         //
         // Key trick : the AA path renders the polygon's **bounding box
         // (slightly inflated)** as 2 triangles instead of the fan tess.
@@ -858,7 +1038,7 @@ public class SkWebGpuDevice(
         // edge is reliably rasterized, and the shader's coverage
         // (`min` over edge equations) masks the bbox down to the
         // actual polygon shape, with smooth fall-off on the perimeter.
-        if (paint.isAntiAlias && contourCount == 1 && n <= MAX_AA_EDGES) {
+        if (paint.isAntiAlias && n <= MAX_AA_EDGES) {
             val edges = FloatArray(MAX_AA_EDGES * 4)
             buildPerimeterEdges(devVerts, edges)
             val bboxTri = bboxTrianglesFor(devVerts, width, height)
@@ -937,12 +1117,63 @@ public class SkWebGpuDevice(
                 is RectDraw -> buildRectDrawResources(d)
                 is PolygonDraw -> buildPolygonDrawResources(d)
                 is AaPolygonDraw -> buildAaPolygonDrawResources(d)
+                is StencilCoverPolygonDraw -> buildStencilCoverDrawResources(d)
             }
         }
 
         pending.forEachIndexed { i, d ->
             val loadOp = if (i == 0) GPULoadOp.Clear else GPULoadOp.Load
             val res = perDrawResources[i]
+            if (d is StencilCoverPolygonDraw) {
+                // Stencil & cover : 2 sub-passes in a single render pass.
+                // Stencil sub-pass writes the winding count, cover sub-pass
+                // reads it and writes color where != 0. Color attachment
+                // loadOp matches the rest of flush() (Clear for the first
+                // draw, Load otherwise) so we compose with prior draws.
+                // Depth-stencil attachment is cleared per pass (each path
+                // has its own scope) and discarded after.
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = colorView,
+                                loadOp = loadOp,
+                                clearValue = background,
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                        depthStencilAttachment = RenderPassDepthStencilAttachment(
+                            view = depthStencilView,
+                            stencilClearValue = 0u,
+                            stencilLoadOp = GPULoadOp.Clear,
+                            stencilStoreOp = GPUStoreOp.Discard,
+                            stencilReadOnly = false,
+                            depthReadOnly = true,
+                        ),
+                    ),
+                ) {
+                    setBindGroup(0u, res.bindGroup)
+                    setScissorRect(
+                        x = d.scissor[0].toUInt(),
+                        y = d.scissor[1].toUInt(),
+                        width = d.scissor[2].toUInt(),
+                        height = d.scissor[3].toUInt(),
+                    )
+                    // Stencil pass : compute winding count, no color writes.
+                    setPipeline(stencilWritePipeline)
+                    setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
+                    draw((d.stencilVerts.size / 2).toUInt())
+                    // Cover pass : color writes where stencil != 0.
+                    // Reference value 0 + compare NotEqual = "winding count
+                    // != 0" = kWinding fill rule.
+                    setStencilReference(0u)
+                    setPipeline(coverPipelineFor(d.mode))
+                    setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
+                    draw((d.coverVerts.size / 2).toUInt())
+                    end()
+                }
+                return@forEachIndexed
+            }
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -991,6 +1222,7 @@ public class SkWebGpuDevice(
                         setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
                         draw((d.verts.size / 2).toUInt())
                     }
+                    is StencilCoverPolygonDraw -> { /* handled above */ }
                 }
                 end()
             }
@@ -1025,20 +1257,26 @@ public class SkWebGpuDevice(
 
         val pixels = target.readPixels()
 
-        perDrawResources.forEach { it.uniform.close(); it.vertexBuffer?.close() }
+        perDrawResources.forEach {
+            it.uniform.close()
+            it.vertexBuffer?.close()
+            it.coverVertexBuffer?.close()
+        }
         pending.clear()
         pixels
     }
 
     /**
      * Per-draw GPU resources lifetime-managed by [flush] : the uniform
-     * buffer + its bind group, and (for polygon draws only) the vertex
-     * buffer holding the triangle list.
+     * buffer + its bind group, plus optional vertex buffers (polygon
+     * draws use [vertexBuffer] ; stencil-and-cover draws additionally
+     * use [coverVertexBuffer] for the cover-pass bbox quad).
      */
     private data class DrawResources(
         val uniform: GPUBuffer,
         val bindGroup: io.ygdrasil.webgpu.GPUBindGroup,
         val vertexBuffer: GPUBuffer? = null,
+        val coverVertexBuffer: GPUBuffer? = null,
     )
 
     private fun buildRectDrawResources(d: RectDraw): DrawResources {
@@ -1109,6 +1347,53 @@ public class SkWebGpuDevice(
         return DrawResources(uniform = uniform, bindGroup = bindGroup, vertexBuffer = vertexBuffer)
     }
 
+    private fun buildStencilCoverDrawResources(d: StencilCoverPolygonDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = POLYGON_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverDraw",
+            ),
+        )
+        context.queue.writeBuffer(
+            uniform, 0uL,
+            ArrayBuffer.of(floatArrayOf(
+                d.r, d.g, d.b, d.a,
+                width.toFloat(), height.toFloat(), 0f, 0f,
+            )),
+        )
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = polygonBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        val stencilVB = context.device.createBuffer(
+            BufferDescriptor(
+                size = (d.stencilVerts.size * Float.SIZE_BYTES).toULong(),
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilVerts",
+            ),
+        )
+        context.queue.writeBuffer(stencilVB, 0uL, ArrayBuffer.of(d.stencilVerts))
+        val coverVB = context.device.createBuffer(
+            BufferDescriptor(
+                size = (d.coverVerts.size * Float.SIZE_BYTES).toULong(),
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.coverVerts",
+            ),
+        )
+        context.queue.writeBuffer(coverVB, 0uL, ArrayBuffer.of(d.coverVerts))
+        return DrawResources(
+            uniform = uniform,
+            bindGroup = bindGroup,
+            vertexBuffer = stencilVB,
+            coverVertexBuffer = coverVB,
+        )
+    }
+
     private fun buildAaPolygonDrawResources(d: AaPolygonDraw): DrawResources {
         val uniform = context.device.createBuffer(
             BufferDescriptor(
@@ -1166,6 +1451,9 @@ public class SkWebGpuDevice(
         polygonPipelineCache.clear()
         aaPolygonPipelineCache.values.forEach { it.close() }
         aaPolygonPipelineCache.clear()
+        coverPipelineCache.values.forEach { it.close() }
+        coverPipelineCache.clear()
+        stencilWritePipeline.close()
         presentPipeline.close()
         rectShader.close()
         polygonShader.close()
@@ -1173,6 +1461,8 @@ public class SkWebGpuDevice(
         presentShader.close()
         intermediateView.close()
         intermediateTexture.close()
+        depthStencilView.close()
+        depthStencilTexture.close()
         target.close()
     }
 
@@ -1218,6 +1508,49 @@ public class SkWebGpuDevice(
          * the first `n * 4` entries (where `n = devVerts.size / 2`) are
          * written. Caller guarantees `n <= MAX_AA_EDGES`.
          */
+        /**
+         * G3.3b.2b — fan-tessellate each contour from its own first
+         * vertex, concatenate the triangle lists. The contour boundaries
+         * come from [contourStarts] (vertex index of each contour's
+         * first vertex ; the next entry — or the total vertex count
+         * for the last contour — is the contour's exclusive end).
+         *
+         * Each contour's triangle winding follows its vertex order. With
+         * the stencil pipeline's front-face increment + back-face
+         * decrement, a CW outer contour + CCW inner contour leaves
+         * stencil = 0 inside the hole, stencil = 1 inside the ring.
+         */
+        fun fanTessellateContours(
+            devVerts: ArrayList<Float>,
+            contourStarts: ArrayList<Int>,
+        ): FloatArray {
+            val total = devVerts.size / 2
+            var triCount = 0
+            for (c in contourStarts.indices) {
+                val start = contourStarts[c]
+                val end = if (c + 1 < contourStarts.size) contourStarts[c + 1] else total
+                val len = end - start
+                if (len >= 3) triCount += len - 2
+            }
+            val out = FloatArray(triCount * 6)
+            var w = 0
+            for (c in contourStarts.indices) {
+                val start = contourStarts[c]
+                val end = if (c + 1 < contourStarts.size) contourStarts[c + 1] else total
+                val len = end - start
+                if (len < 3) continue
+                val v0x = devVerts[start * 2]; val v0y = devVerts[start * 2 + 1]
+                for (i in 1 until len - 1) {
+                    val vIa = start + i
+                    val vIb = start + i + 1
+                    out[w++] = v0x; out[w++] = v0y
+                    out[w++] = devVerts[vIa * 2]; out[w++] = devVerts[vIa * 2 + 1]
+                    out[w++] = devVerts[vIb * 2]; out[w++] = devVerts[vIb * 2 + 1]
+                }
+            }
+            return out
+        }
+
         /**
          * Build a 2-triangle bbox covering the polygon, inflated by 1
          * device pixel outward and clamped to the viewport. Used by the
