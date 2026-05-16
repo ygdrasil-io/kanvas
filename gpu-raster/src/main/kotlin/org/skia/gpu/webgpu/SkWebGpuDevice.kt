@@ -372,7 +372,20 @@ public class SkWebGpuDevice(
     }
 
     override fun drawPaint(ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
-        TODO("SkWebGpuDevice.drawPaint — G2+. Will route to a viewport-sized scissor draw with the paint's color.")
+        // G3.2 — drawPaint = fill the entire clip with the paint. Route
+        // through drawRect so all of G2.1/G2.2/G2.3a/G3.1 logic (alpha,
+        // blend mode, AA, stroke-style validation) applies uniformly.
+        // CTM is unused : drawPaint already operates in device coords by
+        // contract (matches SkBitmapDevice.drawPaint).
+        //
+        // Limitation : paint.shader is silently ignored (same as on
+        // drawRect today). Shader support lands with G4 (gradients +
+        // bitmap shaders).
+        val rect = SkRect.MakeLTRB(
+            clip.left.toFloat(), clip.top.toFloat(),
+            clip.right.toFloat(), clip.bottom.toFloat(),
+        )
+        drawRect(rect, clip, paint)
     }
 
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
