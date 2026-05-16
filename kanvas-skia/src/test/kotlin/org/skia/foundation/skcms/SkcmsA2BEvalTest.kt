@@ -1,4 +1,6 @@
 package org.skia.foundation.skcms
+import org.skia.math.SkcmsTransferFunction
+import org.skia.math.SkcmsMatrix3x4
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals

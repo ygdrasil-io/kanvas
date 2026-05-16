@@ -15,7 +15,7 @@ import org.skia.math.SkISize
 import org.skia.math.SkRect
 import org.skia.math.SkScalar
 import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.foundation.skcms.SkcmsMatrix3x3
+import org.skia.math.SkcmsMatrix3x3
 
 /**
  * Port of Skia's `gm/pictureshadercache.cpp::PictureShaderCacheGM`

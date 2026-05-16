@@ -1,6 +1,8 @@
 @file:JvmName("SkcmsParse")
 
 package org.skia.foundation.skcms
+import org.skia.math.SkcmsTransferFunction
+import org.skia.math.SkcmsMatrix3x3
 
 import kotlin.math.abs
 

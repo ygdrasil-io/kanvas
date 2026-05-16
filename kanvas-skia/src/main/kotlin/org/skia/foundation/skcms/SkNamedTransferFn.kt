@@ -1,4 +1,5 @@
 package org.skia.foundation.skcms
+import org.skia.math.SkcmsTransferFunction
 
 /**
  * Bit-compatible port of `SkNamedTransferFn`

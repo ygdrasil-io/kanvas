@@ -73,7 +73,7 @@ class SkColorSpaceCicpTest {
     @Test
     fun `getCicpFromMatrix returns null for an unknown matrix`() {
         // Non-physical matrix far from any standard gamut.
-        val random = org.skia.foundation.skcms.SkcmsMatrix3x3.of(
+        val random = org.skia.math.SkcmsMatrix3x3.of(
             0.7f, 0.7f, 0.7f,
             0.7f, 0.7f, 0.7f,
             0.7f, 0.7f, 0.7f,

@@ -90,7 +90,7 @@ public object SkNamedPrimaries {
     private data class TableEntry(
         val cicpId: CicpId,
         val primaries: SkColorSpacePrimaries,
-        val toXYZD50: org.skia.foundation.skcms.SkcmsMatrix3x3? = null,
+        val toXYZD50: org.skia.math.SkcmsMatrix3x3? = null,
     )
 
     private val cicpTable: List<TableEntry> = listOf(
@@ -111,7 +111,7 @@ public object SkNamedPrimaries {
      * `CicpId → toXYZD50` matrix. Returns `null` if the id is not in the
      * table or the primaries don't yield a valid matrix.
      */
-    public fun getCicp(primaries: CicpId): org.skia.foundation.skcms.SkcmsMatrix3x3? {
+    public fun getCicp(primaries: CicpId): org.skia.math.SkcmsMatrix3x3? {
         for (entry in cicpTable) {
             if (entry.cicpId != primaries) continue
             entry.toXYZD50?.let { return it }
@@ -124,7 +124,7 @@ public object SkNamedPrimaries {
      * Reverse lookup: a `toXYZD50` matrix → its CICP id, or `null` if no
      * standard primary matches within `xyzAlmostEqual` tolerance.
      */
-    public fun getCicpFromMatrix(m: org.skia.foundation.skcms.SkcmsMatrix3x3): CicpId? {
+    public fun getCicpFromMatrix(m: org.skia.math.SkcmsMatrix3x3): CicpId? {
         for (entry in cicpTable) {
             val cand = entry.primaries.toXYZD50() ?: continue
             if (xyzAlmostEqual(m, cand)) return entry.cicpId
