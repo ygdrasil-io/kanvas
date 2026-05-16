@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.skia.codec.SkEncodedImageFormat
+import org.skia.foundation.SkEncodedImageFormat
 import org.skia.math.SkIRect
 import java.nio.ByteBuffer
 
@@ -14,7 +14,7 @@ import java.nio.ByteBuffer
  *
  * Construct via [SkBitmap.asImage] or the [Make] factory.
  */
-public class SkImage internal constructor(
+public class SkImage public constructor(
     public val width: Int,
     public val height: Int,
     public val pixels: IntArray,
@@ -42,10 +42,10 @@ public class SkImage internal constructor(
      * (rounding down, minimum 1) with 2×2 box-filter averaging. The
      * pyramid stops at 1×1, mirroring Skia's `SkMipmap::Build` levels.
      */
-    internal val mipLevels: List<MipLevel>? = null,
+    public val mipLevels: List<MipLevel>? = null,
 ) {
     /** A single pre-rendered mip level — level 0 is the base image. */
-    internal class MipLevel(val width: Int, val height: Int, val pixels: IntArray)
+    public class MipLevel(val width: Int, val height: Int, val pixels: IntArray)
 
     /** Direct read of pixel `(x, y)`; returns `0` if outside image bounds. */
     public fun peekPixel(x: Int, y: Int): SkColor =

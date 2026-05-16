@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.codec.SkCodec
-import org.skia.codec.SkEncodedImageFormat
+import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
 import org.skia.encode.SkPngEncoder

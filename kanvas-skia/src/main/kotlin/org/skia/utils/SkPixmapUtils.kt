@@ -1,6 +1,6 @@
 package org.skia.utils
 
-import org.skia.codec.SkEncodedOrigin
+import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
 

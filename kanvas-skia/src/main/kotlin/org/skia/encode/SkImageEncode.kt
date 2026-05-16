@@ -1,6 +1,6 @@
 package org.skia.encode
 
-import org.skia.codec.SkEncodedImageFormat
+import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType

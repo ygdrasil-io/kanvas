@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.codec.SkAndroidCodec
 import org.skia.codec.SkAnimatedImage
 import org.skia.codec.SkCodec
-import org.skia.codec.SkEncodedOrigin
+import org.skia.foundation.SkEncodedOrigin
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSetARGB

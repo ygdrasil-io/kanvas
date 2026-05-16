@@ -1,7 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SkCodecImageGenerator
+import org.skia.codec.SkCodecImageGenerator
+import org.skia.codec.SkImageGeneratorImages
 import org.skia.foundation.SkImages
 import org.skia.math.SkISize
 import org.skia.tools.ToolUtils
@@ -26,7 +27,7 @@ import org.skia.tools.ToolUtils
  * coverage beyond what `_444` already exercises.
  *
  * **R-final.5 wiring.** [RespectOrientationJpegGM] is the entry point
- * that explicitly funnels through [SkImages.DeferredFromGenerator] +
+ * that explicitly funnels through [SkImageGeneratorImages.DeferredFromGenerator] +
  * [SkCodecImageGenerator] — the API surface this sprint adds. The
  * sibling [Orientation444GM] uses the standard
  * [ToolUtils.GetResourceAsImage] path and ships alongside as a
@@ -74,12 +75,12 @@ public class Orientation444GM : GM() {
 
 /**
  * Port of Skia's `respect_orientation_jpeg` GM (same `gm/orientation.cpp`
- * file). Loads each JPEG via [SkImages.DeferredFromGenerator]
+ * file). Loads each JPEG via [SkImageGeneratorImages.DeferredFromGenerator]
  * + [SkCodecImageGenerator.MakeFromEncodedCodec] — the explicit
  * generator path the upstream `make_images` test exercise targets.
  *
  * The grid layout matches [Orientation444GM] (4×2, 400 × 160), with the
- * sole behavioural difference being the [SkImages.DeferredFromGenerator]
+ * sole behavioural difference being the [SkImageGeneratorImages.DeferredFromGenerator]
  * detour (which on upstream Skia threads the EXIF tag through
  * `SkCodecImageGenerator::onGetPixels`).
  */
@@ -95,7 +96,7 @@ public class RespectOrientationJpegGM : GM() {
             val data = ToolUtils.GetResourceAsData("images/orientation/${i}_444.jpg")
             val image = if (data != null) {
                 val gen = SkCodecImageGenerator.MakeFromEncodedCodec(data.toByteArray())
-                if (gen != null) SkImages.DeferredFromGenerator(gen) else null
+                if (gen != null) SkImageGeneratorImages.DeferredFromGenerator(gen) else null
             } else {
                 null
             }
