@@ -61,10 +61,10 @@ private fun pixelEdge(c: Float): Int = kFloor(c.toDouble() + 0.5).toInt()
  * it can transform vertices itself (cheaper than allocating a transformed
  * copy of the path).
  */
-public class SkBitmapDevice(public val bitmap: SkBitmap) {
+public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
 
-    public val width: Int get() = bitmap.width
-    public val height: Int get() = bitmap.height
+    override val width: Int get() = bitmap.width
+    override val height: Int get() = bitmap.height
 
     /**
      * Source-space colors entering the device are sRGB-encoded (that's the
@@ -78,7 +78,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         dst = bitmap.colorSpace,      dstAT = SkAlphaType.kUnpremul,
     )
 
-    public fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
+    override fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
 
     // ─── Phase I3.3.b — SkAAClip-backed clip plumbing ────────────────────
     //
@@ -158,7 +158,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
         return ac.coverage(x, y)
     }
 
-    public fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+    override fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val devPaint = inDeviceColorSpace(paint)
         if (devPaint.isAntiAlias) drawRectAA(rect, clip, devPaint) else drawRectNonAA(rect, clip, devPaint)
     }
@@ -206,7 +206,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * `SkCanvas.clipShader()` call site), not the current [ctm]. This
      * matches Skia's "clip is frozen at call time" semantics.
      */
-    public fun drawPaint(
+    override fun drawPaint(
         ctm: SkMatrix,
         clip: SkIRect,
         paint: SkPaint,
@@ -626,7 +626,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * behaviour under both [SrcRectConstraint] variants for axis-aligned
      * mappings without filter overflow.
      */
-    public fun drawImageRect(
+    override fun drawImageRect(
         image: SkImage,
         src: SkRect,
         devDst: SkRect,
@@ -1055,7 +1055,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) {
      * `SkPath::Polygon(pts, isClosed=false)` relies on) is implicitly closed
      * by the rasterizer back to its `kMove`.
      */
-    public fun drawPath(
+    override fun drawPath(
         path: SkPath,
         ctm: SkMatrix,
         clip: SkIRect, paint: SkPaint,
