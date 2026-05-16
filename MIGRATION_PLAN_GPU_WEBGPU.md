@@ -363,13 +363,24 @@ Quick wins additionnels sur la surface actuelle, zéro modif au device. Pure ajo
 - [x] [Bug7792WebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/Bug7792WebGpuTest.kt) — 16 paths line-only multi-contour exerçant moveTo/close edge cases (skbug.com/40039046). kWinding non-AA fill via stencil-and-cover (G3.3b.2b). Score **99.99 %** (~70 pixels drift sub-channel, AA edge mismatch identique à Skbug12244, closé par G3.3b.3). Ratché à floor=99.94.
 - [x] **SimpleRectGM / DrawRegionGM** : tentés mais 10 000 `drawRect` calls saturent le path "per-draw render-pass" (cf. note bulk rendering §G3.3b.1 ↑). Test hang. Reportés à un bulk-draw follow-up.
 
-### G3.3b.3 — AA multi-contour + future tessellation (à venir)
+### G3.3b.3a — AA multi-contour via stencil-and-cover ✅
 
-- [ ] **AA stencil-and-cover** : sample-mask AA dans le cover pass, OU per-fragment edge coverage en mode multi-contour. Closerait les ~160 pixels de drift sur Skbug12244GM. Débloquerait `ConcavePathsGM` (tenté en G3.3b.2c, blocked).
-- [ ] **kEvenOdd cover pipeline** : `stencilReadMask = 0x01` au lieu de `0xFF`, compare Equal-to-1. Code prêt mais reverté en G3.3b.2c (pas de GM en scope).
+Lift le throw `require(!paint.isAntiAlias)` sur le branch multi-contour : la passe stencil reste identique (winding count), la passe cover utilise un nouveau pipeline AA dont le fragment shader produit la fall-off de bord à partir des segments d'arête de TOUS les contours.
+
+- [x] **`aa_stencil_cover.wgsl`** : nouveau shader, même layout uniform que `aa_polygon.wgsl` (`color + viewport + edgeCount + edges[256]`), mais les `edges[i]` portent `(Ax, Ay, Bx, By)` au lieu de `(a, b, c, _)`. Le fragment itère les segments, calcule `dist = length(p - clamp_to_segment(p, A, B))`, prend le min, et produit `coverage = clamp(minDist + 0.5, 0, 1)`. Robuste sur concave/multi-contour parce qu'on mesure aux segments, pas aux droites infinies.
+- [x] **`StencilCoverAaPolygonDraw : PendingDraw`** : `stencilVerts` (fan tess concaténée comme G3.3b.2b) + `coverVerts` (bbox inflated par 1px) + `edges`/`edgeCount`. Construit par `buildContourEdgeSegments` (helper companion).
+- [x] **`aaStencilCoverPipelineFor(mode)`** : layout `aaPolygonPipelineLayout` (réutilisé), stencil state identique à `coverPipelineFor` (NotEqual-0), shader AA. Pipeline cache par blend mode.
+- [x] **`drawPath` dispatch** : `contourStarts.size > 1 && paint.isAntiAlias && totalVerts <= MAX_AA_EDGES` → nouveau path. Sinon fall-through vers le path non-AA existant (G3.3b.2b).
+- [x] **Trade-off documenté** : l'AA capture la moitié intérieure de la fall-off (1.0 à 0.5px à l'intérieur du contour, 0.5 sur le bord), la moitié extérieure est perdue parce que la stencil rejette les fragments outside-path. Boundaries un demi-pixel plus durs que le reference. Acceptable vs throw.
+- [x] **Test** : [ConcavePathsWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ConcavePathsWebGpuTest.kt) — 29 cells (mix multi-contour et single-contour concave AA). Score **93.23 %**. Les cells multi-contour rendent bien ; les cells single-contour concave restent fausses (toujours sur la min-coverage shader G3.3b.2a, valide convex uniquement). Closing the rest demanderait soit router single-contour concave vers le nouveau path stencil-and-cover, soit triangulation concave.
+
+### G3.3b.3 — Reste à faire (kEvenOdd, inverse, intra-frame)
+
+- [ ] **kEvenOdd cover pipeline** : `stencilReadMask = 0x01` au lieu de `0xFF`, compare NotEqual-0. Code prêt mais reverté en G3.3b.2c (pas de GM en scope). Cf. Stream A bail report.
 - [ ] **Inverse fill types** (`kInverseWinding`, `kInverseEvenOdd`) : cover quad = viewport entier, stencil compare flip Equal-0. Débloquerait `FillTypeGM` (tenté en G3.3b.2c, blocked).
+- [ ] **Single-contour concave → stencil-and-cover** : router le concave non-multi-contour à travers G3.3b.3a closerait les cells restantes de `ConcavePathsGM`.
 - [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
-- [ ] **Tests** : `ConcavePathsGM`, `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family, `FillTypeGM`.
+- [ ] **Tests futurs** : `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family, `FillTypeGM`.
 
 ### G3.4 — Stroke générique via SkStroker (à venir, après G3.3b)
 
@@ -383,6 +394,8 @@ Quick wins additionnels sur la surface actuelle, zéro modif au device. Pure ajo
 - [x] G3.3b.2a : AA polygon coverage (convex, single-contour) via bbox + fragment edge-distance. 2 tests neufs (AaPolygonFillTest). Pas de bump immédiat sur les ratchet entries (les GMs existants n'ont pas isAntiAlias=true sur leurs paths).
 - [x] G3.3b.2b : multi-contour via stencil-and-cover (winding count, holes naturally handled). Skbug12244GM 90.33 → 99.29 (+8.96).
 - [x] G3.3b.2c : cross-test `BatchedConvexPathsGM` 99.94 % — feature stack convex AA validé end-to-end sur 10 cubic Bezier polygons translucides.
+- [x] G3.3b.2d : 3 cross-tests neufs (FiddleGM, ClipDrawDrawGM, Bug7792GM) avg 99.99 % — zéro changement device, élargissement du harness.
+- [x] G3.3b.3a : AA multi-contour via stencil-and-cover + AA edge-segment shader. ConcavePathsGM débloqué à 93.23 %.
 - [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---
