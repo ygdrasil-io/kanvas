@@ -8,7 +8,7 @@ import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectBuilder
 import org.skia.effects.runtime.effects.SkBuiltinSpecialisedEffects
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage

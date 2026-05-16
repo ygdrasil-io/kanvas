@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SK_ColorBLUE
+import org.skia.math.SK_ColorBLUE
 import org.skia.foundation.SkData
 import org.skia.foundation.SkDeserialProcs
 import org.skia.foundation.SkPaint

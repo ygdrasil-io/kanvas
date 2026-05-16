@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor4f
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTileMode

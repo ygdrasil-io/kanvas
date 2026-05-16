@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
-import org.skia.foundation.SK_ColorGRAY
+import org.skia.math.SK_ColorGRAY
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImageFilter

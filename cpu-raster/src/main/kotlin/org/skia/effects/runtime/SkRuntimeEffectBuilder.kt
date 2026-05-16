@@ -1,7 +1,7 @@
 package org.skia.effects.runtime
 
 import org.skia.foundation.SkBlender
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor4f
 import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkData
 import org.skia.foundation.SkShader

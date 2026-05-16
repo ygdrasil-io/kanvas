@@ -39,10 +39,10 @@ import kotlinx.coroutines.runBlocking
 import org.skia.core.SkDevice
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBlendMode
-import org.skia.foundation.SkColorGetA
-import org.skia.foundation.SkColorGetB
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetR
+import org.skia.math.SkColorGetA
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath

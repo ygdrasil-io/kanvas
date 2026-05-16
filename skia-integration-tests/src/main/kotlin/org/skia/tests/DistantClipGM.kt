@@ -2,8 +2,8 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkPictureRecorder
-import org.skia.foundation.SK_ColorGREEN
-import org.skia.foundation.SK_ColorRED
+import org.skia.math.SK_ColorGREEN
+import org.skia.math.SK_ColorRED
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
 import org.skia.math.SkISize

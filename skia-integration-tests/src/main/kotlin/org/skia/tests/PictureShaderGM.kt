@@ -4,9 +4,9 @@ import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
 import org.skia.core.withRestore
-import org.skia.foundation.SK_ColorGREEN
-import org.skia.foundation.SK_ColorLTGRAY
-import org.skia.foundation.SK_ColorRED
+import org.skia.math.SK_ColorGREEN
+import org.skia.math.SK_ColorLTGRAY
+import org.skia.math.SK_ColorRED
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkPaint

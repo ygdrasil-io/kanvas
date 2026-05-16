@@ -2,13 +2,13 @@ package org.skia.core
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SK_ColorBLUE
-import org.skia.foundation.SK_ColorRED
+import org.skia.math.SK_ColorBLUE
+import org.skia.math.SK_ColorRED
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColor
-import org.skia.foundation.SkColorGetB
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetR
+import org.skia.math.SkColor
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkPaint
 import org.skia.math.SkIRect

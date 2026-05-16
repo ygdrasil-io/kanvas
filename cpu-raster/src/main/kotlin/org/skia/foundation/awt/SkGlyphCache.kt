@@ -1,7 +1,7 @@
 package org.skia.foundation.awt
 
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorGetA
+import org.skia.math.SkColorGetA
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPath
 import kotlin.math.ceil
@@ -186,7 +186,7 @@ internal object SkGlyphCache {
         val canvas = org.skia.core.SkCanvas(bm)
         canvas.translate(-l.toFloat(), -t.toFloat())
         val paint = org.skia.foundation.SkPaint().apply {
-            color = org.skia.foundation.SK_ColorWHITE
+            color = org.skia.math.SK_ColorWHITE
             isAntiAlias = (edging != SkFont.Edging.kAlias)
             style = org.skia.foundation.SkPaint.Style.kFill_Style
         }

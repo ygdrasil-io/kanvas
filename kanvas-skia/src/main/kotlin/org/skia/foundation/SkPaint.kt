@@ -1,5 +1,9 @@
 package org.skia.foundation
 
+
+import org.skia.math.SkColor
+import org.skia.math.SkColor4f
+import org.skia.math.SkColorSetARGB
 import org.skia.core.SkAlphaType
 import org.skia.core.SkColorSpaceXformSteps
 import org.skia.math.SkRect

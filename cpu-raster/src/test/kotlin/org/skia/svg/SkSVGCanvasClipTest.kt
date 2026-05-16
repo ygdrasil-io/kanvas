@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SK_ColorBLACK
+import org.skia.math.SK_ColorBLACK
 import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder

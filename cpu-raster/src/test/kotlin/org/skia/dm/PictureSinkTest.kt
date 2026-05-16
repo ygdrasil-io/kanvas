@@ -4,9 +4,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLUE
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorBLUE
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPaint

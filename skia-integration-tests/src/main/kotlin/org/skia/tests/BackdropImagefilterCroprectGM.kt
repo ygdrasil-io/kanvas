@@ -3,10 +3,10 @@ package org.skia.tests
 import org.skia.core.SaveLayerFlags
 import org.skia.core.SaveLayerRec
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorCYAN
-import org.skia.foundation.SK_ColorGREEN
-import org.skia.foundation.SK_ColorMAGENTA
-import org.skia.foundation.SK_ColorRED
+import org.skia.math.SK_ColorCYAN
+import org.skia.math.SK_ColorGREEN
+import org.skia.math.SK_ColorMAGENTA
+import org.skia.math.SK_ColorRED
 import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilters

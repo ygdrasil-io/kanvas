@@ -1,8 +1,8 @@
 package org.skia.utils
 
-import org.skia.foundation.SkColor
-import org.skia.foundation.SkColorSetARGB
-import org.skia.foundation.SkColorSetRGB
+import org.skia.math.SkColor
+import org.skia.math.SkColorSetARGB
+import org.skia.math.SkColorSetRGB
 import org.skia.math.SkScalar
 
 /**

@@ -2,8 +2,8 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SrcRectConstraint
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkSamplingOptions
 import org.skia.math.SkISize

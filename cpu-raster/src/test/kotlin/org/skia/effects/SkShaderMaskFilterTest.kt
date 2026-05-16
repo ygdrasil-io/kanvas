@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.skia.core.SkColorSpaceXformSteps
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkShader
 import org.skia.math.SkMatrix
 

@@ -3,8 +3,8 @@ package org.skia.core
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
 import org.skia.math.SkMatrix

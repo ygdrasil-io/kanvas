@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
 import org.skia.foundation.SkFont

@@ -1,10 +1,10 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorYELLOW
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorYELLOW
 import org.skia.foundation.SkClipOp
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath

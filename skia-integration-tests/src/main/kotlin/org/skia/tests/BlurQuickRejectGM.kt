@@ -1,12 +1,12 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLACK
-import org.skia.foundation.SK_ColorBLUE
-import org.skia.foundation.SK_ColorGREEN
-import org.skia.foundation.SK_ColorRED
-import org.skia.foundation.SK_ColorWHITE
-import org.skia.foundation.SK_ColorYELLOW
+import org.skia.math.SK_ColorBLACK
+import org.skia.math.SK_ColorBLUE
+import org.skia.math.SK_ColorGREEN
+import org.skia.math.SK_ColorRED
+import org.skia.math.SK_ColorWHITE
+import org.skia.math.SK_ColorYELLOW
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
 import org.skia.foundation.SkPaint

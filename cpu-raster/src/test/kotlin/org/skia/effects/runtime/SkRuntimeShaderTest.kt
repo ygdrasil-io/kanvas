@@ -7,9 +7,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorWHITE
+import org.skia.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor4f
 import org.skia.foundation.SkData
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkShader

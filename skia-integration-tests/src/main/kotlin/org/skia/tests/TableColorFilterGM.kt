@@ -1,9 +1,9 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorTRANSPARENT
+import org.skia.math.SK_ColorTRANSPARENT
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColor4f
+import org.skia.math.SkColor4f
 import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkImageFilter

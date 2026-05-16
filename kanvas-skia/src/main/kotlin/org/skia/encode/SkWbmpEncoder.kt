@@ -1,9 +1,9 @@
 package org.skia.encode
 
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorGetB
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetR
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
 import org.skia.foundation.SkData
 import org.skia.foundation.SkImage
 import java.io.ByteArrayOutputStream

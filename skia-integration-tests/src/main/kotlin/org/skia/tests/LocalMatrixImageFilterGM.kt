@@ -2,7 +2,7 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
-import org.skia.foundation.SK_ColorRED
+import org.skia.math.SK_ColorRED
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilters

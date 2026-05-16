@@ -1,5 +1,7 @@
 package org.skia.foundation
 
+
+import org.skia.math.SkColor4f
 /**
  * A custom blend function for the Skia raster pipeline. Mirrors
  * Skia's

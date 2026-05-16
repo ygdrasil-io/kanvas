@@ -10,7 +10,7 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextEncoding
-import org.skia.foundation.SkColorSetRGB
+import org.skia.math.SkColorSetRGB
 import org.skia.math.SkISize
 import org.skia.math.SkM44
 import org.skia.math.SkRect

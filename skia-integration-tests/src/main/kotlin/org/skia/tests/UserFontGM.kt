@@ -2,7 +2,7 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.skia.core.SkDrawable
-import org.skia.foundation.SK_ColorBLACK
+import org.skia.math.SK_ColorBLACK
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkPaint

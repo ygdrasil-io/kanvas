@@ -1,10 +1,10 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorBLUE
-import org.skia.foundation.SK_ColorRED
+import org.skia.math.SK_ColorBLUE
+import org.skia.math.SK_ColorRED
 import org.skia.foundation.SkBlendMode
-import org.skia.foundation.SkColor
+import org.skia.math.SkColor
 import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkImageFilter

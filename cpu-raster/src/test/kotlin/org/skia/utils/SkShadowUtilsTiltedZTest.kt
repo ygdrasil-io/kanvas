@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColor
+import org.skia.math.SkColor
 import org.skia.foundation.SkPath
 import org.skia.math.SkPoint3
 import org.skia.math.SkRect

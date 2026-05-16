@@ -1,8 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.foundation.SK_ColorWHITE
-import org.skia.foundation.SkColor
+import org.skia.math.SK_ColorWHITE
+import org.skia.math.SkColor
 import org.skia.math.SkISize
 
 public abstract class GM public constructor() {

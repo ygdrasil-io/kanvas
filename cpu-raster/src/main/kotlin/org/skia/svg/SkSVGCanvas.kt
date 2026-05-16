@@ -4,10 +4,10 @@ import org.skia.core.SkCanvas
 import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBitmapShader
-import org.skia.foundation.SkColorGetA
-import org.skia.foundation.SkColorGetB
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetR
+import org.skia.math.SkColorGetA
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
@@ -863,14 +863,14 @@ public open class SkSVGCanvas(
          * output noisier than necessary for diff-ability.
          */
         /**
-         * Format an [org.skia.foundation.SkColor] as a 6-char lower-case
+         * Format an [org.skia.math.SkColor] as a 6-char lower-case
          * hex string `"#rrggbb"`. Drops the alpha byte — alpha is
          * surfaced separately as `fill-opacity` / `stroke-opacity` so the
          * channel decomposition stays diff-friendly. The 3-char
          * shorthand (`#rgb`) is intentionally **not** used : tests can
          * grep for the full hex more reliably.
          */
-        public fun colorHex(c: org.skia.foundation.SkColor): String {
+        public fun colorHex(c: org.skia.math.SkColor): String {
             val r = SkColorGetR(c)
             val g = SkColorGetG(c)
             val b = SkColorGetB(c)

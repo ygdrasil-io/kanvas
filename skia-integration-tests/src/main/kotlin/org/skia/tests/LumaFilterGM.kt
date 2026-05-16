@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkColorFilter
 import org.skia.foundation.SkBlendMode
-import org.skia.foundation.SkColorSetARGB
+import org.skia.math.SkColorSetARGB
 import org.skia.foundation.SkLumaColorFilter
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkShader

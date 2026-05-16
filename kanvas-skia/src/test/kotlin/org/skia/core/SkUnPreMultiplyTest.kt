@@ -3,12 +3,12 @@ package org.skia.core
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColorGetA
-import org.skia.foundation.SkColorGetB
-import org.skia.foundation.SkColorGetG
-import org.skia.foundation.SkColorGetR
-import org.skia.foundation.SkColorSetARGB
-import org.skia.foundation.SkPreMultiplyARGB
+import org.skia.math.SkColorGetA
+import org.skia.math.SkColorGetB
+import org.skia.math.SkColorGetG
+import org.skia.math.SkColorGetR
+import org.skia.math.SkColorSetARGB
+import org.skia.math.SkPreMultiplyARGB
 import kotlin.math.abs
 
 /**
