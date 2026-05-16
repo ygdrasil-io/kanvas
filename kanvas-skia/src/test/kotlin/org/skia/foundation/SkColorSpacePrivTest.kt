@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
-import org.skia.skcms.SkcmsMatrix3x3
-import org.skia.skcms.SkcmsTransferFunction
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkcmsMatrix3x3
+import org.skia.foundation.skcms.SkcmsTransferFunction
 
 /**
  * Phase B of MIGRATION_PLAN_COLORSPACE_PORT.md — exercise the

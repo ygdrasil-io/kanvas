@@ -2,9 +2,9 @@
 
 package org.skia.foundation
 
-import org.skia.skcms.SkNamedTransferFn
-import org.skia.skcms.SkcmsMatrix3x3
-import org.skia.skcms.SkcmsTransferFunction
+import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkcmsMatrix3x3
+import org.skia.foundation.skcms.SkcmsTransferFunction
 import kotlin.math.abs
 
 /**

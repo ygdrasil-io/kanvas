@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs

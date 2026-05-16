@@ -23,8 +23,8 @@ import org.skia.math.SkIRect
 import org.skia.math.SkISize
 import org.skia.math.SkMatrix
 import org.skia.math.SkRect
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.tools.ToolUtils
 
 /**

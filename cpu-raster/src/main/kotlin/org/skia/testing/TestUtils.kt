@@ -6,8 +6,8 @@ import org.skia.dm.Sink
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.tests.GM
 import java.awt.image.BufferedImage
 import java.io.File

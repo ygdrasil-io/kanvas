@@ -1,6 +1,6 @@
 @file:JvmName("SkcmsA2BEval")
 
-package org.skia.skcms
+package org.skia.foundation.skcms
 
 /**
  * Phase F4 of `MIGRATION_PLAN_COLORSPACE_PORT.md` — multi-dimensional

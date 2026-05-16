@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkColorSpace
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 
 /**
  * Phase I of MIGRATION_PLAN_COLORSPACE_PORT.md — verify the HDR
@@ -21,14 +21,14 @@ class SkColorSpaceXformStepsHdrTest {
 
     private fun pqRec2020(refWhite: Float = 203f): SkColorSpace =
         SkColorSpace.makeRGB(
-            org.skia.skcms.skcmsTransferFunctionMakePQ(refWhite),
+            org.skia.foundation.skcms.skcmsTransferFunctionMakePQ(refWhite),
             SkNamedGamut.kRec2020,
         )!!
 
     private fun hlgRec2020(
         refWhite: Float = 203f, peak: Float = 1000f, sysGamma: Float = 1.2f,
     ): SkColorSpace = SkColorSpace.makeRGB(
-        org.skia.skcms.skcmsTransferFunctionMakeHLG(refWhite, peak, sysGamma),
+        org.skia.foundation.skcms.skcmsTransferFunctionMakeHLG(refWhite, peak, sysGamma),
         SkNamedGamut.kRec2020,
     )!!
 
@@ -155,7 +155,7 @@ class SkColorSpaceXformStepsHdrTest {
         // we must keep both OOTFs because the Y vectors differ.
         val srcHlg = hlgRec2020(sysGamma = 1.2f)
         val dstHlg = SkColorSpace.makeRGB(
-            org.skia.skcms.skcmsTransferFunctionMakeHLG(203f, 1000f, 1.0f / 1.2f),
+            org.skia.foundation.skcms.skcmsTransferFunctionMakeHLG(203f, 1000f, 1.0f / 1.2f),
             SkNamedGamut.kSRGB,
         )!!
         val xform = SkColorSpaceXformSteps(
