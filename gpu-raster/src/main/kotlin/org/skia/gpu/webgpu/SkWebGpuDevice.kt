@@ -34,6 +34,7 @@ import io.ygdrasil.webgpu.beginRenderPass
 import kotlinx.coroutines.runBlocking
 import org.skia.core.SkDevice
 import org.skia.core.SrcRectConstraint
+import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColorGetA
 import org.skia.foundation.SkColorGetB
 import org.skia.foundation.SkColorGetG
@@ -113,6 +114,7 @@ public class SkWebGpuDevice(
     private data class RectDraw(
         val x: Int, val y: Int, val w: Int, val h: Int,
         val r: Float, val g: Float, val b: Float, val a: Float,
+        val mode: SkBlendMode,
     )
 
     private val pending: MutableList<RectDraw> = mutableListOf()
@@ -140,33 +142,78 @@ public class SkWebGpuDevice(
         PipelineLayoutDescriptor(bindGroupLayouts = listOf(bindGroupLayout)),
     )
 
-    private val pipeline: GPURenderPipeline = context.device.createRenderPipeline(
-        RenderPipelineDescriptor(
-            layout = pipelineLayout,
-            vertex = VertexState(module = shader, entryPoint = "vs_main"),
-            fragment = FragmentState(
-                module = shader,
-                entryPoint = "fs_main",
-                targets = listOf(
-                    ColorTargetState(
-                        format = GPUTextureFormat.RGBA8Unorm,
-                        blend = BlendState(
-                            color = BlendComponent(
-                                srcFactor = GPUBlendFactor.One,
-                                dstFactor = GPUBlendFactor.OneMinusSrcAlpha,
-                                operation = GPUBlendOperation.Add,
-                            ),
-                            alpha = BlendComponent(
-                                srcFactor = GPUBlendFactor.One,
-                                dstFactor = GPUBlendFactor.OneMinusSrcAlpha,
-                                operation = GPUBlendOperation.Add,
+    /**
+     * Lazily-populated pipeline cache, one entry per [SkBlendMode] the
+     * caller actually exercises. All pipelines share the same vertex /
+     * fragment shader, same layout, same target format — only the
+     * [BlendState] differs. The cache is bounded by the number of
+     * supported modes (4 in G2.2), so no eviction policy is needed.
+     */
+    private val pipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+
+    private fun pipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        pipelineCache.getOrPut(mode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = pipelineLayout,
+                    vertex = VertexState(module = shader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = shader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA8Unorm,
+                                blend = blendStateFor(mode),
                             ),
                         ),
                     ),
                 ),
-            ),
-        ),
-    )
+            )
+        }
+
+    /**
+     * Translate a [SkBlendMode] into the WebGPU [BlendState] that
+     * implements it. G2.2 covers the 4 modes WebGPU expresses natively
+     * via `BlendComponent` (no shader-side blending, no `loadOp = load`
+     * round-trip) :
+     *
+     *  - [SkBlendMode.kClear]   : `src * 0 + dst * 0 = 0`
+     *  - [SkBlendMode.kSrc]     : `src * 1 + dst * 0 = src`
+     *  - [SkBlendMode.kSrcOver] : `src * 1 + dst * (1 - src.a)`
+     *  - [SkBlendMode.kDstOver] : `src * (1 - dst.a) + dst * 1`
+     *
+     * Other modes throw with a pointer to the phase that lands them
+     * (kPlus / kScreen / kModulate need fragment-side blending and are
+     * scheduled for a later G-phase per master plan G2 note).
+     *
+     * Note that fragment output is **premultiplied** (see
+     * `solid_color.wgsl`), so `src.a` and `src.rgb * src.a` are already
+     * in lockstep when these factors apply — the standard premul-input
+     * formulation is what these constants assume.
+     */
+    private fun blendStateFor(mode: SkBlendMode): BlendState = when (mode) {
+        SkBlendMode.kClear -> blendAddBoth(src = GPUBlendFactor.Zero, dst = GPUBlendFactor.Zero)
+        SkBlendMode.kSrc -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.Zero)
+        SkBlendMode.kSrcOver -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.OneMinusSrcAlpha)
+        SkBlendMode.kDstOver -> blendAddBoth(src = GPUBlendFactor.OneMinusDstAlpha, dst = GPUBlendFactor.One)
+        else -> error(
+            "SkWebGpuDevice (G2.2): blend mode $mode not supported yet. " +
+                "G2.2 covers WebGPU-native Porter-Duff (kClear / kSrc / kSrcOver / kDstOver). " +
+                "kPlus / kScreen / kModulate / etc. require fragment-side blending and land in a " +
+                "later G-phase; see MIGRATION_PLAN_GPU_WEBGPU.md G2.",
+        )
+    }
+
+    /**
+     * Helper : symmetric `BlendComponent` for color AND alpha with
+     * `op = Add`. Both Porter-Duff modes in G2.2 use the same factors
+     * for color and alpha (the standard premul formulation), so a
+     * single helper covers all 4.
+     */
+    private fun blendAddBoth(src: GPUBlendFactor, dst: GPUBlendFactor): BlendState {
+        val component = BlendComponent(operation = GPUBlendOperation.Add, srcFactor = src, dstFactor = dst)
+        return BlendState(color = component, alpha = component)
+    }
 
     override fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
 
@@ -177,10 +224,10 @@ public class SkWebGpuDevice(
         require(paint.style == SkPaint.Style.kFill_Style) {
             "SkWebGpuDevice (G2.1): only fill-style supported — got ${paint.style}. Strokes arrive in G3."
         }
-        // G2.1 — translucent SrcOver is supported : the shader premuls
-        // the uniform color and the pipeline blend (src=One,
-        // dst=OneMinusSrcAlpha) does correct SrcOver math. Non-SrcOver
-        // blend modes still TODO (G2.2 pipeline cache).
+        // G2.1 — translucent SrcOver supported via premul shader.
+        // G2.2 — paint.blendMode honoured ; see [blendStateFor] for the
+        // current set of supported modes. Unsupported modes throw at
+        // pipeline-creation time inside flush().
         val color = paint.color
 
         val l = pixelEdge(rect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
@@ -196,6 +243,7 @@ public class SkWebGpuDevice(
                 g = SkColorGetG(color) / 255f,
                 b = SkColorGetB(color) / 255f,
                 a = SkColorGetA(color) / 255f,
+                mode = paint.blendMode,
             ),
         )
     }
@@ -291,7 +339,7 @@ public class SkWebGpuDevice(
                     ),
                 ),
             ) {
-                setPipeline(pipeline)
+                setPipeline(pipelineFor(draw.mode))
                 setBindGroup(0u, bindGroups[i])
                 setScissorRect(
                     x = draw.x.toUInt(),
@@ -315,7 +363,8 @@ public class SkWebGpuDevice(
     }
 
     override fun close() {
-        pipeline.close()
+        pipelineCache.values.forEach { it.close() }
+        pipelineCache.clear()
         shader.close()
         target.close()
     }
