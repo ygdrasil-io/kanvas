@@ -27,6 +27,8 @@
  */
 package org.skia.pathops.internal
 
+
+import org.skia.math.zero_or_one
 import org.skia.foundation.SkPath
 import org.skia.math.SkPoint
 import org.skia.math.SkRect
