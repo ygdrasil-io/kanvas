@@ -790,12 +790,28 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         // G1.2 — `setActiveClip` / `setActiveClipShader` are raster-only
         // (SkAAClip is band-encoded raster coverage; clipShader is a
         // per-pixel shader sampled at draw time). Non-raster devices
-        // (e.g. SkWebGpuDevice) have no concept of either in G1.2 ; the
+        // (e.g. SkWebGpuDevice) have no concept of either yet ; the
         // integer clip rect (`s.clip`) is still propagated to every draw
         // call as a parameter, so basic `clipRect` still works across
         // backends. AA clip + clip-shader support on GPU lands when
         // SkWebGpuDevice grows shader-side clip evaluation (G2+).
-        val raster = s.device as? SkBitmapDevice ?: return
+        //
+        // **Fail-fast on actual misuse.** Silently skipping when an
+        // AA-clip or clip-shader is actually bound would let
+        // `clipPath` / `clipRRect` / `clipShader` "succeed" against
+        // SkWebGpuDevice and return wrong pixels. Throw with a useful
+        // pointer instead so the caller can either fall back to
+        // SkBitmapDevice or wait for the relevant G-phase.
+        val raster = s.device as? SkBitmapDevice
+        if (raster == null) {
+            check(s.aaClip == null && s.clipShader == null) {
+                "${s.device::class.simpleName} does not support clipPath / " +
+                    "clipRRect / clipShader yet (G2+). Use clipRect() instead, " +
+                    "or back the canvas with SkBitmapDevice for these clip ops. " +
+                    "See MIGRATION_PLAN_GPU_WEBGPU.md."
+            }
+            return
+        }
         raster.setActiveClip(s.aaClip)
         raster.setActiveClipShader(s.clipShader, s.clipShaderCtm, s.clipShaderOp)
     }
