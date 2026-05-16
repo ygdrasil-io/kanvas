@@ -22,9 +22,12 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 
 @fragment
 fn fs_main() -> @location(0) vec4f {
-    // SrcOver blending in the pipeline expects PREMUL fragment output.
-    // G1.2 scope: opaque colors only (alpha == 1.0), so premul == unpremul
-    // and no rgb*alpha multiply needed. G2+ will premul here when alpha
-    // arrives.
-    return uniforms.color;
+    // SrcOver blending in the pipeline (src=One, dst=OneMinusSrcAlpha)
+    // expects PREMUL fragment output. Source colors enter the uniform
+    // unpremultiplied (Skia's SkColor convention is non-premul) -- premul
+    // here, in the shader, so the blend math sees correct values for
+    // translucent fills. G2.1 unlocks alpha < 1.0; opaque (alpha == 1.0)
+    // remains a no-op since rgb * 1.0 == rgb.
+    let c = uniforms.color;
+    return vec4f(c.rgb * c.a, c.a);
 }
