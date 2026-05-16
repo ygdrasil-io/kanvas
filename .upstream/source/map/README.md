@@ -61,8 +61,10 @@ Toutes les requêtes utilisent grep / awk / cut natifs. Le glob `**/*.tsv` requi
 ### 1. Kotlin → C++
 
 ```bash
-grep -P '^org\.graphiks\.math\.SkPoint\.length\t' .upstream/source/map/**/*.tsv | cut -f2,4
+awk -F'\t' '$1=="org.graphiks.math.SkPoint.length"' .upstream/source/map/**/*.tsv | cut -f2,4
 ```
+
+> Note macOS : `awk -F'\t'` est portable. `grep -P` (PCRE, pour matcher `\t`) n'est PAS disponible sur BSD grep / macOS — utiliser awk.
 
 ### 2. C++ → Kotlin
 
