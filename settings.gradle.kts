@@ -25,3 +25,4 @@ plugins {
 // consumed by :kanvas-skia via a srcDir reference in kanvas-skia/build.gradle.kts.
 include(":math")
 include(":kanvas-skia")
+include(":cpu-raster")

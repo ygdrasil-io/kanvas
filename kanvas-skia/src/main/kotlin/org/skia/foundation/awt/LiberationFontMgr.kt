@@ -34,7 +34,7 @@ import java.awt.Font
  * `gDefaultFontIndex = 4` upstream, the default typeface is
  * **Liberation Sans Regular** — which we mirror in [getDefault].
  */
-internal object LiberationFontMgr {
+public object LiberationFontMgr {
 
     /**
      * The three Liberation families upstream Skia exposes via

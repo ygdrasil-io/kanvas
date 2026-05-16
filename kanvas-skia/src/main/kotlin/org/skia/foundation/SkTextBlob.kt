@@ -21,8 +21,8 @@ import org.skia.math.SkRect
  * @property cullRect a conservative bounding box of the blob's glyph
  *   ink ; matches Skia's `bounds()` accessor.
  */
-public class SkTextBlob internal constructor(
-    internal val runs: List<Run>,
+public class SkTextBlob public constructor(
+    public val runs: List<Run>,
     private val cullRect: SkRect,
 ) {
     /** Mirrors Skia's `SkTextBlob::bounds()`. */
@@ -130,7 +130,7 @@ public class SkTextBlob internal constructor(
      * (per-glyph x, constant y) / `allocRunPos` (per-glyph x and y)
      * builder paths.
      */
-    internal sealed class Run {
+    public sealed class Run {
         abstract val font: SkFont
         abstract val glyphIds: IntArray
 
