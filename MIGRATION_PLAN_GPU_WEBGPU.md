@@ -310,11 +310,23 @@ Port des algorithmes de subdivision adaptative De Casteljau (quadratic + cubic) 
 
 **Limitation restante (G3.3b.2)** : la fan tessellation depuis le 1er vertex reste convex-correct uniquement. Pour un path concave (avec courbe ou pas), les triangles du fan vont traverser hors du polygone. ConcavePathsGM scorera bas tant que G3.3b.2 ne livre pas une triangulation propre (ear-clipping ou libtess2-like).
 
-### G3.3b.2 — Concave triangulation + AA (à venir)
+### G3.3b.2a — AA polygon coverage (convex, single-contour) ✅
+
+Fragment-side analytical edge coverage pour les paths convexes. `paint.isAntiAlias = true` sur `drawPath` ne throw plus — single-contour convex polygons obtiennent une coverage smooth sur leurs bords.
+
+- [x] [`aa_polygon.wgsl`](gpu-raster/src/main/resources/shaders/aa_polygon.wgsl) — fragment shader qui itère sur les edges du polygon perimeter (uniforme `array<vec4f, 256>` de coefficients `(a, b, c, _)`), calcule `coverage = min over edges of clamp(signed_dist + 0.5, 0, 1)`, applique au premul `color.a`.
+- [x] Nouveau variant `AaPolygonDraw : PendingDraw` avec edges array + edgeCount. 2e polygon pipeline cache (`aaPolygonPipelineCache`) keyed par blend mode.
+- [x] `buildPerimeterEdges(devVerts, out)` — détecte le winding (signed area en screen coords : positive = CW visuellement → flip orient), produit les edge equations normalisées avec "signed_dist > 0 = inside".
+- [x] **Key trick (rasterizer corner-case)** : l'AA path rend la **bounding box du polygon** (2 triangles axis-aligned, inflated par 1 pixel) au lieu du fan tess. Sinon, la rasterization GPU exclut les pixels exactement sur les bords des triangles (top-left edge rule), volant au fragment shader la chance de calculer leur coverage. La bbox garantit que tous les pixels près du polygon sont visités ; le shader masque la bbox vers la forme exacte.
+- [x] Restrictions G3.3b.2a : single-contour seul + `n ≤ MAX_AA_EDGES (256)`. Multi-contour ou très grand path → fallback non-AA fan tess (G3.3b.2b lifterait ces restrictions).
+- [x] [AaPolygonFillTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/AaPolygonFillTest.kt) — 2 sous-tests : half-integer edges (fractional coverage attendu) + integer edges (full coverage partout dedans).
+- [x] **Caveat sur le bump des scores existants** : ScaledRectsGM et Skbug12244GM ne bénéficient PAS — leurs paints n'ont pas `isAntiAlias` explicite, et le défaut SkPaint est `false`. L'infrastructure AA est là pour les futurs GMs qui demandent l'AA path explicitement.
+
+### G3.3b.2b — Concave triangulation + multi-contour (à venir)
 
 - [ ] **Triangulation polygone-à-trous** via ear-clipping ou libtess2-like (remplace la fan tessellation pour les paths non-convexes).
-- [ ] **Multi-contour** paths (chaque `kMove` ouvre un nouveau contour) : tessellator vrai supportant ces cas.
-- [ ] **AA paths** — coverage edge en fragment shader via distance-to-edge ; ou distance field si MSAA off. À profiler sur `ConcavePathsGM`.
+- [ ] **Multi-contour** paths (chaque `kMove` ouvre un nouveau contour) : tessellator vrai supportant ces cas + hole handling (Skbug12244GM bump attendu).
+- [ ] **AA pour concave + multi-contour** : le shader G3.3b.2a fonctionne tel quel (min sur edges), il faut juste alimenter les edge equations correctement pour les multi-contour avec holes (signe à inverser sur les hole contours).
 - [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
 - [ ] **Tests** : `ConcavePathsGM`, `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family.
 
@@ -327,7 +339,8 @@ Port des algorithmes de subdivision adaptative De Casteljau (quadratic + cubic) 
 - [x] G3.2 : 3 tests neufs (2 drawPaint + 1 ClipStrokeRectGM 96.6%). drawPaint TODO clos, 2e GM cible G2 vert.
 - [x] G3.3a : 3 tests neufs (PolygonFillTest : quad + triangle + curve-throws). drawPath skeleton convex polygon débloqué. ScaledRectsGM toujours bloqué par kPlus.
 - [x] G3.3b.1 : Bezier flattening (Quad / Cubic / Conic). 1 test converti + 1 test neuf. Curves rendent. Concave + AA = G3.3b.2.
-- [ ] G3.3b.2 : concave triangulation + multi-contour + AA polygon coverage → ≥ 5 path GMs verts à ≥ 85%.
+- [x] G3.3b.2a : AA polygon coverage (convex, single-contour) via bbox + fragment edge-distance. 2 tests neufs (AaPolygonFillTest). Pas de bump immédiat sur les ratchet entries (les GMs existants n'ont pas isAntiAlias=true sur leurs paths).
+- [ ] G3.3b.2b : concave triangulation + multi-contour + hole handling → ≥ 5 path GMs verts à ≥ 85%, Skbug12244GM bump attendu.
 - [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---
