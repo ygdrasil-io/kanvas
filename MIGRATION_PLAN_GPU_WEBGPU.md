@@ -354,6 +354,15 @@ Validation end-to-end du feature stack convex AA (G3.3b.1 + G3.3b.2a) par un GM 
 - [x] **Score** : **99.94 %** (~160 pixels de drift, sub-channel, sur les bords AA des cubiques). Ratché à floor=99.85.
 - [x] **FillTypeGM / ConcavePathsGM** : tentés, bloqués par features deferred — FillTypeGM exerce `kInverseWinding` (cf G3.3b.2b throw line 1005), ConcavePathsGM exerce AA multi-contour (cf G3.3b.2b throw line 998). Repris dans G3.3b.3.
 
+### G3.3b.2d — Suivi GMs (post-G3.3b.2c) — 3 nouveaux cross-tests ✅
+
+Quick wins additionnels sur la surface actuelle, zéro modif au device. Pure ajout de tests pour élargir le harness.
+
+- [x] [FiddleWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/FiddleWebGpuTest.kt) — `onDraw` no-op, BG blanc seul. Exerce le path "no draws → background-only clear" et le post-process G6.0/G6.1 sur une couleur uniforme. Score **100.00 %**. Ratché à floor=99.99.
+- [x] [ClipDrawDrawWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ClipDrawDrawWebGpuTest.kt) — crbug.com/423834 repro : séquences `clipRect + drawRect + drawRect` non-AA testant la cohérence d'arrondi integer-edge entre `clipRect` et `drawRect`. Pure rect fast-path (G1.2 scissor + G2.3a non-AA fill). Score **100.00 %**. Ratché à floor=99.99.
+- [x] [Bug7792WebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/Bug7792WebGpuTest.kt) — 16 paths line-only multi-contour exerçant moveTo/close edge cases (skbug.com/40039046). kWinding non-AA fill via stencil-and-cover (G3.3b.2b). Score **99.99 %** (~70 pixels drift sub-channel, AA edge mismatch identique à Skbug12244, closé par G3.3b.3). Ratché à floor=99.94.
+- [x] **SimpleRectGM / DrawRegionGM** : tentés mais 10 000 `drawRect` calls saturent le path "per-draw render-pass" (cf. note bulk rendering §G3.3b.1 ↑). Test hang. Reportés à un bulk-draw follow-up.
+
 ### G3.3b.3 — AA multi-contour + future tessellation (à venir)
 
 - [ ] **AA stencil-and-cover** : sample-mask AA dans le cover pass, OU per-fragment edge coverage en mode multi-contour. Closerait les ~160 pixels de drift sur Skbug12244GM. Débloquerait `ConcavePathsGM` (tenté en G3.3b.2c, blocked).
