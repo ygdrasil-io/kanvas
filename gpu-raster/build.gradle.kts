@@ -20,15 +20,15 @@ dependencies {
     implementation(project(":kanvas-skia"))
     implementation(project(":math"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
+    // wgpu4k's mapAsync / requestDevice are `suspend` functions. The
+    // toolkit ships kotlinx-coroutines transitively (runtime), but its
+    // `implementation` scope hides it from consumers' compile classpath
+    // (G1.2: WebGpuContext.kt + SkWebGpuDevice.kt under src/main/ use
+    // `runBlocking`).
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
-    // wgpu4k's mapAsync / requestDevice are `suspend` functions. The
-    // toolkit ships kotlinx-coroutines transitively (runtime), but its
-    // `implementation` scope hides it from consumers' compile classpath,
-    // so this module must declare the API dependency explicitly to call
-    // `runBlocking`.
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
