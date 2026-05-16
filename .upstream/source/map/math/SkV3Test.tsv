@@ -1,0 +1,4 @@
+org.graphiks.math.SkV3Test	M44Test	math/src/test/kotlin/SkV3Test.kt:11	tests/M44Test.cpp:1
+org.graphiks.math.SkV3Test.dot product matches the manual formula	M44_v3	math/src/test/kotlin/SkV3Test.kt:35	tests/M44Test.cpp:77
+org.graphiks.math.SkV3Test.cross product satisfies right-hand rule	M44_v3	math/src/test/kotlin/SkV3Test.kt:43	tests/M44Test.cpp:77
+org.graphiks.math.SkV3Test.length and lengthSquared	M44_v3	math/src/test/kotlin/SkV3Test.kt:50	tests/M44Test.cpp:77
