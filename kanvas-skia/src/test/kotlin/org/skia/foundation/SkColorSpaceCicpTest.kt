@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 
 /**
  * Phase E of MIGRATION_PLAN_COLORSPACE_PORT.md — exercise the CICP
@@ -73,7 +73,7 @@ class SkColorSpaceCicpTest {
     @Test
     fun `getCicpFromMatrix returns null for an unknown matrix`() {
         // Non-physical matrix far from any standard gamut.
-        val random = org.skia.skcms.SkcmsMatrix3x3.of(
+        val random = org.skia.foundation.skcms.SkcmsMatrix3x3.of(
             0.7f, 0.7f, 0.7f,
             0.7f, 0.7f, 0.7f,
             0.7f, 0.7f, 0.7f,

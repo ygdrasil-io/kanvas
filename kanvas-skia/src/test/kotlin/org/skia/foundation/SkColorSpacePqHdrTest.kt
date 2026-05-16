@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedTransferFn
 
 /**
  * R-final.9 — sanity tests for the HDR PQ colorspace tag factory

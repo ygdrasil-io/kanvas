@@ -1,4 +1,4 @@
-package org.skia.skcms
+package org.skia.foundation.skcms
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull

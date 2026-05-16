@@ -5,8 +5,8 @@ import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.tests.GM
 import java.security.MessageDigest
 
@@ -207,8 +207,8 @@ public class Runner(
     }
 
     private fun matrixEquals(
-        a: org.skia.skcms.SkcmsMatrix3x3,
-        b: org.skia.skcms.SkcmsMatrix3x3,
+        a: org.skia.foundation.skcms.SkcmsMatrix3x3,
+        b: org.skia.foundation.skcms.SkcmsMatrix3x3,
     ): Boolean {
         for (r in 0 until 3) for (c in 0 until 3) {
             if (a.vals[r][c] != b.vals[r][c]) return false

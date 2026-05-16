@@ -8,8 +8,8 @@ import org.skia.core.SkAlphaType as CoreAlphaType
 import org.skia.core.SkColorSpaceXformSteps
 import org.skia.math.SkMatrix
 import org.skia.math.SkPoint
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 
 /**
  * Unit tests for [SkLinearGradient]. Uses an identity colour-space xform

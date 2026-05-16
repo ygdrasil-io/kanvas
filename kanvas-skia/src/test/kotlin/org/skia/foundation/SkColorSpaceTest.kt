@@ -7,9 +7,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
-import org.skia.skcms.SkcmsTransferFunction
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkcmsTransferFunction
 
 class SkColorSpaceTest {
 

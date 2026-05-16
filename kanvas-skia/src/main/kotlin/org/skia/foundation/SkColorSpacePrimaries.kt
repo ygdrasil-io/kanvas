@@ -1,7 +1,7 @@
 package org.skia.foundation
 
-import org.skia.skcms.SkcmsMatrix3x3
-import org.skia.skcms.skcmsPrimariesToXYZD50
+import org.skia.foundation.skcms.SkcmsMatrix3x3
+import org.skia.foundation.skcms.skcmsPrimariesToXYZD50
 
 /**
  * Bit-compatible port of `SkColorSpacePrimaries`

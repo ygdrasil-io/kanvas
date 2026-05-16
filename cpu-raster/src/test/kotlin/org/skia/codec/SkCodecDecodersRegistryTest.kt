@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkBitmap
-import org.skia.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.SkcmsICCProfile
 
 /**
  * R-suivi.47 verification — [SkCodec.Decoders] is now a public registry

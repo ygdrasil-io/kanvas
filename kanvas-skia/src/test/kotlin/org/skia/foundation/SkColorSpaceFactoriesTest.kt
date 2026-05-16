@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedGamut
 
 /**
  * R2.19 — covers the PascalCase static factories on

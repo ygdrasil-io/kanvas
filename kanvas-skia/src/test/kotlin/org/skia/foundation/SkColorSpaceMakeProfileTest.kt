@@ -5,9 +5,9 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.skcms.SkNamedGamut
-import org.skia.skcms.SkNamedTransferFn
-import org.skia.skcms.skcmsParse
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.skcmsParse
 import java.io.DataInputStream
 import java.util.zip.Inflater
 
@@ -66,16 +66,16 @@ class SkColorSpaceMakeProfileTest {
         // custom format, not ICC. Instead, hand-construct an
         // SkcmsICCProfile with sRGB-equivalent parametric TRC + sRGB
         // gamut.
-        val profile = org.skia.skcms.SkcmsICCProfile(
+        val profile = org.skia.foundation.skcms.SkcmsICCProfile(
             buffer = ByteArray(0),
             size = 0,
-            dataColorSpace = org.skia.skcms.SkcmsSignature.RGB.value,
-            pcs = org.skia.skcms.SkcmsSignature.XYZ.value,
+            dataColorSpace = org.skia.foundation.skcms.SkcmsSignature.RGB.value,
+            pcs = org.skia.foundation.skcms.SkcmsSignature.XYZ.value,
             tagCount = 0,
             trc = arrayOf(
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
             ),
             toXYZD50 = SkNamedGamut.kSRGB,
             hasTrc = true,
@@ -86,13 +86,13 @@ class SkColorSpaceMakeProfileTest {
 
     @Test
     fun `make from sRGB-linear profile returns the sRGB-linear singleton`() {
-        val profile = org.skia.skcms.SkcmsICCProfile(
+        val profile = org.skia.foundation.skcms.SkcmsICCProfile(
             buffer = ByteArray(0),
             tagCount = 0,
             trc = arrayOf(
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kLinear),
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kLinear),
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kLinear),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kLinear),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kLinear),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kLinear),
             ),
             toXYZD50 = SkNamedGamut.kSRGB,
             hasTrc = true,
@@ -103,7 +103,7 @@ class SkColorSpaceMakeProfileTest {
 
     @Test
     fun `make returns null when no usable TF`() {
-        val profile = org.skia.skcms.SkcmsICCProfile(
+        val profile = org.skia.foundation.skcms.SkcmsICCProfile(
             buffer = ByteArray(0),
             tagCount = 0,
             trc = arrayOfNulls(3),  // no TRC
@@ -116,13 +116,13 @@ class SkColorSpaceMakeProfileTest {
 
     @Test
     fun `make returns null when TRCs disagree`() {
-        val profile = org.skia.skcms.SkcmsICCProfile(
+        val profile = org.skia.foundation.skcms.SkcmsICCProfile(
             buffer = ByteArray(0),
             tagCount = 0,
             trc = arrayOf(
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kLinear),  // different!
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kLinear),  // different!
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kSRGB),
             ),
             toXYZD50 = SkNamedGamut.kSRGB,
             hasTrc = true,
@@ -135,16 +135,16 @@ class SkColorSpaceMakeProfileTest {
     fun `make uses CICP fast-path when usable`() {
         // CICP tag with kRec709 primaries + kIEC61966_2_1 (sRGB) TF.
         // This should snap to the sRGB singleton.
-        val profile = org.skia.skcms.SkcmsICCProfile(
+        val profile = org.skia.foundation.skcms.SkcmsICCProfile(
             buffer = ByteArray(0),
             tagCount = 0,
             trc = arrayOf(
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kRec2020),  // CICP wins
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kRec2020),
-                org.skia.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kRec2020),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kRec2020),  // CICP wins
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kRec2020),
+                org.skia.foundation.skcms.SkcmsCurve.Parametric(SkNamedTransferFn.kRec2020),
             ),
             toXYZD50 = SkNamedGamut.kRec2020,    // CICP overrides
-            cicp = org.skia.skcms.SkcmsCICP(
+            cicp = org.skia.foundation.skcms.SkcmsCICP(
                 colorPrimaries = SkNamedPrimaries.CicpId.kRec709.value,
                 transferCharacteristics = SkNamedTransferFn.CicpId.kIEC61966_2_1.value,
                 matrixCoefficients = 0,
