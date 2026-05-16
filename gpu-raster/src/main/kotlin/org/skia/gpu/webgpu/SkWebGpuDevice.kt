@@ -28,7 +28,11 @@ import io.ygdrasil.webgpu.PipelineLayoutDescriptor
 import io.ygdrasil.webgpu.RenderPassColorAttachment
 import io.ygdrasil.webgpu.RenderPassDescriptor
 import io.ygdrasil.webgpu.RenderPipelineDescriptor
+import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUVertexFormat
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
+import io.ygdrasil.webgpu.VertexAttribute
+import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.beginRenderPass
 import kotlinx.coroutines.runBlocking
@@ -113,37 +117,69 @@ public class SkWebGpuDevice(
     }
 
     /**
-     * One pending draw, accumulated by [drawRect] and replayed by
-     * [flush]. Carries both the scissor rect (integer, in device pixels —
-     * sets the WebGPU `setScissorRect`) and the fractional bounds
-     * (passed to the shader for analytical coverage).
+     * One pending draw, accumulated by the public draw entry points and
+     * replayed by [flush]. Two variants in G3.3a :
+     *  - [RectDraw] : the G1.2/G2.3a path — full-screen Bjorke triangle
+     *    + setScissorRect + analytical coverage in the fragment shader
+     *    (`solid_color.wgsl`).
+     *  - [PolygonDraw] : the G3.3a path — uploaded triangle list, vertex
+     *    shader projects device-pixel coords into NDC, no AA coverage
+     *    (`solid_polygon.wgsl`).
      *
-     * For non-AA draws : `(fl, ft, fr, fb)` are the pixelEdge-rounded
-     * integers — every interior pixel-center hits the rect by exactly
-     * 0.5, so the shader's coverage formula evaluates to 1.0 and the
-     * output is byte-identical to the pre-G2.3a unconditional path.
-     *
-     * For AA draws : the bounds are the original fractional rect and
-     * the scissor is the conservative floor/ceil bbox, so edge pixels
-     * are visited and get fractional coverage.
+     * The two variants share the blend pipeline cache (one per blend
+     * mode per shader). Draw order is preserved across types so blend
+     * modes compose correctly.
+     */
+    private sealed interface PendingDraw {
+        val mode: SkBlendMode
+        val r: Float; val g: Float; val b: Float; val a: Float
+    }
+
+    /**
+     * Scissor rect (integer, device pixels — sets WebGPU `setScissorRect`)
+     * paired with the fractional bounds passed to the shader for
+     * analytical coverage. Non-AA collapses bounds to integers ; AA keeps
+     * the originals and uses the conservative floor/ceil scissor.
      */
     private data class RectDraw(
         val x: Int, val y: Int, val w: Int, val h: Int,
         val fl: Float, val ft: Float, val fr: Float, val fb: Float,
-        val r: Float, val g: Float, val b: Float, val a: Float,
-        val mode: SkBlendMode,
-    )
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
 
-    private val pending: MutableList<RectDraw> = mutableListOf()
+    /**
+     * Triangle-list buffer in **device-pixel** coords. `verts` holds
+     * `triangleCount * 6` floats `[x0, y0, x1, y1, x2, y2, ...]`. Built
+     * by [drawPath] via fan tessellation from the path's first vertex —
+     * exact for convex polygons, only approximate for concave (G3.3b).
+     *
+     * [scissor] is the axis-aligned device clip captured at drawPath
+     * time `(x, y, w, h)`. Applied via `setScissorRect` before drawing
+     * so any clip the SkCanvas state had at the time is respected even
+     * if the triangle list extends beyond it.
+     */
+    private data class PolygonDraw(
+        val verts: FloatArray,
+        val scissor: IntArray, // (x, y, w, h)
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
 
-    private val shader: GPUShaderModule = run {
+    private val pending: MutableList<PendingDraw> = mutableListOf()
+
+    private fun loadShader(resource: String): GPUShaderModule {
         val wgsl = SkWebGpuDevice::class.java.classLoader
-            .getResource("shaders/solid_color.wgsl")?.readText()
-            ?: error("shaders/solid_color.wgsl missing from classpath")
-        context.device.createShaderModule(ShaderModuleDescriptor(code = wgsl))
+            .getResource(resource)?.readText()
+            ?: error("$resource missing from classpath")
+        return context.device.createShaderModule(ShaderModuleDescriptor(code = wgsl))
     }
 
-    private val bindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+    // ─── Rect pipeline (G1.2 / G2.3a) — full-screen tri + scissor + coverage ───
+
+    private val rectShader: GPUShaderModule = loadShader("shaders/solid_color.wgsl")
+
+    private val rectBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
             entries = listOf(
                 BindGroupLayoutEntry(
@@ -155,27 +191,90 @@ public class SkWebGpuDevice(
         ),
     )
 
-    private val pipelineLayout = context.device.createPipelineLayout(
-        PipelineLayoutDescriptor(bindGroupLayouts = listOf(bindGroupLayout)),
+    private val rectPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(rectBindGroupLayout)),
     )
 
     /**
-     * Lazily-populated pipeline cache, one entry per [SkBlendMode] the
-     * caller actually exercises. All pipelines share the same vertex /
-     * fragment shader, same layout, same target format — only the
-     * [BlendState] differs. The cache is bounded by the number of
-     * supported modes (4 in G2.2), so no eviction policy is needed.
+     * Lazily-populated rect-pipeline cache, one entry per [SkBlendMode]
+     * the caller exercises. All entries share the same vertex / fragment
+     * shader, same layout, same target format — only the [BlendState]
+     * differs.
      */
-    private val pipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+    private val rectPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
 
-    private fun pipelineFor(mode: SkBlendMode): GPURenderPipeline =
-        pipelineCache.getOrPut(mode) {
+    private fun rectPipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        rectPipelineCache.getOrPut(mode) {
             context.device.createRenderPipeline(
                 RenderPipelineDescriptor(
-                    layout = pipelineLayout,
-                    vertex = VertexState(module = shader, entryPoint = "vs_main"),
+                    layout = rectPipelineLayout,
+                    vertex = VertexState(module = rectShader, entryPoint = "vs_main"),
                     fragment = FragmentState(
-                        module = shader,
+                        module = rectShader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA8Unorm,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
+    // ─── Polygon pipeline (G3.3a) — vertex buffer in device coords ─────────
+
+    private val polygonShader: GPUShaderModule = loadShader("shaders/solid_polygon.wgsl")
+
+    private val polygonBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                // Same fragment-stage uniform layout as the rect pipeline plus
+                // the viewport size used by the vertex stage's NDC remap
+                // (visibility = Vertex | Fragment).
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                ),
+            ),
+        ),
+    )
+
+    private val polygonPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(polygonBindGroupLayout)),
+    )
+
+    /**
+     * Polygon pipeline cache keyed by [SkBlendMode]. Same set of blends
+     * as the rect pipeline ; the vertex shader is the differentiator.
+     */
+    private val polygonPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+
+    private fun polygonPipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        polygonPipelineCache.getOrPut(mode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = polygonPipelineLayout,
+                    vertex = VertexState(
+                        module = polygonShader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(
+                            VertexBufferLayout(
+                                arrayStride = 8uL, // 2 floats * 4 bytes
+                                attributes = listOf(
+                                    VertexAttribute(
+                                        shaderLocation = 0u,
+                                        offset = 0uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    fragment = FragmentState(
+                        module = polygonShader,
                         entryPoint = "fs_main",
                         targets = listOf(
                             ColorTargetState(
@@ -388,8 +487,82 @@ public class SkWebGpuDevice(
         drawRect(rect, clip, paint)
     }
 
+    /**
+     * G3.3a — minimal `drawPath` skeleton : single-contour **convex
+     * polygon** paths only (Move + Line + Close verbs), **non-AA**,
+     * **fill only**. Walks the verb stream, transforms each point by
+     * [ctm] into device-pixel coords, and fan-tessellates from the
+     * first vertex into a triangle list. Anything more (curves,
+     * concave paths, AA, stroke) throws with a pointer to the phase
+     * that lifts the restriction.
+     */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
-        TODO("SkWebGpuDevice.drawPath — G3 (CPU path tessellation per master plan D2).")
+        require(!paint.isAntiAlias) {
+            "SkWebGpuDevice (G3.3a): AA path fill not supported yet — analytical " +
+                "edge coverage for arbitrary polygons lands in G3.3b."
+        }
+        require(paint.style == SkPaint.Style.kFill_Style) {
+            "SkWebGpuDevice (G3.3a): only fill-style paths supported — got ${paint.style}. " +
+                "Stroke paths (SkStroker.outline) arrive in G3.4."
+        }
+
+        // Walk the verb stream once, transform each point by the CTM,
+        // collect device-pixel vertices. Multiple contours are flattened
+        // into a single vertex list (the fan tessellator below treats
+        // them as one polygon — fine for the convex-only scope, may
+        // produce artefacts on concave or multi-contour paths until G3.3b).
+        val devVerts = ArrayList<Float>(path.verbs.size * 2)
+        var ci = 0
+        for (verb in path.verbs) {
+            when (verb) {
+                SkPath.Verb.kMove, SkPath.Verb.kLine -> {
+                    val sx = path.coords[ci++]
+                    val sy = path.coords[ci++]
+                    val (dx, dy) = ctm.mapXY(sx, sy)
+                    devVerts.add(dx); devVerts.add(dy)
+                }
+                SkPath.Verb.kClose -> { /* polygon closes implicitly on the fan */ }
+                else -> error(
+                    "SkWebGpuDevice (G3.3a): verb $verb not supported. " +
+                        "Bezier flattening + path tessellation arrives in G3.3b.",
+                )
+            }
+        }
+        val n = devVerts.size / 2
+        if (n < 3) return // Degenerate : nothing to fill.
+
+        // Fan tessellation from vertex 0 : triangles (0, 1, 2), (0, 2, 3), …,
+        // (0, n-2, n-1). Convex-correct ; concave paths get artefacts.
+        val triCount = n - 2
+        val tri = FloatArray(triCount * 6)
+        var w = 0
+        for (i in 1 until n - 1) {
+            tri[w++] = devVerts[0]; tri[w++] = devVerts[1]
+            tri[w++] = devVerts[i * 2]; tri[w++] = devVerts[i * 2 + 1]
+            tri[w++] = devVerts[(i + 1) * 2]; tri[w++] = devVerts[(i + 1) * 2 + 1]
+        }
+
+        // Honour the device clip via scissor (axis-aligned int clip).
+        // For G3.3a we leave the polygon's triangles intact and let
+        // setScissorRect cull pixels outside `clip`.
+        val scissorL = clip.left.coerceAtLeast(0)
+        val scissorT = clip.top.coerceAtLeast(0)
+        val scissorR = clip.right.coerceAtMost(width)
+        val scissorB = clip.bottom.coerceAtMost(height)
+        if (scissorL >= scissorR || scissorT >= scissorB) return
+
+        val color = paint.color
+        pending.add(
+            PolygonDraw(
+                verts = tri,
+                scissor = intArrayOf(scissorL, scissorT, scissorR - scissorL, scissorB - scissorT),
+                r = SkColorGetR(color) / 255f,
+                g = SkColorGetG(color) / 255f,
+                b = SkColorGetB(color) / 255f,
+                a = SkColorGetA(color) / 255f,
+                mode = paint.blendMode,
+            ),
+        )
     }
 
     override fun drawImageRect(
@@ -432,40 +605,21 @@ public class SkWebGpuDevice(
             }
         }
 
-        // Per-draw uniform buffers + bind groups (WebGPU forbids
-        // queue.writeBuffer between draws inside a render pass — per-draw
-        // resources are the simplest correct fix; dynamic-offset bind
-        // groups are a G2+ optimisation).
-        val uniforms = pending.map { rd ->
-            val buf = context.device.createBuffer(
-                BufferDescriptor(
-                    size = DRAW_UNIFORM_SIZE,
-                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                    label = "SkWebGpuDevice.draw",
-                ),
-            )
-            // Layout : color (4 floats, offset 0) + bounds (4 floats,
-            // offset 16). Matches `Uniforms { color, bounds }` in
-            // solid_color.wgsl.
-            context.queue.writeBuffer(
-                buf, 0uL,
-                ArrayBuffer.of(floatArrayOf(rd.r, rd.g, rd.b, rd.a, rd.fl, rd.ft, rd.fr, rd.fb)),
-            )
-            buf
-        }
-        val bindGroups = uniforms.map { buf ->
-            context.device.createBindGroup(
-                BindGroupDescriptor(
-                    layout = bindGroupLayout,
-                    entries = listOf(
-                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = buf)),
-                    ),
-                ),
-            )
+        // Per-draw GPU resources (uniform buffer + bind group + optional
+        // vertex buffer for polygons). WebGPU forbids `queue.writeBuffer`
+        // between draws inside a render pass — per-draw resources are
+        // the simplest correct fix ; dynamic-offset bind groups are an
+        // optimisation for later phases.
+        val perDrawResources: List<DrawResources> = pending.map { d ->
+            when (d) {
+                is RectDraw -> buildRectDrawResources(d)
+                is PolygonDraw -> buildPolygonDrawResources(d)
+            }
         }
 
-        pending.forEachIndexed { i, draw ->
+        pending.forEachIndexed { i, d ->
             val loadOp = if (i == 0) GPULoadOp.Clear else GPULoadOp.Load
+            val res = perDrawResources[i]
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -478,15 +632,31 @@ public class SkWebGpuDevice(
                     ),
                 ),
             ) {
-                setPipeline(pipelineFor(draw.mode))
-                setBindGroup(0u, bindGroups[i])
-                setScissorRect(
-                    x = draw.x.toUInt(),
-                    y = draw.y.toUInt(),
-                    width = draw.w.toUInt(),
-                    height = draw.h.toUInt(),
-                )
-                draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                when (d) {
+                    is RectDraw -> {
+                        setPipeline(rectPipelineFor(d.mode))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.x.toUInt(),
+                            y = d.y.toUInt(),
+                            width = d.w.toUInt(),
+                            height = d.h.toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    }
+                    is PolygonDraw -> {
+                        setPipeline(polygonPipelineFor(d.mode))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
+                        draw((d.verts.size / 2).toUInt())
+                    }
+                }
                 end()
             }
         }
@@ -496,21 +666,99 @@ public class SkWebGpuDevice(
 
         val pixels = target.readPixels()
 
-        uniforms.forEach { it.close() }
+        perDrawResources.forEach { it.uniform.close(); it.vertexBuffer?.close() }
         pending.clear()
         pixels
     }
 
+    /**
+     * Per-draw GPU resources lifetime-managed by [flush] : the uniform
+     * buffer + its bind group, and (for polygon draws only) the vertex
+     * buffer holding the triangle list.
+     */
+    private data class DrawResources(
+        val uniform: GPUBuffer,
+        val bindGroup: io.ygdrasil.webgpu.GPUBindGroup,
+        val vertexBuffer: GPUBuffer? = null,
+    )
+
+    private fun buildRectDrawResources(d: RectDraw): DrawResources {
+        val buf = context.device.createBuffer(
+            BufferDescriptor(
+                size = RECT_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.rectDraw",
+            ),
+        )
+        // Layout : color (4 floats) + bounds (4 floats) = 32 bytes.
+        // Matches `Uniforms { color, bounds }` in solid_color.wgsl.
+        context.queue.writeBuffer(
+            buf, 0uL,
+            ArrayBuffer.of(floatArrayOf(d.r, d.g, d.b, d.a, d.fl, d.ft, d.fr, d.fb)),
+        )
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = rectBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = buf)),
+                ),
+            ),
+        )
+        return DrawResources(uniform = buf, bindGroup = bindGroup)
+    }
+
+    private fun buildPolygonDrawResources(d: PolygonDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = POLYGON_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.polygonDraw",
+            ),
+        )
+        // Layout : color (4 floats) + viewport (vec4 padded ; only x,y used).
+        // Matches `Uniforms { color, viewport }` in solid_polygon.wgsl.
+        context.queue.writeBuffer(
+            uniform, 0uL,
+            ArrayBuffer.of(floatArrayOf(
+                d.r, d.g, d.b, d.a,
+                width.toFloat(), height.toFloat(), 0f, 0f,
+            )),
+        )
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = polygonBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        val vertexSize = (d.verts.size * Float.SIZE_BYTES).toULong()
+        val vertexBuffer = context.device.createBuffer(
+            BufferDescriptor(
+                size = vertexSize,
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.polygonVerts",
+            ),
+        )
+        context.queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(d.verts))
+        return DrawResources(uniform = uniform, bindGroup = bindGroup, vertexBuffer = vertexBuffer)
+    }
+
     override fun close() {
-        pipelineCache.values.forEach { it.close() }
-        pipelineCache.clear()
-        shader.close()
+        rectPipelineCache.values.forEach { it.close() }
+        rectPipelineCache.clear()
+        polygonPipelineCache.values.forEach { it.close() }
+        polygonPipelineCache.clear()
+        rectShader.close()
+        polygonShader.close()
         target.close()
     }
 
     private companion object {
-        /** Size of the per-draw uniform : `color: vec4f` + `bounds: vec4f` = 32 bytes. */
-        const val DRAW_UNIFORM_SIZE: ULong = 32uL
+        /** Size of the rect per-draw uniform : `color: vec4f` + `bounds: vec4f` = 32 bytes. */
+        const val RECT_UNIFORM_SIZE: ULong = 32uL
+        /** Size of the polygon per-draw uniform : `color: vec4f` + `viewport: vec4f` = 32 bytes. */
+        const val POLYGON_UNIFORM_SIZE: ULong = 32uL
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 
         /**
