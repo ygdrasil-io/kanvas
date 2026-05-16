@@ -235,15 +235,28 @@ public class SkWebGpuDevice(
     override fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
 
     override fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
-        require(paint.style == SkPaint.Style.kFill_Style) {
-            "SkWebGpuDevice (G2.1): only fill-style supported — got ${paint.style}. Strokes arrive in G3."
-        }
         // G2.1 — translucent SrcOver supported via premul shader.
         // G2.2 — paint.blendMode honoured (kClear / kSrc / kSrcOver / kDstOver).
         // G2.3a — paint.isAntiAlias honoured via analytical coverage in the
         //          shader. Both AA and non-AA route through the same
         //          pipeline ; only the bounds passed to the shader and the
         //          scissor extent differ.
+        // G3.1 — paint.style honoured (Fill / Stroke / StrokeAndFill). Stroke
+        //          decomposes into 4 edge sub-rects (top/bottom/left/right)
+        //          per SkBitmapDevice.strokeRect ; hairline (sw <= 0) snaps
+        //          to integer coords and uses 1-pixel non-AA edges (matches
+        //          SkScan::HairLineRgn).
+        when (paint.style) {
+            SkPaint.Style.kFill_Style -> drawFillRect(rect, clip, paint)
+            SkPaint.Style.kStroke_Style -> drawStrokeRect(rect, clip, paint)
+            SkPaint.Style.kStrokeAndFill_Style -> {
+                drawFillRect(rect, clip, paint)
+                drawStrokeRect(rect, clip, paint)
+            }
+        }
+    }
+
+    private fun drawFillRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val color = paint.color
         val scissor: IntArray
         val bounds: FloatArray
@@ -289,6 +302,73 @@ public class SkWebGpuDevice(
                 mode = paint.blendMode,
             ),
         )
+    }
+
+    /**
+     * Decompose an axis-aligned rect stroke into fill sub-draws — mirrors
+     * [org.skia.core.SkBitmapDevice.strokeRect]'s annular outer/inner
+     * formulation, modulo the per-pixel emit which is delegated to the
+     * shader's analytical coverage path.
+     *
+     * The 4 edges (top, bottom, left, right) are pushed as separate
+     * `RectDraw`s. Their bounds are computed in floating-point so AA
+     * paints get fractional coverage at the outer + inner edges. The
+     * corners are covered by top/bottom only ; left/right exclude them
+     * to avoid double-painting (matters for non-opaque blend modes).
+     */
+    private fun drawStrokeRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+        val sw = paint.strokeWidth
+        if (sw <= 0f) {
+            drawHairlineRect(rect, clip, paint)
+            return
+        }
+
+        val half = sw * 0.5f
+        val outerL = rect.left - half
+        val outerT = rect.top - half
+        val outerR = rect.right + half
+        val outerB = rect.bottom + half
+        val innerL = rect.left + half
+        val innerT = rect.top + half
+        val innerR = rect.right - half
+        val innerB = rect.bottom - half
+
+        if (innerL >= innerR || innerT >= innerB) {
+            // Stroke is so thick that the inner rect is empty (or inverted) ;
+            // the whole outer rect becomes the painted region.
+            drawFillRect(SkRect.MakeLTRB(outerL, outerT, outerR, outerB), clip, paint)
+            return
+        }
+
+        // top edge : full outer width, height = upper band
+        drawFillRect(SkRect.MakeLTRB(outerL, outerT, outerR, innerT), clip, paint)
+        // bottom edge : full outer width, height = lower band
+        drawFillRect(SkRect.MakeLTRB(outerL, innerB, outerR, outerB), clip, paint)
+        // left edge : excluding corners (top/bottom already cover them)
+        drawFillRect(SkRect.MakeLTRB(outerL, innerT, innerL, innerB), clip, paint)
+        // right edge : excluding corners
+        drawFillRect(SkRect.MakeLTRB(innerR, innerT, outerR, innerB), clip, paint)
+    }
+
+    /**
+     * Hairline rect stroke — `strokeWidth <= 0` in Skia means a 1-device-pixel
+     * outline snapped to floor-style integer coords (matches
+     * `SkScan::HairLineRgn` and [org.skia.core.SkBitmapDevice.strokeRect]'s
+     * hairline branch). Always non-AA in this slice — true AA hairlines are
+     * a follow-up if a GM demands it. The hairline `paint` is swapped to
+     * `isAntiAlias = false` for the sub-draws so the shader's coverage
+     * formula collapses to 1.0 on the integer-aligned 1px edges.
+     */
+    private fun drawHairlineRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+        val l = floor(rect.left.toDouble()).toFloat()
+        val t = floor(rect.top.toDouble()).toFloat()
+        val r = floor(rect.right.toDouble()).toFloat()
+        val b = floor(rect.bottom.toDouble()).toFloat()
+        val nonAaPaint = paint.copy().apply { isAntiAlias = false }
+        drawFillRect(SkRect.MakeLTRB(l,     t,     r + 1, t + 1), clip, nonAaPaint) // top
+        drawFillRect(SkRect.MakeLTRB(l,     b,     r + 1, b + 1), clip, nonAaPaint) // bottom
+        drawFillRect(SkRect.MakeLTRB(l,     t + 1, l + 1, b),     clip, nonAaPaint) // left
+        drawFillRect(SkRect.MakeLTRB(r,     t + 1, r + 1, b),     clip, nonAaPaint) // right
     }
 
     override fun drawPaint(ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
