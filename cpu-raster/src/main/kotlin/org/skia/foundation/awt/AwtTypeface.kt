@@ -526,7 +526,7 @@ public class AwtTypeface internal constructor(
         internal fun makeDefaultBase(): Font = Font(Font.SANS_SERIF, Font.PLAIN, 1)
 
         /** Singleton AWT-backed default typeface. */
-        internal val DEFAULT: AwtTypeface = AwtTypeface(makeDefaultBase())
+        public val DEFAULT: AwtTypeface = AwtTypeface(makeDefaultBase())
 
         /**
          * R-final.7 — build an AWT-backed typeface from raw TTF/OTF
