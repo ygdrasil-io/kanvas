@@ -1,6 +1,5 @@
 package org.skia.foundation
 
-import org.skia.foundation.awt.JvmAwtFontMgr
 import java.io.InputStream
 
 /**
@@ -145,13 +144,16 @@ public abstract class SkFontMgr protected constructor() {
 
     public companion object {
         /**
-         * Returns the JVM's default font manager — AWT-backed, exposing
-         * every font enumerable via `GraphicsEnvironment`. Mirrors
-         * upstream's platform-default font manager (`SkFontMgr_Mac` on
-         * macOS, `SkFontMgr_Fontconfig` on Linux, …) without binding to a
-         * native library. See [JvmAwtFontMgr] for backend specifics.
+         * `RefDefault()` moved to an extension function on
+         * [SkFontMgr.Companion] in `:cpu-raster` (file
+         * `org.skia.foundation.awt.SkFontMgrCpuRaster.kt`) so that
+         * `:kanvas-skia/foundation` no longer imports the
+         * AWT-backed implementation. Cycle break preparing the
+         * GPU module's classpath cleanliness.
+         *
+         * Callers should `import org.skia.foundation.awt.RefDefault`
+         * and continue calling `SkFontMgr.RefDefault()`.
          */
-        public fun RefDefault(): SkFontMgr = JvmAwtFontMgr.SINGLETON
 
         /** Mirrors `sk_sp<SkFontMgr> SkFontMgr::RefEmpty()`. */
         public fun RefEmpty(): SkFontMgr = EmptyFontMgr

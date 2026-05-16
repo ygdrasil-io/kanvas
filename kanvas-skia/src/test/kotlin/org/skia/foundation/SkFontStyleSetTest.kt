@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import org.skia.foundation.awt.RefDefault
 
 /**
  * Verifies the abstract [SkFontStyleSet] contract on the JVM-AWT impl
