@@ -266,6 +266,29 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
+     * G3.3b.3a — AA multi-contour path via stencil-and-cover with a
+     * per-fragment edge-segment coverage shader. Same `stencilVerts` /
+     * `coverVerts` as [StencilCoverPolygonDraw] ; `edges` carries the
+     * path's edge segments `(Ax, Ay, Bx, By)` across all contours
+     * (caller guarantees `edgeCount <= MAX_AA_EDGES`).
+     *
+     * Stencil pass identical to the non-AA variant ; cover pass uses
+     * the AA-stencil-cover pipeline (stencil-test NotEqual-0, fragment
+     * shader computes `coverage = clamp(minDist + 0.5, 0, 1)` from the
+     * edge segments). See `aa_stencil_cover.wgsl` for the trade-off
+     * (loses the outside half of the AA falloff vs throwing).
+     */
+    private data class StencilCoverAaPolygonDraw(
+        val stencilVerts: FloatArray,
+        val coverVerts: FloatArray,
+        val edges: FloatArray,   // (Ax, Ay, Bx, By) per edge, length = MAX_AA_EDGES * 4
+        val edgeCount: Int,
+        val scissor: IntArray,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
+    /**
      * AA variant of [PolygonDraw]. `verts` is the fan-tessellated
      * triangle list (same as non-AA), `edges` is the polygon's
      * **perimeter** edge equations `(a, b, c, _)` per edge in
@@ -479,6 +502,62 @@ public class SkWebGpuDevice(
                     ),
                     fragment = FragmentState(
                         module = polygonShader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA8Unorm,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = GPUCompareFunction.NotEqual,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = GPUCompareFunction.NotEqual,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = 0xFFu,
+                        stencilWriteMask = 0xFFu,
+                    ),
+                ),
+            )
+        }
+
+    // ─── AA stencil-cover (G3.3b.3a) — AA cover pass for multi-contour ────
+
+    private val aaStencilCoverShader: GPUShaderModule = loadShader("shaders/aa_stencil_cover.wgsl")
+
+    private val aaStencilCoverPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+
+    /**
+     * AA-cover pipeline. Same stencil state as [coverPipelineFor] (gate
+     * by winding count != 0), but the fragment shader produces AA
+     * coverage from the path's edge segments. Bind group layout is
+     * shared with the single-contour AA pipeline (one uniform buffer
+     * with `color + viewport + edgeCount + edges[256]`).
+     */
+    private fun aaStencilCoverPipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        aaStencilCoverPipelineCache.getOrPut(mode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = aaPolygonPipelineLayout,
+                    vertex = VertexState(
+                        module = aaStencilCoverShader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = aaStencilCoverShader,
                         entryPoint = "fs_main",
                         targets = listOf(
                             ColorTargetState(
@@ -988,15 +1067,29 @@ public class SkWebGpuDevice(
         // Naturally handles holes (opposite-winding inner contour
         // subtracts from outer winding count).
         if (contourStarts.size > 1) {
-            require(!paint.isAntiAlias) {
-                "SkWebGpuDevice (G3.3b.2b): AA on multi-contour paths is not " +
-                    "supported yet. Single-contour convex AA paths still work " +
-                    "(G3.3b.2a) ; multi-contour AA is deferred to G3.3b.3 " +
-                    "(stencil-and-cover with sample-mask AA, or proper " +
-                    "triangulation with AA edge coverage)."
-            }
             val stencilTri = fanTessellateContours(devVerts, contourStarts)
             val coverTri = bboxTrianglesFor(devVerts, width, height)
+            val totalVerts = devVerts.size / 2
+            if (paint.isAntiAlias && totalVerts <= MAX_AA_EDGES) {
+                // G3.3b.3a — AA multi-contour : stencil pass identical
+                // to non-AA, cover pass uses the AA-stencil-cover shader
+                // to smooth the boundary via edge-segment coverage.
+                // Falls through to non-AA below when edge budget exceeded.
+                val edges = FloatArray(MAX_AA_EDGES * 4)
+                buildContourEdgeSegments(devVerts, contourStarts, edges)
+                pending.add(
+                    StencilCoverAaPolygonDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        edges = edges,
+                        edgeCount = totalVerts,
+                        scissor = scissor,
+                        r = rF, g = gF, b = bF, a = aF,
+                        mode = paint.blendMode,
+                    ),
+                )
+                return
+            }
             pending.add(
                 StencilCoverPolygonDraw(
                     stencilVerts = stencilTri,
@@ -1118,6 +1211,7 @@ public class SkWebGpuDevice(
                 is PolygonDraw -> buildPolygonDrawResources(d)
                 is AaPolygonDraw -> buildAaPolygonDrawResources(d)
                 is StencilCoverPolygonDraw -> buildStencilCoverDrawResources(d)
+                is StencilCoverAaPolygonDraw -> buildStencilCoverAaDrawResources(d)
             }
         }
 
@@ -1174,6 +1268,48 @@ public class SkWebGpuDevice(
                 }
                 return@forEachIndexed
             }
+            if (d is StencilCoverAaPolygonDraw) {
+                // G3.3b.3a — same shape as the non-AA stencil-and-cover
+                // pass, but the cover pipeline uses the AA-edge-segment
+                // fragment shader so the boundary fades smoothly.
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = colorView,
+                                loadOp = loadOp,
+                                clearValue = background,
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                        depthStencilAttachment = RenderPassDepthStencilAttachment(
+                            view = depthStencilView,
+                            stencilClearValue = 0u,
+                            stencilLoadOp = GPULoadOp.Clear,
+                            stencilStoreOp = GPUStoreOp.Discard,
+                            stencilReadOnly = false,
+                            depthReadOnly = true,
+                        ),
+                    ),
+                ) {
+                    setBindGroup(0u, res.bindGroup)
+                    setScissorRect(
+                        x = d.scissor[0].toUInt(),
+                        y = d.scissor[1].toUInt(),
+                        width = d.scissor[2].toUInt(),
+                        height = d.scissor[3].toUInt(),
+                    )
+                    setPipeline(stencilWritePipeline)
+                    setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
+                    draw((d.stencilVerts.size / 2).toUInt())
+                    setStencilReference(0u)
+                    setPipeline(aaStencilCoverPipelineFor(d.mode))
+                    setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
+                    draw((d.coverVerts.size / 2).toUInt())
+                    end()
+                }
+                return@forEachIndexed
+            }
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -1223,6 +1359,7 @@ public class SkWebGpuDevice(
                         draw((d.verts.size / 2).toUInt())
                     }
                     is StencilCoverPolygonDraw -> { /* handled above */ }
+                    is StencilCoverAaPolygonDraw -> { /* handled above */ }
                 }
                 end()
             }
@@ -1444,6 +1581,57 @@ public class SkWebGpuDevice(
         return DrawResources(uniform = uniform, bindGroup = bindGroup, vertexBuffer = vertexBuffer)
     }
 
+    private fun buildStencilCoverAaDrawResources(d: StencilCoverAaPolygonDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = AA_POLYGON_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverAaDraw",
+            ),
+        )
+        // Layout shared with `aa_polygon.wgsl` / `aa_stencil_cover.wgsl` :
+        // color + viewport + edgeCount + edges[256]. `edges` here carry
+        // (Ax, Ay, Bx, By) per edge segment instead of (a, b, c, _).
+        val packed = FloatArray(12 + MAX_AA_EDGES * 4)
+        packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
+        packed[4] = width.toFloat(); packed[5] = height.toFloat()
+        packed[6] = 0f; packed[7] = 0f
+        packed[8] = Float.fromBits(d.edgeCount)
+        packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
+        System.arraycopy(d.edges, 0, packed, 12, d.edges.size)
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = aaPolygonBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        val stencilVB = context.device.createBuffer(
+            BufferDescriptor(
+                size = (d.stencilVerts.size * Float.SIZE_BYTES).toULong(),
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverAaStencilVerts",
+            ),
+        )
+        context.queue.writeBuffer(stencilVB, 0uL, ArrayBuffer.of(d.stencilVerts))
+        val coverVB = context.device.createBuffer(
+            BufferDescriptor(
+                size = (d.coverVerts.size * Float.SIZE_BYTES).toULong(),
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverAaCoverVerts",
+            ),
+        )
+        context.queue.writeBuffer(coverVB, 0uL, ArrayBuffer.of(d.coverVerts))
+        return DrawResources(
+            uniform = uniform,
+            bindGroup = bindGroup,
+            vertexBuffer = stencilVB,
+            coverVertexBuffer = coverVB,
+        )
+    }
+
     override fun close() {
         rectPipelineCache.values.forEach { it.close() }
         rectPipelineCache.clear()
@@ -1453,11 +1641,14 @@ public class SkWebGpuDevice(
         aaPolygonPipelineCache.clear()
         coverPipelineCache.values.forEach { it.close() }
         coverPipelineCache.clear()
+        aaStencilCoverPipelineCache.values.forEach { it.close() }
+        aaStencilCoverPipelineCache.clear()
         stencilWritePipeline.close()
         presentPipeline.close()
         rectShader.close()
         polygonShader.close()
         aaPolygonShader.close()
+        aaStencilCoverShader.close()
         presentShader.close()
         intermediateView.close()
         intermediateTexture.close()
@@ -1557,6 +1748,36 @@ public class SkWebGpuDevice(
          * AA polygon path so every near-edge pixel reaches the fragment
          * shader for coverage evaluation.
          */
+        /**
+         * G3.3b.3a — for each contour, emit one edge segment per vertex
+         * (vertex `i` to vertex `i+1`, with the last vertex closing back
+         * to the contour's first vertex). Edges across all contours are
+         * concatenated into [out] as `(Ax, Ay, Bx, By)` quads. Caller
+         * guarantees the total edge count fits in `MAX_AA_EDGES`.
+         */
+        fun buildContourEdgeSegments(
+            devVerts: ArrayList<Float>,
+            contourStarts: ArrayList<Int>,
+            out: FloatArray,
+        ) {
+            val total = devVerts.size / 2
+            var w = 0
+            for (c in contourStarts.indices) {
+                val start = contourStarts[c]
+                val end = if (c + 1 < contourStarts.size) contourStarts[c + 1] else total
+                val len = end - start
+                if (len < 2) continue
+                for (i in 0 until len) {
+                    val a = start + i
+                    val b = if (i == len - 1) start else (a + 1)
+                    out[w++] = devVerts[a * 2]
+                    out[w++] = devVerts[a * 2 + 1]
+                    out[w++] = devVerts[b * 2]
+                    out[w++] = devVerts[b * 2 + 1]
+                }
+            }
+        }
+
         fun bboxTrianglesFor(
             devVerts: ArrayList<Float>,
             viewportW: Int,
