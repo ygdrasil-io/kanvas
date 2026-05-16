@@ -281,6 +281,23 @@ Premier `drawPath` GPU. Scope minimal mais utile : single-contour convex polygon
 
 **Note**. Le clip côté polygon est `setScissorRect` axis-aligned int — comme pour les rects. Pas de point-in-polygon test fragment-side ; la AABB du polygon est honorée par le scissor.
 
+### Suivi GMs (post-G3.3b.1) — ThinStrokedRectsGM ratché ✅
+
+Petit ramassage de quick wins une fois les curves dispo : exploration ciblée de GMs simples côté `:skia-integration-tests` qui devraient marcher avec la surface actuelle.
+
+- [x] [ThinStrokedRectsWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ThinStrokedRectsWebGpuTest.kt) — 7×8 grid de stroke rects axis-aligned avec sw ∈ {4, 2, 1, 0.5, 0.25, 0.125, 0}, tous AA. Score **87.13%** (drift = colorspace + sub-pixel edge conventions). Ratchet `ThinStrokedRectsGM=87.13` ajouté.
+- [x] **SimpleRectGM dropped**. 10 000 `drawRect` calls saturent le chemin "per-draw render-pass + uniform buffer + bind group" de `flush()`. Le test hangs ou prend des minutes. Plan : ajouter un **bulk-draw path** quand le besoin arrive (instancing ou vertex-buffer with per-vertex color). Cf. note ci-dessous.
+
+#### Follow-up : bulk rendering pour GMs high-draw-count
+
+Le `flush()` actuel alloue 1 uniform buffer + 1 bind group + 1 render-pass par `RectDraw` ou `PolygonDraw`. C'est correct (et simple) pour la majorité des GMs (≤ 200 draws), mais s'effondre au-delà de quelques milliers. Options :
+
+1. **Dynamic-offset bind groups** : un seul big uniform buffer, chaque draw bind avec offset différent. Reste un render-pass par draw.
+2. **Instancing** : duplicate la pipeline avec per-instance uniforms via vertex attributes step-mode = Instance. 1 draw call pour N rects de même config.
+3. **Per-vertex color attribute** : vertex buffer porte la color, fragment lit la color interpolée. 1 draw call par batch homogène (même blend mode / AA).
+
+Le déclencheur : un GM en scope dont le draw count > ~500 et qui motive le travail.
+
 ### G3.3b.1 — Bezier flattening ✅
 
 Port des algorithmes de subdivision adaptative De Casteljau (quadratic + cubic) et de stepping uniforme (conic) depuis `SkBitmapDevice.buildEdges`. Mêmes constantes (`PATH_FLATNESS = 0.25`, `PATH_FLATNESS_SQ = 0.0625`, `PATH_MAX_DEPTH = 18`, `CONIC_STEPS = 32`).
