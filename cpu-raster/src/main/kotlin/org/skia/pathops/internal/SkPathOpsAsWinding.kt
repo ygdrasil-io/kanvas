@@ -726,7 +726,7 @@ internal fun no2LevelReverseNeeded(
  * (`src/core/SkPathBuilder.cpp:896`) — top-level helper here
  * since our [SkPathBuilder] doesn't expose a native reverse-add.
  */
-internal fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkPath) {
+public fun reverseAddPath(builder: org.skia.foundation.SkPathBuilder, src: SkPath) {
     val verbs = src.verbs
     if (verbs.isEmpty()) return
     // Cursor : points to the *index past* the next coord pair to read
