@@ -258,24 +258,37 @@ Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et qu
 - [x] **Confirmation** : `clipRect(rect, doAntiAlias = true)` sur un rect axis-aligned integer ne crée PAS d'`SkAAClip` côté SkCanvas — la soft-skip de `bindClip` n'est pas déclenchée.
 - [x] Ratchet `ClipStrokeRectGM=96.605` ajouté.
 
-### G3.3 — drawPath générique (à venir)
+### G3.3a — drawPath skeleton : convex polygons, non-AA ✅
 
-- [ ] **`PathTessellator`** dans `:gpu-raster` :
-  - [ ] Réutilise `SkBitmapDevice.buildEdges` (flatten Bézier en polylines) — extraire en helper public.
-  - [ ] Triangulation polygone-à-trous via libtess2 algorithme (ou ear-clipping si convex-only initial slice). Sortie : `FloatArray` de positions (x, y) en device coords.
-  - [ ] Cache intra-frame : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
-- [ ] **Upload + draw** : `GPUBuffer` vertex, draw triangles, fragment = solid color (réutilise pipeline G2 + nouveau path = liste de triangles au lieu de full-screen Bjorke).
+Premier `drawPath` GPU. Scope minimal mais utile : single-contour convex polygon paths (Move + Line + Close verbs), non-AA, fill only. Fan tessellation depuis le premier vertex. Débloque les rect-under-rotated-CTM (qui transitent via `drawPath` dans SkCanvas) + les paths convexes simples.
+
+- [x] [solid_polygon.wgsl](gpu-raster/src/main/resources/shaders/solid_polygon.wgsl) : nouveau shader avec vertex stage qui transforme device-pixel coords → NDC (Y-flip), fragment stage premul color. Uniform = `(color: vec4f, viewport: vec4f)` = 32 bytes.
+- [x] `pending: List<PendingDraw>` (sealed) avec 2 variantes : `RectDraw` (full-screen tri + scissor + coverage, comme G2.3a) et `PolygonDraw` (vertex buffer triangle list, scissor pour clip). Ordre de draw préservé pour la composition.
+- [x] 2e pipeline cache `polygonPipelineCache: Map<SkBlendMode, GPURenderPipeline>` + `polygonBindGroupLayout` (visibility Vertex | Fragment pour le viewport uniform) + `polygonPipelineLayout`.
+- [x] [SkWebGpuDevice.drawPath](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt) : walk verbs, transforme par CTM, fan-tesselle. Throws sur `kQuad` / `kConic` / `kCubic` (pointe G3.3b) + `isAntiAlias` (G3.3b) + style ≠ Fill (G3.4).
+- [x] `flush()` dispatch sur `is RectDraw` / `is PolygonDraw` ; chaque polygon draw a son propre vertex buffer + uniform buffer + bind group.
+- [x] [PolygonFillTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/PolygonFillTest.kt) — 3 sous-tests : quad (4 vertices), triangle (3 vertices), curve verb throws.
+
+**Note**. Le clip côté polygon est `setScissorRect` axis-aligned int — comme pour les rects. Pas de point-in-polygon test fragment-side ; la AABB du polygon est honorée par le scissor.
+
+### G3.3b — drawPath élargi : curves, AA, concave (à venir)
+
+- [ ] **Bézier flattening** : `kQuad`, `kConic`, `kCubic` → polyline subdivision (port de `SkBitmapDevice.flattenBezier` ou équivalent). Réutilise éventuellement `SkBitmapDevice.buildEdges` côté CPU.
+- [ ] **Triangulation polygone-à-trous** via ear-clipping ou libtess2-like (la fan tessellation actuelle est seulement convex-correct ; concave produit des artefacts).
 - [ ] **AA paths** — coverage edge en fragment shader via distance-to-edge ; ou distance field si MSAA off. À profiler sur `ConcavePathsGM` (cible Phase 3a master).
+- [ ] **Multi-contour** paths (chaque `kMove` ouvre un nouveau contour) : aujourd'hui flatten dans une seule liste fan, fait des artefacts. Tessellator vrai à G3.3b.
+- [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
 - [ ] **Tests** : `ConcavePathsGM`, `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family.
 
-### G3.4 — Stroke générique via SkStroker (à venir, après G3.3)
+### G3.4 — Stroke générique via SkStroker (à venir, après G3.3b)
 
 - [ ] **Stroke** — réutilise `SkStroker` (Phase 3c master) côté CPU pour produire le path outline → tessellate via G3.3 comme un fill. Débloque les strokes non-rect (paths) + AA hairlines correctes. BigRectGM monte alors au-dessus de 85%.
 
 ### Vérification G3
 - [x] G3.1 : 4 tests neufs (3 unit stroke + 1 cross-test BigRectGM 70.7%). Stroke axis-aligned débloqué.
 - [x] G3.2 : 3 tests neufs (2 drawPaint + 1 ClipStrokeRectGM 96.6%). drawPaint TODO clos, 2e GM cible G2 vert.
-- [ ] G3.3 : ≥ 5 path GMs verts sur GPU avec scores ≥ 85%.
+- [x] G3.3a : 3 tests neufs (PolygonFillTest : quad + triangle + curve-throws). drawPath skeleton convex polygon débloqué. ScaledRectsGM toujours bloqué par kPlus.
+- [ ] G3.3b : ≥ 5 path GMs verts sur GPU avec scores ≥ 85% (curves + concave + AA).
 - [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---
