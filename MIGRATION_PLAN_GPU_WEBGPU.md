@@ -228,7 +228,7 @@ Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et qu
 - [x] G2.2 : 4 modes Porter-Duff natifs verts via `BlendModeTest` (5 sous-tests dont l'erreur explicite sur mode non-supporté), G2.1/G1.x toujours verts (9 tests total `:gpu-raster:test`).
 - [x] G2.3a : AA rect via coverage analytique vert via `AaRectFillTest` (2 sous-tests sur edges half-integer + integer), backward compat préservée (11 tests total).
 - [x] G2.3b : cross-test harness en place + 1er vrai GM vert (`ThinRectsGM` à 90.89%, floor 90%), 12 tests total.
-- [ ] **≥ 4 GMs Phase 1-2 à ≥ 90%** : 1/4 fait (ThinRectsGM). BigRectGM, ClipStrokeRectGM bloquées par stroke (G3) ; ScaledRectsGM bloquée par drawPaint + CTM rotated (G3+).
+- [ ] **≥ 4 GMs Phase 1-2 à ≥ 90%** : **2/4** fait (ThinRectsGM 90.89%, ClipStrokeRectGM 96.60%, après G3.1 + G3.2). BigRectGM débloquée mais à 70.7% (G3.4 attendu). ScaledRectsGM bloquée par CTM rotated + kPlus.
 
 ---
 
@@ -247,7 +247,18 @@ Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et qu
 - [x] [BigRectWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BigRectWebGpuTest.kt) — cross-test contre `original-888/bigrect.png`. Score **70.70%** — debloqué mais en dessous du G2 90% target. 3 sources de drift restantes : AA hairline approximé non-AA, stroke-AA corner convention, colorspace sRGB vs Rec.2020 (G6).
 - [x] Ratchet `BigRectGM=70.7` ajouté.
 
-### G3.2 — drawPath générique (à venir)
+### G3.2 — drawPaint + ClipStrokeRectGM cross-test ✅
+
+**Bundle de quick wins.** Iter 4 a déplacé les GMs depuis `:cpu-raster` vers le nouveau module `:skia-integration-tests` — `:gpu-raster` ajoute son testImpl. Avec stroke (G3.1) en place, ClipStrokeRectGM devient testable ; et `drawPaint` reste un TODO trivial — on bundle les deux.
+
+- [x] [SkWebGpuDevice.drawPaint](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt) : route vers `drawRect` sur le clip rect. Pas de CTM (drawPaint opère en device coords par contrat). Toutes les optims G2.x (alpha, blend mode, AA) appliquent uniformément.
+- [x] `testImplementation(project(":skia-integration-tests"))` ajouté (Iter 4 a déplacé les GMs).
+- [x] [DrawPaintTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/DrawPaintTest.kt) — 2 sous-tests : full viewport fill + post-`clipRect` partial fill.
+- [x] [ClipStrokeRectWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ClipStrokeRectWebGpuTest.kt) — cross-test sur `original-888/clip_strokerect.png`. Score **96.60%**, **au-dessus du target G2 90%**.
+- [x] **Confirmation** : `clipRect(rect, doAntiAlias = true)` sur un rect axis-aligned integer ne crée PAS d'`SkAAClip` côté SkCanvas — la soft-skip de `bindClip` n'est pas déclenchée.
+- [x] Ratchet `ClipStrokeRectGM=96.605` ajouté.
+
+### G3.3 — drawPath générique (à venir)
 
 - [ ] **`PathTessellator`** dans `:gpu-raster` :
   - [ ] Réutilise `SkBitmapDevice.buildEdges` (flatten Bézier en polylines) — extraire en helper public.
@@ -257,14 +268,15 @@ Reporté à plus tard, à arbitrer quand un GM en scope exige rotated clip et qu
 - [ ] **AA paths** — coverage edge en fragment shader via distance-to-edge ; ou distance field si MSAA off. À profiler sur `ConcavePathsGM` (cible Phase 3a master).
 - [ ] **Tests** : `ConcavePathsGM`, `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family.
 
-### G3.3 — Stroke générique via SkStroker (à venir, après G3.2)
+### G3.4 — Stroke générique via SkStroker (à venir, après G3.3)
 
-- [ ] **Stroke** — réutilise `SkStroker` (Phase 3c master) côté CPU pour produire le path outline → tessellate via G3.2 comme un fill. Débloque les strokes non-rect (paths) + AA hairlines correctes.
+- [ ] **Stroke** — réutilise `SkStroker` (Phase 3c master) côté CPU pour produire le path outline → tessellate via G3.3 comme un fill. Débloque les strokes non-rect (paths) + AA hairlines correctes. BigRectGM monte alors au-dessus de 85%.
 
 ### Vérification G3
-- [x] G3.1 : 4 tests neufs (3 unit stroke + 1 cross-test BigRectGM). Stroke axis-aligned débloqué.
-- [ ] G3.2 : ≥ 5 path GMs verts sur GPU avec scores ≥ 85%.
-- [ ] G3.3 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
+- [x] G3.1 : 4 tests neufs (3 unit stroke + 1 cross-test BigRectGM 70.7%). Stroke axis-aligned débloqué.
+- [x] G3.2 : 3 tests neufs (2 drawPaint + 1 ClipStrokeRectGM 96.6%). drawPaint TODO clos, 2e GM cible G2 vert.
+- [ ] G3.3 : ≥ 5 path GMs verts sur GPU avec scores ≥ 85%.
+- [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---
 
