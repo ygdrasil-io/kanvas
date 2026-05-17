@@ -384,8 +384,9 @@ public class SkWebGpuDevice(
      * canonical full sweep (start = 0, end = 360) tBias = 0 and tScale = 1.
      *
      * [tileMode] is kept in the per-draw record (and in the pipeline cache
-     * key) for symmetry with the linear / radial gradients ; only kClamp
-     * routes here today (the dispatch gate throws otherwise -- see G4.3.1).
+     * key) for symmetry with the linear / radial gradients ; G4.3.1 opens
+     * the dispatch gate to all 4 tile modes (the pipeline cache already
+     * wired fs_repeat / fs_mirror / fs_decal since G4.3).
      */
     private data class SweepGradientRectDraw(
         val scissor: IntArray,
@@ -1001,7 +1002,7 @@ public class SkWebGpuDevice(
             )
         }
 
-    // ─── Sweep gradient pipeline (G4.3) — kClamp tile mode, drawRect ──────
+    // ─── Sweep gradient pipeline (G4.3 / G4.3.1) — all 4 tile modes, drawRect ──
 
     private val sweepGradientShader: GPUShaderModule = loadShader("shaders/sweep_gradient.wgsl")
 
@@ -1022,12 +1023,11 @@ public class SkWebGpuDevice(
     )
 
     /**
-     * G4.3 -- sweep-gradient pipeline cache. Keyed by `(blend, tile)` from
-     * day 1 even though only kClamp dispatches here ; the other 3 fragment
-     * entry points (fs_repeat / fs_mirror / fs_decal) exist for future-
-     * readiness, mirroring the linear / radial caches. A follow-up slice
-     * (G4.3.1) opens the dispatch gate to the other tile modes without
-     * touching this cache key.
+     * G4.3 / G4.3.1 -- sweep-gradient pipeline cache. Keyed by `(blend,
+     * tile)` mirroring the linear / radial caches. G4.3 wired only kClamp
+     * through the dispatch ; G4.3.1 widened the gate to fs_repeat /
+     * fs_mirror / fs_decal without touching this cache shape (all 4 entry
+     * points were already in place since G4.3 for cache readiness).
      */
     private val sweepGradientPipelineCache:
         MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
@@ -1570,7 +1570,7 @@ public class SkWebGpuDevice(
     }
 
     /**
-     * G4.3 -- emit a [SweepGradientRectDraw] for a kClamp `SkSweepGradient`
+     * G4.3 / G4.3.1 -- emit a [SweepGradientRectDraw] for an `SkSweepGradient`
      * fill of the axis-aligned device-space rect [devRect]. Scissor derivation
      * is identical to [drawLinearGradientFillRect] / [drawRadialGradientFillRect].
      *
@@ -1581,10 +1581,9 @@ public class SkWebGpuDevice(
      * The host-side `tBias = -startAngle / 360` and `tScale = 360 / (endAngle -
      * startAngle)` collapse the fragment-shader remapping to one add + one mul.
      *
-     * Tile modes : only kClamp routes here today ; the dispatch gate at the
-     * top of [drawPath] already filters non-kClamp callers, so reaching this
-     * function with any other tile mode is a programming error (the pipeline
-     * cache still wires all 4 entry points for future-readiness via G4.3.1).
+     * Tile modes : all 4 (kClamp / kRepeat / kMirror / kDecal) route here since
+     * G4.3.1. The pipeline cache picks the matching fragment entry point via
+     * [sweepGradientPipelineFor].
      */
     private fun drawSweepGradientFillRect(
         devRect: SkRect, clip: SkIRect, paint: SkPaint, grad: SkSweepGradient, ctm: SkMatrix,
@@ -1866,19 +1865,17 @@ public class SkWebGpuDevice(
                 return
             }
         }
-        // G4.3 -- sweep gradient fill of an axis-aligned rect, kClamp only.
-        // Same gate shape as the linear / radial branches (path.isRect +
-        // axis-aligned CTM) but additionally requires `tileMode == kClamp`
-        // until G4.3.1 widens the dispatch to the other tile modes (the
-        // pipeline cache already wires fs_repeat / fs_mirror / fs_decal,
-        // so that's a strict superset of this change). Non-rect paths,
-        // rotated/skewed CTMs and the other tile modes fall through to the
-        // existing solid-color fill machinery (paint.color, pre-G4.3
-        // fallback).
+        // G4.3 / G4.3.1 -- sweep gradient fill of an axis-aligned rect, all
+        // 4 tile modes. Same gate shape as the linear / radial branches
+        // (path.isRect + axis-aligned CTM). The pipeline cache picks the
+        // matching fragment entry point per tile mode (G4.3.1 opened the
+        // gate to fs_repeat / fs_mirror / fs_decal without touching the
+        // cache key shape). Non-rect paths and rotated/skewed CTMs still
+        // fall through to the existing solid-color fill machinery
+        // (paint.color, pre-G4.3 fallback).
         if (shader is SkSweepGradient &&
             paint.style == SkPaint.Style.kFill_Style &&
-            ctm.isAxisAligned &&
-            shader.getTileMode() == SkTileMode.kClamp
+            ctm.isAxisAligned
         ) {
             val srcRect = path.isRect()
             if (srcRect != null) {
