@@ -14,8 +14,12 @@ import io.ygdrasil.webgpu.Color
 import io.ygdrasil.webgpu.ColorTargetState
 import io.ygdrasil.webgpu.DepthStencilState
 import io.ygdrasil.webgpu.FragmentState
+import io.ygdrasil.webgpu.GPUAddressMode
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUCompareFunction
+import io.ygdrasil.webgpu.GPUFilterMode
+import io.ygdrasil.webgpu.GPUSampler
+import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUStencilOperation
 import io.ygdrasil.webgpu.RenderPassDepthStencilAttachment
 import io.ygdrasil.webgpu.StencilFaceState
@@ -42,7 +46,11 @@ import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.GPUTextureViewDimension
 import io.ygdrasil.webgpu.GPUVertexFormat
+import io.ygdrasil.webgpu.SamplerBindingLayout
+import io.ygdrasil.webgpu.SamplerDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
+import io.ygdrasil.webgpu.TexelCopyBufferLayout
+import io.ygdrasil.webgpu.TexelCopyTextureInfo
 import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.VertexAttribute
@@ -65,6 +73,7 @@ import org.skia.foundation.SkSweepGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
+import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkStroker
 import org.skia.foundation.SkTileMode
@@ -528,6 +537,41 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
     ) : PendingDraw
 
+    // ─── Bitmap shader (G5.1) — drawImageRect skeleton ────────────────────
+
+    /**
+     * G5.1 -- pending bitmap-textured fill of an axis-aligned device-space
+     * rect. Holds everything the bitmap-shader pipeline needs to render
+     * one `drawImageRect` call : the source-image texture handle (already
+     * uploaded and cached by [imageTextureCacheFor]), the source sub-rect
+     * in image-pixel coords, the destination rect in device-pixel coords,
+     * the integer scissor (device-pixel `(x, y, w, h)` -- clip-clamped),
+     * and the paint scale folded into the sampled colour (premul vec4f ;
+     * defaults to `(1, 1, 1, 1)` when the paint is null).
+     *
+     * The dispatch gate in [drawImageRect] enforces the G5.1 scope :
+     *  - filter = `SkFilterMode.kLinear`
+     *  - tile mode = `SkTileMode.kClamp` (sampler ClampToEdge)
+     *  - blend mode = `SkBlendMode.kSrcOver`
+     * Other combinations fall through to the existing G5.x TODO -- they
+     * will land as follow-up slices (kNearest sampler, repeat / mirror /
+     * decal tile modes, additional blend modes, paint-shader-as-bitmap).
+     *
+     * Inherited `r/g/b/a` carry the paint's solid colour (placeholder ;
+     * the fragment shader sources colour from the texture, the rgba
+     * channels are kept for the [PendingDraw] interface contract).
+     */
+    private data class ImageRectDraw(
+        val texture: GPUTexture,
+        val imageWidth: Int, val imageHeight: Int,
+        val srcL: Float, val srcT: Float, val srcR: Float, val srcB: Float,
+        val dstL: Float, val dstT: Float, val dstR: Float, val dstB: Float,
+        val scissor: IntArray,
+        val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
     private val pending: MutableList<PendingDraw> = mutableListOf()
 
     private fun loadShader(resource: String): GPUShaderModule {
@@ -903,6 +947,178 @@ public class SkWebGpuDevice(
             ),
         ),
     )
+
+    // ─── Bitmap shader (G5.1) — drawImageRect with kLinear / kClamp / SrcOver ──
+
+    private val bitmapShader: GPUShaderModule = loadShader("shaders/bitmap_shader.wgsl")
+
+    /**
+     * G5.1 bind group layout :
+     *   binding 0 -- uniform buffer (src, dst, image size, paint colour)
+     *   binding 1 -- sampled 2D texture (the cached image)
+     *   binding 2 -- filtering sampler (kLinear / ClampToEdge)
+     * Layout shape mirrors the present pass's texture binding (G6.1)
+     * but adds a sampler entry so the shader can lerp.
+     */
+    private val bitmapBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                ),
+                BindGroupLayoutEntry(
+                    binding = 1u,
+                    visibility = GPUShaderStage.Fragment,
+                    texture = TextureBindingLayout(
+                        sampleType = GPUTextureSampleType.Float,
+                        viewDimension = GPUTextureViewDimension.TwoD,
+                        multisampled = false,
+                    ),
+                ),
+                BindGroupLayoutEntry(
+                    binding = 2u,
+                    visibility = GPUShaderStage.Fragment,
+                    sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
+                ),
+            ),
+        ),
+    )
+
+    private val bitmapPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(bitmapBindGroupLayout)),
+    )
+
+    /**
+     * Lazily-populated bitmap-shader pipeline cache keyed by
+     * `(blend, filter, tile)`. For G5.1 only `(kSrcOver, kLinear, kClamp)`
+     * is wired up at the dispatch gate ; other combinations throw via the
+     * existing `drawImageRect` TODO branch and will land in follow-up
+     * slices (G5.x). The cache key is parameterised so the future
+     * widening doesn't need a structural change.
+     */
+    private val bitmapPipelineCache:
+        MutableMap<Triple<SkBlendMode, SkFilterMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
+
+    private fun bitmapPipelineFor(
+        mode: SkBlendMode,
+        filter: SkFilterMode,
+        tile: SkTileMode,
+    ): GPURenderPipeline =
+        bitmapPipelineCache.getOrPut(Triple(mode, filter, tile)) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = bitmapPipelineLayout,
+                    vertex = VertexState(module = bitmapShader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = bitmapShader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
+    /**
+     * Sampler cache keyed by `(filter, tile)`. For G5.1 only
+     * `(kLinear, kClamp)` populates -- the sampler is set up with
+     * MagFilter = MinFilter = Linear and addressMode U/V = ClampToEdge.
+     * Mipmap filter is left at Nearest (no mip pyramid yet ; future
+     * slices wire `image.mipLevels` through to a multi-level texture).
+     */
+    private val bitmapSamplerCache: MutableMap<Pair<SkFilterMode, SkTileMode>, GPUSampler> = mutableMapOf()
+
+    private fun bitmapSamplerFor(filter: SkFilterMode, tile: SkTileMode): GPUSampler =
+        bitmapSamplerCache.getOrPut(filter to tile) {
+            val magMin = when (filter) {
+                SkFilterMode.kNearest -> GPUFilterMode.Nearest
+                SkFilterMode.kLinear -> GPUFilterMode.Linear
+            }
+            val address = when (tile) {
+                SkTileMode.kClamp -> GPUAddressMode.ClampToEdge
+                SkTileMode.kRepeat -> GPUAddressMode.Repeat
+                SkTileMode.kMirror -> GPUAddressMode.MirrorRepeat
+                SkTileMode.kDecal -> GPUAddressMode.ClampToEdge // G5.x : decal needs shader-side coverage
+            }
+            context.device.createSampler(
+                SamplerDescriptor(
+                    addressModeU = address,
+                    addressModeV = address,
+                    magFilter = magMin,
+                    minFilter = magMin,
+                    label = "SkWebGpuDevice.bitmapSampler($filter,$tile)",
+                ),
+            )
+        }
+
+    /**
+     * G5.1 -- per-device cache mapping each [SkImage] seen by
+     * [drawImageRect] to its uploaded `RGBA8Unorm` GPU texture. Keys
+     * use **identity** (`IdentityHashMap`) so we don't depend on
+     * [SkImage] hashing / equality (which would otherwise hash the
+     * `IntArray` pixel buffer on every cache lookup). Closed in [close]
+     * along with the rest of the device's GPU resources.
+     *
+     * The cache lives at the device level (not the context) for the
+     * first slice -- multiple devices sharing a context will each
+     * re-upload their images on first use. Promoting to a context-scoped
+     * weak cache is straightforward but out of scope for G5.1.
+     */
+    private val imageTextureCache: MutableMap<SkImage, GPUTexture> = java.util.IdentityHashMap()
+
+    /**
+     * Upload [image]'s 8888 pixels into a fresh `RGBA8Unorm` GPU texture
+     * (or return the cached texture if [image] has already been uploaded).
+     *
+     * [SkImage.pixels] stores 32-bit packed `SkColor` (ARGB byte order
+     * in the int : alpha in the top byte). The WebGPU `RGBA8Unorm`
+     * texture expects R, G, B, A in that byte order. We unpack each
+     * pixel into a `ByteArray` once, then upload via
+     * `queue.writeTexture`. The texture is uploaded **unpremultiplied,
+     * sRGB-encoded** -- the bitmap-shader fragment stage premultiplies
+     * after the bilinear sample (so the lerp itself runs on unpremul
+     * values, matching `SkBitmapShader.sampleLinear` on the raster side).
+     */
+    private fun imageTextureFor(image: SkImage): GPUTexture =
+        imageTextureCache.getOrPut(image) {
+            val w = image.width
+            val h = image.height
+            val tex = context.device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                    format = GPUTextureFormat.RGBA8Unorm,
+                    usage = GPUTextureUsage.TextureBinding or GPUTextureUsage.CopyDst,
+                    label = "SkWebGpuDevice.image(${w}x${h})",
+                ),
+            )
+            // Unpack ARGB ints to RGBA bytes for the texture upload.
+            val bytes = ByteArray(w * h * 4)
+            val src = image.pixels
+            for (i in 0 until w * h) {
+                val c = src[i]
+                bytes[i * 4]     = SkColorGetR(c).toByte()
+                bytes[i * 4 + 1] = SkColorGetG(c).toByte()
+                bytes[i * 4 + 2] = SkColorGetB(c).toByte()
+                bytes[i * 4 + 3] = SkColorGetA(c).toByte()
+            }
+            context.queue.writeTexture(
+                destination = TexelCopyTextureInfo(texture = tex),
+                data = ArrayBuffer.of(bytes),
+                dataLayout = TexelCopyBufferLayout(
+                    offset = 0uL,
+                    bytesPerRow = (w * 4).toUInt(),
+                    rowsPerImage = h.toUInt(),
+                ),
+                size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+            )
+            tex
+        }
 
     // ─── AA polygon pipeline (G3.3b.2a) — per-fragment edge coverage ──────
 
@@ -2599,6 +2815,39 @@ public class SkWebGpuDevice(
         }
     }
 
+    /**
+     * G5.1 -- first GPU `drawImageRect` slice. Routes the call to the
+     * bitmap-shader pipeline when the (sampling, tile, blend) tuple is
+     * in scope :
+     *  - filter = kLinear ; mipmap = kNone ; cubic = null ; no aniso.
+     *  - tile mode = kClamp (the default SrcRectConstraint clamp + the
+     *    sampler's ClampToEdge address mode).
+     *  - blend mode = kSrcOver (or null paint, defaulting to SrcOver).
+     *
+     * Out-of-scope combinations throw with a pointer to the G5.x
+     * follow-up plan -- they're not supposed to reach this overload
+     * yet (the high-level dispatch in `SkBitmapDevice` / `SkCanvas`
+     * routes the in-scope GMs through here). Extending the cache
+     * keys is structural-only (the data class already carries the
+     * (filter, tile, blend) needed) ; the follow-up slices wire each
+     * combination through.
+     *
+     * **Dispatch shape.** Scissor follows the non-AA fill convention :
+     * pixelEdge-rounded integer bounds (`floor(coord + 0.5)`) clipped
+     * to the user clip and the viewport. AA-on-the-edges is not yet
+     * wired up -- the fragment stage runs unconditionally inside the
+     * scissor so the edge-pixel falloff is the sampler's bilinear job
+     * (which already gives sub-pixel softening when src / dst scales
+     * are non-integer). Future slices will add an outer scissor +
+     * shader-side analytical coverage à la `solid_color.wgsl` for the
+     * `paint.isAntiAlias` case.
+     *
+     * **Paint shader.** For G5.1 the bitmap shader IS the paint shader ;
+     * a `paint.shader` that's a `SkBitmapShader` is NOT yet routed
+     * through here (that's G5.2). The `paint` parameter only contributes
+     * its alpha / colour modulation (folded into `paintColor` in the
+     * uniform) and its blend mode.
+     */
     override fun drawImageRect(
         image: SkImage,
         src: SkRect,
@@ -2608,7 +2857,70 @@ public class SkWebGpuDevice(
         constraint: SrcRectConstraint,
         clip: SkIRect,
     ) {
-        TODO("SkWebGpuDevice.drawImageRect — G5 (BitmapShader + texture upload).")
+        if (image.width <= 0 || image.height <= 0) return
+        if (src.right <= src.left || src.bottom <= src.top) return
+        if (devDst.right <= devDst.left || devDst.bottom <= devDst.top) return
+
+        val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
+        if (mode != SkBlendMode.kSrcOver) {
+            error(
+                "SkWebGpuDevice.drawImageRect : blend mode $mode not supported in G5.1 " +
+                    "(only kSrcOver wired up ; widening to the rest of the blend table is " +
+                    "a G5.x follow-up).",
+            )
+        }
+        if (sampling.cubic != null || sampling.useAniso) {
+            error(
+                "SkWebGpuDevice.drawImageRect : cubic / anisotropic sampling not supported in G5.1 " +
+                    "(only SkFilterMode.kLinear / kNearest with kNone mipmap routed ; G5.x widens).",
+            )
+        }
+        if (sampling.filter != SkFilterMode.kLinear) {
+            error(
+                "SkWebGpuDevice.drawImageRect : filter mode ${sampling.filter} not supported in G5.1 " +
+                    "(only kLinear wired up ; kNearest sampler lands in G5.x).",
+            )
+        }
+        // kClamp is the only tile mode in scope for G5.1. Note that
+        // SkSamplingOptions does NOT carry a tile mode (that's an
+        // SkBitmapShader property) ; drawImageRect's contract is that
+        // sampling outside [src] is governed by SrcRectConstraint and
+        // the (clamp / decal) edge handling. For G5.1 we treat both
+        // kStrict and kFast as "clamp at src edge" -- the sampler's
+        // ClampToEdge address mode + the explicit src->dst affine map
+        // together pin out-of-rect samples to the edge texels, which
+        // is the kClamp behaviour. The strict-vs-fast distinction
+        // (filter overflow killing) is a G5.x follow-up.
+        val tile = SkTileMode.kClamp
+
+        // Non-AA pixelEdge rounding -- matches SkBitmapDevice.drawImageRect.
+        val ix0 = pixelEdge(devDst.left).coerceAtLeast(clip.left).coerceAtLeast(0)
+        val iy0 = pixelEdge(devDst.top).coerceAtLeast(clip.top).coerceAtLeast(0)
+        val ix1 = pixelEdge(devDst.right).coerceAtMost(clip.right).coerceAtMost(width)
+        val iy1 = pixelEdge(devDst.bottom).coerceAtMost(clip.bottom).coerceAtMost(height)
+        if (ix0 >= ix1 || iy0 >= iy1) return
+
+        val texture = imageTextureFor(image)
+
+        // Paint colour scale : alpha (and future colour filter) multiplies
+        // the sampled texel. Default = (1, 1, 1, 1) when paint is null.
+        // For G5.1 only alpha is honoured ; colour filters / blenders /
+        // shaders are G5.x follow-ups.
+        val paintAlpha = (paint?.alpha ?: 0xFF) / 255f
+
+        pending.add(
+            ImageRectDraw(
+                texture = texture,
+                imageWidth = image.width,
+                imageHeight = image.height,
+                srcL = src.left, srcT = src.top, srcR = src.right, srcB = src.bottom,
+                dstL = devDst.left, dstT = devDst.top, dstR = devDst.right, dstB = devDst.bottom,
+                scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
+                paintR = paintAlpha, paintG = paintAlpha, paintB = paintAlpha, paintA = paintAlpha,
+                r = 1f, g = 1f, b = 1f, a = paintAlpha,
+                mode = mode,
+            ),
+        )
     }
 
     /**
@@ -2661,6 +2973,7 @@ public class SkWebGpuDevice(
                 is RadialGradientRectDraw -> buildRadialGradientRectDrawResources(d)
                 is SweepGradientRectDraw -> buildSweepGradientRectDrawResources(d)
                 is ConicalGradientRectDraw -> buildConicalGradientRectDrawResources(d)
+                is ImageRectDraw -> buildImageRectDrawResources(d)
             }
         }
 
@@ -2956,6 +3269,21 @@ public class SkWebGpuDevice(
                     }
                     is ConicalGradientRectDraw -> {
                         setPipeline(conicalGradientPipelineFor(d.mode, d.tileMode))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    }
+                    is ImageRectDraw -> {
+                        // G5.1 -- only (kSrcOver, kLinear, kClamp) is wired
+                        // up at the dispatch gate. The cache key carries
+                        // (blend, filter, tile) so the future widening is
+                        // structural-only.
+                        setPipeline(bitmapPipelineFor(d.mode, SkFilterMode.kLinear, SkTileMode.kClamp))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
@@ -3333,6 +3661,44 @@ public class SkWebGpuDevice(
         return DrawResources(uniform = uniform, bindGroup = bindGroup)
     }
 
+    private fun buildImageRectDrawResources(d: ImageRectDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = IMAGE_RECT_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.imageRectDraw",
+            ),
+        )
+        // Layout matches `bitmap_shader.wgsl` :
+        //   offset  0 : srcRect    (vec4f -- l, t, r, b in image-pixel coords)
+        //   offset 16 : dstRect    (vec4f -- l, t, r, b in device-pixel coords)
+        //   offset 32 : imageSize  (vec4f -- w, h, _, _)
+        //   offset 48 : paintColor (vec4f -- premul tint, default (1, 1, 1, 1))
+        // Total = 64 bytes.
+        context.queue.writeBuffer(
+            uniform, 0uL,
+            ArrayBuffer.of(floatArrayOf(
+                d.srcL, d.srcT, d.srcR, d.srcB,
+                d.dstL, d.dstT, d.dstR, d.dstB,
+                d.imageWidth.toFloat(), d.imageHeight.toFloat(), 0f, 0f,
+                d.paintR, d.paintG, d.paintB, d.paintA,
+            )),
+        )
+        val view = d.texture.createView()
+        val sampler = bitmapSamplerFor(SkFilterMode.kLinear, SkTileMode.kClamp)
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = bitmapBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                    BindGroupEntry(binding = 1u, resource = view),
+                    BindGroupEntry(binding = 2u, resource = sampler),
+                ),
+            ),
+        )
+        return DrawResources(uniform = uniform, bindGroup = bindGroup)
+    }
+
     private fun buildStencilCoverAaDrawResources(d: StencilCoverAaPolygonDraw): DrawResources {
         val uniform = context.device.createBuffer(
             BufferDescriptor(
@@ -3556,6 +3922,12 @@ public class SkWebGpuDevice(
         radialGradientPipelineCache.clear()
         sweepGradientPipelineCache.values.forEach { it.close() }
         sweepGradientPipelineCache.clear()
+        bitmapPipelineCache.values.forEach { it.close() }
+        bitmapPipelineCache.clear()
+        bitmapSamplerCache.values.forEach { it.close() }
+        bitmapSamplerCache.clear()
+        imageTextureCache.values.forEach { it.close() }
+        imageTextureCache.clear()
         stencilWritePipeline.close()
         presentPipeline.close()
         rectShader.close()
@@ -3567,6 +3939,7 @@ public class SkWebGpuDevice(
         linearGradientShader.close()
         radialGradientShader.close()
         sweepGradientShader.close()
+        bitmapShader.close()
         presentShader.close()
         intermediateView.close()
         intermediateTexture.close()
@@ -3643,6 +4016,13 @@ public class SkWebGpuDevice(
          * for the kRadial sub-case).
          */
         const val CONICAL_GRADIENT_UNIFORM_SIZE: ULong = 560uL
+        /**
+         * G5.1 -- size of the bitmap-shader per-draw uniform :
+         *   srcRect (16) + dstRect (16) + imageSize (16) + paintColor (16) = 64 bytes.
+         * Matches `Uniforms { srcRect, dstRect, imageSize, paintColor }` in
+         * `bitmap_shader.wgsl`.
+         */
+        const val IMAGE_RECT_UNIFORM_SIZE: ULong = 64uL
         /**
          * G4.1.2 -- size of the AA stencil-cover gradient per-draw uniform :
          *   color (16) + viewport (16) + startEnd (16) + countPad (16) +
