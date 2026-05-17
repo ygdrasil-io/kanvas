@@ -29,10 +29,8 @@
 // rect's bbox so out-of-rect pixels are killed.
 //
 // Tile mode formulas mirror the rest of the gradient family
-// (see `conical_gradient.wgsl` for the full table). Today only fs_clamp
-// is dispatched ; the other 3 entry points are kept in lockstep so the
-// G4.4.x follow-up that widens the dispatch gate is a no-op on the
-// shader side.
+// (see `conical_gradient.wgsl` for the full table). G4.4.2 widened the
+// host dispatch gate so all 4 entry points are reachable.
 //
 // `sample_stops_at` is copy-pasted from `conical_gradient.wgsl` /
 // `radial_gradient.wgsl` ; cross-shader helper extraction is deferred to

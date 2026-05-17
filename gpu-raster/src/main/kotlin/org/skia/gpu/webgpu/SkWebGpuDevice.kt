@@ -447,24 +447,20 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
-     * G4.4 -- pending conical (two-point) gradient fill of an axis-aligned
-     * rect. Skeleton supports only the **kRadial** sub-case of
-     * [SkConicalGradient] (concentric circles, `c0 == c1`) under kClamp ;
-     * other sub-cases (kStrip, kFocal) and other tile modes fall through
-     * at the dispatch gate to the existing solid-color fill machinery.
+     * G4.4 / G4.4.2 -- pending conical (two-point) gradient fill of an
+     * axis-aligned rect. Supports the **kRadial** sub-case of
+     * [SkConicalGradient] (concentric circles, `c0 == c1`) under all 4
+     * tile modes ; other sub-cases (kStrip, kFocal -- handled separately
+     * via [ConicalFocalGradientRectDraw]) fall through at the dispatch
+     * gate to the existing solid-color fill machinery.
      *
      * `centerX` / `centerY` are the shared centre in device-pixel coords
      * (already CTM-mapped) ; `startRadius` / `endRadius` are the start /
      * end circle radii scaled by `ctm.getMaxScale()` (axis-aligned-CTM
      * gate collapses this to `max(|sx|, |sy|)`). The shader evaluates
      * `t = (length(p - c1) - r0) / (r1 - r0)` and looks up the stops via
-     * the per-tile-mode entry point.
-     *
-     * [tileMode] is kept in the per-draw record (and in the pipeline
-     * cache key) for symmetry with the linear / radial / sweep gradients
-     * even though only kClamp routes here today ; the other 3 entry
-     * points exist in `conical_gradient.wgsl` for the G4.4.1 follow-up
-     * widening the dispatch.
+     * the per-tile-mode entry point ([tileMode] picks among `fs_clamp`,
+     * `fs_repeat`, `fs_mirror`, `fs_decal`).
      */
     private data class ConicalGradientRectDraw(
         val scissor: IntArray,
@@ -479,11 +475,11 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
-     * G4.4.1 -- pending conical (two-point) gradient fill of an axis-aligned
-     * rect, **focal-inside well-behaved** sub-case of [SkConicalGradient]
-     * (`focalData.fR1 > 1`, not focal-on-circle). Routed only for
-     * `tileMode == kClamp` ; other tile modes + focal-outside +
-     * focal-on-circle fall through at the dispatch gate.
+     * G4.4.1 / G4.4.2 -- pending conical (two-point) gradient fill of an
+     * axis-aligned rect, **focal-inside well-behaved** sub-case of
+     * [SkConicalGradient] (`focalData.fR1 > 1`, not focal-on-circle).
+     * Routed for all 4 tile modes (G4.4.2 widening) ; focal-outside +
+     * focal-on-circle still fall through at the dispatch gate.
      *
      * Per-draw payload :
      *  - `affine00..affine12` : 2x3 row-major affine `device -> focal frame`,
@@ -1419,7 +1415,7 @@ public class SkWebGpuDevice(
             )
         }
 
-    // ─── Conical gradient pipeline (G4.4) — kRadial sub-case, kClamp, drawRect ──
+    // ─── Conical gradient pipeline (G4.4 / G4.4.2) — kRadial sub-case, all 4 tile modes, drawRect ──
 
     private val conicalGradientShader: GPUShaderModule =
         loadShader("shaders/conical_gradient.wgsl")
@@ -1441,18 +1437,17 @@ public class SkWebGpuDevice(
     )
 
     /**
-     * G4.4 -- conical-gradient pipeline cache. Keyed by `(blend, tile)`
-     * from day 1 even though only kClamp dispatches here ; the other 3
-     * fragment entry points (`fs_repeat / fs_mirror / fs_decal`) exist
-     * in `conical_gradient.wgsl` for the G4.4.1 follow-up that widens
-     * the dispatch gate (mirrors the radial / sweep cache layouts).
+     * G4.4 / G4.4.2 -- conical-gradient pipeline cache. Keyed by
+     * `(blend, tile)` ; all 4 fragment entry points (`fs_clamp /
+     * fs_repeat / fs_mirror / fs_decal`) are reachable as of G4.4.2
+     * (mirrors the radial / sweep cache layouts).
      *
      * The pipeline itself doesn't distinguish between conical sub-cases ;
      * the host only routes the kRadial sub-case here today (see the
-     * dispatch gate in [drawPath]). A future kFocal pipeline can share
+     * dispatch gate in [drawPath]). A future kStrip pipeline can share
      * this cache key with a different shader file (or extend
-     * `conical_gradient.wgsl` with a typeFlag uniform and a focal-frame
-     * affine -- the bind-group-layout shape stays identical).
+     * `conical_gradient.wgsl` with a typeFlag uniform -- the
+     * bind-group-layout shape stays identical).
      */
     private val conicalGradientPipelineCache:
         MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
@@ -1487,7 +1482,7 @@ public class SkWebGpuDevice(
             )
         }
 
-    // ─── Conical focal-inside pipeline (G4.4.1) — drawRect, kClamp ──
+    // ─── Conical focal-inside pipeline (G4.4.1 / G4.4.2) — drawRect, all 4 tile modes ──
 
     private val conicalFocalGradientShader: GPUShaderModule =
         loadShader("shaders/conical_focal_gradient.wgsl")
@@ -1509,12 +1504,10 @@ public class SkWebGpuDevice(
     )
 
     /**
-     * G4.4.1 -- conical focal-inside pipeline cache. Keyed by `(blend,
-     * tile)` from day 1 even though only kClamp dispatches here ;
-     * `fs_repeat / fs_mirror / fs_decal` exist in
-     * `conical_focal_gradient.wgsl` for the G4.4.x follow-up widening
-     * the dispatch gate, mirroring the cache layout of the kRadial
-     * conical pipeline.
+     * G4.4.1 / G4.4.2 -- conical focal-inside pipeline cache. Keyed by
+     * `(blend, tile)` ; all 4 fragment entry points are reachable as of
+     * G4.4.2, mirroring the cache layout of the kRadial conical
+     * pipeline.
      */
     private val conicalFocalGradientPipelineCache:
         MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
@@ -2245,9 +2238,10 @@ public class SkWebGpuDevice(
     }
 
     /**
-     * G4.4 -- emit a [ConicalGradientRectDraw] for a kClamp `SkConicalGradient`
-     * fill of the axis-aligned device-space rect [devRect]. Scissor derivation
-     * is identical to [drawRadialGradientFillRect].
+     * G4.4 / G4.4.2 -- emit a [ConicalGradientRectDraw] for a
+     * `SkConicalGradient` fill of the axis-aligned device-space rect
+     * [devRect] under any of the 4 tile modes. Scissor derivation is
+     * identical to [drawRadialGradientFillRect].
      *
      * Only the **kRadial** sub-case (concentric circles, `c0 == c1`) is
      * routed here ; the dispatch gate at the top of [drawPath] already
@@ -2257,8 +2251,7 @@ public class SkWebGpuDevice(
      * axis-aligned-CTM gate). The shader evaluates
      *   t = (length(p - c) - r0) / (r1 - r0)
      * and the per-tile-mode entry point clamps / wraps / mirrors / decals
-     * the result before the stops lookup (only fs_clamp is reachable
-     * today -- see G4.4.1 follow-up).
+     * the result before the stops lookup.
      */
     private fun drawConicalGradientFillRect(
         devRect: SkRect, clip: SkIRect, paint: SkPaint, grad: SkConicalGradient, ctm: SkMatrix,
@@ -2331,10 +2324,10 @@ public class SkWebGpuDevice(
     }
 
     /**
-     * G4.4.1 -- emit a [ConicalFocalGradientRectDraw] for a kClamp
+     * G4.4.1 / G4.4.2 -- emit a [ConicalFocalGradientRectDraw] for a
      * `SkConicalGradient` (focal-inside well-behaved sub-case) filling
-     * the axis-aligned device-space rect [devRect]. Scissor derivation
-     * mirrors [drawConicalGradientFillRect].
+     * the axis-aligned device-space rect [devRect] under any of the 4
+     * tile modes. Scissor derivation mirrors [drawConicalGradientFillRect].
      *
      * Per-draw transform : `gradientMatrix * (CTM * localMatrix)^-1`,
      * identical to the CPU `deviceToConical` cached by
@@ -2659,21 +2652,20 @@ public class SkWebGpuDevice(
                 return
             }
         }
-        // G4.4 -- conical gradient fill of an axis-aligned rect, skeleton.
+        // G4.4 / G4.4.2 -- conical gradient fill of an axis-aligned rect.
         // Only the **kRadial** sub-case (concentric circles, `c0 == c1` ;
         // SkConicalGradient.Make tags this `Type.kRadial`) routes through
-        // the dedicated pipeline today, and only under kClamp tile mode.
-        // Other sub-cases (kStrip, kFocal in any of its variants) and
-        // other tile modes fall through to the existing solid-color fill
-        // machinery -- a G4.4.x follow-up adds focal-inside (the most
-        // common kFocal case) ; G4.4.1 widens to the other tile modes
-        // for the kRadial sub-case (the pipeline cache already wires all
-        // 4 entry points). Non-rect paths similarly defer to a later
-        // slice (G4.4.2 = conical-on-non-rect-stencil-and-cover).
+        // the dedicated pipeline today ; all 4 tile modes are wired (G4.4
+        // landed kClamp only ; G4.4.2 widened the gate to kRepeat /
+        // kMirror / kDecal -- the pipeline cache already wired all 4
+        // entry points from day one). Other sub-cases (kStrip, kFocal in
+        // any of its variants) fall through to the existing solid-color
+        // fill machinery -- focal-inside is handled by G4.4.1 below.
+        // Non-rect paths similarly defer to a later slice (G4.4.3 =
+        // conical-on-non-rect-stencil-and-cover).
         if (shader is SkConicalGradient &&
             paint.style == SkPaint.Style.kFill_Style &&
             ctm.isAxisAligned &&
-            shader.getTileMode() == SkTileMode.kClamp &&
             shader.getType() == SkConicalGradient.Type.kRadial
         ) {
             val srcRect = path.isRect()
@@ -2688,16 +2680,17 @@ public class SkWebGpuDevice(
                 return
             }
         }
-        // G4.4.1 -- conical focal-inside well-behaved sub-case
+        // G4.4.1 / G4.4.2 -- conical focal-inside well-behaved sub-case
         // (`focalData.fR1 > 1`, not focal-on-circle). Most common
-        // non-degenerate kFocal config. Other kFocal variants
-        // (focal-on-circle, focal-outside) and tile modes other than
-        // kClamp fall through to the existing solid-color machinery for
-        // now ; a follow-up slice will pick those up.
+        // non-degenerate kFocal config. All 4 tile modes routed
+        // (G4.4.1 landed kClamp only ; G4.4.2 widened to kRepeat /
+        // kMirror / kDecal -- the pipeline cache already wired all 4
+        // entry points from day one). Other kFocal variants
+        // (focal-on-circle, focal-outside) still fall through to the
+        // existing solid-color machinery for now.
         if (shader is SkConicalGradient &&
             paint.style == SkPaint.Style.kFill_Style &&
             ctm.isAxisAligned &&
-            shader.getTileMode() == SkTileMode.kClamp &&
             shader.getType() == SkConicalGradient.Type.kFocal &&
             shader.getFocalData()?.isWellBehaved() == true
         ) {
