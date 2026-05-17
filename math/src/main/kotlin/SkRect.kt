@@ -208,7 +208,7 @@ public data class SkRect(
 
     // ─── Rounding to SkIRect ────────────────────────────────────────────
 
-    /** Round each component to the nearest int (half-to-even, IEEE). */
+    /** Round each component to the nearest int (half-toward-+∞, matches Skia `sk_float_round`). */
     public fun round(): SkIRect = SkIRect(
         SkScalarRoundToInt(left), SkScalarRoundToInt(top),
         SkScalarRoundToInt(right), SkScalarRoundToInt(bottom),

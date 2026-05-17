@@ -92,15 +92,30 @@ public fun SkScalarFloor(value: SkScalar): SkScalar =
 public fun SkScalarCeil(value: SkScalar): SkScalar =
     kotlin.math.ceil(value.toDouble()).toFloat()
 
+/**
+ * Round half toward +∞ (`floor(x + 0.5)`) — matches Skia's
+ * `sk_float_round` / `SkScalarRoundToScalar` (`SkFloatingPoint.h:38`).
+ *
+ * Notably **not** `kotlin.math.round`, which is half-to-even (banker's
+ * rounding): `round(0.5) == 0`, `round(2.5) == 2`. Upstream returns
+ * `1` and `3` respectively. Ties at `±0.5`, `±2.5`, `±4.5`, … are the
+ * observable divergence; non-tie inputs round identically.
+ */
 public fun SkScalarRound(value: SkScalar): SkScalar =
-    kotlin.math.round(value.toDouble()).toFloat()
+    kotlin.math.floor((value + 0.5f).toDouble()).toFloat()
 
 public fun SkScalarTruncToScalar(value: SkScalar): SkScalar =
     kotlin.math.truncate(value.toDouble()).toFloat()
 
 public fun SkScalarFloorToInt(value: SkScalar): Int = kotlin.math.floor(value).toInt()
 public fun SkScalarCeilToInt(value: SkScalar): Int = kotlin.math.ceil(value).toInt()
-public fun SkScalarRoundToInt(value: SkScalar): Int = kotlin.math.round(value).toInt()
+
+/**
+ * Round half toward +∞ (`floor(x + 0.5)`) then truncate to int — matches
+ * Skia's `sk_float_round2int` (`SkFloatingPoint.h:119`). See [SkScalarRound]
+ * for the tie-breaking rationale.
+ */
+public fun SkScalarRoundToInt(value: SkScalar): Int = kotlin.math.floor(value + 0.5f).toInt()
 public fun SkScalarTruncToInt(value: SkScalar): Int = value.toInt()
 
 // ─── Casts ──────────────────────────────────────────────────────────────────

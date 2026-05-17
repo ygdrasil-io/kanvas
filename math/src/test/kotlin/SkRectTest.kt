@@ -212,9 +212,20 @@ class SkRectTest {
     fun `round nearest-int`() {
         val r = SkRect.MakeLTRB(0.4f, 0.6f, 9.5f, 10.4f)
         val ir = r.round()
-        // half-to-even: 0.5 → 0, 9.5 → 10, but JVM Math.round rounds-half-up
+        // half-toward-+∞ (matches Skia `sk_float_round`): 0.4 → 0, 0.6 → 1,
+        // 9.5 (tie) → 10, 10.4 → 10.
         assertEquals(0, ir.left); assertEquals(1, ir.top)
         assertEquals(10, ir.right); assertEquals(10, ir.bottom)
+    }
+
+    @Test
+    fun `round at half-integer ties rounds toward positive infinity`() {
+        // Sanity check that SkRect.round propagates SkScalarRound semantics:
+        // ties at .5 round up (matches upstream Skia `floor(x + 0.5)`).
+        val r = SkRect.MakeLTRB(0.5f, 1.5f, 2.5f, 3.5f)
+        val ir = r.round()
+        assertEquals(1, ir.left); assertEquals(2, ir.top)
+        assertEquals(3, ir.right); assertEquals(4, ir.bottom)
     }
 
     @Test
