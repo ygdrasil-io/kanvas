@@ -482,11 +482,37 @@ public data class SkMatrix(
 
     /**
      * Bulk apply only the linear part (drop translation) to vectors.
-     * Mirrors Skia's `SkMatrix::mapVectors`.
+     * Mirrors Skia's [`SkMatrix::mapVectors`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1108).
+     *
+     * For perspective matrices the linear part is **not** simply the
+     * 2×2 sub-matrix: upstream takes the discrete derivative of
+     * `mapPointPerspective` at the origin, i.e. `mapPoint(src) -
+     * mapPoint(0, 0)`. The naive `(sx*x + kx*y, ky*x + sy*y)` is only
+     * correct for affine matrices.
      */
     public fun mapVectors(dst: Array<SkPoint>, src: Array<SkPoint>, count: Int) {
         require(count <= dst.size && count <= src.size)
-        if (getType() and (kAffine_Mask or kPerspective_Mask or kScale_Mask) == 0) {
+        if (hasPerspective()) {
+            // Perspective: dst[i] = mapPoint(src[i]) - mapPoint(0, 0).
+            // Matches the upstream `mapPointPerspective(src) -
+            // mapPointPerspective({0, 0})` formula (SkMatrix.cpp:1108-1122),
+            // which is the local Jacobian times src.
+            val originW = persp2
+            val originInvW = if (originW != 0f) 1f / originW else 0f
+            val originX = tx * originInvW
+            val originY = ty * originInvW
+            // Walk backwards so dst === src aliasing stays well-defined
+            // when count > 1 (mirrors upstream's reverse loop).
+            for (i in count - 1 downTo 0) {
+                val x = src[i].fX
+                val y = src[i].fY
+                val w = persp0 * x + persp1 * y + persp2
+                val invW = if (w != 0f) 1f / w else 0f
+                val px = (sx * x + kx * y + tx) * invW
+                val py = (ky * x + sy * y + ty) * invW
+                dst[i] = SkPoint(px - originX, py - originY)
+            }
+        } else if (getType() and (kAffine_Mask or kScale_Mask) == 0) {
             // Identity or translate-only — vectors are unchanged.
             for (i in 0 until count) {
                 if (dst !== src || dst[i] !== src[i]) dst[i] = SkPoint(src[i].fX, src[i].fY)

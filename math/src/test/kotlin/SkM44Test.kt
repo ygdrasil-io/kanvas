@@ -219,6 +219,69 @@ class SkM44Test {
     }
 
     @Test
+    fun `mapRect identity returns rect unchanged`() {
+        val m = SkM44()
+        val r = SkRect(-1.5f, 2f, 3.25f, 7.5f)
+        val out = m.mapRect(r)
+        assertEquals(r, out)
+    }
+
+    @Test
+    fun `mapRect with extreme perspective clips w less or equal 0 instead of NaN or Inf`() {
+        // Audit divergence #5: upstream `map_rect_perspective` clips
+        // corners with w < kW0PlaneDistance against the w-plane;
+        // the previous Kotlin implementation projected every corner
+        // and produced Inf/NaN whenever one of them was at or behind
+        // the camera. Build a matrix that places a corner exactly
+        // there: row 3 = (1, 0, 0, -0.5) maps `x = 0.5` to `w = 0`.
+        val m = SkM44(
+            1f, 0f, 0f,  0f,
+            0f, 1f, 0f,  0f,
+            0f, 0f, 1f,  0f,
+            1f, 0f, 0f, -0.5f, // bottom row (perspective): w = x - 0.5
+        )
+        // The right edge x = 0.5 collapses to w = 0; the right edge
+        // x = 2 has w = 1.5; the left edge x = -1 has w = -1.5.
+        val r = SkRect(-1f, -1f, 2f, 1f)
+        val out = m.mapRect(r)
+        assertTrue(out.left.isFinite(),    "left was ${out.left}")
+        assertTrue(out.top.isFinite(),     "top was ${out.top}")
+        assertTrue(out.right.isFinite(),   "right was ${out.right}")
+        assertTrue(out.bottom.isFinite(),  "bottom was ${out.bottom}")
+        assertFalse(out.left.isNaN());   assertFalse(out.right.isNaN())
+        assertFalse(out.top.isNaN());    assertFalse(out.bottom.isNaN())
+    }
+
+    @Test
+    fun `mapRect with mild perspective gives finite bounds matching projected corners`() {
+        // All four corners have w well above kW0PlaneDistance ⇒ the
+        // result is just min/max of (x/w, y/w) per corner, identical
+        // to the old behaviour.
+        val m = SkM44(
+            1f, 0f, 0f, 0f,
+            0f, 1f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            0.1f, 0.2f, 0f, 1f, // bottom row: w = 1 + 0.1x + 0.2y
+        )
+        val r = SkRect(0f, 0f, 2f, 4f)
+        val out = m.mapRect(r)
+
+        // Reference: project each corner manually.
+        fun proj(x: Float, y: Float): Pair<Float, Float> {
+            val w = 0.1f * x + 0.2f * y + 1f
+            return Pair(x / w, y / w)
+        }
+        val (x0, y0) = proj(0f, 0f)
+        val (x1, y1) = proj(2f, 0f)
+        val (x2, y2) = proj(0f, 4f)
+        val (x3, y3) = proj(2f, 4f)
+        assertEquals(minOf(x0, x1, x2, x3), out.left,   1e-5f)
+        assertEquals(minOf(y0, y1, y2, y3), out.top,    1e-5f)
+        assertEquals(maxOf(x0, x1, x2, x3), out.right,  1e-5f)
+        assertEquals(maxOf(y0, y1, y2, y3), out.bottom, 1e-5f)
+    }
+
+    @Test
     fun `asM33 round-trip preserves affine fields`() {
         val src = SkMatrix.MakeAll(2f, 0f, 5f, 0f, 3f, 7f, 0f, 0f, 1f)
         val viaM44 = SkM44(src).asM33()
