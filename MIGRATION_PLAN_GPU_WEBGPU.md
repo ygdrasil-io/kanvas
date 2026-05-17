@@ -499,6 +499,7 @@ Premier slice gradient end-to-end : `SkLinearGradient` en kClamp uniquement, rou
 - [x] G4.1.4 : 1 cross-test neuf (BeziersGM 96.98 %) — zéro changement device, exerce G3.4.1 SkStroker sur 20 paths quad/cubic AA strokes à widths variables.
 - [x] G4.1.5 : 1 cross-test neuf (B119394958GM 93.82 %) — premier GM combinant drawArc(useCenter=false) + kRound_Cap. Round-cap endpoints émis comme demi-cercles par SkStroker.
 - [x] G4.1.6 : 1 cross-test neuf (ArcCircleGapGM 99.14 %) — stroked circle + tangent-arc à huge radius (~1097), hairline strokeWidth=0 via G3.4.3.
+- [x] G1.4.1 : 1 cross-test neuf (AnalyticAntialiasConvexGM 99.90 %) — premier GM utilisateur de `canvas.clear()` débloqué par G1.4 (#524). Sous rotate(1°), 5 configs convex-fill AA.
 - [ ] OvalGM gradient row, autres tile-mode GMs sur path non-rect.
 
 ---
