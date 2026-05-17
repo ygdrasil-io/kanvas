@@ -162,6 +162,49 @@ class SkScalarTest {
     }
 
     @Test
+    fun `SkScalarRound is half-toward-positive-infinity, not banker's rounding`() {
+        // Matches Skia's `sk_float_round(x)` = `floor(x + 0.5)`.
+        // The hallmark divergence vs `kotlin.math.round` is the .5 ties:
+        // banker's rounding maps 0.5 -> 0 and 2.5 -> 2; Skia returns 1 and 3.
+        assertEquals(1f, SkScalarRound(0.5f))
+        assertEquals(2f, SkScalarRound(1.5f))
+        assertEquals(3f, SkScalarRound(2.5f))
+        assertEquals(4f, SkScalarRound(3.5f))
+        // Negative ties: floor(-0.5 + 0.5) = 0, floor(-1.5 + 0.5) = -1, floor(-2.5 + 0.5) = -2.
+        assertEquals(0f, SkScalarRound(-0.5f))
+        assertEquals(-1f, SkScalarRound(-1.5f))
+        assertEquals(-2f, SkScalarRound(-2.5f))
+        // Non-tie inputs round identically.
+        assertEquals(1f, SkScalarRound(0.7f))
+        assertEquals(0f, SkScalarRound(0.3f))
+        assertEquals(-1f, SkScalarRound(-0.7f))
+        assertEquals(0f, SkScalarRound(-0.3f))
+    }
+
+    @Test
+    fun `SkScalarRoundToInt is half-toward-positive-infinity, not banker's rounding`() {
+        assertEquals(1, SkScalarRoundToInt(0.5f))
+        assertEquals(2, SkScalarRoundToInt(1.5f))
+        assertEquals(3, SkScalarRoundToInt(2.5f))
+        assertEquals(0, SkScalarRoundToInt(-0.5f))
+        assertEquals(-1, SkScalarRoundToInt(-1.5f))
+        assertEquals(-2, SkScalarRoundToInt(-2.5f))
+        assertEquals(4, SkScalarRoundToInt(3.7f))
+        assertEquals(-4, SkScalarRoundToInt(-3.7f))
+    }
+
+    @Test
+    fun `SkScalarFloor and SkScalarCeil`() {
+        assertEquals(3f, SkScalarFloor(3.7f))
+        assertEquals(-4f, SkScalarFloor(-3.2f))
+        assertEquals(4f, SkScalarCeil(3.2f))
+        assertEquals(-3f, SkScalarCeil(-3.7f))
+        // Floor / ceil are unaffected by the round-half divergence.
+        assertEquals(0f, SkScalarFloor(0.5f))
+        assertEquals(1f, SkScalarCeil(0.5f))
+    }
+
+    @Test
     fun `SkDoubleToScalar narrows to float`() {
         assertEquals(0.1f, SkDoubleToScalar(0.1))
         // Round-trip via toFloat
