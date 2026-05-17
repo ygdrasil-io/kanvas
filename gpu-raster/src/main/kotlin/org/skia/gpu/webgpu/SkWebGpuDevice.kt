@@ -373,6 +373,36 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
     ) : PendingDraw
 
+    /**
+     * G4.1.2 -- AA stencil-and-cover path filled with a linear gradient.
+     * Geometry payload mirrors [StencilCoverAaPolygonDraw] (stencil fan
+     * triangles + cover bbox quad + edge segments for the AA falloff
+     * helper) ; paint payload mirrors [LinearGradientRectDraw] (start/end
+     * in device-pixel coords, premul stops, tileMode, stopCount). Routed
+     * through [drawPath] when `paint.shader is SkLinearGradient` is AA and
+     * the path is *not* an axis-aligned rect (the rect path keeps the
+     * cheaper [LinearGradientRectDraw] full-screen-triangle dispatch).
+     *
+     * Inherited `r/g/b/a` are the first stop's premul color (placeholder ;
+     * the fragment shader sources color from the stops table).
+     */
+    private data class StencilCoverAaGradientDraw(
+        val stencilVerts: FloatArray,
+        val coverVerts: FloatArray,
+        val edges: FloatArray,
+        val edgeCount: Int,
+        val scissor: IntArray,
+        val fillType: SkPathFillType,
+        val startX: Float, val startY: Float,
+        val endX: Float, val endY: Float,
+        val stopPositions: FloatArray,
+        val stopColors: FloatArray,
+        val stopCount: Int,
+        val tileMode: SkTileMode,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
     private val pending: MutableList<PendingDraw> = mutableListOf()
 
     private fun loadShader(resource: String): GPUShaderModule {
@@ -911,6 +941,115 @@ public class SkWebGpuDevice(
                                 blend = blendStateFor(mode),
                             ),
                         ),
+                    ),
+                ),
+            )
+        }
+
+    // ─── AA stencil-cover gradient pipeline (G4.1.2) — linear gradient on non-rect paths ──
+
+    private val aaStencilCoverGradientShader: GPUShaderModule =
+        loadShader("shaders/aa_stencil_cover_gradient.wgsl")
+
+    /**
+     * G4.1.2 -- pipeline cache for the AA stencil-and-cover cover pass
+     * carrying a linear-gradient fragment shader. Keyed on
+     * `(blend, fillType, tileMode, side)` :
+     *  - `tileMode` picks the fragment entry point (fs_*_clamp / repeat /
+     *    mirror / decal) ;
+     *  - `side` picks inside-cover vs outside-cover (inside / outside
+     *    fragment entries with opposite stencil compare ops) ;
+     *  - `fillType` derives the stencil readMask + compare exactly like
+     *    [aaStencilCoverPipelineFor] (winding / evenodd / inverse) ;
+     *  - `blend` derives the [BlendState] via [blendStateFor].
+     *
+     * Shares [aaPolygonPipelineLayout] with the existing AA pipelines :
+     * the bind-group-layout shape is identical (one uniform binding,
+     * Vertex|Fragment visibility) ; only the bound buffer's size grows.
+     */
+    private data class AaStencilCoverGradientKey(
+        val mode: SkBlendMode,
+        val fillType: SkPathFillType,
+        val tileMode: SkTileMode,
+        val side: CoverageSide,
+    )
+
+    private val aaStencilCoverGradientPipelineCache:
+        MutableMap<AaStencilCoverGradientKey, GPURenderPipeline> = mutableMapOf()
+
+    private fun aaStencilCoverGradientFragmentEntryPoint(
+        side: CoverageSide,
+        tileMode: SkTileMode,
+    ): String = when (side) {
+        CoverageSide.Inside -> when (tileMode) {
+            SkTileMode.kClamp -> "fs_inside_clamp"
+            SkTileMode.kRepeat -> "fs_inside_repeat"
+            SkTileMode.kMirror -> "fs_inside_mirror"
+            SkTileMode.kDecal -> "fs_inside_decal"
+        }
+        CoverageSide.Outside -> when (tileMode) {
+            SkTileMode.kClamp -> "fs_outside_clamp"
+            SkTileMode.kRepeat -> "fs_outside_repeat"
+            SkTileMode.kMirror -> "fs_outside_mirror"
+            SkTileMode.kDecal -> "fs_outside_decal"
+        }
+    }
+
+    private fun aaStencilCoverGradientPipelineFor(
+        mode: SkBlendMode,
+        fillType: SkPathFillType,
+        tileMode: SkTileMode,
+        side: CoverageSide,
+    ): GPURenderPipeline =
+        aaStencilCoverGradientPipelineCache.getOrPut(
+            AaStencilCoverGradientKey(mode, fillType, tileMode, side),
+        ) {
+            val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
+            val insideCompare =
+                if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+            val compare = when (side) {
+                CoverageSide.Inside -> insideCompare
+                CoverageSide.Outside ->
+                    if (insideCompare == GPUCompareFunction.Equal) GPUCompareFunction.NotEqual
+                    else GPUCompareFunction.Equal
+            }
+            val entryPoint = aaStencilCoverGradientFragmentEntryPoint(side, tileMode)
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = aaPolygonPipelineLayout,
+                    vertex = VertexState(
+                        module = aaStencilCoverGradientShader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = aaStencilCoverGradientShader,
+                        entryPoint = entryPoint,
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA8Unorm,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = readMask,
+                        stencilWriteMask = 0xFFu,
                     ),
                 ),
             )
@@ -1529,6 +1668,60 @@ public class SkWebGpuDevice(
         val aF = SkColorGetA(color) / 255f
         val scissor = intArrayOf(scissorL, scissorT, scissorR - scissorL, scissorB - scissorT)
 
+        // G4.1.2 -- linear gradient on a non-rect AA path. The rect+axis-
+        // aligned-CTM shortcut at the top of drawPath already peeled off
+        // the [LinearGradientRectDraw] case ; we now route every AA fill
+        // that carries a SkLinearGradient through stencil-and-cover with
+        // the gradient cover-pipeline (factoring choice "b" of the G4.1.2
+        // plan : forces AA convex single-contour gradient fills through
+        // stencil-and-cover too, accepting one extra stencil pass per
+        // such draw in exchange for one shared dispatch instead of two
+        // parallel ones in `aa_polygon.wgsl`). Non-AA paths keep the
+        // solid-color fall-through ; non-axis-aligned CTMs and shader
+        // types other than [SkLinearGradient] do likewise.
+        val linearGradForAaPath: SkLinearGradient? =
+            if (shader is SkLinearGradient && paint.isAntiAlias && ctm.isAxisAligned) shader
+            else null
+        val gradEndpoints: FloatArray?
+        val gradPositions: FloatArray?
+        val gradColors: FloatArray?
+        val gradStopCount: Int
+        val gradTileMode: SkTileMode?
+        if (linearGradForAaPath != null) {
+            val p0 = linearGradForAaPath.getStartPoint()
+            val p1 = linearGradForAaPath.getEndPoint()
+            val (sx, sy) = ctm.mapXY(p0.fX, p0.fY)
+            val (ex, ey) = ctm.mapXY(p1.fX, p1.fY)
+            gradEndpoints = floatArrayOf(sx, sy, ex, ey)
+            val srcColors = linearGradForAaPath.getColors()
+            val positions = linearGradForAaPath.getPositions()
+            val count = srcColors.size.coerceAtMost(MAX_GRADIENT_STOPS)
+            val packedPositions = FloatArray(MAX_GRADIENT_STOPS * 4)
+            val packedColors = FloatArray(MAX_GRADIENT_STOPS * 4)
+            for (i in 0 until count) {
+                packedPositions[i * 4] = positions[i]
+                val c = srcColors[i]
+                val ca = SkColorGetA(c) / 255f
+                val cr = SkColorGetR(c) / 255f
+                val cg = SkColorGetG(c) / 255f
+                val cb = SkColorGetB(c) / 255f
+                packedColors[i * 4]     = cr * ca
+                packedColors[i * 4 + 1] = cg * ca
+                packedColors[i * 4 + 2] = cb * ca
+                packedColors[i * 4 + 3] = ca
+            }
+            gradPositions = packedPositions
+            gradColors = packedColors
+            gradStopCount = count
+            gradTileMode = linearGradForAaPath.getTileMode()
+        } else {
+            gradEndpoints = null
+            gradPositions = null
+            gradColors = null
+            gradStopCount = 0
+            gradTileMode = null
+        }
+
         // G3.3b.2b — multi-contour path : stencil-and-cover. Each contour
         // is fan-tessellated from its own first vertex ; the concatenated
         // triangle list is rendered into the stencil buffer with
@@ -1551,6 +1744,27 @@ public class SkWebGpuDevice(
             if (paint.isAntiAlias && totalVerts <= MAX_AA_EDGES) {
                 val edges = FloatArray(MAX_AA_EDGES * 4)
                 buildContourEdgeSegments(devVerts, contourStarts, edges)
+                if (linearGradForAaPath != null) {
+                    pending.add(
+                        StencilCoverAaGradientDraw(
+                            stencilVerts = stencilTri,
+                            coverVerts = coverTri,
+                            edges = edges,
+                            edgeCount = totalVerts,
+                            scissor = scissor,
+                            fillType = path.fillType,
+                            startX = gradEndpoints!![0], startY = gradEndpoints[1],
+                            endX = gradEndpoints[2], endY = gradEndpoints[3],
+                            stopPositions = gradPositions!!,
+                            stopColors = gradColors!!,
+                            stopCount = gradStopCount,
+                            tileMode = gradTileMode!!,
+                            r = rF, g = gF, b = bF, a = aF,
+                            mode = paint.blendMode,
+                        ),
+                    )
+                    return
+                }
                 pending.add(
                     StencilCoverAaPolygonDraw(
                         stencilVerts = stencilTri,
@@ -1592,18 +1806,39 @@ public class SkWebGpuDevice(
             if (paint.isAntiAlias && n <= MAX_AA_EDGES) {
                 val edges = FloatArray(MAX_AA_EDGES * 4)
                 buildContourEdgeSegments(devVerts, contourStarts, edges)
-                pending.add(
-                    StencilCoverAaPolygonDraw(
-                        stencilVerts = stencilTri,
-                        coverVerts = coverTri,
-                        edges = edges,
-                        edgeCount = n,
-                        scissor = scissor,
-                        fillType = path.fillType,
-                        r = rF, g = gF, b = bF, a = aF,
-                        mode = paint.blendMode,
-                    ),
-                )
+                if (linearGradForAaPath != null) {
+                    pending.add(
+                        StencilCoverAaGradientDraw(
+                            stencilVerts = stencilTri,
+                            coverVerts = coverTri,
+                            edges = edges,
+                            edgeCount = n,
+                            scissor = scissor,
+                            fillType = path.fillType,
+                            startX = gradEndpoints!![0], startY = gradEndpoints[1],
+                            endX = gradEndpoints[2], endY = gradEndpoints[3],
+                            stopPositions = gradPositions!!,
+                            stopColors = gradColors!!,
+                            stopCount = gradStopCount,
+                            tileMode = gradTileMode!!,
+                            r = rF, g = gF, b = bF, a = aF,
+                            mode = paint.blendMode,
+                        ),
+                    )
+                } else {
+                    pending.add(
+                        StencilCoverAaPolygonDraw(
+                            stencilVerts = stencilTri,
+                            coverVerts = coverTri,
+                            edges = edges,
+                            edgeCount = n,
+                            scissor = scissor,
+                            fillType = path.fillType,
+                            r = rF, g = gF, b = bF, a = aF,
+                            mode = paint.blendMode,
+                        ),
+                    )
+                }
             } else {
                 pending.add(
                     StencilCoverPolygonDraw(
@@ -1633,6 +1868,38 @@ public class SkWebGpuDevice(
         // bbox quad and let the fragment shader's `min` over signed
         // perpendicular edge distances mask it down to the polygon, with
         // sub-pixel coverage falloff on the perimeter.
+        //
+        // G4.1.2 — convex AA paths with a linear-gradient paint detour
+        // through stencil-and-cover (factoring choice "b" of the G4.1.2
+        // plan : we don't extend `aa_polygon.wgsl` with gradient entry
+        // points). The extra stencil pass is one of two parallel cover
+        // sub-draws either way ; the cost difference is one stencil-write
+        // pass per convex gradient path, accepted for the simpler diff.
+        if (paint.isAntiAlias && n <= MAX_AA_EDGES && linearGradForAaPath != null) {
+            val stencilTri = fanTessellateContours(devVerts, contourStarts)
+            val coverTri = bboxTrianglesFor(devVerts, width, height)
+            val edges = FloatArray(MAX_AA_EDGES * 4)
+            buildContourEdgeSegments(devVerts, contourStarts, edges)
+            pending.add(
+                StencilCoverAaGradientDraw(
+                    stencilVerts = stencilTri,
+                    coverVerts = coverTri,
+                    edges = edges,
+                    edgeCount = n,
+                    scissor = scissor,
+                    fillType = path.fillType,
+                    startX = gradEndpoints!![0], startY = gradEndpoints[1],
+                    endX = gradEndpoints[2], endY = gradEndpoints[3],
+                    stopPositions = gradPositions!!,
+                    stopColors = gradColors!!,
+                    stopCount = gradStopCount,
+                    tileMode = gradTileMode!!,
+                    r = rF, g = gF, b = bF, a = aF,
+                    mode = paint.blendMode,
+                ),
+            )
+            return
+        }
         if (paint.isAntiAlias && n <= MAX_AA_EDGES) {
             val edges = FloatArray(MAX_AA_EDGES * 4)
             buildPerimeterEdges(devVerts, edges)
@@ -1714,6 +1981,7 @@ public class SkWebGpuDevice(
                 is AaPolygonDraw -> buildAaPolygonDrawResources(d)
                 is StencilCoverPolygonDraw -> buildStencilCoverDrawResources(d)
                 is StencilCoverAaPolygonDraw -> buildStencilCoverAaDrawResources(d)
+                is StencilCoverAaGradientDraw -> buildStencilCoverAaGradientDrawResources(d)
                 is LinearGradientRectDraw -> buildLinearGradientRectDrawResources(d)
                 is RadialGradientRectDraw -> buildRadialGradientRectDrawResources(d)
             }
@@ -1822,6 +2090,60 @@ public class SkWebGpuDevice(
                 }
                 return@forEachIndexed
             }
+            if (d is StencilCoverAaGradientDraw) {
+                // G4.1.2 — same stencil-and-cover envelope as
+                // [StencilCoverAaPolygonDraw], but the two cover sub-draws
+                // bind the gradient pipeline (linear gradient lookup per
+                // fragment instead of a uniform color). Stencil sub-pass
+                // is identical to the solid-color variant.
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = colorView,
+                                loadOp = loadOp,
+                                clearValue = background,
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                        depthStencilAttachment = RenderPassDepthStencilAttachment(
+                            view = depthStencilView,
+                            stencilClearValue = 0u,
+                            stencilLoadOp = GPULoadOp.Clear,
+                            stencilStoreOp = GPUStoreOp.Discard,
+                            stencilReadOnly = false,
+                            depthReadOnly = true,
+                        ),
+                    ),
+                ) {
+                    setBindGroup(0u, res.bindGroup)
+                    setScissorRect(
+                        x = d.scissor[0].toUInt(),
+                        y = d.scissor[1].toUInt(),
+                        width = d.scissor[2].toUInt(),
+                        height = d.scissor[3].toUInt(),
+                    )
+                    setPipeline(stencilWritePipeline)
+                    setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
+                    draw((d.stencilVerts.size / 2).toUInt())
+                    setStencilReference(0u)
+                    setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
+                    setPipeline(
+                        aaStencilCoverGradientPipelineFor(
+                            d.mode, d.fillType, d.tileMode, CoverageSide.Inside,
+                        ),
+                    )
+                    draw((d.coverVerts.size / 2).toUInt())
+                    setPipeline(
+                        aaStencilCoverGradientPipelineFor(
+                            d.mode, d.fillType, d.tileMode, CoverageSide.Outside,
+                        ),
+                    )
+                    draw((d.coverVerts.size / 2).toUInt())
+                    end()
+                }
+                return@forEachIndexed
+            }
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -1894,6 +2216,7 @@ public class SkWebGpuDevice(
                     }
                     is StencilCoverPolygonDraw -> { /* handled above */ }
                     is StencilCoverAaPolygonDraw -> { /* handled above */ }
+                    is StencilCoverAaGradientDraw -> { /* handled above */ }
                 }
                 end()
             }
@@ -2237,6 +2560,86 @@ public class SkWebGpuDevice(
         )
     }
 
+    private fun buildStencilCoverAaGradientDrawResources(
+        d: StencilCoverAaGradientDraw,
+    ): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = AA_STENCIL_COVER_GRADIENT_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverAaGradientDraw",
+            ),
+        )
+        // Layout matches `aa_stencil_cover_gradient.wgsl` (note the
+        // leading `color` slot kept in lockstep with `solid_polygon.wgsl`
+        // so the stencil-write pass can share this draw's bind group --
+        // it only reads `viewport` for its NDC remap and ignores the
+        // rest).
+        //   offset    0 : color        (vec4f, unused by gradient frag)
+        //   offset   16 : viewport     (vec4f, only x/y used)
+        //   offset   32 : startEnd     (vec4f -- sx, sy, ex, ey)
+        //   offset   48 : countPad     (.x = stopCount as bit-reinterp f32)
+        //   offset   64 : edgeCountPad (.x = edgeCount as bit-reinterp f32)
+        //   offset   80 : edges[MAX_AA_EDGES]      (vec4 each)
+        //   offset 4176 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
+        //   offset 4432 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
+        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8)
+        // color (unused ; left at zero)
+        packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
+        // viewport
+        packed[4] = width.toFloat(); packed[5] = height.toFloat()
+        packed[6] = 0f; packed[7] = 0f
+        // startEnd
+        packed[8] = d.startX; packed[9] = d.startY
+        packed[10] = d.endX;  packed[11] = d.endY
+        // countPad
+        packed[12] = Float.fromBits(d.stopCount)
+        packed[13] = 0f; packed[14] = 0f; packed[15] = 0f
+        // edgeCountPad
+        packed[16] = Float.fromBits(d.edgeCount)
+        packed[17] = 0f; packed[18] = 0f; packed[19] = 0f
+        // edges
+        System.arraycopy(d.edges, 0, packed, 20, d.edges.size)
+        // positions + colors
+        System.arraycopy(d.stopPositions, 0, packed, 20 + MAX_AA_EDGES * 4, MAX_GRADIENT_STOPS * 4)
+        System.arraycopy(
+            d.stopColors, 0,
+            packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
+            MAX_GRADIENT_STOPS * 4,
+        )
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = aaPolygonBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        val stencilVB = context.device.createBuffer(
+            BufferDescriptor(
+                size = (d.stencilVerts.size * Float.SIZE_BYTES).toULong(),
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverAaGradientStencilVerts",
+            ),
+        )
+        context.queue.writeBuffer(stencilVB, 0uL, ArrayBuffer.of(d.stencilVerts))
+        val coverVB = context.device.createBuffer(
+            BufferDescriptor(
+                size = (d.coverVerts.size * Float.SIZE_BYTES).toULong(),
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverAaGradientCoverVerts",
+            ),
+        )
+        context.queue.writeBuffer(coverVB, 0uL, ArrayBuffer.of(d.coverVerts))
+        return DrawResources(
+            uniform = uniform,
+            bindGroup = bindGroup,
+            vertexBuffer = stencilVB,
+            coverVertexBuffer = coverVB,
+        )
+    }
+
     override fun close() {
         rectPipelineCache.values.forEach { it.close() }
         rectPipelineCache.clear()
@@ -2248,6 +2651,8 @@ public class SkWebGpuDevice(
         coverPipelineCache.clear()
         aaStencilCoverPipelineCache.values.forEach { it.close() }
         aaStencilCoverPipelineCache.clear()
+        aaStencilCoverGradientPipelineCache.values.forEach { it.close() }
+        aaStencilCoverGradientPipelineCache.clear()
         linearGradientPipelineCache.values.forEach { it.close() }
         linearGradientPipelineCache.clear()
         radialGradientPipelineCache.values.forEach { it.close() }
@@ -2258,6 +2663,7 @@ public class SkWebGpuDevice(
         polygonShader.close()
         aaPolygonShader.close()
         aaStencilCoverShader.close()
+        aaStencilCoverGradientShader.close()
         linearGradientShader.close()
         radialGradientShader.close()
         presentShader.close()
@@ -2319,6 +2725,15 @@ public class SkWebGpuDevice(
          * different fields (viewport / center+radius vs startEnd / viewport).
          */
         const val RADIAL_GRADIENT_UNIFORM_SIZE: ULong = 560uL
+        /**
+         * G4.1.2 -- size of the AA stencil-cover gradient per-draw uniform :
+         *   color (16) + viewport (16) + startEnd (16) + countPad (16) +
+         *   edgeCountPad (16) + edges (256 * 16) + positions (16 * 16) +
+         *   colors (16 * 16) = 4688 bytes.
+         * The leading `color` slot matches the polygon shader's layout so
+         * the stencil-write pass can share this draw's bind group.
+         */
+        const val AA_STENCIL_COVER_GRADIENT_UNIFORM_SIZE: ULong = 4688uL
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 
         /**

@@ -483,7 +483,7 @@ Premier slice gradient end-to-end : `SkLinearGradient` en kClamp uniquement, rou
 - [x] [ShallowGradientLinearWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ShallowGradientLinearWebGpuTest.kt) — cross-test GM : `ShallowGradientLinearGM` (800×800, drawRect, kClamp, `0xFF555555 -> 0xFF444444`). Score : **100.00 % (byte-exact, 640000/640000 pixels matching)**.
 
 ### Détails restants
-- [ ] `SkLinearGradient.wgsl` : élargir aux tile modes kRepeat / kMirror / kDecal (G4.1.1) ; routes via `drawPath`/`drawPaint` quand la géométrie n'est pas un rect (G4.1.2).
+- [x] `SkLinearGradient.wgsl` : élargir aux tile modes kRepeat / kMirror / kDecal (G4.1.1) ; routes via `drawPath`/`drawPaint` quand la géométrie n'est pas un rect (G4.1.2).
 - [ ] `SkRadialGradient.wgsl` : `t = length(p - center) / radius`, idem lookup (G4.2).
 - [ ] **Linear-premul output** : working space identique au raster (D3) — le shader retourne directement en F16 linear-Rec.2020.
 
@@ -493,6 +493,7 @@ Premier slice gradient end-to-end : `SkLinearGradient` en kClamp uniquement, rou
 ### Vérification G4
 - [x] G4.1 : `ShallowGradientLinearGM` 100.00 % sur GPU (premier gradient GM vert).
 - [x] G4.1.1 : 4 cross-tests neufs (ShallowGradientLinearNoditherGM 100.00 %, AnalyticGradientShaderGM 100.00 %, Crbug938592GM 99.80 %, ConvexPathsGM 99.85 %) avg **99.91 %** — zéro changement device, élargit le harness sur 2 gradients linéaires kClamp supplémentaires (dont 16-stop AnalyticGradients qui sature MAX_GRADIENT_STOPS), valide path.isRect sous scale(±1) axis-aligned (Crbug938592), et apporte enfin un GM convex-paths riche (38 shapes mixant rect/circle/oval/rrect/cubic/quad/conic/arc).
+- [x] G4.1.2 : linear gradient sur path non-rect via AA stencil-and-cover. Nouveau shader [shaders/aa_stencil_cover_gradient.wgsl](gpu-raster/src/main/resources/shaders/aa_stencil_cover_gradient.wgsl) — 8 entry points (2 sides × 4 SkTileMode), partage `aaPolygonBindGroupLayout` + `polygonShader` pour la stencil pass via layout `(color, viewport, ...)` byte-compat. Côté device : nouveau `PendingDraw` `StencilCoverAaGradientDraw` + cache `aaStencilCoverGradientPipelineCache` keyed `(blend, fillType, tileMode, side)`. dispatch : `paint.shader is SkLinearGradient && paint.isAntiAlias && ctm.isAxisAligned` route TOUS les AA paths (multi-contour, single-contour concave, single-contour convex) vers le pipeline gradient — factoring "b" du plan G4.1.2 (les paths convexes AA non-gradient gardent le fast path `AaPolygonDraw`). Tests : 4 unit tests neufs dans [LinearGradientPathTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/LinearGradientPathTest.kt) (kClamp/kRepeat/kMirror/kDecal sur un circle), pas de cross-test GM dans cette slice (aucun GM en scope ne dessine un linear gradient sur un path non-rect sans maskFilter/colorFilter/pathEffect).
 - [ ] FillrectGradientGM, ClampedGradients, OvalGM gradient row verts sur GPU.
 
 ---
