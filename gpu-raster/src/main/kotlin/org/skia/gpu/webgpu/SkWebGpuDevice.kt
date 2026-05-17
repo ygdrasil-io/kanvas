@@ -62,6 +62,7 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkStroker
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
@@ -1019,9 +1020,24 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
-        require(paint.style == SkPaint.Style.kFill_Style) {
-            "SkWebGpuDevice (G3.3b.1): only fill-style paths supported — got ${paint.style}. " +
-                "Stroke paths (SkStroker.outline) arrive in G3.4."
+        // G3.4.1 — stroke style : run SkStroker in source space to produce
+        // the filled outline path, then recurse with a fill-style paint
+        // copy. The outline is multi-contour for closed paths (outer +
+        // reversed inner) and single-contour for open paths (left + cap +
+        // reverse-right + cap), both already handled by the fill machinery
+        // below (stencil-and-cover with kWinding takes care of multi-
+        // contour ; the concave-single-contour route handles open paths).
+        // kStrokeAndFill is the standard "fill then stroke" pair.
+        if (paint.style != SkPaint.Style.kFill_Style) {
+            val fillPaint = paint.copy().apply { style = SkPaint.Style.kFill_Style }
+            val resScale = ctm.getMaxScale().coerceAtLeast(1f)
+            if (paint.style == SkPaint.Style.kStrokeAndFill_Style) {
+                drawPath(path, ctm, clip, fillPaint)
+            }
+            val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
+            if (outline.isEmpty()) return
+            drawPath(outline, ctm, clip, fillPaint)
+            return
         }
 
         // Walk the verb stream once, transform each point by the CTM,
