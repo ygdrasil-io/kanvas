@@ -94,6 +94,15 @@ public class SkM44 {
     // ─── Companion factories ───────────────────────────────────────────
 
     public companion object {
+        /**
+         * Distance to the `w = 0` plane used when clipping perspective
+         * projections in [mapRect]. Matches upstream's
+         * [`SkPathPriv::kW0PlaneDistance`](https://github.com/google/skia/blob/main/src/core/SkPathPriv.h#L73)
+         * = `1.f / (1 << 14)` ≈ 6.1e-5. Corners with homogeneous `w`
+         * below this threshold are treated as being behind the camera.
+         */
+        public const val kW0PlaneDistance: Float = 1f / (1 shl 14)
+
         /** Identity matrix. Mirrors upstream's default constructor. */
         public fun identity(): SkM44 = SkM44()
 
@@ -485,29 +494,130 @@ public class SkM44 {
     /**
      * Apply this matrix to `r` and return the axis-aligned bounding
      * box of the transformed rect (z = 0). Mirrors
-     * [`SkMatrixPriv::MapRect(const SkM44&, const SkRect&)`](https://github.com/google/skia/blob/main/src/core/SkM44.cpp#L216)
-     * for the affine path; perspective uses the same approach as
-     * [SkMatrix.mapRect] (project four corners, divide by w).
+     * [`SkMatrixPriv::MapRect(const SkM44&, const SkRect&)`](https://github.com/google/skia/blob/main/src/core/SkM44.cpp#L216).
+     *
+     * Affine (no perspective) path: project four corners, take min/max.
+     *
+     * Perspective path: ports
+     * [`map_rect_perspective`](https://github.com/google/skia/blob/main/src/core/SkM44.cpp#L164)
+     * — corners whose homogeneous `w` is below `kW0PlaneDistance`
+     * (≈ 6.1e-5, the same threshold upstream uses to avoid division
+     * by ~zero) are clipped against the adjacent edges so the result
+     * stays finite even when the rect crosses behind the camera.
      */
     public fun mapRect(r: SkRect): SkRect {
+        val hasPerspective =
+            fMat[3] != 0f || fMat[7] != 0f || fMat[11] != 0f || fMat[15] != 1f
+        if (!hasPerspective) {
+            return mapRectAffine(r)
+        }
+        return mapRectPerspective(r)
+    }
+
+    /** Affine fast path: project 4 corners (w divide skipped since w == 1) and bound. */
+    private fun mapRectAffine(r: SkRect): SkRect {
         val tl = map(r.left,  r.top,    0f, 1f)
         val tr = map(r.right, r.top,    0f, 1f)
         val bl = map(r.left,  r.bottom, 0f, 1f)
         val br = map(r.right, r.bottom, 0f, 1f)
-
-        fun divide(v: SkV4): Pair<Float, Float> =
-            if (v.w == 0f || v.w == 1f) Pair(v.x, v.y) else Pair(v.x / v.w, v.y / v.w)
-
-        val (x0, y0) = divide(tl)
-        val (x1, y1) = divide(tr)
-        val (x2, y2) = divide(bl)
-        val (x3, y3) = divide(br)
         return SkRect(
-            minOf(x0, x1, x2, x3),
-            minOf(y0, y1, y2, y3),
-            maxOf(x0, x1, x2, x3),
-            maxOf(y0, y1, y2, y3),
+            minOf(tl.x, tr.x, bl.x, br.x),
+            minOf(tl.y, tr.y, bl.y, br.y),
+            maxOf(tl.x, tr.x, bl.x, br.x),
+            maxOf(tl.y, tr.y, bl.y, br.y),
         )
+    }
+
+    /**
+     * Perspective path with `w = 0` plane clipping. Direct port of
+     * [`map_rect_perspective`](https://github.com/google/skia/blob/main/src/core/SkM44.cpp#L164).
+     *
+     * Each of the 4 corners is projected together with its two
+     * neighbours (clockwise traversal). When the corner's `w` is below
+     * [kW0PlaneDistance] the edges leaving it are clipped against the
+     * `w = kW0PlaneDistance` plane; corners with no surviving neighbour
+     * contribute `+Infinity`, which `minOf` discards.
+     */
+    private fun mapRectPerspective(r: SkRect): SkRect {
+        val l = r.left
+        val t = r.top
+        val rg = r.right
+        val b = r.bottom
+
+        // Build four homogeneous corners c0*x + c1*y + c3 (z = 0).
+        val tl = map(l,  t,  0f, 1f)
+        val tr = map(rg, t,  0f, 1f)
+        val br = map(rg, b,  0f, 1f)
+        val bl = map(l,  b,  0f, 1f)
+
+        // Walk the corners clockwise. project(p0, p1, p2) returns
+        // (minX, minY, -maxX, -maxY) — same "flip" trick as upstream so
+        // a single min() across the four results yields (l, t, -r, -b).
+        val p0 = project(tl, tr, bl)
+        val p1 = project(tr, br, tl)
+        val p2 = project(br, bl, tr)
+        val p3 = project(bl, tl, br)
+
+        val minX = minOf(p0[0], p1[0], p2[0], p3[0])
+        val minY = minOf(p0[1], p1[1], p2[1], p3[1])
+        val negMaxX = minOf(p0[2], p1[2], p2[2], p3[2])
+        val negMaxY = minOf(p0[3], p1[3], p2[3], p3[3])
+
+        return SkRect(minX, minY, -negMaxX, -negMaxY)
+    }
+
+    /**
+     * Project a homogeneous corner together with its two neighbours,
+     * clipping edges against the `w = kW0PlaneDistance` plane when the
+     * corner is behind/very close to the camera. Returns a 4-tuple
+     * `(x, y, -x, -y)` of the projected position — combined via `min`
+     * across all four corners this yields (minX, minY, -maxX, -maxY).
+     */
+    private fun project(p0: SkV4, p1: SkV4, p2: SkV4): FloatArray {
+        val w0 = p0.w
+        if (w0 >= kW0PlaneDistance) {
+            // Unclipped: just divide xy by w.
+            val x = p0.x / w0
+            val y = p0.y / w0
+            return floatArrayOf(x, y, -x, -y)
+        }
+        // p0 has w < kW0PlaneDistance — clip the two edges (p0→p1) and
+        // (p0→p2) against the w = kW0PlaneDistance plane and keep the
+        // componentwise min of the two clipped projections. If both
+        // neighbours also have w < kW0PlaneDistance, both return +Inf
+        // and the caller's `minOf` chain ignores this corner.
+        val c1 = clipEdge(p0, p1, w0)
+        val c2 = clipEdge(p0, p2, w0)
+        return floatArrayOf(
+            minOf(c1[0], c2[0]),
+            minOf(c1[1], c2[1]),
+            minOf(c1[2], c2[2]),
+            minOf(c1[3], c2[3]),
+        )
+    }
+
+    /**
+     * Clip the edge from `p0` (w < kW0PlaneDistance) to `p` against the
+     * `w = kW0PlaneDistance` plane. If `p` is also behind the plane,
+     * the whole edge is invalid and we return `+Infinity` so the
+     * caller's `min` reduction drops it. Otherwise interpolate by
+     * `t = (kW0PlaneDistance - w0) / (w - w0)`, divide xy by
+     * kW0PlaneDistance, and return `(x, y, -x, -y)` for the flip trick.
+     */
+    private fun clipEdge(p0: SkV4, p: SkV4, w0: Float): FloatArray {
+        val w = p.w
+        if (w < kW0PlaneDistance) {
+            return floatArrayOf(
+                Float.POSITIVE_INFINITY,
+                Float.POSITIVE_INFINITY,
+                Float.POSITIVE_INFINITY,
+                Float.POSITIVE_INFINITY,
+            )
+        }
+        val t = (kW0PlaneDistance - w0) / (w - w0)
+        val cx = (t * p.x + (1f - t) * p0.x) / kW0PlaneDistance
+        val cy = (t * p.y + (1f - t) * p0.y) / kW0PlaneDistance
+        return floatArrayOf(cx, cy, -cx, -cy)
     }
 
     // ─── Linear algebra ────────────────────────────────────────────────
