@@ -28,18 +28,22 @@ public data class SkV3(
     /** Scalar multiply. */
     public operator fun times(s: Float): SkV3 = SkV3(x * s, y * s, z * s)
 
-    /** Skia's `operator*(SkV3, SkV3)` is the dot product (NOT component-wise). */
-    public operator fun times(o: SkV3): Float = x * o.x + y * o.y + z * o.z
+    /**
+     * Component-wise product, matching Skia's `SkV3 operator*(const SkV3&)`
+     * (`include/core/SkM44.h:74`). For the dot product use [dot] / [Dot].
+     *
+     * Breaking change vs the previous Kotlin port, which returned a `Float`
+     * (the dot product) here — that diverged from upstream semantics
+     * (math audit divergence #3). Any caller relying on `a * b` as the
+     * dot product must switch to `a.dot(b)`.
+     */
+    public operator fun times(o: SkV3): SkV3 = SkV3(x * o.x, y * o.y, z * o.z)
 
-    public fun dot(o: SkV3): Float = x * o.x + y * o.y + z * o.z
+    public fun dot(o: SkV3): Float = Dot(this, o)
 
-    public fun cross(o: SkV3): SkV3 = SkV3(
-        y * o.z - z * o.y,
-        z * o.x - x * o.z,
-        x * o.y - y * o.x,
-    )
+    public fun cross(o: SkV3): SkV3 = Cross(this, o)
 
-    public fun lengthSquared(): Float = this.dot(this)
+    public fun lengthSquared(): Float = Dot(this, this)
     public fun length(): Float = sqrt(lengthSquared().toDouble()).toFloat()
 
     /** Returns a unit-length copy ; if the vector is zero-length, returns zero. */
@@ -50,6 +54,16 @@ public data class SkV3(
 
     public companion object {
         public val ZERO: SkV3 = SkV3(0f, 0f, 0f)
+
+        /** Dot product, mirrors C++ `SkV3::Dot`. */
+        public fun Dot(a: SkV3, b: SkV3): Float = a.x * b.x + a.y * b.y + a.z * b.z
+
+        /** Cross product, mirrors C++ `SkV3::Cross`. */
+        public fun Cross(a: SkV3, b: SkV3): SkV3 = SkV3(
+            a.y * b.z - a.z * b.y,
+            a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x,
+        )
     }
 }
 
