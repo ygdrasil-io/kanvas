@@ -81,6 +81,24 @@ public class SkConicalGradient internal constructor(
     /** Geometric sub-type ; the GPU pipeline switches on this. */
     public fun getType(): Type = type
 
+    /**
+     * Pre-computed source-space → conical-frame affine matrix, built at
+     * `Make` time. The GPU dispatch composes this with the inverse
+     * `CTM · localMatrix` to obtain the per-pixel device → focal-frame
+     * transform expected by the focal-frame shader. Mirrors what
+     * [setupForDraw] does for the CPU path (`deviceToConical`).
+     */
+    public fun getGradientMatrix(): SkMatrix = gradientMatrix
+
+    /**
+     * Focal-frame metadata (`fFocalX`, `fR1`, `fIsSwapped`) when [type] is
+     * [Type.kFocal] ; `null` otherwise. The GPU focal-inside pipeline
+     * needs `fP0 = 1 / fR1`, `fP1 = fFocalX`, plus the swap flag, to
+     * apply the same `compensateFocal` / `unswap` post-passes as the CPU
+     * `computeTFocal`.
+     */
+    public fun getFocalData(): FocalData? = focalData
+
     /** Pre-transformed stop colours in working space (8-bit path). */
     private val xformedColors: IntArray = IntArray(srcColors.size)
 
