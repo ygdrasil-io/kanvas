@@ -479,6 +479,46 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
+     * G4.4.1 -- pending conical (two-point) gradient fill of an axis-aligned
+     * rect, **focal-inside well-behaved** sub-case of [SkConicalGradient]
+     * (`focalData.fR1 > 1`, not focal-on-circle). Routed only for
+     * `tileMode == kClamp` ; other tile modes + focal-outside +
+     * focal-on-circle fall through at the dispatch gate.
+     *
+     * Per-draw payload :
+     *  - `affine00..affine12` : 2x3 row-major affine `device -> focal frame`,
+     *    computed as `gradientMatrix * (CTM * localMatrix)^-1`. This is the
+     *    same matrix the CPU caches as `deviceToConical` in [setupForDraw].
+     *    Pixel-center coords are passed straight through (WGSL's
+     *    `@builtin(position)` is already at the half-pixel offset).
+     *  - `fP0 = 1 / fR1`, `fP1 = fFocalX` : the focal scalars consumed by
+     *    the well-behaved formula `t = sqrt(x*x + y*y) - x * fP0`.
+     *  - `compensateFocal` : 1.0 iff `fFocalX != 0` (apply `t += fP1`).
+     *  - `unswap` : 1.0 iff `fIsSwapped` (apply `t = 1 - t`).
+     *  - `negateX` : 1.0 iff `(1 - fFocalX) < 0` (apply `t = -t` between
+     *    the formula and `compensateFocal`).
+     *
+     * Mirrors [SkConicalGradient.computeTFocal]'s well-behaved branch
+     * byte-for-byte (the well-behaved case is the only one filtered in
+     * here ; the other sub-cases stay out of the dispatch for now).
+     */
+    private data class ConicalFocalGradientRectDraw(
+        val scissor: IntArray,
+        // 2x3 row-major affine `device pixel -> focal frame`.
+        val affine00: Float, val affine01: Float, val affine02: Float,
+        val affine10: Float, val affine11: Float, val affine12: Float,
+        val fP0: Float, val fP1: Float,
+        val compensateFocal: Float, val unswap: Float,
+        val negateX: Float,
+        val stopPositions: FloatArray,
+        val stopColors: FloatArray,
+        val stopCount: Int,
+        val tileMode: SkTileMode,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
+    /**
      * G4.1.2 -- AA stencil-and-cover path filled with a linear gradient.
      * Geometry payload mirrors [StencilCoverAaPolygonDraw] (stencil fan
      * triangles + cover bbox quad + edge segments for the AA falloff
@@ -1406,7 +1446,69 @@ public class SkWebGpuDevice(
                         entryPoint = conicalGradientFragmentEntryPoint(tileMode),
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
+    // ─── Conical focal-inside pipeline (G4.4.1) — drawRect, kClamp ──
+
+    private val conicalFocalGradientShader: GPUShaderModule =
+        loadShader("shaders/conical_focal_gradient.wgsl")
+
+    private val conicalFocalGradientBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                ),
+            ),
+        ),
+    )
+
+    private val conicalFocalGradientPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(conicalFocalGradientBindGroupLayout)),
+    )
+
+    /**
+     * G4.4.1 -- conical focal-inside pipeline cache. Keyed by `(blend,
+     * tile)` from day 1 even though only kClamp dispatches here ;
+     * `fs_repeat / fs_mirror / fs_decal` exist in
+     * `conical_focal_gradient.wgsl` for the G4.4.x follow-up widening
+     * the dispatch gate, mirroring the cache layout of the kRadial
+     * conical pipeline.
+     */
+    private val conicalFocalGradientPipelineCache:
+        MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
+
+    private fun conicalFocalGradientFragmentEntryPoint(tileMode: SkTileMode): String = when (tileMode) {
+        SkTileMode.kClamp -> "fs_clamp"
+        SkTileMode.kRepeat -> "fs_repeat"
+        SkTileMode.kMirror -> "fs_mirror"
+        SkTileMode.kDecal -> "fs_decal"
+    }
+
+    private fun conicalFocalGradientPipelineFor(
+        mode: SkBlendMode,
+        tileMode: SkTileMode,
+    ): GPURenderPipeline =
+        conicalFocalGradientPipelineCache.getOrPut(mode to tileMode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = conicalFocalGradientPipelineLayout,
+                    vertex = VertexState(module = conicalFocalGradientShader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = conicalFocalGradientShader,
+                        entryPoint = conicalFocalGradientFragmentEntryPoint(tileMode),
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -2095,6 +2197,101 @@ public class SkWebGpuDevice(
     }
 
     /**
+     * G4.4.1 -- emit a [ConicalFocalGradientRectDraw] for a kClamp
+     * `SkConicalGradient` (focal-inside well-behaved sub-case) filling
+     * the axis-aligned device-space rect [devRect]. Scissor derivation
+     * mirrors [drawConicalGradientFillRect].
+     *
+     * Per-draw transform : `gradientMatrix * (CTM * localMatrix)^-1`,
+     * identical to the CPU `deviceToConical` cached by
+     * [SkConicalGradient.setupForDraw]. The resulting 2x3 affine maps
+     * device-pixel coords straight into the focal frame ; the shader
+     * applies the well-behaved formula + the static post-passes
+     * (`negate_x`, `compensateFocal`, `unswap`) read from per-draw flags.
+     *
+     * Falls back to `false` (no draw enqueued) when the combined
+     * `(CTM * localMatrix)` is singular -- caller routes through the
+     * solid-color fill (matches the CPU shader's degenerate-matrix
+     * fallback to the first stop).
+     */
+    private fun drawConicalFocalGradientFillRect(
+        devRect: SkRect, clip: SkIRect, paint: SkPaint, grad: SkConicalGradient, ctm: SkMatrix,
+    ): Boolean {
+        val scissor: IntArray
+        if (paint.isAntiAlias) {
+            val fl = devRect.left.coerceAtLeast(clip.left.toFloat()).coerceAtLeast(0f)
+            val ft = devRect.top.coerceAtLeast(clip.top.toFloat()).coerceAtLeast(0f)
+            val fr = devRect.right.coerceAtMost(clip.right.toFloat()).coerceAtMost(width.toFloat())
+            val fb = devRect.bottom.coerceAtMost(clip.bottom.toFloat()).coerceAtMost(height.toFloat())
+            if (fl >= fr || ft >= fb) return false
+            val sl = floor(fl.toDouble()).toInt().coerceAtLeast(0)
+            val st = floor(ft.toDouble()).toInt().coerceAtLeast(0)
+            val sr = ceil(fr.toDouble()).toInt().coerceAtMost(width)
+            val sb = ceil(fb.toDouble()).toInt().coerceAtMost(height)
+            if (sl >= sr || st >= sb) return false
+            scissor = intArrayOf(sl, st, sr - sl, sb - st)
+        } else {
+            val l = pixelEdge(devRect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
+            val t = pixelEdge(devRect.top).coerceAtLeast(clip.top).coerceAtLeast(0)
+            val r = pixelEdge(devRect.right).coerceAtMost(clip.right).coerceAtMost(width)
+            val b = pixelEdge(devRect.bottom).coerceAtMost(clip.bottom).coerceAtMost(height)
+            if (l >= r || t >= b) return false
+            scissor = intArrayOf(l, t, r - l, b - t)
+        }
+
+        val ctmLocal = ctm.preConcat(grad.localMatrix)
+        val invCtmLocal = ctmLocal.invert() ?: return false
+        val devToFocal = grad.getGradientMatrix().preConcat(invCtmLocal)
+
+        val fd = grad.getFocalData() ?: return false
+        val fP0 = 1f / fd.fR1
+        val fP1 = fd.fFocalX
+        val compensate = if (!fd.isNativelyFocal()) 1f else 0f
+        val unswap = if (fd.isSwapped()) 1f else 0f
+        val negateX = if ((1f - fP1) < 0f) 1f else 0f
+
+        val srcColors = grad.getColors()
+        val positions = grad.getPositions()
+        val count = srcColors.size.coerceAtMost(MAX_GRADIENT_STOPS)
+        val packedPositions = FloatArray(MAX_GRADIENT_STOPS * 4)
+        val packedColors = FloatArray(MAX_GRADIENT_STOPS * 4)
+        for (i in 0 until count) {
+            packedPositions[i * 4] = positions[i]
+            val c = srcColors[i]
+            val a = SkColorGetA(c) / 255f
+            val r = SkColorGetR(c) / 255f
+            val g = SkColorGetG(c) / 255f
+            val b = SkColorGetB(c) / 255f
+            packedColors[i * 4]     = r * a
+            packedColors[i * 4 + 1] = g * a
+            packedColors[i * 4 + 2] = b * a
+            packedColors[i * 4 + 3] = a
+        }
+
+        val first = srcColors[0]
+        pending.add(
+            ConicalFocalGradientRectDraw(
+                scissor = scissor,
+                affine00 = devToFocal.sx, affine01 = devToFocal.kx, affine02 = devToFocal.tx,
+                affine10 = devToFocal.ky, affine11 = devToFocal.sy, affine12 = devToFocal.ty,
+                fP0 = fP0, fP1 = fP1,
+                compensateFocal = compensate, unswap = unswap,
+                negateX = negateX,
+                stopPositions = packedPositions,
+                stopColors = packedColors,
+                stopCount = count,
+                tileMode = grad.getTileMode(),
+                r = SkColorGetR(first) / 255f,
+                g = SkColorGetG(first) / 255f,
+                b = SkColorGetB(first) / 255f,
+                a = SkColorGetA(first) / 255f,
+                mode = paint.blendMode,
+            ),
+        )
+        return true
+    }
+
+    /**
      * G3.1.1 — single annular AA rect draw : outer bounds = `rect ± half_sw`,
      * inner bounds = `rect ∓ half_sw`. Replaces the G3.1 4-edge fill
      * decomposition for the AA path so the corner pixels get the same
@@ -2355,6 +2552,32 @@ public class SkWebGpuDevice(
                 )
                 drawConicalGradientFillRect(devRect, clip, paint, shader, ctm)
                 return
+            }
+        }
+        // G4.4.1 -- conical focal-inside well-behaved sub-case
+        // (`focalData.fR1 > 1`, not focal-on-circle). Most common
+        // non-degenerate kFocal config. Other kFocal variants
+        // (focal-on-circle, focal-outside) and tile modes other than
+        // kClamp fall through to the existing solid-color machinery for
+        // now ; a follow-up slice will pick those up.
+        if (shader is SkConicalGradient &&
+            paint.style == SkPaint.Style.kFill_Style &&
+            ctm.isAxisAligned &&
+            shader.getTileMode() == SkTileMode.kClamp &&
+            shader.getType() == SkConicalGradient.Type.kFocal &&
+            shader.getFocalData()?.isWellBehaved() == true
+        ) {
+            val srcRect = path.isRect()
+            if (srcRect != null) {
+                val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
+                val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
+                val devRect = SkRect.MakeLTRB(
+                    minOf(x0, x1), minOf(y0, y1),
+                    maxOf(x0, x1), maxOf(y0, y1),
+                )
+                if (drawConicalFocalGradientFillRect(devRect, clip, paint, shader, ctm)) {
+                    return
+                }
             }
         }
 
@@ -2973,6 +3196,7 @@ public class SkWebGpuDevice(
                 is RadialGradientRectDraw -> buildRadialGradientRectDrawResources(d)
                 is SweepGradientRectDraw -> buildSweepGradientRectDrawResources(d)
                 is ConicalGradientRectDraw -> buildConicalGradientRectDrawResources(d)
+                is ConicalFocalGradientRectDraw -> buildConicalFocalGradientRectDrawResources(d)
                 is ImageRectDraw -> buildImageRectDrawResources(d)
             }
         }
@@ -3284,6 +3508,17 @@ public class SkWebGpuDevice(
                         // (blend, filter, tile) so the future widening is
                         // structural-only.
                         setPipeline(bitmapPipelineFor(d.mode, SkFilterMode.kLinear, SkTileMode.kClamp))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    }
+                    is ConicalFocalGradientRectDraw -> {
+                        setPipeline(conicalFocalGradientPipelineFor(d.mode, d.tileMode))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
@@ -3617,6 +3852,47 @@ public class SkWebGpuDevice(
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = sweepGradientBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        return DrawResources(uniform = uniform, bindGroup = bindGroup)
+    }
+
+    private fun buildConicalFocalGradientRectDrawResources(
+        d: ConicalFocalGradientRectDraw,
+    ): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.conicalFocalGradientRectDraw",
+            ),
+        )
+        // Layout matches `conical_focal_gradient.wgsl` :
+        //   offset   0 : viewport      (vec4f, only x/y used)
+        //   offset  16 : affineRow0    (m00, m01, m02, _)
+        //   offset  32 : affineRow1    (m10, m11, m12, _)
+        //   offset  48 : focalScalars  (fP0, fP1, compensate, unswap)
+        //   offset  64 : flagsCount    (negateX, _, count_bits, _)
+        //   offset  80 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
+        //   offset 336 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
+        val packed = FloatArray(20 + MAX_GRADIENT_STOPS * 8)
+        packed[0] = width.toFloat(); packed[1] = height.toFloat()
+        packed[2] = 0f; packed[3] = 0f
+        packed[4] = d.affine00; packed[5] = d.affine01; packed[6] = d.affine02; packed[7] = 0f
+        packed[8] = d.affine10; packed[9] = d.affine11; packed[10] = d.affine12; packed[11] = 0f
+        packed[12] = d.fP0; packed[13] = d.fP1; packed[14] = d.compensateFocal; packed[15] = d.unswap
+        packed[16] = d.negateX; packed[17] = 0f
+        packed[18] = Float.fromBits(d.stopCount); packed[19] = 0f
+        System.arraycopy(d.stopPositions, 0, packed, 20, MAX_GRADIENT_STOPS * 4)
+        System.arraycopy(d.stopColors, 0, packed, 20 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = conicalFocalGradientBindGroupLayout,
                 entries = listOf(
                     BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
                 ),
@@ -4016,6 +4292,16 @@ public class SkWebGpuDevice(
          * for the kRadial sub-case).
          */
         const val CONICAL_GRADIENT_UNIFORM_SIZE: ULong = 560uL
+        /**
+         * G4.4.1 -- size of the conical focal-inside per-draw uniform :
+         *   viewport (16) + affineRow0 (16) + affineRow1 (16) +
+         *   focalScalars (16) + flagsCount (16) +
+         *   positions (16 * 16) + colors (16 * 16) = 592 bytes.
+         * 32 bytes larger than the kRadial conical uniform because the
+         * focal-frame affine takes 2 vec4f slots and the flags / focal
+         * scalars consume two more.
+         */
+        const val CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 592uL
         /**
          * G5.1 -- size of the bitmap-shader per-draw uniform :
          *   srcRect (16) + dstRect (16) + imageSize (16) + paintColor (16) = 64 bytes.
