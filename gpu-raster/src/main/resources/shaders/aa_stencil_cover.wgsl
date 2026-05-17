@@ -14,18 +14,22 @@
 // and we rely on the stencil winding count -- not edge orientation --
 // to decide inside vs outside.
 //
-// Coverage : the stencil-test already gated inside-vs-outside via the
-// winding count (set by the prior stencil pass). This shader only runs
-// on fragments inside the path, so it just needs the boundary AA falloff
-// -- coverage = clamp(minDist + 0.5, 0, 1), where minDist is the
-// unsigned distance to the nearest edge segment. Range inside the path
-// is [0.5, 1.0] : 0.5 right at the edge, 1.0 once we're more than half
-// a pixel inside. The OUTSIDE half of the AA boundary (coverage 0 -> 0.5
-// as the fragment crosses inwards) is lost because the stencil discards
-// count = 0 fragments before this shader runs. Net effect : boundaries
-// look "harder than the reference by half a pixel". Acceptable for
-// G3.3b.3a vs throwing ; a sample-mask AA or two-pass cover could close
-// the gap later.
+// Coverage : the stencil-test gates inside-vs-outside via the winding
+// count (set by the prior stencil pass). G3.3b.3d splits the cover
+// into TWO sub-draws sharing the same edge data :
+//   * fs_inside  runs on fragments the stencil counts as INSIDE the
+//                fill region. coverage = clamp(minDist + 0.5, 0, 1).
+//                Range [0.5, 1.0] : 0.5 right at the edge, 1.0 once
+//                we're more than half a pixel inside.
+//   * fs_outside runs on fragments the stencil counts as OUTSIDE the
+//                fill region (with the compare op flipped at the
+//                pipeline level). coverage = clamp(0.5 - minDist, 0, 1).
+//                Range [0.0, 0.5] : 0.5 right at the edge, 0.0 once
+//                we're more than half a pixel outside.
+// The two sub-draws are mutually exclusive at fragment level (stencil
+// makes each fragment go to exactly one), so they never double-cover.
+// Sum across the half-pixel boundary integrates to the correct AA
+// profile -- closes the outside-half AA loss of G3.3b.3a.
 //
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
@@ -48,10 +52,8 @@ fn vs_main(@location(0) pos: vec2f) -> @builtin(position) vec4f {
     return vec4f(ndc_x, ndc_y, 0.0, 1.0);
 }
 
-@fragment
-fn fs_main(@builtin(position) frag: vec4f) -> @location(0) vec4f {
+fn minSegmentDistance(p: vec2f) -> f32 {
     var minDist: f32 = 1.0e9;
-    let p = frag.xy;
     for (var i: u32 = 0u; i < uniforms.edgeCount; i = i + 1u) {
         let e = uniforms.edges[i];
         let ea = e.xy;
@@ -64,7 +66,22 @@ fn fs_main(@builtin(position) frag: vec4f) -> @location(0) vec4f {
         let d = length(p - closest);
         minDist = min(minDist, d);
     }
+    return minDist;
+}
+
+@fragment
+fn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {
+    let minDist = minSegmentDistance(frag.xy);
     let coverage = clamp(minDist + 0.5, 0.0, 1.0);
+    let c = uniforms.color;
+    let alpha = c.a * coverage;
+    return vec4f(c.rgb * alpha, alpha);
+}
+
+@fragment
+fn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {
+    let minDist = minSegmentDistance(frag.xy);
+    let coverage = clamp(0.5 - minDist, 0.0, 1.0);
     let c = uniforms.color;
     let alpha = c.a * coverage;
     return vec4f(c.rgb * alpha, alpha);

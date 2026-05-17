@@ -44,7 +44,7 @@ class ConcavePathsWebGpuTest {
                     "maxDiff=${cmp.maxChannelDiff}",
             )
             TestUtils.saveDebugImage(gpuBitmap, "concavepaths-gpu")
-            val floor = 98.85
+            val floor = 99.25
             assertTrue(
                 cmp.similarity >= floor,
                 "ConcavePathsGM regressed below floor : ${cmp.similarity}% < $floor%.",
