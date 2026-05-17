@@ -1,8 +1,15 @@
-// G6.1 present pass (identity variant) -- straight pixel copy from
-// intermediate to final, no colorspace transform. Used by callers that
-// want the raw device output for unit testing (cross-tests via
+// G6.1 / G6.2 present pass (identity variant) -- straight pixel copy
+// from intermediate to final, no colorspace transform. Used by callers
+// that want the raw device output for unit testing (cross-tests via
 // WebGpuSink pick `present_pass.wgsl` instead, which applies the
 // sRGB -> Rec.2020 transform).
+//
+// **G6.2.** The intermediate is now `RGBA16Float` instead of
+// `RGBA8Unorm`. Draw shaders still emit premul **sRGB-coded** values
+// (the F16 storage just buys sub-byte precision), so a straight
+// pixel-value copy still produces sRGB-coded bytes on the
+// `RGBA8Unorm` readback target -- exactly the bytes
+// `SkBitmapDevice` raster also produces.
 //
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 

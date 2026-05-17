@@ -1,5 +1,6 @@
-// G6.1 present pass -- sRGB-encoded sRGB-primary bytes -> Rec.2020
-// encoded bytes (matches `TestUtils.DM_REFERENCE_COLOR_SPACE`).
+// G6.1 / G6.2 present pass -- sRGB-encoded sRGB-primary intermediate
+// -> Rec.2020 encoded readback (matches
+// `TestUtils.DM_REFERENCE_COLOR_SPACE`).
 //
 // Reads each pixel of the intermediate render target with `textureLoad`
 // (1:1 pixel mapping, no sampling filter), applies the inverse sRGB
@@ -7,6 +8,13 @@
 // then re-encodes through the Rec.2020 OETF and writes to the final
 // render target. WebGpuSink's CPU loop (G6.0) is now redundant and
 // drops to a straight byte-to-bitmap repack.
+//
+// **G6.2.** The intermediate is now `RGBA16Float` instead of
+// `RGBA8Unorm` (see [SkWebGpuDevice.intermediateTexture]) but the
+// stored content convention is unchanged : draw shaders still emit
+// premul **sRGB-coded** values, the F16 format only buys sub-byte
+// precision in the intermediate. The transform chain below is
+// therefore identical to G6.1's.
 //
 // Vertex stage : full-screen Bjorke triangle, same pattern as G0's
 // clear_red.wgsl.

@@ -34,6 +34,11 @@
 // today, FillrectGradientGM, has 6 stops). A larger cap can be added
 // when a real GM exceeds it.
 //
+// G6.2 -- intermediate target is `RGBA16Float` ; output convention is
+// unchanged (premul sRGB-coded, lerp on premul stops). F16 gives sub-
+// byte precision on the lerp result and on subsequent blends ; no
+// colorspace switch.
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {

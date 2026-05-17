@@ -13,6 +13,10 @@
 // generic polygons is G3.3b. Existing AA-rect path stays on the
 // solid_color.wgsl pipeline (drawRect / drawPaint / drawFillRect).
 //
+// G6.2 -- intermediate target is `RGBA16Float` ; the output convention
+// is unchanged (premul sRGB-coded). The benefit of the format change
+// is sub-byte precision in the intermediate, not a colorspace switch.
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {
