@@ -1,4 +1,4 @@
-// G4.2 -- radial gradient for drawRect, kClamp tile mode only.
+// G4.2 / G4.2.1 -- radial gradient for drawRect, all 4 tile modes.
 //
 // Vertex stage : same full-screen Bjorke triangle as `linear_gradient.wgsl`.
 // Pair with `setScissorRect(...)` clipped to the rect's bbox so pixels
@@ -9,13 +9,19 @@
 // map to t in [0, 1] per the tile mode, then sample the stops table the
 // same way `linear_gradient.wgsl` does.
 //
-// kClamp formula (mirrors `lookupStop` / `lookupStopF16` in SkShader.kt) :
-//   t = clamp(t_raw, 0, 1)
+// Tile mode formulas (mirror `lookupStop` / `lookupStopF16` in
+// kanvas-skia/.../SkShader.kt -- identical to `linear_gradient.wgsl`) :
+//   kClamp  : t = clamp(t_raw, 0, 1)
+//   kRepeat : t = t_raw - floor(t_raw)            (always in [0, 1))
+//   kMirror : let u = t_raw * 0.5 ;
+//             let w = u - floor(u) ;              (in [0, 1))
+//             t = if (w < 0.5) (w * 2) else (2 - w * 2)
+//   kDecal  : if (t_raw outside [0, 1]) -> coverage = 0 (transparent)
+//             else t = t_raw
 //
-// kRepeat / kMirror / kDecal entry points are NOT included yet -- the
-// G4.2 slice is kClamp-only. They land in G4.2.1 (mirror the linear
-// shader's 4 fs_* entry points + the `linearGradientFragmentEntryPoint`
-// dispatcher).
+// Note : t_raw for a radial gradient is `length / radius` and so is
+// always >= 0 ; the kRepeat / kMirror formulas above remain correct
+// (floor(positive) is well-defined and matches the linear shader).
 //
 // `sample_stops_at` is copy-pasted from `linear_gradient.wgsl` rather
 // than factored across shaders -- the G4.2 plan explicitly defers any
@@ -99,4 +105,35 @@ fn fs_clamp(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let t_raw = compute_t_raw(pos);
     let t = clamp(t_raw, 0.0, 1.0);
     return sample_stops_at(t);
+}
+
+@fragment
+fn fs_repeat(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let t_raw = compute_t_raw(pos);
+    // t = t_raw - floor(t_raw) is always in [0, 1) for any sign.
+    let t = t_raw - floor(t_raw);
+    return sample_stops_at(t);
+}
+
+@fragment
+fn fs_mirror(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let t_raw = compute_t_raw(pos);
+    // Mirror formula : let u = t_raw * 0.5, w = fract(u) in [0, 1).
+    // t = if (w < 0.5) (w * 2) else (2 - w * 2) -- triangle wave with
+    // period 2, range [0, 1], peaks at odd integer t_raw.
+    let u = t_raw * 0.5;
+    let w = u - floor(u);
+    let t = select(2.0 - w * 2.0, w * 2.0, w < 0.5);
+    return sample_stops_at(t);
+}
+
+@fragment
+fn fs_decal(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let t_raw = compute_t_raw(pos);
+    // Outside [0, 1] -> fully transparent (premul (0, 0, 0, 0)).
+    // Inside -> straight t_raw, no clamp (it's already in range).
+    if (t_raw < 0.0 || t_raw > 1.0) {
+        return vec4f(0.0, 0.0, 0.0, 0.0);
+    }
+    return sample_stops_at(t_raw);
 }

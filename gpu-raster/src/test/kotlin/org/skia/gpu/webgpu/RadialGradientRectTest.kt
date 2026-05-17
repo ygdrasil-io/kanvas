@@ -96,6 +96,160 @@ class RadialGradientRectTest {
         assertNear(outside[2], 255, "outside.B", tol = 16)
     }
 
+    // G4.2.1 -- kRepeat / kMirror / kDecal exercise one new fragment
+    // entry point each. Pixel-center is at (x + 0.5, y + 0.5), so the
+    // distance values quoted below add a ~0.5 px offset.
+
+    @Test
+    fun `kRepeat tiles the radial gradient outside the first ring`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        // Centre (32, 32), radius = 10 px : 3 full periods fit between
+        // the centre and the rect edge (x = 62 -> distance 30 -> 3
+        // periods). Red at the start of each period (t = 0) ; blue at
+        // the end (t ~= 1) ; back to red at the next ring boundary.
+        val grad = SkRadialGradient.Make(
+            center = SkPoint(32f, 32f),
+            radius = 10f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kRepeat,
+        )
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        // Centre (pixel-center 32.5, 32.5 -- distance ~0.707, t = 0.07)
+        // : still mostly red.
+        val center = pixels.rgbaAt(32, 32)
+        assertTrue(center[0] in 200..255, "center.R mostly red, got ${center[0]}")
+        assertTrue(center[2] < 64, "center.B near zero, got ${center[2]}")
+
+        // End of period 0 along +x : x = 41, pixel-center 41.5 ->
+        // distance 9.5 -> t = 0.95, mostly blue.
+        val p0End = pixels.rgbaAt(41, 32)
+        assertTrue(p0End[0] < 64, "p0End.R near zero, got ${p0End[0]}")
+        assertTrue(p0End[2] >= 200, "p0End.B mostly blue, got ${p0End[2]}")
+
+        // Just past the period 0 / 1 boundary along +x : x = 43, pixel
+        // center 43.5 -> distance 11.5 -> t_raw = 1.15 -> t = 0.15,
+        // back to mostly red. This is the kRepeat-vs-kMirror discriminator
+        // : with kMirror the same x would be mostly blue (t = 0.85).
+        val p1Start = pixels.rgbaAt(43, 32)
+        assertTrue(p1Start[0] in 180..255, "p1Start.R mostly red, got ${p1Start[0]}")
+        assertTrue(p1Start[2] < 80, "p1Start.B mostly zero, got ${p1Start[2]}")
+    }
+
+    @Test
+    fun `kMirror reflects the radial gradient at each ring boundary`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        // Same setup as kRepeat above : centre (32, 32), radius = 10 px.
+        // Mirror : red->blue in ring 0, blue->red in ring 1, etc. Just
+        // past the ring 0/1 boundary the value reflects -- t_raw = 1.15
+        // -> mirror -> t = 1 - 0.15 = 0.85, still mostly blue.
+        val grad = SkRadialGradient.Make(
+            center = SkPoint(32f, 32f),
+            radius = 10f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kMirror,
+        )
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        // Centre : still mostly red.
+        val center = pixels.rgbaAt(32, 32)
+        assertTrue(center[0] in 200..255, "center.R mostly red, got ${center[0]}")
+        assertTrue(center[2] < 64, "center.B near zero, got ${center[2]}")
+
+        // End of ring 0 (x = 41, distance ~9.5, t = 0.95) : mostly blue.
+        val r0End = pixels.rgbaAt(41, 32)
+        assertTrue(r0End[0] < 64, "r0End.R near zero, got ${r0End[0]}")
+        assertTrue(r0End[2] >= 200, "r0End.B mostly blue, got ${r0End[2]}")
+
+        // Just past ring 0/1 boundary along +x : x = 43, distance ~11.5,
+        // t_raw = 1.15 -> mirror -> t = 0.85, still mostly blue.
+        // (kRepeat would give mostly red here -- this is the
+        // kMirror-vs-kRepeat discriminator.)
+        val r1Start = pixels.rgbaAt(43, 32)
+        assertTrue(r1Start[0] < 80, "r1Start.R near zero, got ${r1Start[0]}")
+        assertTrue(r1Start[2] in 180..255, "r1Start.B mostly blue, got ${r1Start[2]}")
+    }
+
+    @Test
+    fun `kDecal punches transparent outside the radial gradient`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        // Centre (32, 32), radius = 10 px. Rect is much larger : x and
+        // y in [2, 62]. Pixels with distance > radius are outside the
+        // gradient line and must be fully transparent (premul (0, 0, 0,
+        // 0)) -- compositing over white leaves white untouched.
+        val grad = SkRadialGradient.Make(
+            center = SkPoint(32f, 32f),
+            radius = 10f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kDecal,
+        )
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        // Inside the gradient : centre is mostly red.
+        val center = pixels.rgbaAt(32, 32)
+        assertTrue(center[0] in 200..255, "center.R mostly red, got ${center[0]}")
+        assertTrue(center[2] < 64, "center.B near zero, got ${center[2]}")
+
+        // Inside near radius : end of ring 0 along +x (x = 41,
+        // distance ~9.5, t = 0.95) : mostly blue.
+        val edge = pixels.rgbaAt(41, 32)
+        assertTrue(edge[0] < 64, "edge.R near zero, got ${edge[0]}")
+        assertTrue(edge[2] >= 200, "edge.B mostly blue, got ${edge[2]}")
+
+        // Outside the radius along +x : x = 50, distance ~17.5 -> t_raw
+        // > 1 -> transparent -> background white untouched.
+        val outside = pixels.rgbaAt(50, 32)
+        assertNear(outside[0], 255, "outside.R", tol = 16)
+        assertNear(outside[1], 255, "outside.G", tol = 16)
+        assertNear(outside[2], 255, "outside.B", tol = 16)
+
+        // Outside along -y, +x diagonal : (45, 18), distance ~19 ->
+        // transparent.
+        val outsideDiag = pixels.rgbaAt(45, 18)
+        assertNear(outsideDiag[0], 255, "outsideDiag.R", tol = 16)
+        assertNear(outsideDiag[1], 255, "outsideDiag.G", tol = 16)
+        assertNear(outsideDiag[2], 255, "outsideDiag.B", tol = 16)
+    }
+
     private fun assertNear(actual: Int, expected: Int, label: String, tol: Int) {
         val diff = kotlin.math.abs(actual - expected)
         assertTrue(diff <= tol, "$label : expected ~$expected (tol $tol), got $actual")
