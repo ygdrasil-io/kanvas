@@ -4,6 +4,14 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+# MkDocs / Dokka GFM site doc — sortie générée (`mkdocs build`) et sous-arbre
+# API produit par Dokka avant le build (`:math:dokkaGfm` → docs/api/math/).
+# Les sources MkDocs (docs/index.md, mkdocs.yml) sont commitées ; le contenu
+# API généré non.
+_site/
+docs/api/
+.venv*/
+
 # wgpu4k-native unpacks libWGPU-<version>.dylib next to the JVM cwd at
 # load time when system Java extension paths are not writable (typical
 # on modern macOS). Cf. ffi.LibraryLoaderKt.findLibraryPath in
