@@ -19,6 +19,21 @@
 // (ClearRedTest / RectFillCrossTest / TranslucentSrcOverTest /
 // BlendModeTest) stay byte-identical.
 //
+// G6.2 -- the intermediate render target is now `RGBA16Float` instead
+// of `RGBA8Unorm`. The shader output convention stays the same
+// (premul sRGB-coded) ; the only effect of the format change is that
+// intermediate values are no longer quantised to 8-bit, so blends and
+// gradient outputs preserve sub-byte precision. The present pass and
+// the identity pass interpret the F16 contents as sRGB-coded (same as
+// G6.1) so cross-test scores stay byte-equivalent.
+//
+// Option (a) of the G6.2 task description (linearise at shader output,
+// blend in linear) was tried first and dropped : the resulting linear
+// blending diverges substantially from the cross-test reference (which
+// is encoded-Rec.2020 blended via F16 raster). Option (b) -- this one
+// -- keeps the encoded blending math intact while still benefiting
+// from F16 precision in the intermediate.
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 // G3.1.1 -- extended uniform with optional inner-rect cutout for AA

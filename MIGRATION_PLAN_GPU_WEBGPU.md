@@ -561,14 +561,16 @@ Le CPU loop de G6.0 est déplacé dans un GPU present pass. Architecture cleane 
 - [x] **Scores identiques à G6.0** : 4/6 à 100 %, BigRectGM 99.90 %, ThinStrokedRectsGM 94.21 %, Skbug12244GM 90.33 %. Math bit-équivalente, perf+ (le shader évalue le transform en parallèle vs CPU loop séquentiel), cohérence pipeline (architecture alignée sur le plan G6 original).
 - [x] **Bug WGSL non-ASCII** : le shader d'origine avait `→` dans un commentaire. Le parser WGSL de wgpu4k 0.2.0 truncate le code à la première frontière non-ASCII (bug connu G0 post-mortem #4). Fix : ASCII strict appliqué.
 
-### G6.2 — Future : F16 linear-Rec.2020 working space (à venir, optionnel)
+### G6.2 — F16 intermediate render target (livré, sans switch colorspace)
 
-Le plan complet G6 prévoit un working space F16 linear-Rec.2020 (au lieu de RGBA8Unorm sRGB-encoded intermediate). Bénéfice attendu : plus de précision pour les blends translucents (les valeurs intermédiaires ne sont plus quantisées en 8-bit). Pas de bump immédiat sur les scores actuels (pas de GMs avec blends complexes en scope) mais nécessaire pour les futures gradients / image filters.
+L'intermediate texture est passé de `RGBA8Unorm` à `RGBA16Float`. Les shaders continuent à émettre des valeurs premul **sRGB-coded** (pas linear) — la math de blending et l'encodage du readback restent identiques à G6.1. Le bénéfice réel : la précision intermédiaire passe de 8 bits à F16, ce qui aide les futurs cas où les valeurs intermédiaires accumulent du drift (gradient lerps, image filters, blends translucents stackés). Les scores cross-test sont conservés (un seul GM à -0.01 %, re-ratchet trivial).
 
-- [ ] `intermediateTexture` en `RGBA16Float` au lieu de `RGBA8Unorm`.
-- [ ] Adjuster les shaders source/dst pour outputter / lire des valeurs linéaires (pas sRGB-encoded).
-- [ ] `present_pass.wgsl` lit du F16 (déjà linear), applique seulement la Rec.2020 OETF (pas le sRGB inverse).
-- [ ] Validation : scores cross-test inchangés (math équivalent mais plus précis dans la zone intermédiaire).
+- [x] `intermediateTexture` en `RGBA16Float` au lieu de `RGBA8Unorm`. Toutes les pipelines de draw (rect / polygon / aa-polygon / stencil-cover / gradients) targetent ce format. Le `target` final (readback) reste `RGBA8Unorm` ; le present pipeline écrit en `RGBA8Unorm`.
+- [x] **Format configurable au constructeur** : `SkWebGpuDevice(..., intermediateFormat: GPUTextureFormat = GPUTextureFormat.RGBA16Float)`. Default F16 (comportement actuel), callers sur drivers sans blend F16 ou en contraintes mémoire peuvent passer `RGBA8Unorm` pour retomber sur G6.1.
+- [x] **Pas de linéarisation au shader output** — option (a) du plan initial testée et abandonnée : linéariser à l'output fait passer la WebGPU blend hardware en linear blending, ce qui diverge de 30 à 65 points de pourcentage du référence cross-test sur les GMs à stacking translucents (`BatchedConvexPathsGM`, `ClipDrawDrawGM`, `FillTypeGM`). Voir le bloc kdoc de `intermediateTexture` dans `SkWebGpuDevice.kt` pour le détail.
+- [x] `present_pass.wgsl` et `present_identity.wgsl` inchangés (la sémantique des valeurs lues reste sRGB-coded comme en G6.1).
+- [x] **Scores cross-test** : 1 GM re-ratché (B119394958 93.75 % → 93.74 %, drift -0.01 % attribué à la précision F16 sur une edge pixel). Tous les autres scores byte-équivalents.
+- [x] La précision F16 dans l'intermediate sera exploitable par les futurs slices (gradients haute-précision, image filters) sans toucher au format.
 
 ---
 

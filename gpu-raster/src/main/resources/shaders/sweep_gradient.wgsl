@@ -42,6 +42,10 @@
 // MAX_STOPS = 16 matches the linear / radial shaders so the host-side
 // packing code can stay symmetric.
 //
+// G6.2 -- intermediate target is `RGBA16Float` ; output convention is
+// unchanged (premul sRGB-coded). F16 gives sub-byte precision in the
+// intermediate ; no colorspace switch.
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {

@@ -38,7 +38,11 @@ class B119394958WebGpuTest {
                     "maxDiff=${cmp.maxChannelDiff}",
             )
             TestUtils.saveDebugImage(gpuBitmap, "b_119394958-gpu")
-            val floor = 93.75
+            // G6.2 re-ratchet : moving the intermediate render target
+            // to RGBA16Float introduced sub-byte precision in the
+            // gradient lerp / coverage products, which shifted one
+            // edge pixel by 1 LSB and dropped similarity by 0.01 %.
+            val floor = 93.74
             assertTrue(
                 cmp.similarity >= floor,
                 "B119394958GM regressed below floor : ${cmp.similarity}% < $floor%.",

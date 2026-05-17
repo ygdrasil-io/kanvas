@@ -124,6 +124,17 @@ public class SkWebGpuDevice(
      * else stays on the raw sRGB default.
      */
     private val applyColorspaceTransform: Boolean = false,
+    /**
+     * G6.2 — backing format of the intermediate render target. All draw
+     * pipelines target this format. Default `RGBA16Float` (F16) buys
+     * sub-byte precision on intermediate blends, gradient stop lerps,
+     * and future image filters. Callers on drivers that don't support
+     * F16 blending (or memory-constrained backends) can pass
+     * `RGBA8Unorm` to fall back to the G6.1 behaviour. The final
+     * readback target stays `RGBA8Unorm` regardless ; this only
+     * affects the intermediate.
+     */
+    private val intermediateFormat: GPUTextureFormat = GPUTextureFormat.RGBA16Float,
 ) : SkDevice, AutoCloseable {
 
     /**
@@ -142,11 +153,36 @@ public class SkWebGpuDevice(
      * `textureLoad` and writes the colorspace-converted result to
      * `target.colorTexture`. Usage = RenderAttachment (for draws) +
      * TextureBinding (for the present pass).
+     *
+     * **G6.2** : format is `RGBA16Float` (was `RGBA8Unorm` in G6.1).
+     * Content convention is unchanged -- draw shaders still emit
+     * **premul sRGB-coded** values and the present pass / identity
+     * pass still interpret the contents as sRGB-coded on readback.
+     * The format change only buys sub-byte precision in the
+     * intermediate, so blends and gradient stop lerps no longer
+     * quantise to 8-bit before the readback re-encoding.
+     *
+     * **Why not linear ?** The original G6.2 task description had the
+     * shaders linearise their source colours so the F16 attachment
+     * would carry premul-linear values (a true linear working space).
+     * In practice that flips the WebGPU blend hardware from
+     * sRGB-coded blending to linear blending, which diverges from
+     * the cross-test reference (rendered by `RasterSinkF16` whose
+     * F16 raster blends in the destination's encoding space, similar
+     * in shape to sRGB-coded blending and matched by the prior
+     * RGBA8Unorm-intermediate output to within 0.06% on
+     * `BatchedConvexPathsGM`). Switching to true-linear blending
+     * regresses translucent-stacking GMs by 30-65 percentage points
+     * which violates the G6.2 ratchet contract (math equivalence ;
+     * scores unchanged). The compromise here is to keep the format
+     * upgrade -- precision and future-readiness for image filters /
+     * higher-precision gradients -- while preserving the existing
+     * blending math byte-for-byte.
      */
     private val intermediateTexture: GPUTexture = context.device.createTexture(
         TextureDescriptor(
             size = Extent3D(width = width.toUInt(), height = height.toUInt()),
-            format = GPUTextureFormat.RGBA8Unorm,
+            format = intermediateFormat,
             usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
             label = "SkWebGpuDevice.intermediate",
         ),
@@ -506,7 +542,7 @@ public class SkWebGpuDevice(
                         entryPoint = "fs_main",
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -571,7 +607,7 @@ public class SkWebGpuDevice(
                         entryPoint = "fs_main",
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -602,7 +638,7 @@ public class SkWebGpuDevice(
                 entryPoint = "fs_main",
                 targets = listOf(
                     ColorTargetState(
-                        format = GPUTextureFormat.RGBA8Unorm,
+                        format = intermediateFormat,
                         blend = blendAddBoth(GPUBlendFactor.One, GPUBlendFactor.Zero),
                         writeMask = GPUColorWrite.None,
                     ),
@@ -663,7 +699,7 @@ public class SkWebGpuDevice(
                         entryPoint = "fs_main",
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -750,7 +786,7 @@ public class SkWebGpuDevice(
                         entryPoint = entryPoint,
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -871,7 +907,7 @@ public class SkWebGpuDevice(
                         entryPoint = "fs_main",
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -933,7 +969,7 @@ public class SkWebGpuDevice(
                         entryPoint = linearGradientFragmentEntryPoint(tileMode),
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -992,7 +1028,7 @@ public class SkWebGpuDevice(
                         entryPoint = radialGradientFragmentEntryPoint(tileMode),
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -1053,7 +1089,7 @@ public class SkWebGpuDevice(
                         entryPoint = sweepGradientFragmentEntryPoint(tileMode),
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -1143,7 +1179,7 @@ public class SkWebGpuDevice(
                         entryPoint = entryPoint,
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),
@@ -1246,7 +1282,7 @@ public class SkWebGpuDevice(
                         entryPoint = entryPoint,
                         targets = listOf(
                             ColorTargetState(
-                                format = GPUTextureFormat.RGBA8Unorm,
+                                format = intermediateFormat,
                                 blend = blendStateFor(mode),
                             ),
                         ),

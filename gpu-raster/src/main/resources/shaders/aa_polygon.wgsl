@@ -22,6 +22,10 @@
 // even with multiple Bezier curves. Polygons exceeding this fall back
 // to the non-AA polygon pipeline (SkWebGpuDevice.drawPath).
 //
+// G6.2 -- intermediate target is `RGBA16Float` ; the output convention
+// is unchanged (premul sRGB-coded). The benefit is sub-byte precision
+// in the intermediate, not a colorspace switch.
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {
