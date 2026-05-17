@@ -110,6 +110,209 @@ def process(text: str) -> str:
     return text
 
 
+# -- Classification par famille pour le grouping nav (awesome-pages) ---------
+
+# Pour le package `org.graphiks.math`. Chaque famille déclare :
+#  - `classes`  : noms exacts des sous-dirs Dokka (classes/objets/enums)
+#  - `prefixes` : préfixes de noms de fichiers top-level (fns + constantes)
+#  - `files`    : noms exacts de fichiers top-level non-couverts par les préfixes
+# Ordre dans le dict = ordre dans la nav.
+FAMILIES: dict[str, dict[str, list[str]]] = {
+    "Geometry": {
+        "classes": [
+            "-sk-point", "-sk-i-point", "-sk-vector", "-sk-i-vector",
+            "-sk-point3", "-sk-rect", "-sk-i-rect", "-sk-size", "-sk-i-size",
+        ],
+        "prefixes": [],
+        "files": [],
+    },
+    "Matrix": {
+        "classes": ["-sk-matrix", "-sk-m44"],
+        "prefixes": [],
+        "files": [],
+    },
+    "Vector N-D": {
+        "classes": ["-sk-v2", "-sk-v3", "-sk-v4"],
+        "prefixes": [],
+        "files": ["times.md"],  # Float.times(SkV2/3/4) extension operators
+    },
+    "Color": {
+        "classes": [
+            "-sk-color", "-sk-alpha", "-sk-color4f", "-sk-p-m-color",
+            "-sk-color-matrix", "-sk-color-channel", "-sk-color-channel-flag",
+        ],
+        "prefixes": [
+            "-sk-color-set-", "-sk-color-get-",
+            "-sk-color-to-h-s-v", "-sk-h-s-v-to-color", "-sk-r-g-b-to-h-s-v",
+            "-sk-pre-multiply-",
+            "-s-k_-alpha-",       # SK_AlphaOPAQUE / SK_AlphaTRANSPARENT
+            "-s-k_-color-",       # SK_ColorBLACK / etc.
+        ],
+        "files": ["color-to-r-g-b565.md"],
+    },
+    "Scalar": {
+        "classes": ["-sk-scalar"],
+        "prefixes": [
+            "-sk-scalar-",
+            "-s-k_-scalar",        # SK_Scalar1 / SK_ScalarPI / etc.
+            "-sk-degrees-to-radians", "-sk-radians-to-degrees",
+            "-sk-double-to-scalar", "-sk-float-to-scalar", "-sk-int-to-",
+            "-sk-scalars-equal",
+        ],
+        "files": [],
+    },
+    "Pathops (double-precision)": {
+        "classes": ["-sk-d-point", "-sk-d-vector", "-sk-d-line"],
+        "prefixes": [
+            "-almost-", "-not-almost-",
+            "-roughly-equal-ulps", "-ulps-distance",
+            "approximately_", "precisely_", "roughly_",
+            "-b-u-m-p_-e-p-s-i-l-o-n",
+            "-d-b-l_-e-p-s-i-l-o-n",
+            "-f-l-t_-e-p-s-i-l-o-n",
+            "-m-o-r-e_-r-o-u-g-h_-e-p-s-i-l-o-n",
+            "-r-o-u-g-h_-e-p-s-i-l-o-n",
+            "-w-a-y_-r-o-u-g-h_-e-p-s-i-l-o-n",
+            "-sk-d-interp", "-sk-d-side", "-sk-d-sign", "-sk-pin-t",
+        ],
+        "files": ["between.md", "more_roughly_equal.md", "zero_or_one.md"],
+    },
+    "Skcms (color management)": {
+        "classes": ["-skcms-transfer-function", "-skcms-matrix3x3", "-skcms-matrix3x4"],
+        "prefixes": [],
+        "files": [],
+    },
+}
+
+
+def classify(name: str, is_dir: bool) -> str | None:
+    """Renvoie le nom de la famille de `name`, ou None si non classifié."""
+    for fam, rules in FAMILIES.items():
+        if is_dir:
+            if name in rules["classes"]:
+                return fam
+        else:
+            if name in rules["files"]:
+                return fam
+            for prefix in rules["prefixes"]:
+                if name.startswith(prefix):
+                    return fam
+    return None
+
+
+def generate_package_pages(pkg_dir: Path) -> str:
+    """Construit le YAML `.pages` pour le package root avec grouping par famille."""
+    entries: list[tuple[str, bool]] = []
+    for p in sorted(pkg_dir.iterdir()):
+        if p.name in {"index.md", "package-list", ".pages"}:
+            continue
+        if p.is_dir():
+            entries.append((p.name, True))
+        elif p.suffix == ".md":
+            entries.append((p.name, False))
+
+    grouped: dict[str, list[tuple[str, bool]]] = {fam: [] for fam in FAMILIES}
+    other: list[tuple[str, bool]] = []
+    for name, is_dir in entries:
+        fam = classify(name, is_dir)
+        if fam is None:
+            other.append((name, is_dir))
+        else:
+            grouped[fam].append((name, is_dir))
+
+    def sort_key(t: tuple[str, bool]) -> tuple[int, str]:
+        # Classes (dirs) avant les helpers/constantes (fichiers), puis tri alpha
+        # — mais on insère un mini-tri sur les constantes pour qu'elles soient
+        # en fin de famille (préfixe `-s-k_` chez Dokka).
+        name, is_dir = t
+        if is_dir:
+            return (0, name)
+        if name.startswith("-s-k_"):
+            return (2, name)  # constantes SK_X tout à la fin
+        return (1, name)
+
+    lines = ["nav:", "  - index.md"]
+    for fam, items in grouped.items():
+        if not items:
+            continue
+        lines.append(f'  - "{fam}":')
+        for name, _ in sorted(items, key=sort_key):
+            lines.append(f"    - {name}")
+    if other:
+        lines.append('  - "Other":')
+        for name, _ in sorted(other, key=sort_key):
+            lines.append(f"    - {name}")
+    return "\n".join(lines) + "\n"
+
+
+# Un nom Kotlin de package qualifié : `org.graphiks.math`, `kotlin.collections`...
+# (par opposition aux noms Dokka URL-encoded comme `-sk-point`, `-companion`).
+RE_KOTLIN_PACKAGE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+
+
+RE_H1 = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
+
+
+def extract_h1(index_md: Path) -> str | None:
+    """Renvoie le premier H1 d'un index.md, ou None si introuvable."""
+    if not index_md.is_file():
+        return None
+    m = RE_H1.search(index_md.read_text(encoding="utf-8"))
+    return m.group(1) if m else None
+
+
+def write_pages_files(api_root: Path) -> int:
+    """Écrit les `.pages` aux niveaux pertinents. Renvoie le nombre de fichiers."""
+    n = 0
+
+    # Racine API : titre simple.
+    (api_root / ".pages").write_text("title: API\n", encoding="utf-8")
+    n += 1
+
+    # Niveau module (`docs/api/<module>/`) : titre = `:<module>` (convention Gradle).
+    for module_dir in sorted(api_root.iterdir()):
+        if not module_dir.is_dir():
+            continue
+        (module_dir / ".pages").write_text(f"title: ':{module_dir.name}'\n", encoding="utf-8")
+        n += 1
+
+    # Package roots : tout dir dont le nom matche un nom de package Kotlin
+    # (`org.graphiks.math`, etc.). Y emballe `.pages` avec le grouping par
+    # famille + titre `package`.
+    for pkg_dir in api_root.rglob("*"):
+        if not pkg_dir.is_dir():
+            continue
+        if not RE_KOTLIN_PACKAGE.match(pkg_dir.name):
+            continue
+        body = f"title: {pkg_dir.name}\n" + generate_package_pages(pkg_dir)
+        (pkg_dir / ".pages").write_text(body, encoding="utf-8")
+        n += 1
+
+        # Pour chaque classe sous le package : extrait l'H1 de son index.md et
+        # nomme la section avec ce nom (sinon MkDocs affiche le nom URL-encoded
+        # tel quel : "sk i point" au lieu de "SkIPoint").
+        for class_dir in pkg_dir.iterdir():
+            if not class_dir.is_dir() or not class_dir.name.startswith("-"):
+                continue
+            title = extract_h1(class_dir / "index.md")
+            if not title:
+                continue
+            (class_dir / ".pages").write_text(f"title: {title}\n", encoding="utf-8")
+            n += 1
+            # Récursif aux companion / sous-classes
+            for sub in class_dir.rglob("index.md"):
+                sub_dir = sub.parent
+                if sub_dir == class_dir:
+                    continue
+                if not sub_dir.name.startswith("-"):
+                    continue
+                sub_title = extract_h1(sub)
+                if sub_title:
+                    (sub_dir / ".pages").write_text(f"title: {sub_title}\n", encoding="utf-8")
+                    n += 1
+    return n
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(f"usage: {argv[0]} <dir>", file=sys.stderr)
@@ -124,12 +327,33 @@ def main(argv: list[str]) -> int:
     for md in root.rglob("*.md"):
         original = md.read_text(encoding="utf-8")
         cleaned = process(original)
+
+        # Patch h1 des fichiers "constructeur" : Dokka génère par classe un
+        # `-<class>.md` au stub `# <Class>\nconstructor(...)`. Le h1 duplique
+        # le nom de classe et apparaît deux fois dans la nav (la classe + sa
+        # sous-section constructor portent le même label). On renomme.
+        if md.stem == md.parent.name and md.parent.name.startswith("-"):
+            cleaned = re.sub(r"^#\s+.+$", "# constructor", cleaned, count=1, flags=re.MULTILINE)
+
         n_processed += 1
         if cleaned != original:
             md.write_text(cleaned, encoding="utf-8")
             n_changed += 1
 
     print(f"Processed {n_processed} files, modified {n_changed}.")
+
+    # Génère les `.pages` files pour awesome-pages — root API si on est appelé
+    # sur le rep API ; sinon, sur le rep passé.
+    # Heuristique : on prend le parent commun des `index.md` qui ressemblent à
+    # une racine API. Plus simple : si l'arg contient `api/`, prendre l'ancêtre
+    # qui se nomme `api`. Sinon utiliser `root`.
+    api_root = root
+    for ancestor in [root, *root.parents]:
+        if ancestor.name == "api":
+            api_root = ancestor
+            break
+    n_pages = write_pages_files(api_root)
+    print(f"Wrote {n_pages} .pages files under {api_root}.")
     return 0
 
 

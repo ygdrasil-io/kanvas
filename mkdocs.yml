@@ -11,9 +11,11 @@ theme:
   name: material
   features:
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
-    - navigation.expand
+    - navigation.indexes
     - navigation.top
+    - toc.follow
     - search.suggest
     - search.highlight
     - content.code.copy
@@ -45,3 +47,9 @@ markdown_extensions:
 
 plugins:
   - search
+  # awesome-pages — laisse le post-processeur générer .pages files dans
+  # docs/api/ pour : (1) renommer les sections, (2) regrouper les ~30 classes
+  # et ~180 helpers top-level en familles, (3) collapser le doublon math/math/
+  # introduit par Dokka.
+  - awesome-pages:
+      collapse_single_pages: true
