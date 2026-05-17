@@ -26,7 +26,11 @@ Prérequis : Python 3 + `pip install mkdocs-material`.
 mkdir -p docs/api/math
 cp -r math/build/dokka/gfm/. docs/api/math/
 
-# 3. Sert localement (http://localhost:8000)
+# 3. Nettoie les artefacts Dokka non-standard (breadcrumbs `//[...]/`,
+#    tags `[jvm]\`, signatures en code blocks `kotlin)
+python docs/scripts/postprocess_dokka_gfm.py docs/api/math
+
+# 4. Sert localement (http://localhost:8000)
 mkdocs serve
 ```
 
@@ -36,6 +40,19 @@ Pour un build statique :
 mkdocs build
 open _site/index.html
 ```
+
+## Post-traitement GFM
+
+Dokka 2.2.0 (V1) émet du markdown avec des patterns non-standard qui rendent mal sous un parseur GFM générique :
+
+| Pattern Dokka | Rendu sans post-process | Après post-process |
+|---|---|---|
+| `//[name](url)/[name](url)/` (breadcrumb) | Texte brut avec `//` visible | Supprimé (MkDocs Material a sa propre nav) |
+| `[jvm]\` (platform marker) | `[jvm]\` en clair | Supprimé |
+| `fun foo(a: [Float](url)): [Bool](url)` (signature) | Paragraphe texte avec liens | Code block `` ```kotlin `` avec coloration |
+| `- \n   item` (liste mal indentée) | Espacement parasite | Compact |
+
+Le script [`scripts/postprocess_dokka_gfm.py`](scripts/postprocess_dokka_gfm.py) normalise tout ça. Idempotent (relancer ne fait rien de plus).
 
 ## Déploiement (GitHub Pages)
 
