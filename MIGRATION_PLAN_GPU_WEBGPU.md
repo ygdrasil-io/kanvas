@@ -410,9 +410,21 @@ Les deux sub-draws sont mutuellement exclusifs au niveau fragment (le stencil ai
 - [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
 - [ ] **Tests futurs** : `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family, `FillTypePerspGM`.
 
-### G3.4 — Stroke générique via SkStroker (à venir, après G3.3b)
+### G3.4.1 — Stroke générique via SkStroker (skeleton + premier GM) ✅
 
-- [ ] **Stroke** — réutilise `SkStroker` (Phase 3c master) côté CPU pour produire le path outline → tessellate via G3.3 comme un fill. Débloque les strokes non-rect (paths) + AA hairlines correctes. BigRectGM monte alors au-dessus de 85%.
+Lift le throw `require(paint.style == kFill_Style)` sur `drawPath`. Quand `paint.style` n'est pas Fill, on appelle `SkStroker.fromPaint(paint, resScale).stroke(path)` en source-space pour produire l'outline path, puis on récurse dans `drawPath` avec une copie du paint forcée à `kFill_Style`. Le CTM s'applique ensuite à l'outline pendant la rasterisation, comme côté CPU (`SkBitmapDevice.drawPath`).
+
+- [x] **`drawPath` dispatch** : retire le `require(kFill_Style)`. `kStroke_Style` → outline → recurse fill. `kStrokeAndFill_Style` → fill puis outline → recurse fill (la séquence canonique Skia).
+- [x] **`resScale`** : `ctm.getMaxScale().coerceAtLeast(1f)` (même formule que `SkBitmapDevice`). Garantit que le chord error du flattening en source-space reste sous 0.25 px en device-space sous CTM x1000.
+- [x] **Routing aval** : l'outline d'un contour fermé est multi-contour (outer + reversed inner) → stencil-and-cover kWinding (G3.3b.2b/G3.3b.3a). L'outline d'un contour ouvert est single-contour concave (left + cap + reversed-right + cap) → AA stencil-and-cover via détection convexité (G3.3b.3a.2). Le shader/pipeline existant traite tout.
+- [x] **Test** : [CubicStrokeWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CubicStrokeWebGpuTest.kt) — 3 strokes AA cubic Bezier (sub-1 % stroke-width variation). Score **98.57 %**. Premier GM non-rect stroke qui ne throw plus.
+
+### G3.4 — Reste à faire (caps/joins, hairlines, plus de GMs)
+
+- [ ] **Caps** : butt OK (par défaut du flatten polyline) ; square + round caps livrés par `SkStroker` mais à valider sur GMs ciblés (`StrokeRectGM`, `OverStrokeGM`).
+- [ ] **Joins** : miter avec bevel fallback OK ; bevel + round joins à valider (`InnerJoinGeometryGM`, `FatPathFillGM`).
+- [ ] **Hairlines** (`strokeWidth ≤ 0`) : `SkStroker` les traite comme 1-unit en source-space (pas vrai hairline 1-device-pixel). Pour `BigRectGM` à 99.90 % les ~40 pixels résiduels viennent probablement de là. Hairline-true devrait être routé hors-stroker (1-pixel-wide AA line shader, ou similaire).
+- [ ] **Tests futurs** : `OverStrokeGM`, `EmptyStrokeGM`, `StrokeRectGM`, `ScaledStrokesGM`, `ArcOfZorroGM`.
 
 ### Vérification G3
 - [x] G3.1 : 4 tests neufs (3 unit stroke + 1 cross-test BigRectGM 70.7%). Stroke axis-aligned débloqué.
@@ -428,7 +440,8 @@ Les deux sub-draws sont mutuellement exclusifs au niveau fragment (le stencil ai
 - [x] G3.3b.3b : kEvenOdd + inverse fill types via `coverPipelineCache: Pair<SkBlendMode, SkPathFillType>`. FillTypeGM **99.55 %** (4×4 grille des 4 fill types × scales × AA).
 - [x] G3.3b.3c : 4 cross-tests neufs (AnalyticAntialiasInverseGM 99.98 %, PathInvFillGM 99.50 %, ConvexLineOnlyPathsFillGM 98.75 %, Crbug1472747GM 98.16 %) avg **99.10 %** — zéro changement device, élargissement du harness post-G3.3b.3b sur inverse fills + kEvenOdd multi-contour conic.
 - [x] G3.3b.3d : two-pass AA cover (inside + outside) ferme la perte du demi-pixel extérieur sur stencil-and-cover. ConcavePathsGM **98.90 → 99.31 (+0.41 %)**.
-- [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
+- [x] G3.4.1 : SkStroker integration skeleton. drawPath accepte kStroke/kStrokeAndFill via outline → recurse fill. CubicStrokeGM 98.57 % (premier GM non-rect stroke).
+- [ ] G3.4 : caps/joins variants, hairlines bit-exact, plus de GMs (StrokeRectGM, ScaledStrokesGM, ArcOfZorroGM).
 
 ---
 
