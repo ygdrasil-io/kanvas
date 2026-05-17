@@ -35,10 +35,8 @@
 //             t = if (w < 0.5) (w * 2) else (2 - w * 2)
 //   kDecal  : if (t_raw outside [0, 1]) -> coverage = 0 (transparent)
 //             else t = t_raw
-// Today only fs_clamp is dispatched by the host ; the other 3 entry
-// points are kept in lockstep with the radial / sweep shaders so the
-// G4.4.1 follow-up that widens the dispatch gate is a no-op on the
-// shader side. (For the kRadial sub-case specifically the tile-mode
+// G4.4.2 widened the host dispatch gate so all 4 entry points are
+// reachable for the kRadial sub-case. (For kRadial the tile-mode
 // formulas are well-defined ; the CPU SkConicalGradient.kRadial branch
 // already routes through the same lookupStop entry.)
 //

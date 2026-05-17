@@ -110,6 +110,160 @@ class ConicalGradientRectTest {
         assertNear(outside[2], 255, "outside.B", tol = 16)
     }
 
+    // G4.4.2 -- kRepeat / kMirror / kDecal exercise one new fragment
+    // entry point each on the kRadial conical pipeline. Pixel-center is
+    // at (x + 0.5, y + 0.5), so the distance values quoted below add a
+    // ~0.5 px offset. The setup mirrors the radial kRepeat / kMirror /
+    // kDecal tests (same period geometry) -- the kRadial conical is a
+    // rotationally-symmetric ring family and behaves like radial for
+    // (r0, r1) = (0, R).
+
+    @Test
+    fun `kRepeat tiles the conical kRadial gradient outside the first ring`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        // Centre (32, 32), r0 = 0, r1 = 10 px : t_raw = distance / 10.
+        // - Centre (distance ~0.7) : t ~ 0.07 -> mostly red.
+        // - End of period 0 (x = 41, distance ~9.5) : t = 0.95 -> blue.
+        // - Just past period 0/1 boundary (x = 43, distance ~11.5,
+        //   t_raw = 1.15) : kRepeat -> t = 0.15 -> back to mostly red.
+        //   (kMirror would give mostly blue : kRepeat-vs-kMirror disc.)
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(32f, 32f), startRadius = 0f,
+            end = SkPoint(32f, 32f), endRadius = 10f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kRepeat,
+        )!!
+        assertTrue(
+            grad.getType() == SkConicalGradient.Type.kRadial,
+            "fixture must be kRadial, got ${grad.getType()}",
+        )
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        val center = pixels.rgbaAt(32, 32)
+        assertTrue(center[0] in 200..255, "center.R mostly red, got ${center[0]}")
+        assertTrue(center[2] < 64, "center.B near zero, got ${center[2]}")
+
+        val p0End = pixels.rgbaAt(41, 32)
+        assertTrue(p0End[0] < 64, "p0End.R near zero, got ${p0End[0]}")
+        assertTrue(p0End[2] >= 200, "p0End.B mostly blue, got ${p0End[2]}")
+
+        val p1Start = pixels.rgbaAt(43, 32)
+        assertTrue(p1Start[0] in 180..255, "p1Start.R mostly red, got ${p1Start[0]}")
+        assertTrue(p1Start[2] < 80, "p1Start.B mostly zero, got ${p1Start[2]}")
+    }
+
+    @Test
+    fun `kMirror reflects the conical kRadial gradient at each ring boundary`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        // Same geometry as kRepeat above. Mirror : red->blue in ring 0,
+        // blue->red in ring 1, etc. Just past ring 0/1 boundary
+        // (x = 43, t_raw = 1.15) -> mirror -> t = 0.85, still mostly blue.
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(32f, 32f), startRadius = 0f,
+            end = SkPoint(32f, 32f), endRadius = 10f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kMirror,
+        )!!
+        assertTrue(
+            grad.getType() == SkConicalGradient.Type.kRadial,
+            "fixture must be kRadial, got ${grad.getType()}",
+        )
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        val center = pixels.rgbaAt(32, 32)
+        assertTrue(center[0] in 200..255, "center.R mostly red, got ${center[0]}")
+        assertTrue(center[2] < 64, "center.B near zero, got ${center[2]}")
+
+        val r0End = pixels.rgbaAt(41, 32)
+        assertTrue(r0End[0] < 64, "r0End.R near zero, got ${r0End[0]}")
+        assertTrue(r0End[2] >= 200, "r0End.B mostly blue, got ${r0End[2]}")
+
+        // kRepeat-vs-kMirror discriminator : at x = 43, kMirror keeps blue.
+        val r1Start = pixels.rgbaAt(43, 32)
+        assertTrue(r1Start[0] < 80, "r1Start.R near zero, got ${r1Start[0]}")
+        assertTrue(r1Start[2] in 180..255, "r1Start.B mostly blue, got ${r1Start[2]}")
+    }
+
+    @Test
+    fun `kDecal punches transparent outside the conical kRadial gradient`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        // Centre (32, 32), r0 = 0, r1 = 10 px. Rect spans [2, 62] so
+        // most pixels have t_raw > 1 -> transparent -> background white.
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(32f, 32f), startRadius = 0f,
+            end = SkPoint(32f, 32f), endRadius = 10f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kDecal,
+        )!!
+        assertTrue(
+            grad.getType() == SkConicalGradient.Type.kRadial,
+            "fixture must be kRadial, got ${grad.getType()}",
+        )
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        // Inside the gradient : centre is mostly red.
+        val center = pixels.rgbaAt(32, 32)
+        assertTrue(center[0] in 200..255, "center.R mostly red, got ${center[0]}")
+        assertTrue(center[2] < 64, "center.B near zero, got ${center[2]}")
+
+        // End of ring 0 along +x : x = 41, distance ~9.5, t ~ 0.95 -> blue.
+        val edge = pixels.rgbaAt(41, 32)
+        assertTrue(edge[0] < 64, "edge.R near zero, got ${edge[0]}")
+        assertTrue(edge[2] >= 200, "edge.B mostly blue, got ${edge[2]}")
+
+        // Outside the radius along +x : x = 50, distance ~17.5 -> t_raw
+        // > 1 -> transparent -> background white untouched.
+        val outside = pixels.rgbaAt(50, 32)
+        assertNear(outside[0], 255, "outside.R", tol = 16)
+        assertNear(outside[1], 255, "outside.G", tol = 16)
+        assertNear(outside[2], 255, "outside.B", tol = 16)
+
+        // Outside along +x, -y diagonal : (45, 18), distance ~19 -> transparent.
+        val outsideDiag = pixels.rgbaAt(45, 18)
+        assertNear(outsideDiag[0], 255, "outsideDiag.R", tol = 16)
+        assertNear(outsideDiag[1], 255, "outsideDiag.G", tol = 16)
+        assertNear(outsideDiag[2], 255, "outsideDiag.B", tol = 16)
+    }
+
     @Test
     fun `shallow grey-to-grey conical matches the cross-test fixture`() {
         val context = WebGpuContext.createOrNull()
