@@ -1,6 +1,7 @@
-// G4.3 -- sweep gradient for drawRect, all 4 tile modes wired but only
-// kClamp is dispatched today (the other entry points exist for cache
-// readiness, mirroring the linear / radial layout).
+// G4.3 / G4.3.1 -- sweep gradient for drawRect, all 4 tile modes.
+// G4.3 wired only kClamp through the dispatch ; G4.3.1 opens the other
+// 3 entry points (fs_repeat / fs_mirror / fs_decal) without touching the
+// shader -- they were already in place since G4.3 for cache readiness.
 //
 // Vertex stage : same full-screen Bjorke triangle as `linear_gradient.wgsl`
 // and `radial_gradient.wgsl`. Pair with `setScissorRect(...)` clipped to
