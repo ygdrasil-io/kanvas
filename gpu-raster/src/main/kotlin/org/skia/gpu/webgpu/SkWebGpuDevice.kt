@@ -621,13 +621,12 @@ public class SkWebGpuDevice(
      * and the paint scale folded into the sampled colour (premul vec4f ;
      * defaults to `(1, 1, 1, 1)` when the paint is null).
      *
-     * The dispatch gate in [drawImageRect] enforces the G5.1 scope :
-     *  - filter = `SkFilterMode.kLinear`
-     *  - tile mode = `SkTileMode.kClamp` (sampler ClampToEdge)
-     *  - blend mode = `SkBlendMode.kSrcOver`
-     * Other combinations fall through to the existing G5.x TODO -- they
-     * will land as follow-up slices (kNearest sampler, repeat / mirror /
-     * decal tile modes, additional blend modes, paint-shader-as-bitmap).
+     * G5.1.1 -- the (filter, tile) pair is now carried per-draw so the
+     * dispatch gate can route `kNearest` and the non-clamp tile modes
+     * through the same pipeline cache. The blend mode (inherited
+     * `PendingDraw.mode`) is also widened to the 4 modes WebGPU
+     * expresses natively (kClear / kSrc / kSrcOver / kDstOver via
+     * [blendStateFor]).
      *
      * Inherited `r/g/b/a` carry the paint's solid colour (placeholder ;
      * the fragment shader sources colour from the texture, the rgba
@@ -640,6 +639,8 @@ public class SkWebGpuDevice(
         val dstL: Float, val dstT: Float, val dstR: Float, val dstB: Float,
         val scissor: IntArray,
         val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
+        val filter: SkFilterMode,
+        val tile: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
     ) : PendingDraw
@@ -3324,16 +3325,63 @@ public class SkWebGpuDevice(
         constraint: SrcRectConstraint,
         clip: SkIRect,
     ) {
+        // kClamp is the default tile mode for the SkCanvas.drawImageRect
+        // contract -- the SrcRectConstraint distinction (kStrict vs kFast)
+        // is a sub-pixel filter-overflow tweak ; both treat out-of-src
+        // samples as "clamp at src edge". Tests can route the alternative
+        // tile modes via [enqueueImageRectDrawForTest].
+        enqueueImageRectDrawInternal(
+            image = image,
+            src = src,
+            devDst = devDst,
+            sampling = sampling,
+            paint = paint,
+            tile = SkTileMode.kClamp,
+            clip = clip,
+        )
+    }
+
+    /**
+     * G5.1.1 -- shared dispatch entry-point for [drawImageRect] and the
+     * test-only [enqueueImageRectDrawForTest] hook. Validates the
+     * (sampling, blend, tile) tuple against the bitmap-shader pipeline's
+     * current capability matrix, then enqueues an [ImageRectDraw].
+     *
+     * In scope :
+     *  - filter = `SkFilterMode.kLinear` or `SkFilterMode.kNearest`
+     *  - mipmap = `SkMipmapMode.kNone` ; no bicubic ; no anisotropic.
+     *  - tile mode = `SkTileMode.kClamp` / `kRepeat` / `kMirror` /
+     *                `kDecal` (latter handled in-shader ; sampler stays
+     *                ClampToEdge because WebGPU has no `BorderColor`
+     *                mode for non-depth sampled textures).
+     *  - blend mode = `SkBlendMode.kClear` / `kSrc` / `kSrcOver` /
+     *                 `kDstOver` (the natively-blendable subset that
+     *                 [blendStateFor] expresses without a fragment-side
+     *                 round-trip).
+     */
+    private fun enqueueImageRectDrawInternal(
+        image: SkImage,
+        src: SkRect,
+        devDst: SkRect,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+        tile: SkTileMode,
+        clip: SkIRect,
+    ) {
         if (image.width <= 0 || image.height <= 0) return
         if (src.right <= src.left || src.bottom <= src.top) return
         if (devDst.right <= devDst.left || devDst.bottom <= devDst.top) return
 
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
-        if (mode != SkBlendMode.kSrcOver) {
-            error(
-                "SkWebGpuDevice.drawImageRect : blend mode $mode not supported in G5.1 " +
-                    "(only kSrcOver wired up ; widening to the rest of the blend table is " +
-                    "a G5.x follow-up).",
+        when (mode) {
+            SkBlendMode.kClear,
+            SkBlendMode.kSrc,
+            SkBlendMode.kSrcOver,
+            SkBlendMode.kDstOver -> Unit
+            else -> error(
+                "SkWebGpuDevice.drawImageRect : blend mode $mode not supported in G5.1.1 " +
+                    "(in scope : kClear / kSrc / kSrcOver / kDstOver -- the natively-blendable " +
+                    "subset that [blendStateFor] expresses without fragment-side round-trip).",
             )
         }
         if (sampling.cubic != null || sampling.useAniso) {
@@ -3342,23 +3390,10 @@ public class SkWebGpuDevice(
                     "(only SkFilterMode.kLinear / kNearest with kNone mipmap routed ; G5.x widens).",
             )
         }
-        if (sampling.filter != SkFilterMode.kLinear) {
-            error(
-                "SkWebGpuDevice.drawImageRect : filter mode ${sampling.filter} not supported in G5.1 " +
-                    "(only kLinear wired up ; kNearest sampler lands in G5.x).",
-            )
-        }
-        // kClamp is the only tile mode in scope for G5.1. Note that
-        // SkSamplingOptions does NOT carry a tile mode (that's an
-        // SkBitmapShader property) ; drawImageRect's contract is that
-        // sampling outside [src] is governed by SrcRectConstraint and
-        // the (clamp / decal) edge handling. For G5.1 we treat both
-        // kStrict and kFast as "clamp at src edge" -- the sampler's
-        // ClampToEdge address mode + the explicit src->dst affine map
-        // together pin out-of-rect samples to the edge texels, which
-        // is the kClamp behaviour. The strict-vs-fast distinction
-        // (filter overflow killing) is a G5.x follow-up.
-        val tile = SkTileMode.kClamp
+        // sampling.filter ∈ {kLinear, kNearest} -- both supported (G5.1.1).
+        // The mipmap mode is ignored at this slice (no mip pyramid in the
+        // texture upload) ; this matches the gate enforced above and is
+        // also how kanvas-skia's CPU path treats kNone-only images.
 
         // Non-AA pixelEdge rounding -- matches SkBitmapDevice.drawImageRect.
         val ix0 = pixelEdge(devDst.left).coerceAtLeast(clip.left).coerceAtLeast(0)
@@ -3384,9 +3419,41 @@ public class SkWebGpuDevice(
                 dstL = devDst.left, dstT = devDst.top, dstR = devDst.right, dstB = devDst.bottom,
                 scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
                 paintR = paintAlpha, paintG = paintAlpha, paintB = paintAlpha, paintA = paintAlpha,
+                filter = sampling.filter,
+                tile = tile,
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
                 mode = mode,
             ),
+        )
+    }
+
+    /**
+     * G5.1.1 test-only -- enqueue a bitmap draw with an explicit tile
+     * mode. Used by [org.skia.gpu.webgpu.ImageRectTest] to exercise
+     * `kRepeat` / `kMirror` / `kDecal` ; the public
+     * [org.skia.core.SkCanvas.drawImageRect] API does not carry a tile
+     * mode (`SkSamplingOptions` is purely filter / mipmap / cubic).
+     * Tile modes will reach the device naturally once
+     * `paint.shader is SkBitmapShader` routes through this pipeline
+     * (G5.2 onwards) ; until then the test path is the only client.
+     */
+    internal fun enqueueImageRectDrawForTest(
+        image: SkImage,
+        src: SkRect,
+        devDst: SkRect,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+        tile: SkTileMode,
+        clip: SkIRect = SkIRect.MakeWH(width, height),
+    ) {
+        enqueueImageRectDrawInternal(
+            image = image,
+            src = src,
+            devDst = devDst,
+            sampling = sampling,
+            paint = paint,
+            tile = tile,
+            clip = clip,
         )
     }
 
@@ -3802,11 +3869,15 @@ public class SkWebGpuDevice(
                         draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
                     }
                     is ImageRectDraw -> {
-                        // G5.1 -- only (kSrcOver, kLinear, kClamp) is wired
-                        // up at the dispatch gate. The cache key carries
-                        // (blend, filter, tile) so the future widening is
-                        // structural-only.
-                        setPipeline(bitmapPipelineFor(d.mode, SkFilterMode.kLinear, SkTileMode.kClamp))
+                        // G5.1.1 -- pipeline keyed on (blend, filter, tile).
+                        // The blend axis switches the blend state ; filter
+                        // and tile both affect the *sampler* (built into
+                        // the bind group, not the pipeline) -- the pipeline
+                        // entry is identical across them so the cache is
+                        // technically over-keyed. Keeping the cache shape
+                        // matches the gradient pipelines and leaves room
+                        // for shader-side filter / tile branches later.
+                        setPipeline(bitmapPipelineFor(d.mode, d.filter, d.tile))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
@@ -4248,20 +4319,27 @@ public class SkWebGpuDevice(
         // Layout matches `bitmap_shader.wgsl` :
         //   offset  0 : srcRect    (vec4f -- l, t, r, b in image-pixel coords)
         //   offset 16 : dstRect    (vec4f -- l, t, r, b in device-pixel coords)
-        //   offset 32 : imageSize  (vec4f -- w, h, _, _)
+        //   offset 32 : imageSize  (vec4f -- w, h, tileFlag (bit-reinterp u32), _)
         //   offset 48 : paintColor (vec4f -- premul tint, default (1, 1, 1, 1))
         // Total = 64 bytes.
+        //
+        // G5.1.1 -- `imageSize.z` carries the tile-mode ordinal as a
+        // bit-reinterpreted f32 (same trick the gradient shaders use for
+        // `stopCount` / `edgeCount`). The shader does `bitcast<u32>(.z)`
+        // and only branches on kDecal ; the other 3 tile modes are
+        // resolved by the sampler's addressMode.
         context.queue.writeBuffer(
             uniform, 0uL,
             ArrayBuffer.of(floatArrayOf(
                 d.srcL, d.srcT, d.srcR, d.srcB,
                 d.dstL, d.dstT, d.dstR, d.dstB,
-                d.imageWidth.toFloat(), d.imageHeight.toFloat(), 0f, 0f,
+                d.imageWidth.toFloat(), d.imageHeight.toFloat(),
+                Float.fromBits(d.tile.ordinal), 0f,
                 d.paintR, d.paintG, d.paintB, d.paintA,
             )),
         )
         val view = d.texture.createView()
-        val sampler = bitmapSamplerFor(SkFilterMode.kLinear, SkTileMode.kClamp)
+        val sampler = bitmapSamplerFor(d.filter, d.tile)
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = bitmapBindGroupLayout,
