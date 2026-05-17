@@ -16,7 +16,7 @@ _site/               ← sortie HTML finale (gitignored, déployée sur Pages)
 
 ## Génération locale
 
-Prérequis : Python 3 + `pip install mkdocs-material`.
+Prérequis : Python 3 + `pip install mkdocs-material mkdocs-awesome-pages-plugin`.
 
 ```bash
 # 1. Génère le GFM via Dokka
@@ -51,8 +51,19 @@ Dokka 2.2.0 (V1) émet du markdown avec des patterns non-standard qui rendent ma
 | `[jvm]\` (platform marker) | `[jvm]\` en clair | Supprimé |
 | `fun foo(a: [Float](url)): [Bool](url)` (signature) | Paragraphe texte avec liens | Code block `` ```kotlin `` avec coloration |
 | `- \n   item` (liste mal indentée) | Espacement parasite | Compact |
+| `# <Class>` dans `<class>.md` (constructor stub) | Duplique le label du dossier dans la nav | Renommé `# constructor` |
 
 Le script [`scripts/postprocess_dokka_gfm.py`](scripts/postprocess_dokka_gfm.py) normalise tout ça. Idempotent (relancer ne fait rien de plus).
+
+## Navigation par famille (awesome-pages)
+
+Le post-processeur génère aussi des fichiers `.pages` (lus par `mkdocs-awesome-pages-plugin`) qui :
+
+- Renomment les niveaux génériques : `api/` → `API`, `math/` → `:math`, `<class-dir>/` → `<Class>` (sinon MkDocs affiche le dossier URL-décodé : "sk i point" au lieu de "SkIPoint")
+- Regroupent les ~30 classes + ~180 helpers top-level du package `org.graphiks.math` en **7 familles** : *Geometry*, *Matrix*, *Vector N-D*, *Color*, *Scalar*, *Pathops (double-precision)*, *Skcms (color management)*
+- Trient dans chaque famille : classes (dirs) d'abord, puis helpers (fns), puis constantes (`SK_X`) en fin
+
+La classification est dans `docs/scripts/postprocess_dokka_gfm.py` (`FAMILIES`). Pour ajuster : éditer le dict, lancer le post-processeur, rebuilder.
 
 ## Déploiement (GitHub Pages)
 
