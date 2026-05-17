@@ -293,6 +293,13 @@ public data class SkRect(
  * `width()` / `height()` use `Sk32_can_overflow_sub` semantics — they
  * wrap on Int overflow, matching Skia (use [width64] / [height64] for
  * the safe 64-bit form).
+ *
+ * **Saturating mutators:** `setXYWH`, `offset`, `offsetTo`, `inset`, `outset`,
+ * `adjust`, `makeOffset`, `makeInset`, `makeOutset` and the companion
+ * `MakeXYWH` use `Sk32_sat_add` / `Sk32_sat_sub` semantics
+ * (via [SkIPoint.sk32SatAdd] / [SkIPoint.sk32SatSub]) — they saturate
+ * at `Int.MIN_VALUE` / `Int.MAX_VALUE` instead of wrapping, matching upstream
+ * Skia (`SkSafe32.h`). Wrap-around would silently corrupt clip rects.
  */
 public data class SkIRect(
     var left: Int,
@@ -317,9 +324,28 @@ public data class SkIRect(
 
     public fun topLeft(): SkIPoint = SkIPoint(left, top)
 
-    public val isEmpty: Boolean get() = width64() <= 0L || height64() <= 0L
+    /**
+     * Returns `true` when `width()` or `height()` are zero or negative, **or**
+     * when their 64-bit values do not fit in int32 (mirrors upstream
+     * `SkIRect::isEmpty()` — `include/core/SkRect.h`). The overflow check is
+     * load-bearing: a rect like `(Int.MIN_VALUE, 0, Int.MAX_VALUE, 1)` has
+     * `width64() > Int.MAX_VALUE`, so upstream treats it as empty even though
+     * the 64-bit difference is positive.
+     */
+    public val isEmpty: Boolean get() {
+        val w = width64()
+        val h = height64()
+        if (w <= 0L || h <= 0L) return true
+        // Return true if either exceeds int32 (upstream: `!SkTFitsIn<int32_t>(w | h)`).
+        return w > Int.MAX_VALUE.toLong() || h > Int.MAX_VALUE.toLong()
+    }
 
-    public fun isEmpty64(): Boolean = isEmpty
+    /**
+     * Returns `true` when `width64()` or `height64()` are zero or negative.
+     * Unlike [isEmpty], this variant does **not** treat an int32 overflow as
+     * empty (mirrors upstream `SkIRect::isEmpty64()`).
+     */
+    public fun isEmpty64(): Boolean = right <= left || bottom <= top
 
     public fun isSorted(): Boolean = left <= right && top <= bottom
 
@@ -330,32 +356,42 @@ public data class SkIRect(
     }
 
     public fun setXYWH(x: Int, y: Int, w: Int, h: Int) {
-        setLTRB(x, y, x + w, y + h)
+        setLTRB(x, y, SkIPoint.sk32SatAdd(x, w), SkIPoint.sk32SatAdd(y, h))
     }
 
     public fun setWH(w: Int, h: Int) { setLTRB(0, 0, w, h) }
 
     public fun offset(dx: Int, dy: Int) {
-        left += dx; top += dy; right += dx; bottom += dy
+        left = SkIPoint.sk32SatAdd(left, dx)
+        top = SkIPoint.sk32SatAdd(top, dy)
+        right = SkIPoint.sk32SatAdd(right, dx)
+        bottom = SkIPoint.sk32SatAdd(bottom, dy)
     }
 
     public fun offset(delta: SkIPoint) { offset(delta.fX, delta.fY) }
 
     public fun offsetTo(newX: Int, newY: Int) {
-        right += newX - left
-        bottom += newY - top
+        // Upstream: fRight = Sk64_pin_to_s32((int64_t)fRight + newX - fLeft).
+        right = SkIPoint.sk64PinToS32(right.toLong() + newX.toLong() - left.toLong())
+        bottom = SkIPoint.sk64PinToS32(bottom.toLong() + newY.toLong() - top.toLong())
         left = newX
         top = newY
     }
 
     public fun inset(dx: Int, dy: Int) {
-        left += dx; top += dy; right -= dx; bottom -= dy
+        left = SkIPoint.sk32SatAdd(left, dx)
+        top = SkIPoint.sk32SatAdd(top, dy)
+        right = SkIPoint.sk32SatSub(right, dx)
+        bottom = SkIPoint.sk32SatSub(bottom, dy)
     }
 
     public fun outset(dx: Int, dy: Int) { inset(-dx, -dy) }
 
     public fun adjust(dL: Int, dT: Int, dR: Int, dB: Int) {
-        left += dL; top += dT; right += dR; bottom += dB
+        left = SkIPoint.sk32SatAdd(left, dL)
+        top = SkIPoint.sk32SatAdd(top, dT)
+        right = SkIPoint.sk32SatAdd(right, dR)
+        bottom = SkIPoint.sk32SatAdd(bottom, dB)
     }
 
     public fun sort() {
@@ -368,11 +404,19 @@ public data class SkIRect(
         maxOf(left, right), maxOf(top, bottom),
     )
 
-    public fun makeOffset(dx: Int, dy: Int): SkIRect =
-        SkIRect(left + dx, top + dy, right + dx, bottom + dy)
+    public fun makeOffset(dx: Int, dy: Int): SkIRect = SkIRect(
+        SkIPoint.sk32SatAdd(left, dx),
+        SkIPoint.sk32SatAdd(top, dy),
+        SkIPoint.sk32SatAdd(right, dx),
+        SkIPoint.sk32SatAdd(bottom, dy),
+    )
 
-    public fun makeInset(dx: Int, dy: Int): SkIRect =
-        SkIRect(left + dx, top + dy, right - dx, bottom - dy)
+    public fun makeInset(dx: Int, dy: Int): SkIRect = SkIRect(
+        SkIPoint.sk32SatAdd(left, dx),
+        SkIPoint.sk32SatAdd(top, dy),
+        SkIPoint.sk32SatSub(right, dx),
+        SkIPoint.sk32SatSub(bottom, dy),
+    )
 
     public fun makeOutset(dx: Int, dy: Int): SkIRect = makeInset(-dx, -dy)
 
@@ -413,7 +457,8 @@ public data class SkIRect(
 
     public companion object {
         public fun MakeLTRB(l: Int, t: Int, r: Int, b: Int): SkIRect = SkIRect(l, t, r, b)
-        public fun MakeXYWH(x: Int, y: Int, w: Int, h: Int): SkIRect = SkIRect(x, y, x + w, y + h)
+        public fun MakeXYWH(x: Int, y: Int, w: Int, h: Int): SkIRect =
+            SkIRect(x, y, SkIPoint.sk32SatAdd(x, w), SkIPoint.sk32SatAdd(y, h))
         public fun MakeWH(w: Int, h: Int): SkIRect = SkIRect(0, 0, w, h)
         public fun MakeEmpty(): SkIRect = SkIRect(0, 0, 0, 0)
         public fun MakeSize(size: SkISize): SkIRect = SkIRect(0, 0, size.width, size.height)

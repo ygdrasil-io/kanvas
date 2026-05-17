@@ -36,14 +36,89 @@ class SkIRectTest {
     }
 
     @Test
-    fun `isEmpty checks 64-bit dimensions`() {
+    fun `isEmpty checks 64-bit dimensions and int32 fit`() {
         assertTrue(SkIRect.MakeEmpty().isEmpty)
         assertTrue(SkIRect.MakeLTRB(5, 5, 5, 10).isEmpty)
         assertTrue(SkIRect.MakeLTRB(5, 10, 10, 5).isEmpty)
         assertFalse(SkIRect.MakeLTRB(0, 0, 1, 1).isEmpty)
-        // A rect that LOOKS empty in int32 due to overflow but isn't in 64-bit
+        // Upstream `SkIRect::isEmpty()` also returns true when width64()|height64()
+        // do not fit in int32 — the rect is considered corrupted/empty. A rect like
+        // (MIN_VALUE, 0, MAX_VALUE, 1) has width64() = UINT_MAX > INT_MAX → empty.
         val overflow = SkIRect.MakeLTRB(Int.MIN_VALUE, 0, Int.MAX_VALUE, 1)
-        assertFalse(overflow.isEmpty, "width64 > 0 should mean non-empty")
+        assertTrue(overflow.isEmpty, "width64 > Int.MAX_VALUE must be treated as empty")
+        // But isEmpty64() only checks `right <= left || bottom <= top` — so the
+        // same rect is *not* empty under that lenient predicate.
+        assertFalse(overflow.isEmpty64(), "isEmpty64 ignores int32 overflow")
+    }
+
+    @Test
+    fun `MakeXYWH saturates instead of wrapping on int32 overflow`() {
+        // Upstream uses Sk32_sat_add: x + w must clamp at Int.MAX_VALUE.
+        val r = SkIRect.MakeXYWH(Int.MAX_VALUE - 1, 0, 10, 10)
+        assertEquals(Int.MAX_VALUE, r.right, "right should saturate at Int.MAX_VALUE")
+        assertEquals(10, r.bottom)
+    }
+
+    @Test
+    fun `setXYWH offset inset adjust all saturate`() {
+        // setXYWH: w pushes right past MAX_VALUE → clamps.
+        val r = SkIRect.MakeEmpty()
+        r.setXYWH(Int.MAX_VALUE - 5, 0, 100, 1)
+        assertEquals(Int.MAX_VALUE, r.right)
+
+        // offset: dx pushes right past MAX_VALUE → clamps; left can drop to MIN_VALUE.
+        val o = SkIRect.MakeLTRB(Int.MIN_VALUE + 1, 0, Int.MAX_VALUE - 1, 10)
+        o.offset(-5, 0)
+        assertEquals(Int.MIN_VALUE, o.left, "left saturates at MIN_VALUE")
+        o.offset(10, 0)
+        // right was MAX_VALUE - 1 - 5 + 10 = MAX_VALUE + 4 → saturates.
+        assertEquals(Int.MAX_VALUE, o.right, "right saturates at MAX_VALUE")
+
+        // inset: outsetting with very large dx must saturate, not wrap.
+        // (outset(dx) calls inset(-dx) — note `-Int.MAX_VALUE == Int.MIN_VALUE + 1`.)
+        val ins = SkIRect.MakeLTRB(0, 0, 10, 10)
+        ins.outset(Int.MAX_VALUE, 0)
+        assertEquals(Int.MIN_VALUE + 1, ins.left)
+        assertEquals(Int.MAX_VALUE, ins.right)
+        // Saturating inset() with full MIN_VALUE also clamps both ends.
+        val ins2 = SkIRect.MakeLTRB(0, 0, 10, 10)
+        ins2.inset(Int.MIN_VALUE, 0)
+        assertEquals(Int.MIN_VALUE, ins2.left)
+        assertEquals(Int.MAX_VALUE, ins2.right)
+
+        // adjust: large dR pushes right past MAX_VALUE.
+        val a = SkIRect.MakeLTRB(0, 0, 10, 10)
+        a.adjust(0, 0, Int.MAX_VALUE, 0)
+        assertEquals(Int.MAX_VALUE, a.right)
+    }
+
+    @Test
+    fun `makeOffset makeInset makeOutset saturate`() {
+        val r = SkIRect.MakeLTRB(0, 0, 10, 10)
+        val off = r.makeOffset(Int.MAX_VALUE, 0)
+        assertEquals(Int.MAX_VALUE, off.left)
+        assertEquals(Int.MAX_VALUE, off.right)
+
+        val ins = r.makeInset(Int.MIN_VALUE, 0)
+        // left += MIN_VALUE saturates at MIN_VALUE; right -= MIN_VALUE saturates at MAX_VALUE.
+        assertEquals(Int.MIN_VALUE, ins.left)
+        assertEquals(Int.MAX_VALUE, ins.right)
+
+        // makeOutset(dx) delegates to makeInset(-dx), and `-Int.MAX_VALUE == Int.MIN_VALUE + 1`.
+        val out = r.makeOutset(Int.MAX_VALUE, 0)
+        assertEquals(Int.MIN_VALUE + 1, out.left)
+        assertEquals(Int.MAX_VALUE, out.right)
+    }
+
+    @Test
+    fun `offsetTo uses 64-bit pinned arithmetic`() {
+        // Upstream: fRight = Sk64_pin_to_s32((int64_t)fRight + newX - fLeft).
+        // Verify no double-overflow in int32 when newX - left would wrap.
+        val r = SkIRect.MakeLTRB(Int.MIN_VALUE, 0, Int.MIN_VALUE + 10, 5)
+        r.offsetTo(Int.MAX_VALUE - 9, 0)
+        assertEquals(Int.MAX_VALUE - 9, r.left)
+        // right should be left + width = MAX_VALUE - 9 + 10 = MAX_VALUE + 1 → saturates.
+        assertEquals(Int.MAX_VALUE, r.right)
     }
 
     @Test
