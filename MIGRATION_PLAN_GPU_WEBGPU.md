@@ -391,10 +391,23 @@ Le cover quad sélectionné par `drawPath` :
 - [x] **`drawPath` dispatch** : retire la garde `require(!path.fillType.isInverse())`, passe `path.fillType` à `StencilCoverPolygonDraw` / `StencilCoverAaPolygonDraw`, sélectionne le cover quad selon `isInverse()`. Single-contour convex non-inverse garde son chemin rapide (`AaPolygonDraw` / `PolygonDraw`) ; inverse OR concave route vers stencil-and-cover.
 - [x] **Test** : [FillTypeWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/FillTypeWebGpuTest.kt) — grille 4×4 des 4 fill types × 2 scales × AA on/off sur multi-contour. Score **99.55 %** (ratché à floor=99.5).
 
+### G3.3b.3d — Two-pass AA cover (outside-half AA loss) ✅
+
+Close la perte du demi-pixel extérieur de l'AA falloff sur le path stencil-and-cover : après la passe stencil, le cover phase émet maintenant DEUX sub-draws partageant les mêmes edge data + cover quad.
+
+  - **Inside half** : pipeline existant (compare op par fill-type, entry point `fs_inside` = ex-`fs_main`). Coverage = `clamp(minDist + 0.5, 0, 1)` sur les fragments que le stencil compte comme inside.
+  - **Outside half** : nouveau pipeline avec compare op FLIPPÉE (kWinding/kEvenOdd → `Equal` 0, inverse → `NotEqual` 0) et entry point `fs_outside`. Coverage = `clamp(0.5 - minDist, 0, 1)` sur les fragments que le stencil compte comme outside.
+
+Les deux sub-draws sont mutuellement exclusifs au niveau fragment (le stencil aiguille chaque fragment vers exactement un d'eux), donc jamais de double-cover. La somme intègre au bon profil AA across la half-pixel boundary.
+
+- [x] **`aa_stencil_cover.wgsl`** : factor `minSegmentDistance(p)`, splitté en `fs_inside` (ancien `fs_main`) + `fs_outside` (formule miroir). Pas de changement de layout uniform.
+- [x] **`CoverageSide { Inside, Outside }`** + ré-keying de `aaStencilCoverPipelineCache` en `Triple<SkBlendMode, SkPathFillType, CoverageSide>`. `aaStencilCoverPipelineFor(mode, fillType, side)` sélectionne compare op + entry point selon `side`.
+- [x] **`flush` dispatch** : après `setVertexBuffer(coverVB)`, deux `setPipeline(...)` + `draw(...)` consécutifs (Inside puis Outside).
+- [x] **Tests** : ConcavePathsGM **98.90 → 99.31 %** (+0.41, ratché floor 99.25). FillTypeGM stable à 99.55 % (les non-AA cells dominent le mismatch résiduel à tolérance 8). BatchedConvexPathsGM (route `AaPolygonDraw`, pas touchée) et Skbug12244GM (non-AA) inchangés.
+
 ### G3.3b.3 — Reste à faire
 
 - [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
-- [ ] **Sample-mask AA** ou two-pass cover : closerait la perte du demi-pixel extérieur de l'AA falloff sur stencil-and-cover.
 - [ ] **Tests futurs** : `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family, `FillTypePerspGM`.
 
 ### G3.4 — Stroke générique via SkStroker (à venir, après G3.3b)
@@ -414,6 +427,7 @@ Le cover quad sélectionné par `drawPath` :
 - [x] G3.3b.3a.2 : single-contour concave routé vers stencil-and-cover AA via détection convexité cross-product. ConcavePathsGM **93.23 → 98.90 (+5.67%)**.
 - [x] G3.3b.3b : kEvenOdd + inverse fill types via `coverPipelineCache: Pair<SkBlendMode, SkPathFillType>`. FillTypeGM **99.55 %** (4×4 grille des 4 fill types × scales × AA).
 - [x] G3.3b.3c : 4 cross-tests neufs (AnalyticAntialiasInverseGM 99.98 %, PathInvFillGM 99.50 %, ConvexLineOnlyPathsFillGM 98.75 %, Crbug1472747GM 98.16 %) avg **99.10 %** — zéro changement device, élargissement du harness post-G3.3b.3b sur inverse fills + kEvenOdd multi-contour conic.
+- [x] G3.3b.3d : two-pass AA cover (inside + outside) ferme la perte du demi-pixel extérieur sur stencil-and-cover. ConcavePathsGM **98.90 → 99.31 (+0.41 %)**.
 - [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---

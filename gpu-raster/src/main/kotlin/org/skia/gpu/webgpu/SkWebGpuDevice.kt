@@ -544,22 +544,52 @@ public class SkWebGpuDevice(
             )
         }
 
-    // ─── AA stencil-cover (G3.3b.3a) — AA cover pass for multi-contour ────
+    // ─── AA stencil-cover (G3.3b.3a / G3.3b.3d) — AA cover for multi-contour ──
 
     private val aaStencilCoverShader: GPUShaderModule = loadShader("shaders/aa_stencil_cover.wgsl")
 
-    private val aaStencilCoverPipelineCache: MutableMap<Pair<SkBlendMode, SkPathFillType>, GPURenderPipeline> = mutableMapOf()
+    /**
+     * G3.3b.3d — which half of the AA falloff a cover sub-draw paints.
+     * `Inside` paints fragments the stencil counts as inside the fill
+     * region with `coverage = clamp(minDist + 0.5, 0, 1)` ; `Outside`
+     * paints fragments the stencil counts as outside with
+     * `coverage = clamp(0.5 - minDist, 0, 1)`. Two mutually-exclusive
+     * sub-draws over the same cover quad recover the full AA profile.
+     */
+    private enum class CoverageSide { Inside, Outside }
+
+    private val aaStencilCoverPipelineCache: MutableMap<Triple<SkBlendMode, SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
 
     /**
      * AA-cover pipeline. Same fill-type encoding as [coverPipelineFor]
      * (readMask + compare op derived from [SkPathFillType]) but the
      * fragment shader produces AA coverage from the path's edge segments.
      * Bind group layout is shared with the single-contour AA pipeline.
+     *
+     * G3.3b.3d — [side] selects whether this pipeline paints the inside
+     * or outside half of the AA boundary. `Outside` flips the stencil
+     * compare op (so the same stencil reference 0 gates the opposite set
+     * of fragments) and switches to the `fs_outside` shader entry point.
      */
-    private fun aaStencilCoverPipelineFor(mode: SkBlendMode, fillType: SkPathFillType): GPURenderPipeline =
-        aaStencilCoverPipelineCache.getOrPut(mode to fillType) {
+    private fun aaStencilCoverPipelineFor(
+        mode: SkBlendMode,
+        fillType: SkPathFillType,
+        side: CoverageSide,
+    ): GPURenderPipeline =
+        aaStencilCoverPipelineCache.getOrPut(Triple(mode, fillType, side)) {
             val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
-            val compare = if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+            val insideCompare =
+                if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+            val compare = when (side) {
+                CoverageSide.Inside -> insideCompare
+                CoverageSide.Outside ->
+                    if (insideCompare == GPUCompareFunction.Equal) GPUCompareFunction.NotEqual
+                    else GPUCompareFunction.Equal
+            }
+            val entryPoint = when (side) {
+                CoverageSide.Inside -> "fs_inside"
+                CoverageSide.Outside -> "fs_outside"
+            }
             context.device.createRenderPipeline(
                 RenderPipelineDescriptor(
                     layout = aaPolygonPipelineLayout,
@@ -570,7 +600,7 @@ public class SkWebGpuDevice(
                     ),
                     fragment = FragmentState(
                         module = aaStencilCoverShader,
-                        entryPoint = "fs_main",
+                        entryPoint = entryPoint,
                         targets = listOf(
                             ColorTargetState(
                                 format = GPUTextureFormat.RGBA8Unorm,
@@ -1313,9 +1343,15 @@ public class SkWebGpuDevice(
                 return@forEachIndexed
             }
             if (d is StencilCoverAaPolygonDraw) {
-                // G3.3b.3a — same shape as the non-AA stencil-and-cover
-                // pass, but the cover pipeline uses the AA-edge-segment
-                // fragment shader so the boundary fades smoothly.
+                // G3.3b.3a / G3.3b.3d — same shape as the non-AA
+                // stencil-and-cover pass, but the cover phase emits TWO
+                // sub-draws sharing the edge data : inside-half + outside-
+                // half. The two pipelines have opposite stencil compare
+                // ops, so each fragment is gated to exactly one of them,
+                // and their coverage formulas sum to the full AA profile
+                // across the half-pixel boundary band. Closes the
+                // outside-half AA loss inherent to the G3.3b.3a single
+                // cover sub-draw.
                 encoder.beginRenderPass(
                     RenderPassDescriptor(
                         colorAttachments = listOf(
@@ -1347,8 +1383,10 @@ public class SkWebGpuDevice(
                     setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
                     draw((d.stencilVerts.size / 2).toUInt())
                     setStencilReference(0u)
-                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType))
                     setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
+                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Inside))
+                    draw((d.coverVerts.size / 2).toUInt())
+                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Outside))
                     draw((d.coverVerts.size / 2).toUInt())
                     end()
                 }
