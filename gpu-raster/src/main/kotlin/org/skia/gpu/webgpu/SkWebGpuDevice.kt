@@ -888,13 +888,9 @@ public class SkWebGpuDevice(
 
     private fun radialGradientFragmentEntryPoint(tileMode: SkTileMode): String = when (tileMode) {
         SkTileMode.kClamp -> "fs_clamp"
-        // G4.2.1 will add fs_repeat / fs_mirror / fs_decal entry points to
-        // `radial_gradient.wgsl` mirroring the linear shader.
-        else -> error(
-            "SkWebGpuDevice : radial gradient tile mode $tileMode not supported yet. " +
-                "kClamp is the only mode wired in G4.2 ; kRepeat / kMirror / kDecal land " +
-                "in G4.2.1 (mirror the linear shader's 4 fs_* entry points).",
-        )
+        SkTileMode.kRepeat -> "fs_repeat"
+        SkTileMode.kMirror -> "fs_mirror"
+        SkTileMode.kDecal -> "fs_decal"
     }
 
     private fun radialGradientPipelineFor(
@@ -1404,14 +1400,12 @@ public class SkWebGpuDevice(
                 return
             }
         }
-        // G4.2 -- radial gradient fill of an axis-aligned rect. Same gate
-        // shape as the linear branch (path.isRect + axis-aligned CTM),
-        // restricted to kClamp tile mode for now (other modes land in
-        // G4.2.1). Non-rect paths or non-clamp tile modes fall through to
-        // the existing solid-color fill machinery (mirror of the linear
-        // shader's pre-G4.1.1 behaviour).
+        // G4.2 / G4.2.1 -- radial gradient fill of an axis-aligned rect.
+        // Same gate shape as the linear branch (path.isRect + axis-aligned
+        // CTM), all 4 SkTileMode values routed through the dedicated
+        // pipeline. Non-rect paths fall through to the existing solid-
+        // color fill machinery (radial-on-non-rect lands in G4.2.2).
         if (shader is SkRadialGradient &&
-            shader.getTileMode() == SkTileMode.kClamp &&
             paint.style == SkPaint.Style.kFill_Style &&
             ctm.isAxisAligned
         ) {
