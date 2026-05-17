@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.skia.testing.TestUtils
 import org.skia.tests.ConicalGradients2ptInsideGM
+import org.skia.tests.ConicalGradients2ptInsideMirrorGM
+import org.skia.tests.ConicalGradients2ptInsideRepeatGM
 
 /**
  * G4.4.1 cross-test : `ConicalGradients2ptInsideGM` -- 840 x 815
@@ -55,6 +57,80 @@ class ConicalGradients2ptInsideWebGpuTest {
             assertTrue(
                 cmp.similarity >= floor,
                 "ConicalGradients2ptInsideGM regressed below floor : ${cmp.similarity}% < $floor%.",
+            )
+        }
+    }
+
+    /**
+     * G4.4.2 cross-test : `ConicalGradients2ptInsideRepeatGM` -- same
+     * grid as the kClamp variant above, with kRepeat tile mode. Exercises
+     * the new `fs_repeat` entry point of both the kRadial and the
+     * focal-inside well-behaved pipelines. The floor is permissive for
+     * the same reasons as the kClamp variant -- focal-outside and
+     * focal-on-circle cells are still on the solid-color fallback.
+     */
+    @Test
+    fun `ConicalGradients2ptInsideRepeatGM renders close to reference PNG on the GPU backend`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        context!!.use { ctx ->
+            val gm = ConicalGradients2ptInsideRepeatGM()
+            val gpuBitmap = WebGpuSink.draw(ctx, gm)
+            val reference = TestUtils.loadReferenceBitmap("gradients_2pt_conical_inside_repeat")
+                ?: error("original-888/gradients_2pt_conical_inside_repeat.png missing")
+
+            val cmp = TestUtils.compareBitmapsDetailed(
+                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
+            )
+            println(
+                "[ConicalGradients2ptInsideRepeatWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
+                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
+                    "maxDiff=${cmp.maxChannelDiff}",
+            )
+            TestUtils.saveDebugImage(gpuBitmap, "gradients_2pt_conical_inside_repeat-gpu")
+            // Landing score 100.00% (kRepeat tiles produce byte-identical
+            // output to the reference for the supported sub-cases). Floor
+            // set well below to absorb future scoring drift.
+            val floor = 95.00
+            assertTrue(
+                cmp.similarity >= floor,
+                "ConicalGradients2ptInsideRepeatGM regressed below floor : ${cmp.similarity}% < $floor%.",
+            )
+        }
+    }
+
+    /**
+     * G4.4.2 cross-test : `ConicalGradients2ptInsideMirrorGM` -- same
+     * grid as the kClamp variant above, with kMirror tile mode. Exercises
+     * the new `fs_mirror` entry point of both the kRadial and the
+     * focal-inside well-behaved pipelines.
+     */
+    @Test
+    fun `ConicalGradients2ptInsideMirrorGM renders close to reference PNG on the GPU backend`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        context!!.use { ctx ->
+            val gm = ConicalGradients2ptInsideMirrorGM()
+            val gpuBitmap = WebGpuSink.draw(ctx, gm)
+            val reference = TestUtils.loadReferenceBitmap("gradients_2pt_conical_inside_mirror")
+                ?: error("original-888/gradients_2pt_conical_inside_mirror.png missing")
+
+            val cmp = TestUtils.compareBitmapsDetailed(
+                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
+            )
+            println(
+                "[ConicalGradients2ptInsideMirrorWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
+                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
+                    "maxDiff=${cmp.maxChannelDiff}",
+            )
+            TestUtils.saveDebugImage(gpuBitmap, "gradients_2pt_conical_inside_mirror-gpu")
+            // Landing score 100.00% -- see Repeat variant above.
+            val floor = 95.00
+            assertTrue(
+                cmp.similarity >= floor,
+                "ConicalGradients2ptInsideMirrorGM regressed below floor : ${cmp.similarity}% < $floor%.",
             )
         }
     }

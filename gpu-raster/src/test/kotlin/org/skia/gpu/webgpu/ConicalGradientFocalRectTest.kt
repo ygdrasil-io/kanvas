@@ -113,6 +113,159 @@ class ConicalGradientFocalRectTest {
         assertNear(outside[2], 255, "outside.B", tol = 16)
     }
 
+    // G4.4.2 -- kRepeat / kMirror / kDecal exercise the new fragment
+    // entry points on the focal-inside well-behaved pipeline.
+    //
+    // Fixture : start=(16, 32), startRadius=0, end=(20, 32), endRadius=8.
+    // dCenter=4, fR1 = 8/4 = 2 > 1 -> well-behaved focal-inside.
+    // The tight end disk means most pixels on the rect have t_raw > 1,
+    // discriminating between the 4 tile modes :
+    //   pixel (24, 32) -> t_raw ~ 0.71  (inside both rings, blue-ish)
+    //   pixel (32, 32) -> t_raw ~ 1.38  (clamp=1, repeat=0.38, mirror=0.62,
+    //                                    decal=OFF)
+    //   pixel (40, 32) -> t_raw ~ 2.04  (clamp=1, repeat=0.04 ~red,
+    //                                    mirror=0.04 ~red, decal=OFF)
+    //   pixel (60, 32) -> t_raw ~ 3.71  (clamp=1, repeat=0.71 blue,
+    //                                    mirror=0.29 red, decal=OFF)
+    // pixel (60, 32) is the cleanest kRepeat-vs-kMirror discriminator.
+
+    @Test
+    fun `kRepeat tiles the focal-inside conical gradient outside the end disk`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(16f, 32f), startRadius = 0f,
+            end = SkPoint(20f, 32f), endRadius = 8f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kRepeat,
+        )!!
+        assertEquals(SkConicalGradient.Type.kFocal, grad.getType())
+        assertTrue(grad.getFocalData()?.isWellBehaved() == true)
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        // Focal (16, 32) -- t_raw ~ 0.07 -- mostly red.
+        val focal = pixels.rgbaAt(16, 32)
+        assertTrue(focal[0] >= 180, "focal.R mostly red, got ${focal[0]}")
+        assertTrue(focal[2] < 96, "focal.B near zero, got ${focal[2]}")
+
+        // (40, 32) -- t_raw ~ 2.04 -- repeat -> 0.04 -- mostly red.
+        val period2 = pixels.rgbaAt(40, 32)
+        assertTrue(period2[0] >= 180, "period2.R mostly red, got ${period2[0]}")
+        assertTrue(period2[2] < 96, "period2.B near zero, got ${period2[2]}")
+
+        // (60, 32) -- t_raw ~ 3.71 -- repeat -> 0.71 -- mostly blue.
+        // This is the kRepeat-vs-kMirror discriminator (kMirror would
+        // give t ~ 0.29 -- mostly red).
+        val period4 = pixels.rgbaAt(60, 32)
+        assertTrue(period4[0] < 96, "period4.R near zero, got ${period4[0]}")
+        assertTrue(period4[2] >= 180, "period4.B mostly blue, got ${period4[2]}")
+    }
+
+    @Test
+    fun `kMirror reflects the focal-inside conical gradient outside the end disk`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(16f, 32f), startRadius = 0f,
+            end = SkPoint(20f, 32f), endRadius = 8f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kMirror,
+        )!!
+        assertEquals(SkConicalGradient.Type.kFocal, grad.getType())
+        assertTrue(grad.getFocalData()?.isWellBehaved() == true)
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        // Focal (16, 32) -- t_raw ~ 0.07 -- mostly red.
+        val focal = pixels.rgbaAt(16, 32)
+        assertTrue(focal[0] >= 180, "focal.R mostly red, got ${focal[0]}")
+        assertTrue(focal[2] < 96, "focal.B near zero, got ${focal[2]}")
+
+        // (50, 32) -- t_raw ~ 2.88 -- mirror -> 0.88 -- mostly blue.
+        val ring2Blue = pixels.rgbaAt(50, 32)
+        assertTrue(ring2Blue[0] < 96, "ring2Blue.R near zero, got ${ring2Blue[0]}")
+        assertTrue(ring2Blue[2] >= 160, "ring2Blue.B mostly blue, got ${ring2Blue[2]}")
+
+        // (60, 32) -- t_raw ~ 3.71 -- mirror -> 0.29 -- mostly red.
+        // kRepeat-vs-kMirror discriminator (kRepeat would give blue).
+        val period4 = pixels.rgbaAt(60, 32)
+        assertTrue(period4[0] >= 160, "period4.R mostly red, got ${period4[0]}")
+        assertTrue(period4[2] < 96, "period4.B near zero, got ${period4[2]}")
+    }
+
+    @Test
+    fun `kDecal punches transparent outside the focal-inside conical gradient`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(16f, 32f), startRadius = 0f,
+            end = SkPoint(20f, 32f), endRadius = 8f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kDecal,
+        )!!
+        assertEquals(SkConicalGradient.Type.kFocal, grad.getType())
+        assertTrue(grad.getFocalData()?.isWellBehaved() == true)
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        // Focal (16, 32) -- t_raw ~ 0.07 -- inside [0, 1] -- mostly red.
+        val focal = pixels.rgbaAt(16, 32)
+        assertTrue(focal[0] >= 180, "focal.R mostly red, got ${focal[0]}")
+        assertTrue(focal[2] < 96, "focal.B near zero, got ${focal[2]}")
+
+        // (24, 32) -- t_raw ~ 0.71 -- inside [0, 1] -- mostly blue.
+        val inside = pixels.rgbaAt(24, 32)
+        assertTrue(inside[0] < 128, "inside.R smaller, got ${inside[0]}")
+        assertTrue(inside[2] >= 100, "inside.B blue-leaning, got ${inside[2]}")
+
+        // (32, 32) -- t_raw ~ 1.38 -- outside [0, 1] -- transparent --
+        // background white untouched.
+        val outside1 = pixels.rgbaAt(32, 32)
+        assertNear(outside1[0], 255, "outside1.R", tol = 16)
+        assertNear(outside1[1], 255, "outside1.G", tol = 16)
+        assertNear(outside1[2], 255, "outside1.B", tol = 16)
+
+        // (60, 32) -- t_raw ~ 3.71 -- outside -- transparent.
+        val outside2 = pixels.rgbaAt(60, 32)
+        assertNear(outside2[0], 255, "outside2.R", tol = 16)
+        assertNear(outside2[1], 255, "outside2.G", tol = 16)
+        assertNear(outside2[2], 255, "outside2.B", tol = 16)
+    }
+
     private fun assertNear(actual: Int, expected: Int, label: String, tol: Int) {
         val diff = kotlin.math.abs(actual - expected)
         assertTrue(diff <= tol, "$label : expected ~$expected (tol $tol), got $actual")
