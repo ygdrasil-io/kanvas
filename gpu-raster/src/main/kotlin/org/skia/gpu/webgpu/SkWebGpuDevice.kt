@@ -60,6 +60,7 @@ import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkRadialGradient
+import org.skia.foundation.SkSweepGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
@@ -365,6 +366,31 @@ public class SkWebGpuDevice(
     private data class RadialGradientRectDraw(
         val scissor: IntArray,
         val centerX: Float, val centerY: Float, val radius: Float,
+        val stopPositions: FloatArray,
+        val stopColors: FloatArray,
+        val stopCount: Int,
+        val tileMode: SkTileMode,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
+    /**
+     * G4.3 -- pending sweep-gradient fill of an axis-aligned rect. Mirror
+     * of [LinearGradientRectDraw] / [RadialGradientRectDraw] : same scissor
+     * + stops packing, but the gradient is parameterised by `(center, tBias,
+     * tScale)` in device-pixel coords. `tBias = -startAngle / 360` and
+     * `tScale = 360 / (endAngle - startAngle)` collapse the host-side angle
+     * remapping to one add + one mul in the fragment shader. For the
+     * canonical full sweep (start = 0, end = 360) tBias = 0 and tScale = 1.
+     *
+     * [tileMode] is kept in the per-draw record (and in the pipeline cache
+     * key) for symmetry with the linear / radial gradients ; only kClamp
+     * routes here today (the dispatch gate throws otherwise -- see G4.3.1).
+     */
+    private data class SweepGradientRectDraw(
+        val scissor: IntArray,
+        val centerX: Float, val centerY: Float,
+        val tBias: Float, val tScale: Float,
         val stopPositions: FloatArray,
         val stopColors: FloatArray,
         val stopCount: Int,
@@ -975,6 +1001,67 @@ public class SkWebGpuDevice(
             )
         }
 
+    // ─── Sweep gradient pipeline (G4.3) — kClamp tile mode, drawRect ──────
+
+    private val sweepGradientShader: GPUShaderModule = loadShader("shaders/sweep_gradient.wgsl")
+
+    private val sweepGradientBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                ),
+            ),
+        ),
+    )
+
+    private val sweepGradientPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(sweepGradientBindGroupLayout)),
+    )
+
+    /**
+     * G4.3 -- sweep-gradient pipeline cache. Keyed by `(blend, tile)` from
+     * day 1 even though only kClamp dispatches here ; the other 3 fragment
+     * entry points (fs_repeat / fs_mirror / fs_decal) exist for future-
+     * readiness, mirroring the linear / radial caches. A follow-up slice
+     * (G4.3.1) opens the dispatch gate to the other tile modes without
+     * touching this cache key.
+     */
+    private val sweepGradientPipelineCache:
+        MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
+
+    private fun sweepGradientFragmentEntryPoint(tileMode: SkTileMode): String = when (tileMode) {
+        SkTileMode.kClamp -> "fs_clamp"
+        SkTileMode.kRepeat -> "fs_repeat"
+        SkTileMode.kMirror -> "fs_mirror"
+        SkTileMode.kDecal -> "fs_decal"
+    }
+
+    private fun sweepGradientPipelineFor(
+        mode: SkBlendMode,
+        tileMode: SkTileMode,
+    ): GPURenderPipeline =
+        sweepGradientPipelineCache.getOrPut(mode to tileMode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = sweepGradientPipelineLayout,
+                    vertex = VertexState(module = sweepGradientShader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = sweepGradientShader,
+                        entryPoint = sweepGradientFragmentEntryPoint(tileMode),
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA8Unorm,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
     // ─── AA stencil-cover gradient pipeline (G4.1.2) — linear gradient on non-rect paths ──
 
     private val aaStencilCoverGradientShader: GPUShaderModule =
@@ -1483,6 +1570,93 @@ public class SkWebGpuDevice(
     }
 
     /**
+     * G4.3 -- emit a [SweepGradientRectDraw] for a kClamp `SkSweepGradient`
+     * fill of the axis-aligned device-space rect [devRect]. Scissor derivation
+     * is identical to [drawLinearGradientFillRect] / [drawRadialGradientFillRect].
+     *
+     * `SkSweepGradient.center` is shader-local ; the caller's CTM ([ctm]) maps
+     * it into device space here. Angles (startAngle / endAngle) are in source-
+     * space degrees ; under the axis-aligned-CTM dispatch gate they pass through
+     * unchanged (axis-aligned scale + translate preserve angular orientation).
+     * The host-side `tBias = -startAngle / 360` and `tScale = 360 / (endAngle -
+     * startAngle)` collapse the fragment-shader remapping to one add + one mul.
+     *
+     * Tile modes : only kClamp routes here today ; the dispatch gate at the
+     * top of [drawPath] already filters non-kClamp callers, so reaching this
+     * function with any other tile mode is a programming error (the pipeline
+     * cache still wires all 4 entry points for future-readiness via G4.3.1).
+     */
+    private fun drawSweepGradientFillRect(
+        devRect: SkRect, clip: SkIRect, paint: SkPaint, grad: SkSweepGradient, ctm: SkMatrix,
+    ): Boolean {
+        val scissor: IntArray
+        if (paint.isAntiAlias) {
+            val fl = devRect.left.coerceAtLeast(clip.left.toFloat()).coerceAtLeast(0f)
+            val ft = devRect.top.coerceAtLeast(clip.top.toFloat()).coerceAtLeast(0f)
+            val fr = devRect.right.coerceAtMost(clip.right.toFloat()).coerceAtMost(width.toFloat())
+            val fb = devRect.bottom.coerceAtMost(clip.bottom.toFloat()).coerceAtMost(height.toFloat())
+            if (fl >= fr || ft >= fb) return false
+            val sl = floor(fl.toDouble()).toInt().coerceAtLeast(0)
+            val st = floor(ft.toDouble()).toInt().coerceAtLeast(0)
+            val sr = ceil(fr.toDouble()).toInt().coerceAtMost(width)
+            val sb = ceil(fb.toDouble()).toInt().coerceAtMost(height)
+            if (sl >= sr || st >= sb) return false
+            scissor = intArrayOf(sl, st, sr - sl, sb - st)
+        } else {
+            val l = pixelEdge(devRect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
+            val t = pixelEdge(devRect.top).coerceAtLeast(clip.top).coerceAtLeast(0)
+            val r = pixelEdge(devRect.right).coerceAtMost(clip.right).coerceAtMost(width)
+            val b = pixelEdge(devRect.bottom).coerceAtMost(clip.bottom).coerceAtMost(height)
+            if (l >= r || t >= b) return false
+            scissor = intArrayOf(l, t, r - l, b - t)
+        }
+
+        val center = grad.getCenter()
+        val (cx, cy) = ctm.mapXY(center.fX, center.fY)
+        val startAngle = grad.getStartAngle()
+        val endAngle = grad.getEndAngle()
+        val tBias = -startAngle / 360f
+        val tScale = 360f / (endAngle - startAngle)
+
+        val srcColors = grad.getColors()
+        val positions = grad.getPositions()
+        val count = srcColors.size.coerceAtMost(MAX_GRADIENT_STOPS)
+        val packedPositions = FloatArray(MAX_GRADIENT_STOPS * 4)
+        val packedColors = FloatArray(MAX_GRADIENT_STOPS * 4)
+        for (i in 0 until count) {
+            packedPositions[i * 4] = positions[i]
+            val c = srcColors[i]
+            val a = SkColorGetA(c) / 255f
+            val r = SkColorGetR(c) / 255f
+            val g = SkColorGetG(c) / 255f
+            val b = SkColorGetB(c) / 255f
+            packedColors[i * 4]     = r * a
+            packedColors[i * 4 + 1] = g * a
+            packedColors[i * 4 + 2] = b * a
+            packedColors[i * 4 + 3] = a
+        }
+
+        val first = srcColors[0]
+        pending.add(
+            SweepGradientRectDraw(
+                scissor = scissor,
+                centerX = cx, centerY = cy,
+                tBias = tBias, tScale = tScale,
+                stopPositions = packedPositions,
+                stopColors = packedColors,
+                stopCount = count,
+                tileMode = grad.getTileMode(),
+                r = SkColorGetR(first) / 255f,
+                g = SkColorGetG(first) / 255f,
+                b = SkColorGetB(first) / 255f,
+                a = SkColorGetA(first) / 255f,
+                mode = paint.blendMode,
+            ),
+        )
+        return true
+    }
+
+    /**
      * G3.1.1 — single annular AA rect draw : outer bounds = `rect ± half_sw`,
      * inner bounds = `rect ∓ half_sw`. Replaces the G3.1 4-edge fill
      * decomposition for the AA path so the corner pixels get the same
@@ -1689,6 +1863,32 @@ public class SkWebGpuDevice(
                     maxOf(x0, x1), maxOf(y0, y1),
                 )
                 drawRadialGradientFillRect(devRect, clip, paint, shader, ctm)
+                return
+            }
+        }
+        // G4.3 -- sweep gradient fill of an axis-aligned rect, kClamp only.
+        // Same gate shape as the linear / radial branches (path.isRect +
+        // axis-aligned CTM) but additionally requires `tileMode == kClamp`
+        // until G4.3.1 widens the dispatch to the other tile modes (the
+        // pipeline cache already wires fs_repeat / fs_mirror / fs_decal,
+        // so that's a strict superset of this change). Non-rect paths,
+        // rotated/skewed CTMs and the other tile modes fall through to the
+        // existing solid-color fill machinery (paint.color, pre-G4.3
+        // fallback).
+        if (shader is SkSweepGradient &&
+            paint.style == SkPaint.Style.kFill_Style &&
+            ctm.isAxisAligned &&
+            shader.getTileMode() == SkTileMode.kClamp
+        ) {
+            val srcRect = path.isRect()
+            if (srcRect != null) {
+                val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
+                val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
+                val devRect = SkRect.MakeLTRB(
+                    minOf(x0, x1), minOf(y0, y1),
+                    maxOf(x0, x1), maxOf(y0, y1),
+                )
+                drawSweepGradientFillRect(devRect, clip, paint, shader, ctm)
                 return
             }
         }
@@ -2210,6 +2410,7 @@ public class SkWebGpuDevice(
                     buildStencilCoverAaRadialGradientDrawResources(d)
                 is LinearGradientRectDraw -> buildLinearGradientRectDrawResources(d)
                 is RadialGradientRectDraw -> buildRadialGradientRectDrawResources(d)
+                is SweepGradientRectDraw -> buildSweepGradientRectDrawResources(d)
             }
         }
 
@@ -2483,6 +2684,17 @@ public class SkWebGpuDevice(
                     }
                     is RadialGradientRectDraw -> {
                         setPipeline(radialGradientPipelineFor(d.mode, d.tileMode))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    }
+                    is SweepGradientRectDraw -> {
+                        setPipeline(sweepGradientPipelineFor(d.mode, d.tileMode))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
@@ -2788,6 +3000,42 @@ public class SkWebGpuDevice(
         return DrawResources(uniform = uniform, bindGroup = bindGroup)
     }
 
+    private fun buildSweepGradientRectDrawResources(d: SweepGradientRectDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = SWEEP_GRADIENT_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.sweepGradientRectDraw",
+            ),
+        )
+        // Layout matches `sweep_gradient.wgsl` :
+        //   offset   0 : viewport         (vec4f, only x/y used)
+        //   offset  16 : centerBiasScale  (vec4f -- center.xy, tBias, tScale)
+        //   offset  32 : countPad         (u32 in .x as bit-reinterpreted float)
+        //   offset  48 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
+        //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8)
+        packed[0] = width.toFloat(); packed[1] = height.toFloat()
+        packed[2] = 0f; packed[3] = 0f
+        packed[4] = d.centerX; packed[5] = d.centerY
+        packed[6] = d.tBias; packed[7] = d.tScale
+        packed[8] = Float.fromBits(d.stopCount)
+        packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
+        System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
+        System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = sweepGradientBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        return DrawResources(uniform = uniform, bindGroup = bindGroup)
+    }
+
     private fun buildStencilCoverAaDrawResources(d: StencilCoverAaPolygonDraw): DrawResources {
         val uniform = context.device.createBuffer(
             BufferDescriptor(
@@ -3009,6 +3257,8 @@ public class SkWebGpuDevice(
         linearGradientPipelineCache.clear()
         radialGradientPipelineCache.values.forEach { it.close() }
         radialGradientPipelineCache.clear()
+        sweepGradientPipelineCache.values.forEach { it.close() }
+        sweepGradientPipelineCache.clear()
         stencilWritePipeline.close()
         presentPipeline.close()
         rectShader.close()
@@ -3019,6 +3269,7 @@ public class SkWebGpuDevice(
         aaStencilCoverRadialGradientShader.close()
         linearGradientShader.close()
         radialGradientShader.close()
+        sweepGradientShader.close()
         presentShader.close()
         intermediateView.close()
         intermediateTexture.close()
@@ -3078,6 +3329,14 @@ public class SkWebGpuDevice(
          * different fields (viewport / center+radius vs startEnd / viewport).
          */
         const val RADIAL_GRADIENT_UNIFORM_SIZE: ULong = 560uL
+        /**
+         * G4.3 -- size of the sweep-gradient per-draw uniform :
+         *   viewport (16) + centerBiasScale (16) + countPad (16) +
+         *   positions (16 * 16) + colors (16 * 16) = 560 bytes.
+         * Same total as the linear / radial uniforms ; only the second
+         * vec4 carries different fields (center.xy + tBias + tScale here).
+         */
+        const val SWEEP_GRADIENT_UNIFORM_SIZE: ULong = 560uL
         /**
          * G4.1.2 -- size of the AA stencil-cover gradient per-draw uniform :
          *   color (16) + viewport (16) + startEnd (16) + countPad (16) +

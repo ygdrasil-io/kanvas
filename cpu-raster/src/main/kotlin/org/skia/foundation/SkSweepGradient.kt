@@ -37,6 +37,24 @@ public class SkSweepGradient internal constructor(
     localMatrix: SkMatrix = SkMatrix.Identity,
 ) : SkShader(localMatrix) {
 
+    /** Centre of the sweep in shader-local space. */
+    public fun getCenter(): SkPoint = center.copy()
+
+    /** Start angle in degrees ; `0` at the +X axis, increasing clockwise. */
+    public fun getStartAngle(): SkScalar = startAngle
+
+    /** End angle in degrees ; sweep spans `[startAngle, endAngle]`. */
+    public fun getEndAngle(): SkScalar = endAngle
+
+    /** Stop colours (defensive copy). */
+    public fun getColors(): IntArray = srcColors.copyOf()
+
+    /** Stop positions in `[0, 1]` (defensive copy). */
+    public fun getPositions(): FloatArray = positions.copyOf()
+
+    /** What happens for `t` outside `[0, 1]`. */
+    public fun getTileMode(): SkTileMode = tileMode
+
     /** Pre-transformed stops in working colour space. Built per draw. */
     private val xformedColors: IntArray = IntArray(srcColors.size)
 
