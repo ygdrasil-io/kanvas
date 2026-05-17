@@ -19,6 +19,12 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":kanvas-skia"))
     implementation(project(":math"))
+    // G4.1 — gradient shaders need to read SkLinearGradient state
+    // (endpoints, stops, positions, tile mode). The gradient classes
+    // live in :cpu-raster ; this dep is the smallest change that lets
+    // the GPU device detect-and-dispatch on them. Future G4.x slices
+    // (radial / sweep) reuse the same surface.
+    implementation(project(":cpu-raster"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
     // wgpu4k's mapAsync / requestDevice are `suspend` functions. The
     // toolkit ships kotlinx-coroutines transitively (runtime), but its

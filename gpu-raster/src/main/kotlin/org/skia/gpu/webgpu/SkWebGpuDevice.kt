@@ -58,11 +58,13 @@ import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkImage
+import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkStroker
+import org.skia.foundation.SkTileMode
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
@@ -308,6 +310,37 @@ public class SkWebGpuDevice(
         val edges: FloatArray,   // (a, b, c, _) per edge, length = MAX_AA_EDGES * 4
         val edgeCount: Int,
         val scissor: IntArray,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
+    /**
+     * G4.1 — linear gradient (clamp tile mode) fill of an axis-aligned
+     * rect. Same scissor + full-screen-triangle dispatch as [RectDraw],
+     * but the fragment shader reads `(start, end, stops, positions)` from
+     * the uniform and emits a per-pixel premul color rather than a constant.
+     *
+     *  - [scissor] : `(x, y, w, h)` — integer device-pixel scissor, set
+     *    via `setScissorRect` before drawing.
+     *  - [startX] / [startY] / [endX] / [endY] : gradient endpoints in
+     *    **device-pixel coords** (i.e. already CTM-transformed from the
+     *    shader-local endpoints).
+     *  - [stopPositions] / [stopColors] : sorted-on-input table, both
+     *    pre-padded to `MAX_GRADIENT_STOPS` slots (positions = first
+     *    float of each vec4, colors = 4-float premul vec4 per stop).
+     *  - [stopCount] : how many entries are meaningful.
+     *
+     * Inherited `r/g/b/a` are unused (the shader sources color from
+     * the stops) but kept for the [PendingDraw] interface — set to the
+     * first stop so they remain interpretable.
+     */
+    private data class LinearGradientRectDraw(
+        val scissor: IntArray,
+        val startX: Float, val startY: Float,
+        val endX: Float, val endY: Float,
+        val stopPositions: FloatArray, // MAX_GRADIENT_STOPS * 4 floats (x of each vec4)
+        val stopColors: FloatArray,    // MAX_GRADIENT_STOPS * 4 premul vec4
+        val stopCount: Int,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
     ) : PendingDraw
@@ -734,6 +767,54 @@ public class SkWebGpuDevice(
             )
         }
 
+    // ─── Linear gradient pipeline (G4.1) — kClamp tile mode, drawRect ──────
+
+    private val linearGradientShader: GPUShaderModule = loadShader("shaders/linear_gradient.wgsl")
+
+    private val linearGradientBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                ),
+            ),
+        ),
+    )
+
+    private val linearGradientPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(linearGradientBindGroupLayout)),
+    )
+
+    /**
+     * Lazily-populated linear-gradient-pipeline cache, one entry per
+     * [SkBlendMode] the caller exercises. Gradient stops vary per draw
+     * via the uniform buffer ; only the blend state differs across
+     * pipelines (same pattern as `rectPipelineCache`).
+     */
+    private val linearGradientPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+
+    private fun linearGradientPipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        linearGradientPipelineCache.getOrPut(mode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = linearGradientPipelineLayout,
+                    vertex = VertexState(module = linearGradientShader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = linearGradientShader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA8Unorm,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
     /**
      * Translate a [SkBlendMode] into the WebGPU [BlendState] that
      * implements it. G2.2 covers the 4 modes WebGPU expresses natively
@@ -858,6 +939,94 @@ public class SkWebGpuDevice(
                 mode = paint.blendMode,
             ),
         )
+    }
+
+    /**
+     * G4.1 — emit a [LinearGradientRectDraw] for a kClamp `SkLinearGradient`
+     * fill of the axis-aligned device-space rect [devRect] (already CTM-
+     * transformed by the caller). Scissor + rect bounds derivation mirrors
+     * [drawFillRect] : AA path widens the scissor by 1 px so the fragment
+     * stage sees every potentially-covered pixel ; non-AA snaps to integer
+     * edges via [pixelEdge].
+     *
+     * Endpoints come from `SkLinearGradient.getStartPoint/getEndPoint` in
+     * source space ; the caller's CTM ([ctm]) maps them into device space
+     * here so the fragment shader can operate directly in device-pixel
+     * coords. Routed through [drawPath]'s [path.isRect] + axis-aligned-CTM
+     * gate ; rotated/skewed CTM paints with the rect-shaped polygon under
+     * a future generic gradient path (not part of G4.1).
+     *
+     * Returns `false` if the rect is entirely outside the clip / viewport ;
+     * caller drops the draw (no fallback colour for fully-clipped rects).
+     */
+    private fun drawLinearGradientFillRect(
+        devRect: SkRect, clip: SkIRect, paint: SkPaint, grad: SkLinearGradient, ctm: SkMatrix,
+    ): Boolean {
+        val scissor: IntArray
+        if (paint.isAntiAlias) {
+            val fl = devRect.left.coerceAtLeast(clip.left.toFloat()).coerceAtLeast(0f)
+            val ft = devRect.top.coerceAtLeast(clip.top.toFloat()).coerceAtLeast(0f)
+            val fr = devRect.right.coerceAtMost(clip.right.toFloat()).coerceAtMost(width.toFloat())
+            val fb = devRect.bottom.coerceAtMost(clip.bottom.toFloat()).coerceAtMost(height.toFloat())
+            if (fl >= fr || ft >= fb) return false
+            val sl = floor(fl.toDouble()).toInt().coerceAtLeast(0)
+            val st = floor(ft.toDouble()).toInt().coerceAtLeast(0)
+            val sr = ceil(fr.toDouble()).toInt().coerceAtMost(width)
+            val sb = ceil(fb.toDouble()).toInt().coerceAtMost(height)
+            if (sl >= sr || st >= sb) return false
+            scissor = intArrayOf(sl, st, sr - sl, sb - st)
+        } else {
+            val l = pixelEdge(devRect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
+            val t = pixelEdge(devRect.top).coerceAtLeast(clip.top).coerceAtLeast(0)
+            val r = pixelEdge(devRect.right).coerceAtMost(clip.right).coerceAtMost(width)
+            val b = pixelEdge(devRect.bottom).coerceAtMost(clip.bottom).coerceAtMost(height)
+            if (l >= r || t >= b) return false
+            scissor = intArrayOf(l, t, r - l, b - t)
+        }
+
+        val p0 = grad.getStartPoint()
+        val p1 = grad.getEndPoint()
+        val (sx, sy) = ctm.mapXY(p0.fX, p0.fY)
+        val (ex, ey) = ctm.mapXY(p1.fX, p1.fY)
+
+        val srcColors = grad.getColors()
+        val positions = grad.getPositions()
+        val count = srcColors.size.coerceAtMost(MAX_GRADIENT_STOPS)
+        val packedPositions = FloatArray(MAX_GRADIENT_STOPS * 4)
+        val packedColors = FloatArray(MAX_GRADIENT_STOPS * 4)
+        for (i in 0 until count) {
+            packedPositions[i * 4] = positions[i]
+            val c = srcColors[i]
+            val a = SkColorGetA(c) / 255f
+            val r = SkColorGetR(c) / 255f
+            val g = SkColorGetG(c) / 255f
+            val b = SkColorGetB(c) / 255f
+            // Premultiplied : matches the fragment-output convention
+            // (G2.1 premul) and the SrcOver blend state (G2.2).
+            packedColors[i * 4]     = r * a
+            packedColors[i * 4 + 1] = g * a
+            packedColors[i * 4 + 2] = b * a
+            packedColors[i * 4 + 3] = a
+        }
+
+        // Use the first stop's color as the placeholder paint color so
+        // [PendingDraw.r/g/b/a] stays meaningful (unused on this path).
+        val first = srcColors[0]
+        pending.add(
+            LinearGradientRectDraw(
+                scissor = scissor,
+                startX = sx, startY = sy, endX = ex, endY = ey,
+                stopPositions = packedPositions,
+                stopColors = packedColors,
+                stopCount = count,
+                r = SkColorGetR(first) / 255f,
+                g = SkColorGetG(first) / 255f,
+                b = SkColorGetB(first) / 255f,
+                a = SkColorGetA(first) / 255f,
+                mode = paint.blendMode,
+            ),
+        )
+        return true
     }
 
     /**
@@ -1020,6 +1189,42 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
+        // G4.1 — linear gradient (clamp tile mode) fill of an axis-aligned
+        // rect routes through the dedicated gradient pipeline. SkCanvas
+        // sends shaded rect draws here (the drawRect fast path requires
+        // `paint.shader == null`), so the gate is `path.isRect() != null
+        // && ctm.isAxisAligned`. Rotated/skewed CTMs and non-rect paths
+        // fall through to the existing fill machinery, which will paint
+        // them as solid color (the pre-G4.1 fallback) until a generic
+        // gradient-over-polygon pipeline lands later in G4.
+        val shader = paint.shader
+        if (shader is SkLinearGradient &&
+            paint.style == SkPaint.Style.kFill_Style &&
+            ctm.isAxisAligned
+        ) {
+            val srcRect = path.isRect()
+            if (srcRect != null) {
+                when (shader.getTileMode()) {
+                    SkTileMode.kClamp -> {
+                        val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
+                        val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
+                        val devRect = SkRect.MakeLTRB(
+                            minOf(x0, x1), minOf(y0, y1),
+                            maxOf(x0, x1), maxOf(y0, y1),
+                        )
+                        if (drawLinearGradientFillRect(devRect, clip, paint, shader, ctm)) return
+                        // Degenerate (rect outside clip) : nothing to draw.
+                        return
+                    }
+                    else -> error(
+                        "SkWebGpuDevice : SkLinearGradient tile mode ${shader.getTileMode()} " +
+                            "not supported yet. Only kClamp lands in G4.1 ; " +
+                            "kRepeat / kMirror / kDecal arrive in G4.1.x follow-ups.",
+                    )
+                }
+            }
+        }
+
         // G3.4.1 — stroke style : run SkStroker in source space to produce
         // the filled outline path, then recurse with a fill-style paint
         // copy. The outline is multi-contour for closed paths (outer +
@@ -1312,6 +1517,7 @@ public class SkWebGpuDevice(
                 is AaPolygonDraw -> buildAaPolygonDrawResources(d)
                 is StencilCoverPolygonDraw -> buildStencilCoverDrawResources(d)
                 is StencilCoverAaPolygonDraw -> buildStencilCoverAaDrawResources(d)
+                is LinearGradientRectDraw -> buildLinearGradientRectDrawResources(d)
             }
         }
 
@@ -1465,6 +1671,17 @@ public class SkWebGpuDevice(
                         )
                         setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
                         draw((d.verts.size / 2).toUInt())
+                    }
+                    is LinearGradientRectDraw -> {
+                        setPipeline(linearGradientPipelineFor(d.mode))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
                     }
                     is StencilCoverPolygonDraw -> { /* handled above */ }
                     is StencilCoverAaPolygonDraw -> { /* handled above */ }
@@ -1689,6 +1906,42 @@ public class SkWebGpuDevice(
         return DrawResources(uniform = uniform, bindGroup = bindGroup, vertexBuffer = vertexBuffer)
     }
 
+    private fun buildLinearGradientRectDrawResources(d: LinearGradientRectDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = LINEAR_GRADIENT_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.linearGradientRectDraw",
+            ),
+        )
+        // Layout matches `linear_gradient.wgsl` :
+        //   offset   0 : startEnd  (vec4f -- start.xy, end.xy)
+        //   offset  16 : viewport  (vec4f, only x/y used)
+        //   offset  32 : countPad  (u32 in .x as bit-reinterpreted float)
+        //   offset  48 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
+        //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8)
+        packed[0] = d.startX; packed[1] = d.startY
+        packed[2] = d.endX;   packed[3] = d.endY
+        packed[4] = width.toFloat(); packed[5] = height.toFloat()
+        packed[6] = 0f; packed[7] = 0f
+        packed[8] = Float.fromBits(d.stopCount)
+        packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
+        System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
+        System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = linearGradientBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        return DrawResources(uniform = uniform, bindGroup = bindGroup)
+    }
+
     private fun buildStencilCoverAaDrawResources(d: StencilCoverAaPolygonDraw): DrawResources {
         val uniform = context.device.createBuffer(
             BufferDescriptor(
@@ -1751,12 +2004,15 @@ public class SkWebGpuDevice(
         coverPipelineCache.clear()
         aaStencilCoverPipelineCache.values.forEach { it.close() }
         aaStencilCoverPipelineCache.clear()
+        linearGradientPipelineCache.values.forEach { it.close() }
+        linearGradientPipelineCache.clear()
         stencilWritePipeline.close()
         presentPipeline.close()
         rectShader.close()
         polygonShader.close()
         aaPolygonShader.close()
         aaStencilCoverShader.close()
+        linearGradientShader.close()
         presentShader.close()
         intermediateView.close()
         intermediateTexture.close()
@@ -1795,6 +2051,19 @@ public class SkWebGpuDevice(
          *   color (16) + viewport (16) + edgeCount+pad (16) + edges (256*16) = 4144 bytes.
          */
         const val AA_POLYGON_UNIFORM_SIZE: ULong = 4144uL // 48 + 256 * 16
+        /**
+         * G4.1 — cap on `SkLinearGradient` stop count for the WGSL
+         * uniform table. Skia's `MakeLinear` accepts arbitrary counts but
+         * gradient GMs in scope cap at 6 stops (FillrectGradientGM row 8).
+         * A larger cap can be added when a real GM exceeds it.
+         */
+        const val MAX_GRADIENT_STOPS: Int = 16
+        /**
+         * Size of the linear-gradient per-draw uniform :
+         *   startEnd (16) + viewport (16) + countPad (16) +
+         *   positions (16 * 16) + colors (16 * 16) = 560 bytes.
+         */
+        const val LINEAR_GRADIENT_UNIFORM_SIZE: ULong = 560uL // 48 + 16 * 16 + 16 * 16
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 
         /**
