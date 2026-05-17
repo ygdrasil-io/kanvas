@@ -453,7 +453,8 @@ Lift le throw `require(paint.style == kFill_Style)` sur `drawPath`. Quand `paint
 - [x] G3.4.1 : SkStroker integration skeleton. drawPath accepte kStroke/kStrokeAndFill via outline → recurse fill. CubicStrokeGM 98.57 % (premier GM non-rect stroke).
 - [x] G3.4.2 : 5 cross-tests stroke neufs post-G3.4.1 (SmallArcGM 99.80 %, ArcOfZorroGM 99.73 %, Bug6987GM 99.77 %, ScaledStrokesGM 96.49 %, AddArcGM 93.30 %) avg **97.82 %** — zéro changement device, élargissement du harness sur stroke + cubic flattening (resScale 8× et 50000×, drawArc(useCenter=false), addArc, multi-shape + multi-scale).
 - [x] G3.4.3 : true hairlines via `strokeWidth = 1 / resScale` synthèse avant `SkStroker.fromPaint`. 1 unit test neuf (PathHairlineStrokeTest). Aucun GM existant exercice ce chemin (les GMs hairline passent par drawRect) — préparation.
-- [ ] G3.4 : caps/joins variants, plus de GMs (StrokeRectGM, autres).
+- [x] G3.4.4 : 6 cross-tests stroke caps/joins neufs (Bug12866GM 95.24 %, InnerJoinGeometryGM 98.71 %, QuadCapGM 99.80 %, ZeroLineStrokeGM 94.05 %, StrokerectAnisotropicGM 98.11 %, RectPolyStrokeGM 98.21 %) avg **97.35 %** — zéro changement device, élargissement du harness sur caps (butt/round) et joins (miter/round/bevel) variants, plus stroker resScale extrême (1200) et CTM anisotrope.
+- [ ] G3.4 : plus de GMs (StrokeRectGM bloqué par drawPoints non-implémenté côté device, WideButtCapsGM bloqué par `c.clear()` qui passe par bitmap.eraseColor).
 
 ---
 
