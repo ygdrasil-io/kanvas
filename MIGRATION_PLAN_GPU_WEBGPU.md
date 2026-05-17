@@ -464,20 +464,34 @@ Lift le throw `require(paint.style == kFill_Style)` sur `drawPath`. Quand `paint
 
 ### Contrat shader
 - [ ] **Pas de SkSL → WGSL transpilation.** Chaque type de shader (`SkLinearGradient`, `SkRadialGradient`, `SkBitmapShader`, future composite) a son **template WGSL** (~30-80 lignes), instancié au moment du draw avec :
-  - [ ] Stops uniformes : `array<vec4f, MAX_STOPS>` + `array<f32, MAX_STOPS>` positions + `count`.
+  - [x] Stops uniformes : `array<vec4f, MAX_STOPS>` + `array<f32, MAX_STOPS>` positions + `count` (G4.1, MAX_STOPS = 16).
   - [ ] Inverse local-matrix uniform.
   - [ ] Tile mode comme constante de spécialisation (kClamp / kRepeat / kMirror / kDecal — 4 variantes compilées séparément).
 - [ ] **Précompilation** : pipeline cache keyed par `(shader-type, tileMode-X, tileMode-Y, blend-mode, ...)`. Évite recompile par draw.
 
-### Détails
-- [ ] `SkLinearGradient.wgsl` : projection `t = dot(p - p0, dir) / |dir|^2`, lookup binary search dans le stops array, lerp premul (mêmes maths que `lookupStopF16` côté raster).
-- [ ] `SkRadialGradient.wgsl` : `t = length(p - center) / radius`, idem lookup.
+### G4.1 — Linear gradient (kClamp, drawRect)
+
+Premier slice gradient end-to-end : `SkLinearGradient` en kClamp uniquement, route `drawRect`/`SkPath.isRect` sous CTM axis-aligned. Les autres tile modes (kRepeat/kMirror/kDecal) throw avec un message explicite — couverts par G4.1.x.
+
+- [x] `:gpu-raster` ajoute `implementation(project(":cpu-raster"))` pour voir `SkLinearGradient` côté main classpath (les classes gradient vivent dans `:cpu-raster`).
+- [x] [shaders/linear_gradient.wgsl](gpu-raster/src/main/resources/shaders/linear_gradient.wgsl) — ~80 lignes. Uniforms : `startEnd` (vec4), `viewport`, `countPad` (count en bits f32), `positions[16]` (vec4 each, .x = pos), `colors[16]` (vec4 premul). Fragment : `t = clamp(dot(p - start, dir) / |dir|^2, 0, 1)`, scan linéaire des stops, lerp premul `(1-u) * A + u * B`.
+- [x] `SkWebGpuDevice` :
+  - nouvelle `PendingDraw` variant `LinearGradientRectDraw` (scissor + endpoints device-space + stops packés + blend mode).
+  - pipeline cache `linearGradientPipelineCache` keyed par `SkBlendMode` (les stops varient par-draw via uniform, seul l'état de blend différencie les pipelines compilés).
+  - `drawPath` détecte `paint.shader is SkLinearGradient && path.isRect() != null && ctm.isAxisAligned` et route vers `drawLinearGradientFillRect` ; chemin existant `drawFillRect` solid-color inchangé (SkCanvas envoie les rects shaded ici parce que le fast path `device.drawRect` exige `paint.shader == null`).
+- [x] [LinearGradientRectTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/LinearGradientRectTest.kt) — unit test : red->blue gradient horizontal sur un rect 60px, sample 3 colonnes (gauche/milieu/droite) pour vérifier l'interpolation.
+- [x] [ShallowGradientLinearWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ShallowGradientLinearWebGpuTest.kt) — cross-test GM : `ShallowGradientLinearGM` (800×800, drawRect, kClamp, `0xFF555555 -> 0xFF444444`). Score : **100.00 % (byte-exact, 640000/640000 pixels matching)**.
+
+### Détails restants
+- [ ] `SkLinearGradient.wgsl` : élargir aux tile modes kRepeat / kMirror / kDecal (G4.1.1) ; routes via `drawPath`/`drawPaint` quand la géométrie n'est pas un rect (G4.1.2).
+- [ ] `SkRadialGradient.wgsl` : `t = length(p - center) / radius`, idem lookup (G4.2).
 - [ ] **Linear-premul output** : working space identique au raster (D3) — le shader retourne directement en F16 linear-Rec.2020.
 
 ### Tests
 - [ ] Tous les GMs gradient déjà raster (ports Phase 5a-5g du master) re-runnables sur GPU.
 
 ### Vérification G4
+- [x] G4.1 : `ShallowGradientLinearGM` 100.00 % sur GPU (premier gradient GM vert).
 - [ ] FillrectGradientGM, ClampedGradients, OvalGM gradient row, AnalyticGradients verts sur GPU.
 
 ---
