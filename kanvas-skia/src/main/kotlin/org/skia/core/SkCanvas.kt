@@ -1845,7 +1845,10 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      */
     public open fun drawColor(color: SkColor, mode: SkBlendMode = SkBlendMode.kSrcOver) {
         val s = top
-        if (mode == SkBlendMode.kSrc && s.clip == s.device.deviceClipBounds()) {
+        if (mode == SkBlendMode.kSrc &&
+            s.clip == s.device.deviceClipBounds() &&
+            s.device is SkBitmapDevice
+        ) {
             bitmap.eraseColor(color)
             return
         }
