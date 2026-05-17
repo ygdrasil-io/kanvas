@@ -374,13 +374,28 @@ Lift le throw `require(!paint.isAntiAlias)` sur le branch multi-contour : la pas
 - [x] **Trade-off documenté** : l'AA capture la moitié intérieure de la fall-off (1.0 à 0.5px à l'intérieur du contour, 0.5 sur le bord), la moitié extérieure est perdue parce que la stencil rejette les fragments outside-path. Boundaries un demi-pixel plus durs que le reference. Acceptable vs throw.
 - [x] **Test** : [ConcavePathsWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ConcavePathsWebGpuTest.kt) — 29 cells (mix multi-contour et single-contour concave AA). Score **93.23 %**. Les cells multi-contour rendent bien ; les cells single-contour concave restent fausses (toujours sur la min-coverage shader G3.3b.2a, valide convex uniquement). Closing the rest demanderait soit router single-contour concave vers le nouveau path stencil-and-cover, soit triangulation concave.
 
-### G3.3b.3 — Reste à faire (kEvenOdd, inverse, intra-frame)
+### G3.3b.3b — kEvenOdd + inverse fill types ✅
 
-- [ ] **kEvenOdd cover pipeline** : `stencilReadMask = 0x01` au lieu de `0xFF`, compare NotEqual-0. Code prêt mais reverté en G3.3b.2c (pas de GM en scope). Cf. Stream A bail report.
-- [ ] **Inverse fill types** (`kInverseWinding`, `kInverseEvenOdd`) : cover quad = viewport entier, stencil compare flip Equal-0. Débloquerait `FillTypeGM` (tenté en G3.3b.2c, blocked).
-- [x] ~~**Single-contour concave → stencil-and-cover**~~ : livré en G3.3b.3a.2 (cf. ci-dessus). Cross-product convexity check route les concave single-contour à travers le même path AA stencil-and-cover.
+Généralise les deux pipelines `coverPipelineCache` et `aaStencilCoverPipelineCache` pour porter les 4 valeurs de `SkPathFillType`. La pipeline change par `(blend mode, fill type)` :
+
+  - `readMask` : `0xFF` (kWinding) / `0x01` (kEvenOdd)
+  - `stencilCompare` : `NotEqual` (non-inverse) / `Equal` (inverse) contre ref 0
+
+Le cover quad sélectionné par `drawPath` :
+
+  - Non-inverse : bbox path (1px inflated)
+  - Inverse : viewport plein (clip scissoré par la passe)
+
+- [x] **`SkPathFillType` import** + ré-keying des deux caches en `Pair<SkBlendMode, SkPathFillType>`.
+- [x] **`viewportTrianglesFor(w, h)`** : helper compagnion, 2-triangle quad spanning toute la device.
+- [x] **`drawPath` dispatch** : retire la garde `require(!path.fillType.isInverse())`, passe `path.fillType` à `StencilCoverPolygonDraw` / `StencilCoverAaPolygonDraw`, sélectionne le cover quad selon `isInverse()`. Single-contour convex non-inverse garde son chemin rapide (`AaPolygonDraw` / `PolygonDraw`) ; inverse OR concave route vers stencil-and-cover.
+- [x] **Test** : [FillTypeWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/FillTypeWebGpuTest.kt) — grille 4×4 des 4 fill types × 2 scales × AA on/off sur multi-contour. Score **99.55 %** (ratché à floor=99.5).
+
+### G3.3b.3 — Reste à faire
+
 - [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
-- [ ] **Tests futurs** : `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family, `FillTypeGM`.
+- [ ] **Sample-mask AA** ou two-pass cover : closerait la perte du demi-pixel extérieur de l'AA falloff sur stencil-and-cover.
+- [ ] **Tests futurs** : `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family, `FillTypePerspGM`.
 
 ### G3.4 — Stroke générique via SkStroker (à venir, après G3.3b)
 
@@ -397,6 +412,7 @@ Lift le throw `require(!paint.isAntiAlias)` sur le branch multi-contour : la pas
 - [x] G3.3b.2d : 3 cross-tests neufs (FiddleGM, ClipDrawDrawGM, Bug7792GM) avg 99.99 % — zéro changement device, élargissement du harness.
 - [x] G3.3b.3a : AA multi-contour via stencil-and-cover + AA edge-segment shader. ConcavePathsGM débloqué à 93.23 %.
 - [x] G3.3b.3a.2 : single-contour concave routé vers stencil-and-cover AA via détection convexité cross-product. ConcavePathsGM **93.23 → 98.90 (+5.67%)**.
+- [x] G3.3b.3b : kEvenOdd + inverse fill types via `coverPipelineCache: Pair<SkBlendMode, SkPathFillType>`. FillTypeGM **99.55 %** (4×4 grille des 4 fill types × scales × AA).
 - [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---
