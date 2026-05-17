@@ -55,6 +55,32 @@ public class SkConicalGradient internal constructor(
     /** Sub-type tag; mirrors upstream's `SkConicalGradient::Type`. */
     public enum class Type { kRadial, kStrip, kFocal }
 
+    // ─── Public accessors (G4.4 — GPU dispatch) ────────────────────────
+
+    /** Start circle centre in shader-local space. */
+    public fun getStart(): SkPoint = c0.copy()
+
+    /** Start circle radius. */
+    public fun getStartRadius(): SkScalar = r0
+
+    /** End circle centre in shader-local space. */
+    public fun getEnd(): SkPoint = c1.copy()
+
+    /** End circle radius. */
+    public fun getEndRadius(): SkScalar = r1
+
+    /** Stop colours (defensive copy). */
+    public fun getColors(): IntArray = srcColors.copyOf()
+
+    /** Stop positions in `[0, 1]` (defensive copy). */
+    public fun getPositions(): FloatArray = positions.copyOf()
+
+    /** What happens for `t < 0` / `t > 1`. */
+    public fun getTileMode(): SkTileMode = tileMode
+
+    /** Geometric sub-type ; the GPU pipeline switches on this. */
+    public fun getType(): Type = type
+
     /** Pre-transformed stop colours in working space (8-bit path). */
     private val xformedColors: IntArray = IntArray(srcColors.size)
 

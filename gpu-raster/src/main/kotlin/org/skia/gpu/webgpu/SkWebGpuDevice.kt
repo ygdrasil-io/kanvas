@@ -59,6 +59,7 @@ import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkLinearGradient
+import org.skia.foundation.SkConicalGradient
 import org.skia.foundation.SkRadialGradient
 import org.skia.foundation.SkSweepGradient
 import org.skia.foundation.SkPaint
@@ -392,6 +393,38 @@ public class SkWebGpuDevice(
         val scissor: IntArray,
         val centerX: Float, val centerY: Float,
         val tBias: Float, val tScale: Float,
+        val stopPositions: FloatArray,
+        val stopColors: FloatArray,
+        val stopCount: Int,
+        val tileMode: SkTileMode,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
+    /**
+     * G4.4 -- pending conical (two-point) gradient fill of an axis-aligned
+     * rect. Skeleton supports only the **kRadial** sub-case of
+     * [SkConicalGradient] (concentric circles, `c0 == c1`) under kClamp ;
+     * other sub-cases (kStrip, kFocal) and other tile modes fall through
+     * at the dispatch gate to the existing solid-color fill machinery.
+     *
+     * `centerX` / `centerY` are the shared centre in device-pixel coords
+     * (already CTM-mapped) ; `startRadius` / `endRadius` are the start /
+     * end circle radii scaled by `ctm.getMaxScale()` (axis-aligned-CTM
+     * gate collapses this to `max(|sx|, |sy|)`). The shader evaluates
+     * `t = (length(p - c1) - r0) / (r1 - r0)` and looks up the stops via
+     * the per-tile-mode entry point.
+     *
+     * [tileMode] is kept in the per-draw record (and in the pipeline
+     * cache key) for symmetry with the linear / radial / sweep gradients
+     * even though only kClamp routes here today ; the other 3 entry
+     * points exist in `conical_gradient.wgsl` for the G4.4.1 follow-up
+     * widening the dispatch.
+     */
+    private data class ConicalGradientRectDraw(
+        val scissor: IntArray,
+        val centerX: Float, val centerY: Float,
+        val startRadius: Float, val endRadius: Float,
         val stopPositions: FloatArray,
         val stopColors: FloatArray,
         val stopCount: Int,
@@ -1062,6 +1095,74 @@ public class SkWebGpuDevice(
             )
         }
 
+    // ─── Conical gradient pipeline (G4.4) — kRadial sub-case, kClamp, drawRect ──
+
+    private val conicalGradientShader: GPUShaderModule =
+        loadShader("shaders/conical_gradient.wgsl")
+
+    private val conicalGradientBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                ),
+            ),
+        ),
+    )
+
+    private val conicalGradientPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(conicalGradientBindGroupLayout)),
+    )
+
+    /**
+     * G4.4 -- conical-gradient pipeline cache. Keyed by `(blend, tile)`
+     * from day 1 even though only kClamp dispatches here ; the other 3
+     * fragment entry points (`fs_repeat / fs_mirror / fs_decal`) exist
+     * in `conical_gradient.wgsl` for the G4.4.1 follow-up that widens
+     * the dispatch gate (mirrors the radial / sweep cache layouts).
+     *
+     * The pipeline itself doesn't distinguish between conical sub-cases ;
+     * the host only routes the kRadial sub-case here today (see the
+     * dispatch gate in [drawPath]). A future kFocal pipeline can share
+     * this cache key with a different shader file (or extend
+     * `conical_gradient.wgsl` with a typeFlag uniform and a focal-frame
+     * affine -- the bind-group-layout shape stays identical).
+     */
+    private val conicalGradientPipelineCache:
+        MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
+
+    private fun conicalGradientFragmentEntryPoint(tileMode: SkTileMode): String = when (tileMode) {
+        SkTileMode.kClamp -> "fs_clamp"
+        SkTileMode.kRepeat -> "fs_repeat"
+        SkTileMode.kMirror -> "fs_mirror"
+        SkTileMode.kDecal -> "fs_decal"
+    }
+
+    private fun conicalGradientPipelineFor(
+        mode: SkBlendMode,
+        tileMode: SkTileMode,
+    ): GPURenderPipeline =
+        conicalGradientPipelineCache.getOrPut(mode to tileMode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = conicalGradientPipelineLayout,
+                    vertex = VertexState(module = conicalGradientShader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = conicalGradientShader,
+                        entryPoint = conicalGradientFragmentEntryPoint(tileMode),
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA8Unorm,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
     // ─── AA stencil-cover gradient pipeline (G4.1.2) — linear gradient on non-rect paths ──
 
     private val aaStencilCoverGradientShader: GPUShaderModule =
@@ -1656,6 +1757,92 @@ public class SkWebGpuDevice(
     }
 
     /**
+     * G4.4 -- emit a [ConicalGradientRectDraw] for a kClamp `SkConicalGradient`
+     * fill of the axis-aligned device-space rect [devRect]. Scissor derivation
+     * is identical to [drawRadialGradientFillRect].
+     *
+     * Only the **kRadial** sub-case (concentric circles, `c0 == c1`) is
+     * routed here ; the dispatch gate at the top of [drawPath] already
+     * filtered other sub-cases. The shared centre is mapped through [ctm]
+     * to device space ; the start / end radii are scaled by
+     * `ctm.getMaxScale()` (collapses to `max(|sx|, |sy|)` under the
+     * axis-aligned-CTM gate). The shader evaluates
+     *   t = (length(p - c) - r0) / (r1 - r0)
+     * and the per-tile-mode entry point clamps / wraps / mirrors / decals
+     * the result before the stops lookup (only fs_clamp is reachable
+     * today -- see G4.4.1 follow-up).
+     */
+    private fun drawConicalGradientFillRect(
+        devRect: SkRect, clip: SkIRect, paint: SkPaint, grad: SkConicalGradient, ctm: SkMatrix,
+    ): Boolean {
+        val scissor: IntArray
+        if (paint.isAntiAlias) {
+            val fl = devRect.left.coerceAtLeast(clip.left.toFloat()).coerceAtLeast(0f)
+            val ft = devRect.top.coerceAtLeast(clip.top.toFloat()).coerceAtLeast(0f)
+            val fr = devRect.right.coerceAtMost(clip.right.toFloat()).coerceAtMost(width.toFloat())
+            val fb = devRect.bottom.coerceAtMost(clip.bottom.toFloat()).coerceAtMost(height.toFloat())
+            if (fl >= fr || ft >= fb) return false
+            val sl = floor(fl.toDouble()).toInt().coerceAtLeast(0)
+            val st = floor(ft.toDouble()).toInt().coerceAtLeast(0)
+            val sr = ceil(fr.toDouble()).toInt().coerceAtMost(width)
+            val sb = ceil(fb.toDouble()).toInt().coerceAtMost(height)
+            if (sl >= sr || st >= sb) return false
+            scissor = intArrayOf(sl, st, sr - sl, sb - st)
+        } else {
+            val l = pixelEdge(devRect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
+            val t = pixelEdge(devRect.top).coerceAtLeast(clip.top).coerceAtLeast(0)
+            val r = pixelEdge(devRect.right).coerceAtMost(clip.right).coerceAtMost(width)
+            val b = pixelEdge(devRect.bottom).coerceAtMost(clip.bottom).coerceAtMost(height)
+            if (l >= r || t >= b) return false
+            scissor = intArrayOf(l, t, r - l, b - t)
+        }
+
+        // kRadial sub-case : c0 == c1 in source space ; use either, here `end`.
+        val end = grad.getEnd()
+        val (cx, cy) = ctm.mapXY(end.fX, end.fY)
+        val maxScale = ctm.getMaxScale()
+        val devR0 = grad.getStartRadius() * maxScale
+        val devR1 = grad.getEndRadius() * maxScale
+
+        val srcColors = grad.getColors()
+        val positions = grad.getPositions()
+        val count = srcColors.size.coerceAtMost(MAX_GRADIENT_STOPS)
+        val packedPositions = FloatArray(MAX_GRADIENT_STOPS * 4)
+        val packedColors = FloatArray(MAX_GRADIENT_STOPS * 4)
+        for (i in 0 until count) {
+            packedPositions[i * 4] = positions[i]
+            val c = srcColors[i]
+            val a = SkColorGetA(c) / 255f
+            val r = SkColorGetR(c) / 255f
+            val g = SkColorGetG(c) / 255f
+            val b = SkColorGetB(c) / 255f
+            packedColors[i * 4]     = r * a
+            packedColors[i * 4 + 1] = g * a
+            packedColors[i * 4 + 2] = b * a
+            packedColors[i * 4 + 3] = a
+        }
+
+        val first = srcColors[0]
+        pending.add(
+            ConicalGradientRectDraw(
+                scissor = scissor,
+                centerX = cx, centerY = cy,
+                startRadius = devR0, endRadius = devR1,
+                stopPositions = packedPositions,
+                stopColors = packedColors,
+                stopCount = count,
+                tileMode = grad.getTileMode(),
+                r = SkColorGetR(first) / 255f,
+                g = SkColorGetG(first) / 255f,
+                b = SkColorGetB(first) / 255f,
+                a = SkColorGetA(first) / 255f,
+                mode = paint.blendMode,
+            ),
+        )
+        return true
+    }
+
+    /**
      * G3.1.1 — single annular AA rect draw : outer bounds = `rect ± half_sw`,
      * inner bounds = `rect ∓ half_sw`. Replaces the G3.1 4-edge fill
      * decomposition for the AA path so the corner pixels get the same
@@ -1886,6 +2073,35 @@ public class SkWebGpuDevice(
                     maxOf(x0, x1), maxOf(y0, y1),
                 )
                 drawSweepGradientFillRect(devRect, clip, paint, shader, ctm)
+                return
+            }
+        }
+        // G4.4 -- conical gradient fill of an axis-aligned rect, skeleton.
+        // Only the **kRadial** sub-case (concentric circles, `c0 == c1` ;
+        // SkConicalGradient.Make tags this `Type.kRadial`) routes through
+        // the dedicated pipeline today, and only under kClamp tile mode.
+        // Other sub-cases (kStrip, kFocal in any of its variants) and
+        // other tile modes fall through to the existing solid-color fill
+        // machinery -- a G4.4.x follow-up adds focal-inside (the most
+        // common kFocal case) ; G4.4.1 widens to the other tile modes
+        // for the kRadial sub-case (the pipeline cache already wires all
+        // 4 entry points). Non-rect paths similarly defer to a later
+        // slice (G4.4.2 = conical-on-non-rect-stencil-and-cover).
+        if (shader is SkConicalGradient &&
+            paint.style == SkPaint.Style.kFill_Style &&
+            ctm.isAxisAligned &&
+            shader.getTileMode() == SkTileMode.kClamp &&
+            shader.getType() == SkConicalGradient.Type.kRadial
+        ) {
+            val srcRect = path.isRect()
+            if (srcRect != null) {
+                val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
+                val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
+                val devRect = SkRect.MakeLTRB(
+                    minOf(x0, x1), minOf(y0, y1),
+                    maxOf(x0, x1), maxOf(y0, y1),
+                )
+                drawConicalGradientFillRect(devRect, clip, paint, shader, ctm)
                 return
             }
         }
@@ -2408,6 +2624,7 @@ public class SkWebGpuDevice(
                 is LinearGradientRectDraw -> buildLinearGradientRectDrawResources(d)
                 is RadialGradientRectDraw -> buildRadialGradientRectDrawResources(d)
                 is SweepGradientRectDraw -> buildSweepGradientRectDrawResources(d)
+                is ConicalGradientRectDraw -> buildConicalGradientRectDrawResources(d)
             }
         }
 
@@ -2692,6 +2909,17 @@ public class SkWebGpuDevice(
                     }
                     is SweepGradientRectDraw -> {
                         setPipeline(sweepGradientPipelineFor(d.mode, d.tileMode))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    }
+                    is ConicalGradientRectDraw -> {
+                        setPipeline(conicalGradientPipelineFor(d.mode, d.tileMode))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
@@ -3033,6 +3261,42 @@ public class SkWebGpuDevice(
         return DrawResources(uniform = uniform, bindGroup = bindGroup)
     }
 
+    private fun buildConicalGradientRectDrawResources(d: ConicalGradientRectDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = CONICAL_GRADIENT_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.conicalGradientRectDraw",
+            ),
+        )
+        // Layout matches `conical_gradient.wgsl` :
+        //   offset   0 : viewport     (vec4f, only x/y used)
+        //   offset  16 : centerRadii  (vec4f -- center.xy, r0, r1)
+        //   offset  32 : countPad     (u32 in .x as bit-reinterpreted float)
+        //   offset  48 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
+        //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8)
+        packed[0] = width.toFloat(); packed[1] = height.toFloat()
+        packed[2] = 0f; packed[3] = 0f
+        packed[4] = d.centerX; packed[5] = d.centerY
+        packed[6] = d.startRadius; packed[7] = d.endRadius
+        packed[8] = Float.fromBits(d.stopCount)
+        packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
+        System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
+        System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = conicalGradientBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        return DrawResources(uniform = uniform, bindGroup = bindGroup)
+    }
+
     private fun buildStencilCoverAaDrawResources(d: StencilCoverAaPolygonDraw): DrawResources {
         val uniform = context.device.createBuffer(
             BufferDescriptor(
@@ -3334,6 +3598,15 @@ public class SkWebGpuDevice(
          * vec4 carries different fields (center.xy + tBias + tScale here).
          */
         const val SWEEP_GRADIENT_UNIFORM_SIZE: ULong = 560uL
+        /**
+         * G4.4 -- size of the conical-gradient per-draw uniform :
+         *   viewport (16) + centerRadii (16) + countPad (16) +
+         *   positions (16 * 16) + colors (16 * 16) = 560 bytes.
+         * Same total as the linear / radial / sweep uniforms ; only the
+         * second vec4 carries different fields (centre.xy + r0 + r1 here,
+         * for the kRadial sub-case).
+         */
+        const val CONICAL_GRADIENT_UNIFORM_SIZE: ULong = 560uL
         /**
          * G4.1.2 -- size of the AA stencil-cover gradient per-draw uniform :
          *   color (16) + viewport (16) + startEnd (16) + countPad (16) +
