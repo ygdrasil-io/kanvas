@@ -441,7 +441,8 @@ Lift le throw `require(paint.style == kFill_Style)` sur `drawPath`. Quand `paint
 - [x] G3.3b.3c : 4 cross-tests neufs (AnalyticAntialiasInverseGM 99.98 %, PathInvFillGM 99.50 %, ConvexLineOnlyPathsFillGM 98.75 %, Crbug1472747GM 98.16 %) avg **99.10 %** — zéro changement device, élargissement du harness post-G3.3b.3b sur inverse fills + kEvenOdd multi-contour conic.
 - [x] G3.3b.3d : two-pass AA cover (inside + outside) ferme la perte du demi-pixel extérieur sur stencil-and-cover. ConcavePathsGM **98.90 → 99.31 (+0.41 %)**.
 - [x] G3.4.1 : SkStroker integration skeleton. drawPath accepte kStroke/kStrokeAndFill via outline → recurse fill. CubicStrokeGM 98.57 % (premier GM non-rect stroke).
-- [ ] G3.4 : caps/joins variants, hairlines bit-exact, plus de GMs (StrokeRectGM, ScaledStrokesGM, ArcOfZorroGM).
+- [x] G3.4.2 : 5 cross-tests stroke neufs post-G3.4.1 (SmallArcGM 99.80 %, ArcOfZorroGM 99.73 %, Bug6987GM 99.77 %, ScaledStrokesGM 96.49 %, AddArcGM 93.30 %) avg **97.82 %** — zéro changement device, élargissement du harness sur stroke + cubic flattening (resScale 8× et 50000×, drawArc(useCenter=false), addArc, multi-shape + multi-scale).
+- [ ] G3.4 : caps/joins variants, hairlines bit-exact, plus de GMs (StrokeRectGM, autres).
 
 ---
 
