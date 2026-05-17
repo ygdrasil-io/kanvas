@@ -1,4 +1,3 @@
-import org.jetbrains.dokka.gradle.DokkaTask
 import java.net.URL
 
 plugins {
@@ -22,7 +21,9 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
-tasks.withType<DokkaTask>().configureEach {
+// On ne configure que dokkaGfm — le rendu HTML final est fait par MkDocs Material
+// à partir de la sortie GFM (voir mkdocs.yml + .github/workflows/docs.yml).
+tasks.dokkaGfm {
     moduleName.set("math")
     dokkaSourceSets.named("main") {
         includes.from("module.md")
