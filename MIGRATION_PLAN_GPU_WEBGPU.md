@@ -492,7 +492,8 @@ Premier slice gradient end-to-end : `SkLinearGradient` en kClamp uniquement, rou
 
 ### Vérification G4
 - [x] G4.1 : `ShallowGradientLinearGM` 100.00 % sur GPU (premier gradient GM vert).
-- [ ] FillrectGradientGM, ClampedGradients, OvalGM gradient row, AnalyticGradients verts sur GPU.
+- [x] G4.1.1 : 4 cross-tests neufs (ShallowGradientLinearNoditherGM 100.00 %, AnalyticGradientShaderGM 100.00 %, Crbug938592GM 99.80 %, ConvexPathsGM 99.85 %) avg **99.91 %** — zéro changement device, élargit le harness sur 2 gradients linéaires kClamp supplémentaires (dont 16-stop AnalyticGradients qui sature MAX_GRADIENT_STOPS), valide path.isRect sous scale(±1) axis-aligned (Crbug938592), et apporte enfin un GM convex-paths riche (38 shapes mixant rect/circle/oval/rrect/cubic/quad/conic/arc).
+- [ ] FillrectGradientGM, ClampedGradients, OvalGM gradient row verts sur GPU.
 
 ---
 
