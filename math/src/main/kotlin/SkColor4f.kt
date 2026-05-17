@@ -81,15 +81,22 @@ public data class SkColor4f(
     }
 
     /**
-     * Pack to a 32-bit RGBA-byte-order value (R in MSB, A in LSB) as
-     * Skia's `toBytes_RGBA`. Different layout from [toSkColor], which
-     * uses ARGB byte order.
+     * Pack to a 32-bit RGBA-byte-order value matching Skia's `toBytes_RGBA`.
+     *
+     * Skia stores the channels as 4 consecutive bytes in memory in the order
+     * `[R, G, B, A]` (see [src/core/SkColor.cpp](https://github.com/google/skia/blob/main/src/core/SkColor.cpp)
+     * `SkColor4f::toBytes_RGBA` → `Sk4f_toL32`, [src/core/SkSwizzlePriv.h:53-60]).
+     * Read as a little-endian `uint32_t` this becomes
+     * `(A << 24) | (B << 16) | (G << 8) | R` — i.e. **R is in the LSB**, A in
+     * the MSB. This is the layout consumed by GPU buffers / `GrColor` /
+     * shaders, so the value must match upstream bit-for-bit. Different
+     * layout from [toSkColor], which uses ARGB byte order (A in MSB).
      */
     public fun toBytes_RGBA(): Int =
-        (channelToByte(fR) shl 24) or
-            (channelToByte(fG) shl 16) or
-            (channelToByte(fB) shl 8) or
-            channelToByte(fA)
+        (channelToByte(fA) shl 24) or
+            (channelToByte(fB) shl 16) or
+            (channelToByte(fG) shl 8) or
+            channelToByte(fR)
 
     /**
      * Encode to a packed ARGB8888 [SkColor]. Channels outside `[0, 1]`
@@ -131,14 +138,19 @@ public data class SkColor4f(
         public fun FromPMColor(c: SkPMColor): SkColor4f = FromColor(c)
 
         /**
-         * Decode a 32-bit RGBA-byte-order value (R in MSB, A in LSB).
-         * Mirrors Skia's `FromBytes_RGBA`.
+         * Decode a 32-bit RGBA-byte-order value matching Skia's `FromBytes_RGBA`.
+         *
+         * Symmetric to [toBytes_RGBA]: the bytes are laid out in memory as
+         * `[R, G, B, A]`, so the little-endian `uint32_t` is
+         * `(A << 24) | (B << 16) | (G << 8) | R` — **R is byte 0 (LSB)**,
+         * A is byte 3 (MSB). See [src/core/SkColor.cpp](https://github.com/google/skia/blob/main/src/core/SkColor.cpp)
+         * `SkColor4f::FromBytes_RGBA` → `Sk4f_fromL32`.
          */
         public fun FromBytes_RGBA(rgba: Int): SkColor4f = SkColor4f(
-            fR = ((rgba ushr 24) and 0xFF) * INV_255,
-            fG = ((rgba ushr 16) and 0xFF) * INV_255,
-            fB = ((rgba ushr 8) and 0xFF) * INV_255,
-            fA = (rgba and 0xFF) * INV_255,
+            fR = (rgba and 0xFF) * INV_255,
+            fG = ((rgba ushr 8) and 0xFF) * INV_255,
+            fB = ((rgba ushr 16) and 0xFF) * INV_255,
+            fA = ((rgba ushr 24) and 0xFF) * INV_255,
         )
 
         private const val INV_255: Float = 1f / 255f
