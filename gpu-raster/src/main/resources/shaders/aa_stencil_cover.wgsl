@@ -31,6 +31,10 @@
 // Sum across the half-pixel boundary integrates to the correct AA
 // profile -- closes the outside-half AA loss of G3.3b.3a.
 //
+// G6.2 -- intermediate target is `RGBA16Float` ; output convention is
+// unchanged (premul sRGB-coded). F16 gives sub-byte precision in the
+// intermediate ; no colorspace switch.
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {

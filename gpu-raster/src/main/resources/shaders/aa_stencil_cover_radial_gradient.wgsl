@@ -32,6 +32,10 @@
 // `color` itself is unused by the gradient fragment entries but kept
 // in the slot to preserve the layout.
 //
+// G6.2 -- intermediate target is `RGBA16Float` ; output convention is
+// unchanged (premul sRGB-coded). F16 gives sub-byte precision in the
+// intermediate ; no colorspace switch.
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {
