@@ -584,6 +584,55 @@ class SkMatrixTest {
     }
 
     @Test
+    fun `mapVectors with perspective matches mapPoint - mapPoint(0, 0)`() {
+        // Audit divergence #4: upstream mapVectors uses
+        // `mapPointPerspective(src) - mapPointPerspective({0,0})` for
+        // perspective matrices; the naive 2x2 linear part is wrong
+        // because perspective is non-linear.
+        val m = SkMatrix.MakeAll(
+            1.2f, 0.3f, 5f,
+            0.1f, 1.5f, 7f,
+            0.002f, 0.003f, 1f,
+        )
+        assertTrue(m.hasPerspective())
+
+        val origin = m.mapXY(SkPoint(0f, 0f))
+        val srcs = arrayOf(SkPoint(1f, 0f), SkPoint(0f, 1f), SkPoint(2.5f, -1.5f))
+        val dst = Array(srcs.size) { SkPoint() }
+        m.mapVectors(dst, srcs, srcs.size)
+
+        for (i in srcs.indices) {
+            val pt = m.mapXY(srcs[i])
+            val expectedX = pt.fX - origin.fX
+            val expectedY = pt.fY - origin.fY
+            assertNear(expectedX, dst[i].fX, eps = 1e-4f,
+                msg = "mapVectors[$i].x (perspective)")
+            assertNear(expectedY, dst[i].fY, eps = 1e-4f,
+                msg = "mapVectors[$i].y (perspective)")
+        }
+    }
+
+    @Test
+    fun `mapVectors affine fast path unchanged`() {
+        // Regression guard: the affine (no perspective) path must keep
+        // its closed-form `sx*x + kx*y, ky*x + sy*y` semantics so a
+        // pure 2D rotation+scale matrix still produces exact results
+        // independent of the translation column.
+        val m = SkMatrix.MakeAll(
+            2f, -1f, 50f,
+            3f,  4f, 90f,
+        )
+        assertFalse(m.hasPerspective())
+        val src = arrayOf(SkPoint(1f, 0f), SkPoint(0f, 1f), SkPoint(1f, 1f))
+        val dst = Array(src.size) { SkPoint() }
+        m.mapVectors(dst, src, src.size)
+        // Linear part = [[2, -1], [3, 4]].
+        assertEquals(2f, dst[0].fX); assertEquals(3f, dst[0].fY)
+        assertEquals(-1f, dst[1].fX); assertEquals(4f, dst[1].fY)
+        assertEquals(1f, dst[2].fX); assertEquals(7f, dst[2].fY)
+    }
+
+    @Test
     fun `mapRectScaleTranslate fast path matches mapRect`() {
         val m = SkMatrix.MakeScale(2f, 3f).preTranslate(5f, 7f)
         val r = SkRect.MakeLTRB(0f, 0f, 10f, 10f)
