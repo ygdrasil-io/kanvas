@@ -60,6 +60,7 @@ import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkSamplingOptions
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkMatrix
@@ -261,6 +262,7 @@ public class SkWebGpuDevice(
         val stencilVerts: FloatArray,
         val coverVerts: FloatArray,
         val scissor: IntArray,
+        val fillType: SkPathFillType,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
     ) : PendingDraw
@@ -284,6 +286,7 @@ public class SkWebGpuDevice(
         val edges: FloatArray,   // (Ax, Ay, Bx, By) per edge, length = MAX_AA_EDGES * 4
         val edgeCount: Int,
         val scissor: IntArray,
+        val fillType: SkPathFillType,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
     ) : PendingDraw
@@ -481,17 +484,25 @@ public class SkWebGpuDevice(
     )
 
     /**
-     * Cover pipeline cache, one entry per [SkBlendMode]. The fragment
-     * stencil-test compares the stencil byte against the reference (set
-     * to 0 in the render pass) ; non-equal (i.e., winding count != 0)
-     * pixels write their color. Standard `kWinding` fill rule. For
-     * `kEvenOdd` we'd flip the stencil mask to `0x01` and compare
-     * Equal-to-1 ; deferred until a GM in scope needs it.
+     * Cover pipeline cache, one entry per `(blend mode, fill type)`. The
+     * fragment stencil-test compares `(stencil & readMask)` against the
+     * reference (0, set by `setStencilReference` before drawing) :
+     *
+     *  - `kWinding`         : `readMask = 0xFF`, compare `NotEqual` 0  -> fill where `count != 0`.
+     *  - `kEvenOdd`         : `readMask = 0x01`, compare `NotEqual` 0  -> fill where the low bit is set (count is odd).
+     *  - `kInverseWinding`  : `readMask = 0xFF`, compare `Equal` 0     -> fill where `count == 0` (outside the path).
+     *  - `kInverseEvenOdd`  : `readMask = 0x01`, compare `Equal` 0     -> fill where the low bit is clear (count is even).
+     *
+     * Inverse variants pair with a viewport-spanning cover quad (not
+     * the path bbox) so the entire clipped device area is rasterised
+     * and the stencil decides which fragments belong to the "outside".
      */
-    private val coverPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+    private val coverPipelineCache: MutableMap<Pair<SkBlendMode, SkPathFillType>, GPURenderPipeline> = mutableMapOf()
 
-    private fun coverPipelineFor(mode: SkBlendMode): GPURenderPipeline =
-        coverPipelineCache.getOrPut(mode) {
+    private fun coverPipelineFor(mode: SkBlendMode, fillType: SkPathFillType): GPURenderPipeline =
+        coverPipelineCache.getOrPut(mode to fillType) {
+            val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
+            val compare = if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
             context.device.createRenderPipeline(
                 RenderPipelineDescriptor(
                     layout = polygonPipelineLayout,
@@ -515,18 +526,18 @@ public class SkWebGpuDevice(
                         depthWriteEnabled = false,
                         depthCompare = GPUCompareFunction.Always,
                         stencilFront = StencilFaceState(
-                            compare = GPUCompareFunction.NotEqual,
+                            compare = compare,
                             failOp = GPUStencilOperation.Keep,
                             depthFailOp = GPUStencilOperation.Keep,
                             passOp = GPUStencilOperation.Keep,
                         ),
                         stencilBack = StencilFaceState(
-                            compare = GPUCompareFunction.NotEqual,
+                            compare = compare,
                             failOp = GPUStencilOperation.Keep,
                             depthFailOp = GPUStencilOperation.Keep,
                             passOp = GPUStencilOperation.Keep,
                         ),
-                        stencilReadMask = 0xFFu,
+                        stencilReadMask = readMask,
                         stencilWriteMask = 0xFFu,
                     ),
                 ),
@@ -537,17 +548,18 @@ public class SkWebGpuDevice(
 
     private val aaStencilCoverShader: GPUShaderModule = loadShader("shaders/aa_stencil_cover.wgsl")
 
-    private val aaStencilCoverPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+    private val aaStencilCoverPipelineCache: MutableMap<Pair<SkBlendMode, SkPathFillType>, GPURenderPipeline> = mutableMapOf()
 
     /**
-     * AA-cover pipeline. Same stencil state as [coverPipelineFor] (gate
-     * by winding count != 0), but the fragment shader produces AA
-     * coverage from the path's edge segments. Bind group layout is
-     * shared with the single-contour AA pipeline (one uniform buffer
-     * with `color + viewport + edgeCount + edges[256]`).
+     * AA-cover pipeline. Same fill-type encoding as [coverPipelineFor]
+     * (readMask + compare op derived from [SkPathFillType]) but the
+     * fragment shader produces AA coverage from the path's edge segments.
+     * Bind group layout is shared with the single-contour AA pipeline.
      */
-    private fun aaStencilCoverPipelineFor(mode: SkBlendMode): GPURenderPipeline =
-        aaStencilCoverPipelineCache.getOrPut(mode) {
+    private fun aaStencilCoverPipelineFor(mode: SkBlendMode, fillType: SkPathFillType): GPURenderPipeline =
+        aaStencilCoverPipelineCache.getOrPut(mode to fillType) {
+            val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
+            val compare = if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
             context.device.createRenderPipeline(
                 RenderPipelineDescriptor(
                     layout = aaPolygonPipelineLayout,
@@ -571,18 +583,18 @@ public class SkWebGpuDevice(
                         depthWriteEnabled = false,
                         depthCompare = GPUCompareFunction.Always,
                         stencilFront = StencilFaceState(
-                            compare = GPUCompareFunction.NotEqual,
+                            compare = compare,
                             failOp = GPUStencilOperation.Keep,
                             depthFailOp = GPUStencilOperation.Keep,
                             passOp = GPUStencilOperation.Keep,
                         ),
                         stencilBack = StencilFaceState(
-                            compare = GPUCompareFunction.NotEqual,
+                            compare = compare,
                             failOp = GPUStencilOperation.Keep,
                             depthFailOp = GPUStencilOperation.Keep,
                             passOp = GPUStencilOperation.Keep,
                         ),
-                        stencilReadMask = 0xFFu,
+                        stencilReadMask = readMask,
                         stencilWriteMask = 0xFFu,
                     ),
                 ),
@@ -1068,13 +1080,17 @@ public class SkWebGpuDevice(
         // subtracts from outer winding count).
         if (contourStarts.size > 1) {
             val stencilTri = fanTessellateContours(devVerts, contourStarts)
-            val coverTri = bboxTrianglesFor(devVerts, width, height)
+            // G3.3b.3b — inverse fill types fill the viewport MINUS the
+            // path region, so the cover quad spans the full viewport
+            // (scissored to the clip rect). Non-inverse keeps the path
+            // bbox as before.
+            val coverTri = if (path.fillType.isInverse()) {
+                viewportTrianglesFor(width, height)
+            } else {
+                bboxTrianglesFor(devVerts, width, height)
+            }
             val totalVerts = devVerts.size / 2
             if (paint.isAntiAlias && totalVerts <= MAX_AA_EDGES) {
-                // G3.3b.3a — AA multi-contour : stencil pass identical
-                // to non-AA, cover pass uses the AA-stencil-cover shader
-                // to smooth the boundary via edge-segment coverage.
-                // Falls through to non-AA below when edge budget exceeded.
                 val edges = FloatArray(MAX_AA_EDGES * 4)
                 buildContourEdgeSegments(devVerts, contourStarts, edges)
                 pending.add(
@@ -1084,6 +1100,7 @@ public class SkWebGpuDevice(
                         edges = edges,
                         edgeCount = totalVerts,
                         scissor = scissor,
+                        fillType = path.fillType,
                         r = rF, g = gF, b = bF, a = aF,
                         mode = paint.blendMode,
                     ),
@@ -1095,6 +1112,7 @@ public class SkWebGpuDevice(
                     stencilVerts = stencilTri,
                     coverVerts = coverTri,
                     scissor = scissor,
+                    fillType = path.fillType,
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
                 ),
@@ -1102,11 +1120,48 @@ public class SkWebGpuDevice(
             return
         }
 
-        // Single-contour : fan tessellation from vertex 0.
-        // Convex-correct ; concave single-contour paths still produce
-        // artefacts (G3.3b.2b's stencil-and-cover path would fix them too
-        // but adds GPU cost ; we keep the cheap fan tess for the common
-        // convex case).
+        // Single-contour. Inverse fills OR concave shapes route through
+        // stencil-and-cover (fan-tess winding cancels in concave pockets ;
+        // the stencil decides inside vs outside). Convex non-inverse
+        // paths keep the cheap fan-tess + AA-polygon fast paths.
+        if (path.fillType.isInverse() || !isPolygonConvex(devVerts)) {
+            val stencilTri = fanTessellateContours(devVerts, contourStarts)
+            val coverTri = if (path.fillType.isInverse()) {
+                viewportTrianglesFor(width, height)
+            } else {
+                bboxTrianglesFor(devVerts, width, height)
+            }
+            if (paint.isAntiAlias && n <= MAX_AA_EDGES) {
+                val edges = FloatArray(MAX_AA_EDGES * 4)
+                buildContourEdgeSegments(devVerts, contourStarts, edges)
+                pending.add(
+                    StencilCoverAaPolygonDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        edges = edges,
+                        edgeCount = n,
+                        scissor = scissor,
+                        fillType = path.fillType,
+                        r = rF, g = gF, b = bF, a = aF,
+                        mode = paint.blendMode,
+                    ),
+                )
+            } else {
+                pending.add(
+                    StencilCoverPolygonDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        scissor = scissor,
+                        fillType = path.fillType,
+                        r = rF, g = gF, b = bF, a = aF,
+                        mode = paint.blendMode,
+                    ),
+                )
+            }
+            return
+        }
+
+        // Single-contour, convex, non-inverse : cheap fan tess.
         val triCount = n - 2
         val tri = FloatArray(triCount * 6)
         var w = 0
@@ -1116,61 +1171,24 @@ public class SkWebGpuDevice(
             tri[w++] = devVerts[(i + 1) * 2]; tri[w++] = devVerts[(i + 1) * 2 + 1]
         }
 
-        // G3.3b.2a — AA path : compute polygon perimeter edge equations
-        // and route to the analytical-coverage pipeline. Restricted to
-        // single-contour paths within MAX_AA_EDGES vertices.
-        //
-        // Key trick : the AA path renders the polygon's **bounding box
-        // (slightly inflated)** as 2 triangles instead of the fan tess.
-        // Reason : the fan triangles share their outer edges with the
-        // polygon perimeter ; the GPU rasterizer's top-left edge rule
-        // can exclude pixel centres that sit exactly on those edges,
-        // robbing the fragment shader of the chance to compute their
-        // coverage. The bbox triangles are axis-aligned and inflated
-        // by 1 pixel beyond the polygon ; every pixel near a polygon
-        // edge is reliably rasterized, and the shader's coverage
-        // (`min` over edge equations) masks the bbox down to the
-        // actual polygon shape, with smooth fall-off on the perimeter.
+        // G3.3b.2a — convex single-contour AA : render a 1-pixel-inflated
+        // bbox quad and let the fragment shader's `min` over signed
+        // perpendicular edge distances mask it down to the polygon, with
+        // sub-pixel coverage falloff on the perimeter.
         if (paint.isAntiAlias && n <= MAX_AA_EDGES) {
-            if (isPolygonConvex(devVerts)) {
-                val edges = FloatArray(MAX_AA_EDGES * 4)
-                buildPerimeterEdges(devVerts, edges)
-                val bboxTri = bboxTrianglesFor(devVerts, width, height)
-                pending.add(
-                    AaPolygonDraw(
-                        verts = bboxTri,
-                        edges = edges,
-                        edgeCount = n,
-                        scissor = scissor,
-                        r = rF, g = gF, b = bF, a = aF,
-                        mode = paint.blendMode,
-                    ),
-                )
-            } else {
-                // G3.3b.3a follow-up — concave single-contour can't go
-                // through the convex-only min-coverage shader (interior
-                // pockets sit on the wrong side of some edge's infinite
-                // line). Route through the same stencil-and-cover AA path
-                // as multi-contour : fan-tess winding cancels in the
-                // concave pocket so the stencil gates inside correctly,
-                // and the cover shader's per-segment distance handles
-                // the AA boundary.
-                val edges = FloatArray(MAX_AA_EDGES * 4)
-                buildContourEdgeSegments(devVerts, contourStarts, edges)
-                val stencilTri = fanTessellateContours(devVerts, contourStarts)
-                val coverTri = bboxTrianglesFor(devVerts, width, height)
-                pending.add(
-                    StencilCoverAaPolygonDraw(
-                        stencilVerts = stencilTri,
-                        coverVerts = coverTri,
-                        edges = edges,
-                        edgeCount = n,
-                        scissor = scissor,
-                        r = rF, g = gF, b = bF, a = aF,
-                        mode = paint.blendMode,
-                    ),
-                )
-            }
+            val edges = FloatArray(MAX_AA_EDGES * 4)
+            buildPerimeterEdges(devVerts, edges)
+            val bboxTri = bboxTrianglesFor(devVerts, width, height)
+            pending.add(
+                AaPolygonDraw(
+                    verts = bboxTri,
+                    edges = edges,
+                    edgeCount = n,
+                    scissor = scissor,
+                    r = rF, g = gF, b = bF, a = aF,
+                    mode = paint.blendMode,
+                ),
+            )
         } else {
             pending.add(
                 PolygonDraw(
@@ -1287,7 +1305,7 @@ public class SkWebGpuDevice(
                     // Reference value 0 + compare NotEqual = "winding count
                     // != 0" = kWinding fill rule.
                     setStencilReference(0u)
-                    setPipeline(coverPipelineFor(d.mode))
+                    setPipeline(coverPipelineFor(d.mode, d.fillType))
                     setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
                     draw((d.coverVerts.size / 2).toUInt())
                     end()
@@ -1329,7 +1347,7 @@ public class SkWebGpuDevice(
                     setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
                     draw((d.stencilVerts.size / 2).toUInt())
                     setStencilReference(0u)
-                    setPipeline(aaStencilCoverPipelineFor(d.mode))
+                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType))
                     setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
                     draw((d.coverVerts.size / 2).toUInt())
                     end()
@@ -1766,6 +1784,22 @@ public class SkWebGpuDevice(
                 }
             }
             return out
+        }
+
+        /**
+         * G3.3b.3b — full-viewport 2-triangle quad. Used as the cover
+         * quad for inverse fill types : the stencil decides which
+         * fragments belong to the "outside" of the path, and the cover
+         * pass must rasterise the entire device (scissored to the
+         * current clip) so those fragments get a chance to write color.
+         */
+        fun viewportTrianglesFor(viewportW: Int, viewportH: Int): FloatArray {
+            val w = viewportW.toFloat()
+            val h = viewportH.toFloat()
+            return floatArrayOf(
+                0f, 0f, w, 0f, w, h,
+                0f, 0f, w, h, 0f, h,
+            )
         }
 
         /**
