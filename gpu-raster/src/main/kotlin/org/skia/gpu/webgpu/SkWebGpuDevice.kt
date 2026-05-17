@@ -1034,7 +1034,17 @@ public class SkWebGpuDevice(
             if (paint.style == SkPaint.Style.kStrokeAndFill_Style) {
                 drawPath(path, ctm, clip, fillPaint)
             }
-            val outline = SkStroker.fromPaint(paint, resScale).stroke(path)
+            // G3.4.3 — true hairline : strokeWidth <= 0 in Skia means "1
+            // device pixel regardless of CTM". SkStroker operates in source
+            // space and would otherwise see `1f` from `fromPaint`'s default,
+            // producing a 1-source-unit stroke (= CTM-scaled in device).
+            // Synthesising `1 / resScale` makes the device-space width = 1px.
+            val strokerPaint = if (paint.strokeWidth <= 0f) {
+                paint.copy().apply { strokeWidth = 1f / resScale }
+            } else {
+                paint
+            }
+            val outline = SkStroker.fromPaint(strokerPaint, resScale).stroke(path)
             if (outline.isEmpty()) return
             drawPath(outline, ctm, clip, fillPaint)
             return

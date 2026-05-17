@@ -419,11 +419,21 @@ Lift le throw `require(paint.style == kFill_Style)` sur `drawPath`. Quand `paint
 - [x] **Routing aval** : l'outline d'un contour fermé est multi-contour (outer + reversed inner) → stencil-and-cover kWinding (G3.3b.2b/G3.3b.3a). L'outline d'un contour ouvert est single-contour concave (left + cap + reversed-right + cap) → AA stencil-and-cover via détection convexité (G3.3b.3a.2). Le shader/pipeline existant traite tout.
 - [x] **Test** : [CubicStrokeWebGpuTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CubicStrokeWebGpuTest.kt) — 3 strokes AA cubic Bezier (sub-1 % stroke-width variation). Score **98.57 %**. Premier GM non-rect stroke qui ne throw plus.
 
+### G3.4.3 — True hairlines via `1 / resScale` stroke width sur drawPath ✅
+
+`SkStroker.fromPaint` traite `paint.strokeWidth ≤ 0f` comme `1f` en source-space — donc sous `scale(0.5, 0.5)` on obtient un trait de 0.5 device-pixel, sous `scale(2, 2)` un trait de 2 device-pixels. Pas un vrai hairline Skia, qui doit toujours faire **exactement 1 device-pixel** quel que soit le CTM.
+
+- [x] **Fix** : dans `SkWebGpuDevice.drawPath`, juste avant `SkStroker.fromPaint(...)`, si `paint.strokeWidth ≤ 0f`, on synthétise une copie du paint avec `strokeWidth = 1f / resScale`. `SkStroker` produit alors un outline de `1 / resScale` unités source = 1 device-pixel après le CTM. Sous CTM identité (`resScale = 1f`) c'est `strokeWidth = 1f`, comportement identique au passé. Sous heavy scale (`BigRectGM` à 1000×) c'est `strokeWidth = 0.001f` et le shader AA gère la sub-pixel coverage.
+- [x] **`paint.copy()`** existe sur `SkPaint` ([SkPaint.kt:401](kanvas-skia/src/main/kotlin/org/skia/foundation/SkPaint.kt)). `SkPaint` est mutable → `.apply { strokeWidth = ... }` après copy.
+- [x] **`SkStroker` non-touched** : `fromPaint` voit toujours une `strokeWidth > 0` (notre synthèse). Pas besoin de toucher `SkStroker`.
+- [x] **Test** : [PathHairlineStrokeTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/PathHairlineStrokeTest.kt) — open polyline (10,20)→(50,20) avec `strokeWidth = 0f`, non-AA, asserte qu'au moins un pixel sur la ligne (row 19 ou 20) est peint et que 5 rows au-dessus / en-dessous restent background.
+- [x] **GM impact** : aucun GM existant exercice les hairlines via `drawPath` (BigRectGM hairline passe par `drawRect`, qui a son propre chemin). PathInvFillGM est ratcheté 99.50 → 99.52 mais l'amélioration est antérieure au fix (mesure stale, vérifié par run sur master). G3.4.2 prépare le terrain pour futurs GMs hairline-path.
+
 ### G3.4 — Reste à faire (caps/joins, hairlines, plus de GMs)
 
 - [ ] **Caps** : butt OK (par défaut du flatten polyline) ; square + round caps livrés par `SkStroker` mais à valider sur GMs ciblés (`StrokeRectGM`, `OverStrokeGM`).
 - [ ] **Joins** : miter avec bevel fallback OK ; bevel + round joins à valider (`InnerJoinGeometryGM`, `FatPathFillGM`).
-- [ ] **Hairlines** (`strokeWidth ≤ 0`) : `SkStroker` les traite comme 1-unit en source-space (pas vrai hairline 1-device-pixel). Pour `BigRectGM` à 99.90 % les ~40 pixels résiduels viennent probablement de là. Hairline-true devrait être routé hors-stroker (1-pixel-wide AA line shader, ou similaire).
+- [x] **Hairlines drawPath** (`strokeWidth ≤ 0`) : G3.4.3 — synthèse `strokeWidth = 1f / resScale` avant `SkStroker.fromPaint`, donne ~1 device-pixel sous tout CTM. `drawRect` hairlines restent sur leur fast-path inchangé.
 - [ ] **Tests futurs** : `OverStrokeGM`, `EmptyStrokeGM`, `StrokeRectGM`, `ScaledStrokesGM`, `ArcOfZorroGM`.
 
 ### Vérification G3
@@ -442,7 +452,8 @@ Lift le throw `require(paint.style == kFill_Style)` sur `drawPath`. Quand `paint
 - [x] G3.3b.3d : two-pass AA cover (inside + outside) ferme la perte du demi-pixel extérieur sur stencil-and-cover. ConcavePathsGM **98.90 → 99.31 (+0.41 %)**.
 - [x] G3.4.1 : SkStroker integration skeleton. drawPath accepte kStroke/kStrokeAndFill via outline → recurse fill. CubicStrokeGM 98.57 % (premier GM non-rect stroke).
 - [x] G3.4.2 : 5 cross-tests stroke neufs post-G3.4.1 (SmallArcGM 99.80 %, ArcOfZorroGM 99.73 %, Bug6987GM 99.77 %, ScaledStrokesGM 96.49 %, AddArcGM 93.30 %) avg **97.82 %** — zéro changement device, élargissement du harness sur stroke + cubic flattening (resScale 8× et 50000×, drawArc(useCenter=false), addArc, multi-shape + multi-scale).
-- [ ] G3.4 : caps/joins variants, hairlines bit-exact, plus de GMs (StrokeRectGM, autres).
+- [x] G3.4.3 : true hairlines via `strokeWidth = 1 / resScale` synthèse avant `SkStroker.fromPaint`. 1 unit test neuf (PathHairlineStrokeTest). Aucun GM existant exercice ce chemin (les GMs hairline passent par drawRect) — préparation.
+- [ ] G3.4 : caps/joins variants, plus de GMs (StrokeRectGM, autres).
 
 ---
 
