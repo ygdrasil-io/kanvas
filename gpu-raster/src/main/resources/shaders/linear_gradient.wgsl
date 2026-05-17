@@ -1,19 +1,27 @@
-// G4.1 -- linear gradient (clamp tile mode) for drawRect.
+// G4.1 / G4.1.1 -- linear gradient for drawRect, all 4 tile modes.
 //
 // Vertex stage : same full-screen Bjorke triangle as `solid_color.wgsl`.
 // Pair with `setScissorRect(...)` clipped to the rect's bbox so pixels
 // outside the rect are killed before reaching the fragment stage.
 //
-// Fragment stage : compute parametric t along the gradient line
+// Fragment stage : compute parametric t_raw along the gradient line
 // `start -> end` (both in device-pixel coords, already CTM-transformed
 // at draw time). For each fragment, project onto the gradient line :
-//   t = clamp(dot(p - start, dir) / dot(dir, dir), 0, 1)
-// then walk the (positions, colors) table to find the two stops
-// bracketing `t` and lerp in premultiplied sRGB byte-equivalent space.
+//   t_raw = dot(p - start, dir) / dot(dir, dir)
+// then map t_raw to t in [0, 1] per the tile mode (one entry point
+// per mode -- see fs_clamp / fs_repeat / fs_mirror / fs_decal below),
+// walk the (positions, colors) table to find the two stops bracketing
+// t, and lerp in premultiplied sRGB byte-equivalent space.
 //
-// Clamp tile mode only -- the four-mode generalization (kRepeat,
-// kMirror, kDecal) will land in follow-up G4.1.x slices ; the host
-// throws today for non-kClamp shaders, so the shader assumes clamp.
+// Tile mode formulas (mirror `lookupStop` / `lookupStopF16` in
+// kanvas-skia/.../SkShader.kt) :
+//   kClamp  : t = clamp(t_raw, 0, 1)
+//   kRepeat : t = t_raw - floor(t_raw)            (always in [0, 1))
+//   kMirror : let u = t_raw * 0.5 ;
+//             let w = u - floor(u) ;              (in [0, 1))
+//             t = if (w < 0.5) (w * 2) else (2 - w * 2)
+//   kDecal  : if (t_raw outside [0, 1]) -> coverage = 0 (transparent)
+//             else t = t_raw
 //
 // Colors are stored as PREMULTIPLIED sRGB-encoded vec4f (alpha already
 // folded into RGB). The lerp is straight `(1-u)*A + u*B` in this
@@ -53,27 +61,28 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
     return vec4f(x, y, 0.0, 1.0);
 }
 
-@fragment
-fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+// Compute t_raw at the pixel center. Returns the raw projection along
+// the gradient line ; tile-mode mapping happens in each fs_* entry.
+// `pos.xy` is already the pixel center (`column p` -> `p + 0.5`).
+fn compute_t_raw(pos: vec4f) -> f32 {
     let start = uniforms.startEnd.xy;
     let end = uniforms.startEnd.zw;
     let dir = end - start;
     let lenSq = dot(dir, dir);
-    let count = bitcast<u32>(uniforms.countPad.x);
-
-    // Degenerate gradient (start == end) : collapse to first stop.
     if (lenSq < 1.0e-12) {
-        return uniforms.colors[0];
+        // Degenerate gradient (start == end) : sentinel < 0 so callers
+        // collapse to the first stop via the tile-mode formula or via
+        // the explicit early-out in sample_stops_at.
+        return -1.0e30;
     }
+    return dot(pos.xy - start, dir) / lenSq;
+}
 
-    // pos.xy is the pixel center : column `p` has center at `p + 0.5`.
-    let t_raw = dot(pos.xy - start, dir) / lenSq;
-    let t = clamp(t_raw, 0.0, 1.0);
-
-    // Walk the positions table to find the bracketing pair. Skia does
-    // a binary search ; up to 16 stops we just scan linearly to keep
-    // the WGSL straightforward (the cost is negligible vs the lookup
-    // itself).
+// Walk the (positions, colors) table and lerp at parametric `t` in
+// [0, 1]. Linear scan up to count stops (Skia uses binary search ; with
+// count <= 16 the linear scan is negligible vs the lookup itself).
+fn sample_stops_at(t: f32) -> vec4f {
+    let count = bitcast<u32>(uniforms.countPad.x);
     if (count <= 1u) {
         return uniforms.colors[0];
     }
@@ -97,7 +106,43 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let span = t1 - t0;
     let u = select((t - t0) / span, 0.0, span <= 0.0);
     let inv = 1.0 - u;
-    let c0 = uniforms.colors[lo];
-    let c1 = uniforms.colors[hi];
-    return inv * c0 + u * c1;
+    return inv * uniforms.colors[lo] + u * uniforms.colors[hi];
+}
+
+@fragment
+fn fs_clamp(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let t_raw = compute_t_raw(pos);
+    let t = clamp(t_raw, 0.0, 1.0);
+    return sample_stops_at(t);
+}
+
+@fragment
+fn fs_repeat(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let t_raw = compute_t_raw(pos);
+    // t = t_raw - floor(t_raw) is always in [0, 1) for any sign.
+    let t = t_raw - floor(t_raw);
+    return sample_stops_at(t);
+}
+
+@fragment
+fn fs_mirror(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let t_raw = compute_t_raw(pos);
+    // Mirror formula : let u = t_raw * 0.5, w = fract(u) in [0, 1).
+    // t = if (w < 0.5) (w * 2) else (2 - w * 2) -- triangle wave with
+    // period 2, range [0, 1], peaks at odd integer t_raw.
+    let u = t_raw * 0.5;
+    let w = u - floor(u);
+    let t = select(2.0 - w * 2.0, w * 2.0, w < 0.5);
+    return sample_stops_at(t);
+}
+
+@fragment
+fn fs_decal(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let t_raw = compute_t_raw(pos);
+    // Outside [0, 1] -> fully transparent (premul (0, 0, 0, 0)).
+    // Inside -> straight t_raw, no clamp (it's already in range).
+    if (t_raw < 0.0 || t_raw > 1.0) {
+        return vec4f(0.0, 0.0, 0.0, 0.0);
+    }
+    return sample_stops_at(t_raw);
 }

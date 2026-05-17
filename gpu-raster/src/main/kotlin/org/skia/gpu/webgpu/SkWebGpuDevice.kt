@@ -341,6 +341,10 @@ public class SkWebGpuDevice(
         val stopPositions: FloatArray, // MAX_GRADIENT_STOPS * 4 floats (x of each vec4)
         val stopColors: FloatArray,    // MAX_GRADIENT_STOPS * 4 premul vec4
         val stopCount: Int,
+        // G4.1.1 -- one pipeline per (blend, tile) pair ; the shader has
+        // 4 fragment entry points, one per SkTileMode (fs_clamp /
+        // fs_repeat / fs_mirror / fs_decal).
+        val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
     ) : PendingDraw
@@ -789,21 +793,35 @@ public class SkWebGpuDevice(
 
     /**
      * Lazily-populated linear-gradient-pipeline cache, one entry per
-     * [SkBlendMode] the caller exercises. Gradient stops vary per draw
-     * via the uniform buffer ; only the blend state differs across
-     * pipelines (same pattern as `rectPipelineCache`).
+     * (blend, tile) pair the caller exercises. G4.1.1 widened the key
+     * from `SkBlendMode` to `Pair<SkBlendMode, SkTileMode>` so the 4
+     * shader entry points (fs_clamp / fs_repeat / fs_mirror / fs_decal)
+     * each get their own pipeline. Gradient stops still vary per draw
+     * via the uniform buffer ; cache key only covers state that lives
+     * on the pipeline itself.
      */
-    private val linearGradientPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+    private val linearGradientPipelineCache:
+        MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
 
-    private fun linearGradientPipelineFor(mode: SkBlendMode): GPURenderPipeline =
-        linearGradientPipelineCache.getOrPut(mode) {
+    private fun linearGradientFragmentEntryPoint(tileMode: SkTileMode): String = when (tileMode) {
+        SkTileMode.kClamp -> "fs_clamp"
+        SkTileMode.kRepeat -> "fs_repeat"
+        SkTileMode.kMirror -> "fs_mirror"
+        SkTileMode.kDecal -> "fs_decal"
+    }
+
+    private fun linearGradientPipelineFor(
+        mode: SkBlendMode,
+        tileMode: SkTileMode,
+    ): GPURenderPipeline =
+        linearGradientPipelineCache.getOrPut(mode to tileMode) {
             context.device.createRenderPipeline(
                 RenderPipelineDescriptor(
                     layout = linearGradientPipelineLayout,
                     vertex = VertexState(module = linearGradientShader, entryPoint = "vs_main"),
                     fragment = FragmentState(
                         module = linearGradientShader,
-                        entryPoint = "fs_main",
+                        entryPoint = linearGradientFragmentEntryPoint(tileMode),
                         targets = listOf(
                             ColorTargetState(
                                 format = GPUTextureFormat.RGBA8Unorm,
@@ -1019,6 +1037,7 @@ public class SkWebGpuDevice(
                 stopPositions = packedPositions,
                 stopColors = packedColors,
                 stopCount = count,
+                tileMode = grad.getTileMode(),
                 r = SkColorGetR(first) / 255f,
                 g = SkColorGetG(first) / 255f,
                 b = SkColorGetB(first) / 255f,
@@ -1189,14 +1208,15 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
-        // G4.1 — linear gradient (clamp tile mode) fill of an axis-aligned
-        // rect routes through the dedicated gradient pipeline. SkCanvas
-        // sends shaded rect draws here (the drawRect fast path requires
-        // `paint.shader == null`), so the gate is `path.isRect() != null
-        // && ctm.isAxisAligned`. Rotated/skewed CTMs and non-rect paths
-        // fall through to the existing fill machinery, which will paint
-        // them as solid color (the pre-G4.1 fallback) until a generic
-        // gradient-over-polygon pipeline lands later in G4.
+        // G4.1 / G4.1.1 — linear gradient fill of an axis-aligned rect
+        // routes through the dedicated gradient pipeline, for all 4
+        // SkTileMode values. SkCanvas sends shaded rect draws here (the
+        // drawRect fast path requires `paint.shader == null`), so the
+        // gate is `path.isRect() != null && ctm.isAxisAligned`. Rotated/
+        // skewed CTMs and non-rect paths fall through to the existing
+        // fill machinery, which will paint them as solid color (the
+        // pre-G4.1 fallback) until a generic gradient-over-polygon
+        // pipeline lands later in G4.
         val shader = paint.shader
         if (shader is SkLinearGradient &&
             paint.style == SkPaint.Style.kFill_Style &&
@@ -1204,24 +1224,17 @@ public class SkWebGpuDevice(
         ) {
             val srcRect = path.isRect()
             if (srcRect != null) {
-                when (shader.getTileMode()) {
-                    SkTileMode.kClamp -> {
-                        val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
-                        val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
-                        val devRect = SkRect.MakeLTRB(
-                            minOf(x0, x1), minOf(y0, y1),
-                            maxOf(x0, x1), maxOf(y0, y1),
-                        )
-                        if (drawLinearGradientFillRect(devRect, clip, paint, shader, ctm)) return
-                        // Degenerate (rect outside clip) : nothing to draw.
-                        return
-                    }
-                    else -> error(
-                        "SkWebGpuDevice : SkLinearGradient tile mode ${shader.getTileMode()} " +
-                            "not supported yet. Only kClamp lands in G4.1 ; " +
-                            "kRepeat / kMirror / kDecal arrive in G4.1.x follow-ups.",
-                    )
-                }
+                val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
+                val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
+                val devRect = SkRect.MakeLTRB(
+                    minOf(x0, x1), minOf(y0, y1),
+                    maxOf(x0, x1), maxOf(y0, y1),
+                )
+                drawLinearGradientFillRect(devRect, clip, paint, shader, ctm)
+                // Either emitted a draw or rect was outside clip ; either
+                // way we own this paint and the fill machinery must not
+                // re-render it as solid color.
+                return
             }
         }
 
@@ -1673,7 +1686,7 @@ public class SkWebGpuDevice(
                         draw((d.verts.size / 2).toUInt())
                     }
                     is LinearGradientRectDraw -> {
-                        setPipeline(linearGradientPipelineFor(d.mode))
+                        setPipeline(linearGradientPipelineFor(d.mode, d.tileMode))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
