@@ -378,7 +378,7 @@ Lift le throw `require(!paint.isAntiAlias)` sur le branch multi-contour : la pas
 
 - [ ] **kEvenOdd cover pipeline** : `stencilReadMask = 0x01` au lieu de `0xFF`, compare NotEqual-0. Code prêt mais reverté en G3.3b.2c (pas de GM en scope). Cf. Stream A bail report.
 - [ ] **Inverse fill types** (`kInverseWinding`, `kInverseEvenOdd`) : cover quad = viewport entier, stencil compare flip Equal-0. Débloquerait `FillTypeGM` (tenté en G3.3b.2c, blocked).
-- [ ] **Single-contour concave → stencil-and-cover** : router le concave non-multi-contour à travers G3.3b.3a closerait les cells restantes de `ConcavePathsGM`.
+- [x] ~~**Single-contour concave → stencil-and-cover**~~ : livré en G3.3b.3a.2 (cf. ci-dessus). Cross-product convexity check route les concave single-contour à travers le même path AA stencil-and-cover.
 - [ ] **Cache intra-frame** : si le même path est dessiné plusieurs fois, ne pas re-tessellate.
 - [ ] **Tests futurs** : `ConvexPathsGM`, `ArcOfZorroGM`, `crbug_*` family, `FillTypeGM`.
 
@@ -396,6 +396,7 @@ Lift le throw `require(!paint.isAntiAlias)` sur le branch multi-contour : la pas
 - [x] G3.3b.2c : cross-test `BatchedConvexPathsGM` 99.94 % — feature stack convex AA validé end-to-end sur 10 cubic Bezier polygons translucides.
 - [x] G3.3b.2d : 3 cross-tests neufs (FiddleGM, ClipDrawDrawGM, Bug7792GM) avg 99.99 % — zéro changement device, élargissement du harness.
 - [x] G3.3b.3a : AA multi-contour via stencil-and-cover + AA edge-segment shader. ConcavePathsGM débloqué à 93.23 %.
+- [x] G3.3b.3a.2 : single-contour concave routé vers stencil-and-cover AA via détection convexité cross-product. ConcavePathsGM **93.23 → 98.90 (+5.67%)**.
 - [ ] G3.4 : AA hairline + stroke générique (path) débloqués ; BigRectGM monte au-dessus de 85%.
 
 ---

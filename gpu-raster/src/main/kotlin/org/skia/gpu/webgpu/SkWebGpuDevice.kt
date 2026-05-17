@@ -1132,19 +1132,45 @@ public class SkWebGpuDevice(
         // (`min` over edge equations) masks the bbox down to the
         // actual polygon shape, with smooth fall-off on the perimeter.
         if (paint.isAntiAlias && n <= MAX_AA_EDGES) {
-            val edges = FloatArray(MAX_AA_EDGES * 4)
-            buildPerimeterEdges(devVerts, edges)
-            val bboxTri = bboxTrianglesFor(devVerts, width, height)
-            pending.add(
-                AaPolygonDraw(
-                    verts = bboxTri,
-                    edges = edges,
-                    edgeCount = n,
-                    scissor = scissor,
-                    r = rF, g = gF, b = bF, a = aF,
-                    mode = paint.blendMode,
-                ),
-            )
+            if (isPolygonConvex(devVerts)) {
+                val edges = FloatArray(MAX_AA_EDGES * 4)
+                buildPerimeterEdges(devVerts, edges)
+                val bboxTri = bboxTrianglesFor(devVerts, width, height)
+                pending.add(
+                    AaPolygonDraw(
+                        verts = bboxTri,
+                        edges = edges,
+                        edgeCount = n,
+                        scissor = scissor,
+                        r = rF, g = gF, b = bF, a = aF,
+                        mode = paint.blendMode,
+                    ),
+                )
+            } else {
+                // G3.3b.3a follow-up — concave single-contour can't go
+                // through the convex-only min-coverage shader (interior
+                // pockets sit on the wrong side of some edge's infinite
+                // line). Route through the same stencil-and-cover AA path
+                // as multi-contour : fan-tess winding cancels in the
+                // concave pocket so the stencil gates inside correctly,
+                // and the cover shader's per-segment distance handles
+                // the AA boundary.
+                val edges = FloatArray(MAX_AA_EDGES * 4)
+                buildContourEdgeSegments(devVerts, contourStarts, edges)
+                val stencilTri = fanTessellateContours(devVerts, contourStarts)
+                val coverTri = bboxTrianglesFor(devVerts, width, height)
+                pending.add(
+                    StencilCoverAaPolygonDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        edges = edges,
+                        edgeCount = n,
+                        scissor = scissor,
+                        r = rF, g = gF, b = bF, a = aF,
+                        mode = paint.blendMode,
+                    ),
+                )
+            }
         } else {
             pending.add(
                 PolygonDraw(
@@ -1748,6 +1774,37 @@ public class SkWebGpuDevice(
          * AA polygon path so every near-edge pixel reaches the fragment
          * shader for coverage evaluation.
          */
+        /**
+         * Cross-product convexity test. Walks consecutive vertex triples
+         * `(v[i], v[i+1], v[i+2])` (indices mod n) and checks whether
+         * every non-degenerate turn shares the same orientation. A sign
+         * flip = at least one reflex vertex = concave. Collinear triples
+         * (cross product = 0) are ignored. Triangles (`n < 4`) are
+         * trivially convex.
+         */
+        fun isPolygonConvex(devVerts: ArrayList<Float>): Boolean {
+            val n = devVerts.size / 2
+            if (n < 4) return true
+            var sign = 0
+            for (i in 0 until n) {
+                val ax = devVerts[i * 2]
+                val ay = devVerts[i * 2 + 1]
+                val bx = devVerts[((i + 1) % n) * 2]
+                val by = devVerts[((i + 1) % n) * 2 + 1]
+                val cx = devVerts[((i + 2) % n) * 2]
+                val cy = devVerts[((i + 2) % n) * 2 + 1]
+                val cross = (bx - ax) * (cy - by) - (by - ay) * (cx - bx)
+                if (cross == 0f) continue
+                val newSign = if (cross > 0f) 1 else -1
+                if (sign == 0) {
+                    sign = newSign
+                } else if (sign != newSign) {
+                    return false
+                }
+            }
+            return true
+        }
+
         /**
          * G3.3b.3a — for each contour, emit one edge segment per vertex
          * (vertex `i` to vertex `i+1`, with the last vertex closing back
