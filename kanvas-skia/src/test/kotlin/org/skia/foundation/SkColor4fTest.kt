@@ -182,9 +182,15 @@ class SkColor4fTest {
     }
 
     @Test
-    fun `toBytes_RGBA packs R in MSB`() {
-        // pure red, opaque ⇒ R=FF, G=00, B=00, A=FF
+    fun `toBytes_RGBA stores R G B A as 4 consecutive memory bytes`() {
+        // Skia's toBytes_RGBA lays out [R, G, B, A] in memory; read as a
+        // little-endian uint32 this is (A<<24)|(B<<16)|(G<<8)|R — R in LSB.
+        // pure red, opaque ⇒ bytes [FF, 00, 00, FF] ⇒ 0xFF0000FF
         assertEquals(0xFF0000FF.toInt(), SkColor4f(1f, 0f, 0f, 1f).toBytes_RGBA())
+        // pure green ⇒ bytes [00, FF, 00, FF] ⇒ 0xFF00FF00
+        assertEquals(0xFF00FF00.toInt(), SkColor4f(0f, 1f, 0f, 1f).toBytes_RGBA())
+        // pure blue ⇒ bytes [00, 00, FF, FF] ⇒ 0xFFFF0000
+        assertEquals(0xFFFF0000.toInt(), SkColor4f(0f, 0f, 1f, 1f).toBytes_RGBA())
     }
 
     @Test
