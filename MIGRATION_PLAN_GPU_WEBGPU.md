@@ -516,10 +516,21 @@ Premier slice gradient end-to-end : `SkLinearGradient` en kClamp uniquement, rou
 - [ ] **Image upload** : `SkImage` → `GPUTexture` cache (`weakHashMap<SkImage, GPUTexture>`).
 - [ ] **`SkBitmapShader.wgsl`** : sampler 2D + tile-mode constantes spec, `kNearest` / `kLinear`, mêmes règles de pixel-center que le raster.
 - [ ] **`drawImage` / `drawImageRect`** : pipeline simple qui réutilise `SkBitmapShader.wgsl` avec local-matrix dérivée de `(src, dst)`.
-- [ ] **Color management** : la texture peut être uploadée en sRGB ou Rec.2020 — passer le profil en uniform et linearize dans le shader. Réutilise `SkColorSpaceXformSteps` côté CPU pour produire les coefficients.
+- [x] **Color management** (G5.3) : sRGB (identity fast path) + Display P3 (sRGB TF + P3 → sRGB primaries matrix). Le profil passe en uniform `csFlags.x` (sentinel bit-reinterp) + `csMatrix` (mat3x3 column-major), le shader applique sRGB EOTF → matrix → sRGB OETF avant la premul-by-alpha. Coefficients calculés via `SkColorSpaceXformSteps(image.colorSpace, kUnpremul, sRGB, kUnpremul)`. **Différé** : Rec.2020 (linear ou PQ TF), Adobe RGB, ProPhoto, HDR/PQ/HLG luminance scaling — auraient besoin de TF coefs dédiés dans l'uniform. Voir G5.3 ci-dessous.
 
 ### Tests
 - [ ] `DrawBitmapRect3`, `BigMatrixGM`, `TilemodesAlphaGM`, `BitmapShaderGM`, `TinyBitmapGM`.
+
+### G5.3 — Texture color management (sRGB + Display P3)
+
+Le bitmap-shader pipeline (G5.1) sait maintenant lifter un texel non-sRGB dans l'espace de travail intermediate (sRGB-coded). Branchement guardé par un sentinel `csMode` dans l'uniform : `0 = identity fast path` (sRGB ou tout source où `SkColorSpaceXformSteps.Flags.isIdentity == true` — pas de surcoût pour l'existant), `1 = sRGB EOTF → primaries matrix → sRGB OETF` (Display P3 et toute source à TF sRGB + gamut non-sRGB).
+
+- [x] [`bitmap_shader.wgsl`](gpu-raster/src/main/resources/shaders/bitmap_shader.wgsl) : ajoute `csFlags: vec4f` + `csMatrix: mat3x3<f32>` (std140 = 3×16 = 48 bytes) à l'uniform. Branchement `bitcast<u32>(csFlags.x) == CS_MODE_SRGB_TF_MATRIX` autour de la sequence `srgb_to_linear` (per-channel) → `csMatrix * lin` → `linear_to_srgb` (per-channel + `max(v, 0.0)` clamp avant le `pow`). Helpers `srgb_to_linear` / `linear_to_srgb` byte-identiques avec `present_pass.wgsl`. La uniform passe de 64 à 128 bytes (`IMAGE_RECT_UNIFORM_SIZE`).
+- [x] [`SkWebGpuDevice.bitmapColorSpaceFor`](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt) : calcule `(mode, matrix)` côté hôte. Détecte 3 cas : (a) `cs.hash() == sRGB.hash()` → identity, (b) TF source ≠ sRGB → identity (fallback as-uploaded ; out-of-scope), (c) `SkColorSpaceXformSteps.flags.isIdentity` → identity, (d) sinon → mode 1 + `steps.srcToDstMatrix.copyOf()`. Le matrix est column-major et est consommé tel quel par WGSL (`mat3x3 * vec3` est column-vector multiply). Constante partagée `IDENTITY_CS_MATRIX` pour le fast path.
+- [x] Plumb-through dans `ImageRectDraw` + `enqueueImageRectDrawInternal` : `csMode` + `csMatrix` calculés une fois par draw via `bitmapColorSpaceFor(image)`, écrits dans le uniform via `Float.fromBits(d.csMode)` (sentinel) + 3 colonnes paddées.
+- [x] Tests unitaires : [ImageRectColorSpaceTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ImageRectColorSpaceTest.kt) — (1) sRGB tagué explicitement vs défaut (regression guard du fast path), (2) P3 tagué `(64, 128, 32, 255)` → readback comparé à `SkColorSpaceXformSteps.apply` exécuté en host (mêmes pipeline raster/GPU, tol 3/255), (3) P3 white round-trip (gamut invariant, tol 2/255). Zéro régression sur les 125 tests existants.
+
+**Différés explicitement** : Rec.2020 (TF linear ou PQ — il faut un nouveau slot de coefs TF dans l'uniform, le shader actuel hardcode sRGB EOTF/OETF), Adobe RGB (TF gamma 2.2, idem), ProPhoto (gamut + TF différents), HDR PQ/HLG (luminance scaling + OOTF). La détection côté hôte se base sur `cs.transferFnHash != sRGB.transferFnHash` → fallback sur le fast path (uploaded as-is), donc les sources Rec.2020 etc. sortent visuellement comme avant G5.3 — pas de régression mais pas non plus de transform appliquée.
 
 ---
 
