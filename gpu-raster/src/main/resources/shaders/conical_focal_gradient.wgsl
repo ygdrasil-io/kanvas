@@ -1,7 +1,7 @@
-// G4.4.1 / G4.4.5 -- conical (two-point) gradient, focal-inside +
-// focal-outside sub-cases, drawRect dispatch.
+// G4.4.1 / G4.4.5 / G4.4.6 -- conical (two-point) gradient, focal-
+// inside + focal-outside + focal-on-circle sub-cases, drawRect dispatch.
 //
-// This shader covers two kFocal sub-cases of `SkConicalGradient` :
+// This shader covers three kFocal sub-cases of `SkConicalGradient` :
 //   - **focal-inside well-behaved** (`focalData.fR1 > 1`,
 //     not focal-on-circle) -- the most common general conical case ;
 //     landed in G4.4.1.
@@ -10,18 +10,25 @@
 //     G4.4.5. The host picks `+sqrt` (greater) vs `-sqrt` (smaller) via
 //     the `subCaseSign` flag and the host gates `disc < 0` with the
 //     `in_cone` factor.
-// The focal-on-circle degenerate case still falls through to solid
-// color at the dispatch gate.
+//   - **focal-on-circle** (`|fR1 - 1| < tolerance`) -- the focal point
+//     lies exactly on the end circle ; landed in G4.4.6. Formula
+//     `t = (x*x + y*y) / x` (with a singularity at `x = 0` that maps to
+//     premul transparent black, same `in_cone = 0` route as the focal-
+//     outside mask). Also subject to `mask_2pt_conical_degenerates`
+//     (t <= 0 or NaN -> in_cone = 0).
 //
 // CPU reference : `cpu-raster/.../SkConicalGradient.kt::computeTFocal`.
 // After applying the precomputed `gradientMatrix` (which maps source
 // space to the canonical focal frame where focal = (0, 0) and end
 // center = (1, 0)), the per-sub-case formula is :
-//   well-behaved : t = sqrt(x*x + y*y) - x * fP0     with fP0 = 1 / fR1
-//   focal-outside: t = sign * sqrt(x*x - y*y) - x * fP0,
-//                  masked to transparent when (x*x - y*y) < 0 OR t <= 0
-//                  (`mask_2pt_conical_degenerates` ; sign = +1 for the
-//                  "greater" variant, -1 for "smaller").
+//   well-behaved    : t = sqrt(x*x + y*y) - x * fP0   with fP0 = 1 / fR1
+//   focal-outside   : t = sign * sqrt(x*x - y*y) - x * fP0,
+//                     masked to transparent when (x*x - y*y) < 0 OR t <= 0
+//                     (`mask_2pt_conical_degenerates` ; sign = +1 for the
+//                     "greater" variant, -1 for "smaller").
+//   focal-on-circle : t = (x*x + y*y) / x,
+//                     masked to transparent when abs(x) < eps (NaN guard)
+//                     OR t <= 0 (`mask_2pt_conical_degenerates`).
 // Then the CPU applies these post-passes :
 //   - negate_x : t = -t                 iff (1 - fFocalX) < 0
 //   - compensate_focal : t = t + fFocalX iff fFocalX != 0
@@ -67,8 +74,8 @@ struct Uniforms {
     focalScalars: vec4f,    // offset 48
     // Flags + stop count : (negateX, subCase, count_bits, subCaseSign)
     //   negateX     = 1.0 if (1 - fFocalX) < 0, 0.0 otherwise
-    //   subCase     = 0.0 well-behaved, 1.0 focal-outside (greater/smaller).
-    //                 Future : 2.0 will encode focal-on-circle.
+    //   subCase     = 0.0 well-behaved, 1.0 focal-outside (greater /
+    //                 smaller), 2.0 focal-on-circle.
     //   count_bits  = u32 stop count bit-reinterpreted as f32
     //   subCaseSign = +1.0 for "greater" (+sqrt), -1.0 for "smaller"
     //                 (-sqrt) ; only consulted when subCase == 1.0.
@@ -120,7 +127,7 @@ fn compute_t_raw(pos: vec4f) -> FocalT {
     if (subCase < 0.5) {
         // Well-behaved focal-inside : t = sqrt(x*x + y*y) - x * fP0.
         t = sqrt(fx * fx + fy * fy) - fx * fP0;
-    } else {
+    } else if (subCase < 1.5) {
         // Focal-outside greater / smaller :
         //   disc = x*x - y*y
         //   t    = subCaseSign * sqrt(max(disc, 0)) - x * fP0
@@ -130,6 +137,18 @@ fn compute_t_raw(pos: vec4f) -> FocalT {
         let raw = subCaseSign * sqrt(safeDisc) - fx * fP0;
         t = raw;
         let inside = (disc >= 0.0) && (raw > 0.0);
+        in_cone = select(0.0, 1.0, inside);
+    } else {
+        // Focal-on-circle : t = (x*x + y*y) / x.
+        //   Singularity at x = 0 -> premul transparent black via in_cone = 0
+        //   (matches `mask_2pt_conical_nan` in the CPU pipeline).
+        //   Also subject to `mask_2pt_conical_degenerates` : t <= 0 or NaN
+        //   -> in_cone = 0.
+        let safeX = select(fx, 1.0, abs(fx) < 1.0e-6);
+        let raw = (fx * fx + fy * fy) / safeX;
+        t = raw;
+        let xOk = abs(fx) >= 1.0e-6;
+        let inside = xOk && (raw > 0.0);
         in_cone = select(0.0, 1.0, inside);
     }
 
