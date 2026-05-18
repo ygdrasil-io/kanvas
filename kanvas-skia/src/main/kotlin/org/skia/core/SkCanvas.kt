@@ -1101,6 +1101,14 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * modes). The path the rasteriser walks is exactly the same as if
      * the caller emitted those calls themselves, so honouring of
      * paint shaders / blend modes / clipPath stays uniform.
+     *
+     * Per upstream's `SkCanvas::onDrawPoints`
+     * (`src/core/SkCanvas.cpp:1947-1949`), the line modes
+     * ([PointMode.kLines] and [PointMode.kPolygon]) force
+     * `paint.style = kStroke_Style` before dispatch — a caller-supplied
+     * kFill paint would otherwise produce a no-op fill of an open
+     * polyline. [PointMode.kPoints] keeps the caller-supplied style
+     * for the fill on each disk/square it stamps.
      */
     public open fun drawPoints(mode: PointMode, points: Array<org.graphiks.math.SkPoint>, paint: SkPaint) {
         if (points.isEmpty()) return
@@ -1152,19 +1160,37 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                 }
             }
             PointMode.kLines -> {
+                // Upstream `SkCanvas::onDrawPoints` enforces
+                // `strokePaint.setStyle(kStroke_Style)` before dispatch ;
+                // a kFill paint would otherwise produce a no-op fill of
+                // an open polyline. Force-stroke the local copy so the
+                // [drawLine] → [drawPath] chain honours the upstream
+                // contract regardless of caller-supplied paint.style.
+                val strokePaint = if (paint.style == SkPaint.Style.kStroke_Style) {
+                    paint
+                } else {
+                    paint.copy().apply { style = SkPaint.Style.kStroke_Style }
+                }
                 var i = 0
                 while (i + 1 < points.size) {
                     val a = points[i]
                     val b = points[i + 1]
-                    drawLine(a.fX, a.fY, b.fX, b.fY, paint)
+                    drawLine(a.fX, a.fY, b.fX, b.fY, strokePaint)
                     i += 2
                 }
             }
             PointMode.kPolygon -> {
+                // Same upstream enforcement as kLines : force kStroke so
+                // a kFill paint still produces a visible polyline.
+                val strokePaint = if (paint.style == SkPaint.Style.kStroke_Style) {
+                    paint
+                } else {
+                    paint.copy().apply { style = SkPaint.Style.kStroke_Style }
+                }
                 for (i in 0 until points.size - 1) {
                     val a = points[i]
                     val b = points[i + 1]
-                    drawLine(a.fX, a.fY, b.fX, b.fY, paint)
+                    drawLine(a.fX, a.fY, b.fX, b.fY, strokePaint)
                 }
             }
         }
