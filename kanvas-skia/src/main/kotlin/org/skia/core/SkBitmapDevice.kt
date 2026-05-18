@@ -568,13 +568,25 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      * so no per-pixel xform is needed (the canvas seeds the layer
      * device with the parent's color space).
      */
-    public fun compositeFrom(
-        src: SkBitmapDevice,
+    override fun compositeFrom(
+        src: SkDevice,
         originX: Int,
         originY: Int,
         clip: SkIRect,
         paint: SkPaint?,
     ) {
+        // Raster composite is implemented as a pixel-walk over the source
+        // bitmap ; the GPU layer device would need to first read back to
+        // CPU before reaching this path. The CPU layer pipeline never
+        // mixes backends (SkCanvas constructs a raster layer when the
+        // root is raster) so a hard cast is safe here.
+        val srcBitmap = src as? SkBitmapDevice
+            ?: error(
+                "SkBitmapDevice.compositeFrom : source device is " +
+                    "${src::class.simpleName} ; raster composite only consumes " +
+                    "SkBitmapDevice. Generalising across backends requires a " +
+                    "readback step (see SkWebGpuDevice.compositeFrom)."
+            )
         val paintAlpha = paint?.alpha ?: 0xFF
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
         val blender = paint?.blender
@@ -590,8 +602,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         if (paintAlpha == 0 && !mustBlendZero) return
         val l = maxOf(clip.left, originX, 0)
         val t = maxOf(clip.top, originY, 0)
-        val r = minOf(clip.right, originX + src.width, width)
-        val b = minOf(clip.bottom, originY + src.height, height)
+        val r = minOf(clip.right, originX + srcBitmap.width, width)
+        val b = minOf(clip.bottom, originY + srcBitmap.height, height)
         if (l >= r || t >= b) return
         // Read source pixels via the colorType-aware [SkBitmap.getPixel]
         // accessor so this composite works for both 8888-only and F16-only
@@ -600,13 +612,24 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // GM uses `saveLayer` heavily — none in scope do.
         for (y in t until b) {
             for (x in l until r) {
-                val sample = src.bitmap.getPixel(x - originX, y - originY)
+                val sample = srcBitmap.bitmap.getPixel(x - originX, y - originY)
                 var effective = if (paintAlpha == 0xFF) sample else applyAlpha(sample, paintAlpha)
                 effective = applyColorFilter(colorFilter, effective)
                 if (effective ushr 24 == 0 && !mustBlendZero) continue
                 dispatchBlend(x, y, effective, mode, blender)
             }
         }
+    }
+
+    /**
+     * Phase G-saveLayer — allocate a raster layer-device matching this
+     * device's colour profile. Always succeeds : raster always supports
+     * layers (`SkCanvas.saveLayer` has worked on the CPU since Phase 7).
+     */
+    override fun makeLayerDevice(width: Int, height: Int): SkDevice {
+        val layerBitmap = SkBitmap(width, height, bitmap.colorSpace, bitmap.colorType)
+            .also { it.eraseColor(0) }
+        return SkBitmapDevice(layerBitmap)
     }
 
     /**

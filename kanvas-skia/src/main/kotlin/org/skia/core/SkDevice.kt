@@ -80,4 +80,44 @@ public interface SkDevice {
         constraint: SrcRectConstraint,
         clip: SkIRect,
     )
+
+    /**
+     * Phase G-saveLayer — allocate a fresh, backend-matched offscreen
+     * device of the given pixel size that subsequent layer draws will
+     * target. The returned device must share this device's colour
+     * profile (color space + color type for raster ; intermediate
+     * format / present-pass settings for GPU) so [compositeFrom] can
+     * blit pixels back without an extra colour-space conversion.
+     *
+     * **Scope.** Used by [SkCanvas.saveLayer] to back a transparency
+     * group. The simplest scaffolding implementation may bail with a
+     * helpful error when the backend doesn't yet support layers — this
+     * keeps the existing fail-fast contract for GMs that touch layers
+     * on a backend that hasn't implemented them.
+     */
+    public fun makeLayerDevice(width: Int, height: Int): SkDevice
+
+    /**
+     * Phase G-saveLayer — composite [src]'s pixels onto this device,
+     * with `src`'s `(0, 0)` landing at `(originX, originY)` of this
+     * device, intersecting writes with [clip] (in this device's
+     * coords). Source pixels are blended through `paint?.blendMode`
+     * (defaults to [SkBlendMode.kSrcOver]) after multiplying by
+     * `paint?.alpha`.
+     *
+     * Used by [SkCanvas.restore] to flatten a `saveLayer`'s offscreen
+     * device back into its parent. The CPU implementation has the
+     * fully-featured pipeline (every blend mode, colour filters,
+     * blenders, modes that affect zero-alpha sources). The GPU
+     * scaffolding implementation honours **alpha + blendMode only**
+     * (kClear / kSrc / kSrcOver / kDstOver in the bitmap-shader
+     * pipeline ; the layer's extended modes are deferred).
+     */
+    public fun compositeFrom(
+        src: SkDevice,
+        originX: Int,
+        originY: Int,
+        clip: SkIRect,
+        paint: SkPaint?,
+    )
 }
