@@ -171,6 +171,23 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         var clipShaderCtm: SkMatrix = SkMatrix.Identity,
         /** Clip-op for the bound [clipShader]. */
         var clipShaderOp: SkClipOp = SkClipOp.kIntersect,
+        /**
+         * G2.x -- analytical clip shape captured by [clipPath] when the
+         * path is one of the canonical simple shapes (rect / oval /
+         * circle / uniform-corner rrect) and the CTM is axis-aligned.
+         * Stored in **device coords**. Used by non-raster devices that
+         * can evaluate the shape's coverage analytically in a shader,
+         * sparing them the rasterised [aaClip] mask. The raster
+         * [SkBitmapDevice] ignores this slot and keeps using [aaClip].
+         *
+         * Set by intersect-style `clipPath` / `clipRRect` ops via
+         * [SkClipShape.tryDetect]. Single-shape only : a second simple-
+         * shape `clipPath` clears the slot back to `null` (the canvas
+         * falls back to the AA-mask path, which then triggers the GPU
+         * device's fail-fast when no simple shape can carry the
+         * combined clip). Difference ops also clear the slot.
+         */
+        var simpleShapeClip: SkClipShape? = null,
     )
 
     /**
@@ -257,6 +274,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             clipShader = s.clipShader,
             clipShaderCtm = s.clipShaderCtm,
             clipShaderOp = s.clipShaderOp,
+            simpleShapeClip = s.simpleShapeClip,
         ))
         return stack.size - 2
     }
@@ -595,6 +613,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         if (w <= 0 || h <= 0) {
             s.clip = SkIRect.MakeLTRB(s.clip.left, s.clip.top, s.clip.left, s.clip.top)
             s.aaClip = null
+            s.simpleShapeClip = null
             return
         }
 
@@ -610,6 +629,44 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         }
 
         s.clip = newClipBbox
+
+        // G2.x -- simple-shape capture for non-raster (GPU) devices.
+        // Only kIntersect, only non-inverse fill types ; inverse fills
+        // mean "outside the shape" which we don't model in the
+        // [SkClipShape] sealed type.
+        if (!path.fillType.isInverse()) {
+            val detected = SkClipShape.tryDetect(path, s.matrix)
+            when (detected) {
+                null -> {
+                    // Unrecognised path : leave the existing slot alone if
+                    // it was already null ; otherwise clear it (can't
+                    // intersect a recorded shape with an arbitrary path).
+                    if (s.simpleShapeClip != null) s.simpleShapeClip = null
+                }
+                is SkClipShape.Rect -> {
+                    // Pure rect intersection : the new clip rect is
+                    // already encoded in [s.clip] (a tighter [SkIRect]).
+                    // Don't disturb a previously recorded curved shape
+                    // -- the canvas still represents (existing shape) ∩
+                    // (new rect) correctly because [s.clip] is the
+                    // outer bbox and the curved shape sits inside it.
+                }
+                else -> {
+                    // Curved shape (oval / circle / rrect) :
+                    //  - first such shape : record it.
+                    //  - second curved shape : we don't compose two
+                    //    curved shapes yet -- drop to null so [bindClip]
+                    //    falls through to the AA-mask path. On non-
+                    //    raster devices the existing fail-fast then
+                    //    triggers, which is honest about the gap.
+                    s.simpleShapeClip = if (s.simpleShapeClip == null) detected else null
+                }
+            }
+        } else {
+            // Inverse fill : clear -- can't represent "outside shape" in
+            // the analytic clip slot today.
+            s.simpleShapeClip = null
+        }
     }
 
     /**
@@ -624,12 +681,18 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val h = s.clip.bottom - s.clip.top
         if (w <= 0 || h <= 0) {
             s.aaClip = null
+            s.simpleShapeClip = null
             return
         }
         val pathAac = rasterisePathToAaClip(s, path, s.clip, doAntiAlias)
         val combined = SkAAClip(s.aaClip ?: SkAAClip(s.clip))
         combined.op(pathAac, SkRegion.Op.kDifference)
         s.aaClip = combined
+        // Difference cuts a hole inside the existing clip ; the analytic
+        // shape slot (which is intersect-shape only) can no longer
+        // represent the result. Drop to null so non-raster devices fail
+        // fast on the now-impossible clip combination.
+        s.simpleShapeClip = null
     }
 
     /**
@@ -761,6 +824,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         if (w <= 0 || h <= 0) {
             s.clip = SkIRect.MakeLTRB(s.clip.left, s.clip.top, s.clip.left, s.clip.top)
             s.aaClip = null
+            s.simpleShapeClip = null
             return
         }
         val regionAaClip = SkAAClip(region)
@@ -773,6 +837,9 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             combined
         }
         s.clip = newClipBbox
+        // Region intersection can't tighten an analytic simple shape ;
+        // drop it (the band-encoded region needs the AA-mask path).
+        s.simpleShapeClip = null
     }
 
     private fun clipRegionDifference(s: State, region: SkRegion) {
@@ -780,12 +847,14 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val h = s.clip.bottom - s.clip.top
         if (w <= 0 || h <= 0) {
             s.aaClip = null
+            s.simpleShapeClip = null
             return
         }
         val regionAaClip = SkAAClip(region)
         val combined = SkAAClip(s.aaClip ?: SkAAClip(s.clip))
         combined.op(regionAaClip, SkRegion.Op.kDifference)
         s.aaClip = combined
+        s.simpleShapeClip = null
     }
 
     /**
@@ -804,18 +873,45 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         // backends. AA clip + clip-shader support on GPU lands when
         // SkWebGpuDevice grows shader-side clip evaluation (G2+).
         //
+        // **G2.x simple-shape clip.** When the active state carries a
+        // [State.simpleShapeClip] (set by [clipPath] / [clipRRect] when
+        // the path matches one of the canonical simple-shape contours
+        // and the CTM is axis-aligned), the canvas pushes it onto every
+        // device via [SkDevice.setActiveClipShape]. The raster device
+        // ignores it (it already has the rasterised aaClip). GPU
+        // devices read it and evaluate per-pixel coverage analytically
+        // in their fragment pipelines, sparing them an alpha mask.
+        //
         // **Fail-fast on actual misuse.** Silently skipping when an
-        // AA-clip or clip-shader is actually bound would let
-        // `clipPath` / `clipRRect` / `clipShader` "succeed" against
-        // SkWebGpuDevice and return wrong pixels. Throw with a useful
+        // AA-clip or clip-shader is actually bound on a non-raster
+        // device would let `clipPath` / `clipRRect` / `clipShader`
+        // "succeed" and return wrong pixels. Throw with a useful
         // pointer instead so the caller can either fall back to
-        // SkBitmapDevice or wait for the relevant G-phase.
+        // SkBitmapDevice or wait for the relevant G-phase. The
+        // simple-shape clip carves out an honest fast path : if it's
+        // set, the GPU device can render the clip analytically and we
+        // skip the throw -- the rasterised aaClip is still present (as
+        // an over-approximation), but the GPU shader's coverage is the
+        // authoritative answer.
         val raster = s.device as? SkBitmapDevice
         if (raster == null) {
-            check(s.aaClip == null && s.clipShader == null) {
-                "${s.device::class.simpleName} does not support clipPath / " +
-                    "clipRRect / clipShader yet (G2+). Use clipRect() instead, " +
-                    "or back the canvas with SkBitmapDevice for these clip ops. " +
+            s.device.setActiveClipShape(s.simpleShapeClip)
+            // Allow aaClip to be present iff we also have a matching
+            // simple-shape clip the GPU device can evaluate. Clip-shader
+            // still throws (per-pixel shader sampling deferred to a
+            // later slice).
+            check(s.clipShader == null) {
+                "${s.device::class.simpleName} does not support " +
+                    "clipShader yet (G2+). Use clipRect() / clipPath() instead, " +
+                    "or back the canvas with SkBitmapDevice. " +
+                    "See MIGRATION_PLAN_GPU_WEBGPU.md."
+            }
+            check(s.aaClip == null || s.simpleShapeClip != null) {
+                "${s.device::class.simpleName} does not support arbitrary " +
+                    "clipPath (only axis-aligned rect / oval / circle / " +
+                    "uniform-corner rrect under an axis-aligned CTM). The " +
+                    "current clip needs a rasterised alpha mask. Use " +
+                    "clipRect() or back the canvas with SkBitmapDevice. " +
                     "See MIGRATION_PLAN_GPU_WEBGPU.md."
             }
             return
