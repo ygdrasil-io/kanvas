@@ -266,6 +266,99 @@ class ConicalGradientFocalRectTest {
         assertNear(outside2[2], 255, "outside2.B", tol = 16)
     }
 
+    // G4.4.5 -- focal-outside sub-case (`focalData.fR1 < 1`, not focal-
+    // on-circle). The "greater" / "smaller" raster-pipeline variants are
+    // both routed through the same shader path with a `subCaseSign` flag.
+    //
+    // Fixture for the classification test :
+    //   start = (20, 32), r0 = 4 ; end = (50, 32), r1 = 20 ; dCenter = 30.
+    // After Make() normalises by dCenter and applies the focal-frame
+    // remap, we get :
+    //   fFocalX = -0.25       (no swap, |fFocalX - 1| not nearly zero)
+    //   fR1     = 0.667 / 1.25 = 0.534     < 1 -> focal-outside
+    //   isFocalOutsideSmaller : false  (greater variant, sign = +1)
+    //   negateX                : 0
+    // Geometrically, the focal point sits outside the end circle ; the
+    // gradient is only defined inside the conical "wedge" emanating from
+    // the focal point and bounded by the tangent lines to the end
+    // circle. Pixels outside the wedge are masked to transparent (black
+    // premul).
+
+    @Test
+    fun `focal-outside greater is correctly classified as kFocal focal-outside`() {
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(20f, 32f), startRadius = 4f,
+            end = SkPoint(50f, 32f), endRadius = 20f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kClamp,
+        )!!
+        assertEquals(SkConicalGradient.Type.kFocal, grad.getType())
+        val fd = grad.getFocalData()
+        assertTrue(fd != null, "focalData must be present for kFocal")
+        assertTrue(!fd!!.isWellBehaved(), "fixture must NOT be focal-inside well-behaved")
+        assertTrue(fd.isFocalOutside(), "fixture must be focal-outside")
+        assertTrue(!fd.isFocalOutsideSmaller(), "fixture must be the 'greater' variant")
+        assertTrue(!fd.isFocalOnCircle(), "fixture must not be focal-on-circle")
+    }
+
+    @Test
+    fun `focal-outside greater conical renders inside the cone and masks outside`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        // start=(20,32), r0=4 ; end=(50,32), r1=20. Focal-outside greater.
+        // The visible wedge expands from a focal point at ~ (12.5, 32) to
+        // the end disk at (50, 32) radius 20. Pixels far above or below
+        // the central horizontal line fall outside the cone and must
+        // collapse to background white (transparent gradient).
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(20f, 32f), startRadius = 4f,
+            end = SkPoint(50f, 32f), endRadius = 20f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kClamp,
+        )!!
+        assertTrue(grad.getFocalData()?.isFocalOutside() == true)
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        // On the central horizontal line, well inside the end circle :
+        // pixel (50, 32) is on the end circle's centre -> t = 1 -> blue.
+        val endCentre = pixels.rgbaAt(50, 32)
+        assertTrue(endCentre[2] >= 150, "endCentre.B mostly blue, got ${endCentre[2]}")
+
+        // Pixel on the central line, near the focal point on the start
+        // side : the start circle disk is around (20, 32) radius 4, so
+        // (20, 32) is on it -> t close to 0 -> red leaning.
+        val startCentre = pixels.rgbaAt(20, 32)
+        assertTrue(startCentre[0] >= 150, "startCentre.R mostly red, got ${startCentre[0]}")
+
+        // Far above the centre, well outside the cone : (32, 4) is far
+        // enough above the horizontal axis to be outside the wedge ;
+        // the shader's in_cone factor zeroes the colour -> background
+        // white shows through.
+        val above = pixels.rgbaAt(32, 4)
+        assertNear(above[0], 255, "above.R", tol = 32)
+        assertNear(above[1], 255, "above.G", tol = 32)
+        assertNear(above[2], 255, "above.B", tol = 32)
+
+        // Far below the centre : symmetric case.
+        val below = pixels.rgbaAt(32, 60)
+        assertNear(below[0], 255, "below.R", tol = 32)
+        assertNear(below[1], 255, "below.G", tol = 32)
+        assertNear(below[2], 255, "below.B", tol = 32)
+    }
+
     private fun assertNear(actual: Int, expected: Int, label: String, tol: Int) {
         val diff = kotlin.math.abs(actual - expected)
         assertTrue(diff <= tol, "$label : expected ~$expected (tol $tol), got $actual")

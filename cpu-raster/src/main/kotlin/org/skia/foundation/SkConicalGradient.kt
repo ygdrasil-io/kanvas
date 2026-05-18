@@ -334,6 +334,24 @@ public class SkConicalGradient internal constructor(
         public fun isSwapped(): Boolean = fIsSwapped
         public fun isWellBehaved(): Boolean = !isFocalOnCircle() && fR1 > 1f
         public fun isNativelyFocal(): Boolean = nearlyZero(fFocalX)
+
+        /**
+         * Focal-outside sub-case (G4.4.5) : focal point is outside the end
+         * circle (`fR1 < 1`, not focal-on-circle). Splits into the
+         * "greater" and "smaller" raster-pipeline variants on the sign of
+         * the `sqrt(x*x - y*y)` term (see [SkConicalGradient.computeTFocal]) ;
+         * call [isFocalOutsideSmaller] to disambiguate.
+         */
+        public fun isFocalOutside(): Boolean = !isFocalOnCircle() && fR1 < 1f
+
+        /**
+         * For the focal-outside sub-case, returns `true` if the "smaller"
+         * variant applies (`-sqrt(disc) - x*fP0`), `false` if "greater"
+         * (`+sqrt(disc) - x*fP0`). Mirrors the CPU dispatch :
+         * `isSwapped() || (1 - fFocalX) < 0`. Undefined for non-focal-
+         * outside configurations.
+         */
+        public fun isFocalOutsideSmaller(): Boolean = isSwapped() || (1f - fFocalX) < 0f
     }
 
     public companion object {

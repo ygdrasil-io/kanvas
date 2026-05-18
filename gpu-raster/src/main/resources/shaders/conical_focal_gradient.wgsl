@@ -1,17 +1,27 @@
-// G4.4.1 -- conical (two-point) gradient, focal-inside sub-case (well-behaved),
-// kClamp tile mode, drawRect dispatch.
+// G4.4.1 / G4.4.5 -- conical (two-point) gradient, focal-inside +
+// focal-outside sub-cases, drawRect dispatch.
 //
-// This shader covers the kFocal sub-case of `SkConicalGradient` where
-// the focal point is inside the end circle -- the most common general
-// conical configuration. The host filters to the well-behaved variant
-// (`focalData.fR1 > 1` and not focal-on-circle) ; the focal-on-circle /
-// focal-outside cases fall through to solid color at the dispatch gate.
+// This shader covers two kFocal sub-cases of `SkConicalGradient` :
+//   - **focal-inside well-behaved** (`focalData.fR1 > 1`,
+//     not focal-on-circle) -- the most common general conical case ;
+//     landed in G4.4.1.
+//   - **focal-outside** (`focalData.fR1 < 1`, not focal-on-circle) --
+//     the "smaller" / "greater" raster-pipeline variants ; landed in
+//     G4.4.5. The host picks `+sqrt` (greater) vs `-sqrt` (smaller) via
+//     the `subCaseSign` flag and the host gates `disc < 0` with the
+//     `in_cone` factor.
+// The focal-on-circle degenerate case still falls through to solid
+// color at the dispatch gate.
 //
-// CPU reference : `cpu-raster/.../SkConicalGradient.kt::computeTFocal`,
-// well-behaved branch. After applying the precomputed `gradientMatrix`
-// (which maps source space to the canonical focal frame where focal =
-// (0, 0) and end center = (1, 0)), the well-behaved formula is :
-//   t = sqrt(x*x + y*y) - x * fP0       with fP0 = 1 / fR1
+// CPU reference : `cpu-raster/.../SkConicalGradient.kt::computeTFocal`.
+// After applying the precomputed `gradientMatrix` (which maps source
+// space to the canonical focal frame where focal = (0, 0) and end
+// center = (1, 0)), the per-sub-case formula is :
+//   well-behaved : t = sqrt(x*x + y*y) - x * fP0     with fP0 = 1 / fR1
+//   focal-outside: t = sign * sqrt(x*x - y*y) - x * fP0,
+//                  masked to transparent when (x*x - y*y) < 0 OR t <= 0
+//                  (`mask_2pt_conical_degenerates` ; sign = +1 for the
+//                  "greater" variant, -1 for "smaller").
 // Then the CPU applies these post-passes :
 //   - negate_x : t = -t                 iff (1 - fFocalX) < 0
 //   - compensate_focal : t = t + fFocalX iff fFocalX != 0
@@ -55,9 +65,13 @@ struct Uniforms {
     //   compensate = 1.0 if (fFocalX != 0), 0.0 otherwise
     //   unswap    = 1.0 if fIsSwapped, 0.0 otherwise
     focalScalars: vec4f,    // offset 48
-    // Flags + stop count : (negateX, _, count_bits, _)
-    //   negateX = 1.0 if (1 - fFocalX) < 0, 0.0 otherwise
-    //   count_bits = u32 stop count bit-reinterpreted as f32
+    // Flags + stop count : (negateX, subCase, count_bits, subCaseSign)
+    //   negateX     = 1.0 if (1 - fFocalX) < 0, 0.0 otherwise
+    //   subCase     = 0.0 well-behaved, 1.0 focal-outside (greater/smaller).
+    //                 Future : 2.0 will encode focal-on-circle.
+    //   count_bits  = u32 stop count bit-reinterpreted as f32
+    //   subCaseSign = +1.0 for "greater" (+sqrt), -1.0 for "smaller"
+    //                 (-sqrt) ; only consulted when subCase == 1.0.
     flagsCount: vec4f,      // offset 64
     // Stop positions in [0, 1]. Only first `count` entries are valid.
     positions: array<vec4f, 16>, // offset 80
@@ -74,9 +88,19 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
     return vec4f(x, y, 0.0, 1.0);
 }
 
-// Compute t_raw at the pixel center. Apply the device -> focal-frame
-// affine, then the well-behaved formula + post-passes.
-fn compute_t_raw(pos: vec4f) -> f32 {
+// Compute t_raw at the pixel center. `in_cone = 1.0` iff the pixel is
+// inside the conical region (always 1 for well-behaved ; for
+// focal-outside, set to 0 when the discriminant is negative OR when
+// the raw `t` lands in the degenerate half-plane, mirroring the CPU's
+// `mask_2pt_conical_degenerates`). The fragment entry points multiply
+// the sampled colour by `in_cone` so out-of-cone pixels collapse to
+// premul transparent black under every tile mode.
+struct FocalT {
+    t: f32,
+    in_cone: f32,
+};
+
+fn compute_t_raw(pos: vec4f) -> FocalT {
     let px = pos.x;
     let py = pos.y;
     let fx = uniforms.affineRow0.x * px + uniforms.affineRow0.y * py + uniforms.affineRow0.z;
@@ -87,9 +111,27 @@ fn compute_t_raw(pos: vec4f) -> f32 {
     let compensate = uniforms.focalScalars.z;
     let unswap = uniforms.focalScalars.w;
     let negateX = uniforms.flagsCount.x;
+    let subCase = uniforms.flagsCount.y;
+    let subCaseSign = uniforms.flagsCount.w;
 
-    // Well-behaved focal-inside : t = sqrt(x*x + y*y) - x * fP0.
-    var t = sqrt(fx * fx + fy * fy) - fx * fP0;
+    var t: f32;
+    var in_cone: f32 = 1.0;
+
+    if (subCase < 0.5) {
+        // Well-behaved focal-inside : t = sqrt(x*x + y*y) - x * fP0.
+        t = sqrt(fx * fx + fy * fy) - fx * fP0;
+    } else {
+        // Focal-outside greater / smaller :
+        //   disc = x*x - y*y
+        //   t    = subCaseSign * sqrt(max(disc, 0)) - x * fP0
+        //   in_cone = 0 if disc < 0 or t <= 0 (mask_2pt_conical_degenerates)
+        let disc = fx * fx - fy * fy;
+        let safeDisc = max(disc, 0.0);
+        let raw = subCaseSign * sqrt(safeDisc) - fx * fP0;
+        t = raw;
+        let inside = (disc >= 0.0) && (raw > 0.0);
+        in_cone = select(0.0, 1.0, inside);
+    }
 
     // Post-passes (matches SkConicalGradient.kt::computeTFocal) :
     //   negate_x       : t = -t           iff (1 - fFocalX) < 0
@@ -104,7 +146,10 @@ fn compute_t_raw(pos: vec4f) -> f32 {
     if (unswap > 0.5) {
         t = 1.0 - t;
     }
-    return t;
+    var out: FocalT;
+    out.t = t;
+    out.in_cone = in_cone;
+    return out;
 }
 
 // Walk the (positions, colors) table and lerp at parametric `t`.
@@ -138,32 +183,32 @@ fn sample_stops_at(t: f32) -> vec4f {
 
 @fragment
 fn fs_clamp(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let t_raw = compute_t_raw(pos);
-    let t = clamp(t_raw, 0.0, 1.0);
-    return sample_stops_at(t);
+    let s = compute_t_raw(pos);
+    let t = clamp(s.t, 0.0, 1.0);
+    return sample_stops_at(t) * s.in_cone;
 }
 
 @fragment
 fn fs_repeat(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let t_raw = compute_t_raw(pos);
-    let t = t_raw - floor(t_raw);
-    return sample_stops_at(t);
+    let s = compute_t_raw(pos);
+    let t = s.t - floor(s.t);
+    return sample_stops_at(t) * s.in_cone;
 }
 
 @fragment
 fn fs_mirror(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let t_raw = compute_t_raw(pos);
-    let u = t_raw * 0.5;
+    let s = compute_t_raw(pos);
+    let u = s.t * 0.5;
     let w = u - floor(u);
     let t = select(2.0 - w * 2.0, w * 2.0, w < 0.5);
-    return sample_stops_at(t);
+    return sample_stops_at(t) * s.in_cone;
 }
 
 @fragment
 fn fs_decal(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let t_raw = compute_t_raw(pos);
-    if (t_raw < 0.0 || t_raw > 1.0) {
+    let s = compute_t_raw(pos);
+    if (s.in_cone < 0.5 || s.t < 0.0 || s.t > 1.0) {
         return vec4f(0.0, 0.0, 0.0, 0.0);
     }
-    return sample_stops_at(t_raw);
+    return sample_stops_at(s.t);
 }
