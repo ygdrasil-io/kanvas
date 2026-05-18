@@ -1,12 +1,16 @@
-// G4.4.3 -- AA stencil-and-cover cover-pass for non-rect paths filled
-// with a conical (two-point) gradient, **focal-inside well-behaved**
-// sub-case (focal point inside the end circle, `focalData.fR1 > 1`,
-// not focal-on-circle). Mirror of `aa_stencil_cover_conical_gradient.wgsl`
-// (kRadial-on-non-rect) : same per-fragment minimum-distance edge AA
-// machinery, same two-pass inside / outside cover. Only the gradient
-// formula changes -- this shader uses the well-behaved focal formula
-// from `conical_focal_gradient.wgsl` (rect-only G4.4.1) :
-//   t = sqrt(x*x + y*y) - x * fP0
+// G4.4.3 / G4.4.5 -- AA stencil-and-cover cover-pass for non-rect paths
+// filled with a conical (two-point) gradient, **focal-inside well-behaved**
+// (focal point inside the end circle, `focalData.fR1 > 1`, not focal-
+// on-circle ; G4.4.3) or **focal-outside** (`focalData.fR1 < 1`, not
+// focal-on-circle ; G4.4.5) sub-case. Mirror of
+// `aa_stencil_cover_conical_gradient.wgsl` (kRadial-on-non-rect) : same
+// per-fragment minimum-distance edge AA machinery, same two-pass
+// inside / outside cover. Only the gradient formula changes -- this
+// shader uses the same focal formula as `conical_focal_gradient.wgsl`
+// (rect-only G4.4.1 / G4.4.5) :
+//   well-behaved : t = sqrt(x*x + y*y) - x * fP0
+//   focal-outside: t = sign * sqrt(x*x - y*y) - x * fP0 (masked outside
+//                  the cone via the `in_cone` factor)
 // where `(x, y)` are the device-pixel coords mapped through the 2x3
 // `device -> focal frame` affine, plus the per-draw post-passes
 // `negate_x`, `compensate_focal`, `unswap`.
@@ -32,7 +36,7 @@ struct Uniforms {
     affineRow0:   vec4f,                       // offset   32 : (m00, m01, m02, _)
     affineRow1:   vec4f,                       // offset   48 : (m10, m11, m12, _)
     focalScalars: vec4f,                       // offset   64 : (fP0, fP1, compensate, unswap)
-    flagsCount:   vec4f,                       // offset   80 : (negateX, _, count_bits, _)
+    flagsCount:   vec4f,                       // offset   80 : (negateX, subCase, count_bits, subCaseSign)
     edgeCountPad: vec4f,                       // offset   96 : .x = edgeCount as bit-reinterp f32
     edges:        array<vec4f, 256>,           // offset  112 : (Ax, Ay, Bx, By) per edge
     positions:    array<vec4f, 16>,            // offset 4208 : (pos, _, _, _) per stop
@@ -66,10 +70,19 @@ fn minSegmentDistance(p: vec2f) -> f32 {
     return minDist;
 }
 
-// Compute t_raw at the pixel center. Apply the device -> focal-frame
-// affine, then the well-behaved formula + post-passes (matches
-// `conical_focal_gradient.wgsl`).
-fn compute_t_raw(p: vec2f) -> f32 {
+// Compute t_raw at the pixel center. `in_cone = 1.0` iff the pixel is
+// inside the conical region (always 1 for well-behaved ; 0 for focal-
+// outside pixels with negative discriminant or non-positive raw t,
+// mirroring CPU's `mask_2pt_conical_degenerates`). The fragment entry
+// points multiply the sampled colour by `in_cone` after applying the
+// AA coverage, so out-of-cone pixels collapse to premul transparent
+// black under every tile mode -- matching the rect-only shader.
+struct FocalT {
+    t: f32,
+    in_cone: f32,
+};
+
+fn compute_t_raw(p: vec2f) -> FocalT {
     let fx = uniforms.affineRow0.x * p.x + uniforms.affineRow0.y * p.y + uniforms.affineRow0.z;
     let fy = uniforms.affineRow1.x * p.x + uniforms.affineRow1.y * p.y + uniforms.affineRow1.z;
 
@@ -78,9 +91,25 @@ fn compute_t_raw(p: vec2f) -> f32 {
     let compensate = uniforms.focalScalars.z;
     let unswap = uniforms.focalScalars.w;
     let negateX = uniforms.flagsCount.x;
+    let subCase = uniforms.flagsCount.y;
+    let subCaseSign = uniforms.flagsCount.w;
 
-    // Well-behaved focal-inside : t = sqrt(x*x + y*y) - x * fP0.
-    var t = sqrt(fx * fx + fy * fy) - fx * fP0;
+    var t: f32;
+    var in_cone: f32 = 1.0;
+
+    if (subCase < 0.5) {
+        // Well-behaved focal-inside : t = sqrt(x*x + y*y) - x * fP0.
+        t = sqrt(fx * fx + fy * fy) - fx * fP0;
+    } else {
+        // Focal-outside greater / smaller : t = sign * sqrt(x*x - y*y) - x * fP0,
+        // masked when (x*x - y*y) < 0 or raw t <= 0.
+        let disc = fx * fx - fy * fy;
+        let safeDisc = max(disc, 0.0);
+        let raw = subCaseSign * sqrt(safeDisc) - fx * fP0;
+        t = raw;
+        let inside = (disc >= 0.0) && (raw > 0.0);
+        in_cone = select(0.0, 1.0, inside);
+    }
 
     if (negateX > 0.5) {
         t = -t;
@@ -91,7 +120,10 @@ fn compute_t_raw(p: vec2f) -> f32 {
     if (unswap > 0.5) {
         t = 1.0 - t;
     }
-    return t;
+    var out: FocalT;
+    out.t = t;
+    out.in_cone = in_cone;
+    return out;
 }
 
 fn sample_stops_at(t: f32) -> vec4f {
@@ -146,38 +178,38 @@ fn decal_out_of_range(t_raw: f32) -> bool {
 fn fs_inside_clamp(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
     let coverage = clamp(minDist + 0.5, 0.0, 1.0);
-    let t_raw = compute_t_raw(frag.xy);
-    let c = sample_stops_at(map_clamp(t_raw));
-    return vec4f(c.rgb * coverage, c.a * coverage);
+    let s = compute_t_raw(frag.xy);
+    let c = sample_stops_at(map_clamp(s.t));
+    return vec4f(c.rgb * coverage, c.a * coverage) * s.in_cone;
 }
 
 @fragment
 fn fs_inside_repeat(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
     let coverage = clamp(minDist + 0.5, 0.0, 1.0);
-    let t_raw = compute_t_raw(frag.xy);
-    let c = sample_stops_at(map_repeat(t_raw));
-    return vec4f(c.rgb * coverage, c.a * coverage);
+    let s = compute_t_raw(frag.xy);
+    let c = sample_stops_at(map_repeat(s.t));
+    return vec4f(c.rgb * coverage, c.a * coverage) * s.in_cone;
 }
 
 @fragment
 fn fs_inside_mirror(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
     let coverage = clamp(minDist + 0.5, 0.0, 1.0);
-    let t_raw = compute_t_raw(frag.xy);
-    let c = sample_stops_at(map_mirror(t_raw));
-    return vec4f(c.rgb * coverage, c.a * coverage);
+    let s = compute_t_raw(frag.xy);
+    let c = sample_stops_at(map_mirror(s.t));
+    return vec4f(c.rgb * coverage, c.a * coverage) * s.in_cone;
 }
 
 @fragment
 fn fs_inside_decal(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
     let coverage = clamp(minDist + 0.5, 0.0, 1.0);
-    let t_raw = compute_t_raw(frag.xy);
-    if (decal_out_of_range(t_raw)) {
+    let s = compute_t_raw(frag.xy);
+    if (s.in_cone < 0.5 || decal_out_of_range(s.t)) {
         return vec4f(0.0, 0.0, 0.0, 0.0);
     }
-    let c = sample_stops_at(t_raw);
+    let c = sample_stops_at(s.t);
     return vec4f(c.rgb * coverage, c.a * coverage);
 }
 
@@ -187,37 +219,37 @@ fn fs_inside_decal(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 fn fs_outside_clamp(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
     let coverage = clamp(0.5 - minDist, 0.0, 1.0);
-    let t_raw = compute_t_raw(frag.xy);
-    let c = sample_stops_at(map_clamp(t_raw));
-    return vec4f(c.rgb * coverage, c.a * coverage);
+    let s = compute_t_raw(frag.xy);
+    let c = sample_stops_at(map_clamp(s.t));
+    return vec4f(c.rgb * coverage, c.a * coverage) * s.in_cone;
 }
 
 @fragment
 fn fs_outside_repeat(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
     let coverage = clamp(0.5 - minDist, 0.0, 1.0);
-    let t_raw = compute_t_raw(frag.xy);
-    let c = sample_stops_at(map_repeat(t_raw));
-    return vec4f(c.rgb * coverage, c.a * coverage);
+    let s = compute_t_raw(frag.xy);
+    let c = sample_stops_at(map_repeat(s.t));
+    return vec4f(c.rgb * coverage, c.a * coverage) * s.in_cone;
 }
 
 @fragment
 fn fs_outside_mirror(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
     let coverage = clamp(0.5 - minDist, 0.0, 1.0);
-    let t_raw = compute_t_raw(frag.xy);
-    let c = sample_stops_at(map_mirror(t_raw));
-    return vec4f(c.rgb * coverage, c.a * coverage);
+    let s = compute_t_raw(frag.xy);
+    let c = sample_stops_at(map_mirror(s.t));
+    return vec4f(c.rgb * coverage, c.a * coverage) * s.in_cone;
 }
 
 @fragment
 fn fs_outside_decal(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
     let coverage = clamp(0.5 - minDist, 0.0, 1.0);
-    let t_raw = compute_t_raw(frag.xy);
-    if (decal_out_of_range(t_raw)) {
+    let s = compute_t_raw(frag.xy);
+    if (s.in_cone < 0.5 || decal_out_of_range(s.t)) {
         return vec4f(0.0, 0.0, 0.0, 0.0);
     }
-    let c = sample_stops_at(t_raw);
+    let c = sample_stops_at(s.t);
     return vec4f(c.rgb * coverage, c.a * coverage);
 }
