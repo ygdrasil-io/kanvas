@@ -476,13 +476,14 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
-     * G4.4.1 / G4.4.2 / G4.4.5 -- pending conical (two-point) gradient fill
-     * of an axis-aligned rect, **focal-inside well-behaved** or
-     * **focal-outside** sub-case of [SkConicalGradient]. Focal-inside :
-     * `focalData.fR1 > 1`, not focal-on-circle. Focal-outside :
-     * `focalData.fR1 < 1`, not focal-on-circle. Routed for all 4 tile
-     * modes ; the focal-on-circle degenerate case still falls through at
-     * the dispatch gate.
+     * G4.4.1 / G4.4.2 / G4.4.5 / G4.4.6 -- pending conical (two-point)
+     * gradient fill of an axis-aligned rect, **focal-inside well-
+     * behaved**, **focal-outside**, or **focal-on-circle** sub-case of
+     * [SkConicalGradient]. Focal-inside : `focalData.fR1 > 1`, not
+     * focal-on-circle. Focal-outside : `focalData.fR1 < 1`, not focal-
+     * on-circle. Focal-on-circle : `|focalData.fR1 - 1| < tolerance`,
+     * the focal point lies on the end circle (G4.4.6). Routed for all
+     * 4 tile modes.
      *
      * Per-draw payload :
      *  - `affine00..affine12` : 2x3 row-major affine `device -> focal frame`,
@@ -498,15 +499,15 @@ public class SkWebGpuDevice(
      *  - `negateX` : 1.0 iff `(1 - fFocalX) < 0` (apply `t = -t` between
      *    the formula and `compensateFocal`).
      *  - `subCase` : 0.0 for well-behaved focal-inside, 1.0 for focal-
-     *    outside (greater / smaller). The shader picks the formula and
-     *    the in-cone mask off this flag.
+     *    outside (greater / smaller), 2.0 for focal-on-circle. The
+     *    shader picks the formula and the in-cone mask off this flag.
      *  - `subCaseSign` : +1.0 for the "greater" focal-outside variant
      *    (`+sqrt`), -1.0 for "smaller" (`-sqrt`). Only consulted when
      *    `subCase == 1.0`. Mirrors the CPU branch
      *    `isSwapped() || (1 - fFocalX) < 0` -> "smaller".
      *
      * Mirrors [SkConicalGradient.computeTFocal]'s well-behaved + focal-
-     * outside branches byte-for-byte.
+     * outside + focal-on-circle branches byte-for-byte.
      */
     private data class ConicalFocalGradientRectDraw(
         val scissor: IntArray,
@@ -688,13 +689,14 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
-     * G4.4.3 / G4.4.5 -- AA stencil-and-cover path filled with a conical
-     * (two-point) gradient, **focal-inside well-behaved** or **focal-
-     * outside** sub-case. Mirror of [StencilCoverAaConicalGradientDraw]
-     * above and [ConicalFocalGradientRectDraw] (rect-only G4.4.1 /
-     * G4.4.5) ; same geometry payload as the other stencil-cover gradient
-     * variants ; paint payload matches the focal rect-only draw
-     * byte-for-byte (2x3 affine + focal scalars + flags + sub-case
+     * G4.4.3 / G4.4.5 / G4.4.6 -- AA stencil-and-cover path filled with
+     * a conical (two-point) gradient, **focal-inside well-behaved**,
+     * **focal-outside**, or **focal-on-circle** sub-case. Mirror of
+     * [StencilCoverAaConicalGradientDraw] above and
+     * [ConicalFocalGradientRectDraw] (rect-only G4.4.1 / G4.4.5 /
+     * G4.4.6) ; same geometry payload as the other stencil-cover
+     * gradient variants ; paint payload matches the focal rect-only
+     * draw byte-for-byte (2x3 affine + focal scalars + flags + sub-case
      * selector + sign).
      */
     private data class StencilCoverAaConicalFocalGradientDraw(
@@ -2823,11 +2825,15 @@ public class SkWebGpuDevice(
         val compensate = if (!fd.isNativelyFocal()) 1f else 0f
         val unswap = if (fd.isSwapped()) 1f else 0f
         val negateX = if ((1f - fP1) < 0f) 1f else 0f
-        // G4.4.5 -- sub-case selector. Well-behaved -> 0 (default formula),
-        // focal-outside -> 1 (greater/smaller picked via subCaseSign).
-        // Focal-on-circle is intentionally NOT routed here ; the dispatch
-        // gate above filters it out.
-        val subCase = if (fd.isFocalOutside()) 1f else 0f
+        // G4.4.5 / G4.4.6 -- sub-case selector :
+        //   well-behaved      -> 0 (default formula),
+        //   focal-outside     -> 1 (greater/smaller picked via subCaseSign),
+        //   focal-on-circle   -> 2 (`t = (x*x + y*y) / x`).
+        val subCase = when {
+            fd.isFocalOnCircle() -> 2f
+            fd.isFocalOutside() -> 1f
+            else -> 0f
+        }
         val subCaseSign = if (fd.isFocalOutside() && fd.isFocalOutsideSmaller()) -1f else 1f
 
         val srcColors = grad.getColors()
@@ -3247,23 +3253,27 @@ public class SkWebGpuDevice(
                 return
             }
         }
-        // G4.4.1 / G4.4.2 / G4.4.5 -- conical focal sub-cases routed
-        // through the focal-frame pipeline :
+        // G4.4.1 / G4.4.2 / G4.4.5 / G4.4.6 -- conical focal sub-cases
+        // routed through the focal-frame pipeline :
         //   - focal-inside well-behaved (`focalData.fR1 > 1`, not focal-
         //     on-circle, G4.4.1 / G4.4.2) -- the most common case.
         //   - focal-outside (`focalData.fR1 < 1`, not focal-on-circle,
         //     G4.4.5) -- "greater" / "smaller" raster-pipeline variants ;
         //     the shader picks the sign from `subCaseSign` and masks
         //     pixels outside the cone via the `in_cone` factor.
+        //   - focal-on-circle (`|fR1 - 1| < tolerance`, G4.4.6) -- the
+        //     focal point lies exactly on the end circle. The shader
+        //     uses `t = (x*x + y*y) / x` and masks `x ~= 0` / `t <= 0`
+        //     via the `in_cone` factor.
         // All 4 tile modes routed (the pipeline cache wired all 4 entry
-        // points from day one). The focal-on-circle degenerate case
-        // (`fR1 ~ 1`) still falls through to the existing solid-color
-        // machinery.
+        // points from day one).
         if (shader is SkConicalGradient &&
             paint.style == SkPaint.Style.kFill_Style &&
             ctm.isAxisAligned &&
             shader.getType() == SkConicalGradient.Type.kFocal &&
-            shader.getFocalData()?.let { it.isWellBehaved() || it.isFocalOutside() } == true
+            shader.getFocalData()?.let {
+                it.isWellBehaved() || it.isFocalOutside() || it.isFocalOnCircle()
+            } == true
         ) {
             val srcRect = path.isRect()
             if (srcRect != null) {
@@ -3485,7 +3495,9 @@ public class SkWebGpuDevice(
             if (shader is SkConicalGradient && paint.isAntiAlias && ctm.isAxisAligned &&
                 shader.getTileMode() == SkTileMode.kClamp &&
                 shader.getType() == SkConicalGradient.Type.kFocal &&
-                shader.getFocalData()?.let { it.isWellBehaved() || it.isFocalOutside() } == true
+                shader.getFocalData()?.let {
+                    it.isWellBehaved() || it.isFocalOutside() || it.isFocalOnCircle()
+                } == true
             ) shader
             else null
         var gradEndpoints: FloatArray? = null
@@ -3580,8 +3592,15 @@ public class SkWebGpuDevice(
                     val compensate = if (!fd.isNativelyFocal()) 1f else 0f
                     val unswap = if (fd.isSwapped()) 1f else 0f
                     val negateX = if ((1f - fP1) < 0f) 1f else 0f
-                    // G4.4.5 -- sub-case selector. Mirrors the rect-only path.
-                    val subCase = if (fd.isFocalOutside()) 1f else 0f
+                    // G4.4.5 / G4.4.6 -- sub-case selector. Mirrors the
+                    // rect-only path : 0 = well-behaved, 1 = focal-
+                    // outside (greater / smaller via subCaseSign), 2 =
+                    // focal-on-circle.
+                    val subCase = when {
+                        fd.isFocalOnCircle() -> 2f
+                        fd.isFocalOutside() -> 1f
+                        else -> 0f
+                    }
                     val subCaseSign =
                         if (fd.isFocalOutside() && fd.isFocalOutsideSmaller()) -1f else 1f
                     gradConicalFocalScalars = floatArrayOf(
