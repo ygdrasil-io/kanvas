@@ -476,11 +476,13 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
-     * G4.4.1 / G4.4.2 -- pending conical (two-point) gradient fill of an
-     * axis-aligned rect, **focal-inside well-behaved** sub-case of
-     * [SkConicalGradient] (`focalData.fR1 > 1`, not focal-on-circle).
-     * Routed for all 4 tile modes (G4.4.2 widening) ; focal-outside +
-     * focal-on-circle still fall through at the dispatch gate.
+     * G4.4.1 / G4.4.2 / G4.4.5 -- pending conical (two-point) gradient fill
+     * of an axis-aligned rect, **focal-inside well-behaved** or
+     * **focal-outside** sub-case of [SkConicalGradient]. Focal-inside :
+     * `focalData.fR1 > 1`, not focal-on-circle. Focal-outside :
+     * `focalData.fR1 < 1`, not focal-on-circle. Routed for all 4 tile
+     * modes ; the focal-on-circle degenerate case still falls through at
+     * the dispatch gate.
      *
      * Per-draw payload :
      *  - `affine00..affine12` : 2x3 row-major affine `device -> focal frame`,
@@ -489,15 +491,22 @@ public class SkWebGpuDevice(
      *    Pixel-center coords are passed straight through (WGSL's
      *    `@builtin(position)` is already at the half-pixel offset).
      *  - `fP0 = 1 / fR1`, `fP1 = fFocalX` : the focal scalars consumed by
-     *    the well-behaved formula `t = sqrt(x*x + y*y) - x * fP0`.
+     *    the well-behaved formula `t = sqrt(x*x + y*y) - x * fP0` and the
+     *    focal-outside formula `t = sign * sqrt(x*x - y*y) - x * fP0`.
      *  - `compensateFocal` : 1.0 iff `fFocalX != 0` (apply `t += fP1`).
      *  - `unswap` : 1.0 iff `fIsSwapped` (apply `t = 1 - t`).
      *  - `negateX` : 1.0 iff `(1 - fFocalX) < 0` (apply `t = -t` between
      *    the formula and `compensateFocal`).
+     *  - `subCase` : 0.0 for well-behaved focal-inside, 1.0 for focal-
+     *    outside (greater / smaller). The shader picks the formula and
+     *    the in-cone mask off this flag.
+     *  - `subCaseSign` : +1.0 for the "greater" focal-outside variant
+     *    (`+sqrt`), -1.0 for "smaller" (`-sqrt`). Only consulted when
+     *    `subCase == 1.0`. Mirrors the CPU branch
+     *    `isSwapped() || (1 - fFocalX) < 0` -> "smaller".
      *
-     * Mirrors [SkConicalGradient.computeTFocal]'s well-behaved branch
-     * byte-for-byte (the well-behaved case is the only one filtered in
-     * here ; the other sub-cases stay out of the dispatch for now).
+     * Mirrors [SkConicalGradient.computeTFocal]'s well-behaved + focal-
+     * outside branches byte-for-byte.
      */
     private data class ConicalFocalGradientRectDraw(
         val scissor: IntArray,
@@ -507,6 +516,7 @@ public class SkWebGpuDevice(
         val fP0: Float, val fP1: Float,
         val compensateFocal: Float, val unswap: Float,
         val negateX: Float,
+        val subCase: Float, val subCaseSign: Float,
         val stopPositions: FloatArray,
         val stopColors: FloatArray,
         val stopCount: Int,
@@ -677,13 +687,14 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
-     * G4.4.3 -- AA stencil-and-cover path filled with a conical (two-point)
-     * gradient, **focal-inside well-behaved** sub-case. Mirror of
-     * [StencilCoverAaConicalGradientDraw] above and
-     * [ConicalFocalGradientRectDraw] (rect-only G4.4.1) ; same geometry
-     * payload as the other stencil-cover gradient variants ; paint payload
-     * matches the focal-inside rect-only draw byte-for-byte (2x3 affine +
-     * focal scalars + flags).
+     * G4.4.3 / G4.4.5 -- AA stencil-and-cover path filled with a conical
+     * (two-point) gradient, **focal-inside well-behaved** or **focal-
+     * outside** sub-case. Mirror of [StencilCoverAaConicalGradientDraw]
+     * above and [ConicalFocalGradientRectDraw] (rect-only G4.4.1 /
+     * G4.4.5) ; same geometry payload as the other stencil-cover gradient
+     * variants ; paint payload matches the focal rect-only draw
+     * byte-for-byte (2x3 affine + focal scalars + flags + sub-case
+     * selector + sign).
      */
     private data class StencilCoverAaConicalFocalGradientDraw(
         val stencilVerts: FloatArray,
@@ -698,6 +709,7 @@ public class SkWebGpuDevice(
         val fP0: Float, val fP1: Float,
         val compensateFocal: Float, val unswap: Float,
         val negateX: Float,
+        val subCase: Float, val subCaseSign: Float,
         val stopPositions: FloatArray,
         val stopColors: FloatArray,
         val stopCount: Int,
@@ -2810,6 +2822,12 @@ public class SkWebGpuDevice(
         val compensate = if (!fd.isNativelyFocal()) 1f else 0f
         val unswap = if (fd.isSwapped()) 1f else 0f
         val negateX = if ((1f - fP1) < 0f) 1f else 0f
+        // G4.4.5 -- sub-case selector. Well-behaved -> 0 (default formula),
+        // focal-outside -> 1 (greater/smaller picked via subCaseSign).
+        // Focal-on-circle is intentionally NOT routed here ; the dispatch
+        // gate above filters it out.
+        val subCase = if (fd.isFocalOutside()) 1f else 0f
+        val subCaseSign = if (fd.isFocalOutside() && fd.isFocalOutsideSmaller()) -1f else 1f
 
         val srcColors = grad.getColors()
         val positions = grad.getPositions()
@@ -2838,6 +2856,7 @@ public class SkWebGpuDevice(
                 fP0 = fP0, fP1 = fP1,
                 compensateFocal = compensate, unswap = unswap,
                 negateX = negateX,
+                subCase = subCase, subCaseSign = subCaseSign,
                 stopPositions = packedPositions,
                 stopColors = packedColors,
                 stopCount = count,
@@ -3227,19 +3246,23 @@ public class SkWebGpuDevice(
                 return
             }
         }
-        // G4.4.1 / G4.4.2 -- conical focal-inside well-behaved sub-case
-        // (`focalData.fR1 > 1`, not focal-on-circle). Most common
-        // non-degenerate kFocal config. All 4 tile modes routed
-        // (G4.4.1 landed kClamp only ; G4.4.2 widened to kRepeat /
-        // kMirror / kDecal -- the pipeline cache already wired all 4
-        // entry points from day one). Other kFocal variants
-        // (focal-on-circle, focal-outside) still fall through to the
-        // existing solid-color machinery for now.
+        // G4.4.1 / G4.4.2 / G4.4.5 -- conical focal sub-cases routed
+        // through the focal-frame pipeline :
+        //   - focal-inside well-behaved (`focalData.fR1 > 1`, not focal-
+        //     on-circle, G4.4.1 / G4.4.2) -- the most common case.
+        //   - focal-outside (`focalData.fR1 < 1`, not focal-on-circle,
+        //     G4.4.5) -- "greater" / "smaller" raster-pipeline variants ;
+        //     the shader picks the sign from `subCaseSign` and masks
+        //     pixels outside the cone via the `in_cone` factor.
+        // All 4 tile modes routed (the pipeline cache wired all 4 entry
+        // points from day one). The focal-on-circle degenerate case
+        // (`fR1 ~ 1`) still falls through to the existing solid-color
+        // machinery.
         if (shader is SkConicalGradient &&
             paint.style == SkPaint.Style.kFill_Style &&
             ctm.isAxisAligned &&
             shader.getType() == SkConicalGradient.Type.kFocal &&
-            shader.getFocalData()?.isWellBehaved() == true
+            shader.getFocalData()?.let { it.isWellBehaved() || it.isFocalOutside() } == true
         ) {
             val srcRect = path.isRect()
             if (srcRect != null) {
@@ -3461,7 +3484,7 @@ public class SkWebGpuDevice(
             if (shader is SkConicalGradient && paint.isAntiAlias && ctm.isAxisAligned &&
                 shader.getTileMode() == SkTileMode.kClamp &&
                 shader.getType() == SkConicalGradient.Type.kFocal &&
-                shader.getFocalData()?.isWellBehaved() == true
+                shader.getFocalData()?.let { it.isWellBehaved() || it.isFocalOutside() } == true
             ) shader
             else null
         var gradEndpoints: FloatArray? = null
@@ -3556,8 +3579,12 @@ public class SkWebGpuDevice(
                     val compensate = if (!fd.isNativelyFocal()) 1f else 0f
                     val unswap = if (fd.isSwapped()) 1f else 0f
                     val negateX = if ((1f - fP1) < 0f) 1f else 0f
+                    // G4.4.5 -- sub-case selector. Mirrors the rect-only path.
+                    val subCase = if (fd.isFocalOutside()) 1f else 0f
+                    val subCaseSign =
+                        if (fd.isFocalOutside() && fd.isFocalOutsideSmaller()) -1f else 1f
                     gradConicalFocalScalars = floatArrayOf(
-                        fP0, fP1, compensate, unswap, negateX,
+                        fP0, fP1, compensate, unswap, negateX, subCase, subCaseSign,
                     )
                 }
                 // If invCtmLocal / fd is null, gradConicalFocalAffine
@@ -3715,6 +3742,7 @@ public class SkWebGpuDevice(
                             fP0 = scalars[0], fP1 = scalars[1],
                             compensateFocal = scalars[2], unswap = scalars[3],
                             negateX = scalars[4],
+                            subCase = scalars[5], subCaseSign = scalars[6],
                             stopPositions = gradPositions!!,
                             stopColors = gradColors!!,
                             stopCount = gradStopCount,
@@ -3863,6 +3891,7 @@ public class SkWebGpuDevice(
                             fP0 = scalars[0], fP1 = scalars[1],
                             compensateFocal = scalars[2], unswap = scalars[3],
                             negateX = scalars[4],
+                            subCase = scalars[5], subCaseSign = scalars[6],
                             stopPositions = gradPositions!!,
                             stopColors = gradColors!!,
                             stopCount = gradStopCount,
@@ -4056,6 +4085,7 @@ public class SkWebGpuDevice(
                     fP0 = scalars[0], fP1 = scalars[1],
                     compensateFocal = scalars[2], unswap = scalars[3],
                     negateX = scalars[4],
+                    subCase = scalars[5], subCaseSign = scalars[6],
                     stopPositions = gradPositions!!,
                     stopColors = gradColors!!,
                     stopCount = gradStopCount,
@@ -5291,7 +5321,7 @@ public class SkWebGpuDevice(
         //   offset  16 : affineRow0    (m00, m01, m02, _)
         //   offset  32 : affineRow1    (m10, m11, m12, _)
         //   offset  48 : focalScalars  (fP0, fP1, compensate, unswap)
-        //   offset  64 : flagsCount    (negateX, _, count_bits, _)
+        //   offset  64 : flagsCount    (negateX, subCase, count_bits, subCaseSign)
         //   offset  80 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 336 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
         val packed = FloatArray(20 + MAX_GRADIENT_STOPS * 8)
@@ -5300,8 +5330,8 @@ public class SkWebGpuDevice(
         packed[4] = d.affine00; packed[5] = d.affine01; packed[6] = d.affine02; packed[7] = 0f
         packed[8] = d.affine10; packed[9] = d.affine11; packed[10] = d.affine12; packed[11] = 0f
         packed[12] = d.fP0; packed[13] = d.fP1; packed[14] = d.compensateFocal; packed[15] = d.unswap
-        packed[16] = d.negateX; packed[17] = 0f
-        packed[18] = Float.fromBits(d.stopCount); packed[19] = 0f
+        packed[16] = d.negateX; packed[17] = d.subCase
+        packed[18] = Float.fromBits(d.stopCount); packed[19] = d.subCaseSign
         System.arraycopy(d.stopPositions, 0, packed, 20, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 20 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
 
@@ -5819,7 +5849,7 @@ public class SkWebGpuDevice(
         //   offset   32 : affineRow0   (m00, m01, m02, _)
         //   offset   48 : affineRow1   (m10, m11, m12, _)
         //   offset   64 : focalScalars (fP0, fP1, compensate, unswap)
-        //   offset   80 : flagsCount   (negateX, _, count_bits, _)
+        //   offset   80 : flagsCount   (negateX, subCase, count_bits, subCaseSign)
         //   offset   96 : edgeCountPad (.x = edgeCount as bit-reinterp f32)
         //   offset  112 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4208 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
@@ -5832,8 +5862,8 @@ public class SkWebGpuDevice(
         packed[12] = d.affine10; packed[13] = d.affine11; packed[14] = d.affine12; packed[15] = 0f
         packed[16] = d.fP0; packed[17] = d.fP1
         packed[18] = d.compensateFocal; packed[19] = d.unswap
-        packed[20] = d.negateX; packed[21] = 0f
-        packed[22] = Float.fromBits(d.stopCount); packed[23] = 0f
+        packed[20] = d.negateX; packed[21] = d.subCase
+        packed[22] = Float.fromBits(d.stopCount); packed[23] = d.subCaseSign
         packed[24] = Float.fromBits(d.edgeCount)
         packed[25] = 0f; packed[26] = 0f; packed[27] = 0f
         System.arraycopy(d.edges, 0, packed, 28, d.edges.size)
