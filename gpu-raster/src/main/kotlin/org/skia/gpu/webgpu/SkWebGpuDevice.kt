@@ -60,6 +60,7 @@ import io.ygdrasil.webgpu.beginRenderPass
 import kotlinx.coroutines.runBlocking
 import org.skia.core.SkDevice
 import org.skia.core.SrcRectConstraint
+import org.skia.foundation.SkBitmapShader
 import org.skia.foundation.SkBlendMode
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
@@ -744,7 +745,13 @@ public class SkWebGpuDevice(
         val scissor: IntArray,
         val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
         val filter: SkFilterMode,
-        val tile: SkTileMode,
+        // G5.1 drawImageRect always uses the same tile on both axes ; G5.2
+        // (paint.shader is SkBitmapShader) carries the per-axis tileX /
+        // tileY pair that the shader was constructed with. The sampler
+        // cache key + the shader's per-axis decal check both honour the
+        // split.
+        val tileX: SkTileMode,
+        val tileY: SkTileMode,
         val csMode: Int,
         val csMatrix: FloatArray,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
@@ -1171,21 +1178,22 @@ public class SkWebGpuDevice(
 
     /**
      * Lazily-populated bitmap-shader pipeline cache keyed by
-     * `(blend, filter, tile)`. For G5.1 only `(kSrcOver, kLinear, kClamp)`
-     * is wired up at the dispatch gate ; other combinations throw via the
-     * existing `drawImageRect` TODO branch and will land in follow-up
-     * slices (G5.x). The cache key is parameterised so the future
-     * widening doesn't need a structural change.
+     * `(blend, filter)`. The bitmap shader is single-source (no per-tile
+     * entry point ; the tile modes are resolved by the sampler's
+     * addressMode and the in-shader kDecal check), so the per-axis tile
+     * pair does NOT feed into the pipeline cache — only into the sampler
+     * cache key (and the uniform's `tileX/tileY` flag for the decal
+     * branch). G5.1 reached here through a single `tile` ordinal, G5.2
+     * (paint.shader = SkBitmapShader) widens to (tileX, tileY).
      */
     private val bitmapPipelineCache:
-        MutableMap<Triple<SkBlendMode, SkFilterMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
+        MutableMap<Pair<SkBlendMode, SkFilterMode>, GPURenderPipeline> = mutableMapOf()
 
     private fun bitmapPipelineFor(
         mode: SkBlendMode,
         filter: SkFilterMode,
-        tile: SkTileMode,
     ): GPURenderPipeline =
-        bitmapPipelineCache.getOrPut(Triple(mode, filter, tile)) {
+        bitmapPipelineCache.getOrPut(mode to filter) {
             context.device.createRenderPipeline(
                 RenderPipelineDescriptor(
                     layout = bitmapPipelineLayout,
@@ -1205,33 +1213,41 @@ public class SkWebGpuDevice(
         }
 
     /**
-     * Sampler cache keyed by `(filter, tile)`. For G5.1 only
-     * `(kLinear, kClamp)` populates -- the sampler is set up with
-     * MagFilter = MinFilter = Linear and addressMode U/V = ClampToEdge.
+     * Sampler cache keyed by `(filter, tileX, tileY)`. Per-axis tile mode
+     * (G5.2 : SkBitmapShader carries independent `tileX`/`tileY`) ->
+     * sampler `addressModeU` / `addressModeV` are set independently. The
+     * `kDecal` mode is emulated in-shader (sampler stays ClampToEdge) ;
+     * the per-axis decal check lives in `bitmap_shader.wgsl`.
+     *
      * Mipmap filter is left at Nearest (no mip pyramid yet ; future
      * slices wire `image.mipLevels` through to a multi-level texture).
      */
-    private val bitmapSamplerCache: MutableMap<Pair<SkFilterMode, SkTileMode>, GPUSampler> = mutableMapOf()
+    private val bitmapSamplerCache:
+        MutableMap<Triple<SkFilterMode, SkTileMode, SkTileMode>, GPUSampler> = mutableMapOf()
 
-    private fun bitmapSamplerFor(filter: SkFilterMode, tile: SkTileMode): GPUSampler =
-        bitmapSamplerCache.getOrPut(filter to tile) {
+    private fun bitmapSamplerFor(
+        filter: SkFilterMode,
+        tileX: SkTileMode,
+        tileY: SkTileMode,
+    ): GPUSampler =
+        bitmapSamplerCache.getOrPut(Triple(filter, tileX, tileY)) {
             val magMin = when (filter) {
                 SkFilterMode.kNearest -> GPUFilterMode.Nearest
                 SkFilterMode.kLinear -> GPUFilterMode.Linear
             }
-            val address = when (tile) {
+            val addressFor = { tile: SkTileMode -> when (tile) {
                 SkTileMode.kClamp -> GPUAddressMode.ClampToEdge
                 SkTileMode.kRepeat -> GPUAddressMode.Repeat
                 SkTileMode.kMirror -> GPUAddressMode.MirrorRepeat
-                SkTileMode.kDecal -> GPUAddressMode.ClampToEdge // G5.x : decal needs shader-side coverage
-            }
+                SkTileMode.kDecal -> GPUAddressMode.ClampToEdge // decal handled in shader
+            } }
             context.device.createSampler(
                 SamplerDescriptor(
-                    addressModeU = address,
-                    addressModeV = address,
+                    addressModeU = addressFor(tileX),
+                    addressModeV = addressFor(tileY),
                     magFilter = magMin,
                     minFilter = magMin,
-                    label = "SkWebGpuDevice.bitmapSampler($filter,$tile)",
+                    label = "SkWebGpuDevice.bitmapSampler($filter,$tileX,$tileY)",
                 ),
             )
         }
@@ -3052,12 +3068,38 @@ public class SkWebGpuDevice(
         // G3.2 — drawPaint = fill the entire clip with the paint. Route
         // through drawRect so all of G2.1/G2.2/G2.3a/G3.1 logic (alpha,
         // blend mode, AA, stroke-style validation) applies uniformly.
-        // CTM is unused : drawPaint already operates in device coords by
-        // contract (matches SkBitmapDevice.drawPaint).
+        // CTM is unused for the solid-paint fast path : drawPaint already
+        // operates in device coords by contract (matches
+        // SkBitmapDevice.drawPaint).
         //
-        // Limitation : paint.shader is silently ignored (same as on
-        // drawRect today). Shader support lands with G4 (gradients +
-        // bitmap shaders).
+        // G5.2 -- when `paint.shader != null` the clip-sized rect must
+        // reach the shader dispatch gate inside [drawPath] (drawRect
+        // dispatches to the solid-colour rasterizer, which would drop
+        // the shader). drawPath expects the rect in SOURCE (user-
+        // space) coords + the CTM applied at dispatch time, so we
+        // invert the device-coord clip rect back through `ctm^-1`
+        // before dispatch. The bitmap shader's `localMatrix` is
+        // composed with this same `ctm` inside [drawBitmapShaderFillRect]
+        // so the shader sees the correct user -> image-pixel chain
+        // regardless of the canvas's translate/scale state.
+        //
+        // Limitation : non-invertible CTM (degenerate scale) falls
+        // back to the solid drawRect path -- same behaviour as the
+        // existing gradient dispatches (`drawLinearGradientFillRect`
+        // and friends return false on a fully-clipped device rect).
+        if (paint.shader != null) {
+            val inv = ctm.invert()
+            if (inv != null) {
+                val (sl, st) = inv.mapXY(clip.left.toFloat(), clip.top.toFloat())
+                val (sr, sb) = inv.mapXY(clip.right.toFloat(), clip.bottom.toFloat())
+                val srcRect = SkRect.MakeLTRB(
+                    minOf(sl, sr), minOf(st, sb),
+                    maxOf(sl, sr), maxOf(st, sb),
+                )
+                drawPath(SkPath.Rect(srcRect), ctm, clip, paint)
+                return
+            }
+        }
         val rect = SkRect.MakeLTRB(
             clip.left.toFloat(), clip.top.toFloat(),
             clip.right.toFloat(), clip.bottom.toFloat(),
@@ -3230,6 +3272,34 @@ public class SkWebGpuDevice(
                     maxOf(x0, x1), maxOf(y0, y1),
                 )
                 if (drawConicalStripGradientFillRect(devRect, clip, paint, shader, ctm)) {
+                    return
+                }
+            }
+        }
+        // G5.2 -- `paint.shader is SkBitmapShader` fill of an axis-aligned
+        // rect. Reuses the G5.1 / G5.1.1 drawImageRect pipeline (sampler
+        // cache, pipeline cache, bitmap_shader.wgsl) by deriving an
+        // (src, dst) pair from the shader's local matrix composed with
+        // the CTM. Hard scope :
+        //   - rect routing only (`path.isRect() != null`),
+        //   - axis-aligned CTM,
+        //   - shader local matrix is identity or axial scale + translate
+        //     (no rotation / skew / perspective),
+        //   - filter / tile / blend support inherited from G5.1.1.
+        // Other configurations (rotated CTM, non-axis-aligned local
+        // matrix, non-rect path) fall through to the existing solid-
+        // colour fill machinery -- they are out of scope for the
+        // current slice and will land in future G5.x. The dispatch sits
+        // AFTER the gradient gates (gradients win when both are valid
+        // ; in practice a paint carries one shader, not two).
+        if (shader is SkBitmapShader &&
+            paint.style == SkPaint.Style.kFill_Style &&
+            ctm.isAxisAligned &&
+            shader.localMatrix.isAxisAligned
+        ) {
+            val srcRect = path.isRect()
+            if (srcRect != null) {
+                if (drawBitmapShaderFillRect(srcRect, clip, paint, shader, ctm)) {
                     return
                 }
             }
@@ -4075,7 +4145,8 @@ public class SkWebGpuDevice(
             devDst = devDst,
             sampling = sampling,
             paint = paint,
-            tile = SkTileMode.kClamp,
+            tileX = SkTileMode.kClamp,
+            tileY = SkTileMode.kClamp,
             clip = clip,
         )
     }
@@ -4104,7 +4175,8 @@ public class SkWebGpuDevice(
         devDst: SkRect,
         sampling: SkSamplingOptions,
         paint: SkPaint?,
-        tile: SkTileMode,
+        tileX: SkTileMode,
+        tileY: SkTileMode,
         clip: SkIRect,
     ) {
         if (image.width <= 0 || image.height <= 0) return
@@ -4160,7 +4232,8 @@ public class SkWebGpuDevice(
                 scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
                 paintR = paintAlpha, paintG = paintAlpha, paintB = paintAlpha, paintA = paintAlpha,
                 filter = sampling.filter,
-                tile = tile,
+                tileX = tileX,
+                tileY = tileY,
                 csMode = csMode,
                 csMatrix = csMatrix,
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
@@ -4194,7 +4267,114 @@ public class SkWebGpuDevice(
             devDst = devDst,
             sampling = sampling,
             paint = paint,
-            tile = tile,
+            tileX = tile,
+            tileY = tile,
+            clip = clip,
+        )
+    }
+
+    /**
+     * G5.2 -- route a `paint.shader is SkBitmapShader` fill of an
+     * axis-aligned rect through the existing drawImageRect bitmap
+     * pipeline (G5.1 / G5.1.1).
+     *
+     * The shader's `localMatrix` maps shader-local (= image-pixel)
+     * coords to user-space coords. Composed with the CTM (also axis-
+     * aligned by the dispatch gate above), the combined matrix
+     * `M = ctm * localMatrix` is a pure scale + translate. The
+     * `bitmap_shader.wgsl` fragment stage expects an affine
+     * `(devX, devY) -> (sx, sy)` of the same shape -- so we set
+     * `dst = devRect` (the rect mapped through the CTM) and back-solve
+     * the matching `src` rect in source-image-pixel coords via
+     * `M^-1`. The `(tileX, tileY)` pair flows from the shader straight
+     * into the per-draw uniform (sampler addressMode + in-shader
+     * decal check).
+     *
+     * Returns `false` when the rect is fully clipped or the image is
+     * degenerate (caller drops the draw). Returns `true` otherwise --
+     * the caller MUST NOT fall through to the solid-colour fill
+     * machinery (would over-paint with `paint.color = transparent`).
+     */
+    private fun drawBitmapShaderFillRect(
+        srcRect: SkRect,
+        clip: SkIRect,
+        paint: SkPaint,
+        shader: SkBitmapShader,
+        ctm: SkMatrix,
+    ): Boolean {
+        val image = shader.getImage()
+        if (image.width <= 0 || image.height <= 0) return false
+        // Combined matrix : ctm * localMatrix maps shader-local (image
+        // pixel) coords -> device coords. Both factors are axis-aligned
+        // (gated above), so the product is too. Bail honestly if the
+        // inverse doesn't exist (degenerate scale = 0) -- the caller
+        // returns without a fallback draw, mirroring how the gradient
+        // helpers handle fully-clipped rects.
+        val combined = ctm.preConcat(shader.localMatrix)
+        if (!combined.isAxisAligned) return false
+        if (combined.sx == 0f || combined.sy == 0f) return false
+        val inv = combined.invert() ?: return false
+
+        // dst : the rect mapped into device coords. With an axis-aligned
+        // CTM the four corners reduce to two ; `min/max` absorbs any
+        // negative-scale (mirror) factor.
+        val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
+        val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
+        val devDst = SkRect.MakeLTRB(
+            minOf(x0, x1), minOf(y0, y1),
+            maxOf(x0, x1), maxOf(y0, y1),
+        )
+
+        // src : back-solved through `M^-1`. We use the corners of the
+        // ORIGINAL `srcRect` (in user-space) through `localMatrix^-1`
+        // to land in image-pixel coords -- equivalent to applying the
+        // combined inverse to the device-rect corners.
+        val (sl, st) = inv.mapXY(devDst.left, devDst.top)
+        val (sr, sb) = inv.mapXY(devDst.right, devDst.bottom)
+        val imgSrc = SkRect.MakeLTRB(
+            minOf(sl, sr), minOf(st, sb),
+            maxOf(sl, sr), maxOf(st, sb),
+        )
+
+        enqueueImageRectDrawInternal(
+            image = image,
+            src = imgSrc,
+            devDst = devDst,
+            sampling = shader.getSampling(),
+            paint = paint,
+            tileX = shader.getTileX(),
+            tileY = shader.getTileY(),
+            clip = clip,
+        )
+        return true
+    }
+
+    /**
+     * G5.2 -- per-axis tile mode variant of [enqueueImageRectDrawForTest].
+     * Used by [BitmapShaderPaintRectTest] to mirror the cross-axis
+     * shader-routing pipeline path without going through the SkCanvas
+     * shader machinery. The asymmetric `(tileX, tileY)` pair exercises
+     * the sampler-cache key and the in-shader per-axis decal check
+     * that production code reaches via `paint.shader is SkBitmapShader`.
+     */
+    internal fun enqueueImageRectDrawForTest(
+        image: SkImage,
+        src: SkRect,
+        devDst: SkRect,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+        tileX: SkTileMode,
+        tileY: SkTileMode,
+        clip: SkIRect = SkIRect.MakeWH(width, height),
+    ) {
+        enqueueImageRectDrawInternal(
+            image = image,
+            src = src,
+            devDst = devDst,
+            sampling = sampling,
+            paint = paint,
+            tileX = tileX,
+            tileY = tileY,
             clip = clip,
         )
     }
@@ -4729,7 +4909,7 @@ public class SkWebGpuDevice(
                         // technically over-keyed. Keeping the cache shape
                         // matches the gradient pipelines and leaves room
                         // for shader-side filter / tile branches later.
-                        setPipeline(bitmapPipelineFor(d.mode, d.filter, d.tile))
+                        setPipeline(bitmapPipelineFor(d.mode, d.filter))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
@@ -5223,7 +5403,7 @@ public class SkWebGpuDevice(
         // Layout matches `bitmap_shader.wgsl` :
         //   offset   0 : srcRect    (vec4f -- l, t, r, b in image-pixel coords)
         //   offset  16 : dstRect    (vec4f -- l, t, r, b in device-pixel coords)
-        //   offset  32 : imageSize  (vec4f -- w, h, tileFlag (bit-reinterp u32), _)
+        //   offset  32 : imageSize  (vec4f -- w, h, tileX (bit-reinterp u32), tileY (bit-reinterp u32))
         //   offset  48 : paintColor (vec4f -- premul tint, default (1, 1, 1, 1))
         //   offset  64 : csFlags    (vec4f -- .x = csMode bit-reinterp u32 ; G5.3)
         //   offset  80 : csMatrix   (mat3x3<f32>, std140 padded 3 * vec4 = 48 bytes ; G5.3)
@@ -5234,6 +5414,11 @@ public class SkWebGpuDevice(
         // `stopCount` / `edgeCount`). The shader does `bitcast<u32>(.z)`
         // and only branches on kDecal ; the other 3 tile modes are
         // resolved by the sampler's addressMode.
+        //
+        // G5.2 -- per-axis tile mode : `.z = tileX`, `.w = tileY`. The
+        // shader's decal check is now per-axis (covers TinyBitmapGM's
+        // `kRepeat`/`kMirror` mix as a no-op, only `kDecal` on either
+        // axis triggers the kill).
         //
         // G5.3 -- `csFlags.x` carries the colorspace transform mode
         // (`0 = identity` / `1 = sRGB-TF + matrix`) bit-reinterpreted ;
@@ -5248,7 +5433,7 @@ public class SkWebGpuDevice(
                 d.srcL, d.srcT, d.srcR, d.srcB,
                 d.dstL, d.dstT, d.dstR, d.dstB,
                 d.imageWidth.toFloat(), d.imageHeight.toFloat(),
-                Float.fromBits(d.tile.ordinal), 0f,
+                Float.fromBits(d.tileX.ordinal), Float.fromBits(d.tileY.ordinal),
                 d.paintR, d.paintG, d.paintB, d.paintA,
                 Float.fromBits(d.csMode), 0f, 0f, 0f,
                 m[0], m[1], m[2], 0f,
@@ -5257,7 +5442,7 @@ public class SkWebGpuDevice(
             )),
         )
         val view = d.texture.createView()
-        val sampler = bitmapSamplerFor(d.filter, d.tile)
+        val sampler = bitmapSamplerFor(d.filter, d.tileX, d.tileY)
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = bitmapBindGroupLayout,
