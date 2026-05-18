@@ -169,6 +169,59 @@ class ConicalGradientPathTest {
         assertTrue(outside[2] >= 230, "outside.B near white, got ${outside[2]}")
     }
 
+    // ---- focal-on-circle sub-case (G4.4.6) ---------------------------
+
+    @Test
+    fun `focal-on-circle kClamp conical on a circle path interpolates inside the cone`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        // Focal-on-circle fixture : c0 = (16, 32), r0 = 5 ; c1 = (50, 32),
+        // r1 = 39 ; dCenter = r1 - r0 = 34 so |fR1 - 1| ~ 0 (focal-on-
+        // circle). Focal point in source space lies at (11, 32), exactly
+        // on the end circle.
+        // Use a wide disk path (centre (32, 32), radius 30) so the
+        // gradient region is well inside the path -- the AA edge
+        // coverage is clear of every sample.
+        val path = SkPath.Circle(32f, 32f, 30f, SkPathDirection.kCW)
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(16f, 32f), startRadius = 5f,
+            end = SkPoint(50f, 32f), endRadius = 39f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kClamp,
+        )!!
+        assertEquals(SkConicalGradient.Type.kFocal, grad.getType())
+        val fd = grad.getFocalData()
+        assertTrue(fd != null && fd.isFocalOnCircle(), "fixture must be focal-on-circle")
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = true
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawPath(path, paint)
+                device.flush()
+            }
+        }
+
+        // Start circle centre (16, 32) : t < 0 -> kClamp -> red.
+        val startCentre = pixels.rgbaAt(16, 32)
+        assertTrue(startCentre[0] in 180..255, "startCentre.R mostly red, got ${startCentre[0]}")
+        assertTrue(startCentre[2] < 96, "startCentre.B near zero, got ${startCentre[2]}")
+
+        // Mid-axis (40, 32) -- t ~ 0.29 -> red-leaning.
+        val midAxis = pixels.rgbaAt(40, 32)
+        assertTrue(midAxis[0] >= 130, "midAxis.R red-leaning, got ${midAxis[0]}")
+
+        // Outside the disk -> white background untouched.
+        val outside = pixels.rgbaAt(0, 0)
+        assertTrue(outside[0] >= 230, "outside.R near white, got ${outside[0]}")
+        assertTrue(outside[1] >= 230, "outside.G near white, got ${outside[1]}")
+        assertTrue(outside[2] >= 230, "outside.B near white, got ${outside[2]}")
+    }
+
     private fun ByteArray.rgbaAt(x: Int, y: Int): List<Int> {
         val i = (y * W + x) * 4
         return listOf(

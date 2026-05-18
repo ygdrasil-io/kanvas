@@ -359,6 +359,85 @@ class ConicalGradientFocalRectTest {
         assertNear(below[2], 255, "below.B", tol = 32)
     }
 
+    // G4.4.6 -- focal-on-circle sub-case (`|fR1 - 1| < tolerance`). The
+    // focal point lies exactly on the end circle. Fixture :
+    //   c0 = (16, 32), r0 = 5 ; c1 = (50, 32), r1 = 39 ; dCenter = 34 = r1 - r0.
+    // After Make() normalises by dCenter, fFocalX = -5/34 = -0.147 (no
+    // swap, |fFocalX - 1| not nearly zero) and fR1 = 1.0 exactly. The
+    // focal point in source space is at c0 + fFocalX*(c1 - c0) = (11, 32),
+    // which is on the end circle (centre (50, 32), radius 39).
+    // The gradient evaluates t = (x*x + y*y) / x in the focal frame ;
+    // x ~= 0 / t <= 0 collapse to premul transparent black via in_cone.
+
+    @Test
+    fun `focal-on-circle is correctly classified as kFocal focal-on-circle`() {
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(16f, 32f), startRadius = 5f,
+            end = SkPoint(50f, 32f), endRadius = 39f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kClamp,
+        )!!
+        assertEquals(SkConicalGradient.Type.kFocal, grad.getType())
+        val fd = grad.getFocalData()
+        assertTrue(fd != null, "focalData must be present for kFocal")
+        assertTrue(fd!!.isFocalOnCircle(), "fixture must be focal-on-circle")
+        assertTrue(!fd.isWellBehaved(), "focal-on-circle is NOT well-behaved")
+        assertTrue(!fd.isFocalOutside(), "focal-on-circle is NOT focal-outside")
+    }
+
+    @Test
+    fun `focal-on-circle conical interpolates along axis and clamps near focal`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        // Same fixture as the classification test : dCenter = r1 - r0.
+        // Expected (CPU mirror, via SkConicalGradient.computeTFocal) :
+        //   pixel (16, 32) -- start circle centre -- t ~ -0.07 -> kClamp -> red.
+        //   pixel (40, 32) -- on axis, mid-ish -- t ~ 0.29 -> red-leaning.
+        //   pixel (60, 32) -- on axis, past end centre -- t ~ 0.58 -> balanced.
+        //   pixel (50, 4)  -- far off-axis -- t ~ 0.72 -> blue-leaning.
+        val grad = SkConicalGradient.Make(
+            start = SkPoint(16f, 32f), startRadius = 5f,
+            end = SkPoint(50f, 32f), endRadius = 39f,
+            colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+            positions = null,
+            tileMode = SkTileMode.kClamp,
+        )!!
+        assertTrue(grad.getFocalData()?.isFocalOnCircle() == true)
+        val paint = SkPaint().apply {
+            shader = grad
+            isAntiAlias = false
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 2f, 62f, 62f), paint)
+                device.flush()
+            }
+        }
+
+        // Start circle centre (16, 32) -- t < 0 -> kClamp to red.
+        val startCentre = pixels.rgbaAt(16, 32)
+        assertTrue(startCentre[0] >= 180, "startCentre.R mostly red, got ${startCentre[0]}")
+        assertTrue(startCentre[2] < 96, "startCentre.B near zero, got ${startCentre[2]}")
+
+        // Mid-axis (40, 32) -- t ~ 0.29 -> red-leaning.
+        val midAxis = pixels.rgbaAt(40, 32)
+        assertTrue(midAxis[0] >= 150, "midAxis.R red-leaning, got ${midAxis[0]}")
+
+        // Far off-axis (50, 4) -- t ~ 0.72 -> blue-leaning.
+        val offAxis = pixels.rgbaAt(50, 4)
+        assertTrue(offAxis[2] >= 150, "offAxis.B blue-leaning, got ${offAxis[2]}")
+
+        // Pixel near the focal-singularity but on axis below (40, 32) sample
+        // already validated above. Background white outside the rect.
+        val outside = pixels.rgbaAt(0, 0)
+        assertNear(outside[0], 255, "outside.R", tol = 16)
+        assertNear(outside[1], 255, "outside.G", tol = 16)
+        assertNear(outside[2], 255, "outside.B", tol = 16)
+    }
+
     private fun assertNear(actual: Int, expected: Int, label: String, tol: Int) {
         val diff = kotlin.math.abs(actual - expected)
         assertTrue(diff <= tol, "$label : expected ~$expected (tol $tol), got $actual")
