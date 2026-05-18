@@ -120,4 +120,27 @@ public interface SkDevice {
         clip: SkIRect,
         paint: SkPaint?,
     )
+
+    /**
+     * G2.x -- bind an analytical "simple shape" clip captured from the
+     * canvas's clip stack. When non-null, the device should multiply per-
+     * fragment coverage by the shape's coverage (1.0 inside, 0.0 outside,
+     * partial on the boundary for AA-friendly pipelines). The shape is
+     * already in **device coordinates** ; the device does not need to
+     * re-apply the CTM.
+     *
+     * `null` means "no shape clip on top of the integer [clip] rect",
+     * which is the default raster behaviour. This default implementation
+     * is a no-op : [SkBitmapDevice] handles `clipPath` via its
+     * `setActiveClip(SkAAClip)` machinery, so the simple-shape slot
+     * doesn't need to feed back into the CPU rasterizer. GPU devices
+     * override to thread the shape through their fragment pipelines.
+     *
+     * Wired by `SkCanvas.bindClip` before each draw entry point. Resets
+     * itself between draws : the canvas pushes `null` whenever the
+     * active state has no recognised simple-shape clip.
+     */
+    public fun setActiveClipShape(shape: SkClipShape?) {
+        // Default : ignored. Raster device routes through SkAAClip.
+    }
 }
