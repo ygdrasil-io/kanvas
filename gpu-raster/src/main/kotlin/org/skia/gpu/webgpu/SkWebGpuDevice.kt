@@ -2693,6 +2693,144 @@ public class SkWebGpuDevice(
 
     override fun deviceClipBounds(): SkIRect = SkIRect.MakeWH(width, height)
 
+    /**
+     * Phase G-saveLayer — allocate a child GPU device for a
+     * `saveLayer` scope. The returned device shares this device's
+     * [context] (so layer textures and parent textures live on the
+     * same WebGPU adapter / queue) and the same
+     * [intermediateFormat] (so a future direct-blit composite stays
+     * bit-iso). The colorspace transform is forced to `false` on
+     * layer devices : the layer renders into intermediate-format
+     * pixels that the parent samples via [compositeFrom] ; the final
+     * present pass (sRGB → Rec.2020) only runs once, on the root
+     * canvas's flush.
+     *
+     * **Caveats.**
+     *  - Layer devices have their own depth-stencil / pipeline caches.
+     *    They cost N draw passes worth of resources per layer.
+     *  - `width` and `height` are clamped to the layer bounds the
+     *    canvas passes (already intersected with the parent clip), so
+     *    1×1 minimum suffices. A zero-area layer never reaches this
+     *    path (SkCanvas degenerates it to an empty save).
+     *  - Currently used only for plain `saveLayer(bounds, paint)`. The
+     *    SaveLayerRec backdrop / SkImageFilter / SkColorFilter slots
+     *    on the layer paint fall through to `compositeFrom` with
+     *    those slots dropped (documented deferred Phase G-saveLayer-X).
+     */
+    override fun makeLayerDevice(width: Int, height: Int): SkDevice =
+        SkWebGpuDevice(
+            context = context,
+            width = width,
+            height = height,
+            applyColorspaceTransform = false,
+            intermediateFormat = intermediateFormat,
+        )
+
+    /**
+     * Phase G-saveLayer — composite a child device's pixels back onto
+     * this device, honouring [paint]'s alpha + blendMode. Scaffolding
+     * implementation : flushes the child device to a raw RGBA byte
+     * buffer (matches the present-pass output of a layer device, i.e.
+     * sRGB-coded bytes), wraps it as an [SkImage], and routes through
+     * the existing [drawImageRect] / bitmap-shader pipeline so the
+     * alpha + blendMode honoured matches the in-scope blendable subset
+     * (kClear / kSrc / kSrcOver / kDstOver — the rest error out via
+     * [enqueueImageRectDrawInternal]).
+     *
+     * **Performance.** The flush-and-readback round-trip is wasteful
+     * (a direct GPU-to-GPU blit via a tiny composite pipeline would
+     * avoid the readback + texture re-upload). Acceptable for the
+     * scaffolding slice ; a follow-up Phase G-saveLayer-fast can swap
+     * the inner blit out without touching SkCanvas.
+     *
+     * **Constraints.**
+     *  - [src] must be a child [SkWebGpuDevice] (same context). A
+     *    mismatched backend errors out — the cross-device path is not
+     *    in scope.
+     *  - Colour filter / image filter on [paint] are dropped here
+     *    (they're CPU-only ; the relevant filter lives on the [paint]
+     *    that the canvas hands us but the GPU bitmap-shader pipeline
+     *    has no fragment-side colour-filter slot yet). Documented
+     *    deferred Phase G-saveLayer-colorFilter.
+     */
+    override fun compositeFrom(
+        src: SkDevice,
+        originX: Int,
+        originY: Int,
+        clip: SkIRect,
+        paint: SkPaint?,
+    ) {
+        val gpuSrc = src as? SkWebGpuDevice
+            ?: error(
+                "SkWebGpuDevice.compositeFrom : source device is " +
+                    "${src::class.simpleName} ; GPU composite only consumes " +
+                    "SkWebGpuDevice. Cross-backend composite (CPU layer onto " +
+                    "GPU root, or vice-versa) is out of scope — keep the " +
+                    "layer device backend-matched to its parent."
+            )
+        // Flush the child : runs its pending draws into a layer
+        // intermediate, then the layer's identity present pass copies
+        // to its RGBA8Unorm readback target. Bytes are sRGB-coded (the
+        // layer was constructed with `applyColorspaceTransform = false`).
+        val bytes = gpuSrc.flush()
+        val w = gpuSrc.width
+        val h = gpuSrc.height
+        // Pack RGBA bytes (premul, sRGB-coded) into an `SkImage` with
+        // ARGB int pixels. `SkImage.peekPixel` and the bitmap-shader
+        // sampler both consume this layout uniformly. The premul status
+        // matches what `imageTextureFor` expects (unpremul on upload
+        // because the bitmap-shader fragment stage premultiplies after
+        // the bilinear sample) — but our bytes are already premul from
+        // the layer's blend hardware. Divide-by-alpha unpremul step
+        // here so the bitmap-shader fragment stage's premul matches the
+        // original alpha after the colorspace transform. Opaque sources
+        // (the dominant case for the saveLayer-scaffolding tests) are
+        // bit-iso either way (a == 1 ⇒ unpremul == premul).
+        val pixels = IntArray(w * h)
+        for (i in 0 until w * h) {
+            val base = i * 4
+            val r = bytes[base].toInt() and 0xFF
+            val g = bytes[base + 1].toInt() and 0xFF
+            val b = bytes[base + 2].toInt() and 0xFF
+            val a = bytes[base + 3].toInt() and 0xFF
+            // Unpremul : divide RGB by alpha, clamped to [0, 255].
+            val rU: Int; val gU: Int; val bU: Int
+            if (a == 0) { rU = 0; gU = 0; bU = 0 }
+            else if (a == 0xFF) { rU = r; gU = g; bU = b }
+            else {
+                rU = ((r * 255 + a / 2) / a).coerceIn(0, 255)
+                gU = ((g * 255 + a / 2) / a).coerceIn(0, 255)
+                bU = ((b * 255 + a / 2) / a).coerceIn(0, 255)
+            }
+            pixels[i] = (a shl 24) or (rU shl 16) or (gU shl 8) or bU
+        }
+        val layerImage = SkImage(w, h, pixels)
+
+        // Effective dst rect on the parent device. [originX, originY]
+        // is the layer's top-left in parent-device coords ; the layer
+        // is `w × h` so the dst rect is `(originX, originY, +w, +h)`,
+        // intersected with [clip].
+        val dstL = originX.toFloat()
+        val dstT = originY.toFloat()
+        val dstR = (originX + w).toFloat()
+        val dstB = (originY + h).toFloat()
+        val srcRect = SkRect.MakeWH(w.toFloat(), h.toFloat())
+        val dstRect = SkRect.MakeLTRB(dstL, dstT, dstR, dstB)
+        // Reuse the existing drawImageRect pipeline. Sampling is
+        // identity (nearest, no mipmap, no cubic) — the layer's pixel
+        // grid lines up 1:1 with the parent's.
+        val sampling = SkSamplingOptions(filter = SkFilterMode.kNearest)
+        drawImageRect(
+            image = layerImage,
+            src = srcRect,
+            devDst = dstRect,
+            sampling = sampling,
+            paint = paint,
+            constraint = SrcRectConstraint.kFast,
+            clip = clip,
+        )
+    }
+
     override fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         // G2.1 — translucent SrcOver supported via premul shader.
         // G2.2 — paint.blendMode honoured (kClear / kSrc / kSrcOver / kDstOver).
