@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.AnalyticAntialiasConvexGM
 
 /**
@@ -21,29 +19,6 @@ class AnalyticAntialiasConvexWebGpuTest {
 
     @Test
     fun `AnalyticAntialiasConvexGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = AnalyticAntialiasConvexGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("analytic_antialias_convex")
-                ?: error("original-888/analytic_antialias_convex.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[AnalyticAntialiasConvexWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "analytic_antialias_convex-gpu")
-            val floor = 99.85
-            assertTrue(
-                cmp.similarity >= floor,
-                "AnalyticAntialiasConvexGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        runGpuCrossTest(AnalyticAntialiasConvexGM(), floor = 99.85)
     }
 }

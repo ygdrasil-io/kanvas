@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.PolygonsGM
 
 /**
@@ -22,33 +20,10 @@ class PolygonsWebGpuTest {
 
     @Test
     fun `PolygonsGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = PolygonsGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("polygons")
-                ?: error("original-888/polygons.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[PolygonsWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "polygons-gpu")
-            // Ratchet : observed 98.59 %. Residual drift on AA stroke
-            // edges (especially the 0-width hairline rows and the
-            // 40-wide strokes with translucent alpha) where the AA
-            // coverage convention differs sub-LSB from raster.
-            val floor = 98.55
-            assertTrue(
-                cmp.similarity >= floor,
-                "PolygonsGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        // Ratchet : observed 98.59 %. Residual drift on AA stroke
+        // edges (especially the 0-width hairline rows and the
+        // 40-wide strokes with translucent alpha) where the AA
+        // coverage convention differs sub-LSB from raster.
+        runGpuCrossTest(PolygonsGM(), floor = 98.55)
     }
 }

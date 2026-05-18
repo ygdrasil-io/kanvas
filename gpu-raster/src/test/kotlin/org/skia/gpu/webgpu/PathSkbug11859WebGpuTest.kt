@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.PathSkbug11859GM
 
 /**
@@ -18,29 +16,6 @@ class PathSkbug11859WebGpuTest {
 
     @Test
     fun `PathSkbug11859GM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = PathSkbug11859GM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("path_skbug_11859")
-                ?: error("original-888/path_skbug_11859.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[PathSkbug11859WebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "path_skbug_11859-gpu")
-            val floor = 99.90
-            assertTrue(
-                cmp.similarity >= floor,
-                "PathSkbug11859GM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        runGpuCrossTest(PathSkbug11859GM(), floor = 99.90)
     }
 }

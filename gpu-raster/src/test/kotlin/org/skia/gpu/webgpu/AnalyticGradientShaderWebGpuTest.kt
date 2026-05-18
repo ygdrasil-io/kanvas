@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.AnalyticGradientShaderGM
 
 /**
@@ -21,29 +19,6 @@ class AnalyticGradientShaderWebGpuTest {
 
     @Test
     fun `AnalyticGradientShaderGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = AnalyticGradientShaderGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("analytic_gradients")
-                ?: error("original-888/analytic_gradients.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[AnalyticGradientShaderWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "analytic_gradients-gpu")
-            val floor = 99.95
-            assertTrue(
-                cmp.similarity >= floor,
-                "AnalyticGradientShaderGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        runGpuCrossTest(AnalyticGradientShaderGM(), floor = 99.95)
     }
 }
