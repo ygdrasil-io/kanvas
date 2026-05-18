@@ -99,6 +99,16 @@ public class SkConicalGradient internal constructor(
      */
     public fun getFocalData(): FocalData? = focalData
 
+    /**
+     * kStrip pre-computed parameter `fP0` (i.e. `r0^2` in the conical
+     * frame). Used by the GPU kStrip pipeline (G4.4.4) to evaluate
+     * `t = x + sqrt(fP0 - y*y)` per pixel after applying
+     * [gradientMatrix]. Returns `0f` for non-kStrip sub-types ; callers
+     * should gate on [getType] first. Mirrors the value cached at
+     * construction time and consumed by the kStrip branch of [computeT].
+     */
+    public fun getStripP0(): Float = stripP0
+
     /** Pre-transformed stop colours in working space (8-bit path). */
     private val xformedColors: IntArray = IntArray(srcColors.size)
 
