@@ -514,12 +514,25 @@ Premier slice gradient end-to-end : `SkLinearGradient` en kClamp uniquement, rou
 
 **But** : porter `SkBitmapShader` (Phase 5g master) + `drawImage` direct sur GPU. Première utilisation de `GPUTexture` comme source d'échantillonnage.
 
-- [ ] **Image upload** : `SkImage` → `GPUTexture` cache (`weakHashMap<SkImage, GPUTexture>`).
-- [ ] **`SkBitmapShader.wgsl`** : sampler 2D + tile-mode constantes spec, `kNearest` / `kLinear`, mêmes règles de pixel-center que le raster.
-- [ ] **`drawImage` / `drawImageRect`** : pipeline simple qui réutilise `SkBitmapShader.wgsl` avec local-matrix dérivée de `(src, dst)`.
+- [x] **Image upload** : `SkImage` → `GPUTexture` cache (`weakHashMap<SkImage, GPUTexture>`). Livré en G5.1.
+- [x] **`SkBitmapShader.wgsl`** : sampler 2D + tile-mode constantes spec, `kNearest` / `kLinear`, mêmes règles de pixel-center que le raster. Livré en G5.1 / G5.1.1.
+- [x] **`drawImage` / `drawImageRect`** : pipeline simple qui réutilise `SkBitmapShader.wgsl` avec local-matrix dérivée de `(src, dst)`. Livré en G5.1 / G5.1.1.
 - [x] **Color management** (G5.3) : sRGB (identity fast path) + Display P3 (sRGB TF + P3 → sRGB primaries matrix). Le profil passe en uniform `csFlags.x` (sentinel bit-reinterp) + `csMatrix` (mat3x3 column-major), le shader applique sRGB EOTF → matrix → sRGB OETF avant la premul-by-alpha. Coefficients calculés via `SkColorSpaceXformSteps(image.colorSpace, kUnpremul, sRGB, kUnpremul)`. **Différé** : Rec.2020 (linear ou PQ TF), Adobe RGB, ProPhoto, HDR/PQ/HLG luminance scaling — auraient besoin de TF coefs dédiés dans l'uniform. Voir G5.3 ci-dessous.
 
-### Tests
+### G5.1 — drawImageRect skeleton (livré, #534)
+- [x] `ImageRectDraw` + `bitmap_shader.wgsl` + sampler/pipeline caches + `SkImage` -> `GPUTexture` cache. Scope minimal : `(kLinear, kClamp, kSrcOver)`, non-AA pixelEdge rounding du dst rect. Premier slice utilisant un `GPUTexture` comme source d'échantillonnage.
+
+### G5.1.1 — bitmap shader filter/tile/blend extensions (livré, #535)
+- [x] Élargit le slice G5.1 à la matrice (filter, tile, blend) que les caches étaient déjà keyées sur : `kNearest` filter, `kRepeat` / `kMirror` / `kDecal` tile modes, `kClear` / `kSrc` / `kDstOver` blends (le sous-ensemble nativement blendable de `blendStateFor`). Tile modes non-clamp atteints via `enqueueImageRectDrawForTest` (la public API `SkCanvas.drawImageRect` ne porte pas de tile mode — `SkSamplingOptions` est filter / mipmap / cubic only). Le shader `bitmap_shader.wgsl` route kClamp/kRepeat/kMirror via `addressModeU/V`, kDecal en-shader (WebGPU n'a pas de `BorderColor` mode pour les textures samplées non-depth).
+
+### G5.2 — `paint.shader is SkBitmapShader` routing on rect paths (livré)
+- [x] Route `paint.shader is SkBitmapShader` à travers le pipeline G5.1 / G5.1.1 quand le path est un rect axis-aligned. Scope hard : `path.isRect() != null && ctm.isAxisAligned && shader.localMatrix.isAxisAligned` ; tile modes / filter / blend hérités de G5.1.1. Une nouvelle méthode `drawBitmapShaderFillRect` compose `M = ctm * localMatrix` (axis-aligned), back-solve via `M^-1` les corners du rect device pour produire le `(src, devDst)` que `bitmap_shader.wgsl` attend, puis appelle l'`enqueueImageRectDrawInternal` partagé.
+- [x] `bitmap_shader.wgsl` — split de `imageSize.z` en `(tileX, tileY)` : `.z` carry X-axis tile, `.w` carry Y-axis tile (deux `bitcast<u32>`). La kDecal check est désormais per-axis (e.g. `(kRepeat, kDecal)` répète horizontalement et décale verticalement). Le sampler `addressModeU` / `addressModeV` honore déjà l'asymétrie depuis G5.1.1 (`bitmapSamplerCache` keyé `Triple(filter, tileX, tileY)`).
+- [x] `SkBitmapShader.getSampling()` exposé (accessor public sur le champ `sampling` privé) pour le routing GPU.
+- [x] Tests : 6 unit tests neufs dans [BitmapShaderPaintRectTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BitmapShaderPaintRectTest.kt) -- 4 mirroirs des tile-mode tests de `ImageRectTest` via la route `paint.shader = image.makeShader(...)`, 1 cas mixte `(kRepeat, kDecal)` pour exercer la split per-axis du shader, et 1 `drawPaint(paint avec bitmap shader)` qui couvre toute la device. Tous PASSED.
+- [x] `SkWebGpuDevice.drawPaint` : split entre la fast-path solid (drawRect inchangé) et la shader-path (drawPath sur un rect dérivé du `clip.invert(ctm)` -- le device receive son clip en device coords, drawPath attend la path en user coords, l'inverse axis-aligned remet tout dans la même base). Pré-G5.2 `drawPaint` ignorait silencieusement `paint.shader` (commentaire deprecated). G5.2 active gradients + bitmap shaders sur drawPaint gratuitement (le dispatch unique de drawPath couvre tout).
+
+### Tests cross-test (à venir, G-suivi)
 - [ ] `DrawBitmapRect3`, `BigMatrixGM`, `TilemodesAlphaGM`, `BitmapShaderGM`, `TinyBitmapGM`.
 
 ### G5.3 — Texture color management (sRGB + Display P3)

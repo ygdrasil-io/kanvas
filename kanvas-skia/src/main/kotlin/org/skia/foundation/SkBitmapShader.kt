@@ -50,6 +50,11 @@ public class SkBitmapShader public constructor(
     /** Tile mode along the local-y axis. */
     public fun getTileY(): SkTileMode = tileY
 
+    /** Sampling options (filter / mipmap / cubic). G5.2 — needed by the GPU
+     *  routing in [org.skia.gpu.webgpu.SkWebGpuDevice] to pick the right
+     *  bitmap pipeline (filter mode) for `paint.shader is SkBitmapShader`. */
+    public fun getSampling(): SkSamplingOptions = sampling
+
     /**
      * Pre-transformed source pixels, working colour space, **non-premul**
      * 8-bit ARGB. Built once in [setupForDraw]. Same length and same row

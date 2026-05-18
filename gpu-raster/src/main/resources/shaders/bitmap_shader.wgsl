@@ -37,6 +37,13 @@
 // The dispatch gate (see SkWebGpuDevice.drawImageRect) currently feeds
 // kClamp ; the other modes are reachable via the test-only enqueue path.
 //
+// G5.2 -- per-axis tile modes : `imageSize.z` carries `tileX`,
+// `imageSize.w` carries `tileY` (both bit-reinterpreted u32). Each axis
+// runs the kDecal check independently against the corresponding UV
+// coord. `SkBitmapShader` is constructed with `(tileX, tileY)` as a
+// pair, so the sampler's `addressModeU` / `addressModeV` and the
+// in-shader decal check must both honour the split.
+//
 // G6.2 -- intermediate target is `RGBA16Float` ; the output convention
 // is unchanged (premul sRGB-coded). F16 buys sub-byte precision on
 // downstream blends and bilinear lerps ; no colorspace switch.
@@ -74,9 +81,11 @@ struct Uniforms {
     srcRect:   vec4f,    // offset  0
     // Destination rect in device-pixel coords (l, t, r, b).
     dstRect:   vec4f,    // offset 16
-    // Image size in source pixels (w, h, _, _).
-    // `.z` is repurposed as the tile-mode flag (bit-reinterpreted u32 ;
-    // see header comment above). `.w` stays zero / reserved.
+    // Image size in source pixels (w, h, tileX, tileY).
+    // `.z` carries the X-axis tile mode and `.w` carries the Y-axis
+    // tile mode -- both bit-reinterpreted u32 (G5.2 split, see header
+    // comment). G5.1 / G5.1.1 fed `tileX = tileY` so the single-tile
+    // semantics survive as a degenerate case.
     imageSize: vec4f,    // offset 32
     // Per-draw paint scale folded into the sampled color (premul vec4f).
     // Defaults to (1, 1, 1, 1) -- paint.alpha and color filter overrides
@@ -158,12 +167,18 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // kDecal : WebGPU has no `BorderColor` mode for sampled (non-depth)
     // textures, so we emulate it -- the sampler stays ClampToEdge and
     // the shader kills out-of-rect fragments here. Matches the
-    // `fs_decal` idiom in linear_gradient.wgsl.
-    let tile_flag = bitcast<u32>(uniforms.imageSize.z);
-    if (tile_flag == TILE_DECAL) {
-        if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) {
-            return vec4f(0.0, 0.0, 0.0, 0.0);
-        }
+    // `fs_decal` idiom in linear_gradient.wgsl. G5.2 -- per-axis :
+    // kill if `tileX == kDecal && u outside [0, 1]` OR
+    // `tileY == kDecal && v outside [0, 1]`. The two axes do not
+    // interact (e.g. `(kRepeat, kDecal)` repeats horizontally and
+    // decals vertically).
+    let tile_x = bitcast<u32>(uniforms.imageSize.z);
+    let tile_y = bitcast<u32>(uniforms.imageSize.w);
+    if (tile_x == TILE_DECAL && (u < 0.0 || u > 1.0)) {
+        return vec4f(0.0, 0.0, 0.0, 0.0);
+    }
+    if (tile_y == TILE_DECAL && (v < 0.0 || v > 1.0)) {
+        return vec4f(0.0, 0.0, 0.0, 0.0);
     }
 
     // Sample (filter mode = Nearest or Linear, picked by the sampler).
