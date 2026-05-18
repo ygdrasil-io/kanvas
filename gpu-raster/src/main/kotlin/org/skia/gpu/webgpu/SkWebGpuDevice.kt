@@ -515,6 +515,44 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
+     * G4.4.4 -- pending conical (two-point) gradient fill of an
+     * axis-aligned rect, **kStrip** sub-case of [SkConicalGradient]
+     * (`c0 != c1` and `r0 == r1`). All 4 tile modes routed (the pipeline
+     * cache wires all 4 entry points from day one). Other sub-cases
+     * (kRadial, kFocal in any variant) keep going through their existing
+     * dispatch.
+     *
+     * Per-draw payload :
+     *  - `affine00..affine12` : 2x3 row-major affine `device -> conical
+     *    frame`, computed as `gradientMatrix * (CTM * localMatrix)^-1`,
+     *    same chain as the focal-inside dispatch. `gradientMatrix` for
+     *    kStrip is the `MapToUnitX` matrix (puts c0 at origin, c1 at
+     *    (1, 0)).
+     *  - `stripP0 = r0 * r0` : the strip's quadratic-disc constant.
+     *    Mirrors the value cached on the CPU by
+     *    [SkConicalGradient.getStripP0]. NB : upstream computes
+     *    `r0 / centerX1` first, but the Kotlin CPU port stores the
+     *    unscaled `r0^2` ; GPU stays in lockstep with the CPU.
+     *
+     * Mirrors [SkConicalGradient.computeT]'s kStrip branch byte-for-byte
+     * (formula `t = x + sqrt(fP0 - y*y)`, with `disc < 0` producing
+     * transparent black via the shader's `in_strip` factor).
+     */
+    private data class ConicalStripGradientRectDraw(
+        val scissor: IntArray,
+        // 2x3 row-major affine `device pixel -> conical frame`.
+        val affine00: Float, val affine01: Float, val affine02: Float,
+        val affine10: Float, val affine11: Float, val affine12: Float,
+        val stripP0: Float,
+        val stopPositions: FloatArray,
+        val stopColors: FloatArray,
+        val stopCount: Int,
+        val tileMode: SkTileMode,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
+    /**
      * G4.1.2 -- AA stencil-and-cover path filled with a linear gradient.
      * Geometry payload mirrors [StencilCoverAaPolygonDraw] (stencil fan
      * triangles + cover bbox quad + edge segments for the AA falloff
@@ -1671,6 +1709,65 @@ public class SkWebGpuDevice(
             )
         }
 
+    // ─── Conical kStrip pipeline (G4.4.4) — drawRect, all 4 tile modes ──
+
+    private val conicalStripGradientShader: GPUShaderModule =
+        loadShader("shaders/conical_strip_gradient.wgsl")
+
+    private val conicalStripGradientBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                ),
+            ),
+        ),
+    )
+
+    private val conicalStripGradientPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(conicalStripGradientBindGroupLayout)),
+    )
+
+    /**
+     * G4.4.4 -- conical kStrip pipeline cache. Keyed by `(blend, tile)` ;
+     * all 4 fragment entry points are reachable. Mirrors the cache shape
+     * of the kRadial / focal-inside conical pipelines.
+     */
+    private val conicalStripGradientPipelineCache:
+        MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
+
+    private fun conicalStripGradientFragmentEntryPoint(tileMode: SkTileMode): String = when (tileMode) {
+        SkTileMode.kClamp -> "fs_clamp"
+        SkTileMode.kRepeat -> "fs_repeat"
+        SkTileMode.kMirror -> "fs_mirror"
+        SkTileMode.kDecal -> "fs_decal"
+    }
+
+    private fun conicalStripGradientPipelineFor(
+        mode: SkBlendMode,
+        tileMode: SkTileMode,
+    ): GPURenderPipeline =
+        conicalStripGradientPipelineCache.getOrPut(mode to tileMode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = conicalStripGradientPipelineLayout,
+                    vertex = VertexState(module = conicalStripGradientShader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = conicalStripGradientShader,
+                        entryPoint = conicalStripGradientFragmentEntryPoint(tileMode),
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
     // ─── AA stencil-cover gradient pipeline (G4.1.2) — linear gradient on non-rect paths ──
 
     private val aaStencilCoverGradientShader: GPUShaderModule =
@@ -2740,6 +2837,93 @@ public class SkWebGpuDevice(
     }
 
     /**
+     * G4.4.4 -- emit a [ConicalStripGradientRectDraw] for a
+     * `SkConicalGradient` of [SkConicalGradient.Type.kStrip] filling the
+     * axis-aligned device-space rect [devRect] under any of the 4 tile
+     * modes. Scissor derivation mirrors [drawConicalFocalGradientFillRect].
+     *
+     * Per-draw transform : `gradientMatrix * (CTM * localMatrix)^-1`,
+     * identical to the CPU `deviceToConical` cached by
+     * [SkConicalGradient.setupForDraw]. The 2x3 affine maps device-pixel
+     * coords straight into the conical frame (where c0 = (0, 0),
+     * c1 = (1, 0)) ; the shader applies the kStrip formula
+     * `t = x + sqrt(stripP0 - y*y)` plus the `disc < 0` mask.
+     *
+     * Falls back to `false` (no draw enqueued) when the combined
+     * `(CTM * localMatrix)` is singular -- caller routes through the
+     * solid-color fill.
+     */
+    private fun drawConicalStripGradientFillRect(
+        devRect: SkRect, clip: SkIRect, paint: SkPaint, grad: SkConicalGradient, ctm: SkMatrix,
+    ): Boolean {
+        val scissor: IntArray
+        if (paint.isAntiAlias) {
+            val fl = devRect.left.coerceAtLeast(clip.left.toFloat()).coerceAtLeast(0f)
+            val ft = devRect.top.coerceAtLeast(clip.top.toFloat()).coerceAtLeast(0f)
+            val fr = devRect.right.coerceAtMost(clip.right.toFloat()).coerceAtMost(width.toFloat())
+            val fb = devRect.bottom.coerceAtMost(clip.bottom.toFloat()).coerceAtMost(height.toFloat())
+            if (fl >= fr || ft >= fb) return false
+            val sl = floor(fl.toDouble()).toInt().coerceAtLeast(0)
+            val st = floor(ft.toDouble()).toInt().coerceAtLeast(0)
+            val sr = ceil(fr.toDouble()).toInt().coerceAtMost(width)
+            val sb = ceil(fb.toDouble()).toInt().coerceAtMost(height)
+            if (sl >= sr || st >= sb) return false
+            scissor = intArrayOf(sl, st, sr - sl, sb - st)
+        } else {
+            val l = pixelEdge(devRect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
+            val t = pixelEdge(devRect.top).coerceAtLeast(clip.top).coerceAtLeast(0)
+            val r = pixelEdge(devRect.right).coerceAtMost(clip.right).coerceAtMost(width)
+            val b = pixelEdge(devRect.bottom).coerceAtMost(clip.bottom).coerceAtMost(height)
+            if (l >= r || t >= b) return false
+            scissor = intArrayOf(l, t, r - l, b - t)
+        }
+
+        val ctmLocal = ctm.preConcat(grad.localMatrix)
+        val invCtmLocal = ctmLocal.invert() ?: return false
+        val devToConical = grad.getGradientMatrix().preConcat(invCtmLocal)
+
+        val stripP0 = grad.getStripP0()
+
+        val srcColors = grad.getColors()
+        val positions = grad.getPositions()
+        val count = srcColors.size.coerceAtMost(MAX_GRADIENT_STOPS)
+        val packedPositions = FloatArray(MAX_GRADIENT_STOPS * 4)
+        val packedColors = FloatArray(MAX_GRADIENT_STOPS * 4)
+        for (i in 0 until count) {
+            packedPositions[i * 4] = positions[i]
+            val c = srcColors[i]
+            val a = SkColorGetA(c) / 255f
+            val r = SkColorGetR(c) / 255f
+            val g = SkColorGetG(c) / 255f
+            val b = SkColorGetB(c) / 255f
+            packedColors[i * 4]     = r * a
+            packedColors[i * 4 + 1] = g * a
+            packedColors[i * 4 + 2] = b * a
+            packedColors[i * 4 + 3] = a
+        }
+
+        val first = srcColors[0]
+        pending.add(
+            ConicalStripGradientRectDraw(
+                scissor = scissor,
+                affine00 = devToConical.sx, affine01 = devToConical.kx, affine02 = devToConical.tx,
+                affine10 = devToConical.ky, affine11 = devToConical.sy, affine12 = devToConical.ty,
+                stripP0 = stripP0,
+                stopPositions = packedPositions,
+                stopColors = packedColors,
+                stopCount = count,
+                tileMode = grad.getTileMode(),
+                r = SkColorGetR(first) / 255f,
+                g = SkColorGetG(first) / 255f,
+                b = SkColorGetB(first) / 255f,
+                a = SkColorGetA(first) / 255f,
+                mode = paint.blendMode,
+            ),
+        )
+        return true
+    }
+
+    /**
      * G3.1.1 — single annular AA rect draw : outer bounds = `rect ± half_sw`,
      * inner bounds = `rect ∓ half_sw`. Replaces the G3.1 4-edge fill
      * decomposition for the AA path so the corner pixels get the same
@@ -3024,6 +3208,28 @@ public class SkWebGpuDevice(
                     maxOf(x0, x1), maxOf(y0, y1),
                 )
                 if (drawConicalFocalGradientFillRect(devRect, clip, paint, shader, ctm)) {
+                    return
+                }
+            }
+        }
+        // G4.4.4 -- conical kStrip sub-case (`r0 == r1`, `c0 != c1`).
+        // All 4 tile modes routed -- the pipeline cache wires all 4
+        // entry points from day one. Other sub-cases keep their
+        // existing routing.
+        if (shader is SkConicalGradient &&
+            paint.style == SkPaint.Style.kFill_Style &&
+            ctm.isAxisAligned &&
+            shader.getType() == SkConicalGradient.Type.kStrip
+        ) {
+            val srcRect = path.isRect()
+            if (srcRect != null) {
+                val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
+                val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
+                val devRect = SkRect.MakeLTRB(
+                    minOf(x0, x1), minOf(y0, y1),
+                    maxOf(x0, x1), maxOf(y0, y1),
+                )
+                if (drawConicalStripGradientFillRect(devRect, clip, paint, shader, ctm)) {
                     return
                 }
             }
@@ -4050,6 +4256,7 @@ public class SkWebGpuDevice(
                 is SweepGradientRectDraw -> buildSweepGradientRectDrawResources(d)
                 is ConicalGradientRectDraw -> buildConicalGradientRectDrawResources(d)
                 is ConicalFocalGradientRectDraw -> buildConicalFocalGradientRectDrawResources(d)
+                is ConicalStripGradientRectDraw -> buildConicalStripGradientRectDrawResources(d)
                 is ImageRectDraw -> buildImageRectDrawResources(d)
             }
         }
@@ -4543,6 +4750,17 @@ public class SkWebGpuDevice(
                         )
                         draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
                     }
+                    is ConicalStripGradientRectDraw -> {
+                        setPipeline(conicalStripGradientPipelineFor(d.mode, d.tileMode))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    }
                     is StencilCoverPolygonDraw -> { /* handled above */ }
                     is StencilCoverAaPolygonDraw -> { /* handled above */ }
                     is StencilCoverAaGradientDraw -> { /* handled above */ }
@@ -4911,6 +5129,45 @@ public class SkWebGpuDevice(
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = conicalFocalGradientBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                ),
+            ),
+        )
+        return DrawResources(uniform = uniform, bindGroup = bindGroup)
+    }
+
+    private fun buildConicalStripGradientRectDrawResources(
+        d: ConicalStripGradientRectDraw,
+    ): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = CONICAL_STRIP_GRADIENT_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.conicalStripGradientRectDraw",
+            ),
+        )
+        // Layout matches `conical_strip_gradient.wgsl` :
+        //   offset   0 : viewport      (vec4f, only x/y used)
+        //   offset  16 : affineRow0    (m00, m01, m02, _)
+        //   offset  32 : affineRow1    (m10, m11, m12, _)
+        //   offset  48 : stripScalars  (fP0, _, count_bits, _)
+        //   offset  64 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
+        //   offset 320 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
+        val packed = FloatArray(16 + MAX_GRADIENT_STOPS * 8)
+        packed[0] = width.toFloat(); packed[1] = height.toFloat()
+        packed[2] = 0f; packed[3] = 0f
+        packed[4] = d.affine00; packed[5] = d.affine01; packed[6] = d.affine02; packed[7] = 0f
+        packed[8] = d.affine10; packed[9] = d.affine11; packed[10] = d.affine12; packed[11] = 0f
+        packed[12] = d.stripP0; packed[13] = 0f
+        packed[14] = Float.fromBits(d.stopCount); packed[15] = 0f
+        System.arraycopy(d.stopPositions, 0, packed, 16, MAX_GRADIENT_STOPS * 4)
+        System.arraycopy(d.stopColors, 0, packed, 16 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = conicalStripGradientBindGroupLayout,
                 entries = listOf(
                     BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
                 ),
@@ -5568,6 +5825,14 @@ public class SkWebGpuDevice(
          * scalars consume two more.
          */
         const val CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 592uL
+        /**
+         * G4.4.4 -- size of the conical kStrip per-draw uniform :
+         *   viewport (16) + affineRow0 (16) + affineRow1 (16) +
+         *   stripScalars (16) + positions (16 * 16) + colors (16 * 16) = 576 bytes.
+         * 16 bytes smaller than the focal-inside uniform (no flagsCount
+         * vec4 ; the strip has only fP0 + stop count).
+         */
+        const val CONICAL_STRIP_GRADIENT_UNIFORM_SIZE: ULong = 576uL
         /**
          * G5.1 / G5.3 -- size of the bitmap-shader per-draw uniform :
          *   srcRect (16) + dstRect (16) + imageSize (16) + paintColor (16) +
