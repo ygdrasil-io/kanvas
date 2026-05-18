@@ -41,10 +41,31 @@
 // is unchanged (premul sRGB-coded). F16 buys sub-byte precision on
 // downstream blends and bilinear lerps ; no colorspace switch.
 //
+// G5.3 -- texture color management. The intermediate target convention
+// is premul sRGB-coded (sRGB primaries, sRGB OETF). If the source
+// `SkImage` carries a non-sRGB color space, its texels are in that
+// source space's encoded primaries. To draw correctly we :
+//   (1) sample the texel (unpremul, source-encoded),
+//   (2) linearize through the source TF,
+//   (3) multiply by a 3x3 primaries matrix (source -> sRGB),
+//   (4) re-encode through the sRGB OETF,
+//   (5) then proceed with the existing premul-by-alpha + paintColor.
+// The TF used in steps (2) and (4) is the sRGB curve in this slice --
+// it covers sRGB sources (no-op identity matrix) and Display P3 sources
+// (P3 shares the sRGB TF ; only the primaries matrix is non-trivial).
+// `csFlags.x` is a bit-reinterpreted u32 sentinel : 0 = no transform
+// (existing fast path), 1 = apply the matrix-based transform. The
+// matrix is column-major (`mat3x3<f32>`) ; for sRGB images the host
+// uploads the identity so the multiply is a no-op even when the flag
+// would route through the transform branch -- the flag is the gate.
+//
 // Limitations enforced at the dispatch gate (see SkWebGpuDevice
 // drawImageRect) :
 //  - No paint.shader-as-bitmap (drawImageRect only ; G5.2 onwards).
-//  - No color management (texture is uploaded as-is in sRGB-coded bytes).
+//  - Color management : sRGB (no-op) + Display P3 (sRGB TF, P3 gamut).
+//    Other source colorspaces (Rec.2020 linear, Adobe RGB, ...) still
+//    bypass the transform branch -- they'd need their own TF coefs in
+//    the uniform, which is out of scope for G5.3.
 //
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
@@ -61,14 +82,53 @@ struct Uniforms {
     // Defaults to (1, 1, 1, 1) -- paint.alpha and color filter overrides
     // can scale rgba multiplicatively here (G5.x follow-ups).
     paintColor: vec4f,   // offset 48
+    // G5.3 -- color-space transform gate. `.x` is a bit-reinterpreted
+    // u32 sentinel : 0 = no transform (identity / sRGB fast path), 1 =
+    // apply the sRGB EOTF -> matrix -> sRGB OETF transform. `.y/.z/.w`
+    // are reserved (zero-padded).
+    csFlags: vec4f,      // offset 64
+    // G5.3 -- column-major 3x3 primaries matrix (source-linear ->
+    // sRGB-linear). std140 stores each column padded to 16 bytes, so
+    // the struct consumes 48 bytes here (offsets 80 / 96 / 112). For
+    // sRGB sources the host uploads the identity ; for Display P3 it
+    // uploads the P3 -> sRGB primaries transform built on the CPU via
+    // `SkColorSpaceXformSteps`.
+    csMatrix:  mat3x3<f32>, // offset 80
 };
 
 // Tile-mode constants -- mirror `SkTileMode` ordinals.
 const TILE_DECAL: u32 = 3u;
 
+// G5.3 -- color-space transform mode sentinel. 0 = no-op (sRGB source
+// or any source whose pipeline reduces to identity ; the host gate
+// covers Skia's `SkColorSpaceXformSteps::Flags::isIdentity`). 1 =
+// apply linearize -> matrix -> encode. Higher values are reserved for
+// future TF families (Rec.2020 linear, ...) if needed.
+const CS_MODE_IDENTITY: u32 = 0u;
+const CS_MODE_SRGB_TF_MATRIX: u32 = 1u;
+
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var image_texture: texture_2d<f32>;
 @group(0) @binding(2) var image_sampler: sampler;
+
+// G5.3 -- sRGB EOTF (encoded -> linear). Matches `present_pass.wgsl`'s
+// `srgb_to_linear` byte-for-byte ; we keep a local copy here so the
+// bitmap-shader module is self-contained.
+fn srgb_to_linear(v: f32) -> f32 {
+    if (v <= 0.04045) {
+        return v / 12.92;
+    }
+    return pow((v + 0.055) / 1.055, 2.4);
+}
+
+// G5.3 -- sRGB OETF (linear -> encoded).
+fn linear_to_srgb(v: f32) -> f32 {
+    let c = max(v, 0.0);
+    if (c <= 0.0031308) {
+        return 12.92 * c;
+    }
+    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
 
 @vertex
 fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
@@ -109,14 +169,40 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // Sample (filter mode = Nearest or Linear, picked by the sampler).
     let sampled = textureSampleLevel(image_texture, image_sampler, vec2f(u, v), 0.0);
 
-    // The uploaded texture carries **unpremul** sRGB-encoded bytes
-    // (SkImage convention). Multiply RGB by alpha to match the premul
-    // intermediate convention. paintColor multiplies the result so the
-    // paint.alpha / color filter (future G5.x) can fold in at no extra
-    // pipeline cost ; default is (1, 1, 1, 1).
+    // G5.3 -- texture color management. When the host marks the source
+    // image as non-sRGB (csFlags.x != CS_MODE_IDENTITY), apply the
+    // sRGB-EOTF -> primaries-matrix -> sRGB-OETF chain on the sampled
+    // *unpremul* RGB before the premul step below. Alpha is untouched
+    // by the colorspace transform (matches Skia's xform pipeline).
+    //
+    // Note: in WGSL, `mat3x3 * vec3` is column-vector matrix multiply,
+    // which matches the column-major layout we upload from the host.
+    var src_rgb = vec3f(sampled.r, sampled.g, sampled.b);
+    let cs_mode = bitcast<u32>(uniforms.csFlags.x);
+    if (cs_mode == CS_MODE_SRGB_TF_MATRIX) {
+        let lin = vec3f(
+            srgb_to_linear(src_rgb.r),
+            srgb_to_linear(src_rgb.g),
+            srgb_to_linear(src_rgb.b),
+        );
+        let lin_srgb = uniforms.csMatrix * lin;
+        src_rgb = vec3f(
+            linear_to_srgb(lin_srgb.r),
+            linear_to_srgb(lin_srgb.g),
+            linear_to_srgb(lin_srgb.b),
+        );
+    }
+
+    // The uploaded texture carries **unpremul** source-encoded bytes
+    // (SkImage convention -- post-G5.3 the source colorspace can be
+    // non-sRGB ; the transform branch above lifts those texels into
+    // sRGB-encoded values before premul). Multiply RGB by alpha to
+    // match the premul intermediate convention. paintColor multiplies
+    // the result so the paint.alpha / color filter (future G5.x) can
+    // fold in at no extra pipeline cost ; default is (1, 1, 1, 1).
     let pa = sampled.a * uniforms.paintColor.a;
-    let pr = sampled.r * sampled.a * uniforms.paintColor.r;
-    let pg = sampled.g * sampled.a * uniforms.paintColor.g;
-    let pb = sampled.b * sampled.a * uniforms.paintColor.b;
+    let pr = src_rgb.r * sampled.a * uniforms.paintColor.r;
+    let pg = src_rgb.g * sampled.a * uniforms.paintColor.g;
+    let pb = src_rgb.b * sampled.a * uniforms.paintColor.b;
     return vec4f(pr, pg, pb, pa);
 }
