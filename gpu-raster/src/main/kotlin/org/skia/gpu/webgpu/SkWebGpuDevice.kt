@@ -773,6 +773,151 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
     ) : PendingDraw
 
+    // ─── Bitmap shader on non-rect (G5.2.1) ─────────────────────────────
+    /**
+     * G5.2.1 -- AA stencil-and-cover path filled with a bitmap shader
+     * (`paint.shader is SkBitmapShader`). Mirror of
+     * [StencilCoverAaSweepGradientDraw] / [StencilCoverAaConicalGradientDraw] :
+     * same geometry payload (stencil fan triangles + cover bbox quad +
+     * edge segments for the AA falloff) ; paint payload swaps the
+     * gradient (center, tBias, tScale) for the bitmap shader's
+     * (texture, src, dst, imageSize, tileX, tileY, paintColor, csMode,
+     * csMatrix) tuple. Routed through [drawPath] when
+     * `paint.shader is SkBitmapShader` is AA, the CTM is axis-aligned,
+     * the shader's local matrix is axis-aligned, and the path is *not*
+     * an axis-aligned rect (the rect path keeps the cheaper
+     * [ImageRectDraw] full-screen-triangle dispatch via G5.2's
+     * [drawBitmapShaderFillRect]).
+     *
+     * Inherited `r/g/b/a` are placeholders (the fragment shader sources
+     * colour from the texture) ; kept for the [PendingDraw] interface
+     * contract.
+     */
+    private data class StencilCoverAaBitmapShaderDraw(
+        val stencilVerts: FloatArray,
+        val coverVerts: FloatArray,
+        val edges: FloatArray,
+        val edgeCount: Int,
+        val scissor: IntArray,
+        val fillType: SkPathFillType,
+        val texture: GPUTexture,
+        val imageWidth: Int, val imageHeight: Int,
+        val srcL: Float, val srcT: Float, val srcR: Float, val srcB: Float,
+        val dstL: Float, val dstT: Float, val dstR: Float, val dstB: Float,
+        val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
+        val filter: SkFilterMode,
+        val tileX: SkTileMode,
+        val tileY: SkTileMode,
+        val csMode: Int,
+        val csMatrix: FloatArray,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
+    /**
+     * G5.2.1 -- pre-computed bitmap-shader draw payload, shared by the
+     * 3 path-shape branches (multi-contour / inverse-or-concave /
+     * convex). Built once per [drawPath] from the shader's
+     * `(image, tileX, tileY, sampling, localMatrix)` tuple composed
+     * with the (axis-aligned) CTM. The (src, dst) rect pair encodes
+     * the device-pixel -> image-pixel affine used by
+     * `aa_stencil_cover_bitmap_shader.wgsl` (same shape as
+     * `bitmap_shader.wgsl`'s rect pipeline). For non-rect paths we
+     * pick `src = (0, 0, imgW, imgH)` and let
+     * `dst = (ctm * localMatrix).mapRect(src)` ; the resulting affine
+     * is correct over the whole device frame, the path-shape stencil
+     * mask + AA cover-pass selects which fragments actually sample.
+     *
+     * Returns `null` when the combined matrix is degenerate (the
+     * caller falls through to the solid-colour fill).
+     */
+    private data class BitmapShaderPayload(
+        val texture: GPUTexture,
+        val imageWidth: Int,
+        val imageHeight: Int,
+        val srcL: Float, val srcT: Float, val srcR: Float, val srcB: Float,
+        val dstL: Float, val dstT: Float, val dstR: Float, val dstB: Float,
+        val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
+        val filter: SkFilterMode,
+        val tileX: SkTileMode,
+        val tileY: SkTileMode,
+        val csMode: Int,
+        val csMatrix: FloatArray,
+    )
+
+    private fun buildBitmapShaderPayload(
+        shader: SkBitmapShader,
+        ctm: SkMatrix,
+        paint: SkPaint,
+    ): BitmapShaderPayload? {
+        val image = shader.getImage()
+        if (image.width <= 0 || image.height <= 0) return null
+        val combined = ctm.preConcat(shader.localMatrix)
+        if (!combined.isAxisAligned) return null
+        if (combined.sx == 0f || combined.sy == 0f) return null
+        // src spans the full image (in image-pixel coords) ; dst is its
+        // image through the combined affine. The shader uses (src, dst)
+        // as a `device -> image-pixel` affine -- correct over the whole
+        // viewport regardless of path shape ; the stencil + AA cover
+        // pass select which fragments actually sample.
+        val (x0, y0) = combined.mapXY(0f, 0f)
+        val (x1, y1) = combined.mapXY(image.width.toFloat(), image.height.toFloat())
+        val dstL = minOf(x0, x1); val dstT = minOf(y0, y1)
+        val dstR = maxOf(x0, x1); val dstB = maxOf(y0, y1)
+        val texture = imageTextureFor(image)
+        val (csMode, csMatrix) = bitmapColorSpaceFor(image)
+        val paintAlpha = paint.alpha / 255f
+        return BitmapShaderPayload(
+            texture = texture,
+            imageWidth = image.width,
+            imageHeight = image.height,
+            srcL = 0f, srcT = 0f,
+            srcR = image.width.toFloat(), srcB = image.height.toFloat(),
+            dstL = dstL, dstT = dstT, dstR = dstR, dstB = dstB,
+            paintR = paintAlpha, paintG = paintAlpha,
+            paintB = paintAlpha, paintA = paintAlpha,
+            filter = shader.getSampling().filter,
+            tileX = shader.getTileX(),
+            tileY = shader.getTileY(),
+            csMode = csMode,
+            csMatrix = csMatrix,
+        )
+    }
+
+    /**
+     * G5.2.1 -- materialise a [StencilCoverAaBitmapShaderDraw] from a
+     * pre-computed [BitmapShaderPayload] + per-branch path geometry.
+     * Centralises the field copy so each of the 3 dispatch branches
+     * (multi-contour / inverse-or-concave / convex) stays short.
+     */
+    private fun BitmapShaderPayload.toStencilCoverDraw(
+        stencilVerts: FloatArray,
+        coverVerts: FloatArray,
+        edges: FloatArray,
+        edgeCount: Int,
+        scissor: IntArray,
+        fillType: SkPathFillType,
+        mode: SkBlendMode,
+    ): StencilCoverAaBitmapShaderDraw = StencilCoverAaBitmapShaderDraw(
+        stencilVerts = stencilVerts,
+        coverVerts = coverVerts,
+        edges = edges,
+        edgeCount = edgeCount,
+        scissor = scissor,
+        fillType = fillType,
+        texture = texture,
+        imageWidth = imageWidth, imageHeight = imageHeight,
+        srcL = srcL, srcT = srcT, srcR = srcR, srcB = srcB,
+        dstL = dstL, dstT = dstT, dstR = dstR, dstB = dstB,
+        paintR = paintR, paintG = paintG, paintB = paintB, paintA = paintA,
+        filter = filter,
+        tileX = tileX, tileY = tileY,
+        csMode = csMode,
+        csMatrix = csMatrix,
+        r = 1f, g = 1f, b = 1f, a = paintA,
+        mode = mode,
+    )
+
     private val pending: MutableList<PendingDraw> = mutableListOf()
 
     private fun loadShader(resource: String): GPUShaderModule {
@@ -2305,6 +2450,196 @@ public class SkWebGpuDevice(
             )
         }
 
+    // ─── Bitmap shader on non-rect (G5.2.1) ─────────────────────────────
+    //
+    // AA stencil-and-cover cover-pass pipeline carrying a bitmap-shader
+    // fragment shader. Mirror of the gradient stencil-cover pipelines
+    // above but the bind group needs binding 1 (texture) + binding 2
+    // (sampler) in addition to the uniform at binding 0 -- so this
+    // family gets its own bind group layout + pipeline layout, plus its
+    // own stencil-write pipeline (so both passes share the same 3-entry
+    // bind group). The fragment shader has only 2 entry points (inside /
+    // outside) -- the 4 tile modes are resolved by the per-draw sampler
+    // (addressModeU / V for kClamp / kRepeat / kMirror) and a per-axis
+    // in-shader kDecal check, matching `bitmap_shader.wgsl`'s scheme.
+    // Hence the cache key shape is `(blend, fillType, side)` -- no
+    // tileMode in the key. The (filter, tileX, tileY) tuple lives on the
+    // bind group's sampler, not on the pipeline.
+
+    private val aaStencilCoverBitmapShader: GPUShaderModule =
+        loadShader("shaders/aa_stencil_cover_bitmap_shader.wgsl")
+
+    /**
+     * Bind group layout shared by the bitmap-shader stencil-write
+     * pipeline AND the bitmap-shader cover pipelines :
+     *   binding 0 -- uniform buffer (color + viewport + srcRect + dstRect +
+     *                imageSize + paintColor + csFlags + csMatrix +
+     *                edgeCountPad + edges), visibility = Vertex|Fragment
+     *                (the stencil shader's vertex stage reads viewport
+     *                from offset 16, the cover shader's fragment stage
+     *                reads everything else)
+     *   binding 1 -- sampled 2D texture (the cached image), visibility = Fragment
+     *   binding 2 -- filtering sampler, visibility = Fragment
+     * The stencil-write fragment shader (`solid_polygon.wgsl`) ignores
+     * binding 1 / 2 -- they remain unread but must be bound, which
+     * matches WebGPU's pipeline-vs-bind-group compatibility rule.
+     */
+    private val aaStencilCoverBitmapShaderBindGroupLayout: GPUBindGroupLayout =
+        context.device.createBindGroupLayout(
+            BindGroupLayoutDescriptor(
+                entries = listOf(
+                    BindGroupLayoutEntry(
+                        binding = 0u,
+                        visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.Float,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 2u,
+                        visibility = GPUShaderStage.Fragment,
+                        sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
+                    ),
+                ),
+            ),
+        )
+
+    private val aaStencilCoverBitmapShaderPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(aaStencilCoverBitmapShaderBindGroupLayout)),
+    )
+
+    /**
+     * Dedicated stencil-write pipeline that uses the bitmap-shader
+     * pipeline layout (3-binding bind group). Functionally identical to
+     * [stencilWritePipeline] -- same vertex shader (`solid_polygon.wgsl`),
+     * same stencil ops (increment-front / decrement-back, color writes
+     * masked off, depth always-pass). Only the bind group layout differs
+     * so a single bind group can satisfy both the stencil and cover
+     * passes for an [StencilCoverAaBitmapShaderDraw].
+     */
+    private val aaStencilCoverBitmapShaderStencilPipeline: GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = aaStencilCoverBitmapShaderPipelineLayout,
+                vertex = VertexState(
+                    module = polygonShader,
+                    entryPoint = "vs_main",
+                    buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                ),
+                fragment = FragmentState(
+                    module = polygonShader,
+                    entryPoint = "fs_main",
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            blend = blendAddBoth(GPUBlendFactor.One, GPUBlendFactor.Zero),
+                            writeMask = GPUColorWrite.None,
+                        ),
+                    ),
+                ),
+                depthStencil = DepthStencilState(
+                    format = GPUTextureFormat.Depth24PlusStencil8,
+                    depthWriteEnabled = false,
+                    depthCompare = GPUCompareFunction.Always,
+                    stencilFront = StencilFaceState(
+                        compare = GPUCompareFunction.Always,
+                        failOp = GPUStencilOperation.Keep,
+                        depthFailOp = GPUStencilOperation.Keep,
+                        passOp = GPUStencilOperation.IncrementWrap,
+                    ),
+                    stencilBack = StencilFaceState(
+                        compare = GPUCompareFunction.Always,
+                        failOp = GPUStencilOperation.Keep,
+                        depthFailOp = GPUStencilOperation.Keep,
+                        passOp = GPUStencilOperation.DecrementWrap,
+                    ),
+                    stencilReadMask = 0xFFu,
+                    stencilWriteMask = 0xFFu,
+                ),
+            ),
+        )
+
+    private data class AaStencilCoverBitmapShaderKey(
+        val mode: SkBlendMode,
+        val fillType: SkPathFillType,
+        val side: CoverageSide,
+    )
+
+    private val aaStencilCoverBitmapShaderPipelineCache:
+        MutableMap<AaStencilCoverBitmapShaderKey, GPURenderPipeline> = mutableMapOf()
+
+    private fun aaStencilCoverBitmapShaderFragmentEntryPoint(side: CoverageSide): String =
+        when (side) {
+            CoverageSide.Inside -> "fs_inside"
+            CoverageSide.Outside -> "fs_outside"
+        }
+
+    private fun aaStencilCoverBitmapShaderPipelineFor(
+        mode: SkBlendMode,
+        fillType: SkPathFillType,
+        side: CoverageSide,
+    ): GPURenderPipeline =
+        aaStencilCoverBitmapShaderPipelineCache.getOrPut(
+            AaStencilCoverBitmapShaderKey(mode, fillType, side),
+        ) {
+            val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
+            val insideCompare =
+                if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+            val compare = when (side) {
+                CoverageSide.Inside -> insideCompare
+                CoverageSide.Outside ->
+                    if (insideCompare == GPUCompareFunction.Equal) GPUCompareFunction.NotEqual
+                    else GPUCompareFunction.Equal
+            }
+            val entryPoint = aaStencilCoverBitmapShaderFragmentEntryPoint(side)
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = aaStencilCoverBitmapShaderPipelineLayout,
+                    vertex = VertexState(
+                        module = aaStencilCoverBitmapShader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = aaStencilCoverBitmapShader,
+                        entryPoint = entryPoint,
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = readMask,
+                        stencilWriteMask = 0xFFu,
+                    ),
+                ),
+            )
+        }
+
     /**
      * Translate a [SkBlendMode] into the WebGPU [BlendState] that
      * implements it. G2.2 covers the 4 modes WebGPU expresses natively
@@ -3635,6 +3970,24 @@ public class SkWebGpuDevice(
         val conicalFocalActive: Boolean =
             conicalFocalGradForAaPath != null && gradConicalFocalAffine != null
 
+        // G5.2.1 -- bitmap shader on a non-rect AA path. Mirror of the
+        // gradient gate above : axis-aligned CTM + axis-aligned local
+        // matrix + AA paint. The rect-on-axis-aligned-CTM case was
+        // already peeled off at the top of drawPath (G5.2's
+        // [drawBitmapShaderFillRect]) ; we route every remaining AA
+        // bitmap-shader fill through the dedicated stencil-and-cover
+        // pipeline. Non-AA paths and non-axis-aligned matrices fall
+        // through to the existing solid-colour fill machinery.
+        val bitmapShaderForAaPath: SkBitmapShader? =
+            if (shader is SkBitmapShader && paint.isAntiAlias && ctm.isAxisAligned &&
+                shader.localMatrix.isAxisAligned
+            ) shader
+            else null
+        var bitmapPayload: BitmapShaderPayload? = null
+        if (bitmapShaderForAaPath != null) {
+            bitmapPayload = buildBitmapShaderPayload(bitmapShaderForAaPath, ctm, paint)
+        }
+
         // G3.3b.2b — multi-contour path : stencil-and-cover. Each contour
         // is fan-tessellated from its own first vertex ; the concatenated
         // triangle list is rendered into the stencil buffer with
@@ -3768,6 +4121,20 @@ public class SkWebGpuDevice(
                             stopCount = gradStopCount,
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
+                            mode = paint.blendMode,
+                        ),
+                    )
+                    return
+                }
+                if (bitmapPayload != null) {
+                    pending.add(
+                        bitmapPayload.toStencilCoverDraw(
+                            stencilVerts = stencilTri,
+                            coverVerts = coverTri,
+                            edges = edges,
+                            edgeCount = totalVerts,
+                            scissor = scissor,
+                            fillType = path.fillType,
                             mode = paint.blendMode,
                         ),
                     )
@@ -3917,6 +4284,18 @@ public class SkWebGpuDevice(
                             stopCount = gradStopCount,
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
+                            mode = paint.blendMode,
+                        ),
+                    )
+                } else if (bitmapPayload != null) {
+                    pending.add(
+                        bitmapPayload.toStencilCoverDraw(
+                            stencilVerts = stencilTri,
+                            coverVerts = coverTri,
+                            edges = edges,
+                            edgeCount = n,
+                            scissor = scissor,
+                            fillType = path.fillType,
                             mode = paint.blendMode,
                         ),
                     )
@@ -4111,6 +4490,27 @@ public class SkWebGpuDevice(
                     stopCount = gradStopCount,
                     tileMode = gradTileMode!!,
                     r = rF, g = gF, b = bF, a = aF,
+                    mode = paint.blendMode,
+                ),
+            )
+            return
+        }
+        // G5.2.1 -- bitmap shader on a convex AA path. Mirror of the
+        // gradient arms above ; detour through stencil-and-cover with
+        // the dedicated bitmap-shader cover pipeline.
+        if (paint.isAntiAlias && n <= MAX_AA_EDGES && bitmapPayload != null) {
+            val stencilTri = fanTessellateContours(devVerts, contourStarts)
+            val coverTri = bboxTrianglesFor(devVerts, width, height)
+            val edges = FloatArray(MAX_AA_EDGES * 4)
+            buildContourEdgeSegments(devVerts, contourStarts, edges)
+            pending.add(
+                bitmapPayload.toStencilCoverDraw(
+                    stencilVerts = stencilTri,
+                    coverVerts = coverTri,
+                    edges = edges,
+                    edgeCount = n,
+                    scissor = scissor,
+                    fillType = path.fillType,
                     mode = paint.blendMode,
                 ),
             )
@@ -4481,6 +4881,8 @@ public class SkWebGpuDevice(
                     buildStencilCoverAaConicalGradientDrawResources(d)
                 is StencilCoverAaConicalFocalGradientDraw ->
                     buildStencilCoverAaConicalFocalGradientDrawResources(d)
+                is StencilCoverAaBitmapShaderDraw ->
+                    buildStencilCoverAaBitmapShaderDrawResources(d)
                 is LinearGradientRectDraw -> buildLinearGradientRectDrawResources(d)
                 is RadialGradientRectDraw -> buildRadialGradientRectDrawResources(d)
                 is SweepGradientRectDraw -> buildSweepGradientRectDrawResources(d)
@@ -4805,6 +5207,62 @@ public class SkWebGpuDevice(
                 }
                 return@forEachIndexed
             }
+            if (d is StencilCoverAaBitmapShaderDraw) {
+                // G5.2.1 -- mirror of the gradient stencil-cover dispatches
+                // above ; same two-sub-pass structure (stencil-write +
+                // inside/outside cover), the cover sub-draws bind the
+                // bitmap-shader pipeline. The stencil-write pass uses the
+                // dedicated [aaStencilCoverBitmapShaderStencilPipeline]
+                // (3-binding pipeline layout) so the bind group satisfies
+                // both passes' layouts in one go.
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = colorView,
+                                loadOp = loadOp,
+                                clearValue = background,
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                        depthStencilAttachment = RenderPassDepthStencilAttachment(
+                            view = depthStencilView,
+                            stencilClearValue = 0u,
+                            stencilLoadOp = GPULoadOp.Clear,
+                            stencilStoreOp = GPUStoreOp.Discard,
+                            stencilReadOnly = false,
+                            depthReadOnly = true,
+                        ),
+                    ),
+                ) {
+                    setBindGroup(0u, res.bindGroup)
+                    setScissorRect(
+                        x = d.scissor[0].toUInt(),
+                        y = d.scissor[1].toUInt(),
+                        width = d.scissor[2].toUInt(),
+                        height = d.scissor[3].toUInt(),
+                    )
+                    setPipeline(aaStencilCoverBitmapShaderStencilPipeline)
+                    setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
+                    draw((d.stencilVerts.size / 2).toUInt())
+                    setStencilReference(0u)
+                    setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
+                    setPipeline(
+                        aaStencilCoverBitmapShaderPipelineFor(
+                            d.mode, d.fillType, CoverageSide.Inside,
+                        ),
+                    )
+                    draw((d.coverVerts.size / 2).toUInt())
+                    setPipeline(
+                        aaStencilCoverBitmapShaderPipelineFor(
+                            d.mode, d.fillType, CoverageSide.Outside,
+                        ),
+                    )
+                    draw((d.coverVerts.size / 2).toUInt())
+                    end()
+                }
+                return@forEachIndexed
+            }
             if (d is StencilCoverAaSweepGradientDraw) {
                 // G4.3.2 -- mirror of the [StencilCoverAaGradientDraw] /
                 // [StencilCoverAaRadialGradientDraw] dispatches above.
@@ -4998,6 +5456,7 @@ public class SkWebGpuDevice(
                     is StencilCoverAaSweepGradientDraw -> { /* handled above */ }
                     is StencilCoverAaConicalGradientDraw -> { /* handled above */ }
                     is StencilCoverAaConicalFocalGradientDraw -> { /* handled above */ }
+                    is StencilCoverAaBitmapShaderDraw -> { /* handled above */ }
                 }
                 end()
             }
@@ -5926,6 +6385,93 @@ public class SkWebGpuDevice(
         )
     }
 
+    private fun buildStencilCoverAaBitmapShaderDrawResources(
+        d: StencilCoverAaBitmapShaderDraw,
+    ): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = AA_STENCIL_COVER_BITMAP_SHADER_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverAaBitmapShaderDraw",
+            ),
+        )
+        // Layout matches `aa_stencil_cover_bitmap_shader.wgsl` :
+        //   offset    0 : color        (vec4f, unused by bitmap frag ; kept
+        //                                for layout-compat with solid_polygon)
+        //   offset   16 : viewport     (vec4f, only x/y used)
+        //   offset   32 : srcRect      (l, t, r, b in image-pixel coords)
+        //   offset   48 : dstRect      (l, t, r, b in device-pixel coords)
+        //   offset   64 : imageSize    (w, h, tileX bit-reinterp u32, tileY bit-reinterp u32)
+        //   offset   80 : paintColor   (vec4f, premul tint)
+        //   offset   96 : csFlags      (.x = csMode bit-reinterp u32 ; G5.3)
+        //   offset  112 : csMatrix     (mat3x3<f32>, std140 padded 3 * vec4 = 48 bytes ; G5.3)
+        //   offset  160 : edgeCountPad (.x = edgeCount as bit-reinterp f32)
+        //   offset  176 : edges[MAX_AA_EDGES] (vec4 each)
+        // Total = 4272 bytes.
+        val packed = FloatArray(44 + MAX_AA_EDGES * 4)
+        // color (unused ; left at zero)
+        packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
+        // viewport
+        packed[4] = width.toFloat(); packed[5] = height.toFloat()
+        packed[6] = 0f; packed[7] = 0f
+        // srcRect
+        packed[8] = d.srcL; packed[9] = d.srcT; packed[10] = d.srcR; packed[11] = d.srcB
+        // dstRect
+        packed[12] = d.dstL; packed[13] = d.dstT; packed[14] = d.dstR; packed[15] = d.dstB
+        // imageSize
+        packed[16] = d.imageWidth.toFloat(); packed[17] = d.imageHeight.toFloat()
+        packed[18] = Float.fromBits(d.tileX.ordinal); packed[19] = Float.fromBits(d.tileY.ordinal)
+        // paintColor
+        packed[20] = d.paintR; packed[21] = d.paintG; packed[22] = d.paintB; packed[23] = d.paintA
+        // csFlags
+        packed[24] = Float.fromBits(d.csMode); packed[25] = 0f; packed[26] = 0f; packed[27] = 0f
+        // csMatrix : column-major 3x3, std140 padded to 3 * vec4
+        val m = d.csMatrix
+        packed[28] = m[0]; packed[29] = m[1]; packed[30] = m[2]; packed[31] = 0f
+        packed[32] = m[3]; packed[33] = m[4]; packed[34] = m[5]; packed[35] = 0f
+        packed[36] = m[6]; packed[37] = m[7]; packed[38] = m[8]; packed[39] = 0f
+        // edgeCountPad
+        packed[40] = Float.fromBits(d.edgeCount)
+        packed[41] = 0f; packed[42] = 0f; packed[43] = 0f
+        // edges
+        System.arraycopy(d.edges, 0, packed, 44, d.edges.size)
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+        val view = d.texture.createView()
+        val sampler = bitmapSamplerFor(d.filter, d.tileX, d.tileY)
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = aaStencilCoverBitmapShaderBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                    BindGroupEntry(binding = 1u, resource = view),
+                    BindGroupEntry(binding = 2u, resource = sampler),
+                ),
+            ),
+        )
+        val stencilVB = context.device.createBuffer(
+            BufferDescriptor(
+                size = (d.stencilVerts.size * Float.SIZE_BYTES).toULong(),
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverAaBitmapShaderStencilVerts",
+            ),
+        )
+        context.queue.writeBuffer(stencilVB, 0uL, ArrayBuffer.of(d.stencilVerts))
+        val coverVB = context.device.createBuffer(
+            BufferDescriptor(
+                size = (d.coverVerts.size * Float.SIZE_BYTES).toULong(),
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.stencilCoverAaBitmapShaderCoverVerts",
+            ),
+        )
+        context.queue.writeBuffer(coverVB, 0uL, ArrayBuffer.of(d.coverVerts))
+        return DrawResources(
+            uniform = uniform,
+            bindGroup = bindGroup,
+            vertexBuffer = stencilVB,
+            coverVertexBuffer = coverVB,
+        )
+    }
+
     override fun close() {
         rectPipelineCache.values.forEach { it.close() }
         rectPipelineCache.clear()
@@ -5947,6 +6493,9 @@ public class SkWebGpuDevice(
         aaStencilCoverConicalGradientPipelineCache.clear()
         aaStencilCoverConicalFocalGradientPipelineCache.values.forEach { it.close() }
         aaStencilCoverConicalFocalGradientPipelineCache.clear()
+        aaStencilCoverBitmapShaderPipelineCache.values.forEach { it.close() }
+        aaStencilCoverBitmapShaderPipelineCache.clear()
+        aaStencilCoverBitmapShaderStencilPipeline.close()
         linearGradientPipelineCache.values.forEach { it.close() }
         linearGradientPipelineCache.clear()
         radialGradientPipelineCache.values.forEach { it.close() }
@@ -5970,6 +6519,7 @@ public class SkWebGpuDevice(
         aaStencilCoverSweepGradientShader.close()
         aaStencilCoverConicalGradientShader.close()
         aaStencilCoverConicalFocalGradientShader.close()
+        aaStencilCoverBitmapShader.close()
         linearGradientShader.close()
         radialGradientShader.close()
         sweepGradientShader.close()
@@ -6107,6 +6657,18 @@ public class SkWebGpuDevice(
          * other variants).
          */
         const val AA_STENCIL_COVER_CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 4720uL
+        /**
+         * G5.2.1 -- size of the AA stencil-cover bitmap-shader per-draw uniform :
+         *   color (16) + viewport (16) + srcRect (16) + dstRect (16) +
+         *   imageSize (16) + paintColor (16) + csFlags (16) + csMatrix (48) +
+         *   edgeCountPad (16) + edges (256 * 16) = 4272 bytes.
+         * Mirror of [IMAGE_RECT_UNIFORM_SIZE] (128 bytes) extended with the
+         * stencil-cover machinery's `color` / `viewport` / `edgeCountPad`
+         * + `edges[256]` tail. The leading `color` slot matches the polygon
+         * shader's layout so the bitmap-shader stencil-write pass can share
+         * this draw's bind group.
+         */
+        const val AA_STENCIL_COVER_BITMAP_SHADER_UNIFORM_SIZE: ULong = 4272uL
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 
         /**
