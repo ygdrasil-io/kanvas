@@ -58,6 +58,7 @@ import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.beginRenderPass
 import kotlinx.coroutines.runBlocking
+import org.skia.core.SkClipShape
 import org.skia.core.SkDevice
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmapShader
@@ -279,7 +280,51 @@ public class SkWebGpuDevice(
         val il: Float, val it: Float, val ir: Float, val ib: Float,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
-    ) : PendingDraw
+        /**
+         * G2.x -- analytical clip-shape payload. When [clipKind] is 0
+         * (`CLIP_KIND_NONE`), [clipShapeBounds] / [clipShapeRx] /
+         * [clipShapeRy] are ignored and the shader behaves exactly as
+         * before (rect coverage only). When [clipKind] is 1
+         * (`CLIP_KIND_RRECT`), the fragment shader multiplies the rect
+         * coverage by `rrect_cov(pos, clipShapeBounds, clipShapeRx,
+         * clipShapeRy)` -- pixels outside the clip shape go to 0,
+         * inside to 1, with a smooth half-pixel band on the boundary.
+         */
+        val clipKind: Float = CLIP_KIND_NONE,
+        val clipShapeBounds: FloatArray = FloatArray(4),
+        val clipShapeRx: Float = 0f,
+        val clipShapeRy: Float = 0f,
+    ) : PendingDraw {
+        // Manual equals / hashCode to handle FloatArray equality
+        // properly -- the per-element comparison is what the cross-
+        // backend RectFillCrossTest depends on for deterministic
+        // dispatch keying. Data-class default would compare array
+        // references (i.e. always !=).
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is RectDraw) return false
+            if (x != other.x || y != other.y || w != other.w || h != other.h) return false
+            if (ol != other.ol || ot != other.ot || or != other.or || ob != other.ob) return false
+            if (il != other.il || it != other.it || ir != other.ir || ib != other.ib) return false
+            if (r != other.r || g != other.g || b != other.b || a != other.a) return false
+            if (mode != other.mode) return false
+            if (clipKind != other.clipKind) return false
+            if (!clipShapeBounds.contentEquals(other.clipShapeBounds)) return false
+            if (clipShapeRx != other.clipShapeRx) return false
+            if (clipShapeRy != other.clipShapeRy) return false
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = x
+            result = 31 * result + y
+            result = 31 * result + w
+            result = 31 * result + h
+            result = 31 * result + mode.hashCode()
+            result = 31 * result + clipKind.hashCode()
+            return result
+        }
+    }
 
     /**
      * Triangle-list buffer in **device-pixel** coords. `verts` holds
@@ -2831,6 +2876,54 @@ public class SkWebGpuDevice(
         )
     }
 
+    /**
+     * G2.x -- last [SkClipShape] pushed by [SkCanvas.bindClip]. Sampled
+     * by [drawFillRect] at draw-record time, captured in the [RectDraw]
+     * so the per-draw uniform encodes the clip alongside the rect
+     * bounds. Other pipelines (gradients / bitmap shader / polygon /
+     * stencil-and-cover) **do not** consume this slot yet -- they fall
+     * back to the integer scissor (their current behaviour). When the
+     * canvas's clip is a non-shape path on a non-rect-fill draw, the
+     * canvas-side guard in [SkCanvas.bindClip] still throws. Future
+     * slices widen the consumer set ; this first cut just covers
+     * solid-color rect fills, the most common case.
+     */
+    private var activeClipShape: SkClipShape? = null
+
+    override fun setActiveClipShape(shape: SkClipShape?) {
+        activeClipShape = shape
+    }
+
+    /**
+     * G2.x -- fail-fast guard for draws that are NOT yet plumbed through
+     * the analytical clip shape. Called by every non-rect-fill entry
+     * point (stroke rects, paths, gradients, bitmap shader, etc.). When
+     * an [activeClipShape] is set but the draw doesn't consume it, we
+     * throw rather than silently producing wrong pixels. This preserves
+     * the pre-G2.x behaviour : non-rect-fill draws under a curved
+     * clipPath used to throw at canvas-bindClip time ; now they throw
+     * one level lower (the canvas still binds, but the device refuses
+     * the draw).
+     *
+     * Plain rect clip shapes ([SkClipShape.Rect]) are honoured by the
+     * integer scissor on every pipeline -- the device passes those
+     * through without complaint.
+     */
+    private fun requireClipShapeHonoured(drawKind: String) {
+        val shape = activeClipShape ?: return
+        if (shape is SkClipShape.Rect) return  // Scissor already handles this.
+        error(
+            "SkWebGpuDevice.$drawKind does not honour the active clipPath " +
+                "(curved-shape clip captured by SkCanvas). Today only " +
+                "solid-color drawRect-fill consumes simpleShapeClip ; other " +
+                "pipelines (stroke / drawPath / gradients / bitmap shader) " +
+                "fall back to the integer scissor and would silently drop " +
+                "the curve mask. Use clipRect() instead, route the draw " +
+                "through drawRect-fill, or wait for the follow-up slice " +
+                "that widens the consumer set."
+        )
+    }
+
     override fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         // G2.1 — translucent SrcOver supported via premul shader.
         // G2.2 — paint.blendMode honoured (kClear / kSrc / kSrcOver / kDstOver).
@@ -2888,6 +2981,14 @@ public class SkWebGpuDevice(
             bounds = floatArrayOf(l.toFloat(), t.toFloat(), r.toFloat(), b.toFloat())
         }
 
+        // G2.x -- pack the analytic clip shape (if any) into the
+        // per-draw uniform. Circle / oval / rrect / rect all reduce to
+        // the rrect representation : the shader's `rrect_cov` handles
+        // uniform corners for all of them. Plain rects pass `rx = ry =
+        // 0`, which makes `rrect_cov` collapse to the conventional axis-
+        // aligned coverage (and is redundant with the integer scissor
+        // anyway -- we skip emitting CLIP_KIND_RRECT in that case).
+        val (clipKind, clipBounds, clipRx, clipRy) = packClipShape(activeClipShape)
         pending.add(
             RectDraw(
                 x = scissor[0], y = scissor[1], w = scissor[2], h = scissor[3],
@@ -2900,8 +3001,80 @@ public class SkWebGpuDevice(
                 b = SkColorGetB(color) / 255f,
                 a = SkColorGetA(color) / 255f,
                 mode = paint.blendMode,
+                clipKind = clipKind,
+                clipShapeBounds = clipBounds,
+                clipShapeRx = clipRx,
+                clipShapeRy = clipRy,
             ),
         )
+    }
+
+    /**
+     * G2.x -- collapse an [SkClipShape] (circle / oval / uniform-corner
+     * rrect / rect) into the rrect parameterisation expected by
+     * `solid_color.wgsl`'s `rrect_cov` helper. Returns `(kind, bounds,
+     * rx, ry)` where `kind` is either [CLIP_KIND_NONE] (no shape clip ;
+     * the shader skips the modulation step) or [CLIP_KIND_RRECT] (the
+     * shader runs the rrect coverage formula). [SkClipShape.Rect] also
+     * collapses to `CLIP_KIND_NONE` -- the integer scissor already
+     * tightens the draw to the rect bounds, no need to pay the rrect-
+     * coverage cost in the shader.
+     */
+    private fun packClipShape(
+        shape: SkClipShape?,
+    ): ClipShapePack = when (shape) {
+        null, is SkClipShape.Rect -> ClipShapePack(
+            kind = CLIP_KIND_NONE,
+            bounds = ZERO_RECT4,
+            rx = 0f,
+            ry = 0f,
+        )
+        is SkClipShape.Circle -> ClipShapePack(
+            kind = CLIP_KIND_RRECT,
+            bounds = floatArrayOf(
+                shape.cx - shape.r, shape.cy - shape.r,
+                shape.cx + shape.r, shape.cy + shape.r,
+            ),
+            rx = shape.r,
+            ry = shape.r,
+        )
+        is SkClipShape.Oval -> ClipShapePack(
+            kind = CLIP_KIND_RRECT,
+            bounds = floatArrayOf(
+                shape.bounds.left, shape.bounds.top,
+                shape.bounds.right, shape.bounds.bottom,
+            ),
+            rx = shape.bounds.width() * 0.5f,
+            ry = shape.bounds.height() * 0.5f,
+        )
+        is SkClipShape.RRect -> ClipShapePack(
+            kind = CLIP_KIND_RRECT,
+            bounds = floatArrayOf(
+                shape.bounds.left, shape.bounds.top,
+                shape.bounds.right, shape.bounds.bottom,
+            ),
+            rx = shape.rx,
+            ry = shape.ry,
+        )
+    }
+
+    /**
+     * Tuple result of [packClipShape]. A simple data class instead of
+     * `Pair<Float, FloatArray>` plus two more floats for readability at
+     * the [drawFillRect] call site.
+     */
+    private data class ClipShapePack(
+        val kind: Float,
+        val bounds: FloatArray,
+        val rx: Float,
+        val ry: Float,
+    ) {
+        // Default data-class equals/hashCode would compare bounds by
+        // reference. We don't actually need value equality on this
+        // helper -- override to silence the linter and keep semantics
+        // explicit.
+        override fun equals(other: Any?): Boolean = this === other
+        override fun hashCode(): Int = System.identityHashCode(this)
     }
 
     /**
@@ -3470,6 +3643,10 @@ public class SkWebGpuDevice(
         if (sl >= sr || st >= sb) return
 
         val color = paint.color
+        // G2.x -- pick up the active analytical clip shape so AA strokes
+        // (which emit a RectDraw directly, bypassing drawFillRect) also
+        // get masked against a curved clipPath. Mirrors drawFillRect.
+        val (clipKind, clipBounds, clipRx, clipRy) = packClipShape(activeClipShape)
         pending.add(
             RectDraw(
                 x = sl, y = st, w = sr - sl, h = sb - st,
@@ -3480,6 +3657,10 @@ public class SkWebGpuDevice(
                 b = SkColorGetB(color) / 255f,
                 a = SkColorGetA(color) / 255f,
                 mode = paint.blendMode,
+                clipKind = clipKind,
+                clipShapeBounds = clipBounds,
+                clipShapeRx = clipRx,
+                clipShapeRy = clipRy,
             ),
         )
     }
@@ -3624,6 +3805,13 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
+        // G2.x -- only solid-colour drawRect-fill consumes the active
+        // analytical clip shape today. drawPath has many sub-branches
+        // (gradients, bitmap shader, stencil-and-cover, AA polygon, ...)
+        // none of which carry the clipShape uniform yet, so refuse the
+        // draw rather than silently painting outside the curved clip.
+        // Plain rect shapes (handled by the scissor anyway) pass through.
+        requireClipShapeHonoured("drawPath")
         // G4.1 / G4.1.1 — linear gradient fill of an axis-aligned rect
         // routes through the dedicated gradient pipeline, for all 4
         // SkTileMode values. SkCanvas sends shaded rect draws here (the
@@ -4722,6 +4910,11 @@ public class SkWebGpuDevice(
         constraint: SrcRectConstraint,
         clip: SkIRect,
     ) {
+        // G2.x -- the bitmap-shader pipeline doesn't read the analytical
+        // clip-shape uniform yet, so refuse curved clipPath under
+        // drawImageRect (matches the pre-G2.x bindClip throw on aaClip
+        // for non-raster devices). Rect-shape clip falls through.
+        requireClipShapeHonoured("drawImageRect")
         // kClamp is the default tile mode for the SkCanvas.drawImageRect
         // contract -- the SrcRectConstraint distinction (kStrict vs kFast)
         // is a sub-pixel filter-overflow tweak ; both treat out-of-src
@@ -5659,16 +5852,22 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.rectDraw",
             ),
         )
-        // Layout : color (4) + outerBounds (4) + innerBounds (4) = 48 bytes.
-        // Matches `Uniforms { color, outerBounds, innerBounds }` in
-        // solid_color.wgsl. innerBounds is degenerate for fill draws so
-        // `inner_cov` collapses to 0 in the shader.
+        // Layout : color (4) + outerBounds (4) + innerBounds (4) +
+        //          clipShapeBounds (4) + clipShapeRadiiKind (4) = 80 bytes.
+        // Matches `Uniforms { color, outerBounds, innerBounds,
+        // clipShapeBounds, clipShapeRadiiKind }` in solid_color.wgsl.
+        // For draws without an analytical clip shape, `clipKind = 0`
+        // skips the modulation step in the shader and the trailing
+        // bytes are unread (zeroes are fine).
         context.queue.writeBuffer(
             buf, 0uL,
             ArrayBuffer.of(floatArrayOf(
                 d.r, d.g, d.b, d.a,
                 d.ol, d.ot, d.or, d.ob,
                 d.il, d.it, d.ir, d.ib,
+                d.clipShapeBounds[0], d.clipShapeBounds[1],
+                d.clipShapeBounds[2], d.clipShapeBounds[3],
+                d.clipShapeRx, d.clipShapeRy, d.clipKind, 0f,
             )),
         )
         val bindGroup = context.device.createBindGroup(
@@ -6673,11 +6872,26 @@ public class SkWebGpuDevice(
     private companion object {
         /**
          * Size of the rect per-draw uniform :
-         *   color (16) + outerBounds (16) + innerBounds (16) = 48 bytes.
+         *   color (16) + outerBounds (16) + innerBounds (16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 80 bytes.
          * G3.1.1 bumped from 32 to 48 to carry the optional annular
-         * inner-rect bounds (degenerate for fill draws).
+         * inner-rect bounds (degenerate for fill draws). G2.x extended
+         * to 80 bytes to carry the optional analytical clip-shape
+         * (kClipKind = 0 means "no shape clip", existing behaviour).
          */
-        const val RECT_UNIFORM_SIZE: ULong = 48uL
+        const val RECT_UNIFORM_SIZE: ULong = 80uL
+        /**
+         * G2.x -- clip-shape kind packed into the third float of
+         * `clipShapeRadiiKind` in the rect uniform. 0 means "no shape
+         * clip" (the legacy behaviour ; the integer scissor is the only
+         * clip), 1 means "rrect-style shape" with `clipShapeBounds` +
+         * `(rx, ry)` (subsumes oval / circle by reduction to rrect with
+         * `rx = halfW, ry = halfH` for oval, `rx = ry = r` for circle).
+         */
+        const val CLIP_KIND_NONE: Float = 0f
+        const val CLIP_KIND_RRECT: Float = 1f
+        /** Zero-filled placeholder rect bounds for [CLIP_KIND_NONE] uniform packing. */
+        val ZERO_RECT4: FloatArray = floatArrayOf(0f, 0f, 0f, 0f)
         /**
          * Sentinel value for degenerate inner bounds (fill draws). The
          * shader's `clamp(min(p+1, r) - max(p, l), 0, 1)` naturally
