@@ -175,12 +175,13 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
 
     /**
      * Bookkeeping for an active offscreen layer. On `restore` of the
-     * matching state, the layer's bitmap is composited back into
-     * [parentDevice] at `(originX, originY)` using [paint] (alpha and
-     * SrcOver — full blend modes are out of scope).
+     * matching state, the layer's device is composited back into
+     * [parentDevice] at `(originX, originY)` using [paint] (alpha +
+     * blendMode honoured ; colour filter / image filter are CPU-only
+     * for now — see Phase G-saveLayer).
      */
     private data class Layer(
-        val parentDevice: SkBitmapDevice,
+        val parentDevice: SkDevice,
         val originX: Int,
         val originY: Int,
         val paint: SkPaint?,
@@ -287,10 +288,17 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         // snapshot the layer to an SkImage, apply the filter, and
         // composite the filtered result onto the parent device with
         // the offset adjusted for the filter's displacement.
+        //
+        // Image-filter restore is raster-only ; the snapshot + filter
+        // re-upload pipeline runs in CPU. GPU backends fall through
+        // to the generic `compositeFrom` path below (the layer's
+        // paint loses its imageFilter — visual diff documented as a
+        // deferred Phase G-imageFilter follow-up).
         val layerPaint = layer.paint
         val imageFilter = layerPaint?.imageFilter
-        if (imageFilter != null) {
-            val poppedBitmap = popped.device.requireBitmap("restore-imageFilter-snapshot").bitmap
+        val poppedBitmap = (popped.device as? SkBitmapDevice)?.bitmap
+        val parentBitmap = (layer.parentDevice as? SkBitmapDevice)
+        if (imageFilter != null && poppedBitmap != null && parentBitmap != null) {
             val snapshot = poppedBitmap.asImage()
             val filterResult = imageFilter.filterImage(snapshot, top.matrix)
             val filteredImg = filterResult.image
@@ -305,7 +313,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             }
             val filteredDevice = SkBitmapDevice(filteredBitmap)
             val proxyPaint = layerPaint.copy().apply { this.imageFilter = null }
-            layer.parentDevice.compositeFrom(
+            parentBitmap.compositeFrom(
                 filteredDevice,
                 layer.originX + filterResult.offsetX,
                 layer.originY + filterResult.offsetY,
@@ -316,7 +324,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         }
 
         layer.parentDevice.compositeFrom(
-            popped.device.requireBitmap("restore-composite"),
+            popped.device,
             layer.originX,
             layer.originY,
             top.clip,
@@ -2142,13 +2150,13 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             return stack.size - 2
         }
 
-        // Inherit the parent's `colorType` so multi-layer composition stays
-        // in the same precision regime — under an F16 root, layers are F16
-        // too; otherwise both sides remain 8888.
-        val sBitmap = s.device.requireBitmap("saveLayer-parent").bitmap
-        val layerBitmap = SkBitmap(w, h, sBitmap.colorSpace, sBitmap.colorType)
-            .also { it.eraseColor(0) }
-        val layerDevice = SkBitmapDevice(layerBitmap)
+        // Phase G-saveLayer — delegate layer-device construction to the
+        // backend so GPU canvases get a GPU-backed layer (raster stays
+        // on `SkBitmapDevice`, GPU returns a child `SkWebGpuDevice`).
+        // The backend is responsible for matching colour profile /
+        // precision so the parent ↔ layer composite at `restore()`
+        // doesn't introduce an extra colour-space conversion.
+        val layerDevice = s.device.makeLayerDevice(w, h)
         val originX = layerBounds.left
         val originY = layerBounds.top
 
@@ -2157,12 +2165,21 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         // pixels in the device-space layer bbox, runs them through the
         // image filter, and pastes the (possibly displaced + resized)
         // result back into the layer at the correct origin.
+        //
+        // Backdrop seeding is raster-only — it walks parent pixels via
+        // [SkBitmap.getPixel]. GPU canvases ignore the backdrop (a
+        // documented deferred follow-up ; no in-scope GM exercises a
+        // GPU-side backdrop today).
         if (backdrop != null) {
-            seedLayerFromBackdrop(
-                s.device.requireBitmap("saveLayer-backdrop"), layerDevice,
-                originX, originY, w, h, backdrop, s.matrix,
-                scaleFactor = rec.scaleFactor,
-            )
+            val parentBitmap = s.device as? SkBitmapDevice
+            val layerBitmapDevice = layerDevice as? SkBitmapDevice
+            if (parentBitmap != null && layerBitmapDevice != null) {
+                seedLayerFromBackdrop(
+                    parentBitmap, layerBitmapDevice,
+                    originX, originY, w, h, backdrop, s.matrix,
+                    scaleFactor = rec.scaleFactor,
+                )
+            }
         }
 
         // Layer-local CTM: the parent matrix post-translated by `-origin`,
@@ -2181,7 +2198,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                 minOf(h, s.clip.bottom - originY),
             ),
             device = layerDevice,
-            layer = Layer(s.device.requireBitmap("saveLayer-Layer"), originX, originY, paint),
+            layer = Layer(s.device, originX, originY, paint),
         )
         stack.addLast(newState)
         return stack.size - 2
