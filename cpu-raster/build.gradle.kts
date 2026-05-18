@@ -1,5 +1,11 @@
+import java.net.URL
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
+    // G7.2 — Dokka GFM doc generation for :cpu-raster (CPU
+    // rasterization core). See :math/build.gradle.kts for the
+    // reference setup.
+    id("org.jetbrains.dokka") version "2.2.0"
 }
 
 dependencies {
@@ -23,6 +29,10 @@ dependencies {
     // fixtures from a JSON resource. jackson-databind is the
     // standard mature JSON parser ; only the harness imports it.
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.16.1")
+
+    // G7.2 — GFM (GitHub-Flavored Markdown) renderer scoped to
+    // `:cpu-raster:dokkaGfm` only.
+    dokkaGfmPlugin("org.jetbrains.dokka:gfm-plugin:2.2.0")
 }
 
 sourceSets {
@@ -38,4 +48,18 @@ sourceSets {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+}
+
+// G7.2 — Dokka GFM config. See :math/build.gradle.kts for the
+// reference setup.
+tasks.dokkaGfm {
+    moduleName.set("cpu-raster")
+    dokkaSourceSets.named("main") {
+        includes.from("module.md")
+        sourceLink {
+            localDirectory.set(file("src/main/kotlin"))
+            remoteUrl.set(URL("https://github.com/ygdrasil-io/kanvas/blob/master/cpu-raster/src/main/kotlin"))
+            remoteLineSuffix.set("#L")
+        }
+    }
 }

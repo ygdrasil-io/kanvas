@@ -11,8 +11,13 @@
 // binary cost (~50 MB Metal/Vulkan/DX) until they explicitly opt in
 // by depending on this module.
 
+import java.net.URL
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
+    // G7.2 — Dokka GFM doc generation for :gpu-raster (WebGPU GPU
+    // pipeline). See :math/build.gradle.kts for the reference setup.
+    id("org.jetbrains.dokka") version "2.2.0"
 }
 
 dependencies {
@@ -47,6 +52,10 @@ dependencies {
     testImplementation(project(":skia-integration-tests"))
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
+
+    // G7.2 — GFM (GitHub-Flavored Markdown) renderer scoped to
+    // `:gpu-raster:dokkaGfm` only.
+    dokkaGfmPlugin("org.jetbrains.dokka:gfm-plugin:2.2.0")
 }
 
 sourceSets {
@@ -86,5 +95,19 @@ tasks.withType<Test> {
     )
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
+    }
+}
+
+// G7.2 — Dokka GFM config. See :math/build.gradle.kts for the
+// reference setup.
+tasks.dokkaGfm {
+    moduleName.set("gpu-raster")
+    dokkaSourceSets.named("main") {
+        includes.from("module.md")
+        sourceLink {
+            localDirectory.set(file("src/main/kotlin"))
+            remoteUrl.set(URL("https://github.com/ygdrasil-io/kanvas/blob/master/gpu-raster/src/main/kotlin"))
+            remoteLineSuffix.set("#L")
+        }
     }
 }

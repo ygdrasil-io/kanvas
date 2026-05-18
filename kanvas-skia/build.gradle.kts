@@ -1,5 +1,12 @@
+import java.net.URL
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
+    // G7.2 — Dokka GFM doc generation for :kanvas-skia (foundation
+    // types). Mirrors the :math setup (Dokka 2.2.0 V1 + gfm-plugin).
+    // The docs pipeline (Dokka GFM → post-process → MkDocs Material)
+    // lives in `.github/workflows/docs.yml` and `docs/scripts/`.
+    id("org.jetbrains.dokka") version "2.2.0"
 }
 
 
@@ -30,6 +37,10 @@ dependencies {
     // fixtures from a JSON resource. jackson-databind is the
     // standard mature JSON parser ; only the harness imports it.
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.16.1")
+
+    // G7.2 — GFM (GitHub-Flavored Markdown) renderer scoped to
+    // `:kanvas-skia:dokkaGfm` only. Same approach as `:math`.
+    dokkaGfmPlugin("org.jetbrains.dokka:gfm-plugin:2.2.0")
 }
 
 sourceSets {
@@ -69,5 +80,22 @@ tasks.withType<Test> {
     )
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
+    }
+}
+
+// G7.2 — Dokka GFM config. See :math/build.gradle.kts for the
+// reference setup ; the post-processor in
+// `docs/scripts/postprocess_dokka_gfm.py` is module-agnostic and works
+// on whatever directory is passed to it (`docs/api/kanvas-skia` for
+// this module).
+tasks.dokkaGfm {
+    moduleName.set("kanvas-skia")
+    dokkaSourceSets.named("main") {
+        includes.from("module.md")
+        sourceLink {
+            localDirectory.set(file("src/main/kotlin"))
+            remoteUrl.set(URL("https://github.com/ygdrasil-io/kanvas/blob/master/kanvas-skia/src/main/kotlin"))
+            remoteLineSuffix.set("#L")
+        }
     }
 }

@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.PathInvFillGM
 
 /**
@@ -20,30 +18,6 @@ class PathInvFillWebGpuTest {
 
     @Test
     fun `PathInvFillGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = PathInvFillGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("pathinvfill")
-                ?: error("original-888/pathinvfill.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[PathInvFillWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "pathinvfill-gpu")
-            val floor = 99.45
-            assertTrue(
-                cmp.similarity >= floor,
-                "PathInvFillGM regressed below floor : ${cmp.similarity}% < $floor%. " +
-                    "See build/debug-images/pathinvfill-gpu.png.",
-            )
-        }
+        runGpuCrossTest(PathInvFillGM(), floor = 99.45)
     }
 }
