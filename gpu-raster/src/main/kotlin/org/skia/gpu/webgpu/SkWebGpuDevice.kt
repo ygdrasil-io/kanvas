@@ -539,11 +539,12 @@ public class SkWebGpuDevice(
      *    same chain as the focal-inside dispatch. `gradientMatrix` for
      *    kStrip is the `MapToUnitX` matrix (puts c0 at origin, c1 at
      *    (1, 0)).
-     *  - `stripP0 = r0 * r0` : the strip's quadratic-disc constant.
-     *    Mirrors the value cached on the CPU by
-     *    [SkConicalGradient.getStripP0]. NB : upstream computes
-     *    `r0 / centerX1` first, but the Kotlin CPU port stores the
-     *    unscaled `r0^2` ; GPU stays in lockstep with the CPU.
+     *  - `stripP0 = (r0 / centerX1)^2` : the strip's quadratic-disc
+     *    constant, with `centerX1 = |c1 - c0|`. Mirrors the value cached
+     *    on the CPU by [SkConicalGradient.getStripP0], which matches
+     *    upstream's `scaledR0 = fRadius1 / getCenterX1()` (see
+     *    SkConicalGradient.cpp::appendGradientStages). GPU stays in
+     *    lockstep with the CPU.
      *
      * Mirrors [SkConicalGradient.computeT]'s kStrip branch byte-for-byte
      * (formula `t = x + sqrt(fP0 - y*y)`, with `disc < 0` producing
