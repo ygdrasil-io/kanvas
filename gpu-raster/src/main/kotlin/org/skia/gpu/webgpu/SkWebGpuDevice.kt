@@ -689,6 +689,14 @@ public class SkWebGpuDevice(
      * Inherited `r/g/b/a` carry the paint's solid colour (placeholder ;
      * the fragment shader sources colour from the texture, the rgba
      * channels are kept for the [PendingDraw] interface contract).
+     *
+     * G5.3 -- [csMode] selects the shader's colorspace-transform branch
+     * (`0 = identity / sRGB fast path`, `1 = sRGB EOTF -> matrix -> sRGB
+     * OETF`). [csMatrix] is the column-major 3x3 primaries matrix from
+     * source-linear to sRGB-linear ; for `csMode == 0` the host passes
+     * the identity so the multiply is a no-op even if the shader were
+     * to take the transform branch. The matrix is computed once per
+     * image via [bitmapColorSpaceFor].
      */
     private data class ImageRectDraw(
         val texture: GPUTexture,
@@ -699,6 +707,8 @@ public class SkWebGpuDevice(
         val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
         val filter: SkFilterMode,
         val tile: SkTileMode,
+        val csMode: Int,
+        val csMatrix: FloatArray,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
     ) : PendingDraw
@@ -1204,6 +1214,61 @@ public class SkWebGpuDevice(
     private val imageTextureCache: MutableMap<SkImage, GPUTexture> = java.util.IdentityHashMap()
 
     /**
+     * G5.3 -- compute the (mode, matrix) tuple the bitmap shader needs
+     * to lift a sample of [image] into the intermediate target's
+     * sRGB-coded working space.
+     *
+     * The intermediate target convention is **premul sRGB-coded** (sRGB
+     * primaries, sRGB OETF -- see [intermediateTexture] kdoc). When
+     * [image]'s colorSpace is sRGB the pipeline reduces to identity ;
+     * we route the existing fast path (`mode = 0`, identity matrix).
+     *
+     * For other colorspaces we build the canonical CPU xform via
+     * [SkColorSpaceXformSteps] from `image.colorSpace -> sRGB` (both
+     * unpremul, since the texture upload keeps the source convention
+     * and the shader's premul step happens after the colorspace
+     * transform). Three cases are supported by the shader's
+     * `CS_MODE_SRGB_TF_MATRIX` branch :
+     *  - The source TF is the sRGB TF (Display P3 falls here -- it
+     *    shares the sRGB curve, only the primaries matrix differs).
+     *  - The destination TF is the sRGB TF (always true ; the working
+     *    space encodes via sRGB OETF).
+     *  - The gamut transform is exactly the matrix we ship to the
+     *    shader (column-major 3x3, scaleFactor = 1 because no HDR).
+     *
+     * Any other source colorspace (linear Rec.2020, Adobe RGB, PQ /
+     * HLG, ...) returns `mode = 0` -- the existing as-uploaded sRGB
+     * fast path -- with a kdoc warning. Wiring those up means adding
+     * a TF-coefficient slot to the uniform, which is out of scope
+     * for G5.3.
+     */
+    private fun bitmapColorSpaceFor(image: SkImage): Pair<Int, FloatArray> {
+        val cs = image.colorSpace
+        val dst = org.skia.foundation.SkColorSpace.makeSRGB()
+        if (cs.hash() == dst.hash()) {
+            return 0 to IDENTITY_CS_MATRIX
+        }
+        // Only the sRGB-TF + non-sRGB-gamut case is wired up. Detect by
+        // hashing the TF against sRGB's TF hash : same TF means we can
+        // reuse the shader's hardcoded sRGB EOTF / OETF and only ship
+        // the primaries matrix.
+        val srgbTfHash = dst.transferFnHash
+        if (cs.transferFnHash != srgbTfHash) {
+            return 0 to IDENTITY_CS_MATRIX
+        }
+        val steps = org.skia.core.SkColorSpaceXformSteps(
+            cs, org.skia.core.SkAlphaType.kUnpremul,
+            dst, org.skia.core.SkAlphaType.kUnpremul,
+        )
+        if (steps.flags.isIdentity) {
+            return 0 to IDENTITY_CS_MATRIX
+        }
+        // The xform steps' matrix is column-major already (see KDoc on
+        // `SkColorSpaceXformSteps.srcToDstMatrix`) ; copy it verbatim.
+        return 1 to steps.srcToDstMatrix.copyOf()
+    }
+
+    /**
      * Upload [image]'s 8888 pixels into a fresh `RGBA8Unorm` GPU texture
      * (or return the cached texture if [image] has already been uploaded).
      *
@@ -1212,9 +1277,10 @@ public class SkWebGpuDevice(
      * texture expects R, G, B, A in that byte order. We unpack each
      * pixel into a `ByteArray` once, then upload via
      * `queue.writeTexture`. The texture is uploaded **unpremultiplied,
-     * sRGB-encoded** -- the bitmap-shader fragment stage premultiplies
-     * after the bilinear sample (so the lerp itself runs on unpremul
-     * values, matching `SkBitmapShader.sampleLinear` on the raster side).
+     * source-encoded** -- the bitmap-shader fragment stage applies the
+     * colorspace transform (G5.3) then premultiplies after the
+     * bilinear sample (so the lerp itself runs on unpremul values,
+     * matching `SkBitmapShader.sampleLinear` on the raster side).
      */
     private fun imageTextureFor(image: SkImage): GPUTexture =
         imageTextureCache.getOrPut(image) {
@@ -3870,6 +3936,7 @@ public class SkWebGpuDevice(
         if (ix0 >= ix1 || iy0 >= iy1) return
 
         val texture = imageTextureFor(image)
+        val (csMode, csMatrix) = bitmapColorSpaceFor(image)
 
         // Paint colour scale : alpha (and future colour filter) multiplies
         // the sampled texel. Default = (1, 1, 1, 1) when paint is null.
@@ -3888,6 +3955,8 @@ public class SkWebGpuDevice(
                 paintR = paintAlpha, paintG = paintAlpha, paintB = paintAlpha, paintA = paintAlpha,
                 filter = sampling.filter,
                 tile = tile,
+                csMode = csMode,
+                csMatrix = csMatrix,
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
                 mode = mode,
             ),
@@ -4895,17 +4964,27 @@ public class SkWebGpuDevice(
             ),
         )
         // Layout matches `bitmap_shader.wgsl` :
-        //   offset  0 : srcRect    (vec4f -- l, t, r, b in image-pixel coords)
-        //   offset 16 : dstRect    (vec4f -- l, t, r, b in device-pixel coords)
-        //   offset 32 : imageSize  (vec4f -- w, h, tileFlag (bit-reinterp u32), _)
-        //   offset 48 : paintColor (vec4f -- premul tint, default (1, 1, 1, 1))
-        // Total = 64 bytes.
+        //   offset   0 : srcRect    (vec4f -- l, t, r, b in image-pixel coords)
+        //   offset  16 : dstRect    (vec4f -- l, t, r, b in device-pixel coords)
+        //   offset  32 : imageSize  (vec4f -- w, h, tileFlag (bit-reinterp u32), _)
+        //   offset  48 : paintColor (vec4f -- premul tint, default (1, 1, 1, 1))
+        //   offset  64 : csFlags    (vec4f -- .x = csMode bit-reinterp u32 ; G5.3)
+        //   offset  80 : csMatrix   (mat3x3<f32>, std140 padded 3 * vec4 = 48 bytes ; G5.3)
+        // Total = 128 bytes.
         //
         // G5.1.1 -- `imageSize.z` carries the tile-mode ordinal as a
         // bit-reinterpreted f32 (same trick the gradient shaders use for
         // `stopCount` / `edgeCount`). The shader does `bitcast<u32>(.z)`
         // and only branches on kDecal ; the other 3 tile modes are
         // resolved by the sampler's addressMode.
+        //
+        // G5.3 -- `csFlags.x` carries the colorspace transform mode
+        // (`0 = identity` / `1 = sRGB-TF + matrix`) bit-reinterpreted ;
+        // the shader's `bitcast<u32>` gates the transform branch.
+        // `csMatrix` is column-major source-linear -> sRGB-linear ;
+        // WGSL std140 inserts 4 bytes of padding after each 3-float
+        // column, so we pack 3 columns of `(x, y, z, 0)` here.
+        val m = d.csMatrix
         context.queue.writeBuffer(
             uniform, 0uL,
             ArrayBuffer.of(floatArrayOf(
@@ -4914,6 +4993,10 @@ public class SkWebGpuDevice(
                 d.imageWidth.toFloat(), d.imageHeight.toFloat(),
                 Float.fromBits(d.tile.ordinal), 0f,
                 d.paintR, d.paintG, d.paintB, d.paintA,
+                Float.fromBits(d.csMode), 0f, 0f, 0f,
+                m[0], m[1], m[2], 0f,
+                m[3], m[4], m[5], 0f,
+                m[6], m[7], m[8], 0f,
             )),
         )
         val view = d.texture.createView()
@@ -5486,12 +5569,23 @@ public class SkWebGpuDevice(
          */
         const val CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 592uL
         /**
-         * G5.1 -- size of the bitmap-shader per-draw uniform :
-         *   srcRect (16) + dstRect (16) + imageSize (16) + paintColor (16) = 64 bytes.
-         * Matches `Uniforms { srcRect, dstRect, imageSize, paintColor }` in
-         * `bitmap_shader.wgsl`.
+         * G5.1 / G5.3 -- size of the bitmap-shader per-draw uniform :
+         *   srcRect (16) + dstRect (16) + imageSize (16) + paintColor (16) +
+         *   csFlags (16) + csMatrix (mat3x3 -> 3 * 16 = 48) = 128 bytes.
+         * Matches `Uniforms { srcRect, dstRect, imageSize, paintColor,
+         * csFlags, csMatrix }` in `bitmap_shader.wgsl`. WGSL std140
+         * stores each `mat3x3<f32>` column padded to 16 bytes, hence
+         * the 48 bytes for the 9 floats of the primaries matrix.
          */
-        const val IMAGE_RECT_UNIFORM_SIZE: ULong = 64uL
+        const val IMAGE_RECT_UNIFORM_SIZE: ULong = 128uL
+        /**
+         * G5.3 -- identity column-major 3x3 used as the no-op
+         * primaries matrix when [bitmapColorSpaceFor] returns the sRGB
+         * fast path. Shared across all draws to avoid re-allocating
+         * a fresh FloatArray per [ImageRectDraw].
+         */
+        val IDENTITY_CS_MATRIX: FloatArray =
+            floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
         /**
          * G4.1.2 -- size of the AA stencil-cover gradient per-draw uniform :
          *   color (16) + viewport (16) + startEnd (16) + countPad (16) +
