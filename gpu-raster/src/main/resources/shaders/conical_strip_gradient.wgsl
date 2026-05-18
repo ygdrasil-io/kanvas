@@ -10,10 +10,13 @@
 // kStrip branch. After applying the precomputed `gradientMatrix`
 // (which maps source space such that c0 -> (0, 0) and c1 -> (1, 0)),
 // the formula is :
-//   disc = fP0 - y*y       with fP0 = r0 * r0 (NB : upstream computes
-//                          r0 / centerX1 first ; the Kotlin port stores
-//                          the un-scaled r0^2 -- the GPU stays in lock-
-//                          step with the CPU port via getStripP0()).
+//   disc = fP0 - y*y       with fP0 = (r0 / centerX1)^2 where
+//                          centerX1 = |c1 - c0| is the un-mapped centre
+//                          distance ; matches upstream's
+//                          `scaledR0 = fRadius1 / getCenterX1()` then
+//                          `ctx->fP0 = scaledR0 * scaledR0` (see
+//                          SkConicalGradient.cpp::appendGradientStages).
+//                          The GPU pulls this value via getStripP0().
 //   t    = x + sqrt(disc)  iff disc >= 0
 // When `disc < 0` the pixel is outside the strip ; CPU returns
 // `Float.NaN` -> caller paints transparent black under all tile modes
@@ -49,7 +52,7 @@ struct Uniforms {
     //   row1 = (m10, m11, m12, _)  // y' = m10*x + m11*y + m12
     affineRow0: vec4f,      // offset 16
     affineRow1: vec4f,      // offset 32
-    // Strip scalars : (fP0 = r0*r0, _, count_bits, _)
+    // Strip scalars : (fP0 = (r0/centerX1)^2, _, count_bits, _)
     //   count_bits = u32 stop count bit-reinterpreted as f32.
     stripScalars: vec4f,    // offset 48
     // Stop positions in [0, 1]. Only first `count` entries are valid.

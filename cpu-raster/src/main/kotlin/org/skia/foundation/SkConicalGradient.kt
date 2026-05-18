@@ -100,12 +100,14 @@ public class SkConicalGradient internal constructor(
     public fun getFocalData(): FocalData? = focalData
 
     /**
-     * kStrip pre-computed parameter `fP0` (i.e. `r0^2` in the conical
-     * frame). Used by the GPU kStrip pipeline (G4.4.4) to evaluate
-     * `t = x + sqrt(fP0 - y*y)` per pixel after applying
-     * [gradientMatrix]. Returns `0f` for non-kStrip sub-types ; callers
-     * should gate on [getType] first. Mirrors the value cached at
-     * construction time and consumed by the kStrip branch of [computeT].
+     * kStrip pre-computed parameter `fP0` (i.e. `(r0 / centerX1)^2` in
+     * the conical frame, where `centerX1 = |c1 - c0|`). Used by the GPU
+     * kStrip pipeline (G4.4.4) to evaluate `t = x + sqrt(fP0 - y*y)` per
+     * pixel after applying [gradientMatrix]. Returns `0f` for non-kStrip
+     * sub-types ; callers should gate on [getType] first. Mirrors the
+     * value cached at construction time and consumed by the kStrip
+     * branch of [computeT]. Matches upstream's
+     * `SkConicalGradient::appendGradientStages` strip context.
      */
     public fun getStripP0(): Float = stripP0
 
@@ -125,7 +127,12 @@ public class SkConicalGradient internal constructor(
     private val radialBias: Float
 
     // ─── kStrip pre-computes ──────────────────────────────────────────
-    /** `(r0 / |c1.x|)²` — the `fP0` of upstream's strip context. */
+    /** `(r0 / centerX1)²` — the `fP0` of upstream's strip context, where
+     *  `centerX1 = |c1 - c0|` is the un-mapped centre-to-centre distance
+     *  (matches `SkConicalGradient::getCenterX1()`). The `MapToUnitX`
+     *  gradient matrix scales the mapped y by `1/centerX1`, so the strip
+     *  half-width must be rescaled the same way to make `fP0 - y*y` line
+     *  up dimensionally. */
     private val stripP0: Float
 
     init {
@@ -140,11 +147,20 @@ public class SkConicalGradient internal constructor(
         }
 
         if (type == Type.kStrip) {
-            // Upstream's `getCenterX1()` returns the x-coordinate of the second
-            // center *after* `MapToUnitX` mapping (which puts c0 at origin and
-            // c1 at (1, 0)). So the divisor is always 1 in the mapped frame.
-            // Refer to `SkConicalGradient::getCenterX1()`.
-            val scaledR0 = r0  // since centerX1 = 1 in mapped frame
+            // Upstream's `getCenterX1()` returns `SkPoint::Distance(fCenter1,
+            // fCenter2)` -- i.e. the centre-to-centre distance in the *input*
+            // (un-mapped) frame, NOT the post-`MapToUnitX` frame (which would
+            // always be 1). The strip raster-pipeline op consumes the mapped
+            // y in unit-length increments (because `MapToUnitX` divides by the
+            // centre distance), so the discriminant `fP0 - y*y` must compare
+            // against `(r0 / centerX1)^2` to recover the correct half-width.
+            // Refer to `src/shaders/gradients/SkConicalGradient.cpp` :
+            //   SkScalar scaledR0 = fRadius1 / this->getCenterX1();
+            //   ctx->fP0 = scaledR0 * scaledR0;
+            val dx = c1.fX - c0.fX
+            val dy = c1.fY - c0.fY
+            val centerX1 = sqrt(dx * dx + dy * dy)
+            val scaledR0 = r0 / centerX1
             stripP0 = scaledR0 * scaledR0
         } else {
             stripP0 = 0f
