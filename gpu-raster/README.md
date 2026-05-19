@@ -175,6 +175,35 @@ The CI matrix in [`.github/workflows/test.yml`](../.github/workflows/test.yml) s
 
 ---
 
+## Benchmarks
+
+The benchmark suite under [`src/test/kotlin/.../benchmarks/`](src/test/kotlin/org/skia/gpu/webgpu/benchmarks/) ships a JMH-style methodology for the CPU vs GPU comparison and a phase decomposition that drives the G8 trigger evaluation. Run with :
+
+```bash
+./gradlew :gpu-raster:test --tests "*PathHeavyBenchmark*"
+```
+
+### Methodology
+
+- **5 warmup + 3 cold + 10 steady iterations** per `(GM, backend)` pair. Mirrors JMH's `@Warmup(5) @Measurement(10) AverageTime` defaults ; cold + steady are reported separately so the pipeline-cache transient is visible.
+- **Single-JVM, no multi-fork**. We do not pull in `me.champeau.jmh` because (a) the macOS GLFW thread-0 constraint requires `-XstartOnFirstThread` on every JMH fork, (b) the JMH plugin's `jmh` source set does not extend `test` so the cross-test GMs + `WebGpuSink` would need to be duplicated or moved out of `src/test/kotlin/`. Multi-fork JIT washout is the one JMH guarantee we don't reproduce ; we report stddev + relative error so a noisy run is visible.
+- **6 GMs covering 4 workload classes** : path-heavy (`ConvexPathsGM`, `ConicPathsGM`, `HairlinesGM`), path-light control (`BigRectGM`), gradient (`ShallowGradientLinearGM`), bitmap (`DrawBitmapRect3`).
+- **Per-phase decomposition** : every iteration captures `(setup, tessellate, submit, readback, similarity)` nanos. The CPU column has `tessellate = 0` (folded into submit) and `readback = 0` (bitmap already in heap memory). The GPU column has `readback = 0` because flush + readback are bundled in `SkWebGpuDevice.flush()` ; submit bears the full cost.
+
+### Outputs
+
+- `build/bench/results.json` — JMH-flavoured JSON with per-phase `min / avg / median / p95 / stddev / relErr%` for every `(GM, backend, cold|steady)` cell. Reproducibility metadata (date, commit SHA, JVM, OS, GPU adapter, JVM args) embedded at the top.
+- `build/bench/summary.md` — markdown-shaped summary printed to stdout + written to disk. Includes the G8 trigger verdict block.
+- `build/bench-baseline.txt` — same payload as `summary.md`, kept at the legacy path so tooling pinned to the pre-G7.x output location still finds it.
+
+### G8 trigger semantics
+
+The G8 (compute-shader path tessellation) migration is gated on at least one path-heavy GM showing `tessellate ≥ 30 % of render time` (where render = tessellate + submit + readback, excluding setup and similarity which are harness phases). The `% of render` ratio is what the verdict block reads ; `% of total` is reported informationally but is diluted by the similarity-check phase.
+
+The current measurement (Apple M2 Max, JDK 25) lands the highest path-heavy tessellate ratio at ~14 % (`ConvexPathsGM`) — below the trigger, indicating CPU-side fan tessellation is not the dominant phase on the GPU pipeline. The `submit` bucket (encoder build + `queue.submit` + GPU exec + readback) dominates at the current GM sizes.
+
+---
+
 ## Deferred items
 
 Tracked in [MIGRATION_PLAN_GPU_WEBGPU.md](../MIGRATION_PLAN_GPU_WEBGPU.md), surfaced here for quick orientation :
@@ -183,4 +212,4 @@ Tracked in [MIGRATION_PLAN_GPU_WEBGPU.md](../MIGRATION_PLAN_GPU_WEBGPU.md), surf
 - **`PathEffect`** (dash, corner, ...) — CPU-only ; the path arrives at `SkWebGpuDevice.drawPath` already-flattened on the raster side but no GPU-side wiring exists.
 - **`ImageFilter` UV-remap variants** — only `Blur` on `saveLayer` is wired today. Offset / Matrix-transform / Compose / DropShadow / DisplacementMap fall back to the unfiltered path.
 - **`MaskFilter` on shaded paints** — only flat-colour paints. Gradient or bitmap-shader paints with a `MaskFilter` fall back to the unfiltered shaded path.
-- **GPU compute tessellation (G8)** — current path tessellation runs on the CPU. The trigger for migrating to a compute pre-pass is a path-heavy GM showing a ≥ 2× headroom on the GPU vs CPU per-frame budget. Benchmarks landed alongside the G7 finalization PR baseline this comparison (`src/test/kotlin/.../benchmarks/`).
+- **GPU compute tessellation (G8)** — current path tessellation runs on the CPU. The G7.x benchmark methodology revision (this file's *Benchmarks* section) shows the tessellate phase below the 30 %-of-render trigger threshold on every path-heavy GM in scope. G8 is therefore **not justified by the current data** ; revisit when (a) larger path-heavy GMs enter the corpus, (b) the `submit` phase is split into encoder + GPU exec + readback so the actual GPU-side cost is visible, or (c) the readback path is removed (long-lived swapchain target).

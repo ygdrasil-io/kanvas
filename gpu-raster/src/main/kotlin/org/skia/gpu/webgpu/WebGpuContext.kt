@@ -36,6 +36,37 @@ public class WebGpuContext private constructor(
     public val device: GPUDevice get() = glfw.wgpuContext.device
     public val queue: GPUQueue get() = device.queue
 
+    /**
+     * Single-line summary of the WebGPU adapter backing this context.
+     * Format mirrors the diagnostic `println` in [createOrNull] :
+     * `vendor/device arch=… desc=…`. Returned for benchmark
+     * reproducibility metadata so the JSON report can record the GPU
+     * the timings were measured against.
+     *
+     * Best-effort : if the adapter info accessor throws (unlikely but
+     * the underlying wgpu4k surface may change), returns `null`.
+     */
+    public val adapterInfo: String?
+        get() = try {
+            val info = glfw.wgpuContext.adapter.info
+            // Skip empty vendor / arch / desc — on Apple Silicon
+            // wgpu4k 0.2.0 returns empty strings for vendor + arch +
+            // description ; the device alone (e.g. "Apple M2 Max")
+            // is the useful signal.
+            val parts = buildList {
+                if (info.vendor.isNotBlank()) add(info.vendor)
+                if (info.device.isNotBlank()) add(info.device)
+            }
+            val head = if (parts.isEmpty()) "unknown-adapter" else parts.joinToString("/")
+            val tail = buildList {
+                if (info.architecture.isNotBlank()) add("arch=${info.architecture}")
+                if (info.description.isNotBlank()) add("desc=${info.description}")
+            }
+            if (tail.isEmpty()) head else "$head ${tail.joinToString(" ")}"
+        } catch (_: Throwable) {
+            null
+        }
+
     override fun close() {
         glfw.close()
     }
