@@ -98,6 +98,18 @@
 // the colorspace layout contiguous ; total uniform size grows from
 // 128 to 192 bytes (32 for G5.3 csTfParams + 32 for G2.x clip slots).
 //
+// G5.2.2 (this slice) -- rotated / skewed bitmap shader. The host
+// always builds a 2x3 device-to-image affine `M^-1 = (ctm *
+// localMatrix)^-1` and ships it via `devToImageRow0` / `devToImageRow1`
+// (offsets 192 / 208). The fragment stage computes
+//   sx = m0.x * pos.x + m0.y * pos.y + m0.z
+//   sy = m1.x * pos.x + m1.y * pos.y + m1.z
+// directly, then divides by imageSize for the UV. This unifies the
+// axis-aligned and rotated/skewed paths : the legacy `srcRect/dstRect`
+// pair is preserved in the uniform layout (it still drives the host-
+// side scissor rounding) but is no longer read by the fragment stage.
+// Total uniform size grows from 192 to 224 bytes (+32 for the affine).
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {
@@ -149,6 +161,12 @@ struct Uniforms {
     // layout stays contiguous (G2.x sits at offsets 160/176).
     clipShapeBounds:    vec4f, // offset 160 : (l, t, r, b) device-px
     clipShapeRadiiKind: vec4f, // offset 176 : (rx, ry, clipKind, _)
+    // G5.2.2 -- 2x3 device-to-image affine `M^-1 = (ctm * localMatrix)^-1`.
+    // Each row stored as (sx, kx, tx, _) / (ky, sy, ty, _). The shader
+    // applies it directly to the fragment center to derive image-space
+    // coords, replacing the legacy `srcRect / dstRect` rect-affine.
+    devToImageRow0:     vec4f, // offset 192 : (sx, kx, tx, _)
+    devToImageRow1:     vec4f, // offset 208 : (ky, sy, ty, _)
 };
 
 // Tile-mode constants -- mirror `SkTileMode` ordinals.
@@ -251,15 +269,19 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    // pos.xy is the pixel center (column p -> p + 0.5). Map back to
-    // source-image-pixel coords through the dst -> src affine.
-    let dst_w = uniforms.dstRect.z - uniforms.dstRect.x;
-    let dst_h = uniforms.dstRect.w - uniforms.dstRect.y;
-    let src_w = uniforms.srcRect.z - uniforms.srcRect.x;
-    let src_h = uniforms.srcRect.w - uniforms.srcRect.y;
-
-    let sx = uniforms.srcRect.x + (pos.x - uniforms.dstRect.x) * (src_w / dst_w);
-    let sy = uniforms.srcRect.y + (pos.y - uniforms.dstRect.y) * (src_h / dst_h);
+    // G5.2.2 -- map the fragment center back to image-pixel coords
+    // through the 2x3 device-to-image affine. The host computes
+    // `M^-1 = (ctm * localMatrix)^-1` (invertible affine ; non-singular
+    // factors are gated at the dispatch site, so the inverse always
+    // exists at the shader). The axis-aligned subset reduces to the
+    // legacy `srcRect / dstRect` rect-affine ; the rotated / skewed
+    // case slots in here without a branch.
+    let sx = uniforms.devToImageRow0.x * pos.x
+           + uniforms.devToImageRow0.y * pos.y
+           + uniforms.devToImageRow0.z;
+    let sy = uniforms.devToImageRow1.x * pos.x
+           + uniforms.devToImageRow1.y * pos.y
+           + uniforms.devToImageRow1.z;
 
     // Normalise to [0, 1] UV. Tile-mode handling is split between the
     // sampler (Clamp/Repeat/Mirror via addressModeU/V) and the shader
