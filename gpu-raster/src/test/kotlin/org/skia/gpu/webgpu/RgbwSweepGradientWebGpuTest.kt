@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.RgbwSweepGradientGM
 
 /**
@@ -19,29 +17,10 @@ class RgbwSweepGradientWebGpuTest {
 
     @Test
     fun `RgbwSweepGradientGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = RgbwSweepGradientGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("rgbw_sweep_gradient")
-                ?: error("original-888/rgbw_sweep_gradient.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[RgbwSweepGradientWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "rgbw_sweep_gradient-gpu")
-            val floor = 95.0
-            assertTrue(
-                cmp.similarity >= floor,
-                "RgbwSweepGradientGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        runGpuCrossTest(
+            RgbwSweepGradientGM(),
+            floor = 95.0,
+            logTag = "RgbwSweepGradientWebGpu",
+        )
     }
 }

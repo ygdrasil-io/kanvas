@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.BatchedConvexPathsGM
 
 /**
@@ -24,29 +22,10 @@ class BatchedConvexPathsWebGpuTest {
 
     @Test
     fun `BatchedConvexPathsGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = BatchedConvexPathsGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("batchedconvexpaths")
-                ?: error("original-888/batchedconvexpaths.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[BatchedConvexPathsWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "batchedconvexpaths-gpu")
-            val floor = 99.85
-            assertTrue(
-                cmp.similarity >= floor,
-                "BatchedConvexPathsGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        runGpuCrossTest(
+            BatchedConvexPathsGM(),
+            floor = 99.85,
+            logTag = "BatchedConvexPathsWebGpu",
+        )
     }
 }

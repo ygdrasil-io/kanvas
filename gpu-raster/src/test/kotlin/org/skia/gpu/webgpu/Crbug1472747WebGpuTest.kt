@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.Crbug1472747GM
 
 /**
@@ -19,30 +17,6 @@ class Crbug1472747WebGpuTest {
 
     @Test
     fun `Crbug1472747GM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = Crbug1472747GM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("crbug_1472747")
-                ?: error("original-888/crbug_1472747.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[Crbug1472747WebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "crbug_1472747-gpu")
-            val floor = 98.10
-            assertTrue(
-                cmp.similarity >= floor,
-                "Crbug1472747GM regressed below floor : ${cmp.similarity}% < $floor%. " +
-                    "See build/debug-images/crbug_1472747-gpu.png.",
-            )
-        }
+        runGpuCrossTest(Crbug1472747GM(), floor = 98.10, logTag = "Crbug1472747WebGpu")
     }
 }

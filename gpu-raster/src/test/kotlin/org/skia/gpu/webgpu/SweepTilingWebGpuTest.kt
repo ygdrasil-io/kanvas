@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.SweepTilingGM
 
 /**
@@ -22,32 +20,9 @@ class SweepTilingWebGpuTest {
 
     @Test
     fun `SweepTilingGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = SweepTilingGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("sweep_tiling")
-                ?: error("original-888/sweep_tiling.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[SweepTilingWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "sweep_tiling-gpu")
-            // Ratchet : observed 100.00 % byte-exact. Floor pinned at
-            // 99.95 % to absorb sub-LSB drift if future driver / pipeline
-            // changes shift the per-tile-mode lerp arithmetic.
-            val floor = 99.95
-            assertTrue(
-                cmp.similarity >= floor,
-                "SweepTilingGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        // Ratchet : observed 100.00 % byte-exact. Floor pinned at
+        // 99.95 % to absorb sub-LSB drift if future driver / pipeline
+        // changes shift the per-tile-mode lerp arithmetic.
+        runGpuCrossTest(SweepTilingGM(), floor = 99.95, logTag = "SweepTilingWebGpu")
     }
 }

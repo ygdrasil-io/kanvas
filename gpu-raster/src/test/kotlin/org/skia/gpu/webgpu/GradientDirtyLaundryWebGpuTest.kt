@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.GradientDirtyLaundryGM
 
 /**
@@ -21,33 +19,14 @@ class GradientDirtyLaundryWebGpuTest {
 
     @Test
     fun `GradientDirtyLaundryGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = GradientDirtyLaundryGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("gradient_dirty_laundry")
-                ?: error("original-888/gradient_dirty_laundry.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[GradientDirtyLaundryWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "gradient_dirty_laundry-gpu")
-            // Landing score 94.48%. Drift concentrated on the dense
-            // 40-stop sampler's per-stop lerp boundaries -- a few LSB
-            // of channel jitter per row leaves a couple of thousand
-            // pixels outside the textual tolerance band.
-            val floor = 94.40
-            assertTrue(
-                cmp.similarity >= floor,
-                "GradientDirtyLaundryGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        // Landing score 94.48%. Drift concentrated on the dense
+        // 40-stop sampler's per-stop lerp boundaries -- a few LSB
+        // of channel jitter per row leaves a couple of thousand
+        // pixels outside the textual tolerance band.
+        runGpuCrossTest(
+            GradientDirtyLaundryGM(),
+            floor = 94.40,
+            logTag = "GradientDirtyLaundryWebGpu",
+        )
     }
 }
