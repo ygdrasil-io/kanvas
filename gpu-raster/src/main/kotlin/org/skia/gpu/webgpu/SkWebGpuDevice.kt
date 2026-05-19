@@ -63,6 +63,8 @@ import org.skia.core.SkDevice
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmapShader
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.asBlendModeFilter
+import org.skia.foundation.asMatrixFilter
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
@@ -894,6 +896,27 @@ public class SkWebGpuDevice(
         val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /**
+         * Phase G-saveLayer-colorFilter -- packed colorFilter payload.
+         * Layout (matches `Uniforms` in `layer_composite.wgsl`) :
+         *
+         *   colorFilterKindMode (vec4f) : (kind, blendMode, _, _)
+         *     kind : 0 = none, 1 = SkBlendModeFilter, 2 = SkMatrixFilter.
+         *     blendMode : SkBlendMode ordinal (used only when kind == 1).
+         *   colorFilterParam0 (vec4f) :
+         *     kind == 1 -> constant src colour (premul RGBA).
+         *     kind == 2 -> matrix row 0 (R out coefs : rR, rG, rB, rA).
+         *   colorFilterParam1 (vec4f) : matrix row 1 (G out coefs).
+         *   colorFilterParam2 (vec4f) : matrix row 2 (B out coefs).
+         *   colorFilterParam3 (vec4f) : matrix row 3 (A out coefs).
+         *   colorFilterBias   (vec4f) : per-row bias (R, G, B, A).
+         *
+         * The whole payload is `null` when the layer paint has no
+         * colour filter (fast path -- the shader's `kind == 0` branch
+         * is a no-op and the uniform still ships zeros for the params
+         * so the bytes are deterministic).
+         */
+        val colorFilterPacked: FloatArray,
     ) : PendingDraw
 
     // ─── Bitmap shader on non-rect (G5.2.1) ─────────────────────────────
@@ -2995,11 +3018,18 @@ public class SkWebGpuDevice(
      *  - Blend mode outside the kClear / kSrc / kSrcOver / kDstOver
      *    subset errors out -- same gate as the scaffolding's
      *    [enqueueImageRectDrawInternal].
-     *  - Colour filter / image filter on [paint] are dropped here
-     *    (they're CPU-only ; the relevant filter lives on the [paint]
-     *    that the canvas hands us but the GPU composite pipeline has
-     *    no fragment-side colour-filter slot yet). Documented deferred
-     *    Phase G-saveLayer-colorFilter.
+     *  - **Colour filter** : honoured for the two upstream variants
+     *    the WGSL shader implements -- `SkColorFilters.Blend(colour,
+     *    mode)` and `SkColorFilters.Matrix(20 floats)`. Other variants
+     *    (compose, lerp, table, sRGB-gamma, luma, working-CS wrapper,
+     *    ...) silently fall through with the filter dropped -- same
+     *    behaviour as before, scoped follow-ups will widen this set
+     *    (Phase G-saveLayer-colorFilter-x). The supported blend modes
+     *    for the `Blend` variant are the 15 Porter-Duff modes the WGSL
+     *    `blend_premul` helper expresses (kClear...kScreen) ; the rest
+     *    fall back to identity in-shader.
+     *  - **Image filter** on [paint] is still dropped -- separate
+     *    follow-up (Phase G-saveLayer-imageFilter).
      */
     override fun compositeFrom(
         src: SkDevice,
@@ -3069,6 +3099,12 @@ public class SkWebGpuDevice(
         // multiply for premul sources).
         val paintAlpha = (paint?.alpha ?: 0xFF) / 255f
 
+        // Phase G-saveLayer-colorFilter -- inspect the paint's colour
+        // filter and pack the WGSL `Uniforms.colorFilter*` slots.
+        // Unsupported variants leave the payload at the identity
+        // (kind = 0) so the shader's fast path stays warm.
+        val colorFilterPacked = packLayerCompositeColorFilter(paint?.colorFilter)
+
         pending.add(
             LayerCompositeDraw(
                 layerView = gpuSrc.intermediateView,
@@ -3079,8 +3115,79 @@ public class SkWebGpuDevice(
                 paintB = paintAlpha, paintA = paintAlpha,
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
                 mode = mode,
+                colorFilterPacked = colorFilterPacked,
             ),
         )
+    }
+
+    /**
+     * Phase G-saveLayer-colorFilter -- pack the layer paint's colour
+     * filter into the 6-vec4f payload consumed by `layer_composite.wgsl`.
+     *
+     * Layout :
+     *   [ 0..3 ] colorFilterKindMode : (kind, blendMode, 0, 0)
+     *   [ 4..7 ] colorFilterParam0   : kind 1 -> premul colour ;
+     *                                  kind 2 -> matrix row 0
+     *   [ 8..11] colorFilterParam1   : matrix row 1
+     *   [12..15] colorFilterParam2   : matrix row 2
+     *   [16..19] colorFilterParam3   : matrix row 3
+     *   [20..23] colorFilterBias     : per-row bias (R, G, B, A)
+     *
+     * Returns a 24-element [FloatArray] zeroed at kind 0 for the
+     * identity / unsupported path. Supported variants :
+     *  - `SkColorFilters.Blend(colour, mode)` -> kind = 1. The constant
+     *    [SkColor] is decomposed to non-premul float RGBA and then
+     *    premultiplied in-shader-friendly form (R*A, G*A, B*A, A).
+     *  - `SkColorFilters.Matrix(20 floats)` -> kind = 2. The 20 row-
+     *    major floats are unpacked into 4 vec4f rows (4 coefficients
+     *    each) + a 1 vec4f bias (5th column per row).
+     *
+     * All other variants return the identity payload -- the shader
+     * fast-path through `kind == 0` makes the composite bit-iso with
+     * the no-filter case.
+     */
+    private fun packLayerCompositeColorFilter(filter: org.skia.foundation.SkColorFilter?): FloatArray {
+        val out = FloatArray(24) // 6 vec4f * 4 floats each.
+        if (filter == null) return out
+        val blendParams = filter.asBlendModeFilter()
+        if (blendParams != null) {
+            out[0] = 1f                                  // kind = 1
+            out[1] = blendParams.mode.ordinal.toFloat()  // SkBlendMode ordinal
+            val c = blendParams.colour
+            val ca = ((c ushr 24) and 0xFF) / 255f
+            val cr = ((c ushr 16) and 0xFF) / 255f
+            val cg = ((c ushr 8)  and 0xFF) / 255f
+            val cb = ((c       )  and 0xFF) / 255f
+            // Premul the constant colour -- the shader's blend operates
+            // on premul vec4fs, matching SkBlendColorFilter's CPU path.
+            out[4] = cr * ca
+            out[5] = cg * ca
+            out[6] = cb * ca
+            out[7] = ca
+            return out
+        }
+        val matrixParams = filter.asMatrixFilter()
+        if (matrixParams != null) {
+            out[0] = 2f // kind = 2
+            // matrix is row-major, 20 floats : 4 rows of (R, G, B, A
+            // coefs + bias). Pack each row's 4 coefs into a vec4f and
+            // the 4 biases into the shared bias vec4f.
+            val m = matrixParams.matrix
+            // Row 0 (R) -- coefs (m0..m3), bias m4.
+            out[4]  = m[0]; out[5]  = m[1]; out[6]  = m[2];  out[7]  = m[3]
+            // Row 1 (G) -- coefs (m5..m8), bias m9.
+            out[8]  = m[5]; out[9]  = m[6]; out[10] = m[7];  out[11] = m[8]
+            // Row 2 (B) -- coefs (m10..m13), bias m14.
+            out[12] = m[10]; out[13] = m[11]; out[14] = m[12]; out[15] = m[13]
+            // Row 3 (A) -- coefs (m15..m18), bias m19.
+            out[16] = m[15]; out[17] = m[16]; out[18] = m[17]; out[19] = m[18]
+            // Bias vec4f -- (R, G, B, A) biases (m4, m9, m14, m19).
+            out[20] = m[4]; out[21] = m[9]; out[22] = m[14]; out[23] = m[19]
+            return out
+        }
+        // Unsupported variant -- drop the filter, fall through to the
+        // no-filter composite path (matches the pre-slice behaviour).
+        return out
     }
 
     /**
@@ -6786,16 +6893,30 @@ public class SkWebGpuDevice(
             ),
         )
         // Layout matches `layer_composite.wgsl` :
-        //   offset  0 : dstOriginSize (vec4f -- x, y, layerW, layerH)
-        //   offset 16 : paintColor    (vec4f -- premul rgba modulation)
-        // Total = 32 bytes.
+        //   offset   0 : dstOriginSize       (vec4f -- x, y, layerW, layerH)
+        //   offset  16 : paintColor          (vec4f -- premul rgba modulation)
+        //   offset  32 : colorFilterKindMode (vec4f -- kind, mode, 0, 0)
+        //   offset  48 : colorFilterParam0   (vec4f -- premul colour OR matrix row 0)
+        //   offset  64 : colorFilterParam1   (vec4f -- matrix row 1)
+        //   offset  80 : colorFilterParam2   (vec4f -- matrix row 2)
+        //   offset  96 : colorFilterParam3   (vec4f -- matrix row 3)
+        //   offset 112 : colorFilterBias     (vec4f -- per-row bias)
+        // Total = 128 bytes. The colourFilter payload is zeroed when
+        // the layer paint has no filter -- the shader's `kind == 0`
+        // branch is a no-op, so the fast path stays bit-iso.
+        val packed = FloatArray(32) // 8 vec4f * 4 floats each.
+        packed[0] = d.dstOriginX.toFloat()
+        packed[1] = d.dstOriginY.toFloat()
+        packed[2] = d.layerWidth.toFloat()
+        packed[3] = d.layerHeight.toFloat()
+        packed[4] = d.paintR; packed[5] = d.paintG
+        packed[6] = d.paintB; packed[7] = d.paintA
+        // colorFilterPacked is laid out as 6 contiguous vec4f starting
+        // at vec4f index 2 (offset 32 bytes).
+        System.arraycopy(d.colorFilterPacked, 0, packed, 8, 24)
         context.queue.writeBuffer(
             uniform, 0uL,
-            ArrayBuffer.of(floatArrayOf(
-                d.dstOriginX.toFloat(), d.dstOriginY.toFloat(),
-                d.layerWidth.toFloat(), d.layerHeight.toFloat(),
-                d.paintR, d.paintG, d.paintB, d.paintA,
-            )),
+            ArrayBuffer.of(packed),
         )
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -7537,17 +7658,33 @@ public class SkWebGpuDevice(
          */
         const val IMAGE_RECT_UNIFORM_SIZE: ULong = 192uL
         /**
-         * Phase G-saveLayer-fast -- size of the layer-composite per-draw
-         * uniform : `dstOriginSize` (vec4f, 16) + `paintColor` (vec4f, 16)
-         * = 32 bytes. Matches `Uniforms { dstOriginSize, paintColor }` in
-         * `layer_composite.wgsl`. The shader uses `textureLoad` (no
-         * sampler), so the bind group only needs a uniform buffer + a
-         * texture view -- the layer texture's pixel grid lines up 1:1
-         * with the parent's device-pixel grid (integer dstOrigin +
-         * integer-sized layer device, set by SkCanvas), so no UV
-         * normalisation is needed.
+         * Phase G-saveLayer-fast / Phase G-saveLayer-colorFilter -- size
+         * of the layer-composite per-draw uniform. Layout (matches
+         * `Uniforms` in `layer_composite.wgsl`) :
+         *
+         *   dstOriginSize       (vec4f,  16)
+         *   paintColor          (vec4f,  16)
+         *   colorFilterKindMode (vec4f,  16)
+         *   colorFilterParam0   (vec4f,  16)
+         *   colorFilterParam1   (vec4f,  16)
+         *   colorFilterParam2   (vec4f,  16)
+         *   colorFilterParam3   (vec4f,  16)
+         *   colorFilterBias     (vec4f,  16)
+         *   ------                       128 bytes
+         *
+         * The shader uses `textureLoad` (no sampler), so the bind group
+         * only needs a uniform buffer + a texture view -- the layer
+         * texture's pixel grid lines up 1:1 with the parent's device-
+         * pixel grid (integer dstOrigin + integer-sized layer device,
+         * set by SkCanvas), so no UV normalisation is needed.
+         *
+         * Bumped from 32 to 128 bytes in Phase G-saveLayer-colorFilter
+         * to carry the (kind, blendMode, params, bias) payload for
+         * `SkColorFilters.Blend` (kind = 1) and `SkColorFilters.Matrix`
+         * (kind = 2). The fast path (no filter) zeroes everything past
+         * `paintColor`, the shader's `kind == 0` branch is a no-op.
          */
-        const val LAYER_COMPOSITE_UNIFORM_SIZE: ULong = 32uL
+        const val LAYER_COMPOSITE_UNIFORM_SIZE: ULong = 128uL
         /**
          * G5.3 -- identity column-major 3x3 used as the no-op
          * primaries matrix when [bitmapColorSpaceFor] returns the sRGB
