@@ -822,6 +822,18 @@ public class SkWebGpuDevice(
         val csTfParams: FloatArray,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /**
+         * G2.x -- analytical clip-shape payload, mirrors [RectDraw]. When
+         * [clipKind] is [CLIP_KIND_NONE], the slots are ignored and the
+         * shader behaves exactly as before (integer scissor is the only
+         * clip). When [clipKind] is [CLIP_KIND_RRECT], the fragment
+         * shader multiplies the premul output by `rrect_cov(pos,
+         * clipShapeBounds, clipShapeRx, clipShapeRy)`.
+         */
+        val clipKind: Float = CLIP_KIND_NONE,
+        val clipShapeBounds: FloatArray = FloatArray(4),
+        val clipShapeRx: Float = 0f,
+        val clipShapeRy: Float = 0f,
     ) : PendingDraw
 
     // ─── Bitmap shader on non-rect (G5.2.1) ─────────────────────────────
@@ -864,6 +876,15 @@ public class SkWebGpuDevice(
         val csTfParams: FloatArray,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /**
+         * G2.x -- analytical clip-shape payload, mirrors [RectDraw] /
+         * [ImageRectDraw]. Folded into the AA cover-pass coverage by
+         * the fragment shader's `clipShapeCoverage()` helper.
+         */
+        val clipKind: Float = CLIP_KIND_NONE,
+        val clipShapeBounds: FloatArray = FloatArray(4),
+        val clipShapeRx: Float = 0f,
+        val clipShapeRy: Float = 0f,
     ) : PendingDraw
 
     /**
@@ -952,6 +973,10 @@ public class SkWebGpuDevice(
         scissor: IntArray,
         fillType: SkPathFillType,
         mode: SkBlendMode,
+        clipKind: Float = CLIP_KIND_NONE,
+        clipShapeBounds: FloatArray = ZERO_RECT4,
+        clipShapeRx: Float = 0f,
+        clipShapeRy: Float = 0f,
     ): StencilCoverAaBitmapShaderDraw = StencilCoverAaBitmapShaderDraw(
         stencilVerts = stencilVerts,
         coverVerts = coverVerts,
@@ -971,6 +996,10 @@ public class SkWebGpuDevice(
         csTfParams = csTfParams,
         r = 1f, g = 1f, b = 1f, a = paintA,
         mode = mode,
+        clipKind = clipKind,
+        clipShapeBounds = clipShapeBounds,
+        clipShapeRx = clipShapeRx,
+        clipShapeRy = clipShapeRy,
     )
 
     private val pending: MutableList<PendingDraw> = mutableListOf()
@@ -2930,6 +2959,50 @@ public class SkWebGpuDevice(
     }
 
     /**
+     * G2.x slice 2 -- predicate for [drawPath] : `true` if the dispatch
+     * would land in one of the bitmap-shader pipelines that now honour
+     * the analytical clip shape. Mirrors the gates downstream in
+     * [drawPath] without performing the actual draw enqueue. Used to
+     * short-circuit [requireClipShapeHonoured] at the top of [drawPath]
+     * so curved clipPath + bitmap-shader fills work end-to-end while
+     * other branches keep the fail-fast.
+     *
+     * Gate 1 (rect path / `bitmap_shader.wgsl`) :
+     *   - `paint.shader is SkBitmapShader`,
+     *   - `paint.style == kFill_Style`,
+     *   - `ctm.isAxisAligned` AND `shader.localMatrix.isAxisAligned`,
+     *   - `path.isRect() != null`.
+     *
+     * Gate 2 (non-rect AA path / `aa_stencil_cover_bitmap_shader.wgsl`) :
+     *   - `paint.shader is SkBitmapShader`,
+     *   - `paint.isAntiAlias`,
+     *   - `ctm.isAxisAligned` AND `shader.localMatrix.isAxisAligned`,
+     *   - `path.isRect() == null` (covered by gate 1 otherwise).
+     *
+     * Other configurations (rotated CTM, non-axis-aligned local matrix,
+     * non-AA non-rect path) fall back to the solid-colour fill
+     * machinery and remain under the existing fail-fast.
+     */
+    private fun willRouteThroughClipAwareBitmapShader(
+        path: SkPath,
+        ctm: SkMatrix,
+        paint: SkPaint,
+    ): Boolean {
+        val shader = paint.shader as? SkBitmapShader ?: return false
+        if (!ctm.isAxisAligned) return false
+        if (!shader.localMatrix.isAxisAligned) return false
+        val isRect = path.isRect() != null
+        // Rect branch (G5.2) only fires for fill style.
+        if (isRect && paint.style == SkPaint.Style.kFill_Style) return true
+        // AA non-rect branch (G5.2.1) fires when the paint is AA. The
+        // dispatch inside drawPath further constrains it to fill style ;
+        // we mirror that here so stroke-style paints continue to fall
+        // back to the solid-colour fill machinery (and hit the guard).
+        if (!isRect && paint.isAntiAlias && paint.style == SkPaint.Style.kFill_Style) return true
+        return false
+    }
+
+    /**
      * G2.x -- fail-fast guard for draws that are NOT yet plumbed through
      * the analytical clip shape. Called by every non-rect-fill entry
      * point (stroke rects, paths, gradients, bitmap shader, etc.). When
@@ -3840,13 +3913,20 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
-        // G2.x -- only solid-colour drawRect-fill consumes the active
-        // analytical clip shape today. drawPath has many sub-branches
-        // (gradients, bitmap shader, stencil-and-cover, AA polygon, ...)
-        // none of which carry the clipShape uniform yet, so refuse the
-        // draw rather than silently painting outside the curved clip.
-        // Plain rect shapes (handled by the scissor anyway) pass through.
-        requireClipShapeHonoured("drawPath")
+        // G2.x -- drawRect-fill (solid colour) and bitmap-shader fills
+        // (G2.x slice 2) consume the active analytical clip shape today.
+        // Other branches (gradients, stencil-and-cover polygon, AA
+        // polygon, ...) still fall back to the integer scissor, so we
+        // refuse the draw rather than silently painting outside the
+        // curved clip. The bitmap-shader check below short-circuits the
+        // guard when the dispatch would land in either of the two
+        // honoured bitmap pipelines : the rect-on-axis-aligned-CTM fast
+        // path (`drawBitmapShaderFillRect`), or the non-rect AA path
+        // (`aa_stencil_cover_bitmap_shader.wgsl`). The exhaustive guard
+        // protects every other drawPath sub-branch.
+        if (!willRouteThroughClipAwareBitmapShader(path, ctm, paint)) {
+            requireClipShapeHonoured("drawPath")
+        }
         // G4.1 / G4.1.1 — linear gradient fill of an axis-aligned rect
         // routes through the dedicated gradient pipeline, for all 4
         // SkTileMode values. SkCanvas sends shaded rect draws here (the
@@ -4488,6 +4568,8 @@ public class SkWebGpuDevice(
                     return
                 }
                 if (bitmapPayload != null) {
+                    val (bClipKind, bClipBounds, bClipRx, bClipRy) =
+                        packClipShape(activeClipShape)
                     pending.add(
                         bitmapPayload.toStencilCoverDraw(
                             stencilVerts = stencilTri,
@@ -4497,6 +4579,10 @@ public class SkWebGpuDevice(
                             scissor = scissor,
                             fillType = path.fillType,
                             mode = paint.blendMode,
+                            clipKind = bClipKind,
+                            clipShapeBounds = bClipBounds,
+                            clipShapeRx = bClipRx,
+                            clipShapeRy = bClipRy,
                         ),
                     )
                     return
@@ -4649,6 +4735,8 @@ public class SkWebGpuDevice(
                         ),
                     )
                 } else if (bitmapPayload != null) {
+                    val (bClipKind, bClipBounds, bClipRx, bClipRy) =
+                        packClipShape(activeClipShape)
                     pending.add(
                         bitmapPayload.toStencilCoverDraw(
                             stencilVerts = stencilTri,
@@ -4658,6 +4746,10 @@ public class SkWebGpuDevice(
                             scissor = scissor,
                             fillType = path.fillType,
                             mode = paint.blendMode,
+                            clipKind = bClipKind,
+                            clipShapeBounds = bClipBounds,
+                            clipShapeRx = bClipRx,
+                            clipShapeRy = bClipRy,
                         ),
                     )
                 } else {
@@ -4864,6 +4956,8 @@ public class SkWebGpuDevice(
             val coverTri = bboxTrianglesFor(devVerts, width, height)
             val edges = FloatArray(MAX_AA_EDGES * 4)
             buildContourEdgeSegments(devVerts, contourStarts, edges)
+            val (bClipKind, bClipBounds, bClipRx, bClipRy) =
+                packClipShape(activeClipShape)
             pending.add(
                 bitmapPayload.toStencilCoverDraw(
                     stencilVerts = stencilTri,
@@ -4873,6 +4967,10 @@ public class SkWebGpuDevice(
                     scissor = scissor,
                     fillType = path.fillType,
                     mode = paint.blendMode,
+                    clipKind = bClipKind,
+                    clipShapeBounds = bClipBounds,
+                    clipShapeRx = bClipRx,
+                    clipShapeRy = bClipRy,
                 ),
             )
             return
@@ -4945,11 +5043,11 @@ public class SkWebGpuDevice(
         constraint: SrcRectConstraint,
         clip: SkIRect,
     ) {
-        // G2.x -- the bitmap-shader pipeline doesn't read the analytical
-        // clip-shape uniform yet, so refuse curved clipPath under
-        // drawImageRect (matches the pre-G2.x bindClip throw on aaClip
-        // for non-raster devices). Rect-shape clip falls through.
-        requireClipShapeHonoured("drawImageRect")
+        // G2.x slice 2 -- bitmap-shader pipeline (`bitmap_shader.wgsl`)
+        // now honours the analytical clip shape via the trailing two
+        // vec4 slots ; the canvas-side aaClip throw stays out of the
+        // way for curved clipPath. Rect-shape clip already falls
+        // through the scissor.
         // kClamp is the default tile mode for the SkCanvas.drawImageRect
         // contract -- the SrcRectConstraint distinction (kStrict vs kFast)
         // is a sub-pixel filter-overflow tweak ; both treat out-of-src
@@ -5038,6 +5136,13 @@ public class SkWebGpuDevice(
         // shaders are G5.x follow-ups.
         val paintAlpha = (paint?.alpha ?: 0xFF) / 255f
 
+        // G2.x slice 2 -- fold the analytical clip shape (if any) into
+        // the per-draw uniform. Same shape as `drawFillRect` : circle /
+        // oval / rrect / rect all reduce to the rrect representation.
+        // Plain rect / no-shape clips skip the modulation (the integer
+        // scissor already handles them).
+        val (clipKind, clipBounds, clipRx, clipRy) = packClipShape(activeClipShape)
+
         pending.add(
             ImageRectDraw(
                 texture = texture,
@@ -5055,6 +5160,10 @@ public class SkWebGpuDevice(
                 csTfParams = csTfParams,
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
                 mode = mode,
+                clipKind = clipKind,
+                clipShapeBounds = clipBounds,
+                clipShapeRx = clipRx,
+                clipShapeRy = clipRy,
             ),
         )
     }
@@ -6283,15 +6392,17 @@ public class SkWebGpuDevice(
             ),
         )
         // Layout matches `bitmap_shader.wgsl` :
-        //   offset   0 : srcRect     (vec4f -- l, t, r, b in image-pixel coords)
-        //   offset  16 : dstRect     (vec4f -- l, t, r, b in device-pixel coords)
-        //   offset  32 : imageSize   (vec4f -- w, h, tileX (bit-reinterp u32), tileY (bit-reinterp u32))
-        //   offset  48 : paintColor  (vec4f -- premul tint, default (1, 1, 1, 1))
-        //   offset  64 : csFlags     (vec4f -- .x = csMode bit-reinterp u32 ; G5.3)
-        //   offset  80 : csMatrix    (mat3x3<f32>, std140 padded 3 * vec4 = 48 bytes ; G5.3)
-        //   offset 128 : csTfParams0 (vec4f -- (g, a, b, c) parametric TF ; G5.3.x)
-        //   offset 144 : csTfParams1 (vec4f -- (d, e, f, _) parametric TF ; G5.3.x)
-        // Total = 160 bytes.
+        //   offset   0 : srcRect            (vec4f -- l, t, r, b in image-pixel coords)
+        //   offset  16 : dstRect            (vec4f -- l, t, r, b in device-pixel coords)
+        //   offset  32 : imageSize          (vec4f -- w, h, tileX (bit-reinterp u32), tileY (bit-reinterp u32))
+        //   offset  48 : paintColor         (vec4f -- premul tint, default (1, 1, 1, 1))
+        //   offset  64 : csFlags            (vec4f -- .x = csMode bit-reinterp u32 ; G5.3)
+        //   offset  80 : csMatrix           (mat3x3<f32>, std140 padded 3 * vec4 = 48 bytes ; G5.3)
+        //   offset 128 : csTfParams0        (vec4f -- (g, a, b, c) parametric TF ; G5.3.x)
+        //   offset 144 : csTfParams1        (vec4f -- (d, e, f, _) parametric TF ; G5.3.x)
+        //   offset 160 : clipShapeBounds    (vec4f -- l, t, r, b device-px ; G2.x)
+        //   offset 176 : clipShapeRadiiKind (vec4f -- rx, ry, clipKind, _ ; G2.x)
+        // Total = 192 bytes.
         //
         // G5.1.1 -- `imageSize.z` carries the tile-mode ordinal as a
         // bit-reinterpreted f32 (same trick the gradient shaders use for
@@ -6318,8 +6429,15 @@ public class SkWebGpuDevice(
         // branch. Modes 0 and 1 still ship `(1, 1, 0, 0, 0, 0, 0)`
         // (linear identity TF) as a stable byte payload so the std140
         // alignment is deterministic across draws.
+        //
+        // G2.x slice 2 -- `clipShapeBounds` + `clipShapeRadiiKind`
+        // mirror the rect pipeline. `clipKind == 0` => no shape clip
+        // (the slots are ignored) ; `clipKind == 1` => rrect coverage
+        // multiplied into the fragment output. The two slots sit after
+        // the G5.3 colorspace block to keep that block contiguous.
         val m = d.csMatrix
         val tf = d.csTfParams
+        val cb = d.clipShapeBounds
         context.queue.writeBuffer(
             uniform, 0uL,
             ArrayBuffer.of(floatArrayOf(
@@ -6334,6 +6452,8 @@ public class SkWebGpuDevice(
                 m[6], m[7], m[8], 0f,
                 tf[0], tf[1], tf[2], tf[3],
                 tf[4], tf[5], tf[6], 0f,
+                cb[0], cb[1], cb[2], cb[3],
+                d.clipShapeRx, d.clipShapeRy, d.clipKind, 0f,
             )),
         )
         val view = d.texture.createView()
@@ -6782,22 +6902,24 @@ public class SkWebGpuDevice(
             ),
         )
         // Layout matches `aa_stencil_cover_bitmap_shader.wgsl` :
-        //   offset    0 : color        (vec4f, unused by bitmap frag ; kept
-        //                                for layout-compat with solid_polygon)
-        //   offset   16 : viewport     (vec4f, only x/y used)
-        //   offset   32 : srcRect      (l, t, r, b in image-pixel coords)
-        //   offset   48 : dstRect      (l, t, r, b in device-pixel coords)
-        //   offset   64 : imageSize    (w, h, tileX bit-reinterp u32, tileY bit-reinterp u32)
-        //   offset   80 : paintColor   (vec4f, premul tint)
-        //   offset   96 : csFlags      (.x = csMode bit-reinterp u32 ; G5.3)
-        //   offset  112 : csMatrix     (mat3x3<f32>, std140 padded 3 * vec4 = 48 bytes ; G5.3)
-        //   offset  160 : csTfParams0  (vec4f -- (g, a, b, c) parametric TF ; G5.3.x)
-        //   offset  176 : csTfParams1  (vec4f -- (d, e, f, _) parametric TF ; G5.3.x)
-        //   offset  192 : edgeCountPad (.x = edgeCount as bit-reinterp f32)
-        //   offset  208 : edges[MAX_AA_EDGES] (vec4 each)
-        // Total = 4304 bytes (was 4272 before G5.3.x ; 32 bytes added
-        // for the parametric TF coefficients).
-        val packed = FloatArray(52 + MAX_AA_EDGES * 4)
+        //   offset    0 : color              (vec4f, unused by bitmap frag ; kept
+        //                                      for layout-compat with solid_polygon)
+        //   offset   16 : viewport           (vec4f, only x/y used)
+        //   offset   32 : srcRect            (l, t, r, b in image-pixel coords)
+        //   offset   48 : dstRect            (l, t, r, b in device-pixel coords)
+        //   offset   64 : imageSize          (w, h, tileX bit-reinterp u32, tileY bit-reinterp u32)
+        //   offset   80 : paintColor         (vec4f, premul tint)
+        //   offset   96 : csFlags            (.x = csMode bit-reinterp u32 ; G5.3)
+        //   offset  112 : csMatrix           (mat3x3<f32>, std140 padded 3 * vec4 = 48 bytes ; G5.3)
+        //   offset  160 : csTfParams0        (vec4f -- (g, a, b, c) parametric TF ; G5.3.x)
+        //   offset  176 : csTfParams1        (vec4f -- (d, e, f, _) parametric TF ; G5.3.x)
+        //   offset  192 : clipShapeBounds    (vec4f -- l, t, r, b device-px ; G2.x)
+        //   offset  208 : clipShapeRadiiKind (vec4f -- rx, ry, clipKind, _ ; G2.x)
+        //   offset  224 : edgeCountPad       (.x = edgeCount as bit-reinterp f32)
+        //   offset  240 : edges[MAX_AA_EDGES] (vec4 each)
+        // Total = 4336 bytes (was 4272 before G5.3.x + G2.x ; +32 for
+        // parametric TF coefficients, +32 for the clip-shape slots).
+        val packed = FloatArray(60 + MAX_AA_EDGES * 4)
         // color (unused ; left at zero)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         // viewport
@@ -6823,11 +6945,18 @@ public class SkWebGpuDevice(
         val tf = d.csTfParams
         packed[40] = tf[0]; packed[41] = tf[1]; packed[42] = tf[2]; packed[43] = tf[3]
         packed[44] = tf[4]; packed[45] = tf[5]; packed[46] = tf[6]; packed[47] = 0f
+        // G2.x -- clipShapeBounds + clipShapeRadiiKind. clipKind == 0
+        // means "no shape clip" (slots ignored by the shader, same as
+        // the rect pipeline).
+        val cb = d.clipShapeBounds
+        packed[48] = cb[0]; packed[49] = cb[1]; packed[50] = cb[2]; packed[51] = cb[3]
+        packed[52] = d.clipShapeRx; packed[53] = d.clipShapeRy
+        packed[54] = d.clipKind; packed[55] = 0f
         // edgeCountPad
-        packed[48] = Float.fromBits(d.edgeCount)
-        packed[49] = 0f; packed[50] = 0f; packed[51] = 0f
+        packed[56] = Float.fromBits(d.edgeCount)
+        packed[57] = 0f; packed[58] = 0f; packed[59] = 0f
         // edges
-        System.arraycopy(d.edges, 0, packed, 52, d.edges.size)
+        System.arraycopy(d.edges, 0, packed, 60, d.edges.size)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val view = d.texture.createView()
         val sampler = bitmapSamplerFor(d.filter, d.tileX, d.tileY)
@@ -7027,21 +7156,25 @@ public class SkWebGpuDevice(
          */
         const val CONICAL_STRIP_GRADIENT_UNIFORM_SIZE: ULong = 576uL
         /**
-         * G5.1 / G5.3 / G5.3.x -- size of the bitmap-shader per-draw uniform :
+         * G5.1 / G5.3 / G5.3.x / G2.x -- size of the bitmap-shader per-draw uniform :
          *   srcRect (16) + dstRect (16) + imageSize (16) + paintColor (16) +
          *   csFlags (16) + csMatrix (mat3x3 -> 3 * 16 = 48) +
-         *   csTfParams0 (16) + csTfParams1 (16) = 160 bytes.
+         *   csTfParams0 (16) + csTfParams1 (16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 192 bytes.
          * Matches `Uniforms { srcRect, dstRect, imageSize, paintColor,
-         * csFlags, csMatrix, csTfParams0, csTfParams1 }` in
-         * `bitmap_shader.wgsl`. WGSL std140 stores each `mat3x3<f32>`
-         * column padded to 16 bytes, hence the 48 bytes for the 9 floats
-         * of the primaries matrix.
+         * csFlags, csMatrix, csTfParams0, csTfParams1, clipShapeBounds,
+         * clipShapeRadiiKind }` in `bitmap_shader.wgsl`. WGSL std140
+         * stores each `mat3x3<f32>` column padded to 16 bytes, hence the
+         * 48 bytes for the 9 floats of the primaries matrix.
          *
-         * G5.3.x bumped the size from 128 to 160 bytes to carry the
-         * 7-float parametric TF coefficients (`(g, a, b, c, d, e, f)`)
-         * used by csMode = 2 (Rec.2020 linear, Adobe RGB / k2Dot2, ...).
+         * G5.3.x added 32 bytes for the 7-float parametric TF
+         * coefficients (`(g, a, b, c, d, e, f)`) used by csMode = 2
+         * (Rec.2020 linear, Adobe RGB / k2Dot2, ...). G2.x added 32
+         * more bytes for the analytical clip-shape payload -- when
+         * `clipShapeRadiiKind.z == 0` the slots are ignored, matching
+         * the rect pipeline.
          */
-        const val IMAGE_RECT_UNIFORM_SIZE: ULong = 160uL
+        const val IMAGE_RECT_UNIFORM_SIZE: ULong = 192uL
         /**
          * G5.3 -- identity column-major 3x3 used as the no-op
          * primaries matrix when [bitmapColorSpaceFor] returns the sRGB
@@ -7085,23 +7218,25 @@ public class SkWebGpuDevice(
          */
         const val AA_STENCIL_COVER_CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 4720uL
         /**
-         * G5.2.1 / G5.3.x -- size of the AA stencil-cover bitmap-shader
-         * per-draw uniform :
+         * G5.2.1 / G5.3.x / G2.x -- size of the AA stencil-cover bitmap-shader per-draw uniform :
          *   color (16) + viewport (16) + srcRect (16) + dstRect (16) +
          *   imageSize (16) + paintColor (16) + csFlags (16) + csMatrix (48) +
-         *   csTfParams0 (16) + csTfParams1 (16) + edgeCountPad (16) +
-         *   edges (256 * 16) = 4304 bytes.
-         * Mirror of [IMAGE_RECT_UNIFORM_SIZE] (160 bytes) extended with the
+         *   csTfParams0 (16) + csTfParams1 (16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   edgeCountPad (16) + edges (256 * 16) = 4336 bytes.
+         * Mirror of [IMAGE_RECT_UNIFORM_SIZE] (192 bytes) extended with the
          * stencil-cover machinery's `color` / `viewport` / `edgeCountPad`
          * + `edges[256]` tail. The leading `color` slot matches the polygon
          * shader's layout so the bitmap-shader stencil-write pass can share
          * this draw's bind group.
          *
-         * G5.3.x bumped this from 4272 to 4304 bytes -- 32 bytes for the
-         * parametric TF coefficients (2 vec4f) shared with the rect
-         * pipeline's csMode = 2 branch.
+         * G5.3.x added 32 bytes for the parametric TF coefficients
+         * (2 vec4f) shared with the rect pipeline's csMode = 2 branch.
+         * G2.x added 32 more bytes for the analytical clip-shape slots
+         * sitting after the G5.3 colorspace block (so the colorspace
+         * block stays contiguous).
          */
-        const val AA_STENCIL_COVER_BITMAP_SHADER_UNIFORM_SIZE: ULong = 4304uL
+        const val AA_STENCIL_COVER_BITMAP_SHADER_UNIFORM_SIZE: ULong = 4336uL
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 
         /**
