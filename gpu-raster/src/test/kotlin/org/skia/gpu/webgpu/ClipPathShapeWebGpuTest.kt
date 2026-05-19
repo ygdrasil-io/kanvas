@@ -9,16 +9,21 @@ import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorGREEN
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
+import org.skia.foundation.SkConicalGradient
 import org.skia.foundation.SkImage
+import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkRadialGradient
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkSweepGradient
 import org.skia.foundation.SkTileMode
 
 /**
@@ -295,6 +300,161 @@ class ClipPathShapeWebGpuTest {
             assertSamplesWhite(gpuRgba, listOf(40 to 40, 50 to 50, 40 to 20, 20 to 40))
             // Outside the circle (top-left corner of canvas, far from centre).
             assertSamplesWhite(gpuRgba, listOf(2 to 2, 5 to 5))
+        }
+    }
+
+    @Test
+    fun `circle clip masks linear gradient rect fill`() {
+        // G2.x -- linear gradient rect dispatch (linear_gradient.wgsl)
+        // honours the active analytical clip shape. Cross-checks against
+        // the CPU raster reference -- pixels outside the circle are
+        // erased, pixels inside carry the gradient.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val draw: (SkCanvas) -> Unit = { canvas ->
+                val grad = SkLinearGradient.Make(
+                    p0 = SkPoint(0f, 32f),
+                    p1 = SkPoint(64f, 32f),
+                    colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+                    positions = null,
+                    tileMode = SkTileMode.kClamp,
+                )
+                canvas.clipPath(SkPath.Circle(32f, 32f, 20f), doAntiAlias = false)
+                canvas.drawRect(
+                    SkRect.MakeLTRB(0f, 0f, 64f, 64f),
+                    SkPaint().apply { shader = grad },
+                )
+            }
+            val rasterRgba = renderRaster(draw)
+            val gpuRgba = renderGpu(ctx, draw)
+            // Outside the circle : background white (gradient masked out).
+            assertSamplesWhite(gpuRgba, listOf(5 to 5, 60 to 5, 5 to 60, 60 to 60))
+            // Inside the circle : gradient pixels (not white, not background).
+            // Far enough from the boundary to avoid the AA band.
+            assertGradientPixels(gpuRgba, listOf(32 to 32, 22 to 32, 42 to 32, 32 to 42))
+            assertSimilarPixelCount(gpuRgba, rasterRgba, tolerance = 6)
+        }
+    }
+
+    @Test
+    fun `rrect clip masks radial gradient on path fill`() {
+        // G2.x -- radial gradient on a non-rect AA path
+        // (aa_stencil_cover_radial_gradient.wgsl) honours the active
+        // analytical clip shape. The drawn path is a large rect, so the
+        // dispatch routes through the rect-fill linear path... wait,
+        // we need a non-rect path to exercise the stencil-cover variant.
+        // Use a large circle path that gets fan-tessellated.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val rrect = SkRRect.MakeRectXY(SkRect.MakeLTRB(8f, 8f, 56f, 56f), 12f, 12f)
+            val draw: (SkCanvas) -> Unit = { canvas ->
+                val grad = SkRadialGradient.Make(
+                    center = SkPoint(32f, 32f),
+                    radius = 28f,
+                    colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+                    positions = null,
+                    tileMode = SkTileMode.kClamp,
+                )
+                canvas.clipRRect(rrect, doAntiAlias = false)
+                canvas.drawPath(
+                    SkPath.Circle(32f, 32f, 30f),
+                    SkPaint().apply {
+                        shader = grad
+                        isAntiAlias = true
+                    },
+                )
+            }
+            val rasterRgba = renderRaster(draw)
+            val gpuRgba = renderGpu(ctx, draw)
+            // Outside the rrect (well past rounded corners) : white.
+            assertSamplesWhite(gpuRgba, listOf(2 to 2, 60 to 2, 2 to 60, 60 to 60))
+            // Inside the rrect : gradient pixels.
+            assertGradientPixels(gpuRgba, listOf(32 to 32, 32 to 16, 16 to 32, 32 to 48))
+            assertSimilarPixelCount(gpuRgba, rasterRgba, tolerance = 6)
+        }
+    }
+
+    @Test
+    fun `circle clip masks sweep gradient rect fill`() {
+        // G2.x -- sweep gradient rect dispatch (sweep_gradient.wgsl)
+        // honours the active analytical clip shape.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val draw: (SkCanvas) -> Unit = { canvas ->
+                val grad = SkSweepGradient.Make(
+                    center = SkPoint(32f, 32f),
+                    colors = intArrayOf(SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorRED),
+                    positions = null,
+                    tileMode = SkTileMode.kClamp,
+                )
+                canvas.clipPath(SkPath.Circle(32f, 32f, 20f), doAntiAlias = false)
+                canvas.drawRect(
+                    SkRect.MakeLTRB(0f, 0f, 64f, 64f),
+                    SkPaint().apply { shader = grad },
+                )
+            }
+            val rasterRgba = renderRaster(draw)
+            val gpuRgba = renderGpu(ctx, draw)
+            assertSamplesWhite(gpuRgba, listOf(5 to 5, 60 to 5, 5 to 60, 60 to 60))
+            assertGradientPixels(gpuRgba, listOf(42 to 32, 32 to 42, 22 to 32, 32 to 22))
+            assertSimilarPixelCount(gpuRgba, rasterRgba, tolerance = 6)
+        }
+    }
+
+    @Test
+    fun `circle clip masks conical gradient rect fill`() {
+        // G2.x -- conical gradient (kRadial sub-case) rect dispatch
+        // (conical_gradient.wgsl) honours the active analytical clip
+        // shape. We use concentric circles c0 == c1 so the gradient
+        // routes through the kRadial pipeline.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val draw: (SkCanvas) -> Unit = { canvas ->
+                val grad = SkConicalGradient.Make(
+                    start = SkPoint(32f, 32f), startRadius = 0f,
+                    end = SkPoint(32f, 32f), endRadius = 24f,
+                    colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+                    positions = null,
+                    tileMode = SkTileMode.kClamp,
+                )!!
+                canvas.clipPath(SkPath.Circle(32f, 32f, 20f), doAntiAlias = false)
+                canvas.drawRect(
+                    SkRect.MakeLTRB(0f, 0f, 64f, 64f),
+                    SkPaint().apply { shader = grad },
+                )
+            }
+            val rasterRgba = renderRaster(draw)
+            val gpuRgba = renderGpu(ctx, draw)
+            assertSamplesWhite(gpuRgba, listOf(5 to 5, 60 to 5, 5 to 60, 60 to 60))
+            assertGradientPixels(gpuRgba, listOf(32 to 32, 22 to 32, 42 to 32, 32 to 42))
+            assertSimilarPixelCount(gpuRgba, rasterRgba, tolerance = 6)
+        }
+    }
+
+    /**
+     * Assert that the sampled pixels are NOT the background white --
+     * they should carry gradient colour (R / G / B mixed, or a non-white
+     * blend). Used to verify the gradient actually rendered inside the
+     * clip region (vs being entirely masked out by a too-tight clip).
+     */
+    private fun assertGradientPixels(rgba: ByteArray, samples: List<Pair<Int, Int>>) {
+        for ((x, y) in samples) {
+            val idx = (y * W + x) * 4
+            val r = rgba[idx].toInt() and 0xFF
+            val g = rgba[idx + 1].toInt() and 0xFF
+            val b = rgba[idx + 2].toInt() and 0xFF
+            // "Not white" = at least one channel meaningfully below 220.
+            // Background white is (255, 255, 255) ; any gradient sample
+            // should have at least one channel dimmed (red side ~ B = 0,
+            // blue side ~ R = 0, mid blend ~ both moderate).
+            assertTrue(
+                r < 220 || g < 220 || b < 220,
+                "Expected gradient pixel (not white) at ($x, $y) but got (R=$r, G=$g, B=$b)",
+            )
         }
     }
 

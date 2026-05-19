@@ -441,6 +441,15 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /**
+         * G2.x -- analytical clip-shape captured from the canvas's clip
+         * stack at draw-record time. `null` means "no shape clip" (the
+         * integer scissor is the only clip) ; the shader collapses the
+         * `rrect_cov` modulation to 1.0 in that case. Curved shapes
+         * (circle / oval / uniform-corner rrect) are passed through to
+         * `rrect_cov` as a uniform-radii rrect.
+         */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -464,6 +473,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -490,6 +501,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -518,6 +531,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -569,6 +584,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -608,6 +625,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -638,6 +657,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -667,6 +688,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     // ─── Sweep gradient on non-rect (G4.3.2) ─────────────────────────────
@@ -699,6 +722,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     // ─── Conical gradient on non-rect (G4.4.3) ─────────────────────────────
@@ -731,6 +756,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -764,6 +791,8 @@ public class SkWebGpuDevice(
         val tileMode: SkTileMode,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     // ─── Bitmap shader (G5.1) — drawImageRect skeleton ────────────────────
@@ -3269,6 +3298,7 @@ public class SkWebGpuDevice(
                 b = SkColorGetB(first) / 255f,
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
+                clipShape = activeClipShape,
             ),
         )
         return true
@@ -3349,6 +3379,7 @@ public class SkWebGpuDevice(
                 b = SkColorGetB(first) / 255f,
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
+                clipShape = activeClipShape,
             ),
         )
         return true
@@ -3435,6 +3466,7 @@ public class SkWebGpuDevice(
                 b = SkColorGetB(first) / 255f,
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
+                clipShape = activeClipShape,
             ),
         )
         return true
@@ -3521,6 +3553,7 @@ public class SkWebGpuDevice(
                 b = SkColorGetB(first) / 255f,
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
+                clipShape = activeClipShape,
             ),
         )
         return true
@@ -3627,6 +3660,7 @@ public class SkWebGpuDevice(
                 b = SkColorGetB(first) / 255f,
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
+                clipShape = activeClipShape,
             ),
         )
         return true
@@ -3714,6 +3748,7 @@ public class SkWebGpuDevice(
                 b = SkColorGetB(first) / 255f,
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
+                clipShape = activeClipShape,
             ),
         )
         return true
@@ -3913,18 +3948,35 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
-        // G2.x -- drawRect-fill (solid colour) and bitmap-shader fills
-        // (G2.x slice 2) consume the active analytical clip shape today.
-        // Other branches (gradients, stencil-and-cover polygon, AA
-        // polygon, ...) still fall back to the integer scissor, so we
-        // refuse the draw rather than silently painting outside the
-        // curved clip. The bitmap-shader check below short-circuits the
-        // guard when the dispatch would land in either of the two
-        // honoured bitmap pipelines : the rect-on-axis-aligned-CTM fast
-        // path (`drawBitmapShaderFillRect`), or the non-rect AA path
-        // (`aa_stencil_cover_bitmap_shader.wgsl`). The exhaustive guard
-        // protects every other drawPath sub-branch.
-        if (!willRouteThroughClipAwareBitmapShader(path, ctm, paint)) {
+        // G2.x -- drawPath has many sub-branches (gradients, bitmap
+        // shader, stencil-and-cover, AA polygon, ...) and only some of
+        // them carry the analytical clip-shape uniform today :
+        //   - solid-colour fill / stroke (via drawFillRect /
+        //     drawAnnularStrokeRect on the rect-fill fast path) : yes.
+        //   - 2 bitmap-shader pipelines (rect fast path + non-rect AA
+        //     stencil-and-cover) : yes (G2.x slice 2, #562).
+        //   - 8 gradient pipelines (linear / radial / sweep / conical
+        //     family × rect path + non-rect AA path) : yes (G2.x slice
+        //     3, this branch).
+        //   - plain polygon / stencil-cover / AA polygon paths
+        //     (solid-colour drawPath with no shader) : not yet.
+        // For that last category we refuse the draw rather than
+        // silently painting outside the curved clip. Plain rect shapes
+        // (handled by the scissor anyway) pass through.
+        //
+        // The gate below skips the throw when the dispatch would land
+        // in either of the clip-aware bitmap pipelines (rect fast path
+        // or AA non-rect) OR when the paint carries a recognised
+        // gradient shader. Solid-colour drawPath (no shader) still
+        // hits `requireClipShapeHonoured` : it would need the stencil-
+        // cover / polygon shaders to grow the clipShape uniform too.
+        val gradientShaderInScope = paint.shader is SkLinearGradient ||
+            paint.shader is SkRadialGradient ||
+            paint.shader is SkSweepGradient ||
+            paint.shader is SkConicalGradient
+        if (!willRouteThroughClipAwareBitmapShader(path, ctm, paint) &&
+            !gradientShaderInScope
+        ) {
             requireClipShapeHonoured("drawPath")
         }
         // G4.1 / G4.1.1 — linear gradient fill of an axis-aligned rect
@@ -4468,6 +4520,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                     return
@@ -4490,6 +4543,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                     return
@@ -4513,6 +4567,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                     return
@@ -4536,6 +4591,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                     return
@@ -4563,6 +4619,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                     return
@@ -4645,6 +4702,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                 } else if (radialGradForAaPath != null) {
@@ -4665,6 +4723,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                 } else if (sweepGradForAaPath != null) {
@@ -4686,6 +4745,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                 } else if (conicalRadialGradForAaPath != null) {
@@ -4707,6 +4767,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                 } else if (conicalFocalActive) {
@@ -4732,6 +4793,7 @@ public class SkWebGpuDevice(
                             tileMode = gradTileMode!!,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                 } else if (bitmapPayload != null) {
@@ -4824,6 +4886,7 @@ public class SkWebGpuDevice(
                     tileMode = gradTileMode!!,
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
+                    clipShape = activeClipShape,
                 ),
             )
             return
@@ -4850,6 +4913,7 @@ public class SkWebGpuDevice(
                     tileMode = gradTileMode!!,
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
+                    clipShape = activeClipShape,
                 ),
             )
             return
@@ -4881,6 +4945,7 @@ public class SkWebGpuDevice(
                     tileMode = gradTileMode!!,
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
+                    clipShape = activeClipShape,
                 ),
             )
             return
@@ -4911,6 +4976,7 @@ public class SkWebGpuDevice(
                     tileMode = gradTileMode!!,
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
+                    clipShape = activeClipShape,
                 ),
             )
             return
@@ -4944,6 +5010,7 @@ public class SkWebGpuDevice(
                     tileMode = gradTileMode!!,
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
+                    clipShape = activeClipShape,
                 ),
             )
             return
@@ -6160,6 +6227,27 @@ public class SkWebGpuDevice(
         return DrawResources(uniform = uniform, bindGroup = bindGroup, vertexBuffer = vertexBuffer)
     }
 
+    /**
+     * G2.x -- write the analytical clip-shape (8 floats : `clipShapeBounds`
+     * followed by `clipShapeRadiiKind`) at offset [base] in [out]. Mirrors
+     * [packClipShape] : `null` and [SkClipShape.Rect] produce the
+     * `clipKind = 0` sentinel (no shape clip ; the shader skips the
+     * `rrect_cov` modulation), [SkClipShape.Circle] / [SkClipShape.Oval]
+     * / [SkClipShape.RRect] all collapse to the rrect parameterisation
+     * (bounds + uniform `(rx, ry)`).
+     */
+    private fun writeClipShape(out: FloatArray, base: Int, shape: SkClipShape?) {
+        val (kind, bounds, rx, ry) = packClipShape(shape)
+        out[base]     = bounds[0]
+        out[base + 1] = bounds[1]
+        out[base + 2] = bounds[2]
+        out[base + 3] = bounds[3]
+        out[base + 4] = rx
+        out[base + 5] = ry
+        out[base + 6] = kind
+        out[base + 7] = 0f
+    }
+
     private fun buildLinearGradientRectDrawResources(d: LinearGradientRectDraw): DrawResources {
         val uniform = context.device.createBuffer(
             BufferDescriptor(
@@ -6174,7 +6262,9 @@ public class SkWebGpuDevice(
         //   offset  32 : countPad  (u32 in .x as bit-reinterpreted float)
         //   offset  48 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
-        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8)
+        //   offset 560 : clipShapeBounds (vec4f -- l, t, r, b) ; G2.x
+        //   offset 576 : clipShapeRadiiKind (vec4f -- rx, ry, clipKind, _) ; G2.x
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = d.startX; packed[1] = d.startY
         packed[2] = d.endX;   packed[3] = d.endY
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
@@ -6183,6 +6273,9 @@ public class SkWebGpuDevice(
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+        // G2.x -- clip-shape payload appended at offset 560.
+        val clipBase = 12 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -6210,7 +6303,9 @@ public class SkWebGpuDevice(
         //   offset  32 : countPad     (u32 in .x as bit-reinterpreted float)
         //   offset  48 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
-        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8)
+        //   offset 560 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 576 : clipShapeRadiiKind (vec4f) ; G2.x
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.centerX; packed[5] = d.centerY; packed[6] = d.radius; packed[7] = 0f
@@ -6218,6 +6313,7 @@ public class SkWebGpuDevice(
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+        writeClipShape(packed, 12 + MAX_GRADIENT_STOPS * 8, d.clipShape)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -6245,7 +6341,9 @@ public class SkWebGpuDevice(
         //   offset  32 : countPad         (u32 in .x as bit-reinterpreted float)
         //   offset  48 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
-        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8)
+        //   offset 560 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 576 : clipShapeRadiiKind (vec4f) ; G2.x
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.centerX; packed[5] = d.centerY
@@ -6254,6 +6352,7 @@ public class SkWebGpuDevice(
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+        writeClipShape(packed, 12 + MAX_GRADIENT_STOPS * 8, d.clipShape)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -6285,7 +6384,9 @@ public class SkWebGpuDevice(
         //   offset  64 : flagsCount    (negateX, subCase, count_bits, subCaseSign)
         //   offset  80 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 336 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
-        val packed = FloatArray(20 + MAX_GRADIENT_STOPS * 8)
+        //   offset 592 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 608 : clipShapeRadiiKind (vec4f) ; G2.x
+        val packed = FloatArray(20 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.affine00; packed[5] = d.affine01; packed[6] = d.affine02; packed[7] = 0f
@@ -6295,6 +6396,7 @@ public class SkWebGpuDevice(
         packed[18] = Float.fromBits(d.stopCount); packed[19] = d.subCaseSign
         System.arraycopy(d.stopPositions, 0, packed, 20, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 20 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+        writeClipShape(packed, 20 + MAX_GRADIENT_STOPS * 8, d.clipShape)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -6325,7 +6427,9 @@ public class SkWebGpuDevice(
         //   offset  48 : stripScalars  (fP0, _, count_bits, _)
         //   offset  64 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 320 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
-        val packed = FloatArray(16 + MAX_GRADIENT_STOPS * 8)
+        //   offset 576 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 592 : clipShapeRadiiKind (vec4f) ; G2.x
+        val packed = FloatArray(16 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.affine00; packed[5] = d.affine01; packed[6] = d.affine02; packed[7] = 0f
@@ -6334,6 +6438,7 @@ public class SkWebGpuDevice(
         packed[14] = Float.fromBits(d.stopCount); packed[15] = 0f
         System.arraycopy(d.stopPositions, 0, packed, 16, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 16 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+        writeClipShape(packed, 16 + MAX_GRADIENT_STOPS * 8, d.clipShape)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -6361,7 +6466,9 @@ public class SkWebGpuDevice(
         //   offset  32 : countPad     (u32 in .x as bit-reinterpreted float)
         //   offset  48 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
-        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8)
+        //   offset 560 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 576 : clipShapeRadiiKind (vec4f) ; G2.x
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.centerX; packed[5] = d.centerY
@@ -6370,6 +6477,7 @@ public class SkWebGpuDevice(
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
+        writeClipShape(packed, 12 + MAX_GRADIENT_STOPS * 8, d.clipShape)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -6543,7 +6651,7 @@ public class SkWebGpuDevice(
         //   offset   80 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4176 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4432 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8)
+        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -6560,6 +6668,7 @@ public class SkWebGpuDevice(
             packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
+        writeClipShape(packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -6614,7 +6723,7 @@ public class SkWebGpuDevice(
         //   offset   80 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4176 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4432 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8)
+        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -6631,6 +6740,7 @@ public class SkWebGpuDevice(
             packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
+        writeClipShape(packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -6687,7 +6797,7 @@ public class SkWebGpuDevice(
         //   offset   80 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4176 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4432 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8)
+        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
         // color (unused ; left at zero)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         // viewport
@@ -6711,6 +6821,7 @@ public class SkWebGpuDevice(
             packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
+        writeClipShape(packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -6768,7 +6879,7 @@ public class SkWebGpuDevice(
         //   offset   80 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4176 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4432 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8)
+        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -6785,6 +6896,7 @@ public class SkWebGpuDevice(
             packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
+        writeClipShape(packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -6839,7 +6951,7 @@ public class SkWebGpuDevice(
         //   offset  112 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4208 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4464 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(28 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8)
+        val packed = FloatArray(28 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -6858,6 +6970,7 @@ public class SkWebGpuDevice(
             packed, 28 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
+        writeClipShape(packed, 28 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -7109,52 +7222,67 @@ public class SkWebGpuDevice(
         /**
          * Size of the linear-gradient per-draw uniform :
          *   startEnd (16) + viewport (16) + countPad (16) +
-         *   positions (16 * 16) + colors (16 * 16) = 560 bytes.
+         *   positions (16 * 16) + colors (16 * 16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 592 bytes.
+         * G2.x bumped from 560 to 592 to carry the optional analytical
+         * clip-shape (`clipKind = 0` means "no shape clip").
          */
-        const val LINEAR_GRADIENT_UNIFORM_SIZE: ULong = 560uL // 48 + 16 * 16 + 16 * 16
+        const val LINEAR_GRADIENT_UNIFORM_SIZE: ULong = 592uL // 560 + 32
         /**
-         * G4.2 -- size of the radial-gradient per-draw uniform :
+         * G4.2 / G2.x -- size of the radial-gradient per-draw uniform :
          *   viewport (16) + centerRadius (16) + countPad (16) +
-         *   positions (16 * 16) + colors (16 * 16) = 560 bytes.
-         * Same total as the linear uniform but the first 32 bytes carry
-         * different fields (viewport / center+radius vs startEnd / viewport).
+         *   positions (16 * 16) + colors (16 * 16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 592 bytes.
+         * Same total as the linear uniform ; the first 32 bytes carry
+         * different fields (viewport / center+radius vs startEnd /
+         * viewport). G2.x bumped from 560 to 592 to carry the optional
+         * analytical clip-shape.
          */
-        const val RADIAL_GRADIENT_UNIFORM_SIZE: ULong = 560uL
+        const val RADIAL_GRADIENT_UNIFORM_SIZE: ULong = 592uL
         /**
-         * G4.3 -- size of the sweep-gradient per-draw uniform :
+         * G4.3 / G2.x -- size of the sweep-gradient per-draw uniform :
          *   viewport (16) + centerBiasScale (16) + countPad (16) +
-         *   positions (16 * 16) + colors (16 * 16) = 560 bytes.
+         *   positions (16 * 16) + colors (16 * 16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 592 bytes.
          * Same total as the linear / radial uniforms ; only the second
          * vec4 carries different fields (center.xy + tBias + tScale here).
+         * G2.x bumped from 560 to 592 to carry the optional analytical
+         * clip-shape.
          */
-        const val SWEEP_GRADIENT_UNIFORM_SIZE: ULong = 560uL
+        const val SWEEP_GRADIENT_UNIFORM_SIZE: ULong = 592uL
         /**
-         * G4.4 -- size of the conical-gradient per-draw uniform :
+         * G4.4 / G2.x -- size of the conical-gradient per-draw uniform :
          *   viewport (16) + centerRadii (16) + countPad (16) +
-         *   positions (16 * 16) + colors (16 * 16) = 560 bytes.
+         *   positions (16 * 16) + colors (16 * 16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 592 bytes.
          * Same total as the linear / radial / sweep uniforms ; only the
          * second vec4 carries different fields (centre.xy + r0 + r1 here,
-         * for the kRadial sub-case).
+         * for the kRadial sub-case). G2.x bumped from 560 to 592 to
+         * carry the optional analytical clip-shape.
          */
-        const val CONICAL_GRADIENT_UNIFORM_SIZE: ULong = 560uL
+        const val CONICAL_GRADIENT_UNIFORM_SIZE: ULong = 592uL
         /**
-         * G4.4.1 -- size of the conical focal-inside per-draw uniform :
+         * G4.4.1 / G2.x -- size of the conical focal-inside per-draw uniform :
          *   viewport (16) + affineRow0 (16) + affineRow1 (16) +
          *   focalScalars (16) + flagsCount (16) +
-         *   positions (16 * 16) + colors (16 * 16) = 592 bytes.
+         *   positions (16 * 16) + colors (16 * 16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 624 bytes.
          * 32 bytes larger than the kRadial conical uniform because the
          * focal-frame affine takes 2 vec4f slots and the flags / focal
-         * scalars consume two more.
+         * scalars consume two more. G2.x bumped from 592 to 624 to carry
+         * the optional analytical clip-shape.
          */
-        const val CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 592uL
+        const val CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 624uL
         /**
-         * G4.4.4 -- size of the conical kStrip per-draw uniform :
+         * G4.4.4 / G2.x -- size of the conical kStrip per-draw uniform :
          *   viewport (16) + affineRow0 (16) + affineRow1 (16) +
-         *   stripScalars (16) + positions (16 * 16) + colors (16 * 16) = 576 bytes.
+         *   stripScalars (16) + positions (16 * 16) + colors (16 * 16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 608 bytes.
          * 16 bytes smaller than the focal-inside uniform (no flagsCount
-         * vec4 ; the strip has only fP0 + stop count).
+         * vec4 ; the strip has only fP0 + stop count). G2.x bumped from
+         * 576 to 608 to carry the optional analytical clip-shape.
          */
-        const val CONICAL_STRIP_GRADIENT_UNIFORM_SIZE: ULong = 576uL
+        const val CONICAL_STRIP_GRADIENT_UNIFORM_SIZE: ULong = 608uL
         /**
          * G5.1 / G5.3 / G5.3.x / G2.x -- size of the bitmap-shader per-draw uniform :
          *   srcRect (16) + dstRect (16) + imageSize (16) + paintColor (16) +
@@ -7197,26 +7325,31 @@ public class SkWebGpuDevice(
         val IDENTITY_CS_TF_PARAMS: FloatArray =
             floatArrayOf(1f, 1f, 0f, 0f, 0f, 0f, 0f)
         /**
-         * G4.1.2 -- size of the AA stencil-cover gradient per-draw uniform :
+         * G4.1.2 / G2.x -- size of the AA stencil-cover gradient per-draw uniform :
          *   color (16) + viewport (16) + startEnd (16) + countPad (16) +
          *   edgeCountPad (16) + edges (256 * 16) + positions (16 * 16) +
-         *   colors (16 * 16) = 4688 bytes.
+         *   colors (16 * 16) + clipShapeBounds (16) + clipShapeRadiiKind (16)
+         *   = 4720 bytes.
          * The leading `color` slot matches the polygon shader's layout so
-         * the stencil-write pass can share this draw's bind group.
+         * the stencil-write pass can share this draw's bind group. G2.x
+         * bumped from 4688 to 4720 to carry the optional analytical
+         * clip-shape.
          */
-        const val AA_STENCIL_COVER_GRADIENT_UNIFORM_SIZE: ULong = 4688uL
+        const val AA_STENCIL_COVER_GRADIENT_UNIFORM_SIZE: ULong = 4720uL
         /**
-         * G4.4.3 -- size of the AA stencil-cover conical focal-inside
+         * G4.4.3 / G2.x -- size of the AA stencil-cover conical focal-inside
          * per-draw uniform :
          *   color (16) + viewport (16) + affineRow0 (16) + affineRow1 (16) +
          *   focalScalars (16) + flagsCount (16) + edgeCountPad (16) +
-         *   edges (256 * 16) + positions (16 * 16) + colors (16 * 16) = 4720 bytes.
+         *   edges (256 * 16) + positions (16 * 16) + colors (16 * 16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 4752 bytes.
          * 32 bytes larger than the kRadial / linear / radial / sweep stencil-
          * cover uniforms because the focal-frame affine takes 2 vec4f slots
          * and the focal scalars / flags consume two more (vs one in the
-         * other variants).
+         * other variants). G2.x bumped from 4720 to 4752 to carry the
+         * optional analytical clip-shape.
          */
-        const val AA_STENCIL_COVER_CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 4720uL
+        const val AA_STENCIL_COVER_CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 4752uL
         /**
          * G5.2.1 / G5.3.x / G2.x -- size of the AA stencil-cover bitmap-shader per-draw uniform :
          *   color (16) + viewport (16) + srcRect (16) + dstRect (16) +
