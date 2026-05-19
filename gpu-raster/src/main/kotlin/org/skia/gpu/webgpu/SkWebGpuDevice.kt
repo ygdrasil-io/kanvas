@@ -1042,6 +1042,83 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
     ) : PendingDraw
 
+    // ─── MaskFilter Gaussian blur on shaded paints (Phase MaskFilter-blur-shaded) ─
+    /**
+     * Phase MaskFilter-blur-shaded -- pending entry for `paint.maskFilter
+     * is SkBlurMaskFilter` on `drawPath` / `drawRect` when the paint
+     * also carries a [SkShader] (linear / radial / sweep / conical
+     * gradient, or bitmap shader). The path is rasterised onto a child
+     * [SkWebGpuDevice]'s intermediate texture with the FULL paint
+     * (shader + colourFilter), so the layer holds the final per-pixel
+     * RGBA premul colours of the unblurred shape. The dispatch gate
+     * also allocates a per-draw scratch H-pass texture sized to the
+     * shaded layer. The flush replays this draw as two render passes :
+     *   1. Horizontal Gaussian blur : shaded layer -> scratchH.
+     *   2. Vertical Gaussian blur + style combine + composite :
+     *      scratchH (-> blurred B) + shaded layer (-> A, M = A.a)
+     *      combined per [SkBlurStyle] and blended onto the parent
+     *      intermediate via the pipeline's blend state.
+     *
+     * The single shaded layer plays both roles (convolution source for
+     * pass 1, sharp shape mask + SrcOver "src" for pass 2's kSolid
+     * combine) -- M = A.a always since the child device started
+     * cleared transparent and only the path's pixels carry alpha.
+     *
+     * Both scratch textures (the child layer device's intermediate +
+     * the host-allocated scratch H texture) outlive a single command
+     * buffer because the V pass reads scratchH after the H pass wrote
+     * it ; we close them in [closeDrawResources] after submission.
+     *
+     * The kernel weights, radius cap, and uniform layout mirror
+     * [BlurredPathDraw] exactly -- the host packs the same 192-byte
+     * uniform, only `paintColor` ships as zeros since the shaded layer
+     * already carries the final colour (no paint-colour fold in the
+     * shader). The bind-group layout is shared with the solid-paint
+     * variant so the two MaskFilter pipelines reuse a single
+     * [blurBindGroupLayout].
+     *
+     * Style combine (V-pass, premul RGBA) :
+     *   - kNormal : output = B
+     *   - kSolid  : output = A + B * (1 - A.a)   (SrcOver A over B)
+     *   - kOuter  : output = B * (1 - M)         (halo only)
+     *   - kInner  : output = B * M               (clipped inside)
+     *
+     * Inherited `r/g/b/a` are placeholders ; the fragment shader sources
+     * colour from the shaded layer texture.
+     */
+    private data class BlurredShadedPathDraw(
+        // Child layer device whose intermediate holds the shaded shape
+        // render. Kept on the draw so [flush] can close it after
+        // submission -- the layer device owns the GPU resource and we
+        // must release it once the parent's H pass has finished
+        // sampling.
+        val shadedLayerDevice: SkWebGpuDevice,
+        // Shaded source : the child device's intermediate view.
+        val shadedLayerView: GPUTextureView,
+        // Host-allocated scratch H-pass texture (closed after submit).
+        val scratchHTexture: GPUTexture,
+        val scratchHView: GPUTextureView,
+        // Size of the shaded layer (and of scratchH, they share dims).
+        val srcWidth: Int, val srcHeight: Int,
+        // Origin of the shaded layer in parent-device pixel coords.
+        val dstOriginX: Int, val dstOriginY: Int,
+        // Integer scissor in parent-device pixels for the V pass.
+        val scissor: IntArray,
+        // Symmetric half-kernel : (1 + radius) floats, packed into 9
+        // vec4f (36 floats, trailing zeroed).
+        val kernel: FloatArray,
+        val radius: Int,
+        // SkBlurStyle ordinal (0 = kNormal, 1 = kSolid, 2 = kOuter,
+        // 3 = kInner). Packed into the V-pass uniform's axisRadius.w
+        // slot ; the V-pass fragment branches on this to combine B
+        // (blurred RGBA) with A (original shaded RGBA, M = A.a).
+        val blurStyleOrdinal: Int,
+        // PendingDraw interface : r/g/b/a placeholders ; mode honoured
+        // by the V-pass pipeline's blend state.
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
     // ─── ImageFilter Gaussian blur on saveLayer (Phase G-saveLayer-imageFilter-blur) ─
     /**
      * Phase G-saveLayer-imageFilter-blur -- pending entry for the layer
@@ -1327,6 +1404,7 @@ public class SkWebGpuDevice(
         is ImageRectDraw,
         is LayerCompositeDraw,
         is BlurredPathDraw,
+        is BlurredShadedPathDraw,
         is BlurredLayerCompositeDraw,
         is DropShadowLayerCompositeDraw -> false
     }
@@ -2138,6 +2216,74 @@ public class SkWebGpuDevice(
                     vertex = VertexState(module = blurGaussianShader, entryPoint = "vs_main"),
                     fragment = FragmentState(
                         module = blurGaussianShader,
+                        entryPoint = "fs_vertical_composite",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
+    // ─── MaskFilter Gaussian blur on shaded paints (Phase MaskFilter-blur-shaded) ─
+    /**
+     * Phase MaskFilter-blur-shaded -- separable Gaussian blur shader on
+     * a SHADED layer. Two entry points (`fs_horizontal`,
+     * `fs_vertical_composite`) ; the H pass writes pure blurred RGBA
+     * into a scratch texture and the V pass combines B (blurred) with
+     * A (original shaded layer, M = A.a) per [SkBlurStyle], then blends
+     * onto the parent intermediate. Shares [blurBindGroupLayout] with
+     * the solid-paint variant -- the binding shapes are identical (one
+     * uniform + two sampled textures).
+     */
+    private val blurMaskFilterShadedShader: GPUShaderModule =
+        loadShader("shaders/blur_mask_filter_shaded.wgsl")
+
+    /**
+     * Phase MaskFilter-blur-shaded -- H pass pipeline. Same shape as
+     * [blurHorizontalPipeline] (no blend ; writes a freshly-cleared
+     * scratch). The H entry samples the shaded layer and writes pure
+     * RGBA along the X axis ; the V pass owns the style combine and
+     * the final composite onto the parent.
+     */
+    private val blurShadedHorizontalPipeline: GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = blurPipelineLayout,
+                vertex = VertexState(module = blurMaskFilterShadedShader, entryPoint = "vs_main"),
+                fragment = FragmentState(
+                    module = blurMaskFilterShadedShader,
+                    entryPoint = "fs_horizontal",
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            blend = null,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    /**
+     * Phase MaskFilter-blur-shaded -- V pass + composite pipeline, keyed
+     * by [SkBlendMode] (same natively-blendable subset as the solid
+     * variant). The V pass samples the H scratch, combines with the
+     * shaded layer per style, and blends onto the parent.
+     */
+    private val blurShadedVerticalPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> =
+        mutableMapOf()
+
+    private fun blurShadedVerticalPipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        blurShadedVerticalPipelineCache.getOrPut(mode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = blurPipelineLayout,
+                    vertex = VertexState(module = blurMaskFilterShadedShader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = blurMaskFilterShadedShader,
                         entryPoint = "fs_vertical_composite",
                         targets = listOf(
                             ColorTargetState(
@@ -4718,9 +4864,15 @@ public class SkWebGpuDevice(
     ): Boolean {
         val rawMaskFilter = paint.maskFilter ?: return false
         if (rawMaskFilter !is SkBlurMaskFilter) return false
-        if (paint.shader != null) return false
         if (!ctm.isAxisAligned) return false
         if (path.fillType.isInverse()) return false
+        // Phase MaskFilter-blur-shaded -- shaded paints (gradient /
+        // bitmap shader) take the dedicated RGBA layer pipeline below.
+        // The fast alpha-only path further down handles the solid-paint
+        // case (the historical #570 / #575 scope).
+        if (paint.shader != null) {
+            return drawPathWithShadedBlurMaskFilter(path, ctm, clip, paint, rawMaskFilter)
+        }
 
         // Apply the CTM-scale rescale if the filter ignores the CTM
         // (Phase R1-C contract -- mirrors SkBitmapDevice).
@@ -4843,6 +4995,145 @@ public class SkWebGpuDevice(
                 kernel = kernel,
                 radius = radius,
                 paintR = cr, paintG = cg, paintB = cb, paintA = ca,
+                blurStyleOrdinal = styleOrdinal,
+                r = 1f, g = 1f, b = 1f, a = 1f,
+                mode = paint.blendMode,
+            ),
+        )
+        return true
+    }
+
+    /**
+     * Phase MaskFilter-blur-shaded -- shaded-paint variant of
+     * [drawPathWithBlurMaskFilterIfApplicable]. The path carries a
+     * [SkShader] (gradient or bitmap shader), so the unblurred shape
+     * is rasterised onto a child layer device with the FULL paint
+     * (shader + colourFilter + paint colour modulation), producing
+     * RGBA premul pixels rather than a white-tinted alpha-only mask.
+     * The blur convolution then runs on RGBA throughout, and the V
+     * pass applies the [SkBlurStyle] combine per-RGBA-channel using
+     * the original shaded layer as both the SrcOver "src" (for kSolid)
+     * and the sharp coverage mask (M = A.a, for kOuter / kInner).
+     *
+     * Bounds + radius + kernel + scissor computation mirrors the
+     * solid-paint path verbatim ; only the child render and the
+     * dispatch [BlurredShadedPathDraw] differ. The child paint strips
+     * the maskFilter (so the shaded render doesn't recurse) but
+     * retains shader / colourFilter / pathEffect / blendMode (the
+     * shaded layer reproduces the unblurred shape with its full paint
+     * applied). The blend mode on the child render is forced to
+     * kSrcOver onto the transparent layer base -- so per-pixel alpha
+     * accumulates with the shader output, matching what the upstream
+     * raster does for a shaded shape on a freshly-cleared mask buffer.
+     */
+    private fun drawPathWithShadedBlurMaskFilter(
+        path: SkPath,
+        ctm: SkMatrix,
+        clip: SkIRect,
+        paint: SkPaint,
+        rawMaskFilter: SkBlurMaskFilter,
+    ): Boolean {
+        // Apply the CTM-scale rescale if the filter ignores the CTM
+        // (Phase R1-C contract -- mirrors SkBitmapDevice).
+        val scale = ctm.getMaxScale().coerceAtLeast(1f)
+        val maskFilter = (if (!rawMaskFilter.respectCTM) {
+            rawMaskFilter.withCtmScale(scale) as? SkBlurMaskFilter ?: return false
+        } else {
+            rawMaskFilter
+        })
+
+        val sigma = maskFilter.sigma
+        if (!sigma.isFinite() || sigma <= 0f) return false
+
+        // Clamp the radius to the shader's MAX_BLUR_RADIUS so the
+        // uniform layout stays fixed. The kernel is renormalised after
+        // the clamp -- same shape as the solid variant.
+        val unboundedRadius = ceil(3.0 * sigma).toInt().coerceAtLeast(1)
+        val radius = unboundedRadius.coerceAtMost(MAX_BLUR_RADIUS)
+        val kernel = buildSymmetricGaussianHalfKernel(sigma, radius)
+
+        // Compute device-space bounds of the path under the CTM,
+        // expand by radius + 1 px safety, intersect with clip + viewport.
+        val srcBounds = path.computeBounds()
+        val devBounds = ctm.mapRect(srcBounds)
+        val strokeExpand = if (paint.style != SkPaint.Style.kFill_Style) {
+            (paint.strokeWidth * scale * 0.5f) + 1f
+        } else 1f
+        var ml = floor(devBounds.left - strokeExpand).toInt() - radius
+        var mt = floor(devBounds.top - strokeExpand).toInt() - radius
+        var mr = ceil(devBounds.right + strokeExpand).toInt() + radius
+        var mb = ceil(devBounds.bottom + strokeExpand).toInt() + radius
+        ml = maxOf(ml, clip.left, 0)
+        mt = maxOf(mt, clip.top, 0)
+        mr = minOf(mr, clip.right, width)
+        mb = minOf(mb, clip.bottom, height)
+        val maskW = mr - ml
+        val maskH = mb - mt
+        if (maskW <= 0 || maskH <= 0) return true  // Fully clipped -- nothing to draw.
+
+        // Render the shaded shape into a child layer device. The paint
+        // here keeps shader + colourFilter + pathEffect (so the layer
+        // carries the full unblurred shaded result), but drops the
+        // maskFilter (no recursion) and forces kSrcOver onto the
+        // transparent layer base so the shader output accumulates
+        // straightforwardly. The layer device starts cleared to
+        // transparent (set by [makeLayerDevice.setBackground(0)]).
+        val shadedDevice = makeLayerDevice(maskW, maskH) as SkWebGpuDevice
+        val shadedClip = SkIRect.MakeWH(maskW, maskH)
+        val shadedCtm = ctm.postTranslate(-ml.toFloat(), -mt.toFloat())
+        val shadedPaint = paint.copy().apply {
+            // Strip the maskFilter so the child render doesn't recurse
+            // back through this helper.
+            this.maskFilter = null
+            // Force kSrcOver so the shader output composites onto the
+            // transparent layer base. The paint's original blend mode
+            // is honoured by the V-pass composite onto the PARENT, not
+            // by the shaded-layer render.
+            blendMode = SkBlendMode.kSrcOver
+        }
+        // Explicit kClear-fill to ensure the layer base is fully
+        // transparent before the shaded shape lands -- mirrors the
+        // solid-paint path's preamble.
+        val clearPaint = SkPaint().apply { blendMode = SkBlendMode.kClear }
+        shadedDevice.drawRect(
+            SkRect.MakeLTRB(0f, 0f, maskW.toFloat(), maskH.toFloat()),
+            shadedClip,
+            clearPaint,
+        )
+        shadedDevice.drawPath(path, shadedCtm, shadedClip, shadedPaint)
+        shadedDevice.flushDrawsOnly()
+
+        // Allocate the per-draw scratch H-pass texture.
+        val scratchH = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = maskW.toUInt(), height = maskH.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.shadedBlurScratchH",
+            ),
+        )
+        val scratchHView = scratchH.createView()
+
+        val scissor = intArrayOf(ml, mt, maskW, maskH)
+
+        val styleOrdinal = when (maskFilter.style) {
+            SkBlurStyle.kNormal -> 0
+            SkBlurStyle.kSolid -> 1
+            SkBlurStyle.kOuter -> 2
+            SkBlurStyle.kInner -> 3
+        }
+
+        pending.add(
+            BlurredShadedPathDraw(
+                shadedLayerDevice = shadedDevice,
+                shadedLayerView = shadedDevice.intermediateView,
+                scratchHTexture = scratchH,
+                scratchHView = scratchHView,
+                srcWidth = maskW, srcHeight = maskH,
+                dstOriginX = ml, dstOriginY = mt,
+                scissor = scissor,
+                kernel = kernel,
+                radius = radius,
                 blurStyleOrdinal = styleOrdinal,
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = paint.blendMode,
@@ -7475,6 +7766,7 @@ public class SkWebGpuDevice(
                 is ImageRectDraw -> buildImageRectDrawResources(d)
                 is LayerCompositeDraw -> buildLayerCompositeDrawResources(d)
                 is BlurredPathDraw -> buildBlurredPathDrawResources(d)
+                is BlurredShadedPathDraw -> buildBlurredShadedPathDrawResources(d)
                 is BlurredLayerCompositeDraw -> buildBlurredLayerCompositeDrawResources(d)
                 is DropShadowLayerCompositeDraw ->
                     buildDropShadowLayerCompositeDrawResources(d)
@@ -7900,6 +8192,63 @@ public class SkWebGpuDevice(
                         ),
                     )
                     draw((d.coverVerts.size / 2).toUInt())
+                    end()
+                }
+                return@forEachIndexed
+            }
+            if (d is BlurredShadedPathDraw) {
+                // Phase MaskFilter-blur-shaded -- two render passes,
+                // mirrors the solid-paint variant below but :
+                //   - the H pass samples the SHADED layer (RGBA premul)
+                //     instead of a white-tinted alpha-only shape mask,
+                //   - the V pass combines the blurred RGBA B with the
+                //     original shaded layer A per SkBlurStyle and
+                //     blends onto the parent. No paint-colour fold (A
+                //     already carries the final shader output).
+                val hView = res.scratchHView!!
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = hView,
+                                loadOp = GPULoadOp.Clear,
+                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    setPipeline(blurShadedHorizontalPipeline)
+                    setBindGroup(0u, res.bindGroup)
+                    setScissorRect(
+                        x = 0u, y = 0u,
+                        width = d.srcWidth.toUInt(),
+                        height = d.srcHeight.toUInt(),
+                    )
+                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    end()
+                }
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = colorView,
+                                loadOp = loadOp,
+                                clearValue = background,
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    setPipeline(blurShadedVerticalPipelineFor(d.mode))
+                    setBindGroup(0u, res.secondaryBindGroup!!)
+                    setScissorRect(
+                        x = d.scissor[0].toUInt(),
+                        y = d.scissor[1].toUInt(),
+                        width = d.scissor[2].toUInt(),
+                        height = d.scissor[3].toUInt(),
+                    )
+                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
                     end()
                 }
                 return@forEachIndexed
@@ -8381,6 +8730,7 @@ public class SkWebGpuDevice(
                     is StencilCoverAaConicalFocalGradientDraw -> { /* handled above */ }
                     is StencilCoverAaBitmapShaderDraw -> { /* handled above */ }
                     is BlurredPathDraw -> { /* handled above */ }
+                    is BlurredShadedPathDraw -> { /* handled above */ }
                     is BlurredLayerCompositeDraw -> { /* handled above */ }
                     is DropShadowLayerCompositeDraw -> { /* handled above */ }
                 }
@@ -9271,6 +9621,94 @@ public class SkWebGpuDevice(
             scratchHTexture = d.scratchHTexture,
             scratchHView = d.scratchHView,
             layerDevice = d.shapeMaskDevice,
+        )
+    }
+
+    /**
+     * Phase MaskFilter-blur-shaded -- build the GPU resources for a
+     * [BlurredShadedPathDraw]. Shape mirrors
+     * [buildBlurredPathDrawResources] (two uniform buffers + two bind
+     * groups against the shared [blurBindGroupLayout]) but :
+     *   - Primary (H pass) binding 1 + 2 are both the shaded layer view
+     *     (the H pass only reads binding 1 ; binding 2 is kept for
+     *     layout parity).
+     *   - Secondary (V pass) binding 1 is the H-pass scratch, binding
+     *     2 is the shaded layer (consumed by the kSolid / kOuter /
+     *     kInner style combine).
+     * Both uniforms share the [BLUR_UNIFORM_SIZE] byte layout ; the
+     * `paintColor` slot ships as zeros (the shaded layer already
+     * carries the final colours, no paint-colour fold in the shader).
+     */
+    private fun buildBlurredShadedPathDrawResources(d: BlurredShadedPathDraw): DrawResources {
+        // ── H pass uniform : axisRadius = (1, 0, radius, 0). paintColor
+        //    is zero (the shaded layer carries the final colours).
+        val hUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = BLUR_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.shadedBlurHorizontalDraw",
+            ),
+        )
+        val hPacked = FloatArray(BLUR_UNIFORM_FLOATS)
+        hPacked[0] = 0f; hPacked[1] = 0f
+        hPacked[2] = d.srcWidth.toFloat(); hPacked[3] = d.srcHeight.toFloat()
+        // paintColor : unused for the shaded variant ; ship zeros for
+        // deterministic bytes.
+        hPacked[4] = 0f; hPacked[5] = 0f; hPacked[6] = 0f; hPacked[7] = 0f
+        hPacked[8] = 1f; hPacked[9] = 0f; hPacked[10] = d.radius.toFloat(); hPacked[11] = 0f
+        for (k in 0..d.radius) {
+            hPacked[12 + k] = d.kernel[k]
+        }
+        context.queue.writeBuffer(hUniform, 0uL, ArrayBuffer.of(hPacked))
+        val hBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = blurBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = hUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.shadedLayerView),
+                    BindGroupEntry(binding = 2u, resource = d.shadedLayerView),
+                ),
+            ),
+        )
+
+        // ── V pass uniform : axisRadius = (0, 1, radius, blurStyle).
+        val vUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = BLUR_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.shadedBlurVerticalDraw",
+            ),
+        )
+        val vPacked = FloatArray(BLUR_UNIFORM_FLOATS)
+        vPacked[0] = d.dstOriginX.toFloat(); vPacked[1] = d.dstOriginY.toFloat()
+        vPacked[2] = d.srcWidth.toFloat(); vPacked[3] = d.srcHeight.toFloat()
+        vPacked[4] = 0f; vPacked[5] = 0f; vPacked[6] = 0f; vPacked[7] = 0f
+        vPacked[8] = 0f
+        vPacked[9] = 1f
+        vPacked[10] = d.radius.toFloat()
+        vPacked[11] = d.blurStyleOrdinal.toFloat()
+        for (k in 0..d.radius) {
+            vPacked[12 + k] = d.kernel[k]
+        }
+        context.queue.writeBuffer(vUniform, 0uL, ArrayBuffer.of(vPacked))
+        val vBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = blurBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = vUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.scratchHView),
+                    BindGroupEntry(binding = 2u, resource = d.shadedLayerView),
+                ),
+            ),
+        )
+        return DrawResources(
+            uniform = hUniform,
+            bindGroup = hBindGroup,
+            secondaryUniform = vUniform,
+            secondaryBindGroup = vBindGroup,
+            scratchHTexture = d.scratchHTexture,
+            scratchHView = d.scratchHView,
+            layerDevice = d.shadedLayerDevice,
         )
     }
 
