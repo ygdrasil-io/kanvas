@@ -66,6 +66,7 @@ import org.skia.foundation.SkBlendMode
 import org.skia.foundation.asBlendModeFilter
 import org.skia.foundation.asBlurImageFilter
 import org.skia.foundation.asColorFilterImageFilter
+import org.skia.foundation.asComposeImageFilter
 import org.skia.foundation.asDropShadowImageFilter
 import org.skia.foundation.asOffsetImageFilter
 import org.skia.foundation.asMatrixFilter
@@ -1105,6 +1106,18 @@ public class SkWebGpuDevice(
         // when the colour-filter slot is identity.
         val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
         val colorFilterPacked: FloatArray,
+        // Phase G-saveLayer-imageFilter-compose -- optional pre-blur
+        // ColorFilter pass. When non-null, the dispatch encodes a
+        // 4-pass pipeline (preCF, H, V, composite) instead of 3 ; the
+        // pre-CF pass reads the layer texture, applies the colour
+        // filter via `layer_composite.wgsl` with kSrc blend, and writes
+        // to [scratchPreCfTexture] (which then feeds the H pass instead
+        // of the raw layer texture). The packed payload mirrors
+        // [colorFilterPacked] : 24 floats (6 vec4f), `kind == 0` for
+        // identity / no pre-CF.
+        val preBlurColorFilterPacked: FloatArray?,
+        val scratchPreCfTexture: GPUTexture?,
+        val scratchPreCfView: GPUTextureView?,
         // PendingDraw interface : r/g/b/a placeholders ; mode honoured
         // by the composite-pass pipeline's blend state.
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
@@ -3614,27 +3627,35 @@ public class SkWebGpuDevice(
      *    for the `Blend` variant are the 15 Porter-Duff modes the WGSL
      *    `blend_premul` helper expresses (kClear...kScreen) ; the rest
      *    fall back to identity in-shader.
-     *  - **Image filter** on [paint] : five variants ship --
-     *    `SkImageFilters.ColorFilter(cf, input = null)` (Phase
-     *    G-saveLayer-imageFilter, unwraps `cf` via
-     *    [packLayerCompositeColorFilter]), `SkImageFilters.Blur(
-     *    sigmaX, sigmaY, kClamp / kDecal, input = null)` (Phase
-     *    G-saveLayer-imageFilter-blur, 3-pass H+V+composite),
-     *    `SkImageFilters.Offset(dx, dy, input = null)` (Phase
-     *    G-saveLayer-imageFilter-offset, shifts the composite's
-     *    `dstOriginSize.xy` -- no new pipeline), and `SkImageFilters
-     *    .DropShadow(dx, dy, sigmaX, sigmaY, color, input = null)`
-     *    (Phase G-saveLayer-imageFilter-dropshadow, 4-pass blur +
-     *    colorize-via-Blend(color, kSrcIn) + offset composite +
-     *    original composite -- kSrcOver mode only). All require
-     *    `input == null` ; the ColorFilter wrap also requires the
-     *    layer paint's own `colorFilter` to be `null` (single-
-     *    occupancy uniform). Other image-filter variants -- Compose,
-     *    MatrixTransform, DisplacementMap, Magnifier, Tile, Crop,
-     *    Blend, Erode / Dilate, MatrixConvolution, Lighting,
-     *    Arithmetic, ... -- throw a clear "not yet supported"
-     *    error. Defer the real Gaussian-blur convolution to a follow-up
-     *    slice that adds a multi-pass render-target ping-pong pipeline.
+     *  - **Image filter** on [paint] : the tree is flattened via
+     *    [resolveLayerImageFilterPlan] into a normalized
+     *    `[preCF?][Blur?][postCF?]` plan. Supported variants :
+     *      - `SkImageFilters.ColorFilter(cf, input = null)` -- routed
+     *        through the composite-pass colour filter slot, same code
+     *        path as `paint.colorFilter` (Phase G-saveLayer-imageFilter).
+     *      - `SkImageFilters.Blur(sigmaX, sigmaY, kClamp / kDecal, input
+     *        = null)` -- separable Gaussian via the 3-pass pipeline
+     *        (Phase G-saveLayer-imageFilter-blur).
+     *      - `SkImageFilters.Offset(dx, dy, input = null)` -- shifts the
+     *        composite's `dstOriginSize.xy` -- no new pipeline (Phase
+     *        G-saveLayer-imageFilter-offset).
+     *      - `SkImageFilters.DropShadow(dx, dy, sigmaX, sigmaY, color,
+     *        input = null)` -- 4-pass blur + colorize-via-Blend(color,
+     *        kSrcIn) + offset composite + original composite, kSrcOver
+     *        only (Phase G-saveLayer-imageFilter-dropshadow).
+     *      - `SkImageFilters.Compose(outer, inner)` -- recursive walk
+     *        of the chain (Phase G-saveLayer-imageFilter-compose), with
+     *        leaves classified as "pre-blur CF" / "Blur" / "post-blur
+     *        CF" depending on where they fall. A pre-blur CF triggers
+     *        an extra (4th) render pass that applies the colour filter
+     *        to the layer texture into a scratch before the Blur reads
+     *        from it. Compose where a child is Offset or DropShadow is
+     *        deferred -- throws.
+     *    Other variants (MatrixTransform, DisplacementMap, Magnifier,
+     *    Tile, Crop, Blend, Erode / Dilate, MatrixConvolution, Lighting,
+     *    Arithmetic, ...) throw a clear "not yet supported" error. The
+     *    single-occupancy rule still applies : `paint.colorFilter` may
+     *    not coexist with a CF in the same stage of the Compose chain.
      */
     override fun compositeFrom(
         src: SkDevice,
@@ -3676,14 +3697,15 @@ public class SkWebGpuDevice(
             )
         }
 
-        // Phase G-saveLayer-imageFilter -- scaffolding gate. Detect the
-        // paint's imageFilter and route the one supported variant
-        // (ColorFilter(cf, input = null)) through the existing
-        // colour-filter packing. All other variants raise a clear error
-        // so the call site (saveLayer + restore) surfaces the missing
-        // backend support rather than silently dropping the filter.
-        val effectiveColorFilter: org.skia.foundation.SkColorFilter? =
-            resolveLayerColorFilter(paint)
+        // Phase G-saveLayer-imageFilter-compose -- walk the paint's
+        // imageFilter tree (possibly Compose-wrapped) into a normalized
+        // plan of "[pre-blur CF][Blur?][post-blur CF folded with
+        // paint.colorFilter]". Unsupported leaves throw inside the
+        // walker so the call site (saveLayer + restore) surfaces the
+        // missing backend support rather than silently dropping the
+        // filter. See [resolveLayerImageFilterPlan] for the full set
+        // of supported / rejected patterns.
+        val plan = resolveLayerImageFilterPlan(paint)
 
         val w = gpuSrc.width
         val h = gpuSrc.height
@@ -3714,22 +3736,19 @@ public class SkWebGpuDevice(
         // multiply for premul sources).
         val paintAlpha = (paint?.alpha ?: 0xFF) / 255f
 
-        // Phase G-saveLayer-colorFilter -- inspect the resolved colour
-        // filter (paint.colorFilter, possibly augmented by an unwrapped
-        // ImageFilter ColorFilter wrap) and pack the WGSL
-        // `Uniforms.colorFilter*` slots. Unsupported variants leave the
-        // payload at the identity (kind = 0) so the shader's fast path
-        // stays warm.
-        val colorFilterPacked = packLayerCompositeColorFilter(effectiveColorFilter)
+        // Phase G-saveLayer-colorFilter -- pack the post-blur colour
+        // filter (or the only colour filter, if no blur is present)
+        // into the 6-vec4f payload consumed by `layer_composite.wgsl`.
+        // Unsupported variants leave the payload at the identity
+        // (kind = 0) so the shader's fast path stays warm.
+        val colorFilterPacked = packLayerCompositeColorFilter(plan.effectiveColorFilter)
 
-        // Phase G-saveLayer-imageFilter-blur -- if the layer paint
-        // carries `SkImageFilters.Blur` (already gate-checked by
-        // [resolveLayerColorFilter] for input == null and tileMode in
-        // {kClamp, kDecal}), route through the 3-pass blur pipeline
-        // instead of the plain layer composite. Sigma == 0 on both axes
-        // collapses to the identity composite (no blur) so the call
-        // site can dial blur from off to on without a discontinuity.
-        val blurParams = paint?.imageFilter?.asBlurImageFilter()
+        // Phase G-saveLayer-imageFilter-blur / -compose -- if the
+        // imageFilter tree contains a Blur (with sigma > 0 on either
+        // axis), route through the multi-pass blur pipeline. The pass
+        // count is 3 when there is no pre-blur CF (H, V, composite) ;
+        // 4 when a pre-blur CF is present (preCF, H, V, composite).
+        val blurParams = plan.blurParams
         if (blurParams != null &&
             (blurParams.sigmaX > 0f || blurParams.sigmaY > 0f)
         ) {
@@ -3743,6 +3762,7 @@ public class SkWebGpuDevice(
                 tileMode = blurParams.tileMode,
                 paintAlpha = paintAlpha,
                 colorFilterPacked = colorFilterPacked,
+                preBlurColorFilter = plan.preBlurColorFilter,
                 mode = mode,
             )
             return
@@ -3854,6 +3874,19 @@ public class SkWebGpuDevice(
             return
         }
 
+        // No blur (or sigma == 0). A pre-blur CF from the Compose tree
+        // collapses to the post-blur slot when there is no blur ; the
+        // resolver folded both into `effectiveColorFilter` above.
+        // Defensive : if the resolver ever leaves a stray preBlurCF
+        // without a blur, surface it as an error rather than dropping
+        // the filter.
+        if (plan.preBlurColorFilter != null) {
+            error(
+                "SkWebGpuDevice.compositeFrom : internal -- pre-blur " +
+                    "colour filter present without a Blur. The plan resolver " +
+                    "should have folded it into effectiveColorFilter."
+            )
+        }
         pending.add(
             LayerCompositeDraw(
                 layerView = gpuSrc.intermediateView,
@@ -3891,6 +3924,13 @@ public class SkWebGpuDevice(
         tileMode: SkTileMode,
         paintAlpha: Float,
         colorFilterPacked: FloatArray,
+        // Phase G-saveLayer-imageFilter-compose -- optional pre-blur
+        // ColorFilter (from a Compose chain). `null` -> 3-pass pipeline
+        // (H, V, composite). Non-null -> 4-pass pipeline (preCF, H, V,
+        // composite) ; the preCF pass runs `layer_composite.wgsl` with
+        // kSrc blend on the layer texture into a fresh scratch, then
+        // the blur reads from that scratch.
+        preBlurColorFilter: org.skia.foundation.SkColorFilter?,
         mode: SkBlendMode,
     ) {
         if (!sigmaX.isFinite() || !sigmaY.isFinite() || sigmaX < 0f || sigmaY < 0f) {
@@ -3938,6 +3978,30 @@ public class SkWebGpuDevice(
         )
         val scratchVView = scratchV.createView()
 
+        // Phase G-saveLayer-imageFilter-compose -- allocate the pre-CF
+        // scratch only when needed. The Blur H pass reads from this
+        // texture (instead of the raw layer view) when a pre-blur CF is
+        // present.
+        val preCfScratch: GPUTexture?
+        val preCfScratchView: GPUTextureView?
+        val preCfPacked: FloatArray?
+        if (preBlurColorFilter != null) {
+            preCfScratch = context.device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                    format = intermediateFormat,
+                    usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                    label = "SkWebGpuDevice.blurImageFilterScratchPreCf",
+                ),
+            )
+            preCfScratchView = preCfScratch.createView()
+            preCfPacked = packLayerCompositeColorFilter(preBlurColorFilter)
+        } else {
+            preCfScratch = null
+            preCfScratchView = null
+            preCfPacked = null
+        }
+
         pending.add(
             BlurredLayerCompositeDraw(
                 layerView = gpuSrc.intermediateView,
@@ -3952,6 +4016,9 @@ public class SkWebGpuDevice(
                 paintR = paintAlpha, paintG = paintAlpha,
                 paintB = paintAlpha, paintA = paintAlpha,
                 colorFilterPacked = colorFilterPacked,
+                preBlurColorFilterPacked = preCfPacked,
+                scratchPreCfTexture = preCfScratch,
+                scratchPreCfView = preCfScratchView,
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
                 mode = mode,
             ),
@@ -4124,138 +4191,298 @@ public class SkWebGpuDevice(
     }
 
     /**
-     * Phase G-saveLayer-imageFilter -- resolver for the layer paint's
-     * [SkImageFilter] slot.
+     * Phase G-saveLayer-imageFilter-compose -- normalized plan for the
+     * layer paint's [SkImageFilter] slot, built by walking the (possibly
+     * Compose-wrapped) tree into the shape the WebGPU composite pipeline
+     * can dispatch :
      *
-     * Returns the effective [SkColorFilter] that should drive the
-     * layer-composite shader's `colorFilter*` uniform :
+     *   [optional pre-blur ColorFilter]
+     *   [optional Blur]
+     *   [optional post-blur ColorFilter (folded with paint.colorFilter)]
      *
-     *  - `paint == null` or `paint.imageFilter == null` -> just the
-     *    paint's own `colorFilter` (or `null`), bit-iso with the
-     *    pre-imageFilter path.
-     *  - `paint.imageFilter` is a `ColorFilter(cf, input = null)` wrap
-     *    **and** `paint.colorFilter == null` -> returns the inner `cf`.
-     *    The composite shader applies it per pixel, which is identical
-     *    to the CPU snapshot path's behaviour : the layer pixels are
-     *    rendered first (premul RGBA on the layer texture), then the
-     *    composite reads them and runs `cf` per pixel before blending
-     *    onto the parent. No structural transform involved.
-     *  - `paint.imageFilter` is a `Blur(sigmaX, sigmaY, tileMode, input
-     *    = null)` -> returns the paint's own `colorFilter` ; the blur
-     *    pass is handled separately by [compositeFrom] enqueuing a
-     *    [BlurredLayerCompositeDraw] (kClamp / kDecal only -- other tile
-     *    modes throw at the dispatch gate ; non-null `input` throws too).
-     *  - `paint.imageFilter` is an `Offset(dx, dy, input = null)` ->
-     *    returns the paint's own `colorFilter` ; the offset is folded
-     *    into the composite's `dstOriginSize.xy` slot by [compositeFrom]
-     *    (just a shifted dst origin, no per-pixel UV remap).
-     *  - `paint.imageFilter` is a `DropShadow(dx, dy, sigmaX, sigmaY,
-     *    color, input = null)` -> returns the paint's own `colorFilter` ;
-     *    the shadow is rendered as a separate (blur + colorize + offset)
-     *    composite pass by [compositeFrom] enqueuing a
-     *    [DropShadowLayerCompositeDraw] (kSrcOver mode only -- other
-     *    modes throw at the dispatch gate ; non-null `input` throws too).
-     *  - any other [SkImageFilter] variant (Compose, MatrixTransform,
-     *    DisplacementMap, Magnifier, Tile, Crop, Blend, Erode / Dilate,
-     *    MatrixConvolution, Lighting, Arithmetic, ...) -> throws a clear
-     *    error. These require either a UV-remapping sample
-     *    (MatrixTransform / DisplacementMap), or a multi-pass render-
-     *    target ping-pong (Compose / Magnifier), none of which the
-     *    scaffolding pipeline can express yet.
-     *  - both `paint.colorFilter` and a `ColorFilter` wrap set -> throws
-     *    "double colour filter" error : the composite shader's
-     *    `colorFilter*` uniform is single-occupancy, and folding two
-     *    arbitrary [SkColorFilter] variants together would need
-     *    [SkColorFilter] composition support (kind = 3 / Compose), which
-     *    is a separate follow-up slice.
+     * The pre-blur ColorFilter runs in a dedicated pre-pass that reads
+     * the layer texture and writes to a scratch (using
+     * `layer_composite.wgsl` with `kSrc` blend) before the Blur's H pass
+     * reads from that scratch. The post-blur ColorFilter rides in the
+     * composite pass's uniform (the existing slot consumed by
+     * `layer_composite.wgsl` after the paintColor scale).
+     *
+     * When the imageFilter contains no Blur, the whole plan collapses
+     * onto the existing [LayerCompositeDraw] path : pre-blur and
+     * post-blur slots fold into a single effective colour filter (the
+     * existing single-occupancy rule applies -- if both slots are non-
+     * null, the resolver throws).
+     *
+     * Top-level Offset / DropShadow are NOT modelled by the plan : the
+     * dispatch in [compositeFrom] handles them BEFORE calling this
+     * resolver. The resolver therefore only sees Blur, ColorFilter,
+     * and Compose nodes ; encountering an Offset / DropShadow inside
+     * a Compose tree throws a "deferred" error (mixing those structural
+     * filters with the normalized `[preCF?][Blur?][postCF?]` plan needs
+     * a render-to-texture intermediate that is out of scope for the
+     * first Compose slice).
      */
-    private fun resolveLayerColorFilter(paint: SkPaint?): org.skia.foundation.SkColorFilter? {
-        val imf = paint?.imageFilter ?: return paint?.colorFilter
+    private data class ResolvedLayerImageFilterPlan(
+        // Single ColorFilter applied to the layer texture before the
+        // Blur reads from it. `null` means no pre-blur stage.
+        val preBlurColorFilter: org.skia.foundation.SkColorFilter?,
+        // Blur parameters, or `null` if the filter tree carries no Blur.
+        // When present, the dispatch enqueues a [BlurredLayerCompositeDraw]
+        // (optionally extended with a pre-blur CF pass) ; when absent,
+        // the dispatch enqueues a plain [LayerCompositeDraw].
+        val blurParams: org.skia.foundation.SkBlurImageFilterParams?,
+        // Effective ColorFilter consumed by the composite pass uniform.
+        // Folds `paint.colorFilter` with any post-blur (or pre-blur when
+        // no blur is present) ColorFilter from the tree.
+        val effectiveColorFilter: org.skia.foundation.SkColorFilter?,
+    )
+
+    /**
+     * Phase G-saveLayer-imageFilter -- resolver for the layer paint's
+     * [SkImageFilter] slot. See [ResolvedLayerImageFilterPlan] for the
+     * shape of the normalized plan.
+     *
+     * Supported variants (Phase G-saveLayer-imageFilter / -blur /
+     * -compose) :
+     *  - `null` filter -> just `paint.colorFilter` (no blur, no pre-CF).
+     *  - `SkImageFilters.ColorFilter(cf, input = null)` -> post-blur CF
+     *    only ; folds with `paint.colorFilter` per the single-occupancy
+     *    rule (throws if both are set).
+     *  - `SkImageFilters.Blur(sigmaX, sigmaY, kClamp/kDecal,
+     *    input = null)` -> blur params, no pre-CF, post-CF =
+     *    `paint.colorFilter`.
+     *  - `SkImageFilters.Offset(dx, dy, input = null)` / `SkImageFilters
+     *    .DropShadow(...)` at the TOP level -> pass-through : no blur,
+     *    no pre-CF, effective CF = `paint.colorFilter`. The dispatch
+     *    in [compositeFrom] handles the structural shift / shadow pass
+     *    before this resolver sees the filter.
+     *  - `SkImageFilters.Compose(outer, inner)` -> walk the children
+     *    recursively : `inner` is applied first to the source image,
+     *    then `outer` to the inner's result. The walk classifies each
+     *    leaf as "before blur" / "blur" / "after blur" depending on
+     *    where it falls in the chain.
+     *
+     * Unsupported patterns throw with a clear error :
+     *  - Any Compose chain that introduces more than one Blur (e.g.
+     *    `Compose(Blur, Blur)`), or a Blur with a non-`kClamp`/`kDecal`
+     *    tile mode, or a non-null `input` on a leaf Blur / ColorFilter.
+     *  - Any non-`null` `paint.colorFilter` combined with a post-blur
+     *    ColorFilter from the Compose chain (single-occupancy uniform).
+     *  - Any Offset / DropShadow inside a Compose tree -- deferred
+     *    (the structural filter mixed with the normalized blur/CF plan
+     *    needs a render-to-texture intermediate that the first Compose
+     *    slice doesn't ship).
+     *  - Any other [SkImageFilter] variant in a leaf position
+     *    (MatrixTransform, DisplacementMap, ...).
+     */
+    private fun resolveLayerImageFilterPlan(
+        paint: SkPaint?,
+    ): ResolvedLayerImageFilterPlan {
+        val imf = paint?.imageFilter
+            ?: return ResolvedLayerImageFilterPlan(
+                preBlurColorFilter = null,
+                blurParams = null,
+                effectiveColorFilter = paint?.colorFilter,
+            )
+
         // Phase G-saveLayer-imageFilter-offset / -dropshadow -- both
         // variants are folded into the composite uniform / dispatch by
-        // [compositeFrom] directly ; the resolved colour filter is just
-        // the paint's own (the offset / shadow placement is structural,
-        // not per-pixel). The dispatch gate validates input == null
-        // there too, so this branch only short-circuits the throw path.
+        // [compositeFrom] directly when they sit at the TOP of the
+        // filter tree ; the plan here is just "no blur, no preCF,
+        // effectiveCF = paint.colorFilter" (the offset / shadow placement
+        // is structural, not per-pixel). The dispatch gate validates
+        // input == null there too, so this branch only short-circuits
+        // the throw path of the walker below.
         if (imf.asOffsetImageFilter() != null || imf.asDropShadowImageFilter() != null) {
-            return paint.colorFilter
+            return ResolvedLayerImageFilterPlan(
+                preBlurColorFilter = null,
+                blurParams = null,
+                effectiveColorFilter = paint.colorFilter,
+            )
         }
-        val colorFilterWrap = imf.asColorFilterImageFilter()
-        if (colorFilterWrap != null) {
-            if (colorFilterWrap.input != null) {
+
+        // Walk the Compose tree, classifying each leaf as "pre-blur CF"
+        // / "blur" / "post-blur CF". `inner` runs first, so we recurse
+        // into it before `outer`. The walk uses a mutable accumulator
+        // because the chain is left-associative (e.g.
+        // `Compose(Compose(A, B), C)` resolves as `A(B(C(src)))`).
+        var preBlurCF: org.skia.foundation.SkColorFilter? = null
+        var blur: org.skia.foundation.SkBlurImageFilterParams? = null
+        var postBlurCF: org.skia.foundation.SkColorFilter? = null
+
+        fun walk(node: org.skia.foundation.SkImageFilter) {
+            val composeParams = node.asComposeImageFilter()
+            if (composeParams != null) {
+                // inner runs first, then outer.
+                walk(composeParams.inner)
+                walk(composeParams.outer)
+                return
+            }
+            // Phase G-saveLayer-imageFilter-compose -- Offset / DropShadow
+            // inside a Compose tree is deferred. Mixing those structural
+            // filters with the normalized `[preCF?][Blur?][postCF?]` plan
+            // needs a render-to-texture intermediate (the Offset / shadow
+            // would shift either the source the Blur reads from, or the
+            // composite output -- both need a separate pre-pass). Throw
+            // a clear "deferred" error so the call site surfaces the gap.
+            if (node.asOffsetImageFilter() != null ||
+                node.asDropShadowImageFilter() != null
+            ) {
                 error(
-                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
-                        "SkImageFilters.ColorFilter(cf, input = nonNull) wrap " +
-                        "with a non-null child filter. Only the input == null " +
-                        "case is supported in the scaffolding slice (Phase " +
-                        "G-saveLayer-imageFilter) -- a non-null child needs a " +
-                        "render-to-texture pre-pass that the WebGPU layer " +
-                        "composite pipeline cannot express yet."
+                    "SkWebGpuDevice.compositeFrom : a Compose chain contains " +
+                        "an ${node::class.simpleName} leaf (e.g. Compose(" +
+                        "Offset, Blur)) -- not yet supported. Top-level " +
+                        "Offset / DropShadow ship in their own dispatch " +
+                        "paths, but mixing them with a Compose tree (where " +
+                        "they would shift the texture the Blur reads from, " +
+                        "or shift the composite output relative to a colour-" +
+                        "filtered scratch) is deferred -- it needs a render-" +
+                        "to-texture intermediate that the first Compose " +
+                        "support slice (Phase G-saveLayer-imageFilter-" +
+                        "compose) doesn't ship."
                 )
             }
-            if (paint.colorFilter != null) {
+            val blurLeaf = node.asBlurImageFilter()
+            if (blurLeaf != null) {
+                if (blurLeaf.input != null) {
+                    error(
+                        "SkWebGpuDevice.compositeFrom : a Blur leaf inside the " +
+                            "imageFilter tree has a non-null child filter. The " +
+                            "Compose support flattens the tree, so leaves must " +
+                            "have input == null -- nest the child via a Compose " +
+                            "node instead (e.g. SkImageFilters.Compose(Blur(...), " +
+                            "child) rather than Blur(..., input = child))."
+                    )
+                }
+                when (blurLeaf.tileMode) {
+                    SkTileMode.kClamp, SkTileMode.kDecal -> Unit
+                    else -> error(
+                        "SkWebGpuDevice.compositeFrom : a Blur leaf inside the " +
+                            "imageFilter tree has tileMode = ${blurLeaf.tileMode}. " +
+                            "Only kClamp and kDecal are supported on the WebGPU " +
+                            "backend ; kRepeat / kMirror need a sampler with the " +
+                            "corresponding addressMode (follow-up slice)."
+                    )
+                }
+                if (blur != null) {
+                    error(
+                        "SkWebGpuDevice.compositeFrom : the imageFilter tree " +
+                            "carries more than one Blur (e.g. Compose(Blur, " +
+                            "Blur)). The first Compose support slice handles at " +
+                            "most one Blur per layer composite -- folding two " +
+                            "Gaussians via sigma = sqrt(s1^2 + s2^2) needs a " +
+                            "follow-up slice that proves the kernel-mass " +
+                            "renormalization on kDecal."
+                    )
+                }
+                blur = blurLeaf
+                return
+            }
+            val cfLeaf = node.asColorFilterImageFilter()
+            if (cfLeaf != null) {
+                if (cfLeaf.input != null) {
+                    error(
+                        "SkWebGpuDevice.compositeFrom : a ColorFilter leaf " +
+                            "inside the imageFilter tree has a non-null child " +
+                            "filter. Compose flattens the tree, so leaves must " +
+                            "have input == null -- nest the child via a Compose " +
+                            "node instead (e.g. SkImageFilters.Compose(" +
+                            "ColorFilter(cf), child) rather than ColorFilter(cf, " +
+                            "input = child))."
+                    )
+                }
+                if (blur == null) {
+                    // This CF runs before the Blur (or there is no Blur).
+                    if (preBlurCF != null) {
+                        error(
+                            "SkWebGpuDevice.compositeFrom : the imageFilter tree " +
+                                "carries more than one ColorFilter in the same " +
+                                "stage (e.g. Compose(ColorFilter, ColorFilter) " +
+                                "with no Blur between them). The composite " +
+                                "shader's colorFilter uniform is single-occupancy " +
+                                "per stage -- folding two arbitrary SkColorFilter " +
+                                "variants needs an SkComposeColorFilter extractor " +
+                                "that the scaffolding slice doesn't ship."
+                        )
+                    }
+                    preBlurCF = cfLeaf.colorFilter
+                } else {
+                    // This CF runs after the Blur.
+                    if (postBlurCF != null) {
+                        error(
+                            "SkWebGpuDevice.compositeFrom : the imageFilter tree " +
+                                "carries more than one ColorFilter after the " +
+                                "Blur (e.g. Compose(ColorFilter, Compose(" +
+                                "ColorFilter, Blur))). The composite shader's " +
+                                "colorFilter uniform is single-occupancy per " +
+                                "stage."
+                        )
+                    }
+                    postBlurCF = cfLeaf.colorFilter
+                }
+                return
+            }
+            error(
+                "SkWebGpuDevice.compositeFrom : paint.imageFilter " +
+                    "${node::class.simpleName} not yet supported on the WebGPU " +
+                    "backend. Supported leaves in a Compose chain : " +
+                    "SkImageFilters.Blur(kClamp / kDecal, input = null) and " +
+                    "SkImageFilters.ColorFilter(cf, input = null). Other " +
+                    "variants -- Offset, DropShadow, MatrixTransform, " +
+                    "DisplacementMap, Magnifier, Tile, Crop, Blend, Erode / " +
+                    "Dilate, MatrixConvolution, Lighting, Arithmetic -- need " +
+                    "follow-up slices that add a fragment-side UV-remapping " +
+                    "or multi-pass render-target pipeline."
+            )
+        }
+        walk(imf)
+
+        // Single-occupancy rule -- a CF on paint.colorFilter may not
+        // coexist with a CF from the Compose chain that lands in the
+        // same stage (the composite shader's uniform is single-slot).
+        // When no Blur is present, pre-blur and post-blur collapse onto
+        // the same stage as the composite pass, so we treat any non-
+        // null tree-side CF as the post-blur slot for the conflict check.
+        if (blur == null) {
+            // No blur : preBlurCF and postBlurCF are not both populated
+            // (the walk classifies all CFs as "pre-blur" before any blur
+            // is seen). Fold into a single effective CF.
+            val treeCF = preBlurCF ?: postBlurCF
+            if (treeCF != null && paint.colorFilter != null) {
                 error(
                     "SkWebGpuDevice.compositeFrom : both paint.colorFilter and " +
-                        "paint.imageFilter (ColorFilter wrap) are set. The " +
-                        "WebGPU layer composite uniform is single-occupancy " +
-                        "(one SkColorFilter per draw) -- folding two arbitrary " +
-                        "SkColorFilter variants needs a SkColorFilters.Compose " +
-                        "extractor that the scaffolding slice doesn't ship. " +
-                        "Set only one of the two on the layer paint."
+                        "paint.imageFilter (ColorFilter / Compose chain) are " +
+                        "set. The WebGPU layer composite uniform is single-" +
+                        "occupancy (one SkColorFilter per draw) -- folding two " +
+                        "arbitrary SkColorFilter variants needs an " +
+                        "SkComposeColorFilter extractor that the scaffolding " +
+                        "slice doesn't ship. Set only one of the two on the " +
+                        "layer paint."
                 )
             }
-            return colorFilterWrap.colorFilter
+            return ResolvedLayerImageFilterPlan(
+                preBlurColorFilter = null,
+                blurParams = null,
+                effectiveColorFilter = treeCF ?: paint.colorFilter,
+            )
         }
-        val blurWrap = imf.asBlurImageFilter()
-        if (blurWrap != null) {
-            // Blur is handled by the dedicated [BlurredLayerCompositeDraw]
-            // path in [compositeFrom]. We still surface the paint's own
-            // colourFilter so the final composite step folds it in --
-            // structurally equivalent to running the blur first (Blur
-            // composes over the layer texture as the source image, then
-            // the colour filter applies to the output, then the blend
-            // mode places it onto the parent ; the composite-pass
-            // pipeline runs the colour filter on the already-blurred
-            // pixels, matching that order).
-            if (blurWrap.input != null) {
-                error(
-                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
-                        "SkImageFilters.Blur(input = nonNull) with a non-null " +
-                        "child filter. Only the input == null case is supported " +
-                        "in the first ImageFilter Blur slice (Phase " +
-                        "G-saveLayer-imageFilter-blur) -- a non-null child " +
-                        "needs a render-to-texture pre-pass that the WebGPU " +
-                        "blur pipeline cannot express yet."
-                )
-            }
-            when (blurWrap.tileMode) {
-                SkTileMode.kClamp, SkTileMode.kDecal -> Unit
-                else -> error(
-                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
-                        "SkImageFilters.Blur(tileMode = ${blurWrap.tileMode}). " +
-                        "Only kClamp and kDecal are supported in the first " +
-                        "ImageFilter Blur slice (Phase " +
-                        "G-saveLayer-imageFilter-blur) -- kRepeat / kMirror " +
-                        "need a sampler with the corresponding addressMode and " +
-                        "a follow-up slice."
-                )
-            }
-            return paint.colorFilter
+        // Blur present : pre-blur CF (if any) stays as the pre-pass ;
+        // post-blur CF folds with paint.colorFilter under the single-
+        // occupancy rule.
+        if (postBlurCF != null && paint.colorFilter != null) {
+            error(
+                "SkWebGpuDevice.compositeFrom : both paint.colorFilter and a " +
+                    "post-blur ColorFilter from the imageFilter tree are set. " +
+                    "The composite shader's colorFilter uniform is single-" +
+                    "occupancy -- folding the two would need an " +
+                    "SkComposeColorFilter extractor that the scaffolding slice " +
+                    "doesn't ship. Set only one of the two."
+            )
         }
-        error(
-            "SkWebGpuDevice.compositeFrom : paint.imageFilter " +
-                "${imf::class.simpleName} not yet supported on the WebGPU " +
-                "backend. Supported variants : null (no filter) ; " +
-                "SkImageFilters.ColorFilter(cf, input = null) when the " +
-                "paint's own colorFilter is null ; SkImageFilters.Blur(" +
-                "sigmaX, sigmaY, kClamp / kDecal, input = null) ; " +
-                "SkImageFilters.Offset(dx, dy, input = null) ; " +
-                "SkImageFilters.DropShadow(dx, dy, sigmaX, sigmaY, color, " +
-                "input = null). Other variants -- Compose, MatrixTransform, " +
-                "DisplacementMap, Magnifier, Tile, Crop, Blend, Erode / " +
-                "Dilate, MatrixConvolution, Lighting, Arithmetic -- need " +
-                "follow-up slices that add a fragment-side UV-remapping or " +
-                "multi-pass render-target pipeline."
+        return ResolvedLayerImageFilterPlan(
+            preBlurColorFilter = preBlurCF,
+            blurParams = blur,
+            effectiveColorFilter = postBlurCF ?: paint.colorFilter,
         )
     }
 
@@ -7697,8 +7924,9 @@ public class SkWebGpuDevice(
             if (d is BlurredLayerCompositeDraw) {
                 // Phase G-saveLayer-imageFilter-blur -- three render
                 // passes :
-                //   1. H pass : sample layer texture, write to scratchH
-                //      (cleared). No blend.
+                //   1. H pass : sample layer texture (or pre-CF scratch
+                //      when a pre-blur CF is present, see below), write
+                //      to scratchH (cleared). No blend.
                 //   2. V pass : sample scratchH, write to scratchV
                 //      (cleared). No blend. Output is blurred premul
                 //      RGBA, no paint-colour fold.
@@ -7707,6 +7935,40 @@ public class SkWebGpuDevice(
                 //      parent intermediate via the layer composite
                 //      pipeline (same code path as the no-filter
                 //      saveLayer).
+                //
+                // Phase G-saveLayer-imageFilter-compose -- when a pre-
+                // blur ColorFilter is present (from a Compose chain),
+                // an extra pass runs *before* the H pass : sample the
+                // layer texture, apply the colour filter via
+                // `layer_composite.wgsl` with kSrc blend, write to the
+                // pre-CF scratch. The H pass then reads from the
+                // pre-CF scratch (its bind group's binding 1 was wired
+                // by [buildBlurredLayerCompositeDrawResources]).
+                if (res.scratchPreCfView != null && res.quaternaryBindGroup != null) {
+                    val preCfView = res.scratchPreCfView
+                    encoder.beginRenderPass(
+                        RenderPassDescriptor(
+                            colorAttachments = listOf(
+                                RenderPassColorAttachment(
+                                    view = preCfView,
+                                    loadOp = GPULoadOp.Clear,
+                                    clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                    storeOp = GPUStoreOp.Store,
+                                ),
+                            ),
+                        ),
+                    ) {
+                        setPipeline(layerCompositePipelineFor(SkBlendMode.kSrc))
+                        setBindGroup(0u, res.quaternaryBindGroup)
+                        setScissorRect(
+                            x = 0u, y = 0u,
+                            width = d.layerWidth.toUInt(),
+                            height = d.layerHeight.toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                        end()
+                    }
+                }
                 val hView = res.scratchHView!!
                 val vView = res.scratchVView!!
                 encoder.beginRenderPass(
@@ -8107,10 +8369,14 @@ public class SkWebGpuDevice(
             it.tertiaryUniform?.close()
             it.scratchVView?.close()
             it.scratchVTexture?.close()
-            // Phase G-saveLayer-imageFilter-dropshadow -- release the
-            // original-pass composite uniform. Same lifetime as the
-            // shadow-pass tertiary uniform.
+            // Phase G-saveLayer-imageFilter-dropshadow / -compose --
+            // release the fourth-pass uniform (DropShadow's original-pass
+            // composite OR Compose's pre-blur CF pass uniform ; the two
+            // never coexist on the same draw) and, when present, the
+            // pre-blur CF scratch texture + view (Compose only).
             it.quaternaryUniform?.close()
+            it.scratchPreCfView?.close()
+            it.scratchPreCfTexture?.close()
         }
     }
 
@@ -8222,13 +8488,26 @@ public class SkWebGpuDevice(
         val tertiaryBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
         val scratchVTexture: GPUTexture? = null,
         val scratchVView: GPUTextureView? = null,
-        // Phase G-saveLayer-imageFilter-dropshadow -- a fourth uniform +
-        // bind group for the original-pass composite (the layer content
-        // drawn ON TOP of the shadow). Same byte layout as the tertiary
-        // (the shadow-pass composite) but different colour-filter +
-        // dst-origin payload, so we need a distinct GPU buffer.
+        // A fourth uniform + bind group, shared between two paths that
+        // never coexist on the same draw :
+        //  - Phase G-saveLayer-imageFilter-dropshadow : the original-pass
+        //    composite (layer content drawn ON TOP of the shadow). Same
+        //    byte layout as the tertiary (the shadow-pass composite) but
+        //    different colour-filter + dst-origin payload, so we need a
+        //    distinct GPU buffer.
+        //  - Phase G-saveLayer-imageFilter-compose : the pre-blur
+        //    ColorFilter pass. Bound by
+        //    [buildBlurredLayerCompositeDrawResources] when the
+        //    BlurredLayerCompositeDraw carries a pre-blur CF, else left
+        //    null and the blur H pass reads from the raw layer view.
         val quaternaryUniform: GPUBuffer? = null,
         val quaternaryBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
+        // Phase G-saveLayer-imageFilter-compose -- pre-blur CF scratch
+        // texture + view. The blur H pass reads from this scratch when
+        // present (instead of from the raw layer view). Released in
+        // [closeDrawResources] alongside the other scratch textures.
+        val scratchPreCfTexture: GPUTexture? = null,
+        val scratchPreCfView: GPUTextureView? = null,
     )
 
     private fun buildRectDrawResources(d: RectDraw): DrawResources {
@@ -8972,6 +9251,51 @@ public class SkWebGpuDevice(
     private fun buildBlurredLayerCompositeDrawResources(
         d: BlurredLayerCompositeDraw,
     ): DrawResources {
+        // ── Phase G-saveLayer-imageFilter-compose -- optional pre-blur
+        //    CF pass. Allocated only when the draw carries a pre-blur
+        //    CF (i.e. a Compose chain landed with a CF inner of a Blur
+        //    outer). Reuses the layer_composite.wgsl shader / bind
+        //    group layout with kSrc blend so the scratch is overwritten
+        //    rather than blended with prior content.
+        val preCfPacked = d.preBlurColorFilterPacked
+        val preCfView = d.scratchPreCfView
+        var preCfUniform: GPUBuffer? = null
+        var preCfBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null
+        // The blur H pass reads from preCfView when the pre-CF pass
+        // produced one ; otherwise it reads from the raw layer view.
+        val hPassSourceView: GPUTextureView = preCfView ?: d.layerView
+        if (preCfPacked != null && preCfView != null) {
+            preCfUniform = context.device.createBuffer(
+                BufferDescriptor(
+                    size = LAYER_COMPOSITE_UNIFORM_SIZE,
+                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                    label = "SkWebGpuDevice.blurImageFilterPreCfDraw",
+                ),
+            )
+            // layer_composite.wgsl uniform layout : 8 vec4f.
+            //   dstOriginSize : (0, 0, w, h)  -> identity mapping
+            //   paintColor    : (1, 1, 1, 1)  -> no scale
+            //   colorFilter*  : packed CF (6 vec4f, 24 floats)
+            val packed = FloatArray(32)
+            packed[0] = 0f; packed[1] = 0f
+            packed[2] = d.layerWidth.toFloat(); packed[3] = d.layerHeight.toFloat()
+            packed[4] = 1f; packed[5] = 1f; packed[6] = 1f; packed[7] = 1f
+            System.arraycopy(preCfPacked, 0, packed, 8, 24)
+            context.queue.writeBuffer(preCfUniform, 0uL, ArrayBuffer.of(packed))
+            preCfBindGroup = context.device.createBindGroup(
+                BindGroupDescriptor(
+                    layout = layerCompositeBindGroupLayout,
+                    entries = listOf(
+                        BindGroupEntry(
+                            binding = 0u,
+                            resource = BufferBinding(buffer = preCfUniform),
+                        ),
+                        BindGroupEntry(binding = 1u, resource = d.layerView),
+                    ),
+                ),
+            )
+        }
+
         // ── H pass uniform : axisTileRadius = (1, 0, tileMode, radiusX).
         val hUniform = context.device.createBuffer(
             BufferDescriptor(
@@ -8998,7 +9322,7 @@ public class SkWebGpuDevice(
                 layout = blurImageFilterBindGroupLayout,
                 entries = listOf(
                     BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = hUniform)),
-                    BindGroupEntry(binding = 1u, resource = d.layerView),
+                    BindGroupEntry(binding = 1u, resource = hPassSourceView),
                 ),
             ),
         )
@@ -9074,6 +9398,14 @@ public class SkWebGpuDevice(
             scratchHView = d.scratchHView,
             scratchVTexture = d.scratchVTexture,
             scratchVView = d.scratchVView,
+            // Phase G-saveLayer-imageFilter-compose -- pre-blur CF
+            // pass resources (only populated when the draw carried a
+            // pre-blur CF, else left null and the dispatch skips the
+            // pre-CF render pass).
+            quaternaryUniform = preCfUniform,
+            quaternaryBindGroup = preCfBindGroup,
+            scratchPreCfTexture = d.scratchPreCfTexture,
+            scratchPreCfView = d.scratchPreCfView,
             // layerDevice intentionally left null -- the layer device
             // is owned by SkCanvas, not by this draw (mirrors
             // [LayerCompositeDraw]).

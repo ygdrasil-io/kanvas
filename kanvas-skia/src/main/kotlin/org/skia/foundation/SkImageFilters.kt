@@ -913,6 +913,12 @@ internal class SkComposeImageFilter(
     private val outer: SkImageFilter,
     private val inner: SkImageFilter,
 ) : SkImageFilter() {
+    // Phase G-saveLayer-imageFilter-compose -- read-only views for backend
+    // extractors. Same pattern as [SkBlurImageFilter.exposedSigmaX] /
+    // [SkColorFilterImageFilter.exposedColorFilter] : keeps the concrete
+    // class internal while letting backends walk the filter tree.
+    internal val exposedOuter: SkImageFilter get() = outer
+    internal val exposedInner: SkImageFilter get() = inner
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val midResult = inner.filterImage(src, ctm)
         val outResult = outer.filterImage(midResult.image, ctm)
@@ -2616,5 +2622,46 @@ public fun SkImageFilter.asDropShadowImageFilter(): SkDropShadowImageFilterParam
         sigmaY = f.exposedSigmaY,
         color = f.exposedColor,
         input = f.exposedInput,
+    )
+}
+
+/**
+ * Read-only descriptor of an [SkImageFilters.Compose] node -- the two
+ * child filters that the composition chains, in the order
+ * `outer(inner(src))`. Returned by [SkImageFilter.asComposeImageFilter]
+ * when (and only when) the receiver is a `Compose` filter.
+ *
+ * Backends that can walk an image-filter tree (e.g. the WebGPU layer
+ * composite pipeline -- Phase G-saveLayer-imageFilter-compose) use this
+ * to recursively resolve the children : apply [inner] to the layer
+ * texture first, then apply [outer] to the result. Each child is itself
+ * an [SkImageFilter], so the backend re-runs its dispatch on the
+ * extracted children -- support for [SkImageFilters.Compose] then
+ * follows directly from support for the leaf filter variants (Blur,
+ * ColorFilter, ...).
+ */
+public data class SkComposeImageFilterParams(
+    /** Outer filter applied last : `outer(inner(src))`. */
+    public val outer: SkImageFilter,
+    /** Inner filter applied first to the source image. */
+    public val inner: SkImageFilter,
+)
+
+/**
+ * Extract the parameters of an [SkImageFilters.Compose] node, or `null`
+ * if the receiver is any other [SkImageFilter] variant (Blur, Offset,
+ * ColorFilter, DropShadow, ...).
+ *
+ * Backends that can recursively resolve a filter tree use this to walk
+ * `outer(inner(src))` -- the layer composite path applies [inner] to
+ * the layer texture into a scratch render target, then applies [outer]
+ * to that scratch, then composites onto the parent. The two children
+ * are themselves [SkImageFilter]s so the dispatch recurses on them.
+ */
+public fun SkImageFilter.asComposeImageFilter(): SkComposeImageFilterParams? {
+    val f = this as? SkComposeImageFilter ?: return null
+    return SkComposeImageFilterParams(
+        outer = f.exposedOuter,
+        inner = f.exposedInner,
     )
 }

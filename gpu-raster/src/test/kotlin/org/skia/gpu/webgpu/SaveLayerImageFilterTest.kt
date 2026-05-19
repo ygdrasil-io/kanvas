@@ -15,6 +15,7 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.asBlurImageFilter
 import org.skia.foundation.asColorFilterImageFilter
+import org.skia.foundation.asComposeImageFilter
 import org.skia.foundation.asDropShadowImageFilter
 import org.skia.foundation.asOffsetImageFilter
 import kotlin.math.abs
@@ -737,6 +738,448 @@ class SaveLayerImageFilterTest {
         assertTrue(params != null) { "ColorFilter wrap must extract" }
         assertEquals(cf, params!!.colorFilter, "inner colorFilter identity")
         assertEquals(null, params.input, "input must be null")
+    }
+
+    // ─── Phase G-saveLayer-imageFilter-compose ─────────────────────────
+
+    @Test
+    fun `saveLayer with Compose(ColorFilter grayscale, Blur) blurs first then grays`() {
+        // Phase G-saveLayer-imageFilter-compose -- the headline case :
+        // Compose(outer = ColorFilter(grayscale), inner = Blur(sigma)).
+        // SkImageFilters.Compose(outer, inner) means "apply inner first,
+        // then outer", so the layer texture is blurred first (still red,
+        // softened at the edges) and then the colour filter desaturates
+        // to grayscale. The composite shader already runs the colour
+        // filter on the already-blurred pixels (the existing blur
+        // pipeline's pass 3), so this case folds onto the existing 3-
+        // pass blur path with the outer ColorFilter routed as the
+        // composite-pass colour filter slot.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val luma = floatArrayOf(
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0f,     0f,     0f,     1f, 0f,
+                )
+                val grayscale = SkColorFilters.Matrix(luma)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 2f, sigmaY = 2f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.ColorFilter(grayscale, input = null),
+                        inner = blur,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Centre of the rect : still gray (luma of red = 0.299 * 255 = 76).
+        // The blur centre tap collapses on the source colour, then the
+        // grayscale matrix converts that red to luma (76, 76, 76, 255).
+        assertRgbaApprox(
+            pixels, 16, 16,
+            76, 76, 76, 255,
+            tag = "Compose(grayscale, blur) centre", tol = 2,
+        )
+        // Far surround : untouched white.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "Compose far surround")
+        // Just-inside-edge : a softened gray-ish (blur partially fades
+        // the edge before the grayscale converts). The R/G/B channels
+        // are all equal after grayscale, so we check they match within
+        // tolerance.
+        val j = (16 * W + 20) * 4
+        val r2 = pixels[j].toInt() and 0xFF
+        val g2 = pixels[j + 1].toInt() and 0xFF
+        val b2 = pixels[j + 2].toInt() and 0xFF
+        assertTrue(abs(r2 - g2) <= 1 && abs(g2 - b2) <= 1) {
+            "After grayscale, R/G/B must match : got ($r2, $g2, $b2)"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Compose(Blur, ColorFilter grayscale) grays first then blurs`() {
+        // Phase G-saveLayer-imageFilter-compose -- the pre-blur CF case.
+        // Compose(outer = Blur, inner = ColorFilter(grayscale)) : the
+        // colour filter runs first (red layer -> gray layer), then the
+        // blur softens the gray. The dispatch encodes a 4-pass pipeline
+        // (preCF, H, V, composite) with the ColorFilter packed into the
+        // pre-blur scratch's uniform.
+        //
+        // Order-comparison with the previous test : the centre pixel
+        // must be identical (gray of (76, 76, 76, 255)) because the
+        // blur centre tap and grayscale matrix commute when the kernel
+        // fully lands on the source colour. Edge pixels differ
+        // numerically -- here grayscale-then-blur fades pre-grayscale
+        // gray with transparent surround ; the previous case faded
+        // pre-blur red and then desaturated -- but in both cases the
+        // R/G/B channels stay equal so the gray property holds.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val luma = floatArrayOf(
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0f,     0f,     0f,     1f, 0f,
+                )
+                val grayscale = SkColorFilters.Matrix(luma)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 2f, sigmaY = 2f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = blur,
+                        inner = SkImageFilters.ColorFilter(grayscale, input = null),
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Centre : still (76, 76, 76, 255). Both filter orderings give
+        // the same centre because the kernel collapses to the source
+        // colour and the grayscale matrix is linear.
+        assertRgbaApprox(
+            pixels, 16, 16,
+            76, 76, 76, 255,
+            tag = "Compose(blur, grayscale) centre", tol = 2,
+        )
+        // Far surround : white.
+        assertRgbaApprox(
+            pixels, 2, 2, 255, 255, 255, 255,
+            tag = "Compose far surround",
+        )
+        // R/G/B equality holds for all pixels (post-grayscale property
+        // preserved by linear blur).
+        for ((x, y) in listOf(20 to 16, 22 to 16, 16 to 20, 16 to 22)) {
+            val j = (y * W + x) * 4
+            val rr = pixels[j].toInt() and 0xFF
+            val gg = pixels[j + 1].toInt() and 0xFF
+            val bb = pixels[j + 2].toInt() and 0xFF
+            assertTrue(abs(rr - gg) <= 1 && abs(gg - bb) <= 1) {
+                "Grayscale preserved through linear blur at ($x, $y) : " +
+                    "($rr, $gg, $bb)"
+            }
+        }
+    }
+
+    @Test
+    fun `saveLayer with Compose(ColorFilter, ColorFilter) folds chain when only one CF`() {
+        // Phase G-saveLayer-imageFilter-compose -- pure colour-filter
+        // Compose with no Blur. Two CFs in the same stage are rejected
+        // by the single-occupancy rule (the composite shader's
+        // colorFilter uniform holds one CF only). This test exercises
+        // the throw branch so the call site gets a clear error rather
+        // than a silently dropped filter.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val err = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val identity = floatArrayOf(
+                    1f, 0f, 0f, 0f, 0f,
+                    0f, 1f, 0f, 0f, 0f,
+                    0f, 0f, 1f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f,
+                )
+                val cf1 = SkColorFilters.Matrix(identity)
+                val cf2 = SkColorFilters.Matrix(identity)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.ColorFilter(cf1, input = null),
+                        inner = SkImageFilters.ColorFilter(cf2, input = null),
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                runCatching { canvas.restore() }.exceptionOrNull()
+            }
+        }
+        assertTrue(err is IllegalStateException) {
+            "Expected IllegalStateException for Compose(CF, CF) ; got $err"
+        }
+        val msg = err?.message ?: ""
+        assertTrue(msg.contains("single-occupancy") || msg.contains("ColorFilter")) {
+            "Error message should explain the conflict ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Compose(Compose, X) left-associative chain walks correctly`() {
+        // Phase G-saveLayer-imageFilter-compose -- nested Compose. The
+        // tree :
+        //
+        //   Compose(outer = Compose(outer = grayscale, inner = Blur),
+        //           inner = identity-matrix)
+        //
+        // resolves as :
+        //   1. identity-matrix on the source (no-op)
+        //   2. Blur (the inner of the outer Compose)
+        //   3. grayscale (the outer of the outer Compose)
+        //
+        // i.e. identical end result to the non-nested
+        // Compose(grayscale, Blur) case. The walk's job is to flatten
+        // the tree correctly.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val luma = floatArrayOf(
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0f,     0f,     0f,     1f, 0f,
+                )
+                val identity = floatArrayOf(
+                    1f, 0f, 0f, 0f, 0f,
+                    0f, 1f, 0f, 0f, 0f,
+                    0f, 0f, 1f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f,
+                )
+                val grayscale = SkColorFilters.Matrix(luma)
+                val identityCF = SkColorFilters.Matrix(identity)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 2f, sigmaY = 2f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val grayPlusBlur = SkImageFilters.Compose(
+                    outer = SkImageFilters.ColorFilter(grayscale, input = null),
+                    inner = blur,
+                )
+                val nested = SkImageFilters.Compose(
+                    outer = grayPlusBlur,
+                    inner = SkImageFilters.ColorFilter(identityCF, input = null),
+                )
+                val layerPaint = SkPaint().apply { imageFilter = nested }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Centre : gray (76, 76, 76, 255). Same as the non-nested
+        // Compose(grayscale, Blur) case.
+        assertRgbaApprox(
+            pixels, 16, 16,
+            76, 76, 76, 255,
+            tag = "nested Compose centre", tol = 2,
+        )
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "nested Compose far surround")
+    }
+
+    @Test
+    fun `saveLayer with Compose containing Offset leaf throws clear error`() {
+        // Phase G-saveLayer-imageFilter-compose -- the bail branch for
+        // unsupported leaves in a Compose chain. Offset isn't yet
+        // wired through the GPU layer composite ; the walker must
+        // surface a clear error rather than silently dropping the
+        // chain or hitting an undefined GPU state.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val err = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 2f, sigmaY = 2f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.Offset(dx = 4f, dy = 4f, input = null),
+                        inner = blur,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                runCatching { canvas.restore() }.exceptionOrNull()
+            }
+        }
+        assertTrue(err is IllegalStateException) {
+            "Expected IllegalStateException for Compose(Offset, Blur) ; got $err"
+        }
+        val msg = err?.message ?: ""
+        assertTrue(msg.contains("not yet supported") || msg.contains("SkOffsetImageFilter")) {
+            "Error message should call out the unsupported leaf ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Compose two Blurs throws clear error`() {
+        // Phase G-saveLayer-imageFilter-compose -- two Blurs in a
+        // chain. Folding into a single Gaussian with sigma = sqrt(s1^2
+        // + s2^2) needs a follow-up slice that proves the kernel-mass
+        // renormalization on kDecal ; the first cut throws.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val err = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val blur1 = SkImageFilters.Blur(
+                    sigmaX = 1f, sigmaY = 1f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val blur2 = SkImageFilters.Blur(
+                    sigmaX = 2f, sigmaY = 2f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(outer = blur1, inner = blur2)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                runCatching { canvas.restore() }.exceptionOrNull()
+            }
+        }
+        assertTrue(err is IllegalStateException) {
+            "Expected IllegalStateException for Compose(Blur, Blur) ; got $err"
+        }
+        val msg = err?.message ?: ""
+        assertTrue(msg.contains("more than one Blur") || msg.contains("Blur")) {
+            "Error message should call out the duplicate Blur ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Compose(ColorFilter, Blur) is bit-iso with the existing Blur+CF case`() {
+        // Phase G-saveLayer-imageFilter-compose -- regression guard.
+        // The existing path "Blur imageFilter + paint.colorFilter" runs
+        // the colour filter at the composite pass after the blur ; the
+        // new path "Compose(ColorFilter, Blur) imageFilter" must
+        // produce identical pixels because the inner Blur runs first
+        // and the outer ColorFilter routes to the same composite-pass
+        // slot.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val luma = floatArrayOf(
+            0.299f, 0.587f, 0.114f, 0f, 0f,
+            0.299f, 0.587f, 0.114f, 0f, 0f,
+            0.299f, 0.587f, 0.114f, 0f, 0f,
+            0f,     0f,     0f,     1f, 0f,
+        )
+
+        val pixelsCompose = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val gray = SkColorFilters.Matrix(luma)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 2f, sigmaY = 2f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.ColorFilter(gray, input = null),
+                        inner = blur,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+        // Compare with : same blur + paint.colorFilter set directly.
+        val pixelsRef = WebGpuContext.createOrNull()!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val gray = SkColorFilters.Matrix(luma)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 2f, sigmaY = 2f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = blur
+                    colorFilter = gray
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+        // Bit-iso check at a few spot pixels.
+        for ((x, y) in listOf(2 to 2, 16 to 16, 20 to 16, 22 to 22)) {
+            val i = (y * W + x) * 4
+            for (c in 0..3) {
+                assertEquals(
+                    pixelsRef[i + c], pixelsCompose[i + c],
+                    "Compose(CF, Blur) vs Blur+CF at ($x, $y) channel $c",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `asComposeImageFilter extracts outer and inner from Compose`() {
+        // Unit test of the extractor : Compose nodes must surface the
+        // two children, leaf filters must return null (no
+        // misinterpretation as a Compose).
+        val blur = SkImageFilters.Blur(
+            sigmaX = 1f, sigmaY = 1f, tileMode = SkTileMode.kDecal, input = null,
+        )!!
+        val identity = floatArrayOf(
+            1f, 0f, 0f, 0f, 0f,
+            0f, 1f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f,
+        )
+        val cfWrap = SkImageFilters.ColorFilter(
+            SkColorFilters.Matrix(identity), input = null,
+        )
+        val composed = SkImageFilters.Compose(outer = cfWrap, inner = blur)
+        val params = composed!!.asComposeImageFilter()
+        assertTrue(params != null) { "Compose must extract" }
+        assertEquals(cfWrap, params!!.outer, "outer identity")
+        assertEquals(blur, params.inner, "inner identity")
+        // Leaves must not extract as Compose.
+        assertEquals(null, blur.asComposeImageFilter()) {
+            "Blur must not extract as Compose"
+        }
+        assertEquals(null, cfWrap.asComposeImageFilter()) {
+            "ColorFilter wrap must not extract as Compose"
+        }
     }
 
     private fun assertRgbaApprox(
