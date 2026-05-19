@@ -373,6 +373,17 @@ public class SkWebGpuDevice(
          * in the uniform, shader skips the `rrect_cov` modulation.
          */
         val clipShape: SkClipShape? = null,
+        /**
+         * Phase G-direct-colorFilter (polygon closing slice) -- optional
+         * packed `SkColorFilter` payload (6 vec4f = 24 floats) consumed
+         * by `solid_polygon.wgsl`'s `apply_color_filter` helper. Built by
+         * [packLayerCompositeColorFilter] (shared layout). When the paint
+         * carries no colour filter, this is the all-zero
+         * [ZERO_COLOR_FILTER_24] sentinel ; `colorFilterKindMode.x == 0`
+         * makes the shader's filter branch a no-op and the output is
+         * byte-identical to the pre-slice path.
+         */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -399,6 +410,15 @@ public class SkWebGpuDevice(
          * but its colour writes are masked off, so the slot is inert).
          */
         val clipShape: SkClipShape? = null,
+        /**
+         * Phase G-direct-colorFilter (polygon closing slice) -- optional
+         * packed `SkColorFilter` payload (6 vec4f = 24 floats) consumed
+         * by `solid_polygon.wgsl`'s `apply_color_filter` helper at the
+         * cover pass. The stencil pass shares the same uniform but its
+         * fragment colour writes are masked off, so this slot is inert
+         * during stencil-write.
+         */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -430,6 +450,16 @@ public class SkWebGpuDevice(
          * clip's boundary band intersects with the polygon's AA falloff.
          */
         val clipShape: SkClipShape? = null,
+        /**
+         * Phase G-direct-colorFilter (polygon closing slice) -- optional
+         * packed `SkColorFilter` payload (6 vec4f = 24 floats) consumed
+         * by `aa_stencil_cover.wgsl`'s `apply_color_filter` helper. Both
+         * fs_inside and fs_outside route through the same helper so the
+         * filtered colour is applied uniformly across the AA boundary
+         * band. The stencil pass shares the buffer but its colour writes
+         * are masked off, so the slot is inert during stencil-write.
+         */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -456,6 +486,14 @@ public class SkWebGpuDevice(
          * coverage by `clip_cov(frag.xy)` to honour the analytical clip.
          */
         val clipShape: SkClipShape? = null,
+        /**
+         * Phase G-direct-colorFilter (polygon closing slice) -- optional
+         * packed `SkColorFilter` payload (6 vec4f = 24 floats) consumed
+         * by `aa_polygon.wgsl`'s `apply_color_filter` helper. The shader
+         * applies the filter to the unpremul source colour before
+         * multiplying by the per-edge coverage.
+         */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -6444,6 +6482,19 @@ public class SkWebGpuDevice(
         val bF = SkColorGetB(color) / 255f
         val aF = SkColorGetA(color) / 255f
         val scissor = intArrayOf(scissorL, scissorT, scissorR - scissorL, scissorB - scissorT)
+        // Phase G-direct-colorFilter (polygon closing slice) -- pack the
+        // paint's `SkColorFilter` (if any) into the 6-vec4f payload
+        // consumed by `solid_polygon.wgsl` / `aa_polygon.wgsl` /
+        // `aa_stencil_cover.wgsl`. Reuses [packLayerCompositeColorFilter]
+        // verbatim -- all three shaders share the (kind, mode, 4 matrix
+        // rows, bias) layout established by `solid_color.wgsl`.
+        // Unsupported variants (Compose / Lerp / Table / sRGB-gamma /
+        // working-CS wrapper) yield the all-zero identity payload and
+        // the filter is silently dropped, matching the rect-fill
+        // behaviour in #569 and the saveLayer behaviour in #568.
+        val polygonColorFilter = paint.colorFilter
+        val polygonColorFilterPacked = if (polygonColorFilter == null) ZERO_COLOR_FILTER_24
+                                       else packLayerCompositeColorFilter(polygonColorFilter)
 
         // G4.1.2 -- linear gradient on a non-rect AA path. The rect+axis-
         // aligned-CTM shortcut at the top of drawPath already peeled off
@@ -6836,6 +6887,7 @@ public class SkWebGpuDevice(
                         r = rF, g = gF, b = bF, a = aF,
                         mode = paint.blendMode,
                         clipShape = activeClipShape,
+                        colorFilterPacked = polygonColorFilterPacked,
                     ),
                 )
                 return
@@ -6875,6 +6927,7 @@ public class SkWebGpuDevice(
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
                     clipShape = activeClipShape,
+                    colorFilterPacked = polygonColorFilterPacked,
                 ),
             )
             return
@@ -7035,6 +7088,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = polygonColorFilterPacked,
                         ),
                     )
                 }
@@ -7070,6 +7124,7 @@ public class SkWebGpuDevice(
                         r = rF, g = gF, b = bF, a = aF,
                         mode = paint.blendMode,
                         clipShape = activeClipShape,
+                        colorFilterPacked = polygonColorFilterPacked,
                     ),
                 )
             }
@@ -7302,6 +7357,7 @@ public class SkWebGpuDevice(
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
                     clipShape = activeClipShape,
+                    colorFilterPacked = polygonColorFilterPacked,
                 ),
             )
         } else {
@@ -7312,6 +7368,7 @@ public class SkWebGpuDevice(
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
                     clipShape = activeClipShape,
+                    colorFilterPacked = polygonColorFilterPacked,
                 ),
             )
         }
@@ -8962,14 +9019,22 @@ public class SkWebGpuDevice(
             ),
         )
         // Layout : color (4 floats) + viewport (vec4 padded ; only x,y used)
-        // + clipShapeBounds (vec4) + clipShapeRadiiKind (vec4). Matches
-        // `Uniforms { color, viewport, clipShapeBounds, clipShapeRadiiKind }`
-        // in solid_polygon.wgsl.
-        val packed = FloatArray(16)
+        // + clipShapeBounds (vec4) + clipShapeRadiiKind (vec4) +
+        // colorFilter* (6 * vec4 = 24 floats). Matches the `Uniforms`
+        // struct in solid_polygon.wgsl (40 floats = 160 bytes total).
+        // Phase G-direct-colorFilter -- the trailing 24 floats stay zero
+        // when the paint has no colour filter, so the shader's kind == 0
+        // fast path runs and the output is byte-identical.
+        val packed = FloatArray(40)
         packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
         writeClipShape(packed, 8, d.clipShape)
+        // 6 contiguous vec4f starting at vec4f index 4 (offset 64 bytes
+        // = float index 16). When the paint had no colour filter,
+        // [colorFilterPacked] is the shared [ZERO_COLOR_FILTER_24]
+        // sentinel, keeping the trailing 24 floats at zero.
+        System.arraycopy(d.colorFilterPacked, 0, packed, 16, 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -9002,12 +9067,15 @@ public class SkWebGpuDevice(
         // Same layout as buildPolygonDrawResources -- shared with
         // solid_polygon.wgsl. The stencil-write sub-pass discards its
         // fragment output (writeMask = None) so the trailing clip-shape
-        // slots only matter to the cover sub-pass.
-        val packed = FloatArray(16)
+        // + colour-filter slots only matter to the cover sub-pass.
+        val packed = FloatArray(40)
         packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
         writeClipShape(packed, 8, d.clipShape)
+        // Phase G-direct-colorFilter -- 24 trailing floats packed
+        // identically to [buildPolygonDrawResources].
+        System.arraycopy(d.colorFilterPacked, 0, packed, 16, 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -9056,10 +9124,12 @@ public class SkWebGpuDevice(
         //   offset   48 : edges[MAX_AA_EDGES] (vec4 each)
         //   offset 4144 : clipShapeBounds (vec4) ; G2.x (closing slice)
         //   offset 4160 : clipShapeRadiiKind (vec4) ; G2.x (closing slice)
+        //   offset 4176 : colorFilter* (6 * vec4 = 24 floats) ; Phase
+        //                 G-direct-colorFilter (polygon closing slice)
         // Pack the whole thing in one FloatArray ; reinterpret edgeCount's
         // bits as a float so `floatArrayOf` lays it out at the right
         // byte offset.
-        val packed = FloatArray(12 + MAX_AA_EDGES * 4 + 8)
+        val packed = FloatArray(12 + MAX_AA_EDGES * 4 + 8 + 24)
         // color
         packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
         // viewport
@@ -9073,6 +9143,9 @@ public class SkWebGpuDevice(
         System.arraycopy(d.edges, 0, packed, 12, d.edges.size)
         // G2.x (closing slice) -- clip-shape payload at offset 4144.
         writeClipShape(packed, 12 + MAX_AA_EDGES * 4, d.clipShape)
+        // Phase G-direct-colorFilter -- colour-filter payload at offset
+        // 4176 (= float index 12 + MAX_AA_EDGES * 4 + 8).
+        System.arraycopy(d.colorFilterPacked, 0, packed, 12 + MAX_AA_EDGES * 4 + 8, 24)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -10075,7 +10148,9 @@ public class SkWebGpuDevice(
         //   offset   48 : edges[256]      (vec4 each, here (Ax, Ay, Bx, By))
         //   offset 4144 : clipShapeBounds (vec4) ; G2.x (closing slice)
         //   offset 4160 : clipShapeRadiiKind (vec4) ; G2.x (closing slice)
-        val packed = FloatArray(12 + MAX_AA_EDGES * 4 + 8)
+        //   offset 4176 : colorFilter* (6 * vec4 = 24 floats) ; Phase
+        //                 G-direct-colorFilter (polygon closing slice)
+        val packed = FloatArray(12 + MAX_AA_EDGES * 4 + 8 + 24)
         packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -10083,6 +10158,9 @@ public class SkWebGpuDevice(
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.edges, 0, packed, 12, d.edges.size)
         writeClipShape(packed, 12 + MAX_AA_EDGES * 4, d.clipShape)
+        // Phase G-direct-colorFilter -- colour-filter payload at offset
+        // 4176 (= float index 12 + MAX_AA_EDGES * 4 + 8).
+        System.arraycopy(d.colorFilterPacked, 0, packed, 12 + MAX_AA_EDGES * 4 + 8, 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -10720,14 +10798,18 @@ public class SkWebGpuDevice(
         /**
          * Size of the polygon per-draw uniform :
          *   color (16) + viewport (16) + clipShapeBounds (16) +
-         *   clipShapeRadiiKind (16) = 64 bytes.
+         *   clipShapeRadiiKind (16) + colorFilter* (6 * 16 = 96) = 160 bytes.
          * G2.x (closing slice) bumped from 32 to 64 to carry the optional
          * analytical clip-shape consumed by `solid_polygon.wgsl`'s cover
-         * pass. The stencil-write pass shares this layout (color writes
-         * masked off ; only `viewport` is read by its vertex stage so the
-         * trailing clip-shape slots are inert).
+         * pass. Phase G-direct-colorFilter (polygon closing slice) bumped
+         * from 64 to 160 to carry the 6-vec4f colour-filter payload (kind,
+         * mode, 4 matrix rows, bias) consumed by `solid_polygon.wgsl`'s
+         * `apply_color_filter` helper. The stencil-write pass shares this
+         * layout (color writes masked off ; only `viewport` is read by its
+         * vertex stage so the trailing clip-shape + colour-filter slots
+         * are inert).
          */
-        const val POLYGON_UNIFORM_SIZE: ULong = 64uL
+        const val POLYGON_UNIFORM_SIZE: ULong = 160uL
         /**
          * Max polygon vertex count for the AA path. Bounded by the
          * `array<vec4f, 256>` in `aa_polygon.wgsl` ; circles flattened
@@ -10738,15 +10820,20 @@ public class SkWebGpuDevice(
         /**
          * Size of the AA polygon per-draw uniform :
          *   color (16) + viewport (16) + edgeCount+pad (16) + edges (256*16) +
-         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 4176 bytes.
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilter* (6 * 16 = 96) = 4272 bytes.
          * G2.x (closing slice) bumped from 4144 to 4176 to carry the
          * optional analytical clip-shape consumed by `aa_polygon.wgsl` and
-         * `aa_stencil_cover.wgsl`. Both shaders share this layout via the
-         * `aaPolygonBindGroupLayout` ; the gradient stencil-cover shaders
-         * use a larger uniform (positions / colors slots before the clip
-         * payload), so this constant does not gate them.
+         * `aa_stencil_cover.wgsl`. Phase G-direct-colorFilter (polygon
+         * closing slice) bumped from 4176 to 4272 to carry the 6-vec4f
+         * colour-filter payload (kind, mode, 4 matrix rows, bias) consumed
+         * by `aa_polygon.wgsl` / `aa_stencil_cover.wgsl`'s
+         * `apply_color_filter` helper. Both shaders share this layout via
+         * the `aaPolygonBindGroupLayout` ; the gradient stencil-cover
+         * shaders use a larger uniform (positions / colors slots before
+         * the clip payload), so this constant does not gate them.
          */
-        const val AA_POLYGON_UNIFORM_SIZE: ULong = 4176uL // 48 + 256 * 16 + 32
+        const val AA_POLYGON_UNIFORM_SIZE: ULong = 4272uL // 48 + 256 * 16 + 32 + 96
         /**
          * G4.1 — cap on `SkLinearGradient` stop count for the WGSL
          * uniform table. Skia's `MakeLinear` accepts arbitrary counts but
