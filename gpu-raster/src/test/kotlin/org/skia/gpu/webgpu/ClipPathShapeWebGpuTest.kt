@@ -20,6 +20,7 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkRadialGradient
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
@@ -431,6 +432,153 @@ class ClipPathShapeWebGpuTest {
             val gpuRgba = renderGpu(ctx, draw)
             assertSamplesWhite(gpuRgba, listOf(5 to 5, 60 to 5, 5 to 60, 60 to 60))
             assertGradientPixels(gpuRgba, listOf(32 to 32, 22 to 32, 42 to 32, 32 to 42))
+            assertSimilarPixelCount(gpuRgba, rasterRgba, tolerance = 6)
+        }
+    }
+
+    // ─── G2.x closing slice -- analytical clip on polygon / stencil-cover ───
+
+    @Test
+    fun `circle clip masks solid color drawPath on convex non-rect AA path`() {
+        // G2.x closing slice -- the AA polygon pipeline (`aa_polygon.wgsl`)
+        // now honours the analytical clip shape. A solid-colour AA
+        // drawPath on a convex non-rect path (an arbitrary triangle-like
+        // polygon) gets fan-tessellated and routed through aa_polygon.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            // Convex non-rect path : pentagon centred on (32, 32).
+            val pentagon = SkPathBuilder()
+                .moveTo(32f, 6f)
+                .lineTo(56f, 24f)
+                .lineTo(48f, 54f)
+                .lineTo(16f, 54f)
+                .lineTo(8f, 24f)
+                .close()
+                .detach()
+            val draw: (SkCanvas) -> Unit = { canvas ->
+                canvas.clipPath(SkPath.Circle(32f, 32f, 18f), doAntiAlias = false)
+                canvas.drawPath(pentagon, SkPaint().apply {
+                    color = SK_ColorBLUE
+                    isAntiAlias = true
+                })
+            }
+            val rasterRgba = renderRaster(draw)
+            val gpuRgba = renderGpu(ctx, draw)
+            // Inside the clip circle AND inside the pentagon : blue.
+            assertSamplesBlue(gpuRgba, listOf(32 to 32, 22 to 32, 32 to 22, 32 to 42))
+            // Outside the clip circle (far corners) : background white.
+            assertSamplesWhite(gpuRgba, listOf(2 to 2, 60 to 2, 2 to 60, 60 to 60))
+            assertSimilarPixelCount(gpuRgba, rasterRgba, tolerance = 6)
+        }
+    }
+
+    @Test
+    fun `rrect clip masks solid color drawPath on multi-contour donut`() {
+        // G2.x closing slice -- the stencil-and-cover AA pipeline
+        // (`aa_stencil_cover.wgsl`) now honours the analytical clip
+        // shape. A donut path (outer rect + reverse-wound inner rect)
+        // is multi-contour and routes through stencil-cover.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            // Multi-contour donut : outer CW square + inner CCW square,
+            // kWinding fill type cancels in the hole.
+            val donut = SkPathBuilder()
+                .moveTo(8f, 8f)
+                .lineTo(56f, 8f)
+                .lineTo(56f, 56f)
+                .lineTo(8f, 56f)
+                .close()
+                // Inner hole, reverse winding.
+                .moveTo(24f, 24f)
+                .lineTo(24f, 40f)
+                .lineTo(40f, 40f)
+                .lineTo(40f, 24f)
+                .close()
+                .detach()
+            val rrect = SkRRect.MakeRectXY(SkRect.MakeLTRB(4f, 4f, 60f, 60f), 14f, 14f)
+            val draw: (SkCanvas) -> Unit = { canvas ->
+                canvas.clipRRect(rrect, doAntiAlias = false)
+                canvas.drawPath(donut, SkPaint().apply {
+                    color = SK_ColorBLUE
+                    isAntiAlias = true
+                })
+            }
+            val rasterRgba = renderRaster(draw)
+            val gpuRgba = renderGpu(ctx, draw)
+            // Inside donut ring (between outer / inner squares) AND
+            // inside the rrect : blue.
+            assertSamplesBlue(gpuRgba, listOf(12 to 32, 52 to 32, 32 to 12, 32 to 52))
+            // Inside the donut hole : background white (winding cancels).
+            assertSamplesWhite(gpuRgba, listOf(32 to 32))
+            // Outside the donut bbox (rrect rounded corners) : white.
+            assertSamplesWhite(gpuRgba, listOf(2 to 2, 60 to 2, 2 to 60, 60 to 60))
+            assertSimilarPixelCount(gpuRgba, rasterRgba, tolerance = 6)
+        }
+    }
+
+    @Test
+    fun `oval clip masks solid color drawPath on concave path`() {
+        // G2.x closing slice -- concave single-contour path also routes
+        // through stencil-and-cover (the convex check fails). A simple
+        // star-ish concave shape exercises the path.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            // Concave : an "arrow" / chevron pointing right.
+            val arrow = SkPathBuilder()
+                .moveTo(8f, 8f)
+                .lineTo(40f, 32f)
+                .lineTo(8f, 56f)
+                .lineTo(24f, 32f)
+                .close()
+                .detach()
+            val ovalBounds = SkRect.MakeLTRB(4f, 14f, 60f, 50f) // wide oval
+            val draw: (SkCanvas) -> Unit = { canvas ->
+                canvas.clipPath(SkPath.Oval(ovalBounds), doAntiAlias = false)
+                canvas.drawPath(arrow, SkPaint().apply {
+                    color = SK_ColorBLUE
+                    isAntiAlias = true
+                })
+            }
+            val rasterRgba = renderRaster(draw)
+            val gpuRgba = renderGpu(ctx, draw)
+            // Outside the oval (top corners well above oval's top) : white.
+            assertSamplesWhite(gpuRgba, listOf(2 to 2, 60 to 2, 2 to 60, 60 to 60))
+            // Far right (past the arrow's tip) : white.
+            assertSamplesWhite(gpuRgba, listOf(55 to 32))
+            assertSimilarPixelCount(gpuRgba, rasterRgba, tolerance = 6)
+        }
+    }
+
+    @Test
+    fun `circle clip masks solid color drawPath non-AA polygon path`() {
+        // G2.x closing slice -- non-AA polygon dispatch (`solid_polygon.wgsl`
+        // via convex single-contour path) honours the analytical clip
+        // shape. Use a convex non-rect path with isAntiAlias = false.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val triangle = SkPathBuilder()
+                .moveTo(32f, 8f)
+                .lineTo(56f, 56f)
+                .lineTo(8f, 56f)
+                .close()
+                .detach()
+            val draw: (SkCanvas) -> Unit = { canvas ->
+                canvas.clipPath(SkPath.Circle(32f, 32f, 20f), doAntiAlias = false)
+                canvas.drawPath(triangle, SkPaint().apply {
+                    color = SK_ColorBLUE
+                    isAntiAlias = false
+                })
+            }
+            val rasterRgba = renderRaster(draw)
+            val gpuRgba = renderGpu(ctx, draw)
+            // Pixels inside both triangle and clip circle : blue.
+            assertSamplesBlue(gpuRgba, listOf(32 to 42, 28 to 38, 36 to 38))
+            // Outside the clip circle : white.
+            assertSamplesWhite(gpuRgba, listOf(2 to 2, 60 to 2, 2 to 60, 60 to 60))
             assertSimilarPixelCount(gpuRgba, rasterRgba, tolerance = 6)
         }
     }

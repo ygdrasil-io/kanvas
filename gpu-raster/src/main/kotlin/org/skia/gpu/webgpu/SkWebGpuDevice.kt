@@ -342,6 +342,12 @@ public class SkWebGpuDevice(
         val scissor: IntArray, // (x, y, w, h)
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /**
+         * G2.x (closing slice) -- analytical clip shape captured at
+         * drawPath time. `null` / [SkClipShape.Rect] -> sentinel zeros
+         * in the uniform, shader skips the `rrect_cov` modulation.
+         */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -362,6 +368,12 @@ public class SkWebGpuDevice(
         val fillType: SkPathFillType,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /**
+         * G2.x (closing slice) -- analytical clip shape carried into the
+         * cover pass uniform (the stencil pass shares the same buffer
+         * but its colour writes are masked off, so the slot is inert).
+         */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -386,6 +398,13 @@ public class SkWebGpuDevice(
         val fillType: SkPathFillType,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /**
+         * G2.x (closing slice) -- analytical clip shape carried into the
+         * AA cover pass uniform. Both fs_inside and fs_outside multiply
+         * their polygon coverage by `clip_cov(frag.xy)` so the analytical
+         * clip's boundary band intersects with the polygon's AA falloff.
+         */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -406,6 +425,12 @@ public class SkWebGpuDevice(
         val scissor: IntArray,
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
+        /**
+         * G2.x (closing slice) -- analytical clip shape carried into the
+         * AA polygon uniform. Fragment shader multiplies its per-edge
+         * coverage by `clip_cov(frag.xy)` to honour the analytical clip.
+         */
+        val clipShape: SkClipShape? = null,
     ) : PendingDraw
 
     /**
@@ -4062,37 +4087,16 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
-        // G2.x -- drawPath has many sub-branches (gradients, bitmap
-        // shader, stencil-and-cover, AA polygon, ...) and only some of
-        // them carry the analytical clip-shape uniform today :
-        //   - solid-colour fill / stroke (via drawFillRect /
-        //     drawAnnularStrokeRect on the rect-fill fast path) : yes.
-        //   - 2 bitmap-shader pipelines (rect fast path + non-rect AA
-        //     stencil-and-cover) : yes (G2.x slice 2, #562).
-        //   - 8 gradient pipelines (linear / radial / sweep / conical
-        //     family × rect path + non-rect AA path) : yes (G2.x slice
-        //     3, this branch).
-        //   - plain polygon / stencil-cover / AA polygon paths
-        //     (solid-colour drawPath with no shader) : not yet.
-        // For that last category we refuse the draw rather than
-        // silently painting outside the curved clip. Plain rect shapes
-        // (handled by the scissor anyway) pass through.
-        //
-        // The gate below skips the throw when the dispatch would land
-        // in either of the clip-aware bitmap pipelines (rect fast path
-        // or AA non-rect) OR when the paint carries a recognised
-        // gradient shader. Solid-colour drawPath (no shader) still
-        // hits `requireClipShapeHonoured` : it would need the stencil-
-        // cover / polygon shaders to grow the clipShape uniform too.
-        val gradientShaderInScope = paint.shader is SkLinearGradient ||
-            paint.shader is SkRadialGradient ||
-            paint.shader is SkSweepGradient ||
-            paint.shader is SkConicalGradient
-        if (!willRouteThroughClipAwareBitmapShader(path, ctm, paint) &&
-            !gradientShaderInScope
-        ) {
-            requireClipShapeHonoured("drawPath")
-        }
+        // G2.x (closing slice) -- every drawPath dispatch now honours
+        // the analytical clip shape. The bitmap-shader pipelines (rect
+        // fast path + non-rect AA), the 8 gradient pipelines (linear /
+        // radial / sweep / conical family x rect path + non-rect AA),
+        // and now the solid-colour polygon / stencil-cover / AA polygon
+        // pipelines all carry `clipShapeBounds` + `clipShapeRadiiKind`
+        // in their per-draw uniform. The old `requireClipShapeHonoured`
+        // throw is dead code on this entry point (kept as a defensive
+        // guard in case a future dispatch path bypasses the polygon /
+        // gradient / bitmap arms and lands somewhere unexpected).
         // G4.1 / G4.1.1 — linear gradient fill of an axis-aligned rect
         // routes through the dedicated gradient pipeline, for all 4
         // SkTileMode values. SkCanvas sends shaded rect draws here (the
@@ -4768,6 +4772,7 @@ public class SkWebGpuDevice(
                         fillType = path.fillType,
                         r = rF, g = gF, b = bF, a = aF,
                         mode = paint.blendMode,
+                        clipShape = activeClipShape,
                     ),
                 )
                 return
@@ -4780,6 +4785,7 @@ public class SkWebGpuDevice(
                     fillType = path.fillType,
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
+                    clipShape = activeClipShape,
                 ),
             )
             return
@@ -4939,6 +4945,7 @@ public class SkWebGpuDevice(
                             fillType = path.fillType,
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
+                            clipShape = activeClipShape,
                         ),
                     )
                 }
@@ -4951,6 +4958,7 @@ public class SkWebGpuDevice(
                         fillType = path.fillType,
                         r = rF, g = gF, b = bF, a = aF,
                         mode = paint.blendMode,
+                        clipShape = activeClipShape,
                     ),
                 )
             }
@@ -5168,6 +5176,7 @@ public class SkWebGpuDevice(
                     scissor = scissor,
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
+                    clipShape = activeClipShape,
                 ),
             )
         } else {
@@ -5177,6 +5186,7 @@ public class SkWebGpuDevice(
                     scissor = scissor,
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
+                    clipShape = activeClipShape,
                 ),
             )
         }
@@ -6292,15 +6302,16 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.polygonDraw",
             ),
         )
-        // Layout : color (4 floats) + viewport (vec4 padded ; only x,y used).
-        // Matches `Uniforms { color, viewport }` in solid_polygon.wgsl.
-        context.queue.writeBuffer(
-            uniform, 0uL,
-            ArrayBuffer.of(floatArrayOf(
-                d.r, d.g, d.b, d.a,
-                width.toFloat(), height.toFloat(), 0f, 0f,
-            )),
-        )
+        // Layout : color (4 floats) + viewport (vec4 padded ; only x,y used)
+        // + clipShapeBounds (vec4) + clipShapeRadiiKind (vec4). Matches
+        // `Uniforms { color, viewport, clipShapeBounds, clipShapeRadiiKind }`
+        // in solid_polygon.wgsl.
+        val packed = FloatArray(16)
+        packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
+        packed[4] = width.toFloat(); packed[5] = height.toFloat()
+        packed[6] = 0f; packed[7] = 0f
+        writeClipShape(packed, 8, d.clipShape)
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = polygonBindGroupLayout,
@@ -6329,13 +6340,16 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.stencilCoverDraw",
             ),
         )
-        context.queue.writeBuffer(
-            uniform, 0uL,
-            ArrayBuffer.of(floatArrayOf(
-                d.r, d.g, d.b, d.a,
-                width.toFloat(), height.toFloat(), 0f, 0f,
-            )),
-        )
+        // Same layout as buildPolygonDrawResources -- shared with
+        // solid_polygon.wgsl. The stencil-write sub-pass discards its
+        // fragment output (writeMask = None) so the trailing clip-shape
+        // slots only matter to the cover sub-pass.
+        val packed = FloatArray(16)
+        packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
+        packed[4] = width.toFloat(); packed[5] = height.toFloat()
+        packed[6] = 0f; packed[7] = 0f
+        writeClipShape(packed, 8, d.clipShape)
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = polygonBindGroupLayout,
@@ -6377,14 +6391,16 @@ public class SkWebGpuDevice(
             ),
         )
         // Layout matches `aa_polygon.wgsl` :
-        //   offset  0 : color    (4 floats)
-        //   offset 16 : viewport (4 floats, only x/y used)
-        //   offset 32 : edgeCount (u32) + 3 u32 padding
-        //   offset 48 : edges[MAX_AA_EDGES] (vec4 each)
+        //   offset    0 : color    (4 floats)
+        //   offset   16 : viewport (4 floats, only x/y used)
+        //   offset   32 : edgeCount (u32) + 3 u32 padding
+        //   offset   48 : edges[MAX_AA_EDGES] (vec4 each)
+        //   offset 4144 : clipShapeBounds (vec4) ; G2.x (closing slice)
+        //   offset 4160 : clipShapeRadiiKind (vec4) ; G2.x (closing slice)
         // Pack the whole thing in one FloatArray ; reinterpret edgeCount's
         // bits as a float so `floatArrayOf` lays it out at the right
         // byte offset.
-        val packed = FloatArray(12 + MAX_AA_EDGES * 4)
+        val packed = FloatArray(12 + MAX_AA_EDGES * 4 + 8)
         // color
         packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
         // viewport
@@ -6396,6 +6412,8 @@ public class SkWebGpuDevice(
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         // edges
         System.arraycopy(d.edges, 0, packed, 12, d.edges.size)
+        // G2.x (closing slice) -- clip-shape payload at offset 4144.
+        writeClipShape(packed, 12 + MAX_AA_EDGES * 4, d.clipShape)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -6818,15 +6836,20 @@ public class SkWebGpuDevice(
             ),
         )
         // Layout shared with `aa_polygon.wgsl` / `aa_stencil_cover.wgsl` :
-        // color + viewport + edgeCount + edges[256]. `edges` here carry
-        // (Ax, Ay, Bx, By) per edge segment instead of (a, b, c, _).
-        val packed = FloatArray(12 + MAX_AA_EDGES * 4)
+        //   offset    0 : color           (vec4)
+        //   offset   16 : viewport        (vec4, only x/y used)
+        //   offset   32 : edgeCount + pad (u32 reinterp + 3 pad)
+        //   offset   48 : edges[256]      (vec4 each, here (Ax, Ay, Bx, By))
+        //   offset 4144 : clipShapeBounds (vec4) ; G2.x (closing slice)
+        //   offset 4160 : clipShapeRadiiKind (vec4) ; G2.x (closing slice)
+        val packed = FloatArray(12 + MAX_AA_EDGES * 4 + 8)
         packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
         packed[8] = Float.fromBits(d.edgeCount)
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.edges, 0, packed, 12, d.edges.size)
+        writeClipShape(packed, 12 + MAX_AA_EDGES * 4, d.clipShape)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -7431,8 +7454,17 @@ public class SkWebGpuDevice(
          * keeps the math well-clear of FP precision concerns.
          */
         const val DEGENERATE_INNER: Float = 1e10f
-        /** Size of the polygon per-draw uniform : `color: vec4f` + `viewport: vec4f` = 32 bytes. */
-        const val POLYGON_UNIFORM_SIZE: ULong = 32uL
+        /**
+         * Size of the polygon per-draw uniform :
+         *   color (16) + viewport (16) + clipShapeBounds (16) +
+         *   clipShapeRadiiKind (16) = 64 bytes.
+         * G2.x (closing slice) bumped from 32 to 64 to carry the optional
+         * analytical clip-shape consumed by `solid_polygon.wgsl`'s cover
+         * pass. The stencil-write pass shares this layout (color writes
+         * masked off ; only `viewport` is read by its vertex stage so the
+         * trailing clip-shape slots are inert).
+         */
+        const val POLYGON_UNIFORM_SIZE: ULong = 64uL
         /**
          * Max polygon vertex count for the AA path. Bounded by the
          * `array<vec4f, 256>` in `aa_polygon.wgsl` ; circles flattened
@@ -7442,9 +7474,16 @@ public class SkWebGpuDevice(
         const val MAX_AA_EDGES: Int = 256
         /**
          * Size of the AA polygon per-draw uniform :
-         *   color (16) + viewport (16) + edgeCount+pad (16) + edges (256*16) = 4144 bytes.
+         *   color (16) + viewport (16) + edgeCount+pad (16) + edges (256*16) +
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 4176 bytes.
+         * G2.x (closing slice) bumped from 4144 to 4176 to carry the
+         * optional analytical clip-shape consumed by `aa_polygon.wgsl` and
+         * `aa_stencil_cover.wgsl`. Both shaders share this layout via the
+         * `aaPolygonBindGroupLayout` ; the gradient stencil-cover shaders
+         * use a larger uniform (positions / colors slots before the clip
+         * payload), so this constant does not gate them.
          */
-        const val AA_POLYGON_UNIFORM_SIZE: ULong = 4144uL // 48 + 256 * 16
+        const val AA_POLYGON_UNIFORM_SIZE: ULong = 4176uL // 48 + 256 * 16 + 32
         /**
          * G4.1 — cap on `SkLinearGradient` stop count for the WGSL
          * uniform table. Skia's `MakeLinear` accepts arbitrary counts but
