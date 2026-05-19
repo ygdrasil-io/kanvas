@@ -84,6 +84,20 @@
 //    bypass the transform branch -- they need luminance scaling / OOTF
 //    handling out of scope for G5.3.x.
 //
+// G2.x clip-shape (this slice) -- the trailing two vec4 slots carry
+// the analytical "simple shape" clip captured from the SkCanvas's
+// clip stack. Same shape as `solid_color.wgsl` : `clipShapeBounds` is
+// `(l, t, r, b)` in device-pixel coords ; `clipShapeRadiiKind` is
+// `(rx, ry, clipKind, _)` with `clipKind in {0, 1}`. When clipKind ==
+// 0, the slots are ignored (rect-clip fast path -- already enforced
+// by the scissor) ; when clipKind == 1, the `rrect_cov` helper below
+// multiplies the fragment output by the analytic rrect coverage so
+// pixels outside the curved clip get 0, inside get 1, with a smooth
+// half-pixel band on the boundary. The two slots come AFTER the G5.3
+// colorspace block (`csMatrix + csTfParams0 + csTfParams1`) to keep
+// the colorspace layout contiguous ; total uniform size grows from
+// 128 to 192 bytes (32 for G5.3 csTfParams + 32 for G2.x clip slots).
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {
@@ -128,6 +142,13 @@ struct Uniforms {
     // alignment is stable across modes.
     csTfParams0: vec4f,  // offset 128
     csTfParams1: vec4f,  // offset 144
+    // G2.x -- analytical clip-shape payload, mirrors `solid_color.wgsl`.
+    // `clipShapeRadiiKind.z` is the kind enum (0 = no shape clip ; 1 =
+    // rrect / oval / circle ; same encoding as the rect pipeline). The
+    // two slots come AFTER the G5.3 colorspace block so the colorspace
+    // layout stays contiguous (G2.x sits at offsets 160/176).
+    clipShapeBounds:    vec4f, // offset 160 : (l, t, r, b) device-px
+    clipShapeRadiiKind: vec4f, // offset 176 : (rx, ry, clipKind, _)
 };
 
 // Tile-mode constants -- mirror `SkTileMode` ordinals.
@@ -192,6 +213,33 @@ fn parametric_tf(v: f32) -> f32 {
         return c * clamped + f;
     }
     return pow(a * clamped + b, g) + e;
+}
+
+// G2.x -- analytic coverage of an axis-aligned rounded rect at fragment
+// center `p`. Copy of `solid_color.wgsl`'s `rrect_cov` (kept local so
+// the bitmap-shader module stays self-contained ; WGSL has no shared
+// include). The formula and constants are byte-identical to the rect
+// pipeline -- see `solid_color.wgsl` for the full derivation comment.
+fn rrect_cov(p: vec2f, bounds: vec4f, rx_in: f32, ry_in: f32) -> f32 {
+    let centre = vec2f(0.5 * (bounds.x + bounds.z), 0.5 * (bounds.y + bounds.w));
+    let half = vec2f(0.5 * (bounds.z - bounds.x), 0.5 * (bounds.w - bounds.y));
+    let rx = max(rx_in, 1e-4);
+    let ry = max(ry_in, 1e-4);
+    let q_abs = abs(p - centre);
+    let q = q_abs - (half - vec2f(rx, ry));
+    let inner_rect_sdf = max(q.x, q.y);
+    let outer_rect_sdf = max(q_abs.x - half.x, q_abs.y - half.y);
+    let qm = max(q, vec2f(0.0, 0.0));
+    let n = vec2f(qm.x / rx, qm.y / ry);
+    let nl = length(n);
+    let nl_safe = max(nl, 1e-6);
+    let dir = n / nl_safe;
+    let effective_r = length(vec2f(rx * dir.x, ry * dir.y));
+    let corner_sdf = (nl - 1.0) * effective_r;
+    let in_corner_band = step(0.0, q.x) * step(0.0, q.y);
+    let band_sdf = mix(outer_rect_sdf, corner_sdf, in_corner_band);
+    let final_sdf = band_sdf;
+    return clamp(0.5 - final_sdf, 0.0, 1.0);
 }
 
 @vertex
@@ -288,9 +336,30 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // match the premul intermediate convention. paintColor multiplies
     // the result so the paint.alpha / color filter (future G5.x) can
     // fold in at no extra pipeline cost ; default is (1, 1, 1, 1).
-    let pa = sampled.a * uniforms.paintColor.a;
-    let pr = src_rgb.r * sampled.a * uniforms.paintColor.r;
-    let pg = src_rgb.g * sampled.a * uniforms.paintColor.g;
-    let pb = src_rgb.b * sampled.a * uniforms.paintColor.b;
+    var pa = sampled.a * uniforms.paintColor.a;
+    var pr = src_rgb.r * sampled.a * uniforms.paintColor.r;
+    var pg = src_rgb.g * sampled.a * uniforms.paintColor.g;
+    var pb = src_rgb.b * sampled.a * uniforms.paintColor.b;
+
+    // G2.x -- analytical clip-shape coverage. clipKind == 0 means "no
+    // shape clip" (legacy rect-only ; the integer scissor is the only
+    // clip), so the multiply is skipped. clipKind == 1 evaluates the
+    // rrect coverage formula and folds it into the premul output so
+    // pixels outside the clip shape get 0, fully inside get 1, with a
+    // smooth half-pixel band on the boundary. Matches `solid_color.wgsl`
+    // byte-for-byte.
+    let clip_kind = i32(uniforms.clipShapeRadiiKind.z + 0.5);
+    if (clip_kind == 1) {
+        let clip_cov = rrect_cov(
+            pos.xy,
+            uniforms.clipShapeBounds,
+            uniforms.clipShapeRadiiKind.x,
+            uniforms.clipShapeRadiiKind.y,
+        );
+        pr = pr * clip_cov;
+        pg = pg * clip_cov;
+        pb = pb * clip_cov;
+        pa = pa * clip_cov;
+    }
     return vec4f(pr, pg, pb, pa);
 }
