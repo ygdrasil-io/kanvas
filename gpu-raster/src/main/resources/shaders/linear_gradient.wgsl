@@ -41,6 +41,12 @@
 //
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
+// G2.x clip-shape -- the trailing two vec4 slots carry an optional
+// analytical "simple shape" clip captured from the SkCanvas's clip
+// stack (mirror of `solid_color.wgsl`). When clipShapeRadiiKind.z
+// (clipKind) is 0, no extra modulation happens. When clipKind is 1
+// (rrect-style, subsumes oval / circle), each fragment's gradient
+// output is multiplied by `rrect_cov(pos, clipShapeBounds, rx, ry)`.
 struct Uniforms {
     // start point (xy) + end point (zw), all in device-pixel coords.
     startEnd: vec4f,    // offset  0
@@ -54,7 +60,9 @@ struct Uniforms {
     positions: array<vec4f, 16>, // offset 48
     // Stop colors as premul sRGB-encoded vec4f. Only first `count`
     // entries are valid.
-    colors: array<vec4f, 16>,    // offset 48 + 256
+    colors: array<vec4f, 16>,    // offset 48 + 256 = 304
+    clipShapeBounds:    vec4f,   // offset 560 : (l, t, r, b) device-px
+    clipShapeRadiiKind: vec4f,   // offset 576 : (rx, ry, clipKind, _)
 };
 
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
@@ -114,11 +122,49 @@ fn sample_stops_at(t: f32) -> vec4f {
     return inv * uniforms.colors[lo] + u * uniforms.colors[hi];
 }
 
+// G2.x -- analytical rrect coverage at fragment center `p`. Mirror of
+// `solid_color.wgsl::rrect_cov`. Returns 1.0 deep inside the rrect,
+// 0.0 outside, smooth half-pixel falloff at the boundary.
+fn rrect_cov(p: vec2f, bounds: vec4f, rx_in: f32, ry_in: f32) -> f32 {
+    let centre = vec2f(0.5 * (bounds.x + bounds.z), 0.5 * (bounds.y + bounds.w));
+    let half = vec2f(0.5 * (bounds.z - bounds.x), 0.5 * (bounds.w - bounds.y));
+    let rx = max(rx_in, 1e-4);
+    let ry = max(ry_in, 1e-4);
+    let q_abs = abs(p - centre);
+    let q = q_abs - (half - vec2f(rx, ry));
+    let outer_rect_sdf = max(q_abs.x - half.x, q_abs.y - half.y);
+    let qm = max(q, vec2f(0.0, 0.0));
+    let n = vec2f(qm.x / rx, qm.y / ry);
+    let nl = length(n);
+    let nl_safe = max(nl, 1e-6);
+    let dir = n / nl_safe;
+    let effective_r = length(vec2f(rx * dir.x, ry * dir.y));
+    let corner_sdf = (nl - 1.0) * effective_r;
+    let in_corner_band = step(0.0, q.x) * step(0.0, q.y);
+    let band_sdf = mix(outer_rect_sdf, corner_sdf, in_corner_band);
+    return clamp(0.5 - band_sdf, 0.0, 1.0);
+}
+
+// G2.x -- clip-shape modulation. Returns 1.0 when clipKind == 0 (no
+// shape clip ; integer scissor handles it), else the rrect coverage.
+fn clip_cov(pos: vec2f) -> f32 {
+    let clip_kind = i32(uniforms.clipShapeRadiiKind.z + 0.5);
+    if (clip_kind == 1) {
+        return rrect_cov(
+            pos,
+            uniforms.clipShapeBounds,
+            uniforms.clipShapeRadiiKind.x,
+            uniforms.clipShapeRadiiKind.y,
+        );
+    }
+    return 1.0;
+}
+
 @fragment
 fn fs_clamp(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let t_raw = compute_t_raw(pos);
     let t = clamp(t_raw, 0.0, 1.0);
-    return sample_stops_at(t);
+    return sample_stops_at(t) * clip_cov(pos.xy);
 }
 
 @fragment
@@ -126,7 +172,7 @@ fn fs_repeat(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let t_raw = compute_t_raw(pos);
     // t = t_raw - floor(t_raw) is always in [0, 1) for any sign.
     let t = t_raw - floor(t_raw);
-    return sample_stops_at(t);
+    return sample_stops_at(t) * clip_cov(pos.xy);
 }
 
 @fragment
@@ -138,7 +184,7 @@ fn fs_mirror(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let u = t_raw * 0.5;
     let w = u - floor(u);
     let t = select(2.0 - w * 2.0, w * 2.0, w < 0.5);
-    return sample_stops_at(t);
+    return sample_stops_at(t) * clip_cov(pos.xy);
 }
 
 @fragment
@@ -149,5 +195,5 @@ fn fs_decal(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     if (t_raw < 0.0 || t_raw > 1.0) {
         return vec4f(0.0, 0.0, 0.0, 0.0);
     }
-    return sample_stops_at(t_raw);
+    return sample_stops_at(t_raw) * clip_cov(pos.xy);
 }
