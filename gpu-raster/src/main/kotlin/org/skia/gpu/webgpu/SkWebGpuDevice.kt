@@ -1018,6 +1018,78 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
     ) : PendingDraw
 
+    // ─── ImageFilter Gaussian blur on saveLayer (Phase G-saveLayer-imageFilter-blur) ─
+    /**
+     * Phase G-saveLayer-imageFilter-blur -- pending entry for the layer
+     * composite path when `paint.imageFilter is SkImageFilters.Blur(
+     * sigmaX, sigmaY, kClamp / kDecal, child = null)`. The child layer
+     * device's intermediate texture has been drained by the dispatch
+     * gate (via [SkWebGpuDevice.flushDrawsOnly]) and is ready to be
+     * sampled. The flush replays this draw as three render passes :
+     *   1. Horizontal Gaussian blur : layer texture -> scratchH.
+     *   2. Vertical Gaussian blur   : scratchH      -> scratchV.
+     *   3. Layer composite          : scratchV      -> parent
+     *      intermediate (via the existing `layer_composite.wgsl`
+     *      pipeline, so paintColor + colorFilter + blendMode all follow
+     *      the no-filter saveLayer code path).
+     *
+     * The three scratch textures + the child layer device outlive a
+     * single command buffer because passes 2 and 3 read pass 1's / 2's
+     * output ; we close them in [closeDrawResources] after submission.
+     *
+     * Both blur scratches share the layer's `(w, h)` dimensions -- no
+     * padding. Near-edge pixels lose part of their kernel mass on
+     * kDecal (transparent border) ; on kClamp the shader extends the
+     * edge texel out. Larger sigmas where the kernel meaningfully
+     * spreads beyond the layer bounds would need a padded scratch ;
+     * deferred to a follow-up slice (the current scope matches the
+     * MaskFilter blur's "intrinsic layer bounds" assumption).
+     *
+     * The kernel weights and dispatch padding strategy mirror
+     * [BlurredPathDraw] exactly -- the same [buildSymmetricGaussianHalfKernel]
+     * helper is reused, the same [MAX_BLUR_RADIUS] cap applies.
+     */
+    private data class BlurredLayerCompositeDraw(
+        // Child layer device's intermediate view (the layer pixels).
+        // The device is owned by SkCanvas (mirrors [LayerCompositeDraw])
+        // -- we sample it in pass 1 ; the canvas closes it after we
+        // submit. The two scratch textures below are owned by this draw
+        // and closed in [closeDrawResources].
+        val layerView: GPUTextureView,
+        val layerWidth: Int, val layerHeight: Int,
+        // Host-allocated scratch H/V textures (closed after submit).
+        val scratchHTexture: GPUTexture,
+        val scratchHView: GPUTextureView,
+        val scratchVTexture: GPUTexture,
+        val scratchVView: GPUTextureView,
+        // Origin of the layer in parent-device pixel coords (the final
+        // composite step uses this to align scratchV onto the parent).
+        val dstOriginX: Int, val dstOriginY: Int,
+        // Integer scissor in parent-device pixels for the composite pass.
+        val scissor: IntArray,
+        // Symmetric half-kernels per axis. Each is (1 + radius) floats,
+        // packed into 9 vec4f (36 floats, trailing zeroed). When sigmaX
+        // and sigmaY differ, the two kernels and radii differ too.
+        val kernelX: FloatArray, val radiusX: Int,
+        val kernelY: FloatArray, val radiusY: Int,
+        // Tile mode applied per-axis by the blur shader on out-of-source
+        // samples (SkTileMode ordinal : 0 = kClamp, 3 = kDecal). Only
+        // those two are supported -- the dispatch gate throws for
+        // kRepeat / kMirror.
+        val tileModeOrdinal: Int,
+        // Layer composite payload : paint colour (premul scale) + packed
+        // colour-filter (kind / params / bias). Routed through the
+        // existing [layer_composite.wgsl] pipeline on pass 3, so the
+        // pixel result matches the no-filter saveLayer path exactly
+        // when the colour-filter slot is identity.
+        val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
+        val colorFilterPacked: FloatArray,
+        // PendingDraw interface : r/g/b/a placeholders ; mode honoured
+        // by the composite-pass pipeline's blend state.
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
     // ─── Bitmap shader on non-rect (G5.2.1) ─────────────────────────────
     /**
      * G5.2.1 -- AA stencil-and-cover path filled with a bitmap shader
@@ -1113,7 +1185,8 @@ public class SkWebGpuDevice(
         is ConicalStripGradientRectDraw,
         is ImageRectDraw,
         is LayerCompositeDraw,
-        is BlurredPathDraw -> false
+        is BlurredPathDraw,
+        is BlurredLayerCompositeDraw -> false
     }
 
     /**
@@ -1901,6 +1974,99 @@ public class SkWebGpuDevice(
                 ),
             )
         }
+
+    // ─── ImageFilter Gaussian blur pipelines (Phase G-saveLayer-imageFilter-blur) ─
+    /**
+     * Phase G-saveLayer-imageFilter-blur -- separable Gaussian blur
+     * shader, fork of [blurGaussianShader]. Two entry points
+     * (`fs_horizontal`, `fs_vertical`) -- both write a pure blurred
+     * RGBA premul into a scratch texture, no paint-colour fold. The
+     * final composite onto the parent runs through
+     * [layerCompositePipelineFor] in a third render pass, so paint
+     * alpha + colour filter follow the same code path as the no-filter
+     * saveLayer.
+     */
+    private val blurImageFilterShader: GPUShaderModule =
+        loadShader("shaders/blur_image_filter.wgsl")
+
+    /**
+     * Phase G-saveLayer-imageFilter-blur -- bind group layout shared by
+     * the H and V passes. Shape matches [blurBindGroupLayout] (uniform
+     * + sampled texture, no sampler) but kept distinct so the two blur
+     * variants stay independent and we can evolve the ImageFilter
+     * uniform layout without touching the MaskFilter pipeline.
+     */
+    private val blurImageFilterBindGroupLayout: GPUBindGroupLayout =
+        context.device.createBindGroupLayout(
+            BindGroupLayoutDescriptor(
+                entries = listOf(
+                    BindGroupLayoutEntry(
+                        binding = 0u,
+                        visibility = GPUShaderStage.Fragment,
+                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.UnfilterableFloat,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    private val blurImageFilterPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(blurImageFilterBindGroupLayout)),
+    )
+
+    /**
+     * Phase G-saveLayer-imageFilter-blur -- H pass pipeline. Writes
+     * pure RGBA into a freshly-cleared scratch texture ; no blend.
+     */
+    private val blurImageFilterHorizontalPipeline: GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = blurImageFilterPipelineLayout,
+                vertex = VertexState(module = blurImageFilterShader, entryPoint = "vs_main"),
+                fragment = FragmentState(
+                    module = blurImageFilterShader,
+                    entryPoint = "fs_horizontal",
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            blend = null,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    /**
+     * Phase G-saveLayer-imageFilter-blur -- V pass pipeline. Same shape
+     * as the H pipeline -- writes pure RGBA into a freshly-cleared
+     * scratch texture, no blend. The blending onto the parent happens
+     * in the third pass via [layerCompositePipelineFor].
+     */
+    private val blurImageFilterVerticalPipeline: GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = blurImageFilterPipelineLayout,
+                vertex = VertexState(module = blurImageFilterShader, entryPoint = "vs_main"),
+                fragment = FragmentState(
+                    module = blurImageFilterShader,
+                    entryPoint = "fs_vertical",
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            blend = null,
+                        ),
+                    ),
+                ),
+            ),
+        )
 
     /**
      * G5.1 -- per-device cache mapping each [SkImage] seen by
@@ -3376,6 +3542,32 @@ public class SkWebGpuDevice(
         // stays warm.
         val colorFilterPacked = packLayerCompositeColorFilter(effectiveColorFilter)
 
+        // Phase G-saveLayer-imageFilter-blur -- if the layer paint
+        // carries `SkImageFilters.Blur` (already gate-checked by
+        // [resolveLayerColorFilter] for input == null and tileMode in
+        // {kClamp, kDecal}), route through the 3-pass blur pipeline
+        // instead of the plain layer composite. Sigma == 0 on both axes
+        // collapses to the identity composite (no blur) so the call
+        // site can dial blur from off to on without a discontinuity.
+        val blurParams = paint?.imageFilter?.asBlurImageFilter()
+        if (blurParams != null &&
+            (blurParams.sigmaX > 0f || blurParams.sigmaY > 0f)
+        ) {
+            enqueueBlurredLayerComposite(
+                gpuSrc = gpuSrc,
+                w = w, h = h,
+                originX = originX, originY = originY,
+                scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
+                sigmaX = blurParams.sigmaX,
+                sigmaY = blurParams.sigmaY,
+                tileMode = blurParams.tileMode,
+                paintAlpha = paintAlpha,
+                colorFilterPacked = colorFilterPacked,
+                mode = mode,
+            )
+            return
+        }
+
         pending.add(
             LayerCompositeDraw(
                 layerView = gpuSrc.intermediateView,
@@ -3392,8 +3584,97 @@ public class SkWebGpuDevice(
     }
 
     /**
-     * Phase G-saveLayer-imageFilter -- scaffolding-slice resolver for
-     * the layer paint's [SkImageFilter] slot.
+     * Phase G-saveLayer-imageFilter-blur -- helper for [compositeFrom].
+     * Allocates the two scratch textures (H and V passes), pre-computes
+     * the per-axis Gaussian half-kernels (matches the MaskFilter blur's
+     * [buildSymmetricGaussianHalfKernel]), and enqueues a single
+     * [BlurredLayerCompositeDraw] that the dispatch loop expands into
+     * three render passes.
+     *
+     * Sigma 0 on a given axis -> radius 0 (centre tap only, weight 1) :
+     * the convolution along that axis is the identity. We still run
+     * the pass for layout simplicity ; the cost is a single textureLoad
+     * per pixel and the output is bit-iso with the non-blurred sample.
+     */
+    private fun enqueueBlurredLayerComposite(
+        gpuSrc: SkWebGpuDevice,
+        w: Int, h: Int,
+        originX: Int, originY: Int,
+        scissor: IntArray,
+        sigmaX: Float, sigmaY: Float,
+        tileMode: SkTileMode,
+        paintAlpha: Float,
+        colorFilterPacked: FloatArray,
+        mode: SkBlendMode,
+    ) {
+        if (!sigmaX.isFinite() || !sigmaY.isFinite() || sigmaX < 0f || sigmaY < 0f) {
+            error(
+                "SkWebGpuDevice.compositeFrom : SkImageFilters.Blur sigma " +
+                    "must be finite and non-negative ; got (sigmaX = $sigmaX, " +
+                    "sigmaY = $sigmaY)."
+            )
+        }
+        val unboundedRadiusX = if (sigmaX > 0f) {
+            ceil(3.0 * sigmaX).toInt().coerceAtLeast(1)
+        } else 0
+        val unboundedRadiusY = if (sigmaY > 0f) {
+            ceil(3.0 * sigmaY).toInt().coerceAtLeast(1)
+        } else 0
+        val radiusX = unboundedRadiusX.coerceAtMost(MAX_BLUR_RADIUS)
+        val radiusY = unboundedRadiusY.coerceAtMost(MAX_BLUR_RADIUS)
+        val kernelX = if (radiusX > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaX, radiusX)
+        } else floatArrayOf(1f)
+        val kernelY = if (radiusY > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaY, radiusY)
+        } else floatArrayOf(1f)
+
+        // Allocate two scratch textures of the same dimensions as the
+        // layer texture. Both are colour-attachment + texture-binding
+        // usage : the H pass writes scratchH (sampled by the V pass) ;
+        // the V pass writes scratchV (sampled by the composite pass).
+        val scratchH = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.blurImageFilterScratchH",
+            ),
+        )
+        val scratchHView = scratchH.createView()
+        val scratchV = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.blurImageFilterScratchV",
+            ),
+        )
+        val scratchVView = scratchV.createView()
+
+        pending.add(
+            BlurredLayerCompositeDraw(
+                layerView = gpuSrc.intermediateView,
+                layerWidth = w, layerHeight = h,
+                scratchHTexture = scratchH, scratchHView = scratchHView,
+                scratchVTexture = scratchV, scratchVView = scratchVView,
+                dstOriginX = originX, dstOriginY = originY,
+                scissor = scissor,
+                kernelX = kernelX, radiusX = radiusX,
+                kernelY = kernelY, radiusY = radiusY,
+                tileModeOrdinal = tileMode.ordinal,
+                paintR = paintAlpha, paintG = paintAlpha,
+                paintB = paintAlpha, paintA = paintAlpha,
+                colorFilterPacked = colorFilterPacked,
+                r = 1f, g = 1f, b = 1f, a = paintAlpha,
+                mode = mode,
+            ),
+        )
+    }
+
+    /**
+     * Phase G-saveLayer-imageFilter -- resolver for the layer paint's
+     * [SkImageFilter] slot.
      *
      * Returns the effective [SkColorFilter] that should drive the
      * layer-composite shader's `colorFilter*` uniform :
@@ -3408,15 +3689,19 @@ public class SkWebGpuDevice(
      *    rendered first (premul RGBA on the layer texture), then the
      *    composite reads them and runs `cf` per pixel before blending
      *    onto the parent. No structural transform involved.
-     *  - any other [SkImageFilter] variant (Blur, Offset, Compose,
-     *    DropShadow, MatrixTransform, DisplacementMap, Magnifier, Tile,
-     *    Crop, Blend, Erode / Dilate, MatrixConvolution, Lighting,
-     *    Arithmetic, ...) -> throws a clear error. These require either
-     *    a fragment-side Gaussian convolution (Blur), a UV-remapping
+     *  - `paint.imageFilter` is a `Blur(sigmaX, sigmaY, tileMode, input
+     *    = null)` -> returns the paint's own `colorFilter` ; the blur
+     *    pass is handled separately by [compositeFrom] enqueuing a
+     *    [BlurredLayerCompositeDraw] (kClamp / kDecal only -- other tile
+     *    modes throw at the dispatch gate ; non-null `input` throws too).
+     *  - any other [SkImageFilter] variant (Offset, Compose, DropShadow,
+     *    MatrixTransform, DisplacementMap, Magnifier, Tile, Crop, Blend,
+     *    Erode / Dilate, MatrixConvolution, Lighting, Arithmetic, ...)
+     *    -> throws a clear error. These require either a UV-remapping
      *    sample (Offset / MatrixTransform / DisplacementMap), or a
      *    multi-pass render-target ping-pong (Compose / DropShadow /
      *    Magnifier), none of which the scaffolding pipeline can express
-     *    yet. Follow-up slices land the Gaussian-blur multi-pass first.
+     *    yet.
      *  - both `paint.colorFilter` and a `ColorFilter` wrap set -> throws
      *    "double colour filter" error : the composite shader's
      *    `colorFilter*` uniform is single-occupancy, and folding two
@@ -3454,28 +3739,52 @@ public class SkWebGpuDevice(
         }
         val blurWrap = imf.asBlurImageFilter()
         if (blurWrap != null) {
-            error(
-                "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
-                    "SkImageFilters.Blur(sigmaX = ${blurWrap.sigmaX}, " +
-                    "sigmaY = ${blurWrap.sigmaY}, tileMode = " +
-                    "${blurWrap.tileMode}). The Gaussian-blur convolution " +
-                    "needs a separable multi-pass render-target pipeline " +
-                    "(ping-pong horizontal + vertical) that the layer " +
-                    "composite scaffolding doesn't ship yet -- follow-up " +
-                    "slice Phase G-saveLayer-imageFilter-blur."
-            )
+            // Blur is handled by the dedicated [BlurredLayerCompositeDraw]
+            // path in [compositeFrom]. We still surface the paint's own
+            // colourFilter so the final composite step folds it in --
+            // structurally equivalent to running the blur first (Blur
+            // composes over the layer texture as the source image, then
+            // the colour filter applies to the output, then the blend
+            // mode places it onto the parent ; the composite-pass
+            // pipeline runs the colour filter on the already-blurred
+            // pixels, matching that order).
+            if (blurWrap.input != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Blur(input = nonNull) with a non-null " +
+                        "child filter. Only the input == null case is supported " +
+                        "in the first ImageFilter Blur slice (Phase " +
+                        "G-saveLayer-imageFilter-blur) -- a non-null child " +
+                        "needs a render-to-texture pre-pass that the WebGPU " +
+                        "blur pipeline cannot express yet."
+                )
+            }
+            when (blurWrap.tileMode) {
+                SkTileMode.kClamp, SkTileMode.kDecal -> Unit
+                else -> error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Blur(tileMode = ${blurWrap.tileMode}). " +
+                        "Only kClamp and kDecal are supported in the first " +
+                        "ImageFilter Blur slice (Phase " +
+                        "G-saveLayer-imageFilter-blur) -- kRepeat / kMirror " +
+                        "need a sampler with the corresponding addressMode and " +
+                        "a follow-up slice."
+                )
+            }
+            return paint.colorFilter
         }
         error(
             "SkWebGpuDevice.compositeFrom : paint.imageFilter " +
                 "${imf::class.simpleName} not yet supported on the WebGPU " +
                 "backend. Supported variants : null (no filter) ; " +
                 "SkImageFilters.ColorFilter(cf, input = null) when the " +
-                "paint's own colorFilter is null. Other variants -- Blur, " +
-                "Offset, Compose, DropShadow, MatrixTransform, " +
+                "paint's own colorFilter is null ; SkImageFilters.Blur(" +
+                "sigmaX, sigmaY, kClamp / kDecal, input = null). Other " +
+                "variants -- Offset, Compose, DropShadow, MatrixTransform, " +
                 "DisplacementMap, Magnifier, Tile, Crop, Blend, Erode / " +
                 "Dilate, MatrixConvolution, Lighting, Arithmetic -- need " +
-                "follow-up slices that add a fragment-side Gaussian / " +
-                "UV-remapping / multi-pass render-target pipeline."
+                "follow-up slices that add a fragment-side UV-remapping or " +
+                "multi-pass render-target pipeline."
         )
     }
 
@@ -6263,6 +6572,7 @@ public class SkWebGpuDevice(
                 is ImageRectDraw -> buildImageRectDrawResources(d)
                 is LayerCompositeDraw -> buildLayerCompositeDrawResources(d)
                 is BlurredPathDraw -> buildBlurredPathDrawResources(d)
+                is BlurredLayerCompositeDraw -> buildBlurredLayerCompositeDrawResources(d)
             }
         }
 
@@ -6754,6 +7064,90 @@ public class SkWebGpuDevice(
                 }
                 return@forEachIndexed
             }
+            if (d is BlurredLayerCompositeDraw) {
+                // Phase G-saveLayer-imageFilter-blur -- three render
+                // passes :
+                //   1. H pass : sample layer texture, write to scratchH
+                //      (cleared). No blend.
+                //   2. V pass : sample scratchH, write to scratchV
+                //      (cleared). No blend. Output is blurred premul
+                //      RGBA, no paint-colour fold.
+                //   3. Composite : sample scratchV, modulate by
+                //      paintColor, apply colorFilter, blend onto the
+                //      parent intermediate via the layer composite
+                //      pipeline (same code path as the no-filter
+                //      saveLayer).
+                val hView = res.scratchHView!!
+                val vView = res.scratchVView!!
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = hView,
+                                loadOp = GPULoadOp.Clear,
+                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    setPipeline(blurImageFilterHorizontalPipeline)
+                    setBindGroup(0u, res.bindGroup)
+                    setScissorRect(
+                        x = 0u, y = 0u,
+                        width = d.layerWidth.toUInt(),
+                        height = d.layerHeight.toUInt(),
+                    )
+                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    end()
+                }
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = vView,
+                                loadOp = GPULoadOp.Clear,
+                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    setPipeline(blurImageFilterVerticalPipeline)
+                    setBindGroup(0u, res.secondaryBindGroup!!)
+                    setScissorRect(
+                        x = 0u, y = 0u,
+                        width = d.layerWidth.toUInt(),
+                        height = d.layerHeight.toUInt(),
+                    )
+                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    end()
+                }
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = colorView,
+                                loadOp = loadOp,
+                                clearValue = background,
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    setPipeline(layerCompositePipelineFor(d.mode))
+                    setBindGroup(0u, res.tertiaryBindGroup!!)
+                    setScissorRect(
+                        x = d.scissor[0].toUInt(),
+                        y = d.scissor[1].toUInt(),
+                        width = d.scissor[2].toUInt(),
+                        height = d.scissor[3].toUInt(),
+                    )
+                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    end()
+                }
+                return@forEachIndexed
+            }
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -6914,6 +7308,7 @@ public class SkWebGpuDevice(
                     is StencilCoverAaConicalFocalGradientDraw -> { /* handled above */ }
                     is StencilCoverAaBitmapShaderDraw -> { /* handled above */ }
                     is BlurredPathDraw -> { /* handled above */ }
+                    is BlurredLayerCompositeDraw -> { /* handled above */ }
                 }
                 end()
             }
@@ -6941,6 +7336,13 @@ public class SkWebGpuDevice(
             it.scratchHView?.close()
             it.scratchHTexture?.close()
             it.layerDevice?.close()
+            // Phase G-saveLayer-imageFilter-blur -- release the V-pass
+            // scratch and the composite-pass uniform. The layer device
+            // for this path is owned by SkCanvas, not by this draw, so
+            // we do *not* close it here.
+            it.tertiaryUniform?.close()
+            it.scratchVView?.close()
+            it.scratchVTexture?.close()
         }
     }
 
@@ -7042,6 +7444,16 @@ public class SkWebGpuDevice(
         val scratchHTexture: GPUTexture? = null,
         val scratchHView: GPUTextureView? = null,
         val layerDevice: SkWebGpuDevice? = null,
+        // Phase G-saveLayer-imageFilter-blur -- a third uniform + bind
+        // group for the final composite pass (consumed by
+        // `layer_composite.wgsl`) plus the V-pass scratch texture that
+        // the composite samples. The composite pass reads scratchV, so
+        // both scratches need to outlive the command buffer ; we close
+        // them after submit.
+        val tertiaryUniform: GPUBuffer? = null,
+        val tertiaryBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
+        val scratchVTexture: GPUTexture? = null,
+        val scratchVView: GPUTextureView? = null,
     )
 
     private fun buildRectDrawResources(d: RectDraw): DrawResources {
@@ -7728,6 +8140,139 @@ public class SkWebGpuDevice(
             scratchHTexture = d.scratchHTexture,
             scratchHView = d.scratchHView,
             layerDevice = d.shapeMaskDevice,
+        )
+    }
+
+    /**
+     * Phase G-saveLayer-imageFilter-blur -- build the GPU resources for
+     * a [BlurredLayerCompositeDraw]. Three uniform buffers + three bind
+     * groups :
+     *   - Primary   (H pass)    : `axisTileRadius.x = 1, .y = 0`, source
+     *                              binding is the layer texture view.
+     *                              Kernel + radius are per-X.
+     *   - Secondary (V pass)    : `axisTileRadius.x = 0, .y = 1`, source
+     *                              binding is the H-pass scratch view.
+     *                              Kernel + radius are per-Y.
+     *   - Tertiary  (composite) : layout matches `layer_composite.wgsl`
+     *                              (128-byte uniform : dstOriginSize,
+     *                              paintColor, colorFilter*). Source
+     *                              binding is the V-pass scratch view.
+     *
+     * The H and V uniforms share the [BLUR_IMAGE_FILTER_UNIFORM_SIZE]
+     * byte layout ; only the per-axis flags + the kernel data differ.
+     * The composite uniform is the same byte layout as the
+     * no-imageFilter [LayerCompositeDraw], so the pixel result for
+     * the colour-filter-applied step is bit-iso with the plain
+     * saveLayer composite for the same paint payload.
+     */
+    private fun buildBlurredLayerCompositeDrawResources(
+        d: BlurredLayerCompositeDraw,
+    ): DrawResources {
+        // ── H pass uniform : axisTileRadius = (1, 0, tileMode, radiusX).
+        val hUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = BLUR_IMAGE_FILTER_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.blurImageFilterHorizontalDraw",
+            ),
+        )
+        val hPacked = FloatArray(BLUR_IMAGE_FILTER_UNIFORM_FLOATS)
+        // dstOriginSize.xy unused (layer-space sampling), .zw = (w, h).
+        hPacked[0] = 0f; hPacked[1] = 0f
+        hPacked[2] = d.layerWidth.toFloat(); hPacked[3] = d.layerHeight.toFloat()
+        // axisTileRadius = (1, 0, tileMode, radiusX).
+        hPacked[4] = 1f; hPacked[5] = 0f
+        hPacked[6] = d.tileModeOrdinal.toFloat()
+        hPacked[7] = d.radiusX.toFloat()
+        // weights[0..radiusX] -> flat indices starting at packed[8].
+        for (k in 0..d.radiusX) {
+            hPacked[8 + k] = d.kernelX[k]
+        }
+        context.queue.writeBuffer(hUniform, 0uL, ArrayBuffer.of(hPacked))
+        val hBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = blurImageFilterBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = hUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.layerView),
+                ),
+            ),
+        )
+
+        // ── V pass uniform : axisTileRadius = (0, 1, tileMode, radiusY).
+        val vUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = BLUR_IMAGE_FILTER_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.blurImageFilterVerticalDraw",
+            ),
+        )
+        val vPacked = FloatArray(BLUR_IMAGE_FILTER_UNIFORM_FLOATS)
+        vPacked[0] = 0f; vPacked[1] = 0f
+        vPacked[2] = d.layerWidth.toFloat(); vPacked[3] = d.layerHeight.toFloat()
+        vPacked[4] = 0f; vPacked[5] = 1f
+        vPacked[6] = d.tileModeOrdinal.toFloat()
+        vPacked[7] = d.radiusY.toFloat()
+        for (k in 0..d.radiusY) {
+            vPacked[8 + k] = d.kernelY[k]
+        }
+        context.queue.writeBuffer(vUniform, 0uL, ArrayBuffer.of(vPacked))
+        val vBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = blurImageFilterBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = vUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.scratchHView),
+                ),
+            ),
+        )
+
+        // ── Composite pass uniform : matches `layer_composite.wgsl`'s
+        //    128-byte layout. dstOriginSize : (originX, originY,
+        //    layerW, layerH) -- the composite shader subtracts this
+        //    origin to map the parent-pixel fragment to a layer-pixel
+        //    sample. paintColor + colorFilter payload mirror the plain
+        //    [LayerCompositeDraw] packing.
+        val compUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = LAYER_COMPOSITE_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.blurImageFilterCompositeDraw",
+            ),
+        )
+        val compPacked = FloatArray(32) // 8 vec4f * 4 floats each.
+        compPacked[0] = d.dstOriginX.toFloat()
+        compPacked[1] = d.dstOriginY.toFloat()
+        compPacked[2] = d.layerWidth.toFloat()
+        compPacked[3] = d.layerHeight.toFloat()
+        compPacked[4] = d.paintR; compPacked[5] = d.paintG
+        compPacked[6] = d.paintB; compPacked[7] = d.paintA
+        System.arraycopy(d.colorFilterPacked, 0, compPacked, 8, 24)
+        context.queue.writeBuffer(compUniform, 0uL, ArrayBuffer.of(compPacked))
+        val compBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = layerCompositeBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = compUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.scratchVView),
+                ),
+            ),
+        )
+
+        return DrawResources(
+            uniform = hUniform,
+            bindGroup = hBindGroup,
+            secondaryUniform = vUniform,
+            secondaryBindGroup = vBindGroup,
+            tertiaryUniform = compUniform,
+            tertiaryBindGroup = compBindGroup,
+            scratchHTexture = d.scratchHTexture,
+            scratchHView = d.scratchHView,
+            scratchVTexture = d.scratchVTexture,
+            scratchVView = d.scratchVView,
+            // layerDevice intentionally left null -- the layer device
+            // is owned by SkCanvas, not by this draw (mirrors
+            // [LayerCompositeDraw]).
         )
     }
 
@@ -8560,6 +9105,27 @@ public class SkWebGpuDevice(
         const val BLUR_UNIFORM_SIZE: ULong = 192uL
         /** Float count of [BLUR_UNIFORM_SIZE] for FloatArray packing : 48 floats. */
         const val BLUR_UNIFORM_FLOATS: Int = 48
+        /**
+         * Phase G-saveLayer-imageFilter-blur -- size of the per-pass
+         * blur uniform for the ImageFilter blur shader. Layout (matches
+         * `Uniforms` in `blur_image_filter.wgsl`) :
+         *   offset   0 : dstOriginSize  (vec4f -- 0, 0, srcW, srcH)
+         *   offset  16 : axisTileRadius (vec4f -- axisX, axisY,
+         *                                tileMode, radius)
+         *   offset  32 : weights        (array<vec4f, 9> -- 144 bytes,
+         *                                36 float slots ; indices 0..32
+         *                                hold the symmetric half-kernel,
+         *                                indices 33..35 are zeroed pad)
+         *   ------                       176 bytes
+         *
+         * Smaller than [BLUR_UNIFORM_SIZE] because the ImageFilter blur
+         * doesn't fold a paintColor in the shader -- the colour
+         * modulation happens on the final composite pass via
+         * `layer_composite.wgsl`.
+         */
+        const val BLUR_IMAGE_FILTER_UNIFORM_SIZE: ULong = 176uL
+        /** Float count of [BLUR_IMAGE_FILTER_UNIFORM_SIZE] for FloatArray packing : 44 floats. */
+        const val BLUR_IMAGE_FILTER_UNIFORM_FLOATS: Int = 44
         /**
          * G5.3 -- identity column-major 3x3 used as the no-op
          * primaries matrix when [bitmapColorSpaceFor] returns the sRGB
