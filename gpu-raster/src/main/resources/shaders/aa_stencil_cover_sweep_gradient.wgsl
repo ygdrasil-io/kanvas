@@ -52,6 +52,10 @@ struct Uniforms {
     edges:           array<vec4f, 256>,           // offset   80 : (Ax, Ay, Bx, By) per edge
     positions:       array<vec4f, 16>,            // offset 4176 : (pos, _, _, _) per stop
     colors:          array<vec4f, 16>,            // offset 4432 : premul (r, g, b, a) per stop
+    // G2.x clip-shape -- trailing two vec4 slots carry the optional
+    // analytical clip (mirror of `solid_color.wgsl`).
+    clipShapeBounds:    vec4f,                    // offset 4688 : (l, t, r, b) device-px
+    clipShapeRadiiKind: vec4f,                    // offset 4704 : (rx, ry, clipKind, _)
 };
 
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
@@ -153,12 +157,46 @@ fn decal_out_of_range(t_raw: f32) -> bool {
     return t_raw < 0.0 || t_raw > 1.0;
 }
 
+// G2.x -- analytical rrect coverage (mirror of `solid_color.wgsl`).
+fn rrect_cov(p: vec2f, bounds: vec4f, rx_in: f32, ry_in: f32) -> f32 {
+    let centre = vec2f(0.5 * (bounds.x + bounds.z), 0.5 * (bounds.y + bounds.w));
+    let half = vec2f(0.5 * (bounds.z - bounds.x), 0.5 * (bounds.w - bounds.y));
+    let rx = max(rx_in, 1e-4);
+    let ry = max(ry_in, 1e-4);
+    let q_abs = abs(p - centre);
+    let q = q_abs - (half - vec2f(rx, ry));
+    let outer_rect_sdf = max(q_abs.x - half.x, q_abs.y - half.y);
+    let qm = max(q, vec2f(0.0, 0.0));
+    let n = vec2f(qm.x / rx, qm.y / ry);
+    let nl = length(n);
+    let nl_safe = max(nl, 1e-6);
+    let dir = n / nl_safe;
+    let effective_r = length(vec2f(rx * dir.x, ry * dir.y));
+    let corner_sdf = (nl - 1.0) * effective_r;
+    let in_corner_band = step(0.0, q.x) * step(0.0, q.y);
+    let band_sdf = mix(outer_rect_sdf, corner_sdf, in_corner_band);
+    return clamp(0.5 - band_sdf, 0.0, 1.0);
+}
+
+fn clip_cov(p: vec2f) -> f32 {
+    let clip_kind = i32(uniforms.clipShapeRadiiKind.z + 0.5);
+    if (clip_kind == 1) {
+        return rrect_cov(
+            p,
+            uniforms.clipShapeBounds,
+            uniforms.clipShapeRadiiKind.x,
+            uniforms.clipShapeRadiiKind.y,
+        );
+    }
+    return 1.0;
+}
+
 // ----- inside cover (coverage in [0.5, 1.0]) -----
 
 @fragment
 fn fs_inside_clamp(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
-    let coverage = clamp(minDist + 0.5, 0.0, 1.0);
+    let coverage = clamp(minDist + 0.5, 0.0, 1.0) * clip_cov(frag.xy);
     let t_raw = compute_t_raw(frag.xy);
     let c = sample_stops_at(map_clamp(t_raw));
     return vec4f(c.rgb * coverage, c.a * coverage);
@@ -167,7 +205,7 @@ fn fs_inside_clamp(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 @fragment
 fn fs_inside_repeat(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
-    let coverage = clamp(minDist + 0.5, 0.0, 1.0);
+    let coverage = clamp(minDist + 0.5, 0.0, 1.0) * clip_cov(frag.xy);
     let t_raw = compute_t_raw(frag.xy);
     let c = sample_stops_at(map_repeat(t_raw));
     return vec4f(c.rgb * coverage, c.a * coverage);
@@ -176,7 +214,7 @@ fn fs_inside_repeat(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 @fragment
 fn fs_inside_mirror(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
-    let coverage = clamp(minDist + 0.5, 0.0, 1.0);
+    let coverage = clamp(minDist + 0.5, 0.0, 1.0) * clip_cov(frag.xy);
     let t_raw = compute_t_raw(frag.xy);
     let c = sample_stops_at(map_mirror(t_raw));
     return vec4f(c.rgb * coverage, c.a * coverage);
@@ -185,7 +223,7 @@ fn fs_inside_mirror(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 @fragment
 fn fs_inside_decal(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
-    let coverage = clamp(minDist + 0.5, 0.0, 1.0);
+    let coverage = clamp(minDist + 0.5, 0.0, 1.0) * clip_cov(frag.xy);
     let t_raw = compute_t_raw(frag.xy);
     if (decal_out_of_range(t_raw)) {
         return vec4f(0.0, 0.0, 0.0, 0.0);
@@ -199,7 +237,7 @@ fn fs_inside_decal(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 @fragment
 fn fs_outside_clamp(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
-    let coverage = clamp(0.5 - minDist, 0.0, 1.0);
+    let coverage = clamp(0.5 - minDist, 0.0, 1.0) * clip_cov(frag.xy);
     let t_raw = compute_t_raw(frag.xy);
     let c = sample_stops_at(map_clamp(t_raw));
     return vec4f(c.rgb * coverage, c.a * coverage);
@@ -208,7 +246,7 @@ fn fs_outside_clamp(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 @fragment
 fn fs_outside_repeat(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
-    let coverage = clamp(0.5 - minDist, 0.0, 1.0);
+    let coverage = clamp(0.5 - minDist, 0.0, 1.0) * clip_cov(frag.xy);
     let t_raw = compute_t_raw(frag.xy);
     let c = sample_stops_at(map_repeat(t_raw));
     return vec4f(c.rgb * coverage, c.a * coverage);
@@ -217,7 +255,7 @@ fn fs_outside_repeat(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 @fragment
 fn fs_outside_mirror(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
-    let coverage = clamp(0.5 - minDist, 0.0, 1.0);
+    let coverage = clamp(0.5 - minDist, 0.0, 1.0) * clip_cov(frag.xy);
     let t_raw = compute_t_raw(frag.xy);
     let c = sample_stops_at(map_mirror(t_raw));
     return vec4f(c.rgb * coverage, c.a * coverage);
@@ -226,7 +264,7 @@ fn fs_outside_mirror(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 @fragment
 fn fs_outside_decal(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let minDist = minSegmentDistance(frag.xy);
-    let coverage = clamp(0.5 - minDist, 0.0, 1.0);
+    let coverage = clamp(0.5 - minDist, 0.0, 1.0) * clip_cov(frag.xy);
     let t_raw = compute_t_raw(frag.xy);
     if (decal_out_of_range(t_raw)) {
         return vec4f(0.0, 0.0, 0.0, 0.0);
