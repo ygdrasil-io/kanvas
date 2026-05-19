@@ -6,10 +6,12 @@ import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
 import org.graphiks.math.SkRect
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkPaint
 import kotlin.math.abs
 
@@ -289,6 +291,221 @@ class SaveLayerTest {
         // and the composite is SrcOver with full alpha.
         assertRgbaApprox(pixels, 15, 15, 0, 0, 255, 255, tag = "layer body")
         assertRgbaApprox(pixels, 1, 1, 255, 255, 255, 255, tag = "background corner")
+    }
+
+    // ─── Phase G-saveLayer-colorFilter tests ──────────────────────────
+
+    @Test
+    fun `saveLayer with Blend(red, kPlus) colorFilter tints green layer to yellow`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                // saveLayer with colorFilter = Blend(red, kPlus) ; draw
+                // green inside. The composite-pass shader runs the
+                // colour filter on the sampled (green premul) texel :
+                //   blendPremul(src = (R=1, G=0, B=0, A=1),
+                //               dst = (R=0, G=1, B=0, A=1),
+                //               kPlus) = min(1, s+d) = (1, 1, 0, 1)
+                // ⇒ yellow premul. Composite (SrcOver) over white :
+                //   out = yellow + white * (1 - 1) = yellow.
+                val layerPaint = SkPaint().apply {
+                    colorFilter = SkColorFilters.Blend(SK_ColorRED, SkBlendMode.kPlus)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorGREEN })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : yellow (R=255, G=255, B=0, A=255).
+        assertRgbaApprox(pixels, 12, 12, 255, 255, 0, 255, tag = "Blend(red,kPlus) center", tol = 2)
+        assertRgbaApprox(pixels, 20, 20, 255, 255, 0, 255, tag = "Blend(red,kPlus) center #2", tol = 2)
+        // Outside layer : white background untouched.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside layer")
+    }
+
+    @Test
+    fun `saveLayer with Blend(blue, kModulate) colorFilter masks green layer to black`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                // colorFilter = Blend(blue, kModulate) on a green layer.
+                //   src = blue premul = (R=0, G=0, B=1, A=1)
+                //   dst = green premul = (R=0, G=1, B=0, A=1)
+                //   modulate = s * d = (0, 0, 0, 1) -- opaque black.
+                // Composite (SrcOver) over white -> opaque black.
+                val layerPaint = SkPaint().apply {
+                    colorFilter = SkColorFilters.Blend(SK_ColorBLUE, SkBlendMode.kModulate)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorGREEN })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : opaque black.
+        assertRgbaApprox(pixels, 14, 14, 0, 0, 0, 255, tag = "Blend(blue,kModulate) center", tol = 2)
+        // Outside layer : white background.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside layer")
+    }
+
+    @Test
+    fun `saveLayer with Matrix grayscale colorFilter turns red layer to gray`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                // Rec.601 luma weights : 0.299 R + 0.587 G + 0.114 B,
+                // alpha untouched. Applied to opaque red ⇒
+                //   gray = (0.299, 0.299, 0.299, 1) ≈ (76, 76, 76, 255).
+                val luma = floatArrayOf(
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0f,     0f,     0f,     1f, 0f,
+                )
+                val layerPaint = SkPaint().apply {
+                    colorFilter = SkColorFilters.Matrix(luma)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : gray (~ 76, 76, 76, 255). Float-precision +
+        // 8-bit quantisation -> ±2 tolerance.
+        assertRgbaApprox(pixels, 14, 14, 76, 76, 76, 255, tag = "Matrix luma center", tol = 2)
+        // Outside layer : white background.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside layer")
+    }
+
+    @Test
+    fun `saveLayer with Matrix bias colorFilter shifts blue layer to white`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorBLUE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                // Matrix with bias only : identity coefs + bias of
+                // (1, 1, 0, 0) lifts R and G to 1 (clamped) while
+                // leaving B and A from the source. Applied to blue
+                // (R=0, G=0, B=1, A=1) ⇒ (1, 1, 1, 1) = white.
+                val biasOnly = floatArrayOf(
+                    1f, 0f, 0f, 0f, 1f,
+                    0f, 1f, 0f, 0f, 1f,
+                    0f, 0f, 1f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f,
+                )
+                val layerPaint = SkPaint().apply {
+                    colorFilter = SkColorFilters.Matrix(biasOnly)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorBLUE })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : white.
+        assertRgbaApprox(pixels, 14, 14, 255, 255, 255, 255, tag = "Matrix bias center", tol = 2)
+        // Outside layer : blue background.
+        assertRgbaApprox(pixels, 2, 2, 0, 0, 255, 255, tag = "outside layer")
+    }
+
+    @Test
+    fun `saveLayer with null paint colorFilter is a no-op (fast path)`() {
+        // Regression -- the colour-filter slot expanded the uniform from
+        // 32 to 128 bytes. Verify the no-filter path still produces
+        // bit-iso output (matches the original `saveLayer plus drawRect`
+        // test outside of this group).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                // Paint with NO colour filter -- the composite uniform
+                // ships the identity payload, shader's kind == 0 fast
+                // path runs.
+                val layerPaint = SkPaint() // colorFilter = null
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : opaque red (SrcOver of red over white).
+        assertRgbaApprox(pixels, 14, 14, 255, 0, 0, 255, tag = "null-filter center")
+        // Outside layer : white background untouched.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside layer")
+    }
+
+    @Test
+    fun `saveLayer with unsupported colorFilter (Compose) falls back to no-filter composite`() {
+        // Phase G-saveLayer-colorFilter -- variants outside the supported
+        // subset (modeFilter / matrixFilter) should drop silently and
+        // composite as if no filter was set. Compose(Matrix, Matrix) is
+        // a concrete unsupported case that the host-side `asMatrixFilter`
+        // / `asBlendModeFilter` extractors return null for.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val identity = floatArrayOf(
+                    1f, 0f, 0f, 0f, 0f,
+                    0f, 1f, 0f, 0f, 0f,
+                    0f, 0f, 1f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f,
+                )
+                // Compose two identity matrices -- not detected as a
+                // Matrix filter by the extractor, so the GPU path drops
+                // the filter and composites the layer pixels directly.
+                val composed = SkColorFilters.Compose(
+                    SkColorFilters.Matrix(identity),
+                    SkColorFilters.Matrix(identity),
+                )
+                val layerPaint = SkPaint().apply { colorFilter = composed }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Filter dropped ⇒ same as no-filter SrcOver of red over white.
+        // (Identity Compose would have been bit-iso anyway -- this also
+        // protects against a buggy extractor that picks up Compose as a
+        // matrix and ships wrong floats.)
+        assertRgbaApprox(pixels, 14, 14, 255, 0, 0, 255, tag = "Compose-fallback center")
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside layer")
     }
 
     private fun assertRgbaApprox(
