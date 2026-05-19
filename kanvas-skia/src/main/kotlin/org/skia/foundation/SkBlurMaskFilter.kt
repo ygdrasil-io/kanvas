@@ -37,8 +37,8 @@ import kotlin.math.exp
  * (captures 99.7 % of the kernel mass per the 3-sigma rule).
  */
 public class SkBlurMaskFilter private constructor(
-    private val style: SkBlurStyle,
-    private val sigma: Float,
+    public val style: SkBlurStyle,
+    public val sigma: Float,
     private val respectCTMFlag: Boolean = true,
 ) : SkMaskFilter() {
 
