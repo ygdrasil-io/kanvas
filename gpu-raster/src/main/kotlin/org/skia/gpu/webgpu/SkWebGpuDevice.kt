@@ -818,6 +818,37 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
     ) : PendingDraw
 
+    // ─── Layer composite (Phase G-saveLayer-fast) ───────────────────────
+    /**
+     * Phase G-saveLayer-fast -- direct GPU-to-GPU layer composite. The
+     * source is a sibling [SkWebGpuDevice]'s [intermediateTexture] (the
+     * child layer's pending draws have already been flushed onto it via
+     * [flushDrawsOnly] before this pending draw is enqueued). The
+     * fragment stage uses `textureLoad` with integer pixel coords --
+     * 1:1 layer-pixel / parent-device-pixel grid alignment, no filter,
+     * no sampler.
+     *
+     * Replaces the scaffolding flush+readback+re-upload+sample
+     * round-trip in [compositeFrom] with a single fullscreen-quad
+     * render pass on the parent's intermediate. Blend mode is honoured
+     * via the pipeline's blend state (matches the natively-blendable
+     * subset : kClear / kSrc / kSrcOver / kDstOver, same gate as the
+     * scaffolding's [enqueueImageRectDrawInternal]).
+     *
+     * Inherited `r/g/b/a` are placeholders (fragment shader sources
+     * colour from the layer texture) ; kept for the [PendingDraw]
+     * interface contract.
+     */
+    private data class LayerCompositeDraw(
+        val layerView: GPUTextureView,
+        val layerWidth: Int, val layerHeight: Int,
+        val dstOriginX: Int, val dstOriginY: Int,
+        val scissor: IntArray,
+        val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
     // ─── Bitmap shader on non-rect (G5.2.1) ─────────────────────────────
     /**
      * G5.2.1 -- AA stencil-and-cover path filled with a bitmap shader
@@ -1453,6 +1484,82 @@ public class SkWebGpuDevice(
                     magFilter = magMin,
                     minFilter = magMin,
                     label = "SkWebGpuDevice.bitmapSampler($filter,$tileX,$tileY)",
+                ),
+            )
+        }
+
+    // ─── Layer composite (Phase G-saveLayer-fast) ────────────────────────
+    /**
+     * Phase G-saveLayer-fast -- direct GPU-to-GPU composite shader. A
+     * minimal fullscreen-quad pipeline that samples a child
+     * [SkWebGpuDevice]'s intermediate texture via `textureLoad` and
+     * writes onto this device's intermediate, replacing the scaffolding
+     * flush+readback+re-upload round-trip in [compositeFrom].
+     */
+    private val layerCompositeShader: GPUShaderModule = loadShader("shaders/layer_composite.wgsl")
+
+    /**
+     * Phase G-saveLayer-fast -- bind group layout :
+     *   binding 0 -- uniform buffer (dstOrigin, size, paintColor)
+     *   binding 1 -- the child device's intermediate texture (sampleType
+     *                UnfilterableFloat so the same layout works for both
+     *                `RGBA16Float` and `RGBA8Unorm` intermediate formats ;
+     *                the shader uses `textureLoad`, not `textureSample`,
+     *                so no sampler is needed).
+     */
+    private val layerCompositeBindGroupLayout: GPUBindGroupLayout =
+        context.device.createBindGroupLayout(
+            BindGroupLayoutDescriptor(
+                entries = listOf(
+                    BindGroupLayoutEntry(
+                        binding = 0u,
+                        visibility = GPUShaderStage.Fragment,
+                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.UnfilterableFloat,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    private val layerCompositePipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(layerCompositeBindGroupLayout)),
+    )
+
+    /**
+     * Phase G-saveLayer-fast -- pipeline cache keyed by [SkBlendMode].
+     * Small set (4 modes : kClear / kSrc / kSrcOver / kDstOver -- the
+     * natively-blendable subset that [blendStateFor] expresses without
+     * a fragment-side round-trip). Other modes error out at the
+     * dispatch gate, matching the scaffolding's gate via
+     * [enqueueImageRectDrawInternal].
+     */
+    private val layerCompositePipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> =
+        mutableMapOf()
+
+    private fun layerCompositePipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        layerCompositePipelineCache.getOrPut(mode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = layerCompositePipelineLayout,
+                    vertex = VertexState(module = layerCompositeShader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = layerCompositeShader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
                 ),
             )
         }
@@ -2773,30 +2880,33 @@ public class SkWebGpuDevice(
 
     /**
      * Phase G-saveLayer — composite a child device's pixels back onto
-     * this device, honouring [paint]'s alpha + blendMode. Scaffolding
-     * implementation : flushes the child device to a raw RGBA byte
-     * buffer (matches the present-pass output of a layer device, i.e.
-     * sRGB-coded bytes), wraps it as an [SkImage], and routes through
-     * the existing [drawImageRect] / bitmap-shader pipeline so the
-     * alpha + blendMode honoured matches the in-scope blendable subset
-     * (kClear / kSrc / kSrcOver / kDstOver — the rest error out via
-     * [enqueueImageRectDrawInternal]).
+     * this device, honouring [paint]'s alpha + blendMode. **Direct
+     * GPU-to-GPU blit** (Phase G-saveLayer-fast) : drains the child
+     * device's pending draws onto its intermediate texture via
+     * [flushDrawsOnly], then enqueues a [LayerCompositeDraw] that the
+     * parent's flush replays as a fullscreen-quad render pass sampling
+     * the child's intermediate via `textureLoad`. No readback, no
+     * re-upload -- both textures live on the same WebGPU adapter / queue
+     * (the child device was built via [makeLayerDevice], which shares
+     * the parent's [context] + [intermediateFormat]).
      *
-     * **Performance.** The flush-and-readback round-trip is wasteful
-     * (a direct GPU-to-GPU blit via a tiny composite pipeline would
-     * avoid the readback + texture re-upload). Acceptable for the
-     * scaffolding slice ; a follow-up Phase G-saveLayer-fast can swap
-     * the inner blit out without touching SkCanvas.
+     * Blend mode is honoured via the composite pipeline's blend state
+     * (matches the natively-blendable subset : kClear / kSrc / kSrcOver
+     * / kDstOver) ; alpha + colour modulation fold into a per-draw
+     * `paintColor` uniform.
      *
      * **Constraints.**
      *  - [src] must be a child [SkWebGpuDevice] (same context). A
      *    mismatched backend errors out — the cross-device path is not
      *    in scope.
+     *  - Blend mode outside the kClear / kSrc / kSrcOver / kDstOver
+     *    subset errors out -- same gate as the scaffolding's
+     *    [enqueueImageRectDrawInternal].
      *  - Colour filter / image filter on [paint] are dropped here
      *    (they're CPU-only ; the relevant filter lives on the [paint]
-     *    that the canvas hands us but the GPU bitmap-shader pipeline
-     *    has no fragment-side colour-filter slot yet). Documented
-     *    deferred Phase G-saveLayer-colorFilter.
+     *    that the canvas hands us but the GPU composite pipeline has
+     *    no fragment-side colour-filter slot yet). Documented deferred
+     *    Phase G-saveLayer-colorFilter.
      */
     override fun compositeFrom(
         src: SkDevice,
@@ -2813,66 +2923,70 @@ public class SkWebGpuDevice(
                     "GPU root, or vice-versa) is out of scope — keep the " +
                     "layer device backend-matched to its parent."
             )
-        // Flush the child : runs its pending draws into a layer
-        // intermediate, then the layer's identity present pass copies
-        // to its RGBA8Unorm readback target. Bytes are sRGB-coded (the
-        // layer was constructed with `applyColorspaceTransform = false`).
-        val bytes = gpuSrc.flush()
+        if (gpuSrc.context !== context) {
+            error(
+                "SkWebGpuDevice.compositeFrom : child device's WebGPU " +
+                    "context does not match the parent's. The layer texture " +
+                    "cannot be sampled across contexts -- ensure the child " +
+                    "was built via makeLayerDevice() so it inherits the " +
+                    "parent's context."
+            )
+        }
+        val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
+        when (mode) {
+            SkBlendMode.kClear,
+            SkBlendMode.kSrc,
+            SkBlendMode.kSrcOver,
+            SkBlendMode.kDstOver -> Unit
+            else -> error(
+                "SkWebGpuDevice.compositeFrom : blend mode $mode not " +
+                    "supported. In scope : kClear / kSrc / kSrcOver / " +
+                    "kDstOver -- the natively-blendable subset that " +
+                    "[blendStateFor] expresses without fragment-side " +
+                    "round-trip. Other modes need a fragment-side blend " +
+                    "(Phase G-saveLayer-x).",
+            )
+        }
         val w = gpuSrc.width
         val h = gpuSrc.height
-        // Pack RGBA bytes (premul, sRGB-coded) into an `SkImage` with
-        // ARGB int pixels. `SkImage.peekPixel` and the bitmap-shader
-        // sampler both consume this layout uniformly. The premul status
-        // matches what `imageTextureFor` expects (unpremul on upload
-        // because the bitmap-shader fragment stage premultiplies after
-        // the bilinear sample) — but our bytes are already premul from
-        // the layer's blend hardware. Divide-by-alpha unpremul step
-        // here so the bitmap-shader fragment stage's premul matches the
-        // original alpha after the colorspace transform. Opaque sources
-        // (the dominant case for the saveLayer-scaffolding tests) are
-        // bit-iso either way (a == 1 ⇒ unpremul == premul).
-        val pixels = IntArray(w * h)
-        for (i in 0 until w * h) {
-            val base = i * 4
-            val r = bytes[base].toInt() and 0xFF
-            val g = bytes[base + 1].toInt() and 0xFF
-            val b = bytes[base + 2].toInt() and 0xFF
-            val a = bytes[base + 3].toInt() and 0xFF
-            // Unpremul : divide RGB by alpha, clamped to [0, 255].
-            val rU: Int; val gU: Int; val bU: Int
-            if (a == 0) { rU = 0; gU = 0; bU = 0 }
-            else if (a == 0xFF) { rU = r; gU = g; bU = b }
-            else {
-                rU = ((r * 255 + a / 2) / a).coerceIn(0, 255)
-                gU = ((g * 255 + a / 2) / a).coerceIn(0, 255)
-                bU = ((b * 255 + a / 2) / a).coerceIn(0, 255)
-            }
-            pixels[i] = (a shl 24) or (rU shl 16) or (gU shl 8) or bU
-        }
-        val layerImage = SkImage(w, h, pixels)
+        // Drain the child's pending draws onto its intermediateTexture.
+        // We must not run the child's flush() : that would copy through
+        // its identity present pass to the readback target and stage a
+        // CPU buffer back -- exactly the round-trip we're killing. The
+        // child's intermediateTexture is in the same WebGPU queue as
+        // ours, so encoding a render pass that samples it on a later
+        // command buffer is well-ordered as long as the child's draws
+        // have already been submitted.
+        gpuSrc.flushDrawsOnly()
 
-        // Effective dst rect on the parent device. [originX, originY]
-        // is the layer's top-left in parent-device coords ; the layer
-        // is `w × h` so the dst rect is `(originX, originY, +w, +h)`,
-        // intersected with [clip].
-        val dstL = originX.toFloat()
-        val dstT = originY.toFloat()
-        val dstR = (originX + w).toFloat()
-        val dstB = (originY + h).toFloat()
-        val srcRect = SkRect.MakeWH(w.toFloat(), h.toFloat())
-        val dstRect = SkRect.MakeLTRB(dstL, dstT, dstR, dstB)
-        // Reuse the existing drawImageRect pipeline. Sampling is
-        // identity (nearest, no mipmap, no cubic) — the layer's pixel
-        // grid lines up 1:1 with the parent's.
-        val sampling = SkSamplingOptions(filter = SkFilterMode.kNearest)
-        drawImageRect(
-            image = layerImage,
-            src = srcRect,
-            devDst = dstRect,
-            sampling = sampling,
-            paint = paint,
-            constraint = SrcRectConstraint.kFast,
-            clip = clip,
+        // Compute the integer dst rect on the parent device, clipped
+        // against the caller's [clip] (already intersected with the
+        // parent's clip stack by SkCanvas) and the viewport.
+        val ix0 = originX.coerceAtLeast(clip.left).coerceAtLeast(0)
+        val iy0 = originY.coerceAtLeast(clip.top).coerceAtLeast(0)
+        val ix1 = (originX + w).coerceAtMost(clip.right).coerceAtMost(width)
+        val iy1 = (originY + h).coerceAtMost(clip.bottom).coerceAtMost(height)
+        if (ix0 >= ix1 || iy0 >= iy1) return
+
+        // Paint colour scale : alpha (and future colour filter) multiplies
+        // the loaded texel. Default = (1, 1, 1, 1) when paint is null.
+        // The layer pixels are premul, so we scale all 4 channels by the
+        // paint alpha (matches the scaffolding's drawImageRect path which
+        // unpremul-then-premul-with-paintAlpha collapsed to the same
+        // multiply for premul sources).
+        val paintAlpha = (paint?.alpha ?: 0xFF) / 255f
+
+        pending.add(
+            LayerCompositeDraw(
+                layerView = gpuSrc.intermediateView,
+                layerWidth = w, layerHeight = h,
+                dstOriginX = originX, dstOriginY = originY,
+                scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
+                paintR = paintAlpha, paintG = paintAlpha,
+                paintB = paintAlpha, paintA = paintAlpha,
+                r = 1f, g = 1f, b = 1f, a = paintAlpha,
+                mode = mode,
+            ),
         )
     }
 
@@ -5166,11 +5280,23 @@ public class SkWebGpuDevice(
      * de-padded from WebGPU's 256-byte row alignment. Clears [pending]
      * for the next frame.
      */
-    public fun flush(): ByteArray = runBlocking {
-        val encoder = context.device.createCommandEncoder()
-        // G6.1 — draws target the *intermediate* texture ; the final
-        // present pass below samples it, applies the sRGB → Rec.2020
-        // transform, and writes to `target.colorTexture` for readback.
+    /**
+     * Phase G-saveLayer-fast -- encode every pending draw into [encoder]
+     * targeting [intermediateView], and return the per-draw GPU resources
+     * (uniform buffers / bind groups / vertex buffers) so the caller can
+     * close them after submitting the encoder.
+     *
+     * Shared by [flush] (which adds a present pass + readback tail) and
+     * [flushDrawsOnly] (which submits without the readback so a parent
+     * device can sample this device's [intermediateTexture] in a later
+     * command buffer -- the layer-composite path).
+     *
+     * Pending is consumed but not cleared here ; the caller clears
+     * after closing the resources.
+     */
+    private fun encodePendingDrawsToIntermediate(
+        encoder: io.ygdrasil.webgpu.GPUCommandEncoder,
+    ): List<DrawResources> {
         val colorView = intermediateView
 
         if (pending.isEmpty()) {
@@ -5221,6 +5347,7 @@ public class SkWebGpuDevice(
                 is ConicalFocalGradientRectDraw -> buildConicalFocalGradientRectDrawResources(d)
                 is ConicalStripGradientRectDraw -> buildConicalStripGradientRectDrawResources(d)
                 is ImageRectDraw -> buildImageRectDrawResources(d)
+                is LayerCompositeDraw -> buildLayerCompositeDrawResources(d)
             }
         }
 
@@ -5780,6 +5907,24 @@ public class SkWebGpuDevice(
                         )
                         draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
                     }
+                    is LayerCompositeDraw -> {
+                        // Phase G-saveLayer-fast -- direct GPU-to-GPU
+                        // composite : fullscreen-quad render pass that
+                        // samples the child device's intermediate via
+                        // `textureLoad` and writes onto our intermediate.
+                        // Blend mode honoured by the pipeline's blend
+                        // state ; alpha + colour modulation fold into
+                        // the per-draw `paintColor` uniform.
+                        setPipeline(layerCompositePipelineFor(d.mode))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    }
                     is StencilCoverPolygonDraw -> { /* handled above */ }
                     is StencilCoverAaPolygonDraw -> { /* handled above */ }
                     is StencilCoverAaGradientDraw -> { /* handled above */ }
@@ -5792,6 +5937,35 @@ public class SkWebGpuDevice(
                 end()
             }
         }
+
+        return perDrawResources
+    }
+
+    /**
+     * Phase G-saveLayer-fast -- close out per-draw GPU resources after
+     * the command buffer they were bound into has been submitted.
+     * Shared by [flush] and [flushDrawsOnly].
+     */
+    private fun closeDrawResources(perDrawResources: List<DrawResources>) {
+        perDrawResources.forEach {
+            it.uniform.close()
+            it.vertexBuffer?.close()
+            it.coverVertexBuffer?.close()
+        }
+    }
+
+    /**
+     * Submit the pending draws, read the colour texture back, and return
+     * its raw bytes. Layout: row-major RGBA, `width * height * 4` bytes,
+     * de-padded from WebGPU's 256-byte row alignment. Clears [pending]
+     * for the next frame.
+     */
+    public fun flush(): ByteArray = runBlocking {
+        val encoder = context.device.createCommandEncoder()
+        // G6.1 — draws target the *intermediate* texture ; the final
+        // present pass below samples it, applies the sRGB → Rec.2020
+        // transform, and writes to `target.colorTexture` for readback.
+        val perDrawResources = encodePendingDrawsToIntermediate(encoder)
 
         // G6.1 present pass : transform sRGB intermediate to Rec.2020
         // final, in a fragment shader (textureLoad + transform + write).
@@ -5822,13 +5996,30 @@ public class SkWebGpuDevice(
 
         val pixels = target.readPixels()
 
-        perDrawResources.forEach {
-            it.uniform.close()
-            it.vertexBuffer?.close()
-            it.coverVertexBuffer?.close()
-        }
+        closeDrawResources(perDrawResources)
         pending.clear()
         pixels
+    }
+
+    /**
+     * Phase G-saveLayer-fast -- drain pending draws onto
+     * [intermediateTexture] and submit, **without** the present pass or
+     * readback round-trip. Used by [compositeFrom] to flush a child
+     * layer device before its texture is sampled by the parent's
+     * subsequent composite render pass.
+     *
+     * After this call, the device's [intermediateTexture] holds the
+     * fully-blended content of all pending draws (sRGB-coded premul,
+     * matching the present-pass identity-copy output) and `pending` is
+     * empty. The intermediate is readable as a sampled texture in any
+     * subsequent command buffer queued onto [context]'s shared queue.
+     */
+    internal fun flushDrawsOnly() {
+        val encoder = context.device.createCommandEncoder()
+        val perDrawResources = encodePendingDrawsToIntermediate(encoder)
+        context.queue.submit(listOf(encoder.finish()))
+        closeDrawResources(perDrawResources)
+        pending.clear()
     }
 
     /**
@@ -6296,6 +6487,45 @@ public class SkWebGpuDevice(
                     BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
                     BindGroupEntry(binding = 1u, resource = view),
                     BindGroupEntry(binding = 2u, resource = sampler),
+                ),
+            ),
+        )
+        return DrawResources(uniform = uniform, bindGroup = bindGroup)
+    }
+
+    /**
+     * Phase G-saveLayer-fast -- build per-draw resources for a
+     * [LayerCompositeDraw]. The uniform carries the dst origin + layer
+     * size + paint colour ; the bind group also captures the child's
+     * intermediate texture view (already populated by
+     * [flushDrawsOnly]).
+     */
+    private fun buildLayerCompositeDrawResources(d: LayerCompositeDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = LAYER_COMPOSITE_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.layerCompositeDraw",
+            ),
+        )
+        // Layout matches `layer_composite.wgsl` :
+        //   offset  0 : dstOriginSize (vec4f -- x, y, layerW, layerH)
+        //   offset 16 : paintColor    (vec4f -- premul rgba modulation)
+        // Total = 32 bytes.
+        context.queue.writeBuffer(
+            uniform, 0uL,
+            ArrayBuffer.of(floatArrayOf(
+                d.dstOriginX.toFloat(), d.dstOriginY.toFloat(),
+                d.layerWidth.toFloat(), d.layerHeight.toFloat(),
+                d.paintR, d.paintG, d.paintB, d.paintA,
+            )),
+        )
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = layerCompositeBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                    BindGroupEntry(binding = 1u, resource = d.layerView),
                 ),
             ),
         )
@@ -6843,6 +7073,8 @@ public class SkWebGpuDevice(
         bitmapPipelineCache.clear()
         bitmapSamplerCache.values.forEach { it.close() }
         bitmapSamplerCache.clear()
+        layerCompositePipelineCache.values.forEach { it.close() }
+        layerCompositePipelineCache.clear()
         imageTextureCache.values.forEach { it.close() }
         imageTextureCache.clear()
         stencilWritePipeline.close()
@@ -6861,6 +7093,7 @@ public class SkWebGpuDevice(
         radialGradientShader.close()
         sweepGradientShader.close()
         bitmapShader.close()
+        layerCompositeShader.close()
         presentShader.close()
         intermediateView.close()
         intermediateTexture.close()
@@ -6980,6 +7213,18 @@ public class SkWebGpuDevice(
          * the 48 bytes for the 9 floats of the primaries matrix.
          */
         const val IMAGE_RECT_UNIFORM_SIZE: ULong = 128uL
+        /**
+         * Phase G-saveLayer-fast -- size of the layer-composite per-draw
+         * uniform : `dstOriginSize` (vec4f, 16) + `paintColor` (vec4f, 16)
+         * = 32 bytes. Matches `Uniforms { dstOriginSize, paintColor }` in
+         * `layer_composite.wgsl`. The shader uses `textureLoad` (no
+         * sampler), so the bind group only needs a uniform buffer + a
+         * texture view -- the layer texture's pixel grid lines up 1:1
+         * with the parent's device-pixel grid (integer dstOrigin +
+         * integer-sized layer device, set by SkCanvas), so no UV
+         * normalisation is needed.
+         */
+        const val LAYER_COMPOSITE_UNIFORM_SIZE: ULong = 32uL
         /**
          * G5.3 -- identity column-major 3x3 used as the no-op
          * primaries matrix when [bitmapColorSpaceFor] returns the sRGB
