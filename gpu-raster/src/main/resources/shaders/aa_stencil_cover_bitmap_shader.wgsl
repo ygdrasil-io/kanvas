@@ -20,9 +20,11 @@
 // `bitmap_shader.wgsl` byte-for-byte.
 //
 // G5.3 -- texture color management. `csFlags.x` (bit-reinterpreted
-// u32) gates the sRGB EOTF -> primaries matrix -> sRGB OETF chain ;
+// u32) gates the source-TF -> primaries matrix -> sRGB OETF chain ;
 // `csMatrix` is the column-major source-linear -> sRGB-linear
-// primaries transform. Identical to the rect pipeline ; for sRGB
+// primaries transform. Identical to the rect pipeline -- mode 1 uses
+// the hardcoded sRGB EOTF, mode 2 (G5.3.x) reads parametric TF coefs
+// from `csTfParams0/1` (Rec.2020 linear, Adobe RGB, ...). For sRGB
 // sources the host uploads identity and `csFlags.x = 0` so the
 // transform branch is bypassed.
 //
@@ -56,8 +58,10 @@ struct Uniforms {
     paintColor:  vec4f,                       // offset   80 : premul tint
     csFlags:     vec4f,                       // offset   96 : .x = csMode bit-reinterp u32
     csMatrix:    mat3x3<f32>,                 // offset  112 : column-major 3x3 (std140 padded)
-    edgeCountPad:vec4f,                       // offset  160 : .x = edgeCount as bit-reinterp f32
-    edges:       array<vec4f, 256>,           // offset  176 : (Ax, Ay, Bx, By) per edge
+    csTfParams0: vec4f,                       // offset  160 : G5.3.x parametric TF (g, a, b, c)
+    csTfParams1: vec4f,                       // offset  176 : G5.3.x parametric TF (d, e, f, _)
+    edgeCountPad:vec4f,                       // offset  192 : .x = edgeCount as bit-reinterp f32
+    edges:       array<vec4f, 256>,           // offset  208 : (Ax, Ay, Bx, By) per edge
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -68,9 +72,11 @@ struct Uniforms {
 // `bitmap_shader.wgsl`).
 const TILE_DECAL: u32 = 3u;
 
-// G5.3 -- color-space transform mode sentinel (same as bitmap_shader.wgsl).
+// G5.3 / G5.3.x -- color-space transform mode sentinel (same as
+// bitmap_shader.wgsl).
 const CS_MODE_IDENTITY: u32 = 0u;
 const CS_MODE_SRGB_TF_MATRIX: u32 = 1u;
+const CS_MODE_PARAMETRIC_TF_MATRIX: u32 = 2u;
 
 @vertex
 fn vs_main(@location(0) pos: vec2f) -> @builtin(position) vec4f {
@@ -115,6 +121,24 @@ fn linear_to_srgb(v: f32) -> f32 {
     return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
 }
 
+// G5.3.x -- parametric sRGBish TF eval. Mirror of `parametric_tf` in
+// `bitmap_shader.wgsl` ; same coefficient packing (csTfParams0 = (g,
+// a, b, c), csTfParams1 = (d, e, f, _)).
+fn parametric_tf(v: f32) -> f32 {
+    let g = uniforms.csTfParams0.x;
+    let a = uniforms.csTfParams0.y;
+    let b = uniforms.csTfParams0.z;
+    let c = uniforms.csTfParams0.w;
+    let d = uniforms.csTfParams1.x;
+    let e = uniforms.csTfParams1.y;
+    let f = uniforms.csTfParams1.z;
+    let clamped = max(v, 0.0);
+    if (clamped < d) {
+        return c * clamped + f;
+    }
+    return pow(a * clamped + b, g) + e;
+}
+
 // Sample the bitmap pattern at device-pixel position `p`. Mirrors the
 // fragment body of `bitmap_shader.wgsl` (same dst -> src affine,
 // same per-axis decal check, same csMode transform, same premul + paint
@@ -149,6 +173,18 @@ fn sampleBitmap(p: vec2f) -> vec4f {
             srgb_to_linear(src_rgb.r),
             srgb_to_linear(src_rgb.g),
             srgb_to_linear(src_rgb.b),
+        );
+        let lin_srgb = uniforms.csMatrix * lin;
+        src_rgb = vec3f(
+            linear_to_srgb(lin_srgb.r),
+            linear_to_srgb(lin_srgb.g),
+            linear_to_srgb(lin_srgb.b),
+        );
+    } else if (cs_mode == CS_MODE_PARAMETRIC_TF_MATRIX) {
+        let lin = vec3f(
+            parametric_tf(src_rgb.r),
+            parametric_tf(src_rgb.g),
+            parametric_tf(src_rgb.b),
         );
         let lin_srgb = uniforms.csMatrix * lin;
         src_rgb = vec3f(

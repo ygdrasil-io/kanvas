@@ -57,22 +57,32 @@
 //   (3) multiply by a 3x3 primaries matrix (source -> sRGB),
 //   (4) re-encode through the sRGB OETF,
 //   (5) then proceed with the existing premul-by-alpha + paintColor.
-// The TF used in steps (2) and (4) is the sRGB curve in this slice --
-// it covers sRGB sources (no-op identity matrix) and Display P3 sources
-// (P3 shares the sRGB TF ; only the primaries matrix is non-trivial).
-// `csFlags.x` is a bit-reinterpreted u32 sentinel : 0 = no transform
-// (existing fast path), 1 = apply the matrix-based transform. The
-// matrix is column-major (`mat3x3<f32>`) ; for sRGB images the host
+// `csFlags.x` is a bit-reinterpreted u32 sentinel selecting the source-TF
+// linearise stage :
+//   0 = no transform (existing fast path -- sRGB or untagged source).
+//   1 = sRGB EOTF + primaries matrix (G5.3 ; Display P3 falls here, it
+//       shares the sRGB curve, only the primaries matrix differs).
+//   2 = parametric sRGBish TF + primaries matrix (G5.3.x ; covers
+//       Rec.2020-linear, Adobe RGB / k2Dot2, Rec.709 / kRec2020-bit-depths
+//       -- any source whose TF classifies as sRGBish but is not the sRGB
+//       curve itself). `csTfParams0/1` carry the 7 parametric coefficients
+//       (g, a, b, c, d, e, f) ; the OETF on the output side stays the
+//       sRGB OETF (the intermediate target's encoding does not change).
+// The matrix is column-major (`mat3x3<f32>`) ; for sRGB images the host
 // uploads the identity so the multiply is a no-op even when the flag
-// would route through the transform branch -- the flag is the gate.
+// would route through a transform branch -- the flag is the gate.
 //
 // Limitations enforced at the dispatch gate (see SkWebGpuDevice
 // drawImageRect) :
 //  - No paint.shader-as-bitmap (drawImageRect only ; G5.2 onwards).
-//  - Color management : sRGB (no-op) + Display P3 (sRGB TF, P3 gamut).
-//    Other source colorspaces (Rec.2020 linear, Adobe RGB, ...) still
-//    bypass the transform branch -- they'd need their own TF coefs in
-//    the uniform, which is out of scope for G5.3.
+//  - Color management :
+//      sRGB (no-op, mode=0),
+//      sRGB-TF + non-sRGB gamut (Display P3 ; mode=1),
+//      sRGBish parametric TF + any gamut (Rec.2020 linear, Adobe RGB ;
+//        mode=2).
+//    HDR families (Rec.2020 PQ, HLG, ProPhoto with non-sRGBish TF) still
+//    bypass the transform branch -- they need luminance scaling / OOTF
+//    handling out of scope for G5.3.x.
 //
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
@@ -92,9 +102,12 @@ struct Uniforms {
     // can scale rgba multiplicatively here (G5.x follow-ups).
     paintColor: vec4f,   // offset 48
     // G5.3 -- color-space transform gate. `.x` is a bit-reinterpreted
-    // u32 sentinel : 0 = no transform (identity / sRGB fast path), 1 =
-    // apply the sRGB EOTF -> matrix -> sRGB OETF transform. `.y/.z/.w`
-    // are reserved (zero-padded).
+    // u32 sentinel :
+    //   0 = no transform (identity / sRGB fast path).
+    //   1 = sRGB EOTF + matrix + sRGB OETF.
+    //   2 = parametric sRGBish EOTF + matrix + sRGB OETF (G5.3.x ;
+    //       Rec.2020 linear / Adobe RGB / Rec.709 / ...).
+    // `.y/.z/.w` are reserved (zero-padded).
     csFlags: vec4f,      // offset 64
     // G5.3 -- column-major 3x3 primaries matrix (source-linear ->
     // sRGB-linear). std140 stores each column padded to 16 bytes, so
@@ -103,18 +116,33 @@ struct Uniforms {
     // uploads the P3 -> sRGB primaries transform built on the CPU via
     // `SkColorSpaceXformSteps`.
     csMatrix:  mat3x3<f32>, // offset 80
+    // G5.3.x -- parametric source-TF coefficients, used only when
+    // `csFlags.x == 2`. The 7-float Skia parametric form
+    //   y = (a*x + b)^g + e   if x >= d
+    //   y = c*x + f           if x <  d
+    // is packed `(g, a, b, c)` in `csTfParams0` and `(d, e, f, _)` in
+    // `csTfParams1`. For Rec.2020 linear the host uploads `(1, 1, 0, 0,
+    // 0, 0, 0)` (identity power law) ; for Adobe RGB / k2Dot2 it
+    // uploads `(2.2, 1, 0, 0, 0, 0, 0)` (pure 2.2 power law). The slot
+    // is unused (uploaded as zero) when `csFlags.x != 2` so the std140
+    // alignment is stable across modes.
+    csTfParams0: vec4f,  // offset 128
+    csTfParams1: vec4f,  // offset 144
 };
 
 // Tile-mode constants -- mirror `SkTileMode` ordinals.
 const TILE_DECAL: u32 = 3u;
 
-// G5.3 -- color-space transform mode sentinel. 0 = no-op (sRGB source
-// or any source whose pipeline reduces to identity ; the host gate
-// covers Skia's `SkColorSpaceXformSteps::Flags::isIdentity`). 1 =
-// apply linearize -> matrix -> encode. Higher values are reserved for
-// future TF families (Rec.2020 linear, ...) if needed.
+// G5.3 -- color-space transform mode sentinel.
+//   0 = no-op (sRGB source or any source whose pipeline reduces to
+//       identity ; the host gate covers Skia's
+//       `SkColorSpaceXformSteps::Flags::isIdentity`).
+//   1 = sRGB EOTF + matrix + sRGB OETF.
+//   2 = parametric sRGBish EOTF + matrix + sRGB OETF (G5.3.x).
+// Higher values are reserved for future TF families (PQ / HLG / ...).
 const CS_MODE_IDENTITY: u32 = 0u;
 const CS_MODE_SRGB_TF_MATRIX: u32 = 1u;
+const CS_MODE_PARAMETRIC_TF_MATRIX: u32 = 2u;
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var image_texture: texture_2d<f32>;
@@ -137,6 +165,33 @@ fn linear_to_srgb(v: f32) -> f32 {
         return 12.92 * c;
     }
     return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
+// G5.3.x -- parametric sRGBish TF eval. Mirror of
+// `skcmsTransferFunctionEval(tf, x)` in `Skcms.kt` for the `sRGBish`
+// classification : strips out the `sign` extraction (texel bytes are
+// in [0, 1], no negatives reach this path) and evaluates the two
+// branches by the source TF's `d` split. `csTfParams0 = (g, a, b, c)`,
+// `csTfParams1 = (d, e, f, _)`.
+//
+// For Rec.2020-linear the host uploads `(1, 1, 0, 0, 0, 0, 0)` ; the
+// power branch returns `(1*x + 0)^1 + 0 = x`. For Adobe RGB / k2Dot2
+// the host uploads `(2.2, 1, 0, 0, 0, 0, 0)` ; the power branch
+// returns `x^2.2`. The linear branch is unreachable (`d == 0`) so the
+// `c` and `f` slots are zero -- the formula is correct regardless.
+fn parametric_tf(v: f32) -> f32 {
+    let g = uniforms.csTfParams0.x;
+    let a = uniforms.csTfParams0.y;
+    let b = uniforms.csTfParams0.z;
+    let c = uniforms.csTfParams0.w;
+    let d = uniforms.csTfParams1.x;
+    let e = uniforms.csTfParams1.y;
+    let f = uniforms.csTfParams1.z;
+    let clamped = max(v, 0.0);
+    if (clamped < d) {
+        return c * clamped + f;
+    }
+    return pow(a * clamped + b, g) + e;
 }
 
 @vertex
@@ -186,9 +241,15 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
     // G5.3 -- texture color management. When the host marks the source
     // image as non-sRGB (csFlags.x != CS_MODE_IDENTITY), apply the
-    // sRGB-EOTF -> primaries-matrix -> sRGB-OETF chain on the sampled
+    // source-TF -> primaries-matrix -> sRGB-OETF chain on the sampled
     // *unpremul* RGB before the premul step below. Alpha is untouched
     // by the colorspace transform (matches Skia's xform pipeline).
+    //
+    // The source-TF stage is selected by `csFlags.x` :
+    //   1 = sRGB EOTF (hardcoded constants ; matches `srgb_to_linear`).
+    //   2 = parametric sRGBish TF (G5.3.x ; coefs from `csTfParams0/1`).
+    // The OETF on the output side is always the sRGB OETF because the
+    // intermediate target's encoding does not change.
     //
     // Note: in WGSL, `mat3x3 * vec3` is column-vector matrix multiply,
     // which matches the column-major layout we upload from the host.
@@ -199,6 +260,18 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             srgb_to_linear(src_rgb.r),
             srgb_to_linear(src_rgb.g),
             srgb_to_linear(src_rgb.b),
+        );
+        let lin_srgb = uniforms.csMatrix * lin;
+        src_rgb = vec3f(
+            linear_to_srgb(lin_srgb.r),
+            linear_to_srgb(lin_srgb.g),
+            linear_to_srgb(lin_srgb.b),
+        );
+    } else if (cs_mode == CS_MODE_PARAMETRIC_TF_MATRIX) {
+        let lin = vec3f(
+            parametric_tf(src_rgb.r),
+            parametric_tf(src_rgb.g),
+            parametric_tf(src_rgb.b),
         );
         let lin_srgb = uniforms.csMatrix * lin;
         src_rgb = vec3f(
