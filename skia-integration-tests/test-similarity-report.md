@@ -150,9 +150,9 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ConicalGradients2ptInsideGM | 82.35% | = | 1 | 563,761 / 684,600 | 0, 63, 43, 46 | 0, 32, 21, 12 |
 | ConicalGradients2ptInsideMirrorGM | 76.42% | = | 1 | 523,170 / 684,600 | 0, 63, 43, 46 | 0, 30, 20, 12 |
 | ConicalGradients2ptInsideRepeatGM | 76.38% | = | 1 | 522,868 / 684,600 | 0, 63, 43, 46 | 0, 30, 21, 12 |
-| ConicalGradients2ptOutsideGM | 92.56% | +2.50% | 1 | 633,677 / 684,600 | 0, 217, 217, 217 | 0, 33, 22, 13 |
+| ConicalGradients2ptOutsideGM | 92.56% | = | 1 | 633,677 / 684,600 | 0, 217, 217, 217 | 0, 33, 22, 13 |
 | ConicalGradients2ptOutsideMirrorGM | 89.24% | = | 1 | 610,933 / 684,600 | 0, 110, 58, 178 | 0, 32, 22, 13 |
-| ConicalGradients2ptOutsideNoDitherGM | 92.57% | +2.50% | 1 | 633,710 / 684,600 | 0, 217, 217, 217 | 0, 33, 22, 13 |
+| ConicalGradients2ptOutsideNoDitherGM | 92.57% | = | 1 | 633,710 / 684,600 | 0, 217, 217, 217 | 0, 33, 22, 13 |
 | ConicalGradients2ptOutsideRepeatGM | 89.24% | = | 1 | 610,903 / 684,600 | 0, 107, 52, 173 | 0, 32, 22, 13 |
 | ConjoinedPolygonsGM | 99.23% | = | 1 | 158,766 / 160,000 | 0, 34, 33, 33 | 0, 11, 10, 10 |
 | ContourStartGM | 90.87% | = | 4 | 654,279 / 720,000 | 0, 195, 238, 251 | 0, 120, 97, 147 |

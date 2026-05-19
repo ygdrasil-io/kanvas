@@ -6068,23 +6068,32 @@ public class SkWebGpuDevice(
         val conicalFocalActive: Boolean =
             conicalFocalGradForAaPath != null && gradConicalFocalAffine != null
 
-        // G5.2.1 / G5.2.2 -- bitmap shader on a non-rect AA path. The
-        // rect-on-CTM case was already peeled off at the top of
-        // drawPath (G5.2's [drawBitmapShaderFillRect]) ; we route every
-        // remaining AA bitmap-shader fill through the dedicated
-        // stencil-and-cover pipeline. The CTM + localMatrix can be any
-        // invertible affine (G5.2.2 widening : the shader applies the
-        // 2x3 device-to-image affine directly, so rotated / skewed
-        // combinations work without a separate code path). Non-AA paths
-        // still fall through to the existing solid-colour fill
-        // machinery -- AA cover is the only pipeline that consumes the
-        // shader today.
-        val bitmapShaderForAaPath: SkBitmapShader? =
-            if (shader is SkBitmapShader && paint.isAntiAlias) shader
+        // G5.2.1 / G5.2.2 / G5.2.3 -- bitmap shader on a non-rect path
+        // (or rotated-CTM rect, which is rejected by the axis-aligned
+        // gate of [drawBitmapShaderFillRect] and lands here as a 4-vertex
+        // convex polygon). We route every remaining bitmap-shader fill
+        // through the dedicated stencil-and-cover pipeline. The CTM +
+        // localMatrix can be any invertible affine (G5.2.2 widening :
+        // the shader applies the 2x3 device-to-image affine directly,
+        // so rotated / skewed combinations work without a separate
+        // code path).
+        //
+        // G5.2.3 -- non-AA paths now route through the same pipeline.
+        // Setting `edgeCount = 0` makes `minSegmentDistance` return a
+        // large sentinel, so `inside` coverage saturates to 1.0 and
+        // `outside` coverage collapses to 0.0 -- a sharp stencil-bound
+        // fill with no AA falloff. This unlocks `RepeatedBitmapGM` and
+        // any other GM that draws a bitmap-shader fill under a rotated
+        // CTM with `paint.isAntiAlias = false` (the rect fast path's
+        // axis-aligned gate would otherwise drop the shader entirely
+        // and paint a solid-colour fallback -- see
+        // `RepeatedBitmapCrossBackendTest`).
+        val bitmapShaderForPath: SkBitmapShader? =
+            if (shader is SkBitmapShader) shader
             else null
         var bitmapPayload: BitmapShaderPayload? = null
-        if (bitmapShaderForAaPath != null) {
-            bitmapPayload = buildBitmapShaderPayload(bitmapShaderForAaPath, ctm, paint)
+        if (bitmapShaderForPath != null) {
+            bitmapPayload = buildBitmapShaderPayload(bitmapShaderForPath, ctm, paint)
         }
 
         // G3.3b.2b — multi-contour path : stencil-and-cover. Each contour
@@ -6265,6 +6274,32 @@ public class SkWebGpuDevice(
                 )
                 return
             }
+            // G5.2.3 -- non-AA bitmap shader on a multi-contour path.
+            // Reuse the AA stencil-cover bitmap pipeline with
+            // `edgeCount = 0` (sentinel : the AA fragment shader's
+            // `minSegmentDistance` returns 1e9, collapsing the inside
+            // cover to coverage = 1.0 and the outside cover to 0.0 --
+            // sharp stencil-bound fill, no AA falloff).
+            if (bitmapPayload != null) {
+                val (bClipKind, bClipBounds, bClipRx, bClipRy) =
+                    packClipShape(activeClipShape)
+                pending.add(
+                    bitmapPayload.toStencilCoverDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        edges = FloatArray(MAX_AA_EDGES * 4),
+                        edgeCount = 0,
+                        scissor = scissor,
+                        fillType = path.fillType,
+                        mode = paint.blendMode,
+                        clipKind = bClipKind,
+                        clipShapeBounds = bClipBounds,
+                        clipShapeRx = bClipRx,
+                        clipShapeRy = bClipRy,
+                    ),
+                )
+                return
+            }
             pending.add(
                 StencilCoverPolygonDraw(
                     stencilVerts = stencilTri,
@@ -6437,6 +6472,28 @@ public class SkWebGpuDevice(
                         ),
                     )
                 }
+            } else if (bitmapPayload != null) {
+                // G5.2.3 -- non-AA bitmap shader on a concave / inverse
+                // single-contour path. Same edgeCount = 0 sentinel as
+                // the multi-contour arm : sharp stencil-bound fill via
+                // the AA pipeline with the AA falloff collapsed.
+                val (bClipKind, bClipBounds, bClipRx, bClipRy) =
+                    packClipShape(activeClipShape)
+                pending.add(
+                    bitmapPayload.toStencilCoverDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        edges = FloatArray(MAX_AA_EDGES * 4),
+                        edgeCount = 0,
+                        scissor = scissor,
+                        fillType = path.fillType,
+                        mode = paint.blendMode,
+                        clipKind = bClipKind,
+                        clipShapeBounds = bClipBounds,
+                        clipShapeRx = bClipRx,
+                        clipShapeRy = bClipRy,
+                    ),
+                )
             } else {
                 pending.add(
                     StencilCoverPolygonDraw(
@@ -6625,14 +6682,28 @@ public class SkWebGpuDevice(
             )
             return
         }
-        // G5.2.1 -- bitmap shader on a convex AA path. Mirror of the
+        // G5.2.1 -- bitmap shader on a convex path. Mirror of the
         // gradient arms above ; detour through stencil-and-cover with
-        // the dedicated bitmap-shader cover pipeline.
-        if (paint.isAntiAlias && n <= MAX_AA_EDGES && bitmapPayload != null) {
+        // the dedicated bitmap-shader cover pipeline. G5.2.3 -- non-AA
+        // paths now route here too with `edgeCount = 0` (sharp
+        // stencil-bound fill, no AA falloff) ; this is what unblocks
+        // `RepeatedBitmapGM` (drawRect under a rotated CTM with
+        // `paint.isAntiAlias = false`).
+        if (n <= MAX_AA_EDGES && bitmapPayload != null) {
             val stencilTri = fanTessellateContours(devVerts, contourStarts)
             val coverTri = bboxTrianglesFor(devVerts, width, height)
             val edges = FloatArray(MAX_AA_EDGES * 4)
-            buildContourEdgeSegments(devVerts, contourStarts, edges)
+            val edgeCount: Int
+            if (paint.isAntiAlias) {
+                buildContourEdgeSegments(devVerts, contourStarts, edges)
+                edgeCount = n
+            } else {
+                // edges left zero-filled ; `edgeCount = 0` tells the
+                // fragment shader's `minSegmentDistance` to return a
+                // 1e9 sentinel, collapsing the inside coverage to 1.0
+                // and the outside coverage to 0.0.
+                edgeCount = 0
+            }
             val (bClipKind, bClipBounds, bClipRx, bClipRy) =
                 packClipShape(activeClipShape)
             pending.add(
@@ -6640,7 +6711,7 @@ public class SkWebGpuDevice(
                     stencilVerts = stencilTri,
                     coverVerts = coverTri,
                     edges = edges,
-                    edgeCount = n,
+                    edgeCount = edgeCount,
                     scissor = scissor,
                     fillType = path.fillType,
                     mode = paint.blendMode,
