@@ -26,6 +26,16 @@
 // outside the analytical clip get 0 and the boundary band gets a
 // smooth half-pixel falloff.
 //
+// Phase G-direct-colorFilter (polygon closing slice) -- the 6 trailing
+// vec4 slots carry an optional SkColorFilter applied to the unpremul
+// source colour BEFORE the per-pixel premul + coverage modulation.
+// Same packing as `solid_color.wgsl` / `layer_composite.wgsl`, so the
+// host-side packer (`packLayerCompositeColorFilter`) is shared.
+//
+//   colorFilterKindMode.x == 0 : no-op (default ; fast path).
+//   colorFilterKindMode.x == 1 : SkColorFilters.Blend(colour, mode).
+//   colorFilterKindMode.x == 2 : SkColorFilters.Matrix(20 floats).
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {
@@ -33,6 +43,12 @@ struct Uniforms {
     viewport:            vec4f,   // offset 16 : (width, height, 0, 0) in device pixels
     clipShapeBounds:     vec4f,   // offset 32 : (l, t, r, b) device-px ; ignored when clipKind = 0
     clipShapeRadiiKind:  vec4f,   // offset 48 : (rx, ry, clipKind, _) ; clipKind in {0, 1}
+    colorFilterKindMode: vec4f,   // offset 64 : (kind, blendMode, _, _) ; kind 0 = none
+    colorFilterParam0:   vec4f,   // offset 80 : kind 1 -> premul colour ; kind 2 -> matrix row 0
+    colorFilterParam1:   vec4f,   // offset 96 : matrix row 1 (G coefs)
+    colorFilterParam2:   vec4f,   // offset 112: matrix row 2 (B coefs)
+    colorFilterParam3:   vec4f,   // offset 128: matrix row 3 (A coefs)
+    colorFilterBias:     vec4f,   // offset 144: per-row bias (R, G, B, A)
 };
 
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
@@ -81,9 +97,83 @@ fn clip_cov(p: vec2f) -> f32 {
     return 1.0;
 }
 
+// Phase G-direct-colorFilter -- pure-float blend on premul RGBA. Same
+// dispatch table as `solid_color.wgsl`'s `blend_premul`. Inputs are
+// premul ; output is premul. Unsupported modes fall through to identity
+// src (host-side packer leaves `kind = 0` for unsupported variants).
+fn blend_premul(s: vec4f, d: vec4f, mode: u32) -> vec4f {
+    let sa = s.a; let da = d.a;
+    if (mode == 0u) { return vec4f(0.0); }
+    if (mode == 1u) { return s; }
+    if (mode == 2u) { return d; }
+    if (mode == 3u) {
+        let k = 1.0 - sa;
+        return vec4f(s.r + d.r * k, s.g + d.g * k, s.b + d.b * k, sa + da * k);
+    }
+    if (mode == 4u) {
+        let k = 1.0 - da;
+        return vec4f(d.r + s.r * k, d.g + s.g * k, d.b + s.b * k, da + sa * k);
+    }
+    if (mode == 5u) { return s * da; }
+    if (mode == 6u) { return d * sa; }
+    if (mode == 7u) { return s * (1.0 - da); }
+    if (mode == 8u) { return d * (1.0 - sa); }
+    if (mode == 9u) {
+        let k = 1.0 - sa;
+        return vec4f(s.r * da + d.r * k, s.g * da + d.g * k,
+                     s.b * da + d.b * k, sa * da + da * k);
+    }
+    if (mode == 10u) {
+        let k = 1.0 - da;
+        return vec4f(d.r * sa + s.r * k, d.g * sa + s.g * k,
+                     d.b * sa + s.b * k, da * sa + sa * k);
+    }
+    if (mode == 11u) {
+        let ks = 1.0 - sa; let kd = 1.0 - da;
+        return vec4f(s.r * kd + d.r * ks, s.g * kd + d.g * ks,
+                     s.b * kd + d.b * ks, sa * kd + da * ks);
+    }
+    if (mode == 12u) {
+        return min(vec4f(1.0), s + d);
+    }
+    if (mode == 13u) { return s * d; }
+    if (mode == 14u) { return s + d - s * d; }
+    return s;
+}
+
+// Phase G-direct-colorFilter -- apply the optional SkColorFilter to an
+// unpremul RGBA source colour. Returns the filtered unpremul RGBA.
+// `kind == 0` is a no-op fast path (identical to the pre-slice output).
+fn apply_color_filter(c_un: vec4f) -> vec4f {
+    let kind = u32(uniforms.colorFilterKindMode.x + 0.5);
+    if (kind == 1u) {
+        let mode = u32(uniforms.colorFilterKindMode.y + 0.5);
+        let a = c_un.a;
+        let dst_premul = vec4f(c_un.r * a, c_un.g * a, c_un.b * a, a);
+        let out_premul = blend_premul(uniforms.colorFilterParam0, dst_premul, mode);
+        let oa = out_premul.a;
+        if (oa <= 0.0) { return vec4f(0.0); }
+        let inv = 1.0 / oa;
+        return vec4f(out_premul.r * inv, out_premul.g * inv, out_premul.b * inv, oa);
+    }
+    if (kind == 2u) {
+        let out_r = dot(uniforms.colorFilterParam0, c_un) + uniforms.colorFilterBias.x;
+        let out_g = dot(uniforms.colorFilterParam1, c_un) + uniforms.colorFilterBias.y;
+        let out_b = dot(uniforms.colorFilterParam2, c_un) + uniforms.colorFilterBias.z;
+        let out_a = dot(uniforms.colorFilterParam3, c_un) + uniforms.colorFilterBias.w;
+        return vec4f(
+            clamp(out_r, 0.0, 1.0),
+            clamp(out_g, 0.0, 1.0),
+            clamp(out_b, 0.0, 1.0),
+            clamp(out_a, 0.0, 1.0),
+        );
+    }
+    return c_un;
+}
+
 @fragment
 fn fs_main(@builtin(position) frag: vec4f) -> @location(0) vec4f {
-    let c = uniforms.color;
+    let c = apply_color_filter(uniforms.color);
     let cov = clip_cov(frag.xy);
     let a = c.a * cov;
     return vec4f(c.rgb * a, a);
