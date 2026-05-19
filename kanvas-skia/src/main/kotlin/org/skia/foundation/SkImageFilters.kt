@@ -870,6 +870,11 @@ internal class SkColorFilterImageFilter(
     private val cf: SkColorFilter,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    // Phase G-saveLayer-imageFilter -- read-only views for backend
+    // extractors. See `SkBlurImageFilter.exposedSigmaX` for the
+    // pattern rationale.
+    internal val exposedColorFilter: SkColorFilter get() = cf
+    internal val exposedInput: SkImageFilter? get() = input
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
         val srcImg = upstream.image
@@ -927,6 +932,15 @@ internal class SkBlurImageFilter(
     private val tileMode: SkTileMode,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    // Phase G-saveLayer-imageFilter -- read-only views for backend
+    // extractors. Same pattern as `SkBlendColorFilter.exposedColour` /
+    // `SkMatrixColorFilter.exposedMatrix` : keeps the concrete class
+    // internal while letting backends introspect the parameters they
+    // can express in their fragment-side pipeline.
+    internal val exposedSigmaX: Float get() = sigmaX
+    internal val exposedSigmaY: Float get() = sigmaY
+    internal val exposedTileMode: SkTileMode get() = tileMode
+    internal val exposedInput: SkImageFilter? get() = input
     // Legacy 3-arg constructor for internal call sites that pre-date G6.
     internal constructor(sigmaX: Float, sigmaY: Float, input: SkImageFilter?) :
         this(sigmaX, sigmaY, SkTileMode.kDecal, input)
@@ -2395,4 +2409,100 @@ internal class SkLightingImageFilter(
         if (x in 0 until img.width && y in 0 until img.height)
             (img.peekPixel(x, y) ushr 24) and 0xFF
         else 0
+}
+
+// -- Phase G-saveLayer-imageFilter -- introspection extractors ---------------
+//
+// Mirror the pattern of [SkColorFilter.asBlendModeFilter] /
+// [SkColorFilter.asMatrixFilter] : let GPU backends inspect the two filter
+// variants that the WebGPU layer composite scaffolding handles natively --
+// `SkImageFilters.Blur` (deferred to follow-up, throw-on-encounter) and
+// `SkImageFilters.ColorFilter(child = null)` (routed to the existing
+// colorFilter packing). All other variants return `null` ; the GPU dispatch
+// throws a clear "not yet supported" error for those.
+
+/**
+ * Read-only descriptor of an [SkImageFilters.Blur] filter -- the Gaussian
+ * sigma per axis, the tile mode used for out-of-bounds samples, and the
+ * optional child filter that feeds into the blur. Returned by
+ * [SkImageFilter.asBlurImageFilter] when (and only when) the receiver is a
+ * `Blur` filter.
+ *
+ * Backends that can express a separable Gaussian on a render target (e.g.
+ * a multi-pass WebGPU fragment shader) use this to decide whether to fold
+ * the filter in or throw / fall back. The kanvas-skia GPU backend's
+ * scaffolding slice currently throws for any non-null Blur on the layer
+ * paint -- this descriptor lets it surface `sigmaX` / `sigmaY` / `tileMode`
+ * in the error message.
+ */
+public data class SkBlurImageFilterParams(
+    /** Gaussian sigma in X (`>= 0`). */
+    public val sigmaX: Float,
+    /** Gaussian sigma in Y (`>= 0`). */
+    public val sigmaY: Float,
+    /** Tile mode used when the kernel samples beyond the source bounds. */
+    public val tileMode: SkTileMode,
+    /** Optional child filter ; `null` means the source image is the input. */
+    public val input: SkImageFilter?,
+)
+
+/**
+ * Read-only descriptor of an [SkImageFilters.ColorFilter] wrap -- the
+ * inner [SkColorFilter] applied per pixel, and the optional child filter
+ * that feeds into it. Returned by [SkImageFilter.asColorFilterImageFilter]
+ * when (and only when) the receiver is a `ColorFilter` filter.
+ *
+ * The GPU layer-composite path uses this to unwrap the [colorFilter] and
+ * route it through the existing layer paint colorFilter plumbing -- the
+ * effective pixel result is identical because the composite step renders
+ * the layer pixels through the same per-pixel filter pass, and no
+ * geometric transform is applied. The [input] child must be `null` for
+ * that routing to be exact (a non-null child means the filter chain has
+ * structural transforms upstream of the colour transform, which the
+ * scaffolding doesn't yet handle ; the GPU dispatch then throws).
+ */
+public data class SkColorFilterImageFilterParams(
+    /** The inner [SkColorFilter] applied per pixel. */
+    public val colorFilter: SkColorFilter,
+    /** Optional child filter ; `null` means the source image is the input. */
+    public val input: SkImageFilter?,
+)
+
+/**
+ * Extract the parameters of an [SkImageFilters.Blur] filter, or `null` if
+ * the receiver is any other [SkImageFilter] variant (offset, colorFilter,
+ * compose, drop-shadow, displacement, ...).
+ *
+ * Backends that can implement a Gaussian convolution on a render target
+ * use this to decide whether to fold the filter in or fall through to the
+ * CPU snapshot path. The kanvas-skia GPU scaffolding doesn't yet have a
+ * fragment-side Gaussian kernel ; it uses this purely to surface a clear
+ * error message when the layer paint carries a Blur.
+ */
+public fun SkImageFilter.asBlurImageFilter(): SkBlurImageFilterParams? {
+    val f = this as? SkBlurImageFilter ?: return null
+    return SkBlurImageFilterParams(
+        sigmaX = f.exposedSigmaX,
+        sigmaY = f.exposedSigmaY,
+        tileMode = f.exposedTileMode,
+        input = f.exposedInput,
+    )
+}
+
+/**
+ * Extract the parameters of an [SkImageFilters.ColorFilter] wrap, or
+ * `null` if the receiver is any other [SkImageFilter] variant.
+ *
+ * Backends that can express a per-pixel [SkColorFilter] in their composite
+ * fragment shader (e.g. the WebGPU layer-composite pipeline) use this to
+ * unwrap the inner colour filter and route it through the existing
+ * `paint.colorFilter` plumbing -- the per-pixel result is identical when
+ * the wrap's [SkColorFilterImageFilterParams.input] is `null`.
+ */
+public fun SkImageFilter.asColorFilterImageFilter(): SkColorFilterImageFilterParams? {
+    val f = this as? SkColorFilterImageFilter ?: return null
+    return SkColorFilterImageFilterParams(
+        colorFilter = f.exposedColorFilter,
+        input = f.exposedInput,
+    )
 }
