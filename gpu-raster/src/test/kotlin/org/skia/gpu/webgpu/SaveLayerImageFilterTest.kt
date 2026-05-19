@@ -15,6 +15,8 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.asBlurImageFilter
 import org.skia.foundation.asColorFilterImageFilter
+import org.skia.foundation.asDropShadowImageFilter
+import org.skia.foundation.asOffsetImageFilter
 import kotlin.math.abs
 
 /**
@@ -328,10 +330,52 @@ class SaveLayerImageFilterTest {
     }
 
     @Test
-    fun `saveLayer with Offset imageFilter throws clear error`() {
-        // Phase G-saveLayer-imageFilter -- another non-supported
-        // variant. The fallback error path is the generic "not yet
-        // supported" message that names the concrete class.
+    fun `saveLayer with Offset imageFilter shifts layer by dx dy`() {
+        // Phase G-saveLayer-imageFilter-offset -- the routed path. The
+        // composite shader's existing `dstOriginSize.xy` slot already
+        // drives the parent-pixel mapping ; we just shift the dst
+        // origin by the integer-rounded (dx, dy) and let the scissor
+        // cull the off-by-N edge. No new pipeline or shader.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                // The layer covers the whole device. Inside it we draw
+                // a 4x4 red rect at (10, 10)..(14, 14). With the
+                // Offset filter set to (8, 8) the composite places the
+                // layer pixels at (originX + 8, originY + 8) so the
+                // red rect lands at (18, 18)..(22, 22).
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 14f, 14f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Offset(dx = 8f, dy = 8f, input = null)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Red rect at the shifted position (18, 18)..(22, 22).
+        assertRgbaApprox(pixels, 19, 19, 255, 0, 0, 255, tag = "Offset shifted rect centre")
+        assertRgbaApprox(pixels, 21, 21, 255, 0, 0, 255, tag = "Offset shifted rect inside")
+        // Where the rect *would* have been drawn at (10, 10)..(14, 14)
+        // it now shows the white background (the layer is transparent
+        // there before the Offset shift).
+        assertRgbaApprox(pixels, 11, 11, 255, 255, 255, 255, tag = "Offset original pos cleared")
+        // The far corner is untouched.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside Offset reach")
+    }
+
+    @Test
+    fun `saveLayer with Offset imageFilter input nonNull throws clear error`() {
+        // Phase G-saveLayer-imageFilter-offset -- the non-null child
+        // case is deferred to a follow-up slice that handles
+        // structural-transform pre-passes.
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
@@ -339,8 +383,9 @@ class SaveLayerImageFilterTest {
             SkWebGpuDevice(ctx, W, H).use { device ->
                 val canvas = SkCanvas(device)
                 val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val inner = SkImageFilters.Offset(dx = 0f, dy = 0f, input = null)
                 val layerPaint = SkPaint().apply {
-                    imageFilter = SkImageFilters.Offset(dx = 8f, dy = 8f, input = null)
+                    imageFilter = SkImageFilters.Offset(dx = 4f, dy = 4f, input = inner)
                 }
                 canvas.saveLayer(layerBounds, layerPaint)
                 canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
@@ -349,11 +394,202 @@ class SaveLayerImageFilterTest {
         }
 
         assertTrue(err is IllegalStateException) {
-            "Expected IllegalStateException for Offset imageFilter ; got $err"
+            "Expected IllegalStateException for Offset with non-null child ; got $err"
         }
         val msg = err?.message ?: ""
-        assertTrue(msg.contains("SkOffsetImageFilter") || msg.contains("not yet supported")) {
-            "Error message should surface the unsupported filter class ; got : $msg"
+        assertTrue(msg.contains("Offset") && msg.contains("input == null")) {
+            "Error message should call out the non-null child input ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `saveLayer with DropShadow imageFilter draws shadow under layer`() {
+        // Phase G-saveLayer-imageFilter-dropshadow -- the load-bearing
+        // test. A green rect drawn inside a layer with a black drop
+        // shadow set to (5, 7) and small sigma. Properties to verify :
+        //   - the green rect's interior pixels stay green (the original
+        //     layer content lands ON TOP of the shadow),
+        //   - a few px right + down of the rect, the white background
+        //     is darkened by the shadow,
+        //   - far from the rect + shadow extent, white is untouched.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(8f, 8f, 16f, 16f)
+                // Opaque green : ARGB (255, 0, 255, 0).
+                val green = (255 shl 24) or (0 shl 16) or (255 shl 8) or 0
+                // Opaque black : ARGB (255, 0, 0, 0).
+                val black = (255 shl 24)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.DropShadow(
+                        dx = 5f, dy = 7f,
+                        sigmaX = 1.5f, sigmaY = 1.5f,
+                        color = black, input = null,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = green })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // The green rect is at (8..16, 8..16). Its centre should stay
+        // pure green -- the shadow underneath is fully covered.
+        assertRgbaApprox(pixels, 12, 12, 0, 255, 0, 255,
+            tag = "DropShadow green centre", tol = 2)
+
+        // A pixel in the shadow's strongest region : the rect's
+        // centre + (5, 7) = (17, 19) lands inside the shadow's
+        // densest area, just outside the rect. With small sigma the
+        // shadow alpha there is close to the rect's silhouette
+        // alpha (= 1) -> nearly black.
+        val i = (19 * W + 17) * 4
+        val r = pixels[i].toInt() and 0xFF
+        val g = pixels[i + 1].toInt() and 0xFF
+        val b = pixels[i + 2].toInt() and 0xFF
+        assertTrue(r < 80 && g < 80 && b < 80) {
+            "Shadow centre pixel should be near-black ; got ($r, $g, $b)"
+        }
+
+        // Far corner -- outside both the rect and the shadow's
+        // kernel reach. White background untouched.
+        assertRgbaApprox(pixels, 28, 2, 255, 255, 255, 255, tag = "DropShadow far white")
+    }
+
+    @Test
+    fun `saveLayer with DropShadow imageFilter zero sigma is a colorize-offset copy`() {
+        // Phase G-saveLayer-imageFilter-dropshadow -- sigma == 0 on
+        // both axes : the blur kernel collapses to the centre tap (1.0
+        // weight). The shadow is a colorized, offset copy of the layer
+        // silhouette (alpha mask tinted to the shadow colour). For a
+        // fully-opaque red rect with a fully-opaque blue shadow the
+        // result is :
+        //   - the red rect at its original position,
+        //   - a blue rectangle at (originalRect + (dx, dy)) under it.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(8f, 8f, 14f, 14f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.DropShadow(
+                        dx = 6f, dy = 6f,
+                        sigmaX = 0f, sigmaY = 0f,
+                        color = SK_ColorBLUE, input = null,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Original red rect at (8..14, 8..14) -- pure red because
+        // the layer's content lands on top of the shadow with srcOver
+        // and the rect has alpha = 255.
+        assertRgbaApprox(pixels, 10, 10, 255, 0, 0, 255, tag = "DropShadow original red")
+        // Shadow at (8+6 .. 14+6, 8+6 .. 14+6) = (14..20, 14..20) --
+        // pure blue. The shadow comes BEFORE the original layer
+        // content, so the original rect doesn't overlap this region.
+        assertRgbaApprox(pixels, 16, 16, 0, 0, 255, 255, tag = "DropShadow shadow blue")
+        // Far untouched background.
+        assertRgbaApprox(pixels, 28, 28, 255, 255, 255, 255, tag = "DropShadow far white")
+    }
+
+    @Test
+    fun `saveLayer with DropShadow imageFilter input nonNull throws clear error`() {
+        // Phase G-saveLayer-imageFilter-dropshadow -- non-null child
+        // is deferred to a follow-up slice.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val err = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val inner = SkImageFilters.Offset(dx = 0f, dy = 0f, input = null)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.DropShadow(
+                        dx = 2f, dy = 2f,
+                        sigmaX = 1f, sigmaY = 1f,
+                        color = (255 shl 24), input = inner,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                runCatching { canvas.restore() }.exceptionOrNull()
+            }
+        }
+
+        assertTrue(err is IllegalStateException) {
+            "Expected IllegalStateException for DropShadow with non-null child ; got $err"
+        }
+        val msg = err?.message ?: ""
+        assertTrue(msg.contains("DropShadow") && msg.contains("input == null")) {
+            "Error message should call out the non-null child input ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `asOffsetImageFilter extracts dx dy and input from Offset`() {
+        val off = SkImageFilters.Offset(dx = 3.5f, dy = -2.25f, input = null)
+        val params = off.asOffsetImageFilter()
+        assertTrue(params != null) { "Offset must extract" }
+        assertEquals(3.5f, params!!.dx, "dx")
+        assertEquals(-2.25f, params.dy, "dy")
+        assertEquals(null, params.input, "input")
+    }
+
+    @Test
+    fun `asOffsetImageFilter returns null for non-Offset filter`() {
+        val blur = SkImageFilters.Blur(
+            sigmaX = 1f, sigmaY = 1f, tileMode = SkTileMode.kDecal, input = null,
+        )
+        assertEquals(null, blur?.asOffsetImageFilter()) {
+            "Blur must not extract as Offset"
+        }
+    }
+
+    @Test
+    fun `asDropShadowImageFilter extracts params from DropShadow`() {
+        val shadowColor = (200 shl 24) or (10 shl 16) or (20 shl 8) or 30
+        val ds = SkImageFilters.DropShadow(
+            dx = 4f, dy = 6f,
+            sigmaX = 2f, sigmaY = 3f,
+            color = shadowColor, input = null,
+        )
+        val params = ds.asDropShadowImageFilter()
+        assertTrue(params != null) { "DropShadow must extract" }
+        assertEquals(4f, params!!.dx, "dx")
+        assertEquals(6f, params.dy, "dy")
+        assertEquals(2f, params.sigmaX, "sigmaX")
+        assertEquals(3f, params.sigmaY, "sigmaY")
+        assertEquals(shadowColor, params.color, "color")
+        assertEquals(null, params.input, "input")
+    }
+
+    @Test
+    fun `asDropShadowImageFilter returns null for non-DropShadow filter`() {
+        val blur = SkImageFilters.Blur(
+            sigmaX = 1f, sigmaY = 1f, tileMode = SkTileMode.kDecal, input = null,
+        )
+        assertEquals(null, blur?.asDropShadowImageFilter()) {
+            "Blur must not extract as DropShadow"
+        }
+        val offset = SkImageFilters.Offset(dx = 1f, dy = 0f, input = null)
+        assertEquals(null, offset.asDropShadowImageFilter()) {
+            "Offset must not extract as DropShadow"
         }
     }
 
