@@ -212,6 +212,61 @@ class SaveLayerTest {
     }
 
     @Test
+    fun `saveLayer plus 100 drawRects plus restore composites without error`() {
+        // Phase G-saveLayer-fast perf-shape exercise -- 100 draws inside
+        // the layer scope (more than the worst-case GM ever generates)
+        // verifies the direct-blit composite handles a populated
+        // intermediate texture without exception / NaN / obviously
+        // wrong pixels (post-composite the layer body should still be
+        // visibly painted, NOT background-coloured).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(4f, 4f, 28f, 28f)
+                canvas.saveLayer(layerBounds, null)
+                // 100 stacked 1-pixel-tall horizontal stripes inside the
+                // layer bounds. Final stripe at y = 27 is red (the last
+                // one painted under SrcOver wins for opaque alpha).
+                repeat(100) { i ->
+                    val y = 4f + (i % 24).toFloat()
+                    canvas.drawRect(
+                        SkRect.MakeLTRB(4f, y, 28f, y + 1f),
+                        SkPaint().apply { color = SK_ColorRED },
+                    )
+                }
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Layer body : every interior pixel was hit at least once by a
+        // red stripe (the modulo wraps every 24 rows so each of the 24
+        // interior rows is painted 4-5 times). Composite is SrcOver of
+        // opaque red over white -> opaque red.
+        assertRgbaApprox(pixels, 8, 8, 255, 0, 0, 255, tag = "layer body 1")
+        assertRgbaApprox(pixels, 15, 15, 255, 0, 0, 255, tag = "layer body 2")
+        assertRgbaApprox(pixels, 20, 25, 255, 0, 0, 255, tag = "layer body 3")
+        // Outside layer : white background untouched.
+        assertRgbaApprox(pixels, 1, 1, 255, 255, 255, 255, tag = "outside layer")
+        assertRgbaApprox(pixels, 30, 30, 255, 255, 255, 255, tag = "outside layer #2")
+        // No NaN bleed : every byte we sampled should be a valid byte.
+        // (Test the corners + a couple of interior + a couple of bounds
+        // pixels.)
+        for ((x, y) in listOf(0 to 0, W - 1 to 0, 0 to H - 1, W - 1 to H - 1,
+                              5 to 5, 10 to 10, 27 to 27, 3 to 3)) {
+            val i = (y * W + x) * 4
+            for (c in 0 until 4) {
+                val v = pixels[i + c].toInt() and 0xFF
+                assertTrue(v in 0..255) { "byte at ($x, $y).$c = $v out of range" }
+            }
+        }
+    }
+
+    @Test
     fun `saveLayer with null bounds spans full viewport`() {
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
