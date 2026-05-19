@@ -908,6 +908,19 @@ public class SkWebGpuDevice(
         val clipShapeBounds: FloatArray = FloatArray(4),
         val clipShapeRx: Float = 0f,
         val clipShapeRy: Float = 0f,
+        /**
+         * G5.2.2 -- 2x3 device-to-image affine `M^-1 = (ctm * localMatrix)^-1`.
+         * Row 0 = `(sx, kx, tx)` ; row 1 = `(ky, sy, ty)`. The fragment shader
+         * uses this directly to derive image-pixel coords from the fragment
+         * center, replacing the legacy `srcRect/dstRect` rect-affine.
+         *
+         * For [drawImageRect] callers (no shader rotation) the affine is
+         * built from the axis-aligned src/dst ratio so the byte output stays
+         * unchanged ; for [SkBitmapShader] callers the affine is the inverse
+         * of `ctm * localMatrix`.
+         */
+        val devToImageRow0: FloatArray,
+        val devToImageRow1: FloatArray,
     ) : PendingDraw
 
     // ─── Layer composite (Phase G-saveLayer-fast) ───────────────────────
@@ -1139,6 +1152,14 @@ public class SkWebGpuDevice(
         val clipShapeBounds: FloatArray = FloatArray(4),
         val clipShapeRx: Float = 0f,
         val clipShapeRy: Float = 0f,
+        /**
+         * G5.2.2 -- 2x3 device-to-image affine, mirror of [ImageRectDraw].
+         * Replaces the legacy srcRect/dstRect rect-affine in the fragment
+         * math so rotated / skewed CTM + localMatrix combinations route
+         * through the same pipeline as the axis-aligned case.
+         */
+        val devToImageRow0: FloatArray = FloatArray(3),
+        val devToImageRow1: FloatArray = FloatArray(3),
     ) : PendingDraw
 
     /**
@@ -1219,6 +1240,12 @@ public class SkWebGpuDevice(
         val csMode: Int,
         val csMatrix: FloatArray,
         val csTfParams: FloatArray,
+        // G5.2.2 -- 2x3 device-to-image affine `M^-1 = (ctm * localMatrix)^-1`.
+        // Row 0 = `(sx, kx, tx)` ; row 1 = `(ky, sy, ty)`. The shader applies
+        // this directly to the fragment center to derive image-pixel coords,
+        // unifying axis-aligned and rotated / skewed paths.
+        val devToImageRow0: FloatArray,
+        val devToImageRow1: FloatArray,
     )
 
     private fun buildBitmapShaderPayload(
@@ -1228,18 +1255,28 @@ public class SkWebGpuDevice(
     ): BitmapShaderPayload? {
         val image = shader.getImage()
         if (image.width <= 0 || image.height <= 0) return null
+        // G5.2.2 -- arbitrary affine CTM + localMatrix. Compose
+        // `M = ctm * localMatrix` (the shader-local -> device affine)
+        // and invert it once to derive the device -> image-pixel map
+        // that the shader applies per fragment. Bail honestly when the
+        // combined affine is singular (degenerate scale / perspective) ;
+        // the caller falls through to the solid-colour fill.
         val combined = ctm.preConcat(shader.localMatrix)
-        if (!combined.isAxisAligned) return null
-        if (combined.sx == 0f || combined.sy == 0f) return null
-        // src spans the full image (in image-pixel coords) ; dst is its
-        // image through the combined affine. The shader uses (src, dst)
-        // as a `device -> image-pixel` affine -- correct over the whole
-        // viewport regardless of path shape ; the stencil + AA cover
-        // pass select which fragments actually sample.
+        if (combined.hasPerspective()) return null
+        val inv = combined.invert() ?: return null
+        // Diagnostic `srcRect / dstRect` pair -- the device-AABB of the
+        // image footprint under `M`. The fragment shader ignores these
+        // (it reads the affine instead) but the host still uses
+        // `dst{L,T,R,B}` to size the AA stencil-cover cover quad when
+        // the path bbox is wider than the image footprint (defensive --
+        // historically tests expected the cover quad to span the full
+        // device frame, which still works with the affine path).
         val (x0, y0) = combined.mapXY(0f, 0f)
-        val (x1, y1) = combined.mapXY(image.width.toFloat(), image.height.toFloat())
-        val dstL = minOf(x0, x1); val dstT = minOf(y0, y1)
-        val dstR = maxOf(x0, x1); val dstB = maxOf(y0, y1)
+        val (x1, y1) = combined.mapXY(image.width.toFloat(), 0f)
+        val (x2, y2) = combined.mapXY(0f, image.height.toFloat())
+        val (x3, y3) = combined.mapXY(image.width.toFloat(), image.height.toFloat())
+        val dstL = minOf(x0, x1, x2, x3); val dstT = minOf(y0, y1, y2, y3)
+        val dstR = maxOf(x0, x1, x2, x3); val dstB = maxOf(y0, y1, y2, y3)
         val texture = imageTextureFor(image)
         val (csMode, csMatrix, csTfParams) = bitmapColorSpaceFor(image)
         val paintAlpha = paint.alpha / 255f
@@ -1258,6 +1295,8 @@ public class SkWebGpuDevice(
             csMode = csMode,
             csMatrix = csMatrix,
             csTfParams = csTfParams,
+            devToImageRow0 = floatArrayOf(inv.sx, inv.kx, inv.tx),
+            devToImageRow1 = floatArrayOf(inv.ky, inv.sy, inv.ty),
         )
     }
 
@@ -1302,6 +1341,8 @@ public class SkWebGpuDevice(
         clipShapeBounds = clipShapeBounds,
         clipShapeRx = clipShapeRx,
         clipShapeRy = clipShapeRy,
+        devToImageRow0 = devToImageRow0,
+        devToImageRow1 = devToImageRow1,
     )
 
     private val pending: MutableList<PendingDraw> = mutableListOf()
@@ -3888,18 +3929,23 @@ public class SkWebGpuDevice(
      * Gate 1 (rect path / `bitmap_shader.wgsl`) :
      *   - `paint.shader is SkBitmapShader`,
      *   - `paint.style == kFill_Style`,
-     *   - `ctm.isAxisAligned` AND `shader.localMatrix.isAxisAligned`,
+     *   - `ctm.isAxisAligned` (axis-aligned device-space rect ; rotated
+     *     CTM rect paths fall to gate 2 which bounds the painted region
+     *     via stencil-and-cover).
+     *   - any localMatrix (rotated / skewed allowed via the affine
+     *     uniform ; G5.2.2 widening).
      *   - `path.isRect() != null`.
      *
      * Gate 2 (non-rect AA path / `aa_stencil_cover_bitmap_shader.wgsl`) :
      *   - `paint.shader is SkBitmapShader`,
      *   - `paint.isAntiAlias`,
-     *   - `ctm.isAxisAligned` AND `shader.localMatrix.isAxisAligned`,
-     *   - `path.isRect() == null` (covered by gate 1 otherwise).
+     *   - any CTM + any localMatrix (rotated / skewed allowed ; G5.2.2).
+     *   - `path.isRect() == null` (covered by gate 1 otherwise) OR
+     *     rotated-CTM rect (gate 1 falls through).
      *
-     * Other configurations (rotated CTM, non-axis-aligned local matrix,
-     * non-AA non-rect path) fall back to the solid-colour fill
-     * machinery and remain under the existing fail-fast.
+     * Other configurations (non-AA non-rect path under rotated CTM)
+     * fall back to the solid-colour fill machinery and remain under
+     * the existing fail-fast.
      */
     private fun willRouteThroughClipAwareBitmapShader(
         path: SkPath,
@@ -3907,16 +3953,15 @@ public class SkWebGpuDevice(
         paint: SkPaint,
     ): Boolean {
         val shader = paint.shader as? SkBitmapShader ?: return false
-        if (!ctm.isAxisAligned) return false
-        if (!shader.localMatrix.isAxisAligned) return false
+        if (shader.localMatrix.hasPerspective() || ctm.hasPerspective()) return false
         val isRect = path.isRect() != null
-        // Rect branch (G5.2) only fires for fill style.
-        if (isRect && paint.style == SkPaint.Style.kFill_Style) return true
-        // AA non-rect branch (G5.2.1) fires when the paint is AA. The
-        // dispatch inside drawPath further constrains it to fill style ;
-        // we mirror that here so stroke-style paints continue to fall
-        // back to the solid-colour fill machinery (and hit the guard).
-        if (!isRect && paint.isAntiAlias && paint.style == SkPaint.Style.kFill_Style) return true
+        // Rect branch (G5.2) -- axis-aligned-CTM rect fast path.
+        if (isRect && paint.style == SkPaint.Style.kFill_Style && ctm.isAxisAligned) return true
+        // AA non-rect branch (G5.2.1 / G5.2.2) -- arbitrary affine CTM
+        // + localMatrix, fill style + AA paint. Captures rotated-CTM
+        // rect paths too (they fall through gate 1's axis-aligned
+        // requirement).
+        if (paint.isAntiAlias && paint.style == SkPaint.Style.kFill_Style) return true
         return false
     }
 
@@ -5239,26 +5284,34 @@ public class SkWebGpuDevice(
                 }
             }
         }
-        // G5.2 -- `paint.shader is SkBitmapShader` fill of an axis-aligned
-        // rect. Reuses the G5.1 / G5.1.1 drawImageRect pipeline (sampler
-        // cache, pipeline cache, bitmap_shader.wgsl) by deriving an
-        // (src, dst) pair from the shader's local matrix composed with
-        // the CTM. Hard scope :
+        // G5.2 / G5.2.2 -- `paint.shader is SkBitmapShader` fill of an
+        // axis-aligned-in-device-space rect. Reuses the G5.1 / G5.1.1
+        // drawImageRect pipeline (sampler cache, pipeline cache,
+        // bitmap_shader.wgsl) but now drives the per-fragment image-
+        // coord lookup through the 2x3 device-to-image affine carried
+        // in the uniform (G5.2.2). The axis-aligned subset still rounds
+        // out to the same pixels as before (the host derives the affine
+        // from `src/dst` ratios for drawImage callers, and from
+        // `(ctm * localMatrix)^-1` for shader callers ; both reduce to
+        // the same matrix when the inputs are axis-aligned).
+        //
+        // Hard scope :
         //   - rect routing only (`path.isRect() != null`),
-        //   - axis-aligned CTM,
-        //   - shader local matrix is identity or axial scale + translate
-        //     (no rotation / skew / perspective),
+        //   - axis-aligned CTM (otherwise the integer scissor on the
+        //     fullscreen-triangle would over-paint fragments outside
+        //     the rotated rect bounds ; rotated-CTM rect paths fall
+        //     through to the AA stencil-cover non-rect dispatch which
+        //     bounds the painted region exactly).
+        //   - rotated / skewed localMatrix allowed (G5.2.2 widening :
+        //     the shader's affine handles it ; the rect is still
+        //     axis-aligned in device space so the scissor is exact).
         //   - filter / tile / blend support inherited from G5.1.1.
-        // Other configurations (rotated CTM, non-axis-aligned local
-        // matrix, non-rect path) fall through to the existing solid-
-        // colour fill machinery -- they are out of scope for the
-        // current slice and will land in future G5.x. The dispatch sits
-        // AFTER the gradient gates (gradients win when both are valid
-        // ; in practice a paint carries one shader, not two).
+        // The dispatch sits AFTER the gradient gates (gradients win
+        // when both are valid ; in practice a paint carries one
+        // shader, not two).
         if (shader is SkBitmapShader &&
             paint.style == SkPaint.Style.kFill_Style &&
-            ctm.isAxisAligned &&
-            shader.localMatrix.isAxisAligned
+            ctm.isAxisAligned
         ) {
             val srcRect = path.isRect()
             if (srcRect != null) {
@@ -5564,18 +5617,19 @@ public class SkWebGpuDevice(
         val conicalFocalActive: Boolean =
             conicalFocalGradForAaPath != null && gradConicalFocalAffine != null
 
-        // G5.2.1 -- bitmap shader on a non-rect AA path. Mirror of the
-        // gradient gate above : axis-aligned CTM + axis-aligned local
-        // matrix + AA paint. The rect-on-axis-aligned-CTM case was
-        // already peeled off at the top of drawPath (G5.2's
-        // [drawBitmapShaderFillRect]) ; we route every remaining AA
-        // bitmap-shader fill through the dedicated stencil-and-cover
-        // pipeline. Non-AA paths and non-axis-aligned matrices fall
-        // through to the existing solid-colour fill machinery.
+        // G5.2.1 / G5.2.2 -- bitmap shader on a non-rect AA path. The
+        // rect-on-CTM case was already peeled off at the top of
+        // drawPath (G5.2's [drawBitmapShaderFillRect]) ; we route every
+        // remaining AA bitmap-shader fill through the dedicated
+        // stencil-and-cover pipeline. The CTM + localMatrix can be any
+        // invertible affine (G5.2.2 widening : the shader applies the
+        // 2x3 device-to-image affine directly, so rotated / skewed
+        // combinations work without a separate code path). Non-AA paths
+        // still fall through to the existing solid-colour fill
+        // machinery -- AA cover is the only pipeline that consumes the
+        // shader today.
         val bitmapShaderForAaPath: SkBitmapShader? =
-            if (shader is SkBitmapShader && paint.isAntiAlias && ctm.isAxisAligned &&
-                shader.localMatrix.isAxisAligned
-            ) shader
+            if (shader is SkBitmapShader && paint.isAntiAlias) shader
             else null
         var bitmapPayload: BitmapShaderPayload? = null
         if (bitmapShaderForAaPath != null) {
@@ -6266,6 +6320,12 @@ public class SkWebGpuDevice(
         tileX: SkTileMode,
         tileY: SkTileMode,
         clip: SkIRect,
+        // G5.2.2 -- when non-null, override the axis-aligned affine that
+        // would otherwise be derived from (src, devDst). Used by
+        // [drawBitmapShaderFillRect] to ship the true inverse of
+        // `ctm * localMatrix` for rotated / skewed bitmap shaders.
+        affineOverrideRow0: FloatArray? = null,
+        affineOverrideRow1: FloatArray? = null,
     ) {
         if (image.width <= 0 || image.height <= 0) return
         if (src.right <= src.left || src.bottom <= src.top) return
@@ -6317,6 +6377,35 @@ public class SkWebGpuDevice(
         // scissor already handles them).
         val (clipKind, clipBounds, clipRx, clipRy) = packClipShape(activeClipShape)
 
+        // G5.2.2 -- derive the device-to-image affine from the axis-aligned
+        // (src, devDst) pair the caller supplied. The fragment math used to
+        // be `sx = src.l + (pos.x - dst.l) * (src.w / dst.w)` ; rewriting
+        // as a 2x3 affine gives :
+        //   row0 = (src.w / dst.w, 0, src.l - dst.l * src.w / dst.w)
+        //   row1 = (0, src.h / dst.h, src.t - dst.t * src.h / dst.h)
+        // The fragment now reads this affine instead of the rect pair so
+        // [SkBitmapShader] callers with a rotated localMatrix can route
+        // through the same pipeline -- they pass `affineOverrideRow*` with
+        // the full inverse of `ctm * localMatrix` instead of falling back
+        // to this axis-aligned derivation.
+        val row0: FloatArray
+        val row1: FloatArray
+        if (affineOverrideRow0 != null && affineOverrideRow1 != null) {
+            row0 = affineOverrideRow0
+            row1 = affineOverrideRow1
+        } else {
+            val srcW = src.right - src.left
+            val srcH = src.bottom - src.top
+            val dstW = devDst.right - devDst.left
+            val dstH = devDst.bottom - devDst.top
+            val sxRow0 = srcW / dstW
+            val syRow1 = srcH / dstH
+            val txRow0 = src.left - devDst.left * sxRow0
+            val tyRow1 = src.top - devDst.top * syRow1
+            row0 = floatArrayOf(sxRow0, 0f, txRow0)
+            row1 = floatArrayOf(0f, syRow1, tyRow1)
+        }
+
         pending.add(
             ImageRectDraw(
                 texture = texture,
@@ -6338,6 +6427,8 @@ public class SkWebGpuDevice(
                 clipShapeBounds = clipBounds,
                 clipShapeRx = clipRx,
                 clipShapeRy = clipRy,
+                devToImageRow0 = row0,
+                devToImageRow1 = row1,
             ),
         )
     }
@@ -6404,31 +6495,37 @@ public class SkWebGpuDevice(
     ): Boolean {
         val image = shader.getImage()
         if (image.width <= 0 || image.height <= 0) return false
-        // Combined matrix : ctm * localMatrix maps shader-local (image
-        // pixel) coords -> device coords. Both factors are axis-aligned
-        // (gated above), so the product is too. Bail honestly if the
-        // inverse doesn't exist (degenerate scale = 0) -- the caller
-        // returns without a fallback draw, mirroring how the gradient
-        // helpers handle fully-clipped rects.
+        // G5.2.2 -- combined matrix `M = ctm * localMatrix` may be any
+        // invertible affine (rotated / skewed allowed). Perspective and
+        // singular factors bail to the solid-colour fallback ; the
+        // gradient helpers handle degenerate matrices the same way.
         val combined = ctm.preConcat(shader.localMatrix)
-        if (!combined.isAxisAligned) return false
-        if (combined.sx == 0f || combined.sy == 0f) return false
+        if (combined.hasPerspective()) return false
         val inv = combined.invert() ?: return false
 
-        // dst : the rect mapped into device coords. With an axis-aligned
-        // CTM the four corners reduce to two ; `min/max` absorbs any
-        // negative-scale (mirror) factor.
+        // Cover quad : the device-AABB of the rotated source-rect
+        // corners under `ctm`. Mirrors how the gradient rect helpers
+        // (`drawLinearGradientFillRect` & friends) compute their cover
+        // rect from `ctm.mapXY(corner)` -- but we map all four corners
+        // (not just two) because `ctm` may now rotate, so the rect
+        // does not reduce to its diagonal pair.
         val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
-        val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
+        val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.top)
+        val (x2, y2) = ctm.mapXY(srcRect.left, srcRect.bottom)
+        val (x3, y3) = ctm.mapXY(srcRect.right, srcRect.bottom)
         val devDst = SkRect.MakeLTRB(
-            minOf(x0, x1), minOf(y0, y1),
-            maxOf(x0, x1), maxOf(y0, y1),
+            minOf(x0, x1, x2, x3), minOf(y0, y1, y2, y3),
+            maxOf(x0, x1, x2, x3), maxOf(y0, y1, y2, y3),
         )
 
-        // src : back-solved through `M^-1`. We use the corners of the
-        // ORIGINAL `srcRect` (in user-space) through `localMatrix^-1`
-        // to land in image-pixel coords -- equivalent to applying the
-        // combined inverse to the device-rect corners.
+        // Image-space src bounds : the corners of `devDst` mapped
+        // through `M^-1`. For an axis-aligned matrix this matches the
+        // pre-G5.2.2 derivation byte-for-byte ; for rotated matrices
+        // it's a loose AABB of the rotated image footprint -- the
+        // shader honours the affine per fragment, so the `srcRect`
+        // value is now purely diagnostic (the fragment math ignores
+        // it). We keep computing a sensible value so the uniform
+        // bytes stay deterministic.
         val (sl, st) = inv.mapXY(devDst.left, devDst.top)
         val (sr, sb) = inv.mapXY(devDst.right, devDst.bottom)
         val imgSrc = SkRect.MakeLTRB(
@@ -6445,6 +6542,15 @@ public class SkWebGpuDevice(
             tileX = shader.getTileX(),
             tileY = shader.getTileY(),
             clip = clip,
+            // G5.2.2 -- override the affine derived from src/dst (which
+            // is axis-aligned by construction) with the true inverse of
+            // `M = ctm * localMatrix`. The two match exactly when the
+            // CTM and localMatrix are axis-aligned ; they diverge for
+            // rotated / skewed inputs -- in which case the shader-supplied
+            // affine is the correct one (the rect-derived affine is a
+            // lossy axis-aligned approximation).
+            affineOverrideRow0 = floatArrayOf(inv.sx, inv.kx, inv.tx),
+            affineOverrideRow1 = floatArrayOf(inv.ky, inv.sy, inv.ty),
         )
         return true
     }
@@ -7926,7 +8032,9 @@ public class SkWebGpuDevice(
         //   offset 144 : csTfParams1        (vec4f -- (d, e, f, _) parametric TF ; G5.3.x)
         //   offset 160 : clipShapeBounds    (vec4f -- l, t, r, b device-px ; G2.x)
         //   offset 176 : clipShapeRadiiKind (vec4f -- rx, ry, clipKind, _ ; G2.x)
-        // Total = 192 bytes.
+        //   offset 192 : devToImageRow0     (vec4f -- (sx, kx, tx, _) ; G5.2.2)
+        //   offset 208 : devToImageRow1     (vec4f -- (ky, sy, ty, _) ; G5.2.2)
+        // Total = 224 bytes.
         //
         // G5.1.1 -- `imageSize.z` carries the tile-mode ordinal as a
         // bit-reinterpreted f32 (same trick the gradient shaders use for
@@ -7959,9 +8067,18 @@ public class SkWebGpuDevice(
         // (the slots are ignored) ; `clipKind == 1` => rrect coverage
         // multiplied into the fragment output. The two slots sit after
         // the G5.3 colorspace block to keep that block contiguous.
+        //
+        // G5.2.2 -- `devToImageRow0` / `devToImageRow1` carry the 2x3
+        // device-to-image affine that drives the per-fragment image-
+        // coord lookup. Axis-aligned callers (drawImageRect) build it
+        // from the rect ratio ; SkBitmapShader callers ship the
+        // inverse of `ctm * localMatrix` directly so rotated / skewed
+        // shaders route through the same shader path.
         val m = d.csMatrix
         val tf = d.csTfParams
         val cb = d.clipShapeBounds
+        val r0 = d.devToImageRow0
+        val r1 = d.devToImageRow1
         context.queue.writeBuffer(
             uniform, 0uL,
             ArrayBuffer.of(floatArrayOf(
@@ -7978,6 +8095,8 @@ public class SkWebGpuDevice(
                 tf[4], tf[5], tf[6], 0f,
                 cb[0], cb[1], cb[2], cb[3],
                 d.clipShapeRx, d.clipShapeRy, d.clipKind, 0f,
+                r0[0], r0[1], r0[2], 0f,
+                r1[0], r1[1], r1[2], 0f,
             )),
         )
         val view = d.texture.createView()
@@ -8730,11 +8849,13 @@ public class SkWebGpuDevice(
         //   offset  176 : csTfParams1        (vec4f -- (d, e, f, _) parametric TF ; G5.3.x)
         //   offset  192 : clipShapeBounds    (vec4f -- l, t, r, b device-px ; G2.x)
         //   offset  208 : clipShapeRadiiKind (vec4f -- rx, ry, clipKind, _ ; G2.x)
-        //   offset  224 : edgeCountPad       (.x = edgeCount as bit-reinterp f32)
-        //   offset  240 : edges[MAX_AA_EDGES] (vec4 each)
-        // Total = 4336 bytes (was 4272 before G5.3.x + G2.x ; +32 for
-        // parametric TF coefficients, +32 for the clip-shape slots).
-        val packed = FloatArray(60 + MAX_AA_EDGES * 4)
+        //   offset  224 : devToImageRow0     (vec4f -- (sx, kx, tx, _) ; G5.2.2)
+        //   offset  240 : devToImageRow1     (vec4f -- (ky, sy, ty, _) ; G5.2.2)
+        //   offset  256 : edgeCountPad       (.x = edgeCount as bit-reinterp f32)
+        //   offset  272 : edges[MAX_AA_EDGES] (vec4 each)
+        // Total = 4368 bytes (was 4336 before G5.2.2 ; +32 for the
+        // device-to-image affine, edge tail shifts forward by 32 bytes).
+        val packed = FloatArray(68 + MAX_AA_EDGES * 4)
         // color (unused ; left at zero)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         // viewport
@@ -8767,11 +8888,16 @@ public class SkWebGpuDevice(
         packed[48] = cb[0]; packed[49] = cb[1]; packed[50] = cb[2]; packed[51] = cb[3]
         packed[52] = d.clipShapeRx; packed[53] = d.clipShapeRy
         packed[54] = d.clipKind; packed[55] = 0f
+        // G5.2.2 -- 2x3 device-to-image affine (mirrors bitmap_shader.wgsl).
+        val r0 = d.devToImageRow0
+        val r1 = d.devToImageRow1
+        packed[56] = r0[0]; packed[57] = r0[1]; packed[58] = r0[2]; packed[59] = 0f
+        packed[60] = r1[0]; packed[61] = r1[1]; packed[62] = r1[2]; packed[63] = 0f
         // edgeCountPad
-        packed[56] = Float.fromBits(d.edgeCount)
-        packed[57] = 0f; packed[58] = 0f; packed[59] = 0f
+        packed[64] = Float.fromBits(d.edgeCount)
+        packed[65] = 0f; packed[66] = 0f; packed[67] = 0f
         // edges
-        System.arraycopy(d.edges, 0, packed, 60, d.edges.size)
+        System.arraycopy(d.edges, 0, packed, 68, d.edges.size)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val view = d.texture.createView()
         val sampler = bitmapSamplerFor(d.filter, d.tileX, d.tileY)
@@ -9044,9 +9170,13 @@ public class SkWebGpuDevice(
          * (Rec.2020 linear, Adobe RGB / k2Dot2, ...). G2.x added 32
          * more bytes for the analytical clip-shape payload -- when
          * `clipShapeRadiiKind.z == 0` the slots are ignored, matching
-         * the rect pipeline.
+         * the rect pipeline. G5.2.2 added 32 more bytes for the 2x3
+         * device-to-image affine (rotated / skewed bitmap shader) ;
+         * the legacy srcRect/dstRect slots stay in the layout for
+         * host-side scissor reuse but the fragment math now reads the
+         * affine instead.
          */
-        const val IMAGE_RECT_UNIFORM_SIZE: ULong = 192uL
+        const val IMAGE_RECT_UNIFORM_SIZE: ULong = 224uL
         /**
          * Phase G-saveLayer-fast / Phase G-saveLayer-colorFilter -- size
          * of the layer-composite per-draw uniform. Layout (matches
@@ -9190,9 +9320,12 @@ public class SkWebGpuDevice(
          * (2 vec4f) shared with the rect pipeline's csMode = 2 branch.
          * G2.x added 32 more bytes for the analytical clip-shape slots
          * sitting after the G5.3 colorspace block (so the colorspace
-         * block stays contiguous).
+         * block stays contiguous). G5.2.2 added 32 more bytes for the
+         * 2x3 device-to-image affine (rotated / skewed bitmap shader),
+         * inserted between `clipShapeRadiiKind` and `edgeCountPad` ;
+         * the edge tail shifts forward by 32 bytes.
          */
-        const val AA_STENCIL_COVER_BITMAP_SHADER_UNIFORM_SIZE: ULong = 4336uL
+        const val AA_STENCIL_COVER_BITMAP_SHADER_UNIFORM_SIZE: ULong = 4368uL
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 
         /**
