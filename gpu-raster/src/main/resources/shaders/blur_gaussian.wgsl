@@ -53,7 +53,8 @@ struct Uniforms {
     //   .x = 1.0 when sampling along X (H pass), 0.0 else.
     //   .y = 1.0 when sampling along Y (V pass), 0.0 else.
     //   .z = radius (number of off-centre taps per side, 0..32).
-    //   .w = unused.
+    //   .w = blurStyle (0 = kNormal, 1 = kSolid, 2 = kOuter, 3 = kInner).
+    //        Only consumed by the V pass ; the H pass is style-agnostic.
     axisRadius:    vec4f,    // offset  32
     // weights[0..8] : symmetric half-kernel packed 4 floats per
     // vec4f. weight at off-centre offset k lives at flat index k :
@@ -68,6 +69,13 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var source_texture: texture_2d<f32>;
+// MaskFilter blur styles (kSolid / kOuter / kInner) : V pass needs the
+// original (unblurred) shape-mask alpha M(p) alongside the blurred
+// coverage B(p). The H pass ignores this binding -- it samples
+// source_texture only -- but the layout entry is required by the
+// shared bind-group layout. The host binds the shape-mask view to
+// this slot in both H and V bind groups.
+@group(0) @binding(2) var shape_mask: texture_2d<f32>;
 
 @vertex
 fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
@@ -162,10 +170,36 @@ fn fs_vertical_composite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     }
 
     // The blurred shape mask alpha is `acc.a` (and acc.r/g/b mirror
-    // it since the shape was rendered white-premul). Modulate the
-    // paintColor by the blurred coverage to produce the final premul
-    // output.
-    let coverage = acc.a;
+    // it since the shape was rendered white-premul).
+    let blurAlpha = acc.a;
+
+    // SkBlurStyle composition. Let M = original sharp mask alpha (the
+    // shape-mask texel under this fragment) and B = blurred coverage.
+    //   kNormal (0) : output = B            -- pure soft blur.
+    //   kSolid  (1) : output = min(M+B, 1)  -- sharp shape + halo.
+    //   kOuter  (2) : output = max(B-M, 0)  -- halo outside only.
+    //   kInner  (3) : output = B * M        -- blur clipped inside.
+    //
+    // The shape_mask texture is a white-premul render of the shape :
+    // .a holds the path coverage. For pixels outside the shape mask's
+    // extent (scratch_px out of range), M defaults to 0 so kSolid /
+    // kInner / kOuter behave as if M = 0 there.
+    var maskAlpha: f32 = 0.0;
+    if (scratch_px.x >= 0 && scratch_px.x < src_w &&
+        scratch_px.y >= 0 && scratch_px.y < src_h) {
+        maskAlpha = textureLoad(shape_mask, scratch_px, 0).a;
+    }
+
+    let style = i32(uniforms.axisRadius.w + 0.5);
+    var coverage: f32 = blurAlpha;
+    if (style == 1) {
+        coverage = min(maskAlpha + blurAlpha, 1.0);
+    } else if (style == 2) {
+        coverage = max(blurAlpha - maskAlpha, 0.0);
+    } else if (style == 3) {
+        coverage = blurAlpha * maskAlpha;
+    }
+
     return vec4f(
         uniforms.paintColor.r * coverage,
         uniforms.paintColor.g * coverage,
