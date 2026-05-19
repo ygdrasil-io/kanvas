@@ -63,6 +63,8 @@ import org.skia.core.SkDevice
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmapShader
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkDashPathEffect
+import org.skia.foundation.SkPathEffect
 import org.skia.foundation.asBlendModeFilter
 import org.skia.foundation.asBlurImageFilter
 import org.skia.foundation.asColorFilterImageFilter
@@ -5553,6 +5555,52 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
+        // H5 -- PathEffect dispatch. The canonical Skia pipeline for paths
+        // is `path -> pathEffect -> stroker -> maskFilter -> colorFilter
+        // -> blend` (mirrored on CPU at SkBitmapDevice.drawPath:1092). The
+        // GPU device silently dropped `paint.pathEffect` before this slice ;
+        // we now route through [SkPathEffect.filterPath] before the rest
+        // of the dispatch runs.
+        //
+        // Scope :
+        //   - [SkDashPathEffect] -- supported. The dash effect decomposes
+        //     the input path into a sequence of `moveTo + lineTo` pairs
+        //     (one per "on" interval) ; we then recurse with a paint copy
+        //     whose `pathEffect = null`, letting the existing stroker /
+        //     fill machinery thicken each dash segment normally.
+        //   - All other [SkPathEffect] subtypes (CornerPathEffect,
+        //     DiscretePathEffect, ComposePathEffect, SumPathEffect,
+        //     Path1D/2D path effects) -- deferred. Throws a clear error
+        //     so callers learn at draw time rather than silently mis-render.
+        //
+        // Empty / null filter result follows the CPU contract exactly :
+        //   - `filterPath() == null` -- passthrough (use original path).
+        //   - `filterPath()` returns an empty path -- draw nothing (unless
+        //     fillType is inverse, which means "fill outside the empty
+        //     path" i.e. the whole clip).
+        val pathEffect = paint.pathEffect
+        if (pathEffect != null) {
+            when (pathEffect) {
+                is SkDashPathEffect -> {
+                    val effectivePath = pathEffect.filterPath(path, ctm) ?: path
+                    if (effectivePath !== path &&
+                        effectivePath.isEmpty() &&
+                        !effectivePath.fillType.isInverse()
+                    ) return
+                    val paintNoEffect = paint.copy().apply { this.pathEffect = null }
+                    drawPath(effectivePath, ctm, clip, paintNoEffect)
+                    return
+                }
+                else -> error(
+                    "SkWebGpuDevice (H5): paint.pathEffect of type " +
+                        "${pathEffect::class.simpleName} is not supported. " +
+                        "Only SkDashPathEffect is in scope today ; " +
+                        "SkCornerPathEffect / SkDiscretePathEffect / " +
+                        "SkComposePathEffect / SkSumPathEffect / 1D / 2D " +
+                        "path effects are deferred to a follow-up slice.",
+                )
+            }
+        }
         // Phase MaskFilter-blur -- `paint.maskFilter is SkBlurMaskFilter`
         // (kNormal) on `drawPath` routes through the offscreen-mask + blur
         // pipeline. Hard scope :
