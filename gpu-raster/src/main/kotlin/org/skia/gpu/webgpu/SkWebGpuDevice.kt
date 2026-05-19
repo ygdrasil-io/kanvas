@@ -64,6 +64,8 @@ import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmapShader
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.asBlendModeFilter
+import org.skia.foundation.asBlurImageFilter
+import org.skia.foundation.asColorFilterImageFilter
 import org.skia.foundation.asMatrixFilter
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
@@ -3112,8 +3114,20 @@ public class SkWebGpuDevice(
      *    for the `Blend` variant are the 15 Porter-Duff modes the WGSL
      *    `blend_premul` helper expresses (kClear...kScreen) ; the rest
      *    fall back to identity in-shader.
-     *  - **Image filter** on [paint] is still dropped -- separate
-     *    follow-up (Phase G-saveLayer-imageFilter).
+     *  - **Image filter** on [paint] : scaffolding slice (Phase
+     *    G-saveLayer-imageFilter) routes one variant -- a
+     *    `SkImageFilters.ColorFilter(cf, input = null)` wrap -- through
+     *    the existing colour-filter plumbing by unwrapping `cf` and
+     *    packing it via [packLayerCompositeColorFilter]. The unwrap
+     *    requires the wrap's `input` child to be `null` (no upstream
+     *    structural transform) **and** the layer paint's own
+     *    `colorFilter` to be `null` (the slot is single-occupancy in
+     *    the current shader). All other image-filter variants -- Blur,
+     *    Offset, Compose, DropShadow, MatrixTransform, DisplacementMap,
+     *    Magnifier, Tile, Crop, Blend, Erode / Dilate, MatrixConvolution,
+     *    Lighting, Arithmetic, ... -- throw a clear "not yet supported"
+     *    error. Defer the real Gaussian-blur convolution to a follow-up
+     *    slice that adds a multi-pass render-target ping-pong pipeline.
      */
     override fun compositeFrom(
         src: SkDevice,
@@ -3154,6 +3168,16 @@ public class SkWebGpuDevice(
                     "(Phase G-saveLayer-x).",
             )
         }
+
+        // Phase G-saveLayer-imageFilter -- scaffolding gate. Detect the
+        // paint's imageFilter and route the one supported variant
+        // (ColorFilter(cf, input = null)) through the existing
+        // colour-filter packing. All other variants raise a clear error
+        // so the call site (saveLayer + restore) surfaces the missing
+        // backend support rather than silently dropping the filter.
+        val effectiveColorFilter: org.skia.foundation.SkColorFilter? =
+            resolveLayerColorFilter(paint)
+
         val w = gpuSrc.width
         val h = gpuSrc.height
         // Drain the child's pending draws onto its intermediateTexture.
@@ -3183,11 +3207,13 @@ public class SkWebGpuDevice(
         // multiply for premul sources).
         val paintAlpha = (paint?.alpha ?: 0xFF) / 255f
 
-        // Phase G-saveLayer-colorFilter -- inspect the paint's colour
-        // filter and pack the WGSL `Uniforms.colorFilter*` slots.
-        // Unsupported variants leave the payload at the identity
-        // (kind = 0) so the shader's fast path stays warm.
-        val colorFilterPacked = packLayerCompositeColorFilter(paint?.colorFilter)
+        // Phase G-saveLayer-colorFilter -- inspect the resolved colour
+        // filter (paint.colorFilter, possibly augmented by an unwrapped
+        // ImageFilter ColorFilter wrap) and pack the WGSL
+        // `Uniforms.colorFilter*` slots. Unsupported variants leave the
+        // payload at the identity (kind = 0) so the shader's fast path
+        // stays warm.
+        val colorFilterPacked = packLayerCompositeColorFilter(effectiveColorFilter)
 
         pending.add(
             LayerCompositeDraw(
@@ -3201,6 +3227,94 @@ public class SkWebGpuDevice(
                 mode = mode,
                 colorFilterPacked = colorFilterPacked,
             ),
+        )
+    }
+
+    /**
+     * Phase G-saveLayer-imageFilter -- scaffolding-slice resolver for
+     * the layer paint's [SkImageFilter] slot.
+     *
+     * Returns the effective [SkColorFilter] that should drive the
+     * layer-composite shader's `colorFilter*` uniform :
+     *
+     *  - `paint == null` or `paint.imageFilter == null` -> just the
+     *    paint's own `colorFilter` (or `null`), bit-iso with the
+     *    pre-imageFilter path.
+     *  - `paint.imageFilter` is a `ColorFilter(cf, input = null)` wrap
+     *    **and** `paint.colorFilter == null` -> returns the inner `cf`.
+     *    The composite shader applies it per pixel, which is identical
+     *    to the CPU snapshot path's behaviour : the layer pixels are
+     *    rendered first (premul RGBA on the layer texture), then the
+     *    composite reads them and runs `cf` per pixel before blending
+     *    onto the parent. No structural transform involved.
+     *  - any other [SkImageFilter] variant (Blur, Offset, Compose,
+     *    DropShadow, MatrixTransform, DisplacementMap, Magnifier, Tile,
+     *    Crop, Blend, Erode / Dilate, MatrixConvolution, Lighting,
+     *    Arithmetic, ...) -> throws a clear error. These require either
+     *    a fragment-side Gaussian convolution (Blur), a UV-remapping
+     *    sample (Offset / MatrixTransform / DisplacementMap), or a
+     *    multi-pass render-target ping-pong (Compose / DropShadow /
+     *    Magnifier), none of which the scaffolding pipeline can express
+     *    yet. Follow-up slices land the Gaussian-blur multi-pass first.
+     *  - both `paint.colorFilter` and a `ColorFilter` wrap set -> throws
+     *    "double colour filter" error : the composite shader's
+     *    `colorFilter*` uniform is single-occupancy, and folding two
+     *    arbitrary [SkColorFilter] variants together would need
+     *    [SkColorFilter] composition support (kind = 3 / Compose), which
+     *    is a separate follow-up slice.
+     */
+    private fun resolveLayerColorFilter(paint: SkPaint?): org.skia.foundation.SkColorFilter? {
+        val imf = paint?.imageFilter ?: return paint?.colorFilter
+        val colorFilterWrap = imf.asColorFilterImageFilter()
+        if (colorFilterWrap != null) {
+            if (colorFilterWrap.input != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.ColorFilter(cf, input = nonNull) wrap " +
+                        "with a non-null child filter. Only the input == null " +
+                        "case is supported in the scaffolding slice (Phase " +
+                        "G-saveLayer-imageFilter) -- a non-null child needs a " +
+                        "render-to-texture pre-pass that the WebGPU layer " +
+                        "composite pipeline cannot express yet."
+                )
+            }
+            if (paint.colorFilter != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : both paint.colorFilter and " +
+                        "paint.imageFilter (ColorFilter wrap) are set. The " +
+                        "WebGPU layer composite uniform is single-occupancy " +
+                        "(one SkColorFilter per draw) -- folding two arbitrary " +
+                        "SkColorFilter variants needs a SkColorFilters.Compose " +
+                        "extractor that the scaffolding slice doesn't ship. " +
+                        "Set only one of the two on the layer paint."
+                )
+            }
+            return colorFilterWrap.colorFilter
+        }
+        val blurWrap = imf.asBlurImageFilter()
+        if (blurWrap != null) {
+            error(
+                "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                    "SkImageFilters.Blur(sigmaX = ${blurWrap.sigmaX}, " +
+                    "sigmaY = ${blurWrap.sigmaY}, tileMode = " +
+                    "${blurWrap.tileMode}). The Gaussian-blur convolution " +
+                    "needs a separable multi-pass render-target pipeline " +
+                    "(ping-pong horizontal + vertical) that the layer " +
+                    "composite scaffolding doesn't ship yet -- follow-up " +
+                    "slice Phase G-saveLayer-imageFilter-blur."
+            )
+        }
+        error(
+            "SkWebGpuDevice.compositeFrom : paint.imageFilter " +
+                "${imf::class.simpleName} not yet supported on the WebGPU " +
+                "backend. Supported variants : null (no filter) ; " +
+                "SkImageFilters.ColorFilter(cf, input = null) when the " +
+                "paint's own colorFilter is null. Other variants -- Blur, " +
+                "Offset, Compose, DropShadow, MatrixTransform, " +
+                "DisplacementMap, Magnifier, Tile, Crop, Blend, Erode / " +
+                "Dilate, MatrixConvolution, Lighting, Arithmetic -- need " +
+                "follow-up slices that add a fragment-side Gaussian / " +
+                "UV-remapping / multi-pass render-target pipeline."
         )
     }
 
