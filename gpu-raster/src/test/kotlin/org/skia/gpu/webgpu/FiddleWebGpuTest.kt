@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.FiddleGM
 
 /**
@@ -21,32 +19,9 @@ class FiddleWebGpuTest {
 
     @Test
     fun `FiddleGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = FiddleGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("fiddle")
-                ?: error("original-888/fiddle.png missing from test classpath")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[FiddleWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "fiddle-gpu")
-            // Background-only render — every pixel survives the
-            // sRGB → Rec.2020 present-pass transform byte-exact, so the
-            // floor is at the ceiling.
-            val floor = 99.99
-            assertTrue(
-                cmp.similarity >= floor,
-                "FiddleGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        // Background-only render — every pixel survives the
+        // sRGB → Rec.2020 present-pass transform byte-exact, so the
+        // floor is at the ceiling.
+        runGpuCrossTest(FiddleGM(), floor = 99.99)
     }
 }

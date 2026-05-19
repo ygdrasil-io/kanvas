@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.SmallArcGM
 
 /**
@@ -22,31 +20,8 @@ class SmallArcWebGpuTest {
 
     @Test
     fun `SmallArcGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = SmallArcGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("smallarc")
-                ?: error("original-888/smallarc.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[SmallArcWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "smallarc-gpu")
-            // First stroke-via-cubic GM under CTM 8× exercising
-            // SkStroker.resScale. Score : 99.80 %.
-            val floor = 99.75
-            assertTrue(
-                cmp.similarity >= floor,
-                "SmallArcGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        // First stroke-via-cubic GM under CTM 8× exercising
+        // SkStroker.resScale. Score : 99.80 %.
+        runGpuCrossTest(SmallArcGM(), floor = 99.75, logTag = "SmallArcWebGpu")
     }
 }

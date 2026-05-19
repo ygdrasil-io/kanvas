@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.QuadCapGM
 
 /**
@@ -22,32 +20,9 @@ class QuadCapWebGpuTest {
 
     @Test
     fun `QuadCapGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = QuadCapGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("quadcap")
-                ?: error("original-888/quadcap.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[QuadCapWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "quadcap-gpu")
-            // Score : 99.80 %. Hairline strokes, tiny 200 x 200 image,
-            // butt+tangent-extension vs round-cap geometry match almost
-            // pixel-perfect through the G3.4.3 `1 / resScale` synthesis.
-            val floor = 99.75
-            assertTrue(
-                cmp.similarity >= floor,
-                "QuadCapGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        // Score : 99.80 %. Hairline strokes, tiny 200 x 200 image,
+        // butt+tangent-extension vs round-cap geometry match almost
+        // pixel-perfect through the G3.4.3 `1 / resScale` synthesis.
+        runGpuCrossTest(QuadCapGM(), floor = 99.75, logTag = "QuadCapWebGpu")
     }
 }

@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.TinyBitmapGM
 
 /**
@@ -24,32 +22,9 @@ class TinyBitmapWebGpuTest {
 
     @Test
     fun `TinyBitmapGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = TinyBitmapGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("tinybitmap")
-                ?: error("original-888/tinybitmap.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[TinyBitmapWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "tinybitmap-gpu")
-            // Landing score 100.00 % -- byte-exact match (1 x 1 source
-            // means tile mode is identity, paint alpha modulation
-            // collapses to a deterministic per-pixel multiply).
-            val floor = 99.95
-            assertTrue(
-                cmp.similarity >= floor,
-                "TinyBitmapGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        // Landing score 100.00 % -- byte-exact match (1 x 1 source
+        // means tile mode is identity, paint alpha modulation
+        // collapses to a deterministic per-pixel multiply).
+        runGpuCrossTest(TinyBitmapGM(), floor = 99.95, logTag = "TinyBitmapWebGpu")
     }
 }

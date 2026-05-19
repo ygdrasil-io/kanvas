@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.PointsGM
 
 /**
@@ -23,33 +21,10 @@ class PointsWebGpuTest {
 
     @Test
     fun `PointsGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = PointsGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("points")
-                ?: error("original-888/points.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[PointsWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "points-gpu")
-            // Floor : PointsGM lands at ~99.45 % on the GPU backend
-            // (matching the CPU ratchet at 99.44 %), so the floor sits
-            // a small margin below to ride out hairline-rounding wobble
-            // between runs.
-            val floor = 99.0
-            assertTrue(
-                cmp.similarity >= floor,
-                "PointsGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        // Floor : PointsGM lands at ~99.45 % on the GPU backend
+        // (matching the CPU ratchet at 99.44 %), so the floor sits
+        // a small margin below to ride out hairline-rounding wobble
+        // between runs.
+        runGpuCrossTest(PointsGM(), floor = 99.0)
     }
 }
