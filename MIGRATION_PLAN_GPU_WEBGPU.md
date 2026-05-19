@@ -557,6 +557,18 @@ Le bitmap-shader pipeline (G5.1) sait maintenant lifter un texel non-sRGB dans l
 
 **Différés explicitement** : Rec.2020 (TF linear ou PQ — il faut un nouveau slot de coefs TF dans l'uniform, le shader actuel hardcode sRGB EOTF/OETF), Adobe RGB (TF gamma 2.2, idem), ProPhoto (gamut + TF différents), HDR PQ/HLG (luminance scaling + OOTF). La détection côté hôte se base sur `cs.transferFnHash != sRGB.transferFnHash` → fallback sur le fast path (uploaded as-is), donc les sources Rec.2020 etc. sortent visuellement comme avant G5.3 — pas de régression mais pas non plus de transform appliquée.
 
+### G5.3.x — Texture color management (Rec.2020 linear + Adobe RGB)
+
+Extension de G5.3 pour couvrir les sources dont le TF classifie comme `sRGBish` mais n'est pas exactement la courbe sRGB. Ajoute un troisième mode dans la sentinel `csFlags.x` (`csMode = 2`) qui consomme 7 coefs TF parametriques uploadés depuis l'hôte, mirror byte-pour-byte de `SkcmsTransferFunction` et de l'eval `SkcmsTransferFunctionEval` côté CPU.
+
+- [x] [`bitmap_shader.wgsl`](gpu-raster/src/main/resources/shaders/bitmap_shader.wgsl) : ajoute `csTfParams0: vec4f` + `csTfParams1: vec4f` à l'uniform (offsets 128 / 144, total = 160 bytes — `IMAGE_RECT_UNIFORM_SIZE` passe de 128 à 160). Helper `parametric_tf(v)` qui évalue la forme paramétrique Skia 7-floats `(g, a, b, c, d, e, f)` (`y = (a*x + b)^g + e` si `x >= d`, sinon `y = c*x + f`). Nouvelle branche `csMode == 2` qui appelle `parametric_tf` au lieu de `srgb_to_linear` ; l'OETF de sortie reste sRGB (l'intermediate target ne change pas).
+- [x] [`aa_stencil_cover_bitmap_shader.wgsl`](gpu-raster/src/main/resources/shaders/aa_stencil_cover_bitmap_shader.wgsl) : même extension pour conserver la parité colorspace avec le rect pipeline. Uniform passe de 4272 à 4304 bytes (`AA_STENCIL_COVER_BITMAP_SHADER_UNIFORM_SIZE`).
+- [x] [`SkWebGpuDevice.bitmapColorSpaceFor`](gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt) renvoie un `Triple(mode, matrix, tfParams)`. Détection : `classify(cs.transferFn) == SkcmsTFType.sRGBish` → mode 1 si TF == sRGB (G5.3 hardcoded EOTF), sinon mode 2 + coefs `(g, a, b, c, d, e, f)` extraits de `cs.transferFn`. PQ / HLG / Invalid → fallback identity (luminance scaling out-of-scope). Constante partagée `IDENTITY_CS_TF_PARAMS = (1, 1, 0, 0, 0, 0, 0)` (linear identity TF) pour modes 0 et 1.
+- [x] Plumb-through dans `ImageRectDraw` + `StencilCoverAaBitmapShaderDraw` + `BitmapShaderPayload` : champ `csTfParams: FloatArray` (7 floats), écrit dans le uniform via 2 vec4f (`(g, a, b, c)` + `(d, e, f, 0)`).
+- [x] Tests unitaires : 4 cas neufs dans [ImageRectColorSpaceTest](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ImageRectColorSpaceTest.kt) — (1) Rec.2020-linear `(64, 128, 32, 255)` → readback vs `SkColorSpaceXformSteps.apply` (tol 3), (2) Rec.2020-linear white round-trip (D65 gamut invariant, tol 2), (3) Adobe RGB / k2Dot2 `(64, 128, 32, 255)` (tol 3), (4) Adobe RGB white round-trip (tol 2). Zéro régression sur les 208 tests existants → 212 total.
+
+**Différés explicitement** : Rec.2020 PQ TF (luminance scaling 10000/refWhite + PQ EOTF), HDR HLG TF (OOTF Y-luminance scaling), color management côté paint (paint.colorFilter / paint.color). Ces TF classifient comme `PQ` / `HLG` côté `Skcms.classify` et sortent du fast path mode = 0 (visuellement inchangé vs avant G5.3.x).
+
 ---
 
 ## Phase G6 — Color management GPU
