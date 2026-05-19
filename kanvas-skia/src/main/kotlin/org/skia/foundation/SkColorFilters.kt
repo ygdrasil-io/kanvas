@@ -351,6 +351,14 @@ internal class SkSRGBGammaColorFilter(private val toSRGB: Boolean) : SkColorFilt
 internal class SkMatrixColorFilter(private val m: FloatArray) : SkColorFilter() {
     init { check(m.size == 20) }
 
+    /**
+     * Phase G-saveLayer-colorFilter -- read-only handle on the raw
+     * 20-float matrix for [asMatrixFilter] extraction. Callers must
+     * `copyOf()` before mutating ; the field itself is shared with the
+     * filter's per-pixel evaluator.
+     */
+    internal val exposedMatrix: FloatArray get() = m
+
     override fun filterColor4f(src: SkColor4f): SkColor4f {
         val r = src.fR; val g = src.fG; val b = src.fB; val a = src.fA
         val outR = m[0]  * r + m[1]  * g + m[2]  * b + m[3]  * a + m[4]
@@ -443,6 +451,15 @@ internal class SkBlendColorFilter(
     private val colour: SkColor,
     private val mode: SkBlendMode,
 ) : SkColorFilter() {
+
+    /**
+     * Phase G-saveLayer-colorFilter -- read-only handles on the
+     * constructor args for [asBlendModeFilter] extraction. Both are
+     * immutable scalars / enums so direct exposure is safe.
+     */
+    internal val exposedColour: SkColor get() = colour
+    internal val exposedMode: SkBlendMode get() = mode
+
     private val src4f: SkColor4f = SkColor4f(
         SkColorGetR(colour) / 255f,
         SkColorGetG(colour) / 255f,
@@ -573,4 +590,79 @@ internal fun blendPremul(
         )
     }
     return out
+}
+
+// -- Backend-facing extractors ----------------------------------------------
+//
+// Phase G-saveLayer-colorFilter -- a small public read-only API that lets
+// non-foundation backends (e.g. :gpu-raster) detect the common
+// [SkColorFilter] shapes without depending on the `internal` concrete
+// classes. The variants in scope are the two SkColorFilters that the
+// WebGPU layer-composite shader supports : Blend (constant colour applied
+// with a [SkBlendMode] to each pixel) and Matrix (4x5 affine RGBA in /
+// RGBA out). All other variants return `null` -- backends fall back to
+// the no-filter composite path for the unsupported cases (or to CPU
+// rasterisation upstream of the dispatch).
+
+/**
+ * Read-only descriptor of an [SkColorFilters.Blend] filter -- the constant
+ * source colour + the blend mode that combines it with the input pixel.
+ * Returned by [SkColorFilter.asBlendModeFilter] when (and only when) the
+ * receiver is a `Blend` filter.
+ */
+public data class SkBlendModeFilterParams(
+    /** The constant colour used as the *src* of the per-pixel blend. */
+    public val colour: SkColor,
+    /** The blend mode applied with [colour] as src and the pixel as dst. */
+    public val mode: SkBlendMode,
+)
+
+/**
+ * Read-only descriptor of an [SkColorFilters.Matrix] filter -- the 20
+ * row-major floats of the 4 x 5 affine colour matrix. Returned by
+ * [SkColorFilter.asMatrixFilter] when (and only when) the receiver is a
+ * `Matrix` filter. The returned array is a defensive copy.
+ *
+ * Layout : row-major, same as [SkColorFilters.Matrix] :
+ *
+ * ```
+ *   row 0 : r11 r12 r13 r14 r15   (R coefficients + bias)
+ *   row 1 : r21 r22 r23 r24 r25
+ *   row 2 : r31 r32 r33 r34 r35
+ *   row 3 : r41 r42 r43 r44 r45
+ * ```
+ */
+public data class SkMatrixFilterParams(
+    /** 20 row-major floats : 4 rows of (R, G, B, A coefficients + bias). */
+    public val matrix: FloatArray,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is SkMatrixFilterParams && matrix.contentEquals(other.matrix)
+    override fun hashCode(): Int = matrix.contentHashCode()
+}
+
+/**
+ * Extract the parameters of an [SkColorFilters.Blend] filter, or `null`
+ * if the receiver is any other [SkColorFilter] variant (matrix, table,
+ * compose, lerp, sRGB gamma, working-CS wrapper, ...).
+ *
+ * Backends that can express the per-pixel `Blend(colour, mode)` in their
+ * fragment-side pipeline (e.g. the WebGPU layer composite) use this to
+ * decide whether to fold the filter in or fall back to a no-filter
+ * composite path.
+ */
+public fun SkColorFilter.asBlendModeFilter(): SkBlendModeFilterParams? {
+    val f = this as? SkBlendColorFilter ?: return null
+    return SkBlendModeFilterParams(colour = f.exposedColour, mode = f.exposedMode)
+}
+
+/**
+ * Extract the row-major 4 x 5 matrix of an [SkColorFilters.Matrix]
+ * filter, or `null` if the receiver is any other [SkColorFilter]
+ * variant. The returned [FloatArray] is a defensive copy -- mutating it
+ * does not affect the underlying filter.
+ */
+public fun SkColorFilter.asMatrixFilter(): SkMatrixFilterParams? {
+    val f = this as? SkMatrixColorFilter ?: return null
+    return SkMatrixFilterParams(matrix = f.exposedMatrix.copyOf())
 }
