@@ -660,7 +660,7 @@ L'intermediate texture est passé de `RGBA8Unorm` à `RGBA16Float`. Les shaders 
 
 ## Travaux parallèles possibles
 
-- **Texte sur GPU** — réutilise le pipeline texte (master plan T1-T5) en uploadant les glyphes raster en atlas GPU. Peut être livré après G5.
+- **Texte sur GPU** — ✅ **livré par construction**. `SkCanvas.drawTextBlob` / `drawString` décomposent les glyphes en `SkPath` via `SkFont.makeTextPath` puis routent vers `SkDevice.drawPath`, que `SkWebGpuDevice` implémente déjà bout-en-bout (multi-contour concave via stencil-and-cover, G3.3b.2b). G8-scaffolding (slice de vérification, [TextSmokeWebGpuTest.kt](gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TextSmokeWebGpuTest.kt)) mesure `ColorWheelNativeGM` à 99.53 % de similarité contre l'oracle Skia upstream (17 / 3584 pixels off, drift sub-pixel AA hairline). Un pipeline atlas dédié (`GrAtlasManager` style) reste un futur upgrade de perf si le path-fill devient un bottleneck pour de gros runs ; aucun motif fonctionnel ne le justifie aujourd'hui.
 - **WebAssembly / Native targets** — wgpu4k est KMP (JS/WASM browser, Native expérimental). Si on convertit `kanvas-skia-gpu` en module KMP (ajouter un `commonMain` + `jvmMain`), on a *gratuitement* les autres cibles. Reporté tant que le projet reste JVM-only ; budget bas pour la conversion (la majorité du code est multiplatform-friendly).
 
 ---
