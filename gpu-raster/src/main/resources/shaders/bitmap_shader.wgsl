@@ -98,7 +98,7 @@
 // the colorspace layout contiguous ; total uniform size grows from
 // 128 to 192 bytes (32 for G5.3 csTfParams + 32 for G2.x clip slots).
 //
-// G5.2.2 (this slice) -- rotated / skewed bitmap shader. The host
+// G5.2.2 -- rotated / skewed bitmap shader. The host
 // always builds a 2x3 device-to-image affine `M^-1 = (ctm *
 // localMatrix)^-1` and ships it via `devToImageRow0` / `devToImageRow1`
 // (offsets 192 / 208). The fragment stage computes
@@ -109,6 +109,20 @@
 // pair is preserved in the uniform layout (it still drives the host-
 // side scissor rounding) but is no longer read by the fragment stage.
 // Total uniform size grows from 192 to 224 bytes (+32 for the affine).
+//
+// Phase H2 paint-colorFilter (this slice) -- the 6 trailing vec4f
+// slots carry an optional `SkColorFilter` (same packing as
+// `solid_color.wgsl` / `layer_composite.wgsl`). The filter is applied
+// after the G5.3 colorspace transform (so colours are already in the
+// sRGB-coded working space) and BEFORE the rrect clipShape coverage
+// multiply, matching Skia's `shader -> colorFilter -> maskFilter ->
+// clip -> blend` ordering. Filter slots sit AFTER the G5.2.2 affine
+// to keep the existing block contiguous ; total uniform size grows
+// from 224 to 320 bytes (+96 = 6 * 16 for the colorFilter payload).
+//
+//   colorFilterKindMode.x == 0 : no-op (default ; fast path).
+//   colorFilterKindMode.x == 1 : SkColorFilters.Blend(colour, mode).
+//   colorFilterKindMode.x == 2 : SkColorFilters.Matrix(20 floats).
 //
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
@@ -167,6 +181,21 @@ struct Uniforms {
     // coords, replacing the legacy `srcRect / dstRect` rect-affine.
     devToImageRow0:     vec4f, // offset 192 : (sx, kx, tx, _)
     devToImageRow1:     vec4f, // offset 208 : (ky, sy, ty, _)
+    // Phase H2 paint-colorFilter -- 6 trailing vec4f carrying an
+    // optional `SkColorFilter` (same packing as `solid_color.wgsl` /
+    // `layer_composite.wgsl`). The host-side packer
+    // ([SkWebGpuDevice.packLayerCompositeColorFilter]) is shared.
+    //   colorFilterKindMode.x == 0 -> no-op (default fast path).
+    //   colorFilterKindMode.x == 1 -> SkBlendModeFilter (param0 = premul
+    //                                  src colour, kindMode.y = mode).
+    //   colorFilterKindMode.x == 2 -> SkMatrixFilter (param0..3 = rows,
+    //                                  bias = additive 5th column).
+    colorFilterKindMode: vec4f, // offset 224 : (kind, blendMode, _, _)
+    colorFilterParam0:   vec4f, // offset 240
+    colorFilterParam1:   vec4f, // offset 256
+    colorFilterParam2:   vec4f, // offset 272
+    colorFilterParam3:   vec4f, // offset 288
+    colorFilterBias:     vec4f, // offset 304
 };
 
 // Tile-mode constants -- mirror `SkTileMode` ordinals.
@@ -231,6 +260,91 @@ fn parametric_tf(v: f32) -> f32 {
         return c * clamped + f;
     }
     return pow(a * clamped + b, g) + e;
+}
+
+// Phase H2 paint-colorFilter -- pure-float blend on premul RGBA. Same
+// dispatch table as `solid_color.wgsl`'s `blend_premul` / shared with
+// `layer_composite.wgsl`. Inputs are premul ; output is premul.
+// Unsupported modes (separable / HSL) fall through to identity src ;
+// the host-side packer leaves `kind = 0` for unsupported variants so
+// the branch is defensive only.
+fn blend_premul(s: vec4f, d: vec4f, mode: u32) -> vec4f {
+    let sa = s.a; let da = d.a;
+    if (mode == 0u) { return vec4f(0.0); }
+    if (mode == 1u) { return s; }
+    if (mode == 2u) { return d; }
+    if (mode == 3u) {
+        let k = 1.0 - sa;
+        return vec4f(s.r + d.r * k, s.g + d.g * k, s.b + d.b * k, sa + da * k);
+    }
+    if (mode == 4u) {
+        let k = 1.0 - da;
+        return vec4f(d.r + s.r * k, d.g + s.g * k, d.b + s.b * k, da + sa * k);
+    }
+    if (mode == 5u) { return s * da; }
+    if (mode == 6u) { return d * sa; }
+    if (mode == 7u) { return s * (1.0 - da); }
+    if (mode == 8u) { return d * (1.0 - sa); }
+    if (mode == 9u) {
+        let k = 1.0 - sa;
+        return vec4f(s.r * da + d.r * k, s.g * da + d.g * k,
+                     s.b * da + d.b * k, sa * da + da * k);
+    }
+    if (mode == 10u) {
+        let k = 1.0 - da;
+        return vec4f(d.r * sa + s.r * k, d.g * sa + s.g * k,
+                     d.b * sa + s.b * k, da * sa + sa * k);
+    }
+    if (mode == 11u) {
+        let ks = 1.0 - sa; let kd = 1.0 - da;
+        return vec4f(s.r * kd + d.r * ks, s.g * kd + d.g * ks,
+                     s.b * kd + d.b * ks, sa * kd + da * ks);
+    }
+    if (mode == 12u) {
+        return min(vec4f(1.0), s + d);
+    }
+    if (mode == 13u) { return s * d; }
+    if (mode == 14u) { return s + d - s * d; }
+    return s;
+}
+
+// Phase H2 paint-colorFilter -- apply the optional `SkColorFilter` to
+// an unpremul RGBA source colour (already in the sRGB-coded working
+// space ; the G5.3 colorspace transform has run upstream). Returns
+// filtered unpremul RGBA ; `kind == 0` is the no-op fast path
+// (identical to the pre-slice output).
+fn apply_color_filter(c_un: vec4f) -> vec4f {
+    let kind = u32(uniforms.colorFilterKindMode.x + 0.5);
+    if (kind == 1u) {
+        // SkBlendModeFilter : `param0` is the premul constant src ;
+        // premul the dst, run blend_premul, unpremul before returning
+        // so the call site can reuse the existing premul pipeline.
+        let mode = u32(uniforms.colorFilterKindMode.y + 0.5);
+        let a = c_un.a;
+        let dst_premul = vec4f(c_un.r * a, c_un.g * a, c_un.b * a, a);
+        let out_premul = blend_premul(uniforms.colorFilterParam0, dst_premul, mode);
+        let oa = out_premul.a;
+        if (oa <= 0.0) { return vec4f(0.0); }
+        let inv = 1.0 / oa;
+        return vec4f(out_premul.r * inv, out_premul.g * inv, out_premul.b * inv, oa);
+    }
+    if (kind == 2u) {
+        // SkMatrixFilter : Param0..3 are rows of coefficients ; bias is
+        // the additive 5th column. Output is clamped to `[0, 1]` before
+        // re-premul at the call site (matches SkMatrixColorFilter's
+        // storage-edge clamp).
+        let out_r = dot(uniforms.colorFilterParam0, c_un) + uniforms.colorFilterBias.x;
+        let out_g = dot(uniforms.colorFilterParam1, c_un) + uniforms.colorFilterBias.y;
+        let out_b = dot(uniforms.colorFilterParam2, c_un) + uniforms.colorFilterBias.z;
+        let out_a = dot(uniforms.colorFilterParam3, c_un) + uniforms.colorFilterBias.w;
+        return vec4f(
+            clamp(out_r, 0.0, 1.0),
+            clamp(out_g, 0.0, 1.0),
+            clamp(out_b, 0.0, 1.0),
+            clamp(out_a, 0.0, 1.0),
+        );
+    }
+    return c_un;
 }
 
 // G2.x -- analytic coverage of an axis-aligned rounded rect at fragment
@@ -351,17 +465,27 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         );
     }
 
+    // Phase H2 paint-colorFilter -- run the optional `SkColorFilter`
+    // on the unpremul (sRGB-coded) RGBA before the premul + paint
+    // modulation. Skia's stage order is `shader -> colorFilter ->
+    // maskFilter -> clip -> blend` ; the bitmap shader is the "shader"
+    // stage (G5.3 colorspace transform already ran), `paintColor`
+    // contributes the paint.alpha modulation, and the rrect clip mod
+    // below covers the clip step. The fast path (kind == 0) returns
+    // the input unchanged so the bytes stay bit-iso when no filter is
+    // attached.
+    let filtered_un = apply_color_filter(vec4f(src_rgb.r, src_rgb.g, src_rgb.b, sampled.a));
     // The uploaded texture carries **unpremul** source-encoded bytes
     // (SkImage convention -- post-G5.3 the source colorspace can be
     // non-sRGB ; the transform branch above lifts those texels into
     // sRGB-encoded values before premul). Multiply RGB by alpha to
     // match the premul intermediate convention. paintColor multiplies
-    // the result so the paint.alpha / color filter (future G5.x) can
-    // fold in at no extra pipeline cost ; default is (1, 1, 1, 1).
-    var pa = sampled.a * uniforms.paintColor.a;
-    var pr = src_rgb.r * sampled.a * uniforms.paintColor.r;
-    var pg = src_rgb.g * sampled.a * uniforms.paintColor.g;
-    var pb = src_rgb.b * sampled.a * uniforms.paintColor.b;
+    // the result so the paint.alpha modulation folds in at no extra
+    // pipeline cost ; default is (1, 1, 1, 1).
+    var pa = filtered_un.a * uniforms.paintColor.a;
+    var pr = filtered_un.r * filtered_un.a * uniforms.paintColor.r;
+    var pg = filtered_un.g * filtered_un.a * uniforms.paintColor.g;
+    var pb = filtered_un.b * filtered_un.a * uniforms.paintColor.b;
 
     // G2.x -- analytical clip-shape coverage. clipKind == 0 means "no
     // shape clip" (legacy rect-only ; the integer scissor is the only
