@@ -54,6 +54,15 @@
 // bytes (32 for G5.3.x csTfParams + 32 for G2.x clip slots) ; the
 // edge-segment tail shifts forward by 64 bytes.
 //
+// G5.2.2 (this slice) -- rotated / skewed bitmap shader. The host
+// always builds the 2x3 device-to-image affine and ships it via
+// `devToImageRow0` / `devToImageRow1`. The fragment stage maps the
+// fragment center directly through the affine ; the legacy
+// `srcRect / dstRect` pair is kept in the layout for host-side
+// scissor reuse but is no longer consumed by the fragment math.
+// Total uniform size grows from 4336 to 4368 bytes (+32 bytes for
+// the affine) ; the edge tail shifts forward by 32 bytes.
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {
@@ -70,8 +79,15 @@ struct Uniforms {
     // G2.x -- analytical clip-shape payload, mirrors `bitmap_shader.wgsl`.
     clipShapeBounds:    vec4f,                // offset  192 : (l, t, r, b) device-px
     clipShapeRadiiKind: vec4f,                // offset  208 : (rx, ry, clipKind, _)
-    edgeCountPad:       vec4f,                // offset  224 : .x = edgeCount as bit-reinterp f32
-    edges:              array<vec4f, 256>,    // offset  240 : (Ax, Ay, Bx, By) per edge
+    // G5.2.2 -- 2x3 device-to-image affine (`M^-1 = (ctm * localMatrix)^-1`).
+    // Replaces the srcRect/dstRect rect-affine in the fragment math ;
+    // mirrors `bitmap_shader.wgsl`'s offsets 192/208 (but here those
+    // offsets are already taken by the clip slots, so the affine sits
+    // immediately after).
+    devToImageRow0:     vec4f,                // offset  224 : (sx, kx, tx, _)
+    devToImageRow1:     vec4f,                // offset  240 : (ky, sy, ty, _)
+    edgeCountPad:       vec4f,                // offset  256 : .x = edgeCount as bit-reinterp f32
+    edges:              array<vec4f, 256>,    // offset  272 : (Ax, Ay, Bx, By) per edge
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -193,17 +209,18 @@ fn clipShapeCoverage(p: vec2f) -> f32 {
 }
 
 // Sample the bitmap pattern at device-pixel position `p`. Mirrors the
-// fragment body of `bitmap_shader.wgsl` (same dst -> src affine,
-// same per-axis decal check, same csMode transform, same premul + paint
-// modulation). Returns premul RGBA in the sRGB-coded working space.
+// fragment body of `bitmap_shader.wgsl` (same affine map, same per-axis
+// decal check, same csMode transform, same premul + paint modulation).
+// Returns premul RGBA in the sRGB-coded working space.
 fn sampleBitmap(p: vec2f) -> vec4f {
-    let dst_w = uniforms.dstRect.z - uniforms.dstRect.x;
-    let dst_h = uniforms.dstRect.w - uniforms.dstRect.y;
-    let src_w = uniforms.srcRect.z - uniforms.srcRect.x;
-    let src_h = uniforms.srcRect.w - uniforms.srcRect.y;
-
-    let sx = uniforms.srcRect.x + (p.x - uniforms.dstRect.x) * (src_w / dst_w);
-    let sy = uniforms.srcRect.y + (p.y - uniforms.dstRect.y) * (src_h / dst_h);
+    // G5.2.2 -- 2x3 device-to-image affine. See bitmap_shader.wgsl for
+    // the derivation comment ; same semantics here.
+    let sx = uniforms.devToImageRow0.x * p.x
+           + uniforms.devToImageRow0.y * p.y
+           + uniforms.devToImageRow0.z;
+    let sy = uniforms.devToImageRow1.x * p.x
+           + uniforms.devToImageRow1.y * p.y
+           + uniforms.devToImageRow1.z;
 
     let u = sx / uniforms.imageSize.x;
     let v = sy / uniforms.imageSize.y;
