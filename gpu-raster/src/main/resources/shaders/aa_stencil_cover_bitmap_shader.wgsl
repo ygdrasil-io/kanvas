@@ -54,7 +54,7 @@
 // bytes (32 for G5.3.x csTfParams + 32 for G2.x clip slots) ; the
 // edge-segment tail shifts forward by 64 bytes.
 //
-// G5.2.2 (this slice) -- rotated / skewed bitmap shader. The host
+// G5.2.2 -- rotated / skewed bitmap shader. The host
 // always builds the 2x3 device-to-image affine and ships it via
 // `devToImageRow0` / `devToImageRow1`. The fragment stage maps the
 // fragment center directly through the affine ; the legacy
@@ -62,6 +62,16 @@
 // scissor reuse but is no longer consumed by the fragment math.
 // Total uniform size grows from 4336 to 4368 bytes (+32 bytes for
 // the affine) ; the edge tail shifts forward by 32 bytes.
+//
+// Phase H2 paint-colorFilter (this slice) -- 6 trailing vec4f slots
+// carry an optional `SkColorFilter`, mirror of `bitmap_shader.wgsl`'s
+// extension. The filter is applied AFTER the G5.3 colorspace
+// transform (`src_rgb` already sRGB-coded) and BEFORE the
+// `clipShapeCoverage` rrect multiply, matching Skia's `shader ->
+// colorFilter -> maskFilter -> clip -> blend` ordering. The slots sit
+// AFTER the G5.2.2 affine and BEFORE `edgeCountPad`, so the edge tail
+// shifts forward by 96 bytes ; total uniform size grows from 4368 to
+// 4464 (+96 = 6 * 16 for the colorFilter payload).
 //
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
@@ -86,8 +96,18 @@ struct Uniforms {
     // immediately after).
     devToImageRow0:     vec4f,                // offset  224 : (sx, kx, tx, _)
     devToImageRow1:     vec4f,                // offset  240 : (ky, sy, ty, _)
-    edgeCountPad:       vec4f,                // offset  256 : .x = edgeCount as bit-reinterp f32
-    edges:              array<vec4f, 256>,    // offset  272 : (Ax, Ay, Bx, By) per edge
+    // Phase H2 paint-colorFilter -- 6 trailing vec4f mirroring
+    // `bitmap_shader.wgsl`'s tail. Same packing, same fast-path semantics
+    // (kind == 0 -> no-op). Slots sit between the G5.2.2 affine and
+    // `edgeCountPad` ; the edge tail shifts forward by 96 bytes.
+    colorFilterKindMode: vec4f,               // offset  256 : (kind, blendMode, _, _)
+    colorFilterParam0:   vec4f,               // offset  272
+    colorFilterParam1:   vec4f,               // offset  288
+    colorFilterParam2:   vec4f,               // offset  304
+    colorFilterParam3:   vec4f,               // offset  320
+    colorFilterBias:     vec4f,               // offset  336
+    edgeCountPad:       vec4f,                // offset  352 : .x = edgeCount as bit-reinterp f32
+    edges:              array<vec4f, 256>,    // offset  368 : (Ax, Ay, Bx, By) per edge
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -163,6 +183,79 @@ fn parametric_tf(v: f32) -> f32 {
         return c * clamped + f;
     }
     return pow(a * clamped + b, g) + e;
+}
+
+// Phase H2 paint-colorFilter -- pure-float blend on premul RGBA.
+// Byte-for-byte copy of `bitmap_shader.wgsl`'s helper ; kept local so
+// this module stays self-contained.
+fn blend_premul(s: vec4f, d: vec4f, mode: u32) -> vec4f {
+    let sa = s.a; let da = d.a;
+    if (mode == 0u) { return vec4f(0.0); }
+    if (mode == 1u) { return s; }
+    if (mode == 2u) { return d; }
+    if (mode == 3u) {
+        let k = 1.0 - sa;
+        return vec4f(s.r + d.r * k, s.g + d.g * k, s.b + d.b * k, sa + da * k);
+    }
+    if (mode == 4u) {
+        let k = 1.0 - da;
+        return vec4f(d.r + s.r * k, d.g + s.g * k, d.b + s.b * k, da + sa * k);
+    }
+    if (mode == 5u) { return s * da; }
+    if (mode == 6u) { return d * sa; }
+    if (mode == 7u) { return s * (1.0 - da); }
+    if (mode == 8u) { return d * (1.0 - sa); }
+    if (mode == 9u) {
+        let k = 1.0 - sa;
+        return vec4f(s.r * da + d.r * k, s.g * da + d.g * k,
+                     s.b * da + d.b * k, sa * da + da * k);
+    }
+    if (mode == 10u) {
+        let k = 1.0 - da;
+        return vec4f(d.r * sa + s.r * k, d.g * sa + s.g * k,
+                     d.b * sa + s.b * k, da * sa + sa * k);
+    }
+    if (mode == 11u) {
+        let ks = 1.0 - sa; let kd = 1.0 - da;
+        return vec4f(s.r * kd + d.r * ks, s.g * kd + d.g * ks,
+                     s.b * kd + d.b * ks, sa * kd + da * ks);
+    }
+    if (mode == 12u) {
+        return min(vec4f(1.0), s + d);
+    }
+    if (mode == 13u) { return s * d; }
+    if (mode == 14u) { return s + d - s * d; }
+    return s;
+}
+
+// Phase H2 paint-colorFilter -- apply the optional `SkColorFilter` to
+// an unpremul RGBA source colour. Mirror of `bitmap_shader.wgsl`'s
+// helper, byte-for-byte.
+fn apply_color_filter(c_un: vec4f) -> vec4f {
+    let kind = u32(uniforms.colorFilterKindMode.x + 0.5);
+    if (kind == 1u) {
+        let mode = u32(uniforms.colorFilterKindMode.y + 0.5);
+        let a = c_un.a;
+        let dst_premul = vec4f(c_un.r * a, c_un.g * a, c_un.b * a, a);
+        let out_premul = blend_premul(uniforms.colorFilterParam0, dst_premul, mode);
+        let oa = out_premul.a;
+        if (oa <= 0.0) { return vec4f(0.0); }
+        let inv = 1.0 / oa;
+        return vec4f(out_premul.r * inv, out_premul.g * inv, out_premul.b * inv, oa);
+    }
+    if (kind == 2u) {
+        let out_r = dot(uniforms.colorFilterParam0, c_un) + uniforms.colorFilterBias.x;
+        let out_g = dot(uniforms.colorFilterParam1, c_un) + uniforms.colorFilterBias.y;
+        let out_b = dot(uniforms.colorFilterParam2, c_un) + uniforms.colorFilterBias.z;
+        let out_a = dot(uniforms.colorFilterParam3, c_un) + uniforms.colorFilterBias.w;
+        return vec4f(
+            clamp(out_r, 0.0, 1.0),
+            clamp(out_g, 0.0, 1.0),
+            clamp(out_b, 0.0, 1.0),
+            clamp(out_a, 0.0, 1.0),
+        );
+    }
+    return c_un;
 }
 
 // G2.x -- analytic rrect coverage. Byte-for-byte copy of
@@ -264,10 +357,16 @@ fn sampleBitmap(p: vec2f) -> vec4f {
         );
     }
 
-    let pa = sampled.a * uniforms.paintColor.a;
-    let pr = src_rgb.r * sampled.a * uniforms.paintColor.r;
-    let pg = src_rgb.g * sampled.a * uniforms.paintColor.g;
-    let pb = src_rgb.b * sampled.a * uniforms.paintColor.b;
+    // Phase H2 paint-colorFilter -- run the optional `SkColorFilter`
+    // on the unpremul (sRGB-coded) RGBA before the premul + paint
+    // modulation. Order matches `bitmap_shader.wgsl` (shader stage
+    // sample/colorspace -> colorFilter -> premul -> clip in the
+    // caller).
+    let filtered_un = apply_color_filter(vec4f(src_rgb.r, src_rgb.g, src_rgb.b, sampled.a));
+    let pa = filtered_un.a * uniforms.paintColor.a;
+    let pr = filtered_un.r * filtered_un.a * uniforms.paintColor.r;
+    let pg = filtered_un.g * filtered_un.a * uniforms.paintColor.g;
+    let pb = filtered_un.b * filtered_un.a * uniforms.paintColor.b;
     return vec4f(pr, pg, pb, pa);
 }
 
