@@ -4,16 +4,22 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
+import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorGREEN
+import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
 import org.graphiks.math.SkRect
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
+import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkTileMode
 
 /**
  * G2.x -- analytical clipPath for axis-aligned simple shapes (circle /
@@ -135,6 +141,138 @@ class ClipPathShapeWebGpuTest {
         }
     }
 
+    // ─── G2.x slice 2 -- analytical clip on bitmap-shader pipelines ───
+
+    @Test
+    fun `circle clip masks drawImageRect to circle interior`() {
+        // `bitmap_shader.wgsl` rect pipeline -- the 4x4 quadrant image
+        // is scaled up to fill the canvas, then clipped to a centred
+        // circle. Interior pixels carry the image samples ; exterior
+        // pixels stay at the white background.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val image = makeQuadrantImage(QUAD_SIDE)
+            val gpuRgba = renderGpu(ctx) { canvas ->
+                canvas.clipPath(SkPath.Circle(32f, 32f, 20f), doAntiAlias = false)
+                canvas.drawImageRect(
+                    image,
+                    SkRect.MakeWH(QUAD_SIDE.toFloat(), QUAD_SIDE.toFloat()),
+                    SkRect.MakeLTRB(0f, 0f, 64f, 64f),
+                    SkSamplingOptions.nearest(),
+                )
+            }
+            // Interior of the circle (top-left quadrant of the upscaled
+            // image lands at red ; bottom-right quadrant at black).
+            // (32, 32) is in the bottom-right quadrant (right-of-centre +
+            // below-centre) so the source pixel is black.
+            assertSamplesNotWhite(gpuRgba, listOf(32 to 32, 22 to 32, 32 to 22, 42 to 32, 32 to 42))
+            // Outside the circle : background untouched.
+            assertSamplesWhite(gpuRgba, listOf(5 to 5, 60 to 5, 5 to 60, 60 to 60))
+        }
+    }
+
+    @Test
+    fun `rrect clip masks drawImageRect with rounded corners`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val image = makeQuadrantImage(QUAD_SIDE)
+            val rrect = SkRRect.MakeRectXY(SkRect.MakeLTRB(8f, 8f, 56f, 56f), 12f, 12f)
+            val gpuRgba = renderGpu(ctx) { canvas ->
+                canvas.clipRRect(rrect, doAntiAlias = false)
+                canvas.drawImageRect(
+                    image,
+                    SkRect.MakeWH(QUAD_SIDE.toFloat(), QUAD_SIDE.toFloat()),
+                    SkRect.MakeLTRB(0f, 0f, 64f, 64f),
+                    SkSamplingOptions.nearest(),
+                )
+            }
+            // Centre + straight-edge mid-points = inside the rrect, image
+            // samples paint there.
+            assertSamplesNotWhite(gpuRgba, listOf(32 to 32, 32 to 12, 12 to 32, 52 to 32, 32 to 52))
+            // Far corners = outside the rrect bbox -> background white.
+            assertSamplesWhite(gpuRgba, listOf(2 to 2, 62 to 2, 2 to 62, 62 to 62))
+            // Just outside the rrect's rounded corner -> still background.
+            assertSamplesWhite(gpuRgba, listOf(9 to 9, 54 to 9, 9 to 54, 54 to 54))
+        }
+    }
+
+    @Test
+    fun `rrect clip masks bitmap shader rect fill via paint shader`() {
+        // Routes through `drawBitmapShaderFillRect` (paint.shader is
+        // SkBitmapShader on path.isRect). The rrect clip masks the
+        // tiled image to the rrect interior.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val image = makeQuadrantImage(QUAD_SIDE)
+            val rrect = SkRRect.MakeRectXY(SkRect.MakeLTRB(8f, 8f, 56f, 56f), 12f, 12f)
+            val gpuRgba = renderGpu(ctx) { canvas ->
+                canvas.clipRRect(rrect, doAntiAlias = false)
+                val paint = SkPaint().apply {
+                    shader = image.makeShader(
+                        tileX = SkTileMode.kRepeat,
+                        tileY = SkTileMode.kRepeat,
+                        sampling = SkSamplingOptions.nearest(),
+                    )
+                }
+                canvas.drawRect(SkRect.MakeLTRB(0f, 0f, 64f, 64f), paint)
+            }
+            // Interior of the rrect : the repeating 4-pixel pattern
+            // paints, so the sampled colour is one of R / G / B / Bk
+            // (never white background).
+            assertSamplesNotWhite(gpuRgba, listOf(32 to 32, 12 to 32, 52 to 32, 32 to 12, 32 to 52))
+            // Outside the rrect bbox : background untouched.
+            assertSamplesWhite(gpuRgba, listOf(2 to 2, 62 to 2, 2 to 62, 62 to 62))
+            // Rounded-corner exterior : also background.
+            assertSamplesWhite(gpuRgba, listOf(9 to 9, 54 to 9, 9 to 54, 54 to 54))
+        }
+    }
+
+    @Test
+    fun `oval clip masks bitmap shader fill on circle path (AA stencil cover)`() {
+        // Routes through `aa_stencil_cover_bitmap_shader.wgsl` -- the
+        // path is non-rect (circle) and the paint is AA, so the AA
+        // stencil-and-cover bitmap pipeline takes over. The oval clip
+        // intersects the circle path, narrowing the painted region.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val image = makeQuadrantImage(QUAD_SIDE)
+            val ovalBounds = SkRect.MakeLTRB(12f, 18f, 52f, 46f) // narrow oval
+            val gpuRgba = renderGpu(ctx) { canvas ->
+                canvas.clipPath(SkPath.Oval(ovalBounds), doAntiAlias = false)
+                val paint = SkPaint().apply {
+                    shader = image.makeShader(
+                        tileX = SkTileMode.kRepeat,
+                        tileY = SkTileMode.kRepeat,
+                        sampling = SkSamplingOptions.nearest(),
+                    )
+                    isAntiAlias = true
+                }
+                // Larger circle path : the AA stencil-and-cover bitmap
+                // pipeline kicks in (path.isRect == null + AA + axis-
+                // aligned CTM/local matrix).
+                canvas.drawPath(SkPath.Circle(32f, 32f, 24f), paint)
+            }
+            // Centre of the intersection : both clip oval and circle
+            // path cover it ; the repeating image pattern paints
+            // (non-white).
+            assertSamplesNotWhite(gpuRgba, listOf(32 to 32))
+            // Outside the oval (far corners) : background untouched.
+            assertSamplesWhite(gpuRgba, listOf(2 to 2, 62 to 2, 2 to 62, 62 to 62))
+            // Inside the oval clip but outside the circle path : also
+            // background (the path's coverage is 0 there). The oval
+            // ends near (12, 32) and (52, 32) ; the circle reaches
+            // (8, 32) and (56, 32). The horizontal strip between the
+            // oval's vertical extent and the circle's edge is masked.
+            // Pick (32, 8) which is inside the circle but well above
+            // the oval's top edge (y=18).
+            assertSamplesWhite(gpuRgba, listOf(32 to 8, 32 to 56))
+        }
+    }
+
     @Test
     fun `clipRect intersected with circle keeps the tighter shape`() {
         val context = WebGpuContext.createOrNull()
@@ -207,6 +345,47 @@ class ClipPathShapeWebGpuTest {
     }
 
     /**
+     * Inverse of [assertSamplesWhite] : asserts the pixel is anything
+     * BUT white. Used by the bitmap-shader clipPath tests to confirm
+     * the image sampled inside the clip region (R / G / B / Bk
+     * quadrant colours, not the background).
+     */
+    private fun assertSamplesNotWhite(rgba: ByteArray, samples: List<Pair<Int, Int>>) {
+        for ((x, y) in samples) {
+            val idx = (y * W + x) * 4
+            val r = rgba[idx].toInt() and 0xFF
+            val g = rgba[idx + 1].toInt() and 0xFF
+            val b = rgba[idx + 2].toInt() and 0xFF
+            assertTrue(
+                r < 220 || g < 220 || b < 220,
+                "Expected non-background sample at ($x, $y) but got (R=$r, G=$g, B=$b)",
+            )
+        }
+    }
+
+    /**
+     * 4x4 image split into 4 colour quadrants : R / G / B / Bk. Same
+     * helper as the bitmap-shader test classes -- duplicated to keep
+     * this test class independent.
+     */
+    private fun makeQuadrantImage(side: Int): SkImage {
+        val bitmap = SkBitmap(side, side)
+        val half = side / 2
+        for (y in 0 until side) {
+            for (x in 0 until side) {
+                val color = when {
+                    x < half && y < half -> SK_ColorRED
+                    x >= half && y < half -> SK_ColorGREEN
+                    x < half && y >= half -> SK_ColorBLUE
+                    else -> SK_ColorBLACK
+                }
+                bitmap.setPixel(x, y, color)
+            }
+        }
+        return SkImage.Make(bitmap)
+    }
+
+    /**
      * Compare GPU vs CPU outputs byte-by-byte ; allow [tolerance]
      * channel diff to absorb the half-pixel AA boundary band where the
      * CPU's `SkAAClip` and the GPU's `rrect_cov` use slightly different
@@ -253,5 +432,8 @@ class ClipPathShapeWebGpuTest {
     private companion object {
         const val W: Int = 64
         const val H: Int = 64
+        // Side length of the 4-colour quadrant SkImage used by the
+        // bitmap-shader clip-on-non-rect cases.
+        const val QUAD_SIDE: Int = 4
     }
 }
