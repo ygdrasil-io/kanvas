@@ -1,0 +1,153 @@
+name: Test matrix (raster + GPU)
+
+# G7 cross-validation matrix. Two jobs in parallel :
+#  - `raster`  : :cpu-raster + :skia-integration-tests on ubuntu-latest.
+#                No native GPU driver dependency, fast runner.
+#  - `gpu`     : :gpu-raster on macos-latest. Needs a WebGPU adapter
+#                (wgpu4k-toolkit → Metal on macOS). The `-XstartOnFirstThread`
+#                requirement is handled by the per-module test task in
+#                `gpu-raster/build.gradle.kts`.
+#
+# Both jobs trigger on PRs that touch the test surface or any of the
+# modules that feed it. The matrix is intentionally split into separate
+# jobs (rather than `strategy.matrix`) so a missing WebGPU adapter on the
+# raster runner doesn't poison the raster job, and so the macOS runner
+# only runs the GPU-relevant test path (it costs ~10x more than ubuntu).
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'math/**'
+      - 'kanvas-skia/**'
+      - 'cpu-raster/**'
+      - 'gpu-raster/**'
+      - 'skia-integration-tests/**'
+      - 'integration-tests/**'
+      - 'kanvas-legacy/src/test/resources/**'
+      - 'buildSrc/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/test.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'math/**'
+      - 'kanvas-skia/**'
+      - 'cpu-raster/**'
+      - 'gpu-raster/**'
+      - 'skia-integration-tests/**'
+      - 'integration-tests/**'
+      - 'kanvas-legacy/src/test/resources/**'
+      - 'buildSrc/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  raster:
+    name: Raster tests (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run :cpu-raster + :skia-integration-tests
+        # GPU module deliberately skipped on the raster job — no driver,
+        # the WebGPU tests would all skip via Assumptions.assumeTrue and
+        # the matrix would mask a real GPU regression. The macos job
+        # below owns the GPU coverage.
+        run: |
+          ./gradlew --no-daemon \
+            :cpu-raster:test \
+            :skia-integration-tests:test \
+            :math:test \
+            :kanvas-skia:test
+
+      - name: Upload raster debug images
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raster-debug-images
+          path: |
+            cpu-raster/build/debug-images/
+            skia-integration-tests/build/debug-images/
+          if-no-files-found: ignore
+
+      - name: Upload raster test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raster-test-reports
+          path: |
+            cpu-raster/build/reports/tests/
+            skia-integration-tests/build/reports/tests/
+            cpu-raster/test-similarity-report.md
+            skia-integration-tests/test-similarity-report.md
+          if-no-files-found: ignore
+
+  gpu:
+    name: GPU tests (macos)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run :gpu-raster
+        # `:gpu-raster` test task injects `-XstartOnFirstThread` on
+        # macOS, plus `--add-opens=java.base/java.lang=ALL-UNNAMED` and
+        # `--enable-native-access=ALL-UNNAMED` (see build.gradle.kts).
+        # macOS runners ship a Metal adapter that wgpu4k-toolkit can
+        # bind via `WebGpuContext.createOrNull()` — when missing, the
+        # tests skip via `Assumptions.assumeTrue` rather than fail.
+        run: ./gradlew --no-daemon :gpu-raster:test
+
+      - name: Upload GPU debug images
+        # Cross-backend tests dump raster.png / gpu.png / diff.png /
+        # triptych.png under `gpu-raster/build/debug-images/` whenever
+        # either backend lands inside its `floor + 2 %` warning band.
+        # The triptych is the single file to open first when triaging.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-debug-images
+          path: gpu-raster/build/debug-images/
+          if-no-files-found: ignore
+
+      - name: Upload GPU test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-test-reports
+          path: |
+            gpu-raster/build/reports/tests/
+            gpu-raster/test-similarity-scores-webgpu.properties
+          if-no-files-found: ignore
