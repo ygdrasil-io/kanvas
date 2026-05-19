@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.ConcavePathsGM
 
 /**
@@ -26,29 +24,6 @@ class ConcavePathsWebGpuTest {
 
     @Test
     fun `ConcavePathsGM renders best-effort on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = ConcavePathsGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("concavepaths")
-                ?: error("original-888/concavepaths.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[ConcavePathsWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "concavepaths-gpu")
-            val floor = 99.25
-            assertTrue(
-                cmp.similarity >= floor,
-                "ConcavePathsGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        runGpuCrossTest(ConcavePathsGM(), floor = 99.25, logTag = "ConcavePathsWebGpu")
     }
 }

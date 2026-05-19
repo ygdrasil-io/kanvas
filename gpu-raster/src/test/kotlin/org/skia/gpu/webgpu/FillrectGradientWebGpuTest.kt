@@ -1,9 +1,7 @@
 package org.skia.gpu.webgpu
 
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
-import org.skia.testing.TestUtils
+import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.FillrectGradientGM
 
 /**
@@ -19,29 +17,10 @@ class FillrectGradientWebGpuTest {
 
     @Test
     fun `FillrectGradientGM renders close to reference PNG on the GPU backend`() {
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        context!!.use { ctx ->
-            val gm = FillrectGradientGM()
-            val gpuBitmap = WebGpuSink.draw(ctx, gm)
-            val reference = TestUtils.loadReferenceBitmap("fillrect_gradient")
-                ?: error("original-888/fillrect_gradient.png missing")
-
-            val cmp = TestUtils.compareBitmapsDetailed(
-                gpuBitmap, reference, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
-            )
-            println(
-                "[FillrectGradientWebGpu] similarity=${"%.2f".format(cmp.similarity)}%, " +
-                    "matching=${cmp.matchingPixels}/${cmp.totalPixels}, " +
-                    "maxDiff=${cmp.maxChannelDiff}",
-            )
-            TestUtils.saveDebugImage(gpuBitmap, "fillrect_gradient-gpu")
-            val floor = 95.70
-            assertTrue(
-                cmp.similarity >= floor,
-                "FillrectGradientGM regressed below floor : ${cmp.similarity}% < $floor%.",
-            )
-        }
+        runGpuCrossTest(
+            FillrectGradientGM(),
+            floor = 95.70,
+            logTag = "FillrectGradientWebGpu",
+        )
     }
 }
