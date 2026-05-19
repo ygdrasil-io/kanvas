@@ -973,6 +973,52 @@ public class SkWebGpuDevice(
     ) : PendingDraw
 
     /**
+     * G-suivi (round 17 follow-up) -- returns `true` when this pending
+     * draw would build a zero-size GPU vertex buffer, which makes
+     * `wgpu::setVertexBuffer` panic with "invalid size". Fan
+     * tessellation of multi-contour paths whose individual contours each
+     * carry fewer than 3 vertices (e.g. the stroker output of
+     * `FLT_EPSILON` / zero-extent rects in `StrokeRectGM`) emits an
+     * empty stencil-vertex array. The dispatch loop drops these draws
+     * silently — no fragments to render, same observable result as
+     * upstream Skia on degenerate paths.
+     *
+     * `coverVerts` is currently never empty for any caller
+     * (`bboxTrianglesFor` / `viewportTrianglesFor` always return 12
+     * floats), but the guard checks it too for future-proofing : any
+     * new producer that emits empty cover triangles will also be
+     * skipped cleanly instead of crashing the test runner.
+     *
+     * Non-stencil-cover variants ([PolygonDraw], [AaPolygonDraw]) keep
+     * their existing producer-side `n < 3` early returns in
+     * [drawPath] — they would also hit this filter as a safety net.
+     */
+    private fun PendingDraw.producesEmptyVertexBuffer(): Boolean = when (this) {
+        is PolygonDraw -> verts.isEmpty()
+        is AaPolygonDraw -> verts.isEmpty()
+        is StencilCoverPolygonDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
+        is StencilCoverAaPolygonDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
+        is StencilCoverAaGradientDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
+        is StencilCoverAaRadialGradientDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
+        is StencilCoverAaSweepGradientDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
+        is StencilCoverAaConicalGradientDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
+        is StencilCoverAaConicalFocalGradientDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
+        is StencilCoverAaBitmapShaderDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
+        // Rect / gradient-rect / image-rect / layer-composite draws use
+        // a full-screen-triangle in the vertex shader (no vertex buffer
+        // bound), so they never hit the panic path.
+        is RectDraw,
+        is LinearGradientRectDraw,
+        is RadialGradientRectDraw,
+        is SweepGradientRectDraw,
+        is ConicalGradientRectDraw,
+        is ConicalFocalGradientRectDraw,
+        is ConicalStripGradientRectDraw,
+        is ImageRectDraw,
+        is LayerCompositeDraw -> false
+    }
+
+    /**
      * G5.2.1 -- pre-computed bitmap-shader draw payload, shared by the
      * 3 path-shape branches (multi-contour / inverse-or-concave /
      * convex). Built once per [drawPath] from the shader's
@@ -5520,6 +5566,24 @@ public class SkWebGpuDevice(
         encoder: io.ygdrasil.webgpu.GPUCommandEncoder,
     ): List<DrawResources> {
         val colorView = intermediateView
+
+        // G-suivi (round 17 follow-up) -- drop pending draws whose vertex
+        // arrays would produce a zero-size GPU buffer. WebGPU panics in
+        // `setVertexBuffer` ("invalid size") on a 0-byte vertex binding,
+        // and an empty triangle list means no fragments to render — silent
+        // skip is the correct semantics (mirrors upstream Skia's behaviour
+        // on degenerate paths). The producer side can emit empty
+        // `stencilVerts` when `fanTessellateContours` returns an empty
+        // array (e.g. multi-contour paths where every individual contour
+        // has fewer than 3 vertices, as happens with the stroker output
+        // of `FLT_EPSILON` / zero-extent rects in `StrokeRectGM`).
+        // `coverVerts` is currently never empty (bbox / viewport quads are
+        // always 12 floats), but the guard covers it for future-proofing.
+        val survivors = pending.filterNot { it.producesEmptyVertexBuffer() }
+        if (survivors.size != pending.size) {
+            pending.clear()
+            pending.addAll(survivors)
+        }
 
         if (pending.isEmpty()) {
             // Explicit clear pass so the caller can read back the background.
