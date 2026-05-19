@@ -296,6 +296,18 @@ public class SkWebGpuDevice(
         val clipShapeBounds: FloatArray = FloatArray(4),
         val clipShapeRx: Float = 0f,
         val clipShapeRy: Float = 0f,
+        /**
+         * Phase G-direct-colorFilter -- optional packed `SkColorFilter`
+         * payload (6 vec4f = 24 floats) consumed by `solid_color.wgsl`'s
+         * `apply_color_filter` helper. Built by [packLayerCompositeColorFilter]
+         * (shared with the layer-composite shader -- same layout). When the
+         * paint carries no colour filter, this is an all-zero 24-element
+         * array : `colorFilterKindMode.x == 0` makes the shader's filter
+         * branch dead and the output is byte-identical to the pre-slice
+         * path. Same fallback for unsupported variants (Compose / Lerp /
+         * Table / sRGB-gamma / working-CS wrapper).
+         */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw {
         // Manual equals / hashCode to handle FloatArray equality
         // properly -- the per-element comparison is what the cross-
@@ -314,6 +326,7 @@ public class SkWebGpuDevice(
             if (!clipShapeBounds.contentEquals(other.clipShapeBounds)) return false
             if (clipShapeRx != other.clipShapeRx) return false
             if (clipShapeRy != other.clipShapeRy) return false
+            if (!colorFilterPacked.contentEquals(other.colorFilterPacked)) return false
             return true
         }
 
@@ -3418,6 +3431,17 @@ public class SkWebGpuDevice(
         // aligned coverage (and is redundant with the integer scissor
         // anyway -- we skip emitting CLIP_KIND_RRECT in that case).
         val (clipKind, clipBounds, clipRx, clipRy) = packClipShape(activeClipShape)
+        // Phase G-direct-colorFilter -- detect `paint.colorFilter` and
+        // pack it into the 6-vec4f payload consumed by
+        // `solid_color.wgsl`. Reuses [packLayerCompositeColorFilter]
+        // verbatim -- both shaders share the (kind, mode, 4 matrix
+        // rows, bias) layout. Unsupported variants (Compose / Lerp /
+        // Table / sRGB-gamma / working-CS wrapper) yield the all-zero
+        // identity payload and the filter is silently dropped, matching
+        // the saveLayer behaviour from #568.
+        val cf = paint.colorFilter
+        val colorFilterPacked = if (cf == null) ZERO_COLOR_FILTER_24
+                                else packLayerCompositeColorFilter(cf)
         pending.add(
             RectDraw(
                 x = scissor[0], y = scissor[1], w = scissor[2], h = scissor[3],
@@ -3434,6 +3458,7 @@ public class SkWebGpuDevice(
                 clipShapeBounds = clipBounds,
                 clipShapeRx = clipRx,
                 clipShapeRy = clipRy,
+                colorFilterPacked = colorFilterPacked,
             ),
         )
     }
@@ -6437,23 +6462,31 @@ public class SkWebGpuDevice(
             ),
         )
         // Layout : color (4) + outerBounds (4) + innerBounds (4) +
-        //          clipShapeBounds (4) + clipShapeRadiiKind (4) = 80 bytes.
+        //          clipShapeBounds (4) + clipShapeRadiiKind (4) +
+        //          colorFilterKindMode (4) + colorFilterParam0..3 (4*4) +
+        //          colorFilterBias (4) = 44 floats = 176 bytes.
         // Matches `Uniforms { color, outerBounds, innerBounds,
-        // clipShapeBounds, clipShapeRadiiKind }` in solid_color.wgsl.
+        // clipShapeBounds, clipShapeRadiiKind, colorFilterKindMode,
+        // colorFilterParam0..3, colorFilterBias }` in solid_color.wgsl.
         // For draws without an analytical clip shape, `clipKind = 0`
-        // skips the modulation step in the shader and the trailing
-        // bytes are unread (zeroes are fine).
-        context.queue.writeBuffer(
-            buf, 0uL,
-            ArrayBuffer.of(floatArrayOf(
-                d.r, d.g, d.b, d.a,
-                d.ol, d.ot, d.or, d.ob,
-                d.il, d.it, d.ir, d.ib,
-                d.clipShapeBounds[0], d.clipShapeBounds[1],
-                d.clipShapeBounds[2], d.clipShapeBounds[3],
-                d.clipShapeRx, d.clipShapeRy, d.clipKind, 0f,
-            )),
-        )
+        // skips the modulation step in the shader. For draws without a
+        // colour filter, the trailing 6 vec4f are all zeros and the
+        // shader's `colorFilterKindMode.x == 0` branch is a no-op.
+        val packed = FloatArray(44)
+        packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
+        packed[4] = d.ol; packed[5] = d.ot; packed[6] = d.or; packed[7] = d.ob
+        packed[8] = d.il; packed[9] = d.it; packed[10] = d.ir; packed[11] = d.ib
+        packed[12] = d.clipShapeBounds[0]; packed[13] = d.clipShapeBounds[1]
+        packed[14] = d.clipShapeBounds[2]; packed[15] = d.clipShapeBounds[3]
+        packed[16] = d.clipShapeRx; packed[17] = d.clipShapeRy
+        packed[18] = d.clipKind; packed[19] = 0f
+        // Phase G-direct-colorFilter -- 6 contiguous vec4f starting at
+        // vec4f index 5 (offset 80 bytes = float index 20). When the
+        // paint had no colour filter, [colorFilterPacked] is the shared
+        // [ZERO_COLOR_FILTER_24] sentinel, so the trailing 24 floats
+        // are zero and the shader's fast path stays warm.
+        System.arraycopy(d.colorFilterPacked, 0, packed, 20, 24)
+        context.queue.writeBuffer(buf, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = rectBindGroupLayout,
@@ -7612,13 +7645,22 @@ public class SkWebGpuDevice(
         /**
          * Size of the rect per-draw uniform :
          *   color (16) + outerBounds (16) + innerBounds (16) +
-         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 80 bytes.
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilterKindMode (16) + colorFilterParam0 (16) +
+         *   colorFilterParam1 (16) + colorFilterParam2 (16) +
+         *   colorFilterParam3 (16) + colorFilterBias (16) = 176 bytes.
          * G3.1.1 bumped from 32 to 48 to carry the optional annular
          * inner-rect bounds (degenerate for fill draws). G2.x extended
          * to 80 bytes to carry the optional analytical clip-shape
          * (kClipKind = 0 means "no shape clip", existing behaviour).
+         * Phase G-direct-colorFilter bumped from 80 to 176 bytes to
+         * carry the optional paint.colorFilter payload consumed by the
+         * `apply_color_filter` helper in `solid_color.wgsl`. Fast path
+         * (no filter) ships zeros for the trailing 96 bytes, the
+         * shader's `kind == 0` branch is a no-op and existing tests
+         * stay bit-iso.
          */
-        const val RECT_UNIFORM_SIZE: ULong = 80uL
+        const val RECT_UNIFORM_SIZE: ULong = 176uL
         /**
          * G2.x -- clip-shape kind packed into the third float of
          * `clipShapeRadiiKind` in the rect uniform. 0 means "no shape
@@ -7631,6 +7673,16 @@ public class SkWebGpuDevice(
         const val CLIP_KIND_RRECT: Float = 1f
         /** Zero-filled placeholder rect bounds for [CLIP_KIND_NONE] uniform packing. */
         val ZERO_RECT4: FloatArray = floatArrayOf(0f, 0f, 0f, 0f)
+        /**
+         * Phase G-direct-colorFilter -- shared identity payload for
+         * the 6-vec4f `colorFilter*` slots when a draw has no colour
+         * filter. Length 24 = 6 vec4f * 4 floats. Treated as read-only
+         * by the uniform packer ([buildRectDrawResources]). DO NOT
+         * MUTATE -- callers either copy or replace wholesale via
+         * [packLayerCompositeColorFilter] when they need a non-zero
+         * payload.
+         */
+        val ZERO_COLOR_FILTER_24: FloatArray = FloatArray(24)
         /**
          * Sentinel value for degenerate inner bounds (fill draws). The
          * shader's `clamp(min(p+1, r) - max(p, l), 0, 1)` naturally
