@@ -834,6 +834,14 @@ internal class SkOffsetImageFilter(
     private val dy: Float,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    // Phase G-saveLayer-imageFilter-offset -- read-only views for backend
+    // extractors. Same pattern as [SkBlurImageFilter.exposedSigmaX] :
+    // keeps the concrete class internal while letting GPU backends
+    // introspect the (dx, dy, input) tuple they fold into the layer
+    // composite uniform.
+    internal val exposedDx: Float get() = dx
+    internal val exposedDy: Float get() = dy
+    internal val exposedInput: SkImageFilter? get() = input
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
         val scale = ctm.computeMaxScale().coerceAtLeast(1f)
@@ -1131,6 +1139,17 @@ internal class SkDropShadowImageFilter(
     private val color: SkColor,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    // Phase G-saveLayer-imageFilter-dropshadow -- read-only views for
+    // backend extractors. Mirrors [SkBlurImageFilter.exposedSigmaX] :
+    // keeps the concrete class internal while letting GPU backends
+    // introspect the (dx, dy, sigmaX, sigmaY, color, input) tuple they
+    // need to render the shadow + composite the original.
+    internal val exposedDx: Float get() = dx
+    internal val exposedDy: Float get() = dy
+    internal val exposedSigmaX: Float get() = sigmaX
+    internal val exposedSigmaY: Float get() = sigmaY
+    internal val exposedColor: SkColor get() = color
+    internal val exposedInput: SkImageFilter? get() = input
     /**
      * Phase R1-C — output covers `src ∪ (src offset by (dx, dy) and
      * inflated by ±3σ)`. Mirrors Skia's
@@ -2503,6 +2522,99 @@ public fun SkImageFilter.asColorFilterImageFilter(): SkColorFilterImageFilterPar
     val f = this as? SkColorFilterImageFilter ?: return null
     return SkColorFilterImageFilterParams(
         colorFilter = f.exposedColorFilter,
+        input = f.exposedInput,
+    )
+}
+
+// -- Phase G-saveLayer-imageFilter-offset -- introspection extractor ---------
+//
+// Mirror of [asBlurImageFilter] for [SkImageFilters.Offset]. GPU backends
+// that can fold a `(dx, dy)` translation into their layer-composite uniform
+// (the WebGPU port reuses `layer_composite.wgsl`'s `dstOriginSize.xy` slot)
+// use this to detect the filter and skip the throw-on-encounter gate.
+
+/**
+ * Read-only descriptor of an [SkImageFilters.Offset] filter -- the per-axis
+ * displacement and the optional child filter. Returned by
+ * [SkImageFilter.asOffsetImageFilter] when (and only when) the receiver is an
+ * `Offset` filter.
+ *
+ * Backends that fold an `(dx, dy)` translation into their composite uniform
+ * (no per-pixel sample remap, just a shifted dst origin) use this to detect
+ * the filter without the upstream `Offset(0, 0)` no-op fast path that the
+ * CPU raster handles internally.
+ */
+public data class SkOffsetImageFilterParams(
+    /** Translation in device pixels along X. */
+    public val dx: Float,
+    /** Translation in device pixels along Y. */
+    public val dy: Float,
+    /** Optional child filter ; `null` means the source image is the input. */
+    public val input: SkImageFilter?,
+)
+
+/**
+ * Read-only descriptor of an [SkImageFilters.DropShadow] filter -- the
+ * shadow offset, per-axis Gaussian sigma, shadow colour, and optional child
+ * filter. Returned by [SkImageFilter.asDropShadowImageFilter] when (and
+ * only when) the receiver is a `DropShadow` filter.
+ *
+ * The GPU layer-composite path uses this to render a colorized-blurred-
+ * offset copy of the layer texture BEHIND the original layer content,
+ * matching the `Blur(sigma) + Offset(dx, dy) + ColorFilter(color, kSrcIn)
+ * + Compose(srcOver, original)` semantic of `SkDropShadowImageFilter`.
+ */
+public data class SkDropShadowImageFilterParams(
+    /** Shadow displacement in device pixels along X. */
+    public val dx: Float,
+    /** Shadow displacement in device pixels along Y. */
+    public val dy: Float,
+    /** Gaussian sigma in X (`>= 0`). */
+    public val sigmaX: Float,
+    /** Gaussian sigma in Y (`>= 0`). */
+    public val sigmaY: Float,
+    /** Shadow colour (non-premul ARGB, applied via `SrcIn` on the alpha). */
+    public val color: SkColor,
+    /** Optional child filter ; `null` means the source image is the input. */
+    public val input: SkImageFilter?,
+)
+
+/**
+ * Extract the parameters of an [SkImageFilters.Offset] filter, or `null` if
+ * the receiver is any other [SkImageFilter] variant (blur, colorFilter,
+ * compose, drop-shadow, ...).
+ *
+ * Backends that fold a `(dx, dy)` translation into their composite uniform
+ * use this to detect the filter ; the kanvas-skia GPU backend reuses the
+ * `layer_composite.wgsl` shader's existing `dstOriginSize.xy` slot and
+ * simply shifts the dst origin -- no per-pixel UV remap.
+ */
+public fun SkImageFilter.asOffsetImageFilter(): SkOffsetImageFilterParams? {
+    val f = this as? SkOffsetImageFilter ?: return null
+    return SkOffsetImageFilterParams(
+        dx = f.exposedDx,
+        dy = f.exposedDy,
+        input = f.exposedInput,
+    )
+}
+
+/**
+ * Extract the parameters of an [SkImageFilters.DropShadow] filter, or `null`
+ * if the receiver is any other [SkImageFilter] variant.
+ *
+ * Backends that can render a colorized blurred shadow behind a layer (the
+ * WebGPU port reuses the existing 3-pass blur pipeline followed by the layer
+ * composite, with the shadow colorize folded in-shader) use this to detect
+ * the filter and route through the dedicated 2-stage composite path.
+ */
+public fun SkImageFilter.asDropShadowImageFilter(): SkDropShadowImageFilterParams? {
+    val f = this as? SkDropShadowImageFilter ?: return null
+    return SkDropShadowImageFilterParams(
+        dx = f.exposedDx,
+        dy = f.exposedDy,
+        sigmaX = f.exposedSigmaX,
+        sigmaY = f.exposedSigmaY,
+        color = f.exposedColor,
         input = f.exposedInput,
     )
 }

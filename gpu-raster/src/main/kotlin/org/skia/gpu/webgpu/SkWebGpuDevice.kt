@@ -66,6 +66,8 @@ import org.skia.foundation.SkBlendMode
 import org.skia.foundation.asBlendModeFilter
 import org.skia.foundation.asBlurImageFilter
 import org.skia.foundation.asColorFilterImageFilter
+import org.skia.foundation.asDropShadowImageFilter
+import org.skia.foundation.asOffsetImageFilter
 import org.skia.foundation.asMatrixFilter
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
@@ -1103,6 +1105,103 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
     ) : PendingDraw
 
+    // ─── DropShadow on saveLayer (Phase G-saveLayer-imageFilter-dropshadow) ─
+    /**
+     * Phase G-saveLayer-imageFilter-dropshadow -- pending entry for the
+     * layer composite path when `paint.imageFilter is SkImageFilters
+     * .DropShadow(dx, dy, sigmaX, sigmaY, color, input = null)`. The
+     * child layer device's intermediate texture has been drained by the
+     * dispatch gate (via [SkWebGpuDevice.flushDrawsOnly]) and is ready
+     * to be sampled. The flush replays this draw as four render passes :
+     *   1. H blur pass : layer texture -> scratchH (separable Gaussian
+     *      along X). Same shader as the plain blur ImageFilter.
+     *   2. V blur pass : scratchH -> scratchV (separable Gaussian along
+     *      Y). The output is the layer texture's premul RGBA blurred ;
+     *      the colorize-to-shadow step happens at the composite pass
+     *      via the existing `Blend(shadowColor, kSrcIn)` colour filter
+     *      slot, which the [layer_composite.wgsl] shader already
+     *      implements (kind = 1, mode = kSrcIn).
+     *   3. Composite (shadow) : scratchV -> parent intermediate at the
+     *      shadow's offset origin `(originX + sdx, originY + sdy)`.
+     *      `colorFilter` is packed as `Blend(shadowColor, kSrcIn)` --
+     *      the shader masks out the layer's RGB and keeps only the
+     *      blurred alpha tinted to the shadow colour, premul. Blends
+     *      onto the parent via kSrcOver (gated at the dispatch site).
+     *   4. Composite (original) : layer texture -> parent intermediate
+     *      at the original origin `(originX, originY)`. Same code path
+     *      as the plain no-filter saveLayer composite (paintColor +
+     *      colour filter + kSrcOver). Draws the layer content ON TOP
+     *      of the shadow ; in combination, that's "draw a shadow under
+     *      the layer".
+     *
+     * The two scratch textures + the child layer device outlive a
+     * single command buffer because passes 2..4 read passes 1..2's
+     * output ; we close them in [closeDrawResources] after submission.
+     *
+     * Inherited `r/g/b/a` are placeholders ; the composite-pass blend
+     * mode is kSrcOver (gated at the dispatch site) and the paint
+     * colour modulation folds into the per-pass uniform.
+     */
+    private data class DropShadowLayerCompositeDraw(
+        // Child layer device's intermediate view (the layer pixels).
+        // Used by both the H blur pass (sampled) AND the original-pass
+        // composite (sampled again). The device is owned by SkCanvas
+        // (mirrors [BlurredLayerCompositeDraw]) -- we sample it, but
+        // the canvas closes it after we submit. The two scratch
+        // textures below are owned by this draw and closed in
+        // [closeDrawResources].
+        val layerView: GPUTextureView,
+        val layerWidth: Int, val layerHeight: Int,
+        // Host-allocated scratch H/V textures (closed after submit).
+        val scratchHTexture: GPUTexture,
+        val scratchHView: GPUTextureView,
+        val scratchVTexture: GPUTexture,
+        val scratchVView: GPUTextureView,
+        // Origin of the layer in parent-device pixel coords (the
+        // original-pass composite uses this).
+        val dstOriginX: Int, val dstOriginY: Int,
+        // Origin of the shadow in parent-device pixel coords -- the
+        // layer origin shifted by the integer-rounded (dx, dy). The
+        // shadow-pass composite uses this.
+        val shadowDstOriginX: Int, val shadowDstOriginY: Int,
+        // Integer scissor in parent-device pixels for the original-
+        // pass composite.
+        val originalScissor: IntArray,
+        // Integer scissor in parent-device pixels for the shadow-pass
+        // composite (intersected with the parent clip + viewport at
+        // the shifted origin).
+        val shadowScissor: IntArray,
+        // Symmetric half-kernels per axis. Each is (1 + radius) floats,
+        // packed into 9 vec4f (36 floats, trailing zeroed).
+        val kernelX: FloatArray, val radiusX: Int,
+        val kernelY: FloatArray, val radiusY: Int,
+        // Tile mode for the blur's out-of-source samples. Only kDecal
+        // (transparent border) is supported -- the shadow alpha falls
+        // off to zero outside the layer, so the blur kernel sees a
+        // decaled silhouette. kClamp would extend the edge alpha out
+        // (and so the shadow would fill the entire kernel-spread band
+        // outside the layer with the edge colour, not the upstream
+        // SkDropShadow semantic).
+        val tileModeOrdinal: Int,
+        // Shadow colour-filter payload : packed as `Blend(shadowColor,
+        // kSrcIn)` (kind = 1, mode = 5, param0 = premul shadow colour).
+        // The composite shader masks the layer texel down to its alpha
+        // multiplied by the shadow colour -- that's the colorize step.
+        val shadowColorFilterPacked: FloatArray,
+        // Original-pass paint payload : paint colour modulation +
+        // colour-filter slot. Identical to the no-filter saveLayer
+        // composite path. The shadow pass uses (1, 1, 1, 1) for its
+        // paintColor slot since the shadow colour is folded into the
+        // colour filter.
+        val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
+        val originalColorFilterPacked: FloatArray,
+        // PendingDraw interface : r/g/b/a placeholders ; mode honoured
+        // by both composite passes' blend state (gated to kSrcOver at
+        // the dispatch site).
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
     // ─── Bitmap shader on non-rect (G5.2.1) ─────────────────────────────
     /**
      * G5.2.1 -- AA stencil-and-cover path filled with a bitmap shader
@@ -1207,7 +1306,8 @@ public class SkWebGpuDevice(
         is ImageRectDraw,
         is LayerCompositeDraw,
         is BlurredPathDraw,
-        is BlurredLayerCompositeDraw -> false
+        is BlurredLayerCompositeDraw,
+        is DropShadowLayerCompositeDraw -> false
     }
 
     /**
@@ -3446,7 +3546,20 @@ public class SkWebGpuDevice(
             height = height,
             applyColorspaceTransform = false,
             intermediateFormat = intermediateFormat,
-        )
+        ).also {
+            // Phase G-saveLayer-imageFilter-dropshadow -- saveLayer
+            // semantics require the layer device to start transparent
+            // (the layer captures only the draws that hit it ; pixels
+            // not drawn remain alpha = 0 so the parent composite
+            // sees-through to whatever was below). The root SkWebGpuDevice
+            // ctor defaults `background` to opaque white (matching the
+            // GM convention) ; we override here so the layer's first-
+            // pass `loadOp = Clear` clears to transparent. Without this,
+            // every saveLayer would have an opaque white background and
+            // the imageFilter Blur / DropShadow paths would silhouette
+            // the entire layer rect instead of the actually-drawn shape.
+            it.setBackground(0)
+        }
 
     /**
      * Phase G-saveLayer — composite a child device's pixels back onto
@@ -3482,18 +3595,25 @@ public class SkWebGpuDevice(
      *    for the `Blend` variant are the 15 Porter-Duff modes the WGSL
      *    `blend_premul` helper expresses (kClear...kScreen) ; the rest
      *    fall back to identity in-shader.
-     *  - **Image filter** on [paint] : scaffolding slice (Phase
-     *    G-saveLayer-imageFilter) routes one variant -- a
-     *    `SkImageFilters.ColorFilter(cf, input = null)` wrap -- through
-     *    the existing colour-filter plumbing by unwrapping `cf` and
-     *    packing it via [packLayerCompositeColorFilter]. The unwrap
-     *    requires the wrap's `input` child to be `null` (no upstream
-     *    structural transform) **and** the layer paint's own
-     *    `colorFilter` to be `null` (the slot is single-occupancy in
-     *    the current shader). All other image-filter variants -- Blur,
-     *    Offset, Compose, DropShadow, MatrixTransform, DisplacementMap,
-     *    Magnifier, Tile, Crop, Blend, Erode / Dilate, MatrixConvolution,
-     *    Lighting, Arithmetic, ... -- throw a clear "not yet supported"
+     *  - **Image filter** on [paint] : five variants ship --
+     *    `SkImageFilters.ColorFilter(cf, input = null)` (Phase
+     *    G-saveLayer-imageFilter, unwraps `cf` via
+     *    [packLayerCompositeColorFilter]), `SkImageFilters.Blur(
+     *    sigmaX, sigmaY, kClamp / kDecal, input = null)` (Phase
+     *    G-saveLayer-imageFilter-blur, 3-pass H+V+composite),
+     *    `SkImageFilters.Offset(dx, dy, input = null)` (Phase
+     *    G-saveLayer-imageFilter-offset, shifts the composite's
+     *    `dstOriginSize.xy` -- no new pipeline), and `SkImageFilters
+     *    .DropShadow(dx, dy, sigmaX, sigmaY, color, input = null)`
+     *    (Phase G-saveLayer-imageFilter-dropshadow, 4-pass blur +
+     *    colorize-via-Blend(color, kSrcIn) + offset composite +
+     *    original composite -- kSrcOver mode only). All require
+     *    `input == null` ; the ColorFilter wrap also requires the
+     *    layer paint's own `colorFilter` to be `null` (single-
+     *    occupancy uniform). Other image-filter variants -- Compose,
+     *    MatrixTransform, DisplacementMap, Magnifier, Tile, Crop,
+     *    Blend, Erode / Dilate, MatrixConvolution, Lighting,
+     *    Arithmetic, ... -- throw a clear "not yet supported"
      *    error. Defer the real Gaussian-blur convolution to a follow-up
      *    slice that adds a multi-pass render-target ping-pong pipeline.
      */
@@ -3609,6 +3729,112 @@ public class SkWebGpuDevice(
             return
         }
 
+        // Phase G-saveLayer-imageFilter-offset -- `SkImageFilters.Offset(
+        // dx, dy, input = null)` is a pure UV translation : the layer
+        // pixels are unchanged, only the dst origin shifts by (dx, dy).
+        // We reuse the plain [LayerCompositeDraw] path with the dst
+        // origin and scissor shifted by the integer-rounded offset. No
+        // new pipeline, no new shader -- the composite shader's existing
+        // `dstOriginSize.xy` slot already drives the parent-pixel
+        // mapping. Out-of-bounds samples land outside the integer dst
+        // rect and the scissor culls them.
+        val offsetParams = paint?.imageFilter?.asOffsetImageFilter()
+        if (offsetParams != null) {
+            if (offsetParams.input != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Offset(input = nonNull) with a non-null " +
+                        "child filter. Only the input == null case is supported " +
+                        "(Phase G-saveLayer-imageFilter-offset) -- a non-null " +
+                        "child needs a render-to-texture pre-pass that the " +
+                        "WebGPU layer composite pipeline cannot express yet."
+                )
+            }
+            // Apply the (dx, dy) translation by shifting the dst origin
+            // and the scissor by the same integer rounding the CPU
+            // raster's `SkOffsetImageFilter.filterImage` applies
+            // (`(dx * scale + 0.5).toInt()` with `scale >= 1`). The
+            // saveLayer composite runs at the device's identity CTM, so
+            // `scale == 1` and the rounding collapses to `floor(dx + 0.5)`.
+            val sdx = floor(offsetParams.dx + 0.5f).toInt()
+            val sdy = floor(offsetParams.dy + 0.5f).toInt()
+            val shiftedOriginX = originX + sdx
+            val shiftedOriginY = originY + sdy
+            val shiftedIx0 = shiftedOriginX.coerceAtLeast(clip.left).coerceAtLeast(0)
+            val shiftedIy0 = shiftedOriginY.coerceAtLeast(clip.top).coerceAtLeast(0)
+            val shiftedIx1 = (shiftedOriginX + w).coerceAtMost(clip.right).coerceAtMost(width)
+            val shiftedIy1 = (shiftedOriginY + h).coerceAtMost(clip.bottom).coerceAtMost(height)
+            if (shiftedIx0 >= shiftedIx1 || shiftedIy0 >= shiftedIy1) return
+            pending.add(
+                LayerCompositeDraw(
+                    layerView = gpuSrc.intermediateView,
+                    layerWidth = w, layerHeight = h,
+                    dstOriginX = shiftedOriginX, dstOriginY = shiftedOriginY,
+                    scissor = intArrayOf(
+                        shiftedIx0, shiftedIy0,
+                        shiftedIx1 - shiftedIx0, shiftedIy1 - shiftedIy0,
+                    ),
+                    paintR = paintAlpha, paintG = paintAlpha,
+                    paintB = paintAlpha, paintA = paintAlpha,
+                    r = 1f, g = 1f, b = 1f, a = paintAlpha,
+                    mode = mode,
+                    colorFilterPacked = colorFilterPacked,
+                ),
+            )
+            return
+        }
+
+        // Phase G-saveLayer-imageFilter-dropshadow -- `SkImageFilters
+        // .DropShadow(dx, dy, sigmaX, sigmaY, color, input = null)`
+        // renders a colorized blurred copy of the layer (offset by
+        // (dx, dy)) BEHIND the original layer content. Two composite
+        // sub-passes :
+        //   1. shadow : layer alpha -> blur(sigma) -> tint(color, kSrcIn)
+        //               -> composite at (originX + sdx, originY + sdy).
+        //   2. original : layer RGBA -> composite at (originX, originY)
+        //                 with the paint's regular colorFilter / alpha.
+        // The user's [mode] is gated to kSrcOver here -- the Skia
+        // semantic Compose(srcOver, original) commutes with the parent
+        // composite only for kSrcOver. Other modes need an intermediate
+        // layer to hold (shadow + original) before applying the user's
+        // mode against the parent -- deferred follow-up.
+        val dropShadowParams = paint?.imageFilter?.asDropShadowImageFilter()
+        if (dropShadowParams != null) {
+            if (dropShadowParams.input != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.DropShadow(input = nonNull) with a " +
+                        "non-null child filter. Only the input == null case is " +
+                        "supported (Phase G-saveLayer-imageFilter-dropshadow) " +
+                        "-- a non-null child needs a render-to-texture pre-pass " +
+                        "that the WebGPU layer composite pipeline cannot " +
+                        "express yet."
+                )
+            }
+            if (mode != SkBlendMode.kSrcOver) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.DropShadow but the layer paint's " +
+                        "blendMode is $mode. Only kSrcOver is supported in " +
+                        "the first DropShadow slice (Phase " +
+                        "G-saveLayer-imageFilter-dropshadow) -- other modes " +
+                        "need an intermediate layer to hold the (shadow + " +
+                        "original) composite before applying the user's mode " +
+                        "against the parent, which is a follow-up slice."
+                )
+            }
+            enqueueDropShadowLayerComposite(
+                gpuSrc = gpuSrc,
+                w = w, h = h,
+                originX = originX, originY = originY,
+                clip = clip,
+                params = dropShadowParams,
+                paintAlpha = paintAlpha,
+                colorFilterPacked = colorFilterPacked,
+            )
+            return
+        }
+
         pending.add(
             LayerCompositeDraw(
                 layerView = gpuSrc.intermediateView,
@@ -3714,6 +3940,171 @@ public class SkWebGpuDevice(
     }
 
     /**
+     * Phase G-saveLayer-imageFilter-dropshadow -- helper for
+     * [compositeFrom]. Allocates the two scratch textures (H and V
+     * blur), pre-computes the per-axis Gaussian half-kernels, packs the
+     * shadow-pass colour filter as `Blend(shadowColor, kSrcIn)` (the
+     * colorize-from-alpha step), and enqueues a single
+     * [DropShadowLayerCompositeDraw] that the dispatch loop expands into
+     * four render passes.
+     *
+     * Sigma constraints mirror [enqueueBlurredLayerComposite] -- the
+     * radius is clamped to [MAX_BLUR_RADIUS] and the kernel is
+     * renormalised after the clamp. The blur tile mode is forced to
+     * kDecal (transparent border) -- a kClamp blur would extend the
+     * edge alpha out indefinitely, which doesn't match the upstream
+     * SkDropShadowImageFilter semantic.
+     */
+    private fun enqueueDropShadowLayerComposite(
+        gpuSrc: SkWebGpuDevice,
+        w: Int, h: Int,
+        originX: Int, originY: Int,
+        clip: SkIRect,
+        params: org.skia.foundation.SkDropShadowImageFilterParams,
+        paintAlpha: Float,
+        colorFilterPacked: FloatArray,
+    ) {
+        if (!params.sigmaX.isFinite() || !params.sigmaY.isFinite() ||
+            params.sigmaX < 0f || params.sigmaY < 0f
+        ) {
+            error(
+                "SkWebGpuDevice.compositeFrom : SkImageFilters.DropShadow " +
+                    "sigma must be finite and non-negative ; got (sigmaX = " +
+                    "${params.sigmaX}, sigmaY = ${params.sigmaY})."
+            )
+        }
+        val unboundedRadiusX = if (params.sigmaX > 0f) {
+            ceil(3.0 * params.sigmaX).toInt().coerceAtLeast(1)
+        } else 0
+        val unboundedRadiusY = if (params.sigmaY > 0f) {
+            ceil(3.0 * params.sigmaY).toInt().coerceAtLeast(1)
+        } else 0
+        val radiusX = unboundedRadiusX.coerceAtMost(MAX_BLUR_RADIUS)
+        val radiusY = unboundedRadiusY.coerceAtMost(MAX_BLUR_RADIUS)
+        val kernelX = if (radiusX > 0) {
+            buildSymmetricGaussianHalfKernel(params.sigmaX, radiusX)
+        } else floatArrayOf(1f)
+        val kernelY = if (radiusY > 0) {
+            buildSymmetricGaussianHalfKernel(params.sigmaY, radiusY)
+        } else floatArrayOf(1f)
+
+        // Allocate two scratch textures of the same dimensions as the
+        // layer texture -- same shape as [enqueueBlurredLayerComposite].
+        val scratchH = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.dropShadowScratchH",
+            ),
+        )
+        val scratchHView = scratchH.createView()
+        val scratchV = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.dropShadowScratchV",
+            ),
+        )
+        val scratchVView = scratchV.createView()
+
+        // Integer-round the shadow displacement -- same rounding the
+        // CPU raster's [SkDropShadowImageFilter] uses ([SkOffsetImageFilter]
+        // shares this rounding). The saveLayer composite runs at the
+        // device's identity CTM, so the `scale >= 1` factor collapses
+        // to 1.
+        val sdx = floor(params.dx + 0.5f).toInt()
+        val sdy = floor(params.dy + 0.5f).toInt()
+        val shadowOriginX = originX + sdx
+        val shadowOriginY = originY + sdy
+
+        // Original-pass scissor (the layer pixels land at the original
+        // origin -- same shape as the no-filter composite path).
+        val origIx0 = originX.coerceAtLeast(clip.left).coerceAtLeast(0)
+        val origIy0 = originY.coerceAtLeast(clip.top).coerceAtLeast(0)
+        val origIx1 = (originX + w).coerceAtMost(clip.right).coerceAtMost(width)
+        val origIy1 = (originY + h).coerceAtMost(clip.bottom).coerceAtMost(height)
+        // Shadow-pass scissor (the shadow lands at the offset origin --
+        // its kernel-spread band is captured by the layer texture's
+        // own bounds since the blur runs in layer space, no padding).
+        val shadIx0 = shadowOriginX.coerceAtLeast(clip.left).coerceAtLeast(0)
+        val shadIy0 = shadowOriginY.coerceAtLeast(clip.top).coerceAtLeast(0)
+        val shadIx1 = (shadowOriginX + w).coerceAtMost(clip.right).coerceAtMost(width)
+        val shadIy1 = (shadowOriginY + h).coerceAtMost(clip.bottom).coerceAtMost(height)
+
+        // Both passes need a non-empty scissor to do useful work. If
+        // the shadow lands entirely outside the parent clip, we still
+        // need to draw the original. Skip the shadow pass by collapsing
+        // its scissor to (0, 0, 0, 0) ; the dispatch loop honours
+        // zero-area scissors (no draw).
+        val shadowScissor = if (shadIx0 >= shadIx1 || shadIy0 >= shadIy1) {
+            intArrayOf(0, 0, 0, 0)
+        } else {
+            intArrayOf(shadIx0, shadIy0, shadIx1 - shadIx0, shadIy1 - shadIy0)
+        }
+        if (origIx0 >= origIx1 || origIy0 >= origIy1) {
+            // The original layer is entirely clipped out. Still draw
+            // the shadow when its scissor is non-empty. If both are
+            // empty, fall through to add nothing.
+            if (shadowScissor[2] == 0 || shadowScissor[3] == 0) {
+                scratchHView.close(); scratchH.close()
+                scratchVView.close(); scratchV.close()
+                return
+            }
+        }
+        val originalScissor = if (origIx0 >= origIx1 || origIy0 >= origIy1) {
+            intArrayOf(0, 0, 0, 0)
+        } else {
+            intArrayOf(origIx0, origIy0, origIx1 - origIx0, origIy1 - origIy0)
+        }
+
+        // Pack the shadow-pass colour filter as `Blend(shadowColor,
+        // kSrcIn)`. Decompose the [SkColor] (ARGB) into non-premul
+        // floats, premultiply by the paint alpha (the shadow inherits
+        // the paint's alpha modulation -- mirrors the upstream
+        // SkDropShadowImageFilter::filterImage which composes its
+        // `Blend(SK_ColorBLACK, kSrcIn)` ColorFilterImageFilter into
+        // the shadow output before the parent's SrcOver), then premul
+        // the colour by its own alpha for the shader's premul-source
+        // assumption.
+        val shadowColor = params.color
+        val ca = (((shadowColor ushr 24) and 0xFF) / 255f) * paintAlpha
+        val crNonPre = ((shadowColor ushr 16) and 0xFF) / 255f
+        val cgNonPre = ((shadowColor ushr 8) and 0xFF) / 255f
+        val cbNonPre = (shadowColor and 0xFF) / 255f
+        val shadowColorFilterPacked = FloatArray(24)
+        shadowColorFilterPacked[0] = 1f                              // kind = 1 (Blend)
+        shadowColorFilterPacked[1] = SkBlendMode.kSrcIn.ordinal.toFloat()
+        shadowColorFilterPacked[4] = crNonPre * ca                   // premul R
+        shadowColorFilterPacked[5] = cgNonPre * ca                   // premul G
+        shadowColorFilterPacked[6] = cbNonPre * ca                   // premul B
+        shadowColorFilterPacked[7] = ca                              // alpha
+
+        pending.add(
+            DropShadowLayerCompositeDraw(
+                layerView = gpuSrc.intermediateView,
+                layerWidth = w, layerHeight = h,
+                scratchHTexture = scratchH, scratchHView = scratchHView,
+                scratchVTexture = scratchV, scratchVView = scratchVView,
+                dstOriginX = originX, dstOriginY = originY,
+                shadowDstOriginX = shadowOriginX, shadowDstOriginY = shadowOriginY,
+                originalScissor = originalScissor,
+                shadowScissor = shadowScissor,
+                kernelX = kernelX, radiusX = radiusX,
+                kernelY = kernelY, radiusY = radiusY,
+                tileModeOrdinal = SkTileMode.kDecal.ordinal,
+                shadowColorFilterPacked = shadowColorFilterPacked,
+                paintR = paintAlpha, paintG = paintAlpha,
+                paintB = paintAlpha, paintA = paintAlpha,
+                originalColorFilterPacked = colorFilterPacked,
+                r = 1f, g = 1f, b = 1f, a = paintAlpha,
+                mode = SkBlendMode.kSrcOver,
+            ),
+        )
+    }
+
+    /**
      * Phase G-saveLayer-imageFilter -- resolver for the layer paint's
      * [SkImageFilter] slot.
      *
@@ -3735,14 +4126,23 @@ public class SkWebGpuDevice(
      *    pass is handled separately by [compositeFrom] enqueuing a
      *    [BlurredLayerCompositeDraw] (kClamp / kDecal only -- other tile
      *    modes throw at the dispatch gate ; non-null `input` throws too).
-     *  - any other [SkImageFilter] variant (Offset, Compose, DropShadow,
-     *    MatrixTransform, DisplacementMap, Magnifier, Tile, Crop, Blend,
-     *    Erode / Dilate, MatrixConvolution, Lighting, Arithmetic, ...)
-     *    -> throws a clear error. These require either a UV-remapping
-     *    sample (Offset / MatrixTransform / DisplacementMap), or a
-     *    multi-pass render-target ping-pong (Compose / DropShadow /
-     *    Magnifier), none of which the scaffolding pipeline can express
-     *    yet.
+     *  - `paint.imageFilter` is an `Offset(dx, dy, input = null)` ->
+     *    returns the paint's own `colorFilter` ; the offset is folded
+     *    into the composite's `dstOriginSize.xy` slot by [compositeFrom]
+     *    (just a shifted dst origin, no per-pixel UV remap).
+     *  - `paint.imageFilter` is a `DropShadow(dx, dy, sigmaX, sigmaY,
+     *    color, input = null)` -> returns the paint's own `colorFilter` ;
+     *    the shadow is rendered as a separate (blur + colorize + offset)
+     *    composite pass by [compositeFrom] enqueuing a
+     *    [DropShadowLayerCompositeDraw] (kSrcOver mode only -- other
+     *    modes throw at the dispatch gate ; non-null `input` throws too).
+     *  - any other [SkImageFilter] variant (Compose, MatrixTransform,
+     *    DisplacementMap, Magnifier, Tile, Crop, Blend, Erode / Dilate,
+     *    MatrixConvolution, Lighting, Arithmetic, ...) -> throws a clear
+     *    error. These require either a UV-remapping sample
+     *    (MatrixTransform / DisplacementMap), or a multi-pass render-
+     *    target ping-pong (Compose / Magnifier), none of which the
+     *    scaffolding pipeline can express yet.
      *  - both `paint.colorFilter` and a `ColorFilter` wrap set -> throws
      *    "double colour filter" error : the composite shader's
      *    `colorFilter*` uniform is single-occupancy, and folding two
@@ -3752,6 +4152,15 @@ public class SkWebGpuDevice(
      */
     private fun resolveLayerColorFilter(paint: SkPaint?): org.skia.foundation.SkColorFilter? {
         val imf = paint?.imageFilter ?: return paint?.colorFilter
+        // Phase G-saveLayer-imageFilter-offset / -dropshadow -- both
+        // variants are folded into the composite uniform / dispatch by
+        // [compositeFrom] directly ; the resolved colour filter is just
+        // the paint's own (the offset / shadow placement is structural,
+        // not per-pixel). The dispatch gate validates input == null
+        // there too, so this branch only short-circuits the throw path.
+        if (imf.asOffsetImageFilter() != null || imf.asDropShadowImageFilter() != null) {
+            return paint.colorFilter
+        }
         val colorFilterWrap = imf.asColorFilterImageFilter()
         if (colorFilterWrap != null) {
             if (colorFilterWrap.input != null) {
@@ -3820,8 +4229,10 @@ public class SkWebGpuDevice(
                 "backend. Supported variants : null (no filter) ; " +
                 "SkImageFilters.ColorFilter(cf, input = null) when the " +
                 "paint's own colorFilter is null ; SkImageFilters.Blur(" +
-                "sigmaX, sigmaY, kClamp / kDecal, input = null). Other " +
-                "variants -- Offset, Compose, DropShadow, MatrixTransform, " +
+                "sigmaX, sigmaY, kClamp / kDecal, input = null) ; " +
+                "SkImageFilters.Offset(dx, dy, input = null) ; " +
+                "SkImageFilters.DropShadow(dx, dy, sigmaX, sigmaY, color, " +
+                "input = null). Other variants -- Compose, MatrixTransform, " +
                 "DisplacementMap, Magnifier, Tile, Crop, Blend, Erode / " +
                 "Dilate, MatrixConvolution, Lighting, Arithmetic -- need " +
                 "follow-up slices that add a fragment-side UV-remapping or " +
@@ -6679,6 +7090,8 @@ public class SkWebGpuDevice(
                 is LayerCompositeDraw -> buildLayerCompositeDrawResources(d)
                 is BlurredPathDraw -> buildBlurredPathDrawResources(d)
                 is BlurredLayerCompositeDraw -> buildBlurredLayerCompositeDrawResources(d)
+                is DropShadowLayerCompositeDraw ->
+                    buildDropShadowLayerCompositeDrawResources(d)
             }
         }
 
@@ -7254,6 +7667,139 @@ public class SkWebGpuDevice(
                 }
                 return@forEachIndexed
             }
+            if (d is DropShadowLayerCompositeDraw) {
+                // Phase G-saveLayer-imageFilter-dropshadow -- four render
+                // passes :
+                //   1. H pass : sample layer texture, write to scratchH
+                //      (cleared). No blend. Same shader as the plain
+                //      blur ImageFilter -- the colorize-to-shadow step
+                //      runs at pass 3 via the colour-filter slot.
+                //   2. V pass : sample scratchH, write to scratchV
+                //      (cleared). No blend. Output is the layer's
+                //      premul RGBA blurred along both axes.
+                //   3. Composite (shadow) : sample scratchV, run the
+                //      packed `Blend(shadowColor, kSrcIn)` colour
+                //      filter (kind = 1, mode = 5) which masks the
+                //      blurred RGB out and keeps the alpha * shadowColor
+                //      product, then blend onto the parent intermediate
+                //      via the layer-composite pipeline at the offset
+                //      origin.
+                //   4. Composite (original) : sample the layer texture
+                //      directly, modulate by paintColor, apply the
+                //      paint's regular colour filter, blend onto the
+                //      parent intermediate at the original origin.
+                //      Lands the layer content ON TOP of the shadow.
+                val hView = res.scratchHView!!
+                val vView = res.scratchVView!!
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = hView,
+                                loadOp = GPULoadOp.Clear,
+                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    setPipeline(blurImageFilterHorizontalPipeline)
+                    setBindGroup(0u, res.bindGroup)
+                    setScissorRect(
+                        x = 0u, y = 0u,
+                        width = d.layerWidth.toUInt(),
+                        height = d.layerHeight.toUInt(),
+                    )
+                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    end()
+                }
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = vView,
+                                loadOp = GPULoadOp.Clear,
+                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    setPipeline(blurImageFilterVerticalPipeline)
+                    setBindGroup(0u, res.secondaryBindGroup!!)
+                    setScissorRect(
+                        x = 0u, y = 0u,
+                        width = d.layerWidth.toUInt(),
+                        height = d.layerHeight.toUInt(),
+                    )
+                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    end()
+                }
+                // Shadow composite : skip when the scissor is empty
+                // (shadow clipped entirely outside parent bounds).
+                if (d.shadowScissor[2] > 0 && d.shadowScissor[3] > 0) {
+                    encoder.beginRenderPass(
+                        RenderPassDescriptor(
+                            colorAttachments = listOf(
+                                RenderPassColorAttachment(
+                                    view = colorView,
+                                    loadOp = loadOp,
+                                    clearValue = background,
+                                    storeOp = GPUStoreOp.Store,
+                                ),
+                            ),
+                        ),
+                    ) {
+                        setPipeline(layerCompositePipelineFor(d.mode))
+                        setBindGroup(0u, res.tertiaryBindGroup!!)
+                        setScissorRect(
+                            x = d.shadowScissor[0].toUInt(),
+                            y = d.shadowScissor[1].toUInt(),
+                            width = d.shadowScissor[2].toUInt(),
+                            height = d.shadowScissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                        end()
+                    }
+                }
+                // Original composite : the second composite pass lands
+                // the layer content on top of the shadow. The shadow
+                // pass above may have cleared the first attachment with
+                // a Clear loadOp on the first draw -- the dispatch loop
+                // forces Load on subsequent passes anyway, but if the
+                // shadow pass was skipped we still need to honour the
+                // outer loadOp here, so we pick the right one based on
+                // whether the shadow ran.
+                val originalLoadOp =
+                    if (d.shadowScissor[2] > 0 && d.shadowScissor[3] > 0) GPULoadOp.Load
+                    else loadOp
+                if (d.originalScissor[2] > 0 && d.originalScissor[3] > 0) {
+                    encoder.beginRenderPass(
+                        RenderPassDescriptor(
+                            colorAttachments = listOf(
+                                RenderPassColorAttachment(
+                                    view = colorView,
+                                    loadOp = originalLoadOp,
+                                    clearValue = background,
+                                    storeOp = GPUStoreOp.Store,
+                                ),
+                            ),
+                        ),
+                    ) {
+                        setPipeline(layerCompositePipelineFor(d.mode))
+                        setBindGroup(0u, res.quaternaryBindGroup!!)
+                        setScissorRect(
+                            x = d.originalScissor[0].toUInt(),
+                            y = d.originalScissor[1].toUInt(),
+                            width = d.originalScissor[2].toUInt(),
+                            height = d.originalScissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                        end()
+                    }
+                }
+                return@forEachIndexed
+            }
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -7415,6 +7961,7 @@ public class SkWebGpuDevice(
                     is StencilCoverAaBitmapShaderDraw -> { /* handled above */ }
                     is BlurredPathDraw -> { /* handled above */ }
                     is BlurredLayerCompositeDraw -> { /* handled above */ }
+                    is DropShadowLayerCompositeDraw -> { /* handled above */ }
                 }
                 end()
             }
@@ -7449,6 +7996,10 @@ public class SkWebGpuDevice(
             it.tertiaryUniform?.close()
             it.scratchVView?.close()
             it.scratchVTexture?.close()
+            // Phase G-saveLayer-imageFilter-dropshadow -- release the
+            // original-pass composite uniform. Same lifetime as the
+            // shadow-pass tertiary uniform.
+            it.quaternaryUniform?.close()
         }
     }
 
@@ -7560,6 +8111,13 @@ public class SkWebGpuDevice(
         val tertiaryBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
         val scratchVTexture: GPUTexture? = null,
         val scratchVView: GPUTextureView? = null,
+        // Phase G-saveLayer-imageFilter-dropshadow -- a fourth uniform +
+        // bind group for the original-pass composite (the layer content
+        // drawn ON TOP of the shadow). Same byte layout as the tertiary
+        // (the shadow-pass composite) but different colour-filter +
+        // dst-origin payload, so we need a distinct GPU buffer.
+        val quaternaryUniform: GPUBuffer? = null,
+        val quaternaryBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
     )
 
     private fun buildRectDrawResources(d: RectDraw): DrawResources {
@@ -8392,6 +8950,168 @@ public class SkWebGpuDevice(
             // layerDevice intentionally left null -- the layer device
             // is owned by SkCanvas, not by this draw (mirrors
             // [LayerCompositeDraw]).
+        )
+    }
+
+    /**
+     * Phase G-saveLayer-imageFilter-dropshadow -- build the GPU resources
+     * for a [DropShadowLayerCompositeDraw]. Four uniform buffers + four
+     * bind groups :
+     *   - Primary    (H blur)            : same shape as the plain blur
+     *                                       ImageFilter's primary -- sources
+     *                                       the layer texture, X-axis kernel.
+     *   - Secondary  (V blur)            : sources the H scratch, Y-axis
+     *                                       kernel.
+     *   - Tertiary   (shadow composite)  : sources the V scratch, applies
+     *                                       the packed `Blend(shadowColor,
+     *                                       kSrcIn)` colour filter, lands
+     *                                       at the shifted origin.
+     *   - Quaternary (original composite): sources the layer texture
+     *                                       directly, applies the paint's
+     *                                       regular colour filter, lands
+     *                                       at the original origin.
+     *
+     * The two composite uniforms share the same byte layout
+     * ([LAYER_COMPOSITE_UNIFORM_SIZE]) as the no-filter saveLayer ; only
+     * their `dstOriginSize.xy` + `colorFilterPacked` payload differ.
+     */
+    private fun buildDropShadowLayerCompositeDrawResources(
+        d: DropShadowLayerCompositeDraw,
+    ): DrawResources {
+        // ── H blur pass uniform : axisTileRadius = (1, 0, kDecal, radiusX).
+        val hUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = BLUR_IMAGE_FILTER_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.dropShadowBlurHorizontalDraw",
+            ),
+        )
+        val hPacked = FloatArray(BLUR_IMAGE_FILTER_UNIFORM_FLOATS)
+        hPacked[0] = 0f; hPacked[1] = 0f
+        hPacked[2] = d.layerWidth.toFloat(); hPacked[3] = d.layerHeight.toFloat()
+        hPacked[4] = 1f; hPacked[5] = 0f
+        hPacked[6] = d.tileModeOrdinal.toFloat()
+        hPacked[7] = d.radiusX.toFloat()
+        for (k in 0..d.radiusX) {
+            hPacked[8 + k] = d.kernelX[k]
+        }
+        context.queue.writeBuffer(hUniform, 0uL, ArrayBuffer.of(hPacked))
+        val hBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = blurImageFilterBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = hUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.layerView),
+                ),
+            ),
+        )
+
+        // ── V blur pass uniform : axisTileRadius = (0, 1, kDecal, radiusY).
+        val vUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = BLUR_IMAGE_FILTER_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.dropShadowBlurVerticalDraw",
+            ),
+        )
+        val vPacked = FloatArray(BLUR_IMAGE_FILTER_UNIFORM_FLOATS)
+        vPacked[0] = 0f; vPacked[1] = 0f
+        vPacked[2] = d.layerWidth.toFloat(); vPacked[3] = d.layerHeight.toFloat()
+        vPacked[4] = 0f; vPacked[5] = 1f
+        vPacked[6] = d.tileModeOrdinal.toFloat()
+        vPacked[7] = d.radiusY.toFloat()
+        for (k in 0..d.radiusY) {
+            vPacked[8 + k] = d.kernelY[k]
+        }
+        context.queue.writeBuffer(vUniform, 0uL, ArrayBuffer.of(vPacked))
+        val vBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = blurImageFilterBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = vUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.scratchHView),
+                ),
+            ),
+        )
+
+        // ── Shadow composite uniform : dstOriginSize at the shifted
+        //    origin, paintColor = (1, 1, 1, 1) (shadow alpha is folded
+        //    into the colour-filter's premul colour), colour filter =
+        //    Blend(shadowColor, kSrcIn).
+        val shadowUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = LAYER_COMPOSITE_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.dropShadowShadowCompositeDraw",
+            ),
+        )
+        val shadowPacked = FloatArray(32)
+        shadowPacked[0] = d.shadowDstOriginX.toFloat()
+        shadowPacked[1] = d.shadowDstOriginY.toFloat()
+        shadowPacked[2] = d.layerWidth.toFloat()
+        shadowPacked[3] = d.layerHeight.toFloat()
+        // paintColor = (1, 1, 1, 1) -- the shadow's alpha + paint alpha
+        // modulation is already folded into the colour-filter's premul
+        // src colour, so we don't double-multiply here.
+        shadowPacked[4] = 1f; shadowPacked[5] = 1f
+        shadowPacked[6] = 1f; shadowPacked[7] = 1f
+        System.arraycopy(d.shadowColorFilterPacked, 0, shadowPacked, 8, 24)
+        context.queue.writeBuffer(shadowUniform, 0uL, ArrayBuffer.of(shadowPacked))
+        val shadowBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = layerCompositeBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = shadowUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.scratchVView),
+                ),
+            ),
+        )
+
+        // ── Original composite uniform : dstOriginSize at the layer's
+        //    original origin, paintColor = (paintA, paintA, paintA,
+        //    paintA), colour filter = the paint's original.
+        val originalUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = LAYER_COMPOSITE_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.dropShadowOriginalCompositeDraw",
+            ),
+        )
+        val originalPacked = FloatArray(32)
+        originalPacked[0] = d.dstOriginX.toFloat()
+        originalPacked[1] = d.dstOriginY.toFloat()
+        originalPacked[2] = d.layerWidth.toFloat()
+        originalPacked[3] = d.layerHeight.toFloat()
+        originalPacked[4] = d.paintR; originalPacked[5] = d.paintG
+        originalPacked[6] = d.paintB; originalPacked[7] = d.paintA
+        System.arraycopy(d.originalColorFilterPacked, 0, originalPacked, 8, 24)
+        context.queue.writeBuffer(originalUniform, 0uL, ArrayBuffer.of(originalPacked))
+        val originalBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = layerCompositeBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = originalUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.layerView),
+                ),
+            ),
+        )
+
+        return DrawResources(
+            uniform = hUniform,
+            bindGroup = hBindGroup,
+            secondaryUniform = vUniform,
+            secondaryBindGroup = vBindGroup,
+            tertiaryUniform = shadowUniform,
+            tertiaryBindGroup = shadowBindGroup,
+            scratchHTexture = d.scratchHTexture,
+            scratchHView = d.scratchHView,
+            scratchVTexture = d.scratchVTexture,
+            scratchVView = d.scratchVView,
+            quaternaryUniform = originalUniform,
+            quaternaryBindGroup = originalBindGroup,
+            // layerDevice intentionally left null -- the layer device
+            // is owned by SkCanvas, not by this draw (mirrors
+            // [BlurredLayerCompositeDraw]).
         )
     }
 
