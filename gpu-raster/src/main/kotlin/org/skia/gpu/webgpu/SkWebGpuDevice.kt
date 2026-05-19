@@ -1025,6 +1025,12 @@ public class SkWebGpuDevice(
         val radius: Int,
         // Paint colour, premul.
         val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
+        // SkBlurStyle ordinal (0 = kNormal, 1 = kSolid, 2 = kOuter,
+        // 3 = kInner). Packed into the V-pass uniform's axisRadius.w
+        // slot ; the V-pass fragment branches on this to combine the
+        // blurred coverage B with the sharp shape-mask alpha M per
+        // the formulas in [SkBlurMaskFilter].
+        val blurStyleOrdinal: Int,
         // PendingDraw interface : r/g/b/a placeholders ; mode honoured
         // by the V-pass pipeline's blend state.
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
@@ -1928,9 +1934,13 @@ public class SkWebGpuDevice(
 
     /**
      * Phase MaskFilter-blur -- bind group layout, shared by the H and V
-     * passes. Identical to [layerCompositeBindGroupLayout] in shape
-     * (uniform buffer + sampled texture, no sampler -- the shader uses
-     * `textureLoad`).
+     * passes. One uniform buffer + two sampled textures (no sampler --
+     * both shader entries use `textureLoad`). Binding 1 is the
+     * convolution source : the shape mask for the H pass, the H-pass
+     * scratch for the V pass. Binding 2 is the original (sharp) shape
+     * mask, consumed by the V pass for the kSolid / kOuter / kInner
+     * style formulas ; the H pass ignores it but the binding has to
+     * exist because the layout is shared.
      */
     private val blurBindGroupLayout: GPUBindGroupLayout =
         context.device.createBindGroupLayout(
@@ -1943,6 +1953,15 @@ public class SkWebGpuDevice(
                     ),
                     BindGroupLayoutEntry(
                         binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.UnfilterableFloat,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 2u,
                         visibility = GPUShaderStage.Fragment,
                         texture = TextureBindingLayout(
                             sampleType = GPUTextureSampleType.UnfilterableFloat,
@@ -3996,16 +4015,27 @@ public class SkWebGpuDevice(
     }
 
     /**
-     * Phase MaskFilter-blur -- if [paint]'s `maskFilter` is a kNormal
-     * Gaussian blur on a non-shader paint and the CTM is axis-aligned,
-     * render [path] through the offscreen-mask + separable Gaussian
-     * blur pipeline and return `true`. Returns `false` if the paint /
-     * CTM doesn't fall in the supported sub-set ; the caller falls
-     * through to the regular fill machinery (with the maskFilter
-     * silently dropped, matching the pre-slice GPU behaviour).
+     * Phase MaskFilter-blur -- if [paint]'s `maskFilter` is a
+     * Gaussian blur (any of `kNormal` / `kSolid` / `kOuter` / `kInner`)
+     * on a non-shader paint and the CTM is axis-aligned, render [path]
+     * through the offscreen-mask + separable Gaussian blur pipeline
+     * and return `true`. Returns `false` if the paint / CTM doesn't
+     * fall in the supported sub-set ; the caller falls through to the
+     * regular fill machinery (with the maskFilter silently dropped,
+     * matching the pre-slice GPU behaviour).
+     *
+     * The four [SkBlurStyle]s differ only in the V-pass shader's
+     * post-convolution composition step :
+     *   - kNormal : output = B(p)              (soft blur only)
+     *   - kSolid  : output = min(M+B, 1)       (sharp shape + halo)
+     *   - kOuter  : output = max(B-M, 0)       (halo outside the shape)
+     *   - kInner  : output = B * M             (blur clipped to inside)
+     * where M is the sharp shape-mask alpha and B is the blurred
+     * coverage. The shader receives both textures via the V-pass bind
+     * group and branches on the style ordinal packed into the uniform.
      *
      * Hard scope :
-     *   - `paint.maskFilter is SkBlurMaskFilter` AND `style == kNormal`,
+     *   - `paint.maskFilter is SkBlurMaskFilter` (all 4 styles),
      *   - `paint.shader == null` (shaded blur out of scope ; CPU raster
      *     has the same limitation, see
      *     [org.skia.core.SkBitmapDevice.drawPathWithMaskFilter]),
@@ -4048,7 +4078,6 @@ public class SkWebGpuDevice(
     ): Boolean {
         val rawMaskFilter = paint.maskFilter ?: return false
         if (rawMaskFilter !is SkBlurMaskFilter) return false
-        if (rawMaskFilter.style != SkBlurStyle.kNormal) return false
         if (paint.shader != null) return false
         if (!ctm.isAxisAligned) return false
         if (path.fillType.isInverse()) return false
@@ -4152,6 +4181,16 @@ public class SkWebGpuDevice(
         val cg = SkColorGetG(color) / 255f * ca
         val cb = SkColorGetB(color) / 255f * ca
 
+        // Style ordinal : matches the SkBlurStyle declaration order
+        // (kNormal = 0, kSolid = 1, kOuter = 2, kInner = 3). The V-pass
+        // shader branches on this value to combine B and M.
+        val styleOrdinal = when (maskFilter.style) {
+            SkBlurStyle.kNormal -> 0
+            SkBlurStyle.kSolid -> 1
+            SkBlurStyle.kOuter -> 2
+            SkBlurStyle.kInner -> 3
+        }
+
         pending.add(
             BlurredPathDraw(
                 shapeMaskDevice = maskDevice,
@@ -4164,6 +4203,7 @@ public class SkWebGpuDevice(
                 kernel = kernel,
                 radius = radius,
                 paintR = cr, paintG = cg, paintB = cb, paintA = ca,
+                blurStyleOrdinal = styleOrdinal,
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = paint.blendMode,
             ),
@@ -8202,19 +8242,25 @@ public class SkWebGpuDevice(
         hPacked[2] = d.srcWidth.toFloat(); hPacked[3] = d.srcHeight.toFloat()
         // paintColor : zero in the H pass (ignored by fs_horizontal).
         hPacked[4] = 0f; hPacked[5] = 0f; hPacked[6] = 0f; hPacked[7] = 0f
-        // axisRadius : (1, 0, radius, 0).
+        // axisRadius : (1, 0, radius, 0). Style is irrelevant for the
+        // H pass (the H entry doesn't read the shape mask) ; we ship 0
+        // for deterministic bytes.
         hPacked[8] = 1f; hPacked[9] = 0f; hPacked[10] = d.radius.toFloat(); hPacked[11] = 0f
         // weights[0..radius] -> flat indices starting at packed[12].
         for (k in 0..d.radius) {
             hPacked[12 + k] = d.kernel[k]
         }
         context.queue.writeBuffer(hUniform, 0uL, ArrayBuffer.of(hPacked))
+        // Binding 2 (shape mask) is unused by the H entry but the
+        // shared layout requires it ; bind the shape-mask view so a
+        // valid texture sits in the slot.
         val hBindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = blurBindGroupLayout,
                 entries = listOf(
                     BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = hUniform)),
                     BindGroupEntry(binding = 1u, resource = d.shapeMaskView),
+                    BindGroupEntry(binding = 2u, resource = d.shapeMaskView),
                 ),
             ),
         )
@@ -8237,17 +8283,27 @@ public class SkWebGpuDevice(
         vPacked[2] = d.srcWidth.toFloat(); vPacked[3] = d.srcHeight.toFloat()
         vPacked[4] = d.paintR; vPacked[5] = d.paintG
         vPacked[6] = d.paintB; vPacked[7] = d.paintA
-        vPacked[8] = 0f; vPacked[9] = 1f; vPacked[10] = d.radius.toFloat(); vPacked[11] = 0f
+        // axisRadius : (0, 1, radius, blurStyle). The V-pass shader
+        // branches on axisRadius.w to compose B (blurred coverage)
+        // with M (sharp shape-mask alpha) per the SkBlurStyle formula.
+        vPacked[8] = 0f
+        vPacked[9] = 1f
+        vPacked[10] = d.radius.toFloat()
+        vPacked[11] = d.blurStyleOrdinal.toFloat()
         for (k in 0..d.radius) {
             vPacked[12 + k] = d.kernel[k]
         }
         context.queue.writeBuffer(vUniform, 0uL, ArrayBuffer.of(vPacked))
+        // V-pass bind group : binding 1 is the H-pass scratch (the
+        // convolution source for the V pass), binding 2 is the sharp
+        // shape mask (consumed by the kSolid / kOuter / kInner branch).
         val vBindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = blurBindGroupLayout,
                 entries = listOf(
                     BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = vUniform)),
                     BindGroupEntry(binding = 1u, resource = d.scratchHView),
+                    BindGroupEntry(binding = 2u, resource = d.shapeMaskView),
                 ),
             ),
         )
@@ -9225,7 +9281,12 @@ public class SkWebGpuDevice(
          * Layout (matches `Uniforms` in `blur_gaussian.wgsl`) :
          *   offset   0 : dstOriginSize (vec4f -- dstX, dstY, srcW, srcH)
          *   offset  16 : paintColor    (vec4f -- premul rgba modulation)
-         *   offset  32 : axisRadius    (vec4f -- axisX, axisY, radius, 0)
+         *   offset  32 : axisRadius    (vec4f -- axisX, axisY, radius,
+         *                                blurStyle). `blurStyle` is the
+         *                                [org.skia.foundation.SkBlurStyle]
+         *                                ordinal (0 = kNormal, 1 = kSolid,
+         *                                2 = kOuter, 3 = kInner) and is
+         *                                only consumed by the V pass.
          *   offset  48 : weights       (array<vec4f, 9> -- 144 bytes,
          *                                36 float slots ; indices 0..32
          *                                hold the symmetric half-kernel,

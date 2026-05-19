@@ -17,7 +17,8 @@ import kotlin.math.abs
 
 /**
  * Phase MaskFilter-blur acceptance tests -- `paint.maskFilter =
- * SkBlurMaskFilter(kNormal, sigma)` on the GPU backend.
+ * SkBlurMaskFilter(style, sigma)` on the GPU backend, for all four
+ * [SkBlurStyle] variants : kNormal / kSolid / kOuter / kInner.
  *
  * The GPU path :
  *  1. Allocates a child layer device sized to the path bounds + 3*sigma
@@ -26,21 +27,26 @@ import kotlin.math.abs
  *  3. Drains the child via [SkWebGpuDevice.flushDrawsOnly].
  *  4. Enqueues a [SkWebGpuDevice.BlurredPathDraw] that the parent's
  *     flush replays as two render passes (H Gaussian blur on a scratch
- *     texture, then V Gaussian blur + paint-colour modulation onto the
- *     parent's intermediate).
+ *     texture, then V Gaussian blur + style-driven composition + paint-
+ *     colour modulation onto the parent's intermediate).
+ *
+ * The V pass binds both the H-pass scratch (the convolution source)
+ * and the original shape mask (the sharp M(p)) -- the four styles
+ * differ only in how M and B are combined per the formulas :
+ *  - kNormal : B
+ *  - kSolid  : min(M + B, 1)
+ *  - kOuter  : max(B - M, 0)
+ *  - kInner  : B * M
  *
  * Coverage in this suite :
- *  - `drawRect` + blur : the rect's edges become soft (gradient from
- *    full alpha to zero over ~3*sigma pixels) ; the rect's interior
- *    keeps the paint colour. Sample a row of pixels crossing the edge
- *    and verify monotonic decay.
- *  - `drawPath(circle)` + blur : same edge-softness check on a curved
- *    boundary.
- *  - paint.alpha modulation : the V-pass uniform pre-multiplies the
- *    paint colour, so halving the alpha halves the alpha of every
- *    blurred pixel.
- *  - background bleed-through : far outside the path, the parent's
- *    background pixels stay untouched (SrcOver with alpha = 0).
+ *  - `drawRect` + kNormal : soft edges, opaque centre, monotone decay.
+ *  - `drawPath(circle)` + kNormal : edge-softness on a curved boundary.
+ *  - paint.alpha modulation : halving alpha halves output alpha.
+ *  - background bleed-through : far outside the path, untouched.
+ *  - kSolid : interior stays fully solid, halo extends outward.
+ *  - kOuter : interior transparent (B - M = 0), only outer halo.
+ *  - kInner : blur clipped to interior, exterior fully transparent.
+ *  - paint without maskFilter : sharp fill, dispatch gate doesn't fire.
  */
 class MaskFilterBlurTest {
 
@@ -235,6 +241,149 @@ class MaskFilterBlurTest {
             halfCentre[0] in 100..180,
             "half-alpha centre R should be ~128, got ${halfCentre[0]}",
         )
+    }
+
+    @Test
+    fun `drawRect with kSolid blur keeps interior fully solid and halos outward`() {
+        // kSolid : output = min(M + B, 1). The sharp shape stays
+        // fully opaque (M = 1 inside the rect), and a soft outer halo
+        // (B > 0 outside) extends past the original edges. Inside the
+        // rect there's NO partial-coverage band (kNormal would have
+        // one near the inner edge as the kernel mass leaks out) -- M
+        // re-saturates every interior pixel.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val sigma = 4f
+        val rect = SkRect.MakeLTRB(20f, 20f, 44f, 44f)
+        val paint = SkPaint().apply {
+            color = SK_ColorBLACK
+            maskFilter = SkBlurMaskFilter.Make(SkBlurStyle.kSolid, sigma)
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(rect, paint)
+                device.flush()
+            }
+        }
+
+        // Centre of the rect : fully opaque black (coverage = 1).
+        val centre = pixels.rgbaAt(32, 32)
+        assertEquals(listOf(0, 0, 0, 255), centre,
+            "kSolid centre must be fully opaque")
+
+        // Just inside the right edge (x = 43, the last rect column) :
+        // still fully opaque under kSolid since M = 1. Under kNormal,
+        // this column would already be partially transparent because
+        // the blurred kernel is leaking the mass outward.
+        val justInside = pixels.rgbaAt(43, 32)
+        assertEquals(listOf(0, 0, 0, 255), justInside,
+            "kSolid interior must stay fully solid up to the edge")
+
+        // Just outside the right edge (x = 44) : partial coverage --
+        // the halo starts. Should be partially transparent (luminance
+        // between 0 and 255).
+        val justOutside = pixels.rgbaAt(44, 32)
+        assertTrue(justOutside[0] in 20..240,
+            "kSolid halo at x = 44 must show partial coverage, got $justOutside")
+
+        // Far outside (x = 60, 16 px past the edge) : background.
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(60, 32),
+            "kSolid far-outside must be background")
+    }
+
+    @Test
+    fun `drawRect with kOuter blur shows halo only outside the shape`() {
+        // kOuter : output = max(B - M, 0). Inside the shape M = 1
+        // and B is also high (kernel is fully covered) so B - M = 0
+        // -> the interior is transparent (background bleeds through).
+        // Outside the shape M = 0 and B > 0 -> only the halo remains.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val sigma = 4f
+        val rect = SkRect.MakeLTRB(20f, 20f, 44f, 44f)
+        val paint = SkPaint().apply {
+            color = SK_ColorBLACK
+            maskFilter = SkBlurMaskFilter.Make(SkBlurStyle.kOuter, sigma)
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(rect, paint)
+                device.flush()
+            }
+        }
+
+        // Centre of the rect : transparent (B - M = 0). Background
+        // bleeds through -> white.
+        val centre = pixels.rgbaAt(32, 32)
+        assertEquals(listOf(255, 255, 255, 255), centre,
+            "kOuter centre must be background (halo subtracted by M)")
+
+        // Just outside the right edge : halo present.
+        val haloBand = (45..56).map { x -> pixels.rgbaAt(x, 32)[0] }
+        val partials = haloBand.count { it in 20..240 }
+        assertTrue(partials >= 3,
+            "kOuter must have partial halo pixels outside the rect, " +
+                "got band luminances $haloBand")
+
+        // Far outside : background.
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(60, 32),
+            "kOuter far-outside must be background")
+    }
+
+    @Test
+    fun `drawRect with kInner blur shows blur clipped inside the shape`() {
+        // kInner : output = B * M. Outside the shape (M = 0) the
+        // output is 0 -> background. Inside the shape the blurred
+        // coverage B is < 1 near the inner edges (the kernel partly
+        // leaks past the boundary) -> a darker centre, brighter near
+        // the inner edges (B falls off going inward toward 0 at the
+        // edge of M).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val sigma = 4f
+        val rect = SkRect.MakeLTRB(20f, 20f, 44f, 44f)
+        val paint = SkPaint().apply {
+            color = SK_ColorBLACK
+            maskFilter = SkBlurMaskFilter.Make(SkBlurStyle.kInner, sigma)
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(rect, paint)
+                device.flush()
+            }
+        }
+
+        // Centre of the rect : near-opaque (M = 1, B saturated since
+        // the 24x24 interior is wider than 2*radius = 24 for sigma 4,
+        // borderline -- the centre tap mass is essentially full).
+        val centre = pixels.rgbaAt(32, 32)
+        assertTrue(centre[0] < 30,
+            "kInner centre R should be near 0 (full B * 1), got ${centre[0]}")
+
+        // Just outside the right edge (x = 44) : background. M = 0
+        // there, so no contribution regardless of B.
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(44, 32),
+            "kInner just-outside must be background (clipped by M = 0)")
+
+        // Far outside : background.
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(60, 32),
+            "kInner far-outside must be background")
+
+        // Inside the rect, near the right edge (x = 43, the last
+        // interior column) : the blur kernel mostly straddles the
+        // edge so B is roughly half. Output should be lighter than
+        // the centre -- the inner falloff.
+        val justInside = pixels.rgbaAt(43, 32)
+        assertTrue(justInside[0] > centre[0] + 20,
+            "kInner must fade toward the interior edge : justInside R " +
+                "(${justInside[0]}) should exceed centre R (${centre[0]}) " +
+                "by at least 20 luminance units")
     }
 
     @Test
