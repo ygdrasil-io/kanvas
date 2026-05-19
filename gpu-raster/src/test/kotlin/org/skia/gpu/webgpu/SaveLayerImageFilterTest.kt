@@ -153,11 +153,152 @@ class SaveLayerImageFilterTest {
     }
 
     @Test
-    fun `saveLayer with Blur imageFilter throws clear error`() {
-        // Phase G-saveLayer-imageFilter -- scaffolding raises for any
-        // non-supported variant. Verify the error message names the
-        // filter type and points at the follow-up slice rather than
-        // silently dropping the filter.
+    fun `saveLayer with Blur imageFilter sigma 0 collapses to identity composite`() {
+        // Phase G-saveLayer-imageFilter-blur -- sigma == 0 on both axes
+        // is the identity case. The dispatch routes through the plain
+        // [LayerCompositeDraw] path (no blur scratch textures, no
+        // multi-pass) ; the pixel result must be bit-iso with the
+        // no-imageFilter saveLayer.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Blur(
+                        sigmaX = 0f, sigmaY = 0f,
+                        tileMode = SkTileMode.kClamp, input = null,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Plain SrcOver of opaque red over white -> red inside layer.
+        assertRgbaApprox(pixels, 14, 14, 255, 0, 0, 255, tag = "Blur sigma=0 center")
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside layer")
+    }
+
+    @Test
+    fun `saveLayer with Blur imageFilter kClamp softens layer edges`() {
+        // Phase G-saveLayer-imageFilter-blur -- the load-bearing test :
+        // a small red rect inset inside a larger layer, blurred with
+        // sigma > 0. Properties to verify :
+        //   - the rect's interior pixels stay solid red (no kernel mass
+        //     loss in the centre),
+        //   - the rect's edges fade to white (= blurred red mixed with
+        //     transparent surround), forming a soft falloff,
+        //   - the falloff width matches the kernel radius (3 * sigma),
+        //   - the layer's surround inside the layer bounds stays white
+        //     where the kernel hasn't reached.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                // 32x32 device. The layer covers the whole device so
+                // the blur extends out into the layer's transparent
+                // surround. Inside the layer, draw a 12x12 red square
+                // inset by 10 px from each side : pixels (10..21).
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Blur(
+                        sigmaX = 2f, sigmaY = 2f,
+                        tileMode = SkTileMode.kClamp, input = null,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Centre of the red rect -- well inside the kernel's full
+        // support, so the convolved sum collapses back to the source
+        // colour (kernel sums to 1, all taps land on red).
+        assertRgbaApprox(pixels, 16, 16, 255, 0, 0, 255, tag = "blur centre red", tol = 2)
+
+        // Far outside the rect, but inside the layer -- kernel taps
+        // all land on transparent, the SrcOver composite onto the
+        // white background leaves white untouched.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "blur far surround white")
+
+        // Just outside the rect edge (1 px past the right edge) --
+        // halfway into the kernel's spread, expect a soft pink. With
+        // sigma = 2 the centre tap weight is ~0.20 ; a pixel 1 px
+        // outside the edge has about half its kernel mass landing on
+        // red so the alpha should be ~50% red blended over white.
+        val i = (16 * W + 22) * 4
+        val r = pixels[i].toInt() and 0xFF
+        val g = pixels[i + 1].toInt() and 0xFF
+        val b = pixels[i + 2].toInt() and 0xFF
+        assertTrue(r > 220 && g > 140 && g < 220 && b > 140 && b < 220) {
+            "Just-outside-edge pixel should be a soft pink (high R, mid G/B) ; " +
+                "got ($r, $g, $b)"
+        }
+
+        // Inside the rect 1 px from the edge -- kernel mostly red but
+        // a sliver of transparent taps from outside the rect ; the
+        // final colour after SrcOver onto white is a slightly washed-
+        // out red.
+        val j = (16 * W + 20) * 4
+        val r2 = pixels[j].toInt() and 0xFF
+        val g2 = pixels[j + 1].toInt() and 0xFF
+        val b2 = pixels[j + 2].toInt() and 0xFF
+        assertTrue(r2 > 230 && g2 < 120 && b2 < 120) {
+            "Inside-edge pixel should be near-red with a faint white wash ; " +
+                "got ($r2, $g2, $b2)"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Blur imageFilter input nonNull throws clear error`() {
+        // The non-null child case is deferred to a follow-up slice that
+        // handles structural-transform pre-passes.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val err = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val inner = SkImageFilters.Offset(dx = 0f, dy = 0f, input = null)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Blur(
+                        sigmaX = 4f, sigmaY = 4f,
+                        tileMode = SkTileMode.kClamp, input = inner,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                runCatching { canvas.restore() }.exceptionOrNull()
+            }
+        }
+
+        assertTrue(err is IllegalStateException) {
+            "Expected IllegalStateException for Blur with non-null child ; got $err"
+        }
+        val msg = err?.message ?: ""
+        assertTrue(msg.contains("Blur") && msg.contains("input == null")) {
+            "Error message should call out the non-null child input ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Blur imageFilter kRepeat tileMode throws clear error`() {
+        // kRepeat / kMirror need a sampler with the corresponding
+        // addressMode -- deferred to a follow-up slice. kClamp / kDecal
+        // are handled in-shader.
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
@@ -168,7 +309,7 @@ class SaveLayerImageFilterTest {
                 val layerPaint = SkPaint().apply {
                     imageFilter = SkImageFilters.Blur(
                         sigmaX = 4f, sigmaY = 4f,
-                        tileMode = SkTileMode.kDecal, input = null,
+                        tileMode = SkTileMode.kRepeat, input = null,
                     )
                 }
                 canvas.saveLayer(layerBounds, layerPaint)
@@ -178,11 +319,11 @@ class SaveLayerImageFilterTest {
         }
 
         assertTrue(err is IllegalStateException) {
-            "Expected IllegalStateException for Blur imageFilter ; got $err"
+            "Expected IllegalStateException for Blur with kRepeat tileMode ; got $err"
         }
         val msg = err?.message ?: ""
-        assertTrue(msg.contains("Blur") && msg.contains("sigmaX = 4.0") && msg.contains("sigmaY = 4.0")) {
-            "Error message should name the Blur filter + its sigmas ; got : $msg"
+        assertTrue(msg.contains("tileMode") && msg.contains("kRepeat")) {
+            "Error message should call out the unsupported tileMode ; got : $msg"
         }
     }
 
