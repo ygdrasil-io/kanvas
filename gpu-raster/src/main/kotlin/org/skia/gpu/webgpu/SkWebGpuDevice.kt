@@ -104,6 +104,7 @@ import org.skia.foundation.SkBlurStyle
 import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.ln
 
 /**
  * G1.2 — first GPU-backed [SkDevice] implementation, built on wgpu4k.
@@ -1125,16 +1126,26 @@ public class SkWebGpuDevice(
         // Shape-mask source : the child device's intermediate view.
         val shapeMaskView: GPUTextureView,
         // Host-allocated scratch H-pass texture (closed after submit).
+        // For the single-stage path : sized to (srcWidth, srcHeight) ;
+        // the H pass writes the convolved RGBA along X here. For the
+        // multi-stage cascade path : sized to the smallest cascade
+        // level (srcWidth >> n, srcHeight >> n), the H pass runs on
+        // the cascade's downN texture and writes here.
         val scratchHTexture: GPUTexture,
         val scratchHView: GPUTextureView,
-        // Size of the shape mask (and of scratchH, they share dims).
+        // Size of the shape mask. For the single-stage path the H
+        // scratch + V output share these dims ; for the cascade path
+        // the H scratch lives at the downsampled size, but the final
+        // composite + the upsample output are at (srcWidth, srcHeight).
         val srcWidth: Int, val srcHeight: Int,
         // Origin of the shape mask in parent-device pixel coords.
         val dstOriginX: Int, val dstOriginY: Int,
         // Integer scissor in parent-device pixels for the V pass.
         val scissor: IntArray,
         // Symmetric half-kernel : (1 + radius) floats, packed into 9
-        // vec4f (36 floats, trailing zeroed).
+        // vec4f (36 floats, trailing zeroed). For the single-stage
+        // path this is the full-sigma kernel ; for the cascade path
+        // this is the sigma-step kernel (sigma / 2^N).
         val kernel: FloatArray,
         val radius: Int,
         // Paint colour, premul.
@@ -1145,11 +1156,65 @@ public class SkWebGpuDevice(
         // blurred coverage B with the sharp shape-mask alpha M per
         // the formulas in [SkBlurMaskFilter].
         val blurStyleOrdinal: Int,
+        // Phase MaskFilter-blur-cascade -- when sigma exceeds the
+        // single-stage kernel reach (MAX_BLUR_RADIUS = 32 -> sigma
+        // ~10.6), the dispatch builds an N-stage downsample chain +
+        // an N-stage upsample chain. Non-null carries the per-stage
+        // texture views and dimensions ; the per-stage uniforms +
+        // bind groups are built in [buildBlurredPathDrawResources]
+        // and dispatched in [flush]. Null = single-stage fast path.
+        val cascade: BlurCascade?,
         // PendingDraw interface : r/g/b/a placeholders ; mode honoured
         // by the V-pass pipeline's blend state.
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
         override val mode: SkBlendMode,
     ) : PendingDraw
+
+    /**
+     * Phase MaskFilter-blur-cascade -- the per-stage texture chain for
+     * a sigma > kMaxBlurSigma blur. Allocated at dispatch time, owned
+     * by the [BlurredPathDraw] (closed alongside the H scratch in
+     * [closeDrawResources]).
+     *
+     * `levels[0]` is the smallest (downsampled N times), `levels[N]`
+     * is the original mask size. `downsamples` runs `levels[0] <-
+     * levels[1]`, `levels[1] <- levels[2]`, ..., `levels[N-1] <-
+     * shapeMask` (the source of the first downsample is the shape
+     * mask itself, not a level here). `upsamples` runs the inverse :
+     * starting from the V-blur output (sized like `levels[0]`),
+     * each step writes to `upLevels[i]` while sampling the previous
+     * step's output.
+     *
+     * The final composite pass samples `upLevels.last()` (sized to
+     * the original mask) as the blurred mask and the original shape
+     * mask for the [SkBlurStyle] combine.
+     */
+    private data class BlurCascade(
+        // Downsample chain. Index 0 = first downsample (output of
+        // halving the shape mask) ; index N-1 = smallest level fed
+        // into the inner H+V blur.
+        val downLevels: List<CascadeLevel>,
+        // V-blur output (size matches downLevels.last()).
+        val innerVTexture: GPUTexture,
+        val innerVView: GPUTextureView,
+        // Upsample chain. Index 0 = first upsample (input is innerV) ;
+        // index N-1 = full-resolution output fed to the composite.
+        val upLevels: List<CascadeLevel>,
+    )
+
+    /**
+     * Phase MaskFilter-blur-cascade -- a single texture in the cascade
+     * chain. Just a (texture, view, w, h) tuple ; the per-stage
+     * uniform + bind group live in [DrawResources.cascadeUniforms] /
+     * [DrawResources.cascadeBindGroups] (parallel arrays, dispatch-
+     * order indexed).
+     */
+    private data class CascadeLevel(
+        val texture: GPUTexture,
+        val view: GPUTextureView,
+        val width: Int,
+        val height: Int,
+    )
 
     // ─── MaskFilter Gaussian blur on shaded paints (Phase MaskFilter-blur-shaded) ─
     /**
@@ -2357,6 +2422,183 @@ public class SkWebGpuDevice(
                 ),
             )
         }
+
+    // ─── MaskFilter Gaussian blur multi-stage cascade (lift sigma cap) ───
+    /**
+     * Phase MaskFilter-blur-cascade -- inner V blur pipeline. Runs at
+     * the downsampled (smallest) resolution. Writes the pure blurred
+     * mask to a scratch texture ; the style combine + paint-colour
+     * fold + composite onto the parent happen in
+     * [blurCascadeCompositePipelineFor] after the upsample chain.
+     *
+     * Reuses [blurGaussianShader] / [blurBindGroupLayout] (same
+     * 192-byte uniform, same two-texture bind layout). Entry point
+     * `fs_vertical_blur` -- the V-pass Gaussian convolution without
+     * the style / paint / composite tail.
+     */
+    private val blurCascadeInnerVerticalPipeline: GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = blurPipelineLayout,
+                vertex = VertexState(module = blurGaussianShader, entryPoint = "vs_main"),
+                fragment = FragmentState(
+                    module = blurGaussianShader,
+                    entryPoint = "fs_vertical_blur",
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            blend = null,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    /**
+     * Phase MaskFilter-blur-cascade -- final composite pipeline. Samples
+     * the full-resolution upsampled blurred mask + the original sharp
+     * shape mask, applies the [SkBlurStyle] combine, modulates by
+     * `paintColor`, and blends onto the parent via the pipeline's blend
+     * state (same natively-blendable subset as the single-stage
+     * variant : kClear / kSrc / kSrcOver / kDstOver).
+     *
+     * Reuses [blurGaussianShader] / [blurBindGroupLayout]. Entry point
+     * `fs_composite_upsampled` -- one-tap textureLoad on binding 1
+     * (the upsample-chain output), style combine + paint fold from
+     * binding 2 (the sharp shape mask).
+     */
+    private val blurCascadeCompositePipelineCache:
+        MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+
+    private fun blurCascadeCompositePipelineFor(mode: SkBlendMode): GPURenderPipeline =
+        blurCascadeCompositePipelineCache.getOrPut(mode) {
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = blurPipelineLayout,
+                    vertex = VertexState(module = blurGaussianShader, entryPoint = "vs_main"),
+                    fragment = FragmentState(
+                        module = blurGaussianShader,
+                        entryPoint = "fs_composite_upsampled",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+
+    /**
+     * Phase MaskFilter-blur-cascade -- shader modules for the 2x
+     * bilinear downsample / upsample passes used in the multi-stage
+     * sigma cascade.
+     */
+    private val blurDownsampleShader: GPUShaderModule =
+        loadShader("shaders/blur_downsample.wgsl")
+    private val blurUpsampleShader: GPUShaderModule =
+        loadShader("shaders/blur_upsample.wgsl")
+
+    /**
+     * Phase MaskFilter-blur-cascade -- bind group layout for the
+     * downsample + upsample passes. Uniform (size payload) + sampled
+     * texture (the source level) + Linear sampler. The source binding
+     * uses `Float` sample type (vs `UnfilterableFloat` for the
+     * textureLoad-based blur layout) so the bilinear sampler can
+     * filter it. `RGBA16Float` is filterable on every major adapter,
+     * and `RGBA8Unorm` (the fallback intermediate format) is
+     * filterable by default too -- this layout is portable across
+     * both.
+     */
+    private val blurResampleBindGroupLayout: GPUBindGroupLayout =
+        context.device.createBindGroupLayout(
+            BindGroupLayoutDescriptor(
+                entries = listOf(
+                    BindGroupLayoutEntry(
+                        binding = 0u,
+                        visibility = GPUShaderStage.Fragment,
+                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.Float,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 2u,
+                        visibility = GPUShaderStage.Fragment,
+                        sampler = SamplerBindingLayout(
+                            type = GPUSamplerBindingType.Filtering,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    private val blurResamplePipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(blurResampleBindGroupLayout)),
+    )
+
+    private val blurDownsamplePipeline: GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = blurResamplePipelineLayout,
+                vertex = VertexState(module = blurDownsampleShader, entryPoint = "vs_main"),
+                fragment = FragmentState(
+                    module = blurDownsampleShader,
+                    entryPoint = "fs_main",
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            blend = null,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    private val blurUpsamplePipeline: GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = blurResamplePipelineLayout,
+                vertex = VertexState(module = blurUpsampleShader, entryPoint = "vs_main"),
+                fragment = FragmentState(
+                    module = blurUpsampleShader,
+                    entryPoint = "fs_main",
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            blend = null,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    /**
+     * Phase MaskFilter-blur-cascade -- shared sampler for the cascade
+     * downsample / upsample passes. Linear filter, ClampToEdge on
+     * both axes : preserves the kernel's edge mass at the mask
+     * boundaries (matches the textureLoad-based zero-padding at the
+     * outer boundary of the shape-mask layer device, whose pixels are
+     * cleared to (0,0,0,0) before the path rasterises). The sampler
+     * lives on the device and is shared across every cascade pass on
+     * every BlurredPathDraw.
+     */
+    private val blurResampleSampler: GPUSampler = context.device.createSampler(
+        SamplerDescriptor(
+            addressModeU = GPUAddressMode.ClampToEdge,
+            addressModeV = GPUAddressMode.ClampToEdge,
+            magFilter = GPUFilterMode.Linear,
+            minFilter = GPUFilterMode.Linear,
+            label = "SkWebGpuDevice.blurResampleSampler",
+        ),
+    )
 
     // ─── MaskFilter Gaussian blur on shaded paints (Phase MaskFilter-blur-shaded) ─
     /**
@@ -5241,18 +5483,38 @@ public class SkWebGpuDevice(
         val sigma = maskFilter.sigma
         if (!sigma.isFinite() || sigma <= 0f) return false
 
-        // Clamp the radius to the shader's MAX_BLUR_RADIUS so the
-        // uniform layout stays fixed. The kernel is renormalised after
-        // the clamp so the centre tap preserves full alpha (the
-        // out-spread tails are slightly clipped, which is a known
-        // first-slice limitation -- documented in the BlurredPathDraw
-        // kdoc).
-        val unboundedRadius = ceil(3.0 * sigma).toInt().coerceAtLeast(1)
-        val radius = unboundedRadius.coerceAtMost(MAX_BLUR_RADIUS)
-        val kernel = buildSymmetricGaussianHalfKernel(sigma, radius)
-
+        // Phase MaskFilter-blur-cascade -- decide single-stage vs.
+        // multi-stage cascade. The kernel reach is `3 * sigma` taps
+        // per side ; the shader caps that at MAX_BLUR_RADIUS = 32
+        // (sigma ~ 10.6). For sigma above [MAX_SINGLE_STAGE_BLUR_SIGMA]
+        // we route through the downsample-blur-upsample cascade :
+        // halve the resolution N times, halve the per-stage sigma to
+        // sigma / 2^N, run the same 32-tap kernel at the smallest
+        // level, then upsample N times. N is capped at
+        // [MAX_CASCADE_LEVELS] so the smallest texture stays large
+        // enough for the kernel to be meaningful (and so the per-draw
+        // GPU-resource count stays bounded).
+        val needsCascade = sigma > MAX_SINGLE_STAGE_BLUR_SIGMA
+        val cascadeLevels = if (needsCascade) {
+            // n = ceil(log2(sigma / kMax)) ; clamped to [1, MAX_CASCADE_LEVELS].
+            val raw = ceil(ln(sigma / MAX_SINGLE_STAGE_BLUR_SIGMA.toDouble()) /
+                ln(2.0)).toInt().coerceAtLeast(1)
+            raw.coerceAtMost(MAX_CASCADE_LEVELS)
+        } else 0
         // Compute device-space bounds of the path under the CTM,
-        // expand by radius + 1 px safety, intersect with clip + viewport.
+        // expand by `3 * sigma` (the kernel reach) + 1 px safety,
+        // intersect with clip + viewport.
+        //
+        // Bounds padding uses the FULL sigma's kernel reach for the
+        // cascade path (the convolved Gaussian still spreads `~3 *
+        // sigma` from the shape edge regardless of how many cascade
+        // levels we run). The single-stage path caps at the
+        // MAX_BLUR_RADIUS clamp (the kernel can't physically reach
+        // beyond that, so padding more would just allocate dead
+        // pixels at the mask edges).
+        val fullSigmaRadius = ceil(3.0 * sigma).toInt().coerceAtLeast(1)
+        val padRadius = if (needsCascade) fullSigmaRadius
+            else fullSigmaRadius.coerceAtMost(MAX_BLUR_RADIUS)
         val srcBounds = path.computeBounds()
         val devBounds = ctm.mapRect(srcBounds)
         // Stroke-style paths expand the bounds by half the stroke
@@ -5261,10 +5523,10 @@ public class SkWebGpuDevice(
         val strokeExpand = if (paint.style != SkPaint.Style.kFill_Style) {
             (paint.strokeWidth * scale * 0.5f) + 1f
         } else 1f
-        var ml = floor(devBounds.left - strokeExpand).toInt() - radius
-        var mt = floor(devBounds.top - strokeExpand).toInt() - radius
-        var mr = ceil(devBounds.right + strokeExpand).toInt() + radius
-        var mb = ceil(devBounds.bottom + strokeExpand).toInt() + radius
+        var ml = floor(devBounds.left - strokeExpand).toInt() - padRadius
+        var mt = floor(devBounds.top - strokeExpand).toInt() - padRadius
+        var mr = ceil(devBounds.right + strokeExpand).toInt() + padRadius
+        var mb = ceil(devBounds.bottom + strokeExpand).toInt() + padRadius
         ml = maxOf(ml, clip.left, 0)
         mt = maxOf(mt, clip.top, 0)
         mr = minOf(mr, clip.right, width)
@@ -5272,6 +5534,39 @@ public class SkWebGpuDevice(
         val maskW = mr - ml
         val maskH = mb - mt
         if (maskW <= 0 || maskH <= 0) return true  // Fully clipped -- nothing to draw.
+
+        // Phase MaskFilter-blur-cascade -- once we know `maskW / maskH`,
+        // clamp N down if the smallest level would degenerate to
+        // < 4 px per axis (the bilinear filter needs at least a 2x2
+        // footprint and the Gaussian kernel needs a few pixels of
+        // breathing room to spread). Keep at least 1 cascade level
+        // if sigma > the single-stage threshold ; bail to single-stage
+        // only if even N = 1 doesn't fit (tiny shape, large sigma --
+        // the visual is degenerate anyway and the single-stage clamp
+        // gives a perceptually-acceptable fallback).
+        val effectiveN = if (needsCascade) {
+            var n = cascadeLevels
+            while (n > 1 && (maskW shr n < 4 || maskH shr n < 4)) n -= 1
+            if (maskW shr n < 4 || maskH shr n < 4) 0 else n
+        } else 0
+        // Re-derive sigma_step / kernel if N changed.
+        val finalSigmaStep =
+            if (effectiveN > 0) sigma / (1 shl effectiveN)
+            else sigma
+        val finalRadius =
+            if (effectiveN > 0)
+                ceil(3.0 * finalSigmaStep).toInt()
+                    .coerceAtLeast(1).coerceAtMost(MAX_BLUR_RADIUS)
+            else {
+                // Single-stage : fall back to the historical clamp at
+                // MAX_BLUR_RADIUS (sigma > 10 with degenerate mask
+                // dimensions takes this branch).
+                ceil(3.0 * sigma).toInt().coerceAtLeast(1).coerceAtMost(MAX_BLUR_RADIUS)
+            }
+        val finalKernel = buildSymmetricGaussianHalfKernel(
+            if (effectiveN > 0) finalSigmaStep else sigma,
+            finalRadius,
+        )
 
         // Render the shape into a child layer device. The white-tint
         // paint produces a premul (1, 1, 1, coverage) mask in the
@@ -5305,10 +5600,20 @@ public class SkWebGpuDevice(
         maskDevice.drawPath(path, maskCtm, maskClip, whitePaint)
         maskDevice.flushDrawsOnly()
 
-        // Allocate the per-draw scratch H-pass texture.
+        // Phase MaskFilter-blur-cascade -- when running the multi-stage
+        // path we size scratchH to the SMALLEST cascade level (the H
+        // pass runs after the downsample chain, on a `maskW/2^N x
+        // maskH/2^N` texture). The single-stage path keeps the
+        // historical (maskW, maskH) sizing.
+        val innerW =
+            if (effectiveN > 0) (maskW shr effectiveN).coerceAtLeast(1)
+            else maskW
+        val innerH =
+            if (effectiveN > 0) (maskH shr effectiveN).coerceAtLeast(1)
+            else maskH
         val scratchH = context.device.createTexture(
             TextureDescriptor(
-                size = Extent3D(width = maskW.toUInt(), height = maskH.toUInt()),
+                size = Extent3D(width = innerW.toUInt(), height = innerH.toUInt()),
                 format = intermediateFormat,
                 usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
                 label = "SkWebGpuDevice.blurScratchH",
@@ -5316,8 +5621,18 @@ public class SkWebGpuDevice(
         )
         val scratchHView = scratchH.createView()
 
-        // Scissor for the V pass : the union (mr-ml) x (mb-mt) region
-        // on the parent intermediate, already clipped to clip + viewport.
+        // Phase MaskFilter-blur-cascade -- build the chain of progressively-
+        // halved scratches for the downsample stages, plus the V-blur
+        // output and the matching chain of progressively-doubled
+        // scratches for the upsample stages. We only build the cascade
+        // when `effectiveN > 0` ; the single-stage path leaves it null.
+        val cascade: BlurCascade? = if (effectiveN > 0) {
+            buildBlurCascade(maskW, maskH, effectiveN)
+        } else null
+
+        // Scissor for the V pass / final composite : the union
+        // (mr-ml) x (mb-mt) region on the parent intermediate,
+        // already clipped to clip + viewport.
         val scissor = intArrayOf(ml, mt, maskW, maskH)
 
         // Paint colour : extract premul RGBA. The shape mask is white-
@@ -5347,15 +5662,91 @@ public class SkWebGpuDevice(
                 srcWidth = maskW, srcHeight = maskH,
                 dstOriginX = ml, dstOriginY = mt,
                 scissor = scissor,
-                kernel = kernel,
-                radius = radius,
+                kernel = finalKernel,
+                radius = finalRadius,
                 paintR = cr, paintG = cg, paintB = cb, paintA = ca,
                 blurStyleOrdinal = styleOrdinal,
+                cascade = cascade,
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = paint.blendMode,
             ),
         )
         return true
+    }
+
+    /**
+     * Phase MaskFilter-blur-cascade -- allocate the texture chain for
+     * an N-stage downsample-blur-upsample cascade.
+     *
+     * Layout :
+     *   - `downLevels[0]` = (maskW >> 1, maskH >> 1)    (1st downsample target).
+     *   - `downLevels[1]` = (maskW >> 2, maskH >> 2)    (2nd downsample target).
+     *   - ...
+     *   - `downLevels[n-1]` = (maskW >> n, maskH >> n)  (smallest level ; fed into H+V).
+     *   - `innerV`      = same dims as `downLevels[n-1]` (V-blur output).
+     *   - `upLevels[0]` = (maskW >> (n-1), maskH >> (n-1)) (1st upsample target).
+     *   - `upLevels[1]` = (maskW >> (n-2), maskH >> (n-2)).
+     *   - ...
+     *   - `upLevels[n-1]` = (maskW, maskH)               (full-resolution blurred mask).
+     *
+     * All textures use [intermediateFormat] (RGBA16Float by default)
+     * with `RenderAttachment | TextureBinding` usage so they can serve
+     * as both render targets and sampled sources. The Linear sampler
+     * lives on the device ([blurResampleSampler]).
+     */
+    private fun buildBlurCascade(maskW: Int, maskH: Int, n: Int): BlurCascade {
+        val downLevels = ArrayList<CascadeLevel>(n)
+        for (i in 1..n) {
+            val w = (maskW shr i).coerceAtLeast(1)
+            val h = (maskH shr i).coerceAtLeast(1)
+            val tex = context.device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                    format = intermediateFormat,
+                    usage = GPUTextureUsage.RenderAttachment or
+                        GPUTextureUsage.TextureBinding,
+                    label = "SkWebGpuDevice.blurCascadeDown$i",
+                ),
+            )
+            downLevels += CascadeLevel(tex, tex.createView(), w, h)
+        }
+        // V-blur output : matches the smallest downsample level dims.
+        val innerW = (maskW shr n).coerceAtLeast(1)
+        val innerH = (maskH shr n).coerceAtLeast(1)
+        val innerV = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = innerW.toUInt(), height = innerH.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or
+                    GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.blurCascadeInnerV",
+            ),
+        )
+        val innerVView = innerV.createView()
+        val upLevels = ArrayList<CascadeLevel>(n)
+        // Upsample chain : start at (maskW >> (n-1), maskH >> (n-1))
+        // (one level up from innerV) and end at (maskW, maskH) (the
+        // full-resolution blurred mask).
+        for (i in (n - 1) downTo 0) {
+            val w = if (i == 0) maskW else (maskW shr i).coerceAtLeast(1)
+            val h = if (i == 0) maskH else (maskH shr i).coerceAtLeast(1)
+            val tex = context.device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                    format = intermediateFormat,
+                    usage = GPUTextureUsage.RenderAttachment or
+                        GPUTextureUsage.TextureBinding,
+                    label = "SkWebGpuDevice.blurCascadeUp$i",
+                ),
+            )
+            upLevels += CascadeLevel(tex, tex.createView(), w, h)
+        }
+        return BlurCascade(
+            downLevels = downLevels,
+            innerVTexture = innerV,
+            innerVView = innerVView,
+            upLevels = upLevels,
+        )
     }
 
     /**
@@ -8677,20 +9068,167 @@ public class SkWebGpuDevice(
                 return@forEachIndexed
             }
             if (d is BlurredPathDraw) {
-                // Phase MaskFilter-blur -- two render passes :
+                // Phase MaskFilter-blur -- single-stage (sigma <=
+                // ~10) takes the historical two-pass path :
                 //   1. H pass : sample shape mask, write to scratchH
                 //      (cleared). No blend.
-                //   2. V pass : sample scratchH, modulate by paint
-                //      colour, blend onto the parent intermediate via
-                //      the pipeline's blend state. The colour-attachment
-                //      loadOp matches the rest of [flush] (Clear for the
-                //      first draw, Load otherwise) so the composite
-                //      stacks with prior draws.
+                //   2. V pass + composite : sample scratchH, modulate
+                //      by paint colour, blend onto the parent
+                //      intermediate via the pipeline's blend state.
                 //
-                // The H scratch texture is freshly allocated per draw
-                // (see [drawPathWithBlurMaskFilterIfApplicable]) so the
-                // Clear loadOp is the natural choice -- it gives the
-                // scissored shader a zero-padded sandbox.
+                // Phase MaskFilter-blur-cascade -- multi-stage (sigma
+                // above ~10) :
+                //   1. N downsample passes : shapeMask -> down1 ->
+                //      down2 -> ... -> downN (each 2x bilinear).
+                //   2. H pass at the smallest level : downN ->
+                //      scratchH (sized like downN).
+                //   3. Inner V pass : scratchH -> cascade.innerV
+                //      (same size). Pure Gaussian blur, no style or
+                //      paint fold.
+                //   4. N upsample passes : innerV -> up_{n-1} -> ...
+                //      -> up_0 (full resolution).
+                //   5. Final composite : sample up_0 (full-res blurred
+                //      mask) + the sharp shape mask, apply style +
+                //      paint, blend onto the parent intermediate.
+                //
+                // All scratch textures are freshly allocated per draw
+                // (see [drawPathWithBlurMaskFilterIfApplicable] /
+                // [buildBlurCascade]) so each pass starts with Clear
+                // loadOp. The colour-attachment loadOp on the final
+                // composite matches the rest of [flush] (Clear for
+                // the first draw, Load otherwise) so the composite
+                // stacks with prior draws.
+                if (d.cascade != null) {
+                    val cascade = d.cascade
+                    // 1. Downsample chain. Each pass scissor is its
+                    //    destination level's full extent.
+                    for (i in cascade.downLevels.indices) {
+                        val dst = cascade.downLevels[i]
+                        encoder.beginRenderPass(
+                            RenderPassDescriptor(
+                                colorAttachments = listOf(
+                                    RenderPassColorAttachment(
+                                        view = dst.view,
+                                        loadOp = GPULoadOp.Clear,
+                                        clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                        storeOp = GPUStoreOp.Store,
+                                    ),
+                                ),
+                            ),
+                        ) {
+                            setPipeline(blurDownsamplePipeline)
+                            setBindGroup(0u, res.cascadeDownsampleBindGroups[i])
+                            setScissorRect(
+                                x = 0u, y = 0u,
+                                width = dst.width.toUInt(),
+                                height = dst.height.toUInt(),
+                            )
+                            draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                            end()
+                        }
+                    }
+                    // 2. H pass at the smallest level (scratchH).
+                    val hView = res.scratchHView!!
+                    val innermost = cascade.downLevels.last()
+                    encoder.beginRenderPass(
+                        RenderPassDescriptor(
+                            colorAttachments = listOf(
+                                RenderPassColorAttachment(
+                                    view = hView,
+                                    loadOp = GPULoadOp.Clear,
+                                    clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                    storeOp = GPUStoreOp.Store,
+                                ),
+                            ),
+                        ),
+                    ) {
+                        setPipeline(blurHorizontalPipeline)
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = 0u, y = 0u,
+                            width = innermost.width.toUInt(),
+                            height = innermost.height.toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                        end()
+                    }
+                    // 3. Inner V pass : scratchH -> cascade.innerV.
+                    encoder.beginRenderPass(
+                        RenderPassDescriptor(
+                            colorAttachments = listOf(
+                                RenderPassColorAttachment(
+                                    view = cascade.innerVView,
+                                    loadOp = GPULoadOp.Clear,
+                                    clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                    storeOp = GPUStoreOp.Store,
+                                ),
+                            ),
+                        ),
+                    ) {
+                        setPipeline(blurCascadeInnerVerticalPipeline)
+                        setBindGroup(0u, res.cascadeInnerVBindGroup!!)
+                        setScissorRect(
+                            x = 0u, y = 0u,
+                            width = innermost.width.toUInt(),
+                            height = innermost.height.toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                        end()
+                    }
+                    // 4. Upsample chain. The last upsample lands at
+                    //    full resolution (maskW x maskH).
+                    for (i in cascade.upLevels.indices) {
+                        val dst = cascade.upLevels[i]
+                        encoder.beginRenderPass(
+                            RenderPassDescriptor(
+                                colorAttachments = listOf(
+                                    RenderPassColorAttachment(
+                                        view = dst.view,
+                                        loadOp = GPULoadOp.Clear,
+                                        clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                        storeOp = GPUStoreOp.Store,
+                                    ),
+                                ),
+                            ),
+                        ) {
+                            setPipeline(blurUpsamplePipeline)
+                            setBindGroup(0u, res.cascadeUpsampleBindGroups[i])
+                            setScissorRect(
+                                x = 0u, y = 0u,
+                                width = dst.width.toUInt(),
+                                height = dst.height.toUInt(),
+                            )
+                            draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                            end()
+                        }
+                    }
+                    // 5. Final composite onto the parent intermediate.
+                    encoder.beginRenderPass(
+                        RenderPassDescriptor(
+                            colorAttachments = listOf(
+                                RenderPassColorAttachment(
+                                    view = colorView,
+                                    loadOp = loadOp,
+                                    clearValue = background,
+                                    storeOp = GPUStoreOp.Store,
+                                ),
+                            ),
+                        ),
+                    ) {
+                        setPipeline(blurCascadeCompositePipelineFor(d.mode))
+                        setBindGroup(0u, res.cascadeCompositeBindGroup!!)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                        end()
+                    }
+                    return@forEachIndexed
+                }
+                // Single-stage path.
                 val hView = res.scratchHView!!
                 encoder.beginRenderPass(
                     RenderPassDescriptor(
@@ -9198,6 +9736,15 @@ public class SkWebGpuDevice(
             it.quaternaryUniform?.close()
             it.scratchPreCfView?.close()
             it.scratchPreCfTexture?.close()
+            // Phase MaskFilter-blur-cascade -- per-stage uniforms and
+            // textures for the multi-stage sigma cascade. Empty lists
+            // on the single-stage fast path are a no-op.
+            it.cascadeDownsampleUniforms.forEach { u -> u.close() }
+            it.cascadeUpsampleUniforms.forEach { u -> u.close() }
+            it.cascadeInnerVUniform?.close()
+            it.cascadeCompositeUniform?.close()
+            it.cascadeViews.forEach { v -> v.close() }
+            it.cascadeTextures.forEach { t -> t.close() }
         }
     }
 
@@ -9329,6 +9876,32 @@ public class SkWebGpuDevice(
         // [closeDrawResources] alongside the other scratch textures.
         val scratchPreCfTexture: GPUTexture? = null,
         val scratchPreCfView: GPUTextureView? = null,
+        // Phase MaskFilter-blur-cascade -- per-stage uniform buffers
+        // and bind groups for the multi-stage sigma cascade. Indexed
+        // by pass order :
+        //   - cascadeDownsampleUniforms[i] / cascadeDownsampleBindGroups[i]
+        //     drives the i-th downsample pass (i = 0..N-1).
+        //   - cascadeUpsampleUniforms[i] / cascadeUpsampleBindGroups[i]
+        //     drives the i-th upsample pass (i = 0..N-1).
+        //   - cascadeInnerVUniform / cascadeInnerVBindGroup drives the
+        //     inner V-blur pass (the H pass uses `uniform` / `bindGroup`
+        //     above, repurposed to point at the smallest cascade level).
+        //   - cascadeCompositeUniform / cascadeCompositeBindGroup drives
+        //     the final upsample-composite pass (replaces
+        //     `secondaryUniform` / `secondaryBindGroup` for the cascade
+        //     path).
+        // All null on the single-stage fast path.
+        val cascadeDownsampleUniforms: List<GPUBuffer> = emptyList(),
+        val cascadeDownsampleBindGroups: List<io.ygdrasil.webgpu.GPUBindGroup> = emptyList(),
+        val cascadeUpsampleUniforms: List<GPUBuffer> = emptyList(),
+        val cascadeUpsampleBindGroups: List<io.ygdrasil.webgpu.GPUBindGroup> = emptyList(),
+        val cascadeInnerVUniform: GPUBuffer? = null,
+        val cascadeInnerVBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
+        val cascadeCompositeUniform: GPUBuffer? = null,
+        val cascadeCompositeBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
+        // Owned cascade textures + views to close after submit.
+        val cascadeTextures: List<GPUTexture> = emptyList(),
+        val cascadeViews: List<GPUTextureView> = emptyList(),
     )
 
     private fun buildRectDrawResources(d: RectDraw): DrawResources {
@@ -10008,6 +10581,22 @@ public class SkWebGpuDevice(
      * so the uniform's WGSL `array<vec4f, 9>` is fully initialised.
      */
     private fun buildBlurredPathDrawResources(d: BlurredPathDraw): DrawResources {
+        // For the single-stage path, the H pass reads the shape mask
+        // directly. For the cascade path, the H pass reads the
+        // SMALLEST cascade level (the final downsample output).
+        val hSourceView =
+            if (d.cascade != null) d.cascade.downLevels.last().view
+            else d.shapeMaskView
+        // For both paths the H scratch shares the H source's
+        // dimensions. In the single-stage path that's (srcW, srcH) ;
+        // in the cascade path that's the smallest level's dims.
+        val hScratchW =
+            if (d.cascade != null) d.cascade.downLevels.last().width
+            else d.srcWidth
+        val hScratchH =
+            if (d.cascade != null) d.cascade.downLevels.last().height
+            else d.srcHeight
+
         // ── H pass uniform : axisRadius = (1, 0, radius, 0). paintColor
         //    is irrelevant for the H pass (the V pass owns the colour
         //    fold) ; we ship zeros for deterministic bytes.
@@ -10019,11 +10608,11 @@ public class SkWebGpuDevice(
             ),
         )
         val hPacked = FloatArray(BLUR_UNIFORM_FLOATS)
-        // dstOriginSize : H pass writes to a scratch sized to (srcW, srcH)
+        // dstOriginSize : H pass writes to a scratch sized to (hScratchW, hScratchH)
         // with origin (0, 0) -- the shader treats dst pixel coords as
         // the source pixel coords directly.
         hPacked[0] = 0f; hPacked[1] = 0f
-        hPacked[2] = d.srcWidth.toFloat(); hPacked[3] = d.srcHeight.toFloat()
+        hPacked[2] = hScratchW.toFloat(); hPacked[3] = hScratchH.toFloat()
         // paintColor : zero in the H pass (ignored by fs_horizontal).
         hPacked[4] = 0f; hPacked[5] = 0f; hPacked[6] = 0f; hPacked[7] = 0f
         // axisRadius : (1, 0, radius, 0). Style is irrelevant for the
@@ -10036,69 +10625,246 @@ public class SkWebGpuDevice(
         }
         context.queue.writeBuffer(hUniform, 0uL, ArrayBuffer.of(hPacked))
         // Binding 2 (shape mask) is unused by the H entry but the
-        // shared layout requires it ; bind the shape-mask view so a
+        // shared layout requires it ; bind the H-source view so a
         // valid texture sits in the slot.
         val hBindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = blurBindGroupLayout,
                 entries = listOf(
                     BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = hUniform)),
-                    BindGroupEntry(binding = 1u, resource = d.shapeMaskView),
+                    BindGroupEntry(binding = 1u, resource = hSourceView),
+                    BindGroupEntry(binding = 2u, resource = hSourceView),
+                ),
+            ),
+        )
+
+        // Single-stage path : build the V uniform + bind group that
+        // does the V Gaussian convolution AND the style/paint composite
+        // onto the parent. The cascade path takes a different shape
+        // below (inner V is blur-only, final composite is a separate
+        // pass).
+        if (d.cascade == null) {
+            // ── V pass uniform : axisRadius = (0, 1, radius, style).
+            val vUniform = context.device.createBuffer(
+                BufferDescriptor(
+                    size = BLUR_UNIFORM_SIZE,
+                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                    label = "SkWebGpuDevice.blurVerticalDraw",
+                ),
+            )
+            val vPacked = FloatArray(BLUR_UNIFORM_FLOATS)
+            vPacked[0] = d.dstOriginX.toFloat(); vPacked[1] = d.dstOriginY.toFloat()
+            vPacked[2] = d.srcWidth.toFloat(); vPacked[3] = d.srcHeight.toFloat()
+            vPacked[4] = d.paintR; vPacked[5] = d.paintG
+            vPacked[6] = d.paintB; vPacked[7] = d.paintA
+            vPacked[8] = 0f
+            vPacked[9] = 1f
+            vPacked[10] = d.radius.toFloat()
+            vPacked[11] = d.blurStyleOrdinal.toFloat()
+            for (k in 0..d.radius) {
+                vPacked[12 + k] = d.kernel[k]
+            }
+            context.queue.writeBuffer(vUniform, 0uL, ArrayBuffer.of(vPacked))
+            val vBindGroup = context.device.createBindGroup(
+                BindGroupDescriptor(
+                    layout = blurBindGroupLayout,
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = vUniform)),
+                        BindGroupEntry(binding = 1u, resource = d.scratchHView),
+                        BindGroupEntry(binding = 2u, resource = d.shapeMaskView),
+                    ),
+                ),
+            )
+            return DrawResources(
+                uniform = hUniform,
+                bindGroup = hBindGroup,
+                secondaryUniform = vUniform,
+                secondaryBindGroup = vBindGroup,
+                scratchHTexture = d.scratchHTexture,
+                scratchHView = d.scratchHView,
+                layerDevice = d.shapeMaskDevice,
+            )
+        }
+
+        // Cascade path -- build the per-stage resources for the
+        // downsample chain, the inner V-blur pass, the upsample chain,
+        // and the final composite pass.
+        val cascade = d.cascade
+        val n = cascade.downLevels.size
+
+        // Downsample uniforms + bind groups. The i-th pass reads from
+        // its source view (shapeMask for i = 0, downLevels[i - 1].view
+        // otherwise) and writes to downLevels[i].
+        val downsampleUniforms = ArrayList<GPUBuffer>(n)
+        val downsampleBindGroups =
+            ArrayList<io.ygdrasil.webgpu.GPUBindGroup>(n)
+        for (i in 0 until n) {
+            val src = if (i == 0) d.shapeMaskView else cascade.downLevels[i - 1].view
+            val srcLevelW = if (i == 0) d.srcWidth else cascade.downLevels[i - 1].width
+            val srcLevelH = if (i == 0) d.srcHeight else cascade.downLevels[i - 1].height
+            val dst = cascade.downLevels[i]
+            val u = context.device.createBuffer(
+                BufferDescriptor(
+                    size = BLUR_RESAMPLE_UNIFORM_SIZE,
+                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                    label = "SkWebGpuDevice.blurDownsample$i",
+                ),
+            )
+            val packed = FloatArray(4)
+            packed[0] = dst.width.toFloat(); packed[1] = dst.height.toFloat()
+            packed[2] = srcLevelW.toFloat(); packed[3] = srcLevelH.toFloat()
+            context.queue.writeBuffer(u, 0uL, ArrayBuffer.of(packed))
+            val bg = context.device.createBindGroup(
+                BindGroupDescriptor(
+                    layout = blurResampleBindGroupLayout,
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = u)),
+                        BindGroupEntry(binding = 1u, resource = src),
+                        BindGroupEntry(binding = 2u, resource = blurResampleSampler),
+                    ),
+                ),
+            )
+            downsampleUniforms += u
+            downsampleBindGroups += bg
+        }
+
+        // Inner V uniform : axisRadius = (0, 1, radius, 0). Style /
+        // paint are unused (the final composite handles them).
+        val innerVUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = BLUR_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.blurCascadeInnerV",
+            ),
+        )
+        val innerVPacked = FloatArray(BLUR_UNIFORM_FLOATS)
+        innerVPacked[0] = 0f; innerVPacked[1] = 0f
+        innerVPacked[2] = hScratchW.toFloat(); innerVPacked[3] = hScratchH.toFloat()
+        innerVPacked[4] = 0f; innerVPacked[5] = 0f
+        innerVPacked[6] = 0f; innerVPacked[7] = 0f
+        innerVPacked[8] = 0f
+        innerVPacked[9] = 1f
+        innerVPacked[10] = d.radius.toFloat()
+        innerVPacked[11] = 0f
+        for (k in 0..d.radius) {
+            innerVPacked[12 + k] = d.kernel[k]
+        }
+        context.queue.writeBuffer(innerVUniform, 0uL, ArrayBuffer.of(innerVPacked))
+        val innerVBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = blurBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = innerVUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.scratchHView),
+                    BindGroupEntry(binding = 2u, resource = d.scratchHView),
+                ),
+            ),
+        )
+
+        // Upsample uniforms + bind groups. The i-th pass samples from
+        // (i == 0 ? innerV : upLevels[i - 1]) and writes to upLevels[i].
+        val upsampleUniforms = ArrayList<GPUBuffer>(n)
+        val upsampleBindGroups = ArrayList<io.ygdrasil.webgpu.GPUBindGroup>(n)
+        for (i in 0 until n) {
+            val src: GPUTextureView
+            val srcLevelW: Int
+            val srcLevelH: Int
+            if (i == 0) {
+                src = cascade.innerVView
+                // Inner V dims match the smallest downsample level.
+                srcLevelW = cascade.downLevels.last().width
+                srcLevelH = cascade.downLevels.last().height
+            } else {
+                src = cascade.upLevels[i - 1].view
+                srcLevelW = cascade.upLevels[i - 1].width
+                srcLevelH = cascade.upLevels[i - 1].height
+            }
+            val dst = cascade.upLevels[i]
+            val u = context.device.createBuffer(
+                BufferDescriptor(
+                    size = BLUR_RESAMPLE_UNIFORM_SIZE,
+                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                    label = "SkWebGpuDevice.blurUpsample$i",
+                ),
+            )
+            val packed = FloatArray(4)
+            packed[0] = dst.width.toFloat(); packed[1] = dst.height.toFloat()
+            packed[2] = srcLevelW.toFloat(); packed[3] = srcLevelH.toFloat()
+            context.queue.writeBuffer(u, 0uL, ArrayBuffer.of(packed))
+            val bg = context.device.createBindGroup(
+                BindGroupDescriptor(
+                    layout = blurResampleBindGroupLayout,
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = u)),
+                        BindGroupEntry(binding = 1u, resource = src),
+                        BindGroupEntry(binding = 2u, resource = blurResampleSampler),
+                    ),
+                ),
+            )
+            upsampleUniforms += u
+            upsampleBindGroups += bg
+        }
+
+        // Final composite uniform : axisRadius.x/.y/.z are unused by
+        // `fs_composite_upsampled` (no convolution) ; only .w (style)
+        // matters. Pack the paint colour and the origin so the shader
+        // can map fragment dst -> upsampled-mask sample.
+        val compositeUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = BLUR_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.blurCascadeComposite",
+            ),
+        )
+        val cPacked = FloatArray(BLUR_UNIFORM_FLOATS)
+        cPacked[0] = d.dstOriginX.toFloat(); cPacked[1] = d.dstOriginY.toFloat()
+        cPacked[2] = d.srcWidth.toFloat(); cPacked[3] = d.srcHeight.toFloat()
+        cPacked[4] = d.paintR; cPacked[5] = d.paintG
+        cPacked[6] = d.paintB; cPacked[7] = d.paintA
+        cPacked[8] = 0f; cPacked[9] = 0f
+        cPacked[10] = 0f; cPacked[11] = d.blurStyleOrdinal.toFloat()
+        context.queue.writeBuffer(compositeUniform, 0uL, ArrayBuffer.of(cPacked))
+        val compositeBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = blurBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = compositeUniform)),
+                    BindGroupEntry(binding = 1u, resource = cascade.upLevels.last().view),
                     BindGroupEntry(binding = 2u, resource = d.shapeMaskView),
                 ),
             ),
         )
 
-        // ── V pass uniform : axisRadius = (0, 1, radius, 0). paintColor
-        //    is the per-draw premul colour the shader multiplies by the
-        //    blurred coverage. dstOrigin is the (ml, mt) of the shape
-        //    mask in parent-device pixel coords -- the shader subtracts
-        //    it from the fragment position to land in scratch-pixel
-        //    coords.
-        val vUniform = context.device.createBuffer(
-            BufferDescriptor(
-                size = BLUR_UNIFORM_SIZE,
-                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                label = "SkWebGpuDevice.blurVerticalDraw",
-            ),
-        )
-        val vPacked = FloatArray(BLUR_UNIFORM_FLOATS)
-        vPacked[0] = d.dstOriginX.toFloat(); vPacked[1] = d.dstOriginY.toFloat()
-        vPacked[2] = d.srcWidth.toFloat(); vPacked[3] = d.srcHeight.toFloat()
-        vPacked[4] = d.paintR; vPacked[5] = d.paintG
-        vPacked[6] = d.paintB; vPacked[7] = d.paintA
-        // axisRadius : (0, 1, radius, blurStyle). The V-pass shader
-        // branches on axisRadius.w to compose B (blurred coverage)
-        // with M (sharp shape-mask alpha) per the SkBlurStyle formula.
-        vPacked[8] = 0f
-        vPacked[9] = 1f
-        vPacked[10] = d.radius.toFloat()
-        vPacked[11] = d.blurStyleOrdinal.toFloat()
-        for (k in 0..d.radius) {
-            vPacked[12 + k] = d.kernel[k]
+        // Collect the owned cascade textures + views for cleanup.
+        val cascadeTextures = ArrayList<GPUTexture>(2 * n + 1)
+        val cascadeViews = ArrayList<GPUTextureView>(2 * n + 1)
+        cascade.downLevels.forEach {
+            cascadeTextures += it.texture
+            cascadeViews += it.view
         }
-        context.queue.writeBuffer(vUniform, 0uL, ArrayBuffer.of(vPacked))
-        // V-pass bind group : binding 1 is the H-pass scratch (the
-        // convolution source for the V pass), binding 2 is the sharp
-        // shape mask (consumed by the kSolid / kOuter / kInner branch).
-        val vBindGroup = context.device.createBindGroup(
-            BindGroupDescriptor(
-                layout = blurBindGroupLayout,
-                entries = listOf(
-                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = vUniform)),
-                    BindGroupEntry(binding = 1u, resource = d.scratchHView),
-                    BindGroupEntry(binding = 2u, resource = d.shapeMaskView),
-                ),
-            ),
-        )
+        cascadeTextures += cascade.innerVTexture
+        cascadeViews += cascade.innerVView
+        cascade.upLevels.forEach {
+            cascadeTextures += it.texture
+            cascadeViews += it.view
+        }
+
         return DrawResources(
             uniform = hUniform,
             bindGroup = hBindGroup,
-            secondaryUniform = vUniform,
-            secondaryBindGroup = vBindGroup,
             scratchHTexture = d.scratchHTexture,
             scratchHView = d.scratchHView,
             layerDevice = d.shapeMaskDevice,
+            cascadeDownsampleUniforms = downsampleUniforms,
+            cascadeDownsampleBindGroups = downsampleBindGroups,
+            cascadeUpsampleUniforms = upsampleUniforms,
+            cascadeUpsampleBindGroups = upsampleBindGroups,
+            cascadeInnerVUniform = innerVUniform,
+            cascadeInnerVBindGroup = innerVBindGroup,
+            cascadeCompositeUniform = compositeUniform,
+            cascadeCompositeBindGroup = compositeBindGroup,
+            cascadeTextures = cascadeTextures,
+            cascadeViews = cascadeViews,
         )
     }
 
@@ -11447,6 +12213,31 @@ public class SkWebGpuDevice(
          * trailing 3).
          */
         const val MAX_BLUR_RADIUS: Int = 32
+
+        /**
+         * Phase MaskFilter-blur-cascade -- the upper sigma the single-
+         * stage path can faithfully reproduce before the 32-tap kernel
+         * starts clipping its outer tail. Derived from `radius = ceil
+         * (3 * sigma)` = 32 -> sigma = 32 / 3 ~= 10.667. Sigma above
+         * this routes through the multi-stage downsample-blur-upsample
+         * cascade : N = ceil(log2(sigma / kMaxBlurSigmaSingleStage)),
+         * per-stage sigma = sigma / 2^N. The cascade preserves the
+         * single-stage path byte-for-byte for sigma <= this value
+         * (kept slightly under the exact 10.667 boundary to leave a
+         * comfortable kernel tail).
+         */
+        const val MAX_SINGLE_STAGE_BLUR_SIGMA: Float = 10f
+
+        /**
+         * Phase MaskFilter-blur-cascade -- hard ceiling on the number
+         * of cascade levels. At N levels the smallest texture has
+         * dimensions `maskDim / 2^N`. Beyond 6 the inner mask shrinks
+         * to a few pixels even on large draws (e.g. 1024 px shape mask
+         * collapses to 16 px) which defeats the Gaussian. The cap
+         * also bounds the per-draw GPU-resource count : 2*N + 4
+         * textures + matching bind groups.
+         */
+        const val MAX_CASCADE_LEVELS: Int = 6
         /**
          * Phase MaskFilter-blur -- size of the per-draw blur uniform.
          * Layout (matches `Uniforms` in `blur_gaussian.wgsl`) :
@@ -11488,6 +12279,16 @@ public class SkWebGpuDevice(
         const val BLUR_IMAGE_FILTER_UNIFORM_SIZE: ULong = 176uL
         /** Float count of [BLUR_IMAGE_FILTER_UNIFORM_SIZE] for FloatArray packing : 44 floats. */
         const val BLUR_IMAGE_FILTER_UNIFORM_FLOATS: Int = 44
+        /**
+         * Phase MaskFilter-blur-cascade -- size of the per-stage uniform
+         * for `blur_downsample.wgsl` / `blur_upsample.wgsl`. One vec4f :
+         * (dstW, dstH, srcW, srcH). 16 bytes ; round-up to the
+         * std140-aligned minimum buffer size doesn't apply (WebGPU
+         * allows 16-byte uniform buffers as long as the std140 layout
+         * inside is well-formed -- one vec4f is the minimum aligned
+         * struct).
+         */
+        const val BLUR_RESAMPLE_UNIFORM_SIZE: ULong = 16uL
         /**
          * G5.3 -- identity column-major 3x3 used as the no-op
          * primaries matrix when [bitmapColorSpaceFor] returns the sRGB
