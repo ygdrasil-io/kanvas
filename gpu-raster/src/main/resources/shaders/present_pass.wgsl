@@ -3,11 +3,22 @@
 // `TestUtils.DM_REFERENCE_COLOR_SPACE`).
 //
 // Reads each pixel of the intermediate render target with `textureLoad`
-// (1:1 pixel mapping, no sampling filter), applies the inverse sRGB
-// OETF, multiplies by the BT.2020 primaries matrix in linear space,
-// then re-encodes through the Rec.2020 OETF and writes to the final
-// render target. WebGpuSink's CPU loop (G6.0) is now redundant and
-// drops to a straight byte-to-bitmap repack.
+// (1:1 pixel mapping, no sampling filter), un-premultiplies, applies
+// the inverse sRGB OETF, multiplies by the BT.2020 primaries matrix
+// in linear space, then re-encodes through the Rec.2020 OETF and
+// writes to the final render target. WebGpuSink's CPU loop (G6.0) is
+// now redundant and drops to a straight byte-to-bitmap repack.
+//
+// **II5 / Crbug892988.** The un-premultiplication step is required so
+// the readback bytes match the unpremul convention of the reference
+// PNGs in `original-888/`. F16 raster's `SkBitmap.getPixel` for
+// `kRGBA_F16Norm` does the same conversion (premul -> unpremul ARGB)
+// at compare time ; doing it here keeps the cross-backend comparison
+// fair. For opaque draws (the common case) `src.a == 1` and
+// un-premul is a no-op, so existing tests are unchanged. For
+// non-opaque kSrc (the Crbug892988 case) it brings the GPU output
+// from `(R*a, G*a, B*a, a)` back to `(R, G, B, a)` -- the bytes the
+// PNG reference encodes.
 //
 // **G6.2.** The intermediate is now `RGBA16Float` instead of
 // `RGBA8Unorm` (see [SkWebGpuDevice.intermediateTexture]) but the
@@ -52,10 +63,33 @@ fn fs_main(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let pix = vec2i(i32(frag.x), i32(frag.y));
     let src = textureLoad(intermediate_texture, pix, 0);
 
+    // II5 -- un-premultiply RGB before the OETF inverse / matrix /
+    // OETF chain. The intermediate stores premul sRGB-encoded values ;
+    // the colour-space transform is defined on unpremul linear values,
+    // and the readback bytes feed into a comparison that loads the
+    // reference PNG as unpremul.
+    //
+    // Alpha is clamped to 1.0 prior to the divide. The F16 intermediate
+    // can hold values > 1.0 from non-clamping blend operations
+    // (kPlus's `One + One` doesn't saturate on the GPU side ; the F16
+    // format faithfully stores `src.a + dst.a` even when it exceeds
+    // 1.0). Skia's CPU `kPlus` clamps each channel pre-store, so the
+    // reference PNG encodes alpha = 1.0 for those pixels. Clamping
+    // here keeps the divide neutral (inv_a = 1) on the kPlus case and
+    // recovers `(R/A, G/A, B/A)` only when the genuine source alpha
+    // was non-opaque (the Crbug892988 kSrc path).
+    //
+    // The `src.a > 0` guard avoids NaN from `0 / 0`.
+    var rgb_unpremul = vec3f(0.0, 0.0, 0.0);
+    if (src.a > 0.0) {
+        let inv_a = 1.0 / min(src.a, 1.0);
+        rgb_unpremul = vec3f(src.r * inv_a, src.g * inv_a, src.b * inv_a);
+    }
+
     let lin_srgb = vec3f(
-        srgb_to_linear(src.r),
-        srgb_to_linear(src.g),
-        srgb_to_linear(src.b),
+        srgb_to_linear(rgb_unpremul.r),
+        srgb_to_linear(rgb_unpremul.g),
+        srgb_to_linear(rgb_unpremul.b),
     );
 
     // Linear sRGB primaries -> linear Rec.2020 primaries.
