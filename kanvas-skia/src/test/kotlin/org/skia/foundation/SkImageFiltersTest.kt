@@ -182,4 +182,107 @@ class SkImageFiltersTest {
         assertEquals(10, out.offsetX, "inner's dx should propagate via input chain")
         assertEquals(5, out.offsetY, "outer's dy adds")
     }
+
+    // -- J3 — Compose with non-null inner that physically shifts the image
+    //         (so outer must see inner's spatial position, not just its
+    //         pixel buffer). Mirrors upstream Skia's
+    //         `ctx.withNewSource(innerResult)` semantics in
+    //         `SkComposeImageFilter::onFilterImage`.
+
+    @Test
+    fun `Compose outer ColorFilter inner Offset sees inner spatial position`() {
+        // Inner = Offset(2, 0) shifts a 4x4 image right by 2px (so the
+        // logical image now occupies columns [2, 6) at y in [0, 4)).
+        // Outer = an identity ColorFilter that just copies its input
+        // pixel-for-pixel. The composed result must contain inner's
+        // shifted pixels — i.e. the materialized image must be 6 wide,
+        // with columns 0..1 transparent and columns 2..5 carrying the
+        // original sampleImage rows.
+        val identityCf = SkColorFilters.Matrix(floatArrayOf(
+            1f, 0f, 0f, 0f, 0f,
+            0f, 1f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f,
+        ))
+        val inner = SkImageFilters.Offset(2f, 0f)
+        val outer = SkImageFilters.ColorFilter(identityCf)
+        val composed = SkImageFilters.Compose(outer, inner)!!
+        val out = composed.filterImage(sampleImage, identity)
+        // The materialized image should be 6 wide x 4 tall (covers
+        // both the origin (0,0) and the shifted inner at (2,0)).
+        assertEquals(6, out.image.width, "materialized width covers origin + shifted inner")
+        assertEquals(4, out.image.height, "materialized height matches inner")
+        // Final offset is (left, top) = (0, 0) — origin is contained.
+        assertEquals(0, out.offsetX, "left of materialized footprint")
+        assertEquals(0, out.offsetY, "top of materialized footprint")
+        // The shifted region (columns 2..5) carries sampleImage pixels.
+        for (y in 0 until 4) {
+            for (x in 0 until 4) {
+                assertEquals(
+                    sampleImage.peekPixel(x, y),
+                    out.image.peekPixel(x + 2, y),
+                    "shifted pixel at ($x, $y) -> materialized ($x+2, $y)",
+                )
+            }
+        }
+        // The padding region (columns 0..1) is transparent black.
+        for (y in 0 until 4) {
+            for (x in 0 until 2) {
+                assertEquals(0, out.image.peekPixel(x, y),
+                    "padding pixel at ($x, $y) should be transparent")
+            }
+        }
+    }
+
+    @Test
+    fun `Compose outer Offset inner Offset keeps fast offset-stacking path`() {
+        // When outer is a pure Offset, the materialization fast-path
+        // kicks in : inner's image is forwarded as-is and the offsets
+        // simply stack. This preserves the original test
+        // `Compose stacks the offsets of two Offset filters`.
+        val outer = SkImageFilters.Offset(10f, 0f)
+        val inner = SkImageFilters.Offset(0f, 5f)
+        val composed = SkImageFilters.Compose(outer, inner)!!
+        val out = composed.filterImage(sampleImage, identity)
+        // Fast path : image unchanged, offsets accumulated.
+        assertSame(sampleImage, out.image, "fast path forwards inner's image")
+        assertEquals(10, out.offsetX)
+        assertEquals(5, out.offsetY)
+    }
+
+    @Test
+    fun `Compose outer ColorFilter inner Offset negative dx materializes with left padding`() {
+        // Inner = Offset(-2.5, 0) which the implementation rounds to
+        // (sx = (-2.5 + 0.5).toInt() = -2) shifts the image LEFT by 2
+        // px. The materialized footprint covers BOTH the origin (0, 0)
+        // and the shifted image at (-2, 0). Since the image is 4 wide,
+        // it spans [-2, 2) in layer space, which already contains the
+        // origin -- so the footprint is just the image's own range :
+        // left = -2, right = 2, width = 4. Final offset becomes (-2, 0).
+        val identityCf = SkColorFilters.Matrix(floatArrayOf(
+            1f, 0f, 0f, 0f, 0f,
+            0f, 1f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f,
+        ))
+        val inner = SkImageFilters.Offset(-2.5f, 0f)
+        val outer = SkImageFilters.ColorFilter(identityCf)
+        val composed = SkImageFilters.Compose(outer, inner)!!
+        val out = composed.filterImage(sampleImage, identity)
+        assertEquals(4, out.image.width, "materialized width = image range, origin already inside")
+        assertEquals(4, out.image.height)
+        assertEquals(-2, out.offsetX, "left of materialized footprint")
+        assertEquals(0, out.offsetY)
+        // The image content lives in columns [0, 4) of the materialized
+        // image (which corresponds to layer columns [-2, 2)).
+        for (y in 0 until 4) {
+            for (x in 0 until 4) {
+                assertEquals(
+                    sampleImage.peekPixel(x, y),
+                    out.image.peekPixel(x, y),
+                    "shifted pixel at ($x, $y) -> materialized ($x, $y)",
+                )
+            }
+        }
+    }
 }
