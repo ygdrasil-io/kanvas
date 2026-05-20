@@ -268,45 +268,6 @@ class PathEffectVariantsTest {
         }
     }
 
-    @Test
-    fun `SkCornerPathEffect still throws since it's out of scope for this slice`() {
-        // II1 ships Discrete + Compose + Sum. SkCornerPathEffect lands in
-        // a separate slice (#589 -- not part of this branch). Must still
-        // throw with a clear deferred error.
-        val context = WebGpuContext.createOrNull()
-        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
-
-        val path: SkPath = SkPathBuilder()
-            .moveTo(8f, 8f)
-            .lineTo(24f, 8f)
-            .lineTo(24f, 24f)
-            .lineTo(8f, 24f)
-            .close()
-            .detach()
-
-        val paint = SkPaint().apply {
-            color = SK_ColorBLUE
-            style = SkPaint.Style.kStroke_Style
-            strokeWidth = 0f
-            isAntiAlias = false
-            pathEffect = SkCornerPathEffect.Make(4f)
-        }
-
-        context!!.use { ctx ->
-            SkWebGpuDevice(ctx, W, H).use { device ->
-                device.setBackground(SK_ColorWHITE)
-                val canvas = SkCanvas(device)
-                val ex = assertThrows(IllegalStateException::class.java) {
-                    canvas.drawPath(path, paint)
-                }
-                assertTrue(
-                    ex.message?.contains("SkCornerPathEffect") == true,
-                    "exception must name SkCornerPathEffect ; got: ${ex.message}",
-                )
-            }
-        }
-    }
-
     /**
      * Render a single drawing closure on a fresh [SkWebGpuDevice] backed
      * by [context]. The context is consumed (its `.use{}` block runs to
