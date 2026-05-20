@@ -508,6 +508,314 @@ class SaveLayerTest {
         assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside layer")
     }
 
+    // ─── Phase G-saveLayer-blend tests ────────────────────────────────
+
+    @Test
+    fun `saveLayer with kPlus blendMode adds layer to background`() {
+        // kPlus is `out = clamp(s + d, 0, 1)` in premul space. A green
+        // layer (R=0, G=1, B=0, A=1 premul) composited onto a red
+        // background (R=1, G=0, B=0, A=1) yields min(1, s+d) =
+        // (1, 1, 0, 1) = yellow.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply { blendMode = SkBlendMode.kPlus }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorGREEN })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : yellow (additive blend).
+        assertRgbaApprox(pixels, 12, 12, 255, 255, 0, 255, tag = "kPlus center", tol = 2)
+        assertRgbaApprox(pixels, 20, 20, 255, 255, 0, 255, tag = "kPlus center #2", tol = 2)
+        // Outside layer : background red untouched.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside kPlus")
+    }
+
+    @Test
+    fun `saveLayer with kMultiply blendMode multiplies layer with background`() {
+        // kMultiply premul : rc = (1-sa)*dc + (1-da)*sc + sc*dc.
+        // With opaque src and dst (sa = da = 1), all carrier terms zero
+        // out and the result is `s * d` channel-wise. 50% gray src over
+        // red dst : s = (0.5, 0.5, 0.5, 1) premul, d = (1, 0, 0, 1) ->
+        // rc = (0.5, 0, 0, 1) per channel ; ra = 1 + 1 - 1*1 = 1.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val gray = 0xFF808080.toInt()
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply { blendMode = SkBlendMode.kMultiply }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = gray })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : dark red (~ 128, 0, 0, 255). 8-bit quantisation
+        // tolerance of 2.
+        assertRgbaApprox(pixels, 14, 14, 128, 0, 0, 255, tag = "kMultiply center", tol = 2)
+        // Outside layer : background red.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside kMultiply")
+    }
+
+    @Test
+    fun `saveLayer with kModulate blendMode multiplies layer with background opaque src`() {
+        // kModulate is `s * d` per channel including alpha. For opaque
+        // operands : s = (0.5, 0.5, 0.5, 1), d = (1, 0, 0, 1) -> s*d =
+        // (0.5, 0, 0, 1). Alpha stays opaque (1 * 1 = 1) ; the per-channel
+        // product on the colour channels keeps only the red component.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val gray = 0xFF808080.toInt()
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply { blendMode = SkBlendMode.kModulate }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = gray })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : premul (128, 0, 0, 255).
+        assertRgbaApprox(pixels, 14, 14, 128, 0, 0, 255, tag = "kModulate center", tol = 2)
+        // Outside layer : background red.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside kModulate")
+    }
+
+    @Test
+    fun `saveLayer with kScreen blendMode lightens background`() {
+        // kScreen : s + d - s*d (separable, including alpha). Opaque
+        // blue layer over opaque red bg : s = (0, 0, 1, 1), d = (1, 0, 0, 1).
+        // rc = (1, 0, 1, 1) - red component cancels with itself, others
+        // sum. Result : magenta (255, 0, 255, 255).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply { blendMode = SkBlendMode.kScreen }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorBLUE })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : magenta.
+        assertRgbaApprox(pixels, 14, 14, 255, 0, 255, 255, tag = "kScreen center", tol = 2)
+        // Outside layer : background red.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside kScreen")
+    }
+
+    @Test
+    fun `saveLayer with kDarken blendMode picks darker channel`() {
+        // kDarken : rc = sc + dc - max(sc*da, dc*sa) ; ra = SrcOver.
+        // For opaque s, d (sa = da = 1) : rc = sc + dc - max(sc, dc) =
+        // min(sc, dc) per channel. Opaque green (0, 1, 0, 1) over opaque
+        // red (1, 0, 0, 1) -> (min(0, 1), min(1, 0), min(0, 0), 1) =
+        // (0, 0, 0, 1) = black.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply { blendMode = SkBlendMode.kDarken }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorGREEN })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : black (min of red and green channels = 0).
+        assertRgbaApprox(pixels, 14, 14, 0, 0, 0, 255, tag = "kDarken center", tol = 2)
+        // Outside layer : background red.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside kDarken")
+    }
+
+    @Test
+    fun `saveLayer with kLighten blendMode picks brighter channel`() {
+        // kLighten : rc = sc + dc - min(sc*da, dc*sa) ; ra = SrcOver.
+        // For opaque s, d : rc = max(sc, dc) per channel. Opaque green
+        // over opaque red -> (max(0, 1), max(1, 0), max(0, 0), 1) =
+        // (1, 1, 0, 1) = yellow.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply { blendMode = SkBlendMode.kLighten }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorGREEN })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : yellow (max of red and green channels).
+        assertRgbaApprox(pixels, 14, 14, 255, 255, 0, 255, tag = "kLighten center", tol = 2)
+        // Outside layer : background red.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside kLighten")
+    }
+
+    @Test
+    fun `saveLayer with kDifference blendMode subtracts colors`() {
+        // kDifference : rc = sc + dc - 2*min(sc*da, dc*sa) ; ra = SrcOver.
+        // For opaque s, d : rc = sc + dc - 2*min(sc, dc) = |sc - dc|.
+        // Opaque white (1,1,1,1) over opaque red (1,0,0,1) -> (0, 1, 1, 1)
+        // = cyan.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply { blendMode = SkBlendMode.kDifference }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorWHITE })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : cyan.
+        assertRgbaApprox(pixels, 14, 14, 0, 255, 255, 255, tag = "kDifference center", tol = 2)
+        // Outside layer : background red.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside kDifference")
+    }
+
+    @Test
+    fun `saveLayer with kExclusion blendMode subtracts double product`() {
+        // kExclusion : rc = sc + dc - 2*sc*dc ; ra = SrcOver. Like
+        // Difference for max-and-zero values. For opaque green (0,1,0,1)
+        // over opaque white (1,1,1,1) -> sc + dc - 2*sc*dc per channel :
+        //   R : 0 + 1 - 0 = 1
+        //   G : 1 + 1 - 2*1*1 = 0
+        //   B : 0 + 1 - 0 = 1
+        // -> magenta (1, 0, 1, 1).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply { blendMode = SkBlendMode.kExclusion }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorGREEN })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : magenta.
+        assertRgbaApprox(pixels, 14, 14, 255, 0, 255, 255, tag = "kExclusion center", tol = 2)
+        // Outside layer : background white.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside kExclusion")
+    }
+
+    @Test
+    fun `saveLayer with kPlus blendMode does not affect pixels outside layer`() {
+        // Regression : ensure the non-native composite's snapshot pass
+        // doesn't accidentally touch pixels outside the scissor rect.
+        // The snapshot pass scissor covers the whole parent, but the
+        // blend composite pass scissor only covers the dst rect, and the
+        // blend pipeline uses kSrc -- so only the dst rect should change.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val layerPaint = SkPaint().apply { blendMode = SkBlendMode.kPlus }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorBLUE })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside layer : magenta (R=255, G=0, B=255, A=255 from kPlus
+        // of blue over red).
+        assertRgbaApprox(pixels, 15, 15, 255, 0, 255, 255, tag = "kPlus inside", tol = 2)
+        // Outside layer : background red untouched (key regression).
+        assertRgbaApprox(pixels, 0, 0, 255, 0, 0, 255, tag = "kPlus outside TL")
+        assertRgbaApprox(pixels, 31, 31, 255, 0, 0, 255, tag = "kPlus outside BR")
+        assertRgbaApprox(pixels, 5, 5, 255, 0, 0, 255, tag = "kPlus outside near layer")
+        assertRgbaApprox(pixels, 25, 25, 255, 0, 0, 255, tag = "kPlus outside near layer #2")
+    }
+
+    @Test
+    fun `saveLayer with kPlus blendMode and Blur image filter throws`() {
+        // Bail condition : combining a Blur image filter with a non-
+        // native blend mode is deferred. Verify the gate throws clearly.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        var threw = false
+        var msg: String? = null
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply {
+                    blendMode = SkBlendMode.kPlus
+                    imageFilter = org.skia.foundation.SkImageFilters.Blur(
+                        sigmaX = 2f, sigmaY = 2f,
+                        tileMode = org.skia.foundation.SkTileMode.kDecal,
+                        input = null,
+                    )
+                }
+                try {
+                    canvas.saveLayer(layerBounds, layerPaint)
+                    canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorGREEN })
+                    canvas.restore()
+                    device.flush()
+                } catch (e: IllegalStateException) {
+                    threw = true
+                    msg = e.message
+                }
+            }
+        }
+        assertTrue(threw, "expected IllegalStateException for kPlus + Blur, got none")
+        assertTrue(
+            msg?.contains("Blur") == true && msg?.contains("kPlus") == true,
+            "error message should mention Blur and kPlus ; got : $msg",
+        )
+    }
+
     private fun assertRgbaApprox(
         rgba: ByteArray, x: Int, y: Int,
         r: Int, g: Int, b: Int, a: Int,
