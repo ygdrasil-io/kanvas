@@ -387,6 +387,219 @@ class MaskFilterBlurTest {
     }
 
     @Test
+    fun `drawRect with large sigma 20 routes through cascade and spreads beyond single-stage cap`() {
+        // Phase MaskFilter-blur-cascade -- sigma = 20 is roughly 2x
+        // the single-stage cap (~10) so it routes through the
+        // downsample-blur-upsample cascade. We pick the rect large
+        // enough (120x120) that the centre sees ~full kernel mass,
+        // so coverage at the centre is near opaque. The 3-sigma blur
+        // reach is 60 px ; we sample well past the single-stage's
+        // 32-pixel kernel reach to verify the cascade carries the
+        // blur further than the historical clamp would.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val w = 256
+        val h = 256
+        val sigma = 20f
+        // Centre = (128, 128), half-size = 60 so the rect is 120x120
+        // and the kernel (60 px reach) fits comfortably inside the
+        // saturated interior at the centre.
+        val rect = SkRect.MakeLTRB(68f, 68f, 188f, 188f)
+        val paint = SkPaint().apply {
+            color = SK_ColorBLACK
+            maskFilter = SkBlurMaskFilter.Make(SkBlurStyle.kNormal, sigma)
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, w, h).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(rect, paint)
+                device.flush()
+            }
+        }
+
+        fun lumAt(x: Int, y: Int): Int {
+            val i = (y * w + x) * 4
+            return pixels[i].toInt() and 0xFF
+        }
+
+        // Centre of the rect : the 120x120 rect is large enough for
+        // the kernel (60 px reach per side) to find full coverage at
+        // the centre. Expect near-opaque black.
+        val centreLum = lumAt(128, 128)
+        assertTrue(centreLum < 60,
+            "rect centre should be near-opaque black (R < 60), got $centreLum")
+
+        // 20 px past the rect's right edge (= 1 sigma past) :
+        // expected coverage ~ 0.5 * erfc(1 / sqrt(2)) ~ 0.16, so
+        // luminance ~ (1 - 0.16) * 255 ~ 214. The single-stage 32-tap
+        // clamp would give some coverage here too (1 sigma is well
+        // inside the 32-px reach) but with the cascade we expect the
+        // full Gaussian shape, no truncation.
+        val lum1Sigma = lumAt(208, 128)
+        assertTrue(lum1Sigma in 180..240,
+            "1 sigma past edge (sigma 20) should be a midtone-ish " +
+                "(R in [180, 240]), got $lum1Sigma")
+
+        // 32 px past the rect's right edge (x = 188 + 32 = 220) :
+        // about 1.6 sigma. Expected coverage ~ 0.5 * erfc(1.6/sqrt(2))
+        // ~ 0.055, luminance ~ 241. Loose threshold -- the key
+        // contract is that the cascade carries SOME blur past the
+        // single-stage 32-px kernel reach (the single-stage clamp
+        // would be ~255 here).
+        val lumPast32 = lumAt(220, 128)
+        assertTrue(lumPast32 < 250,
+            "with cascade (sigma 20), pixel 32 px past the edge should " +
+                "still carry some blur falloff (R < 250), got $lumPast32 -- " +
+                "the single-stage clamp would yield ~255 here")
+
+        // 60 px past the edge (3 sigma -- the kernel's tail) :
+        // approaches background but still shows a tiny falloff.
+        val lumFar = lumAt(248, 128)
+        assertTrue(lumFar >= 240,
+            "60 px past the edge should be near-background (R >= 240), " +
+                "got $lumFar")
+
+        // Profile from x = 188 (right edge) to x = 248 (3 sigma past)
+        // must be monotonically non-decreasing.
+        val profile = (188..248 step 4).map { x -> lumAt(x, 128) }
+        for (i in 1 until profile.size) {
+            assertTrue(profile[i] >= profile[i - 1] - 2,
+                "cascade profile must be monotone : profile = $profile, " +
+                    "violation at index $i")
+        }
+
+        // Far corner (background) : white.
+        assertEquals(255, lumAt(2, 2),
+            "far from the blur extent : background")
+    }
+
+    @Test
+    fun `drawRect with sigma 64 spreads gradually over 3 sigma 192 px`() {
+        // Phase MaskFilter-blur-cascade -- sigma = 64 is ~6x the
+        // single-stage cap, exercising a 3+ stage cascade. Render a
+        // 320x320 rect on a 768x768 canvas (the rect is big enough
+        // that the 3-sigma kernel reach of 192 px finds full coverage
+        // at the centre).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val w = 768
+        val h = 768
+        val sigma = 64f
+        // Centre = (384, 384), rect spans 320x320.
+        val rect = SkRect.MakeLTRB(224f, 224f, 544f, 544f)
+        val paint = SkPaint().apply {
+            color = SK_ColorBLACK
+            maskFilter = SkBlurMaskFilter.Make(SkBlurStyle.kNormal, sigma)
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, w, h).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(rect, paint)
+                device.flush()
+            }
+        }
+
+        fun lumAt(x: Int, y: Int): Int {
+            val i = (y * w + x) * 4
+            return pixels[i].toInt() and 0xFF
+        }
+
+        // Centre of the rect : 320x320 is large enough for the kernel
+        // to find full coverage. Expect near-opaque black.
+        val centreLum = lumAt(384, 384)
+        assertTrue(centreLum < 60,
+            "rect centre should be near-opaque black (R < 60), got $centreLum")
+
+        // 64 px past the right edge (= 1 sigma) : expected coverage
+        // ~ 0.16, luminance ~ 214. We test the cascade carries the
+        // Gaussian past where the single-stage 32-tap clamp would
+        // have yielded ~255.
+        val lum1Sigma = lumAt(608, 384)
+        assertTrue(lum1Sigma in 180..240,
+            "1 sigma (64 px) past edge should be a midtone " +
+                "(R in [180, 240]), got $lum1Sigma -- single-stage clamp " +
+                "would yield ~255")
+
+        // 96 px past the edge (= 1.5 sigma) : visible blur tail,
+        // expected coverage ~ 0.067, luminance ~ 238.
+        val lum96 = lumAt(640, 384)
+        assertTrue(lum96 < 250,
+            "96 px past edge should still carry blur (R < 250), got $lum96")
+
+        // 192 px past the edge (~3 sigma) : approaches background.
+        val lum192 = lumAt(736, 384)
+        assertTrue(lum192 >= 240,
+            "192 px past the edge should be near-background (R >= 240), " +
+                "got $lum192")
+
+        // Monotone non-decrease from rect right edge outward.
+        val profile = (544..736 step 12).map { x -> lumAt(x, 384) }
+        for (i in 1 until profile.size) {
+            assertTrue(profile[i] >= profile[i - 1] - 3,
+                "cascade profile must be (nearly) monotone : " +
+                    "profile = $profile, violation at index $i")
+        }
+
+        // Far corner : untouched background.
+        assertEquals(255, lumAt(2, 2),
+            "far from the blur extent : background")
+    }
+
+    @Test
+    fun `drawRect cascade preserves kSolid blur style`() {
+        // Phase MaskFilter-blur-cascade -- the style combine
+        // (kSolid / kOuter / kInner) runs at the FINAL composite
+        // pass, sampling the original sharp shape mask. Verify the
+        // cascade preserves the kSolid contract (interior stays
+        // fully opaque, halo extends outward).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val w = 256
+        val h = 256
+        val sigma = 20f
+        // Use a 120x120 rect so the interior carries enough kernel
+        // mass for the halo to be visibly distinct from the bg.
+        val rect = SkRect.MakeLTRB(68f, 68f, 188f, 188f)
+        val paint = SkPaint().apply {
+            color = SK_ColorBLACK
+            maskFilter = SkBlurMaskFilter.Make(SkBlurStyle.kSolid, sigma)
+        }
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, w, h).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(rect, paint)
+                device.flush()
+            }
+        }
+        fun lumAt(x: Int, y: Int): Int {
+            val i = (y * w + x) * 4
+            return pixels[i].toInt() and 0xFF
+        }
+
+        // kSolid : interior is fully opaque (sharp mask M = 1, so
+        // min(M + B, 1) = 1 for every pixel inside the shape).
+        assertEquals(0, lumAt(128, 128), "kSolid centre must be fully opaque")
+        // The interior right edge (just inside the shape) should also
+        // be solid : in pixel-edge coords the rect covers [68, 188) ;
+        // x = 187 is still inside.
+        assertEquals(0, lumAt(187, 128),
+            "kSolid : interior right edge still fully opaque")
+        // The halo (outside the shape) still spreads via the cascade.
+        // 16 px past the edge (close enough to the boundary that the
+        // sigma=20 Gaussian still carries significant mass) has
+        // visible darkening.
+        val lumNear = lumAt(204, 128)
+        assertTrue(lumNear in 1..240,
+            "kSolid halo at 16 px past edge should be a midtone, got $lumNear")
+        // Far corner : white.
+        assertEquals(255, lumAt(2, 2),
+            "kSolid far from blur extent : background")
+    }
+
+    @Test
     fun `blur draw with no maskFilter falls through to ordinary fill`() {
         // Sanity : the blur dispatch gate must NOT intercept a paint
         // without maskFilter. Regression guard for the dispatch's
