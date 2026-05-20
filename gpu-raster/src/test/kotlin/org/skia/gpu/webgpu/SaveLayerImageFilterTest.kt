@@ -16,8 +16,11 @@ import org.skia.foundation.SkTileMode
 import org.skia.foundation.asBlurImageFilter
 import org.skia.foundation.asColorFilterImageFilter
 import org.skia.foundation.asComposeImageFilter
+import org.skia.foundation.asCropImageFilter
 import org.skia.foundation.asDropShadowImageFilter
+import org.skia.foundation.asMagnifierImageFilter
 import org.skia.foundation.asOffsetImageFilter
+import org.skia.foundation.asTileImageFilter
 import kotlin.math.abs
 
 /**
@@ -1179,6 +1182,418 @@ class SaveLayerImageFilterTest {
         }
         assertEquals(null, cfWrap.asComposeImageFilter()) {
             "ColorFilter wrap must not extract as Compose"
+        }
+    }
+
+    // ─── Phase G-saveLayer-imageFilter-crop ─────────────────────────
+
+    @Test
+    fun `saveLayer with Crop kDecal imageFilter clears outside rect`() {
+        // Phase G-saveLayer-imageFilter-crop -- top-level Crop with the
+        // strict-crop semantic (kDecal) on a full-canvas layer. A red
+        // rect drawn outside the crop rect should not contribute to
+        // the final composite -- those pixels stay at the white
+        // background. Inside the crop rect : the layer pixels pass
+        // through (1:1).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                // Crop rect : (8, 8) .. (24, 24) -- a 16x16 window.
+                val cropRect = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Crop(cropRect, SkTileMode.kDecal)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                // Draw red across the entire layer.
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+        // Inside the crop rect : red (passthrough).
+        assertRgbaApprox(pixels, 16, 16, 255, 0, 0, 255, tag = "Crop kDecal inside")
+        // Outside the crop rect : white (background untouched -- the
+        // layer composite contributed transparent).
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "Crop kDecal outside top-left")
+        assertRgbaApprox(pixels, 28, 28, 255, 255, 255, 255, tag = "Crop kDecal outside bot-right")
+        // Just inside the crop edge : still red.
+        assertRgbaApprox(pixels, 9, 9, 255, 0, 0, 255, tag = "Crop kDecal edge inside")
+        // Just outside the crop edge : still white.
+        assertRgbaApprox(pixels, 7, 7, 255, 255, 255, 255, tag = "Crop kDecal edge outside")
+    }
+
+    @Test
+    fun `saveLayer with Crop kClamp imageFilter replicates edge color outside`() {
+        // Phase G-saveLayer-imageFilter-crop -- kClamp tile mode :
+        // outside the crop rect, the sampler clamps to the nearest
+        // in-rect texel. We paint the inside of the crop rect with
+        // red ; outside the rect we should still see red (because the
+        // edge texel is red), modulated through the kSrcOver onto the
+        // background. The whole layer was drawn red, but only the
+        // crop rect's interior holds red premul ; the kClamp branch
+        // re-samples that red border for every out-of-rect pixel.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val cropRect = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Crop(cropRect, SkTileMode.kClamp)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                // Draw a 16x16 red rect that fills the crop rect.
+                canvas.drawRect(cropRect, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+        // Inside : red.
+        assertRgbaApprox(pixels, 16, 16, 255, 0, 0, 255, tag = "Crop kClamp inside")
+        // Outside, top-left corner : the closest in-rect pixel is at
+        // (8, 8) which is red -- expect red.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "Crop kClamp clamp top-left")
+        // Outside, bottom-right corner : closest in-rect pixel at (23,
+        // 23) -- expect red.
+        assertRgbaApprox(pixels, 28, 28, 255, 0, 0, 255, tag = "Crop kClamp clamp bot-right")
+    }
+
+    // ─── Phase G-saveLayer-imageFilter-tile ─────────────────────────
+
+    @Test
+    fun `saveLayer with Tile imageFilter replicates source rect across dst rect`() {
+        // Phase G-saveLayer-imageFilter-tile -- Tile(src, dst) repeats
+        // a sub-region (`src`) of the layer texture across the dst
+        // rect. We paint a small red square inside src ; expect the
+        // tile to replicate that square across the dst rect's grid.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                // src = top-left 8x8 of the layer ; dst = full layer
+                // (32x32) -> tile 4x4.
+                val srcRect = SkRect.MakeLTRB(0f, 0f, 8f, 8f)
+                val dstRect = SkRect.MakeLTRB(0f, 0f, 32f, 32f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Tile(srcRect, dstRect)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                // Inside src : a 4x4 red square at (2..6, 2..6) ;
+                // remaining pixels of src stay transparent (the layer
+                // device starts cleared transparent).
+                canvas.drawRect(
+                    SkRect.MakeLTRB(2f, 2f, 6f, 6f),
+                    SkPaint().apply { color = SK_ColorRED },
+                )
+                canvas.restore()
+                device.flush()
+            }
+        }
+        // Tile (0, 0) of the dst : original red square at (2, 2) ..
+        // (6, 6). Test centre pixel (4, 4) -> red.
+        assertRgbaApprox(pixels, 4, 4, 255, 0, 0, 255, tag = "Tile (0,0) red")
+        // Tile (1, 0) of the dst : the same square replicated at
+        // (10, 2) .. (14, 6). Test (12, 4) -> red.
+        assertRgbaApprox(pixels, 12, 4, 255, 0, 0, 255, tag = "Tile (1,0) red")
+        // Tile (2, 2) of the dst : square at (18, 18) .. (22, 22).
+        // Test (20, 20) -> red.
+        assertRgbaApprox(pixels, 20, 20, 255, 0, 0, 255, tag = "Tile (2,2) red")
+        // Tile (3, 3) : (26, 26) .. (30, 30). Test (28, 28) -> red.
+        assertRgbaApprox(pixels, 28, 28, 255, 0, 0, 255, tag = "Tile (3,3) red")
+        // Between tiles : (0, 0) is in src but outside the red
+        // square -> transparent in the layer -> background white
+        // shows through.
+        assertRgbaApprox(pixels, 0, 0, 255, 255, 255, 255, tag = "Tile in-src background")
+        // Tile (1, 0) at the same in-tile location (8, 0) -> also
+        // background.
+        assertRgbaApprox(pixels, 8, 0, 255, 255, 255, 255, tag = "Tile (1,0) background")
+    }
+
+    // ─── Phase G-saveLayer-imageFilter-magnifier ────────────────────
+
+    @Test
+    fun `saveLayer with Magnifier outside lens is identity passthrough`() {
+        // Phase G-saveLayer-imageFilter-magnifier -- the outside-the-
+        // lens path is a strict identity. We paint a red rect that
+        // extends beyond the lens and check the outside-lens pixels
+        // match the unfiltered composite.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                // Lens in the middle of the layer.
+                val lens = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Magnifier(
+                        lensBounds = lens, zoomAmount = 2f, inset = 4f,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                // Paint a red rect that extends well outside the lens
+                // ; the outside-lens portion must be untouched.
+                canvas.drawRect(
+                    SkRect.MakeLTRB(0f, 0f, 32f, 32f),
+                    SkPaint().apply { color = SK_ColorRED },
+                )
+                canvas.restore()
+                device.flush()
+            }
+        }
+        // Outside lens : red passthrough.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "Magnifier outside lens top-left")
+        assertRgbaApprox(pixels, 28, 28, 255, 0, 0, 255, tag = "Magnifier outside lens bot-right")
+        // Inside lens centre : red (the layer was painted uniform red,
+        // any sample inside the layer extent is red).
+        assertRgbaApprox(pixels, 16, 16, 255, 0, 0, 255, tag = "Magnifier inside lens centre")
+    }
+
+    @Test
+    fun `saveLayer with Magnifier zoom magnifies inside lens`() {
+        // Phase G-saveLayer-imageFilter-magnifier -- non-trivial zoom.
+        // We paint a horizontal red bar at the lens-centre Y line
+        // (devY = 16). Inside the lens, with zoom = 2, the sample
+        // coord halves the distance from the lens centre, so a fragment
+        // at devY = 12 (centre = 16) samples devY = 14 ; that's still
+        // within the bar (Y in 15..16 in our test), so we need a thick
+        // bar. Make the bar at Y = 14..18 (4 px) and place lens with
+        // a small inset to maximise the magnified region.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                // Lens : centred at (16, 16), extending 8 px in each
+                // direction so the lens spans (8, 8) .. (24, 24).
+                val lens = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerPaint = SkPaint().apply {
+                    // inset = 1 -> the lens has a 1-px transition zone
+                    // and the rest is fully magnified.
+                    imageFilter = SkImageFilters.Magnifier(
+                        lensBounds = lens, zoomAmount = 2f, inset = 1f,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                // Horizontal red bar at Y = 14..18 across the whole
+                // layer.
+                canvas.drawRect(
+                    SkRect.MakeLTRB(0f, 14f, 32f, 18f),
+                    SkPaint().apply { color = SK_ColorRED },
+                )
+                canvas.restore()
+                device.flush()
+            }
+        }
+        // Outside lens : (4, 4) is outside both the lens and the bar
+        // -> white.
+        assertRgbaApprox(pixels, 4, 4, 255, 255, 255, 255, tag = "Magnifier outside lens, off-bar")
+        // Outside lens but on the bar : (4, 16) -> red.
+        assertRgbaApprox(pixels, 4, 16, 255, 0, 0, 255, tag = "Magnifier outside lens, on bar")
+        // Inside lens at centre Y line : (16, 16) -> red (the bar
+        // extends across, magnification of a uniform line is the line
+        // itself).
+        assertRgbaApprox(pixels, 16, 16, 255, 0, 0, 255, tag = "Magnifier centre on bar")
+        // Inside lens at a row 4 px above centre : devY = 12, lens
+        // centre Y = 16. With zoom = 2 and t = clamp(min_edge / inset)
+        // = 1 (we are 4 px from the top edge, inset = 1, so fully
+        // magnified), sampleY = 16 + (12 - 16) / 2 = 14. y = 14 is
+        // INSIDE the bar (14..18) -> red.
+        assertRgbaApprox(pixels, 16, 12, 255, 0, 0, 255, tag = "Magnifier above centre samples bar")
+        // Inside lens at a row 7 px above centre : devY = 9, near
+        // edge. min_edge = 1 -> t = 1 (saturated). sampleY = 16 +
+        // (9 - 16) / 2 = 12.5 -> rounds to 13. y = 13 is OUTSIDE the
+        // bar (the bar starts at 14) -> white.
+        assertRgbaApprox(pixels, 16, 9, 255, 255, 255, 255, tag = "Magnifier near top edge samples off-bar")
+    }
+
+    // ─── Extractor unit tests ────────────────────────────────────────
+
+    @Test
+    fun `asCropImageFilter extracts rect tileMode and input from Crop`() {
+        // Unit test of the extractor : Crop nodes surface (rect,
+        // tileMode, input) ; leaf filters return null.
+        val rect = SkRect.MakeLTRB(2f, 4f, 8f, 16f)
+        val crop = SkImageFilters.Crop(rect, SkTileMode.kRepeat)
+        val params = crop.asCropImageFilter()
+        assertTrue(params != null) { "Crop must extract" }
+        assertEquals(rect.left, params!!.rect.left)
+        assertEquals(rect.top, params.rect.top)
+        assertEquals(rect.right, params.rect.right)
+        assertEquals(rect.bottom, params.rect.bottom)
+        assertEquals(SkTileMode.kRepeat, params.tileMode)
+        assertEquals(null, params.input, "Crop input must be null")
+        // Other variants must not extract as Crop.
+        val blur = SkImageFilters.Blur(
+            sigmaX = 1f, sigmaY = 1f, tileMode = SkTileMode.kDecal, input = null,
+        )!!
+        assertEquals(null, blur.asCropImageFilter()) {
+            "Blur must not extract as Crop"
+        }
+    }
+
+    @Test
+    fun `asTileImageFilter extracts src and dst rects from Tile`() {
+        val src = SkRect.MakeLTRB(0f, 0f, 16f, 16f)
+        val dst = SkRect.MakeLTRB(0f, 0f, 64f, 64f)
+        val tile = SkImageFilters.Tile(src, dst)
+        val params = tile.asTileImageFilter()
+        assertTrue(params != null) { "Tile must extract" }
+        assertEquals(src.right, params!!.src.right, "src right")
+        assertEquals(dst.right, params.dst.right, "dst right")
+        assertEquals(null, params.input, "Tile input must be null")
+        // Other variants must not extract as Tile.
+        val crop = SkImageFilters.Crop(src, SkTileMode.kDecal)
+        assertEquals(null, crop.asTileImageFilter()) {
+            "Crop must not extract as Tile"
+        }
+    }
+
+    @Test
+    fun `asMagnifierImageFilter extracts lensBounds zoom inset from Magnifier`() {
+        val lens = SkRect.MakeLTRB(4f, 4f, 28f, 28f)
+        val mag = SkImageFilters.Magnifier(
+            lensBounds = lens, zoomAmount = 3.5f, inset = 2f,
+        )
+        val params = mag.asMagnifierImageFilter()
+        assertTrue(params != null) { "Magnifier must extract" }
+        assertEquals(lens.left, params!!.lensBounds.left)
+        assertEquals(lens.right, params.lensBounds.right)
+        assertEquals(3.5f, params.zoomAmount, "zoomAmount")
+        assertEquals(2f, params.inset, "inset")
+        assertEquals(null, params.input, "Magnifier input must be null")
+        // Other variants must not extract as Magnifier.
+        val tile = SkImageFilters.Tile(lens, lens)
+        assertEquals(null, tile.asMagnifierImageFilter()) {
+            "Tile must not extract as Magnifier"
+        }
+    }
+
+    // ─── Negative / error path tests ─────────────────────────────────
+
+    @Test
+    fun `saveLayer with Crop and paint colorFilter both set throws clear error`() {
+        // The first Crop slice keeps the UV-remap and colour-filter
+        // branches orthogonal (the composite shader runs them in
+        // series but the host gate keeps the wiring simple).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        val luma = floatArrayOf(
+            0.299f, 0.587f, 0.114f, 0f, 0f,
+            0.299f, 0.587f, 0.114f, 0f, 0f,
+            0.299f, 0.587f, 0.114f, 0f, 0f,
+            0f,     0f,     0f,     1f, 0f,
+        )
+        val ex = kotlin.runCatching {
+            context!!.use { ctx ->
+                SkWebGpuDevice(ctx, W, H).use { device ->
+                    device.setBackground(SK_ColorWHITE)
+                    val canvas = SkCanvas(device)
+                    val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                    val layerPaint = SkPaint().apply {
+                        imageFilter = SkImageFilters.Crop(
+                            SkRect.MakeLTRB(8f, 8f, 24f, 24f),
+                            SkTileMode.kDecal,
+                        )
+                        colorFilter = SkColorFilters.Matrix(luma)
+                    }
+                    canvas.saveLayer(layerBounds, layerPaint)
+                    canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                    canvas.restore()
+                    device.flush()
+                }
+            }
+        }.exceptionOrNull()
+        assertTrue(ex != null) { "must throw" }
+        assertTrue(ex!!.message?.contains("Crop") == true) {
+            "error must mention Crop, got: ${ex.message}"
+        }
+        assertTrue(ex.message?.contains("colorFilter") == true) {
+            "error must mention colorFilter, got: ${ex.message}"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Tile imageFilter input nonNull throws clear error`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        val inner = SkImageFilters.Blur(
+            sigmaX = 1f, sigmaY = 1f, tileMode = SkTileMode.kDecal, input = null,
+        )!!
+        val ex = kotlin.runCatching {
+            context!!.use { ctx ->
+                SkWebGpuDevice(ctx, W, H).use { device ->
+                    device.setBackground(SK_ColorWHITE)
+                    val canvas = SkCanvas(device)
+                    val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                    val layerPaint = SkPaint().apply {
+                        imageFilter = SkImageFilters.Tile(
+                            srcRect = SkRect.MakeLTRB(0f, 0f, 8f, 8f),
+                            dstRect = SkRect.MakeLTRB(0f, 0f, 32f, 32f),
+                            input = inner,
+                        )
+                    }
+                    canvas.saveLayer(layerBounds, layerPaint)
+                    canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                    canvas.restore()
+                    device.flush()
+                }
+            }
+        }.exceptionOrNull()
+        assertTrue(ex != null) { "must throw" }
+        assertTrue(ex!!.message?.contains("Tile") == true) {
+            "error must mention Tile, got: ${ex.message}"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Magnifier imageFilter input nonNull throws clear error`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        val inner = SkImageFilters.Blur(
+            sigmaX = 1f, sigmaY = 1f, tileMode = SkTileMode.kDecal, input = null,
+        )!!
+        val ex = kotlin.runCatching {
+            context!!.use { ctx ->
+                SkWebGpuDevice(ctx, W, H).use { device ->
+                    device.setBackground(SK_ColorWHITE)
+                    val canvas = SkCanvas(device)
+                    val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                    val layerPaint = SkPaint().apply {
+                        imageFilter = SkImageFilters.Magnifier(
+                            lensBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f),
+                            zoomAmount = 2f,
+                            inset = 4f,
+                            input = inner,
+                        )
+                    }
+                    canvas.saveLayer(layerBounds, layerPaint)
+                    canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                    canvas.restore()
+                    device.flush()
+                }
+            }
+        }.exceptionOrNull()
+        assertTrue(ex != null) { "must throw" }
+        assertTrue(ex!!.message?.contains("Magnifier") == true) {
+            "error must mention Magnifier, got: ${ex.message}"
         }
     }
 

@@ -49,6 +49,31 @@
 //                          vec4f slots (R / G / B / A) ; per-row bias
 //                          lives in the 5th vec4f (`colorFilterBias`).
 //
+// Phase G-saveLayer-imageFilter-crop/-tile/-magnifier -- BEFORE the
+// `textureLoad` the shader optionally rewrites the layer-pixel sample
+// coordinate through one of three UV remaps :
+//
+//   imageFilterKind == 0 : no-op (default ; fast path).
+//   imageFilterKind == 1 : Crop(rect, tileMode). Outside `rect`, the
+//                          layer-pixel coord is folded by tileMode
+//                          (kClamp / kRepeat / kMirror / kDecal). For
+//                          kDecal, samples outside `rect` return zero.
+//   imageFilterKind == 2 : Tile(src, dst). The layer-pixel coord is
+//                          mapped to `src.tl + ((coord - dst.tl) mod
+//                          src.size)`. Pure UV-tile sampling.
+//   imageFilterKind == 3 : Magnifier(lens, zoom, inset). Inside `lens`,
+//                          the sample coord is `lens.center + (coord -
+//                          lens.center) / zoom`, lerped with the identity
+//                          coord based on `min_edge_dist / inset` (smooth
+//                          transition over the inset band). Outside the
+//                          lens : pass through.
+//
+// All three remaps operate on the *layer-pixel* coord (after the
+// dstOrigin subtraction), in device-pixel units, and produce an
+// integer-rounded layer-pixel coord that `textureLoad` consumes. The
+// `dstOriginSize.zw` (layer width / height) clamp still kicks in
+// defensively if the remapped coord lands outside the layer extent.
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {
@@ -76,6 +101,22 @@ struct Uniforms {
     colorFilterParam3: vec4f,    // offset  96
     // kind == 2 : per-row bias (R, G, B, A).
     colorFilterBias:   vec4f,    // offset 112
+    // Phase G-saveLayer-imageFilter-crop/-tile/-magnifier --
+    // (kind, tileMode, zoom, inset).
+    //   kind     : 0 = none, 1 = Crop, 2 = Tile, 3 = Magnifier.
+    //   tileMode : SkTileMode ordinal (0 = kClamp, 1 = kRepeat,
+    //              2 = kMirror, 3 = kDecal) ; used by kind == 1.
+    //   zoom     : Magnifier zoom factor (>= 1 typically) ; kind == 3.
+    //   inset    : Magnifier inset band width ; kind == 3.
+    imageFilterKindMode: vec4f,  // offset 128
+    // kind == 1 : Crop rect (left, top, right, bottom) in layer-pixel
+    //             coords (offset from dstOrigin already removed by host).
+    // kind == 2 : Tile dst rect (left, top, right, bottom).
+    // kind == 3 : Magnifier lens rect.
+    imageFilterRectA: vec4f,     // offset 144
+    // kind == 2 : Tile src rect (left, top, right, bottom).
+    // kind == 1 / 3 : unused, zeroed.
+    imageFilterRectB: vec4f,     // offset 160
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -140,6 +181,36 @@ fn blend_premul(s: vec4f, d: vec4f, mode: u32) -> vec4f {
     return s;
 }
 
+// Phase G-saveLayer-imageFilter-crop -- per-axis tile-mode folding on
+// an integer coord against an integer extent. Mirrors the CPU raster's
+// `sampleImageWithTileMode` per-axis cases. kDecal yields a negative
+// sentinel (`-1`) that the caller maps to a transparent texel.
+fn tile_axis(p: i32, p0: i32, p1: i32, mode: u32) -> i32 {
+    // Inside [p0, p1) is the identity.
+    if (p >= p0 && p < p1) { return p; }
+    let len = p1 - p0;
+    if (len <= 0) { return -1; }
+    if (mode == 0u) {
+        // kClamp -- clamp to [p0, p1 - 1].
+        return clamp(p, p0, p1 - 1);
+    }
+    if (mode == 1u) {
+        // kRepeat -- positive modulo.
+        let r = (p - p0) % len;
+        let rr = select(r + len, r, r >= 0);
+        return p0 + rr;
+    }
+    if (mode == 2u) {
+        // kMirror -- period 2 * len, mirror inside each period.
+        let twoLen = 2 * len;
+        let r = (p - p0) % twoLen;
+        let rr = select(r + twoLen, r, r >= 0);
+        return p0 + select(twoLen - 1 - rr, rr, rr < len);
+    }
+    // kDecal -- out-of-bounds is transparent.
+    return -1;
+}
+
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // pos.xy is the destination pixel center (column p -> p + 0.5).
@@ -148,15 +219,95 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // exact texel (no filter), so 1:1 grid alignment is exact.
     let dst_px = vec2i(i32(floor(pos.x)), i32(floor(pos.y)));
     let origin_px = vec2i(i32(uniforms.dstOriginSize.x), i32(uniforms.dstOriginSize.y));
-    let layer_px = dst_px - origin_px;
+    var layer_px = dst_px - origin_px;
+    let layer_w = i32(uniforms.dstOriginSize.z);
+    let layer_h = i32(uniforms.dstOriginSize.w);
+
+    // Phase G-saveLayer-imageFilter-crop/-tile/-magnifier -- per-filter
+    // UV remap. The fast path (kind == 0) skips the whole block and
+    // sample at the identity coord.
+    let ifKind = u32(uniforms.imageFilterKindMode.x + 0.5);
+    var decal_zero = false;
+    if (ifKind == 1u) {
+        // Crop(rect, tileMode). rect is in layer-pixel space.
+        let mode = u32(uniforms.imageFilterKindMode.y + 0.5);
+        let rl = i32(floor(uniforms.imageFilterRectA.x));
+        let rt = i32(floor(uniforms.imageFilterRectA.y));
+        let rr = i32(ceil(uniforms.imageFilterRectA.z));
+        let rb = i32(ceil(uniforms.imageFilterRectA.w));
+        let tx = tile_axis(layer_px.x, rl, rr, mode);
+        let ty = tile_axis(layer_px.y, rt, rb, mode);
+        if (tx < 0 || ty < 0) {
+            decal_zero = true;
+        } else {
+            layer_px = vec2i(tx, ty);
+        }
+    } else if (ifKind == 2u) {
+        // Tile(src, dst). Inside dst : map (px - dst.tl) mod src.size
+        // into src ; outside dst : pass-through (kept as identity coord).
+        let dl = uniforms.imageFilterRectA.x;
+        let dt = uniforms.imageFilterRectA.y;
+        let drr = uniforms.imageFilterRectA.z;
+        let dbb = uniforms.imageFilterRectA.w;
+        let sl = uniforms.imageFilterRectB.x;
+        let st = uniforms.imageFilterRectB.y;
+        let srr = uniforms.imageFilterRectB.z;
+        let sbb = uniforms.imageFilterRectB.w;
+        let pxF = f32(layer_px.x);
+        let pyF = f32(layer_px.y);
+        let insideDst = pxF >= dl && pxF < drr && pyF >= dt && pyF < dbb;
+        if (insideDst) {
+            let sw = srr - sl;
+            let sh = sbb - st;
+            if (sw <= 0.0 || sh <= 0.0) {
+                // Degenerate src -- transparent (matches CPU's "empty
+                // tile" semantic).
+                decal_zero = true;
+            } else {
+                let rxF = (pxF - dl) - sw * floor((pxF - dl) / sw);
+                let ryF = (pyF - dt) - sh * floor((pyF - dt) / sh);
+                let tx = i32(floor(sl + rxF));
+                let ty = i32(floor(st + ryF));
+                layer_px = vec2i(tx, ty);
+            }
+        }
+    } else if (ifKind == 3u) {
+        // Magnifier(lens, zoom, inset). Inside the lens rect, the
+        // sample coord is `lens.center + (coord - lens.center) / zoom`,
+        // lerped with the identity coord weighted by `t = clamp(
+        // min_edge_dist / inset, 0, 1)`. Outside the lens : identity.
+        let lL = uniforms.imageFilterRectA.x;
+        let lT = uniforms.imageFilterRectA.y;
+        let lR = uniforms.imageFilterRectA.z;
+        let lB = uniforms.imageFilterRectA.w;
+        let zoom = uniforms.imageFilterKindMode.z;
+        let inset = max(uniforms.imageFilterKindMode.w, 0.0001);
+        let pxF = f32(layer_px.x);
+        let pyF = f32(layer_px.y);
+        let inside = pxF >= lL && pxF < lR && pyF >= lT && pyF < lB;
+        if (inside && zoom > 0.0) {
+            let cx = (lL + lR) * 0.5;
+            let cy = (lT + lB) * 0.5;
+            let invZoom = 1.0 / zoom;
+            let magX = cx + (pxF - cx) * invZoom;
+            let magY = cy + (pyF - cy) * invZoom;
+            let dLeft = pxF - lL;
+            let dRight = lR - pxF;
+            let dTop = pyF - lT;
+            let dBottom = lB - pyF;
+            let minEdge = min(min(dLeft, dRight), min(dTop, dBottom));
+            let t = clamp(minEdge / inset, 0.0, 1.0);
+            let sampleX = pxF + (magX - pxF) * t;
+            let sampleY = pyF + (magY - pyF) * t;
+            layer_px = vec2i(i32(floor(sampleX + 0.5)), i32(floor(sampleY + 0.5)));
+        }
+    }
 
     // Guard rail : if the scissor failed and the fragment maps outside
     // the layer extent, return transparent. The scissor on the render
     // pass should make this branch dead, but defensively returning
     // zero is cheaper than a UB-inducing out-of-bounds load.
-    let layer_w = i32(uniforms.dstOriginSize.z);
-    let layer_h = i32(uniforms.dstOriginSize.w);
-    if (layer_px.x < 0 || layer_px.x >= layer_w ||
+    if (decal_zero || layer_px.x < 0 || layer_px.x >= layer_w ||
         layer_px.y < 0 || layer_px.y >= layer_h) {
         return vec4f(0.0, 0.0, 0.0, 0.0);
     }
