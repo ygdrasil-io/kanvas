@@ -4405,6 +4405,8 @@ public class SkWebGpuDevice(
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = SkBlendMode.kSrc,
                 colorFilterPacked = FloatArray(24), // identity (kind = 0).
+                matrixPacked = IDENTITY_LAYER_MATRIX_12,
+                imageFilterPacked = FloatArray(12), // identity (kind = 0).
             ),
         )
         return true
