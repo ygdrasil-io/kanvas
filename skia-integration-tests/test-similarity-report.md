@@ -436,7 +436,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | RuntimeIntrinsicsRelationalGM | 97.53% | = | 1 | 300,504 / 308,125 | 0, 255, 255, 255 | 0, 139, 139, 139 |
 | RuntimeIntrinsicsTrigGM | 96.14% | -0.19% | 1 | 186,134 / 193,600 | 0, 255, 255, 255 | 0, 65, 63, 66 |
 | RuntimeShaderGM | 50.00% | = | 1 | 65,537 / 131,072 | 0, 144, 58, 76 | 0, 32, 11, 30 |
-| SamplerStressGM | 99.66% | = | 1 | 306,147 / 307,200 | 0, 77, 186, 78 | 0, 19, 21, 20 |
+| SamplerStressGM | 99.66% | -0.00% | 1 | 306,146 / 307,200 | 0, 77, 184, 78 | 0, 18, 19, 18 |
 | SaveLayerGM | 44.13% | = | 1 | 28,919 / 65,536 | 0, 140, 140, 140 | 0, 101, 104, 94 |
 | ScaledRectsGM | 87.79% | = | 1 | 7,192 / 8,192 | 0, 36, 7, 11 | 0, 36, 7, 11 |
 | ScaledStrokesGM | 96.03% | = | 1 | 196,665 / 204,800 | 0, 255, 255, 255 | 0, 129, 128, 128 |
@@ -460,7 +460,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ShowMipLevelsGM | 78.30% | = | 4 | 858,204 / 1,096,100 | 0, 255, 255, 255 | 0, 17, 51, 44 |
 | SimpleAaclipPathGM | 98.99% | = | 1 | 118,788 / 120,000 | 0, 161, 161, 161 | 0, 53, 52, 52 |
 | SimpleAaclipRectGM | 99.00% | = | 1 | 118,797 / 120,000 | 0, 197, 161, 161 | 0, 59, 54, 53 |
-| SimpleBlurRoundRectGM | 68.05% | = | 1 | 340,262 / 500,000 | 0, 99, 148, 170 | 0, 14, 10, 22 |
+| SimpleBlurRoundRectGM | 68.27% | +0.21% | 1 | 341,329 / 500,000 | 0, 96, 96, 98 | 0, 11, 8, 11 |
 | SimpleRectGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | SimpleShapesAaGM | 65.01% | = | 1 | 162,518 / 250,000 | 0, 33, 31, 32 | 0, 5, 5, 5 |
 | SimpleShapesBwGM | 65.55% | = | 1 | 163,874 / 250,000 | 0, 129, 133, 137 | 0, 5, 5, 5 |
