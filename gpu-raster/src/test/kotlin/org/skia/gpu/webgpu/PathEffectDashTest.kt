@@ -8,10 +8,10 @@ import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorWHITE
-import org.skia.foundation.SkCornerPathEffect
 import org.skia.foundation.SkDashPathEffect
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkPath1DPathEffect
 import org.skia.foundation.SkPathBuilder
 
 /**
@@ -136,11 +136,13 @@ class PathEffectDashTest {
     }
 
     @Test
-    fun `non-Dash path effect throws a clear deferred error`() {
-        // SkCornerPathEffect is implemented at the foundation level but
+    fun `non-supported path effect throws a clear deferred error`() {
+        // SkPath1DPathEffect is implemented at the foundation level but
         // not wired into the GPU dispatch this slice -- the drawPath hook
         // must throw a clear deferred-error rather than silently mis-
-        // render. Same applies to Discrete / Compose / Sum / 1D / 2D.
+        // render. Same applies to Discrete / Compose / Sum / 2D.
+        // (SkCornerPathEffect moved to the supported set in the i3
+        // slice ; see PathEffectCornerTest for its coverage.)
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
@@ -152,12 +154,28 @@ class PathEffectDashTest {
             .close()
             .detach()
 
+        // Stamp = tiny circle approximation (3 lines) ; the GPU dispatch
+        // doesn't care about the stamp geometry since it throws before
+        // running filterPath. advance must be > 0 (or Make returns null).
+        val stamp = SkPathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(1f, 0f)
+            .lineTo(1f, 1f)
+            .close()
+            .detach()
+        val effect = SkPath1DPathEffect.Make(
+            stamp = stamp,
+            advance = 4f,
+            phase = 0f,
+            style = SkPath1DPathEffect.Style.kTranslate,
+        )!!
+
         val paint = SkPaint().apply {
             color = SK_ColorBLUE
             style = SkPaint.Style.kStroke_Style
             strokeWidth = 0f
             isAntiAlias = false
-            pathEffect = SkCornerPathEffect.Make(4f)
+            pathEffect = effect
         }
 
         context!!.use { ctx ->
@@ -168,12 +186,12 @@ class PathEffectDashTest {
                     canvas.drawPath(path, paint)
                 }
                 assertTrue(
-                    ex.message?.contains("SkCornerPathEffect") == true,
+                    ex.message?.contains("SkPath1DPathEffect") == true,
                     "exception must name the unsupported variant ; got: ${ex.message}",
                 )
                 assertTrue(
-                    ex.message?.contains("SkDashPathEffect") == true,
-                    "exception must mention the supported variant ; got: ${ex.message}",
+                    ex.message?.contains("1D / 2D path effects") == true,
+                    "exception must mention the 1D / 2D deferral ; got: ${ex.message}",
                 )
             }
         }
