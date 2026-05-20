@@ -27,10 +27,12 @@
 // to 1.0 after the 2x reflection of the off-centre half.
 //
 // Radius cap : 32 taps per side -- supports sigma up to ~10.6 (3*sigma
-// = 32). Larger sigma clamps to this radius at the dispatch gate so
-// the uniform layout stays fixed. The visual blur for larger sigma
-// becomes slightly under-spread but the kernel mass renormalisation
-// (CPU side) keeps the centre alpha exact.
+// = 32) in the single-stage path. Larger sigma routes through the
+// multi-stage downsample-blur-upsample cascade (`fs_vertical_blur` +
+// `fs_composite_upsampled` here, plus `blur_downsample.wgsl` /
+// `blur_upsample.wgsl`), which reduces the effective per-stage sigma
+// by 2^N (N = ceil(log2(sigma / 10.6))) before applying this same
+// 32-tap kernel at the smallest level.
 //
 // The shape mask source is RGBA16Float, premul, with shape pixels in
 // the .rgb = (1,1,1) (white) and .a = coverage. We sample channel
@@ -189,6 +191,100 @@ fn fs_vertical_composite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         scratch_px.y >= 0 && scratch_px.y < src_h) {
         maskAlpha = textureLoad(shape_mask, scratch_px, 0).a;
     }
+
+    let style = i32(uniforms.axisRadius.w + 0.5);
+    var coverage: f32 = blurAlpha;
+    if (style == 1) {
+        coverage = min(maskAlpha + blurAlpha, 1.0);
+    } else if (style == 2) {
+        coverage = max(blurAlpha - maskAlpha, 0.0);
+    } else if (style == 3) {
+        coverage = blurAlpha * maskAlpha;
+    }
+
+    return vec4f(
+        uniforms.paintColor.r * coverage,
+        uniforms.paintColor.g * coverage,
+        uniforms.paintColor.b * coverage,
+        uniforms.paintColor.a * coverage,
+    );
+}
+
+// MaskFilter multi-stage cascade -- inner V pass that writes the
+// pure blurred mask to a scratch texture at the downsampled
+// resolution. No style combine, no paint-colour fold, no composite.
+// The downstream upsample chain + final composite handles those.
+//
+// Reads binding 1 (the H-pass scratch at the inner resolution),
+// samples along Y with the same symmetric half-kernel as
+// `fs_vertical_composite`, and writes (r=acc.r, g=acc.g, b=acc.b,
+// a=acc.a) -- the convolved RGBA, premul.
+//
+// dstOriginSize.xy is ignored here (the scratch the V writes to
+// shares the H scratch's dimensions, fragment dst pixel maps 1:1
+// to the H-scratch source pixel). axisRadius.w (blurStyle) is also
+// ignored.
+@fragment
+fn fs_vertical_blur(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let dst_px = vec2i(i32(floor(pos.x)), i32(floor(pos.y)));
+    let src_w = i32(uniforms.dstOriginSize.z);
+    let src_h = i32(uniforms.dstOriginSize.w);
+    let radius = i32(uniforms.axisRadius.z + 0.5);
+
+    if (dst_px.x < 0 || dst_px.x >= src_w ||
+        dst_px.y < 0 || dst_px.y >= src_h) {
+        return vec4f(0.0);
+    }
+
+    var acc = vec4f(0.0);
+    acc = acc + textureLoad(source_texture, dst_px, 0) * weight_at(0);
+    for (var k: i32 = 1; k <= radius; k = k + 1) {
+        let w = weight_at(k);
+        let yn = dst_px.y - k;
+        let yp = dst_px.y + k;
+        if (yn >= 0 && yn < src_h) {
+            acc = acc + textureLoad(source_texture, vec2i(dst_px.x, yn), 0) * w;
+        }
+        if (yp >= 0 && yp < src_h) {
+            acc = acc + textureLoad(source_texture, vec2i(dst_px.x, yp), 0) * w;
+        }
+    }
+    return acc;
+}
+
+// MaskFilter multi-stage cascade -- final composite pass. Samples
+// the upsampled (full-resolution) blurred mask from binding 1 with
+// a single-tap textureLoad (no convolution -- the Gaussian work
+// happens at the inner stage). Then applies the SkBlurStyle combine
+// using the original sharp shape mask in binding 2, modulates by
+// paintColor, and writes onto the parent intermediate at the
+// fragment's dst pixel (offset by dstOriginSize.xy).
+//
+// Mirrors the tail half of `fs_vertical_composite` -- the kernel
+// summation loop is dropped because the upsample pipeline already
+// produced the full-resolution blurred mask. axisRadius.z is unused
+// (no kernel samples here) ; axisRadius.w carries the style ordinal.
+@fragment
+fn fs_composite_upsampled(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let dst_px = vec2i(i32(floor(pos.x)), i32(floor(pos.y)));
+    let origin_px = vec2i(i32(uniforms.dstOriginSize.x), i32(uniforms.dstOriginSize.y));
+    let src_w = i32(uniforms.dstOriginSize.z);
+    let src_h = i32(uniforms.dstOriginSize.w);
+
+    let scratch_px = dst_px - origin_px;
+    if (scratch_px.x < 0 || scratch_px.x >= src_w ||
+        scratch_px.y < 0 || scratch_px.y >= src_h) {
+        return vec4f(0.0);
+    }
+
+    // Single-tap sample of the full-resolution blurred mask (binding 1
+    // is the upsample-chain output, sized to (src_w, src_h)).
+    let blurred = textureLoad(source_texture, scratch_px, 0);
+    let blurAlpha = blurred.a;
+
+    // Sharp shape-mask alpha (binding 2 is the original white-tint
+    // shape mask at full resolution).
+    let maskAlpha = textureLoad(shape_mask, scratch_px, 0).a;
 
     let style = i32(uniforms.axisRadius.w + 0.5);
     var coverage: f32 = blurAlpha;
