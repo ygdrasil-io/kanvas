@@ -143,4 +143,43 @@ public interface SkDevice {
     public fun setActiveClipShape(shape: SkClipShape?) {
         // Default : ignored. Raster device routes through SkAAClip.
     }
+
+    /**
+     * Phase G-saveLayer-backdrop -- seed `this` layer device with a copy
+     * of [parent]'s pixels in the rectangle
+     * `[originX, originY, originX + width, originY + height)`.
+     *
+     * Called by [SkCanvas.saveLayer] when [SaveLayerRec.backdrop] is
+     * non-null and the CPU `SkBitmap.getPixel` path doesn't apply (i.e.
+     * the parent device is not a raster device). Lets a GPU device
+     * sample its parent's intermediate texture without a CPU round-trip,
+     * so the new layer's first draws compose ON TOP of the parent
+     * pixels rather than starting from a transparent clear.
+     *
+     * **Scope.** This first slice ships **copy-only** semantics : the
+     * parent's pixels land in the layer unchanged. The backdrop
+     * [org.skia.foundation.SkImageFilter] itself is currently ignored
+     * on GPU -- filter application (Blur / ColorFilter / Offset) is a
+     * deferred follow-up. The CPU raster path in [SkCanvas.saveLayer]
+     * still applies the filter via [SkBitmap.getPixel] + `filterImage`.
+     *
+     * Default implementation is a no-op : devices that don't override
+     * this leave the layer transparent (current behaviour for any
+     * backend except the WebGPU one). The caller (canvas) treats this
+     * as best-effort and falls through to "layer starts transparent"
+     * silently -- the kdoc on [SaveLayerRec.backdrop] documents the
+     * GPU-side filter-ignored behaviour.
+     *
+     * Returns `true` when the device successfully seeded the layer
+     * (caller should NOT fall back to a CPU path) ; `false` when the
+     * device declined (caller may try the CPU path if applicable, or
+     * leave the layer transparent). The default returns `false`.
+     */
+    public fun seedBackdropFrom(
+        parent: SkDevice,
+        originX: Int,
+        originY: Int,
+        width: Int,
+        height: Int,
+    ): Boolean = false
 }

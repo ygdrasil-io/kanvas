@@ -2262,10 +2262,22 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         // image filter, and pastes the (possibly displaced + resized)
         // result back into the layer at the correct origin.
         //
-        // Backdrop seeding is raster-only — it walks parent pixels via
-        // [SkBitmap.getPixel]. GPU canvases ignore the backdrop (a
-        // documented deferred follow-up ; no in-scope GM exercises a
-        // GPU-side backdrop today).
+        // Backdrop seeding splits along the device backend :
+        //   - Raster parents (SkBitmapDevice → SkBitmapDevice) : walk
+        //     parent pixels via [SkBitmap.getPixel], run them through
+        //     [backdrop], paste into the layer bitmap. Full filter
+        //     application (Blur / ColorFilter / Offset / ...).
+        //   - Non-raster parents (e.g. GPU device → GPU device) :
+        //     delegate to [SkDevice.seedBackdropFrom], which the backend
+        //     implements with whatever native primitive it has
+        //     available. The GPU backend ships a **copy-only** seed
+        //     (Phase G-saveLayer-backdrop) -- the parent's pixels land
+        //     unchanged ; the [backdrop] filter itself is currently
+        //     ignored on GPU (documented deferred follow-up).
+        //
+        // If neither branch matches (mixed backend / unknown device),
+        // the layer is left transparent silently -- matches the
+        // pre-Phase-G-saveLayer-backdrop behaviour on GPU.
         if (backdrop != null) {
             val parentBitmap = s.device as? SkBitmapDevice
             val layerBitmapDevice = layerDevice as? SkBitmapDevice
@@ -2275,6 +2287,13 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                     originX, originY, w, h, backdrop, s.matrix,
                     scaleFactor = rec.scaleFactor,
                 )
+            } else {
+                // Non-raster path : copy-only delegate. The device
+                // returns false if it can't seed (default no-op) ;
+                // we accept that silently as "layer starts
+                // transparent". Filter application on the parent
+                // snapshot is the bonus follow-up slice.
+                layerDevice.seedBackdropFrom(s.device, originX, originY, w, h)
             }
         }
 

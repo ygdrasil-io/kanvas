@@ -253,6 +253,20 @@ public class SkWebGpuDevice(
      */
     private var background: Color = Color(1.0, 1.0, 1.0, 1.0)
 
+    /**
+     * Phase G-saveLayer-backdrop -- tracks whether
+     * [intermediateTexture] has been written by a prior
+     * [flushDrawsOnly]. When `true`, the next render pass MUST use
+     * `loadOp = Load` (NOT Clear) for `i == 0` -- otherwise the
+     * background clear would wipe the parent pixels we committed for a
+     * mid-render `seedBackdropFrom` (the only existing caller of
+     * [flushDrawsOnly] is on child devices that don't get more draws,
+     * so this flag is dormant in the pre-Phase-G-saveLayer-backdrop
+     * world ; flipping it here is the one-line fix to make parent
+     * `flushDrawsOnly` mid-render safe).
+     */
+    private var intermediateInitialized: Boolean = false
+
     /** Update the clear value used by the next [flush]. */
     public fun setBackground(srgbArgb: Int) {
         background = Color(
@@ -4312,6 +4326,89 @@ public class SkWebGpuDevice(
             // the entire layer rect instead of the actually-drawn shape.
             it.setBackground(0)
         }
+
+    /**
+     * Phase G-saveLayer-backdrop -- seed `this` layer device with a
+     * copy of [parent]'s pixels in the rectangle
+     * `[originX, originY, originX + width, originY + height)`.
+     *
+     * Mechanism : flush [parent]'s pending draws onto its
+     * intermediate texture (so all preceding canvas draws are
+     * committed), then enqueue a single [LayerCompositeDraw] onto
+     * **this** (child) device's pending list. That draw samples
+     * [parent]'s intermediate via the existing `layer_composite.wgsl`
+     * pipeline (1:1 `textureLoad` -- no filter, no sampler) and writes
+     * onto this device's intermediate under blend mode `kSrc` (REPLACE,
+     * so the child's initial transparent clear is overwritten by the
+     * parent's pixels). Origin offset is encoded as the negative
+     * `dstOriginX/Y` in the composite uniform : at child pixel `(x,
+     * y)` the shader computes `layer_px = (x, y) - (-originX,
+     * -originY) = (x + originX, y + originY)`, sampling the matching
+     * parent pixel.
+     *
+     * **Scope.** Copy-only (Phase G-saveLayer-backdrop) : the
+     * SaveLayerRec backdrop [org.skia.foundation.SkImageFilter] itself
+     * is **not** applied on GPU -- the layer starts from a raw copy of
+     * the parent pixels in the layer bbox. Filter application (Blur /
+     * ColorFilter / Offset / ...) is a deferred follow-up. This still
+     * unlocks the architectural pattern (frosted-glass "starts from
+     * current pixels" semantics) for the main use case ; the CPU
+     * raster path remains the full-featured fallback.
+     *
+     * **Bail conditions** -- the seed silently no-ops (returns
+     * `false`) when :
+     *  - [parent] is not an [SkWebGpuDevice]. Cross-backend backdrop
+     *    (CPU parent → GPU child, etc.) needs a readback round-trip
+     *    that's out of scope.
+     *  - [parent]'s [context] differs from this device's. Sampling
+     *    across contexts is illegal in WebGPU.
+     *  - [parent]'s [intermediateFormat] differs from this device's.
+     *    Cross-format sampling needs a conversion render pass that's
+     *    out of scope ; `makeLayerDevice` always copies the parent's
+     *    format so this only fires for user-constructed mismatches.
+     */
+    override fun seedBackdropFrom(
+        parent: SkDevice,
+        originX: Int,
+        originY: Int,
+        width: Int,
+        height: Int,
+    ): Boolean {
+        val gpuParent = parent as? SkWebGpuDevice ?: return false
+        if (gpuParent.context !== context) return false
+        if (gpuParent.intermediateFormat != intermediateFormat) return false
+        if (width <= 0 || height <= 0) return false
+
+        // Flush the parent's pending draws so its intermediate holds
+        // all preceding canvas draws. Subsequent parent flushes use
+        // `loadOp = Load` (Phase G-saveLayer-backdrop guard) so this
+        // mid-render flush doesn't get wiped by the next
+        // [encodePendingDrawsToIntermediate].
+        gpuParent.flushDrawsOnly()
+
+        // Enqueue a composite draw on this (child) device's pending
+        // list. `dstOriginX/Y` are the NEGATIVE layer origins so the
+        // shader maps `child (x, y) → parent (x + originX, y +
+        // originY)`. Scissor covers the full child target. `mode =
+        // kSrc` so the child's transparent clear (via `setBackground
+        // (0)`) is replaced -- subsequent layer draws then composite
+        // ON TOP via `loadOp = Load`.
+        pending.add(
+            LayerCompositeDraw(
+                layerView = gpuParent.intermediateView,
+                layerWidth = gpuParent.width,
+                layerHeight = gpuParent.height,
+                dstOriginX = -originX,
+                dstOriginY = -originY,
+                scissor = intArrayOf(0, 0, width, height),
+                paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
+                r = 1f, g = 1f, b = 1f, a = 1f,
+                mode = SkBlendMode.kSrc,
+                colorFilterPacked = FloatArray(24), // identity (kind = 0).
+            ),
+        )
+        return true
+    }
 
     /**
      * Phase G-saveLayer — composite a child device's pixels back onto
@@ -9055,13 +9152,21 @@ public class SkWebGpuDevice(
         }
 
         if (pending.isEmpty()) {
-            // Explicit clear pass so the caller can read back the background.
+            // Explicit clear pass so the caller can read back the
+            // background. When the intermediate has already been
+            // populated by a prior flushDrawsOnly (Phase
+            // G-saveLayer-backdrop), use `loadOp = Load` to preserve
+            // those pixels -- the no-pending case still emits a pass
+            // (so the encoder is non-empty and the caller's structural
+            // invariants hold) but it must not wipe the intermediate.
+            val initialLoadOp =
+                if (intermediateInitialized) GPULoadOp.Load else GPULoadOp.Clear
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
                         RenderPassColorAttachment(
                             view = colorView,
-                            loadOp = GPULoadOp.Clear,
+                            loadOp = initialLoadOp,
                             clearValue = background,
                             storeOp = GPUStoreOp.Store,
                         ),
@@ -9114,7 +9219,17 @@ public class SkWebGpuDevice(
         }
 
         pending.forEachIndexed { i, d ->
-            val loadOp = if (i == 0) GPULoadOp.Clear else GPULoadOp.Load
+            // Phase G-saveLayer-backdrop -- when the intermediate has
+            // already been populated (e.g. by a prior flushDrawsOnly
+            // for parent-pixel seeding), the first draw must NOT clear
+            // the attachment -- otherwise it would wipe the committed
+            // parent pixels. Subsequent draws use `loadOp = Load`
+            // unchanged.
+            val loadOp = if (i == 0 && !intermediateInitialized) {
+                GPULoadOp.Clear
+            } else {
+                GPULoadOp.Load
+            }
             val res = perDrawResources[i]
             if (d is StencilCoverPolygonDraw) {
                 // Stencil & cover : 2 sub-passes in a single render pass.
@@ -10417,6 +10532,12 @@ public class SkWebGpuDevice(
 
         closeDrawResources(perDrawResources)
         pending.clear()
+        // Phase G-saveLayer-backdrop -- the intermediate is now fully
+        // populated. A subsequent `flush()` (rare -- the host usually
+        // closes the device after the first flush) would `loadOp =
+        // Load` and preserve the pixels, matching the
+        // [flushDrawsOnly] convention.
+        intermediateInitialized = true
         pixels
     }
 
@@ -10439,6 +10560,12 @@ public class SkWebGpuDevice(
         context.queue.submit(listOf(encoder.finish()))
         closeDrawResources(perDrawResources)
         pending.clear()
+        // Phase G-saveLayer-backdrop -- mark the intermediate as
+        // populated so a subsequent [encodePendingDrawsToIntermediate]
+        // (from a later flushDrawsOnly or the final flush) uses
+        // `loadOp = Load` and preserves the parent pixels we just
+        // committed.
+        intermediateInitialized = true
     }
 
     /**
