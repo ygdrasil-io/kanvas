@@ -118,8 +118,14 @@ public abstract class SkPathEffect {
  * inner effect returns `null` (passthrough), the outer is applied to
  * the original [input]. When the outer returns `null`, the inner's
  * result is returned unchanged.
+ *
+ * Construct via [SkPathEffect.MakeCompose] (the only entry point) ;
+ * the constructor stays internal. The class itself is `public` so
+ * device-level dispatch (e.g. `SkWebGpuDevice.drawPath`) can pattern-
+ * match on the runtime type — the foundation `filterPath` contract
+ * is all that's exposed in practice.
  */
-internal class SkComposePathEffect(
+public class SkComposePathEffect internal constructor(
     private val outer: SkPathEffect,
     private val inner: SkPathEffect,
 ) : SkPathEffect() {
@@ -138,8 +144,13 @@ internal class SkComposePathEffect(
  * `first(p) ⊕ second(p)` — concatenates the verb streams of both
  * effects' outputs. When either effect returns `null` (passthrough),
  * its branch is filled by the original [input].
+ *
+ * Construct via [SkPathEffect.MakeSum] (the only entry point) ; the
+ * constructor stays internal. The class itself is `public` so device-
+ * level dispatch (e.g. `SkWebGpuDevice.drawPath`) can pattern-match
+ * on the runtime type.
  */
-internal class SkSumPathEffect(
+public class SkSumPathEffect internal constructor(
     private val first: SkPathEffect,
     private val second: SkPathEffect,
 ) : SkPathEffect() {
