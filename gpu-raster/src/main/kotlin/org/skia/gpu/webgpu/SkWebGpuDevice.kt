@@ -80,6 +80,7 @@ import org.skia.foundation.asMagnifierImageFilter
 import org.skia.foundation.asOffsetImageFilter
 import org.skia.foundation.asTileImageFilter
 import org.skia.foundation.asMatrixFilter
+import org.skia.foundation.asMatrixTransformImageFilter
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
@@ -1067,6 +1068,33 @@ public class SkWebGpuDevice(
          * so the bytes are deterministic).
          */
         val colorFilterPacked: FloatArray,
+        /**
+         * Phase G-saveLayer-imageFilter-matrixTransform -- inverse 2x3
+         * affine packed for the composite shader's MatrixTransform path,
+         * plus the sampling-mode selector :
+         *
+         *   matrixPacked[0..3] -> `devToLayerRow0` (a, b, c, _)
+         *   matrixPacked[4..7] -> `devToLayerRow1` (d, e, f, _)
+         *   matrixPacked[8..11] -> `samplingMode` (mode, 0, 0, 0)
+         *     where `mode` is :
+         *       0 -> identity (no MatrixTransform ; the shader falls
+         *            back to the integer-grid `textureLoad` fast path
+         *            and the `devToLayer*` rows are ignored).
+         *       1 -> kNearest (floor of inverse-mapped texel coords).
+         *       2 -> kLinear  (bilerp on the four neighbours).
+         *
+         * Layout is contiguous, 12 floats (3 vec4f * 4) ; placed in the
+         * uniform after `colorFilterBias` (offset 128). The default
+         * (identity) payload is `[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]`
+         * -- `samplingMode = 0` flags the identity branch in the shader
+         * and the row coefficients are inert -- so the bytes stay
+         * deterministic on the no-MatrixTransform fast path.
+         *
+         * MatrixTransform is mutually exclusive with Crop/Tile/Magnifier
+         * in [imageFilterPacked] -- the resolver throws a deferred error
+         * if both are non-default for the same composite.
+         */
+        val matrixPacked: FloatArray,
         /**
          * Phase G-saveLayer-imageFilter-crop/-tile/-magnifier -- packed
          * UV-remap payload. Layout (matches the trailing 3 vec4f in
@@ -4414,6 +4442,7 @@ public class SkWebGpuDevice(
                     r = 1f, g = 1f, b = 1f, a = paintAlphaE,
                     mode = mode,
                     colorFilterPacked = FloatArray(24),
+                    matrixPacked = IDENTITY_LAYER_MATRIX_12,
                     imageFilterPacked = imageFilterPackedEarly,
                 ),
             )
@@ -4564,6 +4593,13 @@ public class SkWebGpuDevice(
                     r = 1f, g = 1f, b = 1f, a = paintAlpha,
                     mode = mode,
                     colorFilterPacked = colorFilterPacked,
+                    // Phase G-saveLayer-imageFilter-matrixTransform --
+                    // Offset is a pure translation expressed via the
+                    // composite shader's existing `dstOriginSize.xy`
+                    // slot ; no affine UV remap, so the matrix payload
+                    // is the identity / off sentinel that flags the
+                    // integer-grid `textureLoad` fast path.
+                    matrixPacked = IDENTITY_LAYER_MATRIX_12,
                     imageFilterPacked = FloatArray(12),
                 ),
             )
@@ -4621,6 +4657,37 @@ public class SkWebGpuDevice(
             return
         }
 
+        // Phase G-saveLayer-imageFilter-matrixTransform -- `SkImageFilters
+        // .MatrixTransform(matrix, sampling, input = null)` applies an
+        // arbitrary 2x3 affine to the layer pixels before composite. We
+        // pack the inverse 2x3 into the composite uniform's matrix payload
+        // and let the fragment shader sample the layer texture per the
+        // selected SkFilterMode (kNearest / kLinear). The cover-quad
+        // geometry covers the bbox of the matrix-mapped layer rect (the
+        // four corners of `(0, 0)..(w, h)` mapped through the user matrix
+        // and offset by the layer's origin in parent-device pixels).
+        //
+        // Perspective rows are out of scope (the shader's vec3 dot-product
+        // path covers 2x3 affine only -- a 3x3 with non-trivial bottom
+        // row would need a homogeneous divide that the first slice ships
+        // without). Cubic sampling is also deferred -- the shader only
+        // implements kNearest / kLinear (same as `drawImageRect`'s cubic
+        // deferral).
+        val matrixTransformParams = paint?.imageFilter?.asMatrixTransformImageFilter()
+        if (matrixTransformParams != null) {
+            enqueueMatrixTransformLayerComposite(
+                gpuSrc = gpuSrc,
+                w = w, h = h,
+                originX = originX, originY = originY,
+                clip = clip,
+                params = matrixTransformParams,
+                paintAlpha = paintAlpha,
+                colorFilterPacked = colorFilterPacked,
+                mode = mode,
+            )
+            return
+        }
+
         // No blur (or sigma == 0). A pre-blur CF from the Compose tree
         // collapses to the post-blur slot when there is no blur ; the
         // resolver folded both into `effectiveColorFilter` above.
@@ -4669,6 +4736,11 @@ public class SkWebGpuDevice(
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
                 mode = mode,
                 colorFilterPacked = colorFilterPacked,
+                // Phase G-saveLayer-imageFilter-matrixTransform -- no
+                // imageFilter on this path : ship the identity matrix
+                // payload so the shader takes the integer-grid fast
+                // path (bit-iso with the pre-MatrixTransform slice).
+                matrixPacked = IDENTITY_LAYER_MATRIX_12,
                 imageFilterPacked = FloatArray(12),
             ),
         )
@@ -4963,6 +5035,167 @@ public class SkWebGpuDevice(
     }
 
     /**
+     * Phase G-saveLayer-imageFilter-matrixTransform -- helper for
+     * [compositeFrom]. Computes the inverse 2x3 of the user matrix, the
+     * cover-quad scissor (axis-aligned bbox of the mapped layer rect,
+     * intersected with the parent clip + viewport), and enqueues a single
+     * [LayerCompositeDraw] with the matrix payload packed into its
+     * `matrixPacked` slot. The fragment shader applies the inverse to
+     * the device-pixel coords and samples the layer texture per the
+     * SkFilterMode selected (kNearest -> mode 1, kLinear -> mode 2).
+     *
+     * **Bail conditions.**
+     *  - Non-null child filter -- the structural pre-pass needed to
+     *    render the child filter's output into a scratch before the
+     *    affine remap is deferred to a follow-up slice. Throws a clear
+     *    "input == null required" error.
+     *  - Perspective matrix -- the shader's `vec3 dot-product` path
+     *    handles 2x3 affine only. A 3x3 with non-trivial bottom row
+     *    needs a homogeneous divide that the first slice doesn't ship.
+     *    Throws a clear "perspective deferred" error.
+     *  - Cubic sampling -- the shader implements kNearest / kLinear
+     *    only ; cubic resampling is deferred (same as drawImageRect).
+     *  - Non-invertible matrix -- the inverse 2x3 doesn't exist, so the
+     *    fragment shader can't reverse-map device pixels to layer pixels.
+     *    Returns silently (mirrors `SkImageFilters.MatrixTransform`'s
+     *    own treatment of non-invertible matrices : it returns the input
+     *    unchanged, which on a composite path means a no-op).
+     */
+    private fun enqueueMatrixTransformLayerComposite(
+        gpuSrc: SkWebGpuDevice,
+        w: Int, h: Int,
+        originX: Int, originY: Int,
+        clip: SkIRect,
+        params: org.skia.foundation.SkMatrixTransformImageFilterParams,
+        paintAlpha: Float,
+        colorFilterPacked: FloatArray,
+        mode: SkBlendMode,
+    ) {
+        if (params.input != null) {
+            error(
+                "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                    "SkImageFilters.MatrixTransform(input = nonNull) with a " +
+                    "non-null child filter. Only the input == null case is " +
+                    "supported (Phase G-saveLayer-imageFilter-matrixTransform) " +
+                    "-- a non-null child needs a render-to-texture pre-pass " +
+                    "that the WebGPU layer composite pipeline cannot express yet."
+            )
+        }
+        if (params.matrix.hasPerspective()) {
+            error(
+                "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                    "SkImageFilters.MatrixTransform with a perspective matrix " +
+                    "(non-trivial bottom row). Only 2x3 affine is supported " +
+                    "in the first MatrixTransform slice (Phase " +
+                    "G-saveLayer-imageFilter-matrixTransform) -- perspective " +
+                    "needs a homogeneous divide in the fragment shader (the " +
+                    "current shader uses a vec3 dot-product affine path) and " +
+                    "is deferred to a follow-up slice."
+            )
+        }
+        // Cubic sampling deferral matches `drawImageRect`'s cubic gate.
+        // The composite shader only implements kNearest / kLinear ; a
+        // cubic resampler would need a 16-tap kernel + B/C coefs in the
+        // uniform.
+        if (params.sampling.cubic != null) {
+            error(
+                "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                    "SkImageFilters.MatrixTransform with a cubic resampler. " +
+                    "Only kNearest and kLinear are supported in the first " +
+                    "MatrixTransform slice (Phase G-saveLayer-imageFilter-" +
+                    "matrixTransform) -- cubic resampling needs a 16-tap " +
+                    "kernel in the composite shader and is deferred."
+            )
+        }
+        val samplingModeOrdinal = when (params.sampling.filter) {
+            SkFilterMode.kNearest -> 1
+            SkFilterMode.kLinear -> 2
+        }
+
+        // The user matrix is expressed in layer-pixel coords (it
+        // operates on the input image's pixel grid, before the dst
+        // origin shifts it onto the parent device). To convert
+        // device-pixel coords -> layer-pixel coords, the fragment
+        // shader needs to :
+        //   1. subtract the layer's dst origin (parent-device px ->
+        //      transformed-layer-px)
+        //   2. invert the user matrix (transformed-layer-px ->
+        //      original-layer-px the texture stores)
+        //
+        // Composed as a single 2x3 : `inv(M) * T(-originX, -originY)`.
+        // We bake this composition into `devToLayerRow*` so the shader
+        // only has to evaluate `dot(row, vec3(pos.x, pos.y, 1))` per
+        // axis. Mirrors the bitmap shader's "device -> local" pack in
+        // #574.
+        val invMatrix = params.matrix.invert()
+        if (invMatrix == null) {
+            // Non-invertible : the CPU raster's MatrixTransform returns
+            // the input image unchanged. A composite of "unchanged but
+            // displaced by a non-invertible matrix" has no well-defined
+            // dst -- the visible footprint collapses to zero area. Skip
+            // the draw to mirror the CPU raster's degenerate behaviour.
+            return
+        }
+        // Bake the dst-origin translation into the inverse : the
+        // composed transform is `inv(M) * T(-originX, -originY)`, i.e.
+        // first translate the device pixel into layer-relative-of-the-
+        // transformed-image coords, then invert the user matrix to
+        // land in the texture's original layer-pixel coords.
+        val a = invMatrix.sx
+        val b = invMatrix.kx
+        val c = invMatrix.tx - a * originX - b * originY
+        val d = invMatrix.ky
+        val e = invMatrix.sy
+        val f = invMatrix.ty - d * originX - e * originY
+        val matrixPacked = FloatArray(12)
+        matrixPacked[0] = a; matrixPacked[1] = b; matrixPacked[2] = c
+        matrixPacked[4] = d; matrixPacked[5] = e; matrixPacked[6] = f
+        matrixPacked[8] = samplingModeOrdinal.toFloat()
+
+        // Cover-quad geometry : the axis-aligned bbox of the four
+        // corners of the layer rect mapped through the user matrix,
+        // offset by the layer's dst origin in parent-device pixels.
+        // We then floor / ceil to integer device-pixel coords (the
+        // shader's `floor(pos.xy)` -> int conversion expects integer-
+        // aligned scissor edges) and intersect with the parent clip
+        // + viewport so fragments outside the visible composite never
+        // reach the shader.
+        val mappedRect = params.matrix.mapRect(
+            org.graphiks.math.SkRect.MakeLTRB(0f, 0f, w.toFloat(), h.toFloat()),
+        )
+        val coverL = floor(mappedRect.left).toInt() + originX
+        val coverT = floor(mappedRect.top).toInt() + originY
+        val coverR = ceil(mappedRect.right).toInt() + originX
+        val coverB = ceil(mappedRect.bottom).toInt() + originY
+        val ix0 = coverL.coerceAtLeast(clip.left).coerceAtLeast(0)
+        val iy0 = coverT.coerceAtLeast(clip.top).coerceAtLeast(0)
+        val ix1 = coverR.coerceAtMost(clip.right).coerceAtMost(width)
+        val iy1 = coverB.coerceAtMost(clip.bottom).coerceAtMost(height)
+        if (ix0 >= ix1 || iy0 >= iy1) return
+
+        pending.add(
+            LayerCompositeDraw(
+                layerView = gpuSrc.intermediateView,
+                layerWidth = w, layerHeight = h,
+                // dstOriginX / dstOriginY are unused on the
+                // MatrixTransform path (the shader's identity branch
+                // is the only consumer of `dstOriginSize.xy`, and
+                // `samplingMode != 0` skips it). We still ship the
+                // original origin for diagnostic / fast-path safety.
+                dstOriginX = originX, dstOriginY = originY,
+                scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
+                paintR = paintAlpha, paintG = paintAlpha,
+                paintB = paintAlpha, paintA = paintAlpha,
+                r = 1f, g = 1f, b = 1f, a = paintAlpha,
+                mode = mode,
+                colorFilterPacked = colorFilterPacked,
+                matrixPacked = matrixPacked,
+                imageFilterPacked = FloatArray(12),
+            ),
+        )
+    }
+
+    /**
      * Phase G-saveLayer-imageFilter-compose -- normalized plan for the
      * layer paint's [SkImageFilter] slot, built by walking the (possibly
      * Compose-wrapped) tree into the shape the WebGPU composite pipeline
@@ -5057,15 +5290,19 @@ public class SkWebGpuDevice(
                 effectiveColorFilter = paint?.colorFilter,
             )
 
-        // Phase G-saveLayer-imageFilter-offset / -dropshadow -- both
-        // variants are folded into the composite uniform / dispatch by
-        // [compositeFrom] directly when they sit at the TOP of the
-        // filter tree ; the plan here is just "no blur, no preCF,
-        // effectiveCF = paint.colorFilter" (the offset / shadow placement
+        // Phase G-saveLayer-imageFilter-offset / -dropshadow /
+        // -matrixTransform -- the three structural variants are folded
+        // into the composite uniform / dispatch by [compositeFrom]
+        // directly when they sit at the TOP of the filter tree ; the
+        // plan here is just "no blur, no preCF, effectiveCF =
+        // paint.colorFilter" (the offset / shadow / matrix placement
         // is structural, not per-pixel). The dispatch gate validates
         // input == null there too, so this branch only short-circuits
         // the throw path of the walker below.
-        if (imf.asOffsetImageFilter() != null || imf.asDropShadowImageFilter() != null) {
+        if (imf.asOffsetImageFilter() != null ||
+            imf.asDropShadowImageFilter() != null ||
+            imf.asMatrixTransformImageFilter() != null
+        ) {
             return ResolvedLayerImageFilterPlan(
                 preBlurColorFilter = null,
                 blurParams = null,
@@ -5091,26 +5328,29 @@ public class SkWebGpuDevice(
                 return
             }
             // Phase G-saveLayer-imageFilter-compose -- Offset / DropShadow
-            // inside a Compose tree is deferred. Mixing those structural
-            // filters with the normalized `[preCF?][Blur?][postCF?]` plan
-            // needs a render-to-texture intermediate (the Offset / shadow
-            // would shift either the source the Blur reads from, or the
-            // composite output -- both need a separate pre-pass). Throw
-            // a clear "deferred" error so the call site surfaces the gap.
+            // / MatrixTransform inside a Compose tree is deferred. Mixing
+            // those structural filters with the normalized `[preCF?][Blur?]
+            // [postCF?]` plan needs a render-to-texture intermediate (the
+            // Offset / shadow / matrix would shift either the source the
+            // Blur reads from, or the composite output -- both need a
+            // separate pre-pass). Throw a clear "deferred" error so the
+            // call site surfaces the gap.
             if (node.asOffsetImageFilter() != null ||
-                node.asDropShadowImageFilter() != null
+                node.asDropShadowImageFilter() != null ||
+                node.asMatrixTransformImageFilter() != null
             ) {
                 error(
                     "SkWebGpuDevice.compositeFrom : a Compose chain contains " +
                         "an ${node::class.simpleName} leaf (e.g. Compose(" +
-                        "Offset, Blur)) -- not yet supported. Top-level " +
-                        "Offset / DropShadow ship in their own dispatch " +
-                        "paths, but mixing them with a Compose tree (where " +
-                        "they would shift the texture the Blur reads from, " +
-                        "or shift the composite output relative to a colour-" +
-                        "filtered scratch) is deferred -- it needs a render-" +
-                        "to-texture intermediate that the first Compose " +
-                        "support slice (Phase G-saveLayer-imageFilter-" +
+                        "Offset, Blur) or Compose(MatrixTransform, Blur)) -- " +
+                        "not yet supported. Top-level Offset / DropShadow / " +
+                        "MatrixTransform ship in their own dispatch paths, " +
+                        "but mixing them with a Compose tree (where they " +
+                        "would shift / remap either the texture the Blur " +
+                        "reads from, or the composite output relative to a " +
+                        "colour-filtered scratch) is deferred -- it needs a " +
+                        "render-to-texture intermediate that the first " +
+                        "Compose support slice (Phase G-saveLayer-imageFilter-" +
                         "compose) doesn't ship."
                 )
             }
@@ -5490,6 +5730,53 @@ public class SkWebGpuDevice(
             return out
         }
         return null
+    }
+
+    /**
+     * Phase G-saveLayer-imageFilter-matrixTransform -- pack the inverse
+     * of the user's 2x3 affine into the trailing 12-float payload that
+     * `layer_composite.wgsl` reads as `(devToLayerRow0, devToLayerRow1,
+     * samplingMode)`. The fragment shader applies the inverse to the
+     * device-pixel coords `(pos.x, pos.y, 1)` to land in layer-pixel
+     * coords ; the sampling-mode selector picks kNearest (mode = 1) or
+     * kLinear (mode = 2) at that point.
+     *
+     * The inverse 2x3 has the same shape as the input (sx, kx, tx ; ky,
+     * sy, ty) but the translation is recomputed via the standard 2x2
+     * adjugate formula -- matches Skia's `SkMatrix::invert` affine path.
+     *
+     * `samplingMode` ordinal :
+     *   1 = kNearest (default for the MatrixTransform identity case
+     *                  too -- a kNearest sample on integer texel coords
+     *                  collapses to the same texel the integer-grid
+     *                  `textureLoad` would have returned),
+     *   2 = kLinear.
+     * `samplingMode == 0` is reserved for the no-MatrixTransform fast
+     * path and **must not** be produced here -- callers that need that
+     * payload should use the [IDENTITY_LAYER_MATRIX_12] sentinel.
+     *
+     * Returns 12 floats (3 vec4f -- row 0, row 1, samplingMode). The
+     * `.w` slot of each row is zeroed (reserved for follow-up
+     * perspective row).
+     */
+    private fun packLayerCompositeMatrixTransform(
+        invMatrix: org.graphiks.math.SkMatrix,
+        samplingModeOrdinal: Int,
+    ): FloatArray {
+        val out = FloatArray(12)
+        out[0] = invMatrix.sx
+        out[1] = invMatrix.kx
+        out[2] = invMatrix.tx
+        out[3] = 0f
+        out[4] = invMatrix.ky
+        out[5] = invMatrix.sy
+        out[6] = invMatrix.ty
+        out[7] = 0f
+        out[8] = samplingModeOrdinal.toFloat()
+        out[9] = 0f
+        out[10] = 0f
+        out[11] = 0f
+        return out
     }
 
     /**
@@ -10820,13 +11107,18 @@ public class SkWebGpuDevice(
         //   offset  80 : colorFilterParam2   (vec4f -- matrix row 2)
         //   offset  96 : colorFilterParam3   (vec4f -- matrix row 3)
         //   offset 112 : colorFilterBias     (vec4f -- per-row bias)
-        //   offset 128 : imageFilterKindMode (vec4f -- kind, tile, zoom, inset)
-        //   offset 144 : imageFilterRectA    (vec4f -- rect or lens or dst)
-        //   offset 160 : imageFilterRectB    (vec4f -- Tile src ; else zeroed)
-        // Total = 176 bytes. The colourFilter and image-filter payloads
-        // are zeroed when the layer paint has neither -- both kind == 0
-        // branches are no-ops, so the fast path stays bit-iso.
-        val packed = FloatArray(44) // 11 vec4f * 4 floats each.
+        //   offset 128 : devToLayerRow0      (vec4f -- inv 2x3 row 0)
+        //   offset 144 : devToLayerRow1      (vec4f -- inv 2x3 row 1)
+        //   offset 160 : samplingMode        (vec4f -- mode, 0, 0, 0)
+        //   offset 176 : imageFilterKindMode (vec4f -- kind, tile, zoom, inset)
+        //   offset 192 : imageFilterRectA    (vec4f -- rect or lens or dst)
+        //   offset 208 : imageFilterRectB    (vec4f -- Tile src ; else zeroed)
+        // Total = 224 bytes. The colourFilter / matrix / image-filter
+        // payloads are sentinel-zeroed when the layer paint has neither
+        // colour filter nor image filter -- the shader's `kind == 0`
+        // and `samplingMode == 0` and `imageFilterKind == 0` branches
+        // are all no-ops, so the fast path stays bit-iso.
+        val packed = FloatArray(LAYER_COMPOSITE_UNIFORM_FLOATS) // 14 vec4f * 4 floats each.
         packed[0] = d.dstOriginX.toFloat()
         packed[1] = d.dstOriginY.toFloat()
         packed[2] = d.layerWidth.toFloat()
@@ -10836,10 +11128,13 @@ public class SkWebGpuDevice(
         // colorFilterPacked is laid out as 6 contiguous vec4f starting
         // at vec4f index 2 (offset 32 bytes).
         System.arraycopy(d.colorFilterPacked, 0, packed, 8, 24)
+        // matrixPacked is 3 vec4f (devToLayerRow0, devToLayerRow1,
+        // samplingMode) starting at vec4f index 8 (offset 128 bytes).
+        System.arraycopy(d.matrixPacked, 0, packed, 32, 12)
         // imageFilterPacked is 3 contiguous vec4f starting at vec4f
-        // index 8 (offset 128 bytes). Zeroed array for the no-IF fast
+        // index 11 (offset 176 bytes). Zeroed array for the no-IF fast
         // path keeps the shader's `imageFilterKind == 0` branch warm.
-        System.arraycopy(d.imageFilterPacked, 0, packed, 32, 12)
+        System.arraycopy(d.imageFilterPacked, 0, packed, 44, 12)
         context.queue.writeBuffer(
             uniform, 0uL,
             ArrayBuffer.of(packed),
@@ -11407,15 +11702,18 @@ public class SkWebGpuDevice(
                     label = "SkWebGpuDevice.blurImageFilterPreCfDraw",
                 ),
             )
-            // layer_composite.wgsl uniform layout : 8 vec4f.
+            // layer_composite.wgsl uniform layout : 11 vec4f.
             //   dstOriginSize : (0, 0, w, h)  -> identity mapping
             //   paintColor    : (1, 1, 1, 1)  -> no scale
             //   colorFilter*  : packed CF (6 vec4f, 24 floats)
-            val packed = FloatArray(32)
+            //   matrix slots  : identity / off (3 vec4f, 12 floats) --
+            //                   pre-blur CF doesn't carry a transform.
+            val packed = FloatArray(LAYER_COMPOSITE_UNIFORM_FLOATS)
             packed[0] = 0f; packed[1] = 0f
             packed[2] = d.layerWidth.toFloat(); packed[3] = d.layerHeight.toFloat()
             packed[4] = 1f; packed[5] = 1f; packed[6] = 1f; packed[7] = 1f
             System.arraycopy(preCfPacked, 0, packed, 8, 24)
+            System.arraycopy(IDENTITY_LAYER_MATRIX_12, 0, packed, 32, 12)
             context.queue.writeBuffer(preCfUniform, 0uL, ArrayBuffer.of(packed))
             preCfBindGroup = context.device.createBindGroup(
                 BindGroupDescriptor(
@@ -11491,11 +11789,13 @@ public class SkWebGpuDevice(
         )
 
         // ── Composite pass uniform : matches `layer_composite.wgsl`'s
-        //    128-byte layout. dstOriginSize : (originX, originY,
+        //    176-byte layout. dstOriginSize : (originX, originY,
         //    layerW, layerH) -- the composite shader subtracts this
         //    origin to map the parent-pixel fragment to a layer-pixel
-        //    sample. paintColor + colorFilter payload mirror the plain
-        //    [LayerCompositeDraw] packing.
+        //    sample. paintColor + colorFilter + matrix payload mirror
+        //    the plain [LayerCompositeDraw] packing ; the matrix slots
+        //    ship the identity / off sentinel because the blur image
+        //    filter pipeline doesn't compose with MatrixTransform yet.
         val compUniform = context.device.createBuffer(
             BufferDescriptor(
                 size = LAYER_COMPOSITE_UNIFORM_SIZE,
@@ -11503,7 +11803,7 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.blurImageFilterCompositeDraw",
             ),
         )
-        val compPacked = FloatArray(32) // 8 vec4f * 4 floats each.
+        val compPacked = FloatArray(LAYER_COMPOSITE_UNIFORM_FLOATS) // 11 vec4f * 4 floats each.
         compPacked[0] = d.dstOriginX.toFloat()
         compPacked[1] = d.dstOriginY.toFloat()
         compPacked[2] = d.layerWidth.toFloat()
@@ -11511,6 +11811,12 @@ public class SkWebGpuDevice(
         compPacked[4] = d.paintR; compPacked[5] = d.paintG
         compPacked[6] = d.paintB; compPacked[7] = d.paintA
         System.arraycopy(d.colorFilterPacked, 0, compPacked, 8, 24)
+        // Phase G-saveLayer-imageFilter-matrixTransform -- the blur
+        // composite doesn't carry a MatrixTransform (the affine + blur
+        // combination is deferred to a Compose-chain follow-up). Ship
+        // the identity / off payload so the shader's integer-grid fast
+        // path stays bit-iso with the pre-MatrixTransform behaviour.
+        System.arraycopy(IDENTITY_LAYER_MATRIX_12, 0, compPacked, 32, 12)
         context.queue.writeBuffer(compUniform, 0uL, ArrayBuffer.of(compPacked))
         val compBindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -11639,7 +11945,7 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.dropShadowShadowCompositeDraw",
             ),
         )
-        val shadowPacked = FloatArray(32)
+        val shadowPacked = FloatArray(LAYER_COMPOSITE_UNIFORM_FLOATS)
         shadowPacked[0] = d.shadowDstOriginX.toFloat()
         shadowPacked[1] = d.shadowDstOriginY.toFloat()
         shadowPacked[2] = d.layerWidth.toFloat()
@@ -11650,6 +11956,9 @@ public class SkWebGpuDevice(
         shadowPacked[4] = 1f; shadowPacked[5] = 1f
         shadowPacked[6] = 1f; shadowPacked[7] = 1f
         System.arraycopy(d.shadowColorFilterPacked, 0, shadowPacked, 8, 24)
+        // Phase G-saveLayer-imageFilter-matrixTransform -- DropShadow
+        // doesn't carry an affine remap, ship the identity / off payload.
+        System.arraycopy(IDENTITY_LAYER_MATRIX_12, 0, shadowPacked, 32, 12)
         context.queue.writeBuffer(shadowUniform, 0uL, ArrayBuffer.of(shadowPacked))
         val shadowBindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -11671,7 +11980,7 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.dropShadowOriginalCompositeDraw",
             ),
         )
-        val originalPacked = FloatArray(32)
+        val originalPacked = FloatArray(LAYER_COMPOSITE_UNIFORM_FLOATS)
         originalPacked[0] = d.dstOriginX.toFloat()
         originalPacked[1] = d.dstOriginY.toFloat()
         originalPacked[2] = d.layerWidth.toFloat()
@@ -11679,6 +11988,8 @@ public class SkWebGpuDevice(
         originalPacked[4] = d.paintR; originalPacked[5] = d.paintG
         originalPacked[6] = d.paintB; originalPacked[7] = d.paintA
         System.arraycopy(d.originalColorFilterPacked, 0, originalPacked, 8, 24)
+        // Phase G-saveLayer-imageFilter-matrixTransform -- ship identity.
+        System.arraycopy(IDENTITY_LAYER_MATRIX_12, 0, originalPacked, 32, 12)
         context.queue.writeBuffer(originalUniform, 0uL, ArrayBuffer.of(originalPacked))
         val originalBindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -12400,6 +12711,28 @@ public class SkWebGpuDevice(
          */
         val ZERO_COLOR_FILTER_24: FloatArray = FloatArray(24)
         /**
+         * Phase G-saveLayer-imageFilter-matrixTransform -- shared
+         * "identity / off" payload for the trailing 3-vec4f
+         * (`devToLayerRow0`, `devToLayerRow1`, `samplingMode`) slots
+         * of the layer composite uniform. Length 12 = 3 vec4f * 4
+         * floats.
+         *
+         * `samplingMode.x = 0` flags the integer-grid `textureLoad`
+         * fast path in `layer_composite.wgsl` -- the `devToLayerRow*`
+         * coefficients are ignored. We still ship deterministic zeros
+         * so the uniform bytes stay reproducible across runs (and so a
+         * shader bug that read `devToLayerRow*` despite `samplingMode
+         * == 0` would produce a clean (0, 0) -> (0, 0) -> textureLoad
+         * fault rather than reading uninitialised memory).
+         *
+         * Treated as read-only by [buildLayerCompositeDrawResources]
+         * and the Blur / DropShadow composite-uniform packers ; DO NOT
+         * MUTATE -- callers either copy or replace wholesale via
+         * [packLayerCompositeMatrixTransform] when they need a non-zero
+         * payload.
+         */
+        val IDENTITY_LAYER_MATRIX_12: FloatArray = FloatArray(12)
+        /**
          * Sentinel value for degenerate inner bounds (fill draws). The
          * shader's `clamp(min(p+1, r) - max(p, l), 0, 1)` naturally
          * collapses to 0 when `r < l` (and `b < t`), regardless of `p`.
@@ -12582,7 +12915,13 @@ public class SkWebGpuDevice(
          *   colorFilterParam2   (vec4f,  16)
          *   colorFilterParam3   (vec4f,  16)
          *   colorFilterBias     (vec4f,  16)
-         *   ------                       128 bytes
+         *   devToLayerRow0      (vec4f,  16)
+         *   devToLayerRow1      (vec4f,  16)
+         *   samplingMode        (vec4f,  16)
+         *   imageFilterKindMode (vec4f,  16)
+         *   imageFilterRectA    (vec4f,  16)
+         *   imageFilterRectB    (vec4f,  16)
+         *   ------                       224 bytes
          *
          * The shader uses `textureLoad` (no sampler), so the bind group
          * only needs a uniform buffer + a texture view -- the layer
@@ -12596,13 +12935,26 @@ public class SkWebGpuDevice(
          * (kind = 2). The fast path (no filter) zeroes everything past
          * `paintColor`, the shader's `kind == 0` branch is a no-op.
          *
-         * Bumped further from 128 to 176 bytes in Phase G-saveLayer-
+         * Bumped from 128 to 176 bytes in Phase G-saveLayer-imageFilter-
+         * matrixTransform to carry the inverse 2x3 affine
+         * (`devToLayerRow0` + `devToLayerRow1`) and the sampling-mode
+         * selector consumed by `layer_composite.wgsl` when
+         * `SkImageFilters.MatrixTransform` is set on the layer paint.
+         * The fast path (no MatrixTransform) zeroes both rows and ships
+         * `samplingMode.x = 0` so the shader's identity branch takes
+         * over and stays bit-iso with the no-filter saveLayer.
+         *
+         * Bumped further from 176 to 224 bytes in Phase G-saveLayer-
          * imageFilter-crop/-tile/-magnifier to carry the three trailing
          * vec4f (kind/tileMode/zoom/inset + two rect slots). The
          * `imageFilterKind == 0` fast path keeps the rest of the
-         * shader bit-iso with the pre-slice behaviour.
+         * shader bit-iso with the pre-slice behaviour. MatrixTransform
+         * and Crop/Tile/Magnifier are mutually exclusive in the shader
+         * (host resolver throws on the combo).
          */
-        const val LAYER_COMPOSITE_UNIFORM_SIZE: ULong = 176uL
+        const val LAYER_COMPOSITE_UNIFORM_SIZE: ULong = 224uL
+        /** Float count of [LAYER_COMPOSITE_UNIFORM_SIZE] for FloatArray packing : 56 floats (14 vec4f). */
+        const val LAYER_COMPOSITE_UNIFORM_FLOATS: Int = 56
         /**
          * Phase MaskFilter-blur -- maximum supported off-centre tap count
          * per side for the separable Gaussian blur shader's uniform.
