@@ -1085,6 +1085,15 @@ internal class SkMatrixTransformImageFilter(
     private val sampling: SkSamplingOptions,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    // Phase G-saveLayer-imageFilter-matrixTransform -- read-only views
+    // for backend extractors. Same pattern as `SkBlurImageFilter
+    // .exposedSigmaX` / `SkOffsetImageFilter.exposedDx` : keeps the
+    // concrete class internal while letting GPU backends introspect the
+    // (matrix, sampling, input) tuple they fold into the layer composite
+    // uniform's 2x3 affine slot.
+    internal val exposedMatrix: SkMatrix get() = matrix
+    internal val exposedSampling: SkSamplingOptions get() = sampling
+    internal val exposedInput: SkImageFilter? get() = input
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
         val srcImg = upstream.image
@@ -2788,6 +2797,60 @@ public fun SkImageFilter.asMagnifierImageFilter(): SkMagnifierImageFilterParams?
         lensBounds = f.exposedLensBounds,
         zoomAmount = f.exposedZoom,
         inset = f.exposedInset,
+        input = f.exposedInput,
+    )
+}
+
+// -- Phase G-saveLayer-imageFilter-matrixTransform -- introspection ----------
+//
+// Mirror of [asOffsetImageFilter] for [SkImageFilters.MatrixTransform]. GPU
+// backends that can fold an arbitrary 2x3 affine into their layer-composite
+// uniform (the WebGPU port packs the inverse of the user's matrix into a pair
+// of `vec4f` slots that the fragment shader applies to the device-pixel
+// coords before sampling the layer texture) use this to detect the filter
+// and skip the throw-on-encounter gate.
+
+/**
+ * Read-only descriptor of an [SkImageFilters.MatrixTransform] filter -- the
+ * 3x3 (typically affine) user matrix, the sampling options the shader
+ * honours when the inverse matrix lands on non-integer texel coords, and the
+ * optional child filter. Returned by [SkImageFilter.asMatrixTransformImageFilter]
+ * when (and only when) the receiver is a `MatrixTransform` filter.
+ *
+ * Backends that can express the inverse 2x3 in their composite fragment
+ * shader (the WebGPU port packs `devToLayerRow0` / `devToLayerRow1` into the
+ * layer composite uniform and the cover-quad geometry is the bounding box
+ * of the matrix-mapped layer rect) use this to detect the filter and route
+ * through the dedicated affine path. Perspective (`hasPerspective()`) is
+ * out of scope for the first MatrixTransform slice -- the dispatch gate
+ * throws a clear "deferred" error in that case.
+ */
+public data class SkMatrixTransformImageFilterParams(
+    /** User-supplied 3x3 matrix applied to the input filter's output. */
+    public val matrix: SkMatrix,
+    /** Sampling options applied to the inverse-transformed texel coords. */
+    public val sampling: SkSamplingOptions,
+    /** Optional child filter ; `null` means the source image is the input. */
+    public val input: SkImageFilter?,
+)
+
+/**
+ * Extract the parameters of an [SkImageFilters.MatrixTransform] filter, or
+ * `null` if the receiver is any other [SkImageFilter] variant (Blur, Offset,
+ * ColorFilter, DropShadow, Compose, ...).
+ *
+ * Backends that fold an arbitrary affine transform into their composite
+ * fragment shader use this to detect the filter ; the kanvas-skia WebGPU
+ * backend packs the inverse 2x3 into the existing layer composite uniform
+ * (two extra `vec4f` slots beyond the no-filter saveLayer payload) and
+ * computes the cover-quad bbox by mapping the four corners of the layer
+ * rect through the user's matrix.
+ */
+public fun SkImageFilter.asMatrixTransformImageFilter(): SkMatrixTransformImageFilterParams? {
+    val f = this as? SkMatrixTransformImageFilter ?: return null
+    return SkMatrixTransformImageFilterParams(
+        matrix = f.exposedMatrix,
+        sampling = f.exposedSampling,
         input = f.exposedInput,
     )
 }
