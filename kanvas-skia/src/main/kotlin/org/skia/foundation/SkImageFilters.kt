@@ -1414,6 +1414,11 @@ internal class SkCropImageFilter(
     private val tileMode: SkTileMode,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    // Phase G-saveLayer-imageFilter-crop -- read-only views for backend
+    // extractors. Same pattern as `SkBlurImageFilter.exposedSigmaX`.
+    internal val exposedRect: SkRect get() = rect
+    internal val exposedTileMode: SkTileMode get() = tileMode
+    internal val exposedInput: SkImageFilter? get() = input
 
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
@@ -1467,6 +1472,11 @@ internal class SkTileImageFilter(
     private val dst: SkRect,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    // Phase G-saveLayer-imageFilter-tile -- read-only views for backend
+    // extractors.
+    internal val exposedSrc: SkRect get() = src
+    internal val exposedDst: SkRect get() = dst
+    internal val exposedInput: SkImageFilter? get() = input
 
     override fun filterImage(srcImg: SkImage, ctm: SkMatrix): FilterResult {
         val upstream = input?.filterImage(srcImg, ctm) ?: FilterResult(srcImg, 0, 0)
@@ -1543,6 +1553,12 @@ internal class SkMagnifierImageFilter(
     @Suppress("unused") private val sampling: SkSamplingOptions,
     private val input: SkImageFilter?,
 ) : SkImageFilter() {
+    // Phase G-saveLayer-imageFilter-magnifier -- read-only views for
+    // backend extractors.
+    internal val exposedLensBounds: SkRect get() = lensBounds
+    internal val exposedZoom: SkScalar get() = zoom
+    internal val exposedInset: SkScalar get() = inset
+    internal val exposedInput: SkImageFilter? get() = input
 
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val upstream = input?.filterImage(src, ctm) ?: FilterResult(src, 0, 0)
@@ -2663,5 +2679,115 @@ public fun SkImageFilter.asComposeImageFilter(): SkComposeImageFilterParams? {
     return SkComposeImageFilterParams(
         outer = f.exposedOuter,
         inner = f.exposedInner,
+    )
+}
+
+// -- Phase G-saveLayer-imageFilter-crop -- introspection extractor ----------
+//
+// Mirror of [asBlurImageFilter] for [SkImageFilters.Crop]. GPU backends that
+// can express a per-pixel UV-clamp / repeat / mirror / decal in their
+// composite fragment shader use this to detect the filter and route through
+// the dedicated branch.
+
+/**
+ * Read-only descriptor of an [SkImageFilters.Crop] filter -- the crop
+ * rectangle, the tile mode dictating out-of-rect samples, and the optional
+ * child filter. Returned by [SkImageFilter.asCropImageFilter] when (and only
+ * when) the receiver is a `Crop` filter.
+ *
+ * The GPU layer-composite path uses this to fold a pure UV-clamp / UV-repeat
+ * / UV-mirror / UV-decal into the composite fragment shader -- no scratch
+ * texture, no extra pass.
+ */
+public data class SkCropImageFilterParams(
+    /** Crop rectangle in device pixels. */
+    public val rect: SkRect,
+    /** Tile mode used when the sample lands outside [rect]. */
+    public val tileMode: SkTileMode,
+    /** Optional child filter ; `null` means the source image is the input. */
+    public val input: SkImageFilter?,
+)
+
+/**
+ * Extract the parameters of an [SkImageFilters.Crop] filter, or `null` if
+ * the receiver is any other [SkImageFilter] variant.
+ */
+public fun SkImageFilter.asCropImageFilter(): SkCropImageFilterParams? {
+    val f = this as? SkCropImageFilter ?: return null
+    return SkCropImageFilterParams(
+        rect = f.exposedRect,
+        tileMode = f.exposedTileMode,
+        input = f.exposedInput,
+    )
+}
+
+// -- Phase G-saveLayer-imageFilter-tile -- introspection extractor ----------
+
+/**
+ * Read-only descriptor of an [SkImageFilters.Tile] filter -- the source
+ * sub-region, the destination rectangle, and the optional child filter.
+ * Returned by [SkImageFilter.asTileImageFilter] when (and only when) the
+ * receiver is a `Tile` filter.
+ *
+ * The GPU layer-composite path uses this to fold a pure UV-modulo across
+ * [dst] into the composite fragment shader, sampling [src] in the source
+ * image -- no scratch texture, no extra pass.
+ */
+public data class SkTileImageFilterParams(
+    /** Source sub-region (replicated). */
+    public val src: SkRect,
+    /** Destination rectangle (tiled output extent). */
+    public val dst: SkRect,
+    /** Optional child filter ; `null` means the source image is the input. */
+    public val input: SkImageFilter?,
+)
+
+/**
+ * Extract the parameters of an [SkImageFilters.Tile] filter, or `null` if
+ * the receiver is any other [SkImageFilter] variant.
+ */
+public fun SkImageFilter.asTileImageFilter(): SkTileImageFilterParams? {
+    val f = this as? SkTileImageFilter ?: return null
+    return SkTileImageFilterParams(
+        src = f.exposedSrc,
+        dst = f.exposedDst,
+        input = f.exposedInput,
+    )
+}
+
+// -- Phase G-saveLayer-imageFilter-magnifier -- introspection extractor -----
+
+/**
+ * Read-only descriptor of an [SkImageFilters.Magnifier] filter -- the lens
+ * rectangle, zoom amount, inset (soft transition zone), and optional child
+ * filter. Returned by [SkImageFilter.asMagnifierImageFilter] when (and only
+ * when) the receiver is a `Magnifier` filter.
+ *
+ * The GPU layer-composite path uses this to fold a per-pixel zoom-around-
+ * lens-centre with an edge-blend over the inset band into a dedicated
+ * fragment shader -- no scratch texture, no extra pass.
+ */
+public data class SkMagnifierImageFilterParams(
+    /** Lens rectangle in device pixels. */
+    public val lensBounds: SkRect,
+    /** Zoom factor (`> 0` ; `<= 0` is a backend no-op). */
+    public val zoomAmount: Float,
+    /** Inset band width in pixels (`>= 0`). */
+    public val inset: Float,
+    /** Optional child filter ; `null` means the source image is the input. */
+    public val input: SkImageFilter?,
+)
+
+/**
+ * Extract the parameters of an [SkImageFilters.Magnifier] filter, or `null`
+ * if the receiver is any other [SkImageFilter] variant.
+ */
+public fun SkImageFilter.asMagnifierImageFilter(): SkMagnifierImageFilterParams? {
+    val f = this as? SkMagnifierImageFilter ?: return null
+    return SkMagnifierImageFilterParams(
+        lensBounds = f.exposedLensBounds,
+        zoomAmount = f.exposedZoom,
+        inset = f.exposedInset,
+        input = f.exposedInput,
     )
 }
