@@ -1090,6 +1090,40 @@ public class SkWebGpuDevice(
         val imageFilterPacked: FloatArray,
     ) : PendingDraw
 
+    // ─── Phase G-saveLayer-blend -- non-native blend mode composite ────
+    /**
+     * Phase G-saveLayer-blend -- pending entry for [compositeFrom] when
+     * the layer paint's blend mode is non-natively-blendable (kPlus /
+     * kModulate / kScreen / kDarken / kLighten / kDifference /
+     * kExclusion / kMultiply -- the subset implemented by
+     * `layer_composite_blend.wgsl`). The flush replays this draw as
+     * two render passes :
+     *   1. Snapshot pass : sample the parent intermediate (via the
+     *      existing `layer_composite.wgsl` pipeline with kSrc blend),
+     *      write to a per-composite scratch (`snapshotView`). WebGPU
+     *      disallows sampling the parent's intermediate while also
+     *      targeting it, hence the snapshot dance.
+     *   2. Blend composite : sample the layer texture (source) AND the
+     *      snapshot (destination), evaluate the SkBlendMode in the
+     *      fragment stage via `layer_composite_blend.wgsl`, write to
+     *      the parent intermediate with `BlendState = kSrc`.
+     *
+     * Inherited `r/g/b/a` are placeholders. The fragment shader sources
+     * colour from the layer texture + snapshot ; `mode` is honoured by
+     * the in-shader branch ladder (the pipeline is single, kSrc-only).
+     */
+    private data class NonNativeBlendLayerCompositeDraw(
+        val layerView: GPUTextureView,
+        val layerWidth: Int, val layerHeight: Int,
+        val dstOriginX: Int, val dstOriginY: Int,
+        val scissor: IntArray,
+        val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
+        override val r: Float, override val g: Float, override val b: Float, override val a: Float,
+        override val mode: SkBlendMode,
+        /** Packed colour filter on the source side (same layout as [LayerCompositeDraw]). */
+        val colorFilterPacked: FloatArray,
+    ) : PendingDraw
+
     // ─── MaskFilter Gaussian blur (Phase MaskFilter-blur) ───────────────
     /**
      * Phase MaskFilter-blur -- pending entry for `paint.maskFilter is
@@ -1586,6 +1620,7 @@ public class SkWebGpuDevice(
         is ConicalStripGradientRectDraw,
         is ImageRectDraw,
         is LayerCompositeDraw,
+        is NonNativeBlendLayerCompositeDraw,
         is BlurredPathDraw,
         is BlurredShadedPathDraw,
         is BlurredLayerCompositeDraw,
@@ -2308,6 +2343,97 @@ public class SkWebGpuDevice(
                 ),
             )
         }
+
+    // ─── Phase G-saveLayer-blend -- non-native blend modes (in-shader) ──
+    /**
+     * Phase G-saveLayer-blend -- composite shader that evaluates a
+     * non-natively-blendable [SkBlendMode] in the fragment stage,
+     * sampling both the layer texture (source) AND a snapshot of the
+     * parent intermediate (destination). The pipeline writes the
+     * blended premul result via `BlendState = kSrc` since the math is
+     * already done in-shader.
+     *
+     * Supported modes (host gate matches the shader's branches) :
+     * kPlus / kModulate / kScreen / kDarken / kLighten / kDifference /
+     * kExclusion / kMultiply. Other non-native modes (kOverlay,
+     * kHardLight, kColorDodge, kColorBurn, kSoftLight, HSL) throw at
+     * the gate and remain deferred.
+     */
+    private val layerCompositeBlendShader: GPUShaderModule =
+        loadShader("shaders/layer_composite_blend.wgsl")
+
+    /**
+     * Phase G-saveLayer-blend -- bind group layout :
+     *   binding 0 -- uniform buffer (dstOrigin, size, paintColor,
+     *                colorFilter payload, blendModeOrdinal).
+     *   binding 1 -- the child device's intermediate texture (source).
+     *   binding 2 -- a snapshot of the parent intermediate (destination)
+     *                allocated per-composite. Same `intermediateFormat`
+     *                as binding 1 ; the shader uses `textureLoad` so no
+     *                sampler is required.
+     */
+    private val layerCompositeBlendBindGroupLayout: GPUBindGroupLayout =
+        context.device.createBindGroupLayout(
+            BindGroupLayoutDescriptor(
+                entries = listOf(
+                    BindGroupLayoutEntry(
+                        binding = 0u,
+                        visibility = GPUShaderStage.Fragment,
+                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.UnfilterableFloat,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 2u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.UnfilterableFloat,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    private val layerCompositeBlendPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(layerCompositeBlendBindGroupLayout)),
+    )
+
+    /**
+     * Phase G-saveLayer-blend -- single pipeline (no blend-mode key) :
+     * the blend math runs in the fragment stage and the result is
+     * written to the parent intermediate via `kSrc`. The mode the user
+     * asked for is shipped via the uniform's `blendModeOrdinal` slot
+     * and the shader's branch ladder evaluates the canonical Skia
+     * formula in premul space.
+     */
+    private val layerCompositeBlendPipeline: GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = layerCompositeBlendPipelineLayout,
+                vertex = VertexState(module = layerCompositeBlendShader, entryPoint = "vs_main"),
+                fragment = FragmentState(
+                    module = layerCompositeBlendShader,
+                    entryPoint = "fs_main",
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            // kSrc -- the fragment stage already produced
+                            // the premul blended output, write it verbatim.
+                            blend = blendStateFor(SkBlendMode.kSrc),
+                        ),
+                    ),
+                ),
+            ),
+        )
 
     // ─── MaskFilter Gaussian blur pipelines (Phase MaskFilter-blur) ────
     /**
@@ -4202,18 +4328,36 @@ public class SkWebGpuDevice(
             )
         }
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
-        when (mode) {
+        // Phase G-saveLayer-blend -- the natively-blendable subset goes
+        // through the fast `LayerCompositeDraw` path (no snapshot, no
+        // in-shader blend). The non-native subset implemented by
+        // `layer_composite_blend.wgsl` (kPlus / kModulate / kScreen /
+        // kDarken / kLighten / kDifference / kExclusion / kMultiply)
+        // runs through the snapshot-and-rebind in-shader blend path. Any
+        // other mode (kOverlay, kHardLight, kColorDodge, kColorBurn,
+        // kSoftLight, HSL, ...) is deferred.
+        val nonNativeBlend = when (mode) {
             SkBlendMode.kClear,
             SkBlendMode.kSrc,
             SkBlendMode.kSrcOver,
-            SkBlendMode.kDstOver -> Unit
+            SkBlendMode.kDstOver -> false
+            SkBlendMode.kPlus,
+            SkBlendMode.kModulate,
+            SkBlendMode.kScreen,
+            SkBlendMode.kDarken,
+            SkBlendMode.kLighten,
+            SkBlendMode.kDifference,
+            SkBlendMode.kExclusion,
+            SkBlendMode.kMultiply -> true
             else -> error(
                 "SkWebGpuDevice.compositeFrom : blend mode $mode not " +
-                    "supported. In scope : kClear / kSrc / kSrcOver / " +
-                    "kDstOver -- the natively-blendable subset that " +
-                    "[blendStateFor] expresses without fragment-side " +
-                    "round-trip. Other modes need a fragment-side blend " +
-                    "(Phase G-saveLayer-x).",
+                    "supported yet. Fast (native) path : kClear / kSrc / " +
+                    "kSrcOver / kDstOver. In-shader path (Phase " +
+                    "G-saveLayer-blend) : kPlus / kModulate / kScreen / " +
+                    "kDarken / kLighten / kDifference / kExclusion / " +
+                    "kMultiply. Other modes (kOverlay / kHardLight / " +
+                    "kColorDodge / kColorBurn / kSoftLight / HSL) need " +
+                    "additional shader work and are deferred.",
             )
         }
 
@@ -4331,6 +4475,18 @@ public class SkWebGpuDevice(
         if (blurParams != null &&
             (blurParams.sigmaX > 0f || blurParams.sigmaY > 0f)
         ) {
+            if (nonNativeBlend) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Blur AND the layer paint's blendMode " +
+                        "is $mode. Combining a Blur image-filter with a " +
+                        "non-native blend mode is deferred (Phase " +
+                        "G-saveLayer-blend) -- the blur path composites " +
+                        "via the fixed-function blend pipeline ; routing " +
+                        "the blur output through the in-shader blend path " +
+                        "needs a separate plumbing slice."
+                )
+            }
             enqueueBlurredLayerComposite(
                 gpuSrc = gpuSrc,
                 w = w, h = h,
@@ -4366,6 +4522,17 @@ public class SkWebGpuDevice(
                         "(Phase G-saveLayer-imageFilter-offset) -- a non-null " +
                         "child needs a render-to-texture pre-pass that the " +
                         "WebGPU layer composite pipeline cannot express yet."
+                )
+            }
+            if (nonNativeBlend) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Offset AND the layer paint's blendMode " +
+                        "is $mode. Combining an Offset image-filter with a " +
+                        "non-native blend mode is deferred (Phase " +
+                        "G-saveLayer-blend) -- the offset path composites via " +
+                        "the fixed-function blend pipeline and would need to " +
+                        "shift the in-shader blend's dstOrigin too."
                 )
             }
             // Apply the (dx, dy) translation by shifting the dst origin
@@ -4466,6 +4633,30 @@ public class SkWebGpuDevice(
                     "colour filter present without a Blur. The plan resolver " +
                     "should have folded it into effectiveColorFilter."
             )
+        }
+        if (nonNativeBlend) {
+            // Phase G-saveLayer-blend -- non-natively-blendable mode
+            // routes through the in-shader blend pipeline. The dispatch
+            // expands this entry into a snapshot pass (parent intermediate
+            // -> snapshot scratch) followed by the blend composite (layer
+            // + snapshot -> in-shader blend -> parent intermediate). The
+            // snapshot texture is allocated here so its lifetime aligns
+            // with the draw ; [closeDrawResources] releases it after
+            // submission.
+            pending.add(
+                NonNativeBlendLayerCompositeDraw(
+                    layerView = gpuSrc.intermediateView,
+                    layerWidth = w, layerHeight = h,
+                    dstOriginX = originX, dstOriginY = originY,
+                    scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
+                    paintR = paintAlpha, paintG = paintAlpha,
+                    paintB = paintAlpha, paintA = paintAlpha,
+                    r = 1f, g = 1f, b = 1f, a = paintAlpha,
+                    mode = mode,
+                    colorFilterPacked = colorFilterPacked,
+                ),
+            )
+            return
         }
         pending.add(
             LayerCompositeDraw(
@@ -8579,6 +8770,8 @@ public class SkWebGpuDevice(
                 is ConicalStripGradientRectDraw -> buildConicalStripGradientRectDrawResources(d)
                 is ImageRectDraw -> buildImageRectDrawResources(d)
                 is LayerCompositeDraw -> buildLayerCompositeDrawResources(d)
+                is NonNativeBlendLayerCompositeDraw ->
+                    buildNonNativeBlendLayerCompositeDrawResources(d)
                 is BlurredPathDraw -> buildBlurredPathDrawResources(d)
                 is BlurredShadedPathDraw -> buildBlurredShadedPathDrawResources(d)
                 is BlurredLayerCompositeDraw -> buildBlurredLayerCompositeDrawResources(d)
@@ -9279,6 +9472,104 @@ public class SkWebGpuDevice(
                 }
                 return@forEachIndexed
             }
+            if (d is NonNativeBlendLayerCompositeDraw) {
+                // Phase G-saveLayer-blend -- two (or three) render passes :
+                //   0. (When i == 0) Pre-clear the parent intermediate to
+                //      the background colour. The snapshot pass below
+                //      samples the parent intermediate ; if no prior
+                //      draws have populated it, the snapshot would carry
+                //      uninitialised pixels. The fast `LayerCompositeDraw`
+                //      path piggybacks the clear onto its own render
+                //      pass (via `loadOp = Clear`), but our snapshot
+                //      pass targets the scratch, not the parent, so we
+                //      must clear separately.
+                //   1. Snapshot : sample the parent's intermediate (via
+                //      `layer_composite.wgsl` with kSrc blend, identity
+                //      paintColor, identity colour filter), write to the
+                //      per-composite snapshot scratch. The snapshot is
+                //      `(width, height)` of the parent and the shader's
+                //      dst-pixel-to-layer-pixel mapping with origin (0, 0)
+                //      reduces to a straight `textureLoad` copy.
+                //   2. Blend composite : sample the layer texture (source)
+                //      + snapshot (destination), evaluate the SkBlendMode
+                //      in the fragment stage via
+                //      `layer_composite_blend.wgsl`, write to the parent
+                //      intermediate with `BlendState = kSrc`. The
+                //      `loadOp` is `Load` here -- we already cleared (or
+                //      a prior draw populated the intermediate) and we
+                //      need to preserve pixels outside the scissor.
+                if (i == 0) {
+                    encoder.beginRenderPass(
+                        RenderPassDescriptor(
+                            colorAttachments = listOf(
+                                RenderPassColorAttachment(
+                                    view = colorView,
+                                    loadOp = GPULoadOp.Clear,
+                                    clearValue = background,
+                                    storeOp = GPUStoreOp.Store,
+                                ),
+                            ),
+                        ),
+                    ) {
+                        end()
+                    }
+                }
+                val snapView = res.scratchVView!!
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = snapView,
+                                loadOp = GPULoadOp.Clear,
+                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    // Snapshot pass : reuse the kSrc layer composite
+                    // pipeline. Scissor covers the parent's full extent
+                    // so the snapshot's RGBA matches the parent texel-
+                    // for-texel under the dst rect.
+                    setPipeline(layerCompositePipelineFor(SkBlendMode.kSrc))
+                    setBindGroup(0u, res.bindGroup)
+                    setScissorRect(
+                        x = 0u, y = 0u,
+                        width = width.toUInt(),
+                        height = height.toUInt(),
+                    )
+                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    end()
+                }
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = colorView,
+                                // Always Load -- we either cleared above
+                                // (i == 0) or a prior draw populated the
+                                // parent. Clearing again here would wipe
+                                // those pixels.
+                                loadOp = GPULoadOp.Load,
+                                clearValue = background,
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    setPipeline(layerCompositeBlendPipeline)
+                    setBindGroup(0u, res.secondaryBindGroup!!)
+                    setScissorRect(
+                        x = d.scissor[0].toUInt(),
+                        y = d.scissor[1].toUInt(),
+                        width = d.scissor[2].toUInt(),
+                        height = d.scissor[3].toUInt(),
+                    )
+                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    end()
+                }
+                return@forEachIndexed
+            }
             if (d is BlurredLayerCompositeDraw) {
                 // Phase G-saveLayer-imageFilter-blur -- three render
                 // passes :
@@ -9694,6 +9985,7 @@ public class SkWebGpuDevice(
                     is BlurredShadedPathDraw -> { /* handled above */ }
                     is BlurredLayerCompositeDraw -> { /* handled above */ }
                     is DropShadowLayerCompositeDraw -> { /* handled above */ }
+                    is NonNativeBlendLayerCompositeDraw -> { /* handled above */ }
                 }
                 end()
             }
@@ -10562,6 +10854,119 @@ public class SkWebGpuDevice(
             ),
         )
         return DrawResources(uniform = uniform, bindGroup = bindGroup)
+    }
+
+    /**
+     * Phase G-saveLayer-blend -- build per-draw resources for a
+     * [NonNativeBlendLayerCompositeDraw]. Allocates a snapshot texture
+     * (W x H of the parent's intermediate) and builds two uniform
+     * buffers + bind groups :
+     *  - Snapshot pass : reuses `layer_composite.wgsl` with kSrc blend
+     *    and `dstOriginSize = (0, 0, parentW, parentH)`. Source =
+     *    parent's intermediate ; target = snapshot.
+     *  - Blend composite : `layer_composite_blend.wgsl` with kSrc blend.
+     *    Source = child's intermediate (layer) + snapshot (dst). Target
+     *    = parent's intermediate. The uniform's `colorFilterKindMode.z`
+     *    carries the user's blendMode ordinal so the shader's branch
+     *    ladder evaluates the canonical formula in premul space.
+     */
+    private fun buildNonNativeBlendLayerCompositeDrawResources(
+        d: NonNativeBlendLayerCompositeDraw,
+    ): DrawResources {
+        // Allocate the snapshot texture (same dims + format as the
+        // parent's intermediate). Released by [closeDrawResources] via
+        // the scratchPreCfTexture / scratchPreCfView slots (reused as a
+        // generic "extra scratch" channel -- the draw never carries a
+        // pre-blur CF in this path, so the slot is free).
+        val snapshot = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.nonNativeBlendSnapshot",
+            ),
+        )
+        val snapshotView = snapshot.createView()
+
+        // Snapshot-pass uniform : layer_composite.wgsl with
+        // dstOriginSize = (0, 0, parentW, parentH), paintColor = (1,1,1,1),
+        // colorFilter kind = 0 (identity), so the shader's output equals
+        // the loaded texel verbatim.
+        val snapUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = LAYER_COMPOSITE_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.nonNativeBlendSnapshotUniform",
+            ),
+        )
+        val snapPacked = FloatArray(32)
+        snapPacked[0] = 0f; snapPacked[1] = 0f
+        snapPacked[2] = width.toFloat(); snapPacked[3] = height.toFloat()
+        snapPacked[4] = 1f; snapPacked[5] = 1f; snapPacked[6] = 1f; snapPacked[7] = 1f
+        // Remaining 24 floats (colour-filter payload) stay zero ; the
+        // shader's `kind == 0` fast path runs.
+        context.queue.writeBuffer(snapUniform, 0uL, ArrayBuffer.of(snapPacked))
+
+        val snapBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = layerCompositeBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = snapUniform)),
+                    BindGroupEntry(binding = 1u, resource = intermediateView),
+                ),
+            ),
+        )
+
+        // Blend-composite uniform : layer_composite_blend.wgsl. Same
+        // 128-byte layout as layer_composite ; the user's blendMode
+        // ordinal goes into colorFilterKindMode.z so the shader can
+        // dispatch on it without expanding the uniform.
+        val blendUniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = LAYER_COMPOSITE_UNIFORM_SIZE,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.nonNativeBlendComposite",
+            ),
+        )
+        val blendPacked = FloatArray(32)
+        blendPacked[0] = d.dstOriginX.toFloat()
+        blendPacked[1] = d.dstOriginY.toFloat()
+        blendPacked[2] = d.layerWidth.toFloat()
+        blendPacked[3] = d.layerHeight.toFloat()
+        blendPacked[4] = d.paintR; blendPacked[5] = d.paintG
+        blendPacked[6] = d.paintB; blendPacked[7] = d.paintA
+        // colorFilterPacked occupies vec4f indices 2..7 (24 floats from
+        // float index 8). We then overwrite the third float of the first
+        // vec4f (colorFilterKindMode.z) with the layer paint's blendMode
+        // ordinal -- the source-side colour-filter payload only consumes
+        // .x (kind) and .y (mode) so .z is free.
+        System.arraycopy(d.colorFilterPacked, 0, blendPacked, 8, 24)
+        blendPacked[10] = d.mode.ordinal.toFloat()
+        context.queue.writeBuffer(blendUniform, 0uL, ArrayBuffer.of(blendPacked))
+
+        val blendBindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = layerCompositeBlendBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = blendUniform)),
+                    BindGroupEntry(binding = 1u, resource = d.layerView),
+                    BindGroupEntry(binding = 2u, resource = snapshotView),
+                ),
+            ),
+        )
+
+        return DrawResources(
+            uniform = snapUniform,
+            bindGroup = snapBindGroup,
+            secondaryUniform = blendUniform,
+            secondaryBindGroup = blendBindGroup,
+            // Park the snapshot lifetime on the V-pass scratch slots so
+            // [closeDrawResources] releases it after submit -- the
+            // semantics match (both are "scratch textures consumed by a
+            // later pass within the same encoder").
+            scratchVTexture = snapshot,
+            scratchVView = snapshotView,
+        )
     }
 
     /**
