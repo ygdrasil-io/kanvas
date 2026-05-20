@@ -63,8 +63,13 @@ import org.skia.core.SkDevice
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmapShader
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkComposePathEffect
 import org.skia.foundation.SkDashPathEffect
+import org.skia.foundation.SkPath1DPathEffect
+import org.skia.foundation.SkPath2DPathEffect
 import org.skia.foundation.SkPathEffect
+import org.skia.foundation.SkSumPathEffect
+import org.skia.tools.SkDiscretePathEffect
 import org.skia.foundation.asBlendModeFilter
 import org.skia.foundation.asBlurImageFilter
 import org.skia.foundation.asColorFilterImageFilter
@@ -6180,23 +6185,32 @@ public class SkWebGpuDevice(
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
-        // H5 -- PathEffect dispatch. The canonical Skia pipeline for paths
-        // is `path -> pathEffect -> stroker -> maskFilter -> colorFilter
+        // H5 / II1 -- PathEffect dispatch. The canonical Skia pipeline for
+        // paths is `path -> pathEffect -> stroker -> maskFilter -> colorFilter
         // -> blend` (mirrored on CPU at SkBitmapDevice.drawPath:1092). The
-        // GPU device silently dropped `paint.pathEffect` before this slice ;
+        // GPU device silently dropped `paint.pathEffect` before H5 (#583) ;
         // we now route through [SkPathEffect.filterPath] before the rest
         // of the dispatch runs.
         //
-        // Scope :
-        //   - [SkDashPathEffect] -- supported. The dash effect decomposes
-        //     the input path into a sequence of `moveTo + lineTo` pairs
-        //     (one per "on" interval) ; we then recurse with a paint copy
-        //     whose `pathEffect = null`, letting the existing stroker /
-        //     fill machinery thicken each dash segment normally.
-        //   - All other [SkPathEffect] subtypes (CornerPathEffect,
-        //     DiscretePathEffect, ComposePathEffect, SumPathEffect,
-        //     Path1D/2D path effects) -- deferred. Throws a clear error
-        //     so callers learn at draw time rather than silently mis-render.
+        // Scope (extended in II1 -- Discrete + Compose + Sum) :
+        //   - [SkDashPathEffect]     -- supported (#583).
+        //   - [SkDiscretePathEffect] -- supported (II1). Jitters the path
+        //     with deterministic perpendicular noise. Output is a polyline
+        //     consumed by the existing stroker / fill machinery.
+        //   - [SkComposePathEffect]  -- supported (II1). `outer(inner(p))`
+        //     tree filter ; both arms call into foundation `filterPath`.
+        //   - [SkSumPathEffect]      -- supported (II1). Concatenates the
+        //     verb streams of `first(p)` and `second(p)`.
+        //   - [SkPath1DPathEffect] / [SkPath2DPathEffect] -- deferred.
+        //     These produce many stamp instances ; defer to a follow-up
+        //     slice to avoid blowing up the polygon pipeline budget.
+        //   - Any other [SkPathEffect] subtype (e.g. SkCornerPathEffect)
+        //     -- deferred too, throws a clear error so callers learn at
+        //     draw time rather than silently mis-render.
+        //
+        // All supported branches share the same recursion pattern : run
+        // `filterPath`, then re-enter `drawPath` with `pathEffect = null`
+        // on the paint copy. Stroker / maskFilter / colorFilter follow.
         //
         // Empty / null filter result follows the CPU contract exactly :
         //   - `filterPath() == null` -- passthrough (use original path).
@@ -6206,7 +6220,10 @@ public class SkWebGpuDevice(
         val pathEffect = paint.pathEffect
         if (pathEffect != null) {
             when (pathEffect) {
-                is SkDashPathEffect -> {
+                is SkDashPathEffect,
+                is SkDiscretePathEffect,
+                is SkComposePathEffect,
+                is SkSumPathEffect -> {
                     val effectivePath = pathEffect.filterPath(path, ctm) ?: path
                     if (effectivePath !== path &&
                         effectivePath.isEmpty() &&
@@ -6216,13 +6233,19 @@ public class SkWebGpuDevice(
                     drawPath(effectivePath, ctm, clip, paintNoEffect)
                     return
                 }
-                else -> error(
-                    "SkWebGpuDevice (H5): paint.pathEffect of type " +
+                is SkPath1DPathEffect, is SkPath2DPathEffect -> error(
+                    "SkWebGpuDevice (II1): paint.pathEffect of type " +
                         "${pathEffect::class.simpleName} is not supported. " +
-                        "Only SkDashPathEffect is in scope today ; " +
-                        "SkCornerPathEffect / SkDiscretePathEffect / " +
-                        "SkComposePathEffect / SkSumPathEffect / 1D / 2D " +
-                        "path effects are deferred to a follow-up slice.",
+                        "1D / 2D path effects are deferred to a follow-up slice.",
+                )
+                else -> error(
+                    "SkWebGpuDevice (II1): paint.pathEffect of type " +
+                        "${pathEffect::class.simpleName} is not supported. " +
+                        "Supported variants : SkDashPathEffect, " +
+                        "SkDiscretePathEffect, SkComposePathEffect, " +
+                        "SkSumPathEffect. " +
+                        "SkCornerPathEffect and 1D / 2D path effects are " +
+                        "deferred to a follow-up slice.",
                 )
             }
         }
