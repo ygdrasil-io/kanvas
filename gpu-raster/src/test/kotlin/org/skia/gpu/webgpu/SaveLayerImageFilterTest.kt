@@ -8,10 +8,13 @@ import org.skia.core.SkCanvas
 import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
 import org.skia.foundation.SkColorFilters
+import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.asBlurImageFilter
 import org.skia.foundation.asColorFilterImageFilter
@@ -19,6 +22,7 @@ import org.skia.foundation.asComposeImageFilter
 import org.skia.foundation.asCropImageFilter
 import org.skia.foundation.asDropShadowImageFilter
 import org.skia.foundation.asMagnifierImageFilter
+import org.skia.foundation.asMatrixTransformImageFilter
 import org.skia.foundation.asOffsetImageFilter
 import org.skia.foundation.asTileImageFilter
 import kotlin.math.abs
@@ -403,6 +407,262 @@ class SaveLayerImageFilterTest {
         val msg = err?.message ?: ""
         assertTrue(msg.contains("Offset") && msg.contains("input == null")) {
             "Error message should call out the non-null child input ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `saveLayer with MatrixTransform translate equivalent to Offset filter`() {
+        // Phase G-saveLayer-imageFilter-matrixTransform -- a pure
+        // translation MatrixTransform should produce the same composite
+        // as SkImageFilters.Offset(dx, dy). Renders both side-by-side
+        // (different canvases) and asserts the two outputs match
+        // pixel-for-pixel inside the shifted rect.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val (pixelsOffset, pixelsMatrix) = context!!.use { ctx ->
+            val viaOffset = SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 14f, 14f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Offset(dx = 8f, dy = 8f, input = null)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+            val viaMatrix = SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 14f, 14f)
+                // MakeAll : (sx, kx, tx, ky, sy, ty). Pure translate (8, 8).
+                val translate = SkMatrix.MakeAll(1f, 0f, 8f, 0f, 1f, 8f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.MatrixTransform(
+                        matrix = translate,
+                        sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                        input = null,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+            viaOffset to viaMatrix
+        }
+
+        // Same shifted-rect anchor as the Offset test : (18, 18).
+        assertRgbaApprox(pixelsMatrix, 19, 19, 255, 0, 0, 255, tag = "MT translate centre")
+        assertRgbaApprox(pixelsMatrix, 11, 11, 255, 255, 255, 255, tag = "MT translate cleared origin")
+        // Strict pixel-for-pixel equivalence with the Offset path.
+        for (y in 0 until H) for (x in 0 until W) {
+            val i = (y * W + x) * 4
+            for (c in 0..3) {
+                assertEquals(
+                    pixelsOffset[i + c], pixelsMatrix[i + c],
+                    "Offset vs MatrixTransform(translate) at ($x, $y) channel $c",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `saveLayer with MatrixTransform scale stretches layer pixels`() {
+        // Phase G-saveLayer-imageFilter-matrixTransform -- a non-uniform
+        // scale ((2, 0.5)) should place a 4-px wide source rect into an
+        // 8-px wide x 2-px tall mapped rect. We assert the mapped rect's
+        // interior is red and the unmapped corners stay white.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                // Source rect : (4, 8)..(8, 12) -- 4x4 red.
+                val rectBounds = SkRect.MakeLTRB(4f, 8f, 8f, 12f)
+                // Scale (2, 0.5) -- mapped rect : (8, 4)..(16, 6).
+                val scale = SkMatrix.MakeAll(2f, 0f, 0f, 0f, 0.5f, 0f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.MatrixTransform(
+                        matrix = scale,
+                        sampling = SkSamplingOptions(SkFilterMode.kLinear),
+                        input = null,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Centre of the mapped rect : (12, 5) -- expect saturated red.
+        assertRgbaApprox(pixels, 12, 5, 255, 0, 0, 255, tag = "MT scale centre", tol = 2)
+        // Strict interior away from the scaled-rect edges (kLinear
+        // mixes a half-pixel along the edges) -- pick (11, 5) which is
+        // safely 2+ texels inside the mapped (8..16, 4..6) rect.
+        assertRgbaApprox(pixels, 11, 5, 255, 0, 0, 255, tag = "MT scale interior", tol = 2)
+        // Original (4..8, 8..12) source rect's position is empty (the
+        // matrix moved its content elsewhere) -- white background.
+        assertRgbaApprox(pixels, 5, 9, 255, 255, 255, 255, tag = "MT scale source pos cleared")
+        // Far corner untouched.
+        assertRgbaApprox(pixels, 28, 28, 255, 255, 255, 255, tag = "MT scale far white")
+    }
+
+    @Test
+    fun `saveLayer with MatrixTransform rotate 90 reorients layer`() {
+        // Phase G-saveLayer-imageFilter-matrixTransform -- a 90-degree
+        // rotation around the origin sends `(x, y) -> (-y, x)`. A red
+        // rect at `(2, 8)..(6, 10)` (4 wide, 2 tall, centred on y = 9)
+        // maps to `(-10, 2)..(-8, 6)` -- the bbox lands at x in [-10, -8]
+        // which is OFF-canvas, so we shift by translating after.
+        // Concretely : matrix = `translate(16, 0) * rotate(90deg)`.
+        // The rotated rect lands at `(16 - 10, 2)..(16 - 8, 6)`
+        // = `(6, 2)..(8, 6)` -- 2 wide, 4 tall.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(2f, 8f, 6f, 10f)
+                // MakeAll(sx, kx, tx, ky, sy, ty) -- 90 deg CCW would be
+                // (0, -1, tx, 1, 0, ty). To land the rotated bbox at
+                // x in [6, 8], y in [2, 6] we set tx = 16, ty = 0.
+                val rot = SkMatrix.MakeAll(0f, -1f, 16f, 1f, 0f, 0f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.MatrixTransform(
+                        matrix = rot,
+                        sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                        input = null,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside the rotated rect : (7, 4) -- centre of (6..8, 2..6).
+        assertRgbaApprox(pixels, 7, 4, 255, 0, 0, 255, tag = "MT rotate centre", tol = 2)
+        // Original source rect position now empty -- white.
+        assertRgbaApprox(pixels, 4, 9, 255, 255, 255, 255, tag = "MT rotate src pos cleared")
+        // Outside the rotated rect, still white.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "MT rotate far white")
+    }
+
+    @Test
+    fun `saveLayer with MatrixTransform input nonNull throws clear error`() {
+        // Phase G-saveLayer-imageFilter-matrixTransform -- non-null
+        // child is deferred to a follow-up slice that handles
+        // render-to-texture pre-passes.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val err = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val inner = SkImageFilters.Offset(dx = 0f, dy = 0f, input = null)
+                val translate = SkMatrix.MakeAll(1f, 0f, 4f, 0f, 1f, 4f)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.MatrixTransform(
+                        matrix = translate,
+                        sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                        input = inner,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                runCatching { canvas.restore() }.exceptionOrNull()
+            }
+        }
+
+        assertTrue(err is IllegalStateException) {
+            "Expected IllegalStateException for MatrixTransform with non-null child ; got $err"
+        }
+        val msg = err?.message ?: ""
+        assertTrue(msg.contains("MatrixTransform") && msg.contains("input == null")) {
+            "Error message should call out the non-null child input ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `saveLayer with MatrixTransform perspective throws clear error`() {
+        // Phase G-saveLayer-imageFilter-matrixTransform -- the first
+        // slice handles 2x3 affine only ; perspective rows (non-trivial
+        // bottom row, persp0 / persp1 != 0) need a homogeneous divide
+        // in the shader that is deferred.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val err = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                // Set persp0 = 0.01 to push the matrix into perspective
+                // territory ; `hasPerspective()` returns true.
+                val perspective = SkMatrix.MakeAll(
+                    1f, 0f, 0f,
+                    0f, 1f, 0f,
+                    0.01f, 0f, 1f,
+                )
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.MatrixTransform(
+                        matrix = perspective,
+                        sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                        input = null,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                runCatching { canvas.restore() }.exceptionOrNull()
+            }
+        }
+
+        assertTrue(err is IllegalStateException) {
+            "Expected IllegalStateException for MatrixTransform perspective ; got $err"
+        }
+        val msg = err?.message ?: ""
+        assertTrue(msg.contains("perspective")) {
+            "Error message should call out perspective ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `asMatrixTransformImageFilter extracts matrix and sampling and input`() {
+        val translate = SkMatrix.MakeAll(2f, 0f, 3f, 0f, 0.5f, 4f)
+        val mt = SkImageFilters.MatrixTransform(
+            matrix = translate,
+            sampling = SkSamplingOptions(SkFilterMode.kLinear),
+            input = null,
+        )
+        val params = mt!!.asMatrixTransformImageFilter()
+        assertTrue(params != null) { "MatrixTransform must extract" }
+        assertEquals(2f, params!!.matrix.sx, "sx")
+        assertEquals(0f, params.matrix.kx, "kx")
+        assertEquals(3f, params.matrix.tx, "tx")
+        assertEquals(0f, params.matrix.ky, "ky")
+        assertEquals(0.5f, params.matrix.sy, "sy")
+        assertEquals(4f, params.matrix.ty, "ty")
+        assertEquals(SkFilterMode.kLinear, params.sampling.filter, "sampling")
+        assertEquals(null, params.input, "input")
+        // Other filter variants must not extract.
+        val blur = SkImageFilters.Blur(
+            sigmaX = 1f, sigmaY = 1f, tileMode = SkTileMode.kDecal, input = null,
+        )
+        assertEquals(null, blur?.asMatrixTransformImageFilter()) {
+            "Blur must not extract as MatrixTransform"
         }
     }
 
