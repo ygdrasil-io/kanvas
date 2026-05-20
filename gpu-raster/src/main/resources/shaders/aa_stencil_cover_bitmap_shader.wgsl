@@ -24,7 +24,11 @@
 // `csMatrix` is the column-major source-linear -> sRGB-linear
 // primaries transform. Identical to the rect pipeline -- mode 1 uses
 // the hardcoded sRGB EOTF, mode 2 (G5.3.x) reads parametric TF coefs
-// from `csTfParams0/1` (Rec.2020 linear, Adobe RGB, ...). For sRGB
+// from `csTfParams0/1` (Rec.2020 linear, Adobe RGB, ...), mode 3
+// (G5.3.y ; Rec.2020 PQ) uses the hardcoded SMPTE ST 2084 EOTF then
+// tone-maps to SDR by dividing by peak luminance (`csTfParams0.x`,
+// default 1000 nits), mode 4 (G5.3.y ; Rec.2020 HLG) uses the BT.2100
+// HLG inverse OETF with the same `Lw = peak` convention. For sRGB
 // sources the host uploads identity and `csFlags.x = 0` so the
 // transform branch is bypassed.
 //
@@ -118,11 +122,14 @@ struct Uniforms {
 // `bitmap_shader.wgsl`).
 const TILE_DECAL: u32 = 3u;
 
-// G5.3 / G5.3.x -- color-space transform mode sentinel (same as
-// bitmap_shader.wgsl).
+// G5.3 / G5.3.x / G5.3.y -- color-space transform mode sentinel (same
+// as bitmap_shader.wgsl). Modes 3 / 4 cover Rec.2020 PQ and HLG HDR
+// sources tone-mapped to SDR (`csTfParams0.x` carries peak luminance).
 const CS_MODE_IDENTITY: u32 = 0u;
 const CS_MODE_SRGB_TF_MATRIX: u32 = 1u;
 const CS_MODE_PARAMETRIC_TF_MATRIX: u32 = 2u;
+const CS_MODE_PQ: u32 = 3u;
+const CS_MODE_HLG: u32 = 4u;
 
 @vertex
 fn vs_main(@location(0) pos: vec2f) -> @builtin(position) vec4f {
@@ -183,6 +190,37 @@ fn parametric_tf(v: f32) -> f32 {
         return c * clamped + f;
     }
     return pow(a * clamped + b, g) + e;
+}
+
+// G5.3.y -- SMPTE ST 2084 PQ EOTF. Mirror of `pq_eotf` in
+// `bitmap_shader.wgsl` ; identical constants. Returns nits ; caller
+// tone-maps by dividing by peak luminance.
+fn pq_eotf(N_in: f32) -> f32 {
+    let m1 = 0.1593017578125;
+    let m2 = 78.84375;
+    let c1 = 0.8359375;
+    let c2 = 18.8515625;
+    let c3 = 18.6875;
+    let N = clamp(N_in, 0.0, 1.0);
+    let Np = pow(N, 1.0 / m2);
+    let num = max(Np - c1, 0.0);
+    let den = max(c2 - c3 * Np, 1.0e-6);
+    return pow(num / den, 1.0 / m1) * 10000.0;
+}
+
+// G5.3.y -- BT.2100 HLG inverse OETF. Mirror of `hlg_inverse_oetf` in
+// `bitmap_shader.wgsl` ; same `a, b, c` constants. Returns linear
+// scene light in `[0, 1]` ; with `Lw = peakLuminance` the EOTF tone-
+// mapped output equals the inverse-OETF value (no extra divide).
+fn hlg_inverse_oetf(Ep_in: f32) -> f32 {
+    let a = 0.17883277;
+    let b = 0.28466892;
+    let c = 0.55991073;
+    let Ep = clamp(Ep_in, 0.0, 1.0);
+    if (Ep <= 0.5) {
+        return Ep * Ep / 3.0;
+    }
+    return (exp((Ep - c) / a) + b) / 12.0;
 }
 
 // Phase H2 paint-colorFilter -- pure-float blend on premul RGBA.
@@ -354,6 +392,33 @@ fn sampleBitmap(p: vec2f) -> vec4f {
             linear_to_srgb(lin_srgb.r),
             linear_to_srgb(lin_srgb.g),
             linear_to_srgb(lin_srgb.b),
+        );
+    } else if (cs_mode == CS_MODE_PQ) {
+        // G5.3.y -- Rec.2020 PQ HDR. Mirrors `bitmap_shader.wgsl`.
+        let peak_nits = max(uniforms.csTfParams0.x, 1.0);
+        let lin = vec3f(
+            clamp(pq_eotf(src_rgb.r) / peak_nits, 0.0, 1.0),
+            clamp(pq_eotf(src_rgb.g) / peak_nits, 0.0, 1.0),
+            clamp(pq_eotf(src_rgb.b) / peak_nits, 0.0, 1.0),
+        );
+        let lin_srgb = uniforms.csMatrix * lin;
+        src_rgb = vec3f(
+            linear_to_srgb(lin_srgb.r),
+            linear_to_srgb(lin_srgb.g),
+            linear_to_srgb(lin_srgb.b),
+        );
+    } else if (cs_mode == CS_MODE_HLG) {
+        // G5.3.y -- Rec.2020 HLG HDR. Mirrors `bitmap_shader.wgsl`.
+        let lin = vec3f(
+            hlg_inverse_oetf(src_rgb.r),
+            hlg_inverse_oetf(src_rgb.g),
+            hlg_inverse_oetf(src_rgb.b),
+        );
+        let lin_srgb = uniforms.csMatrix * lin;
+        src_rgb = vec3f(
+            linear_to_srgb(clamp(lin_srgb.r, 0.0, 1.0)),
+            linear_to_srgb(clamp(lin_srgb.g, 0.0, 1.0)),
+            linear_to_srgb(clamp(lin_srgb.b, 0.0, 1.0)),
         );
     }
 
