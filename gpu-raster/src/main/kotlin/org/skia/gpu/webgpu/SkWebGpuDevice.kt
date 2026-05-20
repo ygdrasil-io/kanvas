@@ -4328,32 +4328,54 @@ public class SkWebGpuDevice(
         }
 
     /**
-     * Phase G-saveLayer-backdrop -- seed `this` layer device with a
-     * copy of [parent]'s pixels in the rectangle
-     * `[originX, originY, originX + width, originY + height)`.
+     * Phase G-saveLayer-backdrop (#591) + Phase J5 backdrop filter --
+     * seed `this` layer device with a copy of [parent]'s pixels in
+     * the rectangle `[originX, originY, originX + width, originY +
+     * height)`, optionally filtered through the [backdrop]
+     * [org.skia.foundation.SkImageFilter] before it lands.
      *
-     * Mechanism : flush [parent]'s pending draws onto its
-     * intermediate texture (so all preceding canvas draws are
-     * committed), then enqueue a single [LayerCompositeDraw] onto
-     * **this** (child) device's pending list. That draw samples
-     * [parent]'s intermediate via the existing `layer_composite.wgsl`
-     * pipeline (1:1 `textureLoad` -- no filter, no sampler) and writes
-     * onto this device's intermediate under blend mode `kSrc` (REPLACE,
-     * so the child's initial transparent clear is overwritten by the
-     * parent's pixels). Origin offset is encoded as the negative
-     * `dstOriginX/Y` in the composite uniform : at child pixel `(x,
-     * y)` the shader computes `layer_px = (x, y) - (-originX,
-     * -originY) = (x + originX, y + originY)`, sampling the matching
-     * parent pixel.
+     * Mechanism :
+     *   1. Flush [parent]'s pending draws onto its intermediate
+     *      texture (so all preceding canvas draws are committed).
+     *      Subsequent parent flushes use `loadOp = Load` (the
+     *      [intermediateInitialized] guard) so this mid-render flush
+     *      doesn't get wiped by the next
+     *      [encodePendingDrawsToIntermediate].
+     *   2. Enqueue a copy-only [LayerCompositeDraw] onto **this**
+     *      (child) device's pending list. The draw samples [parent]'s
+     *      intermediate via the existing `layer_composite.wgsl`
+     *      pipeline (1:1 `textureLoad` -- no filter, no sampler) and
+     *      writes onto this device's intermediate under blend mode
+     *      `kSrc` (REPLACE, so the child's initial transparent clear
+     *      is overwritten by the parent's pixels). The origin offset
+     *      is encoded as the negative `dstOriginX/Y` in the composite
+     *      uniform : at child pixel `(x, y)` the shader computes
+     *      `layer_px = (x, y) - (-originX, -originY) = (x + originX,
+     *      y + originY)`, sampling the matching parent pixel.
+     *   3. (Phase J5) When [backdrop] is a `SkImageFilters.Blur` with
+     *      a positive sigma on either axis, enqueue a follow-up
+     *      [BlurredLayerCompositeDraw] on this device's pending list.
+     *      The blur sources [intermediateView] (the just-seeded
+     *      copy), runs the separable Gaussian via the two scratch
+     *      H/V textures, and writes the blurred result back onto
+     *      [intermediateView] with `mode = kSrc` (REPLACING the
+     *      unfiltered copy). The composite uniform's `dstOrigin =
+     *      (0, 0)` because both the source and the dst are layer-
+     *      local at this stage. The scratch textures are owned by
+     *      the draw and released after submission by
+     *      `closeDrawResources`. The same shader resources as
+     *      `paint.imageFilter = Blur` on `compositeFrom` are reused
+     *      -- no new pipelines.
      *
-     * **Scope.** Copy-only (Phase G-saveLayer-backdrop) : the
-     * SaveLayerRec backdrop [org.skia.foundation.SkImageFilter] itself
-     * is **not** applied on GPU -- the layer starts from a raw copy of
-     * the parent pixels in the layer bbox. Filter application (Blur /
-     * ColorFilter / Offset / ...) is a deferred follow-up. This still
-     * unlocks the architectural pattern (frosted-glass "starts from
-     * current pixels" semantics) for the main use case ; the CPU
-     * raster path remains the full-featured fallback.
+     * **Scope.** This slice supports the Blur variant only -- the
+     * dominant use case for backdrop in upstream Skia GMs (frosted-
+     * glass under a translucent overlay). Other filter variants
+     * (`ColorFilter`, `Offset`, `MatrixTransform`, `DropShadow`,
+     * `Compose`, ...) fall through to copy-only : the layer is
+     * seeded with raw parent pixels, the filter is silently dropped.
+     * Widening the supported set is a follow-up slice ; the CPU
+     * raster path in `SkCanvas.saveLayer` remains the full-featured
+     * fallback for offline / non-GPU rendering.
      *
      * **Bail conditions** -- the seed silently no-ops (returns
      * `false`) when :
@@ -4373,6 +4395,7 @@ public class SkWebGpuDevice(
         originY: Int,
         width: Int,
         height: Int,
+        backdrop: org.skia.foundation.SkImageFilter?,
     ): Boolean {
         val gpuParent = parent as? SkWebGpuDevice ?: return false
         if (gpuParent.context !== context) return false
@@ -4386,13 +4409,13 @@ public class SkWebGpuDevice(
         // [encodePendingDrawsToIntermediate].
         gpuParent.flushDrawsOnly()
 
-        // Enqueue a composite draw on this (child) device's pending
-        // list. `dstOriginX/Y` are the NEGATIVE layer origins so the
-        // shader maps `child (x, y) → parent (x + originX, y +
-        // originY)`. Scissor covers the full child target. `mode =
-        // kSrc` so the child's transparent clear (via `setBackground
-        // (0)`) is replaced -- subsequent layer draws then composite
-        // ON TOP via `loadOp = Load`.
+        // Step 1 -- copy-only seed. Enqueue a composite draw on this
+        // (child) device's pending list. `dstOriginX/Y` are the
+        // NEGATIVE layer origins so the shader maps `child (x, y) →
+        // parent (x + originX, y + originY)`. Scissor covers the full
+        // child target. `mode = kSrc` so the child's transparent
+        // clear (via `setBackground(0)`) is replaced -- subsequent
+        // layer draws then composite ON TOP via `loadOp = Load`.
         pending.add(
             LayerCompositeDraw(
                 layerView = gpuParent.intermediateView,
@@ -4409,7 +4432,119 @@ public class SkWebGpuDevice(
                 imageFilterPacked = FloatArray(12), // identity (kind = 0).
             ),
         )
+
+        // Step 2 (Phase J5) -- optional filter application on the
+        // seeded copy. Only `SkImageFilters.Blur(input = null)` is
+        // honoured in this slice ; other variants leave the seed at
+        // the copy-only result (matches the pre-J5 behaviour).
+        if (backdrop != null) {
+            val blur = backdrop.asBlurImageFilter()
+            if (blur != null && blur.input == null &&
+                (blur.sigmaX > 0f || blur.sigmaY > 0f) &&
+                blur.sigmaX.isFinite() && blur.sigmaY.isFinite() &&
+                blur.sigmaX >= 0f && blur.sigmaY >= 0f &&
+                (blur.tileMode == SkTileMode.kClamp ||
+                    blur.tileMode == SkTileMode.kDecal)
+            ) {
+                enqueueBackdropBlurSeed(
+                    width = width, height = height,
+                    sigmaX = blur.sigmaX, sigmaY = blur.sigmaY,
+                    tileMode = blur.tileMode,
+                )
+            }
+            // All other variants : seed stays at copy-only (silent
+            // degrade -- matches the SkDevice.seedBackdropFrom kdoc).
+        }
         return true
+    }
+
+    /**
+     * Phase J5 helper -- enqueue a [BlurredLayerCompositeDraw] that
+     * sources `this` device's [intermediateView] (the just-seeded
+     * parent copy) and writes the blurred result back onto the same
+     * intermediate via `mode = kSrc`. Mirrors
+     * [enqueueBlurredLayerComposite] but specialised for the
+     * backdrop seed slot :
+     *  - `layerView` is `this.intermediateView`, not a child's --
+     *    the parent's rect already lives in `this`'s intermediate
+     *    after the preceding [LayerCompositeDraw].
+     *  - `dstOrigin = (0, 0)`, `layerWidth = width`, `layerHeight =
+     *    height` -- the composite is layer-local (no offset onto a
+     *    parent device).
+     *  - `mode = kSrc` -- the blurred pixels REPLACE the unfiltered
+     *    copy. Subsequent user draws inside the layer scope then
+     *    composite ON TOP via `loadOp = Load`.
+     *  - No paint colour modulation (`paintR/G/B/A = 1`) and no
+     *    colour filter / pre-CF -- the backdrop only carries the
+     *    Blur, the post-restore composite still honours the layer
+     *    paint's own alpha / colour filter / blend mode.
+     *
+     * The read-after-write hazard between the copy-only seed (which
+     * writes `intermediateView`) and the blur's H pass (which reads
+     * `intermediateView`) is naturally serialised : both draws are
+     * separate render passes in [encodePendingDrawsToIntermediate],
+     * dispatched in `pending` order, so WebGPU's execution model
+     * orders the write before the read.
+     */
+    private fun enqueueBackdropBlurSeed(
+        width: Int, height: Int,
+        sigmaX: Float, sigmaY: Float,
+        tileMode: SkTileMode,
+    ) {
+        val unboundedRadiusX = if (sigmaX > 0f) {
+            ceil(3.0 * sigmaX).toInt().coerceAtLeast(1)
+        } else 0
+        val unboundedRadiusY = if (sigmaY > 0f) {
+            ceil(3.0 * sigmaY).toInt().coerceAtLeast(1)
+        } else 0
+        val radiusX = unboundedRadiusX.coerceAtMost(MAX_BLUR_RADIUS)
+        val radiusY = unboundedRadiusY.coerceAtMost(MAX_BLUR_RADIUS)
+        val kernelX = if (radiusX > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaX, radiusX)
+        } else floatArrayOf(1f)
+        val kernelY = if (radiusY > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaY, radiusY)
+        } else floatArrayOf(1f)
+
+        val scratchH = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.backdropBlurScratchH",
+            ),
+        )
+        val scratchHView = scratchH.createView()
+        val scratchV = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.backdropBlurScratchV",
+            ),
+        )
+        val scratchVView = scratchV.createView()
+
+        pending.add(
+            BlurredLayerCompositeDraw(
+                layerView = intermediateView,
+                layerWidth = width, layerHeight = height,
+                scratchHTexture = scratchH, scratchHView = scratchHView,
+                scratchVTexture = scratchV, scratchVView = scratchVView,
+                dstOriginX = 0, dstOriginY = 0,
+                scissor = intArrayOf(0, 0, width, height),
+                kernelX = kernelX, radiusX = radiusX,
+                kernelY = kernelY, radiusY = radiusY,
+                tileModeOrdinal = tileMode.ordinal,
+                paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
+                colorFilterPacked = FloatArray(24), // identity (kind = 0).
+                preBlurColorFilterPacked = null,
+                scratchPreCfTexture = null,
+                scratchPreCfView = null,
+                r = 1f, g = 1f, b = 1f, a = 1f,
+                mode = SkBlendMode.kSrc,
+            ),
+        )
     }
 
     /**
