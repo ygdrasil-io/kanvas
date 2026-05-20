@@ -69,8 +69,11 @@ import org.skia.foundation.asBlendModeFilter
 import org.skia.foundation.asBlurImageFilter
 import org.skia.foundation.asColorFilterImageFilter
 import org.skia.foundation.asComposeImageFilter
+import org.skia.foundation.asCropImageFilter
 import org.skia.foundation.asDropShadowImageFilter
+import org.skia.foundation.asMagnifierImageFilter
 import org.skia.foundation.asOffsetImageFilter
+import org.skia.foundation.asTileImageFilter
 import org.skia.foundation.asMatrixFilter
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
@@ -1029,6 +1032,27 @@ public class SkWebGpuDevice(
          * so the bytes are deterministic).
          */
         val colorFilterPacked: FloatArray,
+        /**
+         * Phase G-saveLayer-imageFilter-crop/-tile/-magnifier -- packed
+         * UV-remap payload. Layout (matches the trailing 3 vec4f in
+         * `layer_composite.wgsl`'s `Uniforms`) :
+         *
+         *   imageFilterKindMode (vec4f) : (kind, tileMode, zoom, inset)
+         *     kind     : 0 = none, 1 = Crop, 2 = Tile, 3 = Magnifier.
+         *     tileMode : SkTileMode ordinal (kind == 1 only).
+         *     zoom     : Magnifier zoom factor (kind == 3 only).
+         *     inset    : Magnifier inset band width (kind == 3 only).
+         *   imageFilterRectA (vec4f) : (left, top, right, bottom).
+         *     kind == 1 : Crop rect (layer-pixel space).
+         *     kind == 2 : Tile dst rect.
+         *     kind == 3 : Magnifier lens rect.
+         *   imageFilterRectB (vec4f) : (left, top, right, bottom).
+         *     kind == 2 : Tile src rect.
+         *     other     : unused, zeroed.
+         *
+         * Total 12 floats. Zeroed for the no-image-filter fast path.
+         */
+        val imageFilterPacked: FloatArray,
     ) : PendingDraw
 
     // ─── MaskFilter Gaussian blur (Phase MaskFilter-blur) ───────────────
@@ -3917,6 +3941,65 @@ public class SkWebGpuDevice(
             )
         }
 
+        // Phase G-saveLayer-imageFilter-crop/-tile/-magnifier -- pure
+        // UV-remap variants that fold into the composite fragment shader
+        // without any scratch pass. We detect them BEFORE the Compose-
+        // tree resolver runs (which would otherwise throw on these
+        // leaves) and route through the existing LayerCompositeDraw
+        // plumbing with a packed [imageFilterPacked] payload. Only
+        // top-level (non-Compose) occurrences with `input == null` and
+        // no paint.colorFilter ride this path -- mixing with Compose /
+        // ColorFilter / Blur / Offset / DropShadow / paint.colorFilter
+        // would need cross-pass coordination that the first slice
+        // doesn't ship.
+        //
+        // Rectangles in [paint.imageFilter] sit in DEVICE-space pixel
+        // coords (upstream Skia convention). The shader operates in
+        // LAYER-local pixel coords (after `dstOrigin` subtraction), so
+        // we translate the rect coordinates by `-(originX, originY)`
+        // here, where the device-to-layer offset is in scope.
+        val imageFilterPackedEarly = computeImageFilterUvRemapPayload(paint)
+        if (imageFilterPackedEarly != null) {
+            // Translate the two RectA / RectB slots from device-space
+            // into layer-local pixel space by subtracting (originX,
+            // originY). The kind / tileMode / zoom / inset payload
+            // (slots 0..3) is coord-free and stays unchanged.
+            val ox = originX.toFloat()
+            val oy = originY.toFloat()
+            imageFilterPackedEarly[4]  -= ox
+            imageFilterPackedEarly[5]  -= oy
+            imageFilterPackedEarly[6]  -= ox
+            imageFilterPackedEarly[7]  -= oy
+            imageFilterPackedEarly[8]  -= ox
+            imageFilterPackedEarly[9]  -= oy
+            imageFilterPackedEarly[10] -= ox
+            imageFilterPackedEarly[11] -= oy
+            val w0 = gpuSrc.width
+            val h0 = gpuSrc.height
+            gpuSrc.flushDrawsOnly()
+            val ix0e = originX.coerceAtLeast(clip.left).coerceAtLeast(0)
+            val iy0e = originY.coerceAtLeast(clip.top).coerceAtLeast(0)
+            val ix1e = (originX + w0).coerceAtMost(clip.right).coerceAtMost(width)
+            val iy1e = (originY + h0).coerceAtMost(clip.bottom).coerceAtMost(height)
+            if (ix0e >= ix1e || iy0e >= iy1e) return
+            val paintAlphaE = (paint?.alpha ?: 0xFF) / 255f
+            pending.add(
+                LayerCompositeDraw(
+                    layerView = gpuSrc.intermediateView,
+                    layerWidth = w0, layerHeight = h0,
+                    dstOriginX = originX, dstOriginY = originY,
+                    scissor = intArrayOf(ix0e, iy0e, ix1e - ix0e, iy1e - iy0e),
+                    paintR = paintAlphaE, paintG = paintAlphaE,
+                    paintB = paintAlphaE, paintA = paintAlphaE,
+                    r = 1f, g = 1f, b = 1f, a = paintAlphaE,
+                    mode = mode,
+                    colorFilterPacked = FloatArray(24),
+                    imageFilterPacked = imageFilterPackedEarly,
+                ),
+            )
+            return
+        }
+
         // Phase G-saveLayer-imageFilter-compose -- walk the paint's
         // imageFilter tree (possibly Compose-wrapped) into a normalized
         // plan of "[pre-blur CF][Blur?][post-blur CF folded with
@@ -4038,6 +4121,7 @@ public class SkWebGpuDevice(
                     r = 1f, g = 1f, b = 1f, a = paintAlpha,
                     mode = mode,
                     colorFilterPacked = colorFilterPacked,
+                    imageFilterPacked = FloatArray(12),
                 ),
             )
             return
@@ -4118,6 +4202,7 @@ public class SkWebGpuDevice(
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
                 mode = mode,
                 colorFilterPacked = colorFilterPacked,
+                imageFilterPacked = FloatArray(12),
             ),
         )
     }
@@ -4652,7 +4737,12 @@ public class SkWebGpuDevice(
                     "DisplacementMap, Magnifier, Tile, Crop, Blend, Erode / " +
                     "Dilate, MatrixConvolution, Lighting, Arithmetic -- need " +
                     "follow-up slices that add a fragment-side UV-remapping " +
-                    "or multi-pass render-target pipeline."
+                    "or multi-pass render-target pipeline. Note : Magnifier " +
+                    "/ Tile / Crop are supported at the TOP level of the " +
+                    "filter tree (Phase G-saveLayer-imageFilter-crop / -tile " +
+                    "/ -magnifier) but not yet inside a Compose chain -- the " +
+                    "UV-remap branch is folded into the composite shader " +
+                    "directly, which precludes another stage running over it."
             )
         }
         walk(imf)
@@ -4774,6 +4864,165 @@ public class SkWebGpuDevice(
         // Unsupported variant -- drop the filter, fall through to the
         // no-filter composite path (matches the pre-slice behaviour).
         return out
+    }
+
+    /**
+     * Phase G-saveLayer-imageFilter-crop/-tile/-magnifier -- pack one of
+     * the three pure UV-remap variants into the 3-vec4f payload consumed
+     * by `layer_composite.wgsl`. Returns `null` when `paint.imageFilter`
+     * is none of these variants, in which case the dispatch falls
+     * through to the existing Blur / Offset / DropShadow / Compose
+     * resolver path.
+     *
+     * Layout (12 floats, 3 vec4f) :
+     *   [ 0..3 ] imageFilterKindMode : (kind, tileMode, zoom, inset)
+     *   [ 4..7 ] imageFilterRectA    : (left, top, right, bottom)
+     *                                  -- Crop rect, Magnifier lens,
+     *                                  or Tile dst rect.
+     *   [ 8..11] imageFilterRectB    : (left, top, right, bottom)
+     *                                  -- Tile src rect ; else zeroed.
+     *
+     * The rect coordinates are translated into layer-pixel space here :
+     * the [SkImageFilter] API ships rectangles in device-pixel coords,
+     * but the shader operates after `dstOrigin` subtraction (i.e. in
+     * layer-pixel coords). The saveLayer composite runs at the device's
+     * identity CTM, so the conversion is just `rect.translate(-origin)`
+     * -- folded directly into the payload by the call site that knows
+     * `originX` / `originY`.
+     *
+     * Wait -- that's wrong : we DON'T know the dstOrigin here. The
+     * coordinate domain of `paint.imageFilter` rectangles is the LAYER's
+     * own pixel space (the imageFilter is applied during the composite,
+     * to the layer's pixels). Upstream Skia treats `lensBounds` / Crop
+     * `rect` / Tile rects as device-space, but since the saveLayer
+     * composite happens after the layer's draws and at identity CTM,
+     * the rectangles align with the layer's local pixel grid 1:1 modulo
+     * the dst-origin shift. We bake the dst-origin shift into the
+     * payload at the call site, where it has the origin handy.
+     *
+     * To keep this helper self-contained and parameter-light, we ship
+     * the raw rects unchanged ; the shader subtracts `dstOrigin` from
+     * the fragment coord BEFORE applying the remap, so the rects must
+     * also be in that same (post-origin-subtraction) space. Translation
+     * happens at the call site, not here.
+     *
+     * Validation : `input == null` is enforced (a non-null child would
+     * need a render-to-texture pre-pass that the first slice doesn't
+     * ship). `paint.colorFilter` is enforced to be null (the composite
+     * shader's colorFilter slot is single-occupancy and the UV-remap
+     * branch may interact with it -- this slice keeps the two
+     * orthogonal).
+     */
+    private fun computeImageFilterUvRemapPayload(paint: SkPaint?): FloatArray? {
+        val imf = paint?.imageFilter ?: return null
+
+        val cropParams = imf.asCropImageFilter()
+        if (cropParams != null) {
+            if (cropParams.input != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Crop(input = nonNull) with a non-null " +
+                        "child filter. Only the input == null case is " +
+                        "supported (Phase G-saveLayer-imageFilter-crop) -- a " +
+                        "non-null child needs a render-to-texture pre-pass " +
+                        "that the WebGPU layer composite pipeline cannot " +
+                        "express yet."
+                )
+            }
+            if (paint.colorFilter != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Crop combined with a paint.colorFilter " +
+                        "-- not yet supported. The UV-remap and colour-filter " +
+                        "branches are kept orthogonal in the first Crop slice " +
+                        "; pre-fold the colour filter into the imageFilter " +
+                        "tree via SkImageFilters.Compose(Crop, ColorFilter), " +
+                        "or set only one of the two on the layer paint."
+                )
+            }
+            val out = FloatArray(12)
+            out[0] = 1f                                        // kind = 1
+            out[1] = cropParams.tileMode.ordinal.toFloat()
+            // out[2..3] : unused for Crop, zeroed.
+            out[4] = cropParams.rect.left
+            out[5] = cropParams.rect.top
+            out[6] = cropParams.rect.right
+            out[7] = cropParams.rect.bottom
+            // out[8..11] : RectB unused, zeroed.
+            return out
+        }
+
+        val tileParams = imf.asTileImageFilter()
+        if (tileParams != null) {
+            if (tileParams.input != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Tile(input = nonNull) with a non-null " +
+                        "child filter. Only the input == null case is " +
+                        "supported (Phase G-saveLayer-imageFilter-tile)."
+                )
+            }
+            if (paint.colorFilter != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Tile combined with a paint.colorFilter " +
+                        "-- not yet supported. Use SkImageFilters.Compose to " +
+                        "chain a ColorFilter onto the Tile, or set only one " +
+                        "of the two on the layer paint."
+                )
+            }
+            // Empty src -> degenerate (the shader's sw/sh > 0 guard
+            // returns transparent). Match the CPU raster's empty-tile
+            // semantic.
+            val out = FloatArray(12)
+            out[0] = 2f                                        // kind = 2
+            // out[1..3] : tileMode / zoom / inset unused, zeroed.
+            out[4] = tileParams.dst.left
+            out[5] = tileParams.dst.top
+            out[6] = tileParams.dst.right
+            out[7] = tileParams.dst.bottom
+            out[8]  = tileParams.src.left
+            out[9]  = tileParams.src.top
+            out[10] = tileParams.src.right
+            out[11] = tileParams.src.bottom
+            return out
+        }
+
+        val magParams = imf.asMagnifierImageFilter()
+        if (magParams != null) {
+            if (magParams.input != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Magnifier(input = nonNull) with a " +
+                        "non-null child filter. Only the input == null case " +
+                        "is supported (Phase G-saveLayer-imageFilter-" +
+                        "magnifier)."
+                )
+            }
+            if (paint.colorFilter != null) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                        "SkImageFilters.Magnifier combined with a paint." +
+                        "colorFilter -- not yet supported. Use SkImageFilters." +
+                        "Compose to chain a ColorFilter onto the Magnifier, " +
+                        "or set only one of the two on the layer paint."
+                )
+            }
+            // Zoom <= 0 is the CPU raster's no-op convention ; the
+            // shader's `inside && zoom > 0` guard mirrors it.
+            val out = FloatArray(12)
+            out[0] = 3f                                        // kind = 3
+            // out[1] : tileMode unused for Magnifier, zeroed.
+            out[2] = magParams.zoomAmount
+            out[3] = magParams.inset
+            out[4] = magParams.lensBounds.left
+            out[5] = magParams.lensBounds.top
+            out[6] = magParams.lensBounds.right
+            out[7] = magParams.lensBounds.bottom
+            // out[8..11] : RectB unused, zeroed.
+            return out
+        }
+        return null
     }
 
     /**
@@ -9615,10 +9864,13 @@ public class SkWebGpuDevice(
         //   offset  80 : colorFilterParam2   (vec4f -- matrix row 2)
         //   offset  96 : colorFilterParam3   (vec4f -- matrix row 3)
         //   offset 112 : colorFilterBias     (vec4f -- per-row bias)
-        // Total = 128 bytes. The colourFilter payload is zeroed when
-        // the layer paint has no filter -- the shader's `kind == 0`
-        // branch is a no-op, so the fast path stays bit-iso.
-        val packed = FloatArray(32) // 8 vec4f * 4 floats each.
+        //   offset 128 : imageFilterKindMode (vec4f -- kind, tile, zoom, inset)
+        //   offset 144 : imageFilterRectA    (vec4f -- rect or lens or dst)
+        //   offset 160 : imageFilterRectB    (vec4f -- Tile src ; else zeroed)
+        // Total = 176 bytes. The colourFilter and image-filter payloads
+        // are zeroed when the layer paint has neither -- both kind == 0
+        // branches are no-ops, so the fast path stays bit-iso.
+        val packed = FloatArray(44) // 11 vec4f * 4 floats each.
         packed[0] = d.dstOriginX.toFloat()
         packed[1] = d.dstOriginY.toFloat()
         packed[2] = d.layerWidth.toFloat()
@@ -9628,6 +9880,10 @@ public class SkWebGpuDevice(
         // colorFilterPacked is laid out as 6 contiguous vec4f starting
         // at vec4f index 2 (offset 32 bytes).
         System.arraycopy(d.colorFilterPacked, 0, packed, 8, 24)
+        // imageFilterPacked is 3 contiguous vec4f starting at vec4f
+        // index 8 (offset 128 bytes). Zeroed array for the no-IF fast
+        // path keeps the shader's `imageFilterKind == 0` branch warm.
+        System.arraycopy(d.imageFilterPacked, 0, packed, 32, 12)
         context.queue.writeBuffer(
             uniform, 0uL,
             ArrayBuffer.of(packed),
@@ -11035,8 +11291,14 @@ public class SkWebGpuDevice(
          * `SkColorFilters.Blend` (kind = 1) and `SkColorFilters.Matrix`
          * (kind = 2). The fast path (no filter) zeroes everything past
          * `paintColor`, the shader's `kind == 0` branch is a no-op.
+         *
+         * Bumped further from 128 to 176 bytes in Phase G-saveLayer-
+         * imageFilter-crop/-tile/-magnifier to carry the three trailing
+         * vec4f (kind/tileMode/zoom/inset + two rect slots). The
+         * `imageFilterKind == 0` fast path keeps the rest of the
+         * shader bit-iso with the pre-slice behaviour.
          */
-        const val LAYER_COMPOSITE_UNIFORM_SIZE: ULong = 128uL
+        const val LAYER_COMPOSITE_UNIFORM_SIZE: ULong = 176uL
         /**
          * Phase MaskFilter-blur -- maximum supported off-centre tap count
          * per side for the separable Gaussian blur shader's uniform.
