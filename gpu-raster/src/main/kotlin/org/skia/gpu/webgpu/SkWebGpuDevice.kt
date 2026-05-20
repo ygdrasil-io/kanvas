@@ -906,18 +906,24 @@ public class SkWebGpuDevice(
      * the fragment shader sources colour from the texture, the rgba
      * channels are kept for the [PendingDraw] interface contract).
      *
-     * G5.3 / G5.3.x -- [csMode] selects the shader's colorspace-transform
-     * branch (`0 = identity / sRGB fast path`, `1 = sRGB EOTF -> matrix
-     * -> sRGB OETF`, `2 = parametric sRGBish EOTF -> matrix -> sRGB
-     * OETF`). [csMatrix] is the column-major 3x3 primaries matrix from
-     * source-linear to sRGB-linear ; for `csMode == 0` the host passes
-     * the identity so the multiply is a no-op even if the shader were
-     * to take the transform branch. [csTfParams] is the 7-float
+     * G5.3 / G5.3.x / G5.3.y -- [csMode] selects the shader's
+     * colorspace-transform branch (`0 = identity / sRGB fast path`,
+     * `1 = sRGB EOTF -> matrix -> sRGB OETF`, `2 = parametric sRGBish
+     * EOTF -> matrix -> sRGB OETF`, `3 = PQ EOTF -> tone-map (divide
+     * by peak nits) -> matrix -> sRGB OETF`, `4 = HLG inverse OETF ->
+     * tone-map -> matrix -> sRGB OETF`). [csMatrix] is the column-
+     * major 3x3 primaries matrix from source-linear to sRGB-linear ;
+     * for `csMode == 0` the host passes the identity so the multiply
+     * is a no-op even if the shader were to take the transform branch.
+     * For PQ / HLG sources the host uploads the canonical Rec.2020-
+     * linear -> sRGB-linear matrix (no extra HDR scale ; the shader's
+     * divide-by-peak handles tone-mapping). [csTfParams] is the 7-float
      * parametric TF (`(g, a, b, c, d, e, f)`, matching
      * `SkcmsTransferFunction`) consumed by `csMode == 2` ; mode 0 / 1
-     * still get a deterministic identity payload so the std140 slot
-     * has stable bytes. The triple is computed once per image via
-     * [bitmapColorSpaceFor].
+     * get a deterministic identity payload, and mode 3 / 4 repurpose
+     * `csTfParams[0]` (the `g` slot, ending up in `csTfParams0.x`) to
+     * carry the peak luminance constant in nits (default 1000). The
+     * triple is computed once per image via [bitmapColorSpaceFor].
      */
     private data class ImageRectDraw(
         val texture: GPUTexture,
@@ -2503,15 +2509,25 @@ public class SkWebGpuDevice(
      *    evaluates the same 2-branch eval `SkcmsTransferFunctionEval`
      *    uses on the CPU side.
      *
-     * Any source TF that classifies as PQ / HLG / HDR or as `Invalid`
-     * returns `mode = 0` -- the existing as-uploaded sRGB fast path.
-     * Wiring those up needs luminance scaling / OOTF handling out of
-     * scope for G5.3.x.
+     * G5.3.y -- PQ / HLG HDR sources route through dedicated branches
+     * (mode = 3 / 4) with hardcoded math in the shader and a tone-
+     * mapping divide-by-peak. The host uploads the canonical
+     * Rec.2020-linear -> sRGB-linear primaries matrix (built from a
+     * synthetic `(kLinear, kRec2020)` colorspace via the same
+     * `SkColorSpaceXformSteps` path other branches use ; that matrix
+     * does not bake any HDR luminance scale, so the shader's tone-map
+     * is decoupled from the gamut transform). The peak-luminance
+     * constant lives in `csTfParams[0]` (default 1000 nits).
+     *
+     * Other HDR families (`PQish` / `HLGish` / `HLGinvish` / `Invalid`)
+     * still fall through to the as-uploaded sRGB fast path -- they
+     * encode display- vs scene-light variants that need the full OOTF
+     * machinery out of scope here.
      *
      * The destination TF is always the sRGB OETF (the intermediate
-     * target's encoding). For the `srcToDstMatrix` we copy the
-     * `SkColorSpaceXformSteps.srcToDstMatrix` verbatim -- it is
-     * column-major and already folds in any non-HDR scale factor.
+     * target's encoding). For the `srcToDstMatrix` (modes 1 / 2) we
+     * copy the `SkColorSpaceXformSteps.srcToDstMatrix` verbatim -- it
+     * is column-major and already folds in any non-HDR scale factor.
      */
     private fun bitmapColorSpaceFor(image: SkImage): Triple<Int, FloatArray, FloatArray> {
         val cs = image.colorSpace
@@ -2521,9 +2537,38 @@ public class SkWebGpuDevice(
         }
         val srgbTfHash = dst.transferFnHash
         val srcTfType = org.skia.foundation.skcms.classify(cs.transferFn)
-        // Only the sRGBish parametric family is wired up. PQ / HLG /
-        // HLGish / HLGinvish / Invalid fall back to the as-uploaded
-        // fast path (luminance scaling + OOTF are out of scope).
+        // G5.3.y -- PQ / HLG : tone-mapped HDR. Build the Rec.2020-
+        // linear -> sRGB-linear primaries matrix off a synthetic source
+        // (kLinear, source.toXYZD50) so the shader's PQ / HLG inverse-
+        // EOTF stage produces a linear value the matrix can multiply
+        // directly. Going through SkColorSpaceXformSteps with kLinear
+        // -> sRGB sidesteps the PQ/HLG luminance-scale handling on the
+        // CPU side (which would bake the wrong scale into the matrix
+        // for our peak-divide convention).
+        if (srcTfType == org.skia.foundation.skcms.SkcmsTFType.PQ ||
+            srcTfType == org.skia.foundation.skcms.SkcmsTFType.HLG) {
+            val linearSrc = org.skia.foundation.SkColorSpace.makeRGB(
+                org.skia.foundation.skcms.SkNamedTransferFn.kLinear,
+                cs.toXYZD50,
+            ) ?: return Triple(0, IDENTITY_CS_MATRIX, IDENTITY_CS_TF_PARAMS)
+            val steps = org.skia.core.SkColorSpaceXformSteps(
+                linearSrc, org.skia.core.SkAlphaType.kUnpremul,
+                dst, org.skia.core.SkAlphaType.kUnpremul,
+            )
+            val matrix = steps.srcToDstMatrix.copyOf()
+            val mode = if (srcTfType == org.skia.foundation.skcms.SkcmsTFType.PQ) 3 else 4
+            // Peak luminance constant in `csTfParams[0]`. We pick
+            // 1000 nits as the slice convention -- standard HDR
+            // "comfort" peak for consumer displays (HDR10 mastering
+            // commonly tops out around 1000 ; cinema-mastered 4000-nit
+            // content gets clipped after the tone-map, which is
+            // documented behaviour for this simplification).
+            val tfParams = floatArrayOf(HDR_PEAK_NITS, 0f, 0f, 0f, 0f, 0f, 0f)
+            return Triple(mode, matrix, tfParams)
+        }
+        // Only the sRGBish parametric family is wired up beyond PQ /
+        // HLG. PQish / HLGish / HLGinvish / Invalid fall back to the
+        // as-uploaded fast path.
         if (srcTfType != org.skia.foundation.skcms.SkcmsTFType.sRGBish) {
             return Triple(0, IDENTITY_CS_MATRIX, IDENTITY_CS_TF_PARAMS)
         }
@@ -11114,6 +11159,17 @@ public class SkWebGpuDevice(
          */
         val IDENTITY_CS_TF_PARAMS: FloatArray =
             floatArrayOf(1f, 1f, 0f, 0f, 0f, 0f, 0f)
+        /**
+         * G5.3.y -- peak luminance constant (nits) used by the PQ /
+         * HLG shader branches (`csMode == 3` / `csMode == 4`) to tone-
+         * map HDR linear values down to the SDR `[0, 1]` working
+         * range. 1000 nits is the common HDR10 / HLG mastering peak ;
+         * 4000-nit-mastered cinema content gets clipped after the
+         * divide, which is the documented tone-mapping simplification
+         * for this slice (preserving HDR through the pipeline would
+         * need an F16 intermediate target on the host side).
+         */
+        const val HDR_PEAK_NITS: Float = 1000f
         /**
          * G4.1.2 / G2.x -- size of the AA stencil-cover gradient per-draw uniform :
          *   color (16) + viewport (16) + startEnd (16) + countPad (16) +

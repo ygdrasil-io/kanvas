@@ -68,9 +68,31 @@
 //       curve itself). `csTfParams0/1` carry the 7 parametric coefficients
 //       (g, a, b, c, d, e, f) ; the OETF on the output side stays the
 //       sRGB OETF (the intermediate target's encoding does not change).
+//   3 = SMPTE ST 2084 PQ EOTF + primaries matrix + sRGB OETF (G5.3.y ;
+//       Rec.2020 PQ HDR sources). PQ-coded `N in [0, 1]` maps to nits
+//       via the 5-coefficient + power-law spec ; we then divide by a
+//       peak-luminance constant (passed in `csTfParams0.x`, typically
+//       1000 nits) to land in the SDR `[0, 1]` working range, clip,
+//       multiply by the Rec.2020->sRGB primaries matrix, and re-encode
+//       through the sRGB OETF. This is a deliberate tone-mapping
+//       simplification : preserving HDR through the pipeline would
+//       require an F16 working space ; for now we tonemap-by-divide
+//       at the texture-sample boundary.
+//   4 = BT.2100 HLG inverse OETF + primaries matrix + sRGB OETF
+//       (G5.3.y ; Rec.2020 HLG HDR sources). Same convention as PQ :
+//       `csTfParams0.x` is peak luminance (typically 1000 nits) ;
+//       the HLG inverse runs the BT.2100 split linear-log curve
+//       (`a, b, c = 0.17883277, 0.28466892, 0.55991073`) producing
+//       linear scene light in `[0, 12]`, divided by 12 to land in
+//       `[0, 1]` SDR-coded range, then matrix + sRGB OETF.
 // The matrix is column-major (`mat3x3<f32>`) ; for sRGB images the host
 // uploads the identity so the multiply is a no-op even when the flag
-// would route through a transform branch -- the flag is the gate.
+// would route through a transform branch -- the flag is the gate. For
+// PQ / HLG sources the host uploads the canonical Rec.2020-linear ->
+// sRGB-linear primaries matrix (`SkColorSpaceXformSteps.srcToDstMatrix`
+// with `(SkColorSpace.makeRGB(kLinear, kRec2020), sRGB)` -- the same
+// Bradford-adapted Rec.2020 toXYZD50 cells the rest of the pipeline
+// uses).
 //
 // Limitations enforced at the dispatch gate (see SkWebGpuDevice
 // drawImageRect) :
@@ -79,10 +101,14 @@
 //      sRGB (no-op, mode=0),
 //      sRGB-TF + non-sRGB gamut (Display P3 ; mode=1),
 //      sRGBish parametric TF + any gamut (Rec.2020 linear, Adobe RGB ;
-//        mode=2).
-//    HDR families (Rec.2020 PQ, HLG, ProPhoto with non-sRGBish TF) still
-//    bypass the transform branch -- they need luminance scaling / OOTF
-//    handling out of scope for G5.3.x.
+//        mode=2),
+//      Rec.2020 PQ (mode=3) and Rec.2020 HLG (mode=4) HDR sources --
+//        tone-mapped by dividing the linear nits/scene-light by a
+//        peak-luminance constant (`csTfParams0.x`, default 1000) so
+//        downstream blends stay in the existing SDR-coded [0,1] working
+//        range. HDR-through-the-pipeline preservation needs an F16
+//        intermediate target and is out of scope.
+//    ProPhoto with non-sRGBish TF still bypasses the transform branch.
 //
 // G2.x clip-shape (this slice) -- the trailing two vec4 slots carry
 // the analytical "simple shape" clip captured from the SkCanvas's
@@ -147,6 +173,10 @@ struct Uniforms {
     //   1 = sRGB EOTF + matrix + sRGB OETF.
     //   2 = parametric sRGBish EOTF + matrix + sRGB OETF (G5.3.x ;
     //       Rec.2020 linear / Adobe RGB / Rec.709 / ...).
+    //   3 = PQ EOTF + tone-map (divide by peak) + matrix + sRGB OETF
+    //       (G5.3.y ; Rec.2020 PQ HDR sources).
+    //   4 = HLG inverse OETF + tone-map (divide by peak) + matrix
+    //       + sRGB OETF (G5.3.y ; Rec.2020 HLG HDR sources).
     // `.y/.z/.w` are reserved (zero-padded).
     csFlags: vec4f,      // offset 64
     // G5.3 -- column-major 3x3 primaries matrix (source-linear ->
@@ -166,6 +196,14 @@ struct Uniforms {
     // uploads `(2.2, 1, 0, 0, 0, 0, 0)` (pure 2.2 power law). The slot
     // is unused (uploaded as zero) when `csFlags.x != 2` so the std140
     // alignment is stable across modes.
+    //
+    // G5.3.y -- when `csFlags.x == 3` (PQ) or `csFlags.x == 4` (HLG)
+    // the slot is repurposed : `csTfParams0.x` carries the peak
+    // luminance constant in nits (typically 1000) used to tone-map the
+    // recovered linear scene light down to the SDR `[0, 1]` working
+    // range. The remaining `csTfParams0/1` slots are unused in modes
+    // 3 / 4 (uploaded as zero ; the hardcoded PQ / HLG math is
+    // self-contained, no parametric coefs to look up).
     csTfParams0: vec4f,  // offset 128
     csTfParams1: vec4f,  // offset 144
     // G2.x -- analytical clip-shape payload, mirrors `solid_color.wgsl`.
@@ -201,16 +239,22 @@ struct Uniforms {
 // Tile-mode constants -- mirror `SkTileMode` ordinals.
 const TILE_DECAL: u32 = 3u;
 
-// G5.3 -- color-space transform mode sentinel.
+// G5.3 / G5.3.x / G5.3.y -- color-space transform mode sentinel.
 //   0 = no-op (sRGB source or any source whose pipeline reduces to
 //       identity ; the host gate covers Skia's
 //       `SkColorSpaceXformSteps::Flags::isIdentity`).
 //   1 = sRGB EOTF + matrix + sRGB OETF.
 //   2 = parametric sRGBish EOTF + matrix + sRGB OETF (G5.3.x).
-// Higher values are reserved for future TF families (PQ / HLG / ...).
+//   3 = PQ EOTF + tone-map (divide by peak nits) + matrix + sRGB OETF
+//       (G5.3.y).
+//   4 = HLG inverse OETF + tone-map (divide by peak nits) + matrix
+//       + sRGB OETF (G5.3.y).
+// Higher values reserved for future TF families.
 const CS_MODE_IDENTITY: u32 = 0u;
 const CS_MODE_SRGB_TF_MATRIX: u32 = 1u;
 const CS_MODE_PARAMETRIC_TF_MATRIX: u32 = 2u;
+const CS_MODE_PQ: u32 = 3u;
+const CS_MODE_HLG: u32 = 4u;
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var image_texture: texture_2d<f32>;
@@ -260,6 +304,51 @@ fn parametric_tf(v: f32) -> f32 {
         return c * clamped + f;
     }
     return pow(a * clamped + b, g) + e;
+}
+
+// G5.3.y -- SMPTE ST 2084 PQ EOTF. Maps a PQ-coded value `N in [0, 1]`
+// to linear nits via the 5-coefficient + power-law formula
+// (`include/private/SkPQ.h`, BT.2100-2 Table 4). Constants below match
+// the integer-rationals upstream Skia ships in `skcms.cc` byte-for-byte.
+// Returns nits (cd/m^2) ; caller divides by peak luminance to land in
+// the SDR `[0, 1]` working range.
+//
+// `pow(0, fractional)` is implementation-defined in WGSL ; clamp the
+// input to avoid the `N = 0` edge case (the spec maps `N = 0 -> 0` nits
+// but the formula goes through `0^(1/m2)` which can NaN). We clamp the
+// numerator to `>= 0` so the divide stays well-defined.
+fn pq_eotf(N_in: f32) -> f32 {
+    let m1 = 0.1593017578125;          // 2610 / 16384
+    let m2 = 78.84375;                 // 2523 / 4096 * 128
+    let c1 = 0.8359375;                // 3424 / 4096
+    let c2 = 18.8515625;               // 2413 / 4096 * 32
+    let c3 = 18.6875;                  // 2392 / 4096 * 32
+    let N = clamp(N_in, 0.0, 1.0);
+    let Np = pow(N, 1.0 / m2);
+    let num = max(Np - c1, 0.0);
+    let den = max(c2 - c3 * Np, 1.0e-6);
+    return pow(num / den, 1.0 / m1) * 10000.0;
+}
+
+// G5.3.y -- BT.2100 HLG inverse OETF. Maps an HLG-coded value
+// `E' in [0, 1]` to linear scene light in `[0, 1]` via the split
+// linear-log curve (ITU-R BT.2100-2 Table 5, `a, b, c` constants in
+// upstream `skcms.cc:259-264`).
+//   HLG_inverse(E') = E'^2 / 3                        if E' <= 0.5
+//                     (exp((E' - c) / a) + b) / 12    if E' >  0.5
+// The EOTF tone-maps to display light by `HLG_inverse(E') * Lw`. This
+// slice's convention is `Lw = peakLuminance` so the tone-mapped output
+// reduces to `HLG_inverse(E')` directly (no extra divide). The caller
+// applies the Rec.2020 -> sRGB primaries matrix on the linear result.
+fn hlg_inverse_oetf(Ep_in: f32) -> f32 {
+    let a = 0.17883277;
+    let b = 0.28466892;
+    let c = 0.55991073;
+    let Ep = clamp(Ep_in, 0.0, 1.0);
+    if (Ep <= 0.5) {
+        return Ep * Ep / 3.0;
+    }
+    return (exp((Ep - c) / a) + b) / 12.0;
 }
 
 // Phase H2 paint-colorFilter -- pure-float blend on premul RGBA. Same
@@ -432,6 +521,9 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // The source-TF stage is selected by `csFlags.x` :
     //   1 = sRGB EOTF (hardcoded constants ; matches `srgb_to_linear`).
     //   2 = parametric sRGBish TF (G5.3.x ; coefs from `csTfParams0/1`).
+    //   3 = PQ EOTF + tone-map (G5.3.y ; peak nits in `csTfParams0.x`).
+    //   4 = HLG inverse OETF + tone-map (G5.3.y ; peak nits in
+    //       `csTfParams0.x`).
     // The OETF on the output side is always the sRGB OETF because the
     // intermediate target's encoding does not change.
     //
@@ -462,6 +554,43 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             linear_to_srgb(lin_srgb.r),
             linear_to_srgb(lin_srgb.g),
             linear_to_srgb(lin_srgb.b),
+        );
+    } else if (cs_mode == CS_MODE_PQ) {
+        // G5.3.y -- Rec.2020 PQ HDR. PQ EOTF lifts the encoded sample
+        // to nits ; divide by peak luminance (csTfParams0.x, default
+        // 1000) to land in `[0, 1]` SDR-coded, clip, apply the
+        // Rec.2020 -> sRGB primaries matrix (host-uploaded in
+        // `csMatrix`), and re-encode through the sRGB OETF. Tone-
+        // mapping reduces to divide-by-peak ; preserving HDR through
+        // the pipeline needs F16 working space.
+        let peak_nits = max(uniforms.csTfParams0.x, 1.0);
+        let lin = vec3f(
+            clamp(pq_eotf(src_rgb.r) / peak_nits, 0.0, 1.0),
+            clamp(pq_eotf(src_rgb.g) / peak_nits, 0.0, 1.0),
+            clamp(pq_eotf(src_rgb.b) / peak_nits, 0.0, 1.0),
+        );
+        let lin_srgb = uniforms.csMatrix * lin;
+        src_rgb = vec3f(
+            linear_to_srgb(lin_srgb.r),
+            linear_to_srgb(lin_srgb.g),
+            linear_to_srgb(lin_srgb.b),
+        );
+    } else if (cs_mode == CS_MODE_HLG) {
+        // G5.3.y -- Rec.2020 HLG HDR. HLG inverse OETF maps the encoded
+        // sample to linear scene light in `[0, 1]` ; with the
+        // `Lw = peakLuminance` convention the EOTF tone-mapped output
+        // is the HLG-inverse value directly (no extra divide). Apply
+        // the Rec.2020 -> sRGB primaries matrix, then sRGB OETF.
+        let lin = vec3f(
+            hlg_inverse_oetf(src_rgb.r),
+            hlg_inverse_oetf(src_rgb.g),
+            hlg_inverse_oetf(src_rgb.b),
+        );
+        let lin_srgb = uniforms.csMatrix * lin;
+        src_rgb = vec3f(
+            linear_to_srgb(clamp(lin_srgb.r, 0.0, 1.0)),
+            linear_to_srgb(clamp(lin_srgb.g, 0.0, 1.0)),
+            linear_to_srgb(clamp(lin_srgb.b, 0.0, 1.0)),
         );
     }
 
