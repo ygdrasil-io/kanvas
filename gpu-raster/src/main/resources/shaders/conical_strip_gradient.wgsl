@@ -63,6 +63,13 @@ struct Uniforms {
     // analytical clip (mirror of `solid_color.wgsl`).
     clipShapeBounds:    vec4f,   // offset 576 : (l, t, r, b) device-px
     clipShapeRadiiKind: vec4f,   // offset 592 : (rx, ry, clipKind, _)
+    // Phase G-direct-colorFilter-gradient -- same layout as #569.
+    colorFilterKindMode: vec4f,  // offset 608 : (kind, blendMode, _, _)
+    colorFilterParam0:   vec4f,  // offset 624
+    colorFilterParam1:   vec4f,  // offset 640
+    colorFilterParam2:   vec4f,  // offset 656
+    colorFilterParam3:   vec4f,  // offset 672
+    colorFilterBias:     vec4f,  // offset 688
 };
 
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
@@ -161,18 +168,91 @@ fn clip_cov(pos: vec2f) -> f32 {
     return 1.0;
 }
 
+// from #569 -- premul blend helper. Copied verbatim across all 9
+// gradient shaders (WGSL has no preprocessor).
+fn blend_premul(s: vec4f, d: vec4f, mode: u32) -> vec4f {
+    let sa = s.a; let da = d.a;
+    if (mode == 0u) { return vec4f(0.0); }
+    if (mode == 1u) { return s; }
+    if (mode == 2u) { return d; }
+    if (mode == 3u) {
+        let k = 1.0 - sa;
+        return vec4f(s.r + d.r * k, s.g + d.g * k, s.b + d.b * k, sa + da * k);
+    }
+    if (mode == 4u) {
+        let k = 1.0 - da;
+        return vec4f(d.r + s.r * k, d.g + s.g * k, d.b + s.b * k, da + sa * k);
+    }
+    if (mode == 5u) { return s * da; }
+    if (mode == 6u) { return d * sa; }
+    if (mode == 7u) { return s * (1.0 - da); }
+    if (mode == 8u) { return d * (1.0 - sa); }
+    if (mode == 9u) {
+        let k = 1.0 - sa;
+        return vec4f(s.r * da + d.r * k, s.g * da + d.g * k,
+                     s.b * da + d.b * k, sa * da + da * k);
+    }
+    if (mode == 10u) {
+        let k = 1.0 - da;
+        return vec4f(d.r * sa + s.r * k, d.g * sa + s.g * k,
+                     d.b * sa + s.b * k, da * sa + sa * k);
+    }
+    if (mode == 11u) {
+        let ks = 1.0 - sa; let kd = 1.0 - da;
+        return vec4f(s.r * kd + d.r * ks, s.g * kd + d.g * ks,
+                     s.b * kd + d.b * ks, sa * kd + da * ks);
+    }
+    if (mode == 12u) {
+        return min(vec4f(1.0), s + d);
+    }
+    if (mode == 13u) { return s * d; }
+    if (mode == 14u) { return s + d - s * d; }
+    return s;
+}
+
+fn apply_color_filter_premul(c_pre: vec4f) -> vec4f {
+    let kind = u32(uniforms.colorFilterKindMode.x + 0.5);
+    if (kind == 0u) { return c_pre; }
+    if (kind == 1u) {
+        let mode = u32(uniforms.colorFilterKindMode.y + 0.5);
+        return blend_premul(uniforms.colorFilterParam0, c_pre, mode);
+    }
+    if (kind == 2u) {
+        let a = c_pre.a;
+        var c_un: vec4f;
+        if (a <= 0.0) {
+            c_un = vec4f(0.0, 0.0, 0.0, 0.0);
+        } else {
+            let inv = 1.0 / a;
+            c_un = vec4f(c_pre.r * inv, c_pre.g * inv, c_pre.b * inv, a);
+        }
+        let out_r = dot(uniforms.colorFilterParam0, c_un) + uniforms.colorFilterBias.x;
+        let out_g = dot(uniforms.colorFilterParam1, c_un) + uniforms.colorFilterBias.y;
+        let out_b = dot(uniforms.colorFilterParam2, c_un) + uniforms.colorFilterBias.z;
+        let out_a = dot(uniforms.colorFilterParam3, c_un) + uniforms.colorFilterBias.w;
+        let cr = clamp(out_r, 0.0, 1.0);
+        let cg = clamp(out_g, 0.0, 1.0);
+        let cb = clamp(out_b, 0.0, 1.0);
+        let ca = clamp(out_a, 0.0, 1.0);
+        return vec4f(cr * ca, cg * ca, cb * ca, ca);
+    }
+    return c_pre;
+}
+
 @fragment
 fn fs_clamp(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let s = compute_t_raw(pos);
     let t = clamp(s.t, 0.0, 1.0);
-    return sample_stops_at(t) * s.in_strip * clip_cov(pos.xy);
+    let c = apply_color_filter_premul(sample_stops_at(t));
+    return c * s.in_strip * clip_cov(pos.xy);
 }
 
 @fragment
 fn fs_repeat(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let s = compute_t_raw(pos);
     let t = s.t - floor(s.t);
-    return sample_stops_at(t) * s.in_strip * clip_cov(pos.xy);
+    let c = apply_color_filter_premul(sample_stops_at(t));
+    return c * s.in_strip * clip_cov(pos.xy);
 }
 
 @fragment
@@ -181,7 +261,8 @@ fn fs_mirror(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let u = s.t * 0.5;
     let w = u - floor(u);
     let t = select(2.0 - w * 2.0, w * 2.0, w < 0.5);
-    return sample_stops_at(t) * s.in_strip * clip_cov(pos.xy);
+    let c = apply_color_filter_premul(sample_stops_at(t));
+    return c * s.in_strip * clip_cov(pos.xy);
 }
 
 @fragment
@@ -190,5 +271,6 @@ fn fs_decal(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     if (s.in_strip < 0.5 || s.t < 0.0 || s.t > 1.0) {
         return vec4f(0.0, 0.0, 0.0, 0.0);
     }
-    return sample_stops_at(s.t) * clip_cov(pos.xy);
+    let c = apply_color_filter_premul(sample_stops_at(s.t));
+    return c * clip_cov(pos.xy);
 }

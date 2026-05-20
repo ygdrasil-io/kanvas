@@ -538,6 +538,15 @@ public class SkWebGpuDevice(
          * `rrect_cov` as a uniform-radii rrect.
          */
         val clipShape: SkClipShape? = null,
+        /**
+         * Phase G-direct-colorFilter-gradient -- packed colorFilter
+         * payload (6 vec4f = 24 floats) consumed by `linear_gradient.wgsl`'s
+         * `apply_color_filter_premul` helper. Same layout as #569's
+         * `solid_color.wgsl`. When the paint carries no colour filter,
+         * this is the shared zero sentinel (`ZERO_COLOR_FILTER_24`) and
+         * the shader's kind == 0 branch is a no-op.
+         */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -563,6 +572,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -591,6 +602,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -621,6 +634,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -674,6 +689,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -715,6 +732,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -747,6 +766,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -778,6 +799,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     // ─── Sweep gradient on non-rect (G4.3.2) ─────────────────────────────
@@ -812,6 +835,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     // ─── Conical gradient on non-rect (G4.4.3) ─────────────────────────────
@@ -846,6 +871,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     /**
@@ -881,6 +908,8 @@ public class SkWebGpuDevice(
         override val mode: SkBlendMode,
         /** G2.x -- see [LinearGradientRectDraw.clipShape]. */
         val clipShape: SkClipShape? = null,
+        /** Phase G-direct-colorFilter-gradient -- see [LinearGradientRectDraw.colorFilterPacked]. */
+        val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
     // ─── Bitmap shader (G5.1) — drawImageRect skeleton ────────────────────
@@ -5496,6 +5525,7 @@ public class SkWebGpuDevice(
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
                 clipShape = activeClipShape,
+                colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
             ),
         )
         return true
@@ -5577,6 +5607,7 @@ public class SkWebGpuDevice(
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
                 clipShape = activeClipShape,
+                colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
             ),
         )
         return true
@@ -5664,6 +5695,7 @@ public class SkWebGpuDevice(
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
                 clipShape = activeClipShape,
+                colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
             ),
         )
         return true
@@ -5751,6 +5783,7 @@ public class SkWebGpuDevice(
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
                 clipShape = activeClipShape,
+                colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
             ),
         )
         return true
@@ -5858,6 +5891,7 @@ public class SkWebGpuDevice(
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
                 clipShape = activeClipShape,
+                colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
             ),
         )
         return true
@@ -5946,6 +5980,7 @@ public class SkWebGpuDevice(
                 a = SkColorGetA(first) / 255f,
                 mode = paint.blendMode,
                 clipShape = activeClipShape,
+                colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
             ),
         )
         return true
@@ -6787,6 +6822,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                     return
@@ -6810,6 +6846,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                     return
@@ -6834,6 +6871,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                     return
@@ -6858,6 +6896,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                     return
@@ -6886,6 +6925,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                     return
@@ -6999,6 +7039,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                 } else if (radialGradForAaPath != null) {
@@ -7020,6 +7061,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                 } else if (sweepGradForAaPath != null) {
@@ -7042,6 +7084,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                 } else if (conicalRadialGradForAaPath != null) {
@@ -7064,6 +7107,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                 } else if (conicalFocalActive) {
@@ -7090,6 +7134,7 @@ public class SkWebGpuDevice(
                             r = rF, g = gF, b = bF, a = aF,
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
+                            colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                         ),
                     )
                 } else if (bitmapPayload != null) {
@@ -7209,6 +7254,7 @@ public class SkWebGpuDevice(
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
                     clipShape = activeClipShape,
+                    colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                 ),
             )
             return
@@ -7236,6 +7282,7 @@ public class SkWebGpuDevice(
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
                     clipShape = activeClipShape,
+                    colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                 ),
             )
             return
@@ -7268,6 +7315,7 @@ public class SkWebGpuDevice(
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
                     clipShape = activeClipShape,
+                    colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                 ),
             )
             return
@@ -7299,6 +7347,7 @@ public class SkWebGpuDevice(
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
                     clipShape = activeClipShape,
+                    colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                 ),
             )
             return
@@ -7333,6 +7382,7 @@ public class SkWebGpuDevice(
                     r = rF, g = gF, b = bF, a = aF,
                     mode = paint.blendMode,
                     clipShape = activeClipShape,
+                    colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
                 ),
             )
             return
@@ -9249,7 +9299,8 @@ public class SkWebGpuDevice(
         //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
         //   offset 560 : clipShapeBounds (vec4f -- l, t, r, b) ; G2.x
         //   offset 576 : clipShapeRadiiKind (vec4f -- rx, ry, clipKind, _) ; G2.x
-        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 592 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = d.startX; packed[1] = d.startY
         packed[2] = d.endX;   packed[3] = d.endY
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
@@ -9261,6 +9312,8 @@ public class SkWebGpuDevice(
         // G2.x -- clip-shape payload appended at offset 560.
         val clipBase = 12 + MAX_GRADIENT_STOPS * 8
         writeClipShape(packed, clipBase, d.clipShape)
+        // Phase G-direct-colorFilter-gradient -- colour filter payload at offset 592.
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -9290,7 +9343,8 @@ public class SkWebGpuDevice(
         //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
         //   offset 560 : clipShapeBounds (vec4f) ; G2.x
         //   offset 576 : clipShapeRadiiKind (vec4f) ; G2.x
-        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 592 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.centerX; packed[5] = d.centerY; packed[6] = d.radius; packed[7] = 0f
@@ -9298,7 +9352,9 @@ public class SkWebGpuDevice(
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
-        writeClipShape(packed, 12 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 12 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -9328,7 +9384,8 @@ public class SkWebGpuDevice(
         //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
         //   offset 560 : clipShapeBounds (vec4f) ; G2.x
         //   offset 576 : clipShapeRadiiKind (vec4f) ; G2.x
-        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 592 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.centerX; packed[5] = d.centerY
@@ -9337,7 +9394,9 @@ public class SkWebGpuDevice(
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
-        writeClipShape(packed, 12 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 12 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -9371,7 +9430,8 @@ public class SkWebGpuDevice(
         //   offset 336 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
         //   offset 592 : clipShapeBounds (vec4f) ; G2.x
         //   offset 608 : clipShapeRadiiKind (vec4f) ; G2.x
-        val packed = FloatArray(20 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 624 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(20 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.affine00; packed[5] = d.affine01; packed[6] = d.affine02; packed[7] = 0f
@@ -9381,7 +9441,9 @@ public class SkWebGpuDevice(
         packed[18] = Float.fromBits(d.stopCount); packed[19] = d.subCaseSign
         System.arraycopy(d.stopPositions, 0, packed, 20, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 20 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
-        writeClipShape(packed, 20 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 20 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -9414,7 +9476,8 @@ public class SkWebGpuDevice(
         //   offset 320 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
         //   offset 576 : clipShapeBounds (vec4f) ; G2.x
         //   offset 592 : clipShapeRadiiKind (vec4f) ; G2.x
-        val packed = FloatArray(16 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 608 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(16 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.affine00; packed[5] = d.affine01; packed[6] = d.affine02; packed[7] = 0f
@@ -9423,7 +9486,9 @@ public class SkWebGpuDevice(
         packed[14] = Float.fromBits(d.stopCount); packed[15] = 0f
         System.arraycopy(d.stopPositions, 0, packed, 16, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 16 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
-        writeClipShape(packed, 16 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 16 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -9453,7 +9518,8 @@ public class SkWebGpuDevice(
         //   offset 304 : colors   [MAX_GRADIENT_STOPS] (vec4 each, premul rgba)
         //   offset 560 : clipShapeBounds (vec4f) ; G2.x
         //   offset 576 : clipShapeRadiiKind (vec4f) ; G2.x
-        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 592 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(12 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = width.toFloat(); packed[1] = height.toFloat()
         packed[2] = 0f; packed[3] = 0f
         packed[4] = d.centerX; packed[5] = d.centerY
@@ -9462,7 +9528,9 @@ public class SkWebGpuDevice(
         packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.stopPositions, 0, packed, 12, MAX_GRADIENT_STOPS * 4)
         System.arraycopy(d.stopColors, 0, packed, 12 + MAX_GRADIENT_STOPS * 4, MAX_GRADIENT_STOPS * 4)
-        writeClipShape(packed, 12 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 12 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
 
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
@@ -10273,7 +10341,10 @@ public class SkWebGpuDevice(
         //   offset   80 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4176 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4432 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 4688 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 4704 : clipShapeRadiiKind (vec4f) ; G2.x
+        //   offset 4720 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -10290,7 +10361,9 @@ public class SkWebGpuDevice(
             packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
-        writeClipShape(packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -10345,7 +10418,10 @@ public class SkWebGpuDevice(
         //   offset   80 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4176 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4432 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 4688 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 4704 : clipShapeRadiiKind (vec4f) ; G2.x
+        //   offset 4720 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -10362,7 +10438,9 @@ public class SkWebGpuDevice(
             packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
-        writeClipShape(packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -10419,7 +10497,10 @@ public class SkWebGpuDevice(
         //   offset   80 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4176 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4432 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 4688 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 4704 : clipShapeRadiiKind (vec4f) ; G2.x
+        //   offset 4720 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         // color (unused ; left at zero)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         // viewport
@@ -10443,7 +10524,9 @@ public class SkWebGpuDevice(
             packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
-        writeClipShape(packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -10501,7 +10584,10 @@ public class SkWebGpuDevice(
         //   offset   80 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4176 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4432 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 4688 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 4704 : clipShapeRadiiKind (vec4f) ; G2.x
+        //   offset 4720 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -10518,7 +10604,9 @@ public class SkWebGpuDevice(
             packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
-        writeClipShape(packed, 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 20 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -10573,7 +10661,10 @@ public class SkWebGpuDevice(
         //   offset  112 : edges[MAX_AA_EDGES]      (vec4 each)
         //   offset 4208 : positions[MAX_GRADIENT_STOPS] (vec4 each, .x = pos)
         //   offset 4464 : colors[MAX_GRADIENT_STOPS]    (vec4 each, premul rgba)
-        val packed = FloatArray(28 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8)
+        //   offset 4720 : clipShapeBounds (vec4f) ; G2.x
+        //   offset 4736 : clipShapeRadiiKind (vec4f) ; G2.x
+        //   offset 4752 : colorFilter* (6 vec4f) ; Phase G-direct-colorFilter-gradient
+        val packed = FloatArray(28 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8 + 8 + 24)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -10592,7 +10683,9 @@ public class SkWebGpuDevice(
             packed, 28 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 4,
             MAX_GRADIENT_STOPS * 4,
         )
-        writeClipShape(packed, 28 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8, d.clipShape)
+        val clipBase = 28 + MAX_AA_EDGES * 4 + MAX_GRADIENT_STOPS * 8
+        writeClipShape(packed, clipBase, d.clipShape)
+        System.arraycopy(d.colorFilterPacked, 0, packed, clipBase + 8, 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -10914,66 +11007,83 @@ public class SkWebGpuDevice(
          * Size of the linear-gradient per-draw uniform :
          *   startEnd (16) + viewport (16) + countPad (16) +
          *   positions (16 * 16) + colors (16 * 16) +
-         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 592 bytes.
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilter* (6 * 16) = 688 bytes.
          * G2.x bumped from 560 to 592 to carry the optional analytical
-         * clip-shape (`clipKind = 0` means "no shape clip").
+         * clip-shape (`clipKind = 0` means "no shape clip") ; Phase
+         * G-direct-colorFilter-gradient bumped from 592 to 688 (+96 bytes
+         * = 6 vec4f) to carry the optional SkColorFilter payload (same
+         * layout as #569 on `solid_color.wgsl`).
          */
-        const val LINEAR_GRADIENT_UNIFORM_SIZE: ULong = 592uL // 560 + 32
+        const val LINEAR_GRADIENT_UNIFORM_SIZE: ULong = 688uL // 592 + 96
         /**
          * G4.2 / G2.x -- size of the radial-gradient per-draw uniform :
          *   viewport (16) + centerRadius (16) + countPad (16) +
          *   positions (16 * 16) + colors (16 * 16) +
-         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 592 bytes.
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilter* (6 * 16) = 688 bytes.
          * Same total as the linear uniform ; the first 32 bytes carry
          * different fields (viewport / center+radius vs startEnd /
          * viewport). G2.x bumped from 560 to 592 to carry the optional
-         * analytical clip-shape.
+         * analytical clip-shape ; Phase G-direct-colorFilter-gradient
+         * bumped from 592 to 688 (+96 bytes) for the colorFilter payload.
          */
-        const val RADIAL_GRADIENT_UNIFORM_SIZE: ULong = 592uL
+        const val RADIAL_GRADIENT_UNIFORM_SIZE: ULong = 688uL
         /**
          * G4.3 / G2.x -- size of the sweep-gradient per-draw uniform :
          *   viewport (16) + centerBiasScale (16) + countPad (16) +
          *   positions (16 * 16) + colors (16 * 16) +
-         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 592 bytes.
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilter* (6 * 16) = 688 bytes.
          * Same total as the linear / radial uniforms ; only the second
          * vec4 carries different fields (center.xy + tBias + tScale here).
          * G2.x bumped from 560 to 592 to carry the optional analytical
-         * clip-shape.
+         * clip-shape ; Phase G-direct-colorFilter-gradient bumped from
+         * 592 to 688 (+96 bytes) for the colorFilter payload.
          */
-        const val SWEEP_GRADIENT_UNIFORM_SIZE: ULong = 592uL
+        const val SWEEP_GRADIENT_UNIFORM_SIZE: ULong = 688uL
         /**
          * G4.4 / G2.x -- size of the conical-gradient per-draw uniform :
          *   viewport (16) + centerRadii (16) + countPad (16) +
          *   positions (16 * 16) + colors (16 * 16) +
-         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 592 bytes.
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilter* (6 * 16) = 688 bytes.
          * Same total as the linear / radial / sweep uniforms ; only the
          * second vec4 carries different fields (centre.xy + r0 + r1 here,
          * for the kRadial sub-case). G2.x bumped from 560 to 592 to
-         * carry the optional analytical clip-shape.
+         * carry the optional analytical clip-shape ; Phase
+         * G-direct-colorFilter-gradient bumped from 592 to 688 (+96 bytes)
+         * for the colorFilter payload.
          */
-        const val CONICAL_GRADIENT_UNIFORM_SIZE: ULong = 592uL
+        const val CONICAL_GRADIENT_UNIFORM_SIZE: ULong = 688uL
         /**
          * G4.4.1 / G2.x -- size of the conical focal-inside per-draw uniform :
          *   viewport (16) + affineRow0 (16) + affineRow1 (16) +
          *   focalScalars (16) + flagsCount (16) +
          *   positions (16 * 16) + colors (16 * 16) +
-         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 624 bytes.
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilter* (6 * 16) = 720 bytes.
          * 32 bytes larger than the kRadial conical uniform because the
          * focal-frame affine takes 2 vec4f slots and the flags / focal
          * scalars consume two more. G2.x bumped from 592 to 624 to carry
-         * the optional analytical clip-shape.
+         * the optional analytical clip-shape ; Phase
+         * G-direct-colorFilter-gradient bumped from 624 to 720 (+96 bytes)
+         * for the colorFilter payload.
          */
-        const val CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 624uL
+        const val CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 720uL
         /**
          * G4.4.4 / G2.x -- size of the conical kStrip per-draw uniform :
          *   viewport (16) + affineRow0 (16) + affineRow1 (16) +
          *   stripScalars (16) + positions (16 * 16) + colors (16 * 16) +
-         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 608 bytes.
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilter* (6 * 16) = 704 bytes.
          * 16 bytes smaller than the focal-inside uniform (no flagsCount
          * vec4 ; the strip has only fP0 + stop count). G2.x bumped from
-         * 576 to 608 to carry the optional analytical clip-shape.
+         * 576 to 608 to carry the optional analytical clip-shape ;
+         * Phase G-direct-colorFilter-gradient bumped from 608 to 704
+         * (+96 bytes) for the colorFilter payload.
          */
-        const val CONICAL_STRIP_GRADIENT_UNIFORM_SIZE: ULong = 608uL
+        const val CONICAL_STRIP_GRADIENT_UNIFORM_SIZE: ULong = 704uL
         /**
          * G5.1 / G5.3 / G5.3.x / G2.x / Phase H2 paint-colorFilter -- size
          * of the bitmap-shader per-draw uniform :
@@ -11118,28 +11228,32 @@ public class SkWebGpuDevice(
          * G4.1.2 / G2.x -- size of the AA stencil-cover gradient per-draw uniform :
          *   color (16) + viewport (16) + startEnd (16) + countPad (16) +
          *   edgeCountPad (16) + edges (256 * 16) + positions (16 * 16) +
-         *   colors (16 * 16) + clipShapeBounds (16) + clipShapeRadiiKind (16)
-         *   = 4720 bytes.
+         *   colors (16 * 16) + clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilter* (6 * 16) = 4816 bytes.
          * The leading `color` slot matches the polygon shader's layout so
          * the stencil-write pass can share this draw's bind group. G2.x
          * bumped from 4688 to 4720 to carry the optional analytical
-         * clip-shape.
+         * clip-shape ; Phase G-direct-colorFilter-gradient bumped from
+         * 4720 to 4816 (+96 bytes = 6 vec4f) for the SkColorFilter payload.
          */
-        const val AA_STENCIL_COVER_GRADIENT_UNIFORM_SIZE: ULong = 4720uL
+        const val AA_STENCIL_COVER_GRADIENT_UNIFORM_SIZE: ULong = 4816uL
         /**
          * G4.4.3 / G2.x -- size of the AA stencil-cover conical focal-inside
          * per-draw uniform :
          *   color (16) + viewport (16) + affineRow0 (16) + affineRow1 (16) +
          *   focalScalars (16) + flagsCount (16) + edgeCountPad (16) +
          *   edges (256 * 16) + positions (16 * 16) + colors (16 * 16) +
-         *   clipShapeBounds (16) + clipShapeRadiiKind (16) = 4752 bytes.
+         *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
+         *   colorFilter* (6 * 16) = 4848 bytes.
          * 32 bytes larger than the kRadial / linear / radial / sweep stencil-
          * cover uniforms because the focal-frame affine takes 2 vec4f slots
          * and the focal scalars / flags consume two more (vs one in the
          * other variants). G2.x bumped from 4720 to 4752 to carry the
-         * optional analytical clip-shape.
+         * optional analytical clip-shape ; Phase
+         * G-direct-colorFilter-gradient bumped from 4752 to 4848 (+96
+         * bytes) for the SkColorFilter payload.
          */
-        const val AA_STENCIL_COVER_CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 4752uL
+        const val AA_STENCIL_COVER_CONICAL_FOCAL_GRADIENT_UNIFORM_SIZE: ULong = 4848uL
         /**
          * G5.2.1 / G5.3.x / G2.x / Phase H2 paint-colorFilter -- size of
          * the AA stencil-cover bitmap-shader per-draw uniform :
