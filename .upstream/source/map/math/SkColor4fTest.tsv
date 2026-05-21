@@ -1,0 +1,6 @@
+org.graphiks.math.SkColor4fTest	SkColor4fTest	math/src/test/kotlin/SkColor4fTest.kt:15	src/core/SkColor.cpp:147
+org.graphiks.math.SkColor4fTest.toBytes_RGBA places R in LSB and A in MSB	SkColor4f::toBytes_RGBA	math/src/test/kotlin/SkColor4fTest.kt:18	src/core/SkColor.cpp:147
+org.graphiks.math.SkColor4fTest.toBytes_RGBA exact bit layout for a non-symmetric colour	SkColor4f::toBytes_RGBA	math/src/test/kotlin/SkColor4fTest.kt:49	src/core/SkColor.cpp:147
+org.graphiks.math.SkColor4fTest.FromBytes_RGBA reads bytes in R G B A order	SkColor4f::FromBytes_RGBA	math/src/test/kotlin/SkColor4fTest.kt:58	src/core/SkColor.cpp:152
+org.graphiks.math.SkColor4fTest.roundtrip toBytes FromBytes preserves channels within 1 ulp_8	SkColor4f::FromBytes_RGBA	math/src/test/kotlin/SkColor4fTest.kt:68	src/core/SkColor.cpp:152
+org.graphiks.math.SkColor4fTest.roundtrip FromBytes toBytes preserves the raw uint32	SkColor4f::FromBytes_RGBA	math/src/test/kotlin/SkColor4fTest.kt:89	src/core/SkColor.cpp:152
