@@ -2268,12 +2268,14 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         //     [backdrop], paste into the layer bitmap. Full filter
         //     application (Blur / ColorFilter / Offset / ...).
         //   - Non-raster parents (e.g. GPU device → GPU device) :
-        //     delegate to [SkDevice.seedBackdropFrom], which the backend
-        //     implements with whatever native primitive it has
-        //     available. The GPU backend ships a **copy-only** seed
-        //     (Phase G-saveLayer-backdrop) -- the parent's pixels land
-        //     unchanged ; the [backdrop] filter itself is currently
-        //     ignored on GPU (documented deferred follow-up).
+        //     delegate to [SkDevice.seedBackdropFrom], which the
+        //     backend implements with whatever native primitive it
+        //     has available. The GPU backend ships **copy-only**
+        //     (Phase G-saveLayer-backdrop, #591) plus the J5
+        //     filter-aware extension : the `backdrop` filter is
+        //     forwarded so backends can apply it on-GPU. The WebGPU
+        //     device honours `SkImageFilters.Blur(input = null)` and
+        //     degrades the rest to copy-only.
         //
         // If neither branch matches (mixed backend / unknown device),
         // the layer is left transparent silently -- matches the
@@ -2288,12 +2290,16 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                     scaleFactor = rec.scaleFactor,
                 )
             } else {
-                // Non-raster path : copy-only delegate. The device
-                // returns false if it can't seed (default no-op) ;
-                // we accept that silently as "layer starts
-                // transparent". Filter application on the parent
-                // snapshot is the bonus follow-up slice.
-                layerDevice.seedBackdropFrom(s.device, originX, originY, w, h)
+                // Non-raster path : delegate to the device, which
+                // either applies the filter natively (J5) or falls
+                // back to copy-only / no-op. Returns `false` silently
+                // when it can't seed -- we accept that as "layer
+                // starts transparent". The filter-application
+                // contract is per-backend (see [SkDevice
+                // .seedBackdropFrom] kdoc).
+                layerDevice.seedBackdropFrom(
+                    s.device, originX, originY, w, h, backdrop,
+                )
             }
         }
 

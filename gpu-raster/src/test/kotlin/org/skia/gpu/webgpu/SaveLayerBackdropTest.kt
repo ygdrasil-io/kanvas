@@ -16,26 +16,26 @@ import org.skia.foundation.SkTileMode
 import kotlin.math.abs
 
 /**
- * Phase G-saveLayer-backdrop -- verify that
- * `SkCanvas.saveLayer(SaveLayerRec(..., backdrop = ...))` on a GPU
- * root canvas routes through [SkWebGpuDevice.seedBackdropFrom] and
- * pre-fills the new layer with the parent device's pixels (copy-only
- * slice -- the backdrop [SkImageFilter] itself is currently ignored
- * on GPU).
+ * Phase G-saveLayer-backdrop (#591) + Phase J5 backdrop filter --
+ * verify that `SkCanvas.saveLayer(SaveLayerRec(..., backdrop = ...))`
+ * on a GPU root canvas routes through
+ * [SkWebGpuDevice.seedBackdropFrom] and pre-fills the new layer with
+ * the parent device's pixels, optionally filtered through the
+ * backdrop [org.skia.foundation.SkImageFilter] before they land.
  *
- * **Scope of this slice (copy-only).**
+ * **Scope.**
  *  - `backdrop = null` : layer starts transparent (regression guard --
  *    same as the pre-slice behaviour).
- *  - `backdrop != null` : layer is seeded with a 1:1 copy of the
- *    parent's pixels in the layer bbox. The filter is dropped ; the
- *    final composite shows parent-pixels-under-new-draws, not
- *    transparent-under-new-draws.
- *
- * Filter application (Blur / ColorFilter / Offset on the backdrop
- * snapshot) is a deferred follow-up -- the unit tests below assert
- * **copy-only** semantics, not blurred-backdrop semantics. The CPU
- * raster path remains the full-featured fallback (see
- * `SaveLayerRecBackdropTest` for the filter-applied case).
+ *  - `backdrop = SkImageFilters.Blur(input = null)` with positive
+ *    sigma : layer is seeded with the parent's pixels in the layer
+ *    bbox, then a separable Gaussian blur is applied in-place via the
+ *    existing `blur_image_filter.wgsl` pipeline. Final composite shows
+ *    blurred-parent-pixels-under-new-draws (frosted-glass pattern).
+ *  - Other backdrop variants (ColorFilter, Offset, MatrixTransform,
+ *    DropShadow, Compose, ...) fall back to copy-only semantics on
+ *    GPU. The CPU raster path remains the full-featured fallback (see
+ *    `SaveLayerRecBackdropTest` for the comprehensive filter
+ *    coverage).
  */
 class SaveLayerBackdropTest {
 
@@ -74,13 +74,17 @@ class SaveLayerBackdropTest {
     }
 
     @Test
-    fun `saveLayer with non-null backdrop seeds the layer with parent pixels`() {
-        // Phase G-saveLayer-backdrop main exercise -- a non-null backdrop
-        // triggers [SkWebGpuDevice.seedBackdropFrom], which copies the
-        // parent's pixels into the layer's bbox. We don't draw anything
-        // inside the layer scope ; the composite back to the parent
-        // should leave the parent's red unchanged (it composited red
-        // pixels onto themselves via SrcOver, alpha = 1, no-op).
+    fun `saveLayer with non-null Blur backdrop blurs the parent pixels into the layer`() {
+        // Phase J5 main exercise -- a `SkImageFilters.Blur` backdrop
+        // triggers the GPU blur seed path : the parent's pixels are
+        // copied into the layer's bbox AND then run through a
+        // separable Gaussian (same `blur_image_filter.wgsl` pipeline
+        // as `paint.imageFilter = Blur` on saveLayer composite). We
+        // don't draw anything inside the layer scope ; the composite
+        // back to the parent paints the blurred copy on top of the
+        // unmodified parent. Inside the layer bbox the result is the
+        // (parent SrcOver blurred-parent) which, for an opaque blur
+        // output, equals the blurred parent.
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
@@ -89,17 +93,15 @@ class SaveLayerBackdropTest {
                 device.setBackground(SK_ColorRED)
                 val canvas = SkCanvas(device)
                 val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
-                // Pre-draw a blue circle (a rect actually) on the
-                // parent so we have something non-uniform in the
-                // layer's bbox.
+                // Pre-draw a blue square on the parent so we have a
+                // sharp blue/red edge for the blur to spread.
                 canvas.drawRect(
                     SkRect.MakeLTRB(10f, 10f, 18f, 18f),
                     SkPaint().apply { color = SK_ColorBLUE },
                 )
-                // Open the layer with a Blur backdrop (filter ignored
-                // in the copy-only slice). Don't draw anything inside.
-                // Restore composites the (parent-seeded) layer back
-                // onto the parent.
+                // Open the layer with a Blur backdrop. Phase J5 :
+                // the GPU now honours the Blur and the seeded layer
+                // pixels are blurred.
                 val backdrop = SkImageFilters.Blur(2f, 2f, SkTileMode.kClamp, null)
                 canvas.saveLayer(SaveLayerRec(layerBounds, null, backdrop))
                 canvas.restore()
@@ -107,15 +109,75 @@ class SaveLayerBackdropTest {
             }
         }
 
-        // Parent had blue at (10..18, 10..18) on red elsewhere. The
-        // backdrop seeded the layer with a copy of these pixels in the
-        // (8..24, 8..24) bbox ; restore SrcOver-composited the same
-        // pixels onto the same locations -> the parent is unchanged.
-        // (This is the architectural-pattern test : layer started from
-        // parent pixels, not transparent.)
-        assertRgbaApprox(pixels, 12, 12, 0, 0, 255, 255, tag = "blue inside layer", tol = 2)
-        assertRgbaApprox(pixels, 20, 20, 255, 0, 0, 255, tag = "red inside layer (no blue)", tol = 2)
+        // Center of the original blue square (12, 12) : still mostly
+        // blue but with red bleeding in from the surrounding (visible
+        // because the layer bbox extends out to (8..24) and the blur
+        // pulls in red from (8..10) on each side). The blur output
+        // here is bluish-purple, NOT pure blue -- this is the J5
+        // discriminator vs the pre-J5 copy-only behaviour.
+        val cIdx = (12 * W + 12) * 4
+        val cR = pixels[cIdx].toInt() and 0xFF
+        val cG = pixels[cIdx + 1].toInt() and 0xFF
+        val cB = pixels[cIdx + 2].toInt() and 0xFF
+        // Blue dominates, but red is present (blur bleed) ; not pure blue.
+        assertTrue(cB > cR) { "(12, 12) : blue should dominate, got R=$cR B=$cB" }
+        assertTrue(cR > 10) { "(12, 12) : red should bleed in (blur), got R=$cR" }
+        // Just past the original blue square's right edge but
+        // inside the layer (18, 14) : the blur spreads BLUE into the
+        // red region. Pre-J5 (copy-only) would land at pure red ;
+        // J5 lands at a red+blue mixture. (Distance 1 from the blue
+        // edge -- well within the sigma=2 Gaussian kernel's reach.)
+        val sIdx = (14 * W + 18) * 4
+        val sR = pixels[sIdx].toInt() and 0xFF
+        val sB = pixels[sIdx + 2].toInt() and 0xFF
+        assertTrue(sR > 50) { "(18, 14) : red present (right edge spread), got R=$sR" }
+        assertTrue(sB > 50) { "(18, 14) : blue should bleed in (blur), got B=$sB" }
         // Outside the layer's bbox : red background untouched.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside layer")
+    }
+
+    @Test
+    fun `saveLayer with non-null ColorFilter backdrop falls back to copy-only on GPU`() {
+        // Phase J5 regression guard -- ColorFilter backdrops are NOT
+        // yet implemented on GPU and must degrade silently to
+        // copy-only (the parent's pixels land in the layer
+        // unchanged ; the filter is dropped). This matches the
+        // SkDevice.seedBackdropFrom kdoc and preserves the PR #591
+        // contract for unsupported variants. The CPU raster path
+        // applies the filter (see `SaveLayerRecBackdropTest`).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                canvas.drawRect(
+                    SkRect.MakeLTRB(10f, 10f, 18f, 18f),
+                    SkPaint().apply { color = SK_ColorBLUE },
+                )
+                // Wrap a ColorFilter (Blend(black, kSrcIn) -- turns
+                // everything opaque black) as a backdrop. On GPU the
+                // filter is silently dropped and the layer is seeded
+                // with raw parent pixels -- the composite back to the
+                // parent is a no-op.
+                val cf = org.skia.foundation.SkColorFilters.Blend(
+                    org.graphiks.math.SK_ColorBLACK,
+                    org.skia.foundation.SkBlendMode.kSrcIn,
+                )
+                val backdrop = SkImageFilters.ColorFilter(cf, null)
+                canvas.saveLayer(SaveLayerRec(layerBounds, null, backdrop))
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Copy-only fallback : parent pixels survive unchanged inside
+        // the layer bbox (blue stays blue, red stays red).
+        assertRgbaApprox(pixels, 12, 12, 0, 0, 255, 255, tag = "blue copy-only", tol = 2)
+        assertRgbaApprox(pixels, 20, 20, 255, 0, 0, 255, tag = "red copy-only", tol = 2)
+        // Outside the layer : red untouched.
         assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside layer")
     }
 
