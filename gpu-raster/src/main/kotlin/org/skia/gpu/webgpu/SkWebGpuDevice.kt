@@ -7881,8 +7881,17 @@ public class SkWebGpuDevice(
         // and focal-inside-well-behaved sub-cases route here today, all
         // 4 tile modes (mirrors the rect-only G4.4.2 widening once it
         // lands ; the shader's 8 entry points are wired up regardless).
+        // K9 -- drop the `paint.isAntiAlias` requirement so non-AA shader
+        // strokes (e.g. `StrokeRectShaderGM`'s top row : Style.kStroke +
+        // isAntiAlias = false + paint.shader = SkLinearGradient) reach the
+        // gradient dispatch. Without this widening the stroker recursion
+        // landed at the solid-colour `StencilCoverPolygonDraw` arm below,
+        // painting the entire stroked outline in `paint.color` (= opaque
+        // black by default) and dropping the gradient entirely. The
+        // non-AA path reuses the same stencil-cover pipeline with
+        // `edgeCount = 0` -- mirror of the G5.2.3 bitmap-shader fix.
         val linearGradForAaPath: SkLinearGradient? =
-            if (shader is SkLinearGradient && paint.isAntiAlias && ctm.isAxisAligned) shader
+            if (shader is SkLinearGradient && ctm.isAxisAligned) shader
             else null
         val radialGradForAaPath: SkRadialGradient? =
             if (shader is SkRadialGradient && paint.isAntiAlias && ctm.isAxisAligned) shader
@@ -8252,6 +8261,38 @@ public class SkWebGpuDevice(
                 )
                 return
             }
+            // K9 -- non-AA linear gradient on a multi-contour path.
+            // Reuse the AA stencil-cover linear-gradient pipeline with
+            // `edgeCount = 0` (same sentinel as G5.2.3 bitmap-shader fix
+            // below : the fragment shader's `minSegmentDistance` returns
+            // 1e9, collapsing the inside cover to coverage = 1.0 and the
+            // outside cover to 0.0 -- sharp stencil-bound fill, no AA
+            // falloff). Fixes `StrokeRectShaderGM`'s top (AA-off) row
+            // where the stroker outline (multi-contour outer + inner)
+            // previously dropped the gradient and painted solid black.
+            if (linearGradForAaPath != null) {
+                pending.add(
+                    StencilCoverAaGradientDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        edges = FloatArray(MAX_AA_EDGES * 4),
+                        edgeCount = 0,
+                        scissor = scissor,
+                        fillType = path.fillType,
+                        startX = gradEndpoints!![0], startY = gradEndpoints[1],
+                        endX = gradEndpoints[2], endY = gradEndpoints[3],
+                        stopPositions = gradPositions!!,
+                        stopColors = gradColors!!,
+                        stopCount = gradStopCount,
+                        tileMode = gradTileMode!!,
+                        r = rF, g = gF, b = bF, a = aF,
+                        mode = paint.blendMode,
+                        clipShape = activeClipShape,
+                        colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
+                    ),
+                )
+                return
+            }
             // G5.2.3 -- non-AA bitmap shader on a multi-contour path.
             // Reuse the AA stencil-cover bitmap pipeline with
             // `edgeCount = 0` (sentinel : the AA fragment shader's
@@ -8457,6 +8498,32 @@ public class SkWebGpuDevice(
                         ),
                     )
                 }
+            } else if (linearGradForAaPath != null) {
+                // K9 -- non-AA linear gradient on a concave / inverse
+                // single-contour path. Same edgeCount = 0 sentinel as
+                // the multi-contour arm and the bitmap-shader case below
+                // (G5.2.3) : sharp stencil-bound fill via the AA pipeline
+                // with the AA falloff collapsed.
+                pending.add(
+                    StencilCoverAaGradientDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        edges = FloatArray(MAX_AA_EDGES * 4),
+                        edgeCount = 0,
+                        scissor = scissor,
+                        fillType = path.fillType,
+                        startX = gradEndpoints!![0], startY = gradEndpoints[1],
+                        endX = gradEndpoints[2], endY = gradEndpoints[3],
+                        stopPositions = gradPositions!!,
+                        stopColors = gradColors!!,
+                        stopCount = gradStopCount,
+                        tileMode = gradTileMode!!,
+                        r = rF, g = gF, b = bF, a = aF,
+                        mode = paint.blendMode,
+                        clipShape = activeClipShape,
+                        colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
+                    ),
+                )
             } else if (bitmapPayload != null) {
                 // G5.2.3 -- non-AA bitmap shader on a concave / inverse
                 // single-contour path. Same edgeCount = 0 sentinel as

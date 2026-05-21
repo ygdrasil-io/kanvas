@@ -20,14 +20,23 @@ import org.skia.tests.StrokeRectShaderGM
  * through drawPath, where G4.1.2 (linear gradient on AA non-rect path
  * via stencil-and-cover) takes over for the AA-on row, and through the
  * non-AA polygon path for the AA-off row.
+ *
+ * K9 -- the non-AA linear-gradient gate in [drawPath] used to require
+ * `paint.isAntiAlias`, which left the AA-off row painted as solid black
+ * (the stroker outline emitted a `StencilCoverPolygonDraw` with
+ * `paint.color` = opaque black). Dropping the `isAntiAlias` requirement
+ * and reusing the AA stencil-cover linear-gradient pipeline with
+ * `edgeCount = 0` (sentinel : sharp stencil-bound fill, no AA falloff --
+ * mirror of the G5.2.3 bitmap-shader fix) lifted the score from 91.88 %
+ * to 99.54 %.
  */
 class StrokeRectShaderWebGpuTest {
 
     @Test
     fun `StrokeRectShaderGM renders close to reference PNG on the GPU backend`() {
-        // Landing score 91.88 %. Floor set 0.05 % below for scoring
-        // drift headroom. Residual drift on AA stroke edge convention
-        // and on the sub-1-px hairline gradient sampling.
-        runGpuCrossTest(StrokeRectShaderGM(), floor = 91.83)
+        // Landing score 99.54 % (K9). Floor set 0.05 % below. Residual
+        // drift on AA stroke edge convention and on the sub-1-px
+        // hairline gradient sampling for the AA-off hairline rect.
+        runGpuCrossTest(StrokeRectShaderGM(), floor = 99.49)
     }
 }
