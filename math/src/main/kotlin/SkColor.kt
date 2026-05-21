@@ -16,17 +16,33 @@ public typealias SkAlpha = Int
 /** Premultiplied ARGB packed color. Identical layout to [SkColor]. */
 public typealias SkPMColor = Int
 
+/** Fully transparent alpha value (`0x00`). Mirrors Skia's `SK_AlphaTRANSPARENT`. */
 public const val SK_AlphaTRANSPARENT: SkAlpha = 0x00
+
+/** Fully opaque alpha value (`0xFF`). Mirrors Skia's `SK_AlphaOPAQUE`. */
 public const val SK_AlphaOPAQUE: SkAlpha = 0xFF
 
+/**
+ * Packs four byte channels (alpha, red, green, blue) into an [SkColor] (ARGB8888).
+ * Channels are `and`-masked to 8 bits — callers don't need to pre-clamp. Mirrors
+ * upstream `SkColorSetARGB` (`include/core/SkColor.h`).
+ */
 public fun SkColorSetARGB(a: Int, r: Int, g: Int, b: Int): SkColor =
     ((a and 0xFF) shl 24) or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
 
+/** Packs RGB with opaque alpha (`0xFF`). Mirrors Skia's `SkColorSetRGB` macro. */
 public fun SkColorSetRGB(r: Int, g: Int, b: Int): SkColor = SkColorSetARGB(0xFF, r, g, b)
 
+/** Returns the alpha byte of [c]. Mirrors Skia's `SkColorGetA` macro. */
 public fun SkColorGetA(c: SkColor): Int = (c ushr 24) and 0xFF
+
+/** Returns the red byte of [c]. Mirrors Skia's `SkColorGetR` macro. */
 public fun SkColorGetR(c: SkColor): Int = (c ushr 16) and 0xFF
+
+/** Returns the green byte of [c]. Mirrors Skia's `SkColorGetG` macro. */
 public fun SkColorGetG(c: SkColor): Int = (c ushr 8) and 0xFF
+
+/** Returns the blue byte of [c]. Mirrors Skia's `SkColorGetB` macro. */
 public fun SkColorGetB(c: SkColor): Int = c and 0xFF
 
 /** Replaces only the alpha byte of [c], keeping its RGB components. */

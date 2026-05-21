@@ -109,17 +109,33 @@ public data class SkColor4f(
         )
 
     public companion object {
+        /**
+         * Standard named colours. Mirror Skia's `SkColors::k*` constants
+         * (`include/core/SkColor.h:456-467`). All have `fA = 1` except
+         * [kTransparent], which is `(0, 0, 0, 0)`.
+         */
         public val kTransparent: SkColor4f = SkColor4f(0f, 0f, 0f, 0f)
+        /** Opaque black `(0, 0, 0, 1)`. Mirrors `SkColors::kBlack`. */
         public val kBlack: SkColor4f = SkColor4f(0f, 0f, 0f, 1f)
+        /** Opaque dark grey `(0.25, 0.25, 0.25, 1)`. Mirrors `SkColors::kDkGray`. */
         public val kDkGray: SkColor4f = SkColor4f(0.25f, 0.25f, 0.25f, 1f)
+        /** Opaque mid grey `(0.5, 0.5, 0.5, 1)`. Mirrors `SkColors::kGray`. */
         public val kGray: SkColor4f = SkColor4f(0.5f, 0.5f, 0.5f, 1f)
+        /** Opaque light grey `(0.75, 0.75, 0.75, 1)`. Mirrors `SkColors::kLtGray`. */
         public val kLtGray: SkColor4f = SkColor4f(0.75f, 0.75f, 0.75f, 1f)
+        /** Opaque white `(1, 1, 1, 1)`. Mirrors `SkColors::kWhite`. */
         public val kWhite: SkColor4f = SkColor4f(1f, 1f, 1f, 1f)
+        /** Opaque red `(1, 0, 0, 1)`. Mirrors `SkColors::kRed`. */
         public val kRed: SkColor4f = SkColor4f(1f, 0f, 0f, 1f)
+        /** Opaque green `(0, 1, 0, 1)`. Mirrors `SkColors::kGreen`. */
         public val kGreen: SkColor4f = SkColor4f(0f, 1f, 0f, 1f)
+        /** Opaque blue `(0, 0, 1, 1)`. Mirrors `SkColors::kBlue`. */
         public val kBlue: SkColor4f = SkColor4f(0f, 0f, 1f, 1f)
+        /** Opaque yellow `(1, 1, 0, 1)`. Mirrors `SkColors::kYellow`. */
         public val kYellow: SkColor4f = SkColor4f(1f, 1f, 0f, 1f)
+        /** Opaque cyan `(0, 1, 1, 1)`. Mirrors `SkColors::kCyan`. */
         public val kCyan: SkColor4f = SkColor4f(0f, 1f, 1f, 1f)
+        /** Opaque magenta `(1, 0, 1, 1)`. Mirrors `SkColors::kMagenta`. */
         public val kMagenta: SkColor4f = SkColor4f(1f, 0f, 1f, 1f)
 
         /** Decode an ARGB8888 [SkColor] into normalised floats. */

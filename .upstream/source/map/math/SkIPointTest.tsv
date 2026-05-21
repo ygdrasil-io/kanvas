@@ -1,1 +1,12 @@
 org.graphiks.math.SkIPointTest	PointTest	math/src/test/kotlin/SkIPointTest.kt:8	tests/PointTest.cpp:1
+org.graphiks.math.SkIPointTest.Make and accessors store coordinates	Point	math/src/test/kotlin/SkIPointTest.kt:11	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.default is zero	Point	math/src/test/kotlin/SkIPointTest.kt:18	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.set replaces both axes	Point	math/src/test/kotlin/SkIPointTest.kt:24	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.offset adds to both axes	Point	math/src/test/kotlin/SkIPointTest.kt:31	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.negate flips signs	Point	math/src/test/kotlin/SkIPointTest.kt:38	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.unaryMinus returns a negated copy	Point	math/src/test/kotlin/SkIPointTest.kt:52	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.plus and minus operators produce new points	Point	math/src/test/kotlin/SkIPointTest.kt:60	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.plusAssign saturates on Int overflow	Point	math/src/test/kotlin/SkIPointTest.kt:72	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.minusAssign saturates on Int underflow	Point	math/src/test/kotlin/SkIPointTest.kt:79	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.plus operator saturates on overflow	Point	math/src/test/kotlin/SkIPointTest.kt:86	tests/PointTest.cpp:132
+org.graphiks.math.SkIPointTest.minus operator saturates on underflow	Point	math/src/test/kotlin/SkIPointTest.kt:93	tests/PointTest.cpp:132
