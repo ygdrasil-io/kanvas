@@ -4616,13 +4616,28 @@ public class SkWebGpuDevice(
         // have already been submitted.
         gpuSrc.flushDrawsOnly()
 
+        // K1 GPU follow-up to PR #605 -- Offset leaves inside the Compose
+        // chain accumulate onto a single dst-origin shift on the final
+        // composite. The Blur kernel is fixed-pixel and the per-pixel
+        // ColorFilter passes don't sample neighbours, so the cumulative
+        // (dx, dy) commutes with all the stages of the normalized
+        // `[preCF?][Blur?][postCF?]` plan. We bake the shift into
+        // [originX] / [originY] BEFORE clipping so the scissor follows
+        // suit ; the top-level Offset early branch below stays as-is
+        // (it sees imf.asOffsetImageFilter() != null, which fires only
+        // when the layer paint's imageFilter is a pure Offset -- the
+        // Compose walker rebuilds the plan with offsetDx/Dy = 0 in
+        // that case via the structural top-level guard above).
+        val composeShiftedOriginX = originX + plan.offsetDx
+        val composeShiftedOriginY = originY + plan.offsetDy
+
         // Compute the integer dst rect on the parent device, clipped
         // against the caller's [clip] (already intersected with the
         // parent's clip stack by SkCanvas) and the viewport.
-        val ix0 = originX.coerceAtLeast(clip.left).coerceAtLeast(0)
-        val iy0 = originY.coerceAtLeast(clip.top).coerceAtLeast(0)
-        val ix1 = (originX + w).coerceAtMost(clip.right).coerceAtMost(width)
-        val iy1 = (originY + h).coerceAtMost(clip.bottom).coerceAtMost(height)
+        val ix0 = composeShiftedOriginX.coerceAtLeast(clip.left).coerceAtLeast(0)
+        val iy0 = composeShiftedOriginY.coerceAtLeast(clip.top).coerceAtLeast(0)
+        val ix1 = (composeShiftedOriginX + w).coerceAtMost(clip.right).coerceAtMost(width)
+        val iy1 = (composeShiftedOriginY + h).coerceAtMost(clip.bottom).coerceAtMost(height)
         if (ix0 >= ix1 || iy0 >= iy1) return
 
         // Paint colour scale : alpha (and future colour filter) multiplies
@@ -4664,7 +4679,7 @@ public class SkWebGpuDevice(
             enqueueBlurredLayerComposite(
                 gpuSrc = gpuSrc,
                 w = w, h = h,
-                originX = originX, originY = originY,
+                originX = composeShiftedOriginX, originY = composeShiftedOriginY,
                 scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
                 sigmaX = blurParams.sigmaX,
                 sigmaY = blurParams.sigmaY,
@@ -4859,7 +4874,7 @@ public class SkWebGpuDevice(
                 NonNativeBlendLayerCompositeDraw(
                     layerView = gpuSrc.intermediateView,
                     layerWidth = w, layerHeight = h,
-                    dstOriginX = originX, dstOriginY = originY,
+                    dstOriginX = composeShiftedOriginX, dstOriginY = composeShiftedOriginY,
                     scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
                     paintR = paintAlpha, paintG = paintAlpha,
                     paintB = paintAlpha, paintA = paintAlpha,
@@ -4874,7 +4889,7 @@ public class SkWebGpuDevice(
             LayerCompositeDraw(
                 layerView = gpuSrc.intermediateView,
                 layerWidth = w, layerHeight = h,
-                dstOriginX = originX, dstOriginY = originY,
+                dstOriginX = composeShiftedOriginX, dstOriginY = composeShiftedOriginY,
                 scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
                 paintR = paintAlpha, paintG = paintAlpha,
                 paintB = paintAlpha, paintA = paintAlpha,
@@ -5385,6 +5400,19 @@ public class SkWebGpuDevice(
         // Folds `paint.colorFilter` with any post-blur (or pre-blur when
         // no blur is present) ColorFilter from the tree.
         val effectiveColorFilter: org.skia.foundation.SkColorFilter?,
+        // K1 GPU follow-up to PR #605 (CPU Compose with non-null inner)
+        // -- accumulated integer pixel offset from `SkImageFilters.Offset`
+        // leaves anywhere in a Compose chain. Both Blur and ColorFilter
+        // are translation-invariant (the Gaussian kernel commutes with
+        // translation, the per-pixel CF is point-wise) so the order
+        // collapses : the only observable effect of any Offset leaf in
+        // the chain is to shift the final composite's dst origin by the
+        // sum of all (dx, dy) offsets, integer-rounded per upstream
+        // Skia's `(dx + 0.5).toInt()` convention. The dispatch in
+        // [compositeFrom] applies the shift to `originX/originY` and the
+        // scissor rect before enqueuing the Blur / no-blur composite.
+        val offsetDx: Int = 0,
+        val offsetDy: Int = 0,
     )
 
     /**
@@ -5463,6 +5491,13 @@ public class SkWebGpuDevice(
         var preBlurCF: org.skia.foundation.SkColorFilter? = null
         var blur: org.skia.foundation.SkBlurImageFilterParams? = null
         var postBlurCF: org.skia.foundation.SkColorFilter? = null
+        // K1 GPU follow-up to PR #605 -- accumulated Offset leaves. Both
+        // Blur and the per-pixel ColorFilter passes commute with
+        // translation, so the order in which Offset leaves are
+        // encountered doesn't matter ; the sum lands as a single dst-
+        // origin shift on the final composite.
+        var offsetDx = 0
+        var offsetDy = 0
 
         fun walk(node: org.skia.foundation.SkImageFilter) {
             val composeParams = node.asComposeImageFilter()
@@ -5472,23 +5507,49 @@ public class SkWebGpuDevice(
                 walk(composeParams.outer)
                 return
             }
-            // Phase G-saveLayer-imageFilter-compose -- Offset / DropShadow
-            // / MatrixTransform inside a Compose tree is deferred. Mixing
-            // those structural filters with the normalized `[preCF?][Blur?]
-            // [postCF?]` plan needs a render-to-texture intermediate (the
-            // Offset / shadow / matrix would shift either the source the
-            // Blur reads from, or the composite output -- both need a
-            // separate pre-pass). Throw a clear "deferred" error so the
-            // call site surfaces the gap.
-            if (node.asOffsetImageFilter() != null ||
-                node.asDropShadowImageFilter() != null ||
+            // K1 GPU follow-up to PR #605 -- Offset leaves inside a
+            // Compose chain collapse onto a single dst-origin shift on
+            // the final composite. Blur is translation-invariant (the
+            // Gaussian kernel commutes with translation -- shifting the
+            // input is bit-iso with shifting the output) ; ColorFilter
+            // is point-wise (it doesn't sample neighbouring pixels).
+            // The cumulative (dx, dy) is integer-rounded per upstream
+            // Skia's `(dx + 0.5).toInt()` convention -- same rule as
+            // the top-level Offset dispatch in [compositeFrom].
+            val offsetLeaf = node.asOffsetImageFilter()
+            if (offsetLeaf != null) {
+                if (offsetLeaf.input != null) {
+                    error(
+                        "SkWebGpuDevice.compositeFrom : an Offset leaf inside " +
+                            "the imageFilter tree has a non-null child filter. " +
+                            "The Compose support flattens the tree, so leaves " +
+                            "must have input == null -- nest the child via a " +
+                            "Compose node instead (e.g. SkImageFilters.Compose" +
+                            "(Offset(dx, dy), child) rather than Offset(dx, dy, " +
+                            "input = child))."
+                    )
+                }
+                offsetDx += floor(offsetLeaf.dx + 0.5f).toInt()
+                offsetDy += floor(offsetLeaf.dy + 0.5f).toInt()
+                return
+            }
+            // Phase G-saveLayer-imageFilter-compose -- DropShadow and
+            // MatrixTransform inside a Compose tree are still deferred.
+            // DropShadow needs to emit a two-pass shadow+original
+            // composite that interacts non-trivially with the blur /
+            // colour-filter stages it shares the chain with ;
+            // MatrixTransform's affine doesn't commute with the fixed-
+            // pixel Blur kernel, so it would need an explicit render-
+            // to-texture pre-pass to apply the affine before the blur
+            // samples. Both are out of scope for this slice.
+            if (node.asDropShadowImageFilter() != null ||
                 node.asMatrixTransformImageFilter() != null
             ) {
                 error(
                     "SkWebGpuDevice.compositeFrom : a Compose chain contains " +
                         "an ${node::class.simpleName} leaf (e.g. Compose(" +
-                        "Offset, Blur) or Compose(MatrixTransform, Blur)) -- " +
-                        "not yet supported. Top-level Offset / DropShadow / " +
+                        "DropShadow, Blur) or Compose(MatrixTransform, Blur)) " +
+                        "-- not yet supported. Top-level DropShadow / " +
                         "MatrixTransform ship in their own dispatch paths, " +
                         "but mixing them with a Compose tree (where they " +
                         "would shift / remap either the texture the Blur " +
@@ -5496,7 +5557,9 @@ public class SkWebGpuDevice(
                         "colour-filtered scratch) is deferred -- it needs a " +
                         "render-to-texture intermediate that the first " +
                         "Compose support slice (Phase G-saveLayer-imageFilter-" +
-                        "compose) doesn't ship."
+                        "compose) doesn't ship. Offset leaves are supported " +
+                        "(K1 GPU follow-up to PR #605) and collapse onto a " +
+                        "dst-origin shift."
                 )
             }
             val blurLeaf = node.asBlurImageFilter()
@@ -5626,6 +5689,8 @@ public class SkWebGpuDevice(
                 preBlurColorFilter = null,
                 blurParams = null,
                 effectiveColorFilter = treeCF ?: paint.colorFilter,
+                offsetDx = offsetDx,
+                offsetDy = offsetDy,
             )
         }
         // Blur present : pre-blur CF (if any) stays as the pre-pass ;
@@ -5645,6 +5710,8 @@ public class SkWebGpuDevice(
             preBlurColorFilter = preBlurCF,
             blurParams = blur,
             effectiveColorFilter = postBlurCF ?: paint.colorFilter,
+            offsetDx = offsetDx,
+            offsetDy = offsetDy,
         )
     }
 

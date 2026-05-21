@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
+import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
@@ -1263,12 +1264,154 @@ class SaveLayerImageFilterTest {
     }
 
     @Test
-    fun `saveLayer with Compose containing Offset leaf throws clear error`() {
-        // Phase G-saveLayer-imageFilter-compose -- the bail branch for
-        // unsupported leaves in a Compose chain. Offset isn't yet
-        // wired through the GPU layer composite ; the walker must
-        // surface a clear error rather than silently dropping the
-        // chain or hitting an undefined GPU state.
+    fun `saveLayer with Compose(Offset, Blur) shifts the blurred result`() {
+        // K1 GPU follow-up to PR #605 -- Offset leaves inside a Compose
+        // chain collapse onto a dst-origin shift on the final composite.
+        // Both Blur and ColorFilter are translation-invariant, so
+        // Compose(Offset(dx, dy), Blur) is bit-iso with Blur shifted by
+        // (dx, dy). We render a red rect at (10..22, 10..22) with
+        // sigma = 0 (degenerate identity Gaussian, kept here for the
+        // dispatch path) and dx = dy = 8 ; the composite must land at
+        // (18..30, 18..30) with the rest of the layer transparent.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 1f, sigmaY = 1f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.Offset(dx = 8f, dy = 8f, input = null),
+                        inner = blur,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Original rect lives at (10..22, 10..22) ; after Offset(8, 8)
+        // it must land at (18..30, 18..30). With sigma = 1 the centre
+        // tap is essentially red away from edges.
+        assertRgbaApprox(
+            pixels, 22, 22,
+            255, 0, 0, 255,
+            tag = "Compose(Offset, Blur) shifted centre", tol = 3,
+        )
+        // Old rect position (12, 12) must now show the background --
+        // the layer's contribution shifted away by 8 pixels.
+        assertRgbaApprox(
+            pixels, 5, 5,
+            255, 255, 255, 255,
+            tag = "Compose(Offset, Blur) pre-shift position is now background", tol = 1,
+        )
+    }
+
+    @Test
+    fun `saveLayer with Compose(Blur, Offset) shifts the blurred result`() {
+        // K1 GPU follow-up to PR #605 -- mirror of the previous test
+        // with the Offset on the inner side. The Blur kernel is
+        // translation-invariant, so Compose(Blur, Offset) and
+        // Compose(Offset, Blur) must produce the same shifted output.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 1f, sigmaY = 1f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = blur,
+                        inner = SkImageFilters.Offset(dx = 8f, dy = 8f, input = null),
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        assertRgbaApprox(
+            pixels, 22, 22,
+            255, 0, 0, 255,
+            tag = "Compose(Blur, Offset) shifted centre", tol = 3,
+        )
+    }
+
+    @Test
+    fun `saveLayer with Compose(Offset, ColorFilter) shifts the color-filtered result`() {
+        // K1 GPU follow-up to PR #605 -- the no-blur path with a
+        // ColorFilter on the inner side and an Offset on the outer.
+        // ColorFilter is point-wise (no neighbour samples) so this
+        // collapses to the plain LayerCompositeDraw path with the
+        // dst origin shifted by (dx, dy) and the colour filter
+        // packed into the composite uniform.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(10f, 10f, 22f, 22f)
+                val luma = floatArrayOf(
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0f,     0f,     0f,     1f, 0f,
+                )
+                val grayscale = SkColorFilters.Matrix(luma)
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.Offset(dx = 8f, dy = 8f, input = null),
+                        inner = SkImageFilters.ColorFilter(grayscale, input = null),
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // After grayscale, red -> luma (76, 76, 76). Position shifted
+        // by (8, 8) so the gray rect now centred at (20, 20).
+        assertRgbaApprox(
+            pixels, 20, 20,
+            76, 76, 76, 255,
+            tag = "Compose(Offset, ColorFilter) shifted centre", tol = 2,
+        )
+        assertRgbaApprox(
+            pixels, 12, 12,
+            255, 255, 255, 255,
+            tag = "Compose(Offset, ColorFilter) pre-shift is background", tol = 1,
+        )
+    }
+
+    @Test
+    fun `saveLayer with Compose containing DropShadow leaf throws clear error`() {
+        // K1 GPU follow-up to PR #605 -- DropShadow inside a Compose
+        // tree is still deferred. The DropShadow path emits a two-pass
+        // shadow+original composite that doesn't trivially commute with
+        // the blur / colour-filter stages it would share the chain with.
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
@@ -1280,11 +1423,14 @@ class SaveLayerImageFilterTest {
                     sigmaX = 2f, sigmaY = 2f,
                     tileMode = SkTileMode.kClamp, input = null,
                 )!!
+                val ds = SkImageFilters.DropShadow(
+                    dx = 4f, dy = 4f,
+                    sigmaX = 2f, sigmaY = 2f,
+                    color = SK_ColorBLACK,
+                    input = null,
+                )!!
                 val layerPaint = SkPaint().apply {
-                    imageFilter = SkImageFilters.Compose(
-                        outer = SkImageFilters.Offset(dx = 4f, dy = 4f, input = null),
-                        inner = blur,
-                    )
+                    imageFilter = SkImageFilters.Compose(outer = ds, inner = blur)
                 }
                 canvas.saveLayer(layerBounds, layerPaint)
                 canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
@@ -1292,10 +1438,10 @@ class SaveLayerImageFilterTest {
             }
         }
         assertTrue(err is IllegalStateException) {
-            "Expected IllegalStateException for Compose(Offset, Blur) ; got $err"
+            "Expected IllegalStateException for Compose(DropShadow, Blur) ; got $err"
         }
         val msg = err?.message ?: ""
-        assertTrue(msg.contains("not yet supported") || msg.contains("SkOffsetImageFilter")) {
+        assertTrue(msg.contains("not yet supported") || msg.contains("DropShadow")) {
             "Error message should call out the unsupported leaf ; got : $msg"
         }
     }
