@@ -13400,6 +13400,25 @@ public class SkWebGpuDevice(
          * flip = at least one reflex vertex = concave. Collinear triples
          * (cross product = 0) are ignored. Triangles (`n < 4`) are
          * trivially convex.
+         *
+         * J6 -- the consecutive-turn check ALONE is not sufficient to
+         * conclude convexity : a self-intersecting "figure-8" polygon
+         * can satisfy "every triple turns the same way" while crossing
+         * itself, producing a non-simple shape that the convex fast path
+         * cannot handle (`aa_polygon.wgsl` uses min-of-signed-perp-dist
+         * which assumes the polygon is the intersection of edge-line
+         * half-planes ; that intersection is empty for a figure-8). The
+         * upstream bug (Skia b/340982297) is exactly this case : seven
+         * vertices, all consecutive turns CCW, the close edge crosses
+         * through the interior. Rejecting it here forces the path
+         * through stencil-and-cover which handles self-intersection via
+         * the winding count in the stencil buffer.
+         *
+         * We additionally check polygon simplicity (no two non-adjacent
+         * edges cross) via [isPolygonSimple]. The O(n^2) cost is bounded
+         * by `MAX_AA_EDGES = 256` and gated behind the cheap convex-turn
+         * test (which already excludes the typical concave path), so it
+         * only runs on the rare candidate-convex shapes.
          */
         fun isPolygonConvex(devVerts: ArrayList<Float>): Boolean {
             val n = devVerts.size / 2
@@ -13421,7 +13440,72 @@ public class SkWebGpuDevice(
                     return false
                 }
             }
+            return isPolygonSimple(devVerts)
+        }
+
+        /**
+         * Returns true iff no two non-adjacent edges of the polygon
+         * (taken as the closed loop `v[0] -> v[1] -> ... -> v[n-1] ->
+         * v[0]`) properly cross each other. "Properly cross" means the
+         * standard segment-segment intersection test (each segment
+         * straddles the other's supporting line strictly). Touching at
+         * a shared endpoint is allowed (the consecutive-edge case is
+         * skipped explicitly), and collinear overlaps return false
+         * (conservative -- collinear self-overlap is unusual for the
+         * convex fast path and the stencil-cover route handles it
+         * either way).
+         *
+         * Used by [isPolygonConvex] to reject self-intersecting polygons
+         * that would otherwise satisfy the consecutive-turn convexity
+         * check (cf. Skia b/340982297). Pure CPU-side ; runs once per
+         * `drawPath` candidate that already passed the cheap turn check.
+         */
+        fun isPolygonSimple(devVerts: ArrayList<Float>): Boolean {
+            val n = devVerts.size / 2
+            if (n < 4) return true
+            for (i in 0 until n) {
+                val a0x = devVerts[i * 2]
+                val a0y = devVerts[i * 2 + 1]
+                val a1x = devVerts[((i + 1) % n) * 2]
+                val a1y = devVerts[((i + 1) % n) * 2 + 1]
+                // Compare edge i against every later edge j > i + 1,
+                // skipping the immediate neighbour (shared endpoint)
+                // and the wrap-around adjacency (edge n-1 <-> edge 0).
+                val jEnd = if (i == 0) n - 1 else n
+                for (j in (i + 2) until jEnd) {
+                    val b0x = devVerts[j * 2]
+                    val b0y = devVerts[j * 2 + 1]
+                    val b1x = devVerts[((j + 1) % n) * 2]
+                    val b1y = devVerts[((j + 1) % n) * 2 + 1]
+                    if (segmentsProperlyIntersect(a0x, a0y, a1x, a1y, b0x, b0y, b1x, b1y)) {
+                        return false
+                    }
+                }
+            }
             return true
+        }
+
+        /**
+         * Standard 2D segment-segment proper-intersection test. Returns
+         * true iff segment `(a0, a1)` crosses segment `(b0, b1)` with
+         * each segment straddling the other's supporting line strictly
+         * (collinear / endpoint-touching cases return false).
+         *
+         * The straddle is detected via cross-product signs : segment A
+         * straddles B's line iff `b0` and `b1` lie on opposite sides of
+         * A's line, and vice versa. Both straddles must hold for a
+         * proper crossing.
+         */
+        private fun segmentsProperlyIntersect(
+            a0x: Float, a0y: Float, a1x: Float, a1y: Float,
+            b0x: Float, b0y: Float, b1x: Float, b1y: Float,
+        ): Boolean {
+            val d1 = (a1x - a0x) * (b0y - a0y) - (a1y - a0y) * (b0x - a0x)
+            val d2 = (a1x - a0x) * (b1y - a0y) - (a1y - a0y) * (b1x - a0x)
+            val d3 = (b1x - b0x) * (a0y - b0y) - (b1y - b0y) * (a0x - b0x)
+            val d4 = (b1x - b0x) * (a1y - b0y) - (b1y - b0y) * (a1x - b0x)
+            return ((d1 > 0f && d2 < 0f) || (d1 < 0f && d2 > 0f)) &&
+                ((d3 > 0f && d4 < 0f) || (d3 < 0f && d4 > 0f))
         }
 
         /**
