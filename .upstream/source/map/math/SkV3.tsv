@@ -12,4 +12,6 @@ org.graphiks.math.SkV3.cross	SkV3::cross	math/src/main/kotlin/SkV3.kt:36	include
 org.graphiks.math.SkV3.lengthSquared	SkV3::lengthSquared	math/src/main/kotlin/SkV3.kt:42	include/core/SkM44.h:87
 org.graphiks.math.SkV3.length	SkV3::length	math/src/main/kotlin/SkV3.kt:43	include/core/SkM44.h:88
 org.graphiks.math.SkV3.normalize	SkV3::normalize	math/src/main/kotlin/SkV3.kt:46	include/core/SkM44.h:92
+org.graphiks.math.SkV3.Companion.Dot	SkV3::Dot	math/src/main/kotlin/SkV3.kt:59	include/core/SkM44.h:64
+org.graphiks.math.SkV3.Companion.Cross	SkV3::Cross	math/src/main/kotlin/SkV3.kt:62	include/core/SkM44.h:65
 org.graphiks.math.times	SkV3::operator*(SkScalar,SkV3)	math/src/main/kotlin/SkV3.kt:57	include/core/SkM44.h:80

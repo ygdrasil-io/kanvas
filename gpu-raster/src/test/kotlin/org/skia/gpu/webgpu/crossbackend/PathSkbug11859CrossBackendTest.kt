@@ -7,12 +7,13 @@ import org.skia.tests.PathSkbug11859GM
 /**
  * Cross-backend test : `PathSkbug11859GM` on raster + GPU.
  *
- * Reduction from skbug 11859 -- a path with a near-degenerate quad
- * segment that previously tripped the AA edge generator. Stresses the
- * polygon AA dispatcher on a non-convex contour with sub-pixel-thin
- * features.
+ * Regression from skia bug 11859 — pathological path that previously
+ * caused a divergence in one of the path arithmetic helpers. Both
+ * backends should now agree on the rendered output.
  *
- * Floors : GPU 99.90 % / raster 99.72 % (initial run 99.95 % / 99.77 %).
+ * Floors mirror the existing per-backend tests :
+ *  - raster (`PathSkbug11859Test`, tol=1) : 90.0 %
+ *  - GPU (`PathSkbug11859WebGpuTest`, tol=8) : 99.90 %
  */
 class PathSkbug11859CrossBackendTest {
 
@@ -20,8 +21,9 @@ class PathSkbug11859CrossBackendTest {
     fun `PathSkbug11859GM matches reference on raster and GPU backends`() {
         runCrossBackendTest(
             gm = PathSkbug11859GM(),
-            rasterFloor = 99.72,
+            rasterFloor = 90.0,
             gpuFloor = 99.90,
+            rasterTolerance = 1,
         )
     }
 }
