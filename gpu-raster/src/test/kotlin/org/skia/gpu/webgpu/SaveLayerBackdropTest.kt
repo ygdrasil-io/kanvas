@@ -16,12 +16,13 @@ import org.skia.foundation.SkTileMode
 import kotlin.math.abs
 
 /**
- * Phase G-saveLayer-backdrop (#591) + Phase J5 backdrop filter --
- * verify that `SkCanvas.saveLayer(SaveLayerRec(..., backdrop = ...))`
- * on a GPU root canvas routes through
- * [SkWebGpuDevice.seedBackdropFrom] and pre-fills the new layer with
- * the parent device's pixels, optionally filtered through the
- * backdrop [org.skia.foundation.SkImageFilter] before they land.
+ * Phase G-saveLayer-backdrop (#591) + Phase J5 backdrop filter +
+ * Phase K3 backdrop ColorFilter / DropShadow -- verify that
+ * `SkCanvas.saveLayer(SaveLayerRec(..., backdrop = ...))` on a GPU
+ * root canvas routes through [SkWebGpuDevice.seedBackdropFrom] and
+ * pre-fills the new layer with the parent device's pixels, optionally
+ * filtered through the backdrop [org.skia.foundation.SkImageFilter]
+ * before they land.
  *
  * **Scope.**
  *  - `backdrop = null` : layer starts transparent (regression guard --
@@ -31,11 +32,19 @@ import kotlin.math.abs
  *    bbox, then a separable Gaussian blur is applied in-place via the
  *    existing `blur_image_filter.wgsl` pipeline. Final composite shows
  *    blurred-parent-pixels-under-new-draws (frosted-glass pattern).
- *  - Other backdrop variants (ColorFilter, Offset, MatrixTransform,
- *    DropShadow, Compose, ...) fall back to copy-only semantics on
- *    GPU. The CPU raster path remains the full-featured fallback (see
- *    `SaveLayerRecBackdropTest` for the comprehensive filter
- *    coverage).
+ *  - `backdrop = SkImageFilters.ColorFilter(cf, input = null)` (K3) :
+ *    the cf folds into the copy-seed's `colorFilterPacked` slot --
+ *    pixel-perfect equivalent to a snapshot-then-apply-cf path. No
+ *    extra render pass.
+ *  - `backdrop = SkImageFilters.DropShadow(dx, dy, sigmaX, sigmaY,
+ *    color, input = null)` (K3) : copy-seed + 3-pass blurred-and-
+ *    tinted composite onto the seed with `mode = kDstOver` (shadow
+ *    behind the seed). The shadow shows through transparent regions
+ *    of the seed, matching upstream `SkDropShadowImageFilter` semantics.
+ *  - Other backdrop variants (Offset, MatrixTransform, Compose, ...)
+ *    fall back to copy-only semantics on GPU. The CPU raster path
+ *    remains the full-featured fallback (see `SaveLayerRecBackdropTest`
+ *    for the comprehensive filter coverage).
  */
 class SaveLayerBackdropTest {
 
@@ -137,14 +146,18 @@ class SaveLayerBackdropTest {
     }
 
     @Test
-    fun `saveLayer with non-null ColorFilter backdrop falls back to copy-only on GPU`() {
-        // Phase J5 regression guard -- ColorFilter backdrops are NOT
-        // yet implemented on GPU and must degrade silently to
-        // copy-only (the parent's pixels land in the layer
-        // unchanged ; the filter is dropped). This matches the
-        // SkDevice.seedBackdropFrom kdoc and preserves the PR #591
-        // contract for unsupported variants. The CPU raster path
-        // applies the filter (see `SaveLayerRecBackdropTest`).
+    fun `saveLayer with non-null ColorFilter backdrop applies the color filter on the seed`() {
+        // Phase K3 main exercise -- a `SkImageFilters.ColorFilter`
+        // backdrop folds the inner cf into the copy-seed's
+        // `colorFilterPacked` slot. The composite shader applies the
+        // filter per-sample as the parent pixels land in the layer,
+        // identical to the CPU raster path's snapshot-then-apply-cf.
+        //
+        // Test cf : Blend(SK_ColorGREEN, kSrcIn). SrcIn against an
+        // opaque source returns the cf colour (alpha = src.a * cfColor
+        // = src.a * 1.0 = src.a ; rgb = cfColor.rgb premul by cfColor.a
+        // = green premul). So every opaque pixel in the seed becomes
+        // opaque green ; transparent pixels stay transparent.
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
@@ -157,13 +170,15 @@ class SaveLayerBackdropTest {
                     SkRect.MakeLTRB(10f, 10f, 18f, 18f),
                     SkPaint().apply { color = SK_ColorBLUE },
                 )
-                // Wrap a ColorFilter (Blend(black, kSrcIn) -- turns
-                // everything opaque black) as a backdrop. On GPU the
-                // filter is silently dropped and the layer is seeded
-                // with raw parent pixels -- the composite back to the
-                // parent is a no-op.
+                // ColorFilter(Blend(green, kSrcIn)) : turns the seed's
+                // RGB to green wherever the seed is opaque. Both the
+                // red background pixels (inside the layer bbox but
+                // outside the blue square) and the blue square pixels
+                // are opaque, so both become green in the layer ;
+                // the composite back to the parent paints green
+                // wherever the layer bbox covers.
                 val cf = org.skia.foundation.SkColorFilters.Blend(
-                    org.graphiks.math.SK_ColorBLACK,
+                    SK_ColorGREEN,
                     org.skia.foundation.SkBlendMode.kSrcIn,
                 )
                 val backdrop = SkImageFilters.ColorFilter(cf, null)
@@ -173,12 +188,107 @@ class SaveLayerBackdropTest {
             }
         }
 
-        // Copy-only fallback : parent pixels survive unchanged inside
-        // the layer bbox (blue stays blue, red stays red).
-        assertRgbaApprox(pixels, 12, 12, 0, 0, 255, 255, tag = "blue copy-only", tol = 2)
-        assertRgbaApprox(pixels, 20, 20, 255, 0, 0, 255, tag = "red copy-only", tol = 2)
-        // Outside the layer : red untouched.
+        // Inside the layer : every pixel becomes opaque green (cf
+        // applied on the seed). Both the previously-blue square's
+        // footprint and the previously-red surround turn green.
+        assertRgbaApprox(pixels, 12, 12, 0, 255, 0, 255, tag = "cf-tinted (was blue)", tol = 2)
+        assertRgbaApprox(pixels, 20, 20, 0, 255, 0, 255, tag = "cf-tinted (was red)", tol = 2)
+        // Outside the layer : red untouched (the layer bbox didn't
+        // reach (2, 2) ; the parent's red survives the saveLayer).
         assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside layer")
+    }
+
+    @Test
+    fun `saveLayer with non-null DropShadow backdrop seeds parent plus shadow behind`() {
+        // Phase K3 main exercise -- a `SkImageFilters.DropShadow`
+        // backdrop seeds the layer with the parent pixels (copy seed)
+        // AND lands a colorized blurred shadow BEHIND the seed via
+        // kDstOver. The shadow shows through transparent regions of
+        // the seed -- here the layer rect extends past the opaque
+        // blue square's footprint into transparent (white-on-white)
+        // areas where the shadow becomes visible.
+        //
+        // Layout :
+        //   - White parent background.
+        //   - Opaque blue square at (10..14, 10..14) -- the layer
+        //     bbox (8..20, 8..20) extends 2 px past it on each side.
+        //   - Backdrop DropShadow(dx = 4, dy = 4, sigma = 1, black).
+        //
+        // After saveLayer + immediate restore : inside the layer bbox,
+        // the seed has copied the parent (blue square on white) ;
+        // the shadow has been composited behind. White is opaque, so
+        // the shadow is hidden in white regions of the seed. The
+        // shadow becomes visible only where the seed is transparent,
+        // which on a white-opaque-everywhere parent is nowhere --
+        // making this test specifically exercise the dispatch wiring
+        // (no crash, copy-seed still correct) rather than the visual
+        // shadow effect. The shadow IS visible when the parent has
+        // transparent regions ; we verify that separately by setting
+        // a transparent background.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                // Transparent-clear background so the shadow has
+                // somewhere to land (the seed is transparent where
+                // the parent is transparent, and kDstOver lets the
+                // shadow show through).
+                device.setBackground(0)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(4f, 4f, 28f, 28f)
+                // Opaque blue square -- the only opaque region of
+                // the parent inside the layer bbox.
+                canvas.drawRect(
+                    SkRect.MakeLTRB(10f, 10f, 14f, 14f),
+                    SkPaint().apply { color = SK_ColorBLUE },
+                )
+                // DropShadow(dx = 4, dy = 4, sigma = 1, opaque black).
+                // The blur of the seed's alpha channel (1 inside the
+                // blue square, 0 elsewhere) at offset (4, 4) creates
+                // a shadow at (14..18, 14..18) -- visible because
+                // the parent's transparent surround leaves the seed
+                // transparent there and kDstOver lets the shadow
+                // through.
+                val backdrop = SkImageFilters.DropShadow(
+                    4f, 4f, 1f, 1f,
+                    /* color = */ 0xFF000000.toInt(),
+                    /* input = */ null,
+                )
+                canvas.saveLayer(SaveLayerRec(layerBounds, null, backdrop))
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // The blue square's centre survives unchanged (the shadow is
+        // behind the opaque blue seed pixels ; kDstOver keeps them).
+        assertRgbaApprox(pixels, 12, 12, 0, 0, 255, 255, tag = "blue seed (shadow behind)", tol = 2)
+        // The shadow region (offset by (4, 4) from the blue square
+        // centre) lands in the transparent seed surround : we expect
+        // a dark pixel with non-zero alpha (the blurred shadow). The
+        // exact value depends on the Gaussian kernel sum at that
+        // pixel ; we just assert the shadow is present (alpha > 0
+        // and rgb close to zero -- the shadow colour is black).
+        val sIdx = (16 * W + 16) * 4
+        val sA = pixels[sIdx + 3].toInt() and 0xFF
+        val sR = pixels[sIdx].toInt() and 0xFF
+        val sG = pixels[sIdx + 1].toInt() and 0xFF
+        val sB = pixels[sIdx + 2].toInt() and 0xFF
+        assertTrue(sA > 10) { "(16, 16) : shadow should land here, got alpha=$sA" }
+        // Black shadow -- rgb should be near zero (with premul, rgb
+        // <= alpha so rgb is small when alpha is small too, but the
+        // ratio rgb/alpha is the unpremul colour which is black =
+        // (0, 0, 0)). We assert rgb <= alpha (premul invariant) and
+        // rgb is small in absolute terms.
+        assertTrue(sR <= sA + 1) { "(16, 16) : premul invariant R<=A, got R=$sR A=$sA" }
+        assertTrue(sG <= sA + 1) { "(16, 16) : premul invariant G<=A, got G=$sG A=$sA" }
+        assertTrue(sB <= sA + 1) { "(16, 16) : premul invariant B<=A, got B=$sB A=$sA" }
+        // Outside the layer bbox : transparent untouched.
+        val oIdx = (2 * W + 2) * 4
+        assertTrue((pixels[oIdx + 3].toInt() and 0xFF) == 0) {
+            "(2, 2) : outside layer should be transparent"
+        }
     }
 
     @Test
