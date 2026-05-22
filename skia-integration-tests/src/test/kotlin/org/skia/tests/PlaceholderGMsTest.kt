@@ -26,8 +26,10 @@ class PlaceholderGMsTest {
     // `@Disabled("STUB.EDGE_AA_IMAGE_SET")` until
     // SkCanvas.experimental_DrawEdgeAAImageSet has a body.
 
-    @Test @Disabled("GPU-only : texture-orientation / makeOrientedImage helpers not yet ported.")
-    fun `FlippityGM placeholder`() { FlippityGM() }
+    // FlippityGM — real body port landed in its own FlippityTest. The
+    // GPU-only `kBottomLeft_GrSurfaceOrigin` flag collapses on raster
+    // (both reference-image rows render identically), matching the
+    // upstream raster sink that produced `original-888/flippity.png`.
 
     @Test @Disabled("GPU-only : glyph atlas LRU eviction not exposed for raster.")
     fun `FontCacheGM placeholder`() { FontCacheGM() }
