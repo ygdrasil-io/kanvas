@@ -49,3 +49,28 @@ org.graphiks.math.SkMatrixTest.mapHomogeneousPoints perspective returns un-divid
 org.graphiks.math.SkMatrixTest.mapRectScaleTranslate fast path matches mapRect	Matrix_maprects	math/src/test/kotlin/SkMatrixTest.kt:587	tests/MatrixTest.cpp:1042
 org.graphiks.math.SkMatrixTest.mapRectScaleTranslate handles negative scale by sorting	Matrix_maprects	math/src/test/kotlin/SkMatrixTest.kt:597	tests/MatrixTest.cpp:1042
 org.graphiks.math.SkMatrixTest.operator times equals concat	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1133	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.I returns Identity	Matrix_Ctor	math/src/test/kotlin/SkMatrixTest.kt:1170	tests/MatrixTest.cpp:1096
+org.graphiks.math.SkMatrixTest.MakeTrans SkVector overload matches dx dy form	Matrix	math/src/test/kotlin/SkMatrixTest.kt:1175	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePerspective flips hasPerspective and getType	Matrix	math/src/test/kotlin/SkMatrixTest.kt:847	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeSkew skews points	Matrix	math/src/test/kotlin/SkMatrixTest.kt:73	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRSXform identity yields identity matrix	Matrix	math/src/test/kotlin/SkMatrixTest.kt:958	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRSXform 90 deg rotation maps (1, 0) to (0, 1) plus translate	Matrix	math/src/test/kotlin/SkMatrixTest.kt:964	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRSXform with uniform scale 2 doubles vector lengths	Matrix	math/src/test/kotlin/SkMatrixTest.kt:972	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly empty returns identity	Matrix	math/src/test/kotlin/SkMatrixTest.kt:982	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly 1 point is pure translate	Matrix	math/src/test/kotlin/SkMatrixTest.kt:988	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly 3 points is general affine	Matrix	math/src/test/kotlin/SkMatrixTest.kt:1016	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly 4 points unit square to skewed quad maps corners	Matrix	math/src/test/kotlin/SkMatrixTest.kt:998	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly mismatched sizes returns null	Matrix	math/src/test/kotlin/SkMatrixTest.kt:1030	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly more than 4 points returns null	Matrix	math/src/test/kotlin/SkMatrixTest.kt:1038	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.postTranslate matches T concat M for any matrix	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1058	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postTranslate affine adds dx dy directly	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1047	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postTranslate perspective uses postConcat	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1071	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postScale closed form matches postConcat	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1082	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postScale unity short-circuit returns same matrix	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1095	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postScale pivoted fixes pivot in device space	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1102	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postRotate matches R concat M	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1111	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postRotate pivoted anchors at pivot	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1120	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postSkew matches Skew concat M	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1129	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.preTranslate perspective dispatches through preConcat	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1140	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.preScale perspective propagates to persp0 and persp1	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1151	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.preScale on affine leaves persp row at (0, 0, 1)	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1161	tests/MatrixTest.cpp:1028

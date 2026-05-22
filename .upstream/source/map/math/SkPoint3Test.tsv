@@ -5,3 +5,4 @@ org.graphiks.math.SkPoint3Test.length and lengthSquared	Point3	math/src/test/kot
 org.graphiks.math.SkPoint3Test.Length companion handles overflow via double	Point3	math/src/test/kotlin/SkPoint3Test.kt:38	tests/Point3Test.cpp:126
 org.graphiks.math.SkPoint3Test.unaryMinus + - operators	Point3	math/src/test/kotlin/SkPoint3Test.kt:53	tests/Point3Test.cpp:126
 org.graphiks.math.SkPoint3Test.DotProduct CrossProduct	Point3	math/src/test/kotlin/SkPoint3Test.kt:63	tests/Point3Test.cpp:126
+org.graphiks.math.SkPoint3Test.isFinite catches NaN and Inf	Point3	math/src/test/kotlin/SkPoint3Test.kt:46	tests/Point3Test.cpp:126
