@@ -1,4 +1,6 @@
 org.graphiks.math.SkDVector	SkDVector	math/src/main/kotlin/SkDPoint.kt:28	src/pathops/SkPathOpsPoint.h:19
+org.graphiks.math.SkDVector.x	SkDVector::fX	math/src/main/kotlin/SkDPoint.kt:28	src/pathops/SkPathOpsPoint.h:20
+org.graphiks.math.SkDVector.y	SkDVector::fY	math/src/main/kotlin/SkDPoint.kt:28	src/pathops/SkPathOpsPoint.h:21
 org.graphiks.math.SkDVector.plusAssign	SkDVector::operator+=	math/src/main/kotlin/SkDPoint.kt:33	src/pathops/SkPathOpsPoint.h:30
 org.graphiks.math.SkDVector.minusAssign	SkDVector::operator-=	math/src/main/kotlin/SkDPoint.kt:36	src/pathops/SkPathOpsPoint.h:36
 org.graphiks.math.SkDVector.divAssign	SkDVector::operator/=	math/src/main/kotlin/SkDPoint.kt:39	src/pathops/SkPathOpsPoint.h:42
@@ -13,6 +15,8 @@ org.graphiks.math.SkDVector.lengthSquared	SkDVector::lengthSquared	math/src/main
 org.graphiks.math.SkDVector.normalize	SkDVector::normalize	math/src/main/kotlin/SkDPoint.kt:84	src/pathops/SkPathOpsPoint.h:90
 org.graphiks.math.SkDVector.isFinite	SkDVector::isFinite	math/src/main/kotlin/SkDPoint.kt:91	src/pathops/SkPathOpsPoint.h:97
 org.graphiks.math.SkDPoint	SkDPoint	math/src/main/kotlin/SkDPoint.kt:98	src/pathops/SkPathOpsPoint.h:102
+org.graphiks.math.SkDPoint.x	SkDPoint::fX	math/src/main/kotlin/SkDPoint.kt:98	src/pathops/SkPathOpsPoint.h:103
+org.graphiks.math.SkDPoint.y	SkDPoint::fY	math/src/main/kotlin/SkDPoint.kt:98	src/pathops/SkPathOpsPoint.h:104
 org.graphiks.math.SkDPoint.set	SkDPoint::set	math/src/main/kotlin/SkDPoint.kt:102	src/pathops/SkPathOpsPoint.h:106
 org.graphiks.math.SkDPoint.plusAssign	SkDPoint::operator+=	math/src/main/kotlin/SkDPoint.kt:105	src/pathops/SkPathOpsPoint.h:129
 org.graphiks.math.SkDPoint.minusAssign	SkDPoint::operator-=	math/src/main/kotlin/SkDPoint.kt:108	src/pathops/SkPathOpsPoint.h:135
