@@ -20,14 +20,11 @@ class PlaceholderGMsTest {
     @Test @Disabled("GPU-only : distance-field text + perspective text-blob.")
     fun `DFTextBlobPerspGM placeholder`() { DFTextBlobPerspGM() }
 
-    @Test @Disabled("SkCanvas.drawImageSet / ImageSetEntry API not yet exposed.")
-    fun `DrawImageSetGM placeholder`() { DrawImageSetGM() }
-
-    @Test @Disabled("SkCanvas.drawImageSet / ImageSetEntry API not yet exposed.")
-    fun `DrawImageSetAlphaOnlyGM placeholder`() { DrawImageSetAlphaOnlyGM() }
-
-    @Test @Disabled("SkCanvas.drawImageSet / ImageSetEntry API not yet exposed.")
-    fun `DrawImageSetRectToRectGM placeholder`() { DrawImageSetRectToRectGM() }
+    // DrawImageSetGM / DrawImageSetAlphaOnlyGM / DrawImageSetRectToRectGM
+    // — real ported bodies now live in DrawImageSetTest /
+    // DrawImageSetAlphaOnlyTest / DrawImageSetRectToRectTest, each
+    // `@Disabled("STUB.EDGE_AA_IMAGE_SET")` until
+    // SkCanvas.experimental_DrawEdgeAAImageSet has a body.
 
     @Test @Disabled("SkJpegEncoder.Options.AlphaOption (Ignore / BlendOnBlack) not yet exposed.")
     fun `EncodeJpegAlphaOptsGM placeholder`() { EncodeJpegAlphaOptsGM() }
