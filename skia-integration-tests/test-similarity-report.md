@@ -416,6 +416,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | PerspTextMinimalGM | 97.51% | = | 8 | 766,885 / 786,432 | 0, 123, 124, 124 | 0, 24, 23, 23 |
 | PictureCullRectGM | 86.11% | = | 1 | 12,400 / 14,400 | 0, 29, 44, 3 | 0, 25, 18, 2 |
 | PictureGM | 28.15% | = | 1 | 15,200 / 54,000 | 0, 53, 43, 38 | 0, 30, 18, 21 |
+| PictureGeneratorGM | 90.34% | (new) | 4 | 901,215 / 997,600 | 0, 239, 239, 239 | 0, 96, 99, 98 |
 | PictureImageFilterGM | 62.16% | = | 4 | 111,896 / 180,000 | 0, 255, 255, 255 | 0, 120, 120, 120 |
 | PictureImageGeneratorGM | 83.07% | = | 4 | 828,725 / 997,600 | 0, 239, 239, 239 | 0, 147, 149, 149 |
 | PictureShaderCacheGM | 97.62% | = | 8 | 9,762 / 10,000 | 0, 50, 180, 198 | 0, 26, 70, 69 |
