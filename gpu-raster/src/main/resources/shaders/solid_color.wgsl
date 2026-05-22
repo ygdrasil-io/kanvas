@@ -273,8 +273,12 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
     // G2.x -- clip-shape coverage. clipKind == 0 means "no shape clip"
     // (legacy rect-only) ; clipKind == 1 means "rrect-style shape" with
-    // bounds + uniform radii. Other kinds are reserved for later
-    // (e.g. clipKind == 2 for non-uniform per-corner radii).
+    // bounds + uniform radii (intersect) ; clipKind == 2 (M4) is the
+    // same rrect parameterisation but the shape carves a hole -- the
+    // shader uses `1 - rrect_cov` so `clipRect(_, kDifference)` and
+    // `clipRRect(_, kDifference)` get pixel-correct coverage without a
+    // path-mask texture. Rect-difference encodes as kind 2 with
+    // rx = ry = 0 (the rect SDF collapse).
     let clip_kind = i32(uniforms.clipShapeRadiiKind.z + 0.5);
     if (clip_kind == 1) {
         let clip_cov = rrect_cov(
@@ -284,6 +288,14 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             uniforms.clipShapeRadiiKind.y,
         );
         coverage = coverage * clip_cov;
+    } else if (clip_kind == 2) {
+        let clip_cov = rrect_cov(
+            pos.xy,
+            uniforms.clipShapeBounds,
+            uniforms.clipShapeRadiiKind.x,
+            uniforms.clipShapeRadiiKind.y,
+        );
+        coverage = coverage * (1.0 - clip_cov);
     }
 
     // Premul output for SrcOver pipeline (src=One, dst=OneMinusSrcAlpha).

@@ -168,6 +168,15 @@ fn clip_cov(pos: vec2f) -> f32 {
             uniforms.clipShapeRadiiKind.x,
             uniforms.clipShapeRadiiKind.y,
         );
+    } else if (clip_kind == 2) {
+        // M4 -- kDifference : invert the rrect coverage so the shape
+        // carves a hole instead of restricting to its inside.
+        return 1.0 - rrect_cov(
+            pos,
+            uniforms.clipShapeBounds,
+            uniforms.clipShapeRadiiKind.x,
+            uniforms.clipShapeRadiiKind.y,
+        );
     }
     return 1.0;
 }

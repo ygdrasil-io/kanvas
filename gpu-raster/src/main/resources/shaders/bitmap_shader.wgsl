@@ -635,6 +635,18 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         pg = pg * clip_cov;
         pb = pb * clip_cov;
         pa = pa * clip_cov;
+    } else if (clip_kind == 2) {
+        // M4 -- kDifference : invert coverage so the shape carves a hole.
+        let clip_cov = 1.0 - rrect_cov(
+            pos.xy,
+            uniforms.clipShapeBounds,
+            uniforms.clipShapeRadiiKind.x,
+            uniforms.clipShapeRadiiKind.y,
+        );
+        pr = pr * clip_cov;
+        pg = pg * clip_cov;
+        pb = pb * clip_cov;
+        pa = pa * clip_cov;
     }
     return vec4f(pr, pg, pb, pa);
 }

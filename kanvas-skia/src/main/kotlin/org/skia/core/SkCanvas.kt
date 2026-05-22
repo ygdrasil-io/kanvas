@@ -688,11 +688,25 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val combined = SkAAClip(s.aaClip ?: SkAAClip(s.clip))
         combined.op(pathAac, SkRegion.Op.kDifference)
         s.aaClip = combined
-        // Difference cuts a hole inside the existing clip ; the analytic
-        // shape slot (which is intersect-shape only) can no longer
-        // represent the result. Drop to null so non-raster devices fail
-        // fast on the now-impossible clip combination.
-        s.simpleShapeClip = null
+        // M4 -- analytic difference clip. If the path is a canonical simple
+        // shape (rect / oval / circle / uniform-corner rrect) under an
+        // axis-aligned CTM, we can let the GPU device evaluate `1 -
+        // rrect_cov(p)` per pixel instead of rasterising the difference
+        // into an alpha mask. Same scope guard as `clipPathIntersect` :
+        // inverse fill types and unrecognised paths drop to null (the
+        // GPU device then takes the existing arbitrary-clipPath fallback,
+        // which still throws at `bindClip` for non-shader pipelines).
+        if (!path.fillType.isInverse() && s.simpleShapeClip == null) {
+            val detected = SkClipShape.tryDetect(path, s.matrix, SkClipOp.kDifference)
+            // Only first-difference is honoured today : composing an
+            // existing intersect shape with a difference would need a
+            // pipeline with two clip uniforms. Single-difference covers
+            // every clipRect(rect, kDifference) / clipRRect(_, kDifference)
+            // call site from a freshly-saved state.
+            s.simpleShapeClip = detected
+        } else {
+            s.simpleShapeClip = null
+        }
     }
 
     /**
