@@ -11,3 +11,8 @@ org.graphiks.math.SkPointTest.setLength on large vector uses double fallback for
 org.graphiks.math.SkPointTest.setLength on (0,0) returns false	Point_setLengthFast	math/src/test/kotlin/SkPointTest.kt:272	tests/PointTest.cpp:152
 org.graphiks.math.SkPointTest.setLength on infinite input returns false (rescale yields NaN)	Point_setLengthFast	math/src/test/kotlin/SkPointTest.kt:279	tests/PointTest.cpp:152
 org.graphiks.math.SkPointTest.Length overflow path returns finite double-precision magnitude	Point	math/src/test/kotlin/SkPointTest.kt:286	tests/PointTest.cpp:132
+org.graphiks.math.SkPointTest.Make and accessors store coordinates	Point	math/src/test/kotlin/SkPointTest.kt:13	tests/PointTest.cpp:132
+org.graphiks.math.SkPointTest.offset adds to both axes	Point	math/src/test/kotlin/SkPointTest.kt:52	tests/PointTest.cpp:132
+org.graphiks.math.SkPointTest.Distance is the magnitude of the difference	Point	math/src/test/kotlin/SkPointTest.kt:187	tests/PointTest.cpp:132
+org.graphiks.math.SkPointTest.dot and cross products	Point	math/src/test/kotlin/SkPointTest.kt:177	tests/PointTest.cpp:132
+org.graphiks.math.SkPointTest.isFinite catches NaN and infinity	Point	math/src/test/kotlin/SkPointTest.kt:217	tests/PointTest.cpp:132

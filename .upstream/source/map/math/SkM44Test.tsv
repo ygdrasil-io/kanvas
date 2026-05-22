@@ -16,3 +16,22 @@ org.graphiks.math.SkM44Test.mapRect on translate matches SkRect-shifted	M44_mapR
 org.graphiks.math.SkM44Test.mapRect on scale produces scaled bounds	M44_mapRect	math/src/test/kotlin/SkM44Test.kt:215	tests/M44Test.cpp:260
 org.graphiks.math.SkM44Test.lookAt produces invertible matrix for typical eye	Matrix_LookAt	math/src/test/kotlin/SkM44Test.kt:275	tests/MatrixTest.cpp:1100
 org.graphiks.math.SkM44Test.times SkV3 drops translation	M44_v3	math/src/test/kotlin/SkM44Test.kt:351	tests/M44Test.cpp:77
+org.graphiks.math.SkM44Test.identity times vector returns vector	M44	math/src/test/kotlin/SkM44Test.kt:42	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.scale factory scales vector	M44	math/src/test/kotlin/SkM44Test.kt:55	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.perspective produces non-affine matrix	M44	math/src/test/kotlin/SkM44Test.kt:74	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.rc and setRC interact correctly	M44_v4	math/src/test/kotlin/SkM44Test.kt:147	tests/M44Test.cpp:101
+org.graphiks.math.SkM44Test.preTranslate matches setConcat with Translate	M44	math/src/test/kotlin/SkM44Test.kt:156	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.postTranslate matches setConcat with Translate on the left	M44	math/src/test/kotlin/SkM44Test.kt:164	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.preScale 2D matches setConcat with Scale 2D	M44	math/src/test/kotlin/SkM44Test.kt:172	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.preScale 3D matches setConcat with Scale 3D	M44	math/src/test/kotlin/SkM44Test.kt:180	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.multiplication is associative	M44	math/src/test/kotlin/SkM44Test.kt:188	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.mapPoint matches SkMatrix when m44 is affine	M44	math/src/test/kotlin/SkM44Test.kt:196	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.mapRect identity returns rect unchanged	M44_mapRect	math/src/test/kotlin/SkM44Test.kt:222	tests/M44Test.cpp:260
+org.graphiks.math.SkM44Test.mapRect with extreme perspective clips w less or equal 0 instead of NaN or Inf	M44_mapRect	math/src/test/kotlin/SkM44Test.kt:230	tests/M44Test.cpp:260
+org.graphiks.math.SkM44Test.mapRect with mild perspective gives finite bounds matching projected corners	M44_mapRect	math/src/test/kotlin/SkM44Test.kt:256	tests/M44Test.cpp:260
+org.graphiks.math.SkM44Test.asM33 round-trip preserves affine fields	M44	math/src/test/kotlin/SkM44Test.kt:285	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.setM33 reproduces SkMatrix constructor	M44	math/src/test/kotlin/SkM44Test.kt:302	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.normalizePerspective scales rows so bottom-right becomes one	M44	math/src/test/kotlin/SkM44Test.kt:310	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.normalizePerspective is a no-op for perspective row not bottom-only	M44	math/src/test/kotlin/SkM44Test.kt:325	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.getColMajor and getRowMajor produce transposed layouts	M44	math/src/test/kotlin/SkM44Test.kt:386	tests/M44Test.cpp:31
+org.graphiks.math.SkM44Test.isFinite catches NaN and Inf	M44	math/src/test/kotlin/SkM44Test.kt:404	tests/M44Test.cpp:31
