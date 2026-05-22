@@ -18,8 +18,15 @@ import org.skia.tests.Crbug892988GM
  * srcOver-style pre-blend at AA edges (cf. Skia's
  * `GrBlend::handleSrcModeNonOpaque`).
  *
- * Floors : sized after the fix lands. The bug shows up as ~5-10 %
- * GPU divergence concentrated on the 4 AA edges of the clipped rect.
+ * Floors (round 28 ratchet, post-PR #599 unlock) : both backends now
+ * measure 100.00 % byte-exact against the upstream reference (65536 /
+ * 65536 matching pixels, maxDiff = 0 on all channels). Round 23
+ * originally landed this skip-list entry at GPU 13.98 % / raster
+ * 100.00 % -- a ~86 pt drift caused by the kSrc non-opaque + AA-clipRect
+ * routing falling through to a coverage-naive blend. PR #599 plumbed
+ * the slow-path blend so the GPU now matches raster bit-for-bit. Floors
+ * set 0.05 pt below the observed scores per the round-28 harvest
+ * convention.
  */
 class Crbug892988CrossBackendTest {
 
@@ -27,8 +34,8 @@ class Crbug892988CrossBackendTest {
     fun `Crbug892988GM matches reference on raster and GPU backends`() {
         runCrossBackendTest(
             gm = Crbug892988GM(),
-            rasterFloor = 99.0,
-            gpuFloor = 99.0,
+            rasterFloor = 99.95,
+            gpuFloor = 99.95,
         )
     }
 }
