@@ -10,7 +10,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | AddArcGM | 91.91% | = | 1 | 994,066 / 1,081,600 | 0, 76, 88, 76 | 0, 8, 9, 9 |
 | AllBitmapConfigsGM | 57.21% | = | 8 | 56,242 / 98,304 | 0, 255, 255, 255 | 0, 80, 84, 82 |
 | AlphaGradientsGM | 46.90% | = | 1 | 144,081 / 307,200 | 0, 71, 71, 71 | 0, 16, 20, 21 |
-| AlphaImageGM | 32.53% | = | 8 | 21,320 / 65,536 | 0, 211, 251, 254 | 0, 47, 57, 57 |
+| AlphaImageGM | 34.09% | = | 8 | 22,338 / 65,536 | 0, 155, 247, 253 | 0, 62, 71, 84 |
 | AnalyticAntialiasConvexGM | 99.78% | = | 1 | 638,619 / 640,000 | 0, 24, 67, 70 | 0, 8, 18, 18 |
 | AnalyticAntialiasGeneralGM | 99.36% | = | 1 | 635,892 / 640,000 | 0, 20, 56, 53 | 0, 8, 17, 14 |
 | AnalyticAntialiasInverseGM | 99.97% | = | 1 | 639,794 / 640,000 | 0, 24, 60, 60 | 0, 11, 28, 26 |
@@ -55,11 +55,11 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | Blur2RectsNonNinepatchGM | 94.97% | = | 1 | 332,398 / 350,000 | 0, 179, 179, 179 | 0, 11, 11, 11 |
 | BlurCircles2GM | 69.10% | = | 1 | 681,007 / 985,500 | 0, 255, 255, 255 | 0, 9, 9, 9 |
 | BlurCirclesGM | 85.86% | = | 1 | 774,900 / 902,500 | 0, 59, 59, 59 | 0, 11, 11, 11 |
-| BlurDrawImageGM | 70.54% | = | 1 | 46,229 / 65,536 | 0, 176, 179, 181 | 0, 21, 24, 21 |
+| BlurDrawImageGM | 70.42% | -0.12% | 1 | 46,150 / 65,536 | 0, 176, 179, 181 | 0, 21, 26, 21 |
 | BlurIgnoreXform_kCircle | 64.04% | = | 1 | 114,080 / 178,125 | 0, 255, 255, 255 | 0, 73, 73, 73 |
 | BlurIgnoreXform_kRRect | 61.99% | = | 1 | 110,411 / 178,125 | 0, 255, 255, 255 | 0, 77, 77, 77 |
 | BlurIgnoreXform_kRect | 60.75% | = | 1 | 108,213 / 178,125 | 0, 255, 255, 255 | 0, 77, 77, 77 |
-| BlurImageGM | 92.86% | = | 1 | 232,143 / 250,000 | 0, 147, 147, 154 | 0, 26, 25, 31 |
+| BlurImageGM | 94.77% | -0.83% | 1 | 236,936 / 250,000 | 0, 103, 105, 115 | 0, 19, 18, 23 |
 | BlurImageVMaskGM | 88.18% | = | 8 | 740,699 / 840,000 | 0, 95, 96, 96 | 0, 14, 14, 14 |
 | BlurLargeRRectsGM | 36.00% | = | 1 | 32,404 / 90,000 | 0, 124, 135, 112 | 0, 22, 21, 22 |
 | BlurPositioningGM | 98.00% | = | 2 | 235,208 / 240,000 | 0, 130, 130, 130 | 0, 36, 36, 36 |
@@ -217,10 +217,10 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | DrawAtlasColorGM | 38.33% | = | 1 | 94,833 / 247,380 | 0, 255, 255, 255 | 0, 60, 85, 86 |
 | DrawAtlasGM | 96.03% | = | 1 | 295,002 / 307,200 | 0, 99, 122, 7 | 0, 64, 82, 2 |
 | DrawBitmapRect3 | 100.00% | = | 1 | 307,200 / 307,200 | 0, 0, 0, 0 | 0, 0, 0, 0 |
-| DrawBitmapRectGM_bitmap | 13.43% | = | 1 | 140,843 / 1,048,576 | 0, 130, 129, 200 | 0, 3, 3, 10 |
-| DrawBitmapRectGM_imagerect | 13.43% | = | 1 | 140,843 / 1,048,576 | 0, 130, 129, 200 | 0, 3, 3, 10 |
-| DrawBitmapRectGM_imagerect_subset | 13.44% | = | 1 | 140,881 / 1,048,576 | 0, 253, 253, 253 | 0, 3, 3, 10 |
-| DrawBitmapRectGM_subset | 13.44% | = | 1 | 140,881 / 1,048,576 | 0, 253, 253, 253 | 0, 3, 3, 10 |
+| DrawBitmapRectGM_bitmap | 13.43% | = | 1 | 140,873 / 1,048,576 | 0, 130, 129, 200 | 0, 3, 3, 10 |
+| DrawBitmapRectGM_imagerect | 13.43% | = | 1 | 140,873 / 1,048,576 | 0, 130, 129, 200 | 0, 3, 3, 10 |
+| DrawBitmapRectGM_imagerect_subset | 13.43% | -0.00% | 1 | 140,842 / 1,048,576 | 0, 130, 129, 200 | 0, 3, 3, 10 |
+| DrawBitmapRectGM_subset | 13.43% | -0.00% | 1 | 140,842 / 1,048,576 | 0, 130, 129, 200 | 0, 3, 3, 10 |
 | DrawBitmapRectSkbug4734GM | 100.00% | = | 1 | 4,096 / 4,096 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | DrawGlyphsGM | 96.33% | = | 1 | 295,933 / 307,200 | 0, 255, 255, 255 | 0, 117, 117, 117 |
 | DrawMiniBitmapRectAaGM | 92.80% | = | 1 | 973,069 / 1,048,576 | 0, 106, 72, 201 | 0, 18, 42, 140 |
@@ -231,7 +231,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | DrawlinesWithLocalMatrixGM | 54.72% | = | 8 | 136,807 / 250,000 | 0, 56, 179, 231 | 0, 16, 10, 13 |
 | DropShadowImageFilterGM | 81.28% | = | 1 | 213,289 / 262,400 | 0, 255, 255, 255 | 0, 97, 96, 90 |
 | DstReadShuffleGM | 58.05% | = | 1 | 209,225 / 360,400 | 0, 130, 120, 142 | 0, 7, 6, 5 |
-| EmbossGM | 70.29% | = | 1 | 50,610 / 72,000 | 0, 116, 122, 121 | 0, 8, 5, 6 |
+| EmbossGM | 70.05% | -0.24% | 1 | 50,437 / 72,000 | 0, 200, 122, 121 | 0, 76, 23, 11 |
 | EmptyPathGM | 87.64% | = | 1 | 147,239 / 168,000 | 0, 193, 193, 193 | 0, 47, 44, 54 |
 | EmptyShaderGM | 65.87% | = | 1 | 7,420 / 11,264 | 0, 155, 185, 180 | 0, 117, 173, 77 |
 | EncodeAlphaJpegGM | 83.53% | = | 64 | 66,820 / 80,000 | 0, 249, 254, 253 | 0, 116, 103, 105 |
@@ -436,7 +436,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | RuntimeIntrinsicsRelationalGM | 97.53% | = | 1 | 300,504 / 308,125 | 0, 255, 255, 255 | 0, 139, 139, 139 |
 | RuntimeIntrinsicsTrigGM | 96.14% | -0.19% | 1 | 186,134 / 193,600 | 0, 255, 255, 255 | 0, 65, 63, 66 |
 | RuntimeShaderGM | 50.00% | = | 1 | 65,537 / 131,072 | 0, 144, 58, 76 | 0, 32, 11, 30 |
-| SamplerStressGM | 99.66% | = | 1 | 306,147 / 307,200 | 0, 77, 186, 78 | 0, 19, 21, 20 |
+| SamplerStressGM | 99.66% | -0.00% | 1 | 306,146 / 307,200 | 0, 77, 184, 78 | 0, 18, 19, 18 |
 | SaveLayerGM | 44.13% | = | 1 | 28,919 / 65,536 | 0, 140, 140, 140 | 0, 101, 104, 94 |
 | ScaledRectsGM | 87.79% | = | 1 | 7,192 / 8,192 | 0, 36, 7, 11 | 0, 36, 7, 11 |
 | ScaledStrokesGM | 96.03% | = | 1 | 196,665 / 204,800 | 0, 255, 255, 255 | 0, 129, 128, 128 |
@@ -460,7 +460,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ShowMipLevelsGM | 78.30% | = | 4 | 858,204 / 1,096,100 | 0, 255, 255, 255 | 0, 17, 51, 44 |
 | SimpleAaclipPathGM | 98.99% | = | 1 | 118,788 / 120,000 | 0, 161, 161, 161 | 0, 53, 52, 52 |
 | SimpleAaclipRectGM | 99.00% | = | 1 | 118,797 / 120,000 | 0, 197, 161, 161 | 0, 59, 54, 53 |
-| SimpleBlurRoundRectGM | 68.05% | = | 1 | 340,262 / 500,000 | 0, 99, 148, 170 | 0, 14, 10, 22 |
+| SimpleBlurRoundRectGM | 68.27% | = | 1 | 341,329 / 500,000 | 0, 96, 96, 98 | 0, 11, 8, 11 |
 | SimpleRectGM | 100.00% | = | 1 | 640,000 / 640,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | SimpleShapesAaGM | 65.01% | = | 1 | 162,518 / 250,000 | 0, 33, 31, 32 | 0, 5, 5, 5 |
 | SimpleShapesBwGM | 65.55% | = | 1 | 163,874 / 250,000 | 0, 129, 133, 137 | 0, 5, 5, 5 |

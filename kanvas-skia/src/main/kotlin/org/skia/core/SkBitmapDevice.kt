@@ -1101,11 +1101,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // Phase 7c — when a mask filter (e.g. Gaussian blur) is set,
         // route through the offscreen-mask pipeline instead of the
         // direct rasteriser. The pathEffect-transformed path is what
-        // gets rasterised into the mask. Shader paths through the
-        // mask filter are out of scope for this slice (use the solid-
-        // paint route).
+        // gets rasterised into the mask. J4 — shader paths are now
+        // supported : the shader is sampled per-pixel and modulated
+        // by the (filtered) mask coverage.
         val maskFilter = paint.maskFilter
-        if (maskFilter != null && paint.shader == null) {
+        if (maskFilter != null) {
             drawPathWithMaskFilter(effectivePath, ctm, clip, paint, maskFilter)
             return
         }
@@ -1176,11 +1176,17 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      * branch.
      *
      * **Limitations** :
-     *  - Shader paints aren't supported (the shader output is per-pixel
-     *    in the device, so sampling it through a blurred mask would
-     *    require a more complex two-pass pipeline). Solid paints only.
      *  - Inverse fill types fall back to the unfiltered path (the mask
      *    bounds are the *outside* of the path, conceptually unbounded).
+     *
+     * **J4 — shader support** : when `paint.shader != null`, the shader
+     * is set up once for this draw and sampled per-pixel inside the
+     * mask. Each device pixel composites as
+     * `shader.sample(x,y) × paint.alpha × maskFilteredCoverage`.
+     * This is what makes `drawImageRect` (which routes through a
+     * shader-bound `drawRect`) honour the paint's mask filter — the
+     * filter blurs the *boundary* of the image rect, the shader fills
+     * the interior at full coverage.
      */
     private fun drawPathWithMaskFilter(
         path: SkPath, ctm: SkMatrix, clip: SkIRect,
@@ -1189,9 +1195,16 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         if (path.fillType.isInverse()) return  // out of scope for this slice
         val mode = paint.blendMode
         val blender = paint.blender
+        val shader = paint.shader
         // Phase 7e — colour filter in sRGB, then xform to working space.
-        val effectiveColor = transformPaintColor(
-            applyColorFilter(paint.colorFilter, paint.color))
+        // For shader paths, the per-pixel colour comes from the shader
+        // (already in device working space) ; `effectiveColor` only
+        // carries the paint's alpha modulator for those.
+        val effectiveColor = if (shader == null) {
+            transformPaintColor(applyColorFilter(paint.colorFilter, paint.color))
+        } else {
+            paint.color
+        }
         val paintA = SkColorGetA(effectiveColor)
         if (paintA == 0 && !modeAffectsZeroAlphaSrc(mode)) return
 
@@ -1247,7 +1260,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             color = org.graphiks.math.SK_ColorWHITE
             blendMode = SkBlendMode.kSrc
             this.maskFilter = null
-            shader = null
+            this.shader = null
             colorFilter = null
             pathEffect = null
         }
@@ -1268,43 +1281,98 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         //    return three planes (alpha + multiply + additive) and
         //    take the [Format.k3D] branch.
         val mustBlendZero = modeAffectsZeroAlphaSrc(mode)
+        // J4 — shader set-up : sampled per-pixel inside the composite
+        // loop. Per-row scratch buffer reused across all rows.
+        if (shader != null) shader.setupForDraw(ctm, xformSteps)
+        val shaderRow = if (shader != null) IntArray(maskW) else null
         when (effectiveMaskFilter.format) {
             org.skia.foundation.SkMaskFilter.Format.kA8 -> {
                 val blurred = effectiveMaskFilter.filterMask(srcMask, maskW, maskH)
-                val rgb = effectiveColor and 0x00FFFFFF
-                for (y in 0 until maskH) {
-                    val devY = mt + y
-                    for (x in 0 until maskW) {
-                        val devX = ml + x
-                        val maskA = blurred[y * maskW + x].toInt() and 0xFF
-                        val effA = (paintA * maskA + 127) / 255
-                        if (effA == 0 && !mustBlendZero) continue
-                        dispatchBlend(devX, devY, (effA shl 24) or rgb, mode, blender)
+                if (shader != null && shaderRow != null) {
+                    for (y in 0 until maskH) {
+                        val devY = mt + y
+                        shader.shadeRow(ml, devY, maskW, shaderRow)
+                        for (x in 0 until maskW) {
+                            val devX = ml + x
+                            val maskA = blurred[y * maskW + x].toInt() and 0xFF
+                            if (maskA == 0 && !mustBlendZero) continue
+                            val s = shaderRow[x]
+                            val sA = SkColorGetA(s)
+                            // sample.alpha *= paint.alpha * mask
+                            val effA = (sA * paintA + 127) / 255
+                            val finalA = (effA * maskA + 127) / 255
+                            if (finalA == 0 && !mustBlendZero) continue
+                            val rgb = s and 0x00FFFFFF
+                            dispatchBlend(devX, devY, (finalA shl 24) or rgb, mode, blender)
+                        }
+                    }
+                } else {
+                    val rgb = effectiveColor and 0x00FFFFFF
+                    for (y in 0 until maskH) {
+                        val devY = mt + y
+                        for (x in 0 until maskW) {
+                            val devX = ml + x
+                            val maskA = blurred[y * maskW + x].toInt() and 0xFF
+                            val effA = (paintA * maskA + 127) / 255
+                            if (effA == 0 && !mustBlendZero) continue
+                            dispatchBlend(devX, devY, (effA shl 24) or rgb, mode, blender)
+                        }
                     }
                 }
             }
             org.skia.foundation.SkMaskFilter.Format.k3D -> {
                 val mask3d = effectiveMaskFilter.filterMask3D(srcMask, maskW, maskH)
                 // Composite per pixel : `src.rgb = paint.rgb × multiply / 255 + additive`,
-                // `src.a = paint.a × mask.alpha / 255` ; then blend.
-                val paintR = (effectiveColor ushr 16) and 0xFF
-                val paintG = (effectiveColor ushr 8) and 0xFF
-                val paintB = effectiveColor and 0xFF
-                for (y in 0 until maskH) {
-                    val devY = mt + y
-                    val rowOffset = y * maskW
-                    for (x in 0 until maskW) {
-                        val devX = ml + x
-                        val idx = rowOffset + x
-                        val maskA = mask3d.alpha[idx].toInt() and 0xFF
-                        val effA = (paintA * maskA + 127) / 255
-                        if (effA == 0 && !mustBlendZero) continue
-                        val mul = mask3d.multiply[idx].toInt() and 0xFF
-                        val add = mask3d.additive[idx].toInt() and 0xFF
-                        val r = ((paintR * mul + 127) / 255 + add).coerceAtMost(255)
-                        val g = ((paintG * mul + 127) / 255 + add).coerceAtMost(255)
-                        val b = ((paintB * mul + 127) / 255 + add).coerceAtMost(255)
-                        dispatchBlend(devX, devY, (effA shl 24) or (r shl 16) or (g shl 8) or b, mode, blender)
+                // `src.a = paint.a × mask.alpha / 255` ; then blend. K2 — when
+                // `paint.shader != null`, the per-pixel RGB comes from the
+                // shader (sampled here at the same device coordinates the
+                // mask covers) instead of `paint.color`.
+                if (shader != null && shaderRow != null) {
+                    for (y in 0 until maskH) {
+                        val devY = mt + y
+                        shader.shadeRow(ml, devY, maskW, shaderRow)
+                        val rowOffset = y * maskW
+                        for (x in 0 until maskW) {
+                            val devX = ml + x
+                            val idx = rowOffset + x
+                            val maskA = mask3d.alpha[idx].toInt() and 0xFF
+                            val s = shaderRow[x]
+                            val sA = SkColorGetA(s)
+                            // sample.alpha *= paint.alpha * mask
+                            val effA = (sA * paintA + 127) / 255
+                            val finalA = (effA * maskA + 127) / 255
+                            if (finalA == 0 && !mustBlendZero) continue
+                            val mul = mask3d.multiply[idx].toInt() and 0xFF
+                            val add = mask3d.additive[idx].toInt() and 0xFF
+                            val sR = (s ushr 16) and 0xFF
+                            val sG = (s ushr 8) and 0xFF
+                            val sB = s and 0xFF
+                            val r = ((sR * mul + 127) / 255 + add).coerceAtMost(255)
+                            val g = ((sG * mul + 127) / 255 + add).coerceAtMost(255)
+                            val b = ((sB * mul + 127) / 255 + add).coerceAtMost(255)
+                            dispatchBlend(devX, devY, (finalA shl 24) or (r shl 16) or (g shl 8) or b, mode, blender)
+                        }
+                    }
+                } else {
+                    val paintR = (effectiveColor ushr 16) and 0xFF
+                    val paintG = (effectiveColor ushr 8) and 0xFF
+                    val paintB = effectiveColor and 0xFF
+                    for (y in 0 until maskH) {
+                        val devY = mt + y
+                        val rowOffset = y * maskW
+                        for (x in 0 until maskW) {
+                            val devX = ml + x
+                            val idx = rowOffset + x
+                            val maskA = mask3d.alpha[idx].toInt() and 0xFF
+                            val effA = (paintA * maskA + 127) / 255
+                            if (effA == 0 && !mustBlendZero) continue
+                            val mul = mask3d.multiply[idx].toInt() and 0xFF
+                            val add = mask3d.additive[idx].toInt() and 0xFF
+                            val r = ((paintR * mul + 127) / 255 + add).coerceAtMost(255)
+                            val g = ((paintG * mul + 127) / 255 + add).coerceAtMost(255)
+                            val b = ((paintB * mul + 127) / 255 + add).coerceAtMost(255)
+                            dispatchBlend(devX, devY, (effA shl 24) or (r shl 16) or (g shl 8) or b, mode, blender)
+                        }
                     }
                 }
             }

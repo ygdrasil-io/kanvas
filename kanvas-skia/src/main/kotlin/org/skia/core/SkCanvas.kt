@@ -1355,7 +1355,20 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         constraint: SrcRectConstraint = SrcRectConstraint.kStrict,
     ) {
         val s = top
-        if (!s.matrix.isAxisAligned) {
+        // K2 — when `paint.maskFilter` is set we re-route through the
+        // shader-rect path (same as upstream Skia's `USE_SHADER` branch
+        // in `SkBitmapDevice::drawImageRect` when `CanApplyDstMatrixAsCTM`
+        // returns false). The mask filter then operates on the boundary
+        // of the dst rect via the offscreen-mask pipeline in
+        // `SkBitmapDevice.drawPathWithMaskFilter` (J4 — shader + maskFilter
+        // combo), producing the correct halo / inner-blur on the image
+        // edge.
+        //
+        // We keep the bulk-rect fast path for the (overwhelmingly common)
+        // axis-aligned no-maskFilter case ; it carries a fully-tuned
+        // nearest / linear / cubic / aniso / mip ladder that the shader
+        // path can't match for raw image draws.
+        if (!s.matrix.isAxisAligned || paint?.maskFilter != null) {
             // R-final.7 — perspective / rotated path : route through drawRect
             // with an image-shader bound to the src→dst local matrix. The
             // shader maps every device pixel back through the CTM⁻¹ and the
@@ -1369,9 +1382,19 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             // inverts it internally as part of its sample pipeline).
             val srcToDst = SkMatrix.MakeRectToRect(src, dst, SkMatrix.ScaleToFit.kFill_ScaleToFit)
             if (srcToDst == null) return
+            // K2 — when the routing is driven by a maskFilter we tile the
+            // shader with `kDecal` so that samples taken inside the
+            // *blurred-mask halo* (i.e. outside the [dst] rect after the
+            // path bounds are expanded by the filter margin) fall to
+            // transparent black instead of clamping to the image edge.
+            // That kills the radial "extruded edge" streaks the kClamp
+            // path produces for opaque sprites under large mask sigmas,
+            // matching the upstream reference where the blur attenuates
+            // the image alpha to zero outside the dst rect.
+            val maskTile = if (paint?.maskFilter != null) SkTileMode.kDecal else SkTileMode.kClamp
             val shader = image.makeShader(
-                SkTileMode.kClamp,
-                SkTileMode.kClamp,
+                maskTile,
+                maskTile,
                 sampling,
                 srcToDst,
             )
