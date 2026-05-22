@@ -10,11 +10,14 @@
 // Two entry points :
 //   - fs_horizontal : sample the source texture along X with Gaussian
 //     weights, write to a scratch RGBA target. Out-of-source samples
-//     follow the per-draw [tileMode] : 0 = kClamp (clamp coord to the
-//     source extent, reading the edge pixel), 3 = kDecal (return zero,
-//     transparent border). Other tile modes (kRepeat / kMirror) are not
-//     supported -- the host dispatch gate throws before reaching the
-//     shader.
+//     follow the per-draw [tileMode] (SkTileMode ordinal) :
+//       0 = kClamp  : clamp the coord to the source extent, reading the
+//                     edge pixel.
+//       1 = kRepeat : wrap the coord modulo the source extent (positive
+//                     mod, so negative indices wrap to the high side).
+//       2 = kMirror : reflect the coord every `srcExtent` taps so the
+//                     sequence reads 0..N-1, N-1..0, 0..N-1, ...
+//       3 = kDecal  : return zero, transparent border.
 //   - fs_vertical : sample the H-pass scratch along Y with Gaussian
 //     weights, write the blurred RGBA into a V-pass scratch. Same
 //     tile-mode handling. The output is consumed by a subsequent
@@ -47,9 +50,13 @@ struct Uniforms {
     // axisTileRadius :
     //   .x = 1.0 when sampling along X (H pass), 0.0 else.
     //   .y = 1.0 when sampling along Y (V pass), 0.0 else.
-    //   .z = SkTileMode ordinal (0 = kClamp, 3 = kDecal). The shader
-    //        only branches on 0 vs other -- non-zero falls through to
-    //        kDecal (zero border).
+    //   .z = SkTileMode ordinal :
+    //          0 = kClamp  -> clamp coord to source extent (edge texel).
+    //          1 = kRepeat -> positive-mod wrap (every sample in-bound).
+    //          2 = kMirror -> reflect every srcExtent taps (every sample
+    //                         in-bound).
+    //          3 = kDecal  -> zero border. Also the fallback for any
+    //                         unrecognised ordinal.
     //   .w = radius (number of off-centre taps per side, 0..32).
     axisTileRadius: vec4f,   // offset  16
     // weights[0..8] : symmetric half-kernel packed 4 floats per
@@ -83,16 +90,54 @@ fn weight_at(k: i32) -> f32 {
     return v.w;
 }
 
+// Positive modulo : WGSL's `%` mirrors C99 (sign of dividend) for signed
+// ints, so `(-1) % w` returns -1. The CPU raster's
+// `SkBlurImageFilter.positiveModInternal` (kanvas-skia
+// SkImageFilters.kt) wraps the result back into [0, m). Mirror it here
+// so kRepeat lands on the same pixel grid as the CPU reference.
+fn positive_mod(n: i32, m: i32) -> i32 {
+    let r = n % m;
+    if (r < 0) { return r + m; }
+    return r;
+}
+
+// Mirror modulo : reflect every `m` taps so the sequence reads
+// 0, 1, ..., m-1, m-1, m-2, ..., 0, 0, 1, ... Mirrors the CPU
+// raster's `mirrorModInternal` in SkBlurImageFilter so kMirror lands on
+// the same pixel grid as the CPU reference.
+fn mirror_mod(n: i32, m: i32) -> i32 {
+    if (m <= 0) { return 0; }
+    let two_m = 2 * m;
+    var r = n % two_m;
+    if (r < 0) { r = r + two_m; }
+    if (r < m) { return r; }
+    return two_m - 1 - r;
+}
+
 // Sample the source texture at (px, py), honouring the per-draw
 // tile mode :
-//   - kClamp (ordinal 0)  : clamp (px, py) to the source extent and
-//                            read the edge texel (reads still go
-//                            through `textureLoad` -- no sampler).
-//   - kDecal (any other)  : return vec4f(0) for any out-of-source coord.
+//   - kClamp  (ordinal 0) : clamp (px, py) to the source extent and
+//                           read the edge texel (no sampler).
+//   - kRepeat (ordinal 1) : positive-mod wrap on each axis ; every
+//                           sample lands in-bound, so the kernel mass
+//                           stays unitary by construction.
+//   - kMirror (ordinal 2) : reflect every `srcExtent` taps on each
+//                           axis ; same unitary-mass property.
+//   - kDecal  (else)      : return vec4f(0) for any out-of-source coord.
 fn tile_load(px: i32, py: i32, src_w: i32, src_h: i32, tile_mode: i32) -> vec4f {
     if (tile_mode == 0) {
         let cx = clamp(px, 0, src_w - 1);
         let cy = clamp(py, 0, src_h - 1);
+        return textureLoad(source_texture, vec2i(cx, cy), 0);
+    }
+    if (tile_mode == 1) {
+        let cx = positive_mod(px, src_w);
+        let cy = positive_mod(py, src_h);
+        return textureLoad(source_texture, vec2i(cx, cy), 0);
+    }
+    if (tile_mode == 2) {
+        let cx = mirror_mod(px, src_w);
+        let cy = mirror_mod(py, src_h);
         return textureLoad(source_texture, vec2i(cx, cy), 0);
     }
     if (px < 0 || px >= src_w || py < 0 || py >= src_h) {

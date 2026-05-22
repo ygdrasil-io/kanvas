@@ -306,17 +306,23 @@ class SaveLayerImageFilterTest {
     }
 
     @Test
-    fun `saveLayer with Blur imageFilter kRepeat tileMode throws clear error`() {
-        // kRepeat / kMirror need a sampler with the corresponding
-        // addressMode -- deferred to a follow-up slice. kClamp / kDecal
-        // are handled in-shader.
+    fun `saveLayer with Blur imageFilter kRepeat keeps full-layer edges solid`() {
+        // N9 -- the kRepeat path : the layer is fully filled with red, so
+        // every kernel tap (including those past the layer extent) wraps
+        // around to a red sample. The blurred result is therefore solid
+        // red across the entire layer (no edge falloff, unlike kDecal).
+        // This is the same property the CPU raster's `SkBlurImageFilter`
+        // exhibits under `positiveModInternal` -- the GPU shader mirrors
+        // it with the matching positive-mod arithmetic in
+        // `blur_image_filter.wgsl::tile_load`.
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
-        val err = context!!.use { ctx ->
+        val pixels = context!!.use { ctx ->
             SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
                 val canvas = SkCanvas(device)
-                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
                 val layerPaint = SkPaint().apply {
                     imageFilter = SkImageFilters.Blur(
                         sigmaX = 4f, sigmaY = 4f,
@@ -325,17 +331,112 @@ class SaveLayerImageFilterTest {
                 }
                 canvas.saveLayer(layerBounds, layerPaint)
                 canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
-                runCatching { canvas.restore() }.exceptionOrNull()
+                canvas.restore()
+                device.flush()
             }
         }
 
-        assertTrue(err is IllegalStateException) {
-            "Expected IllegalStateException for Blur with kRepeat tileMode ; got $err"
+        // Centre is well inside the layer -- every kernel tap is red,
+        // even before any wrap kicks in.
+        assertRgbaApprox(pixels, 16, 16, 255, 0, 0, 255, tag = "kRepeat centre", tol = 2)
+        // Corner pixel (0, 0) -- with kClamp / kRepeat / kMirror, all
+        // kernel taps land on red (clamped at the edge / wrapped to the
+        // opposite side / mirrored back into the layer). The output
+        // stays solid red with no SrcOver-onto-white wash. Compared
+        // against kDecal (which would fade at this corner), this is
+        // the load-bearing assertion : the H/V passes consult the
+        // tile mode and the corner sees full kernel mass.
+        assertRgbaApprox(pixels, 0, 0, 255, 0, 0, 255, tag = "kRepeat corner solid", tol = 2)
+        // Mid-edge pixel (16, 0) -- same property.
+        assertRgbaApprox(pixels, 16, 0, 255, 0, 0, 255, tag = "kRepeat top edge", tol = 2)
+        // Far corner.
+        assertRgbaApprox(pixels, W - 1, H - 1, 255, 0, 0, 255, tag = "kRepeat far corner", tol = 2)
+    }
+
+    @Test
+    fun `saveLayer with Blur imageFilter kMirror keeps full-layer edges solid`() {
+        // N9 -- the kMirror path mirrors kRepeat for a full-layer fill :
+        // out-of-bound taps reflect back into the layer (which is solid
+        // red), so the convolved sum stays solid red on every pixel.
+        // Mirrors the CPU raster's `mirrorModInternal` semantics.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Blur(
+                        sigmaX = 4f, sigmaY = 4f,
+                        tileMode = SkTileMode.kMirror, input = null,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
         }
-        val msg = err?.message ?: ""
-        assertTrue(msg.contains("tileMode") && msg.contains("kRepeat")) {
-            "Error message should call out the unsupported tileMode ; got : $msg"
+
+        assertRgbaApprox(pixels, 16, 16, 255, 0, 0, 255, tag = "kMirror centre", tol = 2)
+        assertRgbaApprox(pixels, 0, 0, 255, 0, 0, 255, tag = "kMirror corner solid", tol = 2)
+        assertRgbaApprox(pixels, 16, 0, 255, 0, 0, 255, tag = "kMirror top edge", tol = 2)
+        assertRgbaApprox(pixels, W - 1, H - 1, 255, 0, 0, 255, tag = "kMirror far corner", tol = 2)
+    }
+
+    @Test
+    fun `saveLayer with Compose grayscale Blur kRepeat keeps full-layer edges solid gray`() {
+        // N9 -- exercise the Compose(outer=ColorFilter, inner=Blur(kRepeat))
+        // path : the Blur leaf is reached through the resolver's walker,
+        // so the kRepeat ordinal flows through the same gate that used to
+        // throw on non-kClamp/non-kDecal. Layer is fully red, blur edges
+        // wrap to red, grayscale CF converts red (0.299 * 255 = ~76) to
+        // a uniform gray. The whole layer should be ~(76, 76, 76, 255).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val luma = floatArrayOf(
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0f,     0f,     0f,     1f, 0f,
+                )
+                val cf = SkColorFilters.Matrix(luma)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 3f, sigmaY = 3f,
+                    tileMode = SkTileMode.kRepeat, input = null,
+                )
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.ColorFilter(cf, input = null),
+                        inner = blur,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
         }
+
+        // 0.299 * 255 ~= 76. Centre and corner should be ~uniform gray
+        // since the blur preserves the colour everywhere under kRepeat.
+        assertRgbaApprox(pixels, 16, 16, 76, 76, 76, 255,
+            tag = "Compose(gray, Blur(kRepeat)) centre", tol = 3,
+        )
+        assertRgbaApprox(pixels, 0, 0, 76, 76, 76, 255,
+            tag = "Compose(gray, Blur(kRepeat)) corner", tol = 3,
+        )
+        assertRgbaApprox(pixels, W - 1, H - 1, 76, 76, 76, 255,
+            tag = "Compose(gray, Blur(kRepeat)) far corner", tol = 3,
+        )
     }
 
     @Test
