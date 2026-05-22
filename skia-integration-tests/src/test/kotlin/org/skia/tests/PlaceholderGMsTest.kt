@@ -26,9 +26,6 @@ class PlaceholderGMsTest {
     // `@Disabled("STUB.EDGE_AA_IMAGE_SET")` until
     // SkCanvas.experimental_DrawEdgeAAImageSet has a body.
 
-    @Test @Disabled("SkJpegEncoder.Options.AlphaOption (Ignore / BlendOnBlack) not yet exposed.")
-    fun `EncodeJpegAlphaOptsGM placeholder`() { EncodeJpegAlphaOptsGM() }
-
     @Test @Disabled("GPU-only : texture-orientation / makeOrientedImage helpers not yet ported.")
     fun `FlippityGM placeholder`() { FlippityGM() }
 
