@@ -24,19 +24,40 @@ import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
 
 /**
- * Port of Skia's `gm/crop_imagefilter.cpp::CropImageFilterGM` (16
- * variants). Each variant covers a `(SkTileMode_in, SkTileMode_out)`
- * pair via two layered [SkImageFilters.Crop] calls (input crop ->
- * Blur(4,4) -> output crop) ; the GM walks a 4×5 grid where rows hold
- * input-relation × hint-content combinations and columns hold
- * output-relation values.
+ * Port of Skia's
+ * [`gm/crop_imagefilter.cpp`](https://github.com/google/skia/blob/main/gm/crop_imagefilter.cpp)
+ * — `CropImageFilterGM` (16 cpp variants). Each variant covers a
+ * `(SkTileMode_in, SkTileMode_out)` pair via two layered
+ * [SkImageFilters.Crop] calls (input crop -> Blur(4, 4) -> output
+ * crop) ; the GM walks a 4×5 grid where rows hold input-relation ×
+ * hint-content combinations and columns hold output-relation values.
  *
  * Each of the 16 cells layers an input crop / blur / output crop
  * filter on top of a stripe-pattern image, reusing the same
- * [makeSubset]-based "cropped image" helper to also tile the source
- * image at quarter alpha behind the filtered draw — that's the
- * call-site that exercises the new `:kanvas-skia` [SkImage.makeSubset]
- * API.
+ * [makeCroppedImage]-based "cropped image" helper (built on
+ * [SkImage.makeSubset]) to also tile the source image at quarter
+ * alpha behind the filtered draw — that's the call-site that
+ * exercises the [SkImage.makeSubset] API on `:kanvas-skia`.
+ *
+ * ## Port status
+ *
+ * Body is fully ported against the live `:kanvas-skia`
+ * [SkImageFilters], [SkImage.makeShader] / [SkImage.makeSubset],
+ * [SkDashPathEffect] and [SkSurfaces.Raster] surfaces. The matching
+ * [CropImageFilterGMTest] is **active** (no `@Disabled`) and ratchets
+ * 4 of the 16 cpp variants — the `(decal, decal)` /  `(clamp, clamp)`
+ * / `(repeat, repeat)` / `(mirror, mirror)` diagonal. Only
+ * `(decal, decal)` currently lands above 80 % similarity vs the
+ * upstream PNG reference ; the three non-decal diagonals score
+ * ~7 % — tracked as a known divergence in
+ * `:cpu-raster`'s saveLayer + non-decal `Crop` tile-mode interaction
+ * (see [skia-integration-tests/test-similarity-report.md] entries),
+ * not a body-port gap.
+ *
+ * Classification per the GM port methodology : **LAZY_PORT** (body
+ * already a faithful translation of the cpp at the time of authoring
+ * in `Iter 4 — Extract Skia-mirror GMs into :skia-integration-tests`
+ * — #469).
  */
 public class CropImageFilterGM(
     private val inputMode: SkTileMode,
