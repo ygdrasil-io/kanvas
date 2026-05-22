@@ -95,3 +95,4 @@ org.graphiks.math.SkMatrix.Companion.concat	SkMatrix::setConcat	math/src/main/ko
 org.graphiks.math.SkMatrix.Companion.MakeAll	SkMatrix::MakeAll	math/src/main/kotlin/SkMatrix.kt:1057	include/core/SkMatrix.h:153
 org.graphiks.math.SkMatrix.Companion.MakeRSXform	SkMatrix::setRSXform	math/src/main/kotlin/SkMatrix.kt:1082	src/core/SkMatrix.cpp:424
 org.graphiks.math.SkMatrix.Companion.MakePolyToPoly	SkMatrix::PolyToPoly	math/src/main/kotlin/SkMatrix.kt:1122	src/core/SkMatrix.cpp:1306
+org.graphiks.math.SkMatrix.Companion.isDegenerate2x2	is_degenerate_2x2	math/src/main/kotlin/SkMatrix.kt:945	src/core/SkMatrix.cpp:176

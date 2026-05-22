@@ -96,3 +96,4 @@ org.graphiks.math.SkIRect.Companion.MakeEmpty	SkIRect::MakeEmpty	math/src/main/k
 org.graphiks.math.SkIRect.Companion.MakeSize	SkIRect::MakeSize	math/src/main/kotlin/SkRect.kt:419	include/core/SkRect.h:71
 org.graphiks.math.SkIRect.Companion.MakePtSize	SkIRect::MakePtSize	math/src/main/kotlin/SkRect.kt:420	include/core/SkRect.h:83
 org.graphiks.math.SkIRect.Companion.Intersects	SkIRect::Intersects	math/src/main/kotlin/SkRect.kt:423	include/core/SkRect.h:540
+org.graphiks.math.SkIRect.isSorted	SkIRect::isSorted	math/src/main/kotlin/SkRect.kt:350	include/core/SkRect.h:717

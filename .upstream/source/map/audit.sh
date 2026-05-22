@@ -7,8 +7,20 @@ Compare l'ensemble des symboles publics Kotlin (depuis les sources
 des TSVs dans `.upstream/source/map/<module>/`.
 
 Reporte :
-- MISSING — symboles publics Kotlin sans entrée TSV (à backfill)
-- STALE   — entrées TSV sans symbole Kotlin correspondant (à supprimer ou ré-aligner)
+- MISSING  — symboles publics Kotlin sans entrée TSV (à backfill)
+- STALE    — entrées TSV sans symbole Kotlin correspondant (à supprimer ou ré-aligner)
+- EXCLUDED — symboles ignorés (Kotlin-idiom + whitelist `_ignore.txt`)
+
+Exclusions automatiques (Kotlin-idiom sans contrepartie upstream) :
+- `override fun equals(other: Any?): Boolean`
+- `override fun hashCode(): Int`
+- `override fun toString(): String`
+
+Exclusions explicites :
+- Fichier `<.upstream/source/map>/<module>/_ignore.txt` — une FQN Kotlin par
+  ligne. Lignes vides et `# commentaires` autorisées. Sert pour les
+  symboles Kotlin-original (constantes de pratique, factory methods sans
+  Skia counterpart, tests qui n'ont pas d'analogue C++ direct, …).
 
 Usage :
     audit.sh <module>
@@ -73,6 +85,13 @@ class Symbol:
     fqn: str
     file: Path
     line: int
+    # Why this symbol is auto-excluded (None if it should be audited).
+    excluded_reason: str | None = None
+
+
+# Names whose `override fun <name>(): T` is always a Kotlin/Java idiom override
+# (Any/Object methods) and never maps to a Skia upstream symbol.
+_OVERRIDE_OBJECT_METHODS = {"equals", "hashCode", "toString"}
 
 
 def _strip(code: str) -> str:
@@ -159,7 +178,25 @@ def extract_symbols(kt_file: Path, repo_root: Path) -> list[Symbol]:
                         fqn = f"{pkg}.{scope_path}.{name}" if pkg else f"{scope_path}.{name}"
                     else:
                         fqn = f"{pkg}.{name}" if pkg else name
-                    out.append(Symbol(fqn=fqn, file=kt_file.relative_to(repo_root), line=lineno))
+                    # Auto-exclude `override fun equals/hashCode/toString` —
+                    # those are Kotlin/Java idiom overrides of Any/Object,
+                    # never mapped to a Skia upstream symbol.
+                    excluded_reason: str | None = None
+                    mods_parts = m.group("mods").split()
+                    if (
+                        kind == "fun"
+                        and "override" in mods_parts
+                        and name in _OVERRIDE_OBJECT_METHODS
+                    ):
+                        excluded_reason = "override-Any-method"
+                    out.append(
+                        Symbol(
+                            fqn=fqn,
+                            file=kt_file.relative_to(repo_root),
+                            line=lineno,
+                            excluded_reason=excluded_reason,
+                        )
+                    )
                 if is_public and kind in {"class", "object", "interface"}:
                     pending_scope = name
                     primary_ctor_scope = name
@@ -242,6 +279,19 @@ def load_tsv_kotlin_fqns(tsv_dir: Path) -> set[str]:
     return out
 
 
+def load_ignore_set(tsv_dir: Path) -> set[str]:
+    """Load `_ignore.txt` — one Kotlin FQN per line. `#` starts a comment."""
+    out: set[str] = set()
+    f = tsv_dir / "_ignore.txt"
+    if not f.is_file():
+        return out
+    for raw in f.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            out.add(line)
+    return out
+
+
 # --- Main ---------------------------------------------------------------------
 
 def find_repo_root(start: Path) -> Path:
@@ -290,17 +340,33 @@ def main(argv: list[str]) -> int:
         for sym in extract_symbols(kt, repo_root):
             kotlin_symbols[sym.fqn] = sym
 
-    # Load TSV FQNs for this module
+    # Load TSV FQNs and ignore-list for this module
     tsv_dir = script_dir / module
     tsv_fqns = load_tsv_kotlin_fqns(tsv_dir)
+    ignore_fqns = load_ignore_set(tsv_dir)
 
-    kotlin_set = set(kotlin_symbols.keys())
+    # Auto-excluded symbols (Kotlin-idiom heuristics on the symbol itself).
+    auto_excluded = {
+        fqn for fqn, sym in kotlin_symbols.items() if sym.excluded_reason is not None
+    }
+    # Explicit exclusions from `_ignore.txt`. Only count entries that actually
+    # match a current Kotlin symbol — anything else is reported as STALE.
+    explicit_excluded = ignore_fqns & set(kotlin_symbols.keys())
+    excluded = auto_excluded | explicit_excluded
+
+    kotlin_set = set(kotlin_symbols.keys()) - excluded
     missing = sorted(kotlin_set - tsv_fqns)
-    stale = sorted(tsv_fqns - kotlin_set)
+    # STALE: TSV entries OR ignore entries with no matching Kotlin symbol.
+    stale_tsv = tsv_fqns - set(kotlin_symbols.keys())
+    stale_ignore = ignore_fqns - set(kotlin_symbols.keys())
+    stale = sorted(stale_tsv | stale_ignore)
 
     print(f"Module:        {module}")
     print(f"Kotlin sources scanned:  {len(kt_files)}")
-    print(f"Public symbols (heuristic): {len(kotlin_set)}")
+    print(f"Public symbols (heuristic): {len(kotlin_symbols)}")
+    print(f"  - auto-excluded (override Any methods): {len(auto_excluded)}")
+    print(f"  - explicit-excluded (_ignore.txt):      {len(explicit_excluded)}")
+    print(f"  - audited (remaining):                  {len(kotlin_set)}")
     print(f"TSV entries:    {len(tsv_fqns)}")
     print()
 
@@ -312,9 +378,14 @@ def main(argv: list[str]) -> int:
         print()
 
     if stale:
-        print(f"STALE — {len(stale)} entrée(s) TSV sans symbole Kotlin :")
+        print(f"STALE — {len(stale)} entrée(s) TSV/ignore sans symbole Kotlin :")
         for fqn in stale:
-            print(f"  {fqn}")
+            src = []
+            if fqn in stale_tsv:
+                src.append("tsv")
+            if fqn in stale_ignore:
+                src.append("ignore")
+            print(f"  [{','.join(src)}] {fqn}")
         print()
 
     if not missing and not stale:
