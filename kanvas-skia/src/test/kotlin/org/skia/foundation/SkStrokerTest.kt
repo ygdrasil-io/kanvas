@@ -163,4 +163,34 @@ class SkStrokerTest {
         // The stroked outline is 2 sub-contours, each 1 move + 4 line + 1 close = 12 verbs.
         assertNotEquals(src.verbs.size, out.verbs.size)
     }
+
+    @Test
+    fun `cubic with a true cusp emits an extra disc sub-contour vs cusp-free cubic`() {
+        // Classical cusp cubic — control polygon legs (P0,P1) and (P2,P3)
+        // X-cross because their endpoints lie on opposite sides of each
+        // other's supporting plane (per upstream `SkFindCubicCusp` rules) :
+        //   P0(0,0)-P1(10,10)  and  P2(0,10)-P3(10,0)
+        // The cusp lands at the X-crossing where the derivative magnitude
+        // collapses to zero.
+        val cuspy = SkPathBuilder()
+            .moveTo(0f, 0f)
+            .cubicTo(10f, 10f, 0f, 10f, 10f, 0f)
+            .detach()
+        // Cusp-free cubic with the same start/end ; no leg crossing — the
+        // upstream check returns -1 and no band-aid disc is emitted.
+        val smooth = SkPathBuilder()
+            .moveTo(0f, 0f)
+            .cubicTo(2f, 5f, 8f, 5f, 10f, 0f)
+            .detach()
+
+        val cuspyOut = stroker(4f).stroke(cuspy)
+        val smoothOut = stroker(4f).stroke(smooth)
+
+        val cuspyMoves = cuspyOut.verbs.count { it == SkPath.Verb.kMove }
+        val smoothMoves = smoothOut.verbs.count { it == SkPath.Verb.kMove }
+        // Both produce 1 sub-contour for the stroke band ; the cuspy case
+        // additionally emits the band-aid disc → +1 moveTo.
+        assertEquals(smoothMoves + 1, cuspyMoves,
+            "cubic-cusp band-aid should add exactly one moveTo (the addCircle disc)")
+    }
 }

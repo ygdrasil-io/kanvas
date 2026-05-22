@@ -68,6 +68,20 @@ import kotlin.math.sqrt
  * `strokeWidth ≤ 0` is treated as a 1-unit hairline (no separate hairline
  * code path yet — this is an approximation that produces correct visible
  * output for typical cases; bit-exact hairline can come later).
+ *
+ * Cubic cusp band-aid
+ * -------------------
+ * When a cubic has a cusp (point where the derivative magnitude collapses
+ * to zero), the naive "outer offset / inner offset" approach leaves a
+ * bowtie / butterfly hole at the cusp because the two side polylines
+ * meet at the same point with opposite directions. Mirroring upstream
+ * Skia's `SkPathStroker::cubicTo` -> `fCusper.addCircle(cuspLoc, fRadius)`
+ * fix (see `src/core/SkStroke.cpp:1363-1367`), we detect cubic cusps
+ * during the flatten pass via [findCubicCusp] (port of `SkFindCubicCusp`
+ * in `src/core/SkGeometry.cpp:1112`) and emit an extra filled disc of
+ * radius `halfW` at each cusp location. The winding fill rule unions
+ * the disc with the stroke band, hiding the bowtie hole. See K8 PR #607
+ * for the RCA on `OverStrokeGM`.
  */
 public class SkStroker private constructor(
     public val width: SkScalar,
@@ -99,8 +113,19 @@ public class SkStroker private constructor(
             return SkPathBuilder().setFillType(SkPathFillType.kWinding).detach()
         }
         val out = SkPathBuilder().setFillType(SkPathFillType.kWinding)
-        for (contour in flattenContours(src, flatnessSq, conicSteps)) {
+        val cusps = FloatArrayList()
+        for (contour in flattenContoursWithCusps(src, flatnessSq, conicSteps, cusps)) {
             strokeContour(out, contour)
+        }
+        // Upstream Skia (post-2016) port : `SkPathStroker::cubicTo` ->
+        // `fCusper.addCircle(cuspLoc, fRadius)`. When a cubic has a cusp
+        // (point of zero derivative + max curvature) the "outer offset /
+        // inner offset" approach above leaves a bowtie/butterfly hole near
+        // the cusp ; the winding-fill union with a disc of radius `halfW`
+        // at the cusp location fills it. See K8 PR #607 for the RCA.
+        val n = cusps.size / 2
+        for (i in 0 until n) {
+            out.addCircle(cusps[i * 2], cusps[i * 2 + 1], halfW)
         }
         return out.detach()
     }
@@ -374,6 +399,19 @@ internal fun flattenContours(
     path: SkPath,
     flatnessSq: Float,
     conicSteps: Int,
+): List<Polyline> = flattenContoursWithCusps(path, flatnessSq, conicSteps, cuspsOut = null)
+
+/**
+ * Same as [flattenContours], but additionally records cubic-cusp
+ * locations (one `(x, y)` pair per detected cusp) into [cuspsOut].
+ * Mirrors upstream Skia's `SkPathStroker::cubicTo` ->
+ * `fCusper.addCircle(cuspLoc, fRadius)` band-aid. See [SkStroker.stroke].
+ */
+internal fun flattenContoursWithCusps(
+    path: SkPath,
+    flatnessSq: Float,
+    conicSteps: Int,
+    cuspsOut: FloatArrayList?,
 ): List<Polyline> {
     val out = ArrayList<Polyline>()
     var current = ArrayList<Float>()
@@ -420,6 +458,14 @@ internal fun flattenContours(
                 val x2 = coords[coordIdx++]; val y2 = coords[coordIdx++]
                 val x3 = coords[coordIdx++]; val y3 = coords[coordIdx++]
                 flattenCubic(current, px, py, x1, y1, x2, y2, x3, y3, 0, flatnessSq)
+                if (cuspsOut != null) {
+                    val t = findCubicCusp(px, py, x1, y1, x2, y2, x3, y3)
+                    if (t > 0f) {
+                        val cx = evalCubicX(px, x1, x2, x3, t)
+                        val cy = evalCubicY(py, y1, y2, y3, t)
+                        cuspsOut.add(cx); cuspsOut.add(cy)
+                    }
+                }
                 px = x3; py = y3
             }
             SkPath.Verb.kClose -> {
@@ -509,6 +555,210 @@ private fun flattenConic(
         val numY = u * u * y0 + 2f * u * t * w * y1 + t * t * y2
         out.add(numX / numW); out.add(numY / numW)
     }
+}
+
+// ----------------------------------------------------------------------
+// Cubic-cusp detection (port of upstream Skia `SkFindCubicCusp` +
+// `SkFindCubicMaxCurvature` from `src/core/SkGeometry.cpp`). Used by
+// the stroker as a band-aid for the "overstroke" bowtie artifact —
+// when a cubic has a cusp we fill a disc of radius `halfW` at the
+// cusp location, hiding the self-intersection hole of the outer/inner
+// offset polyline.
+// ----------------------------------------------------------------------
+
+internal fun evalCubicX(x0: Float, x1: Float, x2: Float, x3: Float, t: Float): Float {
+    val u = 1f - t
+    return u * u * u * x0 + 3f * u * u * t * x1 + 3f * u * t * t * x2 + t * t * t * x3
+}
+
+internal fun evalCubicY(y0: Float, y1: Float, y2: Float, y3: Float, t: Float): Float {
+    val u = 1f - t
+    return u * u * u * y0 + 3f * u * u * t * y1 + 3f * u * t * t * y2 + t * t * t * y3
+}
+
+/**
+ * Returns t in (0, 1) of the cubic cusp, or `-1f` if there is none.
+ * Port of `SkFindCubicCusp` (`src/core/SkGeometry.cpp:1112`).
+ *
+ * A cubic has a cusp when both legs (P0,P1) and (P2,P3) cross the
+ * middle leg (P1,P2) — equivalent to the control polygon "X"-ing
+ * itself. At the cusp, derivative magnitude vanishes (close to zero
+ * relative to the cubic's overall extent).
+ */
+internal fun findCubicCusp(
+    x0: Float, y0: Float, x1: Float, y1: Float,
+    x2: Float, y2: Float, x3: Float, y3: Float,
+): Float {
+    // Same-side filters used by upstream — match degenerate cubics
+    // (cf. the on_same_side helper).
+    if (x0 == x1 && y0 == y1) return -1f
+    if (x2 == x3 && y2 == y3) return -1f
+    if (onSameSide(x0, y0, x1, y1, x2, y2, x3, y3)) return -1f  // ends both relative to (P0,P1)
+    if (onSameSide(x2, y2, x3, y3, x0, y0, x1, y1)) return -1f  // start/control relative to (P2,P3)
+
+    val roots = FloatArray(3)
+    val n = findCubicMaxCurvature(x0, y0, x1, y1, x2, y2, x3, y3, roots)
+
+    val precision = (
+        sqDist(x0, y0, x1, y1) +
+        sqDist(x1, y1, x2, y2) +
+        sqDist(x2, y2, x3, y3)
+    ) * 1e-8f
+
+    for (i in 0 until n) {
+        val t = roots[i]
+        if (t <= 0f || t >= 1f) continue
+        // F'(t) at t — checks magnitude.
+        val u = 1f - t
+        val dxA = 3f * (x1 - x0); val dxB = 3f * (x2 - x1); val dxC = 3f * (x3 - x2)
+        val dyA = 3f * (y1 - y0); val dyB = 3f * (y2 - y1); val dyC = 3f * (y3 - y2)
+        val dx = u * u * dxA + 2f * u * t * dxB + t * t * dxC
+        val dy = u * u * dyA + 2f * u * t * dyB + t * t * dyC
+        if (dx * dx + dy * dy < precision) return t
+    }
+    return -1f
+}
+
+private fun sqDist(ax: Float, ay: Float, bx: Float, by: Float): Float {
+    val dx = bx - ax; val dy = by - ay
+    return dx * dx + dy * dy
+}
+
+/**
+ * Returns true if both points (tx0,ty0), (tx1,ty1) are in the same
+ * half-plane defined by the segment (lx0,ly0)->(lx1,ly1). Port of
+ * the static `on_same_side` helper in `SkGeometry.cpp`.
+ */
+private fun onSameSide(
+    lx0: Float, ly0: Float, lx1: Float, ly1: Float,
+    tx0: Float, ty0: Float, tx1: Float, ty1: Float,
+): Boolean {
+    val lineX = lx1 - lx0; val lineY = ly1 - ly0
+    val c0 = lineX * (ty0 - ly0) - lineY * (tx0 - lx0)
+    val c1 = lineX * (ty1 - ly0) - lineY * (tx1 - lx0)
+    return c0 * c1 >= 0f
+}
+
+/**
+ * Port of `SkFindCubicMaxCurvature` — finds up to 3 t values where
+ * F'(t) · F''(t) = 0 (max curvature candidates), solving the cubic
+ * polynomial `C·C t³ + 3B·C t² + (2B·B + C·A) t + A·B = 0` for each
+ * axis-summed coefficient. Returns the number of real roots written
+ * to [tValues] (already clamped to `[0, 1]` and sorted).
+ */
+private fun findCubicMaxCurvature(
+    x0: Float, y0: Float, x1: Float, y1: Float,
+    x2: Float, y2: Float, x3: Float, y3: Float,
+    tValues: FloatArray,
+): Int {
+    val coeffX = FloatArray(4)
+    val coeffY = FloatArray(4)
+    formulateF1DotF2(x0, x1, x2, x3, coeffX)
+    formulateF1DotF2(y0, y1, y2, y3, coeffY)
+    for (i in 0..3) coeffX[i] += coeffY[i]
+    return solveCubicPoly(coeffX, tValues)
+}
+
+private fun formulateF1DotF2(s0: Float, s1: Float, s2: Float, s3: Float, coeff: FloatArray) {
+    val a = s1 - s0
+    val b = s2 - 2f * s1 + s0
+    val c = s3 + 3f * (s1 - s2) - s0
+    coeff[0] = c * c
+    coeff[1] = 3f * b * c
+    coeff[2] = 2f * b * b + c * a
+    coeff[3] = a * b
+}
+
+/**
+ * Cubic-poly root solver — port of static `solve_cubic_poly` in
+ * `SkGeometry.cpp:961`. Returns 1, 2 or 3 roots in `tValues`, all
+ * clamped to `[0, 1]` and (for 3-root case) sorted ascending with
+ * duplicates collapsed.
+ */
+private fun solveCubicPoly(coeff: FloatArray, tValues: FloatArray): Int {
+    if (kotlin.math.abs(coeff[0]) < 1e-7f) {
+        return solveQuadRoots(coeff[1], coeff[2], coeff[3], tValues)
+    }
+    val inva = 1f / coeff[0]
+    val a = coeff[1] * inva
+    val b = coeff[2] * inva
+    val c = coeff[3] * inva
+
+    val Q = (a * a - b * 3f) / 9f
+    val R = (2f * a * a * a - 9f * a * b + 27f * c) / 54f
+    val Q3 = Q * Q * Q
+    val R2MinusQ3 = R * R - Q3
+    val adiv3 = a / 3f
+
+    if (R2MinusQ3 < 0f) {  // 3 real roots
+        val sqQ = kotlin.math.sqrt(Q.toDouble())
+        val sqQ3 = sqQ * sqQ * sqQ
+        val ratio = (R.toDouble() / sqQ3).coerceIn(-1.0, 1.0)
+        val theta = acos(ratio)
+        val neg2RootQ = -2.0 * sqQ
+        tValues[0] = (neg2RootQ * cos(theta / 3.0) - adiv3.toDouble())
+            .toFloat().coerceIn(0f, 1f)
+        tValues[1] = (neg2RootQ * cos((theta + 2.0 * PI) / 3.0) - adiv3.toDouble())
+            .toFloat().coerceIn(0f, 1f)
+        tValues[2] = (neg2RootQ * cos((theta - 2.0 * PI) / 3.0) - adiv3.toDouble())
+            .toFloat().coerceIn(0f, 1f)
+        bubbleSort3(tValues)
+        return collapseDuplicates(tValues, 3)
+    }
+    // 1 real root
+    var A = kotlin.math.abs(R) + kotlin.math.sqrt(R2MinusQ3)
+    A = cbrtF(A)
+    if (R > 0f) A = -A
+    if (A != 0f) A += Q / A
+    tValues[0] = (A - adiv3).coerceIn(0f, 1f)
+    return 1
+}
+
+private fun cbrtF(v: Float): Float {
+    val d = v.toDouble()
+    val r = if (d >= 0.0) Math.cbrt(d) else -Math.cbrt(-d)
+    return r.toFloat()
+}
+
+/** Port of `SkFindUnitQuadRoots`. Returns 0..2 roots clamped to `[0, 1]`. */
+private fun solveQuadRoots(A: Float, B: Float, C: Float, roots: FloatArray): Int {
+    if (kotlin.math.abs(A) < 1e-7f) {
+        if (B == 0f) return 0
+        val t = (-C / B).coerceIn(0f, 1f)
+        roots[0] = t
+        return 1
+    }
+    val disc = B * B - 4f * A * C
+    if (disc < 0f) return 0
+    val sq = kotlin.math.sqrt(disc)
+    val q = if (B < 0f) -(B - sq) * 0.5f else -(B + sq) * 0.5f
+    var count = 0
+    val r0 = (q / A).coerceIn(0f, 1f)
+    roots[count++] = r0
+    if (q != 0f) {
+        val r1 = (C / q).coerceIn(0f, 1f)
+        if (r1 != r0) roots[count++] = r1
+    }
+    if (count == 2 && roots[0] > roots[1]) {
+        val tmp = roots[0]; roots[0] = roots[1]; roots[1] = tmp
+    }
+    return count
+}
+
+private fun bubbleSort3(a: FloatArray) {
+    if (a[0] > a[1]) { val t = a[0]; a[0] = a[1]; a[1] = t }
+    if (a[1] > a[2]) { val t = a[1]; a[1] = a[2]; a[2] = t }
+    if (a[0] > a[1]) { val t = a[0]; a[0] = a[1]; a[1] = t }
+}
+
+private fun collapseDuplicates(a: FloatArray, count: Int): Int {
+    var write = 1
+    for (i in 1 until count) {
+        if (a[i] != a[write - 1]) {
+            a[write++] = a[i]
+        }
+    }
+    return write
 }
 
 /**
