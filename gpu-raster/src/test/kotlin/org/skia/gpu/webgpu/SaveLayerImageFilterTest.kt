@@ -1407,11 +1407,144 @@ class SaveLayerImageFilterTest {
     }
 
     @Test
-    fun `saveLayer with Compose containing DropShadow leaf throws clear error`() {
-        // K1 GPU follow-up to PR #605 -- DropShadow inside a Compose
-        // tree is still deferred. The DropShadow path emits a two-pass
-        // shadow+original composite that doesn't trivially commute with
-        // the blur / colour-filter stages it would share the chain with.
+    fun `saveLayer with Compose(Blur, DropShadow) materialises DropShadow into scratch then blurs`() {
+        // L1a -- DropShadow as the innermost leaf inside a Compose tree.
+        // Walker order : inner first -> DropShadow encountered first ->
+        // materialise (shadow + original) into a layer-sized scratch as a
+        // pre-pass ; then the outer Blur runs against the scratch as if
+        // it were the raw layer source.
+        //
+        // Expected pixels :
+        //  - The blurred DropShadow result (red rect + offset black shadow,
+        //    softened by the outer 1.5-sigma blur).
+        //  - Centre of the rect : near-red (the blur softens edges but
+        //    the centre is unaffected when the rect is bigger than the
+        //    kernel reach).
+        //  - Pixel offset by (dx, dy) outside the rect : a soft-edged
+        //    shadow tinted black.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(8f, 8f, 16f, 16f)
+                val red = (255 shl 24) or (255 shl 16)
+                val black = 255 shl 24
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 1.5f, sigmaY = 1.5f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val ds = SkImageFilters.DropShadow(
+                    dx = 5f, dy = 7f,
+                    sigmaX = 1f, sigmaY = 1f,
+                    color = black, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(outer = blur, inner = ds)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = red })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Centre of the rect (12, 12) : red rectangle from the original
+        // pass, softened slightly by the outer 1.5-sigma blur. The rect
+        // is 8x8 so the centre stays close to red but tolerates blur
+        // attenuation from the kClamp neighbour samples.
+        val i = (12 * W + 12) * 4
+        val rC = pixels[i].toInt() and 0xFF
+        val gC = pixels[i + 1].toInt() and 0xFF
+        val bC = pixels[i + 2].toInt() and 0xFF
+        assertTrue(rC > 150 && gC < 100 && bC < 100) {
+            "Centre of rect should be predominantly red ; got ($rC, $gC, $bC)"
+        }
+        // Pixel inside the shadow's offset footprint, OUTSIDE the rect :
+        // (17, 19) lands at the rect centre + (5, 7). With small sigma
+        // the shadow alpha there is high, so the pixel should be darker
+        // than the white background (and not red, since the original
+        // doesn't reach this position).
+        val j = (19 * W + 17) * 4
+        val rS = pixels[j].toInt() and 0xFF
+        val gS = pixels[j + 1].toInt() and 0xFF
+        val bS = pixels[j + 2].toInt() and 0xFF
+        assertTrue(rS < 200 && gS < 200 && bS < 200) {
+            "Shadow region pixel should be darkened ; got ($rS, $gS, $bS)"
+        }
+        // Far corner -- outside both rect and shadow extent. White
+        // background untouched (small tolerance for the blur kernel's
+        // negligible tail).
+        assertRgbaApprox(pixels, 28, 2, 255, 255, 255, 255,
+            tag = "Compose(Blur, DropShadow) far white", tol = 2)
+    }
+
+    @Test
+    fun `saveLayer with Compose(ColorFilter, DropShadow) grayscales the materialised shadow`() {
+        // L1a -- DropShadow as innermost leaf, ColorFilter as outer.
+        // Walker order : inner first -> DropShadow materialises into
+        // scratch ; then the outer ColorFilter (grayscale matrix) runs on
+        // the scratch via the standard LayerCompositeDraw path.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(8f, 8f, 14f, 14f)
+                val red = (255 shl 24) or (255 shl 16)
+                val luma = floatArrayOf(
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0f,     0f,     0f,     1f, 0f,
+                )
+                val grayscale = SkColorFilters.Matrix(luma)
+                val ds = SkImageFilters.DropShadow(
+                    dx = 6f, dy = 6f,
+                    sigmaX = 0f, sigmaY = 0f,
+                    color = (255 shl 24) or 255, // opaque blue
+                    input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.ColorFilter(grayscale, input = null),
+                        inner = ds,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = red })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Original red rect at (8..14, 8..14) -> grayscale luma of red =
+        // 76. Tol of 5 to account for the materialised sub-passes and the
+        // 6-vec colour-filter pack rounding.
+        assertRgbaApprox(pixels, 10, 10, 76, 76, 76, 255,
+            tag = "Compose(CF, DropShadow) grayscale red", tol = 5)
+        // Shadow at (14..20, 14..20) was blue (0, 0, 255). Grayscale luma
+        // of blue = 29. Tol of 5.
+        assertRgbaApprox(pixels, 16, 16, 29, 29, 29, 255,
+            tag = "Compose(CF, DropShadow) grayscale blue shadow", tol = 5)
+        // Far untouched background -- grayscale of white is still white.
+        assertRgbaApprox(pixels, 28, 28, 255, 255, 255, 255,
+            tag = "Compose(CF, DropShadow) far white", tol = 1)
+    }
+
+    @Test
+    fun `saveLayer with Compose(DropShadow, Blur) throws L1b deferred error`() {
+        // L1a -- the inverse Compose layout (DropShadow on the OUTER side,
+        // Blur on the INNER side) walks Blur first, accumulating it into
+        // the plan, then sees DropShadow. Materialising the (Blur +
+        // anything else) plan into the DropShadow's source needs a SECOND
+        // RTT pre-pass (chain-of-passes), deferred to L1b.
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
@@ -1441,8 +1574,8 @@ class SaveLayerImageFilterTest {
             "Expected IllegalStateException for Compose(DropShadow, Blur) ; got $err"
         }
         val msg = err?.message ?: ""
-        assertTrue(msg.contains("not yet supported") || msg.contains("DropShadow")) {
-            "Error message should call out the unsupported leaf ; got : $msg"
+        assertTrue(msg.contains("DropShadow") && msg.contains("L1b")) {
+            "Error message should call out the L1b deferral ; got : $msg"
         }
     }
 
