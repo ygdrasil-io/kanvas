@@ -63,6 +63,7 @@ import org.skia.core.SkDevice
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmapShader
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkComposePathEffect
 import org.skia.foundation.SkCornerPathEffect
 import org.skia.foundation.SkDashPathEffect
@@ -7602,24 +7603,49 @@ public class SkWebGpuDevice(
      * G2.x -- collapse an [SkClipShape] (circle / oval / uniform-corner
      * rrect / rect) into the rrect parameterisation expected by
      * `solid_color.wgsl`'s `rrect_cov` helper. Returns `(kind, bounds,
-     * rx, ry)` where `kind` is either [CLIP_KIND_NONE] (no shape clip ;
-     * the shader skips the modulation step) or [CLIP_KIND_RRECT] (the
-     * shader runs the rrect coverage formula). [SkClipShape.Rect] also
-     * collapses to `CLIP_KIND_NONE` -- the integer scissor already
-     * tightens the draw to the rect bounds, no need to pay the rrect-
-     * coverage cost in the shader.
+     * rx, ry)` where `kind` is one of [CLIP_KIND_NONE] (no shape clip ;
+     * the shader skips the modulation step), [CLIP_KIND_RRECT] (the
+     * shader runs the rrect coverage formula and intersects), or
+     * [CLIP_KIND_RRECT_DIFFERENCE] (M4 ; the shader runs the same
+     * formula but uses `1 - cov` so the shape carves out a hole).
+     *
+     * [SkClipShape.Rect] with [SkClipOp.kIntersect] also collapses to
+     * `CLIP_KIND_NONE` -- the integer scissor already tightens the
+     * draw to the rect bounds, no need to pay the rrect-coverage cost
+     * in the shader. Rect with [SkClipOp.kDifference] **does** need
+     * the shader path because scissor can only intersect ; it ships
+     * `CLIP_KIND_RRECT_DIFFERENCE` with `rx = ry = 0` so `rrect_cov`
+     * collapses to axis-aligned rect coverage and the inversion
+     * yields the desired "outside the rect" mask.
      */
     private fun packClipShape(
         shape: SkClipShape?,
     ): ClipShapePack = when (shape) {
-        null, is SkClipShape.Rect -> ClipShapePack(
+        null -> ClipShapePack(
             kind = CLIP_KIND_NONE,
             bounds = ZERO_RECT4,
             rx = 0f,
             ry = 0f,
         )
+        is SkClipShape.Rect -> when (shape.op) {
+            SkClipOp.kIntersect -> ClipShapePack(
+                kind = CLIP_KIND_NONE,
+                bounds = ZERO_RECT4,
+                rx = 0f,
+                ry = 0f,
+            )
+            SkClipOp.kDifference -> ClipShapePack(
+                kind = CLIP_KIND_RRECT_DIFFERENCE,
+                bounds = floatArrayOf(
+                    shape.bounds.left, shape.bounds.top,
+                    shape.bounds.right, shape.bounds.bottom,
+                ),
+                rx = 0f,
+                ry = 0f,
+            )
+        }
         is SkClipShape.Circle -> ClipShapePack(
-            kind = CLIP_KIND_RRECT,
+            kind = kindFor(shape.op),
             bounds = floatArrayOf(
                 shape.cx - shape.r, shape.cy - shape.r,
                 shape.cx + shape.r, shape.cy + shape.r,
@@ -7628,7 +7654,7 @@ public class SkWebGpuDevice(
             ry = shape.r,
         )
         is SkClipShape.Oval -> ClipShapePack(
-            kind = CLIP_KIND_RRECT,
+            kind = kindFor(shape.op),
             bounds = floatArrayOf(
                 shape.bounds.left, shape.bounds.top,
                 shape.bounds.right, shape.bounds.bottom,
@@ -7637,7 +7663,7 @@ public class SkWebGpuDevice(
             ry = shape.bounds.height() * 0.5f,
         )
         is SkClipShape.RRect -> ClipShapePack(
-            kind = CLIP_KIND_RRECT,
+            kind = kindFor(shape.op),
             bounds = floatArrayOf(
                 shape.bounds.left, shape.bounds.top,
                 shape.bounds.right, shape.bounds.bottom,
@@ -7645,6 +7671,13 @@ public class SkWebGpuDevice(
             rx = shape.rx,
             ry = shape.ry,
         )
+    }
+
+    /** M4 -- pick [CLIP_KIND_RRECT] vs [CLIP_KIND_RRECT_DIFFERENCE] from
+     *  the carried [SkClipOp]. */
+    private fun kindFor(op: SkClipOp): Float = when (op) {
+        SkClipOp.kIntersect -> CLIP_KIND_RRECT
+        SkClipOp.kDifference -> CLIP_KIND_RRECT_DIFFERENCE
     }
 
     /**
@@ -13994,6 +14027,18 @@ public class SkWebGpuDevice(
          */
         const val CLIP_KIND_NONE: Float = 0f
         const val CLIP_KIND_RRECT: Float = 1f
+        /**
+         * M4 -- analytical kDifference clip. Same `clipShapeBounds` +
+         * `(rx, ry)` layout as [CLIP_KIND_RRECT], but the shader
+         * inverts the coverage : `coverage *= 1 - rrect_cov(p)`. Unlocks
+         * `clipRect(rect, kDifference)` and `clipRRect(_, kDifference)`
+         * (the most common GM use, eg `Skbug9319GM`,
+         * `BlurredClippedCircleGM`) without going through a stencil
+         * mask. Rect-shaped difference is encoded by `rx = ry = 0`,
+         * which makes `rrect_cov` collapse to axis-aligned coverage and
+         * the inversion produces "outside the rect".
+         */
+        const val CLIP_KIND_RRECT_DIFFERENCE: Float = 2f
         /** Zero-filled placeholder rect bounds for [CLIP_KIND_NONE] uniform packing. */
         val ZERO_RECT4: FloatArray = floatArrayOf(0f, 0f, 0f, 0f)
         /**
