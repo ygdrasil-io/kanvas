@@ -62,55 +62,13 @@ org.graphiks.math.SkIPointTest.equals overload returns false on mismatch
 org.graphiks.math.SkIPointTest.saturating ops are exact when inputs do not overflow
 
 # --- SkIRectTest ---
-org.graphiks.math.SkIRectTest.Intersects companion
-org.graphiks.math.SkIRectTest.contains point is half-open
-org.graphiks.math.SkIRectTest.contains rect requires non-empty inner
-org.graphiks.math.SkIRectTest.intersect non-overlapping returns false unchanged
-org.graphiks.math.SkIRectTest.intersect overlapping clips to overlap
-org.graphiks.math.SkIRectTest.join expands to encompass r and skips empty args
-org.graphiks.math.SkIRectTest.offset offsetTo inset outset adjust
-org.graphiks.math.SkIRectTest.offsetTo uses 64-bit pinned arithmetic
-org.graphiks.math.SkIRectTest.setLTRB and setXYWH replace coordinates
-org.graphiks.math.SkIRectTest.sort and makeSorted swap reversed edges
 org.graphiks.math.SkIRectTest.topLeft returns SkIPoint
 
 # --- SkM44Test ---
-org.graphiks.math.SkM44Test.asM33 round-trip preserves affine fields
 org.graphiks.math.SkM44Test.copy constructor produces independent backing array
 org.graphiks.math.SkM44Test.equals and hashCode match by content
-org.graphiks.math.SkM44Test.getColMajor and getRowMajor produce transposed layouts
-org.graphiks.math.SkM44Test.identity times vector returns vector
-org.graphiks.math.SkM44Test.isFinite catches NaN and Inf
-org.graphiks.math.SkM44Test.mapPoint matches SkMatrix when m44 is affine
-org.graphiks.math.SkM44Test.mapRect identity returns rect unchanged
-org.graphiks.math.SkM44Test.mapRect with extreme perspective clips w less or equal 0 instead of NaN or Inf
-org.graphiks.math.SkM44Test.mapRect with mild perspective gives finite bounds matching projected corners
-org.graphiks.math.SkM44Test.multiplication is associative
-org.graphiks.math.SkM44Test.normalizePerspective is a no-op for perspective row not bottom-only
-org.graphiks.math.SkM44Test.normalizePerspective scales rows so bottom-right becomes one
-org.graphiks.math.SkM44Test.perspective produces non-affine matrix
-org.graphiks.math.SkM44Test.postTranslate matches setConcat with Translate on the left
-org.graphiks.math.SkM44Test.preScale 2D matches setConcat with Scale 2D
-org.graphiks.math.SkM44Test.preScale 3D matches setConcat with Scale 3D
-org.graphiks.math.SkM44Test.preTranslate matches setConcat with Translate
-org.graphiks.math.SkM44Test.rc and setRC interact correctly
-org.graphiks.math.SkM44Test.scale factory scales vector
-org.graphiks.math.SkM44Test.setM33 reproduces SkMatrix constructor
 
 # --- SkMatrixTest ---
-org.graphiks.math.SkMatrixTest.I returns Identity
-org.graphiks.math.SkMatrixTest.MakePerspective flips hasPerspective and getType
-org.graphiks.math.SkMatrixTest.MakePolyToPoly 1 point is pure translate
-org.graphiks.math.SkMatrixTest.MakePolyToPoly 3 points is general affine
-org.graphiks.math.SkMatrixTest.MakePolyToPoly 4 points unit square to skewed quad maps corners
-org.graphiks.math.SkMatrixTest.MakePolyToPoly empty returns identity
-org.graphiks.math.SkMatrixTest.MakePolyToPoly mismatched sizes returns null
-org.graphiks.math.SkMatrixTest.MakePolyToPoly more than 4 points returns null
-org.graphiks.math.SkMatrixTest.MakeRSXform 90 deg rotation maps (1, 0) to (0, 1) plus translate
-org.graphiks.math.SkMatrixTest.MakeRSXform identity yields identity matrix
-org.graphiks.math.SkMatrixTest.MakeRSXform with uniform scale 2 doubles vector lengths
-org.graphiks.math.SkMatrixTest.MakeSkew skews points
-org.graphiks.math.SkMatrixTest.MakeTrans SkVector overload matches dx dy form
 org.graphiks.math.SkMatrixTest.computeMaxScale never returns NaN for typical inputs
 org.graphiks.math.SkMatrixTest.concat of two perspective matrices builds 3x3 product
 org.graphiks.math.SkMatrixTest.deprecated computeMaxScale forwards to getMaxScale
@@ -143,41 +101,23 @@ org.graphiks.math.SkMatrixTest.pivoted MakeScale degenerates to identity for uni
 org.graphiks.math.SkMatrixTest.pivoted MakeScale leaves pivot fixed
 org.graphiks.math.SkMatrixTest.pivoted MakeSkew leaves pivot fixed
 org.graphiks.math.SkMatrixTest.pivoted preScale matches preConcat-with-MakeScale-pivoted
-org.graphiks.math.SkMatrixTest.postRotate matches R concat M
-org.graphiks.math.SkMatrixTest.postRotate pivoted anchors at pivot
-org.graphiks.math.SkMatrixTest.postScale closed form matches postConcat
-org.graphiks.math.SkMatrixTest.postScale pivoted fixes pivot in device space
-org.graphiks.math.SkMatrixTest.postScale unity short-circuit returns same matrix
-org.graphiks.math.SkMatrixTest.postSkew matches Skew concat M
-org.graphiks.math.SkMatrixTest.postTranslate affine adds dx dy directly
-org.graphiks.math.SkMatrixTest.postTranslate matches T concat M for any matrix
-org.graphiks.math.SkMatrixTest.postTranslate perspective uses postConcat
-org.graphiks.math.SkMatrixTest.preScale on affine leaves persp row at (0, 0, 1)
-org.graphiks.math.SkMatrixTest.preScale perspective propagates to persp0 and persp1
-org.graphiks.math.SkMatrixTest.preTranslate perspective dispatches through preConcat
 org.graphiks.math.SkMatrixTest.preservesRightAngles identity translate scale rotate skew
 org.graphiks.math.SkMatrixTest.singular value matches sqrt(eigenvalue) sanity check
 org.graphiks.math.SkMatrixTest.singular values are positive
 
 # --- SkPoint3Test ---
 org.graphiks.math.SkPoint3Test.default ctor is origin
-org.graphiks.math.SkPoint3Test.isFinite catches NaN and Inf
 
 # --- SkPointTest ---
-org.graphiks.math.SkPointTest.Distance is the magnitude of the difference
-org.graphiks.math.SkPointTest.Make and accessors store coordinates
 org.graphiks.math.SkPointTest.Offset companion shifts an array of points in place
 org.graphiks.math.SkPointTest.SkVector typealias is interchangeable with SkPoint
 org.graphiks.math.SkPointTest.data class equals is structural
 org.graphiks.math.SkPointTest.default ctor is zero point
-org.graphiks.math.SkPointTest.dot and cross products
 org.graphiks.math.SkPointTest.equals overload uses raw float equality
-org.graphiks.math.SkPointTest.isFinite catches NaN and infinity
 org.graphiks.math.SkPointTest.iset from SkIPoint matches
 org.graphiks.math.SkPointTest.iset promotes ints to floats
 org.graphiks.math.SkPointTest.minusAssign subtracts vector in place
 org.graphiks.math.SkPointTest.negate flips signs in place
-org.graphiks.math.SkPointTest.offset adds to both axes
 org.graphiks.math.SkPointTest.plus and minus operators compose like vector arithmetic
 org.graphiks.math.SkPointTest.plusAssign adds vector in place
 org.graphiks.math.SkPointTest.scale into dst leaves source untouched
@@ -188,33 +128,12 @@ org.graphiks.math.SkPointTest.timesAssign mutates in place
 org.graphiks.math.SkPointTest.unaryMinus returns a new negated point
 
 # --- SkRectTest ---
-org.graphiks.math.SkRectTest.Bounds of empty array is empty rect
-org.graphiks.math.SkRectTest.Bounds returns null on non-finite point
-org.graphiks.math.SkRectTest.Bounds returns tight bbox
 org.graphiks.math.SkRectTest.Intersects companion accepts loose coordinates
-org.graphiks.math.SkRectTest.Make from SkIRect promotes to float
-org.graphiks.math.SkRectTest.MakeLTRB stores corners verbatim
-org.graphiks.math.SkRectTest.MakeWH origin is zero
-org.graphiks.math.SkRectTest.MakeXYWH adds w h to origin
 org.graphiks.math.SkRectTest.TL TR BL BR return corners
-org.graphiks.math.SkRectTest.adjust shifts each edge independently
-org.graphiks.math.SkRectTest.contains point is half-open
-org.graphiks.math.SkRectTest.contains rect requires non-empty inner
-org.graphiks.math.SkRectTest.inset and outset are symmetric
-org.graphiks.math.SkRectTest.intersect non-overlapping returns false leaves unchanged
-org.graphiks.math.SkRectTest.intersect overlapping rects clips to overlap
-org.graphiks.math.SkRectTest.intersects predicate is NaN-safe
-org.graphiks.math.SkRectTest.join expands to encompass r
-org.graphiks.math.SkRectTest.join into empty becomes r
-org.graphiks.math.SkRectTest.join with empty r is no-op
-org.graphiks.math.SkRectTest.makeOffset Inset Outset return new rects
-org.graphiks.math.SkRectTest.offset and offsetTo
 org.graphiks.math.SkRectTest.round at half-integer ties rounds toward positive infinity
 org.graphiks.math.SkRectTest.round nearest-int
 org.graphiks.math.SkRectTest.roundIn ceils min floors max
 org.graphiks.math.SkRectTest.roundOut floors min ceils max
-org.graphiks.math.SkRectTest.setLTRB and setXYWH replace coordinates
-org.graphiks.math.SkRectTest.sort and makeSorted swap reversed edges
 
 # --- SkScalarTest ---
 org.graphiks.math.SkScalarTest.SkDegreesToRadians and SkRadiansToDegrees round-trip
@@ -241,26 +160,3 @@ org.graphiks.math.SkScalarTest.SkScalarTruncToScalar and TruncToInt
 org.graphiks.math.SkScalarTest.SkScalarsEqual element-wise
 org.graphiks.math.SkScalarTest.constants match Skia values
 org.graphiks.math.SkScalarTest.nearly-zero constants match Skia exactly
-
-# --- SkV2Test ---
-org.graphiks.math.SkV2Test.accessors and equality
-org.graphiks.math.SkV2Test.arithmetic operators
-org.graphiks.math.SkV2Test.dot and cross
-org.graphiks.math.SkV2Test.length and lengthSquared
-org.graphiks.math.SkV2Test.normalize produces unit length
-
-# --- SkV3Test ---
-org.graphiks.math.SkV3Test.Cross companion mirrors instance cross
-org.graphiks.math.SkV3Test.length of unit axes is 1
-org.graphiks.math.SkV3Test.normalize of zero is zero
-org.graphiks.math.SkV3Test.normalize returns unit length
-org.graphiks.math.SkV3Test.operator times SkV3 is component-wise, matching Skia upstream
-org.graphiks.math.SkV3Test.plus minus and unary minus
-org.graphiks.math.SkV3Test.scalar multiplication on both sides
-
-# --- SkV4Test ---
-org.graphiks.math.SkV4Test.accessors and equality
-org.graphiks.math.SkV4Test.dot and length
-org.graphiks.math.SkV4Test.indexed access mirrors C++ operator subscript
-org.graphiks.math.SkV4Test.normalize produces unit vector
-
