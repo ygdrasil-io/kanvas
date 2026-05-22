@@ -4,4 +4,4 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
-| SimpleOffsetImageFilterGM | 84.88% | (new) | 1 | 108,644 / 128,000 | 0, 88, 107, 110 | 0, 30, 35, 58 |
+| SaveLayerPreserveLCDTextGM | 95.75% | (new) | 1 | 178,089 / 186,000 | 0, 203, 199, 204 | 0, 54, 53, 54 |
