@@ -449,6 +449,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ScaledRectsGM | 87.79% | = | 1 | 7,192 / 8,192 | 0, 36, 7, 11 | 0, 36, 7, 11 |
 | ScaledStrokesGM | 96.03% | = | 1 | 196,665 / 204,800 | 0, 255, 255, 255 | 0, 129, 128, 128 |
 | ScaledTilemodesGM | 93.75% | = | 8 | 726,026 / 774,400 | 0, 187, 187, 187 | 0, 15, 9, 18 |
+| ScaledTilingGradientGM | 64.09% | (new) | 1 | 254,119 / 396,500 | 0, 255, 255, 255 | 0, 25, 16, 17 |
 | ShaderMaskFilterGM | 81.90% | = | 1 | 214,702 / 262,144 | 0, 52, 190, 223 | 0, 37, 120, 133 |
 | ShaderPathGM | 98.89% | = | 1 | 754,099 / 762,600 | 0, 217, 217, 217 | 0, 13, 15, 16 |
 | ShaderText3GM | 84.92% | = | 8 | 647,632 / 762,600 | 0, 217, 224, 217 | 0, 18, 28, 25 |
