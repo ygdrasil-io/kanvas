@@ -16,14 +16,14 @@ class OverStrokeTest {
         assertNotNull(reference, "Missing reference image OverStroke.png")
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
         TestReport.recordDetailed("OverStrokeGM", comparison)
-        if (comparison.similarity < 80.0) {
+        if (comparison.similarity < 85.0) {
             TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
         }
         val accepted = SimilarityTracker.updateScore("OverStrokeGM", comparison.similarity)
         assertTrue(accepted, "OverStrokeGM regressed below ratchet")
         assertTrue(
-            comparison.similarity >= 83.4,
-            "OverStrokeGM similarity ${"%.2f".format(comparison.similarity)}% < 83.4% floor",
+            comparison.similarity >= 85.5,
+            "OverStrokeGM similarity ${"%.2f".format(comparison.similarity)}% < 85.5% floor",
         )
     }
 }
