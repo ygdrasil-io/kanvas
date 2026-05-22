@@ -29,9 +29,6 @@ class PlaceholderGMsTest {
     @Test @Disabled("SkCanvas.drawImageSet / ImageSetEntry API not yet exposed.")
     fun `DrawImageSetRectToRectGM placeholder`() { DrawImageSetRectToRectGM() }
 
-    @Test @Disabled("SkJpegEncoder.Options.AlphaOption (Ignore / BlendOnBlack) not yet exposed.")
-    fun `EncodeJpegAlphaOptsGM placeholder`() { EncodeJpegAlphaOptsGM() }
-
     @Test @Disabled("GPU-only : texture-orientation / makeOrientedImage helpers not yet ported.")
     fun `FlippityGM placeholder`() { FlippityGM() }
 
