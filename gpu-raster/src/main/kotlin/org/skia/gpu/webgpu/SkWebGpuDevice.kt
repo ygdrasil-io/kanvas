@@ -4367,15 +4367,31 @@ public class SkWebGpuDevice(
      *      `paint.imageFilter = Blur` on `compositeFrom` are reused
      *      -- no new pipelines.
      *
-     * **Scope.** This slice supports the Blur variant only -- the
-     * dominant use case for backdrop in upstream Skia GMs (frosted-
-     * glass under a translucent overlay). Other filter variants
-     * (`ColorFilter`, `Offset`, `MatrixTransform`, `DropShadow`,
-     * `Compose`, ...) fall through to copy-only : the layer is
-     * seeded with raw parent pixels, the filter is silently dropped.
-     * Widening the supported set is a follow-up slice ; the CPU
-     * raster path in `SkCanvas.saveLayer` remains the full-featured
-     * fallback for offline / non-GPU rendering.
+     * **Scope.** Supported variants :
+     *  - `SkImageFilters.Blur(input = null)` (Phase J5) -- separable
+     *    Gaussian on the seeded copy, kClamp / kDecal tile modes.
+     *  - `SkImageFilters.ColorFilter(cf, input = null)` (Phase K3) --
+     *    the cf is folded into the copy-seed
+     *    [LayerCompositeDraw]'s `colorFilterPacked` slot ; no extra
+     *    render pass. Supports `SkColorFilters.Blend` and
+     *    `SkColorFilters.Matrix` (the two variants the WGSL composite
+     *    shader implements) ; other cf variants degrade to identity
+     *    (filter dropped, layer seeded with raw parent pixels).
+     *  - `SkImageFilters.DropShadow(dx, dy, sigmaX, sigmaY, color,
+     *    input = null)` (Phase K3) -- copy-seed + 3-pass
+     *    [BlurredLayerCompositeDraw] (H blur, V blur, tinted composite
+     *    onto the seeded layer via `mode = kDstOver` so the shadow
+     *    lands behind the existing content). Matches upstream
+     *    DropShadowImageFilter semantics : the shadow shows through
+     *    transparent regions of the seed (e.g. when the layer rect
+     *    extends past opaque parent content).
+     *
+     * Other variants (`Offset`, `MatrixTransform`, `Compose`, ...)
+     * fall through to copy-only : the layer is seeded with raw
+     * parent pixels, the filter is silently dropped. Widening the
+     * supported set is a follow-up slice ; the CPU raster path in
+     * `SkCanvas.saveLayer` remains the full-featured fallback for
+     * offline / non-GPU rendering.
      *
      * **Bail conditions** -- the seed silently no-ops (returns
      * `false`) when :
@@ -4416,6 +4432,24 @@ public class SkWebGpuDevice(
         // child target. `mode = kSrc` so the child's transparent
         // clear (via `setBackground(0)`) is replaced -- subsequent
         // layer draws then composite ON TOP via `loadOp = Load`.
+        //
+        // Phase K3 -- when [backdrop] is a [SkImageFilters.ColorFilter]
+        // wrap (with `input == null`), the inner [SkColorFilter] folds
+        // directly into the copy-seed's `colorFilterPacked` slot --
+        // the composite shader applies the cf per-sample, identical
+        // result to a snapshot-then-apply-cf path. Supported variants
+        // are [SkColorFilters.Blend] and [SkColorFilters.Matrix]
+        // (the two the WGSL `apply_color_filter` helper implements) ;
+        // others pack to the identity payload (kind = 0) and the seed
+        // degrades silently to copy-only. See [packLayerCompositeColorFilter].
+        val seedColorFilter = backdrop?.asColorFilterImageFilter()
+            ?.takeIf { it.input == null }
+            ?.colorFilter
+        val seedColorFilterPacked = if (seedColorFilter != null) {
+            packLayerCompositeColorFilter(seedColorFilter)
+        } else {
+            FloatArray(24) // identity (kind = 0).
+        }
         pending.add(
             LayerCompositeDraw(
                 layerView = gpuParent.intermediateView,
@@ -4427,16 +4461,17 @@ public class SkWebGpuDevice(
                 paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = SkBlendMode.kSrc,
-                colorFilterPacked = FloatArray(24), // identity (kind = 0).
+                colorFilterPacked = seedColorFilterPacked,
                 matrixPacked = IDENTITY_LAYER_MATRIX_12,
                 imageFilterPacked = FloatArray(12), // identity (kind = 0).
             ),
         )
 
-        // Step 2 (Phase J5) -- optional filter application on the
-        // seeded copy. Only `SkImageFilters.Blur(input = null)` is
-        // honoured in this slice ; other variants leave the seed at
-        // the copy-only result (matches the pre-J5 behaviour).
+        // Step 2 -- optional filter application on the seeded copy.
+        // Supported : Blur (Phase J5), DropShadow (Phase K3). ColorFilter
+        // was already folded into the copy-seed's colorFilterPacked
+        // above ; other variants leave the seed at copy-only (silent
+        // degrade, matches the SkDevice.seedBackdropFrom kdoc).
         if (backdrop != null) {
             val blur = backdrop.asBlurImageFilter()
             if (blur != null && blur.input == null &&
@@ -4451,6 +4486,19 @@ public class SkWebGpuDevice(
                     sigmaX = blur.sigmaX, sigmaY = blur.sigmaY,
                     tileMode = blur.tileMode,
                 )
+            } else {
+                val dropShadow = backdrop.asDropShadowImageFilter()
+                if (dropShadow != null && dropShadow.input == null &&
+                    dropShadow.sigmaX.isFinite() && dropShadow.sigmaY.isFinite() &&
+                    dropShadow.sigmaX >= 0f && dropShadow.sigmaY >= 0f
+                ) {
+                    enqueueBackdropDropShadowSeed(
+                        width = width, height = height,
+                        dx = dropShadow.dx, dy = dropShadow.dy,
+                        sigmaX = dropShadow.sigmaX, sigmaY = dropShadow.sigmaY,
+                        shadowColor = dropShadow.color,
+                    )
+                }
             }
             // All other variants : seed stays at copy-only (silent
             // degrade -- matches the SkDevice.seedBackdropFrom kdoc).
@@ -4543,6 +4591,137 @@ public class SkWebGpuDevice(
                 scratchPreCfView = null,
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = SkBlendMode.kSrc,
+            ),
+        )
+    }
+
+    /**
+     * Phase K3 helper -- enqueue a [BlurredLayerCompositeDraw] that
+     * sources `this` device's [intermediateView] (the just-seeded
+     * parent copy) and lands a colorized blurred shadow BEHIND it
+     * via `mode = kDstOver`. Mirrors [enqueueBackdropBlurSeed] but
+     * specialised for the DropShadow backdrop variant :
+     *  - The blur runs on the seeded copy (3-pass : H -> scratchH,
+     *    V -> scratchV, composite -> intermediate).
+     *  - The composite slot ships a `Blend(shadowColor, kSrcIn)`
+     *    color filter that masks the blurred RGB out and keeps the
+     *    blurred alpha tinted to the shadow colour (premul).
+     *  - The composite uses `dstOrigin = (sdx, sdy)` to offset the
+     *    shadow by the integer-rounded DropShadow displacement.
+     *  - `mode = kDstOver` so the shadow lands BEHIND the existing
+     *    seed (which holds the parent pixels). The shadow shows
+     *    through transparent regions of the seed -- e.g. when the
+     *    layer rect extends past opaque parent content, mirroring
+     *    upstream `SkDropShadowImageFilter::filterImage` semantics.
+     *
+     * Tile mode for the blur is forced to kDecal -- the shadow alpha
+     * falls off to zero outside the layer rect, so the kernel sees a
+     * decaled silhouette (matches the `enqueueDropShadowLayerComposite`
+     * choice for the `paint.imageFilter = DropShadow` path).
+     *
+     * The read-after-write hazard between the copy-seed (writes
+     * `intermediateView`) and the blur's H pass (reads
+     * `intermediateView`) is naturally serialised : both draws are
+     * separate render passes in [encodePendingDrawsToIntermediate],
+     * dispatched in `pending` order. Likewise the V scratch read in
+     * the final composite is decoupled from the composite's write to
+     * `intermediateView` (different textures).
+     */
+    private fun enqueueBackdropDropShadowSeed(
+        width: Int, height: Int,
+        dx: Float, dy: Float,
+        sigmaX: Float, sigmaY: Float,
+        // `SkColor` is `Int` (see math/SkColor.kt) -- the ushr below
+        // unpacks the ARGB nibbles.
+        shadowColor: Int,
+    ) {
+        val unboundedRadiusX = if (sigmaX > 0f) {
+            ceil(3.0 * sigmaX).toInt().coerceAtLeast(1)
+        } else 0
+        val unboundedRadiusY = if (sigmaY > 0f) {
+            ceil(3.0 * sigmaY).toInt().coerceAtLeast(1)
+        } else 0
+        val radiusX = unboundedRadiusX.coerceAtMost(MAX_BLUR_RADIUS)
+        val radiusY = unboundedRadiusY.coerceAtMost(MAX_BLUR_RADIUS)
+        val kernelX = if (radiusX > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaX, radiusX)
+        } else floatArrayOf(1f)
+        val kernelY = if (radiusY > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaY, radiusY)
+        } else floatArrayOf(1f)
+
+        // Integer-round the shadow displacement -- same rounding the
+        // CPU raster's SkDropShadowImageFilter uses (and the existing
+        // [enqueueDropShadowLayerComposite] for paint.imageFilter).
+        val sdx = floor(dx + 0.5f).toInt()
+        val sdy = floor(dy + 0.5f).toInt()
+
+        // Pack the shadow tint as Blend(shadowColor, kSrcIn) -- the
+        // composite shader masks the blurred RGB out and keeps only
+        // the blurred alpha multiplied by the shadow colour (premul),
+        // matching upstream SkDropShadow semantics.
+        val ca = ((shadowColor ushr 24) and 0xFF) / 255f
+        val crNonPre = ((shadowColor ushr 16) and 0xFF) / 255f
+        val cgNonPre = ((shadowColor ushr 8) and 0xFF) / 255f
+        val cbNonPre = (shadowColor and 0xFF) / 255f
+        val tintPacked = FloatArray(24)
+        tintPacked[0] = 1f // kind = 1 (Blend)
+        tintPacked[1] = SkBlendMode.kSrcIn.ordinal.toFloat()
+        tintPacked[4] = crNonPre * ca // premul R
+        tintPacked[5] = cgNonPre * ca // premul G
+        tintPacked[6] = cbNonPre * ca // premul B
+        tintPacked[7] = ca            // alpha
+
+        val scratchH = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.backdropDropShadowScratchH",
+            ),
+        )
+        val scratchHView = scratchH.createView()
+        val scratchV = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.backdropDropShadowScratchV",
+            ),
+        )
+        val scratchVView = scratchV.createView()
+
+        pending.add(
+            BlurredLayerCompositeDraw(
+                layerView = intermediateView,
+                layerWidth = width, layerHeight = height,
+                scratchHTexture = scratchH, scratchHView = scratchHView,
+                scratchVTexture = scratchV, scratchVView = scratchVView,
+                // Composite offset by the integer-rounded shadow
+                // displacement. Out-of-bounds samples on the V scratch
+                // fall outside the scratch extent and the composite
+                // shader's textureLoad returns the implicit clamp ;
+                // the scissor below culls the off-rect pixels back to
+                // the layer's footprint anyway.
+                dstOriginX = sdx, dstOriginY = sdy,
+                scissor = intArrayOf(0, 0, width, height),
+                kernelX = kernelX, radiusX = radiusX,
+                kernelY = kernelY, radiusY = radiusY,
+                tileModeOrdinal = SkTileMode.kDecal.ordinal,
+                paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
+                colorFilterPacked = tintPacked,
+                preBlurColorFilterPacked = null,
+                scratchPreCfTexture = null,
+                scratchPreCfView = null,
+                r = 1f, g = 1f, b = 1f, a = 1f,
+                // kDstOver : shadow lands BEHIND existing seed pixels.
+                // The seed already holds opaque parent content where
+                // the parent is opaque, so the shadow shows through
+                // transparent seed regions only (matches the upstream
+                // DropShadowImageFilter::filterImage semantic of "the
+                // shadow is a separate layer composited under the
+                // source").
+                mode = SkBlendMode.kDstOver,
             ),
         )
     }
