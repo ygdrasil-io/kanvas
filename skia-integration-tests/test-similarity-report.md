@@ -424,6 +424,13 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | QuadPathGM | 87.24% | = | 1 | 421,910 / 483,600 | 0, 206, 161, 239 | 0, 91, 73, 105 |
 | RRectClipDrawPaintGM | 80.05% | = | 1 | 52,463 / 65,536 | 0, 159, 230, 236 | 0, 7, 11, 19 |
 | RRectGM | 89.06% | = | 1 | 518,487 / 582,200 | 0, 149, 150, 150 | 0, 24, 23, 18 |
+| RadialGradient2GM | 57.39% | (new) | 8 | 183,638 / 320,000 | 0, 212, 241, 233 | 0, 38, 36, 36 |
+| RadialGradient2NoditherGM | 57.41% | (new) | 8 | 183,702 / 320,000 | 0, 212, 241, 233 | 0, 38, 36, 36 |
+| RadialGradient3GM | 100.00% | (new) | 8 | 250,000 / 250,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| RadialGradient3NoditherGM | 100.00% | (new) | 8 | 250,000 / 250,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| RadialGradient4GM | 100.00% | (new) | 8 | 250,000 / 250,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| RadialGradient4NoditherGM | 100.00% | (new) | 8 | 250,000 / 250,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| RadialGradientGM | 88.54% | (new) | 8 | 1,450,594 / 1,638,400 | 0, 10, 10, 10 | 0, 9, 9, 9 |
 | RadialGradientPrecisionGM | 4.92% | = | 1 | 1,966 / 40,000 | 0, 18, 17, 15 | 0, 10, 10, 8 |
 | RasterAllocatorGM | 63.64% | = | 8 | 114,544 / 180,000 | 0, 13, 150, 190 | 0, 2, 10, 3 |
 | RectPolyStrokeGM | 97.43% | = | 1 | 1,030,831 / 1,058,000 | 0, 255, 255, 255 | 0, 70, 75, 61 |
@@ -514,6 +521,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | TableMaskFilterGM | 83.47% | = | 1 | 133,558 / 160,000 | 0, 114, 114, 114 | 0, 14, 14, 14 |
 | TallStretchedBitmapsGM | 87.95% | = | 1 | 443,002 / 503,700 | 0, 251, 253, 248 | 0, 11, 12, 12 |
 | TeenyStrokesGM | 99.39% | = | 1 | 318,042 / 320,000 | 0, 62, 45, 45 | 0, 11, 9, 9 |
+| TestExtractAlphaGM | 96.86% | (new) | 8 | 172,607 / 178,200 | 0, 203, 91, 84 | 0, 178, 53, 17 |
 | TestGradientGM | 98.05% | = | 1 | 627,544 / 640,000 | 0, 45, 31, 40 | 0, 31, 20, 23 |
 | TextBlobBlockReorderingGM | 81.11% | = | 1 | 44,612 / 55,000 | 0, 202, 124, 124 | 0, 94, 74, 102 |
 | TextBlobColorTransGM | 84.44% | = | 1 | 911,923 / 1,080,000 | 0, 131, 131, 177 | 0, 84, 101, 89 |
@@ -533,6 +541,9 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | TiledScaledBitmapGM | 99.13% | = | 1 | 620,407 / 625,856 | 0, 51, 51, 51 | 0, 10, 10, 10 |
 | TilemodesAlphaGM | 77.34% | = | 2 | 202,741 / 262,144 | 0, 10, 11, 19 | 0, 3, 2, 3 |
 | TilemodesGM | 98.95% | = | 8 | 487,618 / 492,800 | 0, 185, 185, 185 | 0, 36, 34, 37 |
+| TilemodesNpotGM | 99.21% | (new) | 8 | 488,911 / 492,800 | 0, 185, 185, 185 | 0, 42, 41, 45 |
+| Tiling2BitmapGM | 95.40% | (new) | 8 | 378,245 / 396,500 | 0, 255, 255, 255 | 0, 14, 19, 14 |
+| Tiling2GradientGM | 67.20% | (new) | 8 | 266,441 / 396,500 | 0, 255, 255, 255 | 0, 27, 16, 18 |
 | TinyBitmapGM | 0.00% | = | 1 | 0 / 10,000 | 0, 10, 15, 9 | 0, 10, 15, 9 |
 | TransparencyCheckGM | 12.84% | = | 8 | 248,560 / 1,935,360 | 0, 71, 71, 71 | 0, 37, 33, 34 |
 | TrickyCubicStrokesButtMiterGM | 97.87% | = | 1 | 978,684 / 1,000,000 | 0, 244, 246, 249 | 0, 116, 111, 115 |
