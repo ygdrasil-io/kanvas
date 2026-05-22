@@ -2268,6 +2268,34 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                         g += 1
                     }
                 }
+                is org.skia.foundation.SkTextBlob.Run.RSXformPositions -> {
+                    // Each glyph carries its own rotation + uniform-scale +
+                    // translate in `xforms[i]`. The 2×2 affine maps the
+                    // glyph's origin-relative outline into blob-local
+                    // space :
+                    //   blob.x = sCos·gx − sSin·gy + tx
+                    //   blob.y = sSin·gx + sCos·gy + ty
+                    // The blob-level `(x, y)` then translates the whole
+                    // run. Sub-pixel snap is intentionally skipped — the
+                    // RSX path is for rotated / scaled glyphs where
+                    // quarter-phase snap would land off-axis pixels.
+                    for (i in run.glyphIds.indices) {
+                        val gid = run.glyphIds[i]
+                        val path = run.font.getPath(gid) ?: continue
+                        val xf = run.xforms[i]
+                        // `m = T(x, y) · RSX(xf)` — pre-concat into the CTM
+                        // so each glyph's outline ends up at the right
+                        // rotated / scaled / translated location.
+                        val m = org.graphiks.math.SkMatrix(
+                            sx = xf.fSCos, kx = -xf.fSSin, tx = xf.fTx + x,
+                            ky = xf.fSSin, sy = xf.fSCos, ty = xf.fTy + y,
+                        )
+                        save()
+                        concat(m)
+                        drawPath(path, paint)
+                        restore()
+                    }
+                }
             }
         }
     }
