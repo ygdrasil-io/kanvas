@@ -4,4 +4,4 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
-| SliverPathsGM | 91.83% | (new) | 1 | 244,260 / 266,000 | 0, 255, 255, 255 | 0, 61, 61, 61 |
+| SimpleOffsetImageFilterGM | 84.88% | (new) | 1 | 108,644 / 128,000 | 0, 88, 107, 110 | 0, 30, 35, 58 |
