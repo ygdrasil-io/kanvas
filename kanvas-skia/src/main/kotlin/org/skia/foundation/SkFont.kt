@@ -131,6 +131,29 @@ public class SkFont(
         typeface.getGlyphPathInternal(glyphId, size, scaleX, skewX)
 
     /**
+     * Mirrors Skia's
+     * [`SkRect SkFont::getBounds(SkGlyphID, const SkPaint*) const`](https://github.com/google/skia/blob/main/include/core/SkFont.h)
+     * — tight visual bounding box of a single glyph at the configured
+     * size / scaleX / skewX, in text-local coords.
+     *
+     * The optional [paint] mirrors upstream's `paint` parameter
+     * (used to widen the bbox for stroked text). The Kotlin port
+     * currently ignores it — stroked-text glyph bounds need the
+     * per-glyph outline measured against the stroker which we don't
+     * yet thread through the font path. Direct ports of upstream
+     * `.cpp` test code (e.g. `gm/fontmgr.cpp::FontMgrBoundsGM`) pass
+     * `nullptr` here anyway.
+     *
+     * Delegates to [SkTypeface.getGlyphBoundsInternal] — base
+     * typeface ([SkTypeface.MakeEmpty]) returns the empty rect ;
+     * concrete subclasses (`AwtTypeface`) compute the outline bbox.
+     */
+    public fun getBounds(glyphId: Int, paint: SkPaint? = null): SkRect {
+        @Suppress("UNUSED_PARAMETER") val unused = paint
+        return typeface.getGlyphBoundsInternal(glyphId, size, scaleX, skewX)
+    }
+
+    /**
      * Mirrors Skia's `void SkFont::unicharsToGlyphs(SkSpan<const SkUnichar>,
      * SkSpan<SkGlyphID>)` (`SkFont.h` ~line 313).
      *
