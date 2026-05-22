@@ -21,9 +21,17 @@ import org.skia.tests.RepeatedBitmapGM
  * image-pixel coords ; PR #574 widened the gate to accept this
  * composition.
  *
- * Floors : raster floor is byte-near-exact (`tol=1`, 99.5 %+ measured
- * upstream) ; GPU floor matches the raster within a small AA / pixel-
- * snap delta.
+ * Floors (round 28 ratchet, post-#582 unlock) : both backends measure
+ * 99.98 % against the upstream reference (matching=331709/331776 GPU,
+ * 331706/331776 raster ; 3-pixel cross-backend delta on the AA edges
+ * of the rotated bitmap shader cells). The two scores are now within
+ * 0.001 pt of each other, well inside the `WARNING_BAND_PERCENT = 2 %`
+ * cross-backend divergence gate. Round 21 originally landed this test
+ * at GPU 65.42 % / raster 99.98 % (~33 pt gap) ; the bitmap-shader
+ * rotated CTM composition fix (PR #582) closed the gap to bit-stability.
+ * Floors set 0.05 pt below the observed scores per the round-28 harvest
+ * convention (lock in the gain without false-positive flapping on the
+ * trailing-byte AA edge).
  */
 class RepeatedBitmapCrossBackendTest {
 
@@ -31,8 +39,8 @@ class RepeatedBitmapCrossBackendTest {
     fun `RepeatedBitmapGM matches reference on raster and GPU backends`() {
         runCrossBackendTest(
             gm = RepeatedBitmapGM(),
-            rasterFloor = 95.0,
-            gpuFloor = 95.0,
+            rasterFloor = 99.93,
+            gpuFloor = 99.93,
             rasterTolerance = 1,
         )
     }
