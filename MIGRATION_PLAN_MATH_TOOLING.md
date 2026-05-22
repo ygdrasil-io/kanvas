@@ -18,6 +18,7 @@ Ce plan suit les chantiers de **traçabilité, doc et qualité** sur le module `
 | **Fix #3** : SkV3.operator*(SkV3) componentwise (BREAKING) | [#522](https://github.com/ygdrasil-io/kanvas/pull/522) | 🔄 ouvert |
 | **Fix #4+#5** : SkMatrix.mapVectors + SkM44.mapRect perspective | [#523](https://github.com/ygdrasil-io/kanvas/pull/523) | 🔄 ouvert |
 | **Fix #6** : SkScalarRound utilise floor(x+0.5) | [#519](https://github.com/ygdrasil-io/kanvas/pull/519) | 🔄 ouvert |
+| **L5a** : audit `:math` zero-MISSING + CI lint (`_ignore.txt` whitelist, override Any auto-exclusion) | en cours | 🔄 ouvert |
 
 **14 PRs ouvertes/mergées sur la branche outillage `:math`.** 7 correctness-blockers de l'audit corrigés, 5 fix PRs prêtes à merger (tous full `:skia-integration-tests` verts à 585 PASSED / 0 FAILED).
 
@@ -83,7 +84,10 @@ Estimation : 5-10 jours répartis sur 6-8 PRs pour porter le tooling à `:kanvas
 - `mkdocs-awesome-nav` (succession à awesome-pages) si la nav devient touffue
 - `externalDocumentationLink` Dokka pour résoudre les KDocs croisés (ex. `[SkShader]` dans `SkMatrix.invert`)
 - Migrer en Dokka V2 quand GFM/Jekyll natif débarque (V1 sera removed en 2.3+)
-- Lint CI : `audit.sh <module>` doit reporter 0 symbole public sans TSV (whitelist Kotlin-original)
+- ✅ **Lint CI** : `audit.sh math` exécuté dans `.github/workflows/test.yml`
+  (job `raster`), fail si MISSING > 0. Whitelist Kotlin-original via
+  `.upstream/source/map/<module>/_ignore.txt` + auto-exclusion des
+  overrides `equals/hashCode/toString`.
 - Re-running audit après chaque resync upstream Skia (détection de drift)
 
 ## Fichiers critiques
