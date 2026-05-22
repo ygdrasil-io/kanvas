@@ -1539,26 +1539,32 @@ class SaveLayerImageFilterTest {
     }
 
     @Test
-    fun `saveLayer with Compose(DropShadow, Blur) throws L1b deferred error`() {
-        // L1a -- the inverse Compose layout (DropShadow on the OUTER side,
-        // Blur on the INNER side) walks Blur first, accumulating it into
-        // the plan, then sees DropShadow. Materialising the (Blur +
-        // anything else) plan into the DropShadow's source needs a SECOND
-        // RTT pre-pass (chain-of-passes), deferred to L1b.
+    fun `saveLayer with Compose(DropShadow, Blur) chains BlurCF materialise then DS materialise`() {
+        // N1 -- chain-of-passes : the inverse Compose layout (DropShadow
+        // on the OUTER side, Blur on the INNER side) walks Blur first.
+        // Pipeline :
+        //  1. Stage 1 : Blur becomes the prefix of the DS pre-stage.
+        //     -> materialise BlurCF (blur over raw layer) into scratch1
+        //     -> materialise DS (shadow + original over scratch1) into scratch2
+        //  2. Final composite reads scratch2 and blends onto parent.
+        // Visual check : we should see a blurred red rect with a soft
+        // shadow offset by (dx, dy).
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
-        val err = context!!.use { ctx ->
+        val pixels = context!!.use { ctx ->
             SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
                 val canvas = SkCanvas(device)
-                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(8f, 8f, 16f, 16f)
                 val blur = SkImageFilters.Blur(
-                    sigmaX = 2f, sigmaY = 2f,
+                    sigmaX = 1f, sigmaY = 1f,
                     tileMode = SkTileMode.kClamp, input = null,
                 )!!
                 val ds = SkImageFilters.DropShadow(
-                    dx = 4f, dy = 4f,
-                    sigmaX = 2f, sigmaY = 2f,
+                    dx = 6f, dy = 6f,
+                    sigmaX = 1f, sigmaY = 1f,
                     color = SK_ColorBLACK,
                     input = null,
                 )!!
@@ -1566,17 +1572,40 @@ class SaveLayerImageFilterTest {
                     imageFilter = SkImageFilters.Compose(outer = ds, inner = blur)
                 }
                 canvas.saveLayer(layerBounds, layerPaint)
-                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
-                runCatching { canvas.restore() }.exceptionOrNull()
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
             }
         }
-        assertTrue(err is IllegalStateException) {
-            "Expected IllegalStateException for Compose(DropShadow, Blur) ; got $err"
+
+        // Centre of the rect : (12, 12) -- the original (blurred) red
+        // sits there ; the shadow is offset by (+6, +6) and lands BEHIND
+        // the original (so the original colour dominates at the centre).
+        // The blur slightly softens the edge ; the centre is still
+        // dominantly red.
+        val i = (12 * W + 12) * 4
+        val rC = pixels[i].toInt() and 0xFF
+        val gC = pixels[i + 1].toInt() and 0xFF
+        val bC = pixels[i + 2].toInt() and 0xFF
+        assertTrue(rC > 180 && gC < 100 && bC < 100) {
+            "Compose(DS, Blur) centre should be dominantly red ; got ($rC, $gC, $bC)"
         }
-        val msg = err?.message ?: ""
-        assertTrue(msg.contains("DropShadow") && msg.contains("L1b")) {
-            "Error message should call out the L1b deferral ; got : $msg"
+        // Shadow region : a pixel at (20, 20) -- inside the shadow's
+        // offset rect (8+6=14..16+6=22 -- so (20, 20) is in the shadow
+        // band, OUTSIDE the original rect 8..16). The shadow is black
+        // tinted with some blur softening ; this position should NOT be
+        // pure white (the shadow contributes there).
+        val j = (20 * W + 20) * 4
+        val rS = pixels[j].toInt() and 0xFF
+        val gS = pixels[j + 1].toInt() and 0xFF
+        val bS = pixels[j + 2].toInt() and 0xFF
+        assertTrue(rS < 240 && gS < 240 && bS < 240) {
+            "Compose(DS, Blur) shadow band at (20, 20) should be darker than white ; got ($rS, $gS, $bS)"
         }
+        // Far corner stays at the white background (well beyond the
+        // shadow + blur kernel reach).
+        assertRgbaApprox(pixels, 0, 0, 255, 255, 255, 255,
+            tag = "Compose(DS, Blur) far white", tol = 2)
     }
 
     @Test
@@ -1715,25 +1744,30 @@ class SaveLayerImageFilterTest {
     }
 
     @Test
-    fun `saveLayer with Compose(MatrixTransform, Blur) throws follow-up deferred error`() {
-        // L1b -- the inverse Compose layout (MatrixTransform on the OUTER
-        // side, Blur on the INNER side) walks Blur first, accumulating it
-        // into the plan, then sees MatrixTransform. Materialising the
-        // (Blur + anything else) plan into the MatrixTransform's source
-        // needs a SECOND RTT pre-pass (chain-of-passes), deferred to a
-        // follow-up slice.
+    fun `saveLayer with Compose(MatrixTransform, Blur) chains BlurCF materialise then MT materialise`() {
+        // N1 -- chain-of-passes : the inverse Compose layout
+        // (MatrixTransform on the OUTER side, Blur on the INNER side)
+        // walks Blur first. Pipeline :
+        //  1. Stage 1 : Blur becomes the prefix of the MT pre-stage.
+        //     -> materialise BlurCF (blur over raw layer) into scratch1
+        //     -> materialise MT (translate) over scratch1 into scratch2
+        //  2. Final composite reads scratch2 and blends onto parent.
+        // Visual semantics : the source is blurred FIRST, then the
+        // blurred result is translated.
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
-        val err = context!!.use { ctx ->
+        val pixels = context!!.use { ctx ->
             SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
                 val canvas = SkCanvas(device)
-                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(4f, 4f, 10f, 10f)
                 val blur = SkImageFilters.Blur(
-                    sigmaX = 2f, sigmaY = 2f,
+                    sigmaX = 1f, sigmaY = 1f,
                     tileMode = SkTileMode.kClamp, input = null,
                 )!!
-                val translate = SkMatrix.MakeAll(1f, 0f, 4f, 0f, 1f, 4f)
+                val translate = SkMatrix.MakeAll(1f, 0f, 12f, 0f, 1f, 12f)
                 val mt = SkImageFilters.MatrixTransform(
                     matrix = translate,
                     sampling = SkSamplingOptions(SkFilterMode.kNearest),
@@ -1743,65 +1777,171 @@ class SaveLayerImageFilterTest {
                     imageFilter = SkImageFilters.Compose(outer = mt, inner = blur)
                 }
                 canvas.saveLayer(layerBounds, layerPaint)
-                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
-                runCatching { canvas.restore() }.exceptionOrNull()
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
             }
         }
-        assertTrue(err is IllegalStateException) {
-            "Expected IllegalStateException for Compose(MatrixTransform, Blur) ; got $err"
+
+        // Source rect lives at (4..10, 4..10). After Blur, it occupies a
+        // slightly larger soft region. After MT-translate(+12, +12), the
+        // blurred rect lands at roughly (16..22, 16..22). Centre = (19, 19).
+        val i = (19 * W + 19) * 4
+        val rC = pixels[i].toInt() and 0xFF
+        val gC = pixels[i + 1].toInt() and 0xFF
+        val bC = pixels[i + 2].toInt() and 0xFF
+        assertTrue(rC > 180 && gC < 130 && bC < 130) {
+            "Compose(MT, Blur) translated centre should be dominantly red ; got ($rC, $gC, $bC)"
         }
-        val msg = err?.message ?: ""
-        assertTrue(msg.contains("MatrixTransform") && msg.contains("INNERMOST")) {
-            "Error message should call out the MT-outer / inner-Blur deferral ; got : $msg"
-        }
+        // The pre-translation position should be empty (white) -- the
+        // blurred rect has been moved to the new position.
+        assertRgbaApprox(pixels, 5, 5, 255, 255, 255, 255,
+            tag = "Compose(MT, Blur) pre-translate cleared", tol = 5)
+        // Far corner stays at the white background.
+        assertRgbaApprox(pixels, 0, 28, 255, 255, 255, 255,
+            tag = "Compose(MT, Blur) far white", tol = 2)
     }
 
     @Test
-    fun `saveLayer with Compose(MatrixTransform, DropShadow) throws mutually-exclusive error`() {
-        // L1b -- the L1b slice handles at most ONE materialise pre-pass
-        // per layer composite. Stacking a MatrixTransform on top of a
-        // DropShadow (both as innermost candidates) needs a chain-of-
-        // passes that runs the second materialise on the first's output,
-        // deferred to a follow-up slice.
+    fun `saveLayer with Compose(MatrixTransform, DropShadow) chains DS materialise then MT materialise`() {
+        // N1 -- chain-of-passes : a DropShadow on the INNER side and a
+        // MatrixTransform on the OUTER side. Walker order :
+        //  - inner DS first -> first materialise stage (no BlurCF prefix,
+        //    DS reads the raw layer).
+        //  - outer MT -> second materialise stage (no BlurCF prefix,
+        //    MT reads the DS scratch).
+        // Final composite reads the MT scratch and blends onto parent.
+        // Visual semantics : the shadow + original are computed first,
+        // then the whole (shadow + original) composite is translated.
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
-        val err = context!!.use { ctx ->
+        val pixels = context!!.use { ctx ->
             SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
                 val canvas = SkCanvas(device)
-                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                // Source red rect at (4, 4)..(10, 10).
+                val rectBounds = SkRect.MakeLTRB(4f, 4f, 10f, 10f)
                 val ds = SkImageFilters.DropShadow(
                     dx = 3f, dy = 3f,
-                    sigmaX = 1f, sigmaY = 1f,
+                    sigmaX = 0.5f, sigmaY = 0.5f,
                     color = SK_ColorBLACK, input = null,
                 )!!
-                val translate = SkMatrix.MakeAll(1f, 0f, 4f, 0f, 1f, 4f)
+                // Pure translation (+12, +12).
+                val translate = SkMatrix.MakeAll(1f, 0f, 12f, 0f, 1f, 12f)
                 val mt = SkImageFilters.MatrixTransform(
                     matrix = translate,
                     sampling = SkSamplingOptions(SkFilterMode.kNearest),
                     input = null,
                 )!!
-                // Walker order on Compose(outer = mt, inner = ds) :
-                //  - walk inner first -> DropShadow leaf captured as
-                //    innerDropShadow.
-                //  - walk outer (MatrixTransform) -> sees innerDropShadow
-                //    already set -> throws "both DropShadow AND
-                //    MatrixTransform".
                 val layerPaint = SkPaint().apply {
                     imageFilter = SkImageFilters.Compose(outer = mt, inner = ds)
                 }
                 canvas.saveLayer(layerBounds, layerPaint)
-                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
-                runCatching { canvas.restore() }.exceptionOrNull()
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
             }
         }
-        assertTrue(err is IllegalStateException) {
-            "Expected IllegalStateException for Compose(MT, DropShadow) ; got $err"
+
+        // After DS : red rect at (4..10, 4..10) + shadow at (7..13, 7..13).
+        // After MT-translate(+12, +12) : red lands at (16..22, 16..22),
+        // shadow at (19..25, 19..25). Centre of translated red = (19, 19).
+        val i = (19 * W + 19) * 4
+        val rC = pixels[i].toInt() and 0xFF
+        val gC = pixels[i + 1].toInt() and 0xFF
+        val bC = pixels[i + 2].toInt() and 0xFF
+        assertTrue(rC > 180 && gC < 100 && bC < 100) {
+            "Compose(MT, DS) translated centre should be dominantly red ; got ($rC, $gC, $bC)"
         }
-        val msg = err?.message ?: ""
-        assertTrue(msg.contains("DropShadow") && msg.contains("MatrixTransform")) {
-            "Error message should call out the mutually-exclusive materialise ; got : $msg"
+        // Translated shadow band : pixel at (24, 24) -- inside the
+        // shadow's translated rect (19..25) but OUTSIDE the translated
+        // red rect (16..22). Should be darker than white (shadow tint).
+        val j = (24 * W + 24) * 4
+        val rS = pixels[j].toInt() and 0xFF
+        val gS = pixels[j + 1].toInt() and 0xFF
+        val bS = pixels[j + 2].toInt() and 0xFF
+        assertTrue(rS < 240 && gS < 240 && bS < 240) {
+            "Compose(MT, DS) translated shadow at (24, 24) should be darker ; got ($rS, $gS, $bS)"
         }
+        // Pre-translation original position should be empty.
+        assertRgbaApprox(pixels, 5, 5, 255, 255, 255, 255,
+            tag = "Compose(MT, DS) pre-translate cleared", tol = 5)
+    }
+
+    @Test
+    fun `saveLayer with Compose(DropShadow, DropShadow) chains two DS materialise stages`() {
+        // N1 -- chain-of-passes : two DropShadows in the same Compose
+        // chain. Walker order :
+        //  - inner DS first -> first materialise stage (reads raw layer).
+        //  - outer DS -> second materialise stage (reads first DS's
+        //    scratch).
+        // Final composite reads the second DS's scratch.
+        // Visual semantics : the inner DS adds a shadow to the source ;
+        // the outer DS adds ANOTHER shadow to the (source + first
+        // shadow) composite.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(8f, 8f, 14f, 14f)
+                val ds1 = SkImageFilters.DropShadow(
+                    dx = 3f, dy = 0f,
+                    sigmaX = 0.5f, sigmaY = 0.5f,
+                    color = SK_ColorBLACK, input = null,
+                )!!
+                val ds2 = SkImageFilters.DropShadow(
+                    dx = 0f, dy = 3f,
+                    sigmaX = 0.5f, sigmaY = 0.5f,
+                    color = SK_ColorBLACK, input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(outer = ds2, inner = ds1)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Original red rect at (8..14, 8..14) -- centre (10, 10) stays
+        // red after both DS passes (the shadows land BEHIND the original).
+        val i = (10 * W + 10) * 4
+        val rC = pixels[i].toInt() and 0xFF
+        val gC = pixels[i + 1].toInt() and 0xFF
+        val bC = pixels[i + 2].toInt() and 0xFF
+        assertTrue(rC > 200 && gC < 50 && bC < 50) {
+            "Compose(DS, DS) centre should stay red ; got ($rC, $gC, $bC)"
+        }
+        // First DS shadow at (+3, 0) lands at (11..17, 8..14). The
+        // pixel at (16, 10) is in that shadow region but OUTSIDE the
+        // original rect -- it should be darker than white.
+        val j = (10 * W + 16) * 4
+        val rS = pixels[j].toInt() and 0xFF
+        val gS = pixels[j + 1].toInt() and 0xFF
+        val bS = pixels[j + 2].toInt() and 0xFF
+        assertTrue(rS < 240 && gS < 240 && bS < 240) {
+            "Compose(DS, DS) first shadow at (16, 10) should be darker ; got ($rS, $gS, $bS)"
+        }
+        // Second DS shadow at (0, +3) -- applied to the (original + first
+        // shadow) composite, so it shadows BOTH. At (10, 16) (below
+        // original) it should also be darker.
+        val k = (16 * W + 10) * 4
+        val rB = pixels[k].toInt() and 0xFF
+        val gB = pixels[k + 1].toInt() and 0xFF
+        val bB = pixels[k + 2].toInt() and 0xFF
+        assertTrue(rB < 240 && gB < 240 && bB < 240) {
+            "Compose(DS, DS) second shadow at (10, 16) should be darker ; got ($rB, $gB, $bB)"
+        }
+        // Far corner stays at the white background.
+        assertRgbaApprox(pixels, 0, 0, 255, 255, 255, 255,
+            tag = "Compose(DS, DS) far white", tol = 2)
     }
 
     @Test
