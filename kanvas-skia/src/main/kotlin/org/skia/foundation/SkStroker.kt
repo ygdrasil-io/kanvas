@@ -150,10 +150,66 @@ public class SkStroker private constructor(
                 emitJoin(right, px, py, halfW, miterLimit, join,
                     -nx[prev], -ny[prev], -nx[cur], -ny[cur])
             }
-            // Outer (right side, same winding as source) and inner (left side,
-            // reversed) — winding fill paints the band between.
-            emitClosedContour(out, right, reversed = false)
-            emitClosedContour(out, left,  reversed = true)
+            // Inner-offset orientation heuristic ("engulfed contour" fix)
+            // -----------------------------------------------------------
+            // Upstream Skia detects when the inner offset polyline crosses
+            // itself or its sibling outer (because halfW exceeds the
+            // contour's local inradius) and adjusts the band so the
+            // winding fill doesn't paint a self-intersection "bowtie"
+            // hole. The full upstream machinery (`SkPathStroker::cubicTo`
+            // splits at inflection points, then `cubicStroke` recursion
+            // handles per-segment reversal via fInner / fOuter sinks)
+            // operates per Bézier segment ; we apply an equivalent
+            // contour-level orientation check on the polyline result.
+            //
+            // The two offset polylines (`left` = + halfW · normal,
+            // `right` = − halfW · normal) normally have OPPOSITE signed
+            // areas relative to the source. When the stroke is so wide
+            // that the inner offset sweeps PAST the source and ends up
+            // on the OUTSIDE again (typical for "engulfed" tiny contours,
+            // e.g. OverStrokeGM quad cell : 40-unit arch stroked at
+            // halfW = 250), the inner polyline ends up SAME-SIGN as the
+            // outer and the standard "reverse inner → winding subtract"
+            // rule renders a bowtie hole instead of a solid band.
+            //
+            // Heuristic activates only when:
+            //  (1) `halfW` ≥ 10 source units (avoids text-glyph hairline
+            //      strokes where halfW is sub-pixel) ;
+            //  (2) `halfW` > 1.5 × source bounding-box max dimension
+            //      (the contour is genuinely engulfed) ;
+            //  (3) the two offset areas are same-sign with ratio > 0.7
+            //      (symmetric "engulfing" both above and below).
+            // In the engulfed case, emit both offsets same-direction
+            // (winding UNION). Otherwise fall back to the standard band
+            // with the original (right = outer, left = inner) mapping so
+            // closed contours of any orientation get the exact original
+            // verb stream — keeping text-glyph + oval-donut renderings
+            // pixel-stable.
+            val srcArea = signedArea(pts, n)
+            val outerArea: Float
+            val innerArea: Float
+            if (srcArea >= 0f) {
+                outerArea = signedArea(right); innerArea = signedArea(left)
+            } else {
+                outerArea = signedArea(left); innerArea = signedArea(right)
+            }
+            val absInner = kotlin.math.abs(innerArea)
+            val absOuter = kotlin.math.abs(outerArea)
+            val ratio = if (absOuter > 0f) absInner / absOuter else 0f
+            val sameSign = (outerArea >= 0f) == (innerArea >= 0f)
+            val maxDim = contourMaxDimension(pts, n)
+            val engulfed = sameSign && ratio > 0.7f && halfW > 10f &&
+                halfW > 1.5f * maxDim
+            if (engulfed) {
+                val outerSide = if (srcArea >= 0f) right else left
+                val innerSide = if (srcArea >= 0f) left else right
+                emitClosedContour(out, outerSide, reversed = false)
+                emitClosedContour(out, innerSide, reversed = false)
+            } else {
+                // Standard band (original behaviour preserved exactly).
+                emitClosedContour(out, right, reversed = false)
+                emitClosedContour(out, left, reversed = true)
+            }
         } else {
             // First vertex: butt-cap-style flat offset on each side.
             val px0 = pts[0]; val py0 = pts[1]
@@ -189,6 +245,51 @@ public class SkStroker private constructor(
                 px0Endpoint, py0Endpoint, tStartX, tStartY, nStartX, nStartY,
             )
         }
+    }
+
+    /**
+     * Shoelace-formula signed area of a closed polyline given as a flat
+     * `(x, y)` FloatArray with `n` vertices (the implicit close edge is
+     * `pts[n-1] → pts[0]`). Positive = CCW in the standard Cartesian
+     * convention ; in Skia's y-down device space, positive = CW visually.
+     * Used by the inner-offset reversal check : sign change between the
+     * source contour and the inner offset means the inner has flipped.
+     */
+    private fun signedArea(pts: FloatArray, n: Int): Float {
+        if (n < 3) return 0f
+        var s = 0f
+        var j = n - 1
+        for (i in 0 until n) {
+            s += (pts[j * 2] + pts[i * 2]) * (pts[i * 2 + 1] - pts[j * 2 + 1])
+            j = i
+        }
+        return 0.5f * s
+    }
+
+    /** Bounding box max(width, height) for the closed contour's vertex set. */
+    private fun contourMaxDimension(pts: FloatArray, n: Int): Float {
+        if (n < 1) return 0f
+        var minX = pts[0]; var maxX = pts[0]
+        var minY = pts[1]; var maxY = pts[1]
+        for (i in 1 until n) {
+            val x = pts[i * 2]; val y = pts[i * 2 + 1]
+            if (x < minX) minX = x else if (x > maxX) maxX = x
+            if (y < minY) minY = y else if (y > maxY) maxY = y
+        }
+        return maxOf(maxX - minX, maxY - minY)
+    }
+
+    /** Overload : signed area of a closed [FloatArrayList] polyline. */
+    private fun signedArea(poly: FloatArrayList): Float {
+        val n = poly.size / 2
+        if (n < 3) return 0f
+        var s = 0f
+        var j = n - 1
+        for (i in 0 until n) {
+            s += (poly[j * 2] + poly[i * 2]) * (poly[i * 2 + 1] - poly[j * 2 + 1])
+            j = i
+        }
+        return 0.5f * s
     }
 
     /** Emit a closed sub-contour from [poly], optionally reversing direction. */
