@@ -1355,7 +1355,20 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         constraint: SrcRectConstraint = SrcRectConstraint.kStrict,
     ) {
         val s = top
-        if (!s.matrix.isAxisAligned) {
+        // K2 — when `paint.maskFilter` is set we re-route through the
+        // shader-rect path (same as upstream Skia's `USE_SHADER` branch
+        // in `SkBitmapDevice::drawImageRect` when `CanApplyDstMatrixAsCTM`
+        // returns false). The mask filter then operates on the boundary
+        // of the dst rect via the offscreen-mask pipeline in
+        // `SkBitmapDevice.drawPathWithMaskFilter` (J4 — shader + maskFilter
+        // combo), producing the correct halo / inner-blur on the image
+        // edge.
+        //
+        // We keep the bulk-rect fast path for the (overwhelmingly common)
+        // axis-aligned no-maskFilter case ; it carries a fully-tuned
+        // nearest / linear / cubic / aniso / mip ladder that the shader
+        // path can't match for raw image draws.
+        if (!s.matrix.isAxisAligned || paint?.maskFilter != null) {
             // R-final.7 — perspective / rotated path : route through drawRect
             // with an image-shader bound to the src→dst local matrix. The
             // shader maps every device pixel back through the CTM⁻¹ and the
@@ -1369,9 +1382,19 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             // inverts it internally as part of its sample pipeline).
             val srcToDst = SkMatrix.MakeRectToRect(src, dst, SkMatrix.ScaleToFit.kFill_ScaleToFit)
             if (srcToDst == null) return
+            // K2 — when the routing is driven by a maskFilter we tile the
+            // shader with `kDecal` so that samples taken inside the
+            // *blurred-mask halo* (i.e. outside the [dst] rect after the
+            // path bounds are expanded by the filter margin) fall to
+            // transparent black instead of clamping to the image edge.
+            // That kills the radial "extruded edge" streaks the kClamp
+            // path produces for opaque sprites under large mask sigmas,
+            // matching the upstream reference where the blur attenuates
+            // the image alpha to zero outside the dst rect.
+            val maskTile = if (paint?.maskFilter != null) SkTileMode.kDecal else SkTileMode.kClamp
             val shader = image.makeShader(
-                SkTileMode.kClamp,
-                SkTileMode.kClamp,
+                maskTile,
+                maskTile,
                 sampling,
                 srcToDst,
             )
@@ -2268,12 +2291,14 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         //     [backdrop], paste into the layer bitmap. Full filter
         //     application (Blur / ColorFilter / Offset / ...).
         //   - Non-raster parents (e.g. GPU device → GPU device) :
-        //     delegate to [SkDevice.seedBackdropFrom], which the backend
-        //     implements with whatever native primitive it has
-        //     available. The GPU backend ships a **copy-only** seed
-        //     (Phase G-saveLayer-backdrop) -- the parent's pixels land
-        //     unchanged ; the [backdrop] filter itself is currently
-        //     ignored on GPU (documented deferred follow-up).
+        //     delegate to [SkDevice.seedBackdropFrom], which the
+        //     backend implements with whatever native primitive it
+        //     has available. The GPU backend ships **copy-only**
+        //     (Phase G-saveLayer-backdrop, #591) plus the J5
+        //     filter-aware extension : the `backdrop` filter is
+        //     forwarded so backends can apply it on-GPU. The WebGPU
+        //     device honours `SkImageFilters.Blur(input = null)` and
+        //     degrades the rest to copy-only.
         //
         // If neither branch matches (mixed backend / unknown device),
         // the layer is left transparent silently -- matches the
@@ -2288,12 +2313,16 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                     scaleFactor = rec.scaleFactor,
                 )
             } else {
-                // Non-raster path : copy-only delegate. The device
-                // returns false if it can't seed (default no-op) ;
-                // we accept that silently as "layer starts
-                // transparent". Filter application on the parent
-                // snapshot is the bonus follow-up slice.
-                layerDevice.seedBackdropFrom(s.device, originX, originY, w, h)
+                // Non-raster path : delegate to the device, which
+                // either applies the filter natively (J5) or falls
+                // back to copy-only / no-op. Returns `false` silently
+                // when it can't seed -- we accept that as "layer
+                // starts transparent". The filter-application
+                // contract is per-backend (see [SkDevice
+                // .seedBackdropFrom] kdoc).
+                layerDevice.seedBackdropFrom(
+                    s.device, originX, originY, w, h, backdrop,
+                )
             }
         }
 

@@ -1370,6 +1370,24 @@ public class SkWebGpuDevice(
         // slot ; the V-pass fragment branches on this to combine B
         // (blurred RGBA) with A (original shaded RGBA, M = A.a).
         val blurStyleOrdinal: Int,
+        // PR #612 K2-GPU -- "sharp shader RGB modulated by blurred shape
+        // alpha" mode. When `true`, the V-pass kNormal branch computes
+        //   out = (A.rgb * (B.a / A.a), B.a)         for A.a > 0
+        //   out = 0                                   otherwise
+        // instead of the legacy `out = B` (full RGBA blur). This
+        // matches the upstream raster semantic for
+        //   drawImageRect + maskFilter routed via
+        //   SkCanvas.drawImageRect's K2 shader-rect path
+        // where the SkBitmapShader uses kDecal so the shader sample
+        // is zero outside the image rect ; blurring the entire RGBA
+        // layer (legacy) smears image pixels into the surrounding
+        // transparent halo, producing a noticeably blurry image
+        // versus raster's sharp interior + soft alpha edge.
+        // The shaded-paint variant for gradients / kRepeat / kMirror
+        // shaders keeps the legacy `out = B` semantic (their halo IS
+        // expected to inherit the shader's continued samples ; see the
+        // gradient-rect test in MaskFilterShadedTest).
+        val sharpRgbMode: Boolean,
         // PendingDraw interface : r/g/b/a placeholders ; mode honoured
         // by the V-pass pipeline's blend state.
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
@@ -4328,32 +4346,70 @@ public class SkWebGpuDevice(
         }
 
     /**
-     * Phase G-saveLayer-backdrop -- seed `this` layer device with a
-     * copy of [parent]'s pixels in the rectangle
-     * `[originX, originY, originX + width, originY + height)`.
+     * Phase G-saveLayer-backdrop (#591) + Phase J5 backdrop filter --
+     * seed `this` layer device with a copy of [parent]'s pixels in
+     * the rectangle `[originX, originY, originX + width, originY +
+     * height)`, optionally filtered through the [backdrop]
+     * [org.skia.foundation.SkImageFilter] before it lands.
      *
-     * Mechanism : flush [parent]'s pending draws onto its
-     * intermediate texture (so all preceding canvas draws are
-     * committed), then enqueue a single [LayerCompositeDraw] onto
-     * **this** (child) device's pending list. That draw samples
-     * [parent]'s intermediate via the existing `layer_composite.wgsl`
-     * pipeline (1:1 `textureLoad` -- no filter, no sampler) and writes
-     * onto this device's intermediate under blend mode `kSrc` (REPLACE,
-     * so the child's initial transparent clear is overwritten by the
-     * parent's pixels). Origin offset is encoded as the negative
-     * `dstOriginX/Y` in the composite uniform : at child pixel `(x,
-     * y)` the shader computes `layer_px = (x, y) - (-originX,
-     * -originY) = (x + originX, y + originY)`, sampling the matching
-     * parent pixel.
+     * Mechanism :
+     *   1. Flush [parent]'s pending draws onto its intermediate
+     *      texture (so all preceding canvas draws are committed).
+     *      Subsequent parent flushes use `loadOp = Load` (the
+     *      [intermediateInitialized] guard) so this mid-render flush
+     *      doesn't get wiped by the next
+     *      [encodePendingDrawsToIntermediate].
+     *   2. Enqueue a copy-only [LayerCompositeDraw] onto **this**
+     *      (child) device's pending list. The draw samples [parent]'s
+     *      intermediate via the existing `layer_composite.wgsl`
+     *      pipeline (1:1 `textureLoad` -- no filter, no sampler) and
+     *      writes onto this device's intermediate under blend mode
+     *      `kSrc` (REPLACE, so the child's initial transparent clear
+     *      is overwritten by the parent's pixels). The origin offset
+     *      is encoded as the negative `dstOriginX/Y` in the composite
+     *      uniform : at child pixel `(x, y)` the shader computes
+     *      `layer_px = (x, y) - (-originX, -originY) = (x + originX,
+     *      y + originY)`, sampling the matching parent pixel.
+     *   3. (Phase J5) When [backdrop] is a `SkImageFilters.Blur` with
+     *      a positive sigma on either axis, enqueue a follow-up
+     *      [BlurredLayerCompositeDraw] on this device's pending list.
+     *      The blur sources [intermediateView] (the just-seeded
+     *      copy), runs the separable Gaussian via the two scratch
+     *      H/V textures, and writes the blurred result back onto
+     *      [intermediateView] with `mode = kSrc` (REPLACING the
+     *      unfiltered copy). The composite uniform's `dstOrigin =
+     *      (0, 0)` because both the source and the dst are layer-
+     *      local at this stage. The scratch textures are owned by
+     *      the draw and released after submission by
+     *      `closeDrawResources`. The same shader resources as
+     *      `paint.imageFilter = Blur` on `compositeFrom` are reused
+     *      -- no new pipelines.
      *
-     * **Scope.** Copy-only (Phase G-saveLayer-backdrop) : the
-     * SaveLayerRec backdrop [org.skia.foundation.SkImageFilter] itself
-     * is **not** applied on GPU -- the layer starts from a raw copy of
-     * the parent pixels in the layer bbox. Filter application (Blur /
-     * ColorFilter / Offset / ...) is a deferred follow-up. This still
-     * unlocks the architectural pattern (frosted-glass "starts from
-     * current pixels" semantics) for the main use case ; the CPU
-     * raster path remains the full-featured fallback.
+     * **Scope.** Supported variants :
+     *  - `SkImageFilters.Blur(input = null)` (Phase J5) -- separable
+     *    Gaussian on the seeded copy, kClamp / kDecal tile modes.
+     *  - `SkImageFilters.ColorFilter(cf, input = null)` (Phase K3) --
+     *    the cf is folded into the copy-seed
+     *    [LayerCompositeDraw]'s `colorFilterPacked` slot ; no extra
+     *    render pass. Supports `SkColorFilters.Blend` and
+     *    `SkColorFilters.Matrix` (the two variants the WGSL composite
+     *    shader implements) ; other cf variants degrade to identity
+     *    (filter dropped, layer seeded with raw parent pixels).
+     *  - `SkImageFilters.DropShadow(dx, dy, sigmaX, sigmaY, color,
+     *    input = null)` (Phase K3) -- copy-seed + 3-pass
+     *    [BlurredLayerCompositeDraw] (H blur, V blur, tinted composite
+     *    onto the seeded layer via `mode = kDstOver` so the shadow
+     *    lands behind the existing content). Matches upstream
+     *    DropShadowImageFilter semantics : the shadow shows through
+     *    transparent regions of the seed (e.g. when the layer rect
+     *    extends past opaque parent content).
+     *
+     * Other variants (`Offset`, `MatrixTransform`, `Compose`, ...)
+     * fall through to copy-only : the layer is seeded with raw
+     * parent pixels, the filter is silently dropped. Widening the
+     * supported set is a follow-up slice ; the CPU raster path in
+     * `SkCanvas.saveLayer` remains the full-featured fallback for
+     * offline / non-GPU rendering.
      *
      * **Bail conditions** -- the seed silently no-ops (returns
      * `false`) when :
@@ -4373,6 +4429,7 @@ public class SkWebGpuDevice(
         originY: Int,
         width: Int,
         height: Int,
+        backdrop: org.skia.foundation.SkImageFilter?,
     ): Boolean {
         val gpuParent = parent as? SkWebGpuDevice ?: return false
         if (gpuParent.context !== context) return false
@@ -4386,13 +4443,31 @@ public class SkWebGpuDevice(
         // [encodePendingDrawsToIntermediate].
         gpuParent.flushDrawsOnly()
 
-        // Enqueue a composite draw on this (child) device's pending
-        // list. `dstOriginX/Y` are the NEGATIVE layer origins so the
-        // shader maps `child (x, y) → parent (x + originX, y +
-        // originY)`. Scissor covers the full child target. `mode =
-        // kSrc` so the child's transparent clear (via `setBackground
-        // (0)`) is replaced -- subsequent layer draws then composite
-        // ON TOP via `loadOp = Load`.
+        // Step 1 -- copy-only seed. Enqueue a composite draw on this
+        // (child) device's pending list. `dstOriginX/Y` are the
+        // NEGATIVE layer origins so the shader maps `child (x, y) →
+        // parent (x + originX, y + originY)`. Scissor covers the full
+        // child target. `mode = kSrc` so the child's transparent
+        // clear (via `setBackground(0)`) is replaced -- subsequent
+        // layer draws then composite ON TOP via `loadOp = Load`.
+        //
+        // Phase K3 -- when [backdrop] is a [SkImageFilters.ColorFilter]
+        // wrap (with `input == null`), the inner [SkColorFilter] folds
+        // directly into the copy-seed's `colorFilterPacked` slot --
+        // the composite shader applies the cf per-sample, identical
+        // result to a snapshot-then-apply-cf path. Supported variants
+        // are [SkColorFilters.Blend] and [SkColorFilters.Matrix]
+        // (the two the WGSL `apply_color_filter` helper implements) ;
+        // others pack to the identity payload (kind = 0) and the seed
+        // degrades silently to copy-only. See [packLayerCompositeColorFilter].
+        val seedColorFilter = backdrop?.asColorFilterImageFilter()
+            ?.takeIf { it.input == null }
+            ?.colorFilter
+        val seedColorFilterPacked = if (seedColorFilter != null) {
+            packLayerCompositeColorFilter(seedColorFilter)
+        } else {
+            FloatArray(24) // identity (kind = 0).
+        }
         pending.add(
             LayerCompositeDraw(
                 layerView = gpuParent.intermediateView,
@@ -4404,12 +4479,269 @@ public class SkWebGpuDevice(
                 paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = SkBlendMode.kSrc,
-                colorFilterPacked = FloatArray(24), // identity (kind = 0).
+                colorFilterPacked = seedColorFilterPacked,
                 matrixPacked = IDENTITY_LAYER_MATRIX_12,
                 imageFilterPacked = FloatArray(12), // identity (kind = 0).
             ),
         )
+
+        // Step 2 -- optional filter application on the seeded copy.
+        // Supported : Blur (Phase J5), DropShadow (Phase K3). ColorFilter
+        // was already folded into the copy-seed's colorFilterPacked
+        // above ; other variants leave the seed at copy-only (silent
+        // degrade, matches the SkDevice.seedBackdropFrom kdoc).
+        if (backdrop != null) {
+            val blur = backdrop.asBlurImageFilter()
+            if (blur != null && blur.input == null &&
+                (blur.sigmaX > 0f || blur.sigmaY > 0f) &&
+                blur.sigmaX.isFinite() && blur.sigmaY.isFinite() &&
+                blur.sigmaX >= 0f && blur.sigmaY >= 0f &&
+                (blur.tileMode == SkTileMode.kClamp ||
+                    blur.tileMode == SkTileMode.kDecal)
+            ) {
+                enqueueBackdropBlurSeed(
+                    width = width, height = height,
+                    sigmaX = blur.sigmaX, sigmaY = blur.sigmaY,
+                    tileMode = blur.tileMode,
+                )
+            } else {
+                val dropShadow = backdrop.asDropShadowImageFilter()
+                if (dropShadow != null && dropShadow.input == null &&
+                    dropShadow.sigmaX.isFinite() && dropShadow.sigmaY.isFinite() &&
+                    dropShadow.sigmaX >= 0f && dropShadow.sigmaY >= 0f
+                ) {
+                    enqueueBackdropDropShadowSeed(
+                        width = width, height = height,
+                        dx = dropShadow.dx, dy = dropShadow.dy,
+                        sigmaX = dropShadow.sigmaX, sigmaY = dropShadow.sigmaY,
+                        shadowColor = dropShadow.color,
+                    )
+                }
+            }
+            // All other variants : seed stays at copy-only (silent
+            // degrade -- matches the SkDevice.seedBackdropFrom kdoc).
+        }
         return true
+    }
+
+    /**
+     * Phase J5 helper -- enqueue a [BlurredLayerCompositeDraw] that
+     * sources `this` device's [intermediateView] (the just-seeded
+     * parent copy) and writes the blurred result back onto the same
+     * intermediate via `mode = kSrc`. Mirrors
+     * [enqueueBlurredLayerComposite] but specialised for the
+     * backdrop seed slot :
+     *  - `layerView` is `this.intermediateView`, not a child's --
+     *    the parent's rect already lives in `this`'s intermediate
+     *    after the preceding [LayerCompositeDraw].
+     *  - `dstOrigin = (0, 0)`, `layerWidth = width`, `layerHeight =
+     *    height` -- the composite is layer-local (no offset onto a
+     *    parent device).
+     *  - `mode = kSrc` -- the blurred pixels REPLACE the unfiltered
+     *    copy. Subsequent user draws inside the layer scope then
+     *    composite ON TOP via `loadOp = Load`.
+     *  - No paint colour modulation (`paintR/G/B/A = 1`) and no
+     *    colour filter / pre-CF -- the backdrop only carries the
+     *    Blur, the post-restore composite still honours the layer
+     *    paint's own alpha / colour filter / blend mode.
+     *
+     * The read-after-write hazard between the copy-only seed (which
+     * writes `intermediateView`) and the blur's H pass (which reads
+     * `intermediateView`) is naturally serialised : both draws are
+     * separate render passes in [encodePendingDrawsToIntermediate],
+     * dispatched in `pending` order, so WebGPU's execution model
+     * orders the write before the read.
+     */
+    private fun enqueueBackdropBlurSeed(
+        width: Int, height: Int,
+        sigmaX: Float, sigmaY: Float,
+        tileMode: SkTileMode,
+    ) {
+        val unboundedRadiusX = if (sigmaX > 0f) {
+            ceil(3.0 * sigmaX).toInt().coerceAtLeast(1)
+        } else 0
+        val unboundedRadiusY = if (sigmaY > 0f) {
+            ceil(3.0 * sigmaY).toInt().coerceAtLeast(1)
+        } else 0
+        val radiusX = unboundedRadiusX.coerceAtMost(MAX_BLUR_RADIUS)
+        val radiusY = unboundedRadiusY.coerceAtMost(MAX_BLUR_RADIUS)
+        val kernelX = if (radiusX > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaX, radiusX)
+        } else floatArrayOf(1f)
+        val kernelY = if (radiusY > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaY, radiusY)
+        } else floatArrayOf(1f)
+
+        val scratchH = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.backdropBlurScratchH",
+            ),
+        )
+        val scratchHView = scratchH.createView()
+        val scratchV = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.backdropBlurScratchV",
+            ),
+        )
+        val scratchVView = scratchV.createView()
+
+        pending.add(
+            BlurredLayerCompositeDraw(
+                layerView = intermediateView,
+                layerWidth = width, layerHeight = height,
+                scratchHTexture = scratchH, scratchHView = scratchHView,
+                scratchVTexture = scratchV, scratchVView = scratchVView,
+                dstOriginX = 0, dstOriginY = 0,
+                scissor = intArrayOf(0, 0, width, height),
+                kernelX = kernelX, radiusX = radiusX,
+                kernelY = kernelY, radiusY = radiusY,
+                tileModeOrdinal = tileMode.ordinal,
+                paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
+                colorFilterPacked = FloatArray(24), // identity (kind = 0).
+                preBlurColorFilterPacked = null,
+                scratchPreCfTexture = null,
+                scratchPreCfView = null,
+                r = 1f, g = 1f, b = 1f, a = 1f,
+                mode = SkBlendMode.kSrc,
+            ),
+        )
+    }
+
+    /**
+     * Phase K3 helper -- enqueue a [BlurredLayerCompositeDraw] that
+     * sources `this` device's [intermediateView] (the just-seeded
+     * parent copy) and lands a colorized blurred shadow BEHIND it
+     * via `mode = kDstOver`. Mirrors [enqueueBackdropBlurSeed] but
+     * specialised for the DropShadow backdrop variant :
+     *  - The blur runs on the seeded copy (3-pass : H -> scratchH,
+     *    V -> scratchV, composite -> intermediate).
+     *  - The composite slot ships a `Blend(shadowColor, kSrcIn)`
+     *    color filter that masks the blurred RGB out and keeps the
+     *    blurred alpha tinted to the shadow colour (premul).
+     *  - The composite uses `dstOrigin = (sdx, sdy)` to offset the
+     *    shadow by the integer-rounded DropShadow displacement.
+     *  - `mode = kDstOver` so the shadow lands BEHIND the existing
+     *    seed (which holds the parent pixels). The shadow shows
+     *    through transparent regions of the seed -- e.g. when the
+     *    layer rect extends past opaque parent content, mirroring
+     *    upstream `SkDropShadowImageFilter::filterImage` semantics.
+     *
+     * Tile mode for the blur is forced to kDecal -- the shadow alpha
+     * falls off to zero outside the layer rect, so the kernel sees a
+     * decaled silhouette (matches the `enqueueDropShadowLayerComposite`
+     * choice for the `paint.imageFilter = DropShadow` path).
+     *
+     * The read-after-write hazard between the copy-seed (writes
+     * `intermediateView`) and the blur's H pass (reads
+     * `intermediateView`) is naturally serialised : both draws are
+     * separate render passes in [encodePendingDrawsToIntermediate],
+     * dispatched in `pending` order. Likewise the V scratch read in
+     * the final composite is decoupled from the composite's write to
+     * `intermediateView` (different textures).
+     */
+    private fun enqueueBackdropDropShadowSeed(
+        width: Int, height: Int,
+        dx: Float, dy: Float,
+        sigmaX: Float, sigmaY: Float,
+        // `SkColor` is `Int` (see math/SkColor.kt) -- the ushr below
+        // unpacks the ARGB nibbles.
+        shadowColor: Int,
+    ) {
+        val unboundedRadiusX = if (sigmaX > 0f) {
+            ceil(3.0 * sigmaX).toInt().coerceAtLeast(1)
+        } else 0
+        val unboundedRadiusY = if (sigmaY > 0f) {
+            ceil(3.0 * sigmaY).toInt().coerceAtLeast(1)
+        } else 0
+        val radiusX = unboundedRadiusX.coerceAtMost(MAX_BLUR_RADIUS)
+        val radiusY = unboundedRadiusY.coerceAtMost(MAX_BLUR_RADIUS)
+        val kernelX = if (radiusX > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaX, radiusX)
+        } else floatArrayOf(1f)
+        val kernelY = if (radiusY > 0) {
+            buildSymmetricGaussianHalfKernel(sigmaY, radiusY)
+        } else floatArrayOf(1f)
+
+        // Integer-round the shadow displacement -- same rounding the
+        // CPU raster's SkDropShadowImageFilter uses (and the existing
+        // [enqueueDropShadowLayerComposite] for paint.imageFilter).
+        val sdx = floor(dx + 0.5f).toInt()
+        val sdy = floor(dy + 0.5f).toInt()
+
+        // Pack the shadow tint as Blend(shadowColor, kSrcIn) -- the
+        // composite shader masks the blurred RGB out and keeps only
+        // the blurred alpha multiplied by the shadow colour (premul),
+        // matching upstream SkDropShadow semantics.
+        val ca = ((shadowColor ushr 24) and 0xFF) / 255f
+        val crNonPre = ((shadowColor ushr 16) and 0xFF) / 255f
+        val cgNonPre = ((shadowColor ushr 8) and 0xFF) / 255f
+        val cbNonPre = (shadowColor and 0xFF) / 255f
+        val tintPacked = FloatArray(24)
+        tintPacked[0] = 1f // kind = 1 (Blend)
+        tintPacked[1] = SkBlendMode.kSrcIn.ordinal.toFloat()
+        tintPacked[4] = crNonPre * ca // premul R
+        tintPacked[5] = cgNonPre * ca // premul G
+        tintPacked[6] = cbNonPre * ca // premul B
+        tintPacked[7] = ca            // alpha
+
+        val scratchH = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.backdropDropShadowScratchH",
+            ),
+        )
+        val scratchHView = scratchH.createView()
+        val scratchV = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.backdropDropShadowScratchV",
+            ),
+        )
+        val scratchVView = scratchV.createView()
+
+        pending.add(
+            BlurredLayerCompositeDraw(
+                layerView = intermediateView,
+                layerWidth = width, layerHeight = height,
+                scratchHTexture = scratchH, scratchHView = scratchHView,
+                scratchVTexture = scratchV, scratchVView = scratchVView,
+                // Composite offset by the integer-rounded shadow
+                // displacement. Out-of-bounds samples on the V scratch
+                // fall outside the scratch extent and the composite
+                // shader's textureLoad returns the implicit clamp ;
+                // the scissor below culls the off-rect pixels back to
+                // the layer's footprint anyway.
+                dstOriginX = sdx, dstOriginY = sdy,
+                scissor = intArrayOf(0, 0, width, height),
+                kernelX = kernelX, radiusX = radiusX,
+                kernelY = kernelY, radiusY = radiusY,
+                tileModeOrdinal = SkTileMode.kDecal.ordinal,
+                paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
+                colorFilterPacked = tintPacked,
+                preBlurColorFilterPacked = null,
+                scratchPreCfTexture = null,
+                scratchPreCfView = null,
+                r = 1f, g = 1f, b = 1f, a = 1f,
+                // kDstOver : shadow lands BEHIND existing seed pixels.
+                // The seed already holds opaque parent content where
+                // the parent is opaque, so the shadow shows through
+                // transparent seed regions only (matches the upstream
+                // DropShadowImageFilter::filterImage semantic of "the
+                // shadow is a separate layer composited under the
+                // source").
+                mode = SkBlendMode.kDstOver,
+            ),
+        )
     }
 
     /**
@@ -4616,13 +4948,28 @@ public class SkWebGpuDevice(
         // have already been submitted.
         gpuSrc.flushDrawsOnly()
 
+        // K1 GPU follow-up to PR #605 -- Offset leaves inside the Compose
+        // chain accumulate onto a single dst-origin shift on the final
+        // composite. The Blur kernel is fixed-pixel and the per-pixel
+        // ColorFilter passes don't sample neighbours, so the cumulative
+        // (dx, dy) commutes with all the stages of the normalized
+        // `[preCF?][Blur?][postCF?]` plan. We bake the shift into
+        // [originX] / [originY] BEFORE clipping so the scissor follows
+        // suit ; the top-level Offset early branch below stays as-is
+        // (it sees imf.asOffsetImageFilter() != null, which fires only
+        // when the layer paint's imageFilter is a pure Offset -- the
+        // Compose walker rebuilds the plan with offsetDx/Dy = 0 in
+        // that case via the structural top-level guard above).
+        val composeShiftedOriginX = originX + plan.offsetDx
+        val composeShiftedOriginY = originY + plan.offsetDy
+
         // Compute the integer dst rect on the parent device, clipped
         // against the caller's [clip] (already intersected with the
         // parent's clip stack by SkCanvas) and the viewport.
-        val ix0 = originX.coerceAtLeast(clip.left).coerceAtLeast(0)
-        val iy0 = originY.coerceAtLeast(clip.top).coerceAtLeast(0)
-        val ix1 = (originX + w).coerceAtMost(clip.right).coerceAtMost(width)
-        val iy1 = (originY + h).coerceAtMost(clip.bottom).coerceAtMost(height)
+        val ix0 = composeShiftedOriginX.coerceAtLeast(clip.left).coerceAtLeast(0)
+        val iy0 = composeShiftedOriginY.coerceAtLeast(clip.top).coerceAtLeast(0)
+        val ix1 = (composeShiftedOriginX + w).coerceAtMost(clip.right).coerceAtMost(width)
+        val iy1 = (composeShiftedOriginY + h).coerceAtMost(clip.bottom).coerceAtMost(height)
         if (ix0 >= ix1 || iy0 >= iy1) return
 
         // Paint colour scale : alpha (and future colour filter) multiplies
@@ -4664,7 +5011,7 @@ public class SkWebGpuDevice(
             enqueueBlurredLayerComposite(
                 gpuSrc = gpuSrc,
                 w = w, h = h,
-                originX = originX, originY = originY,
+                originX = composeShiftedOriginX, originY = composeShiftedOriginY,
                 scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
                 sigmaX = blurParams.sigmaX,
                 sigmaY = blurParams.sigmaY,
@@ -4859,7 +5206,7 @@ public class SkWebGpuDevice(
                 NonNativeBlendLayerCompositeDraw(
                     layerView = gpuSrc.intermediateView,
                     layerWidth = w, layerHeight = h,
-                    dstOriginX = originX, dstOriginY = originY,
+                    dstOriginX = composeShiftedOriginX, dstOriginY = composeShiftedOriginY,
                     scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
                     paintR = paintAlpha, paintG = paintAlpha,
                     paintB = paintAlpha, paintA = paintAlpha,
@@ -4874,7 +5221,7 @@ public class SkWebGpuDevice(
             LayerCompositeDraw(
                 layerView = gpuSrc.intermediateView,
                 layerWidth = w, layerHeight = h,
-                dstOriginX = originX, dstOriginY = originY,
+                dstOriginX = composeShiftedOriginX, dstOriginY = composeShiftedOriginY,
                 scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
                 paintR = paintAlpha, paintG = paintAlpha,
                 paintB = paintAlpha, paintA = paintAlpha,
@@ -5385,6 +5732,19 @@ public class SkWebGpuDevice(
         // Folds `paint.colorFilter` with any post-blur (or pre-blur when
         // no blur is present) ColorFilter from the tree.
         val effectiveColorFilter: org.skia.foundation.SkColorFilter?,
+        // K1 GPU follow-up to PR #605 (CPU Compose with non-null inner)
+        // -- accumulated integer pixel offset from `SkImageFilters.Offset`
+        // leaves anywhere in a Compose chain. Both Blur and ColorFilter
+        // are translation-invariant (the Gaussian kernel commutes with
+        // translation, the per-pixel CF is point-wise) so the order
+        // collapses : the only observable effect of any Offset leaf in
+        // the chain is to shift the final composite's dst origin by the
+        // sum of all (dx, dy) offsets, integer-rounded per upstream
+        // Skia's `(dx + 0.5).toInt()` convention. The dispatch in
+        // [compositeFrom] applies the shift to `originX/originY` and the
+        // scissor rect before enqueuing the Blur / no-blur composite.
+        val offsetDx: Int = 0,
+        val offsetDy: Int = 0,
     )
 
     /**
@@ -5463,6 +5823,13 @@ public class SkWebGpuDevice(
         var preBlurCF: org.skia.foundation.SkColorFilter? = null
         var blur: org.skia.foundation.SkBlurImageFilterParams? = null
         var postBlurCF: org.skia.foundation.SkColorFilter? = null
+        // K1 GPU follow-up to PR #605 -- accumulated Offset leaves. Both
+        // Blur and the per-pixel ColorFilter passes commute with
+        // translation, so the order in which Offset leaves are
+        // encountered doesn't matter ; the sum lands as a single dst-
+        // origin shift on the final composite.
+        var offsetDx = 0
+        var offsetDy = 0
 
         fun walk(node: org.skia.foundation.SkImageFilter) {
             val composeParams = node.asComposeImageFilter()
@@ -5472,23 +5839,49 @@ public class SkWebGpuDevice(
                 walk(composeParams.outer)
                 return
             }
-            // Phase G-saveLayer-imageFilter-compose -- Offset / DropShadow
-            // / MatrixTransform inside a Compose tree is deferred. Mixing
-            // those structural filters with the normalized `[preCF?][Blur?]
-            // [postCF?]` plan needs a render-to-texture intermediate (the
-            // Offset / shadow / matrix would shift either the source the
-            // Blur reads from, or the composite output -- both need a
-            // separate pre-pass). Throw a clear "deferred" error so the
-            // call site surfaces the gap.
-            if (node.asOffsetImageFilter() != null ||
-                node.asDropShadowImageFilter() != null ||
+            // K1 GPU follow-up to PR #605 -- Offset leaves inside a
+            // Compose chain collapse onto a single dst-origin shift on
+            // the final composite. Blur is translation-invariant (the
+            // Gaussian kernel commutes with translation -- shifting the
+            // input is bit-iso with shifting the output) ; ColorFilter
+            // is point-wise (it doesn't sample neighbouring pixels).
+            // The cumulative (dx, dy) is integer-rounded per upstream
+            // Skia's `(dx + 0.5).toInt()` convention -- same rule as
+            // the top-level Offset dispatch in [compositeFrom].
+            val offsetLeaf = node.asOffsetImageFilter()
+            if (offsetLeaf != null) {
+                if (offsetLeaf.input != null) {
+                    error(
+                        "SkWebGpuDevice.compositeFrom : an Offset leaf inside " +
+                            "the imageFilter tree has a non-null child filter. " +
+                            "The Compose support flattens the tree, so leaves " +
+                            "must have input == null -- nest the child via a " +
+                            "Compose node instead (e.g. SkImageFilters.Compose" +
+                            "(Offset(dx, dy), child) rather than Offset(dx, dy, " +
+                            "input = child))."
+                    )
+                }
+                offsetDx += floor(offsetLeaf.dx + 0.5f).toInt()
+                offsetDy += floor(offsetLeaf.dy + 0.5f).toInt()
+                return
+            }
+            // Phase G-saveLayer-imageFilter-compose -- DropShadow and
+            // MatrixTransform inside a Compose tree are still deferred.
+            // DropShadow needs to emit a two-pass shadow+original
+            // composite that interacts non-trivially with the blur /
+            // colour-filter stages it shares the chain with ;
+            // MatrixTransform's affine doesn't commute with the fixed-
+            // pixel Blur kernel, so it would need an explicit render-
+            // to-texture pre-pass to apply the affine before the blur
+            // samples. Both are out of scope for this slice.
+            if (node.asDropShadowImageFilter() != null ||
                 node.asMatrixTransformImageFilter() != null
             ) {
                 error(
                     "SkWebGpuDevice.compositeFrom : a Compose chain contains " +
                         "an ${node::class.simpleName} leaf (e.g. Compose(" +
-                        "Offset, Blur) or Compose(MatrixTransform, Blur)) -- " +
-                        "not yet supported. Top-level Offset / DropShadow / " +
+                        "DropShadow, Blur) or Compose(MatrixTransform, Blur)) " +
+                        "-- not yet supported. Top-level DropShadow / " +
                         "MatrixTransform ship in their own dispatch paths, " +
                         "but mixing them with a Compose tree (where they " +
                         "would shift / remap either the texture the Blur " +
@@ -5496,7 +5889,9 @@ public class SkWebGpuDevice(
                         "colour-filtered scratch) is deferred -- it needs a " +
                         "render-to-texture intermediate that the first " +
                         "Compose support slice (Phase G-saveLayer-imageFilter-" +
-                        "compose) doesn't ship."
+                        "compose) doesn't ship. Offset leaves are supported " +
+                        "(K1 GPU follow-up to PR #605) and collapse onto a " +
+                        "dst-origin shift."
                 )
             }
             val blurLeaf = node.asBlurImageFilter()
@@ -5626,6 +6021,8 @@ public class SkWebGpuDevice(
                 preBlurColorFilter = null,
                 blurParams = null,
                 effectiveColorFilter = treeCF ?: paint.colorFilter,
+                offsetDx = offsetDx,
+                offsetDy = offsetDy,
             )
         }
         // Blur present : pre-blur CF (if any) stays as the pre-pass ;
@@ -5645,6 +6042,8 @@ public class SkWebGpuDevice(
             preBlurColorFilter = preBlurCF,
             blurParams = blur,
             effectiveColorFilter = postBlurCF ?: paint.colorFilter,
+            offsetDx = offsetDx,
+            offsetDy = offsetDy,
         )
     }
 
@@ -6492,6 +6891,28 @@ public class SkWebGpuDevice(
             SkBlurStyle.kInner -> 3
         }
 
+        // PR #612 K2-GPU -- detect the SkBitmapShader+kDecal routing
+        // signature injected by SkCanvas.drawImageRect when
+        // `paint.maskFilter != null` (K2 commit). Both tile modes
+        // == kDecal means the shader returns (0, 0, 0, 0) outside the
+        // image rect, so the legacy `out = B` (RGBA blur) bleeds zeroes
+        // into the halo -- but it ALSO smears the image's interior
+        // pixels outward, producing a noticeably blurry image versus
+        // raster's sharp interior + soft alpha edge. The new sharp-RGB
+        // mode (see blur_mask_filter_shaded.wgsl) mirrors the raster
+        // semantic exactly when the shader-outside is zero, so we
+        // enable it for this signature only. Shaders that DO carry a
+        // meaningful sample outside the shape (kClamp gradients,
+        // kRepeat / kMirror tiled bitmaps, gradients on a circle path,
+        // etc.) keep the legacy `out = B` semantic -- their halo IS
+        // expected to inherit the shader's continued samples.
+        val sharpRgbMode = run {
+            val s = paint.shader
+            s is org.skia.foundation.SkBitmapShader &&
+                s.getTileX() == SkTileMode.kDecal &&
+                s.getTileY() == SkTileMode.kDecal
+        }
+
         pending.add(
             BlurredShadedPathDraw(
                 shadedLayerDevice = shadedDevice,
@@ -6504,6 +6925,7 @@ public class SkWebGpuDevice(
                 kernel = kernel,
                 radius = radius,
                 blurStyleOrdinal = styleOrdinal,
+                sharpRgbMode = sharpRgbMode,
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = paint.blendMode,
             ),
@@ -7881,8 +8303,17 @@ public class SkWebGpuDevice(
         // and focal-inside-well-behaved sub-cases route here today, all
         // 4 tile modes (mirrors the rect-only G4.4.2 widening once it
         // lands ; the shader's 8 entry points are wired up regardless).
+        // K9 -- drop the `paint.isAntiAlias` requirement so non-AA shader
+        // strokes (e.g. `StrokeRectShaderGM`'s top row : Style.kStroke +
+        // isAntiAlias = false + paint.shader = SkLinearGradient) reach the
+        // gradient dispatch. Without this widening the stroker recursion
+        // landed at the solid-colour `StencilCoverPolygonDraw` arm below,
+        // painting the entire stroked outline in `paint.color` (= opaque
+        // black by default) and dropping the gradient entirely. The
+        // non-AA path reuses the same stencil-cover pipeline with
+        // `edgeCount = 0` -- mirror of the G5.2.3 bitmap-shader fix.
         val linearGradForAaPath: SkLinearGradient? =
-            if (shader is SkLinearGradient && paint.isAntiAlias && ctm.isAxisAligned) shader
+            if (shader is SkLinearGradient && ctm.isAxisAligned) shader
             else null
         val radialGradForAaPath: SkRadialGradient? =
             if (shader is SkRadialGradient && paint.isAntiAlias && ctm.isAxisAligned) shader
@@ -8252,6 +8683,38 @@ public class SkWebGpuDevice(
                 )
                 return
             }
+            // K9 -- non-AA linear gradient on a multi-contour path.
+            // Reuse the AA stencil-cover linear-gradient pipeline with
+            // `edgeCount = 0` (same sentinel as G5.2.3 bitmap-shader fix
+            // below : the fragment shader's `minSegmentDistance` returns
+            // 1e9, collapsing the inside cover to coverage = 1.0 and the
+            // outside cover to 0.0 -- sharp stencil-bound fill, no AA
+            // falloff). Fixes `StrokeRectShaderGM`'s top (AA-off) row
+            // where the stroker outline (multi-contour outer + inner)
+            // previously dropped the gradient and painted solid black.
+            if (linearGradForAaPath != null) {
+                pending.add(
+                    StencilCoverAaGradientDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        edges = FloatArray(MAX_AA_EDGES * 4),
+                        edgeCount = 0,
+                        scissor = scissor,
+                        fillType = path.fillType,
+                        startX = gradEndpoints!![0], startY = gradEndpoints[1],
+                        endX = gradEndpoints[2], endY = gradEndpoints[3],
+                        stopPositions = gradPositions!!,
+                        stopColors = gradColors!!,
+                        stopCount = gradStopCount,
+                        tileMode = gradTileMode!!,
+                        r = rF, g = gF, b = bF, a = aF,
+                        mode = paint.blendMode,
+                        clipShape = activeClipShape,
+                        colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
+                    ),
+                )
+                return
+            }
             // G5.2.3 -- non-AA bitmap shader on a multi-contour path.
             // Reuse the AA stencil-cover bitmap pipeline with
             // `edgeCount = 0` (sentinel : the AA fragment shader's
@@ -8457,6 +8920,32 @@ public class SkWebGpuDevice(
                         ),
                     )
                 }
+            } else if (linearGradForAaPath != null) {
+                // K9 -- non-AA linear gradient on a concave / inverse
+                // single-contour path. Same edgeCount = 0 sentinel as
+                // the multi-contour arm and the bitmap-shader case below
+                // (G5.2.3) : sharp stencil-bound fill via the AA pipeline
+                // with the AA falloff collapsed.
+                pending.add(
+                    StencilCoverAaGradientDraw(
+                        stencilVerts = stencilTri,
+                        coverVerts = coverTri,
+                        edges = FloatArray(MAX_AA_EDGES * 4),
+                        edgeCount = 0,
+                        scissor = scissor,
+                        fillType = path.fillType,
+                        startX = gradEndpoints!![0], startY = gradEndpoints[1],
+                        endX = gradEndpoints[2], endY = gradEndpoints[3],
+                        stopPositions = gradPositions!!,
+                        stopColors = gradColors!!,
+                        stopCount = gradStopCount,
+                        tileMode = gradTileMode!!,
+                        r = rF, g = gF, b = bF, a = aF,
+                        mode = paint.blendMode,
+                        clipShape = activeClipShape,
+                        colorFilterPacked = packLayerCompositeColorFilter(paint.colorFilter),
+                    ),
+                )
             } else if (bitmapPayload != null) {
                 // G5.2.3 -- non-AA bitmap shader on a concave / inverse
                 // single-contour path. Same edgeCount = 0 sentinel as
@@ -11801,7 +12290,15 @@ public class SkWebGpuDevice(
         val vPacked = FloatArray(BLUR_UNIFORM_FLOATS)
         vPacked[0] = d.dstOriginX.toFloat(); vPacked[1] = d.dstOriginY.toFloat()
         vPacked[2] = d.srcWidth.toFloat(); vPacked[3] = d.srcHeight.toFloat()
-        vPacked[4] = 0f; vPacked[5] = 0f; vPacked[6] = 0f; vPacked[7] = 0f
+        // PR #612 K2-GPU -- paintColor.x carries the "sharp shader RGB
+        // modulated by blurred shape alpha" flag (see
+        // blur_mask_filter_shaded.wgsl). Set to 1.0 when the dispatcher
+        // detected the K2 SkBitmapShader+kDecal+rect routing ; the V
+        // pass then takes the new branch on style == kNormal. All other
+        // shaded paints (gradients / non-decal bitmaps) keep paintColor
+        // as zero and fall back to the legacy `out = B` semantics.
+        vPacked[4] = if (d.sharpRgbMode) 1f else 0f
+        vPacked[5] = 0f; vPacked[6] = 0f; vPacked[7] = 0f
         vPacked[8] = 0f
         vPacked[9] = 1f
         vPacked[10] = d.radius.toFloat()
@@ -13400,6 +13897,25 @@ public class SkWebGpuDevice(
          * flip = at least one reflex vertex = concave. Collinear triples
          * (cross product = 0) are ignored. Triangles (`n < 4`) are
          * trivially convex.
+         *
+         * J6 -- the consecutive-turn check ALONE is not sufficient to
+         * conclude convexity : a self-intersecting "figure-8" polygon
+         * can satisfy "every triple turns the same way" while crossing
+         * itself, producing a non-simple shape that the convex fast path
+         * cannot handle (`aa_polygon.wgsl` uses min-of-signed-perp-dist
+         * which assumes the polygon is the intersection of edge-line
+         * half-planes ; that intersection is empty for a figure-8). The
+         * upstream bug (Skia b/340982297) is exactly this case : seven
+         * vertices, all consecutive turns CCW, the close edge crosses
+         * through the interior. Rejecting it here forces the path
+         * through stencil-and-cover which handles self-intersection via
+         * the winding count in the stencil buffer.
+         *
+         * We additionally check polygon simplicity (no two non-adjacent
+         * edges cross) via [isPolygonSimple]. The O(n^2) cost is bounded
+         * by `MAX_AA_EDGES = 256` and gated behind the cheap convex-turn
+         * test (which already excludes the typical concave path), so it
+         * only runs on the rare candidate-convex shapes.
          */
         fun isPolygonConvex(devVerts: ArrayList<Float>): Boolean {
             val n = devVerts.size / 2
@@ -13421,7 +13937,72 @@ public class SkWebGpuDevice(
                     return false
                 }
             }
+            return isPolygonSimple(devVerts)
+        }
+
+        /**
+         * Returns true iff no two non-adjacent edges of the polygon
+         * (taken as the closed loop `v[0] -> v[1] -> ... -> v[n-1] ->
+         * v[0]`) properly cross each other. "Properly cross" means the
+         * standard segment-segment intersection test (each segment
+         * straddles the other's supporting line strictly). Touching at
+         * a shared endpoint is allowed (the consecutive-edge case is
+         * skipped explicitly), and collinear overlaps return false
+         * (conservative -- collinear self-overlap is unusual for the
+         * convex fast path and the stencil-cover route handles it
+         * either way).
+         *
+         * Used by [isPolygonConvex] to reject self-intersecting polygons
+         * that would otherwise satisfy the consecutive-turn convexity
+         * check (cf. Skia b/340982297). Pure CPU-side ; runs once per
+         * `drawPath` candidate that already passed the cheap turn check.
+         */
+        fun isPolygonSimple(devVerts: ArrayList<Float>): Boolean {
+            val n = devVerts.size / 2
+            if (n < 4) return true
+            for (i in 0 until n) {
+                val a0x = devVerts[i * 2]
+                val a0y = devVerts[i * 2 + 1]
+                val a1x = devVerts[((i + 1) % n) * 2]
+                val a1y = devVerts[((i + 1) % n) * 2 + 1]
+                // Compare edge i against every later edge j > i + 1,
+                // skipping the immediate neighbour (shared endpoint)
+                // and the wrap-around adjacency (edge n-1 <-> edge 0).
+                val jEnd = if (i == 0) n - 1 else n
+                for (j in (i + 2) until jEnd) {
+                    val b0x = devVerts[j * 2]
+                    val b0y = devVerts[j * 2 + 1]
+                    val b1x = devVerts[((j + 1) % n) * 2]
+                    val b1y = devVerts[((j + 1) % n) * 2 + 1]
+                    if (segmentsProperlyIntersect(a0x, a0y, a1x, a1y, b0x, b0y, b1x, b1y)) {
+                        return false
+                    }
+                }
+            }
             return true
+        }
+
+        /**
+         * Standard 2D segment-segment proper-intersection test. Returns
+         * true iff segment `(a0, a1)` crosses segment `(b0, b1)` with
+         * each segment straddling the other's supporting line strictly
+         * (collinear / endpoint-touching cases return false).
+         *
+         * The straddle is detected via cross-product signs : segment A
+         * straddles B's line iff `b0` and `b1` lie on opposite sides of
+         * A's line, and vice versa. Both straddles must hold for a
+         * proper crossing.
+         */
+        private fun segmentsProperlyIntersect(
+            a0x: Float, a0y: Float, a1x: Float, a1y: Float,
+            b0x: Float, b0y: Float, b1x: Float, b1y: Float,
+        ): Boolean {
+            val d1 = (a1x - a0x) * (b0y - a0y) - (a1y - a0y) * (b0x - a0x)
+            val d2 = (a1x - a0x) * (b1y - a0y) - (a1y - a0y) * (b1x - a0x)
+            val d3 = (b1x - b0x) * (a0y - b0y) - (b1y - b0y) * (a0x - b0x)
+            val d4 = (b1x - b0x) * (a1y - b0y) - (b1y - b0y) * (a1x - b0x)
+            return ((d1 > 0f && d2 < 0f) || (d1 < 0f && d2 > 0f)) &&
+                ((d3 > 0f && d4 < 0f) || (d3 < 0f && d4 > 0f))
         }
 
         /**

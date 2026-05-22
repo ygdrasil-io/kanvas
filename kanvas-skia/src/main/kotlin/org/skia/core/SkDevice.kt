@@ -1,6 +1,7 @@
 package org.skia.core
 
 import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkSamplingOptions
@@ -156,12 +157,18 @@ public interface SkDevice {
      * so the new layer's first draws compose ON TOP of the parent
      * pixels rather than starting from a transparent clear.
      *
-     * **Scope.** This first slice ships **copy-only** semantics : the
-     * parent's pixels land in the layer unchanged. The backdrop
-     * [org.skia.foundation.SkImageFilter] itself is currently ignored
-     * on GPU -- filter application (Blur / ColorFilter / Offset) is a
-     * deferred follow-up. The CPU raster path in [SkCanvas.saveLayer]
-     * still applies the filter via [SkBitmap.getPixel] + `filterImage`.
+     * **Scope.** The first slice (Phase G-saveLayer-backdrop, #591)
+     * shipped **copy-only** semantics : the parent's pixels land in
+     * the layer unchanged. Phase J5 extends this to also apply the
+     * optional [backdrop] [org.skia.foundation.SkImageFilter] on the
+     * GPU before the pixels reach the layer -- enabling the
+     * frosted-glass / blurred-backdrop pattern on the GPU path. Filter
+     * support is variant-by-variant : the WebGPU device implements
+     * `SkImageFilters.Blur(input = null)` (the only filter that
+     * meaningfully feeds a backdrop in upstream Skia GMs) ; other
+     * variants degrade silently to copy-only (the layer is seeded
+     * with raw parent pixels, the filter is dropped), preserving the
+     * existing PR #591 contract.
      *
      * Default implementation is a no-op : devices that don't override
      * this leave the layer transparent (current behaviour for any
@@ -174,6 +181,12 @@ public interface SkDevice {
      * (caller should NOT fall back to a CPU path) ; `false` when the
      * device declined (caller may try the CPU path if applicable, or
      * leave the layer transparent). The default returns `false`.
+     *
+     * @param backdrop optional ImageFilter to apply on the parent
+     *        snapshot before it lands in the layer. `null` means
+     *        copy-only (matches the PR #591 entry point). Non-null
+     *        invokes the device's filter-aware path ; unsupported
+     *        variants fall back to copy-only.
      */
     public fun seedBackdropFrom(
         parent: SkDevice,
@@ -181,5 +194,6 @@ public interface SkDevice {
         originY: Int,
         width: Int,
         height: Int,
+        backdrop: SkImageFilter? = null,
     ): Boolean = false
 }

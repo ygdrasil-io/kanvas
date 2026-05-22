@@ -1,1 +1,8 @@
 org.graphiks.math.SkIRectTest	RectTest	math/src/test/kotlin/SkIRectTest.kt:13	tests/RectTest.cpp:1
+org.graphiks.math.SkIRectTest.MakeLTRB stores corners	Rect	math/src/test/kotlin/SkIRectTest.kt:16	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.MakeXYWH adds w h to origin	Rect	math/src/test/kotlin/SkIRectTest.kt:24	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.width and height wrap on overflow but width64 stays exact	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:30	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.isEmpty checks 64-bit dimensions and int32 fit	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:39	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.MakeXYWH saturates instead of wrapping on int32 overflow	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:55	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.setXYWH offset inset adjust all saturate	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:63	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.makeOffset makeInset makeOutset saturate	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:96	tests/RectTest.cpp:163
