@@ -4,4 +4,5 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
-| GradientsDegenrate2PointGM | 99.68% | (new) | 8 | 102,076 / 102,400 | 0, 63, 43, 20 | 0, 42, 28, 13 |
+| GradientsLocalPerspectiveGM | 72.78% | (new) | 8 | 498,265 / 684,600 | 0, 255, 255, 255 | 0, 57, 70, 61 |
+| GradientsViewPerspectiveGM | 73.69% | (new) | 8 | 309,490 / 420,000 | 0, 255, 255, 255 | 0, 49, 51, 36 |

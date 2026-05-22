@@ -20,26 +20,24 @@ import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
 
 /**
- * Port of upstream Skia's `gm/gradients.cpp::GradientsGM`
- * (`DEF_GM(return new GradientsGM(true);)`).
+ * Port of upstream Skia's `gm/gradients.cpp::GradientsLocalPerspectiveGM`
+ * (`DEF_GM(return new GradientsLocalPerspectiveGM(true);)` — dither variant).
  *
- * 6×5 grid of gradient permutations :
- *  - 6 colour configurations (`gGradData[]`) — 2-stop /
- *    3-stop / 5-stop combinations.
- *  - 5 gradient types (linear, radial, sweep, 2-radial, 2-conical).
+ * Same 6×5 grid of gradient permutations as [GradientsGM] but with an
+ * increasing y-perspective + x-skew applied as the *local* matrix of
+ * each gradient shader (perspY = (i+1)/500, skewX = (i+1)/10 where i
+ * is the colour-config column index).
  *
- * **Note** : this port renders only the dither=true variant (one
- * of the two upstream sub-GMs). `setDither` isn't a parameter our
- * pipeline tracks — both variants render identically here. Output
- * matches the dither=true reference (`gradients.png`).
+ * **Note** : the `dither` parameter is dropped — kanvas-skia raster
+ * doesn't toggle dither.
  */
-public open class GradientsGM : GM() {
+public class GradientsLocalPerspectiveGM : GM() {
 
     init {
         setBGColor(SkColorSetARGB(0xFF, 0xDD, 0xDD, 0xDD))
     }
 
-    override fun getName(): String = "gradients"
+    override fun getName(): String = "gradients_local_perspective"
     override fun getISize(): SkISize = SkISize.Make(840, 815)
 
     private data class GradData(val colors: IntArray, val pos: FloatArray?)
@@ -51,7 +49,6 @@ public open class GradientsGM : GM() {
         val r = SkRect.MakeLTRB(0f, 0f, 100f, 100f)
         val paint = SkPaint().apply { isAntiAlias = true }
 
-        // 5 base colours + clamp variant.
         val base5 = intArrayOf(SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorWHITE, SK_ColorBLACK)
         val gradDatas = listOf(
             GradData(intArrayOf(base5[0], base5[1]), null),
@@ -65,11 +62,6 @@ public open class GradientsGM : GM() {
             ),
         )
 
-        // Note: TwoPointConicalGradient.Make can return null for
-        // degenerate cases ; gradient lambdas use `?:` to skip the
-        // shader (paint draws as solid colour with no shader,
-        // producing transparent if no other shader is set). Upstream
-        // also returns null for some configs ; iso-similar.
         val makers: List<(SkPoint, SkPoint, GradData, SkTileMode, SkMatrix) -> SkShader?> = listOf(
             { p0, p1, d, t, lm -> SkLinearGradient.Make(p0, p1, d.colors, d.pos, t, lm) },
             { p0, p1, d, t, lm ->
@@ -102,11 +94,14 @@ public open class GradientsGM : GM() {
         c.translate(20f, 20f)
         for (i in gradDatas.indices) {
             c.save()
+            // perspective.setPerspY((i+1)/500); perspective.setSkewX((i+1)/10)
+            val perspective = SkMatrix(
+                sx = 1f, kx = (i + 1).toFloat() / 10f, tx = 0f,
+                ky = 0f, sy = 1f, ty = 0f,
+                persp0 = 0f, persp1 = (i + 1).toFloat() / 500f, persp2 = 1f,
+            )
             for (j in makers.indices) {
-                val scale = if (i == 5) {
-                    SkMatrix.MakeScale(0.5f, 0.5f).postTranslate(25f, 25f)
-                } else SkMatrix.Identity
-                paint.shader = makers[j](pts[0], pts[1], gradDatas[i], tm, scale)
+                paint.shader = makers[j](pts[0], pts[1], gradDatas[i], tm, perspective)
                 c.drawRect(r, paint)
                 c.translate(0f, 120f)
             }
