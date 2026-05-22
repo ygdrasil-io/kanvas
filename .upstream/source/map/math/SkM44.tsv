@@ -1,6 +1,6 @@
 org.graphiks.math.SkM44	SkM44	math/src/main/kotlin/SkM44.kt:28	include/core/SkM44.h:150
 org.graphiks.math.SkM44.fMat	SkM44::fMat	math/src/main/kotlin/SkM44.kt:34	include/core/SkM44.h:437
-org.graphiks.math.SkM44.<init>	SkM44::SkM44	math/src/main/kotlin/SkM44.kt:39	include/core/SkM44.h:155
+org.graphiks.math.SkM44	SkM44::SkM44	math/src/main/kotlin/SkM44.kt:39	include/core/SkM44.h:155
 org.graphiks.math.SkM44.Companion.identity	SkM44::SkM44	math/src/main/kotlin/SkM44.kt:98	include/core/SkM44.h:155
 org.graphiks.math.SkM44.Companion.kW0PlaneDistance	SkPathPriv::kW0PlaneDistance	math/src/main/kotlin/SkM44.kt:104	src/core/SkPathPriv.h:73
 org.graphiks.math.SkM44.Companion.translate	SkM44::Translate	math/src/main/kotlin/SkM44.kt:104	include/core/SkM44.h:225
@@ -43,4 +43,4 @@ org.graphiks.math.SkM44.asM33	SkM44::asM33	math/src/main/kotlin/SkM44.kt:594	inc
 org.graphiks.math.SkM44.normalizePerspective	SkM44::normalizePerspective	math/src/main/kotlin/SkM44.kt:621	src/core/SkM44.cpp:226
 org.graphiks.math.SkM44.isFinite	SkM44::isFinite	math/src/main/kotlin/SkM44.kt:634	include/core/SkM44.h:378
 org.graphiks.math.SkM44.equals	SkM44::operator==	math/src/main/kotlin/SkM44.kt:641	src/core/SkM44.cpp:18
-org.graphiks.math.SkM44.dump	SkM44::dump	math/src/main/kotlin/SkM44.kt:652	src/core/SkM44.cpp:291
+org.graphiks.math.SkM44.toString	SkM44::dump	math/src/main/kotlin/SkM44.kt:762	src/core/SkM44.cpp:291

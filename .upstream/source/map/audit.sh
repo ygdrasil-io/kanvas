@@ -32,15 +32,18 @@ prise en charge de :
 - scope tracking (class, object, interface, companion object) — anonyme
   ou nommé
 - function bodies (les val/var locaux à l'intérieur sont ignorés)
-- primary-ctor val/var (rattachés à la classe)
+- primary-ctor val/var (rattachés à la classe), aussi bien en
+  multi-ligne (`class X(\n  val a: Int,\n) {`) qu'en single-line
+  (`data class X(val a: Int, val b: Int)`)
+- enum entries (`enum class X { kA, kB }` single ou multi-ligne)
 - noms de tests entre backticks (`my test` → my test)
 
 Limitations connues — faux positifs/négatifs possibles sur :
-- déclarations sur une ligne (`data class X(val a: Int, val b: Int)`)
 - expression bodies avec lambda braces (`fun f() = { ... }`)
-- enum entries (besoin d'une syntaxe dédiée)
+- enum entries après un `;` (méthodes membres d'enum)
 
-Sortie : code 0 si MISSING vide, sinon 1.
+Sortie : code 0 si MISSING et STALE vides, sinon 1. STALE et MISSING
+sont tous deux lint-enforcing depuis M6.
 """
 from __future__ import annotations
 
@@ -75,6 +78,20 @@ _COMPANION_RE = re.compile(
     rf"^\s*(?:(?:public)\s+)?companion\s+object\b(?:\s+(?P<name>[A-Za-z_]\w*))?"
 )
 _PACKAGE_RE = re.compile(r"^\s*package\s+([\w.]+)")
+# Primary-constructor `val`/`var` parameters, scanned anywhere inside the
+# class header's `(...)`. Matches `(public )?(val|var)\s+<name>`. Visibility
+# modifiers other than `public` (or missing) make the param non-public.
+_CTOR_PARAM_RE = re.compile(
+    r"(?:(?P<vis>public|private|internal|protected)\s+)?"
+    r"(?P<kind>val|var)\s+(?P<name>[A-Za-z_]\w*)"
+)
+# Enum entry — a bare identifier (optionally followed by `(...)` for entries
+# with constructor args or `{ ... }` for entries with bodies). Matched only
+# inside an `enum class` scope, before the body's `;` separator (which marks
+# the end of the entry list and the start of regular member declarations).
+_ENUM_ENTRY_RE = re.compile(
+    r"^\s*(?P<name>[A-Za-z_]\w*)\s*(?:[(,;{]|$)"
+)
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 _LINE_COMMENT = re.compile(r"//[^\n]*")
 _STRING_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
@@ -121,10 +138,28 @@ def extract_symbols(kt_file: Path, repo_root: Path) -> list[Symbol]:
         pkg = pkg_m.group(1)
 
     out: list[Symbol] = []
-    # Scope stack of (class_name, brace_depth_at_entry).
+    seen_fqns: set[str] = set()
+
+    def _emit(fqn: str, line_no: int, reason: str | None = None) -> None:
+        if fqn in seen_fqns:
+            return
+        seen_fqns.add(fqn)
+        out.append(
+            Symbol(
+                fqn=fqn,
+                file=kt_file.relative_to(repo_root),
+                line=line_no,
+                excluded_reason=reason,
+            )
+        )
+
+    # Scope stack of (class_name, brace_depth_at_entry, is_enum, enum_entries_done).
     # `brace_depth_at_entry` is the depth *outside* the scope — when depth
     # drops back to this value the scope is popped.
-    scope: list[tuple[str, int]] = []
+    # `is_enum` flags `enum class` scopes so we extract entries from their body.
+    # `enum_entries_done` flips to True once a `;` is seen, signalling the
+    # transition from entry list to regular member declarations.
+    scope: list[list] = []  # each item: [name, entry_depth, is_enum, entries_done]
     # Stack of brace depths that correspond to function bodies (or init/getter/setter
     # blocks). Decls inside these are local vars, not class members — skip them.
     fun_body_depths: list[int] = []
@@ -132,6 +167,7 @@ def extract_symbols(kt_file: Path, repo_root: Path) -> list[Symbol]:
     # Pending scope name to push when the next '{' is seen (handles multi-line
     # class declarations like `class A(... ) {` where '{' lands on a later line).
     pending_scope: str | None = None
+    pending_scope_is_enum = False
     # Flag: the next '{' enters a function body (for skipping local-var decls).
     pending_fun_body = False
     # Tracks paren depth (open `(` minus close `)`) so we can treat `val`/`var`
@@ -151,11 +187,44 @@ def extract_symbols(kt_file: Path, repo_root: Path) -> list[Symbol]:
         # Inside a function body? Local vals/vars don't count as public API.
         in_fun_body = bool(fun_body_depths)
 
+        # Enum entries — only inside an `enum class` body, before any `;`.
+        # Entries are bare identifiers (optionally followed by `(...)` for
+        # entries with ctor args or `{ ... }` for entries with bodies),
+        # separated by commas. Lines containing `;` end the entry section.
+        in_enum_body = (
+            bool(scope)
+            and scope[-1][2]              # is_enum
+            and not scope[-1][3]          # entries_done not yet seen
+            and not in_fun_body
+            and not in_primary_ctor
+            and depth == scope[-1][1] + 1  # we're directly inside the enum's body
+        )
+        if in_enum_body:
+            # Skip lines that look like a member decl (the `_DECL_RE` path
+            # below handles those, e.g. enum entries with member methods after
+            # `;`). Otherwise scan for bare-identifier entries.
+            stripped_line = line.strip()
+            if stripped_line and not _DECL_RE.match(line) and not _COMPANION_RE.match(line):
+                em = _ENUM_ENTRY_RE.match(line)
+                if em:
+                    entry_name = em.group("name")
+                    # Exclude Kotlin keywords that could match (companion, object…)
+                    if entry_name not in {
+                        "companion", "object", "init", "constructor",
+                        "private", "public", "internal", "protected",
+                    }:
+                        scope_path = ".".join(s[0] for s in scope)
+                        fqn = f"{pkg}.{scope_path}.{entry_name}" if pkg else f"{scope_path}.{entry_name}"
+                        _emit(fqn, lineno)
+            if ";" in line:
+                scope[-1][3] = True  # entries_done
+
         # Companion object detection first (the main regex requires a name
         # which fails on anonymous `companion object {`).
         cm = _COMPANION_RE.match(line)
         if cm and not in_fun_body:
             pending_scope = "Companion"
+            pending_scope_is_enum = False
         else:
             m = _DECL_RE.match(line)
             if m and not in_fun_body:
@@ -165,11 +234,12 @@ def extract_symbols(kt_file: Path, repo_root: Path) -> list[Symbol]:
                     name = name[1:-1]
                 kind = m.group("kind")
                 is_public = _is_public(m.group("mods"))
+                mods_parts = m.group("mods").split()
                 # Effective scope: if we're inside a primary-ctor `(...)`,
                 # decls (val/var) belong to the pending class.
-                effective_scope = scope
+                effective_scope: list = scope
                 if in_primary_ctor and primary_ctor_scope and kind in {"val", "var"}:
-                    effective_scope = scope + [(primary_ctor_scope, depth)]
+                    effective_scope = scope + [[primary_ctor_scope, depth, False, False]]
                 # Emit only public symbols, but always track scope/body — non-public
                 # funs still introduce local-var scopes that should be skipped.
                 if is_public:
@@ -182,24 +252,70 @@ def extract_symbols(kt_file: Path, repo_root: Path) -> list[Symbol]:
                     # those are Kotlin/Java idiom overrides of Any/Object,
                     # never mapped to a Skia upstream symbol.
                     excluded_reason: str | None = None
-                    mods_parts = m.group("mods").split()
                     if (
                         kind == "fun"
                         and "override" in mods_parts
                         and name in _OVERRIDE_OBJECT_METHODS
                     ):
                         excluded_reason = "override-Any-method"
-                    out.append(
-                        Symbol(
-                            fqn=fqn,
-                            file=kt_file.relative_to(repo_root),
-                            line=lineno,
-                            excluded_reason=excluded_reason,
-                        )
-                    )
+                    _emit(fqn, lineno, excluded_reason)
                 if is_public and kind in {"class", "object", "interface"}:
                     pending_scope = name
+                    pending_scope_is_enum = (kind == "class" and "enum" in mods_parts)
                     primary_ctor_scope = name
+                    # Single-line enum body — `enum class X { kA, kB }` opens
+                    # and closes `{}` on one line, so the scope is pushed and
+                    # popped within this iteration and the regular enum-body
+                    # path never fires. Parse entries inline from the braces.
+                    if pending_scope_is_enum and "{" in line and "}" in line:
+                        ob = line.find("{")
+                        cb = line.rfind("}")
+                        if 0 <= ob < cb:
+                            body = line[ob + 1 : cb]
+                            # Strip after a `;` — entries end there.
+                            if ";" in body:
+                                body = body.split(";", 1)[0]
+                            for raw_entry in body.split(","):
+                                entry = raw_entry.strip()
+                                # An entry may carry `(args)` or `{ … }` but
+                                # those are stripped at the first non-ident
+                                # character.
+                                em2 = re.match(r"([A-Za-z_]\w*)", entry)
+                                if em2:
+                                    entry_name = em2.group(1)
+                                    scope_path = ".".join(s[0] for s in scope + [[name, depth, True, False]])
+                                    efqn = f"{pkg}.{scope_path}.{entry_name}" if pkg else f"{scope_path}.{entry_name}"
+                                    _emit(efqn, lineno)
+                    # Single-line primary ctor — `class X(val a, val b) {…}` on
+                    # one line. Extract val/var params now, since the multi-line
+                    # `in_primary_ctor` path below only triggers when `{` lands
+                    # on a later line. Scan everything after the first `(`.
+                    open_paren_idx = line.find("(")
+                    if open_paren_idx != -1:
+                        # Slice from `(` onwards; the params section ends at the
+                        # matching `)`. Walk char-by-char to find it.
+                        pd = 0
+                        end_idx = -1
+                        for i in range(open_paren_idx, len(line)):
+                            if line[i] == "(":
+                                pd += 1
+                            elif line[i] == ")":
+                                pd -= 1
+                                if pd == 0:
+                                    end_idx = i
+                                    break
+                        if end_idx != -1:
+                            params_segment = line[open_paren_idx + 1 : end_idx]
+                            for pm in _CTOR_PARAM_RE.finditer(params_segment):
+                                vis = pm.group("vis")
+                                if vis in _VISIBILITY_NON_PUBLIC:
+                                    continue
+                                pname = pm.group("name")
+                                pscope_path = ".".join(
+                                    s[0] for s in scope + [[name, depth, False, False]]
+                                )
+                                pfqn = f"{pkg}.{pscope_path}.{pname}" if pkg else f"{pscope_path}.{pname}"
+                                _emit(pfqn, lineno)
                 elif kind == "fun":
                     # Function bodies — if a '{' follows, the body opens.
                     # Expression-body funs (`fun f(): T = expr`) have no body
@@ -246,8 +362,9 @@ def extract_symbols(kt_file: Path, repo_root: Path) -> list[Symbol]:
         # entry depth is the depth *outside* the scope, i.e. `depth + (1 brace consumed by the scope opening)`.
         # We approximate: push on first '{' seen with the current outer depth.
         if pending_scope is not None and opens > 0:
-            scope.append((pending_scope, depth))
+            scope.append([pending_scope, depth, pending_scope_is_enum, False])
             pending_scope = None
+            pending_scope_is_enum = False
         if pending_fun_body and opens > 0:
             fun_body_depths.append(depth)
             pending_fun_body = False
@@ -392,7 +509,10 @@ def main(argv: list[str]) -> int:
         print("✓ Map complète et à jour.")
         return 0
 
-    return 1 if missing else 0
+    # Both MISSING and STALE are now lint-enforcing. STALE entries indicate
+    # TSV/ignore rows pointing at Kotlin symbols that no longer exist (renames,
+    # deletions, or upstream-only artifacts) and should be cleaned up.
+    return 1 if (missing or stale) else 0
 
 
 if __name__ == "__main__":

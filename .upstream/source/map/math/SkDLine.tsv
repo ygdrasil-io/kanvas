@@ -1,4 +1,5 @@
 org.graphiks.math.SkDLine	SkDLine	math/src/main/kotlin/SkDLine.kt:24	src/pathops/SkPathOpsLine.h:14
+org.graphiks.math.SkDLine.pts	SkDLine::fPts	math/src/main/kotlin/SkDLine.kt:24	src/pathops/SkPathOpsLine.h:15
 org.graphiks.math.SkDLine.get	SkDLine::operator[]	math/src/main/kotlin/SkDLine.kt:30	src/pathops/SkPathOpsLine.h:17
 org.graphiks.math.SkDLine.set	SkDLine::operator[]	math/src/main/kotlin/SkDLine.kt:35	src/pathops/SkPathOpsLine.h:18
 org.graphiks.math.SkDLine.set	SkDLine::set	math/src/main/kotlin/SkDLine.kt:41	src/pathops/SkPathOpsLine.h:20
