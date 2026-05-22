@@ -1370,6 +1370,24 @@ public class SkWebGpuDevice(
         // slot ; the V-pass fragment branches on this to combine B
         // (blurred RGBA) with A (original shaded RGBA, M = A.a).
         val blurStyleOrdinal: Int,
+        // PR #612 K2-GPU -- "sharp shader RGB modulated by blurred shape
+        // alpha" mode. When `true`, the V-pass kNormal branch computes
+        //   out = (A.rgb * (B.a / A.a), B.a)         for A.a > 0
+        //   out = 0                                   otherwise
+        // instead of the legacy `out = B` (full RGBA blur). This
+        // matches the upstream raster semantic for
+        //   drawImageRect + maskFilter routed via
+        //   SkCanvas.drawImageRect's K2 shader-rect path
+        // where the SkBitmapShader uses kDecal so the shader sample
+        // is zero outside the image rect ; blurring the entire RGBA
+        // layer (legacy) smears image pixels into the surrounding
+        // transparent halo, producing a noticeably blurry image
+        // versus raster's sharp interior + soft alpha edge.
+        // The shaded-paint variant for gradients / kRepeat / kMirror
+        // shaders keeps the legacy `out = B` semantic (their halo IS
+        // expected to inherit the shader's continued samples ; see the
+        // gradient-rect test in MaskFilterShadedTest).
+        val sharpRgbMode: Boolean,
         // PendingDraw interface : r/g/b/a placeholders ; mode honoured
         // by the V-pass pipeline's blend state.
         override val r: Float, override val g: Float, override val b: Float, override val a: Float,
@@ -6492,6 +6510,28 @@ public class SkWebGpuDevice(
             SkBlurStyle.kInner -> 3
         }
 
+        // PR #612 K2-GPU -- detect the SkBitmapShader+kDecal routing
+        // signature injected by SkCanvas.drawImageRect when
+        // `paint.maskFilter != null` (K2 commit). Both tile modes
+        // == kDecal means the shader returns (0, 0, 0, 0) outside the
+        // image rect, so the legacy `out = B` (RGBA blur) bleeds zeroes
+        // into the halo -- but it ALSO smears the image's interior
+        // pixels outward, producing a noticeably blurry image versus
+        // raster's sharp interior + soft alpha edge. The new sharp-RGB
+        // mode (see blur_mask_filter_shaded.wgsl) mirrors the raster
+        // semantic exactly when the shader-outside is zero, so we
+        // enable it for this signature only. Shaders that DO carry a
+        // meaningful sample outside the shape (kClamp gradients,
+        // kRepeat / kMirror tiled bitmaps, gradients on a circle path,
+        // etc.) keep the legacy `out = B` semantic -- their halo IS
+        // expected to inherit the shader's continued samples.
+        val sharpRgbMode = run {
+            val s = paint.shader
+            s is org.skia.foundation.SkBitmapShader &&
+                s.getTileX() == SkTileMode.kDecal &&
+                s.getTileY() == SkTileMode.kDecal
+        }
+
         pending.add(
             BlurredShadedPathDraw(
                 shadedLayerDevice = shadedDevice,
@@ -6504,6 +6544,7 @@ public class SkWebGpuDevice(
                 kernel = kernel,
                 radius = radius,
                 blurStyleOrdinal = styleOrdinal,
+                sharpRgbMode = sharpRgbMode,
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = paint.blendMode,
             ),
@@ -11801,7 +11842,15 @@ public class SkWebGpuDevice(
         val vPacked = FloatArray(BLUR_UNIFORM_FLOATS)
         vPacked[0] = d.dstOriginX.toFloat(); vPacked[1] = d.dstOriginY.toFloat()
         vPacked[2] = d.srcWidth.toFloat(); vPacked[3] = d.srcHeight.toFloat()
-        vPacked[4] = 0f; vPacked[5] = 0f; vPacked[6] = 0f; vPacked[7] = 0f
+        // PR #612 K2-GPU -- paintColor.x carries the "sharp shader RGB
+        // modulated by blurred shape alpha" flag (see
+        // blur_mask_filter_shaded.wgsl). Set to 1.0 when the dispatcher
+        // detected the K2 SkBitmapShader+kDecal+rect routing ; the V
+        // pass then takes the new branch on style == kNormal. All other
+        // shaded paints (gradients / non-decal bitmaps) keep paintColor
+        // as zero and fall back to the legacy `out = B` semantics.
+        vPacked[4] = if (d.sharpRgbMode) 1f else 0f
+        vPacked[5] = 0f; vPacked[6] = 0f; vPacked[7] = 0f
         vPacked[8] = 0f
         vPacked[9] = 1f
         vPacked[10] = d.radius.toFloat()
