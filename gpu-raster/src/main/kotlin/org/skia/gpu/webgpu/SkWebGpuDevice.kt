@@ -1137,6 +1137,35 @@ public class SkWebGpuDevice(
          * Total 12 floats. Zeroed for the no-image-filter fast path.
          */
         val imageFilterPacked: FloatArray,
+        // L1b -- materialize-to-scratch mode (MatrixTransform inside a
+        // Compose tree). When [materializeTargetTexture] is non-null, the
+        // dispatch loop redirects this draw's render pass to write INTO
+        // that scratch instead of the parent's `colorView`. The scratch's
+        // view is then handed to the downstream Blur / ColorFilter /
+        // LayerComposite stages as their `sourceLayerView`, so they
+        // consume the matrix-transformed pixels as if they were the raw
+        // layer source.
+        //
+        // Semantics when materialising :
+        //  - the dispatch FORCES `loadOp = Clear` on the render pass (the
+        //    scratch starts transparent ; the MatrixTransform writes its
+        //    full footprint into it).
+        //  - the blend mode is forced to `kSrc` regardless of `mode` (the
+        //    scratch starts blank, the MatrixTransform IS the only
+        //    contribution).
+        //  - `scissor` is in LAYER-LOCAL coords (the scratch is layer-sized
+        //    so the parent clip is irrelevant here -- the outer composite
+        //    of the materialised scratch carries the parent clip).
+        //  - `dstOriginX/Y` are layer-local (0, 0) ; the matrix payload's
+        //    `c / f` translation slots don't bake any parent origin shift
+        //    (the layer-local case has `originX = originY = 0`).
+        //
+        // Mirrors the [DropShadowLayerCompositeDraw.materializeTargetView]
+        // / [DropShadowLayerCompositeDraw.materializeTargetTexture] pair
+        // (L1a) ; the scratch texture is OWNED by this draw and released
+        // in [closeDrawResources] after submission.
+        val materializeTargetTexture: GPUTexture? = null,
+        val materializeTargetView: GPUTextureView? = null,
     ) : PendingDraw
 
     // ─── Phase G-saveLayer-blend -- non-native blend mode composite ────
@@ -5188,6 +5217,22 @@ public class SkWebGpuDevice(
         // managed by the materialise [DropShadowLayerCompositeDraw] /
         // [DrawResources] pair (closed in [closeDrawResources] after the
         // batch is submitted).
+        //
+        // L1b -- same shape for MatrixTransform as the innermost leaf.
+        // The walker captures it on [plan.innerMatrixTransform] and
+        // [enqueueMaterializeMatrixTransformToScratch] writes the
+        // matrix-transformed image into a layer-sized scratch via a
+        // single-pass `LayerCompositeDraw` in materialise mode. The two
+        // materialise paths are mutually exclusive at the walker level,
+        // so we pick whichever one fires. Non-invertible MatrixTransform
+        // returns `null` from the helper -- fall back to the raw layer
+        // view (matches the CPU raster's "return input unchanged"
+        // degenerate behaviour ; the visible footprint collapses to
+        // zero area at the cover-quad step which is already handled by
+        // the empty-scissor early-return in
+        // [enqueueMaterializeMatrixTransformToScratch] for the
+        // out-of-layer case, and for non-invertible the helper returns
+        // before allocating the scratch).
         val innerSourceView: GPUTextureView =
             if (plan.innerDropShadow != null) {
                 enqueueMaterializeDropShadowToScratch(
@@ -5195,6 +5240,12 @@ public class SkWebGpuDevice(
                     w = w, h = h,
                     params = plan.innerDropShadow,
                 )
+            } else if (plan.innerMatrixTransform != null) {
+                enqueueMaterializeMatrixTransformToScratch(
+                    gpuSrc = gpuSrc,
+                    w = w, h = h,
+                    params = plan.innerMatrixTransform,
+                ) ?: gpuSrc.intermediateView
             } else {
                 gpuSrc.intermediateView
             }
@@ -5975,6 +6026,183 @@ public class SkWebGpuDevice(
     }
 
     /**
+     * L1b -- render-to-texture pre-pass that materialises a `MatrixTransform`
+     * filter into a layer-sized scratch texture, used by [compositeFrom]
+     * when the filter sits INSIDE a Compose tree (rather than at the top
+     * level where it dispatches directly onto the parent's intermediate
+     * via [enqueueMatrixTransformLayerComposite]).
+     *
+     * Allocates the scratch, enqueues a [LayerCompositeDraw] in
+     * **materialise mode** :
+     *  - `materializeTargetView` = the new scratch's view
+     *  - `dstOriginX/Y` = (0, 0) (the matrix-transformed image sits at the
+     *    top-left of the scratch -- layer-local)
+     *  - matrix payload : the inverse 2x3 of the user matrix, with NO
+     *    parent-origin shift baked in (the layer-local case has `originX
+     *    = originY = 0`, so the `c / f` translation slots are just the
+     *    bare inverse's `tx / ty`)
+     *  - scissor : the axis-aligned bbox of `M([0..w] × [0..h])`,
+     *    clamped to the layer rect (layer-local)
+     *  - mode : kSrc (the scratch starts blank, the matrix-transformed
+     *    image IS the only contribution -- the dispatch forces this)
+     *
+     * Returns the (texture, view) pair so the caller can :
+     *  - Pass the view to downstream Blur / ColorFilter / LayerComposite
+     *    enqueue helpers as their `sourceLayerView`
+     *  - Keep the texture alive until the consumer draws are submitted
+     *    (the texture is registered on the materialise DrawResources and
+     *    closed in [closeDrawResources] after the entire `pending` batch
+     *    is flushed)
+     *
+     * Bail conditions mirror [enqueueMatrixTransformLayerComposite] :
+     *  - Non-null child filter -- throws (input == null required).
+     *  - Perspective matrix -- throws (2x3 affine only).
+     *  - Cubic sampling -- throws (kNearest / kLinear only).
+     *  - Non-invertible matrix -- returns null (the CPU raster's
+     *    `MatrixTransform` returns the input image unchanged in that
+     *    case ; mapping that semantic onto a materialise scratch is
+     *    a no-op, so we return null and the caller falls back to the
+     *    raw layer view as its source).
+     */
+    private fun enqueueMaterializeMatrixTransformToScratch(
+        gpuSrc: SkWebGpuDevice,
+        w: Int, h: Int,
+        params: org.skia.foundation.SkMatrixTransformImageFilterParams,
+    ): GPUTextureView? {
+        if (params.input != null) {
+            error(
+                "SkWebGpuDevice.compositeFrom : a Compose-nested MatrixTransform " +
+                    "leaf has a non-null child filter. The Compose support " +
+                    "flattens the tree, so leaves must have input == null -- " +
+                    "nest the child via a Compose node instead (e.g. " +
+                    "SkImageFilters.Compose(MatrixTransform(m, sampling), child) " +
+                    "rather than MatrixTransform(m, sampling, input = child))."
+            )
+        }
+        if (params.matrix.hasPerspective()) {
+            error(
+                "SkWebGpuDevice.compositeFrom : a Compose-nested MatrixTransform " +
+                    "leaf has a perspective matrix (non-trivial bottom row). " +
+                    "Only 2x3 affine is supported in the L1b slice (Phase " +
+                    "G-saveLayer-imageFilter-matrixTransform-compose) -- " +
+                    "perspective needs a homogeneous divide in the fragment " +
+                    "shader (the current shader uses a vec3 dot-product affine " +
+                    "path) and is deferred to a follow-up slice."
+            )
+        }
+        if (params.sampling.cubic != null) {
+            error(
+                "SkWebGpuDevice.compositeFrom : a Compose-nested MatrixTransform " +
+                    "leaf has a cubic resampler. Only kNearest and kLinear are " +
+                    "supported in the L1b slice (Phase G-saveLayer-imageFilter-" +
+                    "matrixTransform-compose) -- cubic resampling needs a " +
+                    "16-tap kernel in the composite shader and is deferred."
+            )
+        }
+        val samplingModeOrdinal = when (params.sampling.filter) {
+            SkFilterMode.kNearest -> 1
+            SkFilterMode.kLinear -> 2
+        }
+
+        // Layer-local inverse : no parent origin shift to bake in (the
+        // materialised scratch IS layer space, so `originX = originY = 0`
+        // and `c / f` collapse to the bare inverse's `tx / ty`).
+        val invMatrix = params.matrix.invert()
+            ?: return null  // Non-invertible -- fall back to raw layer view.
+        val matrixPacked = FloatArray(12)
+        matrixPacked[0] = invMatrix.sx
+        matrixPacked[1] = invMatrix.kx
+        matrixPacked[2] = invMatrix.tx
+        matrixPacked[4] = invMatrix.ky
+        matrixPacked[5] = invMatrix.sy
+        matrixPacked[6] = invMatrix.ty
+        matrixPacked[8] = samplingModeOrdinal.toFloat()
+
+        // Materialised target : holds the matrix-transformed image in
+        // layer-local coords. Sampled by downstream Blur / ColorFilter /
+        // LayerComposite draws via the returned view.
+        val materializeTarget = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                format = intermediateFormat,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                label = "SkWebGpuDevice.materializeMatrixTransformTarget",
+            ),
+        )
+        val materializeTargetView = materializeTarget.createView()
+
+        // Cover-quad scissor in LAYER-LOCAL pixel coords : the axis-
+        // aligned bbox of the four corners of the layer rect mapped
+        // through the user matrix, clamped to the layer rect (the
+        // scratch is layer-sized -- pixels outside the layer rect are
+        // dropped, matching the upstream SkMatrixTransformImageFilter
+        // semantic when running inside saveLayer).
+        val mappedRect = params.matrix.mapRect(
+            org.graphiks.math.SkRect.MakeLTRB(0f, 0f, w.toFloat(), h.toFloat()),
+        )
+        val ix0 = floor(mappedRect.left).toInt().coerceAtLeast(0)
+        val iy0 = floor(mappedRect.top).toInt().coerceAtLeast(0)
+        val ix1 = ceil(mappedRect.right).toInt().coerceAtMost(w)
+        val iy1 = ceil(mappedRect.bottom).toInt().coerceAtMost(h)
+        if (ix0 >= ix1 || iy0 >= iy1) {
+            // Mapped footprint lies entirely outside the layer rect.
+            // The downstream consumers should see a fully-transparent
+            // source : return the scratch view as-is (the dispatch's
+            // `loadOp = Clear` will leave it transparent). We still
+            // need a draw entry on `pending` so the scratch is owned by
+            // a [DrawResources] and gets cleaned up after submit ; we
+            // ship a zero-area scissor so the draw is a clear-only pass.
+            pending.add(
+                LayerCompositeDraw(
+                    layerView = gpuSrc.intermediateView,
+                    layerWidth = w, layerHeight = h,
+                    dstOriginX = 0, dstOriginY = 0,
+                    scissor = intArrayOf(0, 0, 0, 0),
+                    paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
+                    r = 1f, g = 1f, b = 1f, a = 1f,
+                    mode = SkBlendMode.kSrc,
+                    colorFilterPacked = FloatArray(24),
+                    matrixPacked = matrixPacked,
+                    imageFilterPacked = FloatArray(12),
+                    materializeTargetTexture = materializeTarget,
+                    materializeTargetView = materializeTargetView,
+                ),
+            )
+            return materializeTargetView
+        }
+
+        pending.add(
+            LayerCompositeDraw(
+                layerView = gpuSrc.intermediateView,
+                layerWidth = w, layerHeight = h,
+                // Layer-local origin : the matrix-transformed image lands
+                // inside the layer-sized scratch starting at (0, 0).
+                dstOriginX = 0, dstOriginY = 0,
+                scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
+                // paintAlpha = 1 on the materialised image -- the outer
+                // plan handles the layer paint's alpha + colour filter
+                // on the FINAL composite (where the materialised scratch
+                // is the source).
+                paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
+                r = 1f, g = 1f, b = 1f, a = 1f,
+                // Materialise mode forces `kSrc` at the dispatch site
+                // regardless of `mode` ; we still ship a sentinel.
+                mode = SkBlendMode.kSrc,
+                colorFilterPacked = FloatArray(24),
+                matrixPacked = matrixPacked,
+                imageFilterPacked = FloatArray(12),
+                // Materialise mode : the dispatch redirects this draw's
+                // render pass to write into the scratch (with `loadOp =
+                // Clear`) instead of the parent's `colorView`.
+                materializeTargetTexture = materializeTarget,
+                materializeTargetView = materializeTargetView,
+            ),
+        )
+
+        return materializeTargetView
+    }
+
+    /**
      * Phase G-saveLayer-imageFilter-matrixTransform -- helper for
      * [compositeFrom]. Computes the inverse 2x3 of the user matrix, the
      * cover-quad scissor (axis-aligned bbox of the mapped layer rect,
@@ -6221,6 +6449,34 @@ public class SkWebGpuDevice(
         //   Compose(outer = DropShadow, inner = Blur)        -- pre-DS Blur
         //   Compose(outer = DropShadow, inner = ColorFilter) -- pre-DS CF
         val innerDropShadow: org.skia.foundation.SkDropShadowImageFilterParams? = null,
+        // L1b -- when non-null, a MatrixTransform leaf was encountered as
+        // the FIRST leaf (innermost) inside the Compose chain. The
+        // dispatch in [compositeFrom] materialises the matrix-transformed
+        // image into a layer-sized scratch BEFORE running the rest of the
+        // plan (Blur / ColorFilter / Offset). The remaining plan stages
+        // then run with the materialised scratch as their source.
+        //
+        // Constraints (this slice's scope, mirrors [innerDropShadow]) :
+        //  - The MatrixTransform MUST be the FIRST leaf encountered in
+        //    the walk order. Any Blur / ColorFilter / Offset accumulated
+        //    BEFORE the MatrixTransform throws -- chaining a pre-MT plan
+        //    into the materialise source would need a second RTT pre-pass.
+        //  - The MatrixTransform's `input` MUST be null.
+        //  - Mutually exclusive with [innerDropShadow] -- two
+        //    materialise pre-passes in the same plan need a chain-of-
+        //    passes that's deferred to a future slice.
+        //
+        // Supported shapes :
+        //   Compose(outer = Blur,        inner = MatrixTransform)
+        //   Compose(outer = ColorFilter, inner = MatrixTransform)
+        //   Compose(outer = Offset,      inner = MatrixTransform)
+        //   Compose(Compose(Blur, ColorFilter), MatrixTransform)
+        //
+        // Deferred shapes (throw with "L1b/follow-up" hint) :
+        //   Compose(outer = MatrixTransform, inner = Blur)        -- pre-MT Blur
+        //   Compose(outer = MatrixTransform, inner = ColorFilter) -- pre-MT CF
+        //   Compose(outer = MatrixTransform, inner = DropShadow)  -- two-stage RTT
+        val innerMatrixTransform: org.skia.foundation.SkMatrixTransformImageFilterParams? = null,
     )
 
     /**
@@ -6313,6 +6569,14 @@ public class SkWebGpuDevice(
         // already classified) still throws as deferred (chain-of-passes
         // pre-DropShadow materialise -- L1b).
         var innerDropShadow: org.skia.foundation.SkDropShadowImageFilterParams? = null
+        // L1b -- an innermost MatrixTransform leaf is materialised into a
+        // layer-sized scratch BEFORE the rest of the plan runs. Same
+        // pre-pass plumbing as [innerDropShadow], different render
+        // pipeline (layer_composite.wgsl with the matrix payload instead
+        // of the DropShadow 4-pass blur+colorize+composite). Mutually
+        // exclusive with [innerDropShadow] -- two materialise pre-passes
+        // in the same plan need a chain-of-passes (deferred).
+        var innerMatrixTransform: org.skia.foundation.SkMatrixTransformImageFilterParams? = null
 
         fun walk(node: org.skia.foundation.SkImageFilter) {
             val composeParams = node.asComposeImageFilter()
@@ -6411,22 +6675,78 @@ public class SkWebGpuDevice(
                 innerDropShadow = dropShadowLeaf
                 return
             }
-            // L1a -- MatrixTransform inside a Compose tree is still
-            // deferred. Its affine doesn't commute with the fixed-pixel
-            // Blur kernel, so it would need an explicit render-to-texture
-            // pre-pass to apply the affine before the blur samples. The
-            // same RTT primitive that L1a introduces for DropShadow can be
-            // generalised to MatrixTransform in a follow-up slice (L1b).
-            if (node.asMatrixTransformImageFilter() != null) {
-                error(
-                    "SkWebGpuDevice.compositeFrom : a Compose chain contains " +
-                        "a MatrixTransform leaf (e.g. Compose(MatrixTransform, " +
-                        "Blur)) -- not yet supported. Top-level MatrixTransform " +
-                        "ships in its own dispatch path, but mixing it with a " +
-                        "Compose tree (where it would remap the texture the Blur " +
-                        "reads from) is deferred -- the affine pre-pass needs " +
-                        "RTT plumbing that L1a doesn't ship (planned for L1b)."
-                )
+            // L1b -- MatrixTransform leaf inside a Compose tree :
+            // materialise the matrix-transformed image into a layer-sized
+            // scratch as a pre-pass, then run the rest of the plan with
+            // that scratch as the source. Supported only when the
+            // MatrixTransform is the INNERMOST leaf : the walker walks
+            // `inner` first, so this branch fires before any Blur /
+            // ColorFilter / Offset on the OUTER side has been seen.
+            // A MatrixTransform encountered AFTER other leaves (e.g.
+            // `Compose(outer = MatrixTransform, inner = Blur)` where
+            // Blur is walked first) is deferred -- pre-MT accumulation
+            // would need a second RTT pass to flush the existing plan
+            // before the MatrixTransform consumes it.
+            val matrixTransformLeaf = node.asMatrixTransformImageFilter()
+            if (matrixTransformLeaf != null) {
+                if (matrixTransformLeaf.input != null) {
+                    error(
+                        "SkWebGpuDevice.compositeFrom : a MatrixTransform leaf " +
+                            "inside the imageFilter tree has a non-null child " +
+                            "filter. The Compose support flattens the tree, so " +
+                            "leaves must have input == null -- nest the child via " +
+                            "a Compose node instead (e.g. SkImageFilters.Compose(" +
+                            "MatrixTransform(m, sampling), child) rather than " +
+                            "MatrixTransform(m, sampling, input = child))."
+                    )
+                }
+                if (innerMatrixTransform != null) {
+                    error(
+                        "SkWebGpuDevice.compositeFrom : the imageFilter tree " +
+                            "carries more than one MatrixTransform leaf inside " +
+                            "the Compose chain. The L1b slice handles at most " +
+                            "ONE MatrixTransform per layer composite (materialised " +
+                            "as a pre-pass into a layer-sized scratch) -- stacking " +
+                            "two MatrixTransforms needs a chain-of-passes that " +
+                            "runs the second materialise on the first's output, " +
+                            "deferred to a follow-up slice."
+                    )
+                }
+                if (innerDropShadow != null) {
+                    error(
+                        "SkWebGpuDevice.compositeFrom : the imageFilter tree " +
+                            "carries both a DropShadow AND a MatrixTransform leaf " +
+                            "in the Compose chain. The L1b slice handles only " +
+                            "ONE materialise pre-pass per layer composite -- " +
+                            "combining a DropShadow materialise with a " +
+                            "MatrixTransform materialise needs a chain-of-passes " +
+                            "(deferred to a follow-up slice)."
+                    )
+                }
+                if (blur != null || preBlurCF != null || postBlurCF != null ||
+                    offsetDx != 0 || offsetDy != 0
+                ) {
+                    // Pre-MatrixTransform plan accumulated : the
+                    // MatrixTransform's input would need to be (preCF +
+                    // blur + postCF + offset)(src), which means
+                    // materialising THAT plan into a scratch first, then
+                    // running the MatrixTransform pre-pass on the
+                    // scratch. Two materialise stages = chain-of-passes
+                    // (L1b/follow-up).
+                    error(
+                        "SkWebGpuDevice.compositeFrom : a Compose chain contains " +
+                            "a MatrixTransform leaf AFTER other filters (Blur / " +
+                            "ColorFilter / Offset) on its `input` side (e.g. " +
+                            "Compose(outer = MatrixTransform, inner = Blur)). " +
+                            "The L1b slice supports MatrixTransform only as the " +
+                            "INNERMOST leaf (no other filter below it) -- chaining " +
+                            "a pre-MatrixTransform plan into the materialise source " +
+                            "needs a second render-to-texture pre-pass (deferred " +
+                            "to a follow-up slice)."
+                    )
+                }
+                innerMatrixTransform = matrixTransformLeaf
+                return
             }
             val blurLeaf = node.asBlurImageFilter()
             if (blurLeaf != null) {
@@ -6558,6 +6878,7 @@ public class SkWebGpuDevice(
                 offsetDx = offsetDx,
                 offsetDy = offsetDy,
                 innerDropShadow = innerDropShadow,
+                innerMatrixTransform = innerMatrixTransform,
             )
         }
         // Blur present : pre-blur CF (if any) stays as the pre-pass ;
@@ -6580,6 +6901,7 @@ public class SkWebGpuDevice(
             offsetDx = offsetDx,
             offsetDy = offsetDy,
             innerDropShadow = innerDropShadow,
+            innerMatrixTransform = innerMatrixTransform,
         )
     }
 
@@ -10270,8 +10592,15 @@ public class SkWebGpuDevice(
             // [colorViewWritten] flag is flipped only when a pass that
             // targets colorView is encoded below (see the materialise
             // branch's `colorViewWritten` guard).
-            val targetsColorView = !(d is DropShadowLayerCompositeDraw &&
-                d.materializeTargetView != null)
+            //
+            // L1b -- same reasoning for a MatrixTransform materialise
+            // pass via [LayerCompositeDraw.materializeTargetView] : the
+            // single-pass affine remap writes to the layer-sized scratch,
+            // never to colorView, so it doesn't consume the clear slot
+            // either.
+            val targetsColorView = !((d is DropShadowLayerCompositeDraw &&
+                d.materializeTargetView != null) ||
+                (d is LayerCompositeDraw && d.materializeTargetView != null))
             val loadOp = if (targetsColorView && !colorViewWritten) {
                 GPULoadOp.Clear
             } else {
@@ -11358,6 +11687,47 @@ public class SkWebGpuDevice(
                 }
                 return@forEachIndexed
             }
+            if (d is LayerCompositeDraw && d.materializeTargetView != null) {
+                // L1b -- MatrixTransform-inside-Compose materialise pass.
+                // Single render pass that writes the matrix-transformed
+                // image into the layer-sized scratch (the
+                // [LayerCompositeDraw.materializeTargetView]) with
+                // `loadOp = Clear` and `mode = kSrc`. The downstream
+                // Blur / ColorFilter / LayerComposite draws then sample
+                // the scratch as if it were the raw layer source.
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = d.materializeTargetView,
+                                loadOp = GPULoadOp.Clear,
+                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    // Zero-area scissor (out-of-layer matrix footprint) :
+                    // the Clear loadOp above already wipes the scratch to
+                    // transparent, which is the correct semantic for the
+                    // CPU MatrixTransform on a fully-out-of-bounds map.
+                    // Skip the draw call so wgpu doesn't reject the
+                    // zero-size scissor rect.
+                    if (d.scissor[2] > 0 && d.scissor[3] > 0) {
+                        setPipeline(layerCompositePipelineFor(SkBlendMode.kSrc))
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+                    }
+                    end()
+                }
+                return@forEachIndexed
+            }
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -12428,7 +12798,19 @@ public class SkWebGpuDevice(
                 ),
             ),
         )
-        return DrawResources(uniform = uniform, bindGroup = bindGroup)
+        return DrawResources(
+            uniform = uniform,
+            bindGroup = bindGroup,
+            // L1b -- transfer ownership of the materialise scratch
+            // (allocated by [enqueueMaterializeMatrixTransformToScratch])
+            // from the PendingDraw to the DrawResources so it's cleaned
+            // up in [closeDrawResources] after the command buffer that
+            // sampled it (the downstream Blur / ColorFilter /
+            // LayerComposite draws) has been submitted. `null` on every
+            // non-materialise draw so the fast path is bit-iso.
+            materializeTargetTexture = d.materializeTargetTexture,
+            materializeTargetView = d.materializeTargetView,
+        )
     }
 
     /**
