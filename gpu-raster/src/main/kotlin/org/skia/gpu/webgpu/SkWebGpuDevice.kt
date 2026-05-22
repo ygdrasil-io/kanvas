@@ -1479,9 +1479,12 @@ public class SkWebGpuDevice(
         val kernelX: FloatArray, val radiusX: Int,
         val kernelY: FloatArray, val radiusY: Int,
         // Tile mode applied per-axis by the blur shader on out-of-source
-        // samples (SkTileMode ordinal : 0 = kClamp, 3 = kDecal). Only
-        // those two are supported -- the dispatch gate throws for
-        // kRepeat / kMirror.
+        // samples (SkTileMode ordinal : 0 = kClamp, 1 = kRepeat, 2 =
+        // kMirror, 3 = kDecal). N9 lifts the original kClamp/kDecal-only
+        // restriction : the shader handles the modular / mirror
+        // arithmetic in-shader via `tile_load` so kRepeat / kMirror don't
+        // need a sampler descriptor change (the chain is sampler-free,
+        // all reads go through `textureLoad`).
         val tileModeOrdinal: Int,
         // Layer composite payload : paint colour (premul scale) + packed
         // colour-filter (kind / params / bias). Routed through the
@@ -6737,9 +6740,10 @@ public class SkWebGpuDevice(
      *  - `SkImageFilters.ColorFilter(cf, input = null)` -> post-blur CF
      *    only ; folds with `paint.colorFilter` per the single-occupancy
      *    rule (throws if both are set).
-     *  - `SkImageFilters.Blur(sigmaX, sigmaY, kClamp/kDecal,
-     *    input = null)` -> blur params, no pre-CF, post-CF =
-     *    `paint.colorFilter`.
+     *  - `SkImageFilters.Blur(sigmaX, sigmaY, tileMode, input = null)`
+     *    with any [SkTileMode] (N9 -- all four ordinals are handled
+     *    in-shader by `blur_image_filter.wgsl`) -> blur params, no
+     *    pre-CF, post-CF = `paint.colorFilter`.
      *  - `SkImageFilters.Offset(dx, dy, input = null)` / `SkImageFilters
      *    .DropShadow(...)` at the TOP level -> pass-through : no blur,
      *    no pre-CF, effective CF = `paint.colorFilter`. The dispatch
@@ -6753,8 +6757,8 @@ public class SkWebGpuDevice(
      *
      * Unsupported patterns throw with a clear error :
      *  - Any Compose chain that introduces more than one Blur (e.g.
-     *    `Compose(Blur, Blur)`), or a Blur with a non-`kClamp`/`kDecal`
-     *    tile mode, or a non-null `input` on a leaf Blur / ColorFilter.
+     *    `Compose(Blur, Blur)`), or a non-null `input` on a leaf Blur /
+     *    ColorFilter.
      *  - Any non-`null` `paint.colorFilter` combined with a post-blur
      *    ColorFilter from the Compose chain (single-occupancy uniform).
      *  - Any Offset / DropShadow inside a Compose tree -- deferred
@@ -6970,16 +6974,18 @@ public class SkWebGpuDevice(
                             "child) rather than Blur(..., input = child))."
                     )
                 }
-                when (blurLeaf.tileMode) {
-                    SkTileMode.kClamp, SkTileMode.kDecal -> Unit
-                    else -> error(
-                        "SkWebGpuDevice.compositeFrom : a Blur leaf inside the " +
-                            "imageFilter tree has tileMode = ${blurLeaf.tileMode}. " +
-                            "Only kClamp and kDecal are supported on the WebGPU " +
-                            "backend ; kRepeat / kMirror need a sampler with the " +
-                            "corresponding addressMode (follow-up slice)."
-                    )
-                }
+                // N9 -- all four SkTileMode variants are supported on the
+                // WebGPU saveLayer Blur path. The shader
+                // (`blur_image_filter.wgsl`) samples via `textureLoad` with
+                // manual tile math (no sampler), mirroring the CPU raster's
+                // `positiveModInternal` / `mirrorModInternal` helpers in
+                // `SkBlurImageFilter`. kRepeat / kMirror always sample
+                // in-bound, so the kernel mass is unitary by construction
+                // and no per-pixel renormalisation is required ; kDecal
+                // returns zero out-of-bound (intentional alpha falloff,
+                // matches the CPU reference) ; kClamp reads the edge
+                // texel. The ordinal is shipped to the shader via
+                // [BlurredLayerCompositeDraw.tileModeOrdinal].
                 if (blur != null) {
                     error(
                         "SkWebGpuDevice.compositeFrom : the imageFilter tree " +
