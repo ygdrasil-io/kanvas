@@ -335,6 +335,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | LargeClippedPathWindingGM | 99.78% | = | 2 | 997,831 / 1,000,000 | 0, 71, 92, 6 | 0, 32, 23, 2 |
 | LargeGlyphBlurGM | 58.06% | = | 1 | 668,795 / 1,152,000 | 0, 152, 152, 152 | 0, 8, 8, 8 |
 | LargeOvalsGM | 97.02% | = | 1 | 60,638 / 62,500 | 0, 221, 220, 220 | 0, 28, 28, 28 |
+| LatticeGM | 92.95% | (new) | 1 | 594,878 / 640,000 | 0, 183, 202, 186 | 0, 64, 71, 61 |
 | LcdBlendGM | 93.39% | = | 8 | 504,309 / 540,000 | 0, 236, 236, 236 | 0, 44, 46, 49 |
 | LcdOverlapGM | 84.78% | = | 8 | 476,876 / 562,500 | 0, 226, 247, 241 | 0, 69, 79, 68 |
 | LcdTextGM | 95.53% | = | 8 | 293,462 / 307,200 | 0, 220, 204, 232 | 0, 68, 64, 68 |
@@ -352,6 +353,9 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | MandolineGM | 91.83% | = | 1 | 244,260 / 266,000 | 0, 255, 255, 255 | 0, 61, 61, 61 |
 | ManyCirclesGM | 97.27% | = | 1 | 466,897 / 480,000 | 0, 50, 57, 70 | 0, 7, 5, 6 |
 | ManyRRectsGM | 88.33% | = | 1 | 212,000 / 240,000 | 0, 13, 3, 1 | 0, 13, 3, 1 |
+| MatrixConvolutionGM_basic | 43.94% | (new) | 1 | 65,905 / 150,000 | 0, 255, 255, 255 | 0, 45, 45, 45 |
+| MatrixConvolutionGM_basic_color | 47.47% | (new) | 1 | 71,212 / 150,000 | 0, 247, 250, 115 | 0, 46, 46, 38 |
+| MatrixConvolutionGM_big | 57.97% | (new) | 1 | 86,961 / 150,000 | 0, 255, 255, 255 | 0, 58, 58, 58 |
 | MatrixImageFilterGM | 98.58% | = | 1 | 41,404 / 42,000 | 0, 150, 150, 150 | 0, 20, 20, 20 |
 | MipmapGM | 92.09% | = | 4 | 73,673 / 80,000 | 0, 179, 179, 179 | 0, 25, 25, 25 |
 | MipmapGray8SrgbGM | 99.99% | = | 4 | 59,794 / 59,800 | 0, 6, 6, 6 | 0, 5, 5, 5 |
@@ -392,6 +396,8 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | PathSkbug11886GM | 99.22% | = | 1 | 65,024 / 65,536 | 0, 129, 129, 129 | 0, 35, 35, 35 |
 | PdfNeverEmbedGM | 76.33% | = | 1 | 200,103 / 262,144 | 0, 255, 255, 255 | 0, 136, 121, 153 |
 | PerlinNoiseGM | 49.92% | = | 1 | 68,087 / 136,400 | 0, 50, 17, 18 | 0, 7, 6, 6 |
+| PerlinNoiseLayeredGM | 0.00% | (new) | 1 | 0 / 250,000 | 0, 73, 76, 75 | 0, 36, 36, 36 |
+| PerlinNoiseLocalMatrixGM | 62.50% | (new) | 1 | 192,008 / 307,200 | 0, 79, 95, 86 | 0, 11, 10, 9 |
 | PerlinNoiseRotatedGM | 70.94% | = | 1 | 49,941 / 70,400 | 0, 58, 57, 57 | 0, 7, 7, 7 |
 | PerspShadersAaGM | 63.30% | = | 8 | 47,478 / 75,000 | 0, 222, 254, 223 | 0, 109, 148, 96 |
 | PerspShadersBwGM | 63.42% | = | 8 | 47,564 / 75,000 | 0, 227, 255, 235 | 0, 111, 150, 97 |
