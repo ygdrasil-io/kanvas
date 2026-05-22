@@ -1,23 +1,22 @@
 package org.skia.tests
 
-import org.skia.core.SkCanvas
-import org.graphiks.math.SkISize
-
 /**
- * Upstream-name alias for `gm/gradients_2pt_conical.cpp::ConicalGradientsGM`.
+ * Alias for [ConicalGradients2ptInsideDitherGM].
  *
- * Already covered by three GradCaseType-specialised siblings :
- *  - `ConicalGradients2ptInsideGM`   (kInside)
- *  - `ConicalGradients2ptOutsideGM`  (kOutside)
- *  - `ConicalGradients2ptTileModeGMs` (Edge + tileMode variants)
+ * The upstream class `gm/gradients_2pt_conical.cpp::ConicalGradientsGM`
+ * is a parameterised template over (GradCaseType × dither × tileMode)
+ * that ships 12 `DEF_GM` registrations. The first registration —
+ * `DEF_GM(return new ConicalGradientsGM(kInside_GradCaseType, true))`
+ * — produces the GM named `gradients_2pt_conical_inside`, which is
+ * already ported as [ConicalGradients2ptInsideDitherGM] (kInside +
+ * dither + kClamp tileMode).
  *
- * This class plants the upstream base-name flag; the draw is a no-op.
+ * The remaining 11 instantiations are also already ported as
+ * siblings — see the [ConicalGradients2ptVariantGM] family in
+ * `ConicalGradients2ptInsideGM.kt`, `ConicalGradients2ptOutsideGM.kt`,
+ * and `ConicalGradients2ptTileModeGMs.kt`.
+ *
+ * Keeping this `typealias` so tooling that looks up the GM class
+ * under its longer upstream C++ identifier resolves cleanly.
  */
-public class ConicalGradientsGM : GM() {
-    override fun getName(): String = "gradients_2pt_conical"
-    override fun getISize(): SkISize = SkISize.Make(840, 815)
-
-    override fun onDraw(canvas: SkCanvas?) {
-        // No-op alias : ported as ConicalGradients2pt{Inside,Outside,TileMode}GMs.
-    }
-}
+public typealias ConicalGradientsGM = ConicalGradients2ptInsideDitherGM
