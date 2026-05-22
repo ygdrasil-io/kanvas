@@ -335,6 +335,14 @@ fn clipShapeCoverage(p: vec2f) -> f32 {
             uniforms.clipShapeRadiiKind.x,
             uniforms.clipShapeRadiiKind.y,
         );
+    } else if (clip_kind == 2) {
+        // M4 -- kDifference : invert coverage so the shape carves a hole.
+        return 1.0 - rrect_cov(
+            p,
+            uniforms.clipShapeBounds,
+            uniforms.clipShapeRadiiKind.x,
+            uniforms.clipShapeRadiiKind.y,
+        );
     }
     return 1.0;
 }
