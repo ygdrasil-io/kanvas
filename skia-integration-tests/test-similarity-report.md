@@ -112,6 +112,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ClippedCubicGM | 99.97% | = | 1 | 483,462 / 483,600 | 0, 255, 255, 255 | 0, 255, 255, 255 |
 | CollapsePathsGM | 98.61% | = | 1 | 295,824 / 300,000 | 0, 83, 82, 82 | 0, 12, 12, 12 |
 | Color4fGM | 92.49% | = | 1 | 246,240 / 266,240 | 0, 18, 7, 4 | 0, 13, 4, 3 |
+| ColorCubeGM | 100.00% | (new) | 64 | 262,144 / 262,144 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ColorFilterAlpha8GM | 100.00% | = | 2 | 160,000 / 160,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ColorFilterImageFilterGM | 70.32% | = | 8 | 36,708 / 52,200 | 0, 212, 242, 236 | 0, 82, 96, 116 |
 | ColorFiltersGM | 22.15% | = | 2 | 59,049 / 266,600 | 0, 250, 253, 253 | 0, 74, 84, 89 |

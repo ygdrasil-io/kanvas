@@ -43,8 +43,9 @@ class PlaceholderGMsTest {
     @Test @Disabled("Needs portable LiberationFontMgr + matchFamilyStyleCharacter (R-suivi).")
     fun `FontMgrMatchGM placeholder`() { FontMgrMatchGM() }
 
-    @Test @Disabled("Needs SkFontArguments.Palette (CPAL palette selection).")
-    fun `FontPaletteGM placeholder`() { FontPaletteGM() }
+    // FontPaletteGM — real body port landed in its own FontPaletteTest
+    //                 (STUB.COLR_V1 / STUB.FONTATIONS / STUB.FIXTURE —
+    //                  same blocker trio as ColrV1Test).
 
     // FontRegenGM — real body port landed in its own FontRegenTest
     //               (GPU atlas-stress prologue is N/A for raster, but the
