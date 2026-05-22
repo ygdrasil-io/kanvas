@@ -17,8 +17,8 @@ class PlaceholderGMsTest {
     @Test @Disabled("GPU-only : distance-field text path not yet ported.")
     fun `DFTextGM placeholder`() { DFTextGM() }
 
-    @Test @Disabled("GPU-only : distance-field text + perspective text-blob.")
-    fun `DFTextBlobPerspGM placeholder`() { DFTextBlobPerspGM() }
+    // DFTextBlobPerspGM — real body port landed in its own DFTextBlobPerspTest
+    //                     (STUB.DF_TEXT_RASTER until raster grows an SDF path).
 
     // DrawImageSetGM / DrawImageSetAlphaOnlyGM / DrawImageSetRectToRectGM
     // — real ported bodies now live in DrawImageSetTest /
