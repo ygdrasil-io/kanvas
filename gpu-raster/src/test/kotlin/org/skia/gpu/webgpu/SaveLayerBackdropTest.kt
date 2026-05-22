@@ -41,10 +41,15 @@ import kotlin.math.abs
  *    tinted composite onto the seed with `mode = kDstOver` (shadow
  *    behind the seed). The shadow shows through transparent regions
  *    of the seed, matching upstream `SkDropShadowImageFilter` semantics.
- *  - Other backdrop variants (Offset, MatrixTransform, Compose, ...)
- *    fall back to copy-only semantics on GPU. The CPU raster path
- *    remains the full-featured fallback (see `SaveLayerRecBackdropTest`
- *    for the comprehensive filter coverage).
+ *  - `backdrop = SkImageFilters.Offset(dx, dy, input = null)` (L2a) :
+ *    the integer-rounded `(dx, dy)` folds into the copy-seed's
+ *    `dstOriginX/Y` slot ; the composite shader samples the parent at
+ *    a shifted address (kDecal-equivalent at the parent's pixel-grid
+ *    edges). No extra render pass.
+ *  - Other backdrop variants (MatrixTransform, Compose, ...) fall back
+ *    to copy-only semantics on GPU. The CPU raster path remains the
+ *    full-featured fallback (see `SaveLayerRecBackdropTest` for the
+ *    comprehensive filter coverage).
  */
 class SaveLayerBackdropTest {
 
@@ -289,6 +294,66 @@ class SaveLayerBackdropTest {
         assertTrue((pixels[oIdx + 3].toInt() and 0xFF) == 0) {
             "(2, 2) : outside layer should be transparent"
         }
+    }
+
+    @Test
+    fun `saveLayer with non-null Offset backdrop shifts the seeded parent pixels`() {
+        // Phase L2a main exercise -- a `SkImageFilters.Offset(dx, dy,
+        // input = null)` backdrop folds the integer-rounded `(dx, dy)`
+        // into the copy-seed's `dstOriginX/Y` slot. The composite
+        // shader's existing integer-grid fast path samples the parent
+        // at a shifted address ; no new pipeline.
+        //
+        // Layout :
+        //   - White parent background.
+        //   - Opaque blue square at parent (10..14, 10..14).
+        //   - Layer bbox (8..24, 8..24).
+        //   - Backdrop Offset(dx = +4, dy = +4) -- the parent content
+        //     should appear shifted by (+4, +4) inside the layer ; at
+        //     layer pixel `(x, y)` (mapping to parent global
+        //     `(originX + x, originY + y)`) the seed reads parent at
+        //     `(originX + x - 4, originY + y - 4)`.
+        //
+        // After saveLayer + immediate restore (the seed-then-composite
+        // round-trip) the layer bbox is overwritten by the seed.
+        // Parent (16, 16) -- the apparent shifted position of the
+        // original blue square's centre -- becomes BLUE because the
+        // seed at child (8, 8) reads parent (12, 12) = blue.
+        // Parent (12, 12) -- the original blue square's centre --
+        // becomes WHITE because the seed at child (4, 4) reads
+        // parent (8, 8) = white. Without the Offset support (the
+        // pre-L2a copy-only path) these two pixels would swap.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                canvas.drawRect(
+                    SkRect.MakeLTRB(10f, 10f, 14f, 14f),
+                    SkPaint().apply { color = SK_ColorBLUE },
+                )
+                val backdrop = SkImageFilters.Offset(4f, 4f, null)
+                canvas.saveLayer(SaveLayerRec(layerBounds, null, backdrop))
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Apparent shifted position of the original blue square :
+        // parent (14..18, 14..18). Discriminator vs the pre-L2a
+        // copy-only path which would land at (10..14).
+        assertRgbaApprox(pixels, 16, 16, 0, 0, 255, 255, tag = "shifted blue", tol = 1)
+        assertRgbaApprox(pixels, 14, 14, 0, 0, 255, 255, tag = "shifted blue top-left", tol = 1)
+        // Original blue square's centre -- now WHITE under the layer
+        // (the seed at child (4, 4) reads parent (8, 8) which is
+        // white). The pre-L2a copy-only path would land at BLUE here
+        // (parent (12, 12) seeded directly to child (4, 4)).
+        assertRgbaApprox(pixels, 12, 12, 255, 255, 255, 255, tag = "original blue hidden by shifted seed")
+        // Outside the layer bbox : parent white untouched.
+        assertRgbaApprox(pixels, 2, 2, 255, 255, 255, 255, tag = "outside layer")
     }
 
     @Test
