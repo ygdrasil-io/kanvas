@@ -1147,6 +1147,87 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
     }
 
     /**
+     * Mirrors Skia's `SkCanvas::ImageSetEntry`
+     * ([include/core/SkCanvas.h](https://github.com/google/skia/blob/main/include/core/SkCanvas.h)) :
+     *
+     * ```cpp
+     * struct ImageSetEntry {
+     *     sk_sp<const SkImage> fImage;
+     *     SkRect  fSrcRect;
+     *     SkRect  fDstRect;
+     *     int     fMatrixIndex;  // -1 ⇒ no preview matrix
+     *     float   fAlpha;
+     *     unsigned fAAFlags;     // bitmask of QuadAAFlags
+     *     bool    fHasClip;      // dstClips index validity
+     * };
+     * ```
+     *
+     * One entry in the batch consumed by [experimental_DrawEdgeAAImageSet].
+     * Each carries its own image, source sub-rect, destination rect, AA-edge
+     * bitmask and a per-entry alpha multiplier — the API lets a renderer fuse
+     * N image draws (typically tiled in compositor layers) into a single
+     * operation that can share state and (on GPU) coalesce vertices.
+     */
+    public data class ImageSetEntry(
+        public val image: SkImage,
+        public val srcRect: SkRect,
+        public val dstRect: SkRect,
+        public val matrixIndex: Int = -1,
+        public val alpha: SkScalar = 1f,
+        public val aaFlags: Int = QuadAAFlags.kNone_QuadAAFlags,
+        public val hasClip: Boolean = false,
+    )
+
+    /**
+     * Mirrors Skia's `SkCanvas::experimental_DrawEdgeAAImageSet`
+     * ([include/core/SkCanvas.h](https://github.com/google/skia/blob/main/include/core/SkCanvas.h)) :
+     *
+     * ```cpp
+     * void experimental_DrawEdgeAAImageSet(const ImageSetEntry[], int count,
+     *                                      const SkPoint dstClips[],
+     *                                      const SkMatrix preViewMatrices[],
+     *                                      const SkSamplingOptions&,
+     *                                      const SkPaint*, SrcRectConstraint);
+     * ```
+     *
+     * Batched per-image draw with per-entry edge-AA flags, per-entry alpha
+     * multiplier and (optionally) per-entry destination clip-quad / preview
+     * matrix indices. Each [ImageSetEntry] in [set] is conceptually rendered
+     * as if by [drawImageRect] with the entry's `srcRect → dstRect`
+     * mapping, the entry's `alpha` folded into [paint]'s alpha, and the
+     * entry's AA flags driving per-edge anti-aliasing (raster's
+     * all-or-nothing approximation per [experimental_DrawEdgeAAQuad]).
+     *
+     * **STUB.EDGE_AA_IMAGE_SET** — this is the central batched API used by
+     * the compositor and tile renderer. The single-quad case is already
+     * covered by [drawImageRect] today ; the batched fast-path (vertex
+     * coalescing, BSP clipping, preview-matrix indirection) is the missing
+     * piece. Surface stub kept here so GM ports compile against the real
+     * signature ; the body is a [NotImplementedError] until the batched
+     * device entry-point lands.
+     */
+    public open fun experimental_DrawEdgeAAImageSet(
+        set: Array<ImageSetEntry>,
+        count: Int,
+        dstClips: Array<SkPoint>?,
+        preViewMatrices: Array<SkMatrix>?,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+        constraint: SrcRectConstraint,
+    ): Unit = TODO(
+        "STUB.EDGE_AA_IMAGE_SET: SkCanvas::experimental_DrawEdgeAAImageSet — " +
+            "batched per-image draw with edge-AA flags + per-image transform / " +
+            "alpha. Required by gm/drawimageset.cpp (`draw_image_set`, " +
+            "`draw_image_set_rect_to_rect`, `draw_image_set_alpha_only`) and " +
+            "gm/compositor_quads.cpp. Implement by walking the entries and " +
+            "routing each through drawImageRect with the per-entry alpha " +
+            "folded into the paint and aaFlags into the AA-rect path ; " +
+            "preViewMatrices[entry.matrixIndex] pre-multiplies the CTM, " +
+            "dstClips[4*i..4*i+3] (when entry.hasClip) replaces the dstRect " +
+            "with a quadrilateral clip.",
+    )
+
+    /**
      * Mirrors Skia's `SkCanvas::drawLine(x0, y0, x1, y1, paint)`. Emits a
      * 2-point open path (`moveTo` + `lineTo`) and routes through [drawPath].
      */
