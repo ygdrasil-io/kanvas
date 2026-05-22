@@ -35,7 +35,8 @@ TSV à 4 colonnes, **pas de header**, séparateur `\t` :
 ├── _resolve_url.sh        ← path:line → URL clickable
 ├── audit.sh               ← liste les symboles publics Kotlin sans entrée TSV
 └── <module>/
-    └── <KotlinSource>.tsv ← un fichier par .kt
+    ├── <KotlinSource>.tsv ← un fichier par .kt
+    └── _ignore.txt        ← FQN Kotlin-original sans contrepartie Skia
 ```
 
 Un TSV **par source Kotlin** — diff git lisible, scope d'une PR limité.
@@ -52,7 +53,7 @@ Un TSV **par source Kotlin** — diff git lisible, scope d'une PR limité.
 
 **Facultatif** : `private` / `internal` — seulement si la traçabilité aide.
 
-**Exclu** : symboles Kotlin-original sans contrepartie upstream (extensions ergonomiques, helpers idiomatiques). En cas de doute, ne pas lister.
+**Exclu** : symboles Kotlin-original sans contrepartie upstream (extensions ergonomiques, helpers idiomatiques, factory-methods Kotlin, constantes de pratique). Ces symboles doivent être listés dans `<module>/_ignore.txt` (une FQN Kotlin par ligne, `#` pour les commentaires) — l'audit les écarte du MISSING tout en gardant une trace explicite. Les overrides Any (`equals`/`hashCode`/`toString` avec `override`) sont auto-exclus sans avoir besoin d'entrée.
 
 ## Requêtes terminal — exemples
 
