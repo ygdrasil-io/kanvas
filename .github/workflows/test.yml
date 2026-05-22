@@ -74,14 +74,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Audit :math map (zero MISSING)
+      - name: Audit :math map (zero MISSING, zero STALE)
         # Enforces Kotlin ↔ Skia traceability for `:math` : every public
         # Kotlin symbol must be either mapped in `.upstream/source/map/math/*.tsv`
         # or whitelisted in `.upstream/source/map/math/_ignore.txt` as
         # Kotlin-original (override Any methods are auto-excluded). The
-        # script exits non-zero if MISSING > 0 ; STALE is reported as a
-        # warning but does not fail (heuristic limitation : data-class
-        # primary-ctor params + enum entries are real but not detected).
+        # script exits non-zero if MISSING > 0 OR STALE > 0. Since M6 the
+        # heuristic handles single-line data-class ctors + enum entries, so
+        # both invariants are lint-enforcing.
         run: python3 .upstream/source/map/audit.sh math
 
       - name: Run :cpu-raster + :skia-integration-tests

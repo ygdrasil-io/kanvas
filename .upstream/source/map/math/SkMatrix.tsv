@@ -1,5 +1,4 @@
 org.graphiks.math.SkMatrix	SkMatrix	math/src/main/kotlin/SkMatrix.kt:33	include/core/SkMatrix.h:45
-org.graphiks.math.SkMatrix.<init>	SkMatrix::SkMatrix	math/src/main/kotlin/SkMatrix.kt:33	include/core/SkMatrix.h:45
 org.graphiks.math.SkMatrix.sx	SkMatrix::kMScaleX	math/src/main/kotlin/SkMatrix.kt:34	include/core/SkMatrix.h:327
 org.graphiks.math.SkMatrix.kx	SkMatrix::kMSkewX	math/src/main/kotlin/SkMatrix.kt:35	include/core/SkMatrix.h:328
 org.graphiks.math.SkMatrix.tx	SkMatrix::kMTransX	math/src/main/kotlin/SkMatrix.kt:36	include/core/SkMatrix.h:329
