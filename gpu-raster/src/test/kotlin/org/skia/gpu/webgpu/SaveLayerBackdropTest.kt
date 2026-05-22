@@ -357,6 +357,78 @@ class SaveLayerBackdropTest {
     }
 
     @Test
+    fun `saveLayer with non-null MatrixTransform backdrop remaps parent pixels into the layer`() {
+        // L2b main exercise -- a `SkImageFilters.MatrixTransform`
+        // backdrop replaces the plain copy-only seed with an affine
+        // remap. The composite shader receives the inverse 2x3 (with
+        // the parent origin baked into the translation slots) and
+        // samples the parent's intermediate at `M^{-1}(child_px) +
+        // (originX, originY)` per fragment.
+        //
+        // Test matrix : translate(+4, 0) -- shifts the parent's pixels
+        // 4 px to the right in the layer's view. With a blue square at
+        // parent (10..14, 10..14) and a layer at parent (8..24, 8..24),
+        // the backdrop's M maps the layer input rect (0..16, 0..16) to
+        // (4..20, 0..16) in layer space ; the shader reads
+        // `parent[(cx - 4) + 8, cy + 8]`, so the blue square (which
+        // sits at layer-local (2..6, 2..6) before the matrix) lands at
+        // layer-local (6..10, 2..6) after the matrix. Mapped onto
+        // parent coords, the blue square in the final composite shows
+        // up at parent (14..18, 10..14).
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorRED)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                // Pre-draw a blue square on the parent so we have a
+                // sharp blue/red edge for the matrix to translate.
+                canvas.drawRect(
+                    SkRect.MakeLTRB(10f, 10f, 14f, 14f),
+                    SkPaint().apply { color = SK_ColorBLUE },
+                )
+                // MatrixTransform(translate(+4, 0)) backdrop. The
+                // shader maps each child px (cx, cy) to parent px
+                // (cx - 4 + 8, cy + 8) = (cx + 4, cy + 8).
+                val matrix = org.graphiks.math.SkMatrix.MakeTrans(4f, 0f)
+                val backdrop = org.skia.foundation.SkImageFilters.MatrixTransform(
+                    matrix,
+                    org.skia.foundation.SkSamplingOptions(
+                        org.skia.foundation.SkFilterMode.kNearest,
+                    ),
+                    /* input = */ null,
+                )
+                canvas.saveLayer(SaveLayerRec(layerBounds, null, backdrop))
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Inside the post-matrix blue footprint (parent (14..18, 10..14)) :
+        // the seed produced blue, the composite back lands blue on red.
+        // At parent (15, 11) the child px is (7, 3), the shader samples
+        // parent at (7 - 4 + 8, 3 + 8) = (11, 11) which is blue.
+        assertRgbaApprox(pixels, 15, 11, 0, 0, 255, 255, tag = "translated blue (right)", tol = 2)
+        assertRgbaApprox(pixels, 17, 13, 0, 0, 255, 255, tag = "translated blue (right edge)", tol = 2)
+        // Discriminator vs the copy-only fallback : at parent (13, 11)
+        // the pre-saveLayer pixel is BLUE (inside the original blue
+        // square). With copy-only seed the child px (5, 3) would copy
+        // parent (13, 11) = blue, the composite back lands blue. With
+        // the matrix-remapped seed, the shader samples parent at
+        // (5 - 4 + 8, 3 + 8) = (9, 11) which is OUTSIDE the blue square
+        // = red. The opaque red seed replaces the pre-saveLayer blue
+        // when the layer composites back via SrcOver. If this assertion
+        // sees blue, the matrix branch silently degraded to copy-only.
+        assertRgbaApprox(pixels, 13, 11, 255, 0, 0, 255, tag = "MT branch active vs copy-only", tol = 2)
+        // Inside the layer but on the post-matrix red surround : red.
+        assertRgbaApprox(pixels, 20, 12, 255, 0, 0, 255, tag = "remapped red surround", tol = 2)
+        // Outside the layer's bbox : red background untouched.
+        assertRgbaApprox(pixels, 2, 2, 255, 0, 0, 255, tag = "outside layer")
+    }
+
+    @Test
     fun `saveLayer with backdrop and draw composites new content on top of seeded pixels`() {
         // Phase G-saveLayer-backdrop -- this is the main frosted-glass
         // pattern : seed from parent, draw on top of the seed. The
