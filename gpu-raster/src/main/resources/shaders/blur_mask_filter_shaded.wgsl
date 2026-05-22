@@ -62,9 +62,16 @@ struct Uniforms {
     //   .zw = (srcW, srcH) of the shaded layer (and of the H-pass
     //          scratch -- they share the size).
     dstOriginSize: vec4f,    // offset   0
-    // paintColor : kept for byte-layout parity with `blur_gaussian.wgsl`
-    // but unused -- the shaded layer already carries the final colours.
-    // The host packs zeros here.
+    // paintColor : kept for byte-layout parity with `blur_gaussian.wgsl`.
+    // PR #612 K2-GPU repurposes :
+    //   .x = sharpRgbMode flag (0 = legacy "out = B" full RGBA blur ;
+    //        1 = "out.rgb = A.rgb * (B.a / A.a), out.a = B.a" -- sharp
+    //        shader RGB modulated by the blurred alpha mask, used when
+    //        the routing was triggered by K2's drawImageRect+maskFilter
+    //        path with an `SkBitmapShader(kDecal)` -- the upstream
+    //        raster semantic blurs only the alpha shape mask and
+    //        leaves the shader sample sharp).
+    //   .yzw : reserved / zero.
     paintColor:    vec4f,    // offset  16
     // axisRadius :
     //   .x = 1.0 when sampling along X (H pass), 0.0 else.
@@ -188,7 +195,38 @@ fn fs_vertical_composite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let M = A.a;
 
     let style = i32(uniforms.axisRadius.w + 0.5);
-    var out: vec4f = B;
+    // PR #612 K2-GPU -- when paintColor.x >= 0.5, the dispatcher has
+    // tagged this draw as "K2 SkBitmapShader+kDecal routing on a rect
+    // path that exactly matches the shader source rect". In that case
+    // the raster reference renders the unblurred shader sample
+    // modulated by the blurred shape-alpha (not a full RGBA blur). We
+    // mirror that on GPU by replacing `B` with
+    //   vec4f(A.rgb * (B.a / A.a), B.a)
+    // i.e. the sharp shader RGB (carried by A.rgb, which is `shader *
+    // paintA` premul) with its alpha attenuated by the blurred shape
+    // mask. Outside the shape (A.a = 0 under kDecal) the output is
+    // (0, 0, 0, 0), killing the colour halo that the legacy
+    // `out = B` produces by smearing image pixels into the surrounding
+    // transparent zone.
+    //
+    // The legacy `out = B` path stays for shaders that DO carry a
+    // valid sample outside the shape (kClamp gradients, kRepeat /
+    // kMirror tiled bitmaps, etc.). Those shaders supply blue / repeated
+    // pixels outside the path and the user's expectation is for the
+    // halo to inherit them -- the blurred-RGBA semantics match that
+    // intent (and the MaskFilterShadedTest gradient tests rely on it).
+    let sharpRgbMode = uniforms.paintColor.x >= 0.5;
+    var out: vec4f;
+    if (sharpRgbMode) {
+        if (A.a > 0.001) {
+            let scale = B.a / A.a;
+            out = vec4f(A.rgb * scale, B.a);
+        } else {
+            out = vec4f(0.0);
+        }
+    } else {
+        out = B;
+    }
     if (style == 1) {
         // kSolid : A on top of B (SrcOver, A is premul). Output =
         // A + B * (1 - A.a). For A.a = 1 (interior pixels of the sharp
