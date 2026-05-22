@@ -173,6 +173,64 @@ public open class SkTypeface protected constructor() {
     public open fun makeClone(args: SkFontArguments): SkTypeface? = this
 
     /**
+     * Mirrors Skia's
+     * [`int SkTypeface::countGlyphs() const`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h)
+     * — number of glyphs this typeface carries (`maxp.numGlyphs` in
+     * TrueType terms). Used by `gm/fontmgr.cpp::FontMgrBoundsGM` to
+     * skip typefaces with 0 glyphs (e.g. degenerate AWT fallbacks) and
+     * to bound the per-glyph bbox sweep at a thousand glyphs for
+     * tractable runtimes.
+     *
+     * **Base-class default — 0** : the [MakeEmpty] sentinel carries no
+     * glyphs. Concrete subclasses (notably `AwtTypeface`) override
+     * with the underlying font's `numGlyphs`.
+     */
+    public open fun countGlyphs(): Int = 0
+
+    /**
+     * Mirrors Skia's
+     * [`void SkTypeface::getFamilyName(SkString* name) const`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h).
+     * Appends the typeface's family name to [name].
+     *
+     * Kotlin idiom : we accept a [StringBuilder] out-param so direct
+     * ports of upstream `.cpp` code drop in unchanged. Callers that
+     * just want the value can use [getFamilyName] (the zero-arg
+     * overload).
+     *
+     * **Base-class default — appends nothing** : the [MakeEmpty]
+     * sentinel has no family name. Concrete subclasses override.
+     */
+    public open fun getFamilyName(name: StringBuilder) { /* default no-op */ }
+
+    /**
+     * Convenience zero-arg overload — returns the family name as a
+     * fresh [String]. Implemented via [getFamilyName] (the out-param
+     * form) so subclasses only need to override the latter.
+     */
+    public fun getFamilyName(): String {
+        val sb = StringBuilder()
+        getFamilyName(sb)
+        return sb.toString()
+    }
+
+    /**
+     * Internal hook for [SkFont.getBounds] — single-glyph tight visual
+     * bbox at the configured `size` / `scaleX` / `skewX`. The default
+     * returns the empty rect; concrete subclasses (notably `AwtTypeface`)
+     * compute the glyph outline's actual bounds.
+     *
+     * Mirrors the per-glyph branch of upstream's
+     * `SkScalerContext::getMetrics(...)` (`src/core/SkScalerContext.cpp`)
+     * — the `SkRect` Skia stores in `SkGlyph::fImageBounds`.
+     */
+    public open fun getGlyphBoundsInternal(
+        glyphId: Int,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): SkRect = SkRect.MakeEmpty()
+
+    /**
      * Internal hook for [SkFont.getMetrics] — base class fills [metrics]
      * with zeros and returns 0 (the recommended line spacing).
      */
