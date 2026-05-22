@@ -31,13 +31,19 @@ import org.skia.tests.OverStrokeGM
  * implement that band-aid yet ; it would only help the cubic cell,
  * not the closed-quad / oval rows where the artifact also appears.
  *
- * Net : zero device-side fix possible without re-architecting
- * `SkStroker`. Floors locked at 84.5 % (just under both measured
- * scores) ; ratcheting upward requires a stroker rewrite.
+ * **Update (post inner-offset orientation heuristic)** : the SkStroker
+ * now applies a contour-level "engulfed offset" heuristic for closed
+ * contours where `halfW > 1.5 × bboxMaxDim` AND the two offset
+ * polylines share the same signed orientation with a high area ratio
+ * (> 0.7). In that case both offsets are emitted as same-direction
+ * filled regions (winding UNION) instead of "outer minus reversed
+ * inner". On OverStrokeGM the heuristic fires on the quad cell
+ * (40-unit arch stroked at halfW = 250), unlocking +2.4 pt on the
+ * raster score (83.48 % → 85.87 %). See
+ * `kanvas-skia/src/main/kotlin/org/skia/foundation/SkStroker.kt`
+ * (the `engulfed` branch in `strokeContour`).
  *
- * See [K8 entry in MIGRATION_PLAN_GPU_WEBGPU.md] for the full RCA.
- *
- * Floors : raster 84.5 % / GPU 84.5 %.
+ * Floors : raster 85.5 % / GPU 85.5 %.
  */
 class OverStrokeCrossBackendTest {
 
@@ -45,8 +51,8 @@ class OverStrokeCrossBackendTest {
     fun `OverStrokeGM matches reference on raster and GPU backends`() {
         runCrossBackendTest(
             gm = OverStrokeGM(),
-            rasterFloor = 84.5,
-            gpuFloor = 84.5,
+            rasterFloor = 85.5,
+            gpuFloor = 85.5,
         )
     }
 }
