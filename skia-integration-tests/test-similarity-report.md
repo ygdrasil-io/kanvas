@@ -4,4 +4,4 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
-| SaveLayerPreserveLCDTextGM | 95.75% | (new) | 1 | 178,089 / 186,000 | 0, 203, 199, 204 | 0, 54, 53, 54 |
+| ScaledTilingGradientGM | 64.09% | (new) | 1 | 254,119 / 396,500 | 0, 255, 255, 255 | 0, 25, 16, 17 |
