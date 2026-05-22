@@ -4,4 +4,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
-| RadialGradientGM | 88.54% | (new) | 8 | 1,450,594 / 1,638,400 | 0, 10, 10, 10 | 0, 9, 9, 9 |
+| RadialGradient3GM | 100.00% | (new) | 8 | 250,000 / 250,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| RadialGradient3NoditherGM | 100.00% | (new) | 8 | 250,000 / 250,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| RadialGradient4GM | 100.00% | (new) | 8 | 250,000 / 250,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| RadialGradient4NoditherGM | 100.00% | (new) | 8 | 250,000 / 250,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
