@@ -31,8 +31,8 @@ class PlaceholderGMsTest {
     // (both reference-image rows render identically), matching the
     // upstream raster sink that produced `original-888/flippity.png`.
 
-    @Test @Disabled("GPU-only : glyph atlas LRU eviction not exposed for raster.")
-    fun `FontCacheGM placeholder`() { FontCacheGM() }
+    // FontCacheGM — real body port landed in its own FontCacheTest
+    //                (cross-backend ratchet at ~84 %, see PR notes).
 
     @Test @Disabled("Needs portable LiberationFontMgr (R-suivi).")
     fun `FontMgrBoundsGM placeholder`() { FontMgrBoundsGM() }
