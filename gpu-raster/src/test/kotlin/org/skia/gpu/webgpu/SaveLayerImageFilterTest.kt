@@ -1580,6 +1580,231 @@ class SaveLayerImageFilterTest {
     }
 
     @Test
+    fun `saveLayer with Compose(Blur, MatrixTransform) materialises MT into scratch then blurs`() {
+        // L1b -- MatrixTransform as the innermost leaf inside a Compose
+        // tree. Walker order : inner first -> MatrixTransform encountered
+        // first -> materialise the matrix-transformed image into a layer-
+        // sized scratch as a pre-pass ; then the outer Blur runs against
+        // the scratch as if it were the raw layer source.
+        //
+        // We use a pure translation MatrixTransform (dx = 8, dy = 8) :
+        // that's structurally equivalent in semantic to Compose(Blur,
+        // Offset) -- the kernel reads a shifted source. We assert the
+        // qualitative output : centre of the shifted rect is dominantly
+        // red, pre-shift position is background, soft edges along the
+        // shifted rect.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(8f, 8f, 14f, 14f)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 1.5f, sigmaY = 1.5f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val translate = SkMatrix.MakeAll(1f, 0f, 8f, 0f, 1f, 8f)
+                val mt = SkImageFilters.MatrixTransform(
+                    matrix = translate,
+                    sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                    input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(outer = blur, inner = mt)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Centre of the shifted-blurred rect (mapped centre = (11+8, 11+8)
+        // = (19, 19)) : dominantly red, with the green / blue channels
+        // small but possibly non-zero from kClamp blur neighbour samples.
+        val i = (19 * W + 19) * 4
+        val rC = pixels[i].toInt() and 0xFF
+        val gC = pixels[i + 1].toInt() and 0xFF
+        val bC = pixels[i + 2].toInt() and 0xFF
+        assertTrue(rC > 200 && gC < 120 && bC < 120) {
+            "Compose(Blur, MT-translate) shifted centre should be dominantly red ; got ($rC, $gC, $bC)"
+        }
+        // The pre-shift position (where the source rect would have been
+        // before the MatrixTransform) is now empty background (white).
+        // The blur kernel may extend slightly into this region from the
+        // shifted rect's left edge, so allow a tolerance.
+        assertRgbaApprox(pixels, 9, 9, 255, 255, 255, 255,
+            tag = "Compose(Blur, MT-translate) pre-shift cleared", tol = 5)
+        // Far corner stays at the white background (the kernel tail at
+        // 1.5 sigma is negligible 10+ px away from the shifted rect).
+        assertRgbaApprox(pixels, 28, 2, 255, 255, 255, 255,
+            tag = "Compose(Blur, MT-translate) far white", tol = 2)
+        // Soft edge : a pixel a couple of px OUTSIDE the shifted rect
+        // should be partially blurred -- not pure white. The shifted
+        // rect lives at (16..22, 16..22) ; pick (24, 19) which is 2 px
+        // right of the right edge in y = 19's row. The 1.5-sigma kernel
+        // tail reaches there with non-trivial weight, so the pixel
+        // should carry some red contribution (green / blue drop below
+        // 255 from the partial coverage).
+        val j = (19 * W + 24) * 4
+        val rE = pixels[j].toInt() and 0xFF
+        val gE = pixels[j + 1].toInt() and 0xFF
+        assertTrue(rE >= 200 && gE < 250) {
+            "Compose(Blur, MT-translate) soft edge should be partially red ; got ($rE, $gE)"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Compose(ColorFilter, MatrixTransform) grayscales the transformed pixels`() {
+        // L1b -- MatrixTransform as innermost leaf, ColorFilter as outer.
+        // Walker order : inner first -> MatrixTransform materialises into
+        // scratch ; then the outer ColorFilter (luma grayscale matrix)
+        // runs on the scratch via the standard LayerCompositeDraw path.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                // Source red rect at (4, 8)..(8, 12) -- 4x4 wide.
+                val rectBounds = SkRect.MakeLTRB(4f, 8f, 8f, 12f)
+                val luma = floatArrayOf(
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0f,     0f,     0f,     1f, 0f,
+                )
+                val grayscale = SkColorFilters.Matrix(luma)
+                // Pure translation matrix : shift (8, 4) -- mapped rect
+                // lands at (12, 12)..(16, 16).
+                val translate = SkMatrix.MakeAll(1f, 0f, 8f, 0f, 1f, 4f)
+                val mt = SkImageFilters.MatrixTransform(
+                    matrix = translate,
+                    sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                    input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.ColorFilter(grayscale, input = null),
+                        inner = mt,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+            }
+        }
+
+        // Centre of the shifted rect : (14, 14). Source is red ; after
+        // luma grayscale R contribution = 76. Tol of 5 to account for the
+        // materialised sub-pass + colour-filter pack rounding.
+        assertRgbaApprox(pixels, 14, 14, 76, 76, 76, 255,
+            tag = "Compose(CF, MT-translate) grayscale red", tol = 5)
+        // Pre-shift position now empty.
+        assertRgbaApprox(pixels, 5, 9, 255, 255, 255, 255,
+            tag = "Compose(CF, MT-translate) pre-shift cleared", tol = 1)
+        // Far corner -- grayscale of white is still white.
+        assertRgbaApprox(pixels, 28, 28, 255, 255, 255, 255,
+            tag = "Compose(CF, MT-translate) far white", tol = 1)
+    }
+
+    @Test
+    fun `saveLayer with Compose(MatrixTransform, Blur) throws follow-up deferred error`() {
+        // L1b -- the inverse Compose layout (MatrixTransform on the OUTER
+        // side, Blur on the INNER side) walks Blur first, accumulating it
+        // into the plan, then sees MatrixTransform. Materialising the
+        // (Blur + anything else) plan into the MatrixTransform's source
+        // needs a SECOND RTT pre-pass (chain-of-passes), deferred to a
+        // follow-up slice.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val err = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val blur = SkImageFilters.Blur(
+                    sigmaX = 2f, sigmaY = 2f,
+                    tileMode = SkTileMode.kClamp, input = null,
+                )!!
+                val translate = SkMatrix.MakeAll(1f, 0f, 4f, 0f, 1f, 4f)
+                val mt = SkImageFilters.MatrixTransform(
+                    matrix = translate,
+                    sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                    input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(outer = mt, inner = blur)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                runCatching { canvas.restore() }.exceptionOrNull()
+            }
+        }
+        assertTrue(err is IllegalStateException) {
+            "Expected IllegalStateException for Compose(MatrixTransform, Blur) ; got $err"
+        }
+        val msg = err?.message ?: ""
+        assertTrue(msg.contains("MatrixTransform") && msg.contains("INNERMOST")) {
+            "Error message should call out the MT-outer / inner-Blur deferral ; got : $msg"
+        }
+    }
+
+    @Test
+    fun `saveLayer with Compose(MatrixTransform, DropShadow) throws mutually-exclusive error`() {
+        // L1b -- the L1b slice handles at most ONE materialise pre-pass
+        // per layer composite. Stacking a MatrixTransform on top of a
+        // DropShadow (both as innermost candidates) needs a chain-of-
+        // passes that runs the second materialise on the first's output,
+        // deferred to a follow-up slice.
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val err = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(8f, 8f, 24f, 24f)
+                val ds = SkImageFilters.DropShadow(
+                    dx = 3f, dy = 3f,
+                    sigmaX = 1f, sigmaY = 1f,
+                    color = SK_ColorBLACK, input = null,
+                )!!
+                val translate = SkMatrix.MakeAll(1f, 0f, 4f, 0f, 1f, 4f)
+                val mt = SkImageFilters.MatrixTransform(
+                    matrix = translate,
+                    sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                    input = null,
+                )!!
+                // Walker order on Compose(outer = mt, inner = ds) :
+                //  - walk inner first -> DropShadow leaf captured as
+                //    innerDropShadow.
+                //  - walk outer (MatrixTransform) -> sees innerDropShadow
+                //    already set -> throws "both DropShadow AND
+                //    MatrixTransform".
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(outer = mt, inner = ds)
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(layerBounds, SkPaint().apply { color = SK_ColorRED })
+                runCatching { canvas.restore() }.exceptionOrNull()
+            }
+        }
+        assertTrue(err is IllegalStateException) {
+            "Expected IllegalStateException for Compose(MT, DropShadow) ; got $err"
+        }
+        val msg = err?.message ?: ""
+        assertTrue(msg.contains("DropShadow") && msg.contains("MatrixTransform")) {
+            "Error message should call out the mutually-exclusive materialise ; got : $msg"
+        }
+    }
+
+    @Test
     fun `saveLayer with Compose two Blurs throws clear error`() {
         // Phase G-saveLayer-imageFilter-compose -- two Blurs in a
         // chain. Folding into a single Gaussian with sigma = sqrt(s1^2
