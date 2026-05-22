@@ -163,4 +163,34 @@ class SkStrokerTest {
         // The stroked outline is 2 sub-contours, each 1 move + 4 line + 1 close = 12 verbs.
         assertNotEquals(src.verbs.size, out.verbs.size)
     }
+
+    @Test
+    fun `engulfed-contour heuristic preserves donut for an oval far inside halfW`() {
+        // Square contour 10x10 stroked at width 6 (halfW = 3).
+        // halfW > 1.5 * bboxMaxDim (3 > 15)? No → standard band ;
+        // the inner offset is well-defined and the resulting stroke is
+        // a 2-sub-contour band (outer + reversed-inner). 2 moveTo verbs.
+        val src = SkPath.Rect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f))
+        val out = stroker(6f).stroke(src)
+        val moves = out.verbs.count { it == SkPath.Verb.kMove }
+        assertEquals(2, moves, "standard stroke band → 2 sub-contours (outer + inner)")
+    }
+
+    @Test
+    fun `engulfed contour stroked at large width emits the engulfed-union heuristic`() {
+        // 10x10 square stroked at width 100 (halfW = 50). The inner
+        // offset crosses itself (halfW = 50 vs 10x10 bbox → 5× engulfed).
+        // The heuristic should still emit 2 sub-contours (outer + inner
+        // as union rather than band), but the inner one is now CCW
+        // (same direction as outer) rather than reversed.
+        val src = SkPath.Rect(org.graphiks.math.SkRect.MakeLTRB(0f, 0f, 10f, 10f))
+        val out = stroker(100f).stroke(src)
+        val moves = out.verbs.count { it == SkPath.Verb.kMove }
+        // 2 sub-contours either way (engulfed union still emits both polylines).
+        assertEquals(2, moves, "engulfed-band emits 2 sub-contours")
+        // Bounding box should cover the full envelope ~[−50, 60].
+        val bb = bbox(out)
+        assertTrue(bb[0] <= -45f, "engulfed envelope min-x reaches ~-50, got ${bb[0]}")
+        assertTrue(bb[2] >= 55f, "engulfed envelope max-x reaches ~60, got ${bb[2]}")
+    }
 }
