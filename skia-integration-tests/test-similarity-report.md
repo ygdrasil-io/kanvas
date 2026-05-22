@@ -4,12 +4,9 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 
 | Test | Similarity | Δ vs prev | Tolerance | Match / Total | Max diff (A,R,G,B) | Mean miss (A,R,G,B) |
 |------|-----------:|----------:|----------:|--------------:|--------------------|---------------------|
-| LcdTextSizeGM | 90.59% | (new) | 1 | 34,787 / 38,400 | 0, 255, 255, 255 | 0, 62, 60, 62 |
-| LinearGradientGM | 93.83% | (new) | 1 | 234,584 / 250,000 | 0, 18, 4, 19 | 0, 11, 1, 12 |
-| LinearGradientNoDitherGM | 93.84% | (new) | 1 | 234,605 / 250,000 | 0, 18, 4, 19 | 0, 11, 1, 12 |
-| LinearGradientTinyGM | 97.33% | (new) | 1 | 292,000 / 300,000 | 0, 62, 42, 19 | 0, 39, 26, 12 |
-| ManyPathAtlasesGM_128 | 95.06% | (new) | 1 | 15,574 / 16,384 | 0, 54, 12, 73 | 0, 15, 2, 21 |
-| ManyPathAtlasesGM_2048 | 95.06% | (new) | 1 | 15,574 / 16,384 | 0, 54, 12, 73 | 0, 15, 2, 21 |
-| ModeColorFilterGM | 18.94% | (new) | 1 | 99,288 / 524,288 | 0, 245, 253, 251 | 0, 35, 40, 36 |
-| PathFillGM | 97.89% | (new) | 1 | 300,732 / 307,200 | 0, 67, 66, 66 | 0, 13, 13, 13 |
-| PathInverseFillGM | 99.41% | (new) | 1 | 98,415 / 99,000 | 0, 255, 255, 255 | 0, 62, 61, 61 |
+| LatticeGM | 92.95% | (new) | 1 | 594,878 / 640,000 | 0, 183, 202, 186 | 0, 64, 71, 61 |
+| MatrixConvolutionGM_basic | 43.94% | (new) | 1 | 65,905 / 150,000 | 0, 255, 255, 255 | 0, 45, 45, 45 |
+| MatrixConvolutionGM_basic_color | 47.47% | (new) | 1 | 71,212 / 150,000 | 0, 247, 250, 115 | 0, 46, 46, 38 |
+| MatrixConvolutionGM_big | 57.97% | (new) | 1 | 86,961 / 150,000 | 0, 255, 255, 255 | 0, 58, 58, 58 |
+| PerlinNoiseLayeredGM | 0.00% | (new) | 1 | 0 / 250,000 | 0, 73, 76, 75 | 0, 36, 36, 36 |
+| PerlinNoiseLocalMatrixGM | 62.50% | (new) | 1 | 192,008 / 307,200 | 0, 79, 95, 86 | 0, 11, 10, 9 |
