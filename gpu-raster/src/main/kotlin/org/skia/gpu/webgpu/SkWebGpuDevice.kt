@@ -4468,6 +4468,51 @@ public class SkWebGpuDevice(
         } else {
             FloatArray(24) // identity (kind = 0).
         }
+
+        // L2b -- when [backdrop] is a [SkImageFilters.MatrixTransform]
+        // wrap (with `input == null`, no perspective, no cubic sampler,
+        // invertible matrix), the seed pass replaces the plain copy with
+        // an affine remap : at each child pixel `(cx, cy)`, the shader
+        // samples the parent's intermediate at `M^{-1}(cx, cy) +
+        // (originX, originY)`. Mirrors the top-level paint imageFilter
+        // path's affine packing (see [enqueueMatrixTransformLayerComposite]
+        // and [packLayerCompositeMatrixTransform]) but specialised for
+        // the backdrop seed slot : the source is the PARENT's intermediate
+        // (full width / height) rather than a layer's, the `c / f`
+        // translation slots fold in `+originX / +originY` (the layer's
+        // top-left in parent-device px) instead of `-originX / -originY`,
+        // and the dst is THIS device's intermediate (the child layer).
+        //
+        // Variants we still degrade to copy-only (silent, matches the
+        // [SkDevice.seedBackdropFrom] kdoc) :
+        //  - non-null child filter (input != null) -- would need a
+        //    render-to-texture pre-pass that the seed path doesn't ship.
+        //  - perspective matrix -- the shader's `vec3 dot-product` only
+        //    covers 2x3 affine ; a 3x3 with non-trivial bottom row needs
+        //    a homogeneous divide.
+        //  - cubic sampler -- shader implements kNearest / kLinear only.
+        //  - non-invertible matrix -- the reverse map is undefined ;
+        //    upstream `SkMatrixTransformImageFilter` returns the input
+        //    unchanged in that case, so we just fall through to the copy-
+        //    only seed (visible footprint is the unaltered parent copy).
+        val matrixSeedParams = backdrop?.asMatrixTransformImageFilter()
+            ?.takeIf {
+                it.input == null &&
+                    !it.matrix.hasPerspective() &&
+                    it.sampling.cubic == null
+            }
+        val matrixSeedInverse = matrixSeedParams?.matrix?.invert()
+        if (matrixSeedParams != null && matrixSeedInverse != null) {
+            enqueueBackdropMatrixTransformSeed(
+                gpuParent = gpuParent,
+                originX = originX, originY = originY,
+                width = width, height = height,
+                params = matrixSeedParams,
+                invMatrix = matrixSeedInverse,
+            )
+            return true
+        }
+
         pending.add(
             LayerCompositeDraw(
                 layerView = gpuParent.intermediateView,
@@ -4488,8 +4533,9 @@ public class SkWebGpuDevice(
         // Step 2 -- optional filter application on the seeded copy.
         // Supported : Blur (Phase J5), DropShadow (Phase K3). ColorFilter
         // was already folded into the copy-seed's colorFilterPacked
-        // above ; other variants leave the seed at copy-only (silent
-        // degrade, matches the SkDevice.seedBackdropFrom kdoc).
+        // above ; MatrixTransform took the early return branch above ;
+        // other variants leave the seed at copy-only (silent degrade,
+        // matches the SkDevice.seedBackdropFrom kdoc).
         if (backdrop != null) {
             val blur = backdrop.asBlurImageFilter()
             if (blur != null && blur.input == null &&
@@ -4740,6 +4786,123 @@ public class SkWebGpuDevice(
                 // shadow is a separate layer composited under the
                 // source").
                 mode = SkBlendMode.kDstOver,
+            ),
+        )
+    }
+
+    /**
+     * L2b helper -- enqueue a single [LayerCompositeDraw] that seeds
+     * `this` device's intermediate from [gpuParent]'s intermediate
+     * through a user-supplied 2x3 affine matrix [params.matrix]. The
+     * affine is the upstream `SkImageFilters.MatrixTransform` filter,
+     * which applies `M` to the input image (here the parent's snapshot
+     * in the layer's bbox). The composite shader receives the inverse
+     * `M^{-1}` (with the parent origin baked into the translation
+     * slots) plus the sampling-mode selector, and walks the child's
+     * scissor box one fragment at a time.
+     *
+     * Math :
+     *  - The shader fragment at child-device px `(cx, cy)` evaluates
+     *    `u = a*cx + b*cy + c`, `v = d*cx + e*cy + f` (the inverse 2x3
+     *    dot-product path -- same as [enqueueMatrixTransformLayerComposite],
+     *    just sourced from the parent's intermediate this time).
+     *  - We want `(u, v)` to land at the parent texel the backdrop's
+     *    `M(input)` would produce for output px `(cx, cy)` -- i.e.
+     *    `M^{-1}(cx, cy) + (originX, originY)` (the `+ origin` shift
+     *    converts layer-space coords back to parent-device px so the
+     *    `textureLoad` reads the right parent pixel).
+     *  - So the packed translation is `c = M^{-1}.tx + originX`,
+     *    `f = M^{-1}.ty + originY`. The 2x2 (a, b, d, e) stays the
+     *    bare inverse 2x2.
+     *
+     * Layer dims passed to the draw are the PARENT's full intermediate
+     * extent (`gpuParent.width / height`) so the shader's kDecal
+     * `layer_load` clamp returns transparent black for `(u, v)` outside
+     * the parent's footprint -- this matches the CPU raster's
+     * "transparent black backdrop padding" behaviour (see
+     * `SkCanvas::seedLayerFromBackdrop`).
+     *
+     * Scissor is the axis-aligned bbox of `M([0, 0, w, h])` clamped to
+     * the child's full extent : the backdrop only writes where the
+     * MatrixTransform's output footprint hits the layer rect. Outside
+     * the scissor the child's transparent clear survives, matching the
+     * CPU semantic (the MatrixTransform output has zero alpha outside
+     * `M(input bounds)`).
+     *
+     * Blend mode is `kSrc` (REPLACE the transparent clear) -- same as
+     * the plain copy-only seed path. Subsequent user draws inside the
+     * layer scope then composite ON TOP via `loadOp = Load`.
+     */
+    private fun enqueueBackdropMatrixTransformSeed(
+        gpuParent: SkWebGpuDevice,
+        originX: Int, originY: Int,
+        width: Int, height: Int,
+        params: org.skia.foundation.SkMatrixTransformImageFilterParams,
+        invMatrix: org.graphiks.math.SkMatrix,
+    ) {
+        val samplingModeOrdinal = when (params.sampling.filter) {
+            SkFilterMode.kNearest -> 1
+            SkFilterMode.kLinear -> 2
+        }
+
+        // Bake the parent origin shift into the inverse translation
+        // slots : the shader's `c / f` slots receive `M^{-1}.tx +
+        // originX / M^{-1}.ty + originY` so the final sample coord is
+        // `M^{-1}(cx, cy) + (originX, originY)` -- i.e. the parent
+        // texel that maps onto the child fragment under the backdrop's
+        // affine. Mirrors the `c = inv.tx - a*origin - b*origin` baking
+        // in [enqueueMatrixTransformLayerComposite], but with a `+`
+        // sign because the seed reverses the relationship (the source
+        // is the PARENT, not the layer, so the origin shifts FROM layer
+        // space TO parent space rather than the other way around).
+        val matrixPacked = FloatArray(12)
+        matrixPacked[0] = invMatrix.sx
+        matrixPacked[1] = invMatrix.kx
+        matrixPacked[2] = invMatrix.tx + originX
+        matrixPacked[4] = invMatrix.ky
+        matrixPacked[5] = invMatrix.sy
+        matrixPacked[6] = invMatrix.ty + originY
+        matrixPacked[8] = samplingModeOrdinal.toFloat()
+
+        // Cover-quad scissor in child-device pixel coords. The output
+        // footprint is `M([0..w] × [0..h])` (the backdrop's mapped
+        // input rect), clamped to the child's full extent. Floor / ceil
+        // matches the integer-grid convention used by
+        // [enqueueMatrixTransformLayerComposite] above.
+        val mappedRect = params.matrix.mapRect(
+            org.graphiks.math.SkRect.MakeLTRB(0f, 0f, width.toFloat(), height.toFloat()),
+        )
+        val ix0 = floor(mappedRect.left).toInt().coerceAtLeast(0)
+        val iy0 = floor(mappedRect.top).toInt().coerceAtLeast(0)
+        val ix1 = ceil(mappedRect.right).toInt().coerceAtMost(width)
+        val iy1 = ceil(mappedRect.bottom).toInt().coerceAtMost(height)
+        if (ix0 >= ix1 || iy0 >= iy1) {
+            // Mapped footprint lies entirely outside the child -- the
+            // CPU semantic is "transparent black backdrop", which the
+            // child's existing transparent clear already provides.
+            // Skip the draw rather than enqueuing a zero-area pass.
+            return
+        }
+
+        pending.add(
+            LayerCompositeDraw(
+                layerView = gpuParent.intermediateView,
+                layerWidth = gpuParent.width,
+                layerHeight = gpuParent.height,
+                // dstOriginX / dstOriginY are unused on the
+                // MatrixTransform path (the shader's identity branch
+                // is the only consumer of `dstOriginSize.xy`, and
+                // `samplingMode != 0` skips it). We still ship
+                // `(0, 0)` -- the seed writes layer-local coords, so
+                // any diagnostic readback hits the layer's top-left.
+                dstOriginX = 0, dstOriginY = 0,
+                scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
+                paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
+                r = 1f, g = 1f, b = 1f, a = 1f,
+                mode = SkBlendMode.kSrc,
+                colorFilterPacked = FloatArray(24), // identity (kind = 0).
+                matrixPacked = matrixPacked,
+                imageFilterPacked = FloatArray(12), // identity (kind = 0).
             ),
         )
     }
