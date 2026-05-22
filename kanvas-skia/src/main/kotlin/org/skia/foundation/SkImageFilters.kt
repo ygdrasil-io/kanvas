@@ -908,6 +908,19 @@ internal class SkColorFilterImageFilter(
  * `Compose` — chained `outer(inner(src))`. The combined offset is
  * `inner.offset + outer.offset` (with [outer] applied to [inner]'s
  * output image, so its own offset stacks on top).
+ *
+ * J3 — non-null inner support : when [inner] produces a non-zero
+ * `(offsetX, offsetY)` and [outer] is **not** a pure pass-through
+ * Offset (which simply stacks offsets and doesn't sample pixel
+ * positions), we must materialize the inner's output at the right
+ * spatial position before [outer] reads from it. Otherwise filters
+ * that sample pixels at fixed coordinates (Blur, MatrixTransform,
+ * ColorFilter, DropShadow, ...) would operate on inner's image
+ * *as if* it were positioned at the origin, dropping inner's offset
+ * silently. Mirrors upstream Skia's
+ * `ctx.withNewSource(innerResult)` pattern in
+ * `SkComposeImageFilter::onFilterImage`
+ * (`src/effects/imagefilters/SkComposeImageFilter.cpp`).
  */
 internal class SkComposeImageFilter(
     private val outer: SkImageFilter,
@@ -921,11 +934,61 @@ internal class SkComposeImageFilter(
     internal val exposedInner: SkImageFilter get() = inner
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val midResult = inner.filterImage(src, ctm)
-        val outResult = outer.filterImage(midResult.image, ctm)
+        // Fast path : inner's offset is zero, or outer is a pure
+        // Offset that just stacks the cumulative offset onto inner's
+        // output without sampling pixels. Either way, passing
+        // midResult.image straight through to outer is correct.
+        if ((midResult.offsetX == 0 && midResult.offsetY == 0) ||
+            outer is SkOffsetImageFilter
+        ) {
+            val outResult = outer.filterImage(midResult.image, ctm)
+            return FilterResult(
+                image = outResult.image,
+                offsetX = midResult.offsetX + outResult.offsetX,
+                offsetY = midResult.offsetY + outResult.offsetY,
+            )
+        }
+        // Slow path : inner shifted the image. Materialize inner's
+        // output at its spatial position so [outer] sees it where it
+        // belongs in layer space. We allocate a fresh image whose
+        // origin sits at (midResult.offsetX, midResult.offsetY) by
+        // padding with transparent black on the relevant sides ; the
+        // returned FilterResult carries an offset of zero on the
+        // inner side (it's been absorbed into the materialized image)
+        // so we only add outResult's offset to it.
+        val midImg = midResult.image
+        val mw = midImg.width
+        val mh = midImg.height
+        val ox = midResult.offsetX
+        val oy = midResult.offsetY
+        // Compute the materialized image's footprint : an image that
+        // contains both the origin (0, 0) (so outer's coordinate frame
+        // is preserved) and the shifted inner image at (ox, oy).
+        val left = kotlin.math.min(0, ox)
+        val top = kotlin.math.min(0, oy)
+        val right = kotlin.math.max(0, ox + mw)
+        val bottom = kotlin.math.max(0, oy + mh)
+        val matW = right - left
+        val matH = bottom - top
+        val matBuf = IntArray(matW * matH)
+        // Copy inner's pixels into the materialized buffer at
+        // (ox - left, oy - top).
+        val dstX = ox - left
+        val dstY = oy - top
+        for (y in 0 until mh) {
+            val dstRow = (y + dstY) * matW + dstX
+            for (x in 0 until mw) {
+                matBuf[dstRow + x] = midImg.peekPixel(x, y)
+            }
+        }
+        val materialized = SkImage(matW, matH, matBuf)
+        val outResult = outer.filterImage(materialized, ctm)
+        // The materialized image lives at (left, top) in layer space,
+        // so outer's own offset stacks on top of (left, top).
         return FilterResult(
             image = outResult.image,
-            offsetX = midResult.offsetX + outResult.offsetX,
-            offsetY = midResult.offsetY + outResult.offsetY,
+            offsetX = left + outResult.offsetX,
+            offsetY = top + outResult.offsetY,
         )
     }
 
