@@ -61,26 +61,34 @@ extract_kt_meta() {
     elif grep -qE '//[[:space:]]*TODO:?[[:space:]]*missing API' "$kt" 2>/dev/null; then
         status="STUB"
     elif grep -qE 'override fun onDraw' "$kt" 2>/dev/null; then
-        # crude port-vs-stub heuristic: if onDraw body has < 3 non-trivial lines, STUB.
-        local body_lines
-        body_lines=$(awk '
+        # Has an `onDraw`. STUB is reserved for the explicit Wave-O/P marker
+        # `// TODO: missing API` (already caught above) OR a totally-empty body
+        # (only a single `canvas ?: return` early-bail). Anything else — even
+        # `onDraw { helperFn(canvas) }` delegating to a private helper — counts
+        # as ported, because the heuristic must not penalise files that split
+        # their body across `private fun`s (e.g. CropImageFilterGM delegates
+        # to drawExampleGrid).
+        local body_real_lines
+        body_real_lines=$(awk '
             /override fun onDraw/ { in_body=1; brace=0; next }
             in_body {
-                # count opening / closing braces to find end-of-fn
                 n_open=gsub(/\{/, "&"); n_close=gsub(/\}/, "&")
                 brace += n_open - n_close
                 if (brace < 0) { exit }
-                # skip blank lines and pure-comment lines
                 if ($0 ~ /^[[:space:]]*$/) next
                 if ($0 ~ /^[[:space:]]*\/\//) next
                 if ($0 ~ /^[[:space:]]*\*/) next
+                # Treat the bail-out pattern `val c = canvas ?: return` as
+                # boilerplate, not real work.
+                if ($0 ~ /^[[:space:]]*val[[:space:]]+[A-Za-z_][A-Za-z_0-9]*[[:space:]]*=[[:space:]]*canvas[[:space:]]*\?:[[:space:]]*return[[:space:]]*$/) next
+                if ($0 ~ /^[[:space:]]*canvas[[:space:]]*\?:[[:space:]]*return[[:space:]]*$/) next
                 print
             }' "$kt" | wc -l | tr -d ' ')
-        if [ "${body_lines:-0}" -lt 3 ]; then
+        if [ "${body_real_lines:-0}" -eq 0 ]; then
             status="STUB"
         else
-            # body is non-trivial — check if matching Test class is @Disabled.
-            # XxxGM.kt → XxxTest.kt or XxxGMTest.kt
+            # Non-empty body — check Test class for @Disabled to surface
+            # TEST_DISABLED, otherwise PORTED.
             local kt_bn test_bn1 test_bn2 test_path
             kt_bn=$(basename "$kt" .kt)
             test_bn1="${kt_bn%GM}Test.kt"

@@ -46,6 +46,11 @@ class PlaceholderGMsTest {
     @Test @Disabled("Needs SkFontArguments.Palette (CPAL palette selection).")
     fun `FontPaletteGM placeholder`() { FontPaletteGM() }
 
-    @Test @Disabled("GPU-only : glyph atlas overflow / regen probe.")
-    fun `FontRegenGM placeholder`() { FontRegenGM() }
+    // FontRegenGM — real body port landed in its own FontRegenTest
+    //               (GPU atlas-stress prologue is N/A for raster, but the
+    //                visible text-draw output matches upstream's reference).
+
+    // BadAppleGM — real body port landed in its own BadAppleTest
+    //              (sibling of FontRegenGM in gm/fontregen.cpp — just two
+    //               256pt text blobs on white background).
 }

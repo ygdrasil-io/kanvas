@@ -114,4 +114,65 @@ public object SkCompressedDataUtils {
                 "implemented — see SkCompressedDataSize."
         )
     }
+
+    /**
+     * Mirrors upstream's `etc1_encode_image(src, w, h, pixelSize,
+     * rowBytes, dst)` (`third_party/etc1/etc1.h`) — encodes [srcBitmap]
+     * (which must be [SkColorType.kRGB_565] + opaque) into a sequence
+     * of 64-bit ETC1 / ETC2-RGB8 blocks written to [dst] starting at
+     * [dstOffset]. The destination block grid is rounded up to the
+     * next 4×4 multiple so a 13×7 source still produces a 16×8 grid.
+     *
+     * **Status.** Flag-planting STUB — throws
+     * `NotImplementedError("STUB.COMPRESSED_TEXTURES")`. Used by the
+     * `compressed_textures` GM port to mirror the upstream encode
+     * path ; the actual ETC1 / ETC2 block-builder isn't ported yet.
+     */
+    public fun Etc1EncodeImage(
+        srcBitmap: SkBitmap,
+        dst: ByteArray,
+        dstOffset: Int,
+    ) {
+        TODO(
+            "STUB.COMPRESSED_TEXTURES: SkCompressedDataUtils.Etc1EncodeImage(" +
+                "${srcBitmap.width}x${srcBitmap.height} ${srcBitmap.colorType}, " +
+                "dst[${dst.size} bytes], offset=$dstOffset) not implemented — " +
+                "kanvas-skia raster backend lacks the ETC2-RGB8 block encoder " +
+                "(see CompressedTexturesGM)."
+        )
+    }
+
+    /**
+     * Mirrors upstream's
+     * [`sk_gpu_test::TwoColorBC1Compress(pixmap, otherColor, dst)`](https://github.com/google/skia/blob/main/tools/gpu/CompressedTexture.h)
+     * — encodes [srcBitmap] (which must be [SkColorType.kRGBA_8888])
+     * into a sequence of 64-bit BC1 blocks written to [dst] starting at
+     * [dstOffset]. The "two colour" variant assumes the source is
+     * either black + [otherColor] (opaque pixels) or transparent +
+     * [otherColor] (transparent pixels — fed to the BC1A
+     * punch-through-alpha path).
+     *
+     * **Status.** Flag-planting STUB — throws
+     * `NotImplementedError("STUB.COMPRESSED_TEXTURES")`. Used by the
+     * `compressed_textures` GM port to mirror the upstream encode
+     * path ; the actual BC1 block-builder isn't ported yet (BC1's
+     * static block layout *is* honoured by the hand-rolled byte stream
+     * in `BC1TransparencyGM`, but a generic-input compressor doesn't
+     * exist).
+     */
+    public fun TwoColorBC1Compress(
+        srcBitmap: SkBitmap,
+        otherColor: Int,
+        dst: ByteArray,
+        dstOffset: Int,
+    ) {
+        TODO(
+            "STUB.COMPRESSED_TEXTURES: SkCompressedDataUtils.TwoColorBC1Compress(" +
+                "${srcBitmap.width}x${srcBitmap.height} ${srcBitmap.colorType}, " +
+                "otherColor=0x${otherColor.toUInt().toString(16)}, " +
+                "dst[${dst.size} bytes], offset=$dstOffset) not implemented — " +
+                "kanvas-skia raster backend lacks the BC1 / DXT1 block encoder " +
+                "(see CompressedTexturesGM, BC1TransparencyGM)."
+        )
+    }
 }
