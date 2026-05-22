@@ -4403,13 +4403,21 @@ public class SkWebGpuDevice(
      *    DropShadowImageFilter semantics : the shadow shows through
      *    transparent regions of the seed (e.g. when the layer rect
      *    extends past opaque parent content).
+     *  - `SkImageFilters.Offset(dx, dy, input = null)` (Phase L2a) --
+     *    the integer-rounded `(dx, dy)` folds into the copy-seed's
+     *    `dstOriginX/Y` slot ; the composite shader's existing
+     *    integer-grid fast path samples the parent at a shifted
+     *    address. Samples that land outside the parent's pixel grid
+     *    return transparent (kDecal-equivalent), matching the CPU
+     *    raster semantic for an Offset filter over a finite source.
+     *    No extra render pass, no new pipeline.
      *
-     * Other variants (`Offset`, `MatrixTransform`, `Compose`, ...)
-     * fall through to copy-only : the layer is seeded with raw
-     * parent pixels, the filter is silently dropped. Widening the
-     * supported set is a follow-up slice ; the CPU raster path in
-     * `SkCanvas.saveLayer` remains the full-featured fallback for
-     * offline / non-GPU rendering.
+     * Other variants (`MatrixTransform`, `Compose`, ...) fall through
+     * to copy-only : the layer is seeded with raw parent pixels, the
+     * filter is silently dropped. Widening the supported set is a
+     * follow-up slice ; the CPU raster path in `SkCanvas.saveLayer`
+     * remains the full-featured fallback for offline / non-GPU
+     * rendering.
      *
      * **Bail conditions** -- the seed silently no-ops (returns
      * `false`) when :
@@ -4513,13 +4521,40 @@ public class SkWebGpuDevice(
             return true
         }
 
+        // Phase L2a -- when [backdrop] is a [SkImageFilters.Offset]
+        // wrap (with `input == null`), fold the integer-rounded
+        // translation `(dx, dy)` into the copy-seed's `dstOriginX/Y`.
+        // Upstream `SkOffsetImageFilter` produces the source image
+        // shifted by `(+dx, +dy)` in device space ; sampling that
+        // filtered parent at layer-pixel `(x, y)` (which maps to
+        // parent-global `(originX + x, originY + y)`) reads parent at
+        // `(originX + x - dx, originY + y - dy)`. The composite shader
+        // computes `parent_px = child_px - dstOrigin`, so subtracting
+        // `(sdx, sdy)` from the layer origin (i.e. `dstOriginX =
+        // -(originX - sdx) = -originX + sdx`) does the trick. No new
+        // pipeline, no shader change -- the existing integer-grid
+        // fast path (`imageFilterPacked` identity, `matrixPacked`
+        // identity, `samplingMode == 0`) just samples at a shifted
+        // address. Out-of-bounds samples land outside `[0, parent_w)
+        // × [0, parent_h)` and the shader's `layer_load` guard returns
+        // `vec4f(0)` (kDecal-equivalent), matching the CPU raster
+        // semantic for an Offset filter over a finite source. The
+        // integer rounding mirrors the top-level
+        // `compositeFrom`'s offset path (`floor(d + 0.5)` -- the
+        // saveLayer composite runs at identity CTM so `scale == 1`).
+        // Offset is mutually exclusive with the ColorFilter wrap
+        // (a backdrop is a single leaf filter here -- Compose with
+        // multiple leaves remains deferred to a follow-up slice).
+        val seedOffset = backdrop?.asOffsetImageFilter()?.takeIf { it.input == null }
+        val seedShiftX = if (seedOffset != null) floor(seedOffset.dx + 0.5f).toInt() else 0
+        val seedShiftY = if (seedOffset != null) floor(seedOffset.dy + 0.5f).toInt() else 0
         pending.add(
             LayerCompositeDraw(
                 layerView = gpuParent.intermediateView,
                 layerWidth = gpuParent.width,
                 layerHeight = gpuParent.height,
-                dstOriginX = -originX,
-                dstOriginY = -originY,
+                dstOriginX = -originX + seedShiftX,
+                dstOriginY = -originY + seedShiftY,
                 scissor = intArrayOf(0, 0, width, height),
                 paintR = 1f, paintG = 1f, paintB = 1f, paintA = 1f,
                 r = 1f, g = 1f, b = 1f, a = 1f,
