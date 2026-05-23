@@ -39,7 +39,9 @@ public open class LinePathGM(private val doClose: Boolean = false) : GM() {
             .lineTo(75f, 15f)
         if (doClose) builder.close()
         val path: SkPath = builder.detach()
-        val pathLabel = if (doClose) "moveTo-line-close" else "moveTo-line"
+        // pathLabel ("moveTo-line" / "moveTo-line-close") is stored upstream on
+        // PathAndName.fName but never rendered; omitted here to keep the code
+        // clean (the upstream struct field is also unused in linepaths.cpp).
 
         val titlePaint = SkPaint().apply {
             color = SK_ColorBLACK
@@ -98,10 +100,6 @@ public open class LinePathGM(private val doClose: Boolean = false) : GM() {
         }
         c.restore()
         c.restore()
-
-        // pathLabel is unused — upstream stores it on a struct but never
-        // renders it. Kept here so the diff vs upstream stays minimal.
-        @Suppress("UNUSED_VARIABLE") val unused = pathLabel
     }
 
     private fun drawPath(
