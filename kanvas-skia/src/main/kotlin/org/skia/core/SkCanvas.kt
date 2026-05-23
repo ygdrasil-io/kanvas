@@ -1147,6 +1147,87 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
     }
 
     /**
+     * Mirrors Skia's `SkCanvas::ImageSetEntry`
+     * ([include/core/SkCanvas.h](https://github.com/google/skia/blob/main/include/core/SkCanvas.h)) :
+     *
+     * ```cpp
+     * struct ImageSetEntry {
+     *     sk_sp<const SkImage> fImage;
+     *     SkRect  fSrcRect;
+     *     SkRect  fDstRect;
+     *     int     fMatrixIndex;  // -1 ⇒ no preview matrix
+     *     float   fAlpha;
+     *     unsigned fAAFlags;     // bitmask of QuadAAFlags
+     *     bool    fHasClip;      // dstClips index validity
+     * };
+     * ```
+     *
+     * One entry in the batch consumed by [experimental_DrawEdgeAAImageSet].
+     * Each carries its own image, source sub-rect, destination rect, AA-edge
+     * bitmask and a per-entry alpha multiplier — the API lets a renderer fuse
+     * N image draws (typically tiled in compositor layers) into a single
+     * operation that can share state and (on GPU) coalesce vertices.
+     */
+    public data class ImageSetEntry(
+        public val image: SkImage,
+        public val srcRect: SkRect,
+        public val dstRect: SkRect,
+        public val matrixIndex: Int = -1,
+        public val alpha: SkScalar = 1f,
+        public val aaFlags: Int = QuadAAFlags.kNone_QuadAAFlags,
+        public val hasClip: Boolean = false,
+    )
+
+    /**
+     * Mirrors Skia's `SkCanvas::experimental_DrawEdgeAAImageSet`
+     * ([include/core/SkCanvas.h](https://github.com/google/skia/blob/main/include/core/SkCanvas.h)) :
+     *
+     * ```cpp
+     * void experimental_DrawEdgeAAImageSet(const ImageSetEntry[], int count,
+     *                                      const SkPoint dstClips[],
+     *                                      const SkMatrix preViewMatrices[],
+     *                                      const SkSamplingOptions&,
+     *                                      const SkPaint*, SrcRectConstraint);
+     * ```
+     *
+     * Batched per-image draw with per-entry edge-AA flags, per-entry alpha
+     * multiplier and (optionally) per-entry destination clip-quad / preview
+     * matrix indices. Each [ImageSetEntry] in [set] is conceptually rendered
+     * as if by [drawImageRect] with the entry's `srcRect → dstRect`
+     * mapping, the entry's `alpha` folded into [paint]'s alpha, and the
+     * entry's AA flags driving per-edge anti-aliasing (raster's
+     * all-or-nothing approximation per [experimental_DrawEdgeAAQuad]).
+     *
+     * **STUB.EDGE_AA_IMAGE_SET** — this is the central batched API used by
+     * the compositor and tile renderer. The single-quad case is already
+     * covered by [drawImageRect] today ; the batched fast-path (vertex
+     * coalescing, BSP clipping, preview-matrix indirection) is the missing
+     * piece. Surface stub kept here so GM ports compile against the real
+     * signature ; the body is a [NotImplementedError] until the batched
+     * device entry-point lands.
+     */
+    public open fun experimental_DrawEdgeAAImageSet(
+        set: Array<ImageSetEntry>,
+        count: Int,
+        dstClips: Array<SkPoint>?,
+        preViewMatrices: Array<SkMatrix>?,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+        constraint: SrcRectConstraint,
+    ): Unit = TODO(
+        "STUB.EDGE_AA_IMAGE_SET: SkCanvas::experimental_DrawEdgeAAImageSet — " +
+            "batched per-image draw with edge-AA flags + per-image transform / " +
+            "alpha. Required by gm/drawimageset.cpp (`draw_image_set`, " +
+            "`draw_image_set_rect_to_rect`, `draw_image_set_alpha_only`) and " +
+            "gm/compositor_quads.cpp. Implement by walking the entries and " +
+            "routing each through drawImageRect with the per-entry alpha " +
+            "folded into the paint and aaFlags into the AA-rect path ; " +
+            "preViewMatrices[entry.matrixIndex] pre-multiplies the CTM, " +
+            "dstClips[4*i..4*i+3] (when entry.hasClip) replaces the dstRect " +
+            "with a quadrilateral clip.",
+    )
+
+    /**
      * Mirrors Skia's `SkCanvas::drawLine(x0, y0, x1, y1, paint)`. Emits a
      * 2-point open path (`moveTo` + `lineTo`) and routes through [drawPath].
      */
@@ -2187,6 +2268,34 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                         g += 1
                     }
                 }
+                is org.skia.foundation.SkTextBlob.Run.RSXformPositions -> {
+                    // Each glyph carries its own rotation + uniform-scale +
+                    // translate in `xforms[i]`. The 2×2 affine maps the
+                    // glyph's origin-relative outline into blob-local
+                    // space :
+                    //   blob.x = sCos·gx − sSin·gy + tx
+                    //   blob.y = sSin·gx + sCos·gy + ty
+                    // The blob-level `(x, y)` then translates the whole
+                    // run. Sub-pixel snap is intentionally skipped — the
+                    // RSX path is for rotated / scaled glyphs where
+                    // quarter-phase snap would land off-axis pixels.
+                    for (i in run.glyphIds.indices) {
+                        val gid = run.glyphIds[i]
+                        val path = run.font.getPath(gid) ?: continue
+                        val xf = run.xforms[i]
+                        // `m = T(x, y) · RSX(xf)` — pre-concat into the CTM
+                        // so each glyph's outline ends up at the right
+                        // rotated / scaled / translated location.
+                        val m = org.graphiks.math.SkMatrix(
+                            sx = xf.fSCos, kx = -xf.fSSin, tx = xf.fTx + x,
+                            ky = xf.fSSin, sy = xf.fSCos, ty = xf.fTy + y,
+                        )
+                        save()
+                        concat(m)
+                        drawPath(path, paint)
+                        restore()
+                    }
+                }
             }
         }
     }
@@ -2237,7 +2346,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * layer origin.
      */
     public open fun saveLayer(bounds: SkRect?, paint: SkPaint?): Int =
-        saveLayer(SaveLayerRec(bounds, paint, null, 0))
+        saveLayer(SaveLayerRec(bounds = bounds, paint = paint, backdrop = null, flags = 0))
 
     /**
      * Mirrors Skia's full-fat `SkCanvas::saveLayer(SaveLayerRec)` —
@@ -2785,6 +2894,27 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * [org.skia.utils.SkNoDrawCanvas], recording sinks) override
      * for forwarding, no-op or capture semantics.
      */
+    /**
+     * Mirrors Skia's `SkCanvasPriv::ScaledBackdropLayer` with a
+     * `SkCanvas::FilterSpan` (array of `SkImageFilter`s applied to the
+     * layer in parallel). In upstream the `FilterSpan` is a Canvas2D-
+     * specific extension of `saveLayer` that allows multiple image
+     * filters to be applied simultaneously (e.g. dilate + erode, or
+     * drop-shadow + null) to the saved layer's content. The first filter
+     * in the span and the rest are run independently and composited
+     * together. This is not yet part of the public `:kanvas-skia` API.
+     *
+     * TODO("STUB.IFX.MULTIPLE_FILTERS_SPAN") — implement FilterSpan
+     * saveLayer path once upstream semantics are fully understood.
+     */
+    public open fun saveLayerWithMultipleFilters(
+        bounds: SkRect?,
+        paint: SkPaint?,
+        filters: List<SkImageFilter?>,
+    ): Int {
+        TODO("STUB.IFX.MULTIPLE_FILTERS_SPAN")
+    }
+
     public open fun drawPicture(
         picture: SkPicture,
         matrix: SkMatrix? = null,

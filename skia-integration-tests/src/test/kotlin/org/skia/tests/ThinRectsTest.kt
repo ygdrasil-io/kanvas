@@ -30,4 +30,21 @@ class ThinRectsTest {
         assertTrue(comparison.similarity >= 92.0,
             "ThinRectsGM similarity ${"%.2f".format(comparison.similarity)}% < 92.0% (t=1 floor)")
     }
+
+    @Test
+    fun `ClippedThinRectGM matches clipped_thinrect_png within tolerance`() {
+        val gm = ClippedThinRectGM()
+        val rendered = TestUtils.runGmTest(gm)
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "Missing reference image clipped_thinrect.png")
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
+        TestReport.recordDetailed("ClippedThinRectGM", comparison)
+        if (comparison.similarity < 80.0) {
+            TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
+        }
+        val accepted = SimilarityTracker.updateScore("ClippedThinRectGM", comparison.similarity)
+        assertTrue(accepted, "ClippedThinRectGM regressed below ratchet")
+        assertTrue(comparison.similarity >= 80.0,
+            "ClippedThinRectGM similarity ${"%.2f".format(comparison.similarity)}% < 80.0% floor")
+    }
 }

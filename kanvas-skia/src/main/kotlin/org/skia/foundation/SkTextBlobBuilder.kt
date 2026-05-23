@@ -55,6 +55,18 @@ public class SkTextBlobBuilder {
     )
 
     /**
+     * Allocation handle for [allocRunRSXform]. The [xforms] array
+     * exposes each glyph's [SkRSXform] slot in-place — the caller fills
+     * it before the next builder call. Upstream Skia's
+     * `RunBuffer::xforms()` returns a writable pointer ; we expose a
+     * fixed-size [Array] so callers can `xforms[i] = SkRSXform(...)`.
+     */
+    public class AllocationRSXform internal constructor(
+        public val glyphs: IntArray,
+        public val xforms: Array<SkRSXform>,
+    )
+
+    /**
      * Mirrors Skia's `SkTextBlobBuilder::allocRun(font, count, x, y)`.
      * Reserves space for [count] glyphs with **uniform x-advance** (the
      * font's per-glyph advance widths drive positioning) and a single
@@ -93,6 +105,27 @@ public class SkTextBlobBuilder {
         val positions = FloatArray(count * 2)
         runs.add(SkTextBlob.Run.FullPositions(SkFont(font), glyphs, positions))
         return AllocationPos(glyphs, positions)
+    }
+
+    /**
+     * Mirrors Skia's `SkTextBlobBuilder::allocRunRSXform(font, count)`
+     * (see [`SkTextBlobBuilder.h`](https://github.com/google/skia/blob/main/include/core/SkTextBlobBuilder.h)).
+     * Reserves space for [count] glyphs whose per-glyph transform is
+     * an [SkRSXform] (rotation + uniform-scale + translate). Returns
+     * an [AllocationRSXform] handle exposing both the glyph-id array
+     * (`glyphs`, length [count]) and the writable transform array
+     * (`xforms`, length [count]) — caller fills both before the next
+     * builder operation.
+     *
+     * Used by upstream's `rsxtext.cpp::RSXShaderGM` and any text-on-path
+     * style draw where each glyph needs its own rotation + scale.
+     */
+    public fun allocRunRSXform(font: SkFont, count: Int): AllocationRSXform {
+        require(count >= 0) { "count must be ≥ 0, got $count" }
+        val glyphs = IntArray(count)
+        val xforms = Array(count) { SkRSXform.Identity }
+        runs.add(SkTextBlob.Run.RSXformPositions(SkFont(font), glyphs, xforms))
+        return AllocationRSXform(glyphs, xforms)
     }
 
     /**
@@ -155,6 +188,17 @@ public class SkTextBlobBuilder {
                             r = maxOf(r, px + pad)
                             b = maxOf(b, py + pad)
                             i += 2
+                        }
+                    }
+                    is SkTextBlob.Run.RSXformPositions -> {
+                        // Conservative : per-glyph translate ± pad ; the
+                        // RSXform rotation is bounded by the same `font.size`
+                        // pad in any direction.
+                        for (xf in run.xforms) {
+                            l = minOf(l, xf.fTx - pad)
+                            t = minOf(t, xf.fTy - pad)
+                            r = maxOf(r, xf.fTx + pad)
+                            b = maxOf(b, xf.fTy + pad)
                         }
                     }
                 }

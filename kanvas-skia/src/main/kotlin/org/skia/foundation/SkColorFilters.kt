@@ -137,6 +137,22 @@ public object SkColorFilters {
         SkBlendColorFilter(colour, mode)
 
     /**
+     * Mirrors Skia's
+     * `SkColorFilters::Blend(const SkColor4f&, sk_sp<SkColorSpace>, SkBlendMode)` —
+     * the F32 + colour-space overload. The [colour] is expressed in the
+     * given [colorSpace] (or sRGB if `null`); upstream converts it to the
+     * destination colour space before blending.
+     *
+     * **STUB.COLOR4F_BLEND_CF** — colour-space–aware F32 blend filter.
+     * Full implementation requires propagating the destination colour
+     * space through the filter pipeline and running an xform on [colour]
+     * at draw time. Deferred until the filter pipeline carries explicit
+     * colour-space context (see `MIGRATION_PLAN_GPU_WEBGPU.md`).
+     */
+    public fun Blend(colour: SkColor4f, colorSpace: SkColorSpace?, mode: SkBlendMode): SkColorFilter =
+        TODO("STUB.COLOR4F_BLEND_CF: SkColorFilters::Blend(SkColor4f, SkColorSpace, SkBlendMode)")
+
+    /**
      * Mirrors Skia's `SkColorFilters::Lighting(SkColor mul, SkColor add)`.
      * Multiplies each RGB channel of the input by the corresponding byte
      * from [mul] (treated as `[0, 1]` after `/ 255`), then adds the byte

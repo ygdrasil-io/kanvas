@@ -2,6 +2,7 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
@@ -41,5 +42,27 @@ class BitmapTiledTest {
             "BitmapTiledFractionalVerticalManualGM", comparison.similarity,
         )
         assertTrue(accepted, "BitmapTiledFractionalVerticalManualGM regressed below ratchet")
+    }
+
+    @Disabled(
+        "INTRACTABLE.GPU_ONLY: bitmaptiled_fractional_horizontal is DEF_SIMPLE_GPU_GM_BG " +
+            "(#if defined(SK_GANESH)) — requires GrDirectContext for setResourceCacheLimit to " +
+            "force tiling; no reference PNG exists for this GM name in the repo.",
+    )
+    @Test
+    fun `BitmapTiledFractionalHorizontalGM is GPU-only INTRACTABLE`() {
+        val gm = BitmapTiledFractionalHorizontalGM()
+        TestUtils.runGmTest(gm)
+    }
+
+    @Disabled(
+        "INTRACTABLE.GPU_ONLY: bitmaptiled_fractional_vertical is DEF_SIMPLE_GPU_GM_BG " +
+            "(#if defined(SK_GANESH)) — requires GrDirectContext for setResourceCacheLimit to " +
+            "force tiling; no reference PNG exists for this GM name in the repo.",
+    )
+    @Test
+    fun `BitmapTiledFractionalVerticalGM is GPU-only INTRACTABLE`() {
+        val gm = BitmapTiledFractionalVerticalGM()
+        TestUtils.runGmTest(gm)
     }
 }
