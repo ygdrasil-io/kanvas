@@ -2894,6 +2894,27 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * [org.skia.utils.SkNoDrawCanvas], recording sinks) override
      * for forwarding, no-op or capture semantics.
      */
+    /**
+     * Mirrors Skia's `SkCanvasPriv::ScaledBackdropLayer` with a
+     * `SkCanvas::FilterSpan` (array of `SkImageFilter`s applied to the
+     * layer in parallel). In upstream the `FilterSpan` is a Canvas2D-
+     * specific extension of `saveLayer` that allows multiple image
+     * filters to be applied simultaneously (e.g. dilate + erode, or
+     * drop-shadow + null) to the saved layer's content. The first filter
+     * in the span and the rest are run independently and composited
+     * together. This is not yet part of the public `:kanvas-skia` API.
+     *
+     * TODO("STUB.IFX.MULTIPLE_FILTERS_SPAN") — implement FilterSpan
+     * saveLayer path once upstream semantics are fully understood.
+     */
+    public open fun saveLayerWithMultipleFilters(
+        bounds: SkRect?,
+        paint: SkPaint?,
+        filters: List<SkImageFilter?>,
+    ): Int {
+        TODO("STUB.IFX.MULTIPLE_FILTERS_SPAN")
+    }
+
     public open fun drawPicture(
         picture: SkPicture,
         matrix: SkMatrix? = null,
