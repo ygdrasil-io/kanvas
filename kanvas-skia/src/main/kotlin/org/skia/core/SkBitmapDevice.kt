@@ -1095,7 +1095,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // stipple ; the stroker thickens each segment. When the effect
         // returns an empty path (degenerate intervals etc.) we drop the
         // draw.
-        val effectivePath = paint.pathEffect?.filterPath(path, ctm) ?: path
+        val effectivePath = paint.pathEffect?.filterPath(path, ctm, pathEffectCullRect(clip, ctm, paint)) ?: path
         if (effectivePath !== path && effectivePath.isEmpty() && !effectivePath.fillType.isInverse()) return
 
         // Phase 7c — when a mask filter (e.g. Gaussian blur) is set,
@@ -1510,6 +1510,28 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         out[1] = c.fG * a
         out[2] = c.fB * a
         out[3] = a
+    }
+
+    private fun pathEffectCullRect(clip: SkIRect, ctm: SkMatrix, paint: SkPaint): SkRect? {
+        if (!ctm.isScaleTranslate()) return null
+        val sx = ctm.getScaleX()
+        val sy = ctm.getScaleY()
+        if (sx == 0f || sy == 0f) return null
+
+        val halfStroke = if (paint.style == SkPaint.Style.kFill_Style) 0f else paint.strokeWidth * 0.5f
+        val padX = halfStroke / kotlin.math.abs(sx) + 1f
+        val padY = halfStroke / kotlin.math.abs(sy) + 1f
+        val x0 = (clip.left().toFloat() - ctm.getTranslateX()) / sx
+        val x1 = (clip.right().toFloat() - ctm.getTranslateX()) / sx
+        val y0 = (clip.top().toFloat() - ctm.getTranslateY()) / sy
+        val y1 = (clip.bottom().toFloat() - ctm.getTranslateY()) / sy
+
+        return SkRect.MakeLTRB(
+            kotlin.math.min(x0, x1) - padX,
+            kotlin.math.min(y0, y1) - padY,
+            kotlin.math.max(x0, x1) + padX,
+            kotlin.math.max(y0, y1) + padY,
+        )
     }
 
     // --------------------------------------------------------------------

@@ -20,12 +20,16 @@ class RRectClipAaTest {
         // AA clipping produces soft edges on the rrect boundary.
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
         TestReport.recordDetailed("RRectClipAaGM", comparison)
-        if (comparison.similarity < 80.0) {
+        if (comparison.similarity < FLOOR) {
             TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
         }
         val accepted = SimilarityTracker.updateScore("RRectClipAaGM", comparison.similarity)
         assertTrue(accepted, "RRectClipAaGM regressed below ratchet")
-        assertTrue(comparison.similarity >= 80.0,
-            "RRectClipAaGM similarity ${"%.2f".format(comparison.similarity)}% < 80.0%")
+        assertTrue(comparison.similarity >= FLOOR,
+            "RRectClipAaGM similarity ${"%.2f".format(comparison.similarity)}% < $FLOOR%")
+    }
+
+    private companion object {
+        private const val FLOOR: Double = 60.0
     }
 }

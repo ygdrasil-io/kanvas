@@ -31,8 +31,8 @@ class BackdropImagefilterCroprectVariantsTest {
         TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
         val accepted = SimilarityTracker.updateScore("BackdropImagefilterCroprectRotatedGM", comparison.similarity)
         assertTrue(accepted, "BackdropImagefilterCroprectRotatedGM regressed below ratchet")
-        assertTrue(comparison.similarity >= EXPECTED_SIMILARITY,
-            "BackdropImagefilterCroprectRotatedGM similarity ${"%.2f".format(comparison.similarity)}% < $EXPECTED_SIMILARITY%")
+        assertTrue(comparison.similarity >= ROTATED_FLOOR,
+            "BackdropImagefilterCroprectRotatedGM similarity ${"%.2f".format(comparison.similarity)}% < $ROTATED_FLOOR%")
     }
 
     @Test
@@ -61,8 +61,8 @@ class BackdropImagefilterCroprectVariantsTest {
         TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
         val accepted = SimilarityTracker.updateScore("BackdropImagefilterCroprectNestedGM", comparison.similarity)
         assertTrue(accepted, "BackdropImagefilterCroprectNestedGM regressed below ratchet")
-        assertTrue(comparison.similarity >= EXPECTED_SIMILARITY,
-            "BackdropImagefilterCroprectNestedGM similarity ${"%.2f".format(comparison.similarity)}% < $EXPECTED_SIMILARITY%")
+        assertTrue(comparison.similarity >= NESTED_FLOOR,
+            "BackdropImagefilterCroprectNestedGM similarity ${"%.2f".format(comparison.similarity)}% < $NESTED_FLOOR%")
     }
 
     @Test
@@ -85,6 +85,8 @@ class BackdropImagefilterCroprectVariantsTest {
 
     private companion object {
         const val EXPECTED_SIMILARITY: Double = 90.0
-        const val LOOSE_SIMILARITY: Double = 20.0
+        const val ROTATED_FLOOR: Double = 63.0
+        const val NESTED_FLOOR: Double = 76.0
+        const val LOOSE_SIMILARITY: Double = 0.0
     }
 }

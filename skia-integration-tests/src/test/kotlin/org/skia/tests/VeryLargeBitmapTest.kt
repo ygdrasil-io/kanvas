@@ -2,6 +2,7 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
@@ -9,6 +10,7 @@ import org.skia.testing.TestUtils
 
 class VeryLargeBitmapTest {
     @Test
+    @Disabled("SLOW.GM_STRESS: ~40s very-large bitmap stress test; run explicitly when touching bitmap allocation, clipping, or sampling.")
     fun `VeryLargeBitmapGM matches verylargebitmap_png within tolerance`() {
         val gm = VeryLargeBitmapGM()
         val rendered = TestUtils.runGmTest(gm)
