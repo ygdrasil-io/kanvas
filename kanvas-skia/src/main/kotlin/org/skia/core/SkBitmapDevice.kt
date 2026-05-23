@@ -13,6 +13,7 @@ import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkCubicBC
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
@@ -693,35 +694,6 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             return
         }
 
-        // STUB.ALPHA8_IMAGE_AS_MASK — when the source image is `kAlpha_8`
-        // and the paint carries a non-black RGB colour (i.e. the image is
-        // being used as a colour mask rather than a monochrome sprite), Skia
-        // fills covered pixels with the paint's RGB modulated by the image's
-        // alpha channel. The kanvas-skia raster device does not yet implement
-        // this path : it reads A8 pixels as (0,0,0,alpha) and blends that
-        // dark pixel, producing black instead of the intended paint colour.
-        //
-        // The condition mirrors the semantic used by `gm/imagemasksubset.cpp`:
-        //   - image colorType is kAlpha_8 (pure alpha mask)
-        //   - paint has a non-trivial RGB colour (not black)
-        //   - no colour filter present (a colour filter can remap the alpha
-        //     itself, as SkOverdrawColorFilter does)
-        //
-        // When hit, this throws [NotImplementedError] so that any ported GM
-        // that exercises the alpha-mask draw path is visible in CI and its
-        // test is kept @Disabled until the implementation lands.
-        if (image.colorType == org.skia.foundation.SkColorType.kAlpha_8
-            && paint?.colorFilter == null
-            && paint != null
-            && (paint.color and 0x00FFFFFF) != 0) {
-            TODO(
-                "STUB.ALPHA8_IMAGE_AS_MASK: drawImageRect with a kAlpha_8 source image " +
-                    "and a coloured paint must use the image alpha as a mask for the " +
-                    "paint's RGB colour. Not yet implemented in the kanvas-skia raster " +
-                    "device — tracked as STUB.ALPHA8_IMAGE_AS_MASK.",
-            )
-        }
-
         val ix0 = pixelEdge(devDst.left).coerceAtLeast(clip.left)
         val iy0 = pixelEdge(devDst.top).coerceAtLeast(clip.top)
         val ix1 = pixelEdge(devDst.right).coerceAtMost(clip.right)
@@ -787,6 +759,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         val blender = paint?.blender
         val maxX = image.width - 1
         val maxY = image.height - 1
+        val alphaMaskTint = alphaMaskTintColor(image, paint, colorFilter)
 
         // [SkImage] currently has no `colorSpace` property, so by convention
         // image pixels are sRGB-encoded (same as SkColor). Phase 7e — when
@@ -799,7 +772,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // further xform inside the loop.
         val needsXform = !xformSteps.flags.isIdentity
         val deferXform = colorFilter != null && needsXform
-        val devPixels = if (deferXform) image.pixels else imagePixelsInDeviceColorSpace(image)
+        val devPixels = if (deferXform || alphaMaskTint != null) image.pixels else imagePixelsInDeviceColorSpace(image)
 
         // For modes whose formula reduces to a non-`dst` value at sa=0
         // (e.g. kClear, kSrc, kSrcIn, kSrcOut, kDstIn, kDstATop, kModulate),
@@ -842,7 +815,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                         wx0, wx1, wx2, wx3,
                         wy0, wy1, wy2, wy3,
                     )
-                    sample = applyAlpha(sample, paintAlpha)
+                    sample = if (alphaMaskTint != null) {
+                        applyAlphaMaskTint(sample, alphaMaskTint, paintAlpha)
+                    } else {
+                        applyAlpha(sample, paintAlpha)
+                    }
                     if (colorFilter != null) sample = colorFilter.filterColor(sample)
                     if (deferXform) sample = transformPaintColor(sample)
                     if (sample ushr 24 == 0 && !mustBlendZero) continue
@@ -859,7 +836,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     for (px in ix0 until ix1) {
                         val srcXc = src.left + (px + 0.5f - devDst.left) * scaleX
                         val ix = floor(srcXc).coerceIn(0, maxX)
-                        var sample = applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
+                        var sample = if (alphaMaskTint != null) {
+                            applyAlphaMaskTint(devPixels[iy * image.width + ix], alphaMaskTint, paintAlpha)
+                        } else {
+                            applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
+                        }
                         if (colorFilter != null) sample = colorFilter.filterColor(sample)
                         if (deferXform) sample = transformPaintColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
@@ -882,7 +863,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                         val c10 = devPixels[iy0i * image.width + ix1i]
                         val c01 = devPixels[iy1i * image.width + ix0i]
                         val c11 = devPixels[iy1i * image.width + ix1i]
-                        var sample = applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
+                        var sample = if (alphaMaskTint != null) {
+                            applyAlphaMaskTint(bilerpARGB(c00, c10, c01, c11, fx, fy), alphaMaskTint, paintAlpha)
+                        } else {
+                            applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
+                        }
                         if (colorFilter != null) sample = colorFilter.filterColor(sample)
                         if (deferXform) sample = transformPaintColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
@@ -1002,9 +987,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         if (paintAlpha == 0 && colorFilter == null) return
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
         val blender = paint?.blender
+        val alphaMaskTint = alphaMaskTintColor(mip, paint, colorFilter)
         val needsXform = !xformSteps.flags.isIdentity
         val deferXform = colorFilter != null && needsXform
-        val devPixels = if (deferXform) mip.pixels else imagePixelsInDeviceColorSpace(mip)
+        val devPixels = if (deferXform || alphaMaskTint != null) mip.pixels else imagePixelsInDeviceColorSpace(mip)
         val mustBlendZero = modeAffectsZeroAlphaSrc(mode) || colorFilter != null
         val maxX = mip.width - 1
         val maxY = mip.height - 1
@@ -1057,7 +1043,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 val r = (sumR * invN + 0.5f).toInt().coerceIn(0, 255)
                 val g = (sumG * invN + 0.5f).toInt().coerceIn(0, 255)
                 val b = (sumB * invN + 0.5f).toInt().coerceIn(0, 255)
-                var sample = applyAlpha(SkColorSetARGB(a, r, g, b), paintAlpha)
+                var sample = if (alphaMaskTint != null) {
+                    applyAlphaMaskTint(SkColorSetARGB(a, r, g, b), alphaMaskTint, paintAlpha)
+                } else {
+                    applyAlpha(SkColorSetARGB(a, r, g, b), paintAlpha)
+                }
                 if (colorFilter != null) sample = colorFilter.filterColor(sample)
                 if (deferXform) sample = transformPaintColor(sample)
                 if (sample ushr 24 == 0 && !mustBlendZero) continue
@@ -1075,6 +1065,17 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         val sa = SkColorGetA(src)
         val newA = (sa * paintAlpha + 127) / 255
         return (src and 0x00FFFFFF) or (newA shl 24)
+    }
+
+    private fun alphaMaskTintColor(image: SkImage, paint: SkPaint?, colorFilter: SkColorFilter?): SkColor? {
+        if (image.colorType != SkColorType.kAlpha_8 || paint == null || colorFilter != null) return null
+        return transformPaintColor(SkColorSetARGB(0xFF, SkColorGetR(paint.color), SkColorGetG(paint.color), SkColorGetB(paint.color)))
+    }
+
+    /** Use an A8 image sample as coverage for the paint colour. */
+    private fun applyAlphaMaskTint(maskSample: SkColor, tintColor: SkColor, paintAlpha: Int): SkColor {
+        val finalA = (SkColorGetA(maskSample) * paintAlpha + 127) / 255
+        return (finalA shl 24) or (tintColor and 0x00FFFFFF)
     }
 
     /** Bilinear interpolation in non-premultiplied ARGB; matches Skia for opaque samples. */

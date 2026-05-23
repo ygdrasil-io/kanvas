@@ -25,10 +25,8 @@ import org.skia.tools.ToolUtils
  *
  * After the colour-space conversion upstream calls
  * `xform->reinterpretColorSpace(srgb/srgbLinear)` so the re-tagged image
- * is drawn under an sRGB/linear glass — that API is unimplemented in
- * kanvas-skia (`STUB.IMAGE_REINTERPRET_COLOR_SPACE`). The GM body calls
- * `makeColorSpace` then `reinterpretColorSpace`; the body will throw on
- * the stub path, so the test is `@Disabled`.
+ * is drawn under an sRGB/linear glass. kanvas-skia models that as a
+ * metadata-only image rewrap on top of the converted pixels.
  *
  * C++ original: `gm/makecolorspace.cpp` — `make_color_space` helper + GM body.
  */
@@ -74,8 +72,7 @@ public class MakeColorSpaceGM : GM() {
      *
      * Upstream additionally calls `xform->reinterpretColorSpace(srgb)` after
      * the conversion so that the draw reads the converted pixels as if they
-     * were sRGB — that step requires `STUB.IMAGE_REINTERPRET_COLOR_SPACE`
-     * and will throw at runtime.
+     * were sRGB.
      */
     private fun drawColorSpace(
         canvas: SkCanvas,
@@ -87,9 +84,8 @@ public class MakeColorSpaceGM : GM() {
         val xform = orig.makeColorSpace(colorSpace) ?: return
 
         // Upstream reinterprets the xformed pixels as sRGB / sRGBLinear so the
-        // GPU compositor renders the converted wide-gamut data under a standard
-        // transfer function glass. This step throws on kanvas-skia — the test
-        // is @Disabled.
+        // compositor renders the converted wide-gamut data under a standard
+        // transfer function glass.
         val srgb = if (colorSpace.gammaIsLinear()) {
             SkColorSpace.makeSRGBLinear()
         } else {
