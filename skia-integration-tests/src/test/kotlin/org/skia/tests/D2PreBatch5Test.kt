@@ -37,7 +37,7 @@ class D2PreBatch5Test {
      */
     @Test
     fun `NestedGM matches reference`() =
-        runGm(NestedGM(), "NestedGM", floor = 0.0)
+        runGm(NestedGM(doAA = true, flipped = false), "NestedGM", floor = 0.0)
 
     /**
      * `morphology` — Erode / Dilate filters at various radii on a

@@ -2585,6 +2585,23 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
     public open fun saveLayer(bounds: SkRect?, paint: SkPaint?, flags: SaveLayerFlags): Int =
         saveLayer(bounds, paint)
 
+    /**
+     * Mirrors Skia's `SkCanvas::saveLayerAlphaf(const SkRect* bounds, float alpha)`.
+     * Convenience wrapper that creates a layer paint with the given [alpha]
+     * (a float in `[0, 1]`) and delegates to [saveLayer]. Matches upstream:
+     * ```cpp
+     * int SkCanvas::saveLayerAlphaf(const SkRect* bounds, float alpha) {
+     *     SkPaint tmpPaint;
+     *     tmpPaint.setAlphaf(alpha);
+     *     return this->saveLayer(bounds, &tmpPaint);
+     * }
+     * ```
+     */
+    public open fun saveLayerAlphaf(bounds: SkRect?, alpha: Float): Int {
+        val p = SkPaint().also { it.alphaf = alpha }
+        return saveLayer(bounds, p)
+    }
+
     public open val width: Int get() = device.width
     public open val height: Int get() = device.height
 

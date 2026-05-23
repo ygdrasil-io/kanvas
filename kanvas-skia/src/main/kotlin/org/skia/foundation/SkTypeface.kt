@@ -121,6 +121,25 @@ public open class SkTypeface protected constructor() {
 
     /**
      * Mirrors Skia's
+     * [`SkGlyphID SkTypeface::unicharToGlyph(SkUnichar) const`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h)
+     * — resolves a single Unicode code point to a font-local glyph ID.
+     *
+     * Returns `0` (the `.notdef` glyph) if the typeface has no glyph for
+     * [unichar]. Delegates to [unicharsToGlyphsInternal] with a single-element
+     * array so concrete subclasses only need to override the array form.
+     *
+     * Used by `gm/typeface.cpp::draw_typeface_rendering_gm` to obtain the
+     * glyph ID for `'A'` (typefacerendering) and `'O'`
+     * (typefacerendering_pfa, typefacerendering_pfb).
+     */
+    public fun unicharToGlyph(unichar: Int): Int {
+        val glyphs = ShortArray(1)
+        unicharsToGlyphsInternal(IntArray(1) { unichar }, 1, glyphs)
+        return glyphs[0].toInt() and 0xFFFF
+    }
+
+    /**
+     * Mirrors Skia's
      * [`SkTypeface::getKerningPairAdjustments`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h)
      * — returns the OpenType `kern` table pair adjustments for a sequence
      * of [glyphs] (each adjustment is in source-space FUnits applied
