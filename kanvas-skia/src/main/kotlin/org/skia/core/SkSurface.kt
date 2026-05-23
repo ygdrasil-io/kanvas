@@ -143,6 +143,127 @@ public abstract class SkSurface protected constructor(
         return true
     }
 
+    // ── async-readback rescale family ──────────────────────────────────
+    //
+    // Mirrors Skia's
+    // [`SkSurface::asyncRescaleAndReadPixels`](https://github.com/google/skia/blob/main/include/core/SkSurface.h)
+    // surface — the GPU-side async readback pipeline that asynchronously
+    // rescales the surface's content to a target [SkImageInfo] /
+    // [SkISize] and delivers the resulting pixels to a [callback].
+    // Skia's raster path bypasses this entirely by sync-reading +
+    // resampling on the CPU ; kanvas-skia does not implement either,
+    // so the surface here is flag-planting (`TODO("STUB.ASYNC_RESCALE_READ")`).
+    //
+    // Used by `gm/asyncrescaleandread.cpp` (3 × 2 grid of rescaled
+    // reads — nearest / repeated-linear / repeated-cubic × src-gamma /
+    // linear-gamma) and any downstream consumer that needs surface →
+    // bitmap with rescale (e.g. video pipelines, blur reference passes).
+
+    /**
+     * Async rescale + readback into RGBA pixels.
+     *
+     * **TODO: STUB.ASYNC_RESCALE_READ** — requires the upstream
+     * `SkSurface::asyncRescaleAndReadPixels` implementation (raster
+     * sync-resample is acceptable on the kanvas-skia side).
+     */
+    public open fun asyncRescaleAndReadPixels(
+        info: SkImageInfo,
+        srcRect: org.graphiks.math.SkIRect,
+        rescaleGamma: RescaleGamma = RescaleGamma.kSrc,
+        rescaleMode: RescaleMode = RescaleMode.kNearest,
+        callback: (AsyncReadResult?) -> Unit,
+    ): Unit = TODO("STUB.ASYNC_RESCALE_READ: SkSurface.asyncRescaleAndReadPixels")
+
+    /**
+     * Async rescale + readback into YUV-420 (3 planes, 4:2:0 chroma
+     * subsampled). Used by video-encoder feed paths.
+     *
+     * **TODO: STUB.ASYNC_RESCALE_READ** — same status as the RGBA
+     * variant.
+     */
+    public open fun asyncRescaleAndReadPixelsYUV420(
+        yuvColorSpace: SkYUVColorSpace,
+        dstColorSpace: org.skia.foundation.SkColorSpace?,
+        srcRect: org.graphiks.math.SkIRect,
+        dstSize: org.graphiks.math.SkISize,
+        rescaleGamma: RescaleGamma = RescaleGamma.kSrc,
+        rescaleMode: RescaleMode = RescaleMode.kNearest,
+        callback: (AsyncReadResult?) -> Unit,
+    ): Unit = TODO("STUB.ASYNC_RESCALE_READ: SkSurface.asyncRescaleAndReadPixelsYUV420")
+
+    /**
+     * Async rescale + readback into YUVA-420 (3 planes + alpha plane,
+     * 4:2:0 chroma subsampled).
+     *
+     * **TODO: STUB.ASYNC_RESCALE_READ** — same status as the YUV420
+     * variant.
+     */
+    public open fun asyncRescaleAndReadPixelsYUVA420(
+        yuvColorSpace: SkYUVColorSpace,
+        dstColorSpace: org.skia.foundation.SkColorSpace?,
+        srcRect: org.graphiks.math.SkIRect,
+        dstSize: org.graphiks.math.SkISize,
+        rescaleGamma: RescaleGamma = RescaleGamma.kSrc,
+        rescaleMode: RescaleMode = RescaleMode.kNearest,
+        callback: (AsyncReadResult?) -> Unit,
+    ): Unit = TODO("STUB.ASYNC_RESCALE_READ: SkSurface.asyncRescaleAndReadPixelsYUVA420")
+
+    /** Linearisation hint for the async rescale step. Mirrors `SkImage::RescaleGamma`. */
+    public enum class RescaleGamma { kSrc, kLinear }
+
+    /** Sampling kernel for the async rescale step. Mirrors `SkImage::RescaleMode`. */
+    public enum class RescaleMode { kNearest, kRepeatedLinear, kRepeatedCubic }
+
+    /**
+     * Async-readback result delivered to the
+     * [asyncRescaleAndReadPixels] / `…YUV420` / `…YUVA420` callback.
+     * Mirrors Skia's `SkSurface::AsyncReadResult` — a small handle that
+     * exposes the per-plane pixel buffers and row-bytes.
+     *
+     * **TODO: STUB.ASYNC_RESCALE_READ** — surface only ; no plane data.
+     */
+    public abstract class AsyncReadResult internal constructor() {
+        public abstract fun count(): Int
+        public abstract fun data(planeIndex: Int): ByteArray
+        public abstract fun rowBytes(planeIndex: Int): Int
+    }
+
+    /**
+     * Identifier for the YUV transfer matrix used by the YUV420 / YUVA420
+     * async readback variants. Mirrors Skia's `SkYUVColorSpace`.
+     *
+     * **TODO: STUB.ASYNC_RESCALE_READ** — the YUV pipeline itself is
+     * not implemented ; the enum here is a flag-planting placeholder
+     * sufficient to type the async-readback signatures.
+     */
+    public enum class SkYUVColorSpace {
+        kJPEG_Full_YUV,
+        kRec601_Limited_YUV,
+        kRec709_Full_YUV,
+        kRec709_Limited_YUV,
+        kBT2020_8bit_Full_YUV,
+        kBT2020_8bit_Limited_YUV,
+        kBT2020_10bit_Full_YUV,
+        kBT2020_10bit_Limited_YUV,
+        kBT2020_12bit_Full_YUV,
+        kBT2020_12bit_Limited_YUV,
+        kFCC_Full_YUV,
+        kFCC_Limited_YUV,
+        kSMPTE240_Full_YUV,
+        kSMPTE240_Limited_YUV,
+        kYDZDX_Full_YUV,
+        kYDZDX_Limited_YUV,
+        kGBR_Full_YUV,
+        kGBR_Limited_YUV,
+        kYCgCo_8bit_Full_YUV,
+        kYCgCo_8bit_Limited_YUV,
+        kYCgCo_10bit_Full_YUV,
+        kYCgCo_10bit_Limited_YUV,
+        kYCgCo_12bit_Full_YUV,
+        kYCgCo_12bit_Limited_YUV,
+        kIdentity,
+    }
+
     public companion object {
         /**
          * Allocate a raster surface with a freshly created backing
