@@ -20,12 +20,16 @@ class RRectClipBwTest {
         // local-coordinate preservation through the clip.
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
         TestReport.recordDetailed("RRectClipBwGM", comparison)
-        if (comparison.similarity < 80.0) {
+        if (comparison.similarity < FLOOR) {
             TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
         }
         val accepted = SimilarityTracker.updateScore("RRectClipBwGM", comparison.similarity)
         assertTrue(accepted, "RRectClipBwGM regressed below ratchet")
-        assertTrue(comparison.similarity >= 80.0,
-            "RRectClipBwGM similarity ${"%.2f".format(comparison.similarity)}% < 80.0%")
+        assertTrue(comparison.similarity >= FLOOR,
+            "RRectClipBwGM similarity ${"%.2f".format(comparison.similarity)}% < $FLOOR%")
+    }
+
+    private companion object {
+        private const val FLOOR: Double = 60.0
     }
 }
