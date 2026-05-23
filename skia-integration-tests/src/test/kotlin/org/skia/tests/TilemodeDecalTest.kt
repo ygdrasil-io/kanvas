@@ -2,7 +2,6 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
@@ -11,15 +10,12 @@ import org.skia.testing.TestUtils
 /**
  * Raster smoke-test for [TilemodeDecalGM] (`tilemode_decal`, 720×1100).
  *
- * Disabled by default: `SkTileMode.kDecal` on image shaders and gradient
- * shaders requires a clamp-to-transparent implementation path that is not
- * yet fully wired in `:kanvas-skia`'s raster backend. The GM is registered
- * and the class is in production, but pixel-accurate results are not
- * guaranteed until the decal-shader pass is complete.
- *
- * TODO("STUB.DECAL_SHADER") — track decal image/gradient shader support.
+ * `SkTileMode.kDecal` is fully implemented in `:kanvas-skia` for both
+ * image shaders ([SkBitmapShader]) and gradient shaders ([lookupStop]).
+ * Five shader recipes × four tile-mode pairs; bicubic Mitchell sampling
+ * and decal-edge blending produce per-pixel drift vs. Skia's GPU
+ * pipeline, so tolerance=8 is used (matching other image-shader GMs).
  */
-@Disabled("tilemode_decal: decal image/gradient shader not yet implemented — TODO(STUB.DECAL_SHADER)")
 class TilemodeDecalTest {
 
     @Test
