@@ -76,6 +76,7 @@ org.graphiks.math.SkMatrix.Companion.kAScaleY	SkMatrix::kAScaleY	math/src/main/k
 org.graphiks.math.SkMatrix.Companion.kATransX	SkMatrix::kATransX	math/src/main/kotlin/SkMatrix.kt:782	include/core/SkMatrix.h:344
 org.graphiks.math.SkMatrix.Companion.kATransY	SkMatrix::kATransY	math/src/main/kotlin/SkMatrix.kt:783	include/core/SkMatrix.h:345
 org.graphiks.math.SkMatrix.Companion.MakeRectToRect	SkMatrix::Rect2Rect	math/src/main/kotlin/SkMatrix.kt:797	src/core/SkMatrix.cpp:559
+org.graphiks.math.SkMatrix.Companion.RectToRectOrIdentity	SkMatrix::RectToRectOrIdentity	math/src/main/kotlin/SkMatrix.kt:859	include/core/SkMatrix.h:1120
 org.graphiks.math.SkMatrix.Companion.MakeFrom9	SkMatrix::set9	math/src/main/kotlin/SkMatrix.kt:828	src/core/SkMatrix.cpp:55
 org.graphiks.math.SkMatrix.Companion.MakePerspective	SkMatrix::setAll	math/src/main/kotlin/SkMatrix.kt:842	include/core/SkMatrix.h:536
 org.graphiks.math.SkMatrix.Companion.MakeFromAffine	SkMatrix::setAffine	math/src/main/kotlin/SkMatrix.kt:850	src/core/SkMatrix.cpp:61
@@ -94,4 +95,5 @@ org.graphiks.math.SkMatrix.Companion.concat	SkMatrix::setConcat	math/src/main/ko
 org.graphiks.math.SkMatrix.Companion.MakeAll	SkMatrix::MakeAll	math/src/main/kotlin/SkMatrix.kt:1057	include/core/SkMatrix.h:153
 org.graphiks.math.SkMatrix.Companion.MakeRSXform	SkMatrix::setRSXform	math/src/main/kotlin/SkMatrix.kt:1082	src/core/SkMatrix.cpp:424
 org.graphiks.math.SkMatrix.Companion.MakePolyToPoly	SkMatrix::PolyToPoly	math/src/main/kotlin/SkMatrix.kt:1122	src/core/SkMatrix.cpp:1306
+org.graphiks.math.SkMatrix.Companion.setPolyToPoly	SkMatrix::setPolyToPoly	math/src/main/kotlin/SkMatrix.kt:869	include/core/SkMatrix.h:1158
 org.graphiks.math.SkMatrix.Companion.isDegenerate2x2	is_degenerate_2x2	math/src/main/kotlin/SkMatrix.kt:945	src/core/SkMatrix.cpp:176

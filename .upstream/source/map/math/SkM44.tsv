@@ -17,7 +17,6 @@ org.graphiks.math.SkM44.setRow	SkM44::setRow	math/src/main/kotlin/SkM44.kt:237	i
 org.graphiks.math.SkM44.setCol	SkM44::setCol	math/src/main/kotlin/SkM44.kt:246	include/core/SkM44.h:288
 org.graphiks.math.SkM44.getColMajor	SkM44::getColMajor	math/src/main/kotlin/SkM44.kt:255	include/core/SkM44.h:256
 org.graphiks.math.SkM44.getRowMajor	SkM44::getRowMajor	math/src/main/kotlin/SkM44.kt:261	src/core/SkM44.cpp:44
-org.graphiks.math.SkM44.isIdentity	SkM44::isIdentity	math/src/main/kotlin/SkM44.kt:269	include/core/SkM44.h:293
 org.graphiks.math.SkM44.setIdentity	SkM44::setIdentity	math/src/main/kotlin/SkM44.kt:278	include/core/SkM44.h:293
 org.graphiks.math.SkM44.setTranslate	SkM44::setTranslate	math/src/main/kotlin/SkM44.kt:287	include/core/SkM44.h:301
 org.graphiks.math.SkM44.setScale	SkM44::setScale	math/src/main/kotlin/SkM44.kt:295	include/core/SkM44.h:309
@@ -34,7 +33,7 @@ org.graphiks.math.SkM44.postTranslate	SkM44::postTranslate	math/src/main/kotlin/
 org.graphiks.math.SkM44.preScale	SkM44::preScale(SkScalar,SkScalar)	math/src/main/kotlin/SkM44.kt:432	src/core/SkM44.cpp:109
 org.graphiks.math.SkM44.preScale	SkM44::preScale(SkScalar,SkScalar,SkScalar)	math/src/main/kotlin/SkM44.kt:442	src/core/SkM44.cpp:118
 org.graphiks.math.SkM44.map	SkM44::map	math/src/main/kotlin/SkM44.kt:446	src/core/SkM44.cpp:129
-org.graphiks.math.SkM44.mapPoint	SkMatrixPriv::MapRect	math/src/main/kotlin/SkM44.kt:484	src/core/SkM44.cpp:216
+org.graphiks.math.SkM44.mapPoint	SkM44::map	math/src/main/kotlin/SkM44.kt:484	src/core/SkM44.cpp:129
 org.graphiks.math.SkM44.mapRect	SkMatrixPriv::MapRect	math/src/main/kotlin/SkM44.kt:508	src/core/SkM44.cpp:216
 org.graphiks.math.SkM44.invert	SkM44::invert	math/src/main/kotlin/SkM44.kt:520	src/core/SkM44.cpp:247
 org.graphiks.math.SkM44.transpose	SkM44::transpose	math/src/main/kotlin/SkM44.kt:578	src/core/SkM44.cpp:256

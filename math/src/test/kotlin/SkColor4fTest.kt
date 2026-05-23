@@ -13,6 +13,15 @@ import org.junit.jupiter.api.Test
  * — i.e. R lives in the LSB and A in the MSB.
  */
 class SkColor4fTest {
+    @Test
+    fun `SkHSVToColor treats out-of-range hue as zero instead of wrapping`() {
+        val alpha = 0x80
+        val redAtZero = SkColorSetARGB(alpha, 0xFF, 0x00, 0x00)
+
+        assertEquals(redAtZero, SkHSVToColor(alpha, floatArrayOf(-60f, 1f, 1f)))
+        assertEquals(redAtZero, SkHSVToColor(alpha, floatArrayOf(360f, 1f, 1f)))
+        assertEquals(redAtZero, SkHSVToColor(alpha, floatArrayOf(420f, 1f, 1f)))
+    }
 
     @Test
     fun `toBytes_RGBA places R in LSB and A in MSB`() {
