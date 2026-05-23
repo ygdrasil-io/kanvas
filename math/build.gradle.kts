@@ -72,21 +72,6 @@ benchmark {
     }
 }
 
-tasks.withType<JavaCompile>().configureEach {
-    options.encoding = "UTF-8"
-    options.compilerArgs.addAll(listOf("--add-modules", "jdk.incubator.vector"))
-}
-
-tasks.withType<Test>().configureEach {
-    jvmArgs("--add-modules", "jdk.incubator.vector")
-}
-
-tasks.matching { it.name.contains("Benchmark") }.configureEach {
-    if (this is JavaExec) {
-        jvmArgs("--add-modules", "jdk.incubator.vector")
-    }
-}
-
 dependencies {
     // GFM (GitHub-Flavored Markdown) renderer — scopé sur dokkaGfm uniquement
     // (vs `dokkaPlugin(...)` qui l'aurait appliqué à tous les formats et écrasé HTML).
