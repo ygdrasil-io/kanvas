@@ -195,6 +195,26 @@ public class SkImage public constructor(
     }
 
     /**
+     * Mirrors Skia's `SkImage::makeScaled(SkRecorder*, const SkImageInfo&, const SkSamplingOptions&)`.
+     *
+     * Returns a rescaled version of this image with the geometry and colour
+     * type described by [info], using [sampling] to control filter quality.
+     * Returns `null` if the image cannot be rescaled (empty source / target).
+     *
+     * **Not yet implemented** — the kanvas-skia raster backend does not
+     * expose a direct `makeScaled` path. The preferred raster workaround
+     * is `image.readPixels(dstPixmap, sampling)` via [SkPixmap.scalePixels],
+     * which the `:cpu-raster` layer provides. This surface stub lets GM
+     * bodies compile and fails loudly at runtime so the gap is visible.
+     *
+     * Tracked as STUB.IMAGE_MAKE_SCALED.
+     */
+    public fun makeScaled(
+        info: SkImageInfo,
+        sampling: SkSamplingOptions,
+    ): SkImage? = TODO("STUB.IMAGE_MAKE_SCALED")
+
+    /**
      * Mirrors Skia's `SkImage::makeColorSpace(SkRecorder*, sk_sp<SkColorSpace>, RequiredProperties)`
      * — returns a new image whose pixels have been converted from
      * `this.colorSpace` to [target].
