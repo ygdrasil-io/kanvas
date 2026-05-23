@@ -26,8 +26,9 @@ class Round11Test {
         )
     }
 
-    @Test
-    fun `FiddleGM matches reference`() = runGm(FiddleGM(), "FiddleGM", 99.0)
+    // FiddleGM was moved to its dedicated FiddleTest.kt (real-body port,
+    // PR follow-up to the Round-11 batch). Round11Test now starts at
+    // Bug9331GM.
 
     // Bug9331GM at ~56 % — dasher renders the correct count of dashes
     // in the right positions but sub-pixel placement drifts vs upstream
