@@ -18,8 +18,9 @@ import java.util.zip.Inflater
  * First pure-Kotlin PNG decoder slice.
  *
  * Supports the baseline non-interlaced PNG path used by small fixtures and
- * many generated assets: 8-bit RGB (colour type 2) and RGBA (colour type 6),
- * deflated IDAT data, and the five standard PNG scanline filters.
+ * many generated assets: 8-bit RGB (colour type 2), indexed colour
+ * (colour type 3), and RGBA (colour type 6), deflated IDAT data, and the five
+ * standard PNG scanline filters.
  */
 public class SkPngKotlinCodec private constructor(
     private val png: ParsedPng,
@@ -73,11 +74,18 @@ public class SkPngKotlinCodec private constructor(
 
             var p = 0
             for (x in 0 until png.width) {
-                val r = current[p++].toInt() and 0xFF
-                val g = current[p++].toInt() and 0xFF
-                val b = current[p++].toInt() and 0xFF
-                val a = if (png.colorType == COLOR_RGBA) current[p++].toInt() and 0xFF else 0xFF
-                dst.setPixel(x, y, argb(a, r, g, b))
+                if (png.colorType == COLOR_PALETTE) {
+                    val index = current[p++].toInt() and 0xFF
+                    val palette = png.palette ?: return Result.kErrorInInput
+                    if (index >= palette.size) return Result.kErrorInInput
+                    dst.setPixel(x, y, palette[index])
+                } else {
+                    val r = current[p++].toInt() and 0xFF
+                    val g = current[p++].toInt() and 0xFF
+                    val b = current[p++].toInt() and 0xFF
+                    val a = if (png.colorType == COLOR_RGBA) current[p++].toInt() and 0xFF else 0xFF
+                    dst.setPixel(x, y, argb(a, r, g, b))
+                }
             }
 
             current.copyInto(previous)
@@ -100,6 +108,8 @@ public class SkPngKotlinCodec private constructor(
             var offset = PNG_SIGNATURE.size
             var header: Header? = null
             val idat = ByteArrayOutputStream()
+            var palette: IntArray? = null
+            var transparency: ByteArray? = null
             var sawIdat = false
             var sawIend = false
 
@@ -120,8 +130,19 @@ public class SkPngKotlinCodec private constructor(
                     }
                     TYPE_IDAT -> {
                         if (header == null || sawIend) return null
+                        if (header.colorType == COLOR_PALETTE && palette == null) return null
                         idat.write(data, dataOffset, length)
                         sawIdat = true
+                    }
+                    TYPE_PLTE -> {
+                        if (header == null || sawIdat || sawIend || palette != null) return null
+                        palette = parsePalette(data, dataOffset, length) ?: return null
+                    }
+                    TYPE_TRNS -> {
+                        if (header == null || sawIdat || sawIend || transparency != null) return null
+                        if (header.colorType != COLOR_PALETTE || palette == null) return null
+                        if (length > palette.size) return null
+                        transparency = data.copyOfRange(dataOffset, dataOffset + length)
                     }
                     TYPE_IEND -> {
                         if (length != 0 || header == null) return null
@@ -138,11 +159,17 @@ public class SkPngKotlinCodec private constructor(
 
             val h = header ?: return null
             if (!sawIdat || !sawIend || offset > data.size) return null
+            val finalPalette = if (h.colorType == COLOR_PALETTE) {
+                paletteWithTransparency(palette, transparency) ?: return null
+            } else {
+                null
+            }
             return ParsedPng(
                 width = h.width,
                 height = h.height,
                 colorType = h.colorType,
                 idat = idat.toByteArray(),
+                palette = finalPalette,
             )
         }
 
@@ -156,14 +183,43 @@ public class SkPngKotlinCodec private constructor(
             val interlace = data[offset + 12].toInt() and 0xFF
             if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
             if (bitDepth != 8) return null
-            if (colorType != COLOR_RGB && colorType != COLOR_RGBA) return null
+            if (colorType != COLOR_RGB && colorType != COLOR_PALETTE && colorType != COLOR_RGBA) return null
             if (compression != 0 || filter != 0 || interlace != 0) return null
-            val bytesPerPixel = if (colorType == COLOR_RGBA) 4 else 3
+            val bytesPerPixel = when (colorType) {
+                COLOR_RGBA -> 4
+                COLOR_RGB -> 3
+                else -> 1
+            }
             val rowBytes = width.toLong() * bytesPerPixel.toLong()
             if (rowBytes > Int.MAX_VALUE) return null
             val expected = (rowBytes + 1L) * height.toLong()
             if (expected > Int.MAX_VALUE) return null
             return Header(width, height, colorType)
+        }
+
+        private fun parsePalette(data: ByteArray, offset: Int, length: Int): IntArray? {
+            if (length == 0 || length % 3 != 0) return null
+            val entries = length / 3
+            if (entries > 256) return null
+            return IntArray(entries) { i ->
+                val p = offset + i * 3
+                argb(
+                    a = 0xFF,
+                    r = data[p].toInt() and 0xFF,
+                    g = data[p + 1].toInt() and 0xFF,
+                    b = data[p + 2].toInt() and 0xFF,
+                )
+            }
+        }
+
+        private fun paletteWithTransparency(palette: IntArray?, transparency: ByteArray?): IntArray? {
+            val colors = palette?.copyOf() ?: return null
+            if (transparency != null) {
+                for (i in transparency.indices) {
+                    colors[i] = (colors[i] and 0x00FFFFFF) or ((transparency[i].toInt() and 0xFF) shl 24)
+                }
+            }
+            return colors
         }
 
         private fun hasPngSignature(data: ByteArray): Boolean {
@@ -188,8 +244,13 @@ public class SkPngKotlinCodec private constructor(
         val height: Int,
         val colorType: Int,
         val idat: ByteArray,
+        val palette: IntArray?,
     ) {
-        val bytesPerPixel: Int = if (colorType == COLOR_RGBA) 4 else 3
+        val bytesPerPixel: Int = when (colorType) {
+            COLOR_RGBA -> 4
+            COLOR_RGB -> 3
+            else -> 1
+        }
     }
 }
 
@@ -202,11 +263,14 @@ private val PNG_SIGNATURE = byteArrayOf(
 )
 private const val CHUNK_OVERHEAD: Int = 12
 private const val COLOR_RGB: Int = 2
+private const val COLOR_PALETTE: Int = 3
 private const val COLOR_RGBA: Int = 6
 private const val MAX_DIMENSION: Int = 100_000
 private const val TYPE_IHDR: Int = 0x49484452
 private const val TYPE_IDAT: Int = 0x49444154
 private const val TYPE_IEND: Int = 0x49454E44
+private const val TYPE_PLTE: Int = 0x504C5445
+private const val TYPE_TRNS: Int = 0x74524E53
 
 private fun inflate(data: ByteArray, expectedSize: Int): ByteArray {
     val inflater = Inflater()

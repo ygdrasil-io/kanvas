@@ -84,6 +84,107 @@ class SkPngKotlinCodecTest {
     }
 
     @Test
+    fun `decodes indexed 8-bit palette pixels as opaque RGBA`() {
+        val palette = intArrayOf(
+            argb(0xFF, 0x10, 0x20, 0x30),
+            argb(0xFF, 0x40, 0x50, 0x60),
+            argb(0xFF, 0x70, 0x80, 0x90),
+        )
+        val indexes = listOf(
+            byteArrayOf(0, 1, 2),
+            byteArrayOf(2, 1, 0),
+        )
+        val codec = SkPngKotlinCodec.Decoder.make(
+            indexedPng(width = 3, height = 2, palette = palette, indexes = indexes, filters = intArrayOf(0, 1)),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(palette[0], bitmap!!.getPixel(0, 0))
+        assertEquals(palette[1], bitmap.getPixel(1, 0))
+        assertEquals(palette[2], bitmap.getPixel(2, 0))
+        assertEquals(palette[2], bitmap.getPixel(0, 1))
+        assertEquals(palette[1], bitmap.getPixel(1, 1))
+        assertEquals(palette[0], bitmap.getPixel(2, 1))
+    }
+
+    @Test
+    fun `decodes indexed palette tRNS alpha`() {
+        val palette = intArrayOf(
+            argb(0xFF, 0xFF, 0x00, 0x00),
+            argb(0xFF, 0x00, 0xFF, 0x00),
+            argb(0xFF, 0x00, 0x00, 0xFF),
+        )
+        val codec = SkPngKotlinCodec.Decoder.make(
+            indexedPng(
+                width = 3,
+                height = 1,
+                palette = palette,
+                transparency = byteArrayOf(0xFF.toByte(), 0x00, 0x80.toByte()),
+                indexes = listOf(byteArrayOf(0, 1, 2)),
+                filters = intArrayOf(0),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(argb(0xFF, 0xFF, 0x00, 0x00), bitmap!!.getPixel(0, 0))
+        assertEquals(argb(0x00, 0x00, 0xFF, 0x00), bitmap.getPixel(1, 0))
+        assertEquals(argb(0x80, 0x00, 0x00, 0xFF), bitmap.getPixel(2, 0))
+    }
+
+    @Test
+    fun `rejects indexed PNG without palette`() {
+        assertNull(
+            SkPngKotlinCodec.Decoder.make(
+                indexedPng(
+                    width = 1,
+                    height = 1,
+                    palette = intArrayOf(argb(0xFF, 0x01, 0x02, 0x03)),
+                    indexes = listOf(byteArrayOf(0)),
+                    filters = intArrayOf(0),
+                    includePalette = false,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `rejects invalid PLTE chunk`() {
+        assertNull(
+            SkPngKotlinCodec.Decoder.make(
+                indexedPng(
+                    width = 1,
+                    height = 1,
+                    palette = intArrayOf(argb(0xFF, 0x01, 0x02, 0x03)),
+                    indexes = listOf(byteArrayOf(0)),
+                    filters = intArrayOf(0),
+                    paletteBytes = byteArrayOf(0x01, 0x02),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `rejects palette index outside PLTE`() {
+        val codec = SkPngKotlinCodec.Decoder.make(
+            indexedPng(
+                width = 1,
+                height = 1,
+                palette = intArrayOf(argb(0xFF, 0x01, 0x02, 0x03)),
+                indexes = listOf(byteArrayOf(1)),
+                filters = intArrayOf(0),
+            ),
+        )
+
+        assertNotNull(codec)
+        val (_, result) = codec!!.getImage()
+        assertEquals(SkCodec.Result.kErrorInInput, result)
+    }
+
+    @Test
     fun `rejects corrupted chunk CRC`() {
         val data = png(
             width = 1,
@@ -122,6 +223,54 @@ class SkPngKotlinCodecTest {
             writeChunk("IDAT", deflate(raw.toByteArray()))
             writeChunk("IEND", ByteArray(0))
         }.toByteArray()
+    }
+
+    private fun indexedPng(
+        width: Int,
+        height: Int,
+        palette: IntArray,
+        indexes: List<ByteArray>,
+        filters: IntArray,
+        transparency: ByteArray? = null,
+        includePalette: Boolean = true,
+        paletteBytes: ByteArray = encodePalette(palette),
+    ): ByteArray {
+        val raw = ByteArrayOutputStream()
+        var previous = ByteArray(width)
+        for (y in 0 until height) {
+            val row = indexes[y]
+            raw.write(filters[y])
+            raw.write(filterRow(filters[y], row, previous, bpp = 1))
+            previous = row
+        }
+
+        return ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            writeChunk("IHDR", ByteArrayOutputStream().apply {
+                writeI32BE(width)
+                writeI32BE(height)
+                write(8)
+                write(3)
+                write(0)
+                write(0)
+                write(0)
+            }.toByteArray())
+            if (includePalette) writeChunk("PLTE", paletteBytes)
+            if (transparency != null) writeChunk("tRNS", transparency)
+            writeChunk("IDAT", deflate(raw.toByteArray()))
+            writeChunk("IEND", ByteArray(0))
+        }.toByteArray()
+    }
+
+    private fun encodePalette(palette: IntArray): ByteArray {
+        val out = ByteArray(palette.size * 3)
+        var offset = 0
+        for (color in palette) {
+            out[offset++] = r(color).toByte()
+            out[offset++] = g(color).toByte()
+            out[offset++] = b(color).toByte()
+        }
+        return out
     }
 
     private fun encodeRow(colors: IntArray, colorType: Int): ByteArray {
