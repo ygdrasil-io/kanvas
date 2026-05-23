@@ -1,22 +1,5 @@
 package org.graphiks.math
 
-internal expect object SkMathBackend {
-    internal fun dot2(ax: Float, ay: Float, bx: Float, by: Float): Float
-    internal fun dot3(ax: Float, ay: Float, az: Float, bx: Float, by: Float, bz: Float): Float
-    internal fun dot4(
-        ax: Float,
-        ay: Float,
-        az: Float,
-        aw: Float,
-        bx: Float,
-        by: Float,
-        bz: Float,
-        bw: Float,
-    ): Float
-
-    internal fun m44Concat(a: FloatArray, b: FloatArray, out: FloatArray)
-}
-
 internal object SkMathScalar {
     fun dot2(ax: Float, ay: Float, bx: Float, by: Float): Float =
         ax * bx + ay * by

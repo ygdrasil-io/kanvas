@@ -175,7 +175,8 @@ org.graphiks.math.SkScalarTest.SkScalarsEqual element-wise
 org.graphiks.math.SkScalarTest.constants match Skia values
 org.graphiks.math.SkScalarTest.nearly-zero constants match Skia
 
-# --- SkMathBackendTest ---
-org.graphiks.math.SkMathBackendTest
-org.graphiks.math.SkMathBackendTest.dot products match scalar reference
-org.graphiks.math.SkMathBackendTest.m44 concat matches scalar reference
+# --- SkMathScalar ---
+org.graphiks.math.dot2
+org.graphiks.math.dot3
+org.graphiks.math.dot4
+org.graphiks.math.m44Concat

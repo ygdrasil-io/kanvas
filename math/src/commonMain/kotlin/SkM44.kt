@@ -356,7 +356,7 @@ public class SkM44 {
      */
     public fun setConcat(a: SkM44, b: SkM44): SkM44 {
         val out = FloatArray(16)
-        SkMathBackend.m44Concat(a.fMat, b.fMat, out)
+        SkMathScalar.m44Concat(a.fMat, b.fMat, out)
         out.copyInto(fMat)
         return this
     }
