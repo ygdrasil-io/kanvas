@@ -1,2 +1,2 @@
-org.graphiks.math.SkcmsMatrix3x3	skcms_Matrix3x3	math/src/main/kotlin/SkcmsMatrix3x3.kt:10	modules/skcms/src/skcms_public.h:51
-org.graphiks.math.SkcmsMatrix3x3.vals	skcms_Matrix3x3::vals	math/src/main/kotlin/SkcmsMatrix3x3.kt:10	modules/skcms/src/skcms_public.h:52
+org.graphiks.math.SkcmsMatrix3x3	skcms_Matrix3x3	math/src/commonMain/kotlin/SkcmsMatrix3x3.kt:10	modules/skcms/src/skcms_public.h:51
+org.graphiks.math.SkcmsMatrix3x3.vals	skcms_Matrix3x3::vals	math/src/commonMain/kotlin/SkcmsMatrix3x3.kt:10	modules/skcms/src/skcms_public.h:52

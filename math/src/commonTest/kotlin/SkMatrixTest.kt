@@ -1,11 +1,11 @@
 package org.graphiks.math
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNotEquals
-import org.junit.jupiter.api.Assertions.assertThrows
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import kotlin.test.Test
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -272,12 +272,12 @@ class SkMatrixTest {
     @Test
     fun `MakeRotate snap does not leak negative zero`() {
         // Phase 3: snapToZero should normalize -0f → 0f via the explicit
-        // negation guard. Use Float.floatToRawIntBits to assert bit-exact.
+        // negation guard. Use Float.toRawBits to assert bit-exact.
         for (deg in listOf(0f, 90f, 180f, 270f, -90f, -180f, 360f)) {
             val m = SkMatrix.MakeRotate(deg)
             for ((name, v) in listOf("sx" to m.sx, "kx" to m.kx, "ky" to m.ky, "sy" to m.sy)) {
                 if (v == 0f) {
-                    assertEquals(0, java.lang.Float.floatToRawIntBits(v),
+                    assertEquals(0, v.toRawBits(),
                         "$name at $deg deg leaked -0f")
                 }
             }
@@ -687,7 +687,7 @@ class SkMatrixTest {
     @Test
     fun `mapRectScaleTranslate throws when not scale-translate`() {
         val m = SkMatrix.MakeRotate(30f)
-        assertThrows(IllegalStateException::class.java) {
+        assertFailsWith<IllegalStateException> {
             m.mapRectScaleTranslate(SkRect.MakeLTRB(0f, 0f, 1f, 1f))
         }
     }

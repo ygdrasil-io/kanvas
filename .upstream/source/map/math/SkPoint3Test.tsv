@@ -1,8 +1,8 @@
-org.graphiks.math.SkPoint3Test	Point3Test	math/src/test/kotlin/SkPoint3Test.kt:9	tests/Point3Test.cpp:1
-org.graphiks.math.SkPoint3Test.Make and accessors	Point3	math/src/test/kotlin/SkPoint3Test.kt:18	tests/Point3Test.cpp:126
-org.graphiks.math.SkPoint3Test.set replaces all three components	Point3	math/src/test/kotlin/SkPoint3Test.kt:24	tests/Point3Test.cpp:126
-org.graphiks.math.SkPoint3Test.length and lengthSquared	Point3	math/src/test/kotlin/SkPoint3Test.kt:31	tests/Point3Test.cpp:126
-org.graphiks.math.SkPoint3Test.Length companion handles overflow via double	Point3	math/src/test/kotlin/SkPoint3Test.kt:38	tests/Point3Test.cpp:126
-org.graphiks.math.SkPoint3Test.unaryMinus + - operators	Point3	math/src/test/kotlin/SkPoint3Test.kt:53	tests/Point3Test.cpp:126
-org.graphiks.math.SkPoint3Test.DotProduct CrossProduct	Point3	math/src/test/kotlin/SkPoint3Test.kt:63	tests/Point3Test.cpp:126
-org.graphiks.math.SkPoint3Test.isFinite catches NaN and Inf	Point3	math/src/test/kotlin/SkPoint3Test.kt:46	tests/Point3Test.cpp:126
+org.graphiks.math.SkPoint3Test	Point3Test	math/src/commonTest/kotlin/SkPoint3Test.kt:9	tests/Point3Test.cpp:1
+org.graphiks.math.SkPoint3Test.Make and accessors	Point3	math/src/commonTest/kotlin/SkPoint3Test.kt:18	tests/Point3Test.cpp:126
+org.graphiks.math.SkPoint3Test.set replaces all three components	Point3	math/src/commonTest/kotlin/SkPoint3Test.kt:24	tests/Point3Test.cpp:126
+org.graphiks.math.SkPoint3Test.length and lengthSquared	Point3	math/src/commonTest/kotlin/SkPoint3Test.kt:31	tests/Point3Test.cpp:126
+org.graphiks.math.SkPoint3Test.Length companion handles overflow via double	Point3	math/src/commonTest/kotlin/SkPoint3Test.kt:38	tests/Point3Test.cpp:126
+org.graphiks.math.SkPoint3Test.unaryMinus + - operators	Point3	math/src/commonTest/kotlin/SkPoint3Test.kt:53	tests/Point3Test.cpp:126
+org.graphiks.math.SkPoint3Test.DotProduct CrossProduct	Point3	math/src/commonTest/kotlin/SkPoint3Test.kt:63	tests/Point3Test.cpp:126
+org.graphiks.math.SkPoint3Test.isFinite catches NaN and Inf	Point3	math/src/commonTest/kotlin/SkPoint3Test.kt:46	tests/Point3Test.cpp:126

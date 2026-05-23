@@ -1,8 +1,8 @@
 package org.graphiks.math
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertThrows
-import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.Test
 
 class SkV4Test {
 
@@ -20,8 +20,8 @@ class SkV4Test {
         assertEquals(20f, v[1])
         assertEquals(30f, v[2])
         assertEquals(40f, v[3])
-        assertThrows(IndexOutOfBoundsException::class.java) { v[4] }
-        assertThrows(IndexOutOfBoundsException::class.java) { v[-1] }
+        assertFailsWith<IndexOutOfBoundsException> { v[4] }
+        assertFailsWith<IndexOutOfBoundsException> { v[-1] }
     }
 
     @Test
