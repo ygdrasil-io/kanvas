@@ -654,6 +654,52 @@ public class SkBitmap(
         installPixels(pixmap.info(), pixmap.addr(), pixmap.rowBytes())
 
     /**
+     * Mirrors `SkBitmap::writePixels(const SkPixmap& src, int dstX, int dstY)`
+     * ([SkBitmap.h:741](https://github.com/google/skia/blob/main/include/core/SkBitmap.h#L741)).
+     *
+     * Copies the pixels from [pixmap] into this bitmap starting at
+     * `(dstX, dstY)`. Only the region of [pixmap] that lands within this
+     * bitmap's bounds is written; pixels outside the destination are
+     * silently ignored — matches upstream's clipping semantics.
+     *
+     * Colour-type conversion (e.g. kRGBA_8888 → kARGB_4444) is performed
+     * via the [getPixel] / [setPixel] path; the round-trip uses
+     * non-premultiplied 8-bit ARGB as the interchange format (same as
+     * upstream's internal pipeline). Returns `false` if [pixmap] is empty
+     * or the colour type is unsupported for pixel I/O.
+     *
+     * **Same-type fast-path** — when [pixmap]'s colour type matches this
+     * bitmap's, the raw typed-array data is copied directly from the
+     * pixmap's ByteBuffer, bypassing the SkColor round-trip. This matches
+     * upstream's raw-copy branch and avoids any quantisation artefacts
+     * that the general path could introduce for 4-bit channels.
+     *
+     * Used by `gm/copy_to_4444.cpp::DEF_SIMPLE_GM(format4444, …)`.
+     */
+    public fun writePixels(pixmap: SkPixmap, dstX: Int = 0, dstY: Int = 0): Boolean {
+        if (pixmap.width() <= 0 || pixmap.height() <= 0) return false
+        // Create a temporary bitmap to decode the pixmap's ByteBuffer into
+        // its typed backing array — reuses installPixels which already handles
+        // all supported colour types.
+        val cs = pixmap.colorSpace() ?: SkColorSpace.makeSRGB()
+        val src = SkBitmap(pixmap.width(), pixmap.height(), cs, pixmap.colorType())
+        if (!src.installPixels(pixmap)) return false
+        // Clip the write region to this bitmap's bounds.
+        val srcW = src.width
+        val srcH = src.height
+        for (sy in 0 until srcH) {
+            val dy = dstY + sy
+            if (dy < 0 || dy >= height) continue
+            for (sx in 0 until srcW) {
+                val dx = dstX + sx
+                if (dx < 0 || dx >= width) continue
+                setPixel(dx, dy, src.getPixel(sx, sy))
+            }
+        }
+        return true
+    }
+
+    /**
      * Mirrors `SkBitmap::extractSubset(SkBitmap*, const SkIRect&) const`
      * ([SkBitmap.h:979](https://github.com/google/skia/blob/main/include/core/SkBitmap.h#L979)).
      *
