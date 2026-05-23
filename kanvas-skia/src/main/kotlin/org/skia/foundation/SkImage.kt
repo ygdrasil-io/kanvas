@@ -263,6 +263,51 @@ public class SkImage public constructor(
     }
 
     /**
+     * Mirrors Skia's `SkImage::reinterpretColorSpace(sk_sp<SkColorSpace>)`.
+     *
+     * Returns a new [SkImage] that shares the same underlying pixels as
+     * `this` but is tagged with [newColorSpace] instead of the original
+     * colour space. No pixel data is converted — the raw bytes are
+     * reinterpreted as-is in the new space.
+     *
+     * This is a GPU/recorder-backed concept in upstream Skia (the image
+     * is re-tagged at the driver level without a round-trip through the
+     * CPU). On the kanvas-skia CPU raster backend there is no equivalent
+     * lazy re-tag path — this stub throws to surface the gap.
+     *
+     * Tracked as STUB.IMAGE_REINTERPRET_COLOR_SPACE.
+     */
+    public fun reinterpretColorSpace(newColorSpace: SkColorSpace): SkImage =
+        TODO("STUB.IMAGE_REINTERPRET_COLOR_SPACE")
+
+    /**
+     * Mirrors Skia's `SkImage::makeColorTypeAndColorSpace(SkRecorder*,
+     * SkColorType, sk_sp<SkColorSpace>, RequiredProperties)`.
+     *
+     * Returns a new [SkImage] with both the colour type and colour space
+     * changed simultaneously (e.g. converting to RGB-565 in a wide-gamut
+     * space). On the GPU path this is a single blit ; on the CPU path it
+     * would require a pixmap conversion + colour-space xform. Neither
+     * path is implemented in kanvas-skia — this stub throws to surface
+     * the gap.
+     *
+     * Tracked as STUB.IMAGE_MAKE_COLOR_TYPE_AND_SPACE.
+     */
+    public fun makeColorTypeAndColorSpace(
+        newColorType: SkColorType,
+        newColorSpace: SkColorSpace,
+    ): SkImage? = TODO("STUB.IMAGE_MAKE_COLOR_TYPE_AND_SPACE")
+
+    /**
+     * Mirrors Skia's `SkImage::makeRasterImage(SkRecorder*)` — on the GPU
+     * path this reads back the texture into a CPU-backed raster image.
+     *
+     * On the kanvas-skia CPU raster backend every [SkImage] is already a
+     * raster image, so this is a no-op returning `this`.
+     */
+    public fun makeRasterImage(): SkImage = this
+
+    /**
      * Mirrors Skia's `SkImage::encodeToData()` convenience entry point
      * (defaults to PNG). Returns the encoded bytes wrapped in [SkData],
      * or `null` on encoder failure.
