@@ -21,9 +21,10 @@ import org.skia.tools.ToolUtils
  *  - col 2: converted to Gray-8 in its original space via
  *    `SkImage.makeColorTypeAndColorSpace`
  *
- * Both `makeColorTypeAndColorSpace` calls are unimplemented in kanvas-skia
- * (`STUB.IMAGE_MAKE_COLOR_TYPE_AND_SPACE`), so the body throws. The test is
- * `@Disabled`.
+ * kanvas-skia stores images internally as 8888 pixels, but
+ * `makeColorTypeAndColorSpace` quantizes through the requested colour
+ * type before tagging the output colour space, which is enough to cover
+ * the RGB-565 and Gray-8 variants exercised here.
  *
  * C++ original: `gm/makecolorspace.cpp` — `DEF_SIMPLE_GM_BG(makecolortypeandspace…)`.
  */
@@ -50,13 +51,13 @@ public class MakeColorTypeAndSpaceGM : GM() {
                 // Unmodified.
                 c.drawImage(image, 0f, 0f)
 
-                // 565 in Rec.2020 wide-gamut — throws STUB.IMAGE_MAKE_COLOR_TYPE_AND_SPACE.
+                // 565 in Rec.2020 wide-gamut.
                 val image565 = image.makeColorTypeAndColorSpace(SkColorType.kRGB_565, rec2020)
                 if (image565 != null) {
                     c.drawImage(image565, 128f, 0f)
                 }
 
-                // Gray-8 in the original space — throws STUB.IMAGE_MAKE_COLOR_TYPE_AND_SPACE.
+                // Gray-8 in the original space.
                 val imageGray = image.makeColorTypeAndColorSpace(
                     SkColorType.kGray_8, image.colorSpace,
                 )

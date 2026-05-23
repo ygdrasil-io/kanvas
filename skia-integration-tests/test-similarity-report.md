@@ -12,7 +12,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | AllBitmapConfigsGM | 57.21% | = | 8 | 56,242 / 98,304 | 0, 255, 255, 255 | 0, 80, 84, 82 |
 | AllVariants8888GM | 64.35% | = | 8 | 92,776 / 144,172 | 0, 212, 242, 237 | 0, 106, 190, 118 |
 | AlphaGradientsGM | 46.90% | = | 1 | 144,081 / 307,200 | 0, 71, 71, 71 | 0, 16, 20, 21 |
-| AlphaImageAlphaTintGM | 37.89% | = | 8 | 4,608 / 12,160 | 0, 54, 119, 13 | 0, 25, 63, 4 |
+| AlphaImageAlphaTintGM | 43.68% | = | 8 | 5,312 / 12,160 | 0, 54, 119, 22 | 0, 20, 36, 9 |
 | AlphaImageGM | 34.09% | = | 8 | 22,338 / 65,536 | 0, 155, 247, 253 | 0, 62, 71, 84 |
 | AnalyticAntialiasConvexGM | 99.78% | = | 1 | 638,619 / 640,000 | 0, 24, 67, 70 | 0, 8, 18, 18 |
 | AnalyticAntialiasGeneralGM | 99.36% | = | 1 | 635,892 / 640,000 | 0, 20, 56, 53 | 0, 8, 17, 14 |
@@ -147,6 +147,8 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ColorWheelAlphaTypesGM | 81.84% | = | 8 | 26,816 / 32,768 | 0, 56, 51, 27 | 0, 18, 15, 13 |
 | ColorWheelGM | 73.36% | = | 8 | 72,118 / 98,304 | 0, 167, 167, 167 | 0, 113, 120, 120 |
 | ColorWheelNativeGM | 99.75% | = | 8 | 3,575 / 3,584 | 0, 198, 198, 198 | 0, 98, 98, 127 |
+| Colorspace2GM | 0.00% | = | 8 | 11 / 573,440 | 0, 255, 255, 255 | 0, 147, 151, 164 |
+| ColorspaceGM | 0.00% | = | 8 | 11 / 573,440 | 0, 255, 255, 255 | 0, 147, 151, 164 |
 | CompareAtlasVerticesGM | 5.00% | = | 1 | 16,385 / 327,600 | 0, 186, 137, 124 | 0, 40, 47, 46 |
 | ComplexClip2_path_aa | 98.94% | = | 1 | 135,444 / 136,900 | 0, 155, 143, 194 | 0, 19, 28, 29 |
 | ComplexClip2_path_bw | 99.76% | = | 1 | 136,577 / 136,900 | 0, 155, 200, 194 | 0, 56, 103, 106 |
@@ -344,7 +346,10 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | HSLColorFilterGM | 39.67% | = | 8 | 366,518 / 924,000 | 0, 252, 254, 250 | 0, 49, 55, 54 |
 | HairModesGM | 72.19% | = | 1 | 221,779 / 307,200 | 0, 212, 242, 237 | 0, 31, 36, 40 |
 | HairlineSubdivGM | 96.77% | = | 1 | 126,839 / 131,072 | 0, 139, 138, 138 | 0, 21, 20, 17 |
+| HairlinesButtcapGM | 0.00% | = | - | - | - | - |
 | HairlinesGM | 97.68% | = | 1 | 1,526,219 / 1,562,500 | 0, 255, 255, 255 | 0, 23, 23, 23 |
+| HairlinesRoundcapGM | 0.00% | = | - | - | - | - |
+| HairlinesSquarecapGM | 0.00% | = | - | - | - | - |
 | HardstopGradientShaderGM | 28.76% | = | 1 | 75,384 / 262,144 | 0, 63, 43, 48 | 0, 28, 20, 20 |
 | HardstopGradientsManyGM | 12.79% | = | 1 | 255,818 / 2,000,000 | 0, 28, 20, 4 | 0, 17, 12, 2 |
 | HdrPipBlurGM | 70.62% | = | 8 | 162,699 / 230,400 | 0, 101, 73, 115 | 0, 16, 12, 14 |
@@ -412,7 +417,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | LargeClippedPathWindingGM | 99.78% | = | 2 | 997,831 / 1,000,000 | 0, 71, 92, 6 | 0, 32, 23, 2 |
 | LargeGlyphBlurGM | 58.06% | = | 1 | 668,795 / 1,152,000 | 0, 152, 152, 152 | 0, 8, 8, 8 |
 | LargeOvalsGM | 97.02% | = | 1 | 60,638 / 62,500 | 0, 221, 220, 220 | 0, 28, 28, 28 |
-| LatticeAlphaGM | 17.33% | = | 1 | 2,496 / 14,400 | 0, 255, 255, 255 | 0, 208, 65, 243 |
+| LatticeAlphaGM | 99.76% | = | 1 | 14,366 / 14,400 | 0, 46, 190, 11 | 0, 46, 190, 11 |
 | LatticeGM | 92.95% | = | 1 | 594,878 / 640,000 | 0, 183, 202, 186 | 0, 64, 71, 61 |
 | LatticeGM2 | 87.78% | = | 1 | 561,760 / 640,000 | 128, 104, 55, 77 | 16, 25, 12, 35 |
 | LcdBlendGM | 93.39% | = | 8 | 504,309 / 540,000 | 0, 236, 236, 236 | 0, 44, 46, 49 |
@@ -429,7 +434,9 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | LocalMatrixImageFilterGM | 81.49% | = | 8 | 333,763 / 409,600 | 0, 202, 196, 237 | 0, 36, 119, 141 |
 | LocalMatrixImageShaderFilteringGM | 99.41% | = | 2 | 65,151 / 65,536 | 0, 6, 6, 10 | 0, 1, 1, 2 |
 | LocalMatrixImageShaderGM | 100.00% | = | 1 | 62,500 / 62,500 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| LocalMatrixOrderGM | 82.26% | = | 8 | 205,650 / 250,000 | 0, 197, 151, 230 | 0, 12, 8, 7 |
 | LocalMatrixShaderGM | 67.65% | = | 8 | 365,288 / 540,000 | 0, 208, 208, 241 | 0, 108, 22, 177 |
+| LocalMatrixShaderPerspGM | 59.00% | = | 12 | 85,059 / 144,172 | 0, 255, 255, 255 | 0, 96, 96, 96 |
 | LongLineDashGM | 100.00% | = | 1 | 262,144 / 262,144 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | LongPathDashGM | 39.79% | = | 1 | 149,041 / 374,544 | 0, 182, 182, 182 | 0, 23, 23, 23 |
 | LongWavyLineGM | 99.52% | = | 1 | 260,891 / 262,144 | 0, 65, 64, 64 | 0, 20, 20, 20 |
@@ -474,8 +481,8 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | OverStrokeGM | 85.87% | = | 1 | 214,682 / 250,000 | 0, 255, 255, 255 | 0, 59, 52, 63 |
 | OverdrawCanvasGM | 85.31% | = | 1 | 213,263 / 250,000 | 0, 187, 187, 187 | 0, 19, 52, 59 |
 | OverdrawColorFilterGM | 12.50% | = | 8 | 10,000 / 80,000 | 0, 102, 133, 137 | 0, 52, 89, 62 |
-| OverdrawTextXformGM | 70.55% | = | 1 | 184,944 / 262,144 | 0, 255, 255, 255 | 0, 93, 93, 93 |
-| P3GM | 87.52% | = | 16 | 511,979 / 585,000 | 0, 255, 255, 255 | 0, 79, 57, 55 |
+| OverdrawTextXformGM | 70.55% | = | 1 | 184,944 / 262,144 | 0, 255, 255, 255 | 0, 71, 71, 71 |
+| P3GM | 87.69% | = | 16 | 512,963 / 585,000 | 0, 255, 255, 255 | 0, 75, 58, 56 |
 | P3OvalsGM | 86.81% | = | 16 | 125,007 / 144,000 | 0, 255, 255, 255 | 0, 58, 51, 57 |
 | PatchAlphaGM | 77.81% | = | 8 | 1,283,877 / 1,650,000 | 0, 255, 255, 255 | 0, 81, 97, 79 |
 | PatchAlphaTestGM | 41.65% | = | 1 | 57,275 / 137,500 | 0, 40, 126, 137 | 0, 14, 28, 19 |
@@ -579,6 +586,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ShaderMaskFilterGM | 81.90% | = | 1 | 214,702 / 262,144 | 0, 52, 190, 223 | 0, 37, 120, 133 |
 | ShaderPathGM | 98.89% | = | 1 | 754,099 / 762,600 | 0, 217, 217, 217 | 0, 13, 15, 16 |
 | ShaderText3GM | 84.92% | = | 8 | 647,632 / 762,600 | 0, 217, 224, 217 | 0, 18, 28, 25 |
+| ShadowUtilsDirectional | 85.76% | = | 16 | 84,308 / 98,304 | 0, 118, 118, 118 | 0, 43, 43, 43 |
 | ShadowUtils_DebugColorNoOccluders | 75.07% | = | 16 | 576,570 / 768,000 | 0, 192, 197, 191 | 0, 57, 76, 52 |
 | ShadowUtils_DebugColorOccluders | 75.65% | = | 16 | 580,974 / 768,000 | 0, 247, 247, 247 | 0, 54, 67, 44 |
 | ShadowUtils_Grayscale | 90.36% | = | 16 | 693,997 / 768,000 | 0, 103, 103, 103 | 0, 43, 43, 43 |
@@ -650,7 +658,7 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | TableMaskFilterGM | 83.47% | = | 1 | 133,558 / 160,000 | 0, 114, 114, 114 | 0, 14, 14, 14 |
 | TallStretchedBitmapsGM | 87.95% | = | 1 | 443,002 / 503,700 | 0, 251, 253, 248 | 0, 11, 12, 12 |
 | TeenyStrokesGM | 99.39% | = | 1 | 318,042 / 320,000 | 0, 62, 45, 45 | 0, 11, 9, 9 |
-| TestExtractAlphaGM | 96.86% | = | 8 | 172,607 / 178,200 | 0, 203, 91, 84 | 0, 178, 53, 17 |
+| TestExtractAlphaGM | 99.50% | = | 8 | 177,305 / 178,200 | 0, 90, 91, 91 | 0, 22, 31, 16 |
 | TestGradientGM | 98.05% | = | 1 | 627,544 / 640,000 | 0, 45, 31, 40 | 0, 31, 20, 23 |
 | TextBlobBlockReorderingGM | 81.11% | = | 1 | 44,612 / 55,000 | 0, 202, 124, 124 | 0, 94, 74, 102 |
 | TextBlobColorTransGM | 84.44% | = | 1 | 911,923 / 1,080,000 | 0, 131, 131, 177 | 0, 84, 101, 89 |

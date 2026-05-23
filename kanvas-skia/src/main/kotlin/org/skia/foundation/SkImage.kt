@@ -270,33 +270,39 @@ public class SkImage public constructor(
      * colour space. No pixel data is converted — the raw bytes are
      * reinterpreted as-is in the new space.
      *
-     * This is a GPU/recorder-backed concept in upstream Skia (the image
-     * is re-tagged at the driver level without a round-trip through the
-     * CPU). On the kanvas-skia CPU raster backend there is no equivalent
-     * lazy re-tag path — this stub throws to surface the gap.
-     *
-     * Tracked as STUB.IMAGE_REINTERPRET_COLOR_SPACE.
+     * This is a metadata-only operation. The returned image has a fresh
+     * wrapper and the same immutable pixel buffer, so callers can compose
+     * it with [makeColorSpace] without an extra conversion pass.
      */
     public fun reinterpretColorSpace(newColorSpace: SkColorSpace): SkImage =
-        TODO("STUB.IMAGE_REINTERPRET_COLOR_SPACE")
+        if (colorSpace.hash() == newColorSpace.hash()) this
+        else SkImage(width, height, pixels, colorType, newColorSpace, mipLevels)
 
     /**
      * Mirrors Skia's `SkImage::makeColorTypeAndColorSpace(SkRecorder*,
      * SkColorType, sk_sp<SkColorSpace>, RequiredProperties)`.
      *
      * Returns a new [SkImage] with both the colour type and colour space
-     * changed simultaneously (e.g. converting to RGB-565 in a wide-gamut
-     * space). On the GPU path this is a single blit ; on the CPU path it
-     * would require a pixmap conversion + colour-space xform. Neither
-     * path is implemented in kanvas-skia — this stub throws to surface
-     * the gap.
-     *
-     * Tracked as STUB.IMAGE_MAKE_COLOR_TYPE_AND_SPACE.
+     * changed simultaneously. The internal storage remains 8888 for the
+     * raster backend, but pixels are quantized through the requested
+     * [newColorType] so drawing observes the same precision loss as the
+     * source colour type. The conversion path is intentionally scoped to
+     * the colour types the GM suite exercises today.
      */
     public fun makeColorTypeAndColorSpace(
         newColorType: SkColorType,
         newColorSpace: SkColorSpace,
-    ): SkImage? = TODO("STUB.IMAGE_MAKE_COLOR_TYPE_AND_SPACE")
+    ): SkImage? {
+        if (newColorType == SkColorType.kUnknown) return null
+        val converted = makeColorSpace(newColorSpace) ?: return null
+        if (converted.colorType == newColorType) return converted
+
+        val out = IntArray(width * height)
+        for (i in converted.pixels.indices) {
+            out[i] = quantizeToColorType(converted.pixels[i], newColorType)
+        }
+        return SkImage(width, height, out, newColorType, newColorSpace)
+    }
 
     /**
      * Mirrors Skia's `SkImage::makeRasterImage(SkRecorder*)` — on the GPU
@@ -499,6 +505,33 @@ public class SkImage public constructor(
          */
         private val SCRATCH_RGBA: ThreadLocal<FloatArray> =
             ThreadLocal.withInitial { FloatArray(4) }
+
+        private fun quantizeToColorType(c: SkColor, colorType: SkColorType): SkColor {
+            val a = SkColorGetA(c)
+            val r = SkColorGetR(c)
+            val g = SkColorGetG(c)
+            val b = SkColorGetB(c)
+            return when (colorType) {
+                SkColorType.kRGB_565 -> SkBitmap.unpackRGB565(
+                    SkBitmap.packRGB565(r / 255f, g / 255f, b / 255f),
+                )
+                SkColorType.kGray_8 -> {
+                    val y = (r * 0.299f + g * 0.587f + b * 0.114f + 0.5f)
+                        .toInt()
+                        .coerceIn(0, 255)
+                    SkColorSetARGB(0xFF, y, y, y)
+                }
+                SkColorType.kAlpha_8 -> SkColorSetARGB(a, 0, 0, 0)
+                SkColorType.kARGB_4444 -> SkBitmap.unpackARGB4444Premul(
+                    SkBitmap.packARGB4444Premul(a / 255f, r / 255f, g / 255f, b / 255f),
+                )
+                SkColorType.kRGB_888x -> SkColorSetARGB(0xFF, r, g, b)
+                SkColorType.kRGBA_8888,
+                SkColorType.kBGRA_8888,
+                SkColorType.kSRGBA_8888 -> c
+                else -> c
+            }
+        }
 
         /**
          * Write a single non-premultiplied 8-bit ARGB [SkColor] at
