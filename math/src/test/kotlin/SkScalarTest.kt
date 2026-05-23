@@ -101,6 +101,8 @@ class SkScalarTest {
     fun `SkScalarAve midpoint`() {
         assertEquals(5f, SkScalarAve(2f, 8f))
         assertEquals(0f, SkScalarAve(-3f, 3f))
+        assertEquals(Float.MAX_VALUE, SkScalarAve(Float.MAX_VALUE, Float.MAX_VALUE))
+        assertEquals(0f, SkScalarAve(-Float.MAX_VALUE, Float.MAX_VALUE))
     }
 
     @Test
@@ -182,6 +184,12 @@ class SkScalarTest {
     }
 
     @Test
+    fun `SkScalarRound uses double math for tricky float inputs`() {
+        assertEquals(0f, SkScalarRound(0.49999997f))
+        assertEquals(16777216f, SkScalarRound(16777216f))
+    }
+
+    @Test
     fun `SkScalarRoundToInt is half-toward-positive-infinity, not banker's rounding`() {
         assertEquals(1, SkScalarRoundToInt(0.5f))
         assertEquals(2, SkScalarRoundToInt(1.5f))
@@ -202,6 +210,20 @@ class SkScalarTest {
         // Floor / ceil are unaffected by the round-half divergence.
         assertEquals(0f, SkScalarFloor(0.5f))
         assertEquals(1f, SkScalarCeil(0.5f))
+    }
+
+    @Test
+    fun `SkScalar to-int conversions saturate NaN and extremes like Skia`() {
+        val maxS32FitsInFloat = 2147483520
+        val minS32FitsInFloat = -2147483520
+
+        for (convert in arrayOf(::SkScalarFloorToInt, ::SkScalarCeilToInt, ::SkScalarRoundToInt, ::SkScalarTruncToInt, ::SkScalarToInt)) {
+            assertEquals(maxS32FitsInFloat, convert(Float.NaN))
+            assertEquals(maxS32FitsInFloat, convert(Float.POSITIVE_INFINITY))
+            assertEquals(minS32FitsInFloat, convert(Float.NEGATIVE_INFINITY))
+            assertEquals(maxS32FitsInFloat, convert(Float.MAX_VALUE))
+            assertEquals(minS32FitsInFloat, convert(-Float.MAX_VALUE))
+        }
     }
 
     @Test

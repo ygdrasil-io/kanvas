@@ -19,6 +19,9 @@ public typealias SkScalar = Float
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
+private const val SK_MaxS32FitsInFloat: Int = 2147483520
+private const val SK_MinS32FitsInFloat: Int = -SK_MaxS32FitsInFloat
+
 public const val SK_Scalar1: SkScalar = 1.0f
 public const val SK_ScalarHalf: SkScalar = 0.5f
 public const val SK_ScalarSqrt2: SkScalar = 1.41421356f
@@ -102,27 +105,36 @@ public fun SkScalarCeil(value: SkScalar): SkScalar =
  * observable divergence; non-tie inputs round identically.
  */
 public fun SkScalarRound(value: SkScalar): SkScalar =
-    kotlin.math.floor((value + 0.5f).toDouble()).toFloat()
+    kotlin.math.floor(value.toDouble() + 0.5).toFloat()
 
 public fun SkScalarTruncToScalar(value: SkScalar): SkScalar =
     kotlin.math.truncate(value.toDouble()).toFloat()
 
-public fun SkScalarFloorToInt(value: SkScalar): Int = kotlin.math.floor(value).toInt()
-public fun SkScalarCeilToInt(value: SkScalar): Int = kotlin.math.ceil(value).toInt()
+private fun skFloatSaturate2Int(value: Float): Int {
+    var x = if (value < SK_MaxS32FitsInFloat) value else SK_MaxS32FitsInFloat.toFloat()
+    x = if (x > SK_MinS32FitsInFloat) x else SK_MinS32FitsInFloat.toFloat()
+    return x.toInt()
+}
+
+public fun SkScalarFloorToInt(value: SkScalar): Int =
+    skFloatSaturate2Int(kotlin.math.floor(value.toDouble()).toFloat())
+
+public fun SkScalarCeilToInt(value: SkScalar): Int =
+    skFloatSaturate2Int(kotlin.math.ceil(value.toDouble()).toFloat())
 
 /**
  * Round half toward +∞ (`floor(x + 0.5)`) then truncate to int — matches
  * Skia's `sk_float_round2int` (`SkFloatingPoint.h:119`). See [SkScalarRound]
  * for the tie-breaking rationale.
  */
-public fun SkScalarRoundToInt(value: SkScalar): Int = kotlin.math.floor(value + 0.5f).toInt()
-public fun SkScalarTruncToInt(value: SkScalar): Int = value.toInt()
+public fun SkScalarRoundToInt(value: SkScalar): Int = skFloatSaturate2Int(SkScalarRound(value))
+public fun SkScalarTruncToInt(value: SkScalar): Int = skFloatSaturate2Int(value)
 
 // ─── Casts ──────────────────────────────────────────────────────────────────
 
 public fun SkIntToScalar(value: Int): SkScalar = value.toFloat()
 public fun SkIntToFloat(value: Int): Float = value.toFloat()
-public fun SkScalarToInt(value: SkScalar): Int = value.toInt()
+public fun SkScalarToInt(value: SkScalar): Int = SkScalarTruncToInt(value)
 public fun SkScalarToFloat(value: SkScalar): Float = value
 public fun SkFloatToScalar(value: Float): SkScalar = value
 public fun SkScalarToDouble(value: SkScalar): Double = value.toDouble()
@@ -140,7 +152,7 @@ public fun SkScalarInvert(x: SkScalar): SkScalar = SK_Scalar1 / x
 public fun SkScalarHalf(a: SkScalar): SkScalar = a * SK_ScalarHalf
 
 /** Midpoint, mirrors Skia's `sk_float_midpoint(a, b)`. */
-public fun SkScalarAve(a: SkScalar, b: SkScalar): SkScalar = (a + b) * SK_ScalarHalf
+public fun SkScalarAve(a: SkScalar, b: SkScalar): SkScalar = (0.5 * (a.toDouble() + b)).toFloat()
 
 public fun SkDegreesToRadians(degrees: SkScalar): SkScalar =
     degrees * (SK_ScalarPI / 180.0f)
