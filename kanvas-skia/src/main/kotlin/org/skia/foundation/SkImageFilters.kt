@@ -2,6 +2,7 @@ package org.skia.foundation
 
 
 import org.graphiks.math.SkColor
+import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkColorChannel
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
@@ -144,6 +145,22 @@ public object SkImageFilters {
         color: SkColor,
         input: SkImageFilter? = null,
     ): SkImageFilter = SkDropShadowImageFilter(dx, dy, sigmaX, sigmaY, color, input)
+
+    /**
+     * `SkColor4f` overload — mirrors Skia's
+     * `SkImageFilters::DropShadow(dx, dy, σx, σy, SkColor4f, colorSpace, input)`.
+     * The [colorSpace] parameter is accepted for source-compat but ignored
+     * (same simplification as the rest of the codebase) ; [color] is
+     * converted to ARGB8888 via [SkColor4f.toSkColor] and forwarded to
+     * [SkDropShadowImageFilter].
+     */
+    public fun DropShadow(
+        dx: Float, dy: Float,
+        sigmaX: Float, sigmaY: Float,
+        color: SkColor4f,
+        colorSpace: SkColorSpace? = null,
+        input: SkImageFilter? = null,
+    ): SkImageFilter = SkDropShadowImageFilter(dx, dy, sigmaX, sigmaY, color.toSkColor(), input)
 
     // ─── C1.1 — Source / passthrough wrappers ────────────────────────
 
