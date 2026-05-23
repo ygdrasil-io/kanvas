@@ -846,6 +846,34 @@ public data class SkMatrix(
         }
 
         /**
+         * Mirrors Skia's `SkMatrix::RectToRectOrIdentity(src, dst)`.
+         * Same as [MakeRectToRect] with `kFill_ScaleToFit` but returns
+         * [Identity] instead of `null` when [src] is empty or degenerate.
+         */
+        public fun RectToRectOrIdentity(src: SkRect, dst: SkRect): SkMatrix =
+            MakeRectToRect(src, dst, ScaleToFit.kFill_ScaleToFit) ?: Identity
+
+        /**
+         * Mirrors Skia's `SkMatrix::setPolyToPoly(src, dst, count)`.
+         *
+         * Computes the projective transform that maps [count] source points
+         * to the corresponding destination points (1 ≤ count ≤ 4).
+         * Returns `null` when the system is degenerate (no unique solution).
+         *
+         * **Current status — STUB.POLY_TO_POLY** : full homogeneous linear
+         * system solve for the 4-point case (which yields a full perspective
+         * matrix) is deferred. The 1/2/3-point special cases (translate /
+         * affine) could be implemented in pure affine arithmetic, but the
+         * primary call site (`clip_shader_persp`) always passes 4 points, so
+         * implementing the easier cases now would not unblock the GM. Throws
+         * [NotImplementedError] at runtime so that `@Disabled("STUB.POLY_TO_POLY")`
+         * tests correctly capture the dependency.
+         */
+        public fun setPolyToPoly(src: Array<SkPoint>, dst: Array<SkPoint>): SkMatrix? {
+            TODO("STUB.POLY_TO_POLY")
+        }
+
+        /**
          * Build a matrix from a 9-element row-major buffer. The
          * perspective row is taken verbatim — pass `[0, 0, 1]` for an
          * affine matrix. Mirrors Skia's
