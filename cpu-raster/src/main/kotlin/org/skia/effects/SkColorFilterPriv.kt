@@ -30,6 +30,21 @@ import org.skia.foundation.SkColorFilter
 public object SkColorFilterPriv {
 
     /**
+     * **STUB.GAUSSIAN_COLOR_FILTER** — mirrors `SkColorFilterPriv::MakeGaussian()`
+     * (`src/core/SkColorFilterPriv.h`).
+     *
+     * Creates a Gaussian (soft-light) color filter used internally by
+     * `SkShadowUtils` for the shadow edge falloff. Requires the analytic
+     * shadow mesh pipeline (`SkShadowTessellator` + per-vertex Gaussian
+     * alpha) which is not yet wired into the public color-filter chain.
+     *
+     * @throws NotImplementedError always — pending implementation.
+     */
+    public fun makeGaussian(): SkColorFilter =
+        TODO("STUB.GAUSSIAN_COLOR_FILTER: SkColorFilterPriv::MakeGaussian() requires " +
+            "the analytic Gaussian shadow-mesh pipeline — see API_FINALIZATION_PLAN.md.")
+
+    /**
      * Mirrors `sk_sp<SkColorFilter> SkColorFilterPriv::WithWorkingFormat(
      *     sk_sp<SkColorFilter> child,
      *     const skcms_TransferFunction* tf,
