@@ -74,7 +74,7 @@ public class LinearGradientRTGM : GM() {
         val info = SkImageInfo.MakeN32Premul(256, 64)
         for (i in 0..1) {
             val surface = c.makeSurface(info) ?: SkSurfaces.Raster(info)!!
-            surface.getCanvas().drawRect(SkRect.MakeLTRB(0f, 0f, 256f, 64f), paint)
+            surface.canvas.drawRect(SkRect.MakeLTRB(0f, 0f, 256f, 64f), paint)
             c.drawImage(
                 surface.makeImageSnapshot(),
                 0f,
