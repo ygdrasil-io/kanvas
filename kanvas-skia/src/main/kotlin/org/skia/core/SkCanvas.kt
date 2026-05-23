@@ -108,6 +108,36 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         return org.skia.foundation.SkSurfaces.Raster(info, rowBytes = 0, props = props ?: this.surfaceProps())
     }
 
+    /**
+     * Mirrors Skia's `SkCanvas::imageInfo()` — returns the [org.skia.foundation.SkImageInfo]
+     * of this canvas's root (backing) device. The colour space, colour type,
+     * alpha type, and dimensions reflect the bitmap that was passed to the
+     * canvas's constructor (or the surface that created this canvas).
+     *
+     * GMs use this to build a new surface in a *different* colour space
+     * (see `colorspace2.cpp` — `canvas->makeSurface(canvas->imageInfo().makeColorSpace(midCS))`),
+     * preserving the original dimensions and pixel format while swapping
+     * the working space.
+     *
+     * Mirrors upstream `SkCanvas::imageInfo()` → `rootDevice()->imageInfo()`.
+     * Requires a raster ([SkBitmapDevice]) root device; throws for GPU devices
+     * (deferred to a G-phase where [SkDevice] grows `imageInfo()`).
+     */
+    public open fun imageInfo(): org.skia.foundation.SkImageInfo {
+        val bm = device.requireBitmap("imageInfo").bitmap
+        val alphaType = when (bm.colorType) {
+            org.skia.foundation.SkColorType.kRGBA_F16Norm -> org.skia.foundation.SkAlphaType.kPremul
+            else -> org.skia.foundation.SkAlphaType.kUnpremul
+        }
+        return org.skia.foundation.SkImageInfo.Make(
+            width = bm.width,
+            height = bm.height,
+            colorType = bm.colorType,
+            alphaType = alphaType,
+            colorSpace = bm.colorSpace,
+        )
+    }
+
     /** The root (backing) device. Layers push their own devices on the stack. */
     public val device: SkDevice = rootDevice
 
