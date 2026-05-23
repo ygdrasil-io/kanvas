@@ -71,7 +71,13 @@ for cpp in "$SKIA_GM_DIR"/*.cpp; do
                 [ -n "$kt_bn" ] || continue
                 matched_kts+=("$kt_bn")
                 matched_statuses+=("$status")
-            done < <(awk -F'\t' -v k="$name" '$1==k' "$INDEX")
+            done < <(
+                # Try (1) exact match, (2) name + "GM" suffix — upstream
+                # often declares `class ImageMagnifierBounds : public GM`
+                # whereas the Kotlin port follows the convention of
+                # appending `GM` (→ `ImageMagnifierBoundsGM`).
+                awk -F'\t' -v k="$name" -v kgm="${name}GM" '$1==k || $1==kgm' "$INDEX"
+            )
         done
     fi
 
@@ -94,20 +100,23 @@ for cpp in "$SKIA_GM_DIR"/*.cpp; do
         status="MISSING"
         n_missing=$((n_missing+1))
     else
-        local_ported=0; local_stub=0; local_ignored=0; local_alias=0; local_test_disabled=0
+        # ALIAS counts as PORTED for cpp-status aggregation purposes — a
+        # `typealias FilterGM = BitmapFiltersGM` is just a redirect to a
+        # ported file, so the cpp's GM is effectively ported. (Pure-ALIAS
+        # cpps — where every GM resolves to only an alias — are rare and
+        # collapse into the same PORTED bucket.)
+        local_ported=0; local_stub=0; local_ignored=0; local_test_disabled=0
         for s in "${matched_statuses[@]}"; do
             case "$s" in
-                PORTED)        local_ported=$((local_ported+1)) ;;
+                PORTED|ALIAS)  local_ported=$((local_ported+1)) ;;
                 STUB)          local_stub=$((local_stub+1)) ;;
                 IGNORED)       local_ignored=$((local_ignored+1)) ;;
-                ALIAS)         local_alias=$((local_alias+1)) ;;
                 TEST_DISABLED) local_test_disabled=$((local_test_disabled+1)) ;;
             esac
         done
         if   [ "$local_ported"        -eq "$gm_count" ]; then status="PORTED";        n_ported=$((n_ported+1))
         elif [ "$local_stub"          -eq "$gm_count" ]; then status="STUB";          n_stub=$((n_stub+1))
         elif [ "$local_ignored"       -eq "$gm_count" ]; then status="IGNORED";       n_ignored=$((n_ignored+1))
-        elif [ "$local_alias"         -eq "$gm_count" ]; then status="ALIAS";         n_alias=$((n_alias+1))
         elif [ "$local_test_disabled" -eq "$gm_count" ]; then status="TEST_DISABLED"; n_test_disabled=$((n_test_disabled+1))
         else                                                  status="PARTIAL";       n_partial=$((n_partial+1))
         fi
