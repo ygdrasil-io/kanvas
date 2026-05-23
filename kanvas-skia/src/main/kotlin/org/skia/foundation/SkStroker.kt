@@ -1,5 +1,6 @@
 package org.skia.foundation
 
+import org.graphiks.math.SkRect
 import org.graphiks.math.SkScalar
 import kotlin.math.PI
 import kotlin.math.acos
@@ -109,6 +110,33 @@ public class SkStroker private constructor(
         val pts = contour.coords
         var n = pts.size / 2
         if (n < 2) return  // degenerate (single moveTo) — would need a "dot" cap, deferred.
+
+        // Degenerate "point" contour: moveTo(P) lineTo(P) with the same start and
+        // end point. Upstream Skia emits a dot cap here:
+        //  - kSquare → axis-aligned square of side strokeWidth centred at P.
+        //  - kRound  → filled circle of radius halfW centred at P.
+        //  - kButt   → nothing (zero-length butt has no visible geometry).
+        // This matches the bug583299 reference (zero-length dash with kSquare_Cap
+        // draws a square at the path's starting point).
+        if (n == 2 && pts[0] == pts[2] && pts[1] == pts[3]) {
+            val cx = pts[0]; val cy = pts[1]
+            when (cap) {
+                SkPaint.Cap.kSquare_Cap -> {
+                    // An axis-aligned square of side strokeWidth centred at (cx, cy).
+                    out.addRect(
+                        SkRect.MakeLTRB(cx - halfW, cy - halfW, cx + halfW, cy + halfW)
+                    )
+                }
+                SkPaint.Cap.kRound_Cap -> {
+                    // Approximate a circle with 4-cubic Bézier (kappa method).
+                    out.addOval(
+                        SkRect.MakeLTRB(cx - halfW, cy - halfW, cx + halfW, cy + halfW)
+                    )
+                }
+                else -> { /* kButt: nothing */ }
+            }
+            return
+        }
 
         // Defensive de-dup if a closed contour received an explicit final lineTo
         // back to its start (Skia's flatten pipeline doesn't, but be robust).

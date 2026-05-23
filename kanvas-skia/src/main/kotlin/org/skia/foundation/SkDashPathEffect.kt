@@ -244,10 +244,14 @@ public class SkDashPathEffect private constructor(
         while (consumed < length) {
             val available = length - consumed
             val step = if (remaining < available) remaining else available
-            if (i % 2 == 0 && step > 0f) {
+            if (i % 2 == 0) {
                 // "on" segment — emit a moveTo + lineTo (dash-effect
                 // output is a series of disconnected segments ; the
                 // stroker handles caps per segment).
+                // Zero-length "on" segments (step == 0) are still emitted
+                // as degenerate moveTo+lineTo pairs : with round or square
+                // caps the stroker will draw a cap dot/square at that point,
+                // matching Skia's upstream behaviour (bug583299 regression).
                 builder.moveTo(x0 + ux * consumed, y0 + uy * consumed)
                 builder.lineTo(x0 + ux * (consumed + step), y0 + uy * (consumed + step))
             }
