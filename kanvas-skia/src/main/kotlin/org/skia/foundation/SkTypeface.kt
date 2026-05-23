@@ -233,6 +233,53 @@ public open class SkTypeface protected constructor() {
     }
 
     /**
+     * Mirrors Skia's
+     * [`bool SkTypeface::getPostScriptName(SkString*) const`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h).
+     * Returns the PostScript name of this typeface if one is present in
+     * the OpenType `name` table (nameID 6), or `null` otherwise.
+     *
+     * **STUB.FONTATIONS** — Accessing nameID entries requires raw OpenType
+     * name-table parsing (`getTableData(SkSetFourByteTag('n','a','m','e'), …)`)
+     * which is not implemented in the pure-JVM / AWT backend. This method
+     * always throws [NotImplementedError] with the `STUB.FONTATIONS` tag.
+     * Callers must annotate their tests `@Disabled("STUB.FONTATIONS")`.
+     * See [SkTypeface_Fontations] and `API_FINALIZATION_PLAN.md`.
+     */
+    public open fun getPostScriptName(): String? = TODO(
+        "STUB.FONTATIONS: getPostScriptName() requires raw OpenType name-table access " +
+            "(nameID 6) — not available in the pure-JVM AWT backend. " +
+            "See API_FINALIZATION_PLAN.md § STUB.FONTATIONS.",
+    )
+
+    /**
+     * Mirrors Skia's
+     * [`SkTypeface::LocalizedStrings* SkTypeface::createFamilyNameIterator() const`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h).
+     * Returns an iterator over all localised family names stored in the
+     * OpenType `name` table (nameIDs 1 + 4, all language/platform entries).
+     * Each element is a `(name: String, language: String)` pair.
+     *
+     * **STUB.FONTATIONS** — Same blocker as [getPostScriptName]: raw
+     * name-table parsing is unavailable in the pure-JVM backend. This
+     * method always throws [NotImplementedError]. Callers must annotate
+     * their tests `@Disabled("STUB.FONTATIONS")`.
+     * See [SkTypeface_Fontations] and `API_FINALIZATION_PLAN.md`.
+     */
+    public open fun createFamilyNameIterator(): Iterator<LocalizedString> = TODO(
+        "STUB.FONTATIONS: createFamilyNameIterator() requires raw OpenType name-table access " +
+            "— not available in the pure-JVM AWT backend. " +
+            "See API_FINALIZATION_PLAN.md § STUB.FONTATIONS.",
+    )
+
+    /**
+     * Mirrors Skia's `SkTypeface::LocalizedString` — a `(fString, fLanguage)`
+     * pair returned by [createFamilyNameIterator].
+     *
+     * @property fString   the localised family name string.
+     * @property fLanguage the BCP-47 language tag (e.g. `"en"`, `"ja"`).
+     */
+    public data class LocalizedString(val fString: String, val fLanguage: String)
+
+    /**
      * Internal hook for [SkFont.getBounds] — single-glyph tight visual
      * bbox at the configured `size` / `scaleX` / `skewX`. The default
      * returns the empty rect; concrete subclasses (notably `AwtTypeface`)
