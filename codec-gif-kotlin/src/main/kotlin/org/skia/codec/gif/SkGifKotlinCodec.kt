@@ -31,6 +31,7 @@ public class SkGifKotlinCodec private constructor(
         val requiredFrame: Int,
         val alphaType: SkAlphaType,
         val frameRect: SkIRect,
+        val nextRequiredFrame: Int,
     )
 
     private val cachedInfo: SkImageInfo by lazy {
@@ -115,20 +116,30 @@ public class SkGifKotlinCodec private constructor(
             val packed = readU8()
             val hasGlobalColorTable = (packed and 0x80) != 0
             val globalColorTableSize = 1 shl ((packed and 0x07) + 1)
-            readU8()
+            val backgroundColorIndex = readU8()
             readU8()
 
             val globalColorTable = if (hasGlobalColorTable) readColorTable(globalColorTableSize) else null
             val frames = ArrayList<DecodedFrame>()
             val canvas = IntArray(width * height)
+            var nextRequiredFrame = SkCodec.kNoFrame
 
             while (offset < bytes.size) {
                 when (readU8()) {
                     BLOCK_TRAILER -> break
                     BLOCK_EXTENSION -> readExtension()
                     BLOCK_IMAGE -> {
-                        val frame = readImage(width, height, globalColorTable, canvas, frames.size) ?: return null
+                        val frame = readImage(
+                            canvasWidth = width,
+                            canvasHeight = height,
+                            globalColorTable = globalColorTable,
+                            backgroundColorIndex = backgroundColorIndex,
+                            canvas = canvas,
+                            frameIndex = frames.size,
+                            requiredFrame = nextRequiredFrame,
+                        ) ?: return null
                         frames += frame
+                        nextRequiredFrame = frame.nextRequiredFrame
                     }
                     else -> return null
                 }
@@ -164,8 +175,10 @@ public class SkGifKotlinCodec private constructor(
             canvasWidth: Int,
             canvasHeight: Int,
             globalColorTable: IntArray?,
+            backgroundColorIndex: Int,
             canvas: IntArray,
             frameIndex: Int,
+            requiredFrame: Int,
         ): DecodedFrame? {
             val left = readU16LE()
             val top = readU16LE()
@@ -185,31 +198,51 @@ public class SkGifKotlinCodec private constructor(
             val imageData = readSubBlocks()
             val indexes = decodeLzw(imageData, lzwMinimumCodeSize, width * height) ?: return null
             val beforeFrame = canvas.copyOf()
+            val frameGce = gce
 
             for (i in indexes.indices) {
                 val localY = if (interlaced) deinterlacedY(i / width, height) else i / width
                 val localX = i % width
                 val index = indexes[i]
-                if (index == gce.transparentIndex) continue
+                if (index == frameGce.transparentIndex) continue
                 if (index !in colorTable.indices) return null
                 canvas[(top + localY) * canvasWidth + left + localX] = colorTable[index]
             }
 
             val pixels = canvas.copyOf()
+            val frameRect = SkIRect.MakeXYWH(left, top, width, height)
+
+            val nextRequiredFrame = when (frameGce.disposal) {
+                DISPOSAL_RESTORE_BACKGROUND -> {
+                    val backgroundColor = backgroundColor(globalColorTable, backgroundColorIndex, frameGce)
+                    clearRect(canvas, canvasWidth, left, top, width, height, backgroundColor)
+                    frameIndex
+                }
+                DISPOSAL_RESTORE_PREVIOUS -> {
+                    System.arraycopy(beforeFrame, 0, canvas, 0, canvas.size)
+                    requiredFrame
+                }
+                else -> frameIndex
+            }
             val frame = DecodedFrame(
                 pixels = pixels,
-                durationMs = gce.delayMs,
-                requiredFrame = if (frameIndex == 0) SkCodec.kNoFrame else frameIndex - 1,
+                durationMs = frameGce.delayMs,
+                requiredFrame = requiredFrame,
                 alphaType = SkAlphaType.kUnpremul,
-                frameRect = SkIRect.MakeXYWH(left, top, width, height),
+                frameRect = frameRect,
+                nextRequiredFrame = nextRequiredFrame,
             )
-
-            when (gce.disposal) {
-                DISPOSAL_RESTORE_BACKGROUND -> clearRect(canvas, canvasWidth, left, top, width, height)
-                DISPOSAL_RESTORE_PREVIOUS -> System.arraycopy(beforeFrame, 0, canvas, 0, canvas.size)
-            }
             gce = GraphicControl()
             return frame
+        }
+
+        private fun backgroundColor(
+            globalColorTable: IntArray?,
+            backgroundColorIndex: Int,
+            gce: GraphicControl,
+        ): Int {
+            if (backgroundColorIndex == gce.transparentIndex) return TRANSPARENT
+            return globalColorTable?.getOrNull(backgroundColorIndex) ?: TRANSPARENT
         }
 
         private fun readColorTable(entryCount: Int): IntArray {
@@ -287,6 +320,7 @@ private const val EXT_GRAPHIC_CONTROL: Int = 0xF9
 private const val DISPOSAL_NONE: Int = 0
 private const val DISPOSAL_RESTORE_BACKGROUND: Int = 2
 private const val DISPOSAL_RESTORE_PREVIOUS: Int = 3
+private const val TRANSPARENT: Int = 0
 
 private fun decodeLzw(data: ByteArray, minimumCodeSize: Int, expectedSize: Int): IntArray? {
     if (minimumCodeSize !in 2..8) return null
@@ -381,9 +415,17 @@ private fun deinterlacedY(row: Int, height: Int): Int {
     return row
 }
 
-private fun clearRect(canvas: IntArray, canvasWidth: Int, left: Int, top: Int, width: Int, height: Int) {
+private fun clearRect(
+    canvas: IntArray,
+    canvasWidth: Int,
+    left: Int,
+    top: Int,
+    width: Int,
+    height: Int,
+    color: Int,
+) {
     for (y in top until top + height) {
-        java.util.Arrays.fill(canvas, y * canvasWidth + left, y * canvasWidth + left + width, 0)
+        java.util.Arrays.fill(canvas, y * canvasWidth + left, y * canvasWidth + left + width, color)
     }
 }
 
