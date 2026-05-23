@@ -19,8 +19,8 @@ import kotlin.math.sqrt
  *
  * This backend owns the baseline JPEG container path directly: marker parsing,
  * DQT/DHT/SOF0/SOS, entropy bit reading, Huffman decode, dequantization, and
- * IDCT. The first decode surface is intentionally narrow: sequential 8-bit
- * grayscale JPEGs. YCbCr component scans and subsampling land in follow-ups.
+ * IDCT. The decode surface is intentionally narrow: sequential 8-bit grayscale
+ * JPEGs and 3-component YCbCr JPEGs with 1x1 sampling.
  */
 public class SkJpegKotlinCodec private constructor(
     private val jpeg: ParsedJpeg,
@@ -50,7 +50,7 @@ public class SkJpegKotlinCodec private constructor(
         if (info.colorType != SkColorType.kRGBA_8888) return Result.kInvalidConversion
 
         val pixels = try {
-            decodeGrayscale(jpeg)
+            decodeBaseline(jpeg)
         } catch (_: IllegalArgumentException) {
             return Result.kErrorInInput
         }
@@ -89,7 +89,7 @@ private data class ParsedJpeg(
     val quantTables: Array<IntArray?>,
     val dcTables: Array<HuffmanTable?>,
     val acTables: Array<HuffmanTable?>,
-    val component: Component,
+    val components: List<Component>,
     val scanData: ByteArray,
 )
 
@@ -98,8 +98,15 @@ private data class Component(
     val h: Int,
     val v: Int,
     val quantTable: Int,
+    val frameIndex: Int,
     val dcTable: Int,
     val acTable: Int,
+)
+
+private data class Frame(
+    val width: Int,
+    val height: Int,
+    val components: List<Component>,
 )
 
 private class HuffmanTable(lengths: IntArray, symbols: IntArray) {
@@ -142,8 +149,8 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
     val acTables = arrayOfNulls<HuffmanTable>(4)
     var width = 0
     var height = 0
-    var frameComponent: Component? = null
-    var scanComponent: Component? = null
+    var frameComponents: List<Component>? = null
+    var scanComponents: List<Component>? = null
     var offset = 2
 
     while (offset < data.size) {
@@ -159,8 +166,8 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                 val payloadStart = offset + 2
                 val payloadEnd = offset + length
                 if (length < 2 || payloadEnd > data.size) return null
-                val current = parseSos(data, payloadStart, payloadEnd, frameComponent) ?: return null
-                scanComponent = current
+                val current = parseSos(data, payloadStart, payloadEnd, frameComponents) ?: return null
+                scanComponents = current
                 offset = payloadEnd
                 val scanStart = offset
                 while (offset + 1 < data.size) {
@@ -172,7 +179,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                         if (next != 0x00) {
                             val scan = data.copyOfRange(scanStart, offset)
                             if (next != MARKER_EOI) return null
-                            return buildParsed(width, height, quantTables, dcTables, acTables, scanComponent, scan)
+                            return buildParsed(width, height, quantTables, dcTables, acTables, scanComponents, scan)
                         }
                         offset = markerOffset + 1
                     } else {
@@ -192,11 +199,12 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                     MARKER_DHT -> parseDht(data, payloadStart, payloadEnd, dcTables, acTables)
                     MARKER_SOF0 -> {
                         val frame = parseSof0(data, payloadStart, payloadEnd) ?: return null
-                        width = frame.first
-                        height = frame.second
-                        frameComponent = frame.third
+                        width = frame.width
+                        height = frame.height
+                        frameComponents = frame.components
                     }
                     MARKER_SOF2 -> return null
+                    MARKER_DRI -> return null
                 }
                 offset = payloadEnd
             }
@@ -211,15 +219,31 @@ private fun buildParsed(
     quantTables: Array<IntArray?>,
     dcTables: Array<HuffmanTable?>,
     acTables: Array<HuffmanTable?>,
-    component: Component?,
+    components: List<Component>?,
     scanData: ByteArray,
 ): ParsedJpeg? {
-    val c = component ?: return null
+    val cs = components ?: return null
     if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
-    if (c.h != 1 || c.v != 1) return null
-    if (quantTables[c.quantTable] == null || dcTables[c.dcTable] == null || acTables[c.acTable] == null) return null
+    if (cs.size != 1 && cs.size != 3) return null
+    for (component in cs) {
+        if (component.h != 1 || component.v != 1) return null
+        if (
+            component.quantTable !in quantTables.indices ||
+            component.dcTable !in dcTables.indices ||
+            component.acTable !in acTables.indices
+        ) {
+            return null
+        }
+        if (
+            quantTables[component.quantTable] == null ||
+            dcTables[component.dcTable] == null ||
+            acTables[component.acTable] == null
+        ) {
+            return null
+        }
+    }
     if (scanData.isEmpty()) return null
-    return ParsedJpeg(width, height, quantTables, dcTables, acTables, c, scanData)
+    return ParsedJpeg(width, height, quantTables, dcTables, acTables, cs, scanData)
 }
 
 private fun parseDqt(data: ByteArray, start: Int, end: Int, tables: Array<IntArray?>) {
@@ -264,38 +288,58 @@ private fun parseDht(
     if (p != end) fail()
 }
 
-private fun parseSof0(data: ByteArray, start: Int, end: Int): Triple<Int, Int, Component>? {
+private fun parseSof0(data: ByteArray, start: Int, end: Int): Frame? {
     if (end - start < 8) return null
     var p = start
     val precision = data[p++].toInt() and 0xFF
     val height = readU16BE(data, p).also { p += 2 }
     val width = readU16BE(data, p).also { p += 2 }
     val componentCount = data[p++].toInt() and 0xFF
-    if (precision != 8 || componentCount != 1 || end - p != 3) return null
-    val id = data[p++].toInt() and 0xFF
-    val sampling = data[p++].toInt() and 0xFF
-    val quant = data[p++].toInt() and 0xFF
-    return Triple(width, height, Component(id, sampling ushr 4, sampling and 0x0F, quant, 0, 0))
+    if (precision != 8 || componentCount !in listOf(1, 3) || end - p != componentCount * 3) return null
+    val components = ArrayList<Component>(componentCount)
+    val ids = HashSet<Int>()
+    for (index in 0 until componentCount) {
+        val id = data[p++].toInt() and 0xFF
+        val sampling = data[p++].toInt() and 0xFF
+        val quant = data[p++].toInt() and 0xFF
+        if (!ids.add(id)) return null
+        components += Component(id, sampling ushr 4, sampling and 0x0F, quant, index, 0, 0)
+    }
+    return Frame(width, height, components)
 }
 
-private fun parseSos(data: ByteArray, start: Int, end: Int, frameComponent: Component?): Component? {
-    val frame = frameComponent ?: return null
-    if (end - start != 6) return null
+private fun parseSos(data: ByteArray, start: Int, end: Int, frameComponents: List<Component>?): List<Component>? {
+    val frame = frameComponents ?: return null
+    if (end - start < 6) return null
     var p = start
     val componentCount = data[p++].toInt() and 0xFF
-    if (componentCount != 1) return null
-    val id = data[p++].toInt() and 0xFF
-    if (id != frame.id) return null
-    val tables = data[p++].toInt() and 0xFF
+    if (componentCount != frame.size || end - start != 4 + componentCount * 2) return null
+    val components = ArrayList<Component>(componentCount)
+    val seen = HashSet<Int>()
+    for (i in 0 until componentCount) {
+        val id = data[p++].toInt() and 0xFF
+        if (!seen.add(id)) return null
+        val component = frame.firstOrNull { it.id == id } ?: return null
+        val tables = data[p++].toInt() and 0xFF
+        components += component.copy(dcTable = tables ushr 4, acTable = tables and 0x0F)
+    }
     val spectralStart = data[p++].toInt() and 0xFF
     val spectralEnd = data[p++].toInt() and 0xFF
     val approx = data[p++].toInt() and 0xFF
     if (spectralStart != 0 || spectralEnd != 63 || approx != 0) return null
-    return frame.copy(dcTable = tables ushr 4, acTable = tables and 0x0F)
+    return components
+}
+
+private fun decodeBaseline(jpeg: ParsedJpeg): IntArray {
+    return when (jpeg.components.size) {
+        1 -> decodeGrayscale(jpeg)
+        3 -> decodeColor444(jpeg)
+        else -> fail()
+    }
 }
 
 private fun decodeGrayscale(jpeg: ParsedJpeg): IntArray {
-    val component = jpeg.component
+    val component = jpeg.components.single()
     val quant = jpeg.quantTables[component.quantTable] ?: fail()
     val dcTable = jpeg.dcTables[component.dcTable] ?: fail()
     val acTable = jpeg.acTables[component.acTable] ?: fail()
@@ -347,6 +391,82 @@ private fun decodeGrayscale(jpeg: ParsedJpeg): IntArray {
         }
     }
     return pixels
+}
+
+private fun decodeColor444(jpeg: ParsedJpeg): IntArray {
+    val components = jpeg.components
+    val reader = EntropyBitReader(jpeg.scanData)
+    val pixels = IntArray(jpeg.width * jpeg.height)
+    val previousDc = IntArray(components.size)
+    val blocks = Array(components.size) { IntArray(64) }
+    val blocksX = (jpeg.width + 7) / 8
+    val blocksY = (jpeg.height + 7) / 8
+
+    for (by in 0 until blocksY) {
+        for (bx in 0 until blocksX) {
+            for (scanIndex in components.indices) {
+                val component = components[scanIndex]
+                blocks[component.frameIndex] = decodeBlock(jpeg, component, reader, previousDc, component.frameIndex)
+            }
+
+            val yBlock = blocks[0]
+            val cbBlock = blocks[1]
+            val crBlock = blocks[2]
+            for (y in 0 until 8) {
+                val py = by * 8 + y
+                if (py >= jpeg.height) continue
+                for (x in 0 until 8) {
+                    val px = bx * 8 + x
+                    if (px >= jpeg.width) continue
+                    val offset = y * 8 + x
+                    val yy = (yBlock[offset] + 128).coerceIn(0, 255)
+                    val cb = (cbBlock[offset] + 128).coerceIn(0, 255)
+                    val cr = (crBlock[offset] + 128).coerceIn(0, 255)
+                    pixels[py * jpeg.width + px] = yCbCrToArgb(yy, cb, cr)
+                }
+            }
+        }
+    }
+    return pixels
+}
+
+private fun decodeBlock(
+    jpeg: ParsedJpeg,
+    component: Component,
+    reader: EntropyBitReader,
+    previousDc: IntArray,
+    previousDcIndex: Int,
+): IntArray {
+    val quant = jpeg.quantTables[component.quantTable] ?: fail()
+    val dcTable = jpeg.dcTables[component.dcTable] ?: fail()
+    val acTable = jpeg.acTables[component.acTable] ?: fail()
+    val coeffs = IntArray(64)
+    val dcCategory = dcTable.decode(reader)
+    if (dcCategory !in 0..11) fail()
+    val dcDiff = receiveAndExtend(reader, dcCategory)
+    previousDc[previousDcIndex] += dcDiff
+    coeffs[0] = previousDc[previousDcIndex] * quant[0]
+
+    var k = 1
+    while (k < 64) {
+        val rs = acTable.decode(reader)
+        if (rs == 0x00) break
+        val run = rs ushr 4
+        val size = rs and 0x0F
+        if (size == 0) {
+            if (run == 15) {
+                k += 16
+                continue
+            }
+            fail()
+        }
+        k += run
+        if (k >= 64) fail()
+        coeffs[ZIGZAG[k]] = receiveAndExtend(reader, size) * quant[ZIGZAG[k]]
+        k++
+    }
+
+    return idct(coeffs)
 }
 
 private class EntropyBitReader(private val bytes: ByteArray) {
@@ -411,6 +531,15 @@ private fun argb(a: Int, r: Int, g: Int, b: Int): Int =
         ((g and 0xFF) shl 8) or
         (b and 0xFF)
 
+private fun yCbCrToArgb(y: Int, cb: Int, cr: Int): Int {
+    val cbShifted = cb - 128
+    val crShifted = cr - 128
+    val r = (y + 1.402 * crShifted).roundToInt().coerceIn(0, 255)
+    val g = (y - 0.344136 * cbShifted - 0.714136 * crShifted).roundToInt().coerceIn(0, 255)
+    val b = (y + 1.772 * cbShifted).roundToInt().coerceIn(0, 255)
+    return argb(0xFF, r, g, b)
+}
+
 private fun fail(): Nothing = throw IllegalArgumentException("invalid JPEG")
 
 private const val MARKER_SOF0 = 0xC0
@@ -418,6 +547,7 @@ private const val MARKER_SOF2 = 0xC2
 private const val MARKER_DHT = 0xC4
 private const val MARKER_SOS = 0xDA
 private const val MARKER_DQT = 0xDB
+private const val MARKER_DRI = 0xDD
 private const val MARKER_EOI = 0xD9
 private const val MARKER_TEM = 0x01
 private const val MAX_DIMENSION = 100_000
