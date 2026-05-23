@@ -185,6 +185,32 @@ public object SkImages {
         return SkImage.Make(bitmap)
     }
 
+    /**
+     * **STUB.COMPRESSED_TEXTURES** — mirrors Skia's
+     * `SkImages::RasterFromCompressedTextureData(data, width, height,
+     * compressionType)`.
+     *
+     * Upstream decodes a block-compressed payload (ETC1/ETC2, BC1/DXT1, …)
+     * into a raster [SkImage] without going through the GPU. In
+     * `:kanvas-skia` the decode pipeline for these compressed formats is
+     * not yet implemented — this entry-point is a compile-contract stub
+     * so that GMs that reference the factory (e.g. `ExoticFormatsGM`)
+     * can call it and the `@Disabled` test records the gap.
+     *
+     * Always throws [NotImplementedError] with the `STUB.COMPRESSED_TEXTURES`
+     * tag.
+     */
+    @Suppress("UNUSED_PARAMETER", "FunctionName")
+    public fun RasterFromCompressedTextureData(
+        data: ByteArray,
+        width: Int,
+        height: Int,
+        compressionType: SkTextureCompressionType,
+    ): SkImage? = throw NotImplementedError(
+        "STUB.COMPRESSED_TEXTURES: requires ETC1/ETC2 and BC1/DXT1 block-compression " +
+            "decode + raster-image materialisation — out of scope for :kanvas-skia pure-JVM.",
+    )
+
     // `DeferredFromEncodedData(ByteBuffer): SkImage?` factory moved to
     // [org.skia.codec.SkImageCodecs] (cycle break preparing the
     // :cpu-raster Gradle module extraction — foundation no longer
@@ -383,6 +409,65 @@ public object SkImages {
                 "not implemented — kanvas-skia raster backend lacks the " +
                 "block-compressed texture decode path (BC1 / ETC2 — see " +
                 "BC1TransparencyGM, CompressedTexturesGM)."
+        )
+    }
+
+    /**
+     * Mirrors Skia's
+     * `SkImages::CrossContextTextureFromPixmap(GrDirectContext*, const SkPixmap&, bool buildMips)`
+     * ([include/gpu/ganesh/SkImageGanesh.h](https://github.com/google/skia/blob/main/include/gpu/ganesh/SkImageGanesh.h)).
+     *
+     * Uploads [pixmap]'s pixels into a GPU cross-context texture and returns
+     * a GPU-backed [SkImage] that can be consumed on a different GPU context
+     * from the one used to create it. [buildMips] requests mip-map generation
+     * on upload. The returned image holds a semaphore / sync primitive so the
+     * producing context can signal ownership transfer to a consuming context.
+     *
+     * **Status : STUB.CROSS_CONTEXT_IMAGE** — `:kanvas-skia` is a raster-only
+     * backend. There is no `GrDirectContext` and no GPU texture pipeline. This
+     * factory exists solely so [CrossContextImageGM] compiles against the live
+     * [SkImages] surface and remains `@Disabled` with a precise reason.
+     * Throws [NotImplementedError] unconditionally at runtime.
+     */
+    public fun CrossContextTextureFromPixmap(
+        pixmap: SkPixmap,
+        buildMips: Boolean,
+    ): SkImage? {
+        TODO(
+            "STUB.CROSS_CONTEXT_IMAGE: SkImages.CrossContextTextureFromPixmap(" +
+                "pixmap=${pixmap.info().width}x${pixmap.info().height}, buildMips=$buildMips) " +
+                "requires GrDirectContext — kanvas-skia is raster-only " +
+                "(see CrossContextImageGM)."
+        )
+    }
+
+    /**
+     * Mirrors Skia's
+     * `SkImages::TextureFromYUVAImages(Recorder*, const SkYUVAInfo&,
+     * const sk_sp<SkImage>[kMaxPlanes], sk_sp<SkColorSpace>)`.
+     *
+     * Graphite (GPU) factory that assembles a YUVA multi-plane image from
+     * pre-rendered per-plane GPU textures ([planes]) and a YUVA layout
+     * descriptor ([yuvaInfo]). The resulting image is GPU-resident and
+     * performs YUV→RGB conversion on the fly during drawing.
+     *
+     * This factory has no raster equivalent in `:kanvas-skia` — the raster
+     * backend has no GPU recorder or texture concept. Any caller must guard
+     * against `null` and/or be `@Disabled` with this stub tag.
+     *
+     * **TODO: STUB.YUVA_PIXMAPS** — `SkImages::TextureFromYUVAImages` is
+     * Graphite-only; the raster backend cannot materialise GPU-resident
+     * YUVA images.
+     */
+    public fun TextureFromYUVAImages(
+        recorder: Any?,
+        yuvaInfo: SkYUVAInfo,
+        planes: Array<SkImage?>,
+        imageColorSpace: SkColorSpace?,
+    ): SkImage? {
+        TODO(
+            "STUB.YUVA_PIXMAPS: SkImages.TextureFromYUVAImages — " +
+                "Graphite GPU-only factory; no raster equivalent in kanvas-skia."
         )
     }
 

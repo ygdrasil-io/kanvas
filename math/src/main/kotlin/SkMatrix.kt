@@ -162,7 +162,8 @@ public data class SkMatrix(
      */
     public fun cheapEqualTo(other: SkMatrix): Boolean =
         sx == other.sx && kx == other.kx && tx == other.tx &&
-            ky == other.ky && sy == other.sy && ty == other.ty
+            ky == other.ky && sy == other.sy && ty == other.ty &&
+            persp0 == other.persp0 && persp1 == other.persp1 && persp2 == other.persp2
 
     // ─── Function-style accessors (Skia naming) ──────────────────────────
 
@@ -417,8 +418,11 @@ public data class SkMatrix(
      * Apply only the linear part (drop translation) — used for direction
      * vectors. Mirrors Skia's `SkMatrix::mapVector(dx, dy)`.
      */
-    public fun mapVector(dx: SkScalar, dy: SkScalar): SkPoint =
-        SkPoint(sx * dx + kx * dy, ky * dx + sy * dy)
+    public fun mapVector(dx: SkScalar, dy: SkScalar): SkPoint {
+        val dst = Array(1) { SkPoint() }
+        mapVectors(dst, arrayOf(SkPoint(dx, dy)), 1)
+        return dst[0]
+    }
 
     /**
      * Bulk apply this matrix to `count` source points, writing the
@@ -573,16 +577,18 @@ public data class SkMatrix(
     /**
      * Heuristic mapped radius — for a circle with radius `r` mapped by
      * this matrix, returns the radius of a "representative" circle in
-     * device space. Skia uses the geometric mean of the singular values
-     * for stroke width estimation; we use the same formula
-     * `sqrt(|det|)` derived from `σ_max · σ_min`.
+     * device space. Skia maps `(r, 0)` and `(0, r)`, takes their lengths,
+     * then returns the geometric mean.
      *
      * Mirrors [`SkMatrix::mapRadius`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp).
      */
     public fun mapRadius(r: SkScalar): SkScalar {
-        // Skia: mapRadius(r) = r * sqrt(|sx*sy - kx*ky|).
-        val det = SkScalarAbs(sx * sy - kx * ky)
-        return r * SkScalarSqrt(det)
+        val vec = arrayOf(SkPoint(r, 0f), SkPoint(0f, r))
+        mapVectors(vec)
+
+        val d0 = SkScalarSqrt(vec[0].fX * vec[0].fX + vec[0].fY * vec[0].fY)
+        val d1 = SkScalarSqrt(vec[1].fX * vec[1].fX + vec[1].fY * vec[1].fY)
+        return SkScalarSqrt(d0 * d1)
     }
 
     /** Pre-concat: `this = this · other`. Mirrors `SkMatrix::preConcat`. */
@@ -856,22 +862,12 @@ public data class SkMatrix(
         /**
          * Mirrors Skia's `SkMatrix::setPolyToPoly(src, dst, count)`.
          *
-         * Computes the projective transform that maps [count] source points
-         * to the corresponding destination points (1 ≤ count ≤ 4).
+         * Computes the projective transform that maps source points to the
+         * corresponding destination points (0 ≤ count ≤ 4).
          * Returns `null` when the system is degenerate (no unique solution).
-         *
-         * **Current status — STUB.POLY_TO_POLY** : full homogeneous linear
-         * system solve for the 4-point case (which yields a full perspective
-         * matrix) is deferred. The 1/2/3-point special cases (translate /
-         * affine) could be implemented in pure affine arithmetic, but the
-         * primary call site (`clip_shader_persp`) always passes 4 points, so
-         * implementing the easier cases now would not unblock the GM. Throws
-         * [NotImplementedError] at runtime so that `@Disabled("STUB.POLY_TO_POLY")`
-         * tests correctly capture the dependency.
          */
-        public fun setPolyToPoly(src: Array<SkPoint>, dst: Array<SkPoint>): SkMatrix? {
-            TODO("STUB.POLY_TO_POLY")
-        }
+        public fun setPolyToPoly(src: Array<SkPoint>, dst: Array<SkPoint>): SkMatrix? =
+            MakePolyToPoly(src, dst)
 
         /**
          * Build a matrix from a 9-element row-major buffer. The
@@ -1151,7 +1147,7 @@ public data class SkMatrix(
             anchorX: SkScalar, anchorY: SkScalar,
             tx: SkScalar, ty: SkScalar,
         ): SkMatrix = SkMatrix(
-            sx = scos, kx = -ssin, tx = tx + (-scos * anchorX - -ssin * -anchorY),
+            sx = scos, kx = -ssin, tx = tx - scos * anchorX + ssin * anchorY,
             ky = ssin, sy = scos, ty = ty + (-ssin * anchorX - scos * anchorY),
         )
 
@@ -1281,4 +1277,3 @@ public data class SkMatrix(
         private fun checkForZero(x: Float): Boolean = x * x == 0f
     }
 }
-

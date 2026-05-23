@@ -109,7 +109,7 @@ public class SkDashPathEffect private constructor(
                 SkPath.Verb.kLine -> {
                     val nx = input.coords[coordIdx++]
                     val ny = input.coords[coordIdx++]
-                    distFromContourStart = dashLine(out, penX, penY, nx, ny, distFromContourStart)
+                    distFromContourStart = dashLine(out, penX, penY, nx, ny, distFromContourStart, cullRect)
                     penX = nx; penY = ny
                 }
                 SkPath.Verb.kQuad -> {
@@ -139,14 +139,13 @@ public class SkDashPathEffect private constructor(
                 }
                 SkPath.Verb.kClose -> {
                     distFromContourStart = dashLine(out, penX, penY,
-                        contourStartX, contourStartY, distFromContourStart)
+                        contourStartX, contourStartY, distFromContourStart, cullRect)
                     penX = contourStartX; penY = contourStartY
                 }
                 SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")
             }
         }
-        val detached = out.detach()
-        return if (cullRect != null) cullDashedPath(detached, cullRect) else detached
+        return out.detach()
     }
 
     /**
@@ -230,19 +229,24 @@ public class SkDashPathEffect private constructor(
         builder: SkPathBuilder,
         x0: Float, y0: Float, x1: Float, y1: Float,
         startDist: Float,
+        cullRect: SkRect? = null,
     ): Float {
         val dx = x1 - x0; val dy = y1 - y0
         val length = sqrt(dx * dx + dy * dy)
         if (length <= 0f) return startDist
         val ux = dx / length; val uy = dy / length
+        val (visibleStart, visibleEnd) = clippedDistanceRange(x0, y0, dx, dy, length, cullRect)
+            ?: return startDist + length
 
-        // Position in the dash cycle at the start of the segment.
-        var (i, withinInterval) = locateInCycle(startDist)
+        // Position in the dash cycle at the first visible point. The
+        // original segment length still drives the phase, so culled-away
+        // prefixes do not reset or shift the dash pattern.
+        var (i, withinInterval) = locateInCycle(startDist + visibleStart)
         var remaining = intervals[i] - withinInterval
-        var consumed = 0f
+        var consumed = visibleStart
 
-        while (consumed < length) {
-            val available = length - consumed
+        while (consumed < visibleEnd) {
+            val available = visibleEnd - consumed
             val step = if (remaining < available) remaining else available
             if (i % 2 == 0) {
                 // "on" segment — emit a moveTo + lineTo (dash-effect
@@ -263,6 +267,44 @@ public class SkDashPathEffect private constructor(
             }
         }
         return startDist + length
+    }
+
+    /**
+     * Return the visible distance range for one source-space line segment,
+     * or null when the segment cannot affect [cullRect]. Liang-Barsky clips
+     * in parametric line space, so very large dashed segments can skip
+     * directly to the visible interval instead of iterating through every
+     * offscreen dash cycle first.
+     */
+    private fun clippedDistanceRange(
+        x0: Float, y0: Float, dx: Float, dy: Float, length: Float, cullRect: SkRect?,
+    ): Pair<Float, Float>? {
+        if (cullRect == null) return 0f to length
+        var t0 = 0f
+        var t1 = 1f
+
+        fun clip(p: Float, q: Float): Boolean {
+            if (p == 0f) return q >= 0f
+            val r = q / p
+            return if (p < 0f) {
+                if (r > t1) false else {
+                    if (r > t0) t0 = r
+                    true
+                }
+            } else {
+                if (r < t0) false else {
+                    if (r < t1) t1 = r
+                    true
+                }
+            }
+        }
+
+        if (!clip(-dx, x0 - cullRect.left())) return null
+        if (!clip(dx, cullRect.right() - x0)) return null
+        if (!clip(-dy, y0 - cullRect.top())) return null
+        if (!clip(dy, cullRect.bottom() - y0)) return null
+        if (t1 < t0) return null
+        return (t0 * length) to (t1 * length)
     }
 
     /** Flatten a quadratic Bézier and dash each chord. */

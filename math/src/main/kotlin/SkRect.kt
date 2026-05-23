@@ -463,7 +463,7 @@ public data class SkIRect(
         public fun MakeEmpty(): SkIRect = SkIRect(0, 0, 0, 0)
         public fun MakeSize(size: SkISize): SkIRect = SkIRect(0, 0, size.width, size.height)
         public fun MakePtSize(pt: SkIPoint, size: SkISize): SkIRect =
-            SkIRect(pt.fX, pt.fY, pt.fX + size.width, pt.fY + size.height)
+            MakeXYWH(pt.fX, pt.fY, size.width, size.height)
 
         public fun Intersects(a: SkIRect, b: SkIRect): Boolean {
             val l = maxOf(a.left, b.left)

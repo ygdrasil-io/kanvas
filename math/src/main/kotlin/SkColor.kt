@@ -112,7 +112,7 @@ public fun SkColorToHSV(color: SkColor, hsv: FloatArray) {
 
 /**
  * Convert HSV components to an opaque ARGB color. Out-of-range values are
- * pinned (`hue` mod 360, `s` and `v` clamped to `[0, 1]`).
+ * pinned (`hue` outside `[0, 360)` is treated as zero, `s` and `v` clamped to `[0, 1]`).
  */
 public fun SkHSVToColor(alpha: Int, hsv: FloatArray): SkColor {
     require(hsv.size >= 3) { "hsv must have at least 3 elements" }
@@ -124,9 +124,7 @@ public fun SkHSVToColor(alpha: Int, hsv: FloatArray): SkColor {
         return SkColorSetARGB(alpha and 0xFF, gray, gray, gray)
     }
 
-    var h = hsv[0] % 360f
-    if (h < 0f) h += 360f
-    h /= 60f
+    val h = if (hsv[0] < 0f || hsv[0] >= 360f) 0f else hsv[0] / 60f
     val sector = h.toInt()
     val frac = h - sector
 

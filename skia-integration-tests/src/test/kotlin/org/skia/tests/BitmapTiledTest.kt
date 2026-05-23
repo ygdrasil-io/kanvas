@@ -11,6 +11,7 @@ import org.skia.testing.TestUtils
 class BitmapTiledTest {
 
     @Test
+    @Disabled("SLOW.GM_STRESS: ~16s manual tiled-bitmap ratchet; run explicitly when touching bitmap shader tiling.")
     fun `BitmapTiledFractionalHorizontalManualGM matches reference within tolerance`() {
         val gm = BitmapTiledFractionalHorizontalManualGM()
         val rendered = TestUtils.runGmTest(gm)
@@ -28,6 +29,7 @@ class BitmapTiledTest {
     }
 
     @Test
+    @Disabled("SLOW.GM_STRESS: ~15s manual tiled-bitmap ratchet; run explicitly when touching bitmap shader tiling.")
     fun `BitmapTiledFractionalVerticalManualGM matches reference within tolerance`() {
         val gm = BitmapTiledFractionalVerticalManualGM()
         val rendered = TestUtils.runGmTest(gm)

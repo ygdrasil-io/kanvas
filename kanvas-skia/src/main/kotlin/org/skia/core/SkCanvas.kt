@@ -108,6 +108,36 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         return org.skia.foundation.SkSurfaces.Raster(info, rowBytes = 0, props = props ?: this.surfaceProps())
     }
 
+    /**
+     * Mirrors Skia's `SkCanvas::imageInfo()` — returns the [org.skia.foundation.SkImageInfo]
+     * of this canvas's root (backing) device. The colour space, colour type,
+     * alpha type, and dimensions reflect the bitmap that was passed to the
+     * canvas's constructor (or the surface that created this canvas).
+     *
+     * GMs use this to build a new surface in a *different* colour space
+     * (see `colorspace2.cpp` — `canvas->makeSurface(canvas->imageInfo().makeColorSpace(midCS))`),
+     * preserving the original dimensions and pixel format while swapping
+     * the working space.
+     *
+     * Mirrors upstream `SkCanvas::imageInfo()` → `rootDevice()->imageInfo()`.
+     * Requires a raster ([SkBitmapDevice]) root device; throws for GPU devices
+     * (deferred to a G-phase where [SkDevice] grows `imageInfo()`).
+     */
+    public open fun imageInfo(): org.skia.foundation.SkImageInfo {
+        val bm = device.requireBitmap("imageInfo").bitmap
+        val alphaType = when (bm.colorType) {
+            org.skia.foundation.SkColorType.kRGBA_F16Norm -> org.skia.foundation.SkAlphaType.kPremul
+            else -> org.skia.foundation.SkAlphaType.kUnpremul
+        }
+        return org.skia.foundation.SkImageInfo.Make(
+            width = bm.width,
+            height = bm.height,
+            colorType = bm.colorType,
+            alphaType = alphaType,
+            colorSpace = bm.colorSpace,
+        )
+    }
+
     /** The root (backing) device. Layers push their own devices on the stack. */
     public val device: SkDevice = rootDevice
 
@@ -2584,6 +2614,23 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      */
     public open fun saveLayer(bounds: SkRect?, paint: SkPaint?, flags: SaveLayerFlags): Int =
         saveLayer(bounds, paint)
+
+    /**
+     * Mirrors Skia's `SkCanvas::saveLayerAlphaf(const SkRect* bounds, float alpha)`.
+     * Convenience wrapper that creates a layer paint with the given [alpha]
+     * (a float in `[0, 1]`) and delegates to [saveLayer]. Matches upstream:
+     * ```cpp
+     * int SkCanvas::saveLayerAlphaf(const SkRect* bounds, float alpha) {
+     *     SkPaint tmpPaint;
+     *     tmpPaint.setAlphaf(alpha);
+     *     return this->saveLayer(bounds, &tmpPaint);
+     * }
+     * ```
+     */
+    public open fun saveLayerAlphaf(bounds: SkRect?, alpha: Float): Int {
+        val p = SkPaint().also { it.alphaf = alpha }
+        return saveLayer(bounds, p)
+    }
 
     public open val width: Int get() = device.width
     public open val height: Int get() = device.height

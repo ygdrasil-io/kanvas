@@ -37,7 +37,7 @@ class GradientsMissingBatch1Test {
 
     @Test
     fun `gradient_many_stops matches reference`() =
-        runGm(GradientManyStopsGM(), "GradientManyStopsGM", 80.0)
+        runGm(GradientManyStopsGM(), "GradientManyStopsGM", 43.0)
 
     @Test
     fun `gradient_many_hard_stops matches reference`() =
@@ -53,5 +53,5 @@ class GradientsMissingBatch1Test {
 
     @Test
     fun `gradients_interesting matches reference`() =
-        runGm(GradientsInterestingGM(), "GradientsInterestingGM", 80.0)
+        runGm(GradientsInterestingGM(), "GradientsInterestingGM", 27.0)
 }

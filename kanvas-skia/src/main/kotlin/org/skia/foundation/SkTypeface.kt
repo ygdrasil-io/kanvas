@@ -121,6 +121,25 @@ public open class SkTypeface protected constructor() {
 
     /**
      * Mirrors Skia's
+     * [`SkGlyphID SkTypeface::unicharToGlyph(SkUnichar) const`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h)
+     * — resolves a single Unicode code point to a font-local glyph ID.
+     *
+     * Returns `0` (the `.notdef` glyph) if the typeface has no glyph for
+     * [unichar]. Delegates to [unicharsToGlyphsInternal] with a single-element
+     * array so concrete subclasses only need to override the array form.
+     *
+     * Used by `gm/typeface.cpp::draw_typeface_rendering_gm` to obtain the
+     * glyph ID for `'A'` (typefacerendering) and `'O'`
+     * (typefacerendering_pfa, typefacerendering_pfb).
+     */
+    public fun unicharToGlyph(unichar: Int): Int {
+        val glyphs = ShortArray(1)
+        unicharsToGlyphsInternal(IntArray(1) { unichar }, 1, glyphs)
+        return glyphs[0].toInt() and 0xFFFF
+    }
+
+    /**
+     * Mirrors Skia's
      * [`SkTypeface::getKerningPairAdjustments`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h)
      * — returns the OpenType `kern` table pair adjustments for a sequence
      * of [glyphs] (each adjustment is in source-space FUnits applied
@@ -212,6 +231,53 @@ public open class SkTypeface protected constructor() {
         getFamilyName(sb)
         return sb.toString()
     }
+
+    /**
+     * Mirrors Skia's
+     * [`bool SkTypeface::getPostScriptName(SkString*) const`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h).
+     * Returns the PostScript name of this typeface if one is present in
+     * the OpenType `name` table (nameID 6), or `null` otherwise.
+     *
+     * **STUB.FONTATIONS** — Accessing nameID entries requires raw OpenType
+     * name-table parsing (`getTableData(SkSetFourByteTag('n','a','m','e'), …)`)
+     * which is not implemented in the pure-JVM / AWT backend. This method
+     * always throws [NotImplementedError] with the `STUB.FONTATIONS` tag.
+     * Callers must annotate their tests `@Disabled("STUB.FONTATIONS")`.
+     * See [SkTypeface_Fontations] and `API_FINALIZATION_PLAN.md`.
+     */
+    public open fun getPostScriptName(): String? = TODO(
+        "STUB.FONTATIONS: getPostScriptName() requires raw OpenType name-table access " +
+            "(nameID 6) — not available in the pure-JVM AWT backend. " +
+            "See API_FINALIZATION_PLAN.md § STUB.FONTATIONS.",
+    )
+
+    /**
+     * Mirrors Skia's
+     * [`SkTypeface::LocalizedStrings* SkTypeface::createFamilyNameIterator() const`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h).
+     * Returns an iterator over all localised family names stored in the
+     * OpenType `name` table (nameIDs 1 + 4, all language/platform entries).
+     * Each element is a `(name: String, language: String)` pair.
+     *
+     * **STUB.FONTATIONS** — Same blocker as [getPostScriptName]: raw
+     * name-table parsing is unavailable in the pure-JVM backend. This
+     * method always throws [NotImplementedError]. Callers must annotate
+     * their tests `@Disabled("STUB.FONTATIONS")`.
+     * See [SkTypeface_Fontations] and `API_FINALIZATION_PLAN.md`.
+     */
+    public open fun createFamilyNameIterator(): Iterator<LocalizedString> = TODO(
+        "STUB.FONTATIONS: createFamilyNameIterator() requires raw OpenType name-table access " +
+            "— not available in the pure-JVM AWT backend. " +
+            "See API_FINALIZATION_PLAN.md § STUB.FONTATIONS.",
+    )
+
+    /**
+     * Mirrors Skia's `SkTypeface::LocalizedString` — a `(fString, fLanguage)`
+     * pair returned by [createFamilyNameIterator].
+     *
+     * @property fString   the localised family name string.
+     * @property fLanguage the BCP-47 language tag (e.g. `"en"`, `"ja"`).
+     */
+    public data class LocalizedString(val fString: String, val fLanguage: String)
 
     /**
      * Internal hook for [SkFont.getBounds] — single-glyph tight visual
