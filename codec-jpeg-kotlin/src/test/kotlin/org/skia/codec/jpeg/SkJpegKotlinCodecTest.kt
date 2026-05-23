@@ -17,7 +17,7 @@ import java.util.ServiceLoader
 class SkJpegKotlinCodecTest {
 
     @Test
-    fun `rejects invalid signature and unsupported RGB JPEG`() {
+    fun `rejects invalid signature and mismatched component scan`() {
         assertFalse(SkJpegKotlinCodec.Decoder.matches(ByteArray(0)))
         assertFalse(SkJpegKotlinCodec.Decoder.matches("not-a-jpeg".toByteArray()))
         assertNull(SkJpegKotlinCodec.Decoder.make("not-a-jpeg".toByteArray()))
@@ -65,6 +65,25 @@ class SkJpegKotlinCodecTest {
         assertEquals(0xFF808080.toInt(), bitmap.getPixel(12, 8))
     }
 
+    @Test
+    fun `decodes baseline color 444 8x8 jpeg`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(color444Jpeg())!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        for (y in 0 until 8) {
+            for (x in 0 until 8) {
+                assertEquals(0xFFF16937.toInt(), bitmap!!.getPixel(x, y), "x=$x y=$y")
+            }
+        }
+    }
+
+    @Test
+    fun `rejects color subsampling for this slice`() {
+        assertNull(SkJpegKotlinCodec.Decoder.make(color444Jpeg(ySampling = 0x21)))
+    }
+
     private fun grayscaleJpeg(width: Int, height: Int, componentCount: Int = 1): ByteArray {
         val out = ByteArrayOutputStream()
         out.writeMarker(0xD8)
@@ -108,6 +127,66 @@ class SkJpegKotlinCodecTest {
         return out.toByteArray()
     }
 
+    private fun color444Jpeg(ySampling: Int = 0x11): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(1) }
+        }
+        out.writeSegment(0xC0) {
+            write(8)
+            writeU16BE(8)
+            writeU16BE(8)
+            write(3)
+            write(1)
+            write(ySampling)
+            write(0)
+            write(2)
+            write(0x11)
+            write(0)
+            write(3)
+            write(0x11)
+            write(0)
+        }
+        out.writeSegment(0xC4) {
+            write(0x00)
+            write(0)
+            write(3)
+            repeat(14) { write(0) }
+            write(0x07)
+            write(0x09)
+            write(0x0A)
+        }
+        out.writeSegment(0xC4) {
+            write(0x10)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xDA) {
+            write(3)
+            write(1)
+            write(0x00)
+            write(2)
+            write(0x00)
+            write(3)
+            write(0x00)
+            write(0)
+            write(63)
+            write(0)
+        }
+        out.write(
+            entropyBits(
+                "00" + "1100000" + "0" + // Y = 140, DC coefficient 96, EOB
+                    "01" + "001111111" + "0" + // Cb = 80, DC coefficient -384, EOB
+                    "10" + "1001000000" + "0", // Cr = 200, DC coefficient 576, EOB
+            ),
+        )
+        out.writeMarker(0xD9)
+        return out.toByteArray()
+    }
+
     private fun entropyForZeroBlocks(blockCount: Int): ByteArray {
         val bitCount = blockCount * 2
         val byteCount = (bitCount + 7) / 8
@@ -118,6 +197,24 @@ class SkJpegKotlinCodecTest {
             out[byte] = (out[byte].toInt() and (1 shl shift).inv()).toByte()
         }
         for (bit in bitCount until byteCount * 8) {
+            val byte = bit / 8
+            val shift = 7 - (bit and 7)
+            out[byte] = (out[byte].toInt() or (1 shl shift)).toByte()
+        }
+        return out
+    }
+
+    private fun entropyBits(bits: String): ByteArray {
+        val byteCount = (bits.length + 7) / 8
+        val out = ByteArray(byteCount)
+        for (bit in bits.indices) {
+            if (bits[bit] == '1') {
+                val byte = bit / 8
+                val shift = 7 - (bit and 7)
+                out[byte] = (out[byte].toInt() or (1 shl shift)).toByte()
+            }
+        }
+        for (bit in bits.length until byteCount * 8) {
             val byte = bit / 8
             val shift = 7 - (bit and 7)
             out[byte] = (out[byte].toInt() or (1 shl shift)).toByte()
