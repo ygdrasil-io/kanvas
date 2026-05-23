@@ -42,7 +42,7 @@ public class SkM44 {
 
     /** Copy constructor — clones [src]. */
     public constructor(src: SkM44) {
-        System.arraycopy(src.fMat, 0, fMat, 0, 16)
+        src.fMat.copyInto(fMat)
     }
 
     /**
@@ -158,7 +158,7 @@ public class SkM44 {
             val out = SkM44()
             val inv = cols.invert()
             if (inv != null) {
-                System.arraycopy(inv.fMat, 0, out.fMat, 0, 16)
+                inv.fMat.copyInto(out.fMat)
             } else {
                 out.setIdentity()
             }
@@ -263,7 +263,7 @@ public class SkM44 {
     /** Copy backing column-major storage into [v]. */
     public fun getColMajor(v: FloatArray) {
         require(v.size >= 16) { "getColMajor needs >= 16 elements (got ${v.size})" }
-        System.arraycopy(fMat, 0, v, 0, 16)
+        fMat.copyInto(v)
     }
 
     /** Copy storage into [v] in row-major order (transposed). */
@@ -355,23 +355,9 @@ public class SkM44 {
      * staged in locals).
      */
     public fun setConcat(a: SkM44, b: SkM44): SkM44 {
-        val a00 = a.fMat[0];  val a10 = a.fMat[1];  val a20 = a.fMat[2];  val a30 = a.fMat[3]
-        val a01 = a.fMat[4];  val a11 = a.fMat[5];  val a21 = a.fMat[6];  val a31 = a.fMat[7]
-        val a02 = a.fMat[8];  val a12 = a.fMat[9];  val a22 = a.fMat[10]; val a32 = a.fMat[11]
-        val a03 = a.fMat[12]; val a13 = a.fMat[13]; val a23 = a.fMat[14]; val a33 = a.fMat[15]
-
         val out = FloatArray(16)
-        for (c in 0..3) {
-            val b0 = b.fMat[c * 4 + 0]
-            val b1 = b.fMat[c * 4 + 1]
-            val b2 = b.fMat[c * 4 + 2]
-            val b3 = b.fMat[c * 4 + 3]
-            out[c * 4 + 0] = a00 * b0 + a01 * b1 + a02 * b2 + a03 * b3
-            out[c * 4 + 1] = a10 * b0 + a11 * b1 + a12 * b2 + a13 * b3
-            out[c * 4 + 2] = a20 * b0 + a21 * b1 + a22 * b2 + a23 * b3
-            out[c * 4 + 3] = a30 * b0 + a31 * b1 + a32 * b2 + a33 * b3
-        }
-        System.arraycopy(out, 0, fMat, 0, 16)
+        SkMathBackend.m44Concat(a.fMat, b.fMat, out)
+        out.copyInto(fMat)
         return this
     }
 
@@ -680,7 +666,7 @@ public class SkM44 {
             if (!out[i].isFinite()) return null
         }
         val result = SkM44()
-        System.arraycopy(out, 0, result.fMat, 0, 16)
+        out.copyInto(result.fMat)
         return result
     }
 

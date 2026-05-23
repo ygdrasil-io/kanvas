@@ -10,7 +10,7 @@
 # the symbol to Skia later, REMOVE the entry and add a TSV line instead.
 
 # ────────────────────────────────────────────────────────────────────────
-# src/main/kotlin — production symbols without Skia counterpart
+# src/commonMain/kotlin — production symbols without Skia counterpart
 # ────────────────────────────────────────────────────────────────────────
 
 org.graphiks.math.SK_Scalar2PI
@@ -48,7 +48,7 @@ org.graphiks.math.SkcmsMatrix3x3.Companion.of
 org.graphiks.math.SkcmsMatrix3x3.get
 
 # ────────────────────────────────────────────────────────────────────────
-# src/test/kotlin — test names with Kotlin-style backtick descriptions
+# src/commonTest/kotlin — test names with Kotlin-style backtick descriptions
 # ────────────────────────────────────────────────────────────────────────
 #
 # Test FQNs are descriptive backtick identifiers (e.g. `mapPoints identity
@@ -173,4 +173,9 @@ org.graphiks.math.SkScalarTest.SkScalarSquare
 org.graphiks.math.SkScalarTest.SkScalarTruncToScalar and TruncToInt
 org.graphiks.math.SkScalarTest.SkScalarsEqual element-wise
 org.graphiks.math.SkScalarTest.constants match Skia values
-org.graphiks.math.SkScalarTest.nearly-zero constants match Skia exactly
+org.graphiks.math.SkScalarTest.nearly-zero constants match Skia
+
+# --- SkMathBackendTest ---
+org.graphiks.math.SkMathBackendTest
+org.graphiks.math.SkMathBackendTest.dot products match scalar reference
+org.graphiks.math.SkMathBackendTest.m44 concat matches scalar reference

@@ -11,7 +11,7 @@ import kotlin.math.withSign
  * 1:1 against the original.
  *
  * Everything here is a thin wrapper over [kotlin.math] (which itself
- * delegates to JVM `java.lang.Math`, an IEEE-754 single-precision
+ * delegates to Kotlin platform math, an IEEE-754 single-precision
  * implementation bit-equivalent to upstream's `sk_float_*` to ≤ 1 ulp).
  */
 
@@ -191,13 +191,20 @@ public fun SkScalarNearlyEqual(
  */
 public fun SkScalarSinSnapToZero(radians: SkScalar): SkScalar {
     val v = SkScalarSin(radians)
-    return if (SkScalarNearlyZero(v, SK_ScalarSinCosNearlyZero)) 0f else v
+    return SkScalarSnapSinCos(v)
 }
 
 /** Cos counterpart of [SkScalarSinSnapToZero]. */
 public fun SkScalarCosSnapToZero(radians: SkScalar): SkScalar {
     val v = SkScalarCos(radians)
-    return if (SkScalarNearlyZero(v, SK_ScalarSinCosNearlyZero)) 0f else v
+    return SkScalarSnapSinCos(v)
+}
+
+private fun SkScalarSnapSinCos(value: SkScalar): SkScalar = when {
+    SkScalarNearlyZero(value, SK_ScalarSinCosNearlyZero) -> 0f
+    SkScalarNearlyZero(value - 1f, SK_ScalarSinCosNearlyZero) -> 1f
+    SkScalarNearlyZero(value + 1f, SK_ScalarSinCosNearlyZero) -> -1f
+    else -> value
 }
 
 // ─── Misc ───────────────────────────────────────────────────────────────────

@@ -56,7 +56,8 @@ public data class SkV3(
         public val ZERO: SkV3 = SkV3(0f, 0f, 0f)
 
         /** Dot product, mirrors C++ `SkV3::Dot`. */
-        public fun Dot(a: SkV3, b: SkV3): Float = a.x * b.x + a.y * b.y + a.z * b.z
+        public fun Dot(a: SkV3, b: SkV3): Float =
+            SkMathBackend.dot3(a.x, a.y, a.z, b.x, b.y, b.z)
 
         /** Cross product, mirrors C++ `SkV3::Cross`. */
         public fun Cross(a: SkV3, b: SkV3): SkV3 = SkV3(

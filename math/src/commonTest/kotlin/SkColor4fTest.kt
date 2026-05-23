@@ -1,7 +1,7 @@
 package org.graphiks.math
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.Test
 
 /**
  * Tests focused on the byte-order parity between [SkColor4f.toBytes_RGBA] /
@@ -108,7 +108,7 @@ class SkColor4fTest {
         )
         for (p in packedSamples) {
             val back = SkColor4f.FromBytes_RGBA(p).toBytes_RGBA()
-            assertEquals(p, back, "raw uint32 0x${Integer.toHexString(p)}")
+            assertEquals(p, back, "raw uint32 0x${p.toString(16)}")
         }
     }
 }

@@ -44,7 +44,7 @@ public data class SkV4(
 
     public companion object {
         public fun Dot(a: SkV4, b: SkV4): Float =
-            a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w
+            SkMathBackend.dot4(a.x, a.y, a.z, a.w, b.x, b.y, b.z, b.w)
         public fun Normalize(v: SkV4): SkV4 = v * (1.0f / v.length())
     }
 }

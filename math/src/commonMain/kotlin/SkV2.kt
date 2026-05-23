@@ -35,7 +35,8 @@ public data class SkV2(public val x: Float, public val y: Float) {
     public fun normalize(): SkV2 = Normalize(this)
 
     public companion object {
-        public fun Dot(a: SkV2, b: SkV2): Float = a.x * b.x + a.y * b.y
+        public fun Dot(a: SkV2, b: SkV2): Float =
+            SkMathBackend.dot2(a.x, a.y, b.x, b.y)
         public fun Cross(a: SkV2, b: SkV2): Float = a.x * b.y - a.y * b.x
         public fun Normalize(v: SkV2): SkV2 = v * (1.0f / v.length())
     }
