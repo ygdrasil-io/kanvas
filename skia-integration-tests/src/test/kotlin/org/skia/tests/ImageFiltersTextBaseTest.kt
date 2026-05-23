@@ -8,8 +8,12 @@ import org.skia.testing.TestUtils
 class ImageFiltersTextBaseTest {
 
     @Test
-    fun `ImageFiltersTextBaseGM placeholder`() {
-        // ImageFiltersTextBaseGM is abstract — cannot be instantiated directly.
-        // Concrete subclasses (e.g. ImageFiltersTextGM) exercise the actual drawing.
+    fun `ImageFiltersTextIfGM placeholder`() {
+        TestUtils.runGmTest(ImageFiltersTextIfGM())
+    }
+
+    @Test
+    fun `ImageFiltersTextCfGM placeholder`() {
+        TestUtils.runGmTest(ImageFiltersTextCfGM())
     }
 }

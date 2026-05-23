@@ -57,9 +57,14 @@ public object SkBuiltinColorFilterEffects {
         // Identity color filter (Noop) — gNoop in upstream.
         SkRuntimeEffectDispatch.register(NOOP_SKSL) { IdentityImpl }
 
-        // Luma → alpha (gLumaSrc + AlternateLuma's `inColor.ggga`
-        // are different effects ; we only register gLumaSrc here).
+        // Luma → alpha (gLumaSrc from runtimecolorfilter.cpp).
         SkRuntimeEffectDispatch.register(LUMA_SRC_SKSL) { LumaToAlphaImpl }
+
+        // G-channel splat (AlternateLuma's `inColor.ggga` from
+        // lumafilter.cpp). Replicates the G channel into R, G, B
+        // and preserves A — models a linear-light Y-channel readout
+        // when the working colour space is CIE XYZ (G = Y).
+        SkRuntimeEffectDispatch.register(G_CHANNEL_SPLAT_SKSL) { GChannelSplatImpl }
 
         // Tone-map (gTernary / gIfs / gEarlyReturn — all
         // semantically equivalent ; register all 3 hashes against
@@ -138,6 +143,14 @@ public object SkBuiltinColorFilterEffects {
         return half4(color.rgb * (scale/luma), color.a);
     }
 """
+
+    /** G-channel splat from `gm/lumafilter.cpp` (`AlternateLuma`).
+     *  Replicates the green channel into red, green, and blue while
+     *  preserving alpha. When the working colour space is CIE XYZ D50
+     *  (R→X, G→Y, B→Z) this has the effect of reading back the
+     *  luminance (Y) channel as greyscale. */
+    public const val G_CHANNEL_SPLAT_SKSL: String =
+        "half4 main(half4 inColor) { return inColor.ggga; }"
 
     /** Compose-CF SkSL from `gm/composecolorfilter.cpp`. Two color-
      *  filter children ; outer applied to inner's output. */
@@ -258,6 +271,36 @@ public object SkBuiltinColorFilterEffects {
             val inner = children[0] as ChildResolver.ColorFilter
             val outer = children[1] as ChildResolver.ColorFilter
             return outer.apply(inner.apply(c))
+        }
+    }
+
+    /**
+     * G-channel splat (`AlternateLuma` from `gm/lumafilter.cpp`).
+     *
+     * `inColor.ggga` — spreads the green channel across R, G, B
+     * while preserving A. When the upstream working colour space is
+     * CIE XYZ D50 (RGB → XYZ, so G = Y = luminance), this produces
+     * a near-greyscale result. In kanvas-skia the working-format
+     * wrapper ([org.skia.effects.SkColorFilterPriv.withWorkingFormat])
+     * is not yet implemented, so this impl runs in the device colour
+     * space ; the visual result will differ from upstream but the
+     * math is correct within that constraint.
+     */
+    public object GChannelSplatImpl : SkRuntimeImpl {
+        override val uniforms: List<SkRuntimeEffect.Uniform> = emptyList()
+        override val children: List<SkRuntimeEffect.Child> = emptyList()
+        override val flags: Int = SkRuntimeEffect.kAllowColorFilter_Flag
+
+        override fun shade(
+            coords: SkPoint?,
+            srcColor: SkColor4f?,
+            dstColor: SkColor4f?,
+            uniforms: ByteBuffer,
+            children: Array<ChildResolver>,
+        ): SkColor4f {
+            val c = srcColor ?: return SkColor4f.kBlack
+            // inColor.ggga : replicate G into R, G, B ; keep A.
+            return SkColor4f(c.fG, c.fG, c.fG, c.fA)
         }
     }
 }
