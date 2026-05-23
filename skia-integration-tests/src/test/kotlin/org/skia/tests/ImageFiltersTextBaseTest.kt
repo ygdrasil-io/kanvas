@@ -9,6 +9,6 @@ class ImageFiltersTextBaseTest {
 
     @Test
     fun `ImageFiltersTextBaseGM placeholder`() {
-        TestUtils.runGmTest(ImageFiltersTextBaseGM())
+        TestUtils.runGmTest(ImageFiltersTextIfGM())
     }
 }

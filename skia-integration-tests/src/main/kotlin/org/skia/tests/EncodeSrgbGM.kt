@@ -5,6 +5,7 @@ import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
 import org.skia.encode.SkPngEncoder
+import org.skia.encode.SkWebpEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
@@ -132,6 +133,10 @@ public open class EncodeSrgbGM(
         val bytes = when (format) {
             SkEncodedImageFormat.kPNG -> SkPngEncoder.Encode(bitmap)
             SkEncodedImageFormat.kJPEG -> SkJpegEncoder.Encode(bitmap)
+            // Upstream's third variant — VP8L lossless via SkWebpEncoder.
+            // The TwelveMonkeys imageio-webp codec (on :cpu-raster's runtime
+            // classpath) decodes the round-tripped bytes back to an SkImage.
+            SkEncodedImageFormat.kWEBP -> SkWebpEncoder.Encode(bitmap)
             else -> null
         } ?: return null
         val codec = SkCodec.MakeFromData(bytes) ?: return null
