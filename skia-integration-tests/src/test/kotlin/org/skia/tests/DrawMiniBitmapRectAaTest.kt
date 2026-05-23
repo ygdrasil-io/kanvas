@@ -2,6 +2,7 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
@@ -9,6 +10,7 @@ import org.skia.testing.TestUtils
 
 class DrawMiniBitmapRectAaTest {
     @Test
+    @Disabled("SLOW.GM_STRESS: ~6 min in the default ratchet run; run this class explicitly before changing mini-bitmap AA sampling.")
     fun `DrawMiniBitmapRectAaGM matches drawminibitmaprect_aa_png within tolerance`() {
         val gm = DrawMiniBitmapRectAaGM()
         val rendered = TestUtils.runGmTest(gm)

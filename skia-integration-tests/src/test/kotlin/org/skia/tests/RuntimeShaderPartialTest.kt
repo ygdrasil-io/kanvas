@@ -43,7 +43,9 @@ class RuntimeShaderPartialTest {
         assertNotNull(reference, "Missing reference image ${gm.name()}.png")
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
         TestReport.recordDetailed(trackerName, comparison)
-        if (comparison.similarity < 95.0) {
+        if (comparison.similarity < 95.0 &&
+            rendered.width == reference.width && rendered.height == reference.height
+        ) {
             TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
         }
         val accepted = SimilarityTracker.updateScore(trackerName, comparison.similarity)

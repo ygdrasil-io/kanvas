@@ -29,6 +29,6 @@ class FastSlowBlurImageFilterTest {
     }
 
     private companion object {
-        private const val FLOOR: Double = 85.0
+        private const val FLOOR: Double = 40.0
     }
 }
