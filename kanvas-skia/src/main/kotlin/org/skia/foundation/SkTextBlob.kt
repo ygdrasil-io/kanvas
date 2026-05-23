@@ -211,6 +211,29 @@ public class SkTextBlob public constructor(
 
     public companion object {
         /**
+         * Mirrors Skia's `SkTextBlob::MakeFromString(const char* string,
+         * const SkFont& font)`. Resolves [text] (UTF-8) to glyph IDs via
+         * [font.textToGlyphs][SkFont.textToGlyphs] and packs them into a
+         * single [Run.HorizontalSpread] run anchored at `(0, 0)`.
+         *
+         * Returns `null` when [text] is empty (matching upstream's contract —
+         * Skia returns `null`/`nullptr` for empty-string blobs).
+         *
+         * The resulting blob is ready for `SkCanvas.drawTextBlob(blob, x, y, paint)`.
+         */
+        public fun MakeFromString(text: String, font: SkFont): SkTextBlob? {
+            if (text.isEmpty()) return null
+            val glyphs = font.textToGlyphs(text)
+            if (glyphs.isEmpty()) return null
+            // Conservative cull rect: N glyphs × font.size wide, one line tall.
+            val pad = font.size
+            val width = glyphs.size * pad
+            val cull = SkRect.MakeLTRB(-pad, -pad, width + pad, pad)
+            val run = Run.HorizontalSpread(SkFont(font), glyphs, 0f, 0f)
+            return SkTextBlob(listOf(run), cull)
+        }
+
+        /**
          * Mirrors Skia's `SkTextBlob::MakeFromRSXformGlyphs(glyphs, count,
          * xforms, font)`. Builds a single-run RSXform text blob from an
          * already-resolved glyph-ID array.
