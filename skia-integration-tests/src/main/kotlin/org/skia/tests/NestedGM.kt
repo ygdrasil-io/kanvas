@@ -12,26 +12,36 @@ import org.graphiks.math.SkRect
 import org.skia.tools.SkRandom
 
 /**
- * Port of upstream Skia's `gm/nested.cpp::NestedGM`
- * (4 variants — we ship only the `nested_aa` one).
+ * Port of upstream Skia's `gm/nested.cpp::NestedGM`.
  *
- * Tests combinations of nested rect / oval / rrect path shapes
- * with CW outer + CCW inner contours, exercising even-odd and
- * winding fill rules.
+ * Tests combinations of nested rect / oval / rrect path shapes with CW outer
+ * + CCW inner contours, exercising even-odd and winding fill rules.
  *
- * **Adaptations** :
- *  - Only the `nested_aa` (doAA=true, flipped=false) variant is
- *    rendered. The other 3 variants (bw / aa+flipY / bw+flipY)
- *    are deferred — their layouts are derivable from this one.
+ * Four variants:
+ *  - `nested_aa`       (doAA=true,  flipped=false)
+ *  - `nested_bw`       (doAA=false, flipped=false)
+ *  - `nested_flipY_aa` (doAA=true,  flipped=true)
+ *  - `nested_flipY_bw` (doAA=false, flipped=true)
+ *
+ * Use the companion-object factories to instantiate each variant.
  */
-public class NestedGM : GM() {
+public class NestedGM(
+    private val doAA: Boolean,
+    private val flipped: Boolean,
+) : GM() {
 
     init {
         setBGColor(SkColorSetARGB(0xFF, 0xDD, 0xDD, 0xDD))
     }
 
-    override fun getName(): String = "nested_aa"
-    override fun getISize(): SkISize = SkISize.Make(269, 134)
+    override fun getName(): String {
+        val sb = StringBuilder("nested")
+        if (flipped) sb.append("_flipY")
+        if (doAA) sb.append("_aa") else sb.append("_bw")
+        return sb.toString()
+    }
+
+    override fun getISize(): SkISize = SkISize.Make(kImageWidth, kImageHeight)
 
     private enum class Shape { kRect, kRRect, kOval }
 
@@ -52,7 +62,7 @@ public class NestedGM : GM() {
 
         val shapePaint = SkPaint().apply {
             color = SK_ColorBLACK
-            isAntiAlias = true
+            isAntiAlias = doAA
         }
         val outerRect = SkRect.MakeWH(40f, 40f)
         val innerRects = arrayOf(
@@ -60,10 +70,10 @@ public class NestedGM : GM() {
             SkRect.MakeLTRB(0.5f, 18f, 4.5f, 22f),
         )
 
-        // Random multicolor background.
+        // Random multicolor background to make transparency errors visible.
         val rand = SkRandom()
-        for (yy in 0 until getISize().height step 10) {
-            for (xx in 0 until getISize().width step 10) {
+        for (yy in 0 until kImageHeight step 10) {
+            for (xx in 0 until kImageWidth step 10) {
                 val r = SkRect.MakeXYWH(xx.toFloat(), yy.toFloat(), 10f, 10f)
                 val p = SkPaint().apply { color = rand.nextU() or 0xFF000000.toInt() }
                 c.drawRect(r, p)
@@ -80,7 +90,12 @@ public class NestedGM : GM() {
                     addShape(builder, innerRect, innerShape, SkPathDirection.kCCW)
 
                     c.save()
-                    c.translate(xOff, yOff)
+                    if (flipped) {
+                        c.scale(1.0f, -1.0f)
+                        c.translate(xOff, -yOff - 40.0f)
+                    } else {
+                        c.translate(xOff, yOff)
+                    }
                     c.drawPath(builder.detach(), shapePaint)
                     c.restore()
 
@@ -90,5 +105,10 @@ public class NestedGM : GM() {
             xOff = 2f
             yOff += 45f
         }
+    }
+
+    private companion object {
+        const val kImageWidth = 269
+        const val kImageHeight = 134
     }
 }
