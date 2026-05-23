@@ -9,3 +9,4 @@ org.graphiks.math.SkColorMatrix.setRowMajor	SkColorMatrix::setRowMajor	math/src/
 org.graphiks.math.SkColorMatrix.getRowMajor	SkColorMatrix::getRowMajor	math/src/commonMain/kotlin/SkColorMatrix.kt:125	include/effects/SkColorMatrix.h:49
 org.graphiks.math.SkColorMatrix.preConcat	SkColorMatrix::preConcat	math/src/commonMain/kotlin/SkColorMatrix.kt:137	include/effects/SkColorMatrix.h:43
 org.graphiks.math.SkColorMatrix.postConcat	SkColorMatrix::postConcat	math/src/commonMain/kotlin/SkColorMatrix.kt:145	include/effects/SkColorMatrix.h:44
+org.graphiks.math.SkColorMatrix.Companion.RGBtoYUV	SkColorMatrix::RGBtoYUV	math/src/commonMain/kotlin/SkColorMatrix.kt:182	include/effects/SkColorMatrix.h:57
