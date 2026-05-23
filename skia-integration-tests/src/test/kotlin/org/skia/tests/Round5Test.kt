@@ -41,6 +41,10 @@ class Round5Test {
     fun `SquareHairGM matches reference`() = runGm(SquareHairGM(), "SquareHairGM", 95.0)
 
     @Test
+    fun `SquareHairDiffsGM matches reference`() =
+        runGm(SquareHairDiffsGM(), "SquareHairDiffsGM", 95.0)
+
+    @Test
     fun `ZeroControlStrokeGM matches reference`() =
         runGm(ZeroControlStrokeGM(), "ZeroControlStrokeGM", 98.0)
 
