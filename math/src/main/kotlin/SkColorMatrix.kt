@@ -167,6 +167,26 @@ public class SkColorMatrix {
         fMat.joinToString(prefix = "SkColorMatrix[", postfix = "]")
 
     public companion object {
+        /**
+         * Mirrors `static SkColorMatrix SkColorMatrix::RGBtoYUV(SkYUVColorSpace)`.
+         *
+         * Returns the RGB → YUV color matrix for the requested [yuvColorSpace].
+         * This is the per-color-space generalisation of [setRGB2YUV] (JPEG-Full
+         * only). The non-JPEG variants (Rec.601/709, BT.2020, limited range) are
+         * not yet wired; all requests throw `TODO("STUB.YUVA_PIXMAPS")`.
+         *
+         * **TODO: STUB.YUVA_PIXMAPS** — port the remaining matrices from
+         * `src/core/SkYUVMath.cpp` (`SkColorMatrix_RGB2YUV`) for each
+         * [org.skia.foundation.SkYUVAInfo.YUVColorSpace] variant.
+         */
+        public fun RGBtoYUV(yuvColorSpace: Any): SkColorMatrix {
+            TODO(
+                "STUB.YUVA_PIXMAPS: SkColorMatrix.RGBtoYUV($yuvColorSpace) — " +
+                    "per-color-space RGB→YUV matrices not yet ported from " +
+                    "src/core/SkYUVMath.cpp (SkColorMatrix_RGB2YUV)."
+            )
+        }
+
         // Row offsets — match the C++ kR_Scale / kG_Scale / ... enum.
         private const val kR_Scale = 0
         private const val kG_Scale = 6

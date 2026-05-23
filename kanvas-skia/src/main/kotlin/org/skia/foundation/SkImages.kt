@@ -386,6 +386,36 @@ public object SkImages {
         )
     }
 
+    /**
+     * Mirrors Skia's
+     * `SkImages::TextureFromYUVAImages(Recorder*, const SkYUVAInfo&,
+     * const sk_sp<SkImage>[kMaxPlanes], sk_sp<SkColorSpace>)`.
+     *
+     * Graphite (GPU) factory that assembles a YUVA multi-plane image from
+     * pre-rendered per-plane GPU textures ([planes]) and a YUVA layout
+     * descriptor ([yuvaInfo]). The resulting image is GPU-resident and
+     * performs YUV→RGB conversion on the fly during drawing.
+     *
+     * This factory has no raster equivalent in `:kanvas-skia` — the raster
+     * backend has no GPU recorder or texture concept. Any caller must guard
+     * against `null` and/or be `@Disabled` with this stub tag.
+     *
+     * **TODO: STUB.YUVA_PIXMAPS** — `SkImages::TextureFromYUVAImages` is
+     * Graphite-only; the raster backend cannot materialise GPU-resident
+     * YUVA images.
+     */
+    public fun TextureFromYUVAImages(
+        recorder: Any?,
+        yuvaInfo: SkYUVAInfo,
+        planes: Array<SkImage?>,
+        imageColorSpace: SkColorSpace?,
+    ): SkImage? {
+        TODO(
+            "STUB.YUVA_PIXMAPS: SkImages.TextureFromYUVAImages — " +
+                "Graphite GPU-only factory; no raster equivalent in kanvas-skia."
+        )
+    }
+
     public fun DeferredFromPicture(
         picture: SkPicture,
         dimensions: SkISize,
