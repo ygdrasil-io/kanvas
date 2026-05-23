@@ -414,6 +414,35 @@ public object SkImages {
 
     /**
      * Mirrors Skia's
+     * `SkImages::CrossContextTextureFromPixmap(GrDirectContext*, const SkPixmap&, bool buildMips)`
+     * ([include/gpu/ganesh/SkImageGanesh.h](https://github.com/google/skia/blob/main/include/gpu/ganesh/SkImageGanesh.h)).
+     *
+     * Uploads [pixmap]'s pixels into a GPU cross-context texture and returns
+     * a GPU-backed [SkImage] that can be consumed on a different GPU context
+     * from the one used to create it. [buildMips] requests mip-map generation
+     * on upload. The returned image holds a semaphore / sync primitive so the
+     * producing context can signal ownership transfer to a consuming context.
+     *
+     * **Status : STUB.CROSS_CONTEXT_IMAGE** — `:kanvas-skia` is a raster-only
+     * backend. There is no `GrDirectContext` and no GPU texture pipeline. This
+     * factory exists solely so [CrossContextImageGM] compiles against the live
+     * [SkImages] surface and remains `@Disabled` with a precise reason.
+     * Throws [NotImplementedError] unconditionally at runtime.
+     */
+    public fun CrossContextTextureFromPixmap(
+        pixmap: SkPixmap,
+        buildMips: Boolean,
+    ): SkImage? {
+        TODO(
+            "STUB.CROSS_CONTEXT_IMAGE: SkImages.CrossContextTextureFromPixmap(" +
+                "pixmap=${pixmap.info().width}x${pixmap.info().height}, buildMips=$buildMips) " +
+                "requires GrDirectContext — kanvas-skia is raster-only " +
+                "(see CrossContextImageGM)."
+        )
+    }
+
+    /**
+     * Mirrors Skia's
      * `SkImages::TextureFromYUVAImages(Recorder*, const SkYUVAInfo&,
      * const sk_sp<SkImage>[kMaxPlanes], sk_sp<SkColorSpace>)`.
      *
