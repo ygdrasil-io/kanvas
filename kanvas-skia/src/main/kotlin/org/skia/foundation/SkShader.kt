@@ -136,6 +136,32 @@ public abstract class SkShader protected constructor(
     }
 
     /**
+     * Mirrors Skia's `SkShader::makeWithColorFilter(sk_sp<SkColorFilter>)`.
+     *
+     * Returns a new shader that applies [filter] to every colour produced
+     * by `this` shader before it reaches the paint pipeline. Equivalent
+     * to `SkShaders::Blend(mode, this, SkShaders::Color(filter.filterColor(c)))`.
+     *
+     * **Status** : STUB.MAKE_WITH_COLOR_FILTER — `:kanvas-skia`'s raster
+     * device routes colour-filter logic through [SkPaint.colorFilter] and
+     * [SkImageFilters.ColorFilter] ; the shader-internal composition needed
+     * to implement `SkColorFilterShader` (the private Skia subclass returned
+     * here) is out of scope for the current sprint. Call sites that invoke
+     * this method will throw [NotImplementedError] at runtime, which lets the
+     * GM test be classified and `@Disabled` with the `STUB.MAKE_WITH_COLOR_FILTER`
+     * tag rather than left as a silent no-op.
+     */
+    public open fun makeWithColorFilter(
+        @Suppress("UNUSED_PARAMETER") filter: SkColorFilter,
+    ): SkShader = TODO(
+        "STUB.MAKE_WITH_COLOR_FILTER: SkShader.makeWithColorFilter requires " +
+            "SkColorFilterShader (private Skia subclass) — compose a " +
+            "SkColorFilter into the per-pixel shader sampling chain. " +
+            "Port when the :kanvas-skia shader pipeline supports nested " +
+            "filter composition.",
+    )
+
+    /**
      * R-final.2 — mirrors Skia's
      * [`SkShader::makeWithLocalMatrix`](https://github.com/google/skia/blob/main/src/shaders/SkShader.cpp#L26).
      *
