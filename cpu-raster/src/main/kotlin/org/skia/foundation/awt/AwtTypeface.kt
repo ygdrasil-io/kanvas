@@ -87,6 +87,52 @@ public class AwtTypeface internal constructor(
     internal fun canDisplayCodepoint(cp: Int): Boolean = baseFont.canDisplay(cp)
 
     /**
+     * Mirrors [SkTypeface.countGlyphs] — AWT exposes the underlying
+     * font's `maxp.numGlyphs` directly via `java.awt.Font.getNumGlyphs()`.
+     * Skia's contract is "number of distinct glyphs in this typeface",
+     * which is exactly what AWT returns for TrueType-backed fonts.
+     */
+    override fun countGlyphs(): Int = baseFont.numGlyphs
+
+    /**
+     * Mirrors [SkTypeface.getFamilyName] — appends the AWT
+     * `Font.getFamily(Locale.ROOT)` to [name]. `Locale.ROOT` keeps
+     * the result deterministic across JVM locales (otherwise AWT
+     * would translate canonical family names like "Liberation Sans"
+     * into the user's locale).
+     */
+    override fun getFamilyName(name: StringBuilder) {
+        name.append(baseFont.getFamily(java.util.Locale.ROOT))
+    }
+
+    /**
+     * Mirrors [SkTypeface.getGlyphBoundsInternal] — tight visual bbox
+     * of a single glyph at the requested `size / scaleX / skewX`.
+     * Uses the same `GlyphVector.getVisualBounds()` route as
+     * [measureTextInternal] (the multi-glyph path), but scoped to a
+     * single glyph ID via `Font.createGlyphVector(frc, int[])`.
+     *
+     * The bbox is in baseline-relative coordinates (Skia y-down :
+     * negative `top` = above baseline, positive `bottom` = below).
+     */
+    override fun getGlyphBoundsInternal(
+        glyphId: Int,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+    ): SkRect {
+        val font = derivedFont(size, scaleX, skewX)
+        val gv = font.createGlyphVector(FRC, intArrayOf(glyphId))
+        val vb = gv.getGlyphVisualBounds(0).bounds2D
+        return SkRect(
+            vb.x.toFloat(),
+            vb.y.toFloat(),
+            (vb.x + vb.width).toFloat(),
+            (vb.y + vb.height).toFloat(),
+        )
+    }
+
+    /**
      * Mirrors `SkFont::measureText` — returns advance width, optionally
      * fills [bounds] with the **tight glyph visual bbox** (matching Skia,
      * which returns visual not logical bounds). The visual-bbox path
