@@ -54,7 +54,7 @@ extract_kt_meta() {
         | head -n1 | sed -E 's/.*"([^"]+)".*/\1/') || true )
     [ -z "$get_name" ] && get_name="-"
 
-    if grep -qE '^[[:space:]]*typealias[[:space:]]' "$kt" 2>/dev/null; then
+    if grep -qE '^[[:space:]]*(public|internal|private)?[[:space:]]*typealias[[:space:]]' "$kt" 2>/dev/null; then
         status="ALIAS"
     elif grep -qE '^[[:space:]]*@(Ignore|Disabled)\b' "$kt" 2>/dev/null; then
         status="IGNORED"
@@ -113,22 +113,71 @@ extract_kt_meta() {
 # Build an index file mapping each registered GM name OR class name → kt file.
 # Output format: <key>\t<kt_basename>\t<status>
 # Cached at /tmp/gm-kt-index.$USER.tsv
+#
+# Multi-class per file IS supported : every class name AND every
+# `getName()` literal in the file produces an index entry, all sharing
+# the file-level `status` from [extract_kt_meta]. This is what makes
+# `ImageBlurLargeGM` (declared in `ImageBlurGM.kt` alongside `ImageBlurGM`)
+# resolve correctly against upstream's `imageblur_large` registration —
+# pre-fix the index only recorded the first class per file, which left
+# ~30 % of multi-GM files showing up as false-positive PARTIAL.
+#
+# Implementation note : a naive `for f; do grep $f; done` spawns thousands
+# of grep/awk forks which macOS sandboxes happily SIGKILL. We instead run a
+# single `awk -F /` over the whole directory and emit class + getName keys
+# in one pass. The status (PORTED / STUB / IGNORED / ALIAS / EMPTY) is
+# computed separately via [extract_kt_meta] which is cheap on its own.
 build_kt_index() {
     local out="${1:-/tmp/gm-kt-index.$USER.tsv}"
     : > "$out"
-    local f meta class_name get_name status
+    local tmp_keys
+    tmp_keys=$(mktemp -t gm-kt-keys.XXXXXX)
+    # Pass 1 : extract (key, kt_basename) pairs from every .kt in ONE awk.
+    awk '
+        # Per-file reset.
+        FNR == 1 {
+            n = split(FILENAME, parts, "/")
+            bn = parts[n]
+        }
+        # class | object | typealias <Name>GM
+        # (POSIX awk has no \b ; use a trailing non-word-char + trim it.)
+        match($0, /(class|object|typealias)[[:space:]]+[A-Z][A-Za-z0-9_]+GM[^A-Za-z0-9_]/) {
+            seg = substr($0, RSTART, RLENGTH - 1)
+            sub(/^(class|object|typealias)[[:space:]]+/, "", seg)
+            print seg "\t" bn
+        }
+        # getName(): ... = "literal"
+        # Greedy `.*"` would eat through the CLOSING quote, leaving an
+        # empty string. Use `[^"]*"` to stop at the FIRST quote, then
+        # trim from the second quote on.
+        match($0, /getName\(\)[^=]*=[[:space:]]*"[^"]+"/) {
+            seg = substr($0, RSTART, RLENGTH)
+            sub(/^[^"]*"/, "", seg)   # drop everything up to and through opening quote
+            sub(/".*$/,    "", seg)   # drop from closing quote to end of line
+            print seg "\t" bn
+        }
+    ' "$KT_GM_DIR"/*.kt > "$tmp_keys"
+
+    # Pass 2 : per file, compute status via extract_kt_meta and write
+    # `bn<TAB>status` lines to a status map (bash 3.2 has no associative
+    # arrays so we use a temp-file join via awk).
+    local tmp_status
+    tmp_status=$(mktemp -t gm-kt-status.XXXXXX)
+    local f meta status bn
     for f in "$KT_GM_DIR"/*.kt; do
         [ -f "$f" ] || continue
         meta=$(extract_kt_meta "$f")
-        class_name=$(printf '%s' "$meta" | cut -f1)
-        get_name=$(printf '%s' "$meta"   | cut -f2)
-        status=$(printf '%s' "$meta"     | cut -f3)
-        local bn
+        status=$(printf '%s' "$meta" | cut -f3)
         bn=$(basename "$f")
-        # index by class name
-        [ "$class_name" != "-" ] && printf '%s\t%s\t%s\n' "$class_name" "$bn" "$status" >> "$out"
-        # index by getName() value
-        [ "$get_name"   != "-" ] && printf '%s\t%s\t%s\n' "$get_name"   "$bn" "$status" >> "$out"
+        printf '%s\t%s\n' "$bn" "$status" >> "$tmp_status"
     done
+
+    # Join : for each (key, bn) in keys, look up bn's status.
+    awk -F'\t' '
+        FNR == NR { status[$1] = $2; next }      # first pass : status map
+        { print $1 "\t" $2 "\t" (status[$2] ? status[$2] : "EMPTY") }
+    ' "$tmp_status" "$tmp_keys" >> "$out"
+
+    rm -f "$tmp_keys" "$tmp_status"
     sort -u -o "$out" "$out"
 }
