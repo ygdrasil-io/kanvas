@@ -208,4 +208,42 @@ public class SkTextBlob public constructor(
             }
         }
     }
+
+    public companion object {
+        /**
+         * Mirrors Skia's `SkTextBlob::MakeFromRSXformGlyphs(glyphs, count,
+         * xforms, font)`. Builds a single-run RSXform text blob from an
+         * already-resolved glyph-ID array.
+         *
+         * **STUB.RSXBLOB** — per-glyph RSXform glyph-blob rendering is not
+         * yet supported end-to-end (the [Run.RSXformPositions] run type
+         * exists but [org.skia.core.SkCanvas.drawTextBlob] does not yet
+         * apply the per-glyph affine transforms when rasterising). Returns a
+         * structurally valid [SkTextBlob] so callers compile; the visual
+         * output will fall back to the glyph origins at `(fTx, fTy)` only
+         * (no rotation or scale).
+         */
+        public fun MakeFromRSXformGlyphs(
+            glyphs: IntArray,
+            xforms: Array<SkRSXform>,
+            font: SkFont,
+        ): SkTextBlob {
+            TODO("STUB.RSXBLOB")
+        }
+
+        /**
+         * Mirrors Skia's `SkTextBlob::MakeFromRSXform(text, byteLength,
+         * xforms, font)`. Resolves [text] (UTF-8) to glyph IDs via [font],
+         * then delegates to [MakeFromRSXformGlyphs].
+         *
+         * **STUB.RSXBLOB** — see [MakeFromRSXformGlyphs].
+         */
+        public fun MakeFromRSXform(
+            text: String,
+            xforms: Array<SkRSXform>,
+            font: SkFont,
+        ): SkTextBlob {
+            TODO("STUB.RSXBLOB")
+        }
+    }
 }
