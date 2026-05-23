@@ -8,7 +8,7 @@ import org.skia.testing.TestUtils
 class ImageFiltersTextBaseTest {
 
     @Test
-    fun `ImageFiltersTextBaseGM placeholder`() {
-        TestUtils.runGmTest(ImageFiltersTextBaseGM())
+    fun `ImageFiltersTextIfGM placeholder`() {
+        TestUtils.runGmTest(ImageFiltersTextIfGM())
     }
 }
