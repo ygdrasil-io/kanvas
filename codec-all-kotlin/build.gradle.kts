@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     api(project(":codec-core"))
+    api(project(":codec-png-kotlin"))
     api(project(":codec-wbmp-kotlin"))
     api(project(":codec-bmp-kotlin"))
     api(project(":codec-ico-kotlin"))
