@@ -495,6 +495,22 @@ class SkMatrixTest {
         assertTrue(m.cheapEqualTo(SkMatrix.MakeScale(2f, 3f)))
     }
 
+    @Test
+    fun `cheapEqualTo compares perspective fields`() {
+        val a = SkMatrix.MakeAll(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0.25f, 0f, 1f,
+        )
+        val b = SkMatrix.MakeAll(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0.5f, 0f, 1f,
+        )
+
+        assertFalse(a.cheapEqualTo(b))
+    }
+
     // ─── Phase 2: mapping API ──────────────────────────────────────────
 
     @Test
@@ -512,6 +528,21 @@ class SkMatrixTest {
         // dropped — even though tx/ty are large, vector mapping shouldn't add them.
         val v = m.mapVector(1f, 0f)
         assertEquals(2f, v.fX); assertEquals(0f, v.fY)
+    }
+
+    @Test
+    fun `mapVector with perspective matches mapPoint minus origin`() {
+        val m = SkMatrix.MakeAll(
+            1.2f, 0.3f, 5f,
+            0.1f, 1.5f, 7f,
+            0.002f, 0.003f, 1f,
+        )
+        val origin = m.mapXY(SkPoint(0f, 0f))
+        val point = m.mapXY(SkPoint(2.5f, -1.5f))
+        val vector = m.mapVector(2.5f, -1.5f)
+
+        assertNear(point.fX - origin.fX, vector.fX, eps = 1e-4f)
+        assertNear(point.fY - origin.fY, vector.fY, eps = 1e-4f)
     }
 
     @Test
@@ -675,6 +706,22 @@ class SkMatrixTest {
         for (deg in floatArrayOf(0f, 30f, 90f, 137f)) {
             assertNear(r, SkMatrix.MakeRotate(deg).mapRadius(r), eps = 1e-4f)
         }
+    }
+
+    @Test
+    fun `mapRadius uses mapped axis vector lengths under perspective`() {
+        val r = 5f
+        val m = SkMatrix.MakeAll(
+            1.2f, 0.3f, 5f,
+            0.1f, 1.5f, 7f,
+            0.002f, 0.003f, 1f,
+        )
+        val vectors = arrayOf(SkPoint(r, 0f), SkPoint(0f, r))
+        m.mapVectors(vectors)
+        val d0 = sqrt(vectors[0].fX * vectors[0].fX + vectors[0].fY * vectors[0].fY)
+        val d1 = sqrt(vectors[1].fX * vectors[1].fX + vectors[1].fY * vectors[1].fY)
+
+        assertNear(sqrt(d0 * d1), m.mapRadius(r), eps = 1e-4f)
     }
 
     // ─── Phase 3: function-style accessors + det ─────────────────────────
@@ -976,6 +1023,21 @@ class SkMatrixTest {
         assertNear(2f, x); assertNear(0f, y)
     }
 
+    @Test
+    fun `MakeRSXform pivoted matches SkRSXform anchor translation`() {
+        val m = SkMatrix.MakeRSXform(
+            scos = 0f, ssin = 1f,
+            anchorX = 2f, anchorY = 3f,
+            tx = 10f, ty = 20f,
+        )
+
+        assertNear(13f, m.tx)
+        assertNear(18f, m.ty)
+        val anchored = m.mapXY(SkPoint(2f, 3f))
+        assertNear(10f, anchored.fX)
+        assertNear(20f, anchored.fY)
+    }
+
     // ─── Phase 4: MakePolyToPoly ─────────────────────────────────────────
 
     @Test
@@ -992,6 +1054,17 @@ class SkMatrixTest {
         )!!
         assertTrue(m.isTranslate())
         assertEquals(5f, m.tx); assertEquals(7f, m.ty)
+    }
+
+    @Test
+    fun `setPolyToPoly delegates to MakePolyToPoly`() {
+        val src = arrayOf(SkPoint(0f, 0f), SkPoint(1f, 0f), SkPoint(0f, 1f))
+        val dst = arrayOf(SkPoint(10f, 20f), SkPoint(40f, 25f), SkPoint(15f, 70f))
+
+        val viaSet = SkMatrix.setPolyToPoly(src, dst)!!
+        val viaMake = SkMatrix.MakePolyToPoly(src, dst)!!
+
+        assertTrue(viaSet.cheapEqualTo(viaMake))
     }
 
     @Test

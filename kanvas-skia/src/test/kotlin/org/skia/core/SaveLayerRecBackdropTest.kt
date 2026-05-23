@@ -115,7 +115,7 @@ class SaveLayerRecBackdropTest {
         val bounds = SkRect.MakeLTRB(0f, 0f, 10f, 10f)
         val paint = SkPaint().apply { alpha = 0x80 }
         val backdrop = SkImageFilters.Blur(2f, 2f)
-        val rec = SaveLayerRec(bounds, paint, backdrop, 0)
+        val rec = SaveLayerRec(bounds = bounds, paint = paint, backdrop = backdrop, flags = 0)
         assertEquals(bounds, rec.bounds)
         assertEquals(paint, rec.paint)
         assertNotNull(rec.backdrop)

@@ -374,6 +374,74 @@ public object SkImages {
         return sliced
     }
 
+    /**
+     * Mirrors Skia's
+     * [`SkImages::RasterFromCompressedTextureData(data, width, height, compression)`](https://github.com/google/skia/blob/main/include/core/SkImage.h)
+     * — decodes a block-compressed payload ([data]) into a fresh raster
+     * [SkImage] of the requested logical [width] × [height] (the
+     * underlying block grid is rounded up to the next 4×4 multiple but
+     * the caller-visible image is cropped back to the logical extent).
+     *
+     * [compression] picks the block format ; the entry currently
+     * targets BC1 RGB / BC1 RGBA / ETC2 RGB8 (everything in the
+     * [SkTextureCompressionType] enum bar [SkTextureCompressionType.kNone]).
+     *
+     * **Status.** Flag-planting STUB — throws
+     * `NotImplementedError("STUB.COMPRESSED_TEXTURES")`. The kanvas-skia
+     * raster backend has no block-decompression routine yet ; this
+     * factory exists so the upstream `bc1_transparency` /
+     * `compressed_textures` GM ports compile against the live surface
+     * and stay `@Disabled` with the precise reason.
+     *
+     * **Originally documented as out-of-scope** in this class's header
+     * KDoc ; reintroduced as a TODO entry-point to gate the upstream
+     * GM ports (see PR for the BC1TransparencyGM body port).
+     */
+    public fun RasterFromCompressedTextureData(
+        data: SkData,
+        width: Int,
+        height: Int,
+        compression: SkTextureCompressionType,
+    ): SkImage? {
+        TODO(
+            "STUB.COMPRESSED_TEXTURES: SkImages.RasterFromCompressedTextureData(" +
+                "data[${data.size} bytes], ${width}x$height, $compression) " +
+                "not implemented — kanvas-skia raster backend lacks the " +
+                "block-compressed texture decode path (BC1 / ETC2 — see " +
+                "BC1TransparencyGM, CompressedTexturesGM)."
+        )
+    }
+
+    /**
+     * Mirrors Skia's
+     * `SkImages::TextureFromYUVAImages(Recorder*, const SkYUVAInfo&,
+     * const sk_sp<SkImage>[kMaxPlanes], sk_sp<SkColorSpace>)`.
+     *
+     * Graphite (GPU) factory that assembles a YUVA multi-plane image from
+     * pre-rendered per-plane GPU textures ([planes]) and a YUVA layout
+     * descriptor ([yuvaInfo]). The resulting image is GPU-resident and
+     * performs YUV→RGB conversion on the fly during drawing.
+     *
+     * This factory has no raster equivalent in `:kanvas-skia` — the raster
+     * backend has no GPU recorder or texture concept. Any caller must guard
+     * against `null` and/or be `@Disabled` with this stub tag.
+     *
+     * **TODO: STUB.YUVA_PIXMAPS** — `SkImages::TextureFromYUVAImages` is
+     * Graphite-only; the raster backend cannot materialise GPU-resident
+     * YUVA images.
+     */
+    public fun TextureFromYUVAImages(
+        recorder: Any?,
+        yuvaInfo: SkYUVAInfo,
+        planes: Array<SkImage?>,
+        imageColorSpace: SkColorSpace?,
+    ): SkImage? {
+        TODO(
+            "STUB.YUVA_PIXMAPS: SkImages.TextureFromYUVAImages — " +
+                "Graphite GPU-only factory; no raster equivalent in kanvas-skia."
+        )
+    }
+
     public fun DeferredFromPicture(
         picture: SkPicture,
         dimensions: SkISize,

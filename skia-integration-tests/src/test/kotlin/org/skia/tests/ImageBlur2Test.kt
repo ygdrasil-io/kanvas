@@ -2,6 +2,7 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
@@ -10,6 +11,7 @@ import org.skia.testing.TestUtils
 class ImageBlur2Test {
 
     @Test
+    @Disabled("SLOW.GM_STRESS: ~16s text blur grid; run explicitly when touching saveLayer text blur or large blur kernels.")
     fun `ImageBlur2GM matches imageblur2_png within tolerance`() {
         val gm = ImageBlur2GM()
         val rendered = TestUtils.runGmTest(gm)

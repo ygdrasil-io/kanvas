@@ -17,6 +17,24 @@ public object SimilarityTracker {
     private const val SCORES_FILE: String = "test-similarity-scores.properties"
     private const val MAX_DROP_PERCENT: Double = 1.0
 
+    /**
+     * When `true`, [updateScore] still validates against the existing
+     * ratchet but the [SCORES_FILE] file is **not** mutated. Set via
+     * `-Pkanvas.ratchet.writes.disabled=true` in `gradle.properties` (the
+     * sprint default, see commit message of #671) or
+     * `-Dkanvas.ratchet.writes.disabled=true` on the JVM. Lets 10+
+     * parallel GM port agents coexist without conflicting on the shared
+     * properties file. Re-enable by flipping the gradle.properties line
+     * back to `false` (or removing it) before re-baselining.
+     *
+     * Loaded **once** at object init to avoid per-call sysprop reads
+     * (and to make the gate state visible in test logs at the first
+     * `updateScore` call).
+     */
+    private val ratchetWriteDisabled: Boolean =
+        System.getProperty("kanvas.ratchet.writes.disabled", "false").toBoolean() ||
+            System.getenv("KANVAS_RATCHET_WRITES_DISABLED") == "true"
+
     private val scores: Properties = Properties()
     private var loaded: Boolean = false
 
@@ -74,6 +92,14 @@ public object SimilarityTracker {
     }
 
     private fun saveScores() {
+        if (ratchetWriteDisabled) {
+            // Sprint mode : validate-only. The new score has been pushed
+            // into the in-memory map + TestReport, but the on-disk
+            // ratchet file is left untouched so parallel CI / agent PRs
+            // don't conflict on it. See `kanvas.ratchet.writes.disabled`
+            // in `gradle.properties`.
+            return
+        }
         FileOutputStream(SCORES_FILE).use {
             scores.store(it, "kanvas-skia GM test similarity scores")
         }

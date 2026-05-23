@@ -1,6 +1,7 @@
 package org.skia.foundation
 
 import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.math.SkColorChannel
 import org.graphiks.math.SkISize
 
 /**
@@ -96,6 +97,47 @@ public data class SkYUVAInfo(
      * (MPEG-1 / JPEG).
      */
     public enum class Siting { kCentered, kTopLeft }
+
+    /**
+     * Mirrors `SkYUVAInfo::YUVALocation` — identifies which plane and
+     * channel within that plane carries one of the four YUVA signals.
+     * [fPlane] is -1 when the channel is absent (e.g. no alpha plane).
+     *
+     * Mirrors the C++ struct in `src/core/SkYUVAInfoLocation.h`.
+     */
+    public data class YUVALocation(
+        /** Index into the planes array, or -1 when not present. */
+        public val fPlane: Int = -1,
+        /** Which channel within the plane carries this signal. */
+        public val fChannel: SkColorChannel = SkColorChannel.kA,
+    )
+
+    /**
+     * Mirrors `SkYUVAInfo::YUVALocations` —
+     * `std::array<YUVALocation, kYUVAChannelCount>` in C++.
+     *
+     * Indexed by YUVA channel ordinal : 0=Y, 1=U, 2=V, 3=A.
+     */
+    public typealias YUVALocations = Array<YUVALocation>
+
+    /**
+     * Mirrors `SkYUVAInfo::toYUVALocations(const uint32_t* channelFlags)`.
+     *
+     * Converts this info's [planeConfig] + [channelFlags] into a
+     * [YUVALocations] map. Full implementation requires parsing
+     * per-plane channel-flag bitmasks (from
+     * `src/core/SkYUVAInfoLocation.cpp`). Not yet wired.
+     *
+     * **TODO: STUB.YUVA_PIXMAPS** — implement the channel-flag → YUVA
+     * location dispatch from upstream's `SkYUVAInfo::GetYUVALocations`.
+     */
+    public fun toYUVALocations(channelFlags: IntArray): YUVALocations {
+        TODO(
+            "STUB.YUVA_PIXMAPS: SkYUVAInfo.toYUVALocations(channelFlags) — " +
+                "channel-flag → YUVA location mapping not yet ported from " +
+                "src/core/SkYUVAInfoLocation.cpp."
+        )
+    }
 
     /** Width of the displayed full-resolution image. */
     public fun width(): Int = dimensions.width
@@ -210,6 +252,13 @@ public data class SkYUVAInfo(
     public companion object {
         /** Maximum number of planes any [PlaneConfig] requires. Mirrors `SkYUVAInfo::kMaxPlanes`. */
         public const val kMaxPlanes: Int = 4
+
+        /**
+         * The number of YUVA channels (Y, U, V, A).
+         * Mirrors `SkYUVAInfo::kYUVAChannelCount` — used to size
+         * [YUVALocations] arrays.
+         */
+        public const val kYUVAChannelCount: Int = 4
 
         /** Mirrors `constexpr int SkYUVAInfo::NumPlanes(PlaneConfig)`. */
         public fun NumPlanes(planeConfig: PlaneConfig): Int = when (planeConfig) {

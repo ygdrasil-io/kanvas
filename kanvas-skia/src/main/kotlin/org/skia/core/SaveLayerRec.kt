@@ -2,6 +2,7 @@ package org.skia.core
 
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkTileMode
 import org.graphiks.math.SkRect
 
 /**
@@ -34,6 +35,17 @@ public data class SaveLayerRec(
     public val bounds: SkRect? = null,
     public val paint: SkPaint? = null,
     public val backdrop: SkImageFilter? = null,
+    /**
+     * Tiling mode applied to the **backdrop snapshot** before it is
+     * run through [backdrop] and pasted into the new layer.
+     *
+     * Mirrors `SkCanvas::SaveLayerRec::fBackdropTileMode` (upstream
+     * `include/core/SkCanvas.h`). Currently accepted for source-compat
+     * but **not yet honoured** by the CPU-raster backend — the backdrop
+     * snapshot is always clamped to its bounds. GPU and other backends
+     * may implement the tiling in a later phase.
+     */
+    public val backdropTileMode: SkTileMode = SkTileMode.kClamp,
     public val flags: SaveLayerFlags = 0,
     /**
      * Phase R1-C — mirrors Skia's private

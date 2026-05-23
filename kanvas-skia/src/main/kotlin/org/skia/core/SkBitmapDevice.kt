@@ -693,6 +693,35 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             return
         }
 
+        // STUB.ALPHA8_IMAGE_AS_MASK — when the source image is `kAlpha_8`
+        // and the paint carries a non-black RGB colour (i.e. the image is
+        // being used as a colour mask rather than a monochrome sprite), Skia
+        // fills covered pixels with the paint's RGB modulated by the image's
+        // alpha channel. The kanvas-skia raster device does not yet implement
+        // this path : it reads A8 pixels as (0,0,0,alpha) and blends that
+        // dark pixel, producing black instead of the intended paint colour.
+        //
+        // The condition mirrors the semantic used by `gm/imagemasksubset.cpp`:
+        //   - image colorType is kAlpha_8 (pure alpha mask)
+        //   - paint has a non-trivial RGB colour (not black)
+        //   - no colour filter present (a colour filter can remap the alpha
+        //     itself, as SkOverdrawColorFilter does)
+        //
+        // When hit, this throws [NotImplementedError] so that any ported GM
+        // that exercises the alpha-mask draw path is visible in CI and its
+        // test is kept @Disabled until the implementation lands.
+        if (image.colorType == org.skia.foundation.SkColorType.kAlpha_8
+            && paint?.colorFilter == null
+            && paint != null
+            && (paint.color and 0x00FFFFFF) != 0) {
+            TODO(
+                "STUB.ALPHA8_IMAGE_AS_MASK: drawImageRect with a kAlpha_8 source image " +
+                    "and a coloured paint must use the image alpha as a mask for the " +
+                    "paint's RGB colour. Not yet implemented in the kanvas-skia raster " +
+                    "device — tracked as STUB.ALPHA8_IMAGE_AS_MASK.",
+            )
+        }
+
         val ix0 = pixelEdge(devDst.left).coerceAtLeast(clip.left)
         val iy0 = pixelEdge(devDst.top).coerceAtLeast(clip.top)
         val ix1 = pixelEdge(devDst.right).coerceAtMost(clip.right)
@@ -1095,7 +1124,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // stipple ; the stroker thickens each segment. When the effect
         // returns an empty path (degenerate intervals etc.) we drop the
         // draw.
-        val effectivePath = paint.pathEffect?.filterPath(path, ctm) ?: path
+        val effectivePath = paint.pathEffect?.filterPath(path, ctm, pathEffectCullRect(clip, ctm, paint)) ?: path
         if (effectivePath !== path && effectivePath.isEmpty() && !effectivePath.fillType.isInverse()) return
 
         // Phase 7c — when a mask filter (e.g. Gaussian blur) is set,
@@ -1510,6 +1539,28 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         out[1] = c.fG * a
         out[2] = c.fB * a
         out[3] = a
+    }
+
+    private fun pathEffectCullRect(clip: SkIRect, ctm: SkMatrix, paint: SkPaint): SkRect? {
+        if (!ctm.isScaleTranslate()) return null
+        val sx = ctm.getScaleX()
+        val sy = ctm.getScaleY()
+        if (sx == 0f || sy == 0f) return null
+
+        val halfStroke = if (paint.style == SkPaint.Style.kFill_Style) 0f else paint.strokeWidth * 0.5f
+        val padX = halfStroke / kotlin.math.abs(sx) + 1f
+        val padY = halfStroke / kotlin.math.abs(sy) + 1f
+        val x0 = (clip.left().toFloat() - ctm.getTranslateX()) / sx
+        val x1 = (clip.right().toFloat() - ctm.getTranslateX()) / sx
+        val y0 = (clip.top().toFloat() - ctm.getTranslateY()) / sy
+        val y1 = (clip.bottom().toFloat() - ctm.getTranslateY()) / sy
+
+        return SkRect.MakeLTRB(
+            kotlin.math.min(x0, x1) - padX,
+            kotlin.math.min(y0, y1) - padY,
+            kotlin.math.max(x0, x1) + padX,
+            kotlin.math.max(y0, y1) + padY,
+        )
     }
 
     // --------------------------------------------------------------------

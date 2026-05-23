@@ -246,8 +246,14 @@ internal class SkUserTypeface internal constructor(
     private val metrics: SkFontMetrics,
     private val slots: List<SkCustomTypefaceBuilder.GlyphRec>,
     private val unicharToGlyphId: Map<Int, Int>,
-    public val familyName: String,
+    private val customFamilyName: String,
 ) : SkTypeface() {
+
+    /** Test / advanced-caller accessor. Public mirror of [getFamilyName]. */
+    public val familyName: String
+        @JvmName("customFamilyName") get() = customFamilyName
+
+    override fun getFamilyName(name: StringBuilder) { name.append(customFamilyName) }
 
     override val fontStyle: SkFontStyle = style
 

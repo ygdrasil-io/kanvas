@@ -60,6 +60,21 @@ class SkIRectTest {
     }
 
     @Test
+    fun `MakePtSize delegates to MakeXYWH saturation semantics`() {
+        val max = SkIRect.MakePtSize(SkIPoint(Int.MAX_VALUE - 1, Int.MAX_VALUE - 2), SkISize(10, 20))
+        assertEquals(Int.MAX_VALUE - 1, max.left)
+        assertEquals(Int.MAX_VALUE - 2, max.top)
+        assertEquals(Int.MAX_VALUE, max.right)
+        assertEquals(Int.MAX_VALUE, max.bottom)
+
+        val min = SkIRect.MakePtSize(SkIPoint(Int.MIN_VALUE + 1, Int.MIN_VALUE + 2), SkISize(-10, -20))
+        assertEquals(Int.MIN_VALUE + 1, min.left)
+        assertEquals(Int.MIN_VALUE + 2, min.top)
+        assertEquals(Int.MIN_VALUE, min.right)
+        assertEquals(Int.MIN_VALUE, min.bottom)
+    }
+
+    @Test
     fun `setXYWH offset inset adjust all saturate`() {
         // setXYWH: w pushes right past MAX_VALUE → clamps.
         val r = SkIRect.MakeEmpty()
