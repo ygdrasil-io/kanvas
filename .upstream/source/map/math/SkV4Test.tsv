@@ -1,6 +1,6 @@
-org.graphiks.math.SkV4Test	M44Test	math/src/test/kotlin/SkV4Test.kt:7	tests/M44Test.cpp:1
-org.graphiks.math.SkV4Test.arithmetic operators	M44_v4	math/src/test/kotlin/SkV4Test.kt:36	tests/M44Test.cpp:101
-org.graphiks.math.SkV4Test.accessors and equality	M44_v4	math/src/test/kotlin/SkV4Test.kt:10	tests/M44Test.cpp:101
-org.graphiks.math.SkV4Test.indexed access mirrors C++ operator subscript	M44_v4	math/src/test/kotlin/SkV4Test.kt:17	tests/M44Test.cpp:101
-org.graphiks.math.SkV4Test.dot and length	M44_v4	math/src/test/kotlin/SkV4Test.kt:28	tests/M44Test.cpp:101
-org.graphiks.math.SkV4Test.normalize produces unit vector	M44_v4	math/src/test/kotlin/SkV4Test.kt:48	tests/M44Test.cpp:101
+org.graphiks.math.SkV4Test	M44Test	math/src/commonTest/kotlin/SkV4Test.kt:7	tests/M44Test.cpp:1
+org.graphiks.math.SkV4Test.arithmetic operators	M44_v4	math/src/commonTest/kotlin/SkV4Test.kt:36	tests/M44Test.cpp:101
+org.graphiks.math.SkV4Test.accessors and equality	M44_v4	math/src/commonTest/kotlin/SkV4Test.kt:10	tests/M44Test.cpp:101
+org.graphiks.math.SkV4Test.indexed access mirrors C++ operator subscript	M44_v4	math/src/commonTest/kotlin/SkV4Test.kt:17	tests/M44Test.cpp:101
+org.graphiks.math.SkV4Test.dot and length	M44_v4	math/src/commonTest/kotlin/SkV4Test.kt:28	tests/M44Test.cpp:101
+org.graphiks.math.SkV4Test.normalize produces unit vector	M44_v4	math/src/commonTest/kotlin/SkV4Test.kt:48	tests/M44Test.cpp:101

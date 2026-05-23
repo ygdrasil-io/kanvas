@@ -1,9 +1,9 @@
 package org.graphiks.math
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 /**
  * Coverage for the iso-aligned `SkScalar` helpers.
@@ -27,11 +27,11 @@ class SkScalarTest {
     }
 
     @Test
-    fun `nearly-zero constants match Skia exactly`() {
+    fun `nearly-zero constants match Skia`() {
         // SK_ScalarNearlyZero = 1f / (1 << 12) = 1/4096
-        assertEquals(1.0f / 4096f, SK_ScalarNearlyZero)
+        assertEquals(1.0f / 4096f, SK_ScalarNearlyZero, 0f)
         // SK_ScalarSinCosNearlyZero = 1f / (1 << 16) = 1/65536
-        assertEquals(1.0f / 65536f, SK_ScalarSinCosNearlyZero)
+        assertEquals(1.0f / 65536f, SK_ScalarSinCosNearlyZero, 0f)
     }
 
     @Test
