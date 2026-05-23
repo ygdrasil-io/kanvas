@@ -2346,7 +2346,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * layer origin.
      */
     public open fun saveLayer(bounds: SkRect?, paint: SkPaint?): Int =
-        saveLayer(SaveLayerRec(bounds, paint, null, 0))
+        saveLayer(SaveLayerRec(bounds = bounds, paint = paint, backdrop = null, flags = 0))
 
     /**
      * Mirrors Skia's full-fat `SkCanvas::saveLayer(SaveLayerRec)` —
