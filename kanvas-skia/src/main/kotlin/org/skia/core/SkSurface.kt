@@ -81,6 +81,20 @@ public abstract class SkSurface protected constructor(
     public abstract fun makeImageSnapshot(): SkImage
 
     /**
+     * Mirrors Skia's `SkSurface::makeImageSnapshot(const SkIRect&)` —
+     * returns an immutable [SkImage] of the sub-rectangle [subset] of
+     * this surface's current pixels.
+     *
+     * **TODO: STUB.SURFACE_SNAPSHOT_SUBSET** — the full-surface overload
+     * is implemented; this rectangular-crop variant is not yet wired
+     * through the raster backend. Required by `gm/surface.cpp::surface_underdraw`
+     * (and any other GM that saves-away a strip before drawing the foreground
+     * layer, then composites the strip back underneath via `kDstOver`).
+     */
+    public open fun makeImageSnapshot(subset: org.graphiks.math.SkIRect): SkImage =
+        TODO("STUB.SURFACE_SNAPSHOT_SUBSET: SkSurface.makeImageSnapshot(SkIRect)")
+
+    /**
      * Draw this surface's current contents onto another canvas, with
      * the surface's `(0, 0)` landing at (`x`, `y`) in `target` space.
      * `paint` may carry alpha and a blend mode (filters/shaders are
