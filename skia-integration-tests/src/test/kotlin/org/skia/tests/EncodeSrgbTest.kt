@@ -2,6 +2,7 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.testing.SimilarityTracker
@@ -39,5 +40,34 @@ class EncodeSrgbTest {
         }
         val accepted = SimilarityTracker.updateScore("EncodeSrgbJpgGM", comparison.similarity)
         assertTrue(accepted, "EncodeSrgbJpgGM regressed below ratchet")
+    }
+
+    /**
+     * Upstream's third `encode_srgb.cpp` variant (`DEF_GM` with `kWEBP`).
+     *
+     * The GM is wired : [EncodeSrgbGM] now routes through
+     * [org.skia.encode.SkWebpEncoder.Encode] (VP8L lossless) and decodes
+     * the round-tripped bytes via the TwelveMonkeys imageio-webp codec.
+     * The test is `@Disabled` because no upstream reference image
+     * (`encode-srgb-webp.png`) exists in the `original-888/` fixture set ;
+     * once the reference is seeded (render + drop the PNG into
+     * `kanvas-legacy/src/test/resources/original-888/`) this annotation
+     * can be removed and the ratchet threshold tuned like the PNG/JPG peers.
+     */
+    @Disabled("STUB.ENCODE_SRGB_WEBP: no reference image encode-srgb-webp.png in original-888/ yet — seed it then remove @Disabled")
+    @Test
+    fun `EncodeSrgbGM WEBP matches encode-srgb-webp within tolerance`() {
+        val gm = EncodeSrgbGM(SkEncodedImageFormat.kWEBP)
+        val rendered = TestUtils.runGmTest(gm)
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "Missing reference image encode-srgb-webp.png")
+        // VP8L is lossless, so pixel-identical to PNG tolerance is reasonable.
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 32)
+        TestReport.recordDetailed("EncodeSrgbWebpGM", comparison)
+        if (comparison.similarity < 40.0) {
+            TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
+        }
+        val accepted = SimilarityTracker.updateScore("EncodeSrgbWebpGM", comparison.similarity)
+        assertTrue(accepted, "EncodeSrgbWebpGM regressed below ratchet")
     }
 }
