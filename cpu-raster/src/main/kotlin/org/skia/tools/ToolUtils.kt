@@ -198,6 +198,22 @@ public object ToolUtils {
         SkFont(DefaultPortableTypeface(), size)
 
     /**
+     * Mirrors `ToolUtils::TestFontMgr()` (`tools/fonts/FontToolUtils.cpp`).
+     *
+     * **R-final.S — STUB.LIBERATION_FM** : upstream returns a full `sk_sp<SkFontMgr>`
+     * backed by the portable Liberation typeface set (style sets, family iteration,
+     * `makeFromStream` with TTF / woff / woff2 dispatch). Our AWT-backed [LiberationFontMgr]
+     * is an `internal` object that does **not** extend [org.skia.foundation.SkFontMgr], so
+     * we cannot return a properly-typed instance here without exposing implementation
+     * internals. This method always throws to surface the gap. Every GM that calls it must
+     * annotate its test `@Disabled("STUB.LIBERATION_FM: …")`. See `API_FINALIZATION_PLAN.md`.
+     */
+    public fun TestFontMgr(): org.skia.foundation.SkFontMgr = TODO(
+        "STUB.LIBERATION_FM: TestFontMgr() requires a public SkFontMgr backed by Liberation TTFs " +
+            "with full makeFromStream / woff / woff2 support — see API_FINALIZATION_PLAN.md",
+    )
+
+    /**
      * Mirrors `ToolUtils::add_to_text_blob(builder, text, font, x, y)`
      * (`tools/ToolUtils.cpp` line ~1080). Resolves [text] (UTF-8) into
      * glyph IDs via [SkFont.unicharsToGlyphs] and appends a single
