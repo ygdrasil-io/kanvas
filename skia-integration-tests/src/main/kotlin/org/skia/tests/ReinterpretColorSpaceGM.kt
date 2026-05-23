@@ -21,9 +21,9 @@ import org.skia.tools.ToolUtils
  *    then re-tagged back to sRGB via `reinterpretColorSpace(sRGB)` — tests the
  *    composition of the two APIs; should appear backwards-spun (RGB → BRG)
  *
- * `reinterpretColorSpace` is unimplemented in kanvas-skia
- * (`STUB.IMAGE_REINTERPRET_COLOR_SPACE`), so the body throws. The test is
- * `@Disabled`.
+ * On the CPU backend [SkImage.reinterpretColorSpace] is a metadata-only
+ * rewrap: pixels are shared, but future draws read them under the new
+ * colour-space tag.
  *
  * C++ original: `gm/makecolorspace.cpp` — `DEF_SIMPLE_GM_CAN_FAIL(reinterpretcolorspace…)`.
  */
