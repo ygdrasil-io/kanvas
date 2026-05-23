@@ -12,14 +12,20 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
     implementation(project(":kanvas-skia"))
-
-    // D3.4 — WEBP decoding via the TwelveMonkeys ImageIO plugin.
-    // Registers a WEBP `ImageReader` with the JVM's ImageIO SPI on
-    // classpath load, so `ImageIO.read` decodes WEBP bytes the same
-    // way it does PNG / JPEG / GIF / BMP / WBMP. Used by SkWebpCodec
-    // (moved here in iter 3c). Read-only — TwelveMonkeys has no
-    // WEBP encoder.
-    implementation("com.twelvemonkeys.imageio:imageio-webp:3.12.0")
+    implementation(project(":codec-core"))
+    implementation(project(":codec-common"))
+    implementation(project(":codec-all-awt"))
+    implementation(project(":codec-png-imageio"))
+    implementation(project(":codec-jpeg-imageio"))
+    implementation(project(":codec-gif-imageio"))
+    implementation(project(":codec-bmp-imageio"))
+    implementation(project(":codec-wbmp-imageio"))
+    implementation(project(":codec-webp-imageio"))
+    implementation(project(":codec-ico-kotlin"))
+    implementation(project(":codec-android"))
+    implementation(project(":codec-animated"))
+    implementation(project(":codec-extended"))
+    implementation(project(":codec-image-generator"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")

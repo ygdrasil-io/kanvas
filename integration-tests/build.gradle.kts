@@ -7,6 +7,9 @@ dependencies {
     implementation(project(":math"))
     implementation(project(":kanvas-skia"))
     implementation(project(":cpu-raster"))
+    implementation(project(":codec-core"))
+    implementation(project(":codec-all-awt"))
+    implementation(project(":codec-webp-imageio"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
