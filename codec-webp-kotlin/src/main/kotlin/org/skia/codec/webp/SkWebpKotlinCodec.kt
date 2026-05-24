@@ -1246,6 +1246,88 @@ internal fun inverseVp8WalshHadamard4x4(input: IntArray): IntArray {
     return out
 }
 
+internal sealed interface Vp8CoefficientDecodeResult {
+    data class Block(val coefficients: IntArray, val hasNonZero: Boolean) : Vp8CoefficientDecodeResult
+    data object Invalid : Vp8CoefficientDecodeResult
+}
+
+internal fun decodeVp8CoefficientBlock(
+    reader: Vp8BoolReader,
+    probabilities: IntArray,
+    startCoefficient: Int = 0,
+): Vp8CoefficientDecodeResult {
+    if (probabilities.size != VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT) return Vp8CoefficientDecodeResult.Invalid
+    if (probabilities.any { it !in 1..255 }) return Vp8CoefficientDecodeResult.Invalid
+    if (startCoefficient !in 0 until VP8_BLOCK_COEFFICIENT_COUNT) return Vp8CoefficientDecodeResult.Invalid
+
+    val coefficients = IntArray(VP8_BLOCK_COEFFICIENT_COUNT)
+    var hasNonZero = false
+    for (coefficientIndex in startCoefficient until VP8_BLOCK_COEFFICIENT_COUNT) {
+        if ((reader.readBit(probabilities[0]) ?: return Vp8CoefficientDecodeResult.Invalid) == 0) {
+            return Vp8CoefficientDecodeResult.Block(coefficients, hasNonZero)
+        }
+        if ((reader.readBit(probabilities[1]) ?: return Vp8CoefficientDecodeResult.Invalid) == 0) continue
+
+        val magnitude = readVp8CoefficientMagnitude(reader, probabilities)
+            ?: return Vp8CoefficientDecodeResult.Invalid
+        val sign = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8CoefficientDecodeResult.Invalid
+        coefficients[VP8_ZIGZAG[coefficientIndex]] = if (sign == 0) magnitude else -magnitude
+        hasNonZero = true
+    }
+    return Vp8CoefficientDecodeResult.Block(coefficients, hasNonZero)
+}
+
+private fun readVp8CoefficientMagnitude(reader: Vp8BoolReader, probabilities: IntArray): Int? {
+    if ((reader.readBit(probabilities[2]) ?: return null) == 0) return 1
+    if ((reader.readBit(probabilities[3]) ?: return null) == 0) {
+        if ((reader.readBit(probabilities[4]) ?: return null) == 0) return 2
+        return if ((reader.readBit(probabilities[5]) ?: return null) == 0) 3 else 4
+    }
+
+    if ((reader.readBit(probabilities[6]) ?: return null) == 0) {
+        return readVp8CoefficientCategory(reader, 5, VP8_COEFFICIENT_CATEGORY1_PROBS)
+    }
+    if ((reader.readBit(probabilities[7]) ?: return null) == 0) {
+        return readVp8CoefficientCategory(reader, 7, VP8_COEFFICIENT_CATEGORY2_PROBS)
+    }
+    if ((reader.readBit(probabilities[8]) ?: return null) == 0) {
+        return readVp8CoefficientCategory(reader, 11, VP8_COEFFICIENT_CATEGORY3_PROBS)
+    }
+    if ((reader.readBit(probabilities[9]) ?: return null) == 0) {
+        return readVp8CoefficientCategory(reader, 19, VP8_COEFFICIENT_CATEGORY4_PROBS)
+    }
+    return if ((reader.readBit(probabilities[10]) ?: return null) == 0) {
+        readVp8CoefficientCategory(reader, 35, VP8_COEFFICIENT_CATEGORY5_PROBS)
+    } else {
+        readVp8CoefficientCategory(reader, 67, VP8_COEFFICIENT_CATEGORY6_PROBS)
+    }
+}
+
+private fun readVp8CoefficientCategory(reader: Vp8BoolReader, base: Int, probabilities: IntArray): Int? {
+    var value = base
+    for (probability in probabilities) {
+        value = (value shl 1) + (reader.readBit(probability) ?: return null)
+    }
+    return value - (base shl probabilities.size) + base
+}
+
+private const val VP8_BLOCK_COEFFICIENT_COUNT: Int = 16
+private const val VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT: Int = 11
+
+private val VP8_ZIGZAG = intArrayOf(
+    0, 1, 4, 8,
+    5, 2, 3, 6,
+    9, 12, 13, 10,
+    7, 11, 14, 15,
+)
+
+private val VP8_COEFFICIENT_CATEGORY1_PROBS = intArrayOf(159)
+private val VP8_COEFFICIENT_CATEGORY2_PROBS = intArrayOf(165, 145)
+private val VP8_COEFFICIENT_CATEGORY3_PROBS = intArrayOf(173, 148, 140)
+private val VP8_COEFFICIENT_CATEGORY4_PROBS = intArrayOf(176, 155, 140, 135)
+private val VP8_COEFFICIENT_CATEGORY5_PROBS = intArrayOf(180, 157, 141, 134, 130)
+private val VP8_COEFFICIENT_CATEGORY6_PROBS = intArrayOf(254, 254, 243, 230, 196, 177, 153, 140, 133, 130, 129)
+
 internal enum class Vp8IntraPredictionMode {
     DC,
     VERTICAL,
