@@ -113,7 +113,7 @@ class LiberationOpenTypeFontMgrTest {
     }
 
     @Test
-    fun `portable font paths do not import AWT imageio or JNI`() {
+    fun `portable font paths do not import AWT imageio GraphicsEnvironment or JNI`() {
         val projectRoot = findProjectRoot()
         val portableFontPaths = listOf(
             projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/LiberationFontMgr.kt"),
@@ -151,6 +151,7 @@ class LiberationOpenTypeFontMgrTest {
             Regex("""^\s*import\s+java\.awt(\.|$)""", RegexOption.MULTILINE),
             Regex("""^\s*import\s+javax\.imageio(\.|$)""", RegexOption.MULTILINE),
             Regex("""^\s*import\s+org\.skia\.foundation\.awt(\.|$)""", RegexOption.MULTILINE),
+            Regex("""\bGraphicsEnvironment\b"""),
             Regex("""^\s*import\s+.*\bjni\b""", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE)),
         )
 
