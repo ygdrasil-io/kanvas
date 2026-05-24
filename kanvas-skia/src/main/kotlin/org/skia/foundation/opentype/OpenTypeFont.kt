@@ -80,9 +80,8 @@ public class OpenTypeFontMgr public constructor() : SkFontMgr() {
  */
 public class OpenTypeTypeface private constructor(
     private val font: ParsedTrueTypeFont,
+    override val fontStyle: SkFontStyle,
 ) : SkTypeface() {
-    public override val fontStyle: SkFontStyle = SkFontStyle.Normal()
-
     override fun countGlyphs(): Int = font.numGlyphs
 
     override fun getFamilyName(name: StringBuilder) {
@@ -226,13 +225,16 @@ public class OpenTypeTypeface private constructor(
 
     override fun makeClone(args: SkFontArguments): SkTypeface? {
         // Variation deltas are deliberately not applied in this first slice.
-        return OpenTypeTypeface(font)
+        return OpenTypeTypeface(font, fontStyle)
     }
+
+    internal fun withFontStyle(style: SkFontStyle): OpenTypeTypeface =
+        OpenTypeTypeface(font, style)
 
     public companion object {
         @Suppress("FunctionName")
         public fun MakeFromBytes(bytes: ByteArray, ttcIndex: Int = 0): OpenTypeTypeface? =
-            ParsedTrueTypeFont.parse(bytes, ttcIndex)?.let(::OpenTypeTypeface)
+            ParsedTrueTypeFont.parse(bytes, ttcIndex)?.let { OpenTypeTypeface(it, SkFontStyle.Normal()) }
     }
 }
 
