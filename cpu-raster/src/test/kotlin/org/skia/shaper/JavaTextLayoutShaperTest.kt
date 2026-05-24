@@ -9,7 +9,7 @@ import org.skia.foundation.SkTypeface
 import org.skia.foundation.awt.LiberationFontMgr
 
 /**
- * Phase I4.2 — covers [SkShaper.MakeJavaTextLayout].
+ * Phase I4.2 — covers [SkShaper.MakeJvmAwtTextLayout].
  *
  * Tests cover :
  *  - empty input emits begin / commit line and no runs ;
@@ -55,7 +55,7 @@ class JavaTextLayoutShaperTest {
     @Test
     fun `empty input emits begin and commit line and no runs`() {
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "", font = awtFont(), leftToRight = true,
             width = 100f, runHandler = handler,
         )
@@ -68,7 +68,7 @@ class JavaTextLayoutShaperTest {
         // No AWT engine available — JavaTextLayoutShaper delegates and
         // we still see one run (PrimitiveShaper's char-by-char output).
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "ABC", font = SkFont(SkTypeface.MakeEmpty(), 12f),
             leftToRight = true, width = 100f, runHandler = handler,
         )
@@ -84,7 +84,7 @@ class JavaTextLayoutShaperTest {
     @Test
     fun `ASCII input produces a single LTR run`() {
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "Hello", font = awtFont(), leftToRight = true,
             width = 1000f, runHandler = handler,
         )
@@ -98,7 +98,7 @@ class JavaTextLayoutShaperTest {
     @Test
     fun `LTR positions monotonically increase`() {
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "ABCDE", font = awtFont(), leftToRight = true,
             width = 1000f, runHandler = handler,
         )
@@ -115,7 +115,7 @@ class JavaTextLayoutShaperTest {
     fun `RTL Arabic input flags bidi level 1`() {
         // "مرحبا" (Arabic "hello") — pure RTL.
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "مرحبا",
             font = awtFont(), leftToRight = false,
             width = 1000f, runHandler = handler,
@@ -132,7 +132,7 @@ class JavaTextLayoutShaperTest {
     fun `mixed LTR Arabic LTR emits multiple runs in visual order`() {
         // "Hi مرحبا" — base LTR, English then Arabic.
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "Hi مرحبا",
             font = awtFont(), leftToRight = true,
             width = 1000f, runHandler = handler,
@@ -151,7 +151,7 @@ class JavaTextLayoutShaperTest {
     @Test
     fun `cluster offsets are UTF-8 byte indices for ASCII`() {
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "ABC", font = awtFont(), leftToRight = true,
             width = 1000f, runHandler = handler,
         )
@@ -171,7 +171,7 @@ class JavaTextLayoutShaperTest {
     fun `cluster offsets handle multi-byte UTF-8 encoding`() {
         // "aé" : 'a' = 1 byte at offset 0 ; 'é' = 2 bytes at offset 1.
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "aé", font = awtFont(), leftToRight = true,
             width = 1000f, runHandler = handler,
         )
@@ -190,7 +190,7 @@ class JavaTextLayoutShaperTest {
     @Test
     fun `SkTextBlobShaperRunHandler captures shaped output as a textblob`() {
         val handler = SkTextBlobShaperRunHandler("Hello", originX = 10f, originY = 50f)
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "Hello", font = awtFont(), leftToRight = true,
             width = 1000f, runHandler = handler,
         )
@@ -206,7 +206,7 @@ class JavaTextLayoutShaperTest {
     @Test
     fun `wide width emits a single line for short text`() {
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "Hello world", font = awtFont(), leftToRight = true,
             width = 10_000f, runHandler = handler,
         )
@@ -221,7 +221,7 @@ class JavaTextLayoutShaperTest {
         val handler = CapturingHandler()
         // "the quick brown fox jumps over" — at 16pt with a 60px width
         // we expect at least 3 lines (one or two words per line).
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "the quick brown fox jumps over", font = awtFont(),
             leftToRight = true, width = 60f, runHandler = handler,
         )
@@ -234,7 +234,7 @@ class JavaTextLayoutShaperTest {
     @Test
     fun `infinite width preserves single-line output`() {
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "the quick brown fox jumps over the lazy dog",
             font = awtFont(), leftToRight = true,
             width = Float.POSITIVE_INFINITY, runHandler = handler,
@@ -248,7 +248,7 @@ class JavaTextLayoutShaperTest {
         // A single uninterrupted token — BreakIterator finds no
         // intra-word break, so even at width=10 we get one line.
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "supercalifragilisticexpialidocious",
             font = awtFont(), leftToRight = true,
             width = 10f, runHandler = handler,
@@ -261,7 +261,7 @@ class JavaTextLayoutShaperTest {
     @Test
     fun `wrapped lines anchor at successively lower Y in SkTextBlobShaperRunHandler`() {
         val handler = SkTextBlobShaperRunHandler("the quick brown fox", originX = 0f, originY = 50f)
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "the quick brown fox", font = awtFont(),
             leftToRight = true, width = 60f, runHandler = handler,
         )
@@ -283,7 +283,7 @@ class JavaTextLayoutShaperTest {
         // "aé bé cé" — wraps narrow ; clusters must keep increasing
         // (no resets) since they're absolute byte offsets.
         val handler = CapturingHandler()
-        SkShaper.MakeJavaTextLayout().shape(
+        SkShaper.MakeJvmAwtTextLayout().shape(
             utf8 = "aé bé cé", font = awtFont(),
             leftToRight = true, width = 30f, runHandler = handler,
         )

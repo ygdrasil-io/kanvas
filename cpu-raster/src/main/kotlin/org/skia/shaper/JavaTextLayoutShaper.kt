@@ -8,7 +8,7 @@ import java.text.BreakIterator
 import java.util.Locale
 
 /**
- * Phase I4.2 + I4.3 — bidi-aware [SkShaper] backed by the JDK's
+ * Optional JVM/AWT shaper. Phase I4.2 + I4.3 — bidi-aware [SkShaper] backed by the JDK's
  * `java.awt.Font.layoutGlyphVector` (kerning, ligatures, glyph
  * reordering), `java.text.Bidi` (UAX #9 bidirectional algorithm),
  * and `java.text.BreakIterator` (UAX #14 line break opportunities).
@@ -32,6 +32,10 @@ import java.util.Locale
  *     [SkShaper.RunHandler.commitLine] so multi-line handlers (notably
  *     [SkTextBlobShaperRunHandler]) can advance the baseline cursor
  *     between lines.
+ *
+ * This class is deliberately confined to `:cpu-raster`; portable font paths
+ * should use [SkShaper.MakePrimitive] until a pure Kotlin complex shaper is
+ * introduced.
  *
  * **Fallback** — when [SkFont.typeface] is not an [AwtTypeface] (for
  * example [org.skia.foundation.SkTypeface.MakeEmpty]) the shaper
