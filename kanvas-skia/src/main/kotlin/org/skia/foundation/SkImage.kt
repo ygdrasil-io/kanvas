@@ -392,7 +392,7 @@ public class SkImage public constructor(
      *  - destination row-bytes are less than `dstInfo.minRowBytes()`.
      *  - destination colour type is `kUnknown`.
      *  - source image is empty.
-     *  - `|srcX| >= width()` or `|srcY| >= height()`.
+     *  - the source and destination rectangles do not overlap.
      *
      * Colour-space conversion is performed when `this.colorSpace` and
      * `dstInfo.colorSpace` differ, via [SkColorSpaceXformSteps]. Pixel
@@ -410,7 +410,8 @@ public class SkImage public constructor(
         if (dstInfo.isEmpty()) return false
         if (dstRowBytes < dstInfo.minRowBytes()) return false
         if (width <= 0 || height <= 0) return false
-        if (kotlin.math.abs(srcX) >= width || kotlin.math.abs(srcY) >= height) return false
+        if (srcX >= width || srcY >= height) return false
+        if (srcX + dstInfo.width <= 0 || srcY + dstInfo.height <= 0) return false
 
         // Wrap the destination in a temporary pixmap so the per-pixel
         // format conversion logic lives in one place (SkPixmap.writePixel).
@@ -434,7 +435,8 @@ public class SkImage public constructor(
     public fun readPixels(dst: SkPixmap, srcX: Int = 0, srcY: Int = 0): Boolean {
         if (dst.colorType() == SkColorType.kUnknown) return false
         if (width <= 0 || height <= 0 || dst.width() <= 0 || dst.height() <= 0) return false
-        if (kotlin.math.abs(srcX) >= width || kotlin.math.abs(srcY) >= height) return false
+        if (srcX >= width || srcY >= height) return false
+        if (srcX + dst.width() <= 0 || srcY + dst.height() <= 0) return false
 
         val srcL = maxOf(srcX, 0)
         val srcT = maxOf(srcY, 0)
