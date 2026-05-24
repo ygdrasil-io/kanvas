@@ -62,9 +62,6 @@ public class SkGradient(
     }
 
     internal fun workingColorSpaceOrNull(): SkColorSpace? {
-        if (interpolation.inPremul != Interpolation.InPremul.kNo) {
-            unsupported("InPremul.${interpolation.inPremul}")
-        }
         if (interpolation.hueMethod != Interpolation.HueMethod.kShorter) {
             unsupported("HueMethod.${interpolation.hueMethod}")
         }
@@ -95,6 +92,17 @@ public class SkGradient(
             Interpolation.ColorSpace.kOKLCH,
             Interpolation.ColorSpace.kHSL,
             Interpolation.ColorSpace.kHWB -> unsupported("ColorSpace.${interpolation.colorSpace}")
+        }
+    }
+
+    internal fun requiresDedicatedSampler(): Boolean =
+        interpolation.colorSpace == Interpolation.ColorSpace.kHSL
+
+    internal fun validateDedicatedSampler() {
+        if (interpolation.colorSpace == Interpolation.ColorSpace.kHSL &&
+            interpolation.inPremul != Interpolation.InPremul.kNo
+        ) {
+            unsupported("ColorSpace.kHSL with InPremul.${interpolation.inPremul}")
         }
     }
 

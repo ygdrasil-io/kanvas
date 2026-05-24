@@ -1,6 +1,7 @@
 package org.skia.foundation
 
 import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
 import org.graphiks.math.SkPoint
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -59,6 +60,85 @@ class SkGradientInterpolationTest {
     }
 
     @Test
+    fun `linear gradient overload supports HSL shorter hue interpolation`() {
+        val mid = sampleMidpoint(
+            SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kHSL,
+                hueMethod = SkGradient.Interpolation.HueMethod.kShorter,
+            ),
+        )
+
+        assertTrue(
+            SkColorGetR(mid) > 200 && (mid and 0xFF) > 200 && SkColorGetG(mid) < 80,
+            "shorter red-to-blue HSL midpoint should be magenta, got 0x${mid.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `linear gradient overload supports HSL increasing hue interpolation`() {
+        val mid = sampleMidpoint(
+            SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kHSL,
+                hueMethod = SkGradient.Interpolation.HueMethod.kIncreasing,
+            ),
+        )
+
+        assertTrue(
+            SkColorGetG(mid) > 200 && SkColorGetR(mid) < 80 && (mid and 0xFF) < 80,
+            "increasing red-to-blue HSL midpoint should be green, got 0x${mid.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `linear gradient overload supports HSL longer hue interpolation`() {
+        val mid = sampleMidpoint(
+            SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kHSL,
+                hueMethod = SkGradient.Interpolation.HueMethod.kLonger,
+            ),
+        )
+
+        assertTrue(
+            SkColorGetG(mid) > 200 && SkColorGetR(mid) < 80 && (mid and 0xFF) < 80,
+            "longer red-to-blue HSL midpoint should be green, got 0x${mid.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `linear gradient overload supports HSL decreasing hue interpolation`() {
+        val mid = sampleMidpoint(
+            SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kHSL,
+                hueMethod = SkGradient.Interpolation.HueMethod.kDecreasing,
+            ),
+        )
+
+        assertTrue(
+            SkColorGetR(mid) > 200 && (mid and 0xFF) > 200 && SkColorGetG(mid) < 80,
+            "decreasing red-to-blue HSL midpoint should be magenta, got 0x${mid.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `linear gradient overload accepts premul interpolation flag for RGB spaces`() {
+        val pts = arrayOf(SkPoint(0f, 0f), SkPoint(10f, 0f))
+        val shader = SkShaders.LinearGradient(
+            pts,
+            SkGradient(
+                colors = intArrayOf(0x80FF0000.toInt(), 0x800000FF.toInt()),
+                interpolation = SkGradient.Interpolation(
+                    colorSpace = SkGradient.Interpolation.ColorSpace.kSRGB,
+                    inPremul = SkGradient.Interpolation.InPremul.kYes,
+                ),
+            ),
+        )
+        shader.setupForDraw(org.graphiks.math.SkMatrix.Identity, srgbXform)
+        val row = IntArray(1)
+        shader.shadeRow(5, 0, row.size, row)
+        assertTrue(row[0] ushr 24 > 0, "premul RGB interpolation should render a non-empty sample")
+    }
+
+    @Test
     fun `linear gradient overload accepts bounded RGB color spaces`() {
         val pts = arrayOf(SkPoint(0f, 0f), SkPoint(10f, 0f))
         val rgbSpaces = listOf(
@@ -83,5 +163,20 @@ class SkGradientInterpolationTest {
             shader.shadeRow(0, 0, row.size, row)
             assertTrue(row.any { it != 0 }, "$space should render a non-empty row")
         }
+    }
+
+    private fun sampleMidpoint(interpolation: SkGradient.Interpolation): Int {
+        val pts = arrayOf(SkPoint(0f, 0f), SkPoint(100f, 0f))
+        val shader = SkShaders.LinearGradient(
+            pts,
+            SkGradient(
+                colors = intArrayOf(0xFFFF0000.toInt(), 0xFF0000FF.toInt()),
+                interpolation = interpolation,
+            ),
+        )
+        shader.setupForDraw(org.graphiks.math.SkMatrix.Identity, srgbXform)
+        val row = IntArray(1)
+        shader.shadeRow(50, 0, row.size, row)
+        return row[0]
     }
 }
