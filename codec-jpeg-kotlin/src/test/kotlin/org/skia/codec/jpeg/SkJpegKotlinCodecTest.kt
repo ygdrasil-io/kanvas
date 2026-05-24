@@ -384,6 +384,25 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
+    fun `decodes progressive grayscale dc successive refinement scan`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleDcRefinementJpeg())!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(16, bitmap!!.width)
+        assertEquals(8, bitmap.height)
+        for (y in 0 until 8) {
+            for (x in 0 until 8) {
+                assertEquals(0xFF818181.toInt(), bitmap.getPixel(x, y), "x=$x y=$y")
+            }
+            for (x in 8 until 16) {
+                assertEquals(0xFF808080.toInt(), bitmap.getPixel(x, y), "x=$x y=$y")
+            }
+        }
+    }
+
+    @Test
     fun `rejects invalid progressive scan parameters`() {
         assertNull(
             SkJpegKotlinCodec.Decoder.make(
@@ -515,6 +534,50 @@ class SkJpegKotlinCodecTest {
             }
             out.write(entropyBits(bits))
         }
+        out.writeMarker(0xD9)
+        return out.toByteArray()
+    }
+
+    private fun progressiveGrayscaleDcRefinementJpeg(): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(1) }
+        }
+        out.writeSegment(0xC2) {
+            write(8)
+            writeU16BE(8)
+            writeU16BE(16)
+            write(1)
+            write(1)
+            write(0x11)
+            write(0)
+        }
+        out.writeSegment(0xC4) {
+            write(0x00)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(0)
+            write(0)
+            write(0x04)
+        }
+        out.write(entropyBits("00"))
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(0)
+            write(0)
+            write(0x43)
+        }
+        out.write(entropyBits("10"))
         out.writeMarker(0xD9)
         return out.toByteArray()
     }

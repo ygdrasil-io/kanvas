@@ -583,18 +583,27 @@ private fun decodeProgressiveGrayscaleInitial(jpeg: ParsedJpeg): IntArray? {
     val totalMcus = blocksX * blocksY
     val blockCoeffs = Array(totalMcus) { IntArray(64) }
     var sawDc = false
+    var dcApproxLow = -1
 
     for (entropyScan in jpeg.scans) {
         val scan = entropyScan.scan
         if (scan.components.size != 1 || scan.components.single().id != component.id) return null
         val successiveHigh = scan.successiveApprox ushr 4
         val successiveLow = scan.successiveApprox and 0x0F
-        if (successiveHigh != 0 || successiveLow != 0) return null
         if (scan.spectralStart == 0) {
-            if (scan.spectralEnd != 0 || sawDc) return null
-            decodeProgressiveGrayscaleDcScan(jpeg, entropyScan, blockCoeffs, quant)
-            sawDc = true
+            if (scan.spectralEnd != 0) return null
+            if (successiveHigh == 0) {
+                if (sawDc) return null
+                decodeProgressiveGrayscaleDcScan(jpeg, entropyScan, blockCoeffs, quant, successiveLow)
+                sawDc = true
+                dcApproxLow = successiveLow
+            } else {
+                if (!sawDc || successiveHigh != dcApproxLow || successiveLow != successiveHigh - 1) return null
+                decodeProgressiveGrayscaleDcRefinementScan(jpeg, entropyScan, blockCoeffs, quant, successiveLow)
+                dcApproxLow = successiveLow
+            }
         } else {
+            if (successiveHigh != 0 || successiveLow != 0) return null
             if (!sawDc) return null
             decodeProgressiveGrayscaleAcScan(jpeg, entropyScan, blockCoeffs, quant)
         }
@@ -625,6 +634,7 @@ private fun decodeProgressiveGrayscaleDcScan(
     entropyScan: EntropyScan,
     blockCoeffs: Array<IntArray>,
     quant: IntArray,
+    successiveLow: Int,
 ) {
     val component = entropyScan.scan.components.single()
     val dcTable = jpeg.dcTables[component.dcTable] ?: fail()
@@ -635,11 +645,32 @@ private fun decodeProgressiveGrayscaleDcScan(
         val dcCategory = dcTable.decode(reader)
         if (dcCategory !in 0..11) fail()
         previousDc += receiveAndExtend(reader, dcCategory)
-        blockCoeffs[blockIndex][0] = previousDc * quant[0]
+        blockCoeffs[blockIndex][0] = previousDc * (1 shl successiveLow) * quant[0]
         if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
             reader.consumeRestart(nextRestartMarker)
             nextRestartMarker = (nextRestartMarker + 1) and 7
             previousDc = 0
+        }
+    }
+}
+
+private fun decodeProgressiveGrayscaleDcRefinementScan(
+    jpeg: ParsedJpeg,
+    entropyScan: EntropyScan,
+    blockCoeffs: Array<IntArray>,
+    quant: IntArray,
+    successiveLow: Int,
+) {
+    val reader = EntropyBitReader(entropyScan.data)
+    var nextRestartMarker = 0
+    val refinement = (1 shl successiveLow) * quant[0]
+    for (blockIndex in blockCoeffs.indices) {
+        if (reader.readBit() != 0) {
+            blockCoeffs[blockIndex][0] += refinement
+        }
+        if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
+            reader.consumeRestart(nextRestartMarker)
+            nextRestartMarker = (nextRestartMarker + 1) and 7
         }
     }
 }
