@@ -1688,10 +1688,10 @@ internal fun filterVp8SimpleLoopFilterSample(
         return Vp8SimpleLoopFilterSample(p0 = p0, q0 = q0, filtered = false)
     }
 
-    val adjustment = clipSigned8(3 * (q0 - p0) + (p1 - q1))
+    val adjustment = 3 * (q0 - p0) + clipSigned8(p1 - q1)
     return Vp8SimpleLoopFilterSample(
-        p0 = clip8(p0 + ((adjustment + 3) shr 3)),
-        q0 = clip8(q0 - ((adjustment + 4) shr 3)),
+        p0 = clip8(p0 + clipSigned4((adjustment + 4) shr 3)),
+        q0 = clip8(q0 - clipSigned4((adjustment + 3) shr 3)),
         filtered = true,
     )
 }
@@ -1754,3 +1754,5 @@ internal fun applyVp8SimpleHorizontalLoopFilter(
 private fun clip8(value: Int): Int = value.coerceIn(0, 255)
 
 private fun clipSigned8(value: Int): Int = value.coerceIn(-128, 127)
+
+private fun clipSigned4(value: Int): Int = value.coerceIn(-16, 15)

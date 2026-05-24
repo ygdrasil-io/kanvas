@@ -788,6 +788,18 @@ class SkWebpKotlinCodecTest {
         assertEquals(102, filtered.p0)
         assertEquals(106, filtered.q0)
 
+        val clippedAdjustment = filterVp8SimpleLoopFilterSample(
+            p1 = 0,
+            p0 = 0,
+            q0 = 45,
+            q1 = 0,
+            limit = 100,
+        )
+
+        assertTrue(clippedAdjustment.filtered)
+        assertEquals(15, clippedAdjustment.p0)
+        assertEquals(30, clippedAdjustment.q0)
+
         val untouched = filterVp8SimpleLoopFilterSample(
             p1 = 0,
             p0 = 20,
