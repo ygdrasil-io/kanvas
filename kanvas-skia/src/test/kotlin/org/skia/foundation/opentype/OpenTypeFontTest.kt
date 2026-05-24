@@ -1167,6 +1167,54 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `drawString applies COLRv1 foreground alpha`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1ForegroundAlpha(glyph, alpha = 0))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(160, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlack))
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `drawString clips COLRv1 color glyphs with ClipList`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1ClippedSolid(glyph))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        var redInsideClip = 0
+        var redOutsideClip = 0
+        for (y in 0 until bitmap.height) {
+            for (x in 0 until bitmap.width) {
+                if (isMostlyRed(bitmap.getPixel(x, y))) {
+                    if (x < 48) redInsideClip++ else redOutsideClip++
+                }
+            }
+        }
+        assertTrue(redInsideClip > 0)
+        assertEquals(0, redOutsideClip)
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlack))
+    }
+
+    @Test
     fun `malformed COLRv1 paint graph fails closed without rejecting font`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
@@ -1856,6 +1904,63 @@ class OpenTypeFontTest {
 
         bytes[colrGlyphPaintOffset] = 11 // PaintColrGlyph
         writeU16(bytes, colrGlyphPaintOffset + 1, glyph)
+        return bytes
+    }
+
+    private fun syntheticColrV1ForegroundAlpha(glyph: Int, alpha: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val glyphPaintOffset = baseGlyphListOffset + 10
+        val solidPaintOffset = glyphPaintOffset + 6
+        val bytes = ByteArray(solidPaintOffset + 5)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, glyph)
+        writeU32(bytes, baseGlyphListOffset + 6, glyphPaintOffset - baseGlyphListOffset)
+
+        bytes[glyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, glyphPaintOffset + 1, solidPaintOffset - glyphPaintOffset)
+        writeU16(bytes, glyphPaintOffset + 4, glyph)
+        bytes[solidPaintOffset] = 2 // PaintSolid
+        writeU16(bytes, solidPaintOffset + 1, 0xFFFF) // foreground paletteIndex
+        writeI16(bytes, solidPaintOffset + 3, alpha)
+        return bytes
+    }
+
+    private fun syntheticColrV1ClippedSolid(glyph: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val glyphPaintOffset = baseGlyphListOffset + 10
+        val solidPaintOffset = glyphPaintOffset + 6
+        val clipListOffset = solidPaintOffset + 5
+        val clipBoxOffset = clipListOffset + 12
+        val bytes = ByteArray(clipBoxOffset + 9)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+        writeU32(bytes, 22, clipListOffset) // clipListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, glyph)
+        writeU32(bytes, baseGlyphListOffset + 6, glyphPaintOffset - baseGlyphListOffset)
+
+        bytes[glyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, glyphPaintOffset + 1, solidPaintOffset - glyphPaintOffset)
+        writeU16(bytes, glyphPaintOffset + 4, glyph)
+        bytes[solidPaintOffset] = 2 // PaintSolid
+        writeU16(bytes, solidPaintOffset + 1, 0) // red paletteIndex
+        writeI16(bytes, solidPaintOffset + 3, 0x4000) // alpha = 1.0
+
+        bytes[clipListOffset] = 1 // ClipList format
+        writeU32(bytes, clipListOffset + 1, 1) // numClips
+        writeU16(bytes, clipListOffset + 5, glyph) // startGlyphID
+        writeU16(bytes, clipListOffset + 7, glyph) // endGlyphID
+        writeU24(bytes, clipListOffset + 9, clipBoxOffset - clipListOffset)
+
+        bytes[clipBoxOffset] = 1 // ClipBox format 1
+        writeI16(bytes, clipBoxOffset + 1, -100) // xMin
+        writeI16(bytes, clipBoxOffset + 3, -400) // yMin
+        writeI16(bytes, clipBoxOffset + 5, 500) // xMax
+        writeI16(bytes, clipBoxOffset + 7, 1800) // yMax
         return bytes
     }
 
