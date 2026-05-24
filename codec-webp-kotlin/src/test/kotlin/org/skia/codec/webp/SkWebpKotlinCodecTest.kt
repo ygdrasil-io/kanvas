@@ -1,5 +1,6 @@
 package org.skia.codec.webp
 
+import org.graphiks.math.SkIRect
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -50,7 +51,20 @@ class SkWebpKotlinCodecTest {
     @Test
     fun `parses VP8X dimensions and flags`() {
         val codec = SkWebpKotlinCodec.Decoder.make(
-            vp8xWebp(width = 321, height = 123, flags = 0x3E),
+            riff(
+                "WEBP",
+                vp8xChunk(width = 321, height = 123, flags = 0x3E),
+                animChunk(background = 0, loopCount = 0),
+                anmfChunk(
+                    x = 0,
+                    y = 0,
+                    width = 1,
+                    height = 1,
+                    durationMs = 1,
+                    flags = 0,
+                    frameChunks = arrayOf(vp8lChunk(1, 1)),
+                ),
+            ),
         )
 
         assertNotNull(codec)
@@ -173,6 +187,144 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
         assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+    }
+
+    @Test
+    fun `parses animated WebP frame metadata`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8xChunk(width = 4, height = 2, flags = 0x12),
+                animChunk(background = argb(0x40, 10, 20, 30), loopCount = 7),
+                anmfChunk(
+                    x = 0,
+                    y = 0,
+                    width = 2,
+                    height = 2,
+                    durationMs = 45,
+                    flags = 0x03,
+                    frameChunks = arrayOf(vp8lLiteralChunk(2, 2, IntArray(4) { argb(0xFF, 1, 2, 3) })),
+                ),
+            ),
+        ) as SkWebpKotlinCodec?
+
+        assertNotNull(codec)
+        val checkedCodec = codec!!
+        assertEquals(1, checkedCodec.getFrameCount())
+        assertEquals(4, checkedCodec.getInfo().width)
+        assertEquals(2, checkedCodec.getInfo().height)
+        assertEquals(SkAlphaType.kUnpremul, checkedCodec.getInfo().alphaType)
+        assertEquals(7, checkedCodec.metadata.animation!!.loopCount)
+        assertEquals(argb(0x40, 10, 20, 30), checkedCodec.metadata.animation.backgroundColor)
+        val frame = checkedCodec.metadata.animation.frames.single()
+        assertEquals(45, frame.durationMs)
+        assertFalse(frame.blend)
+        assertTrue(frame.disposeToBackground)
+        assertEquals(
+            SkCodec.FrameInfo(SkCodec.kNoFrame, 45, SkAlphaType.kUnpremul, SkIRect.MakeXYWH(0, 0, 2, 2)),
+            checkedCodec.getFrameInfo().single(),
+        )
+    }
+
+    @Test
+    fun `decodes animated VP8L frames with disposal to background`() {
+        val transparent = argb(0, 0, 0, 0)
+        val red = argb(0xFF, 200, 0, 0)
+        val blue = argb(0xFF, 0, 0, 200)
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8xChunk(width = 4, height = 1, flags = 0x12),
+                animChunk(background = transparent, loopCount = 0),
+                anmfChunk(
+                    x = 0,
+                    y = 0,
+                    width = 4,
+                    height = 1,
+                    durationMs = 10,
+                    flags = 0x03,
+                    frameChunks = arrayOf(vp8lLiteralChunk(4, 1, IntArray(4) { red })),
+                ),
+                anmfChunk(
+                    x = 2,
+                    y = 0,
+                    width = 2,
+                    height = 1,
+                    durationMs = 20,
+                    flags = 0x02,
+                    frameChunks = arrayOf(vp8lLiteralChunk(2, 1, IntArray(2) { blue })),
+                ),
+            ),
+        )!!
+        val dst = SkBitmap(
+            width = 4,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 0)))
+        assertArrayEquals(IntArray(4) { red }, dst.pixels8888)
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 1)))
+        assertArrayEquals(intArrayOf(transparent, transparent, blue, blue), dst.pixels8888)
+    }
+
+    @Test
+    fun `rejects malformed animated WebP chunks`() {
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0x02),
+                    anmfChunk(
+                        x = 0,
+                        y = 0,
+                        width = 2,
+                        height = 2,
+                        durationMs = 1,
+                        flags = 0,
+                        frameChunks = arrayOf(vp8lChunk(2, 2)),
+                    ),
+                ),
+            ),
+        )
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0x02),
+                    animChunk(background = 0, loopCount = 0),
+                    anmfChunk(
+                        x = 2,
+                        y = 0,
+                        width = 2,
+                        height = 2,
+                        durationMs = 1,
+                        flags = 0,
+                        frameChunks = arrayOf(vp8lChunk(2, 2)),
+                    ),
+                ),
+            ),
+        )
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0x02),
+                    animChunk(background = 0, loopCount = 0),
+                    anmfChunk(
+                        x = 0,
+                        y = 0,
+                        width = 1,
+                        height = 1,
+                        durationMs = 1,
+                        flags = 0,
+                        frameChunks = arrayOf(vp8lChunk(2, 2)),
+                    ),
+                ),
+            ),
+        )
     }
 
     @Test
@@ -2185,6 +2337,39 @@ class SkWebpKotlinCodecTest {
         return chunk("VP8X", payload)
     }
 
+    private fun animChunk(background: Int, loopCount: Int): ByteArray {
+        val payload = ByteArray(6)
+        payload[0] = blue(background).toByte()
+        payload[1] = green(background).toByte()
+        payload[2] = red(background).toByte()
+        payload[3] = alpha(background).toByte()
+        writeU16LE(payload, 4, loopCount)
+        return chunk("ANIM", payload)
+    }
+
+    private fun anmfChunk(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        durationMs: Int,
+        flags: Int,
+        frameChunks: Array<ByteArray>,
+    ): ByteArray {
+        require((x and 1) == 0 && (y and 1) == 0)
+        val payload = ByteArrayOutputStream()
+        val header = ByteArray(16)
+        write24LE(header, 0, x / 2)
+        write24LE(header, 3, y / 2)
+        write24LE(header, 6, width - 1)
+        write24LE(header, 9, height - 1)
+        write24LE(header, 12, durationMs)
+        header[15] = flags.toByte()
+        payload.write(header)
+        for (frameChunk in frameChunks) payload.write(frameChunk)
+        return chunk("ANMF", payload.toByteArray())
+    }
+
     private fun vp8lWebp(width: Int, height: Int): ByteArray {
         return riff("WEBP", vp8lChunk(width, height))
     }
@@ -2201,6 +2386,10 @@ class SkWebpKotlinCodecTest {
     }
 
     private fun vp8lLiteralWebp(width: Int, height: Int, argb: IntArray): ByteArray {
+        return riff("WEBP", vp8lLiteralChunk(width, height, argb))
+    }
+
+    private fun vp8lLiteralChunk(width: Int, height: Int, argb: IntArray): ByteArray {
         require(argb.size == width * height)
         val writer = Vp8lTestBitWriter()
         writeVp8lHeaderBits(writer, width, height)
@@ -2222,7 +2411,7 @@ class SkWebpKotlinCodecTest {
             writer.writeSymbol(blue, pixel and 0xFF)
             writer.writeSymbol(alpha, (pixel ushr 24) and 0xFF)
         }
-        return vp8lWebpFromBits(writer)
+        return chunk("VP8L", byteArrayOf(0x2F) + writer.toByteArray())
     }
 
     private fun vp8lNormalHuffmanWebp(width: Int, height: Int): ByteArray {

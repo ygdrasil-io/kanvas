@@ -1,5 +1,6 @@
 package org.skia.codec.webp
 
+import org.graphiks.math.SkIRect
 import org.skia.codec.CodecDecoderProvider
 import org.skia.codec.SkCodec
 import org.skia.foundation.SkAlphaType
@@ -41,7 +42,22 @@ public class SkWebpKotlinCodec internal constructor(
 
     override fun getICCProfile(): SkcmsICCProfile? = metadata.iccProfile
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
+    override fun getFrameCount(): Int = metadata.animation?.frames?.size ?: 1
+
+    override fun getFrameInfo(): List<FrameInfo> =
+        metadata.animation?.frames?.mapIndexed { index, frame ->
+            FrameInfo(
+                requiredFrame = if (index == 0) kNoFrame else index - 1,
+                durationMs = frame.durationMs,
+                alphaType = if (metadata.hasAlpha) SkAlphaType.kUnpremul else SkAlphaType.kOpaque,
+                frameRect = SkIRect.MakeXYWH(frame.x, frame.y, frame.width, frame.height),
+            )
+        } ?: super.getFrameInfo()
+
+    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result =
+        getPixels(info, dst, Options())
+
+    override fun getPixels(info: SkImageInfo, dst: SkBitmap, opts: Options): Result {
         if (info.width != metadata.width || info.height != metadata.height) {
             return Result.kInvalidParameters
         }
@@ -53,6 +69,9 @@ public class SkWebpKotlinCodec internal constructor(
         }
         if (dst.colorType != info.colorType) {
             return Result.kInvalidParameters
+        }
+        metadata.animation?.let { animation ->
+            return decodeAnimatedFrame(info, dst, animation, opts.frameIndex)
         }
         if (metadata.format == WebpBitstreamFormat.VP8) {
             return when (val decoded = decodeVp8LossyPixels(data, metadata)) {
@@ -77,6 +96,41 @@ public class SkWebpKotlinCodec internal constructor(
         }
     }
 
+    private fun decodeAnimatedFrame(
+        info: SkImageInfo,
+        dst: SkBitmap,
+        animation: WebpAnimation,
+        frameIndex: Int,
+    ): Result {
+        if (frameIndex !in animation.frames.indices) return Result.kInvalidParameters
+        val canvas = IntArray(info.width * info.height) { animation.backgroundColor }
+        var previousFrame: WebpAnimationFrame? = null
+        for (index in 0..frameIndex) {
+            previousFrame?.let { previous ->
+                if (previous.disposeToBackground) {
+                    canvas.fillRect(
+                        canvasWidth = info.width,
+                        x = previous.x,
+                        y = previous.y,
+                        width = previous.width,
+                        height = previous.height,
+                        color = animation.backgroundColor,
+                    )
+                }
+            }
+            val frame = animation.frames[index]
+            val framePixels = when (val result = decodeAnimationFramePixels(frame)) {
+                AnimationFrameDecodeResult.Invalid -> return Result.kErrorInInput
+                AnimationFrameDecodeResult.Unsupported -> return Result.kUnimplemented
+                is AnimationFrameDecodeResult.Pixels -> result.pixels
+            }
+            canvas.compositeFrame(info.width, frame, framePixels)
+            previousFrame = frame
+        }
+        canvas.copyInto(dst.pixels8888)
+        return Result.kSuccess
+    }
+
     internal companion object Decoder : SkCodec.Decoder {
         override val name: String = "webp"
 
@@ -97,6 +151,12 @@ public class WebpKotlinDecoderProvider : CodecDecoderProvider {
     override fun decoders(): List<SkCodec.Decoder> = listOf(SkWebpKotlinCodec.Decoder)
 }
 
+private sealed interface AnimationFrameDecodeResult {
+    data class Pixels(val pixels: IntArray) : AnimationFrameDecodeResult
+    data object Unsupported : AnimationFrameDecodeResult
+    data object Invalid : AnimationFrameDecodeResult
+}
+
 internal data class WebpMetadata(
     val width: Int,
     val height: Int,
@@ -108,8 +168,36 @@ internal data class WebpMetadata(
     val exifData: ByteArray? = null,
     val xmpData: ByteArray? = null,
     val alphaChunk: WebpAlphaChunk? = null,
+    val animation: WebpAnimation? = null,
 ) {
-    val hasAlpha: Boolean get() = flags.alpha || alphaChunk != null || format == WebpBitstreamFormat.VP8L
+    val hasAlpha: Boolean get() =
+        flags.alpha || alphaChunk != null || format == WebpBitstreamFormat.VP8L || animation != null
+}
+
+internal data class WebpAnimation(
+    val backgroundColor: Int,
+    val loopCount: Int,
+    val frames: List<WebpAnimationFrame>,
+)
+
+internal data class WebpAnimationFrame(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+    val durationMs: Int,
+    val blend: Boolean,
+    val disposeToBackground: Boolean,
+    val chunks: ByteArray,
+    val format: WebpBitstreamFormat,
+    val hasAlpha: Boolean,
+) {
+    fun asSingleFrameWebp(): ByteArray =
+        if (format == WebpBitstreamFormat.VP8 && hasAlpha) {
+            riffBytes("WEBP", vp8xChunkBytes(width, height, flags = 0x10), chunks)
+        } else {
+            riffBytes("WEBP", chunks)
+        }
 }
 
 internal data class WebpAlphaChunk(
@@ -143,13 +231,100 @@ internal data class WebpVp8xFlags(
 private const val RIFF_HEADER_SIZE: Int = 12
 private const val CHUNK_HEADER_SIZE: Int = 8
 private const val VP8X_PAYLOAD_SIZE: Int = 10
+private const val ANIM_PAYLOAD_SIZE: Int = 6
+private const val ANMF_HEADER_SIZE: Int = 16
 private const val VP8L_HEADER_SIZE: Int = 5
 private const val VP8_KEYFRAME_HEADER_SIZE: Int = 10
 private const val MAX_WEBP_DIMENSION: Int = 16_777_216
 
+private fun decodeAnimationFramePixels(frame: WebpAnimationFrame): AnimationFrameDecodeResult {
+    val codec = SkWebpKotlinCodec.Decoder.make(frame.asSingleFrameWebp())
+        ?: return AnimationFrameDecodeResult.Invalid
+    val info = codec.getInfo()
+    if (info.width != frame.width || info.height != frame.height || info.colorType != SkColorType.kRGBA_8888) {
+        return AnimationFrameDecodeResult.Invalid
+    }
+    val bitmap = SkBitmap(
+        width = frame.width,
+        height = frame.height,
+        colorType = SkColorType.kRGBA_8888,
+        colorSpace = SkColorSpace.makeSRGB(),
+    )
+    return when (codec.getPixels(info, bitmap)) {
+        SkCodec.Result.kSuccess -> AnimationFrameDecodeResult.Pixels(bitmap.pixels8888.copyOf())
+        SkCodec.Result.kUnimplemented -> AnimationFrameDecodeResult.Unsupported
+        else -> AnimationFrameDecodeResult.Invalid
+    }
+}
+
+private fun IntArray.compositeFrame(canvasWidth: Int, frame: WebpAnimationFrame, framePixels: IntArray) {
+    for (row in 0 until frame.height) {
+        val canvasOffset = (frame.y + row) * canvasWidth + frame.x
+        val frameOffset = row * frame.width
+        for (x in 0 until frame.width) {
+            val src = framePixels[frameOffset + x]
+            val dstIndex = canvasOffset + x
+            this[dstIndex] = if (frame.blend) blendSrcOver(src, this[dstIndex]) else src
+        }
+    }
+}
+
+private fun IntArray.fillRect(canvasWidth: Int, x: Int, y: Int, width: Int, height: Int, color: Int) {
+    for (row in 0 until height) {
+        fill(color, (y + row) * canvasWidth + x, (y + row) * canvasWidth + x + width)
+    }
+}
+
+private fun blendSrcOver(src: Int, dst: Int): Int {
+    val srcAlpha = alpha(src)
+    if (srcAlpha == 255) return src
+    if (srcAlpha == 0) return dst
+    val dstAlpha = alpha(dst)
+    val outAlpha = srcAlpha + ((dstAlpha * (255 - srcAlpha) + 127) / 255)
+    if (outAlpha == 0) return 0
+    fun blendChannel(srcChannel: Int, dstChannel: Int): Int =
+        ((srcChannel * srcAlpha * 255) +
+            (dstChannel * dstAlpha * (255 - srcAlpha)) +
+            (outAlpha * 127)) / (outAlpha * 255)
+    return packArgb(
+        outAlpha,
+        blendChannel(red(src), red(dst)).coerceIn(0, 255),
+        blendChannel(green(src), green(dst)).coerceIn(0, 255),
+        blendChannel(blue(src), blue(dst)).coerceIn(0, 255),
+    )
+}
+
+private fun riffBytes(type: String, vararg chunks: ByteArray): ByteArray {
+    var payloadSize = type.length
+    for (chunk in chunks) payloadSize += chunk.size
+    val out = ByteArray(RIFF_HEADER_SIZE + payloadSize)
+    writeAscii(out, 0, "RIFF")
+    writeU32LE(out, 4, payloadSize)
+    writeAscii(out, 8, type)
+    var offset = RIFF_HEADER_SIZE
+    for (chunk in chunks) {
+        chunk.copyInto(out, offset)
+        offset += chunk.size
+    }
+    return out
+}
+
+private fun vp8xChunkBytes(width: Int, height: Int, flags: Int): ByteArray {
+    val out = ByteArray(CHUNK_HEADER_SIZE + VP8X_PAYLOAD_SIZE)
+    writeAscii(out, 0, "VP8X")
+    writeU32LE(out, 4, VP8X_PAYLOAD_SIZE)
+    out[8] = flags.toByte()
+    write24LE(out, 12, width - 1)
+    write24LE(out, 15, height - 1)
+    return out
+}
+
 private fun parseMetadata(data: ByteArray): WebpMetadata? {
     var extended: WebpMetadata? = null
     var extendedBitstream: WebpMetadata? = null
+    var animationBackgroundColor: Int? = null
+    var animationLoopCount: Int = 0
+    val animationFrames = ArrayList<WebpAnimationFrame>()
     var iccProfile: SkcmsICCProfile? = null
     var exifData: ByteArray? = null
     var xmpData: ByteArray? = null
@@ -167,6 +342,32 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
                 if (extended != null) return null
                 extended = parseVp8x(data, payloadOffset, size) ?: return null
             }
+            "ANIM" -> {
+                val base = extended ?: return null
+                if (!base.flags.animation) {
+                    // The spec says ANIM without the animation flag must be ignored.
+                } else {
+                    if (animationBackgroundColor != null || size != ANIM_PAYLOAD_SIZE.toLong()) return null
+                    animationBackgroundColor = parseAnimationBackgroundColor(data, payloadOffset)
+                    animationLoopCount = readU16LE(data, payloadOffset + 4)
+                }
+            }
+            "ANMF" -> {
+                val base = extended ?: return null
+                if (!base.flags.animation) {
+                    // The spec says ANMF without the animation flag should not appear, but still readers ignore unknown chunks.
+                } else {
+                    if (size > Int.MAX_VALUE) return null
+                    val frame = parseAnimationFrame(
+                        data = data,
+                        offset = payloadOffset,
+                        size = size.toInt(),
+                        canvasWidth = base.width,
+                        canvasHeight = base.height,
+                    ) ?: return null
+                    animationFrames += frame
+                }
+            }
             "ICCP" -> {
                 if (iccProfile != null || size > Int.MAX_VALUE) return null
                 iccProfile = parseIccProfile(data, payloadOffset, size.toInt())
@@ -181,17 +382,20 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
             }
             "ALPH" -> {
                 val base = extended ?: return null
+                if (base.flags.animation) return null
                 if (alphaChunk != null || size > Int.MAX_VALUE || !base.flags.alpha) return null
                 alphaChunk = parseAlphaChunk(data, payloadOffset, size.toInt())
                     ?: return null
             }
             "VP8L" -> {
+                if (extended?.flags?.animation == true) return null
                 val bitstream = parseVp8l(data, payloadOffset, size) ?: return null
                 if (extended == null) return bitstream
                 if (extendedBitstream != null) return null
                 extendedBitstream = bitstream
             }
             "VP8 " -> {
+                if (extended?.flags?.animation == true) return null
                 val bitstream = parseVp8(data, payloadOffset, size) ?: return null
                 if (extended == null) return bitstream
                 if (extendedBitstream != null) return null
@@ -205,8 +409,15 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
         offset = next.toInt()
     }
     val base = extended ?: return null
+    val animation = if (base.flags.animation) {
+        val backgroundColor = animationBackgroundColor ?: return null
+        if (animationFrames.isEmpty()) return null
+        WebpAnimation(backgroundColor, animationLoopCount, animationFrames)
+    } else {
+        null
+    }
     val bitstream = extendedBitstream
-    if (alphaChunk != null && bitstream?.format != WebpBitstreamFormat.VP8) return null
+    if (animation == null && alphaChunk != null && bitstream?.format != WebpBitstreamFormat.VP8) return null
     return base.copy(
         format = bitstream?.format ?: base.format,
         payloadOffset = bitstream?.payloadOffset ?: base.payloadOffset,
@@ -215,6 +426,80 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
         exifData = exifData,
         xmpData = xmpData,
         alphaChunk = alphaChunk,
+        animation = animation,
+    )
+}
+
+private fun parseAnimationBackgroundColor(data: ByteArray, offset: Int): Int {
+    val blue = data[offset].toInt() and 0xFF
+    val green = data[offset + 1].toInt() and 0xFF
+    val red = data[offset + 2].toInt() and 0xFF
+    val alpha = data[offset + 3].toInt() and 0xFF
+    return packArgb(alpha, red, green, blue)
+}
+
+private fun parseAnimationFrame(
+    data: ByteArray,
+    offset: Int,
+    size: Int,
+    canvasWidth: Int,
+    canvasHeight: Int,
+): WebpAnimationFrame? {
+    if (size < ANMF_HEADER_SIZE || offset < 0 || offset + size > data.size) return null
+    val x = read24LE(data, offset) * 2
+    val y = read24LE(data, offset + 3) * 2
+    val width = read24LE(data, offset + 6) + 1
+    val height = read24LE(data, offset + 9) + 1
+    val durationMs = read24LE(data, offset + 12)
+    val flags = data[offset + 15].toInt() and 0xFF
+    if (!validDimensions(width, height)) return null
+    if (x < 0 || y < 0 || x + width > canvasWidth || y + height > canvasHeight) return null
+
+    var alphaChunkSeen = false
+    var bitstream: WebpMetadata? = null
+    var frameOffset = offset + ANMF_HEADER_SIZE
+    val frameEnd = offset + size
+    while (frameOffset <= frameEnd - CHUNK_HEADER_SIZE) {
+        val fourcc = readFourcc(data, frameOffset)
+        val chunkSize = readU32LE(data, frameOffset + 4)
+        if (chunkSize > Int.MAX_VALUE) return null
+        val payloadOffset = frameOffset + CHUNK_HEADER_SIZE
+        val payloadEnd = payloadOffset.toLong() + chunkSize
+        if (payloadEnd > frameEnd.toLong()) return null
+        when (fourcc) {
+            "ALPH" -> {
+                if (alphaChunkSeen || parseAlphaChunk(data, payloadOffset, chunkSize.toInt()) == null) return null
+                alphaChunkSeen = true
+            }
+            "VP8L" -> {
+                if (bitstream != null) return null
+                bitstream = parseVp8l(data, payloadOffset, chunkSize) ?: return null
+            }
+            "VP8 " -> {
+                if (bitstream != null) return null
+                bitstream = parseVp8(data, payloadOffset, chunkSize) ?: return null
+            }
+        }
+        val paddedSize = chunkSize + (chunkSize and 1L)
+        val next = payloadOffset.toLong() + paddedSize
+        if (next > Int.MAX_VALUE) return null
+        frameOffset = next.toInt()
+    }
+    if (frameOffset != frameEnd) return null
+    val checkedBitstream = bitstream ?: return null
+    if (checkedBitstream.width != width || checkedBitstream.height != height) return null
+    if (alphaChunkSeen && checkedBitstream.format != WebpBitstreamFormat.VP8) return null
+    return WebpAnimationFrame(
+        x = x,
+        y = y,
+        width = width,
+        height = height,
+        durationMs = durationMs,
+        blend = (flags and 0x02) == 0,
+        disposeToBackground = (flags and 0x01) != 0,
+        chunks = data.copyOfRange(offset + ANMF_HEADER_SIZE, frameEnd),
+        format = checkedBitstream.format,
+        hasAlpha = alphaChunkSeen || checkedBitstream.format == WebpBitstreamFormat.VP8L,
     )
 }
 
@@ -364,6 +649,23 @@ private fun readU32LE(bytes: ByteArray, offset: Int): Long =
         ((bytes[offset + 1].toLong() and 0xFFL) shl 8) or
         ((bytes[offset + 2].toLong() and 0xFFL) shl 16) or
         ((bytes[offset + 3].toLong() and 0xFFL) shl 24)
+
+private fun writeAscii(out: ByteArray, offset: Int, text: String) {
+    for (i in text.indices) out[offset + i] = text[i].code.toByte()
+}
+
+private fun write24LE(out: ByteArray, offset: Int, value: Int) {
+    out[offset] = (value and 0xFF).toByte()
+    out[offset + 1] = ((value ushr 8) and 0xFF).toByte()
+    out[offset + 2] = ((value ushr 16) and 0xFF).toByte()
+}
+
+private fun writeU32LE(out: ByteArray, offset: Int, value: Int) {
+    out[offset] = (value and 0xFF).toByte()
+    out[offset + 1] = ((value ushr 8) and 0xFF).toByte()
+    out[offset + 2] = ((value ushr 16) and 0xFF).toByte()
+    out[offset + 3] = ((value ushr 24) and 0xFF).toByte()
+}
 
 private sealed interface Vp8lDecodeResult {
     data class Pixels(val argb: IntArray) : Vp8lDecodeResult
