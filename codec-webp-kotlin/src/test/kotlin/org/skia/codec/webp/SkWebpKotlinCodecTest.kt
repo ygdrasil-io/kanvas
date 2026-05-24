@@ -165,6 +165,30 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes VP8L color cache references`() {
+        val expected = intArrayOf(
+            argb(0xFF, 0x31, 0x42, 0x53),
+            argb(0xFF, 0x31, 0x42, 0x53),
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorCacheWebp(width = 2, height = 1, expected[0]))!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        for (x in expected.indices) {
+            val actual = dst.getPixel(x, 0)
+            assertEquals(alpha(expected[x]), alpha(actual))
+            assertEquals(red(expected[x]), red(actual))
+            assertEquals(green(expected[x]), green(actual))
+            assertEquals(blue(expected[x]), blue(actual))
+        }
+    }
+
+    @Test
     fun `decodes VP8L subtract green transform`() {
         val expected = intArrayOf(
             argb(0xFF, 0x40, 0x25, 0x58),
@@ -199,6 +223,19 @@ class SkWebpKotlinCodecTest {
         )
 
         assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+    }
+
+    @Test
+    fun `VP8L pixel decode rejects invalid color cache size`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lInvalidColorCacheWebp(width = 1, height = 1))!!
+        val dst = SkBitmap(
+            width = 1,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
@@ -313,6 +350,27 @@ class SkWebpKotlinCodecTest {
         return vp8lWebpFromBits(writer)
     }
 
+    private fun vp8lColorCacheWebp(width: Int, height: Int, pixel: Int): ByteArray {
+        require(width * height == 2)
+        val colorCacheBits = 3
+        val colorCacheIndex = colorCacheIndex(pixel, colorCacheBits)
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(0, 1) // transform_present
+        writer.writeBits(1, 1) // color_cache_present
+        writer.writeBits(colorCacheBits, 4)
+        writer.writeBits(0, 1) // meta_prefix_present
+        val greenSymbols = intArrayOf(green(pixel), 256 + 24 + colorCacheIndex)
+        writeNormalTwoSymbolCode(writer, first = greenSymbols[0], second = greenSymbols[1])
+        writeSimpleCode(writer, intArrayOf(red(pixel)))
+        writeSimpleCode(writer, intArrayOf(blue(pixel)))
+        writeSimpleCode(writer, intArrayOf(alpha(pixel)))
+        writeSimpleCode(writer, intArrayOf(0)) // distance alphabet is unused.
+        writer.writeBits(0, 1) // literal pixel.
+        writer.writeBits(1, 1) // color cache reference.
+        return vp8lWebpFromBits(writer)
+    }
+
     private fun vp8lSubtractGreenWebp(width: Int, height: Int, argb: IntArray): ByteArray {
         require(argb.size == width * height)
         val transformed = IntArray(argb.size) { i ->
@@ -347,6 +405,15 @@ class SkWebpKotlinCodecTest {
             writer.writeSymbol(blue, pixel and 0xFF)
             writer.writeSymbol(alpha, (pixel ushr 24) and 0xFF)
         }
+        return vp8lWebpFromBits(writer)
+    }
+
+    private fun vp8lInvalidColorCacheWebp(width: Int, height: Int): ByteArray {
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(0, 1) // transform_present
+        writer.writeBits(1, 1) // color_cache_present
+        writer.writeBits(0, 4) // invalid: valid color cache bits are 1..11.
         return vp8lWebpFromBits(writer)
     }
 
@@ -467,6 +534,9 @@ class SkWebpKotlinCodecTest {
     private fun red(pixel: Int): Int = (pixel ushr 16) and 0xFF
     private fun green(pixel: Int): Int = (pixel ushr 8) and 0xFF
     private fun blue(pixel: Int): Int = pixel and 0xFF
+
+    private fun colorCacheIndex(pixel: Int, bits: Int): Int =
+        (pixel * 0x1e35a7bd) ushr (32 - bits)
 
     private fun ByteArrayOutputStream.writeU32LE(value: Int) {
         write(value and 0xFF)
