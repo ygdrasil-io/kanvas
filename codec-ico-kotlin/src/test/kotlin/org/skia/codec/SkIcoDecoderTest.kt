@@ -98,6 +98,31 @@ class SkIcoDecoderTest {
         assertEquals(RED, bitmap!!.getPixel(0, 0))
     }
 
+    @Test
+    fun `applies legacy DIB AND mask as alpha`() {
+        val pixels = listOf(
+            listOf(RED, GREEN),
+            listOf(BLUE, WHITE),
+        )
+        val mask = listOf(
+            booleanArrayOf(false, true),
+            booleanArrayOf(true, false),
+        )
+        val codec = SkCodec.MakeFromData(ico(entry(width = 2, height = 2, payload = dib24WithMask(2, 2, pixels, mask))))!!
+
+        assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
+        assertEquals(2, codec.getInfo().width)
+        assertEquals(2, codec.getInfo().height)
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(RED, bitmap!!.getPixel(0, 0))
+        assertEquals(TRANSPARENT_GREEN, bitmap.getPixel(1, 0))
+        assertEquals(TRANSPARENT_BLUE, bitmap.getPixel(0, 1))
+        assertEquals(WHITE, bitmap.getPixel(1, 1))
+    }
+
     private data class Entry(val width: Int, val height: Int, val payload: ByteArray)
 
     private fun entry(width: Int, height: Int, payload: ByteArray): Entry =
@@ -177,6 +202,42 @@ class SkIcoDecoderTest {
         }
         return out
     }
+
+    private fun dib24WithMask(
+        width: Int,
+        height: Int,
+        pixels: List<List<Int>>,
+        mask: List<BooleanArray>,
+    ): ByteArray {
+        val rowBytes = (((width * 24 + 31) / 32) * 4)
+        val maskRowBytes = (((width + 31) / 32) * 4)
+        val maskOffset = 40 + rowBytes * height
+        val out = ByteArray(maskOffset + maskRowBytes * height)
+        writeI32LE(out, 0, 40)
+        writeI32LE(out, 4, width)
+        writeI32LE(out, 8, height * 2)
+        writeU16LE(out, 12, 1)
+        writeU16LE(out, 14, 24)
+        writeI32LE(out, 20, rowBytes * height)
+        for (dy in 0 until height) {
+            val fileRow = height - 1 - dy
+            val rowOffset = 40 + fileRow * rowBytes
+            val maskRowOffset = maskOffset + fileRow * maskRowBytes
+            for (x in 0 until width) {
+                val color = pixels[dy][x]
+                val offset = rowOffset + x * 3
+                out[offset] = b(color).toByte()
+                out[offset + 1] = g(color).toByte()
+                out[offset + 2] = r(color).toByte()
+                if (mask[dy][x]) {
+                    out[maskRowOffset + x / 8] = (
+                        out[maskRowOffset + x / 8].toInt() or (1 shl (7 - (x and 7)))
+                    ).toByte()
+                }
+            }
+        }
+        return out
+    }
 }
 
 private val PNG_SIGNATURE = byteArrayOf(
@@ -194,6 +255,8 @@ private const val RED: Int = -0x10000
 private const val GREEN: Int = -0xff0100
 private const val BLUE: Int = -0xffff01
 private const val WHITE: Int = -0x1
+private const val TRANSPARENT_GREEN: Int = 0x0000FF00
+private const val TRANSPARENT_BLUE: Int = 0x000000FF
 
 private fun ByteArrayOutputStream.writeChunk(type: String, data: ByteArray) {
     writeI32BE(data.size)
