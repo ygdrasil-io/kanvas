@@ -16,7 +16,7 @@ import org.skia.foundation.skcms.SkcmsICCProfile
  * Supported in this first backend slice:
  * - Windows/OS2 file signature `BM`
  * - DIB headers with at least the BITMAPINFOHEADER fields
- * - BI_RGB compression
+ * - BI_RGB, BI_RLE8 and BI_RLE4 compression
  * - indexed 1/4/8 bpp palettes and direct 24/32 bpp BGRA pixels
  * - bottom-up and top-down row order
  */
@@ -52,18 +52,22 @@ public class SkBmpKotlinCodec private constructor(
             return Result.kInvalidConversion
         }
 
-        val rowBytes = rowBytes(header.width, header.bitsPerPixel)
-        val required = header.pixelOffset.toLong() + rowBytes.toLong() * header.height.toLong()
-        if (required > bytes.size.toLong()) return Result.kIncompleteInput
+        if (header.compression == BI_RLE8 || header.compression == BI_RLE4) {
+            return decodeRle(dst)
+        } else {
+            val rowBytes = rowBytes(header.width, header.bitsPerPixel)
+            val required = header.pixelOffset.toLong() + rowBytes.toLong() * header.height.toLong()
+            if (required > bytes.size.toLong()) return Result.kIncompleteInput
 
-        for (dy in 0 until header.height) {
-            val sy = if (header.topDown) dy else header.height - 1 - dy
-            val row = header.pixelOffset + sy * rowBytes
-            for (x in 0 until header.width) {
-                dst.setPixel(x, dy, readPixel(row, x))
+            for (dy in 0 until header.height) {
+                val sy = if (header.topDown) dy else header.height - 1 - dy
+                val row = header.pixelOffset + sy * rowBytes
+                for (x in 0 until header.width) {
+                    dst.setPixel(x, dy, readPixel(row, x))
+                }
             }
+            return Result.kSuccess
         }
-        return Result.kSuccess
     }
 
     private fun readPixel(row: Int, x: Int): Int {
@@ -101,6 +105,97 @@ public class SkBmpKotlinCodec private constructor(
         }
     }
 
+    private fun decodeRle(dst: SkBitmap): Result {
+        if (header.topDown) return Result.kInvalidInput
+        if (header.pixelOffset > bytes.size) return Result.kIncompleteInput
+
+        val background = header.palette.firstOrNull() ?: TRANSPARENT_BLACK
+        for (dy in 0 until header.height) {
+            for (x in 0 until header.width) {
+                dst.setPixel(x, dy, background)
+            }
+        }
+
+        var offset = header.pixelOffset
+        var x = 0
+        var fileY = 0
+        while (offset < bytes.size) {
+            val count = bytes[offset++].toInt() and 0xFF
+            if (offset >= bytes.size) return Result.kIncompleteInput
+            val value = bytes[offset++].toInt() and 0xFF
+            if (count > 0) {
+                if (!writeRleRun(dst, x, fileY, count, value)) return Result.kInvalidInput
+                x += count
+                continue
+            }
+
+            when (value) {
+                RLE_EOL -> {
+                    x = 0
+                    fileY++
+                }
+                RLE_EOF -> return Result.kSuccess
+                RLE_DELTA -> {
+                    if (offset + 2 > bytes.size) return Result.kIncompleteInput
+                    x += bytes[offset++].toInt() and 0xFF
+                    fileY += bytes[offset++].toInt() and 0xFF
+                    if (x > header.width || fileY > header.height) return Result.kInvalidInput
+                }
+                else -> {
+                    if (!writeRleAbsolute(dst, x, fileY, value, offset)) return Result.kInvalidInput
+                    offset += absoluteBytes(value)
+                    if ((absoluteBytes(value) and 1) != 0) offset++
+                    if (offset > bytes.size) return Result.kIncompleteInput
+                    x += value
+                }
+            }
+        }
+        return Result.kIncompleteInput
+    }
+
+    private fun writeRleRun(dst: SkBitmap, x: Int, fileY: Int, count: Int, value: Int): Boolean {
+        if (x < 0 || x + count > header.width || fileY < 0 || fileY >= header.height) return false
+        for (i in 0 until count) {
+            val index = if (header.compression == BI_RLE8) {
+                value
+            } else if ((i and 1) == 0) {
+                value ushr 4
+            } else {
+                value and 0x0F
+            }
+            if (!setRlePixel(dst, x + i, fileY, index)) return false
+        }
+        return true
+    }
+
+    private fun writeRleAbsolute(dst: SkBitmap, x: Int, fileY: Int, count: Int, offset: Int): Boolean {
+        val bytesToRead = absoluteBytes(count)
+        if (offset + bytesToRead > bytes.size) return false
+        if (x < 0 || x + count > header.width || fileY < 0 || fileY >= header.height) return false
+        for (i in 0 until count) {
+            val packed = bytes[offset + if (header.compression == BI_RLE8) i else i / 2].toInt() and 0xFF
+            val index = if (header.compression == BI_RLE8) {
+                packed
+            } else if ((i and 1) == 0) {
+                packed ushr 4
+            } else {
+                packed and 0x0F
+            }
+            if (!setRlePixel(dst, x + i, fileY, index)) return false
+        }
+        return true
+    }
+
+    private fun setRlePixel(dst: SkBitmap, x: Int, fileY: Int, index: Int): Boolean {
+        if (index !in header.palette.indices) return false
+        val dy = header.height - 1 - fileY
+        dst.setPixel(x, dy, header.palette[index])
+        return true
+    }
+
+    private fun absoluteBytes(count: Int): Int =
+        if (header.compression == BI_RLE8) count else (count + 1) / 2
+
     internal companion object Decoder : SkCodec.Decoder {
         override val name: String = "bmp"
 
@@ -133,7 +228,7 @@ public class SkBmpKotlinCodec private constructor(
             val colorsUsed = readI32LE(data, 46)
 
             if (planes != 1) return null
-            if (compression != BI_RGB) return null
+            if (!isSupportedCompression(compression, bitsPerPixel, topDown)) return null
             if (bitsPerPixel !in SUPPORTED_BPP) return null
             if (width > MAX_DIMENSION || height > MAX_DIMENSION) return null
 
@@ -146,15 +241,20 @@ public class SkBmpKotlinCodec private constructor(
                 IntArray(0)
             }
 
-            val rowBytes = rowBytes(width, bitsPerPixel)
-            val required = pixelOffset.toLong() + rowBytes.toLong() * height.toLong()
-            if (required > data.size.toLong()) return null
+            if (compression == BI_RGB) {
+                val rowBytes = rowBytes(width, bitsPerPixel)
+                val required = pixelOffset.toLong() + rowBytes.toLong() * height.toLong()
+                if (required > data.size.toLong()) return null
+            } else if (pixelOffset > data.size) {
+                return null
+            }
 
             return Header(
                 width = width,
                 height = height,
                 topDown = topDown,
                 bitsPerPixel = bitsPerPixel,
+                compression = compression,
                 pixelOffset = pixelOffset,
                 palette = palette,
             )
@@ -181,6 +281,7 @@ public class SkBmpKotlinCodec private constructor(
         val height: Int,
         val topDown: Boolean,
         val bitsPerPixel: Int,
+        val compression: Int,
         val pixelOffset: Int,
         val palette: IntArray,
     )
@@ -192,9 +293,22 @@ public class BmpKotlinDecoderProvider : CodecDecoderProvider {
 
 private const val FILE_HEADER_SIZE: Int = 14
 private const val BI_RGB: Int = 0
+private const val BI_RLE8: Int = 1
+private const val BI_RLE4: Int = 2
+private const val RLE_EOL: Int = 0
+private const val RLE_EOF: Int = 1
+private const val RLE_DELTA: Int = 2
 private const val MAX_DIMENSION: Int = 100_000
 private const val TRANSPARENT_BLACK: Int = 0
 private val SUPPORTED_BPP: Set<Int> = setOf(1, 4, 8, 24, 32)
+
+private fun isSupportedCompression(compression: Int, bitsPerPixel: Int, topDown: Boolean): Boolean =
+    when (compression) {
+        BI_RGB -> true
+        BI_RLE8 -> bitsPerPixel == 8 && !topDown
+        BI_RLE4 -> bitsPerPixel == 4 && !topDown
+        else -> false
+    }
 
 private fun rowBytes(width: Int, bitsPerPixel: Int): Int =
     ((((width.toLong() * bitsPerPixel.toLong()) + 31L) / 32L) * 4L).toInt()
