@@ -107,6 +107,32 @@ APIs requiring shaping, variable-outline interpolation, color glyph paint
 graphs, or platform font fallback should stay documented as unsupported rather
 than silently approximated.
 
+## Issue 927 Strategy
+
+Issue [#927](https://github.com/ygdrasil-io/kanvas/issues/927) is the umbrella
+for font work that remains intentionally outside the current portable OpenType
+backend. The strategy is to keep the default font path pure Kotlin and split
+large policy/rendering decisions into explicit follow-up tickets:
+
+- Complex shaping is tracked by
+  [#976](https://github.com/ygdrasil-io/kanvas/issues/976). `OpenTypeTypeface`
+  remains the SFNT table reader and scaler. Full shaping belongs behind an
+  explicit `SkShaper` or text-layout factory, while `SkShaper.MakePrimitive()`
+  remains the stable minimal fallback.
+- System fallback policy is tracked by
+  [#977](https://github.com/ygdrasil-io/kanvas/issues/977). The existing
+  `OpenTypeSystemFontMgr` provides pure Kotlin system font enumeration, but
+  script/locale/emoji fallback ordering and any platform policy providers must
+  be added without making AWT or JNI mandatory.
+- Complete COLRv1 rendering is tracked by
+  [#978](https://github.com/ygdrasil-io/kanvas/issues/978). COLRv1 metadata can
+  be parsed safely today, but paint graph evaluation, gradients, composites,
+  clip boxes, palette semantics, and GM re-enablement need a separate rendering
+  project.
+- HarfBuzz, FreeType, and Fontations integrations remain optional module or
+  factory choices. They must not become transitive requirements of
+  `kanvas-skia` portable font paths.
+
 ## Shaping Audit
 
 The repository may integrate platform shapers outside `kanvas-skia`, but the
@@ -122,12 +148,11 @@ directly measurable through the existing `measureTextInternal` and
 `makeTextPath` paths, requires no new public API, and is tested with bundled
 Liberation fonts that contain `GPOS` data.
 
-`GSUB` substitutions, including standard ligatures, should be split into a
-separate ticket because they need cluster mapping and a clear policy for
-enabled features. Bidi, script itemization, mark positioning, cursive
-attachment, Indic/Arabic shaping, HarfBuzz parity, and multi-font fallback
-belong outside the OpenType typeface reader and should be tracked as dedicated
-`SkShaper` or text-layout work.
+`GSUB` substitutions, including standard ligatures, are tracked by #976 because
+they need cluster mapping and a clear policy for enabled features. Bidi, script
+itemization, mark positioning, cursive attachment, Indic/Arabic shaping,
+HarfBuzz parity, and multi-font fallback belong outside the OpenType typeface
+reader and should be tracked as dedicated `SkShaper` or text-layout work.
 
 ## Bitmap And SVG Color Font Plan
 
@@ -210,6 +235,12 @@ rendering work:
   CPAL metadata with a synthetic color-font fixture.
 - [#877](https://github.com/ygdrasil-io/kanvas/issues/877): plan color-font
   rendering, palette overrides, COLRv1, CBDT/sbix, and SVG-in-OpenType work.
+- [#976](https://github.com/ygdrasil-io/kanvas/issues/976): optional pure
+  Kotlin shaping path and complex text boundary.
+- [#977](https://github.com/ygdrasil-io/kanvas/issues/977): pure Kotlin system
+  fallback catalog and optional platform provider boundary.
+- [#978](https://github.com/ygdrasil-io/kanvas/issues/978): complete COLRv1
+  paint graph rendering.
 
 ## Validation
 
