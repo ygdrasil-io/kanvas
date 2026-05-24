@@ -2494,29 +2494,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             )
             if (colorPaths != null) {
                 for (colorPath in colorPaths) {
-                    val layerPaint = paint.copy().also {
-                        if (colorPath.shader != null) {
-                            it.shader = colorPath.shader
-                            it.alphaf *= colorPath.alpha
-                        } else if (colorPath.color != null) {
-                            val color = colorPath.color
-                            it.color = color
-                            it.alphaf *= colorPath.alpha
-                        } else {
-                            it.alphaf *= colorPath.alpha
-                        }
-                    }
-                    if (colorPath.clipPaths.isEmpty()) {
-                        drawPath(colorPath.path, layerPaint)
-                    } else {
-                        val saveCount = getSaveCount()
-                        save()
-                        for (clip in colorPath.clipPaths) {
-                            clipPath(clip, doAntiAlias = paint.isAntiAlias)
-                        }
-                        drawPath(colorPath.path, layerPaint)
-                        restoreToCount(saveCount)
-                    }
+                    drawOpenTypeColorPath(colorPath, paint)
                 }
                 return
             }
@@ -2528,6 +2506,54 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         // For T3 we keep paint.isAntiAlias as the source of truth and
         // let drawPath decide; future slices may refine.
         drawPath(path, paint)
+    }
+
+    private fun drawOpenTypeColorPath(
+        colorPath: org.skia.foundation.opentype.OpenTypeColorPath,
+        paint: SkPaint,
+        internalBlendMode: org.skia.foundation.SkBlendMode? = null,
+    ) {
+        if (colorPath.children.isNotEmpty()) {
+            val saveCount = getSaveCount()
+            val layerPaint = paint.copy().also {
+                it.shader = null
+                it.colorFilter = null
+                it.alphaf *= colorPath.alpha
+                val groupBlendMode = colorPath.blendMode ?: internalBlendMode
+                if (groupBlendMode != null) it.blendMode = groupBlendMode
+            }
+            saveLayer(null, layerPaint)
+            for (child in colorPath.children) {
+                drawOpenTypeColorPath(child, paint, org.skia.foundation.SkBlendMode.kSrcOver)
+            }
+            restoreToCount(saveCount)
+            return
+        }
+        val layerPaint = paint.copy().also {
+            if (colorPath.shader != null) {
+                it.shader = colorPath.shader
+                it.alphaf *= colorPath.alpha
+            } else if (colorPath.color != null) {
+                val color = colorPath.color
+                it.color = color
+                it.alphaf *= colorPath.alpha
+            } else {
+                it.alphaf *= colorPath.alpha
+            }
+            val pathBlendMode = colorPath.blendMode ?: internalBlendMode
+            if (pathBlendMode != null) it.blendMode = pathBlendMode
+        }
+        if (colorPath.clipPaths.isEmpty()) {
+            drawPath(colorPath.path, layerPaint)
+        } else {
+            val saveCount = getSaveCount()
+            save()
+            for (clip in colorPath.clipPaths) {
+                clipPath(clip, doAntiAlias = paint.isAntiAlias)
+            }
+            drawPath(colorPath.path, layerPaint)
+            restoreToCount(saveCount)
+        }
     }
 
     /**
