@@ -690,6 +690,59 @@ class SkPngKotlinCodecTest {
         assertNull(SkPngKotlinCodec.Decoder.make(data))
     }
 
+    @Test
+    fun `rejects trailing data after IEND`() {
+        val data = grayscalePng(
+            width = 1,
+            height = 1,
+            rows = listOf(byteArrayOf(0x40)),
+            filters = intArrayOf(0),
+            bitDepth = 8,
+        ) + byteArrayOf(0x00)
+
+        assertNull(SkPngKotlinCodec.Decoder.make(data))
+    }
+
+    @Test
+    fun `rejects non contiguous IDAT chunks`() {
+        val idat = deflate(byteArrayOf(0x00, 0x40))
+        val split = idat.size / 2
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "IDAT" to idat.copyOfRange(0, split),
+            "tEXt" to "note\u0000between-idats".toByteArray(Charsets.ISO_8859_1),
+            "IDAT" to idat.copyOfRange(split, idat.size),
+            "IEND" to ByteArray(0),
+        )
+
+        assertNull(SkPngKotlinCodec.Decoder.make(data))
+    }
+
+    @Test
+    fun `rejects PLTE on grayscale images`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "PLTE" to byteArrayOf(0x00, 0x00, 0x00),
+            "IDAT" to deflate(byteArrayOf(0x00, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        assertNull(SkPngKotlinCodec.Decoder.make(data))
+    }
+
+    @Test
+    fun `rejects duplicate PLTE chunks`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 3),
+            "PLTE" to byteArrayOf(0x10, 0x20, 0x30),
+            "PLTE" to byteArrayOf(0x40, 0x50, 0x60),
+            "IDAT" to deflate(byteArrayOf(0x00, 0x00)),
+            "IEND" to ByteArray(0),
+        )
+
+        assertNull(SkPngKotlinCodec.Decoder.make(data))
+    }
+
     private fun png(
         width: Int,
         height: Int,
@@ -724,6 +777,23 @@ class SkPngKotlinCodecTest {
             writeChunk("IEND", ByteArray(0))
         }.toByteArray()
     }
+
+    private fun pngFromChunks(vararg chunks: Pair<String, ByteArray>): ByteArray =
+        ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            for ((type, payload) in chunks) writeChunk(type, payload)
+        }.toByteArray()
+
+    private fun ihdr(width: Int, height: Int, bitDepth: Int, colorType: Int, interlace: Int = 0): ByteArray =
+        ByteArrayOutputStream().apply {
+            writeI32BE(width)
+            writeI32BE(height)
+            write(bitDepth)
+            write(colorType)
+            write(0)
+            write(0)
+            write(interlace)
+        }.toByteArray()
 
     private fun adam7Png(
         width: Int,
