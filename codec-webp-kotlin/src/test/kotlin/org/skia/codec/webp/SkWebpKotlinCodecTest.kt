@@ -213,7 +213,36 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `VP8L pixel decode rejects unsupported transform`() {
+    fun `decodes VP8L predictor transform`() {
+        val expected = intArrayOf(
+            argb(0xFF, 0x0A, 0x14, 0x1E),
+            argb(0xFF, 0x0D, 0x18, 0x23),
+            argb(0xFF, 0x0D, 0x18, 0x23),
+            argb(0xFF, 0x10, 0x1C, 0x28),
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lPredictorWebp(width = 2, height = 2, mode = 1, expected))!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 2,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        for (y in 0 until 2) {
+            for (x in 0 until 2) {
+                val expectedPixel = expected[y * 2 + x]
+                val actual = dst.getPixel(x, y)
+                assertEquals(alpha(expectedPixel), alpha(actual))
+                assertEquals(red(expectedPixel), red(actual))
+                assertEquals(green(expectedPixel), green(actual))
+                assertEquals(blue(expectedPixel), blue(actual))
+            }
+        }
+    }
+
+    @Test
+    fun `VP8L pixel decode rejects unsupported color transform`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8lUnsupportedTransformWebp(width = 1, height = 1))!!
         val dst = SkBitmap(
             width = 1,
@@ -308,7 +337,7 @@ class SkWebpKotlinCodecTest {
         val writer = Vp8lTestBitWriter()
         writeVp8lHeaderBits(writer, width, height)
         writer.writeBits(1, 1)
-        writer.writeBits(0, 2) // predictor transform is not supported yet.
+        writer.writeBits(1, 2) // color transform is not supported yet.
         return vp8lWebpFromBits(writer)
     }
 
@@ -408,6 +437,32 @@ class SkWebpKotlinCodecTest {
         return vp8lWebpFromBits(writer)
     }
 
+    private fun vp8lPredictorWebp(width: Int, height: Int, mode: Int, argb: IntArray): ByteArray {
+        require(argb.size == width * height)
+        require(mode in 0..13)
+        val residuals = IntArray(argb.size) { i ->
+            val x = i % width
+            val y = i / width
+            val predictor = when {
+                x == 0 && y == 0 -> argb(0xFF, 0, 0, 0)
+                y == 0 -> argb[i - 1]
+                x == 0 -> argb[i - width]
+                mode == 1 -> argb[i - 1]
+                else -> error("test helper only supports left predictor mode")
+            }
+            subtractPixels(argb[i], predictor)
+        }
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(1, 1) // transform_present
+        writer.writeBits(0, 2) // predictor transform.
+        writer.writeBits(0, 3) // size_bits = 2, so this tiny fixture has one predictor block.
+        writeVp8lLiteralImageData(writer, intArrayOf(argb(0xFF, 0, mode, 0)))
+        writer.writeBits(0, 1) // transform_present terminator
+        writeVp8lLiteralImageData(writer, residuals)
+        return vp8lWebpFromBits(writer)
+    }
+
     private fun vp8lInvalidColorCacheWebp(width: Int, height: Int): ByteArray {
         val writer = Vp8lTestBitWriter()
         writeVp8lHeaderBits(writer, width, height)
@@ -415,6 +470,26 @@ class SkWebpKotlinCodecTest {
         writer.writeBits(1, 1) // color_cache_present
         writer.writeBits(0, 4) // invalid: valid color cache bits are 1..11.
         return vp8lWebpFromBits(writer)
+    }
+
+    private fun writeVp8lLiteralImageData(writer: Vp8lTestBitWriter, argb: IntArray) {
+        writer.writeBits(0, 1) // color_cache_present
+        writer.writeBits(0, 1) // meta_prefix_present
+        val green = argb.uniqueChannel { (it ushr 8) and 0xFF }
+        val red = argb.uniqueChannel { (it ushr 16) and 0xFF }
+        val blue = argb.uniqueChannel { it and 0xFF }
+        val alpha = argb.uniqueChannel { (it ushr 24) and 0xFF }
+        writeSimpleCode(writer, green)
+        writeSimpleCode(writer, red)
+        writeSimpleCode(writer, blue)
+        writeSimpleCode(writer, alpha)
+        writeSimpleCode(writer, intArrayOf(0))
+        for (pixel in argb) {
+            writer.writeSymbol(green, (pixel ushr 8) and 0xFF)
+            writer.writeSymbol(red, (pixel ushr 16) and 0xFF)
+            writer.writeSymbol(blue, pixel and 0xFF)
+            writer.writeSymbol(alpha, (pixel ushr 24) and 0xFF)
+        }
     }
 
     private fun writeVp8lHeaderBits(writer: Vp8lTestBitWriter, width: Int, height: Int) {
@@ -534,6 +609,14 @@ class SkWebpKotlinCodecTest {
     private fun red(pixel: Int): Int = (pixel ushr 16) and 0xFF
     private fun green(pixel: Int): Int = (pixel ushr 8) and 0xFF
     private fun blue(pixel: Int): Int = pixel and 0xFF
+
+    private fun subtractPixels(pixel: Int, predictor: Int): Int =
+        argb(
+            alpha = (alpha(pixel) - alpha(predictor)) and 0xFF,
+            red = (red(pixel) - red(predictor)) and 0xFF,
+            green = (green(pixel) - green(predictor)) and 0xFF,
+            blue = (blue(pixel) - blue(predictor)) and 0xFF,
+        )
 
     private fun colorCacheIndex(pixel: Int, bits: Int): Int =
         (pixel * 0x1e35a7bd) ushr (32 - bits)

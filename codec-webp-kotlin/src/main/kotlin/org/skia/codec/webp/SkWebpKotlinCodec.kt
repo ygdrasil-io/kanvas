@@ -251,13 +251,41 @@ private fun decodeSimpleVp8l(data: ByteArray, metadata: WebpMetadata): Vp8lDecod
     if (version != 0) return Vp8lDecodeResult.Invalid
     if (width + 1 != metadata.width || height + 1 != metadata.height) return Vp8lDecodeResult.Invalid
 
+    return decodeVp8lImage(bits, metadata.width, metadata.height, allowTransforms = true)
+}
+
+private fun decodeVp8lImage(
+    bits: Vp8lBitReader,
+    width: Int,
+    height: Int,
+    allowTransforms: Boolean,
+): Vp8lDecodeResult {
     val transforms = ArrayList<Vp8lTransform>()
-    while ((bits.readBits(1) ?: return Vp8lDecodeResult.Invalid) != 0) {
-        val transform = when (bits.readBits(2) ?: return Vp8lDecodeResult.Invalid) {
-            VP8L_TRANSFORM_SUBTRACT_GREEN -> Vp8lTransform.SubtractGreen
-            else -> return Vp8lDecodeResult.Unsupported
+    if (allowTransforms) {
+        while ((bits.readBits(1) ?: return Vp8lDecodeResult.Invalid) != 0) {
+            val transform = when (bits.readBits(2) ?: return Vp8lDecodeResult.Invalid) {
+                VP8L_TRANSFORM_PREDICTOR -> {
+                    val sizeBits = (bits.readBits(3) ?: return Vp8lDecodeResult.Invalid) + 2
+                    val blockSize = 1 shl sizeBits
+                    val transformWidth = ceilDiv(width, blockSize)
+                    val transformHeight = ceilDiv(height, blockSize)
+                    val predictors = when (val result = decodeVp8lImage(
+                        bits = bits,
+                        width = transformWidth,
+                        height = transformHeight,
+                        allowTransforms = false,
+                    )) {
+                        Vp8lDecodeResult.Invalid -> return Vp8lDecodeResult.Invalid
+                        Vp8lDecodeResult.Unsupported -> return Vp8lDecodeResult.Unsupported
+                        is Vp8lDecodeResult.Pixels -> result.argb
+                    }
+                    Vp8lTransform.Predictor(sizeBits, transformWidth, predictors)
+                }
+                VP8L_TRANSFORM_SUBTRACT_GREEN -> Vp8lTransform.SubtractGreen
+                else -> return Vp8lDecodeResult.Unsupported
+            }
+            transforms += transform
         }
-        transforms += transform
     }
 
     val colorCache = when (bits.readBits(1) ?: return Vp8lDecodeResult.Invalid) {
@@ -278,7 +306,7 @@ private fun decodeSimpleVp8l(data: ByteArray, metadata: WebpMetadata): Vp8lDecod
         is Vp8lPrefixGroupReadResult.Group -> groupResult.group
     }
 
-    val pixels = IntArray(metadata.width * metadata.height)
+    val pixels = IntArray(width * height)
     var i = 0
     while (i < pixels.size) {
         val green = group.green.decode(bits) ?: return Vp8lDecodeResult.Invalid
@@ -302,7 +330,7 @@ private fun decodeSimpleVp8l(data: ByteArray, metadata: WebpMetadata): Vp8lDecod
         val length = readVp8lPrefixValue(bits, green - 256) ?: return Vp8lDecodeResult.Invalid
         val distancePrefix = group.distance.decode(bits) ?: return Vp8lDecodeResult.Invalid
         val distanceCode = readVp8lPrefixValue(bits, distancePrefix) ?: return Vp8lDecodeResult.Invalid
-        val distance = pixelDistanceFromCode(distanceCode, metadata.width)
+        val distance = pixelDistanceFromCode(distanceCode, width)
         if (distance < 1 || distance > i || i + length > pixels.size) return Vp8lDecodeResult.Invalid
         repeat(length) {
             val pixel = pixels[i - distance]
@@ -313,17 +341,26 @@ private fun decodeSimpleVp8l(data: ByteArray, metadata: WebpMetadata): Vp8lDecod
     }
     transforms.asReversed().forEach { transform ->
         when (transform) {
+            is Vp8lTransform.Predictor -> {
+                if (!pixels.applyPredictorTransform(width, transform)) return Vp8lDecodeResult.Invalid
+            }
             Vp8lTransform.SubtractGreen -> pixels.applySubtractGreenTransform()
         }
     }
     return Vp8lDecodeResult.Pixels(pixels)
 }
 
+private const val VP8L_TRANSFORM_PREDICTOR: Int = 0
 private const val VP8L_TRANSFORM_SUBTRACT_GREEN: Int = 2
 private const val VP8L_LENGTH_PREFIX_CODE_COUNT: Int = 24
 
-private enum class Vp8lTransform {
-    SubtractGreen,
+private sealed interface Vp8lTransform {
+    data class Predictor(
+        val sizeBits: Int,
+        val width: Int,
+        val predictors: IntArray,
+    ) : Vp8lTransform
+    data object SubtractGreen : Vp8lTransform
 }
 
 private class Vp8lColorCache(
@@ -355,6 +392,113 @@ private fun IntArray.applySubtractGreenTransform() {
         this[i] = packArgb((pixel ushr 24) and 0xFF, red, green, blue)
     }
 }
+
+private fun IntArray.applyPredictorTransform(width: Int, transform: Vp8lTransform.Predictor): Boolean {
+    for (i in indices) {
+        val x = i % width
+        val y = i / width
+        val predictor = predictorPixel(x, y, width, transform) ?: return false
+        this[i] = addPixels(this[i], predictor)
+    }
+    return true
+}
+
+private fun IntArray.predictorPixel(
+    x: Int,
+    y: Int,
+    width: Int,
+    transform: Vp8lTransform.Predictor,
+): Int? {
+    if (x == 0 && y == 0) return VP8L_BLACK_PREDICTOR
+    if (y == 0) return this[y * width + x - 1]
+    if (x == 0) return this[(y - 1) * width + x]
+
+    val modeIndex = (y ushr transform.sizeBits) * transform.width + (x ushr transform.sizeBits)
+    if (modeIndex !in transform.predictors.indices) return null
+    val mode = (transform.predictors[modeIndex] ushr 8) and 0xFF
+    if (mode !in 0..13) return null
+
+    val left = this[y * width + x - 1]
+    val top = this[(y - 1) * width + x]
+    val topLeft = this[(y - 1) * width + x - 1]
+    val topRight = if (x == width - 1) this[y * width] else this[(y - 1) * width + x + 1]
+    return when (mode) {
+        0 -> VP8L_BLACK_PREDICTOR
+        1 -> left
+        2 -> top
+        3 -> topRight
+        4 -> topLeft
+        5 -> averagePixels(averagePixels(left, topRight), top)
+        6 -> averagePixels(left, topLeft)
+        7 -> averagePixels(left, top)
+        8 -> averagePixels(topLeft, top)
+        9 -> averagePixels(top, topRight)
+        10 -> averagePixels(averagePixels(left, topLeft), averagePixels(top, topRight))
+        11 -> selectPredictor(left, top, topLeft)
+        12 -> clampAddSubtractFull(left, top, topLeft)
+        else -> clampAddSubtractHalf(averagePixels(left, top), topLeft)
+    }
+}
+
+private const val VP8L_BLACK_PREDICTOR: Int = -0x1000000
+
+private fun addPixels(residual: Int, predictor: Int): Int =
+    packArgb(
+        alpha = (alpha(residual) + alpha(predictor)) and 0xFF,
+        red = (red(residual) + red(predictor)) and 0xFF,
+        green = (green(residual) + green(predictor)) and 0xFF,
+        blue = (blue(residual) + blue(predictor)) and 0xFF,
+    )
+
+private fun averagePixels(a: Int, b: Int): Int =
+    packArgb(
+        alpha = (alpha(a) + alpha(b)) ushr 1,
+        red = (red(a) + red(b)) ushr 1,
+        green = (green(a) + green(b)) ushr 1,
+        blue = (blue(a) + blue(b)) ushr 1,
+    )
+
+private fun selectPredictor(left: Int, top: Int, topLeft: Int): Int {
+    val pa = alpha(left) + alpha(top) - alpha(topLeft)
+    val pr = red(left) + red(top) - red(topLeft)
+    val pg = green(left) + green(top) - green(topLeft)
+    val pb = blue(left) + blue(top) - blue(topLeft)
+    val leftDistance = kotlin.math.abs(pa - alpha(left)) +
+        kotlin.math.abs(pr - red(left)) +
+        kotlin.math.abs(pg - green(left)) +
+        kotlin.math.abs(pb - blue(left))
+    val topDistance = kotlin.math.abs(pa - alpha(top)) +
+        kotlin.math.abs(pr - red(top)) +
+        kotlin.math.abs(pg - green(top)) +
+        kotlin.math.abs(pb - blue(top))
+    return if (leftDistance < topDistance) left else top
+}
+
+private fun clampAddSubtractFull(left: Int, top: Int, topLeft: Int): Int =
+    packArgb(
+        alpha = clampByte(alpha(left) + alpha(top) - alpha(topLeft)),
+        red = clampByte(red(left) + red(top) - red(topLeft)),
+        green = clampByte(green(left) + green(top) - green(topLeft)),
+        blue = clampByte(blue(left) + blue(top) - blue(topLeft)),
+    )
+
+private fun clampAddSubtractHalf(average: Int, topLeft: Int): Int =
+    packArgb(
+        alpha = clampByte(alpha(average) + (alpha(average) - alpha(topLeft)) / 2),
+        red = clampByte(red(average) + (red(average) - red(topLeft)) / 2),
+        green = clampByte(green(average) + (green(average) - green(topLeft)) / 2),
+        blue = clampByte(blue(average) + (blue(average) - blue(topLeft)) / 2),
+    )
+
+private fun clampByte(value: Int): Int = value.coerceIn(0, 255)
+
+private fun alpha(pixel: Int): Int = (pixel ushr 24) and 0xFF
+private fun red(pixel: Int): Int = (pixel ushr 16) and 0xFF
+private fun green(pixel: Int): Int = (pixel ushr 8) and 0xFF
+private fun blue(pixel: Int): Int = pixel and 0xFF
+
+private fun ceilDiv(value: Int, divisor: Int): Int =
+    (value + divisor - 1) / divisor
 
 private fun readVp8lPrefixValue(bits: Vp8lBitReader, prefixCode: Int): Int? {
     if (prefixCode !in 0..39) return null
