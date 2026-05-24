@@ -95,6 +95,9 @@ public class OpenTypeTypeface private constructor(
 
     override fun getPostScriptName(): String? = font.postScriptName
 
+    internal val hasParsedFontStyle: Boolean
+        get() = font.hasParsedFontStyle
+
     override fun createFamilyNameIterator(): Iterator<SkTypeface.LocalizedString> =
         font.localizedFamilyNames.iterator()
 
@@ -325,7 +328,7 @@ public class OpenTypeTypeface private constructor(
     public companion object {
         @Suppress("FunctionName")
         public fun MakeFromBytes(bytes: ByteArray, ttcIndex: Int = 0): OpenTypeTypeface? =
-            ParsedTrueTypeFont.parse(bytes, ttcIndex)?.let { OpenTypeTypeface(it, SkFontStyle.Normal()) }
+            ParsedTrueTypeFont.parse(bytes, ttcIndex)?.let { OpenTypeTypeface(it, it.fontStyle) }
     }
 }
 
@@ -354,6 +357,8 @@ private class ParsedTrueTypeFont(
     val familyName: String,
     val postScriptName: String?,
     val localizedFamilyNames: List<SkTypeface.LocalizedString>,
+    val fontStyle: SkFontStyle,
+    val hasParsedFontStyle: Boolean,
     val variationAxes: List<SkFontVariation.Axis>,
     private val cmap: Cmap,
     private val advanceWidths: IntArray,
@@ -768,6 +773,7 @@ private class ParsedTrueTypeFont(
             val descent = typoMetrics?.let { reader.i16(it.offset + 70)?.toInt() ?: return null } ?: hheaDescent
             val lineGap = typoMetrics?.let { reader.i16(it.offset + 72)?.toInt() ?: return null } ?: hheaLineGap
             val avg = os2?.let { reader.i16(it.offset + 2)?.toInt() ?: return null } ?: advances.average().toInt()
+            val fontStyle = parseFontStyle(reader, tables["OS/2"], tables["head"], tables["post"], names)
             val sxHeight = os2?.takeIf { it.length >= 88 }?.let { reader.i16(it.offset + 86)?.toInt() ?: return null } ?: unitsPerEm / 2
             val sCapHeight = os2?.takeIf { it.length >= 90 }?.let { reader.i16(it.offset + 88)?.toInt() ?: return null } ?: (unitsPerEm * 7 / 10)
             val post = tables["post"]
@@ -787,7 +793,7 @@ private class ParsedTrueTypeFont(
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
                 avg, sxHeight, sCapHeight, underlinePosition, underlineThickness,
                 strikeoutPosition, strikeoutThickness, familyName, names?.postScriptName, localizedNames,
-                variationAxes, cmap, advances, bearings, offsets, kern, gpos, color, svg, gvar,
+                fontStyle.style, fontStyle.hasMetadata, variationAxes, cmap, advances, bearings, offsets, kern, gpos, color, svg, gvar,
             )
         }
 
@@ -815,6 +821,7 @@ private class ParsedTrueTypeFont(
             if (stringOffset !in table.offset..tableEnd) return null
             val familyCandidates = ArrayList<NameRecord>()
             val postScriptCandidates = ArrayList<NameRecord>()
+            val styleCandidates = ArrayList<NameRecord>()
             val localized = ArrayList<SkTypeface.LocalizedString>()
             val seenLocalized = HashSet<Pair<String, String>>()
             var off = table.offset + 6
@@ -831,6 +838,7 @@ private class ParsedTrueTypeFont(
                         val record = NameRecord(s, platform, language)
                         when (nameId) {
                             1 -> familyCandidates.add(record)
+                            2, 17 -> styleCandidates.add(record)
                             6 -> postScriptCandidates.add(record)
                         }
                         if (nameId == 1 || nameId == 4) {
@@ -844,7 +852,60 @@ private class ParsedTrueTypeFont(
                 off += 12
             }
             val familyName = chooseFamilyName(familyCandidates)
-            return OpenTypeNames(familyName, chooseName(postScriptCandidates), localized)
+            return OpenTypeNames(familyName, chooseName(postScriptCandidates), localized, chooseName(styleCandidates))
+        }
+
+        private fun parseFontStyle(
+            reader: SfntReader,
+            os2: TableRecord?,
+            head: TableRecord?,
+            post: TableRecord?,
+            names: OpenTypeNames?,
+        ): ParsedOpenTypeStyle {
+            val weight = os2
+                ?.takeIf { it.length >= 6 }
+                ?.let { reader.u16(it.offset + 4) }
+                ?.coerceIn(SkFontStyle.kInvisible_Weight, SkFontStyle.kExtraBlack_Weight)
+                ?: SkFontStyle.kNormal_Weight
+            val width = os2
+                ?.takeIf { it.length >= 8 }
+                ?.let { reader.u16(it.offset + 6) }
+                ?.coerceIn(SkFontStyle.kUltraCondensed_Width, SkFontStyle.kUltraExpanded_Width)
+                ?: SkFontStyle.kNormal_Width
+            val fsSelection = os2
+                ?.takeIf { it.length >= 64 }
+                ?.let { reader.u16(it.offset + 62) }
+                ?: 0
+            val macStyle = head
+                ?.takeIf { it.length >= 46 }
+                ?.let { reader.u16(it.offset + 44) }
+                ?: 0
+            val italicAngle = post
+                ?.takeIf { it.length >= 8 }
+                ?.let { reader.i16(it.offset + 4)?.toInt() }
+                ?: 0
+            val styleName = names?.styleName.orEmpty().lowercase()
+            val italic =
+                (fsSelection and OS2_FS_SELECTION_ITALIC) != 0 ||
+                    (macStyle and HEAD_MAC_STYLE_ITALIC) != 0 ||
+                    "italic" in styleName
+            val oblique =
+                (fsSelection and OS2_FS_SELECTION_OBLIQUE) != 0 ||
+                    italicAngle != 0 ||
+                    "oblique" in styleName
+            val bold =
+                (fsSelection and OS2_FS_SELECTION_BOLD) != 0 ||
+                    (macStyle and HEAD_MAC_STYLE_BOLD) != 0
+            val resolvedWeight = if (bold && weight < SkFontStyle.kBold_Weight) SkFontStyle.kBold_Weight else weight
+            val slant = when {
+                italic -> SkFontStyle.Slant.kItalic_Slant
+                oblique -> SkFontStyle.Slant.kOblique_Slant
+                else -> SkFontStyle.Slant.kUpright_Slant
+            }
+            return ParsedOpenTypeStyle(
+                SkFontStyle(resolvedWeight, width, slant),
+                hasMetadata = os2 != null || head != null || post != null || names?.styleName != null,
+            )
         }
 
         private fun parseKernTable(bytes: ByteArray, table: TableRecord?): KernTable? {
@@ -1956,6 +2017,11 @@ private data class OpenTypeNames(
     val familyName: String?,
     val postScriptName: String?,
     val localizedFamilyNames: List<SkTypeface.LocalizedString>,
+    val styleName: String?,
+)
+private data class ParsedOpenTypeStyle(
+    val style: SkFontStyle,
+    val hasMetadata: Boolean,
 )
 private data class KernTable(private val pairs: Map<Int, Int>) {
     fun adjustment(leftGlyph: Int, rightGlyph: Int): Int =
@@ -2229,7 +2295,12 @@ private const val MAX_EXPANDED_COLOR_LAYERS = 65536L
 private const val MAX_COLOR_PAINT_DEPTH = 32
 private const val MAX_SVG_DOCUMENT_RECORDS = 8192
 private const val MAX_SVG_GLYPHS_PER_RECORD = 4096
+private const val OS2_FS_SELECTION_ITALIC = 0x0001
+private const val OS2_FS_SELECTION_BOLD = 0x0020
 private const val OS2_USE_TYPO_METRICS = 0x0080
+private const val OS2_FS_SELECTION_OBLIQUE = 0x0200
+private const val HEAD_MAC_STYLE_BOLD = 0x0001
+private const val HEAD_MAC_STYLE_ITALIC = 0x0002
 
 private fun openTypeTagToString(tag: Int): String = buildString(4) {
     append(((tag ushr 24) and 0xFF).toChar())
