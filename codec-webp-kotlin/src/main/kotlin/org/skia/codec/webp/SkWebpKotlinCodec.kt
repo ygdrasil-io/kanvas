@@ -14,9 +14,9 @@ import org.skia.foundation.skcms.SkcmsICCProfile
  * Pure Kotlin WebP metadata codec.
  *
  * This first slice only sniffs RIFF/WEBP and parses the container
- * metadata needed by [SkCodec.getInfo]. Pixel reconstruction for VP8,
- * VP8L, alpha chunks, ICC, EXIF, and animation is intentionally left
- * for later slices.
+ * metadata needed by [SkCodec.getInfo]. Pixel reconstruction is only
+ * implemented for the current VP8L subset; VP8, alpha chunks, ICC,
+ * EXIF, and animation are intentionally left for later slices.
  */
 public class SkWebpKotlinCodec internal constructor(
     internal val metadata: WebpMetadata,
@@ -265,18 +265,46 @@ private fun decodeSimpleVp8l(data: ByteArray, metadata: WebpMetadata): Vp8lDecod
         Vp8lPrefixGroupReadResult.Unsupported -> return Vp8lDecodeResult.Unsupported
         is Vp8lPrefixGroupReadResult.Group -> groupResult.group
     }
-    if (!group.isLiteralOnly) return Vp8lDecodeResult.Unsupported
 
     val pixels = IntArray(metadata.width * metadata.height)
-    for (i in pixels.indices) {
+    var i = 0
+    while (i < pixels.size) {
         val green = group.green.decode(bits) ?: return Vp8lDecodeResult.Invalid
-        if (green >= 256) return Vp8lDecodeResult.Unsupported
-        val red = group.red.decode(bits) ?: return Vp8lDecodeResult.Invalid
-        val blue = group.blue.decode(bits) ?: return Vp8lDecodeResult.Invalid
-        val alpha = group.alpha.decode(bits) ?: return Vp8lDecodeResult.Invalid
-        pixels[i] = packArgb(alpha, red, green, blue)
+        if (green < 256) {
+            val red = group.red.decode(bits) ?: return Vp8lDecodeResult.Invalid
+            val blue = group.blue.decode(bits) ?: return Vp8lDecodeResult.Invalid
+            val alpha = group.alpha.decode(bits) ?: return Vp8lDecodeResult.Invalid
+            pixels[i++] = packArgb(alpha, red, green, blue)
+            continue
+        }
+        if (green >= 256 + VP8L_LENGTH_PREFIX_CODE_COUNT) return Vp8lDecodeResult.Unsupported
+        val length = readVp8lPrefixValue(bits, green - 256) ?: return Vp8lDecodeResult.Invalid
+        val distancePrefix = group.distance.decode(bits) ?: return Vp8lDecodeResult.Invalid
+        val distanceCode = readVp8lPrefixValue(bits, distancePrefix) ?: return Vp8lDecodeResult.Invalid
+        val distance = pixelDistanceFromCode(distanceCode, metadata.width)
+        if (distance < 1 || distance > i || i + length > pixels.size) return Vp8lDecodeResult.Invalid
+        repeat(length) {
+            pixels[i] = pixels[i - distance]
+            i++
+        }
     }
     return Vp8lDecodeResult.Pixels(pixels)
+}
+
+private const val VP8L_LENGTH_PREFIX_CODE_COUNT: Int = 24
+
+private fun readVp8lPrefixValue(bits: Vp8lBitReader, prefixCode: Int): Int? {
+    if (prefixCode !in 0..39) return null
+    if (prefixCode < 4) return prefixCode + 1
+    val extraBits = (prefixCode - 2) ushr 1
+    val offset = (2 + (prefixCode and 1)) shl extraBits
+    return offset + (bits.readBits(extraBits) ?: return null) + 1
+}
+
+private fun pixelDistanceFromCode(distanceCode: Int, width: Int): Int {
+    if (distanceCode > VP8L_DISTANCE_MAP.size) return distanceCode - VP8L_DISTANCE_MAP.size
+    val (x, y) = VP8L_DISTANCE_MAP[distanceCode - 1]
+    return maxOf(1, x + y * width)
 }
 
 private fun packArgb(alpha: Int, red: Int, green: Int, blue: Int): Int =
@@ -295,8 +323,6 @@ private data class SimpleVp8lPrefixGroup(
     val alpha: Vp8lHuffmanCode,
     val distance: Vp8lHuffmanCode,
 ) {
-    val isLiteralOnly: Boolean get() = green.maxSymbol < 256
-
     companion object {
         fun read(bits: Vp8lBitReader): Vp8lPrefixGroupReadResult {
             val green = when (val result = Vp8lHuffmanCode.read(bits, alphabetSize = 256 + 24)) {
@@ -475,6 +501,24 @@ private const val CODE_LENGTH_CODE_COUNT: Int = 19
 private const val MAX_HUFFMAN_CODE_LENGTH: Int = 15
 private val CODE_LENGTH_CODE_ORDER = intArrayOf(
     17, 18, 0, 1, 2, 3, 4, 5, 16, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+)
+
+private val VP8L_DISTANCE_MAP = arrayOf(
+    0 to 1, 1 to 0, 1 to 1, -1 to 1, 0 to 2, 2 to 0, 1 to 2, -1 to 2,
+    2 to 1, -2 to 1, 2 to 2, -2 to 2, 0 to 3, 3 to 0, 1 to 3, -1 to 3,
+    3 to 1, -3 to 1, 2 to 3, -2 to 3, 3 to 2, -3 to 2, 0 to 4, 4 to 0,
+    1 to 4, -1 to 4, 4 to 1, -4 to 1, 3 to 3, -3 to 3, 2 to 4, -2 to 4,
+    4 to 2, -4 to 2, 0 to 5, 5 to 0, 1 to 5, -1 to 5, 5 to 1, -5 to 1,
+    4 to 3, -4 to 3, 3 to 4, -3 to 4, 2 to 5, -2 to 5, 5 to 2, -5 to 2,
+    4 to 4, -4 to 4, 3 to 5, -3 to 5, 5 to 3, -5 to 3, 0 to 6, 6 to 0,
+    1 to 6, -1 to 6, 6 to 1, -6 to 1, 2 to 6, -2 to 6, 6 to 2, -6 to 2,
+    4 to 5, -4 to 5, 5 to 4, -5 to 4, 3 to 6, -3 to 6, 6 to 3, -6 to 3,
+    0 to 7, 7 to 0, 1 to 7, -1 to 7, 5 to 5, -5 to 5, 7 to 1, -7 to 1,
+    4 to 6, -4 to 6, 6 to 4, -6 to 4, 2 to 7, -2 to 7, 7 to 2, -7 to 2,
+    3 to 7, -3 to 7, 7 to 3, -7 to 3, 5 to 6, -5 to 6, 6 to 5, -6 to 5,
+    8 to 0, 4 to 7, -4 to 7, 7 to 4, -7 to 4, 8 to 1, 8 to 2, 6 to 6,
+    -6 to 6, 8 to 3, 5 to 7, -5 to 7, 7 to 5, -7 to 5, 8 to 4, 6 to 7,
+    -6 to 7, 7 to 6, -7 to 6, 8 to 5, 7 to 7, -7 to 7, 8 to 6, 8 to 7,
 )
 
 private fun reverseBits(value: Int, length: Int): Int {
