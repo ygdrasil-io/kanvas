@@ -255,6 +255,23 @@ class SkColorFilterTest {
         assertColorClose(SkColor4f(0f, 0f, 0f, 0f), out, tag = "Blend kSrcIn transparent dst")
     }
 
+    @Test
+    fun `Blend SkColor4f null color space preserves float precision`() {
+        val cf = SkColorFilters.Blend(SkColor4f(0.5f, 0.25f, 0.75f, 1f), null, SkBlendMode.kModulate)
+        val out = cf.filterColor4f(SkColor4f(1f, 1f, 1f, 1f))
+        assertColorClose(SkColor4f(0.5f, 0.25f, 0.75f, 1f), out,
+            eps = 0.0001f, tag = "Blend Color4f null CS")
+    }
+
+    @Test
+    fun `Blend SkColor4f applies source color space transform`() {
+        val spin = SkColorSpace.makeSRGB().makeColorSpin()
+        val cf = SkColorFilters.Blend(SkColor4f(1f, 0f, 0f, 1f), spin, SkBlendMode.kModulate)
+        val out = cf.filterColor4f(SkColor4f(1f, 1f, 1f, 1f))
+        assertColorClose(SkColor4f(0f, 1f, 0f, 1f), out,
+            eps = 0.0001f, tag = "Blend Color4f spin CS")
+    }
+
     // -- SkLumaColorFilter ---------------------------------------------------
 
     @Test

@@ -20,18 +20,15 @@ import org.graphiks.math.SkISize
  *   i.e. a color filter effect with a *shader-typed* child slot — not yet
  *   supported by the kanvas-skia [SkRuntimeEffect.makeColorFilter] overload.
  * - `mode_cf(color)` — `SkColorFilters::Blend(color, nullptr, kSrc)` with an
- *   [org.graphiks.math.SkColor4f] argument, which routes to the stubbed
- *   `STUB.COLOR4F_BLEND_CF` overload.
+ *   [org.graphiks.math.SkColor4f] argument.
  * - `raw_shader(color)` / `managed_shader(color)` — same SkSL pattern as above
  *   but compiled via `MakeForShader`; the SkSL strings are not registered in
  *   [org.skia.effects.runtime.SkRuntimeEffectDispatch].
  *
- * **Missing API** : the three blocking gaps are
- *  1. `STUB.COLOR4F_BLEND_CF` — [org.skia.foundation.SkColorFilters.Blend]
- *     overload for [org.graphiks.math.SkColor4f] (mode_cf).
- *  2. `STUB.CF_SHADER_CHILD` — [SkRuntimeEffect.makeColorFilter] needs a
+ * **Missing API** : the two blocking gaps are
+ *  1. `STUB.CF_SHADER_CHILD` — [SkRuntimeEffect.makeColorFilter] needs a
  *     variant that accepts shader-typed child slots (indirect_cf).
- *  3. `STUB.WORKING_SPACE_RT` — the SkSL programs for `raw_cf`, `managed_cf`,
+ *  2. `STUB.WORKING_SPACE_RT` — the SkSL programs for `raw_cf`, `managed_cf`,
  *     `raw_shader`, `managed_shader` are not registered in the dispatch table.
  *
  * TODO("STUB.WORKING_SPACE_RT")
@@ -43,9 +40,8 @@ public class WorkingspaceGM : GM() {
 
     override fun onDraw(canvas: SkCanvas?) {
         TODO(
-            "STUB.WORKING_SPACE_RT: workingspace GM requires (1) SkColorFilters.Blend(SkColor4f, null, kSrc)" +
-                " [STUB.COLOR4F_BLEND_CF], (2) SkRuntimeEffect.makeColorFilter with shader-typed child slots" +
-                " [STUB.CF_SHADER_CHILD], and (3) registered SkSL impls in SkRuntimeEffectDispatch for the" +
+            "STUB.WORKING_SPACE_RT: workingspace GM requires (1) SkRuntimeEffect.makeColorFilter with shader-typed child slots" +
+                " [STUB.CF_SHADER_CHILD], and (2) registered SkSL impls in SkRuntimeEffectDispatch for the" +
                 " raw/managed uniform-half4 color-filter and shader programs used by workingspace.cpp.",
         )
     }
