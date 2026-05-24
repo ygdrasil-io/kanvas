@@ -123,6 +123,9 @@ public class OpenTypeTypeface private constructor(
     override fun getKerningPairAdjustments(glyphs: ShortArray): IntArray? =
         font.kerningPairAdjustments(glyphs)
 
+    override fun copyTableData(tag: Int): ByteArray? =
+        font.tableData(tag)
+
     override fun makeTextPath(
         text: String,
         x: SkScalar,
@@ -289,6 +292,11 @@ private class ParsedTrueTypeFont(
         return IntArray(glyphs.size - 1) { i ->
             kernTable.adjustment(glyphs[i].toInt() and 0xFFFF, glyphs[i + 1].toInt() and 0xFFFF)
         }
+    }
+
+    fun tableData(tag: Int): ByteArray? {
+        val record = tables[openTypeTagToString(tag)] ?: return null
+        return bytes.copyOfRange(record.offset, record.offset + record.length)
     }
 
     fun glyphBounds(glyphId: Int, size: Float, scaleX: Float, skewX: Float): SkRect {
@@ -981,6 +989,13 @@ private const val KERN_HORIZONTAL = 0x0001
 private const val KERN_MINIMUM = 0x0002
 private const val KERN_CROSS_STREAM = 0x0004
 private const val OS2_USE_TYPO_METRICS = 0x0080
+
+private fun openTypeTagToString(tag: Int): String = buildString(4) {
+    append(((tag ushr 24) and 0xFF).toChar())
+    append(((tag ushr 16) and 0xFF).toChar())
+    append(((tag ushr 8) and 0xFF).toChar())
+    append((tag and 0xFF).toChar())
+}
 
 private fun kernPairKey(leftGlyph: Int, rightGlyph: Int): Int =
     ((leftGlyph and 0xFFFF) shl 16) or (rightGlyph and 0xFFFF)
