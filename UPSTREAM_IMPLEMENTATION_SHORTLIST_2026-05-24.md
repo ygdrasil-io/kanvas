@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 21 upstream `.cpp` rows as
+The rebaseline currently classifies 11 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -71,52 +71,44 @@ Completed since this snapshot:
 - `STUB.COLOR_FILTER_PRIV`: `SkColorFilterPriv.withWorkingFormat` delegates to
   the existing working-colour-space wrapper; `AlternateLumaGM` is enabled with a
   low ratchet because the mandrill source asset is still synthetic.
+- Tracker hygiene: `gm-status.sh` now ignores upstream `#if 0` GM
+  registrations, uses a per-run Kotlin index to avoid parallel collisions, and
+  treats documented intentionally-empty ports such as `FiddleGM` as ported. The
+  rebaseline bucket logic now lets already-`PORTED` rows override stale
+  historical `STUB.*` tags.
 
 ## Recommended order
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 3 cpps (`drawatlas`, `dftext_blob_persp`, `textblobmixedsizes`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
+| 1 | `blurrect` | 1 cpp | M | Raster/image-filter scope; not blocked by fonts, codecs, or WGSL. |
+| 2 | `dashcubics` / `SkTrimPathEffect` | 1 cpp | M | Clear missing path-effect primitive and a concrete disabled/no-op GM. |
+| 3 | `gradients` | 1 cpp | M/L | Isolated interpolation variants; useful after the tracker noise reduction. |
+| 4 | `savelayer` | 1 cpp | M/L | Raster-facing, but touches F16/save-behind semantics. |
+| 5 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
 
 | Upstream cpp | Tags | Local GM files |
 |---|---|---|
-| `aaclip` | `STUB.MISSING_API` | `AaclipGM.kt`, `CgimageGM.kt`, `ClipCubicGM.kt` |
 | `addarc` | `STUB.MISSING_API` | `AddArcGM.kt`, `AddArcMeasGM.kt`, `FillCircleGM.kt`, `ManyArcsGM.kt`, `StrokeCircleGM.kt`, `TinyAngleArcsGM.kt` |
 | `blurrect` | `STUB.BLURRECT_GALLERY`, `STUB.BLUR_RECTS_FULL`, `STUB.BLUR_RECT_COMPARE` | `BlurMatrixRectGM.kt`, `BlurRectCompareGM.kt`, `BlurRectGM.kt`, `BlurRectGalleryGM.kt` |
-| `color4f` | ported | `Color4blendcfGM.kt`, `Color4fGM.kt`, `Color4shaderGM.kt` |
-| `colorfilterimagefilter` | ported | `ColorFilterImageFilterGM.kt`, `ColorFilterImageFilterLayerGM.kt`, `ColorFilterShaderGM.kt` |
-| `complexclip` | ported | `ClipShaderComplexClipGM.kt`, `ClipShaderPerspGM.kt`, `ComplexClipGM.kt` |
-| `composeshader` | ported | `ComposeShaderAlphaGM.kt`, `ComposeShaderBitmap2GM.kt`, `ComposeShaderBitmapGM.kt`, `ComposeShaderGM.kt`, `ComposeShaderGridGM.kt` |
 | `dashcubics` | disabled `TrimGM` without `STUB.*` tag | `DashCubicsGM.kt`, `TrimGM.kt` |
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
-| `drawimageset` | ported | `DrawImageSetAlphaOnlyGM.kt`, `DrawImageSetGM.kt`, `DrawImageSetRectToRectGM.kt` |
-| `drawquadset` | ported | `DrawQuadSetGM.kt` |
-| `fiddle` | ported | `FiddleGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION` | gradient interpolation variants |
 | `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
-| `imagemasksubset` | ported | `ImageMaskSubsetGM.kt` |
-| `lumafilter` | ported | `AlternateLumaGM.kt`, `LumaFilterGM.kt` |
 | `mesh` | `STUB.MESH` | `MeshGMs.kt` |
-| `patharcto` | ported | `ArctoSkbug9272GM.kt`, `PathAppendExtendGM.kt`, `ShallowAnglePathArcToGM.kt` |
-| `patheffects` | ported | `CTMPathEffectGM.kt`, `PathEffectGM.kt` |
-| `pathmeasure` | `STUB.PATH_MEASURE_EXPLOSION` | `PathMeasureExplosionGM.kt` |
 | `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`, `STUB.XYZ` | `RecordOptsGM.kt` |
-| `rrect` | ported | `RRectBlurGM.kt`, `RRectGM.kt` |
 | `savelayer` | `STUB.F16_COLOR_TYPE`, `STUB.SAVE_BEHIND`; `Skbug14554GM` ported | `SaveBehindGM.kt`, `SaveLayerF16GM.kt`, `SaveLayerGM.kt`, `Skbug14554GM.kt` |
-| `shadowutils` | ported | `ShadowUtilsDirectionalGM.kt`, `ShadowUtilsGaussianColorFilterGM.kt` |
-| `strokedlines` | ported | `StrokedLineCapsGM.kt`, `StrokedLinesGM.kt` |
-| `textblobmixedsizes` | `STUB.DF_TEXT_RASTER` | `TextBlobMixedSizesGM.kt` |
 | `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
 
 - `STUB.MISSING_API` is too vague. The affected rows (`aaclip`, `addarc`)
   need tag cleanup before implementation selection.
-- `dashcubics` and `rrect` are classified as implementation
-  because their disabled/stub reason is actionable but not normalized as
-  a `STUB.*` tag.
+- `dashcubics` is classified as implementation because `TrimGM` is still a
+  documented no-op for missing `SkTrimPathEffect`, but the reason is not yet
+  normalized as a `STUB.*` tag.
 - Text-related rows should be revisited after the font delivery if their
   implementation would touch glyph storage or shaping assumptions.
