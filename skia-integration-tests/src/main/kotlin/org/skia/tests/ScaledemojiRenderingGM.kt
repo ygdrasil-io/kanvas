@@ -38,8 +38,8 @@ import org.skia.foundation.emoji.EmojiTypeface
  * [SkTypeface.MakeEmpty] here.
  *
  * At runtime every [EmojiTypeface.create] call throws `STUB.EMOJI_TABLES`
- * because the AWT scaler cannot decode CBDT / sbix / COLRv0 / SVG glyph
- * tables; those require FreeType (and librsvg for SVG) via JNI.
+ * because the pure Kotlin path does not yet dispatch CBDT / sbix /
+ * COLRv0 / SVG emoji glyph tables.
  * [ScaledemojiRenderingTest] is therefore `@Disabled("STUB.EMOJI_TABLES")`.
  *
  * See [`API_FINALIZATION_PLAN.md`](../../../../../../../../API_FINALIZATION_PLAN.md)
@@ -163,9 +163,8 @@ public class ScaledemojiRenderingGM : GM() {
      * }
      * ```
      * Note: upstream passes `&textPaint` as the fifth arg to `measureText`;
-     * the Kotlin API omits the optional paint parameter (it's irrelevant for
-     * advance-width computation in the AWT backend) — we call the four-arg
-     * overload instead.
+     * the Kotlin API omits the optional paint parameter for advance-width
+     * computation, so we call the four-arg overload instead.
      */
     override fun onDraw(canvas: SkCanvas?) {
         val c = canvas ?: return

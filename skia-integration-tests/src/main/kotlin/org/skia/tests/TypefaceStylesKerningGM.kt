@@ -23,16 +23,13 @@ import org.skia.tools.ToolUtils
  * once at `x + 240` through [drawKernText] which would apply the
  * typeface's `kern` table pair adjustments.
  *
- * **Kerning state on raster** : [SkTypeface.getKerningPairAdjustments]
- * returns `null` on the AWT-backed typefaces (AWT cannot read the
- * OpenType `kern` / `GPOS` tables without a JNI bridge — see
- * `STUB.FONTATIONS` in `API_FINALIZATION_PLAN.md`). [drawKernText]
- * therefore short-circuits to plain `drawSimpleText`, so the
- * right-hand `"Type AWAY"` ends up un-kerned. The reference image was
- * captured with kerning **on**, so the right-hand text will diverge
- * subtly from the upstream pixels (a few glyph pairs slide closer
- * together by 1-3 pixels). The left-hand text and the line-spacing
- * remain pixel-perfect.
+ * **Kerning state on raster** : the pure Kotlin OpenType backend can
+ * expose supported `kern` / GPOS pair adjustments, but this GM still
+ * ratchets the explicit positioned-text path against upstream style and
+ * scaler behavior. The right-hand `"Type AWAY"` is the sensitive region:
+ * glyph-pair positioning and style synthesis can move a few glyphs by a
+ * small number of pixels while the left-hand text and line spacing remain
+ * the stable baseline.
  */
 public class TypefaceStylesKerningGM : GM() {
 
@@ -99,19 +96,17 @@ public class TypefaceStylesKerningGM : GM() {
         val glyphs = ShortArray(codepoints.size)
         font.unicharsToGlyphs(codepoints, codepoints.size, glyphs)
 
-        // R-final.7 — AWT-backed typefaces don't expose the OT kern
-        // table ; this returns null and we fall back to a plain
-        // advance-positioned draw. Same pixel result as the left-hand
-        // pass (which is what upstream's `drawKernText` falls back to
-        // when face has no kerning).
+        // Fallback to plain advance-positioned text when the typeface
+        // exposes no pair-adjustment data. Same pixel result as the
+        // left-hand pass, matching upstream's no-kerning fallback.
         val adjustments = face.getKerningPairAdjustments(glyphs)
         if (adjustments == null) {
             canvas.drawSimpleText(text, text.length, SkTextEncoding.kUTF8, x, y, font, paint)
             return
         }
 
-        // (unreachable until a JNI Fontations bridge lands — kept for
-        // upstream parity so a future override drops in cleanly.)
+        // Explicit positioned glyph drawing is still simplified here;
+        // keep the upstream-shaped branch pinned for a future implementation.
         canvas.drawSimpleText(text, text.length, SkTextEncoding.kUTF8, x, y, font, paint)
     }
 }

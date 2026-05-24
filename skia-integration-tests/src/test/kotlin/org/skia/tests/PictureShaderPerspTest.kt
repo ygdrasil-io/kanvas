@@ -17,8 +17,8 @@ import org.skia.testing.TestUtils
  *  - **kDirect**: clip + drawPicture.
  *  - **kPictureShader**: makeShader(kDecal, kDecal, kLinear, tile=50×50).
  *
- * Floor is 0 % — the AWT rasterizer diverges from upstream's GPU path on
- * perspective text rendering and on the kDecal picture-shader boundary.
+ * Floor is 0 % — the raster OpenType path diverges from upstream's GPU path
+ * on perspective text rendering and on the kDecal picture-shader boundary.
  * The test primarily exercises that the code path compiles and does not
  * throw (structural smoke test).
  */

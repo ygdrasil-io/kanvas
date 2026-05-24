@@ -33,7 +33,7 @@ import org.skia.tools.ToolUtils
  *    gap-splitting. Similarity vs. the upstream reference will be
  *    materially lower as a result.
  *  - All other glyph-rendering caveats from [TextBlobGM] apply
- *    (AWT scaler, no LCD AA, glyph-mask cache absent).
+ *    (OpenType-vs-FreeType scaler drift, no LCD AA, glyph-mask cache absent).
  *
  * The companion `textblob_intercepts` GM in the same C++ file has
  * the same intercept dependency and is intentionally not ported

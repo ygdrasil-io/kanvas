@@ -11,10 +11,9 @@ import org.skia.testing.TestUtils
  * All three methods are `@Disabled` because:
  *  1. [org.skia.foundation.SkTypeface_Fontations.MakeFromStream] throws
  *     `STUB.FONTATIONS` — the Fontations Rust crate is not wired in.
- *  2. [org.skia.foundation.SkTypeface.getPostScriptName] and
- *     [org.skia.foundation.SkTypeface.createFamilyNameIterator] throw
- *     `STUB.FONTATIONS` — raw OpenType name-table access is unavailable
- *     in the pure-JVM / AWT backend.
+ *  2. The pure Kotlin OpenType backend exposes basic name-table data,
+ *     but this GM specifically targets the upstream Fontations factory
+ *     path and variable-axis behavior, which remains a native bridge stub.
  *
  * See `API_FINALIZATION_PLAN.md` § STUB.FONTATIONS.
  */

@@ -32,8 +32,8 @@ import org.skia.tools.ToolUtils
  * --------------
  * `SkFont::Edging::kSubpixelAntiAlias` is silently downgraded to
  * `kAntiAlias` by `:cpu-raster`'s glyph pipeline
- * (`MIGRATION_PLAN_TEXT.md §R3` — AWT's outline-based rasteriser has no
- * subpixel-positioning logic). At 256pt the visual delta vs. upstream's
+ * (the pure Kotlin raster path has no LCD subpixel mask pipeline). At
+ * 256pt the visual delta vs. upstream's
  * LCD-stripe-aware reference is essentially nil — large glyph edges
  * dominate over the per-channel positioning offset. We keep the
  * `kSubpixelAntiAlias` request on the [SkFont] verbatim to keep the

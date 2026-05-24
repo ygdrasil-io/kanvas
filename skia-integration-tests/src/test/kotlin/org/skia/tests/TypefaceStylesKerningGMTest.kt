@@ -15,9 +15,10 @@ class TypefaceStylesKerningGMTest {
         val rendered = TestUtils.runGmTest(gm)
         val reference = TestUtils.loadReferenceBitmap(gm.name())
         assertNotNull(reference, "Missing reference image typefacestyles_kerning.png")
-        // Right-hand text is un-kerned on the AWT path (see GM doc) ; we
-        // ratchet against any regression rather than asserting an
-        // absolute floor.
+        // This GM is a kerning/faux-style ratchet. The pure Kotlin
+        // OpenType backend applies supported `kern` / GPOS pair
+        // positioning, but style synthesis still differs from upstream.
+        // Ratchet against regressions rather than asserting a hard floor.
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
         TestReport.recordDetailed("TypefaceStylesKerningGM", comparison)
         TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())

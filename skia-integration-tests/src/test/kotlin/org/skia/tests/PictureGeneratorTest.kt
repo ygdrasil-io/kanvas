@@ -14,7 +14,7 @@ import org.skia.testing.TestUtils
  *
  * **Logo divergence.** The Kotlin port records the SKIA wordmark via
  * `SkFont.makeTextPath` + gradient shaders, then routes the 16 tiles
- * through `SkImages.DeferredFromPicture`. AWT vs FreeType scaler /
+ * through `SkImages.DeferredFromPicture`. OpenType vs FreeType scaler /
  * stroker divergences (subpixel positioning, gradient stop interpolation
  * in working-colour-space rather than premul-sRGB) mean per-pixel
  * fidelity vs. `pictureimagegenerator.png` is **not** expected — the

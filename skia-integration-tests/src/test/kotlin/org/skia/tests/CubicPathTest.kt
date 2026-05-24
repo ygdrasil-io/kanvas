@@ -19,7 +19,7 @@ class CubicPathTest {
         // every pixel of the cell's clipped rect that the path's interior
         // doesn't cover, exercising the Phase 3.8 scanline-walker
         // extension end-to-end. Stroke + fill combos exercise the
-        // Phase 3g cap/join matrix; text labels ride on the AWT-backed
+        // Phase 3g cap/join matrix; text labels ride on the OpenType-backed
         // text harness.
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
         TestReport.recordDetailed("CubicPathGM", comparison)

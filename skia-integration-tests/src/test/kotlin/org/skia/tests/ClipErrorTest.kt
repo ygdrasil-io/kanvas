@@ -19,7 +19,7 @@ import org.skia.testing.TestUtils
  * mildly from upstream because our blur kernel summing scheme
  * differs by sub-pixel offsets, even though the AA mask + clip
  * outcomes coincide structurally. The crisp pass also leans on the
- * AWT-backed scaler which carries the usual 1-2 ulp drift.
+ * OpenType-backed scaler which carries the usual edge drift.
  */
 class ClipErrorTest {
 

@@ -15,9 +15,9 @@ import org.skia.testing.TestUtils
  * with a Crop+Blur+Crop backdrop filter applied via [org.skia.core.SaveLayerRec].
  *
  * Tolerance is moderate — the backdrop blur produces soft edges and
- * the text rendering uses AWT (vs FreeType upstream), so pixel-level
- * deltas on glyph outlines are expected. The overall scene structure
- * (blurred band at 100..400, clear text above/below) should match.
+ * the pure Kotlin OpenType text path differs from upstream FreeType, so
+ * pixel-level deltas on glyph outlines are expected. The overall scene
+ * structure (blurred band at 100..400, clear text above/below) should match.
  */
 class AnimatedBackdropBlurTest {
 

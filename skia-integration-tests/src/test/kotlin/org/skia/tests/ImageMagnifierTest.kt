@@ -16,7 +16,7 @@ class ImageMagnifierTest {
         val reference = TestUtils.loadReferenceBitmap(gm.name())
         assertNotNull(reference, "Missing reference image imagemagnifier.png")
         // Random-text + magnifier filter — same per-glyph drift seen in
-        // `ImageBlurGM` (AWT vs FreeType + filter amplification).
+        // `ImageBlurGM` (OpenType vs FreeType + filter amplification).
         val comparison = TestUtils.compareBitmapsDetailed(
             rendered, reference!!, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
         )
