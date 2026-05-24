@@ -91,8 +91,8 @@ public class AwtTypeface internal constructor(
      * R-suivi.43 — does this typeface carry a glyph for the Unicode
      * code point [cp]? Routes through AWT `Font.canDisplay(int)` which
      * answers true when the font has a non-`.notdef` glyph for the
-     * code point. Used by [JvmAwtFontMgr.matchFamilyStyleCharacter] to
-     * validate a candidate family before returning it.
+     * code point. Kept for the legacy AWT typeface surface until the
+     * JavaTextLayout shaper is replaced by #927.
      */
     internal fun canDisplayCodepoint(cp: Int): Boolean = baseFont.canDisplay(cp)
 
