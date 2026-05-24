@@ -8,14 +8,10 @@ package org.skia.foundation
  * variable font. Multiple [SkFontVariation]s combine via
  * [SkFont.variations] to set a variable font's design coordinates.
  *
- * **Backend status (Phase I2.2 light)** : the AWT-backed typeface in
- * [org.skia.foundation.awt.AwtTypeface] does **not** consume
- * variations yet — there is no AWT API that maps fvar coordinates to
- * a derived `java.awt.Font`. The data class is exposed today so direct
- * ports of upstream code that *carry* variation positions through
- * (without acting on them) compile and round-trip ; once an AWT-side
- * mapping (or a non-AWT scaler) lands, only [AwtTypeface] needs to
- * read this list.
+ * The data class is exposed so direct ports of upstream code can carry
+ * variation positions through font APIs. Binary-backed typefaces such as
+ * `OpenTypeTypeface` may consume the coordinates when their parsed font
+ * exposes matching `fvar` axes.
  *
  * Serialisation note : Skia stores the axis as a 32-bit OpenType tag
  * (4 packed bytes, `('w'<<24)|('g'<<16)|('h'<<8)|'t'` for `wght`).

@@ -2230,8 +2230,8 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      *
      * **T3 status — real glyph rendering** via the existing path-fill
      * pipeline. Pipeline:
-     *  1. dispatch to `font.typeface.makeTextPath(...)` — for the AWT
-     *     backend this builds an [SkPath] from `GlyphVector.getOutline()`
+     *  1. dispatch to `font.typeface.makeTextPath(...)` — portable
+     *     OpenType typefaces build an [SkPath] from parsed glyph outlines
      *     positioned so that the baseline lands at `(x, y)` in source
      *     coords (no CTM applied yet);
      *  2. delegate to [drawPath], which applies the current CTM and runs

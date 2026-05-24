@@ -21,7 +21,7 @@ import org.skia.testing.TestUtils
  *     [org.skia.foundation.SkLocalMatrixShader] wrapper.
  *
  * Tolerance + floor follow the textual GM convention
- * ([TestUtils.TEXTUAL_GM_TOLERANCE] = 8) — glyph paths come from AWT's
+ * ([TestUtils.TEXTUAL_GM_TOLERANCE] = 8) — glyph paths come from the portable OpenType
  * scaler so AA edges drift ~1-2 ulp vs the upstream FreeType reference,
  * and the rotation/scale + shader-tile sampling amplifies that drift
  * along the diagonals. The [SimilarityTracker] ratchet locks the

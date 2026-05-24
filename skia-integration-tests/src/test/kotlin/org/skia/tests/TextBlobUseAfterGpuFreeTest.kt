@@ -18,7 +18,7 @@ class TextBlobUseAfterGpuFreeTest {
 
         // Two identical "Hamburgefons" text-blob draws at 20pt on a white
         // background. Most of the canvas is colour-space-invariant white ;
-        // glyph ink residuals are dominated by the AWT-vs-FreeType scaler
+        // glyph ink residuals are dominated by the OpenType-vs-FreeType scaler
         // delta on small text (~1-2 ulp on AA edges).
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
         TestReport.recordDetailed("TextBlobUseAfterGpuFreeGM", comparison)

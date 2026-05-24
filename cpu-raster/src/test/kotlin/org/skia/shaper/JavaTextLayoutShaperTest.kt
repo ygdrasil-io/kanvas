@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkTypeface
-import org.skia.tools.ToolUtils
+import org.skia.foundation.awt.LiberationFontMgr
 
 /**
  * Phase I4.2 — covers [SkShaper.MakeJavaTextLayout].
@@ -23,7 +23,7 @@ import org.skia.tools.ToolUtils
  */
 class JavaTextLayoutShaperTest {
 
-    private fun awtFont(): SkFont = SkFont(ToolUtils.DefaultPortableTypeface(), 16f)
+    private fun awtFont(): SkFont = SkFont(LiberationFontMgr.getDefault(), 16f)
 
     /** Capturing handler — accumulates the full callback log + every run. */
     private class CapturingHandler : SkShaper.RunHandler {

@@ -7,9 +7,8 @@ import kotlin.math.abs
  *
  * A collection of typefaces all sharing the same family name. Backends
  * subclass this to expose the styles available under a given family —
- * e.g. on the AWT-backed default font manager, a family like
- * `"Helvetica"` will be represented by an `SkFontStyleSet` over the 4
- * classical AWT styles (regular / bold / italic / bold-italic). The
+ * e.g. the bundled Liberation OpenType manager represents each family
+ * with regular / bold / italic / bold-italic faces. The
  * upstream signature exposes four virtuals (`count`, `getStyle`,
  * `createTypeface`, `matchStyle`) plus a static empty constructor — we
  * mirror exactly that surface.
@@ -47,8 +46,7 @@ public abstract class SkFontStyleSet protected constructor() {
      *
      * Default implementation in upstream is `matchStyleCSS3(pattern)` —
      * here we expose [matchStyleCSS3] as a `protected` helper so subclasses
-     * can call it but aren't forced to use it (some backends — e.g. AWT —
-     * can short-circuit when the candidate count is small).
+     * can call it but aren't forced to use it.
      */
     public abstract fun matchStyle(pattern: SkFontStyle): SkTypeface?
 

@@ -11,15 +11,14 @@ import java.io.InputStream
  * through this API surface — the cross-platform consumer never sees
  * platform-specific types.
  *
- * **Kotlin / JVM port :**
- *  - The default backend is [JvmAwtFontMgr], which enumerates fonts via
- *    `java.awt.GraphicsEnvironment.getAvailableFontFamilyNames()`. This
- *    gives access to system fonts on every JVM-supported platform without
- *    bundling a native fontconfig binding (see R-suivi for the deferred
- *    native fontconfig path).
+ * **Kotlin port :**
+ *  - `:kanvas-skia` exposes this abstract surface plus portable managers
+ *    such as `LiberationOpenTypeFontMgr`, backed by bundled OpenType data.
  *  - [EmptyFontMgr] is the parity with upstream's `SkFontMgr::RefEmpty()`
  *    — useful for unit tests that need an `SkFontMgr` handle without
- *    accidentally pulling in system fonts.
+ *    accidentally pulling in real fonts.
+ *  - Platform default managers are supplied by integration modules so this
+ *    portable foundation layer does not import desktop font APIs.
  *
  * **No reference counting** — Skia ships `SkFontMgr` as `sk_sp<SkFontMgr>`
  * because C++ has no GC. The Kotlin port relies on JVM tracing GC.
@@ -48,9 +47,9 @@ public abstract class SkFontMgr protected constructor() {
      *
      * Never returns null: when the family is not found, returns
      * [SkFontStyleSet.CreateEmpty]. When [familyName] is `null`, returns
-     * the empty set on backends that have no default system family
-     * (e.g. [EmptyFontMgr]) ; the AWT-backed default returns the JVM's
-     * default sans-serif family.
+     * the empty set on backends that have no default family
+     * (e.g. [EmptyFontMgr]); bundled portable managers normally resolve to
+     * their default sans-serif family.
      */
     public abstract fun matchFamily(familyName: String?): SkFontStyleSet
 
@@ -65,11 +64,9 @@ public abstract class SkFontMgr protected constructor() {
      * const`. Returns a typeface from the system fallback chain that can
      * render the supplied [character].
      *
-     * **R3.2 status** : the default JVM AWT backend returns `null` here —
-     * AWT does not expose a public fallback API for "find any font that
-     * carries this codepoint". Callers needing real fallback should reach
-     * for a native fontconfig integration (deferred to R-suivi, see
-     * [JvmAwtFontMgr]'s KDoc).
+     * Portable managers may return `null` when they cannot find a bundled
+     * face that carries the requested codepoint. Callers needing full system
+     * fallback should use a platform integration module.
      */
     public abstract fun matchFamilyStyleCharacter(
         familyName: String?,
@@ -83,9 +80,8 @@ public abstract class SkFontMgr protected constructor() {
      * int ttcIndex) const`. Returns `null` when the data is not a
      * recognised font format.
      *
-     * `ttcIndex` is currently ignored by the default JVM AWT backend
-     * (AWT's `Font.createFont` always picks the first font in a TTC). See
-     * R-suivi for the TTC index handling.
+     * Backends that cannot select a requested collection face should return
+     * `null` or their documented best-effort result.
      */
     public abstract fun makeFromData(data: SkData, ttcIndex: Int = 0): SkTypeface?
 
@@ -144,15 +140,9 @@ public abstract class SkFontMgr protected constructor() {
 
     public companion object {
         /**
-         * `RefDefault()` moved to an extension function on
-         * [SkFontMgr.Companion] in `:cpu-raster` (file
-         * `org.skia.foundation.awt.SkFontMgrCpuRaster.kt`) so that
-         * `:kanvas-skia/foundation` no longer imports the
-         * AWT-backed implementation. Cycle break preparing the
-         * GPU module's classpath cleanliness.
-         *
-         * Callers should `import org.skia.foundation.awt.RefDefault`
-         * and continue calling `SkFontMgr.RefDefault()`.
+         * Platform default font managers are provided by extension modules
+         * so that `:kanvas-skia/foundation` remains portable and free of
+         * desktop font imports.
          */
 
         /** Mirrors `sk_sp<SkFontMgr> SkFontMgr::RefEmpty()`. */

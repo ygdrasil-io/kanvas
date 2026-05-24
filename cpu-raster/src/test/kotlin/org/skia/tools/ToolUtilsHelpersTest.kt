@@ -9,7 +9,9 @@ import org.skia.core.SkCanvas
 import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPaint
+import org.skia.foundation.opentype.OpenTypeTypeface
 import org.graphiks.math.SkRect
 
 /**
@@ -26,6 +28,38 @@ import org.graphiks.math.SkRect
  * helpers ; non-blank inked region for the string-image helper).
  */
 class ToolUtilsHelpersTest {
+    @Test
+    fun `portable font helpers use OpenType typefaces`() {
+        val defaultTypeface = ToolUtils.DefaultPortableTypeface()
+        val sans = ToolUtils.CreatePortableTypeface("sans-serif", SkFontStyle.Normal())
+        val serif = ToolUtils.CreatePortableTypeface("serif", SkFontStyle.Italic())
+        val mono = ToolUtils.CreatePortableTypeface("monospace", SkFontStyle.Bold())
+
+        assertTrue(defaultTypeface is OpenTypeTypeface)
+        assertTrue(sans is OpenTypeTypeface)
+        assertTrue(serif is OpenTypeTypeface)
+        assertTrue(mono is OpenTypeTypeface)
+        assertEquals("Liberation Sans", defaultTypeface.getFamilyName())
+    }
+
+    @Test
+    fun `resource typeface helper loads TTF through OpenType`() {
+        val typeface = ToolUtils.CreateTypefaceFromResource("fonts/ReallyBigA.ttf")
+
+        assertNotNull(typeface)
+        assertTrue(typeface is OpenTypeTypeface)
+    }
+
+    @Test
+    fun `TestFontMgr exposes portable Liberation families`() {
+        val fontMgr = ToolUtils.TestFontMgr()
+
+        assertEquals(3, fontMgr.countFamilies())
+        assertNotNull(fontMgr.legacyMakeTypeface("sans-serif", SkFontStyle.Normal()))
+        assertNotNull(fontMgr.legacyMakeTypeface("serif", SkFontStyle.BoldItalic()))
+        assertNotNull(fontMgr.legacyMakeTypeface("monospace", SkFontStyle.Italic()))
+    }
+
 
     @Test
     fun `create_checkerboard_shader paints alternating quadrants`() {

@@ -40,7 +40,7 @@ import kotlin.math.PI
  * carrying the matching `kotlin.math` impl.
  *
  * **Known drift sources** (vs `runtime_intrinsics_trig.png`) :
- *  - Text labels — AWT-vs-FreeType glyph drift (~3-5 % canvas).
+ *  - Text labels — OpenType-vs-FreeType glyph drift (~3-5 % canvas).
  *  - Working colour space — our render goes through a sRGB
  *    100×100 sub-surface then composites onto a Rec.2020 parent.
  *  - Polyline AA — our scanline 4×4 supersampling vs Skia's

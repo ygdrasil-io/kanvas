@@ -113,31 +113,54 @@ class LiberationOpenTypeFontMgrTest {
     }
 
     @Test
-    fun `opentype source files do not import AWT or JNI`() {
-        val opentypeSources = findProjectRoot()
-            .resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/opentype")
+    fun `portable font paths do not import AWT imageio or JNI`() {
+        val projectRoot = findProjectRoot()
+        val portableFontPaths = listOf(
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/LiberationFontMgr.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/SkFont.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/SkFontArguments.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/SkFontHinting.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/SkFontMgr.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/SkFontPriv.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/SkFontStyleSet.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/SkFontVariation.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/SkTextEncoding.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/SkTypeface.kt"),
+            projectRoot.resolve("kanvas-skia/src/main/kotlin/org/skia/foundation/opentype"),
+            projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontArgumentsTest.kt"),
+            projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontHygieneTest.kt"),
+            projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontMgrFromDataTest.kt"),
+            projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontMgrTest.kt"),
+            projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontStyleSetTest.kt"),
+            projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontTest.kt"),
+            projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontTextToGlyphsTest.kt"),
+            projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkTextBlobGetInterceptsTest.kt"),
+        )
 
-        assertTrue(opentypeSources.isDirectory(), "Missing opentype source directory: $opentypeSources")
+        for (path in portableFontPaths) {
+            assertTrue(path.existsForGuard(), "Missing portable font path: $path")
+        }
 
         val forbiddenPatterns = listOf(
             Regex("""^\s*import\s+java\.awt(\.|$)""", RegexOption.MULTILINE),
+            Regex("""^\s*import\s+javax\.imageio(\.|$)""", RegexOption.MULTILINE),
+            Regex("""^\s*import\s+org\.skia\.foundation\.awt(\.|$)""", RegexOption.MULTILINE),
             Regex("""^\s*import\s+.*\bjni\b""", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE)),
         )
 
-        val offenders = Files.walk(opentypeSources).use { paths ->
-            paths.asSequence()
-                .filter { it.name.endsWith(".kt") }
-                .flatMap { path ->
-                    val text = path.readText()
-                    forbiddenPatterns
-                        .filter { it.containsMatchIn(text) }
-                        .map { path }
-                }
-                .distinct()
-                .toList()
-        }
+        val offenders = portableFontPaths
+            .asSequence()
+            .flatMap { it.kotlinFilesForGuard().asSequence() }
+            .flatMap { path ->
+                val text = path.readText()
+                forbiddenPatterns
+                    .filter { it.containsMatchIn(text) }
+                    .map { path }
+            }
+            .distinct()
+            .toList()
 
-        assertTrue(offenders.isEmpty(), "Forbidden AWT/JNI references in opentype sources: $offenders")
+        assertTrue(offenders.isEmpty(), "Forbidden desktop/native imports in portable font paths: $offenders")
     }
 
     private fun portableMgr(): SkFontMgr {
@@ -185,4 +208,17 @@ class LiberationOpenTypeFontMgrTest {
         }
         error("Could not find project root from ${System.getProperty("user.dir")}")
     }
+
+    private fun Path.existsForGuard(): Boolean = isDirectory() || Files.isRegularFile(this)
+
+    private fun Path.kotlinFilesForGuard(): List<Path> =
+        if (isDirectory()) {
+            Files.walk(this).use { paths ->
+                paths.asSequence()
+                    .filter { it.name.endsWith(".kt") }
+                    .toList()
+            }
+        } else {
+            listOf(this).filter { it.name.endsWith(".kt") }
+        }
 }

@@ -19,7 +19,7 @@ class ImageBlur2Test {
         assertNotNull(reference, "Missing reference image imageblur2.png")
         // 6x6 grid of saveLayer'd text blocks under varying Gaussian
         // sigmas. Like ImageBlurGM, the dominant pixel-drift driver is
-        // AWT-vs-FreeType AA on the underlying glyphs, amplified by the
+        // OpenType-vs-FreeType AA on the underlying glyphs, amplified by the
         // wider blur kernels (sigma up to 80).
         val comparison = TestUtils.compareBitmapsDetailed(
             rendered, reference!!, tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,

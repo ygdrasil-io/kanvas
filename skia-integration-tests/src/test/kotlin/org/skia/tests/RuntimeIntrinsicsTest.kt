@@ -15,7 +15,7 @@ import org.skia.testing.TestUtils
  *
  * **Floor strategy** — these GMs are deliberately low-floor :
  *
- *  - **Text labels** drift via AWT-vs-FreeType glyph rasterisation
+ *  - **Text labels** drift via OpenType-vs-FreeType glyph rasterisation
  *    (3-5 % of canvas area).
  *  - **Working colour space** — each cell is rendered into a sRGB
  *    100×100 sub-surface (matches upstream `SkImageInfo::MakeN32Premul`)

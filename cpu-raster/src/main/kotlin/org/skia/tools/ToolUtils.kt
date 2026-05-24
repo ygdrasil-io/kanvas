@@ -12,15 +12,17 @@ import org.graphiks.math.SkColorGetR
 import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
+import org.skia.foundation.SkFontMgr
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
+import org.skia.foundation.LiberationFontMgr
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkShader
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkTypeface
-import org.skia.foundation.awt.LiberationFontMgr
+import org.skia.foundation.opentype.OpenTypeTypeface
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkScalar
 import kotlin.math.floor
@@ -35,6 +37,8 @@ import kotlin.math.floor
  * surface helpers, the font portability shims.
  */
 public object ToolUtils {
+    private val portableFontMgr: SkFontMgr by lazy { LiberationFontMgr.Make() }
+
 
     /**
      * Mirrors Skia's `SkHSVToColor(alpha, hsv)` (`src/core/SkColor.cpp`).
@@ -129,7 +133,9 @@ public object ToolUtils {
      * (Sans / Mono / Serif respectively).
      */
     public fun CreatePortableTypeface(name: String?, style: SkFontStyle): SkTypeface =
-        LiberationFontMgr.matchFamilyStyle(name, style)
+        portableFontMgr.legacyMakeTypeface(name, style)
+            ?: portableFontMgr.legacyMakeTypeface(null, SkFontStyle.Normal())
+            ?: SkTypeface.MakeEmpty()
 
     /**
      * Mirrors `ToolUtils::DefaultPortableTypeface()`
@@ -140,20 +146,14 @@ public object ToolUtils {
      * (the `.inc` was generated from the upstream Liberation TTF by
      * `tools/fonts/create_test_font.cpp`).
      *
-     * **T4 (option A — currently active)**: we ship the Liberation TTFs
-     * as classpath resources under `kanvas-skia/src/main/resources/fonts/
-     * liberation/` and load them through AWT (`Font.createFont(TRUETYPE_FONT,
-     * …)`), routed via [LiberationFontMgr]. Glyph outlines are identical
-     * to upstream; pixel-level fidelity still drifts on AA edges because
-     * AWT's scaler/hinting differs from FreeType (~1-2 ulp).
-     *
-     * **Tx future (option B — deferred)**: port the `test_font_*.inc` data
-     * to Kotlin and build an `SkTestTypeface` that iterates the embedded
-     * points/verbs directly, bypassing AWT for outline lookup. That would
-     * make outlines bit-exact upstream. Triggered by `bigtext`-family GMs.
-     * See `archives/MIGRATION_PLAN_TEXT.md` §T4 for details.
+     * The Kotlin port ships the Liberation TTFs as classpath resources under
+     * `kanvas-skia/src/main/resources/fonts/liberation/` and loads them
+     * through the pure-Kotlin OpenType backend, routed via [LiberationFontMgr].
+     * This keeps portable GM helpers independent from AWT and native font
+     * stacks.
      */
-    public fun DefaultPortableTypeface(): SkTypeface = LiberationFontMgr.getDefault()
+    public fun DefaultPortableTypeface(): SkTypeface =
+        CreatePortableTypeface(null, SkFontStyle.Normal())
 
     /**
      * Mirrors `ToolUtils::CreateTypefaceFromResource(path, style)`
@@ -161,18 +161,16 @@ public object ToolUtils {
      *
      * Reads the encoded TTF/OTF bytes from the classpath at [path]
      * (relative to the resource root, e.g. `"fonts/ReallyBigA.ttf"`)
-     * and wraps them as an AWT-backed [SkTypeface]. Returns `null` when
-     * the resource is missing or AWT cannot parse the font (corrupt
-     * file, or a colour-emoji format like CBDT / Sbix / COLRv1 that AWT
-     * doesn't support — those need the JNI-backed FreeType pipeline,
-     * see `STUB.EMOJI_TABLES` in `API_FINALIZATION_PLAN.md`).
+     * and wraps them as an OpenType-backed [SkTypeface]. Returns `null`
+     * when the resource is missing or the pure-Kotlin parser cannot read
+     * the font.
      */
     public fun CreateTypefaceFromResource(
         path: String,
         style: SkFontStyle = SkFontStyle.Normal(),
     ): SkTypeface? {
         val data = GetResourceAsData(path) ?: return null
-        return org.skia.foundation.awt.AwtTypeface.createFromBytes(data.toByteArray(), style)
+        return OpenTypeTypeface.MakeFromBytes(data.toByteArray())
     }
 
     /**
@@ -180,12 +178,10 @@ public object ToolUtils {
      *
      * **R-final.7 status — STUB.EMOJI_TABLES, returns `null`** :
      * upstream loads `planetcolr.ttf` / `planetsbix.ttf` / `planetcbdt.ttf`
-     * which are colour-emoji fonts (COLRv0 / Sbix / CBDT formats). AWT's
-     * font scaler doesn't grok colour bitmap glyph tables, so the
-     * resource load succeeds but rendering would just emit `.notdef`
-     * boxes. Returning `null` lets callers detect the absence and skip
-     * the colour-emoji draw path (matches upstream's null-check
-     * semantics — see `gm/mixedtextblobs.cpp:94`).
+     * which are colour-emoji fonts (COLRv0 / Sbix / CBDT formats). The
+     * portable OpenType backend currently exposes COLRv0 and tracks
+     * bitmap/SVG support separately, so this helper stays nullable until
+     * those resource paths are wired end-to-end.
      */
     public fun PlanetTypeface(): SkTypeface? = null
 
@@ -200,18 +196,10 @@ public object ToolUtils {
     /**
      * Mirrors `ToolUtils::TestFontMgr()` (`tools/fonts/FontToolUtils.cpp`).
      *
-     * **R-final.S — STUB.LIBERATION_FM** : upstream returns a full `sk_sp<SkFontMgr>`
-     * backed by the portable Liberation typeface set (style sets, family iteration,
-     * `makeFromStream` with TTF / woff / woff2 dispatch). Our AWT-backed [LiberationFontMgr]
-     * is an `internal` object that does **not** extend [org.skia.foundation.SkFontMgr], so
-     * we cannot return a properly-typed instance here without exposing implementation
-     * internals. This method always throws to surface the gap. Every GM that calls it must
-     * annotate its test `@Disabled("STUB.LIBERATION_FM: …")`. See `API_FINALIZATION_PLAN.md`.
+     * Returns the pure-Kotlin Liberation OpenType font manager used by the
+     * portable font helpers.
      */
-    public fun TestFontMgr(): org.skia.foundation.SkFontMgr = TODO(
-        "STUB.LIBERATION_FM: TestFontMgr() requires a public SkFontMgr backed by Liberation TTFs " +
-            "with full makeFromStream / woff / woff2 support — see API_FINALIZATION_PLAN.md",
-    )
+    public fun TestFontMgr(): SkFontMgr = portableFontMgr
 
     /**
      * Mirrors `ToolUtils::add_to_text_blob(builder, text, font, x, y)`

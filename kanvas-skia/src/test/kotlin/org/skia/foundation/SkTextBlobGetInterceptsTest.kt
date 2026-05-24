@@ -25,7 +25,7 @@ class SkTextBlobGetInterceptsTest {
 
     /**
      * Helper — builds a single-run "ABC" blob anchored at `(x, y)` with
-     * the portable AWT typeface at [textSize]pt.
+     * the portable OpenType typeface at [textSize]pt.
      */
     private fun makeBlob(text: String, textSize: Float, x: Float, y: Float): SkTextBlob {
         val font = ToolUtils.DefaultPortableFont(textSize)

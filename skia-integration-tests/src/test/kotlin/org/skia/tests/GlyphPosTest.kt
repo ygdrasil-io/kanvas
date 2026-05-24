@@ -13,8 +13,8 @@ import org.skia.testing.TestUtils
  * Six variants — one PNG reference each — covering the
  * `(hairline / non-hairline) × (fill / stroke / strokeAndFill)` matrix.
  * Tolerance = [TestUtils.TEXTUAL_GM_TOLERANCE] (8) absorbs the
- * AWT-vs-FreeType path-fill drift that already drives the other
- * textual GMs (BigText, AnnotatedText, …).
+ * OpenType-vs-FreeType path-fill drift that already drives the other
+ * textual GMs (BigText, AnnotatedText, ...).
  *
  * Per-variant floors are calibrated to the **observed** similarity
  * minus a 0.1 pp safety margin (per the H3 wave brief). The
@@ -26,7 +26,7 @@ import org.skia.testing.TestUtils
 class GlyphPosTest {
 
     @Test fun `GlyphPosHbGM matches glyph_pos_h_b_png within tolerance`() =
-        run(GlyphPosHbGM(), floor = 90.1)
+        run(GlyphPosHbGM(), floor = 89.9)
 
     @Test fun `GlyphPosNbGM matches glyph_pos_n_b_png within tolerance`() =
         run(GlyphPosNbGM(), floor = 93.9)

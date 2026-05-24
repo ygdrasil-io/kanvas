@@ -4,10 +4,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import org.skia.foundation.awt.RefDefault
 
 /**
- * Verifies the abstract [SkFontStyleSet] contract on the JVM-AWT impl
+ * Verifies the abstract [SkFontStyleSet] contract on the portable OpenType impl
  * and the [SkFontStyleSet.CreateEmpty] singleton :
  *
  *  - count() / getStyle() / createTypeface() / matchStyle() round-trip,
@@ -15,6 +14,8 @@ import org.skia.foundation.awt.RefDefault
  *  - empty set returns null on createTypeface / matchStyle.
  */
 class SkFontStyleSetTest {
+    private fun portableSet(): SkFontStyleSet = LiberationFontMgr.Make().matchFamily("Liberation Sans")
+
 
     @Test
     fun `empty set has 0 typefaces and returns null for matchStyle`() {
@@ -25,23 +26,21 @@ class SkFontStyleSetTest {
 
     @Test
     fun `matchStyle returns nearest neighbour - Bold matches Bold entry`() {
-        val mgr = SkFontMgr.RefDefault()
-        val set = mgr.matchFamily("Dialog")
+        val set = portableSet()
         if (set.count() == 0) return
         val tf = set.matchStyle(SkFontStyle.Bold())
         assertNotNull(tf, "matchStyle(Bold) should resolve")
         // The fontStyle of the resolved typeface should equal the bold
-        // entry since AWT exposes 4 exact-distance styles and Bold is
+        // entry since Liberation exposes 4 exact-distance styles and Bold is
         // one of them.
         assertEquals(SkFontStyle.kBold_Weight, tf!!.fontStyle.weight)
     }
 
     @Test
     fun `matchStyle returns nearest neighbour - Light maps to Regular`() {
-        val mgr = SkFontMgr.RefDefault()
-        val set = mgr.matchFamily("Dialog")
+        val set = portableSet()
         if (set.count() == 0) return
-        // Light weight (300) is closest to Normal (400) of the 4 AWT
+        // Light weight (300) is closest to Normal (400) of the 4 bundled
         // styles (delta 100 vs delta 400 to Bold).
         val tf = set.matchStyle(
             SkFontStyle(SkFontStyle.kLight_Weight, SkFontStyle.kNormal_Width, SkFontStyle.Slant.kUpright_Slant)
@@ -52,8 +51,7 @@ class SkFontStyleSetTest {
 
     @Test
     fun `matchStyle returns nearest neighbour - Italic-Medium maps to Italic`() {
-        val mgr = SkFontMgr.RefDefault()
-        val set = mgr.matchFamily("Dialog")
+        val set = portableSet()
         if (set.count() == 0) return
         // Slant mismatch dominates (×1000), so an italic-medium query
         // should pick the italic entry over any upright one.
@@ -66,8 +64,7 @@ class SkFontStyleSetTest {
 
     @Test
     fun `getStyle returns SkFontStyle and appends name`() {
-        val mgr = SkFontMgr.RefDefault()
-        val set = mgr.matchFamily("Dialog")
+        val set = portableSet()
         if (set.count() == 0) return
         val nameBuilder = StringBuilder()
         val style = set.getStyle(0, null, nameBuilder)
@@ -78,8 +75,7 @@ class SkFontStyleSetTest {
 
     @Test
     fun `createTypeface yields distinct typefaces per index`() {
-        val mgr = SkFontMgr.RefDefault()
-        val set = mgr.matchFamily("Dialog")
+        val set = portableSet()
         if (set.count() == 0) return
         val regular = set.createTypeface(0)
         val bold = set.createTypeface(1)

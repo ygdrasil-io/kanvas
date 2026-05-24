@@ -12,7 +12,7 @@ import org.skia.testing.TestUtils
  *
  * Tolerance + floor follow the textual GM convention
  * (`TestUtils.TEXTUAL_GM_TOLERANCE`); the floor is set well below the
- * empirical similarity to leave ample buffer for AWT-vs-FreeType edge
+ * empirical similarity to leave ample buffer for OpenType-vs-FreeType edge
  * AA drift across JVM versions.
  */
 class TypefaceStylesTest {
