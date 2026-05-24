@@ -1,15 +1,12 @@
 package org.skia.testing
 
 import org.skia.foundation.SkBitmap
-import java.awt.Color
-import java.awt.Font
-import java.awt.image.BufferedImage
 import kotlin.math.abs
 import kotlin.math.min
 
 /**
  * Renders a `rendered | diff | reference` triptych as a single PNG-ready
- * `BufferedImage`. The diff panel highlights mismatches in magenta with
+ * [SkBitmap]. The diff panel highlights mismatches in magenta with
  * intensity proportional to severity beyond `tolerance`; matching pixels
  * stay neutral grey so the rendered/reference panels keep visual context.
  */
@@ -25,7 +22,7 @@ internal object DiffImage {
         reference: SkBitmap,
         tolerance: Int,
         comparison: BitmapComparison,
-    ): BufferedImage {
+    ): SkBitmap {
         require(rendered.width == reference.width && rendered.height == reference.height) {
             "Triptych requires same-size bitmaps (rendered=${rendered.width}x${rendered.height}, " +
                 "reference=${reference.width}x${reference.height})"
@@ -34,28 +31,21 @@ internal object DiffImage {
         val h = rendered.height
         val totalW = 3 * w + 2 * GUTTER
         val totalH = h + LABEL_HEIGHT
-        val img = BufferedImage(totalW, totalH, BufferedImage.TYPE_INT_ARGB)
-        val g = img.createGraphics()
-        g.color = Color(PANEL_BACKGROUND)
-        g.fillRect(0, 0, totalW, totalH)
-        g.color = Color.WHITE
-        g.font = Font("Monospaced", Font.PLAIN, 11)
-        g.drawString("rendered", 4, 12)
-        val diffLabel = "diff  max=${comparison.maxChannelDiff.max()}  t=$tolerance  " +
-            "miss=${comparison.mismatchingPixels}/${comparison.totalPixels}"
-        g.drawString(diffLabel, w + GUTTER + 4, 12)
-        g.drawString("reference", 2 * (w + GUTTER) + 4, 12)
-        g.drawImage(TestUtils.bitmapToBufferedImage(rendered), 0, LABEL_HEIGHT, null)
-        g.drawImage(buildDiffPanel(rendered, reference, tolerance), w + GUTTER, LABEL_HEIGHT, null)
-        g.drawImage(TestUtils.bitmapToBufferedImage(reference), 2 * (w + GUTTER), LABEL_HEIGHT, null)
-        g.dispose()
+        val img = SkBitmap(totalW, totalH)
+        img.eraseColor(PANEL_BACKGROUND)
+        drawPanelMarkers(img, 0, w)
+        drawPanelMarkers(img, w + GUTTER, min(w, 8 + comparison.maxChannelDiff.max() / 16))
+        drawPanelMarkers(img, 2 * (w + GUTTER), w)
+        copyBitmap(rendered, img, 0, LABEL_HEIGHT)
+        copyBitmap(buildDiffPanel(rendered, reference, tolerance), img, w + GUTTER, LABEL_HEIGHT)
+        copyBitmap(reference, img, 2 * (w + GUTTER), LABEL_HEIGHT)
         return img
     }
 
-    private fun buildDiffPanel(a: SkBitmap, b: SkBitmap, tolerance: Int): BufferedImage {
+    private fun buildDiffPanel(a: SkBitmap, b: SkBitmap, tolerance: Int): SkBitmap {
         val w = a.width
         val h = a.height
-        val pixels = IntArray(w * h)
+        val img = SkBitmap(w, h)
         // Phase 6 — read both bitmaps via the colorType-aware accessor so
         // F16 ↔ F16 (or mixed) comparisons render the diff panel correctly
         // instead of crashing on the empty `pixels8888` array.
@@ -68,16 +58,31 @@ internal object DiffImage {
                 val dG = abs(((pa ushr 8) and 0xFF) - ((pb ushr 8) and 0xFF))
                 val dB = abs((pa and 0xFF) - (pb and 0xFF))
                 val maxD = maxOf(dA, maxOf(dR, maxOf(dG, dB)))
-                pixels[y * w + x] = if (maxD <= tolerance) {
+                img.setPixel(x, y, if (maxD <= tolerance) {
                     MATCHING_COLOR
                 } else {
                     val sev = min(255, (maxD - tolerance) * 4)
                     (0xFF000000.toInt()) or (sev shl 16) or sev
-                }
+                })
             }
         }
-        val img = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
-        img.setRGB(0, 0, w, h, pixels, 0, w)
         return img
+    }
+
+    private fun copyBitmap(src: SkBitmap, dst: SkBitmap, dx: Int, dy: Int) {
+        for (y in 0 until src.height) {
+            for (x in 0 until src.width) {
+                dst.setPixel(dx + x, dy + y, src.getPixel(x, y))
+            }
+        }
+    }
+
+    private fun drawPanelMarkers(dst: SkBitmap, startX: Int, width: Int) {
+        val markerColor = 0xFFFFFFFF.toInt()
+        val y = LABEL_HEIGHT / 2
+        val endX = startX + width
+        for (x in startX + 4 until min(endX - 4, startX + 24)) {
+            dst.setPixel(x, y, markerColor)
+        }
     }
 }

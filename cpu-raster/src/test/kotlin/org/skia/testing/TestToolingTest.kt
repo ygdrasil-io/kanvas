@@ -7,9 +7,9 @@ import org.junit.jupiter.api.Test
 import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
+import org.skia.codec.SkCodec
 import org.skia.foundation.SkBitmap
 import java.io.File
-import javax.imageio.ImageIO
 
 /**
  * Self-tests for the run-time tooling itself (`compareBitmapsDetailed`,
@@ -85,11 +85,11 @@ class TestToolingTest {
         TestUtils.saveComparisonImage(rendered, reference, comparison, name)
         val out = File("build/debug-images/$name-comparison.png")
         assertTrue(out.exists(), "Triptych PNG was not written at ${out.absolutePath}")
-        val img = ImageIO.read(out)
+        val img = SkCodec.MakeFromData(out.readBytes())?.getImage()?.first
         assertNotNull(img)
         // Layout: 3 panels of width `w` separated by 4-pixel gutters,
         // plus a 16-pixel label band on top.
-        assertEquals(3 * w + 2 * 4, img.width)
+        assertEquals(3 * w + 2 * 4, img!!.width)
         assertEquals(h + 16, img.height)
     }
 

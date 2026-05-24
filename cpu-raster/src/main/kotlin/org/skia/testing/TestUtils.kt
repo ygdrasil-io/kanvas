@@ -8,10 +8,9 @@ import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.encode.SkPngEncoder
 import org.skia.tests.GM
-import java.awt.image.BufferedImage
 import java.io.File
-import javax.imageio.ImageIO
 
 public object TestUtils {
 
@@ -78,11 +77,7 @@ public object TestUtils {
         }
     }
 
-    public fun loadReferenceImage(name: String): BufferedImage? {
-        val path = "$REFERENCE_DIR/$name.png"
-        val url = TestUtils::class.java.classLoader.getResource(path) ?: return null
-        return ImageIO.read(File(url.toURI()))
-    }
+    public fun loadReferenceImage(name: String): SkBitmap? = loadReferenceBitmap(name)
 
     /**
      * Read raw PNG bytes from the classpath. Used by [loadReferenceCodec]
@@ -97,7 +92,7 @@ public object TestUtils {
      * Build an [SkCodec] over the named reference PNG. Returns `null`
      * if the resource is missing or the bytes are not a valid PNG.
      *
-     * D3.1 wire-up : the codec replaces the inline iCCP / `BufferedImage`
+     * D3.1 wire-up : the codec replaces the inline iCCP / JVM image
      * plumbing that used to live in this file. Callers that need just
      * the colour space go through [loadReferenceColorSpace] ; callers
      * that need the decoded bitmap go through [loadReferenceBitmap].
@@ -133,12 +128,7 @@ public object TestUtils {
 
     public fun saveDebugImage(bitmap: SkBitmap, name: String) {
         val dir = File("build/debug-images").apply { mkdirs() }
-        ImageIO.write(bitmapToBufferedImage(bitmap), "png", File(dir, "$name.png"))
-    }
-
-    public fun saveDebugImage(image: BufferedImage, name: String) {
-        val dir = File("build/debug-images").apply { mkdirs() }
-        ImageIO.write(image, "png", File(dir, "$name.png"))
+        writePng(bitmap, File(dir, "$name.png"))
     }
 
     /**
@@ -258,26 +248,13 @@ public object TestUtils {
     ) {
         val dir = File("build/debug-images").apply { mkdirs() }
         val triptych = DiffImage.buildTriptych(rendered, reference, comparison.tolerance, comparison)
-        ImageIO.write(triptych, "png", File(dir, "$name-comparison.png"))
+        writePng(triptych, File(dir, "$name-comparison.png"))
     }
 
-    public fun bitmapToBufferedImage(bitmap: SkBitmap): BufferedImage {
-        val img = BufferedImage(bitmap.width, bitmap.height, BufferedImage.TYPE_INT_ARGB)
-        // For F16 bitmaps, materialize a 8-bit ARGB IntArray on the fly via
-        // the colour-space-aware [SkBitmap.getPixel] accessor. (Skipping the
-        // raw `pixels8888` alias would throw — it's an empty array for F16.)
-        if (bitmap.colorType == SkColorType.kRGBA_F16Norm) {
-            val argb = IntArray(bitmap.width * bitmap.height)
-            for (y in 0 until bitmap.height) {
-                for (x in 0 until bitmap.width) {
-                    argb[y * bitmap.width + x] = bitmap.getPixel(x, y)
-                }
-            }
-            img.setRGB(0, 0, bitmap.width, bitmap.height, argb, 0, bitmap.width)
-        } else {
-            img.setRGB(0, 0, bitmap.width, bitmap.height, bitmap.pixels, 0, bitmap.width)
-        }
-        return img
+    private fun writePng(bitmap: SkBitmap, file: File) {
+        val bytes = SkPngEncoder.Encode(bitmap)
+            ?: throw IllegalStateException("Could not encode ${file.name} as PNG")
+        file.writeBytes(bytes)
     }
 
 }

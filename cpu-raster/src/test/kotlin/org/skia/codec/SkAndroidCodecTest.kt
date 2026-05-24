@@ -6,14 +6,13 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkData
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
-import java.awt.image.BufferedImage
+import org.skia.encode.SkPngEncoder
+import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkData
+import org.skia.foundation.SkEncodedImageFormat
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import javax.imageio.ImageIO
 
 /**
  * R3.5 verification suite for [SkAndroidCodec]. Covers :
@@ -170,13 +169,13 @@ class SkAndroidCodecTest {
     // ─── Helpers ──────────────────────────────────────────────────────
 
     private fun synthPng(width: Int, height: Int): ByteArray {
-        val img = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
+        val img = SkBitmap(width, height)
         for (y in 0 until height) {
             for (x in 0 until width) {
-                img.setRGB(x, y, (0xFF shl 24) or (x * 8) or ((y * 8) shl 8))
+                img.setPixel(x, y, (0xFF shl 24) or (x * 8) or ((y * 8) shl 8))
             }
         }
-        return ByteArrayOutputStream().also { ImageIO.write(img, "png", it) }.toByteArray()
+        return SkPngEncoder.Encode(img) ?: error("Synthetic PNG encode failed")
     }
 
     @Test
