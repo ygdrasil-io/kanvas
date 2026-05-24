@@ -322,6 +322,77 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `cmap format 0 maps MacRoman glyph ids when no Unicode subtable exists`() {
+        val base = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val sourceFont = SkFont(base, 12f)
+        val glyphA = sourceFont.textToGlyphs("A")[0]
+        val glyphEAcute = sourceFont.textToGlyphs("\u00E9")[0]
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withTableContent("cmap", "cmap", syntheticCmapFormat0(glyphA, glyphEAcute)),
+        )!!
+        val glyphs = ShortArray(3)
+
+        typeface.unicharsToGlyphsInternal(intArrayOf('A'.code, '\u00E9'.code, '\u0401'.code), 3, glyphs)
+
+        assertEquals(glyphA, glyphs[0].toInt() and 0xFFFF)
+        assertEquals(glyphEAcute, glyphs[1].toInt() and 0xFFFF)
+        assertEquals(0, glyphs[2].toInt() and 0xFFFF)
+    }
+
+    @Test
+    fun `cmap format 6 maps trimmed MacRoman glyph ids when no Unicode subtable exists`() {
+        val base = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val sourceFont = SkFont(base, 12f)
+        val glyphA = sourceFont.textToGlyphs("A")[0]
+        val glyphB = sourceFont.textToGlyphs("B")[0]
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withTableContent("cmap", "cmap", syntheticCmapFormat6('A'.code, intArrayOf(glyphA, glyphB))),
+        )!!
+        val glyphs = ShortArray(3)
+
+        typeface.unicharsToGlyphsInternal(intArrayOf('A'.code, 'B'.code, 'C'.code), 3, glyphs)
+
+        assertEquals(glyphA, glyphs[0].toInt() and 0xFFFF)
+        assertEquals(glyphB, glyphs[1].toInt() and 0xFFFF)
+        assertEquals(0, glyphs[2].toInt() and 0xFFFF)
+    }
+
+    @Test
+    fun `cmap keeps Windows format 4 priority over MacRoman format 6`() {
+        val base = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val sourceFont = SkFont(base, 12f)
+        val glyphA = sourceFont.textToGlyphs("A")[0]
+        val glyphB = sourceFont.textToGlyphs("B")[0]
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withTableContent(
+                "cmap",
+                "cmap",
+                syntheticCmapWithFormat4AndMacRomanFormat6(format4Glyph = glyphA, format6Glyph = glyphB),
+            ),
+        )!!
+        val glyphs = ShortArray(1)
+
+        typeface.unicharsToGlyphsInternal(intArrayOf('A'.code), 1, glyphs)
+
+        assertEquals(glyphA, glyphs[0].toInt() and 0xFFFF)
+    }
+
+    @Test
+    fun `cmap format 6 malformed subtables fail closed`() {
+        val entryCountTooLarge = syntheticCmapFormat6('A'.code, intArrayOf(1)).also {
+            writeU16(it, 20, 300)
+        }
+        val truncatedGlyphArray = syntheticCmapFormat6('A'.code, intArrayOf(1, 2)).copyOf(20)
+        val declaredLengthTooShort = syntheticCmapFormat6('A'.code, intArrayOf(1, 2)).also {
+            writeU16(it, 14, 10)
+        }
+
+        assertNull(OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableContent("cmap", "cmap", entryCountTooLarge)))
+        assertNull(OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableContent("cmap", "cmap", truncatedGlyphArray)))
+        assertNull(OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableContent("cmap", "cmap", declaredLengthTooShort)))
+    }
+
+    @Test
     fun `glyph width and text measurement scale with font size`() {
         val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val small = SkFont(typeface, 12f)
@@ -1059,6 +1130,72 @@ class OpenTypeFontTest {
         bytes[off + 1] = (value ushr 16).toByte()
         bytes[off + 2] = (value ushr 8).toByte()
         bytes[off + 3] = value.toByte()
+    }
+
+    private fun syntheticCmapFormat0(glyphA: Int, glyphEAcute: Int): ByteArray {
+        val subtableOffset = 12
+        val bytes = ByteArray(subtableOffset + 262)
+        writeU16(bytes, 2, 1) // numTables
+        writeU16(bytes, 4, 1) // platform: Macintosh
+        writeU16(bytes, 6, 0) // encoding: Roman
+        writeU32(bytes, 8, subtableOffset)
+        writeU16(bytes, subtableOffset, 0) // format
+        writeU16(bytes, subtableOffset + 2, 262) // length
+        bytes[subtableOffset + 6 + 'A'.code] = glyphA.toByte()
+        bytes[subtableOffset + 6 + 0x8E] = glyphEAcute.toByte() // MacRoman e acute
+        return bytes
+    }
+
+    private fun syntheticCmapFormat6(firstCode: Int, glyphs: IntArray): ByteArray {
+        val subtableOffset = 12
+        val bytes = ByteArray(subtableOffset + 10 + glyphs.size * 2)
+        writeU16(bytes, 2, 1) // numTables
+        writeU16(bytes, 4, 1) // platform: Macintosh
+        writeU16(bytes, 6, 0) // encoding: Roman
+        writeU32(bytes, 8, subtableOffset)
+        writeCmapFormat6Subtable(bytes, subtableOffset, firstCode, glyphs)
+        return bytes
+    }
+
+    private fun syntheticCmapWithFormat4AndMacRomanFormat6(format4Glyph: Int, format6Glyph: Int): ByteArray {
+        val format4Offset = 20
+        val format6Offset = format4Offset + 32
+        val bytes = ByteArray(format6Offset + 12)
+        writeU16(bytes, 2, 2) // numTables
+        writeU16(bytes, 4, 3) // platform: Windows
+        writeU16(bytes, 6, 1) // encoding: Unicode BMP
+        writeU32(bytes, 8, format4Offset)
+        writeU16(bytes, 12, 1) // platform: Macintosh
+        writeU16(bytes, 14, 0) // encoding: Roman
+        writeU32(bytes, 16, format6Offset)
+        writeCmapFormat4SingleGlyph(bytes, format4Offset, 'A'.code, format4Glyph)
+        writeCmapFormat6Subtable(bytes, format6Offset, 'A'.code, intArrayOf(format6Glyph))
+        return bytes
+    }
+
+    private fun writeCmapFormat6Subtable(bytes: ByteArray, off: Int, firstCode: Int, glyphs: IntArray) {
+        writeU16(bytes, off, 6) // format
+        writeU16(bytes, off + 2, 10 + glyphs.size * 2) // length
+        writeU16(bytes, off + 6, firstCode)
+        writeU16(bytes, off + 8, glyphs.size)
+        glyphs.forEachIndexed { index, glyph -> writeU16(bytes, off + 10 + index * 2, glyph) }
+    }
+
+    private fun writeCmapFormat4SingleGlyph(bytes: ByteArray, off: Int, codepoint: Int, glyph: Int) {
+        writeU16(bytes, off, 4) // format
+        writeU16(bytes, off + 2, 32) // length
+        writeU16(bytes, off + 6, 4) // segCountX2
+        writeU16(bytes, off + 8, 4) // searchRange
+        writeU16(bytes, off + 10, 1) // entrySelector
+        writeU16(bytes, off + 12, 0) // rangeShift
+        writeU16(bytes, off + 14, codepoint)
+        writeU16(bytes, off + 16, 0xFFFF)
+        writeU16(bytes, off + 20, codepoint)
+        writeU16(bytes, off + 22, 0xFFFF)
+        writeI16(bytes, off + 24, glyph - codepoint)
+        writeU16(bytes, off + 26, 1)
+        writeU16(bytes, off + 28, 0)
+        writeU16(bytes, off + 30, 0)
     }
 
     private fun syntheticCpalV0(): ByteArray {

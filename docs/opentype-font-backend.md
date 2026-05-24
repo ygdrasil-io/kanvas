@@ -14,6 +14,8 @@ font work from PR #786.
   pair positioning lookup type 2 as a kerning fallback.
 - Simple and composite TrueType `glyf` outlines converted to `SkPath`.
 - Unicode-to-glyph lookup through `cmap`.
+- `cmap` selection prefers Unicode format 12 and 4 subtables, with legacy
+  MacRoman format 6 and format 0 accepted only as lower-priority fallbacks.
 - Family names, PostScript names, localized family-name iteration, advance
   widths, bounds, font metrics, and typeface-level kerning pair adjustments.
 - Defensive raw SFNT table reads via `SkTypeface.copyTableData(tag)` for
@@ -97,9 +99,9 @@ they require dedicated fixtures, larger layout decisions, or format-specific
 rendering work:
 
 - [#871](https://github.com/ygdrasil-io/kanvas/issues/871): legacy and
-  advanced `cmap` formats. Current bundled fonts all have a usable format 4
-  Unicode mapping, so formats beyond 4/12 are deferred until a fixture or
-  product need requires them.
+  advanced `cmap` formats. MacRoman format 0/6 fallbacks are covered by
+  generated fixtures; broader formats such as 2, 8, 10, 13, and 14 are
+  deferred until a fixture or product need requires them.
 - [#874](https://github.com/ygdrasil-io/kanvas/issues/874): `GPOS` pair
   positioning as the minimal shaping increment and kerning fallback.
 - [#875](https://github.com/ygdrasil-io/kanvas/issues/875): apply `fvar` /
