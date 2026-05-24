@@ -12,6 +12,24 @@ KANVAS_SKIA_DIR="${KANVAS_SKIA_DIR:-kanvas-skia/src/main/kotlin}"
 
 # ─── cpp extraction ─────────────────────────────────────────────────────
 
+strip_cpp_inactive_blocks() {
+    awk '
+        /^[[:space:]]*#[[:space:]]*if[[:space:]]+0([[:space:]]|$)/ {
+            skip++
+            next
+        }
+        skip > 0 && /^[[:space:]]*#[[:space:]]*(if|ifdef|ifndef)([[:space:]]|$)/ {
+            skip++
+            next
+        }
+        skip > 0 && /^[[:space:]]*#[[:space:]]*endif([[:space:]]|$)/ {
+            skip--
+            next
+        }
+        skip == 0 { print }
+    ' "$1"
+}
+
 # Print all GM names registered by a .cpp file, one per line.
 # Catches:
 #   class XxxGM : public GM { ... }              → "XxxGM" (class form)
@@ -23,17 +41,21 @@ KANVAS_SKIA_DIR="${KANVAS_SKIA_DIR:-kanvas-skia/src/main/kotlin}"
 #   DEF_SIMPLE_GPU_GM_BG(name, ...)              → "name"
 extract_cpp_gms() {
     local cpp="$1"
+    local active_cpp
+    active_cpp=$(mktemp -t gm-cpp-active.XXXXXX)
+    strip_cpp_inactive_blocks "$cpp" > "$active_cpp"
     {
         # class XxxGM : public (skiagm::)?GM
-        (grep -hEo 'class[[:space:]]+[A-Z][A-Za-z0-9_]+(GM)?[[:space:]]*(final[[:space:]]+)?:[[:space:]]*public[[:space:]]+(skiagm::)?GM' "$cpp" 2>/dev/null \
+        (grep -hEo 'class[[:space:]]+[A-Z][A-Za-z0-9_]+(GM)?[[:space:]]*(final[[:space:]]+)?:[[:space:]]*public[[:space:]]+(skiagm::)?GM' "$active_cpp" 2>/dev/null \
             | awk '{print $2}') || true
         # DEF_SIMPLE_GM family
-        (grep -hEo 'DEF_SIMPLE_(GPU_)?GM(_BG|_CAN_FAIL)?[[:space:]]*\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*' "$cpp" 2>/dev/null \
+        (grep -hEo 'DEF_SIMPLE_(GPU_)?GM(_BG|_CAN_FAIL)?[[:space:]]*\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*' "$active_cpp" 2>/dev/null \
             | sed -E 's/.*\([[:space:]]*//') || true
         # DEF_GM (factory form: DEF_GM(return new XyzGM(...);))
-        (grep -hEo 'DEF_GM[[:space:]]*\([[:space:]]*return[[:space:]]+new[[:space:]]+[A-Z][A-Za-z0-9_]+' "$cpp" 2>/dev/null \
+        (grep -hEo 'DEF_GM[[:space:]]*\([[:space:]]*return[[:space:]]+new[[:space:]]+[A-Z][A-Za-z0-9_]+' "$active_cpp" 2>/dev/null \
             | sed -E 's/.*new[[:space:]]+//') || true
     } | sort -u
+    rm -f "$active_cpp"
 }
 
 # ─── kotlin extraction ─────────────────────────────────────────────────
@@ -84,7 +106,9 @@ extract_kt_meta() {
                 if ($0 ~ /^[[:space:]]*canvas[[:space:]]*\?:[[:space:]]*return[[:space:]]*$/) next
                 print
             }' "$kt" | wc -l | tr -d ' ')
-        if [ "${body_real_lines:-0}" -eq 0 ]; then
+        if [ "${body_real_lines:-0}" -eq 0 ] && grep -qiE 'intentionally empty|deliberately empty stub' "$kt" 2>/dev/null; then
+            status="PORTED"
+        elif [ "${body_real_lines:-0}" -eq 0 ]; then
             status="STUB"
         else
             # Non-empty body — check Test class for @Disabled to surface
