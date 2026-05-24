@@ -10,10 +10,12 @@ import org.skia.codec.CodecDecoderProvider
 import org.skia.codec.SkCodec
 import org.skia.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkICC
+import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 import java.io.ByteArrayOutputStream
@@ -102,6 +104,55 @@ class SkJpegKotlinCodecTest {
                 assertEquals(0xFFF16937.toInt(), bitmap!!.getPixel(x, y), "x=$x y=$y")
             }
         }
+    }
+
+    @Test
+    fun `converts baseline grayscale decode into requested F16`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))!!
+        val requested = SkImageInfo.Make(
+            width = 8,
+            height = 8,
+            colorType = SkColorType.kRGBA_F16Norm,
+            alphaType = SkAlphaType.kPremul,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst))
+        assertF16(dst, 0, 0, 0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 1f)
+        assertF16(dst, 7, 7, 0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 1f)
+    }
+
+    @Test
+    fun `converts baseline color decode into requested F16`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(color444Jpeg())!!
+        val requested = SkImageInfo.Make(
+            width = 8,
+            height = 8,
+            colorType = SkColorType.kRGBA_F16Norm,
+            alphaType = SkAlphaType.kPremul,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst))
+        assertF16(dst, 0, 0, 0xF1 / 255f, 0x69 / 255f, 0x37 / 255f, 1f)
+        assertF16(dst, 7, 7, 0xF1 / 255f, 0x69 / 255f, 0x37 / 255f, 1f)
+    }
+
+    @Test
+    fun `rejects unsupported requested JPEG color conversion`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))!!
+        val requested = SkImageInfo.Make(
+            width = 8,
+            height = 8,
+            colorType = SkColorType.kRGB_565,
+            alphaType = SkAlphaType.kOpaque,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkCodec.Result.kInvalidConversion, codec.getPixels(requested, dst))
     }
 
     @Test
@@ -745,6 +796,23 @@ class SkJpegKotlinCodecTest {
     private fun ByteArrayOutputStream.writeU16BE(value: Int) {
         write((value ushr 8) and 0xFF)
         write(value and 0xFF)
+    }
+
+    private fun assertF16(
+        bitmap: SkBitmap,
+        x: Int,
+        y: Int,
+        r: Float,
+        g: Float,
+        b: Float,
+        a: Float,
+    ) {
+        val pixel = FloatArray(4)
+        bitmap.getPixelF16(x, y, pixel)
+        assertEquals(r, pixel[0], 0.000001f, "r x=$x y=$y")
+        assertEquals(g, pixel[1], 0.000001f, "g x=$x y=$y")
+        assertEquals(b, pixel[2], 0.000001f, "b x=$x y=$y")
+        assertEquals(a, pixel[3], 0.000001f, "a x=$x y=$y")
     }
 
     private fun ByteArrayOutputStream.writeU16LE(value: Int) {
