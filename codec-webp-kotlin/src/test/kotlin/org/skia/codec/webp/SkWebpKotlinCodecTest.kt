@@ -518,6 +518,92 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes representative VP8L lossless fixture corpus`() {
+        val literalGrid = IntArray(16 * 16) { i ->
+            if (((i / 16) + (i % 16)) % 2 == 0) {
+                argb(0xFF, 0x00, 0x00, 0xFF)
+            } else {
+                argb(0x80, 0xFF, 0x00, 0x00)
+            }
+        }
+        val palette = intArrayOf(
+            argb(0xFF, 0x00, 0x00, 0xFF),
+            argb(0x80, 0xFF, 0x00, 0x00),
+        )
+        val paletteIndexes = IntArray(literalGrid.size) { i ->
+            if (((i / 16) + (i % 16)) % 2 == 0) 0 else 1
+        }
+        val transformTarget = intArrayOf(
+            argb(0xFF, 40, 20, 60),
+            argb(0xFF, 45, 25, 65),
+            argb(0xFF, 45, 25, 65),
+            argb(0xFF, 50, 30, 70),
+        )
+        val multipliers = ColorTransformMultipliers(
+            greenToRed = 0x20,
+            greenToBlue = 0x10,
+            redToBlue = 0xE0,
+        )
+        val corpus = listOf(
+            Vp8lFixtureCorpusCase(
+                name = "literal-alpha-grid",
+                width = 16,
+                height = 16,
+                expected = literalGrid,
+                encoded = vp8lLiteralWebp(width = 16, height = 16, literalGrid),
+            ),
+            Vp8lFixtureCorpusCase(
+                name = "palette-alpha-grid",
+                width = 16,
+                height = 16,
+                expected = literalGrid,
+                encoded = vp8lColorIndexingWebp(width = 16, height = 16, palette, paletteIndexes),
+            ),
+            Vp8lFixtureCorpusCase(
+                name = "lz77-copy-run",
+                width = 3,
+                height = 1,
+                expected = intArrayOf(
+                    argb(0xFF, 0x11, 0x25, 0x33),
+                    argb(0xFF, 0x11, 0x25, 0x33),
+                    argb(0xFF, 0x11, 0x25, 0x33),
+                ),
+                encoded = vp8lCopyLengthWebp(width = 3, height = 1),
+            ),
+            Vp8lFixtureCorpusCase(
+                name = "predictor-color-subtract-green",
+                width = 2,
+                height = 2,
+                expected = transformTarget,
+                encoded = vp8lCombinedTransformsWebp(
+                    width = 2,
+                    height = 2,
+                    predictorMode = 1,
+                    multipliers = multipliers,
+                    argb = transformTarget,
+                ),
+            ),
+            Vp8lFixtureCorpusCase(
+                name = "color-cache-reference",
+                width = 2,
+                height = 1,
+                expected = intArrayOf(
+                    argb(0xFF, 0x31, 0x42, 0x53),
+                    argb(0xFF, 0x31, 0x42, 0x53),
+                ),
+                encoded = vp8lColorCacheWebp(width = 2, height = 1, pixel = argb(0xFF, 0x31, 0x42, 0x53)),
+            ),
+        )
+
+        for (case in corpus) {
+            val codec = SkWebpKotlinCodec.Decoder.make(case.encoded) as SkWebpKotlinCodec?
+            assertNotNull(codec, case.name)
+            assertEquals(WebpBitstreamFormat.VP8L, codec!!.metadata.format, case.name)
+            assertWebpPixels(codec, case.width, case.height, case.expected)
+        }
+    }
+
+    @Test
     fun `decodes VP8L packed color indexing transform`() {
         val table = intArrayOf(
             argb(0xFF, 0x10, 0x20, 0x30),
@@ -1030,6 +1116,14 @@ class SkWebpKotlinCodecTest {
         val greenToRed: Int,
         val greenToBlue: Int,
         val redToBlue: Int,
+    )
+
+    private data class Vp8lFixtureCorpusCase(
+        val name: String,
+        val width: Int,
+        val height: Int,
+        val expected: IntArray,
+        val encoded: ByteArray,
     )
 
     private fun assertWebpPixels(codec: SkCodec, width: Int, height: Int, expected: IntArray) {
