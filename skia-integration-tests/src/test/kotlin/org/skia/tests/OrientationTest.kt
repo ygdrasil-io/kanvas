@@ -10,7 +10,7 @@ import org.skia.testing.TestUtils
 /**
  * Tests for the R-final.5 [OrientationGM] family.
  *
- * **R-final.8 EXIF fix.** [org.skia.codec.jpeg.SkJpegCodec] now parses
+ * **R-final.8 EXIF fix.** The JPEG codec now parses
  * the EXIF Orientation tag (0x0112) and applies the corresponding
  * rotation/flip to the decoded pixels via
  * [org.skia.utils.SkPixmapUtils.Orient]. The tests retain a permissive

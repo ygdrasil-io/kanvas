@@ -55,7 +55,7 @@ class CpuRasterKotlinCodecBackendTest {
     }
 
     @Test
-    fun `full cpu-raster codec suite still has a WebP lossy backend blocker`() {
+    fun `full cpu-raster codec suite has no legacy ImageIO codec blockers`() {
         val codecTestRoot = Path.of("src/test/kotlin/org/skia/codec")
         val backendBlockedTests = Files.walk(codecTestRoot).use { paths ->
             paths
@@ -71,13 +71,6 @@ class CpuRasterKotlinCodecBackendTest {
                 .toList()
         }
 
-        assertEquals(
-            listOf(
-                "webp/SkWebpCodecTest.kt",
-            ),
-            backendBlockedTests,
-            "The full :cpu-raster:test --tests '*codec*' switch is blocked by the legacy WebP test " +
-                "until Kotlin VP8 lossy pixel decoding replaces the temporary ImageIO-only behavior.",
-        )
+        assertEquals(emptyList<String>(), backendBlockedTests)
     }
 }

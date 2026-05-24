@@ -34,7 +34,7 @@ import org.skia.tools.ToolUtils
  * smoke-test of the same eight JPEGs through the canonical decode.
  *
  * **EXIF (R-final.8 fix).** As of R-final.8, kanvas-skia's
- * [org.skia.codec.jpeg.SkJpegCodec] now parses the EXIF Orientation
+ * The JPEG codec now parses the EXIF Orientation
  * tag (0x0112) out of the APP1 segment and applies the corresponding
  * rotation/flip to the decoded pixels via
  * [org.skia.utils.SkPixmapUtils.Orient] — surfaced through
