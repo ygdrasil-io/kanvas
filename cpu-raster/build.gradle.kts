@@ -1,4 +1,5 @@
 import java.net.URL
+import org.gradle.api.tasks.testing.Test
 
 plugins {
     id("buildsrc.convention.kotlin-jvm")
@@ -29,6 +30,7 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
+    testImplementation(project(":codec-test-fixtures"))
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
     // D1.4 — PathOps regression harness loads upstream Skia
@@ -54,6 +56,49 @@ sourceSets {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+}
+
+val kotlinCodecBackendRuntime by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    kotlinCodecBackendRuntime(project(":codec-all-kotlin"))
+}
+
+val awtCodecBackendArtifacts = setOf(
+    "codec-all-awt",
+    "codec-png-imageio",
+    "codec-jpeg-imageio",
+    "codec-gif-imageio",
+    "codec-bmp-imageio",
+    "codec-wbmp-imageio",
+    "codec-webp-imageio",
+)
+
+fun File.isAwtCodecBackendArtifact(): Boolean =
+    awtCodecBackendArtifacts.any { artifact ->
+        name == "$artifact.jar" || name.startsWith("$artifact-")
+    }
+
+tasks.register<Test>("testCodecWithKotlinBackend") {
+    group = "verification"
+    description = "Runs the cpu-raster codec backend smoke test with codec-all-kotlin instead of the temporary AWT/ImageIO codec bundle."
+
+    dependsOn("testClasses")
+    shouldRunAfter(tasks.named("test"))
+
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath.filter { file ->
+        !file.isAwtCodecBackendArtifact()
+    } + kotlinCodecBackendRuntime
+
+    systemProperty("kanvas.codec.expectedBackend", "kotlin")
+
+    filter {
+        includeTestsMatching("org.skia.codec.CpuRasterKotlinCodecBackendTest")
+    }
 }
 
 // G7.2 — Dokka GFM config. See :math/build.gradle.kts for the
