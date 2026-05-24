@@ -3,11 +3,11 @@ package org.skia.codec
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkEncodedImageFormat
 import org.graphiks.math.SkISize
-import java.awt.image.BufferedImage
-import java.io.ByteArrayOutputStream
-import javax.imageio.ImageIO
+import org.skia.encode.SkJpegEncoder
+import org.skia.encode.SkPngEncoder
+import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkEncodedImageFormat
 
 /**
  * R-suivi.35 verification — JPEG-specific sample-size picker. libjpeg's
@@ -82,20 +82,20 @@ class SkAndroidCodecComputeSampleSizeJpegTest {
     // ─── Helpers ──────────────────────────────────────────────────────
 
     private fun synthJpeg(width: Int, height: Int): ByteArray {
-        val img = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        val img = SkBitmap(width, height)
         for (y in 0 until height) for (x in 0 until width) {
             val r = (x * 255 / maxOf(1, width - 1)).coerceIn(0, 255)
             val g = (y * 255 / maxOf(1, height - 1)).coerceIn(0, 255)
-            img.setRGB(x, y, (r shl 16) or (g shl 8) or 0x40)
+            img.setPixel(x, y, (0xFF shl 24) or (r shl 16) or (g shl 8) or 0x40)
         }
-        return ByteArrayOutputStream().also { ImageIO.write(img, "jpeg", it) }.toByteArray()
+        return SkJpegEncoder.Encode(img) ?: error("Synthetic JPEG encode failed")
     }
 
     private fun synthPng(width: Int, height: Int): ByteArray {
-        val img = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
+        val img = SkBitmap(width, height)
         for (y in 0 until height) for (x in 0 until width) {
-            img.setRGB(x, y, (0xFF shl 24) or (x * 4) or ((y * 4) shl 8))
+            img.setPixel(x, y, (0xFF shl 24) or (x * 4) or ((y * 4) shl 8))
         }
-        return ByteArrayOutputStream().also { ImageIO.write(img, "png", it) }.toByteArray()
+        return SkPngEncoder.Encode(img) ?: error("Synthetic PNG encode failed")
     }
 }
