@@ -21,6 +21,9 @@ import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 
 class SkWebpKotlinCodecTest {
+    private companion object {
+        const val VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST: Int = 4 * 8 * 3 * 11
+    }
 
     @Test
     fun `sniffs RIFF WEBP signature only`() {
@@ -572,6 +575,79 @@ class SkWebpKotlinCodecTest {
                 it[4] = 2
             },
             (result as Vp8CoefficientDecodeResult.Block).coefficients,
+        )
+    }
+
+    @Test
+    fun `VP8 coefficient probability update parser preserves base table without update bits`() {
+        val base = Vp8CoefficientProbabilities.filled(128)
+        val updateProbabilities = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 255 }
+
+        val result = readVp8CoefficientProbabilityUpdates(
+            reader = Vp8BoolReader(ByteArray(140)),
+            base = base,
+            updateProbabilities = updateProbabilities,
+        )
+
+        assertTrue(result is Vp8CoefficientProbabilityUpdateResult.Probabilities)
+        val probabilities = (result as Vp8CoefficientProbabilityUpdateResult.Probabilities).probabilities
+        assertEquals(128, probabilities.valueAt(type = 0, band = 0, context = 0, probability = 0))
+        assertEquals(128, probabilities.valueAt(type = 3, band = 7, context = 2, probability = 10))
+        assertArrayEquals(IntArray(11) { 128 }, probabilities.tokenProbabilities(type = 1, band = 4, context = 2))
+    }
+
+    @Test
+    fun `VP8 coefficient probability update parser applies literal updates`() {
+        val base = Vp8CoefficientProbabilities.filled(128)
+        val updateProbabilities = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 128 }
+        val updateBits = ByteArray(200).also {
+            it[0] = 0xA6.toByte() // first update flag plus the first seven literal bits for 77.
+            it[1] = 0x33.toByte() // final literal bit, followed by zero update flags.
+        }
+
+        val result = readVp8CoefficientProbabilityUpdates(
+            reader = Vp8BoolReader(updateBits),
+            base = base,
+            updateProbabilities = updateProbabilities,
+        )
+
+        assertTrue(result is Vp8CoefficientProbabilityUpdateResult.Probabilities)
+        val probabilities = (result as Vp8CoefficientProbabilityUpdateResult.Probabilities).probabilities
+        assertEquals(77, probabilities.valueAt(type = 0, band = 0, context = 0, probability = 0))
+        assertEquals(128, probabilities.valueAt(type = 3, band = 7, context = 2, probability = 10))
+        assertArrayEquals(
+            intArrayOf(77) + IntArray(10) { 128 },
+            probabilities.tokenProbabilities(type = 0, band = 0, context = 0),
+        )
+    }
+
+    @Test
+    fun `VP8 coefficient probability update parser rejects malformed inputs`() {
+        val base = Vp8CoefficientProbabilities.filled(128)
+
+        assertEquals(
+            Vp8CoefficientProbabilityUpdateResult.Invalid,
+            readVp8CoefficientProbabilityUpdates(
+                reader = Vp8BoolReader(ByteArray(140)),
+                base = base,
+                updateProbabilities = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST - 1) { 255 },
+            ),
+        )
+        assertEquals(
+            Vp8CoefficientProbabilityUpdateResult.Invalid,
+            readVp8CoefficientProbabilityUpdates(
+                reader = Vp8BoolReader(ByteArray(140)),
+                base = base,
+                updateProbabilities = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 0 },
+            ),
+        )
+        assertEquals(
+            Vp8CoefficientProbabilityUpdateResult.Invalid,
+            readVp8CoefficientProbabilityUpdates(
+                reader = Vp8BoolReader(byteArrayOf(0xFF.toByte())),
+                base = base,
+                updateProbabilities = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 255 },
+            ),
         )
     }
 
