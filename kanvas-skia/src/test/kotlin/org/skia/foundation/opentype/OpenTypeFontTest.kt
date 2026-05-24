@@ -1090,7 +1090,7 @@ class OpenTypeFontTest {
     }
 
     @Test
-    fun `drawString falls back to monochrome for parsed COLRv1 before rendering integration`() {
+    fun `drawString renders parsed COLRv1 solid glyph transform subset`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
         val typeface = OpenTypeTypeface.MakeFromBytes(
@@ -1103,10 +1103,28 @@ class OpenTypeFontTest {
 
         SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
 
-        assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0)
+        assertTrue(bitmap.pixels.count(::isGreenTint) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `drawString renders COLRv1 glyph context through nested translate`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1GlyphTranslate(glyphs[0], glyphs[1]))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
         assertEquals(0, bitmap.pixels.count(::isMostlyRed))
         assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
-        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
     }
 
     @Test
@@ -1416,6 +1434,9 @@ class OpenTypeFontTest {
     private fun isMostlyGreen(color: Int): Boolean =
         SkColorGetG(color) > 200 && SkColorGetR(color) < 40 && SkColorGetB(color) < 40
 
+    private fun isGreenTint(color: Int): Boolean =
+        SkColorGetG(color) > SkColorGetR(color) + 40 && SkColorGetG(color) > SkColorGetB(color) + 40
+
     private fun isMostlyBlue(color: Int): Boolean =
         SkColorGetB(color) > 200 && SkColorGetR(color) < 40 && SkColorGetG(color) < 40
 
@@ -1705,6 +1726,34 @@ class OpenTypeFontTest {
         writeFixed16Dot16(bytes, transformOffset + 12, 1f) // yy
         writeFixed16Dot16(bytes, transformOffset + 16, 12f) // dx
         writeFixed16Dot16(bytes, transformOffset + 20, -3f) // dy
+        return bytes
+    }
+
+    private fun syntheticColrV1GlyphTranslate(baseGlyph: Int, glyph: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val glyphPaintOffset = baseGlyphListOffset + 10
+        val translatePaintOffset = glyphPaintOffset + 6
+        val solidPaintOffset = translatePaintOffset + 8
+        val bytes = ByteArray(solidPaintOffset + 5)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, baseGlyph)
+        writeU32(bytes, baseGlyphListOffset + 6, glyphPaintOffset - baseGlyphListOffset)
+
+        bytes[glyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, glyphPaintOffset + 1, translatePaintOffset - glyphPaintOffset)
+        writeU16(bytes, glyphPaintOffset + 4, glyph)
+
+        bytes[translatePaintOffset] = 14 // PaintTranslate
+        writeU24(bytes, translatePaintOffset + 1, solidPaintOffset - translatePaintOffset)
+        writeI16(bytes, translatePaintOffset + 4, 6) // dx
+        writeI16(bytes, translatePaintOffset + 6, -4) // dy
+
+        bytes[solidPaintOffset] = 2 // PaintSolid
+        writeU16(bytes, solidPaintOffset + 1, 2) // paletteIndex
+        writeI16(bytes, solidPaintOffset + 3, 0x4000) // alpha = 1.0
         return bytes
     }
 

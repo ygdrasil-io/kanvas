@@ -2432,9 +2432,13 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             if (colorPaths != null) {
                 for (colorPath in colorPaths) {
                     val layerPaint = paint.copy().also {
-                        colorPath.color?.let { color ->
+                        val baseAlpha = paint.alphaf
+                        if (colorPath.color != null) {
+                            val color = colorPath.color
                             it.color = color
-                            it.alphaf *= paint.alphaf
+                            it.alphaf *= baseAlpha * colorPath.alpha
+                        } else {
+                            it.alphaf *= colorPath.alpha
                         }
                     }
                     drawPath(colorPath.path, layerPaint)
