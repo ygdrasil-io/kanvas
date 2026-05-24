@@ -6,7 +6,12 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
     implementation(project(":kanvas-skia"))
-    implementation(project(":cpu-raster"))
+    implementation(project(":cpu-raster")) {
+        // GM ratchets still compare against the historical AWT/ImageIO
+        // codec output. Keep this suite on that backend while cpu-raster
+        // production consumers move to codec-all-kotlin.
+        exclude(module = "codec-all-kotlin")
+    }
     implementation(project(":codec-core"))
     implementation(project(":codec-all-awt"))
     implementation(project(":codec-android"))
