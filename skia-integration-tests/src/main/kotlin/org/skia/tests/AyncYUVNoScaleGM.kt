@@ -19,6 +19,6 @@ public class AyncYUVNoScaleGM : GM() {
     override fun getISize(): SkISize = SkISize.Make(400, 300)
 
     override fun onDraw(canvas: SkCanvas?) {
-        // TODO: missing API — SkSurface.asyncRescaleAndReadPixelsYUV420.
+        TODO("STUB.ASYNC_RESCALE_READ_YUV: SkSurface.asyncRescaleAndReadPixelsYUV420 not yet implemented")
     }
 }
