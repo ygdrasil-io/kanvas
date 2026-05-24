@@ -4,8 +4,15 @@ package org.skia.foundation
 import org.graphiks.math.SkColor
 import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkColorChannel
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
+import org.skia.core.SkAlphaType
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
+import org.skia.core.SkColorSpaceXformSteps
 import org.skia.core.SkPicture
 import org.graphiks.math.SkIPoint
 import org.graphiks.math.SkIRect
@@ -906,15 +913,47 @@ internal class SkColorFilterImageFilter(
         val w = srcImg.width
         val h = srcImg.height
         val outPixels = IntArray(w * h)
+        val srcCS = srcImg.colorSpace
+        val srgb = SkColorSpace.makeSRGB()
+        val toFilterCS = if (SkColorSpace.equals(srcCS, srgb)) null else SkColorSpaceXformSteps(
+            src = srcCS,
+            srcAT = SkAlphaType.kUnpremul,
+            dst = srgb,
+            dstAT = SkAlphaType.kUnpremul,
+        )
+        val fromFilterCS = if (SkColorSpace.equals(srcCS, srgb)) null else SkColorSpaceXformSteps(
+            src = srgb,
+            srcAT = SkAlphaType.kUnpremul,
+            dst = srcCS,
+            dstAT = SkAlphaType.kUnpremul,
+        )
         for (y in 0 until h) {
             val rowOff = y * w
             for (x in 0 until w) {
                 val px = srcImg.peekPixel(x, y)
-                outPixels[rowOff + x] = cf.filterColor(px)
+                val rgba = floatArrayOf(
+                    SkColorGetR(px) / 255f,
+                    SkColorGetG(px) / 255f,
+                    SkColorGetB(px) / 255f,
+                    SkColorGetA(px) / 255f,
+                )
+                toFilterCS?.apply(rgba)
+                val filtered = cf.filterColor4f(SkColor4f(rgba[0], rgba[1], rgba[2], rgba[3]))
+                rgba[0] = filtered.fR
+                rgba[1] = filtered.fG
+                rgba[2] = filtered.fB
+                rgba[3] = filtered.fA
+                fromFilterCS?.apply(rgba)
+                outPixels[rowOff + x] = SkColorSetARGB(
+                    (rgba[3].coerceIn(0f, 1f) * 255f + 0.5f).toInt(),
+                    (rgba[0].coerceIn(0f, 1f) * 255f + 0.5f).toInt(),
+                    (rgba[1].coerceIn(0f, 1f) * 255f + 0.5f).toInt(),
+                    (rgba[2].coerceIn(0f, 1f) * 255f + 0.5f).toInt(),
+                )
             }
         }
         return FilterResult(
-            image = SkImage(w, h, outPixels),
+            image = SkImage(w, h, outPixels, srcImg.colorType, srcImg.colorSpace),
             offsetX = upstream.offsetX,
             offsetY = upstream.offsetY,
         )
@@ -1424,13 +1463,10 @@ internal class SkPictureImageFilter(
     override fun filterImage(src: SkImage, ctm: SkMatrix): FilterResult {
         val outW = kotlin.math.max(1, kotlin.math.ceil(targetRect.width().toDouble()).toInt())
         val outH = kotlin.math.max(1, kotlin.math.ceil(targetRect.height().toDouble()).toInt())
-        // Allocate a fresh raster bitmap and replay the picture into
-        // it, translated so the targetRect's top-left lands at (0, 0)
-        // in the bitmap. The bitmap's color space defaults to sRGB ;
-        // pictures recorded against a non-sRGB working space will
-        // need a callsite that re-tags appropriately (B2.4-style
-        // future enhancement).
-        val bitmap = SkBitmap(outW, outH)
+        // Allocate in the input snapshot's working format. During saveLayer
+        // restore, `src` is the layer snapshot; matching it keeps picture
+        // filter output in the same color space as the layer it replaces.
+        val bitmap = SkBitmap(outW, outH, src.colorSpace, src.colorType)
         val canvas = SkCanvas(bitmap)
         canvas.translate(-targetRect.left, -targetRect.top)
         pic.playback(canvas)

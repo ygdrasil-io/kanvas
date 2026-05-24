@@ -1198,6 +1198,21 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
     internal fun activeClipShaderOp(): SkClipOp = top.clipShaderOp
 
     public open fun drawRect(rect: SkRect, paint: SkPaint) {
+        if (paint.imageFilter != null) {
+            val restoreCount = getSaveCount()
+            val layerPaint = paint.copy()
+            val innerPaint = paint.copy().apply {
+                imageFilter = null
+                colorFilter = null
+                blendMode = SkBlendMode.kSrc
+                alpha = 0xFF
+            }
+            saveLayer(rect, layerPaint)
+            drawRect(rect, innerPaint)
+            restoreToCount(restoreCount)
+            return
+        }
+
         val s = top
         // Fast path requires : axis-aligned CTM, no shader, no path
         // effect, no mask filter. The fast path goes directly into the

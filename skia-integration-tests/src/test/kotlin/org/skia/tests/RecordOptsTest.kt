@@ -2,7 +2,6 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
@@ -16,14 +15,11 @@ import org.skia.testing.TestUtils
  * into an [org.skia.core.SkPictureRecorder] and replays it. Both columns must
  * produce identical pixels.
  *
- * @Disabled because current raster output still diverges from the upstream
- * reference. Reactivation audit on 2026-05-24 rendered at 67.96% similarity
- * against `original-888/recordopts.png`, with 53,030 / 78,030 pixels outside
- * tolerance. The remaining blocker is the saveLayer / detector color-filter
- * pipeline exercised by the recorded column, tracked as
- * `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`.
+ * Reactivated after fixing the saveLayer / detector color-filter path:
+ * rect draws now honour image filters, picture image filters preserve the
+ * layer working format, and color-filter image filters preserve source image
+ * color-space metadata.
  */
-@Disabled("STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD")
 class RecordOptsTest {
 
     @Test
