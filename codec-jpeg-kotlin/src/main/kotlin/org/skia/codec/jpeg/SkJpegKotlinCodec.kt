@@ -49,7 +49,7 @@ public class SkJpegKotlinCodec private constructor(
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (dst.width != info.width || dst.height != info.height) return Result.kInvalidParameters
         if (dst.colorType != info.colorType) return Result.kInvalidParameters
-        if (info.colorType != SkColorType.kRGBA_8888) return Result.kInvalidConversion
+        if (!canDecodeTo(info.colorType)) return Result.kInvalidConversion
         val pixels = try {
             if (jpeg.coding == JpegCoding.kProgressive) {
                 decodeProgressive(jpeg) ?: return Result.kUnimplemented
@@ -60,18 +60,44 @@ public class SkJpegKotlinCodec private constructor(
             return Result.kErrorInInput
         }
         if (jpeg.origin == SkEncodedOrigin.kTopLeft) {
-            System.arraycopy(pixels, 0, dst.pixels8888, 0, pixels.size)
-            return Result.kSuccess
+            return writeDecodedPixels(dst, pixels)
         }
         val raw = SkBitmap(
             width = jpeg.width,
             height = jpeg.height,
             colorSpace = info.colorSpace,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = info.colorType,
         )
-        System.arraycopy(pixels, 0, raw.pixels8888, 0, pixels.size)
+        val copyResult = writeDecodedPixels(raw, pixels)
+        if (copyResult != Result.kSuccess) return copyResult
         if (!SkPixmapUtils.Orient(dst, raw, jpeg.origin)) return Result.kInvalidParameters
         return Result.kSuccess
+    }
+
+    private fun canDecodeTo(colorType: SkColorType): Boolean =
+        colorType == SkColorType.kRGBA_8888 || colorType == SkColorType.kRGBA_F16Norm
+
+    private fun writeDecodedPixels(dst: SkBitmap, pixels: IntArray): Result {
+        return when (dst.colorType) {
+            SkColorType.kRGBA_8888 -> {
+                System.arraycopy(pixels, 0, dst.pixels8888, 0, pixels.size)
+                Result.kSuccess
+            }
+            SkColorType.kRGBA_F16Norm -> {
+                for (y in 0 until dst.height) {
+                    for (x in 0 until dst.width) {
+                        val color = pixels[y * dst.width + x]
+                        val a = ((color ushr 24) and 0xFF) / 255f
+                        val r = ((color ushr 16) and 0xFF) / 255f
+                        val g = ((color ushr 8) and 0xFF) / 255f
+                        val b = (color and 0xFF) / 255f
+                        dst.setPixelF16(x, y, r * a, g * a, b * a, a)
+                    }
+                }
+                Result.kSuccess
+            }
+            else -> Result.kInvalidConversion
+        }
     }
 
     internal companion object Decoder : SkCodec.Decoder {
