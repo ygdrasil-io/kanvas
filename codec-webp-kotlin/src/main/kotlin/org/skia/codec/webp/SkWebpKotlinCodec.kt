@@ -9,14 +9,15 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.skcmsParse
 
 /**
  * Pure Kotlin WebP metadata codec.
  *
  * This first slice only sniffs RIFF/WEBP and parses the container
  * metadata needed by [SkCodec.getInfo]. Pixel reconstruction is only
- * implemented for the current VP8L subset; VP8, alpha chunks, ICC,
- * EXIF, and animation are intentionally left for later slices.
+ * implemented for the current VP8L subset; VP8, alpha chunks, EXIF,
+ * and animation are intentionally left for later slices.
  */
 public class SkWebpKotlinCodec internal constructor(
     internal val metadata: WebpMetadata,
@@ -37,7 +38,7 @@ public class SkWebpKotlinCodec internal constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kWEBP
 
-    override fun getICCProfile(): SkcmsICCProfile? = null
+    override fun getICCProfile(): SkcmsICCProfile? = metadata.iccProfile
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (info.width != metadata.width || info.height != metadata.height) {
@@ -92,6 +93,7 @@ internal data class WebpMetadata(
     val flags: WebpVp8xFlags = WebpVp8xFlags(),
     val payloadOffset: Int = -1,
     val payloadSize: Int = 0,
+    val iccProfile: SkcmsICCProfile? = null,
 ) {
     val hasAlpha: Boolean get() = flags.alpha || format == WebpBitstreamFormat.VP8L
 }
@@ -119,6 +121,9 @@ private const val VP8_KEYFRAME_HEADER_SIZE: Int = 10
 private const val MAX_WEBP_DIMENSION: Int = 16_777_216
 
 private fun parseMetadata(data: ByteArray): WebpMetadata? {
+    var extended: WebpMetadata? = null
+    var extendedBitstream: WebpMetadata? = null
+    var iccProfile: SkcmsICCProfile? = null
     var offset = RIFF_HEADER_SIZE
     while (offset <= data.size - CHUNK_HEADER_SIZE) {
         val fourcc = readFourcc(data, offset)
@@ -128,9 +133,26 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
         if (payloadEnd > data.size.toLong()) return null
 
         when (fourcc) {
-            "VP8X" -> return parseVp8x(data, payloadOffset, size)
-            "VP8L" -> return parseVp8l(data, payloadOffset, size)
-            "VP8 " -> return parseVp8(data, payloadOffset, size)
+            "VP8X" -> {
+                if (extended != null) return null
+                extended = parseVp8x(data, payloadOffset, size) ?: return null
+            }
+            "ICCP" -> {
+                if (iccProfile != null || size > Int.MAX_VALUE) return null
+                iccProfile = parseIccProfile(data, payloadOffset, size.toInt())
+            }
+            "VP8L" -> {
+                val bitstream = parseVp8l(data, payloadOffset, size) ?: return null
+                if (extended == null) return bitstream
+                if (extendedBitstream != null) return null
+                extendedBitstream = bitstream
+            }
+            "VP8 " -> {
+                val bitstream = parseVp8(data, payloadOffset, size) ?: return null
+                if (extended == null) return bitstream
+                if (extendedBitstream != null) return null
+                extendedBitstream = bitstream
+            }
         }
 
         val paddedSize = size + (size and 1L)
@@ -138,7 +160,23 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
         if (next > Int.MAX_VALUE) return null
         offset = next.toInt()
     }
-    return null
+    val base = extended ?: return null
+    val bitstream = extendedBitstream
+    return base.copy(
+        format = bitstream?.format ?: base.format,
+        payloadOffset = bitstream?.payloadOffset ?: base.payloadOffset,
+        payloadSize = bitstream?.payloadSize ?: base.payloadSize,
+        iccProfile = iccProfile,
+    )
+}
+
+private fun parseIccProfile(data: ByteArray, offset: Int, size: Int): SkcmsICCProfile? {
+    if (size <= 0 || offset < 0 || offset + size > data.size) return null
+    return try {
+        skcmsParse(data.copyOfRange(offset, offset + size))
+    } catch (_: Throwable) {
+        null
+    }
 }
 
 private fun parseVp8x(data: ByteArray, offset: Int, size: Long): WebpMetadata? {

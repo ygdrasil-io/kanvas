@@ -13,6 +13,9 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
+import org.skia.foundation.SkICC
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 
@@ -54,6 +57,46 @@ class SkWebpKotlinCodecTest {
         assertTrue(codec.metadata.flags.xmp)
         assertTrue(codec.metadata.flags.animation)
         assertEquals(0x3E, codec.metadata.flags.raw)
+    }
+
+    @Test
+    fun `extracts VP8X ICC profile chunk`() {
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8xChunk(width = 2, height = 1, flags = 0x20),
+                chunk("ICCP", iccBytes),
+                vp8lChunk(width = 2, height = 1),
+            ),
+        ) as SkWebpKotlinCodec?
+
+        assertNotNull(codec)
+        val checkedCodec = codec!!
+        assertEquals(WebpBitstreamFormat.VP8L, checkedCodec.metadata.format)
+        assertTrue(checkedCodec.metadata.flags.icc)
+        val profile = checkedCodec.getICCProfile()
+        assertNotNull(profile)
+        assertEquals(iccBytes.size, profile!!.size)
+        assertTrue(profile.hasTrc)
+        assertTrue(profile.hasToXYZD50)
+    }
+
+    @Test
+    fun `ignores invalid VP8X ICC profile bytes without rejecting metadata`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8xChunk(width = 2, height = 1, flags = 0x20),
+                chunk("ICCP", byteArrayOf(1, 2, 3, 4)),
+            ),
+        ) as SkWebpKotlinCodec?
+
+        assertNotNull(codec)
+        assertTrue(codec!!.metadata.flags.icc)
+        assertNull(codec.getICCProfile())
+        assertEquals(2, codec.getInfo().width)
+        assertEquals(1, codec.getInfo().height)
     }
 
     @Test
@@ -336,14 +379,22 @@ class SkWebpKotlinCodecTest {
     }
 
     private fun vp8xWebp(width: Int, height: Int, flags: Int): ByteArray {
+        return riff("WEBP", vp8xChunk(width, height, flags))
+    }
+
+    private fun vp8xChunk(width: Int, height: Int, flags: Int): ByteArray {
         val payload = ByteArray(10)
         payload[0] = flags.toByte()
         write24LE(payload, 4, width - 1)
         write24LE(payload, 7, height - 1)
-        return riff("WEBP", chunk("VP8X", payload))
+        return chunk("VP8X", payload)
     }
 
     private fun vp8lWebp(width: Int, height: Int): ByteArray {
+        return riff("WEBP", vp8lChunk(width, height))
+    }
+
+    private fun vp8lChunk(width: Int, height: Int): ByteArray {
         val bits = ((width - 1) and 0x3FFF) or (((height - 1) and 0x3FFF) shl 14)
         val payload = ByteArray(5)
         payload[0] = 0x2F
@@ -351,7 +402,7 @@ class SkWebpKotlinCodecTest {
         payload[2] = ((bits ushr 8) and 0xFF).toByte()
         payload[3] = ((bits ushr 16) and 0xFF).toByte()
         payload[4] = ((bits ushr 24) and 0xFF).toByte()
-        return riff("WEBP", chunk("VP8L", payload))
+        return chunk("VP8L", payload)
     }
 
     private fun vp8lLiteralWebp(width: Int, height: Int, argb: IntArray): ByteArray {
