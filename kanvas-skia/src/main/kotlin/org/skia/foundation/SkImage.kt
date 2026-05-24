@@ -371,7 +371,7 @@ public class SkImage public constructor(
      * The returned bytes encode a snapshot of this image's pixels
      * tagged sRGB ; non-sRGB working spaces lose their tag through the
      * encode (PNG `iCCP` chunk is not emitted by the underlying
-     * `javax.imageio` writer — tracked as a follow-up).
+     * pure Kotlin writer — tracked as a follow-up).
      */
     public fun encodeToData(format: SkEncodedImageFormat, quality: Int): SkData? {
         val bytes = org.skia.encode.encodeImageToBytes(this, format, quality) ?: return null
