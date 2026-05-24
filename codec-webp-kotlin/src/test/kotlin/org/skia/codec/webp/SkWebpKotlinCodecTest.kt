@@ -140,6 +140,31 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes VP8L LZ77 copy length`() {
+        val expected = intArrayOf(
+            argb(0xFF, 0x11, 0x25, 0x33),
+            argb(0xFF, 0x11, 0x25, 0x33),
+            argb(0xFF, 0x11, 0x25, 0x33),
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lCopyLengthWebp(width = 3, height = 1))!!
+        val dst = SkBitmap(
+            width = 3,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        for (x in expected.indices) {
+            val actual = dst.getPixel(x, 0)
+            assertEquals(alpha(expected[x]), alpha(actual))
+            assertEquals(red(expected[x]), red(actual))
+            assertEquals(green(expected[x]), green(actual))
+            assertEquals(blue(expected[x]), blue(actual))
+        }
+    }
+
+    @Test
     fun `VP8L pixel decode rejects unsupported transform`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8lUnsupportedTransformWebp(width = 1, height = 1))!!
         val dst = SkBitmap(
@@ -247,6 +272,22 @@ class SkWebpKotlinCodecTest {
         return vp8lWebpFromBits(writer)
     }
 
+    private fun vp8lCopyLengthWebp(width: Int, height: Int): ByteArray {
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(0, 1) // transform_present
+        writer.writeBits(0, 1) // color_cache_present
+        writer.writeBits(0, 1) // meta_prefix_present
+        writeNormalTwoSymbolCode(writer, first = 0x25, second = 257)
+        writeSimpleCode(writer, intArrayOf(0x11))
+        writeSimpleCode(writer, intArrayOf(0x33))
+        writeSimpleCode(writer, intArrayOf(0xFF))
+        writeSimpleCode(writer, intArrayOf(1)) // distance prefix 1 maps to the left pixel.
+        writer.writeBits(0, 1) // literal green 0x25.
+        writer.writeBits(1, 1) // length prefix 1 => copy two pixels.
+        return vp8lWebpFromBits(writer)
+    }
+
     private fun writeVp8lHeaderBits(writer: Vp8lTestBitWriter, width: Int, height: Int) {
         writer.writeBits(width - 1, 14)
         writer.writeBits(height - 1, 14)
@@ -276,6 +317,38 @@ class SkWebpKotlinCodecTest {
         writer.writeBits(0, 2) // max_symbol = 2.
         writer.writeBits(if (symbol == 0) 1 else 0, 1)
         writer.writeBits(if (symbol == 0) 0 else 1, 1)
+    }
+
+    private fun writeNormalTwoSymbolCode(writer: Vp8lTestBitWriter, first: Int, second: Int) {
+        require(first < second)
+        writer.writeBits(0, 1) // normal code
+        writer.writeBits(0, 4) // four code length code lengths.
+        writer.writeBits(0, 3) // symbol 17 length.
+        writer.writeBits(1, 3) // symbol 18 length.
+        writer.writeBits(0, 3) // symbol 0 length.
+        writer.writeBits(1, 3) // symbol 1 length.
+        writer.writeBits(1, 1) // custom max_symbol.
+        writer.writeBits(4, 3) // ten bits encode max_symbol.
+        writer.writeBits(second + 1 - 2, 10)
+        writeCodeLengthZeroRun(writer, first)
+        writeCodeLengthOne(writer)
+        writeCodeLengthZeroRun(writer, second - first - 1)
+        writeCodeLengthOne(writer)
+    }
+
+    private fun writeCodeLengthOne(writer: Vp8lTestBitWriter) {
+        writer.writeBits(0, 1)
+    }
+
+    private fun writeCodeLengthZeroRun(writer: Vp8lTestBitWriter, count: Int) {
+        var remaining = count
+        while (remaining > 0) {
+            val repeat = minOf(remaining, 138)
+            require(repeat >= 11)
+            writer.writeBits(1, 1) // code length code symbol 18.
+            writer.writeBits(repeat - 11, 7)
+            remaining -= repeat
+        }
     }
 
     private fun vp8lWebpFromBits(writer: Vp8lTestBitWriter): ByteArray =
