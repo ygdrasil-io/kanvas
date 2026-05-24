@@ -27,15 +27,10 @@ import org.graphiks.math.SkMatrix
  * The grid is 2 (isClosed) × 2 (polygon-factory) = 4 rows of 5 columns
  * (each column 80 px wide), so 400 × 400.
  *
- * **Limitation**: upstream's perspective matrix `[1,0,0, 0,1,0, x,0,1]`
- * (with `x=0.0001`) is passed to verify that `addPath` does not crash when
- * given a perspective input; the C++ path applies a full homogeneous divide.
- * The Kotlin [SkPathBuilder.addPath] implementation only handles the affine
- * part of the matrix — the `persp0 / persp1` rows are stored but not applied
- * during point mapping (`TODO("STUB.PERSPECTIVE_ADDPATH")`).  As a result the
- * two "with perspective" columns render identically to the plain-identity
- * columns, so the GM compiles and runs but its pixel output differs from the
- * upstream DM reference for those two columns.
+ * The perspective matrix `[1,0,0, 0,1,0, x,0,1]` (with `x=0.0001`) verifies
+ * that [SkPathBuilder.addPath] applies the homogeneous divide for perspective
+ * point mapping and does not collapse the two perspective columns to the
+ * identity columns.
  *
  * Reference image: `path_append_extend.png`, 400 × 400, white background.
  *
@@ -97,9 +92,8 @@ public class PathAppendExtendGM : GM() {
             isAntiAlias = true
         }
 
-        // Tiny perspective: upstream uses this to verify addPath doesn't crash
-        // on perspective input. Our addPath ignores the perspective rows
-        // (TODO("STUB.PERSPECTIVE_ADDPATH")) so the result is affine-identity.
+        // Tiny perspective: upstream uses this to verify addPath handles
+        // perspective input instead of treating it as affine identity.
         val x = 0.0001f
         val perspective = SkMatrix.MakeAll(
             1f, 0f, 0f,

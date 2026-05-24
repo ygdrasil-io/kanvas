@@ -28,15 +28,9 @@ import org.skia.tools.ToolUtils
  * brightness, grayscale, and blue-colorize filters via
  * `shader->makeWithColorFilter(filter)`.
  *
- * **Status** : `STUB.MAKE_WITH_COLOR_FILTER` — this GM calls
- * [SkShader.makeWithColorFilter] which is not yet implemented in
- * `:kanvas-skia`. The method throws [NotImplementedError] at runtime so
- * the GM body correctly triggers the stub, allowing the test to be
- * `@Disabled("STUB.MAKE_WITH_COLOR_FILTER")`. The helper functions
- * ([shMakeLinearGradient0], [shMakeLinearGradient1], [shMakeImage],
- * [shMakeTwoPointConical]) and colour-filter builders ([cfMakeBrightness],
- * [cfMakeGrayscale], [cfMakeColorize]) all compile and run up to the point
- * where `makeWithColorFilter` is called.
+ * [SkShader.makeWithColorFilter] is exercised by the filtered columns ;
+ * the first column draws each raw shader directly, matching the upstream
+ * null-filter case.
  *
  * C++ original :
  * ```cpp
@@ -110,8 +104,6 @@ public class ColorFilterShaderGM : GM() {
             c.drawRect(r, paint)
             c.translate(150f, 0f)
 
-            // x >= 0 : each filter applied via makeWithColorFilter.
-            // This call throws STUB.MAKE_WITH_COLOR_FILTER — caught by the test.
             for (filter in filters) {
                 paint.shader = shader.makeWithColorFilter(filter!!)
                 c.drawRect(r, paint)

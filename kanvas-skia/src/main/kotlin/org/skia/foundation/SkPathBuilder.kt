@@ -759,11 +759,11 @@ public class SkPathBuilder public constructor() {
      * (`include/core/SkPathBuilder.h:861`,
      * `src/core/SkPathBuilder.cpp:776-800`).
      *
-     * - **Affine-only**: the matrix is applied component-wise to each
-     *   stored point. Conic weights are projectively invariant under
-     *   affine maps, so they pass through unchanged. Perspective
-     *   matrices are not supported here (same limitation as
-     *   [SkPath.makeTransform] / [transform]).
+     * - The matrix is applied component-wise to each stored point. When
+     *   perspective is present, [SkMatrix.mapXY] performs the homogeneous
+     *   divide. Conic weights pass through unchanged; this is exact for
+     *   affine maps and matches the current lightweight point-mapping
+     *   behaviour for perspective inputs exercised by the GMs.
      * - **kExtend** with non-empty destination: the source's first
      *   `kMove` is replaced by a `lineTo` to the (mapped) move target.
      *   Subsequent `kMove` verbs in the source come through as `moveTo`
@@ -777,8 +777,8 @@ public class SkPathBuilder public constructor() {
     ): SkPathBuilder = apply {
         if (path.isEmpty()) return@apply
         val identity = matrix.isIdentity
-        val sx = matrix.sx; val kx = matrix.kx; val tx = matrix.tx
-        val ky = matrix.ky; val sy = matrix.sy; val ty = matrix.ty
+        fun mapPoint(x: SkScalar, y: SkScalar): Pair<SkScalar, SkScalar> =
+            if (identity) x to y else matrix.mapXY(x, y)
         var coordIdx = 0
         var weightIdx = 0
         val src = path.coords
@@ -788,8 +788,7 @@ public class SkPathBuilder public constructor() {
             when (verb) {
                 SkPath.Verb.kMove -> {
                     val x0 = src[coordIdx++]; val y0 = src[coordIdx++]
-                    val mx = if (identity) x0 else sx * x0 + kx * y0 + tx
-                    val my = if (identity) y0 else ky * x0 + sy * y0 + ty
+                    val (mx, my) = mapPoint(x0, y0)
                     if (extending && !firstMoveSeen) {
                         // Replace the source's first kMove with a line to the
                         // mapped move target — extends the dest's last contour.
@@ -803,39 +802,32 @@ public class SkPathBuilder public constructor() {
                 }
                 SkPath.Verb.kLine -> {
                     val x1 = src[coordIdx++]; val y1 = src[coordIdx++]
-                    if (identity) lineTo(x1, y1)
-                    else lineTo(sx * x1 + kx * y1 + tx, ky * x1 + sy * y1 + ty)
+                    val (mx1, my1) = mapPoint(x1, y1)
+                    lineTo(mx1, my1)
                 }
                 SkPath.Verb.kQuad -> {
                     val x1 = src[coordIdx++]; val y1 = src[coordIdx++]
                     val x2 = src[coordIdx++]; val y2 = src[coordIdx++]
-                    if (identity) quadTo(x1, y1, x2, y2)
-                    else quadTo(
-                        sx * x1 + kx * y1 + tx, ky * x1 + sy * y1 + ty,
-                        sx * x2 + kx * y2 + tx, ky * x2 + sy * y2 + ty,
-                    )
+                    val (mx1, my1) = mapPoint(x1, y1)
+                    val (mx2, my2) = mapPoint(x2, y2)
+                    quadTo(mx1, my1, mx2, my2)
                 }
                 SkPath.Verb.kConic -> {
                     val x1 = src[coordIdx++]; val y1 = src[coordIdx++]
                     val x2 = src[coordIdx++]; val y2 = src[coordIdx++]
                     val w = path.conicWeights[weightIdx++]
-                    if (identity) conicTo(x1, y1, x2, y2, w)
-                    else conicTo(
-                        sx * x1 + kx * y1 + tx, ky * x1 + sy * y1 + ty,
-                        sx * x2 + kx * y2 + tx, ky * x2 + sy * y2 + ty,
-                        w,
-                    )
+                    val (mx1, my1) = mapPoint(x1, y1)
+                    val (mx2, my2) = mapPoint(x2, y2)
+                    conicTo(mx1, my1, mx2, my2, w)
                 }
                 SkPath.Verb.kCubic -> {
                     val x1 = src[coordIdx++]; val y1 = src[coordIdx++]
                     val x2 = src[coordIdx++]; val y2 = src[coordIdx++]
                     val x3 = src[coordIdx++]; val y3 = src[coordIdx++]
-                    if (identity) cubicTo(x1, y1, x2, y2, x3, y3)
-                    else cubicTo(
-                        sx * x1 + kx * y1 + tx, ky * x1 + sy * y1 + ty,
-                        sx * x2 + kx * y2 + tx, ky * x2 + sy * y2 + ty,
-                        sx * x3 + kx * y3 + tx, ky * x3 + sy * y3 + ty,
-                    )
+                    val (mx1, my1) = mapPoint(x1, y1)
+                    val (mx2, my2) = mapPoint(x2, y2)
+                    val (mx3, my3) = mapPoint(x3, y3)
+                    cubicTo(mx1, my1, mx2, my2, mx3, my3)
                 }
                 SkPath.Verb.kClose -> close()
                 SkPath.Verb.kDone -> error("kDone is iterator-only, never stored")

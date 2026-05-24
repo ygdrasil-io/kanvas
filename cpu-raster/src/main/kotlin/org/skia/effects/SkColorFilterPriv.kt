@@ -1,5 +1,6 @@
 package org.skia.effects
 
+import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
 import org.skia.foundation.SkAlphaType
@@ -30,19 +31,17 @@ import org.skia.foundation.SkColorFilter
 public object SkColorFilterPriv {
 
     /**
-     * **STUB.GAUSSIAN_COLOR_FILTER** — mirrors `SkColorFilterPriv::MakeGaussian()`
+     * Mirrors `SkColorFilterPriv::MakeGaussian()`
      * (`src/core/SkColorFilterPriv.h`).
      *
      * Creates a Gaussian (soft-light) color filter used internally by
-     * `SkShadowUtils` for the shadow edge falloff. Requires the analytic
-     * shadow mesh pipeline (`SkShadowTessellator` + per-vertex Gaussian
-     * alpha) which is not yet wired into the public color-filter chain.
-     *
-     * @throws NotImplementedError always — pending implementation.
+     * `SkShadowUtils` for shadow edge falloff. Upstream implements this
+     * as a raster-pipeline `gauss_a_to_rgba` stage: evaluate a quartic
+     * approximation from source alpha, then copy that premultiplied value
+     * into RGBA. Kanvas color filters return non-premultiplied values, so
+     * the equivalent local result is white RGB with the Gaussian alpha.
      */
-    public fun makeGaussian(): SkColorFilter =
-        TODO("STUB.GAUSSIAN_COLOR_FILTER: SkColorFilterPriv::MakeGaussian() requires " +
-            "the analytic Gaussian shadow-mesh pipeline — see API_FINALIZATION_PLAN.md.")
+    public fun makeGaussian(): SkColorFilter = GaussianColorFilter
 
     /**
      * Mirrors `sk_sp<SkColorFilter> SkColorFilterPriv::WithWorkingFormat(
@@ -69,4 +68,21 @@ public object SkColorFilterPriv {
             "per-pixel colour-space xform steps in the raster pipeline — " +
             "see API_FINALIZATION_PLAN.md.",
     )
+
+    private object GaussianColorFilter : SkColorFilter() {
+        override fun filterColor4f(src: SkColor4f): SkColor4f {
+            val a = gaussianAlpha(src.fA)
+            return SkColor4f(1f, 1f, 1f, a)
+        }
+
+        private fun gaussianAlpha(a: Float): Float =
+            a * (
+                a * (
+                    a * (
+                        a * -2.26661229133605957031f +
+                            2.89795351028442382812f
+                    ) + 0.21345567703247070312f
+                ) + 0.15489584207534790039f
+            ) + 0.00030726194381713867f
+    }
 }

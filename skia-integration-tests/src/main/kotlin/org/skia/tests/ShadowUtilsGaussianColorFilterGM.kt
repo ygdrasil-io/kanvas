@@ -23,10 +23,6 @@ import org.graphiks.math.SkColorSetARGB
  *    exercises the soft-falloff filter used internally by the shadow mesh
  *    tessellator for penumbra edge blending.
  *
- * **STUB** : [SkColorFilterPriv.makeGaussian] is not yet implemented —
- * calling [onDraw] throws [NotImplementedError]. The test is therefore
- * disabled until the Gaussian color-filter pipeline is wired in.
- *
  * C++ source : `gm/shadowutils.cpp::shadow_utils_gaussian_colorfilter`.
  * Reference : `shadow_utils_gaussian_colorfilter.png` (512 × 256).
  *
@@ -80,7 +76,6 @@ public class ShadowUtilsGaussianColorFilterGM : GM() {
         c.translate(256f, 0f)
 
         // Right cell: same, but gradient paint carries the Gaussian color filter.
-        // STUB.GAUSSIAN_COLOR_FILTER — throws NotImplementedError at runtime.
         val gaussFilter = SkColorFilterPriv.makeGaussian()
         gradPaint.colorFilter = gaussFilter
         c.drawRect(r, redPaint)
