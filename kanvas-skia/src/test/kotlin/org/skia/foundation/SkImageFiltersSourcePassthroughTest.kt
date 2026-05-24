@@ -314,4 +314,20 @@ class SkImageFiltersSourcePassthroughTest {
         assertEquals(sample4x4.peekPixel(1, 1), result.image.peekPixel(0, 0))
         assertNotEquals(sample4x4.peekPixel(0, 0), result.image.peekPixel(0, 0))
     }
+
+    @Test
+    fun `Crop maps rect through translated CTM for layer-local filtering`() {
+        val filter = SkImageFilters.Crop(
+            rect = SkRect.MakeXYWH(10f, 20f, 2f, 2f),
+            input = null,
+        )
+        val result = filter.filterImage(sample4x4, SkMatrix.MakeTrans(-10f, -20f))
+
+        assertEquals(2, result.image.width)
+        assertEquals(2, result.image.height)
+        assertEquals(0, result.offsetX)
+        assertEquals(0, result.offsetY)
+        assertEquals(sample4x4.peekPixel(0, 0), result.image.peekPixel(0, 0))
+        assertEquals(sample4x4.peekPixel(1, 1), result.image.peekPixel(1, 1))
+    }
 }

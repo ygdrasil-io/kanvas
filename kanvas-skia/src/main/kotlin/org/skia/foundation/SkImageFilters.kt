@@ -1515,10 +1515,11 @@ internal class SkCropImageFilter(
         val srcOffX = upstream.offsetX
         val srcOffY = upstream.offsetY
 
-        val outW = kotlin.math.max(1, kotlin.math.ceil(rect.width().toDouble()).toInt())
-        val outH = kotlin.math.max(1, kotlin.math.ceil(rect.height().toDouble()).toInt())
-        val outOffX = kotlin.math.floor(rect.left.toDouble()).toInt()
-        val outOffY = kotlin.math.floor(rect.top.toDouble()).toInt()
+        val devRect = ctm.mapRect(rect)
+        val outW = kotlin.math.max(1, kotlin.math.ceil(devRect.width().toDouble()).toInt())
+        val outH = kotlin.math.max(1, kotlin.math.ceil(devRect.height().toDouble()).toInt())
+        val outOffX = kotlin.math.floor(devRect.left.toDouble()).toInt()
+        val outOffY = kotlin.math.floor(devRect.top.toDouble()).toInt()
         val outBuf = IntArray(outW * outH)
 
         for (y in 0 until outH) {
