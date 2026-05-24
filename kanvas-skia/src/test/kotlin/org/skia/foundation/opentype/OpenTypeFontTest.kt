@@ -64,6 +64,28 @@ class OpenTypeFontTest {
         error("Missing table: $from")
     }
 
+    private fun ByteArray.withOs2UseTypoMetrics(): ByteArray {
+        val copy = copyOf()
+        val os2 = copy.tableRecord("OS/2")
+        val fsSelectionOffset = os2 + 62
+        val fsSelection = readU16(copy, fsSelectionOffset) or 0x0080
+        writeU16(copy, fsSelectionOffset, fsSelection)
+        return copy
+    }
+
+    private fun ByteArray.tableRecord(tag: String): Int {
+        require(tag.length == 4)
+        val numTables = readU16(this, 4)
+        var off = 12
+        repeat(numTables) {
+            if (String(this, off, 4, Charsets.ISO_8859_1) == tag) {
+                return readU32(this, off + 8)
+            }
+            off += 16
+        }
+        error("Missing table: $tag")
+    }
+
     @Test
     fun `makeFromData loads bundled Liberation TTF without AWT`() {
         val mgr = OpenTypeFontMgr.Create()
@@ -218,6 +240,33 @@ class OpenTypeFontTest {
         assertTrue(metrics.fAscent < 0f)
         assertTrue(metrics.fDescent > 0f)
         assertTrue(metrics.fMaxCharWidth > 0f)
+        assertEquals(-1854f * 20f / 2048f, metrics.fAscent, 0.001f)
+        assertEquals(434f * 20f / 2048f, metrics.fDescent, 0.001f)
+        assertEquals(67f * 20f / 2048f, metrics.fLeading, 0.001f)
+        assertEquals(-1082f * 20f / 2048f, metrics.fXHeight, 0.001f)
+        assertEquals(-1409f * 20f / 2048f, metrics.fCapHeight, 0.001f)
+        assertEquals(150f * 20f / 2048f, metrics.fUnderlineThickness, 0.001f)
+        assertEquals(-8f * 20f / 2048f, metrics.fUnderlinePosition, 0.001f)
+        assertEquals(102f * 20f / 2048f, metrics.fStrikeoutThickness, 0.001f)
+        assertEquals(-530f * 20f / 2048f, metrics.fStrikeoutPosition, 0.001f)
+        assertTrue((metrics.fFlags and SkFontMetrics.kUnderlineThicknessIsValid_Flag) != 0)
+        assertTrue((metrics.fFlags and SkFontMetrics.kUnderlinePositionIsValid_Flag) != 0)
+        assertTrue((metrics.fFlags and SkFontMetrics.kStrikeoutThicknessIsValid_Flag) != 0)
+        assertTrue((metrics.fFlags and SkFontMetrics.kStrikeoutPositionIsValid_Flag) != 0)
+    }
+
+    @Test
+    fun `font metrics prefer OS2 typo metrics when requested`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withOs2UseTypoMetrics())!!
+        val font = SkFont(typeface, 20f)
+        val metrics = SkFontMetrics()
+
+        val spacing = font.getMetrics(metrics)
+
+        assertEquals(-1491f * 20f / 2048f, metrics.fAscent, 0.001f)
+        assertEquals(431f * 20f / 2048f, metrics.fDescent, 0.001f)
+        assertEquals(307f * 20f / 2048f, metrics.fLeading, 0.001f)
+        assertEquals((1491f + 431f + 307f) * 20f / 2048f, spacing, 0.001f)
     }
 
     @Test
@@ -253,8 +302,19 @@ class OpenTypeFontTest {
     private fun readU16(bytes: ByteArray, off: Int): Int =
         ((bytes[off].toInt() and 0xFF) shl 8) or (bytes[off + 1].toInt() and 0xFF)
 
+    private fun readU32(bytes: ByteArray, off: Int): Int =
+        ((bytes[off].toInt() and 0xFF) shl 24) or
+            ((bytes[off + 1].toInt() and 0xFF) shl 16) or
+            ((bytes[off + 2].toInt() and 0xFF) shl 8) or
+            (bytes[off + 3].toInt() and 0xFF)
+
     private fun IntArray.toShortArray(): ShortArray =
         ShortArray(size) { this[it].toShort() }
+
+    private fun writeU16(bytes: ByteArray, off: Int, value: Int) {
+        bytes[off] = (value ushr 8).toByte()
+        bytes[off + 1] = value.toByte()
+    }
 
     private fun writeU32(bytes: ByteArray, off: Int, value: Int) {
         bytes[off] = (value ushr 24).toByte()
