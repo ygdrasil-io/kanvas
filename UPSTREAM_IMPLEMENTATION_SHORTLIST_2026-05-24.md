@@ -109,7 +109,7 @@ Completed since this snapshot:
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, perceptual/hue/premul sampler still missing | gradient interpolation variants |
-| `mesh` | `STUB.MESH` | `MeshGMs.kt` |
+| `mesh` | `STUB.MESH`; all 11 upstream registrations are compile-pinned, but none can be re-enabled before `SkMesh` / `SkMeshSpecification` and `SkCanvas.drawMesh` exist in the active modules | `MeshGMs.kt` |
 | `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`; reactivation audit rendered 67.96% vs `original-888/recordopts.png` | `RecordOptsGM.kt` |
 | `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
@@ -123,3 +123,58 @@ Completed since this snapshot:
   focused blocker is the saveLayer / detector color-filter fold path.
 - Text-related rows should be revisited after the font delivery if their
   implementation would touch glyph storage or shaping assumptions.
+
+### Mesh reconnaissance
+
+The `mesh` row is an implementation-track blocker, not stale disabled-test
+coverage. `skia-integration-tests/src/main/kotlin/org/skia/tests/MeshGMs.kt`
+contains stubs for all 11 registrations in upstream `gm/mesh.cpp`, and
+`skia-integration-tests/src/test/kotlin/org/skia/tests/MeshTest.kt` is
+correctly disabled with `STUB.MESH`.
+
+Reactivation blocker:
+
+- Active modules have no `org.skia.core.SkMesh`,
+  `org.skia.core.SkMeshSpecification`, `SkCanvas.drawMesh(...)`, or
+  device-level draw-mesh dispatch. The generated legacy files under
+  `kanvas-legacy/src/generated/core/org/skia/core/SkMesh*.kt` are incomplete
+  translation artifacts and should be used only as source notes.
+
+Implementation entry points:
+
+- Add public mesh data/API types under
+  `kanvas-skia/src/main/kotlin/org/skia/core/`: `SkMesh`,
+  `SkMeshSpecification`, vertex/index buffer abstractions, `Make` /
+  `MakeIndexed`, and specification validation for attributes, varyings,
+  vertex stride, uniforms, children, bounds, draw mode, offsets, and
+  CPU-backed buffer updates.
+- Add `SkCanvas.drawMesh(mesh, blender, paint)` near the existing
+  `drawVertices(...)` implementation in
+  `kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt`; dispatch through
+  the top device after applying clip/CTM behavior consistent with other
+  canvas draws.
+- Add device handling in the active raster path, starting from
+  `kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt`. A first
+  useful slice can rasterize constant-position/constant-color mesh specs by
+  lowering compatible meshes to `SkVertices`; shader-child, color-managed,
+  uniform-driven, update, zero-init, and picture playback cases should remain
+  disabled until their specific behavior is implemented.
+- Wire picture recording/playback only after the public draw call exists;
+  `PictureMeshGM` depends on recording a mesh operation, not only direct
+  raster drawing.
+- Add focused unit tests for mesh construction and validation before enabling
+  any GM; then split `MeshTest.kt` so the first enabled GM is tied to the
+  smallest implemented behavior rather than unblocking all 11 at once.
+
+GM unblock order:
+
+1. `custommesh`: basic non-indexed/indexed triangles, CPU vertex/index buffers,
+   paint color/shader/blender handling.
+2. `custommesh_cs`: mesh color-space and alpha-type handling.
+3. `custommesh_uniforms`: uniform packing and fragment-stage uniform evaluation.
+4. `mesh_updates` and `mesh_zero_init`: mutable buffers, update offsets, and
+   zero-initialization semantics.
+5. `picture_mesh`: picture record/playback support for mesh draw ops.
+6. `mesh_with_image`, `mesh_with_paint_color`, `mesh_with_paint_image`,
+   `mesh_with_effects`: shader/color-filter/blender child slots.
+7. `custommesh_cs_uniforms`: color-managed `layout(color)` uniform behavior.
