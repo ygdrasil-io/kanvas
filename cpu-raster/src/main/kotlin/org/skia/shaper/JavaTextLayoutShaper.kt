@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package org.skia.shaper
 
 import org.skia.foundation.SkFont
