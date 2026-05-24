@@ -1311,6 +1311,49 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 simple loop filter applies to reconstructed luma planes`() {
+        val yPlane = IntArray(8 * 4) { index ->
+            if (index % 8 < 4) 100 else 106
+        }
+        val planes = Vp8ReconstructedPlanes(
+            yPlane = yPlane,
+            uPlane = IntArray(4 * 2) { 128 },
+            vPlane = IntArray(4 * 2) { 128 },
+            width = 8,
+            height = 4,
+        )
+
+        val filtered = applyVp8SimpleLoopFilterIfNeeded(
+            planes = planes,
+            loopFilter = Vp8LoopFilterHeader(simpleFilter = true, level = 10, sharpness = 7),
+        )
+
+        assertArrayEquals(
+            IntArray(8 * 4) { index ->
+                when (index % 8) {
+                    3 -> 102
+                    4 -> 105
+                    in 0..2 -> 100
+                    else -> 106
+                }
+            },
+            filtered.yPlane,
+        )
+        assertArrayEquals(planes.uPlane, filtered.uPlane)
+        assertArrayEquals(planes.vPlane, filtered.vPlane)
+    }
+
+    @Test
+    fun `VP8 simple loop filter derives sharpness adjusted edge limits`() {
+        val limits = deriveVp8LoopFilterLimits(Vp8LoopFilterHeader(simpleFilter = true, level = 10, sharpness = 7))
+
+        assertEquals(26, limits.macroblockEdge)
+        assertEquals(22, limits.subblockEdge)
+        assertEquals(22, limits.forEdge(4))
+        assertEquals(26, limits.forEdge(16))
+    }
+
+    @Test
     fun `returns unimplemented for pixel decode after metadata parse`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8xWebp(width = 2, height = 2, flags = 0))!!
         val dst = SkBitmap(
@@ -1465,7 +1508,7 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `returns unimplemented for VP8 lossy loop filter pending integration`() {
+    fun `returns unimplemented for VP8 lossy normal loop filter pending integration`() {
         val codec = SkWebpKotlinCodec.Decoder.make(
             riff("WEBP", vp8ChunkWithPartition(width = 2, height = 2, partition = vp8FirstPartition(filterLevel = 1))),
         )!!
@@ -1477,6 +1520,29 @@ class SkWebpKotlinCodecTest {
         )
 
         assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+    }
+
+    @Test
+    fun `decodes VP8 lossy simple loop filter in supported pixel subset`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8ChunkWithPartitions(
+                    width = 2,
+                    height = 2,
+                    firstPartition = vp8FirstPartition(simpleFilter = true, filterLevel = 1),
+                    coefficients = ByteArray(64),
+                ),
+            ),
+        )!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 2,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
@@ -2305,12 +2371,12 @@ class SkWebpKotlinCodecTest {
     private fun vp8SupportedNonBPredWebp(width: Int, height: Int): ByteArray =
         riff("WEBP", vp8ChunkWithPartitions(width, height, vp8FirstPartition(), ByteArray(64)))
 
-    private fun vp8FirstPartition(filterLevel: Int = 0): ByteArray =
+    private fun vp8FirstPartition(simpleFilter: Boolean = false, filterLevel: Int = 0): ByteArray =
         Vp8TestBitWriter().apply {
             writeBit(0) // YUV color space.
             writeBit(0) // No pixel value clamp.
             writeBit(0) // Segmentation disabled.
-            writeBit(0) // Normal loop filter; level 0 is a no-op for this slice.
+            writeBit(if (simpleFilter) 1 else 0)
             writeLiteral(filterLevel, 6)
             writeLiteral(0, 3)
             writeBit(0) // Loop filter deltas disabled.
