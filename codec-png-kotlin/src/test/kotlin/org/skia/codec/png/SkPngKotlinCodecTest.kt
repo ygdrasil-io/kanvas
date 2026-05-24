@@ -136,6 +136,125 @@ class SkPngKotlinCodecTest {
     }
 
     @Test
+    fun `decodes indexed packed palette bit depths`() {
+        val palette = intArrayOf(
+            argb(0xFF, 0x00, 0x00, 0x00),
+            argb(0xFF, 0x40, 0x50, 0x60),
+            argb(0xFF, 0x80, 0x90, 0xA0),
+            argb(0xFF, 0xC0, 0xD0, 0xE0),
+            argb(0xFF, 0x11, 0x22, 0x33),
+            argb(0xFF, 0x44, 0x55, 0x66),
+            argb(0xFF, 0x77, 0x88, 0x99),
+            argb(0xFF, 0xAA, 0xBB, 0xCC),
+            argb(0xFF, 0x12, 0x34, 0x56),
+            argb(0xFF, 0x23, 0x45, 0x67),
+            argb(0xFF, 0x34, 0x56, 0x78),
+            argb(0xFF, 0x45, 0x67, 0x89),
+            argb(0xFF, 0x56, 0x78, 0x9A),
+            argb(0xFF, 0x67, 0x89, 0xAB),
+            argb(0xFF, 0x78, 0x9A, 0xBC),
+            argb(0xFF, 0x89, 0xAB, 0xCD),
+        )
+
+        for (bitDepth in intArrayOf(1, 2, 4)) {
+            val indexes = listOf(
+                intArrayOf(0, (1 shl bitDepth) - 1, 1, 0, 1),
+                intArrayOf(1, 0, (1 shl bitDepth) - 1, 1, 0),
+            )
+            val codec = SkPngKotlinCodec.Decoder.make(
+                indexedPng(
+                    width = 5,
+                    height = 2,
+                    palette = palette.copyOf(1 shl bitDepth),
+                    indexes = indexes.map { packSamples(it, bitDepth) },
+                    filters = intArrayOf(0, 1),
+                    bitDepth = bitDepth,
+                ),
+            )!!
+
+            val (bitmap, result) = codec.getImage()
+            assertEquals(SkCodec.Result.kSuccess, result, "bitDepth=$bitDepth")
+            assertNotNull(bitmap)
+            for (y in indexes.indices) {
+                for (x in indexes[y].indices) {
+                    assertEquals(palette[indexes[y][x]], bitmap!!.getPixel(x, y), "bitDepth=$bitDepth x=$x y=$y")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `decodes grayscale 8-bit pixels as opaque RGBA`() {
+        val rows = listOf(
+            byteArrayOf(0x00, 0x40, 0x80.toByte()),
+            byteArrayOf(0xC0.toByte(), 0xFF.toByte(), 0x20),
+        )
+        val codec = SkPngKotlinCodec.Decoder.make(
+            grayscalePng(width = 3, height = 2, rows = rows, filters = intArrayOf(0, 1), bitDepth = 8),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(argb(0xFF, 0x00, 0x00, 0x00), bitmap!!.getPixel(0, 0))
+        assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap.getPixel(1, 0))
+        assertEquals(argb(0xFF, 0x80, 0x80, 0x80), bitmap.getPixel(2, 0))
+        assertEquals(argb(0xFF, 0xC0, 0xC0, 0xC0), bitmap.getPixel(0, 1))
+        assertEquals(argb(0xFF, 0xFF, 0xFF, 0xFF), bitmap.getPixel(1, 1))
+        assertEquals(argb(0xFF, 0x20, 0x20, 0x20), bitmap.getPixel(2, 1))
+    }
+
+    @Test
+    fun `decodes packed grayscale bit depths`() {
+        for (bitDepth in intArrayOf(1, 2, 4)) {
+            val max = (1 shl bitDepth) - 1
+            val samples = listOf(
+                intArrayOf(0, max, 1, 0, max),
+                intArrayOf(max, 0, max / 2, 1, 0),
+            )
+            val codec = SkPngKotlinCodec.Decoder.make(
+                grayscalePng(
+                    width = 5,
+                    height = 2,
+                    rows = samples.map { packSamples(it, bitDepth) },
+                    filters = intArrayOf(0, 1),
+                    bitDepth = bitDepth,
+                ),
+            )!!
+
+            val (bitmap, result) = codec.getImage()
+            assertEquals(SkCodec.Result.kSuccess, result, "bitDepth=$bitDepth")
+            assertNotNull(bitmap)
+            for (y in samples.indices) {
+                for (x in samples[y].indices) {
+                    val gray = samples[y][x] * 255 / max
+                    assertEquals(argb(0xFF, gray, gray, gray), bitmap!!.getPixel(x, y), "bitDepth=$bitDepth x=$x y=$y")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `decodes grayscale alpha 8-bit pixels`() {
+        val pixels = listOf(
+            intArrayOf(argb(0xFF, 0x10, 0x10, 0x10), argb(0x80, 0x40, 0x40, 0x40)),
+            intArrayOf(argb(0x00, 0x70, 0x70, 0x70), argb(0x20, 0xA0, 0xA0, 0xA0)),
+        )
+        val codec = SkPngKotlinCodec.Decoder.make(
+            grayscaleAlphaPng(width = 2, height = 2, rows = pixels, filters = intArrayOf(0, 1)),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        for (y in pixels.indices) {
+            for (x in pixels[y].indices) {
+                assertEquals(pixels[y][x], bitmap!!.getPixel(x, y), "x=$x y=$y")
+            }
+        }
+    }
+
+    @Test
     fun `rejects indexed PNG without palette`() {
         assertNull(
             SkPngKotlinCodec.Decoder.make(
@@ -234,9 +353,10 @@ class SkPngKotlinCodecTest {
         transparency: ByteArray? = null,
         includePalette: Boolean = true,
         paletteBytes: ByteArray = encodePalette(palette),
+        bitDepth: Int = 8,
     ): ByteArray {
         val raw = ByteArrayOutputStream()
-        var previous = ByteArray(width)
+        var previous = ByteArray((width * bitDepth + 7) / 8)
         for (y in 0 until height) {
             val row = indexes[y]
             raw.write(filters[y])
@@ -249,7 +369,7 @@ class SkPngKotlinCodecTest {
             writeChunk("IHDR", ByteArrayOutputStream().apply {
                 writeI32BE(width)
                 writeI32BE(height)
-                write(8)
+                write(bitDepth)
                 write(3)
                 write(0)
                 write(0)
@@ -273,6 +393,58 @@ class SkPngKotlinCodecTest {
         return out
     }
 
+    private fun grayscalePng(width: Int, height: Int, rows: List<ByteArray>, filters: IntArray, bitDepth: Int): ByteArray {
+        val raw = ByteArrayOutputStream()
+        var previous = ByteArray((width * bitDepth + 7) / 8)
+        for (y in 0 until height) {
+            val row = rows[y]
+            raw.write(filters[y])
+            raw.write(filterRow(filters[y], row, previous, bpp = 1))
+            previous = row
+        }
+
+        return ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            writeChunk("IHDR", ByteArrayOutputStream().apply {
+                writeI32BE(width)
+                writeI32BE(height)
+                write(bitDepth)
+                write(0)
+                write(0)
+                write(0)
+                write(0)
+            }.toByteArray())
+            writeChunk("IDAT", deflate(raw.toByteArray()))
+            writeChunk("IEND", ByteArray(0))
+        }.toByteArray()
+    }
+
+    private fun grayscaleAlphaPng(width: Int, height: Int, rows: List<IntArray>, filters: IntArray): ByteArray {
+        val raw = ByteArrayOutputStream()
+        var previous = ByteArray(width * 2)
+        for (y in 0 until height) {
+            val row = encodeGrayscaleAlphaRow(rows[y])
+            raw.write(filters[y])
+            raw.write(filterRow(filters[y], row, previous, bpp = 2))
+            previous = row
+        }
+
+        return ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            writeChunk("IHDR", ByteArrayOutputStream().apply {
+                writeI32BE(width)
+                writeI32BE(height)
+                write(8)
+                write(4)
+                write(0)
+                write(0)
+                write(0)
+            }.toByteArray())
+            writeChunk("IDAT", deflate(raw.toByteArray()))
+            writeChunk("IEND", ByteArray(0))
+        }.toByteArray()
+    }
+
     private fun encodeRow(colors: IntArray, colorType: Int): ByteArray {
         val bpp = if (colorType == 6) 4 else 3
         val row = ByteArray(colors.size * bpp)
@@ -284,6 +456,27 @@ class SkPngKotlinCodecTest {
             if (colorType == 6) row[offset++] = a(c).toByte()
         }
         return row
+    }
+
+    private fun encodeGrayscaleAlphaRow(colors: IntArray): ByteArray {
+        val row = ByteArray(colors.size * 2)
+        var offset = 0
+        for (c in colors) {
+            row[offset++] = r(c).toByte()
+            row[offset++] = a(c).toByte()
+        }
+        return row
+    }
+
+    private fun packSamples(samples: IntArray, bitDepth: Int): ByteArray {
+        val out = ByteArray((samples.size * bitDepth + 7) / 8)
+        val mask = (1 shl bitDepth) - 1
+        for (x in samples.indices) {
+            val bitOffset = x * bitDepth
+            val shift = 8 - bitDepth - (bitOffset % 8)
+            out[bitOffset / 8] = (out[bitOffset / 8].toInt() or ((samples[x] and mask) shl shift)).toByte()
+        }
+        return out
     }
 
     private fun filterRow(filter: Int, row: ByteArray, previous: ByteArray, bpp: Int): ByteArray {
