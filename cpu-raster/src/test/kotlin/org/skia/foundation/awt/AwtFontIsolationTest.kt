@@ -14,7 +14,6 @@ class AwtFontIsolationTest {
         val allowedPaths = setOf(
             "org/skia/foundation/awt/AwtTypeface.kt",
             "org/skia/foundation/awt/LiberationFontMgr.kt",
-            "org/skia/foundation/awt/JvmAwtFontMgr.kt",
             "org/skia/foundation/awt/AwtPathConverter.kt",
             "org/skia/shaper/JavaTextLayoutShaper.kt",
             "org/skia/shaper/SkShaper.kt",
