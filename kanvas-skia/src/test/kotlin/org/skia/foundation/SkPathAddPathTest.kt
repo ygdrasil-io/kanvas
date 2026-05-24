@@ -82,6 +82,24 @@ class SkPathAddPathTest {
     }
 
     @Test
+    fun `addPath with perspective matrix applies homogeneous divide`() {
+        val src = simpleTriangle()
+        val matrix = SkMatrix.MakeAll(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0.1f, 0f, 1f,
+        )
+
+        val copy = SkPathBuilder().addPath(src, matrix).detach()
+
+        for (i in src.coords.indices step 2) {
+            val (x, y) = matrix.mapXY(src.coords[i], src.coords[i + 1])
+            assertEquals(x, copy.coords[i], 1e-4f)
+            assertEquals(y, copy.coords[i + 1], 1e-4f)
+        }
+    }
+
+    @Test
     fun `addPath with affine matrix preserves conic weights`() {
         val src = pathWithConic()
         val copy = SkPathBuilder().addPath(src, SkMatrix.MakeScale(2f, 3f)).detach()

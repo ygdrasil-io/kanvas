@@ -2,6 +2,7 @@ package org.skia.foundation
 
 
 import org.graphiks.math.SkColor
+import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
@@ -139,27 +140,10 @@ public abstract class SkShader protected constructor(
      * Mirrors Skia's `SkShader::makeWithColorFilter(sk_sp<SkColorFilter>)`.
      *
      * Returns a new shader that applies [filter] to every colour produced
-     * by `this` shader before it reaches the paint pipeline. Equivalent
-     * to `SkShaders::Blend(mode, this, SkShaders::Color(filter.filterColor(c)))`.
-     *
-     * **Status** : STUB.MAKE_WITH_COLOR_FILTER — `:kanvas-skia`'s raster
-     * device routes colour-filter logic through [SkPaint.colorFilter] and
-     * [SkImageFilters.ColorFilter] ; the shader-internal composition needed
-     * to implement `SkColorFilterShader` (the private Skia subclass returned
-     * here) is out of scope for the current sprint. Call sites that invoke
-     * this method will throw [NotImplementedError] at runtime, which lets the
-     * GM test be classified and `@Disabled` with the `STUB.MAKE_WITH_COLOR_FILTER`
-     * tag rather than left as a silent no-op.
+     * by `this` shader before it reaches the paint pipeline.
      */
-    public open fun makeWithColorFilter(
-        @Suppress("UNUSED_PARAMETER") filter: SkColorFilter,
-    ): SkShader = TODO(
-        "STUB.MAKE_WITH_COLOR_FILTER: SkShader.makeWithColorFilter requires " +
-            "SkColorFilterShader (private Skia subclass) — compose a " +
-            "SkColorFilter into the per-pixel shader sampling chain. " +
-            "Port when the :kanvas-skia shader pipeline supports nested " +
-            "filter composition.",
-    )
+    public open fun makeWithColorFilter(filter: SkColorFilter): SkShader =
+        SkColorFilterShader(this, filter)
 
     /**
      * R-final.2 — mirrors Skia's
@@ -417,6 +401,69 @@ internal class SkWorkingColorSpaceShader(
         val gi = (rgba[1].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
         val bi = (rgba[2].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
         return SkColorSetARGB(ai, ri, gi, bi)
+    }
+}
+
+/**
+ * Wrapper shader matching Skia's private `SkColorFilterShader`.
+ *
+ * The child shader owns geometry and colour-space setup. This wrapper
+ * only inserts [filter] after child evaluation, keeping the filter in
+ * the same working colour domain as `SkPaint.colorFilter`.
+ */
+internal class SkColorFilterShader(
+    private val child: SkShader,
+    private val filter: SkColorFilter,
+) : SkShader() {
+
+    override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
+        super.setupForDraw(canvasCtm, xform)
+        child.setupForDraw(canvasCtm, xform)
+    }
+
+    override fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray) {
+        child.shadeRow(devX, devY, count, dst)
+        for (i in 0 until count) {
+            dst[i] = filter.filterColor(dst[i])
+        }
+    }
+
+    override fun shadeRowF16(devX: Int, devY: Int, count: Int, dst: FloatArray) {
+        require(dst.size >= count * 4) { "dst too small: ${dst.size} < ${count * 4}" }
+        child.shadeRowF16(devX, devY, count, dst)
+        var i = 0
+        while (i < count * 4) {
+            filterPremulF16(dst, i)
+            i += 4
+        }
+    }
+
+    override fun sampleAtLocal(lx: Float, ly: Float): SkColor =
+        filter.filterColor(child.sampleAtLocal(lx, ly))
+
+    override fun sampleAtLocalF16(lx: Float, ly: Float, dst: FloatArray, dstOffset: Int) {
+        child.sampleAtLocalF16(lx, ly, dst, dstOffset)
+        filterPremulF16(dst, dstOffset)
+    }
+
+    private fun filterPremulF16(dst: FloatArray, offset: Int) {
+        val srcA = dst[offset + 3]
+        val src = if (srcA > 0f) {
+            val invA = 1f / srcA
+            SkColor4f(
+                dst[offset] * invA,
+                dst[offset + 1] * invA,
+                dst[offset + 2] * invA,
+                srcA,
+            )
+        } else {
+            SkColor4f(0f, 0f, 0f, srcA)
+        }
+        val out = filter.filterColor4f(src)
+        dst[offset] = out.fR * out.fA
+        dst[offset + 1] = out.fG * out.fA
+        dst[offset + 2] = out.fB * out.fA
+        dst[offset + 3] = out.fA
     }
 }
 

@@ -1,34 +1,36 @@
 package org.skia.tests
 
-import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.testing.SimilarityTracker
+import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
 /**
  * PathAppendExtendGM ports gm/patharcto.cpp `path_append_extend`.
- *
- * Classification: STUB.PERSPECTIVE_ADDPATH
- *
- * The GM exercises [SkPathBuilder.addPath] with both [SkPath.AddPathMode.kAppend]
- * and [SkPath.AddPathMode.kExtend], including two variants that pass a tiny
- * perspective matrix (`persp0 = 0.0001f`) to verify addPath does not crash on
- * perspective input.
- *
- * The Kotlin [SkPathBuilder.addPath] implementation only maps points via the
- * affine rows of the matrix — the `persp0 / persp1` perspective rows are stored
- * in [SkMatrix] but not applied during point mapping. As a result, the two
- * "with perspective" columns (columns 3 and 5) render identically to the
- * plain-identity columns, producing a pixel-level divergence from the upstream
- * DM reference for those columns.
- *
- * The GM compiles and runs without errors. Re-enable this test once perspective
- * mapping is implemented in [SkPathBuilder.addPath].
  */
-@Disabled("STUB.PERSPECTIVE_ADDPATH: addPath perspective rows not applied; columns 3/5 differ from upstream DM reference")
 class PathAppendExtendTest {
     @Test
     fun `PathAppendExtendGM matches path_append_extend_png within tolerance`() {
         val gm = PathAppendExtendGM()
-        TestUtils.runGmTest(gm)
+        val rendered = TestUtils.runGmTest(gm)
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "Missing reference image path_append_extend.png")
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
+        TestReport.recordDetailed("PathAppendExtendGM", comparison)
+        if (comparison.similarity < THRESHOLD) {
+            TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
+        }
+        val accepted = SimilarityTracker.updateScore("PathAppendExtendGM", comparison.similarity)
+        assertTrue(accepted, "PathAppendExtendGM regressed below ratchet")
+        assertTrue(
+            comparison.similarity >= THRESHOLD,
+            "PathAppendExtendGM similarity ${"%.2f".format(comparison.similarity)}% < $THRESHOLD%",
+        )
+    }
+
+    private companion object {
+        private const val THRESHOLD: Double = 95.0
     }
 }
