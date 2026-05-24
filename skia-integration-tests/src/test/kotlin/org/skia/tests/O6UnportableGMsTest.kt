@@ -24,9 +24,6 @@ class O6UnportableGMsTest {
     /** `gm/bleed.cpp::SrcRectConstraintGM` (×6 variants) — needs custom surfaces, color images. */
     @Test fun `SrcRectConstraintGM family requires custom surfaces and per-mipmap sampling control`() {}
 
-    /** `gm/surface.cpp::SurfacePropsGM` — needs SkSurfaceProps + makeSurface with pixel geometry. */
-    @Test fun `SurfacePropsGM requires SkSurfaceProps + pixel-geometry makeSurface`() {}
-
     /** `gm/vertices.cpp::VerticesGM` (1× + scaled) — needs SkShaders.Color and many blend modes. */
     @Test fun `VerticesGM requires SkShaders Color and 29-blend-mode coverage`() {}
 

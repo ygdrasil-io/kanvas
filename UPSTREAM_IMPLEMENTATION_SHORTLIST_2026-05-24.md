@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 25 upstream `.cpp` rows as
+The rebaseline currently classifies 24 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -59,6 +59,11 @@ Completed since this snapshot:
   coverage; `StrokedLinesGM` was already enabled.
 - `fiddle`: upstream's intentionally empty GM is already ported and covered
   by `FiddleTest`; the implementation bucket entry was stale.
+- `STUB.SURFACE_PROPS`: `SurfacePropsGM` is ported for the raster path via
+  `SkSurface.MakeRaster(..., SkSurfaceProps)` and enabled with ratchet
+  coverage. WebGPU wrapper tests remain disabled separately.
+- `RRectBlurGM`: `SkCanvas.readPixels` / `writePixels` raster overloads are
+  implemented, the diff GM is ported, and `RRectBlurTest` is enabled.
 
 ## Recommended order
 
@@ -93,11 +98,11 @@ Completed since this snapshot:
 | `patheffects` | ported | `CTMPathEffectGM.kt`, `PathEffectGM.kt` |
 | `pathmeasure` | `STUB.PATH_MEASURE_EXPLOSION` | `PathMeasureExplosionGM.kt` |
 | `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`, `STUB.XYZ` | `RecordOptsGM.kt` |
-| `rrect` | disabled `RRectBlurGM` without `STUB.*` tag | `RRectBlurGM.kt`, `RRectGM.kt` |
+| `rrect` | ported | `RRectBlurGM.kt`, `RRectGM.kt` |
 | `savelayer` | `STUB.F16_COLOR_TYPE`, `STUB.SAVE_BEHIND`; `Skbug14554GM` ported | `SaveBehindGM.kt`, `SaveLayerF16GM.kt`, `SaveLayerGM.kt`, `Skbug14554GM.kt` |
 | `shadowutils` | ported | `ShadowUtilsDirectionalGM.kt`, `ShadowUtilsGaussianColorFilterGM.kt` |
 | `strokedlines` | ported | `StrokedLineCapsGM.kt`, `StrokedLinesGM.kt` |
-| `surface` | `STUB.SURFACE_PROPS` | `NewSurfaceGM.kt`, `SnapWithMipsGM.kt`, `SurfacePropsGM.kt` |
+| `surface` | partial: raster `SurfacePropsGM` ported; WebGPU wrappers still `STUB.SURFACE_PROPS` | `NewSurfaceGM.kt`, `SnapWithMipsGM.kt`, `SurfacePropsGM.kt` |
 | `textblobmixedsizes` | `STUB.DF_TEXT_RASTER` | `TextBlobMixedSizesGM.kt` |
 | `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 

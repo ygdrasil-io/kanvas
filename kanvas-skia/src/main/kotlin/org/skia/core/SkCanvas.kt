@@ -9,6 +9,7 @@ import org.graphiks.math.SkColor
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkShader
 import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkPaint
@@ -17,6 +18,7 @@ import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathDirection
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTileMode
@@ -27,6 +29,7 @@ import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
 import org.graphiks.math.SkScalar
+import java.nio.ByteBuffer
 import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
 
@@ -137,6 +140,78 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             alphaType = alphaType,
             colorSpace = bm.colorSpace,
         )
+    }
+
+    /**
+     * Mirrors Skia's `SkCanvas::readPixels(const SkPixmap&, int, int)` for
+     * raster canvases. Coordinates are root-device coordinates, independent
+     * from the current CTM, matching upstream's readback contract.
+     */
+    public open fun readPixels(dst: SkPixmap, srcX: Int = 0, srcY: Int = 0): Boolean =
+        SkImage.Make(device.requireBitmap("readPixels").bitmap).readPixels(dst, srcX, srcY)
+
+    /**
+     * Mirrors Skia's `SkCanvas::readPixels(const SkImageInfo&, void*, size_t, int, int)`.
+     */
+    public open fun readPixels(
+        dstInfo: SkImageInfo,
+        dstPixels: ByteBuffer,
+        dstRowBytes: Int,
+        srcX: Int = 0,
+        srcY: Int = 0,
+    ): Boolean =
+        readPixels(SkPixmap(dstInfo, dstPixels, dstRowBytes), srcX, srcY)
+
+    /**
+     * Mirrors Skia's `SkCanvas::readPixels(const SkBitmap&, int, int)`.
+     * `SkBitmap.peekPixels` is not required here because kanvas-skia bitmaps
+     * always expose typed storage through [SkBitmap.getPixel] / [SkBitmap.setPixel].
+     */
+    public open fun readPixels(dst: SkBitmap, srcX: Int = 0, srcY: Int = 0): Boolean {
+        if (dst.width <= 0 || dst.height <= 0) return false
+        val src = device.requireBitmap("readPixels").bitmap
+        if (src.width <= 0 || src.height <= 0) return false
+        if (srcX >= src.width || srcY >= src.height) return false
+        if (srcX + dst.width <= 0 || srcY + dst.height <= 0) return false
+
+        val srcL = maxOf(srcX, 0)
+        val srcT = maxOf(srcY, 0)
+        val srcR = minOf(src.width, srcX + dst.width)
+        val srcB = minOf(src.height, srcY + dst.height)
+        if (srcL >= srcR || srcT >= srcB) return false
+
+        for (sy in srcT until srcB) {
+            for (sx in srcL until srcR) {
+                dst.setPixel(sx - srcX, sy - srcY, src.getPixel(sx, sy))
+            }
+        }
+        return true
+    }
+
+    /** Mirrors Skia's `SkCanvas::writePixels(const SkPixmap&, int, int)`. */
+    public open fun writePixels(src: SkPixmap, dstX: Int = 0, dstY: Int = 0): Boolean =
+        device.requireBitmap("writePixels").bitmap.writePixels(src, dstX, dstY)
+
+    /**
+     * Mirrors Skia's `SkCanvas::writePixels(const SkBitmap&, int, int)`.
+     */
+    public open fun writePixels(src: SkBitmap, dstX: Int = 0, dstY: Int = 0): Boolean {
+        if (src.width <= 0 || src.height <= 0) return false
+        val dst = device.requireBitmap("writePixels").bitmap
+        if (dst.width <= 0 || dst.height <= 0) return false
+        if (dstX >= dst.width || dstY >= dst.height) return false
+        if (dstX + src.width <= 0 || dstY + src.height <= 0) return false
+
+        for (sy in 0 until src.height) {
+            val dy = dstY + sy
+            if (dy < 0 || dy >= dst.height) continue
+            for (sx in 0 until src.width) {
+                val dx = dstX + sx
+                if (dx < 0 || dx >= dst.width) continue
+                dst.setPixel(dx, dy, src.getPixel(sx, sy))
+            }
+        }
+        return true
     }
 
     /** The root (backing) device. Layers push their own devices on the stack. */
