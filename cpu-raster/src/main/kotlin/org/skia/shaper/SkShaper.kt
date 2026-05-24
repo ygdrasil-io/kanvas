@@ -9,16 +9,14 @@ import org.graphiks.math.SkRect
  * Mirrors Skia's
  * [`SkShaper`](https://github.com/google/skia/blob/main/modules/skshaper/include/SkShaper.h).
  *
- * **Phase I4 (this slice — I4.1) ships only [MakePrimitive]** — a
+ * **Phase I4 (this slice — I4.1) ships [MakePrimitive]** — a
  * naive char-by-char shaper that maps each Unicode code point to its
  * font-local glyph ID via [SkFont.unicharsToGlyphs] and lays glyphs
  * out left-to-right using the font's per-glyph advance widths. No
  * bidi, no kerning, no ligatures, no complex-script support.
  *
- * Phase I4.2 adds [MakeJvmAwtTextLayout] — an optional JVM/AWT
- * delegate to `java.awt.font.TextLayout` for proper bidi (Arabic /
- * Hebrew) + basic ligatures + kerning. Phase I4.3 adds linebreak /
- * wrapping via ICU's `BreakIterator`.
+ * Complex shaping is intentionally out of scope for this portable
+ * implementation until a pure Kotlin shaper is introduced.
  *
  * **API surface** matches upstream's public façade :
  *  - [shape] — emit one or more `RunInfo` / `Buffer` pairs through
@@ -102,33 +100,6 @@ public abstract class SkShaper protected constructor() {
          */
         public fun MakePrimitive(): SkShaper = PrimitiveShaper()
 
-        /**
-         * Optional JVM/AWT bidi-aware shaper that delegates to the JDK's
-         * [java.awt.Font.layoutGlyphVector] (basic kerning + ligature
-         * substitution + glyph reordering) and `java.text.Bidi`
-         * (Unicode Bidirectional Algorithm — UAX #9). Mixed LTR / RTL
-         * input emits one [RunInfo] per visual run, in visual order.
-         * Line wrapping uses `java.text.BreakIterator` and a greedy
-         * width fill.
-         *
-         * Falls back to [MakePrimitive] when the font's typeface is
-         * not AWT-backed (the [SkTypeface.MakeEmpty] no-op typeface,
-         * for example) — those have no native shaping engine.
-         *
-         * **Out of scope** : HarfBuzz-grade complex script support
-         * (Indic / Khmer / Thai). Latin / CJK / Arabic / Hebrew shape
-         * correctly for the common cases.
-         */
-        public fun MakeJvmAwtTextLayout(): SkShaper = JavaTextLayoutShaper()
-
-        /**
-         * Compatibility alias for the optional JVM/AWT text-layout shaper.
-         */
-        @Deprecated(
-            message = "Use MakeJvmAwtTextLayout() for the optional JVM/AWT shaper, or MakePrimitive() for the portable shaper.",
-            replaceWith = ReplaceWith("MakeJvmAwtTextLayout()"),
-        )
-        public fun MakeJavaTextLayout(): SkShaper = MakeJvmAwtTextLayout()
     }
 }
 
