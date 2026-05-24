@@ -1,6 +1,7 @@
 package org.skia.foundation.opentype
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -1185,6 +1186,127 @@ class OpenTypeFontTest {
         }
     }
 
+    @Test
+    fun `CBDT CBLC metadata exposes PNG bitmap glyph without rendering integration`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single()
+        val png = syntheticPngPayload()
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "CBLC", syntheticCblcTable(glyph, png.size))
+                .withTableContent("kern", "CBDT", syntheticCbdtTable(png)),
+        )!!
+
+        val bitmapGlyph = requireNotNull(typeface.bitmapGlyph(glyph))
+
+        assertEquals(OpenTypeBitmapGlyphSource.CBDT_CBLC, bitmapGlyph.source)
+        assertEquals(glyph, bitmapGlyph.glyphId)
+        assertEquals(18, bitmapGlyph.ppemX)
+        assertEquals(18, bitmapGlyph.ppemY)
+        assertEquals(32, bitmapGlyph.bitDepth)
+        assertEquals("png ", bitmapGlyph.imageFormat)
+        assertArrayEquals(png, bitmapGlyph.bytes)
+        assertNull(typeface.bitmapGlyph(glyph + 1))
+    }
+
+    @Test
+    fun `drawString falls back to monochrome for parsed CBDT CBLC before bitmap rendering integration`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single()
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "CBLC", syntheticCblcTable(glyph, syntheticPngPayload().size))
+                .withTableContent("kern", "CBDT", syntheticCbdtTable(syntheticPngPayload())),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `malformed CBDT CBLC tables fail closed without rejecting font`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single()
+        val png = syntheticPngPayload()
+        val malformedTables = listOf(
+            syntheticCblcTable(glyph, png.size).copyOf(20),
+            syntheticCblcTable(glyph, png.size).also { writeU16(it, 0, 2) },
+            syntheticCblcTable(glyph, png.size).also { writeU16(it, 48, glyph + 1) },
+            syntheticCblcTable(glyph, png.size).also { writeU16(it, 66, 1) },
+            syntheticCblcTable(glyph, png.size).also { writeU32(it, 72, png.size); writeU32(it, 76, 0) },
+        )
+
+        malformedTables.forEach { cblc ->
+            val typeface = OpenTypeTypeface.MakeFromBytes(
+                liberationSansBytes()
+                    .withTableContent("GPOS", "CBLC", cblc)
+                    .withTableContent("kern", "CBDT", syntheticCbdtTable(png)),
+            )!!
+
+            assertNull(typeface.bitmapGlyph(glyph))
+        }
+        val badPng = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "CBLC", syntheticCblcTable(glyph, png.size))
+                .withTableContent("kern", "CBDT", syntheticCbdtTable(byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8))),
+        )!!
+        assertNull(badPng.bitmapGlyph(glyph))
+        val missingCbdt = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withTableContent("GPOS", "CBLC", syntheticCblcTable(glyph, png.size)),
+        )!!
+        assertNull(missingCbdt.bitmapGlyph(glyph))
+    }
+
+    @Test
+    fun `sbix metadata exposes PNG bitmap glyph origins without rendering integration`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single()
+        val png = syntheticPngPayload()
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withTableContent("GPOS", "sbix", syntheticSbixTable(glyph, baseTypeface.countGlyphs(), png)),
+        )!!
+
+        val bitmapGlyph = requireNotNull(typeface.bitmapGlyph(glyph))
+
+        assertEquals(OpenTypeBitmapGlyphSource.SBIX, bitmapGlyph.source)
+        assertEquals(glyph, bitmapGlyph.glyphId)
+        assertEquals(20, bitmapGlyph.ppemX)
+        assertEquals(20, bitmapGlyph.ppemY)
+        assertEquals(32, bitmapGlyph.bitDepth)
+        assertEquals(3, bitmapGlyph.originOffsetX)
+        assertEquals(-4, bitmapGlyph.originOffsetY)
+        assertEquals("png ", bitmapGlyph.imageFormat)
+        assertArrayEquals(png, bitmapGlyph.bytes)
+        assertNull(typeface.bitmapGlyph(glyph + 1))
+    }
+
+    @Test
+    fun `malformed sbix table fails closed without rejecting font`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single()
+        val malformedTables = listOf(
+            syntheticSbixTable(glyph, baseTypeface.countGlyphs(), syntheticPngPayload()).copyOf(10),
+            syntheticSbixTable(glyph, baseTypeface.countGlyphs(), syntheticPngPayload()).also { writeU16(it, 0, 2) },
+            syntheticSbixTable(glyph, baseTypeface.countGlyphs(), syntheticPngPayload()).also { writeU32(it, 8, 0) },
+            syntheticSbixTable(glyph, baseTypeface.countGlyphs(), syntheticPngPayload(), graphicType = "dupe"),
+            syntheticSbixTable(glyph, baseTypeface.countGlyphs(), byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)),
+        )
+
+        malformedTables.forEach { table ->
+            val typeface = OpenTypeTypeface.MakeFromBytes(
+                liberationSansBytes().withTableContent("GPOS", "sbix", table),
+            )!!
+
+            assertNull(typeface.bitmapGlyph(glyph))
+        }
+    }
+
     private fun assertCompositePathTransform(
         bytes: ByteArray,
         codepoint: String,
@@ -1616,6 +1738,82 @@ class OpenTypeFontTest {
         return bytes
     }
 
+    private fun syntheticPngPayload(): ByteArray =
+        byteArrayOf(
+            0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(),
+            0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x00,
+        )
+
+    private fun syntheticCbdtTable(png: ByteArray): ByteArray {
+        val bytes = ByteArray(4 + png.size)
+        writeU16(bytes, 0, 3) // majorVersion
+        writeU16(bytes, 2, 0) // minorVersion
+        png.copyInto(bytes, 4)
+        return bytes
+    }
+
+    private fun syntheticCblcTable(glyphId: Int, pngLength: Int): ByteArray {
+        val sizeTableOffset = 8
+        val indexSubTableArrayOffset = 56
+        val indexSubTableOffset = 64
+        val bytes = ByteArray(indexSubTableOffset + 8 + 8)
+        writeU16(bytes, 0, 3) // majorVersion
+        writeU16(bytes, 2, 0) // minorVersion
+        writeU32(bytes, 4, 1) // numSizes
+
+        writeU32(bytes, sizeTableOffset, indexSubTableArrayOffset) // indexSubTableArrayOffset
+        writeU32(bytes, sizeTableOffset + 4, 16) // indexTablesSize
+        writeU32(bytes, sizeTableOffset + 8, 1) // numberOfIndexSubTables
+        writeU16(bytes, sizeTableOffset + 40, glyphId) // startGlyphIndex
+        writeU16(bytes, sizeTableOffset + 42, glyphId) // endGlyphIndex
+        bytes[sizeTableOffset + 44] = 18 // ppemX
+        bytes[sizeTableOffset + 45] = 18 // ppemY
+        bytes[sizeTableOffset + 46] = 32 // bitDepth
+
+        writeU16(bytes, indexSubTableArrayOffset, glyphId) // firstGlyphIndex
+        writeU16(bytes, indexSubTableArrayOffset + 2, glyphId) // lastGlyphIndex
+        writeU32(bytes, indexSubTableArrayOffset + 4, indexSubTableOffset - indexSubTableArrayOffset)
+
+        writeU16(bytes, indexSubTableOffset, 1) // indexFormat: ULONG offsets
+        writeU16(bytes, indexSubTableOffset + 2, 19) // imageFormat: PNG
+        writeU32(bytes, indexSubTableOffset + 4, 4) // imageDataOffset in CBDT after version
+        writeU32(bytes, indexSubTableOffset + 8, 0)
+        writeU32(bytes, indexSubTableOffset + 12, pngLength)
+        return bytes
+    }
+
+    private fun syntheticSbixTable(
+        glyphId: Int,
+        numGlyphs: Int,
+        png: ByteArray,
+        graphicType: String = "png ",
+    ): ByteArray {
+        require(graphicType.length == 4)
+        val strikeOffset = 12
+        val glyphDataOffset = 4 + (numGlyphs + 1) * 4
+        val glyphRecordLength = 8 + png.size
+        val bytes = ByteArray(strikeOffset + glyphDataOffset + glyphRecordLength)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 4, 1) // numStrikes
+        writeU32(bytes, 8, strikeOffset)
+
+        writeU16(bytes, strikeOffset, 20) // ppem
+        writeU16(bytes, strikeOffset + 2, 72) // ppi
+        val offsetsStart = strikeOffset + 4
+        repeat(numGlyphs + 1) { index ->
+            val offset = if (index <= glyphId) glyphDataOffset else glyphDataOffset + glyphRecordLength
+            writeU32(bytes, offsetsStart + index * 4, offset)
+        }
+
+        val glyphStart = strikeOffset + glyphDataOffset
+        writeI16(bytes, glyphStart, 3)
+        writeI16(bytes, glyphStart + 2, -4)
+        writeTag(bytes, glyphStart + 4, graphicType)
+        png.copyInto(bytes, glyphStart + 8)
+        return bytes
+    }
+
     private data class SyntheticSvgRecord(
         val startGlyphId: Int,
         val endGlyphId: Int,
@@ -1633,6 +1831,10 @@ class OpenTypeFontTest {
         bytes[off] = (value ushr 16).toByte()
         bytes[off + 1] = (value ushr 8).toByte()
         bytes[off + 2] = value.toByte()
+    }
+
+    private fun writeTag(bytes: ByteArray, off: Int, value: String) {
+        value.toByteArray(Charsets.ISO_8859_1).copyInto(bytes, off)
     }
 
     private fun writeFixed16Dot16(bytes: ByteArray, off: Int, value: Float) {
