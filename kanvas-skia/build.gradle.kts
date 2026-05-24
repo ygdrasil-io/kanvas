@@ -22,11 +22,6 @@ dependencies {
     // the main JAR stays raster-free.
     testImplementation(project(":cpu-raster"))
     testImplementation(project(":codec-core"))
-    testImplementation(project(":codec-all-awt"))
-    testImplementation(project(":codec-png-imageio"))
-    testImplementation(project(":codec-jpeg-imageio"))
-    testImplementation(project(":codec-bmp-imageio"))
-    testImplementation(project(":codec-wbmp-imageio"))
     testImplementation(project(":codec-webp-imageio"))
     testImplementation(project(":codec-image-generator"))
     testImplementation(project(":skia-integration-tests"))
