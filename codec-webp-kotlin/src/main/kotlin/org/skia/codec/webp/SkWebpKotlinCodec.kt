@@ -281,6 +281,23 @@ private fun decodeVp8lImage(
                     }
                     Vp8lTransform.Predictor(sizeBits, transformWidth, predictors)
                 }
+                VP8L_TRANSFORM_COLOR -> {
+                    val sizeBits = (bits.readBits(3) ?: return Vp8lDecodeResult.Invalid) + 2
+                    val blockSize = 1 shl sizeBits
+                    val transformWidth = ceilDiv(width, blockSize)
+                    val transformHeight = ceilDiv(height, blockSize)
+                    val multipliers = when (val result = decodeVp8lImage(
+                        bits = bits,
+                        width = transformWidth,
+                        height = transformHeight,
+                        allowTransforms = false,
+                    )) {
+                        Vp8lDecodeResult.Invalid -> return Vp8lDecodeResult.Invalid
+                        Vp8lDecodeResult.Unsupported -> return Vp8lDecodeResult.Unsupported
+                        is Vp8lDecodeResult.Pixels -> result.argb
+                    }
+                    Vp8lTransform.Color(sizeBits, transformWidth, multipliers)
+                }
                 VP8L_TRANSFORM_SUBTRACT_GREEN -> Vp8lTransform.SubtractGreen
                 else -> return Vp8lDecodeResult.Unsupported
             }
@@ -344,6 +361,9 @@ private fun decodeVp8lImage(
             is Vp8lTransform.Predictor -> {
                 if (!pixels.applyPredictorTransform(width, transform)) return Vp8lDecodeResult.Invalid
             }
+            is Vp8lTransform.Color -> {
+                if (!pixels.applyColorTransform(width, transform)) return Vp8lDecodeResult.Invalid
+            }
             Vp8lTransform.SubtractGreen -> pixels.applySubtractGreenTransform()
         }
     }
@@ -351,6 +371,7 @@ private fun decodeVp8lImage(
 }
 
 private const val VP8L_TRANSFORM_PREDICTOR: Int = 0
+private const val VP8L_TRANSFORM_COLOR: Int = 1
 private const val VP8L_TRANSFORM_SUBTRACT_GREEN: Int = 2
 private const val VP8L_LENGTH_PREFIX_CODE_COUNT: Int = 24
 
@@ -359,6 +380,11 @@ private sealed interface Vp8lTransform {
         val sizeBits: Int,
         val width: Int,
         val predictors: IntArray,
+    ) : Vp8lTransform
+    data class Color(
+        val sizeBits: Int,
+        val width: Int,
+        val multipliers: IntArray,
     ) : Vp8lTransform
     data object SubtractGreen : Vp8lTransform
 }
@@ -402,6 +428,38 @@ private fun IntArray.applyPredictorTransform(width: Int, transform: Vp8lTransfor
     }
     return true
 }
+
+private fun IntArray.applyColorTransform(width: Int, transform: Vp8lTransform.Color): Boolean {
+    for (i in indices) {
+        val x = i % width
+        val y = i / width
+        val multiplierIndex = (y ushr transform.sizeBits) * transform.width + (x ushr transform.sizeBits)
+        if (multiplierIndex !in transform.multipliers.indices) return false
+        this[i] = inverseColorTransform(this[i], transform.multipliers[multiplierIndex])
+    }
+    return true
+}
+
+private fun inverseColorTransform(pixel: Int, multiplier: Int): Int {
+    val alpha = alpha(pixel)
+    val green = green(pixel)
+    val greenToRed = blue(multiplier)
+    val greenToBlue = green(multiplier)
+    val redToBlue = red(multiplier)
+    val transformedRed = (red(pixel) + colorTransformDelta(greenToRed, green)) and 0xFF
+    val transformedBlue = (
+        blue(pixel) +
+            colorTransformDelta(greenToBlue, green) +
+            colorTransformDelta(redToBlue, transformedRed)
+        ) and 0xFF
+    return packArgb(alpha, transformedRed, green, transformedBlue)
+}
+
+private fun colorTransformDelta(multiplier: Int, color: Int): Int =
+    (signedByte(multiplier) * signedByte(color)) shr 5
+
+private fun signedByte(value: Int): Int =
+    if ((value and 0x80) == 0) value and 0xFF else (value and 0xFF) - 256
 
 private fun IntArray.predictorPixel(
     x: Int,
