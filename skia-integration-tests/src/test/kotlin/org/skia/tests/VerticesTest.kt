@@ -9,8 +9,8 @@ import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
 @Disabled(
-    "STUB.DRAW_VERTICES_VISUAL_PARITY: vertex blend and colorFilter paths are covered, " +
-        "but VerticesGM still renders ~60% and needs focused image-diff follow-up.",
+    "STUB.DRAW_VERTICES_VISUAL_PARITY: vertex blend order and gradient local sampling are covered, " +
+        "but VerticesGM still renders ~62% and needs follow-up on remaining color pipeline drift.",
 )
 class VerticesTest {
 
