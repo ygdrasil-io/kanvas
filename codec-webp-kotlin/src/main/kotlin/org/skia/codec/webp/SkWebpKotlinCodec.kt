@@ -16,8 +16,8 @@ import org.skia.foundation.skcms.skcmsParse
  *
  * This first slice only sniffs RIFF/WEBP and parses the container
  * metadata needed by [SkCodec.getInfo]. Pixel reconstruction is only
- * implemented for the current VP8L subset; VP8, alpha chunks, EXIF,
- * and animation are intentionally left for later slices.
+ * implemented for the current VP8L subset; VP8, alpha chunks, and
+ * animation are intentionally left for later slices.
  */
 public class SkWebpKotlinCodec internal constructor(
     internal val metadata: WebpMetadata,
@@ -94,6 +94,8 @@ internal data class WebpMetadata(
     val payloadOffset: Int = -1,
     val payloadSize: Int = 0,
     val iccProfile: SkcmsICCProfile? = null,
+    val exifData: ByteArray? = null,
+    val xmpData: ByteArray? = null,
 ) {
     val hasAlpha: Boolean get() = flags.alpha || format == WebpBitstreamFormat.VP8L
 }
@@ -124,6 +126,8 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
     var extended: WebpMetadata? = null
     var extendedBitstream: WebpMetadata? = null
     var iccProfile: SkcmsICCProfile? = null
+    var exifData: ByteArray? = null
+    var xmpData: ByteArray? = null
     var offset = RIFF_HEADER_SIZE
     while (offset <= data.size - CHUNK_HEADER_SIZE) {
         val fourcc = readFourcc(data, offset)
@@ -140,6 +144,14 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
             "ICCP" -> {
                 if (iccProfile != null || size > Int.MAX_VALUE) return null
                 iccProfile = parseIccProfile(data, payloadOffset, size.toInt())
+            }
+            "EXIF" -> {
+                if (exifData != null || size > Int.MAX_VALUE) return null
+                exifData = copyChunkPayload(data, payloadOffset, size.toInt()) ?: return null
+            }
+            "XMP " -> {
+                if (xmpData != null || size > Int.MAX_VALUE) return null
+                xmpData = copyChunkPayload(data, payloadOffset, size.toInt()) ?: return null
             }
             "VP8L" -> {
                 val bitstream = parseVp8l(data, payloadOffset, size) ?: return null
@@ -167,6 +179,8 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
         payloadOffset = bitstream?.payloadOffset ?: base.payloadOffset,
         payloadSize = bitstream?.payloadSize ?: base.payloadSize,
         iccProfile = iccProfile,
+        exifData = exifData,
+        xmpData = xmpData,
     )
 }
 
@@ -177,6 +191,11 @@ private fun parseIccProfile(data: ByteArray, offset: Int, size: Int): SkcmsICCPr
     } catch (_: Throwable) {
         null
     }
+}
+
+private fun copyChunkPayload(data: ByteArray, offset: Int, size: Int): ByteArray? {
+    if (size <= 0 || offset < 0 || offset + size > data.size) return null
+    return data.copyOfRange(offset, offset + size)
 }
 
 private fun parseVp8x(data: ByteArray, offset: Int, size: Long): WebpMetadata? {
