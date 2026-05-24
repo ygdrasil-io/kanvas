@@ -214,10 +214,10 @@ public class OpenTypeTypeface private constructor(
         metrics.fXMax = font.xMax * s
         metrics.fXHeight = -font.xHeight * s
         metrics.fCapHeight = -font.capHeight * s
-        metrics.fUnderlineThickness = max(1f, size / 14f)
-        metrics.fUnderlinePosition = size / 9f
-        metrics.fStrikeoutThickness = max(1f, size / 14f)
-        metrics.fStrikeoutPosition = -size * 0.3f
+        metrics.fUnderlineThickness = font.underlineThickness * s
+        metrics.fUnderlinePosition = -(font.underlinePosition + font.underlineThickness / 2f) * s
+        metrics.fStrikeoutThickness = font.strikeoutThickness * s
+        metrics.fStrikeoutPosition = -font.strikeoutPosition * s
         metrics.fFlags =
             SkFontMetrics.kUnderlineThicknessIsValid_Flag or
                 SkFontMetrics.kUnderlinePositionIsValid_Flag or
@@ -259,6 +259,10 @@ private class ParsedTrueTypeFont(
     val avgCharWidth: Int,
     val xHeight: Int,
     val capHeight: Int,
+    val underlinePosition: Int,
+    val underlineThickness: Int,
+    val strikeoutPosition: Int,
+    val strikeoutThickness: Int,
     val familyName: String,
     val postScriptName: String?,
     val localizedFamilyNames: List<SkTypeface.LocalizedString>,
@@ -563,9 +567,9 @@ private class ParsedTrueTypeFont(
             val xMax = readI16(bytes, head.offset + 40).toInt()
             val yMax = readI16(bytes, head.offset + 42).toInt()
             val indexToLocFormat = readI16(bytes, head.offset + 50).toInt()
-            val ascent = readI16(bytes, hhea.offset + 4).toInt()
-            val descent = readI16(bytes, hhea.offset + 6).toInt()
-            val lineGap = readI16(bytes, hhea.offset + 8).toInt()
+            val hheaAscent = readI16(bytes, hhea.offset + 4).toInt()
+            val hheaDescent = readI16(bytes, hhea.offset + 6).toInt()
+            val hheaLineGap = readI16(bytes, hhea.offset + 8).toInt()
             val maxAdvanceWidth = readU16(bytes, hhea.offset + 10)
             val numHMetrics = readU16(bytes, hhea.offset + 34)
             val numGlyphs = readU16(bytes, maxp.offset + 4)
@@ -604,15 +608,27 @@ private class ParsedTrueTypeFont(
                 ?: listOf(SkTypeface.LocalizedString(familyName, "und"))
             val os2 = tables["OS/2"]
             if (os2 != null && os2.length < 4) return null
+            val typoMetrics = os2?.takeIf {
+                it.length >= 74 && (readU16(bytes, it.offset + 62) and OS2_USE_TYPO_METRICS) != 0
+            }
+            val ascent = typoMetrics?.let { readI16(bytes, it.offset + 68).toInt() } ?: hheaAscent
+            val descent = typoMetrics?.let { readI16(bytes, it.offset + 70).toInt() } ?: hheaDescent
+            val lineGap = typoMetrics?.let { readI16(bytes, it.offset + 72).toInt() } ?: hheaLineGap
             val avg = os2?.let { readI16(bytes, it.offset + 2).toInt() } ?: advances.average().toInt()
             val sxHeight = os2?.takeIf { it.length >= 88 }?.let { readI16(bytes, it.offset + 86).toInt() } ?: unitsPerEm / 2
             val sCapHeight = os2?.takeIf { it.length >= 90 }?.let { readI16(bytes, it.offset + 88).toInt() } ?: (unitsPerEm * 7 / 10)
+            val post = tables["post"]
+            val underlinePosition = post?.takeIf { it.length >= 12 }?.let { readI16(bytes, it.offset + 8).toInt() } ?: -(unitsPerEm / 9)
+            val underlineThickness = post?.takeIf { it.length >= 12 }?.let { readI16(bytes, it.offset + 10).toInt() } ?: max(1, unitsPerEm / 14)
+            val strikeoutThickness = os2?.takeIf { it.length >= 30 }?.let { readI16(bytes, it.offset + 26).toInt() } ?: max(1, unitsPerEm / 14)
+            val strikeoutPosition = os2?.takeIf { it.length >= 30 }?.let { readI16(bytes, it.offset + 28).toInt() } ?: unitsPerEm * 3 / 10
             val kern = parseKernTable(bytes, tables["kern"])
 
             return ParsedTrueTypeFont(
                 bytes, tables, unitsPerEm, indexToLocFormat, numGlyphs, numHMetrics,
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
-                avg, sxHeight, sCapHeight, familyName, names?.postScriptName, localizedNames,
+                avg, sxHeight, sCapHeight, underlinePosition, underlineThickness,
+                strikeoutPosition, strikeoutThickness, familyName, names?.postScriptName, localizedNames,
                 cmap, advances, bearings, offsets, kern,
             )
         }
@@ -964,6 +980,7 @@ private const val WE_HAVE_A_TWO_BY_TWO = 0x0080
 private const val KERN_HORIZONTAL = 0x0001
 private const val KERN_MINIMUM = 0x0002
 private const val KERN_CROSS_STREAM = 0x0004
+private const val OS2_USE_TYPO_METRICS = 0x0080
 
 private fun kernPairKey(leftGlyph: Int, rightGlyph: Int): Int =
     ((leftGlyph and 0xFFFF) shl 16) or (rightGlyph and 0xFFFF)
