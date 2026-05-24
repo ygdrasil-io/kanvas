@@ -12,6 +12,9 @@ import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkEncodedOrigin
+import org.skia.foundation.SkICC
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 import kotlin.math.roundToInt
@@ -211,6 +214,28 @@ class SkJpegKotlinCodecTest {
 
         assertNotNull(codec)
         assertNull(codec!!.getICCProfile())
+        val (_, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+    }
+
+    @Test
+    fun `APP2 ICC chunks are reassembled and parsed`() {
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val splitAt = iccBytes.size / 2
+        val codec = SkJpegKotlinCodec.Decoder.make(
+            withAppSegments(
+                grayscaleJpeg(width = 8, height = 8),
+                iccSegment(index = 1, count = 2, payload = iccBytes.copyOfRange(0, splitAt)),
+                iccSegment(index = 2, count = 2, payload = iccBytes.copyOfRange(splitAt, iccBytes.size)),
+            ),
+        )
+
+        assertNotNull(codec)
+        val profile = codec!!.getICCProfile()
+        assertNotNull(profile)
+        assertEquals(iccBytes.size, profile!!.size)
+        assertTrue(profile.hasTrc)
+        assertTrue(profile.hasToXYZD50)
         val (_, result) = codec.getImage()
         assertEquals(SkCodec.Result.kSuccess, result)
     }
