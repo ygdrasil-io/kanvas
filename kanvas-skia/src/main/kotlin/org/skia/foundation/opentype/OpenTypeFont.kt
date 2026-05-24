@@ -543,18 +543,19 @@ private class ParsedTrueTypeFont(
 
         private fun parseUnchecked(input: ByteArray, ttcIndex: Int): ParsedTrueTypeFont? {
             val bytes = sliceTtc(input, ttcIndex) ?: return null
+            val reader = SfntReader(bytes)
             if (bytes.size < 12) return null
-            val sfnt = tag(bytes, 0)
+            val sfnt = reader.tag(0) ?: return null
             if (sfnt != "\u0000\u0001\u0000\u0000" && sfnt != "true") return null
-            val numTables = readU16(bytes, 4)
-            if (!fits(12, numTables * 16, bytes.size)) return null
+            val numTables = reader.u16(4) ?: return null
+            if (!reader.fits(12, numTables * 16)) return null
             val tables = HashMap<String, TableRecord>()
             var off = 12
             repeat(numTables) {
-                val name = tag(bytes, off)
-                val offset = readU32(bytes, off + 8).toIntOrNull()
-                val length = readU32(bytes, off + 12).toIntOrNull()
-                if (offset != null && length != null && fits(offset, length, bytes.size)) {
+                val name = reader.tag(off) ?: return null
+                val offset = reader.u32(off + 8)?.toIntOrNull()
+                val length = reader.u32(off + 12)?.toIntOrNull()
+                if (offset != null && length != null && reader.fits(offset, length)) {
                     tables[name] = TableRecord(offset, length)
                 }
                 off += 16
@@ -569,18 +570,18 @@ private class ParsedTrueTypeFont(
             if (glyf.length == 0) return null
             if (head.length < 54 || hhea.length < 36 || maxp.length < 6) return null
 
-            val unitsPerEm = readU16(bytes, head.offset + 18)
-            val xMin = readI16(bytes, head.offset + 36).toInt()
-            val yMin = readI16(bytes, head.offset + 38).toInt()
-            val xMax = readI16(bytes, head.offset + 40).toInt()
-            val yMax = readI16(bytes, head.offset + 42).toInt()
-            val indexToLocFormat = readI16(bytes, head.offset + 50).toInt()
-            val hheaAscent = readI16(bytes, hhea.offset + 4).toInt()
-            val hheaDescent = readI16(bytes, hhea.offset + 6).toInt()
-            val hheaLineGap = readI16(bytes, hhea.offset + 8).toInt()
-            val maxAdvanceWidth = readU16(bytes, hhea.offset + 10)
-            val numHMetrics = readU16(bytes, hhea.offset + 34)
-            val numGlyphs = readU16(bytes, maxp.offset + 4)
+            val unitsPerEm = reader.u16(head.offset + 18) ?: return null
+            val xMin = reader.i16(head.offset + 36)?.toInt() ?: return null
+            val yMin = reader.i16(head.offset + 38)?.toInt() ?: return null
+            val xMax = reader.i16(head.offset + 40)?.toInt() ?: return null
+            val yMax = reader.i16(head.offset + 42)?.toInt() ?: return null
+            val indexToLocFormat = reader.i16(head.offset + 50)?.toInt() ?: return null
+            val hheaAscent = reader.i16(hhea.offset + 4)?.toInt() ?: return null
+            val hheaDescent = reader.i16(hhea.offset + 6)?.toInt() ?: return null
+            val hheaLineGap = reader.i16(hhea.offset + 8)?.toInt() ?: return null
+            val maxAdvanceWidth = reader.u16(hhea.offset + 10) ?: return null
+            val numHMetrics = reader.u16(hhea.offset + 34) ?: return null
+            val numGlyphs = reader.u16(maxp.offset + 4) ?: return null
             if (unitsPerEm <= 0 || numGlyphs <= 0 || numHMetrics <= 0) return null
             if (numHMetrics > numGlyphs) return null
             if (hmtx.length < numHMetrics * 4) return null
@@ -589,22 +590,22 @@ private class ParsedTrueTypeFont(
             val bearings = ShortArray(numGlyphs)
             var h = hmtx.offset
             for (i in 0 until numHMetrics) {
-                advances[i] = readU16(bytes, h); h += 2
-                bearings[i] = readI16(bytes, h); h += 2
+                advances[i] = reader.u16(h) ?: return null; h += 2
+                bearings[i] = reader.i16(h) ?: return null; h += 2
             }
             for (i in numHMetrics until numGlyphs) {
                 advances[i] = advances[numHMetrics - 1]
-                bearings[i] = if (h + 2 <= hmtx.offset + hmtx.length) readI16(bytes, h) else 0
+                bearings[i] = if (h + 2 <= hmtx.offset + hmtx.length) reader.i16(h) ?: return null else 0
                 h += 2
             }
 
             val offsets = IntArray(numGlyphs + 1)
             if (indexToLocFormat == 0) {
                 if (loca.length < (numGlyphs + 1) * 2) return null
-                for (i in 0..numGlyphs) offsets[i] = readU16(bytes, loca.offset + i * 2) * 2
+                for (i in 0..numGlyphs) offsets[i] = (reader.u16(loca.offset + i * 2) ?: return null) * 2
             } else if (indexToLocFormat == 1) {
                 if (loca.length < (numGlyphs + 1) * 4) return null
-                for (i in 0..numGlyphs) offsets[i] = readU32(bytes, loca.offset + i * 4).toInt()
+                for (i in 0..numGlyphs) offsets[i] = reader.u32(loca.offset + i * 4)?.toIntOrNull() ?: return null
             } else return null
             if (offsets.any { it < 0 || it > glyf.length }) return null
             for (i in 0 until offsets.lastIndex) if (offsets[i] > offsets[i + 1]) return null
@@ -617,19 +618,19 @@ private class ParsedTrueTypeFont(
             val os2 = tables["OS/2"]
             if (os2 != null && os2.length < 4) return null
             val typoMetrics = os2?.takeIf {
-                it.length >= 74 && (readU16(bytes, it.offset + 62) and OS2_USE_TYPO_METRICS) != 0
+                it.length >= 74 && ((reader.u16(it.offset + 62) ?: return null) and OS2_USE_TYPO_METRICS) != 0
             }
-            val ascent = typoMetrics?.let { readI16(bytes, it.offset + 68).toInt() } ?: hheaAscent
-            val descent = typoMetrics?.let { readI16(bytes, it.offset + 70).toInt() } ?: hheaDescent
-            val lineGap = typoMetrics?.let { readI16(bytes, it.offset + 72).toInt() } ?: hheaLineGap
-            val avg = os2?.let { readI16(bytes, it.offset + 2).toInt() } ?: advances.average().toInt()
-            val sxHeight = os2?.takeIf { it.length >= 88 }?.let { readI16(bytes, it.offset + 86).toInt() } ?: unitsPerEm / 2
-            val sCapHeight = os2?.takeIf { it.length >= 90 }?.let { readI16(bytes, it.offset + 88).toInt() } ?: (unitsPerEm * 7 / 10)
+            val ascent = typoMetrics?.let { reader.i16(it.offset + 68)?.toInt() ?: return null } ?: hheaAscent
+            val descent = typoMetrics?.let { reader.i16(it.offset + 70)?.toInt() ?: return null } ?: hheaDescent
+            val lineGap = typoMetrics?.let { reader.i16(it.offset + 72)?.toInt() ?: return null } ?: hheaLineGap
+            val avg = os2?.let { reader.i16(it.offset + 2)?.toInt() ?: return null } ?: advances.average().toInt()
+            val sxHeight = os2?.takeIf { it.length >= 88 }?.let { reader.i16(it.offset + 86)?.toInt() ?: return null } ?: unitsPerEm / 2
+            val sCapHeight = os2?.takeIf { it.length >= 90 }?.let { reader.i16(it.offset + 88)?.toInt() ?: return null } ?: (unitsPerEm * 7 / 10)
             val post = tables["post"]
-            val underlinePosition = post?.takeIf { it.length >= 12 }?.let { readI16(bytes, it.offset + 8).toInt() } ?: -(unitsPerEm / 9)
-            val underlineThickness = post?.takeIf { it.length >= 12 }?.let { readI16(bytes, it.offset + 10).toInt() } ?: max(1, unitsPerEm / 14)
-            val strikeoutThickness = os2?.takeIf { it.length >= 30 }?.let { readI16(bytes, it.offset + 26).toInt() } ?: max(1, unitsPerEm / 14)
-            val strikeoutPosition = os2?.takeIf { it.length >= 30 }?.let { readI16(bytes, it.offset + 28).toInt() } ?: unitsPerEm * 3 / 10
+            val underlinePosition = post?.takeIf { it.length >= 12 }?.let { reader.i16(it.offset + 8)?.toInt() ?: return null } ?: -(unitsPerEm / 9)
+            val underlineThickness = post?.takeIf { it.length >= 12 }?.let { reader.i16(it.offset + 10)?.toInt() ?: return null } ?: max(1, unitsPerEm / 14)
+            val strikeoutThickness = os2?.takeIf { it.length >= 30 }?.let { reader.i16(it.offset + 26)?.toInt() ?: return null } ?: max(1, unitsPerEm / 14)
+            val strikeoutPosition = os2?.takeIf { it.length >= 30 }?.let { reader.i16(it.offset + 28)?.toInt() ?: return null } ?: unitsPerEm * 3 / 10
             val kern = parseKernTable(bytes, tables["kern"])
 
             return ParsedTrueTypeFont(
@@ -642,11 +643,12 @@ private class ParsedTrueTypeFont(
         }
 
         private fun sliceTtc(bytes: ByteArray, ttcIndex: Int): ByteArray? {
-            if (bytes.size >= 12 && tag(bytes, 0) == "ttcf") {
-                val numFonts = readU32(bytes, 8).toIntOrNull() ?: return null
+            val reader = SfntReader(bytes)
+            if (bytes.size >= 12 && reader.tag(0) == "ttcf") {
+                val numFonts = reader.u32(8)?.toIntOrNull() ?: return null
                 if (ttcIndex < 0 || ttcIndex >= numFonts) return null
-                if (!fits(12, numFonts.toLong() * 4L, bytes.size)) return null
-                val offset = readU32(bytes, 12 + ttcIndex * 4).toIntOrNull() ?: return null
+                if (!reader.fits(12, numFonts.toLong() * 4L)) return null
+                val offset = reader.u32(12 + ttcIndex * 4)?.toIntOrNull() ?: return null
                 if (offset < 0 || offset >= bytes.size) return null
                 return bytes.copyOfRange(offset, bytes.size)
             }
@@ -657,9 +659,10 @@ private class ParsedTrueTypeFont(
             table ?: return null
             if (table.length < 6) return null
             val tableEnd = table.offset + table.length
-            val count = readU16(bytes, table.offset + 2)
-            val stringOffset = table.offset + readU16(bytes, table.offset + 4)
-            if (!fits(table.offset + 6, count.toLong() * 12L, tableEnd)) return null
+            val reader = SfntReader(bytes, tableEnd)
+            val count = reader.u16(table.offset + 2) ?: return null
+            val stringOffset = table.offset + (reader.u16(table.offset + 4) ?: return null)
+            if (!reader.fits(table.offset + 6, count.toLong() * 12L)) return null
             if (stringOffset !in table.offset..tableEnd) return null
             val familyCandidates = ArrayList<NameRecord>()
             val postScriptCandidates = ArrayList<NameRecord>()
@@ -667,13 +670,13 @@ private class ParsedTrueTypeFont(
             val seenLocalized = HashSet<Pair<String, String>>()
             var off = table.offset + 6
             repeat(count) {
-                val platform = readU16(bytes, off)
-                val encoding = readU16(bytes, off + 2)
-                val language = readU16(bytes, off + 4)
-                val nameId = readU16(bytes, off + 6)
-                val length = readU16(bytes, off + 8)
-                val strOff = stringOffset + readU16(bytes, off + 10)
-                if (strOff >= stringOffset && fits(strOff, length, tableEnd)) {
+                val platform = reader.u16(off) ?: return null
+                val encoding = reader.u16(off + 2) ?: return null
+                val language = reader.u16(off + 4) ?: return null
+                val nameId = reader.u16(off + 6) ?: return null
+                val length = reader.u16(off + 8) ?: return null
+                val strOff = stringOffset + (reader.u16(off + 10) ?: return null)
+                if (strOff >= stringOffset && reader.fits(strOff, length)) {
                     val s = decodeName(bytes, strOff, length, platform, encoding)
                     if (!s.isNullOrBlank()) {
                         val record = NameRecord(s, platform, language)
@@ -699,17 +702,18 @@ private class ParsedTrueTypeFont(
             table ?: return null
             if (table.length < 4) return null
             val tableEnd = table.offset + table.length
-            if (readU16(bytes, table.offset) != 0) return null
-            val subtableCount = readU16(bytes, table.offset + 2)
+            val reader = SfntReader(bytes, tableEnd)
+            if (reader.u16(table.offset) != 0) return null
+            val subtableCount = reader.u16(table.offset + 2) ?: return null
             val pairs = HashMap<Int, Int>()
             var off = table.offset + 4
             var hasUsableSubtable = false
             repeat(subtableCount) {
-                if (!fits(off, 6, tableEnd)) return null
-                val subtableVersion = readU16(bytes, off)
-                val subtableLength = readU16(bytes, off + 2)
-                val coverage = readU16(bytes, off + 4)
-                if (subtableVersion != 0 || subtableLength < 6 || !fits(off, subtableLength, tableEnd)) return null
+                if (!reader.fits(off, 6)) return null
+                val subtableVersion = reader.u16(off) ?: return null
+                val subtableLength = reader.u16(off + 2) ?: return null
+                val coverage = reader.u16(off + 4) ?: return null
+                if (subtableVersion != 0 || subtableLength < 6 || !reader.fits(off, subtableLength)) return null
 
                 val format = coverage ushr 8
                 val horizontal = (coverage and KERN_HORIZONTAL) != 0
@@ -732,14 +736,15 @@ private class ParsedTrueTypeFont(
             limit: Int,
             pairs: MutableMap<Int, Int>,
         ): Unit? {
-            if (!fits(off, 8, limit)) return null
-            val pairCount = readU16(bytes, off)
-            if (!fits(off + 8, pairCount.toLong() * 6L, limit)) return null
+            val reader = SfntReader(bytes, limit)
+            if (!reader.fits(off, 8)) return null
+            val pairCount = reader.u16(off) ?: return null
+            if (!reader.fits(off + 8, pairCount.toLong() * 6L)) return null
             var p = off + 8
             repeat(pairCount) {
-                val left = readU16(bytes, p)
-                val right = readU16(bytes, p + 2)
-                val value = readI16(bytes, p + 4).toInt()
+                val left = reader.u16(p) ?: return null
+                val right = reader.u16(p + 2) ?: return null
+                val value = reader.i16(p + 4)?.toInt() ?: return null
                 val key = kernPairKey(left, right)
                 pairs[key] = (pairs[key] ?: 0) + value
                 p += 6
@@ -811,19 +816,6 @@ private class ParsedTrueTypeFont(
                 else -> "und"
             }
 
-        private fun readU16(bytes: ByteArray, off: Int): Int =
-            (((bytes[off].toInt() and 0xFF) shl 8) or (bytes[off + 1].toInt() and 0xFF))
-
-        private fun readI16(bytes: ByteArray, off: Int): Short = readU16(bytes, off).toShort()
-
-        private fun readU32(bytes: ByteArray, off: Int): Long =
-            (((bytes[off].toLong() and 0xFF) shl 24) or
-                ((bytes[off + 1].toLong() and 0xFF) shl 16) or
-                ((bytes[off + 2].toLong() and 0xFF) shl 8) or
-                (bytes[off + 3].toLong() and 0xFF))
-
-        private fun tag(bytes: ByteArray, off: Int): String =
-            String(byteArrayOf(bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]), Charsets.ISO_8859_1)
     }
 }
 
@@ -833,21 +825,23 @@ private sealed interface Cmap {
     companion object {
         fun parse(bytes: ByteArray, table: TableRecord): Cmap? {
             if (table.length < 4) return null
-            val numTables = readU16(bytes, table.offset + 2)
-            if (!fits(table.offset + 4, numTables * 8, table.offset + table.length)) return null
+            val tableEnd = table.offset + table.length
+            val reader = SfntReader(bytes, tableEnd)
+            val numTables = reader.u16(table.offset + 2) ?: return null
+            if (!reader.fits(table.offset + 4, numTables * 8)) return null
             var best: Pair<Int, Int>? = null
             var off = table.offset + 4
             repeat(numTables) {
-                val platform = readU16(bytes, off)
-                val encoding = readU16(bytes, off + 2)
-                val subOffset = readU32(bytes, off + 4).toIntOrNull()
+                val platform = reader.u16(off) ?: return null
+                val encoding = reader.u16(off + 2) ?: return null
+                val subOffset = reader.u32(off + 4)?.toIntOrNull()
                 if (subOffset == null || subOffset < 0 || subOffset >= table.length) {
                     off += 8
                     return@repeat
                 }
                 val abs = table.offset + subOffset
-                if (abs + 2 <= table.offset + table.length) {
-                    val format = readU16(bytes, abs)
+                if (reader.fits(abs, 2)) {
+                    val format = reader.u16(abs) ?: return null
                     val score = when {
                         format == 12 && platform == 3 && encoding == 10 -> 100
                         format == 4 && platform == 3 && encoding == 1 -> 90
@@ -860,22 +854,12 @@ private sealed interface Cmap {
                 off += 8
             }
             val chosen = best?.second ?: return null
-            val tableEnd = table.offset + table.length
-            return when (readU16(bytes, chosen)) {
+            return when (reader.u16(chosen) ?: return null) {
                 4 -> CmapFormat4.parse(bytes, chosen, tableEnd)
                 12 -> CmapFormat12.parse(bytes, chosen, tableEnd)
                 else -> null
             }
         }
-
-        private fun readU16(bytes: ByteArray, off: Int): Int =
-            (((bytes[off].toInt() and 0xFF) shl 8) or (bytes[off + 1].toInt() and 0xFF))
-
-        private fun readU32(bytes: ByteArray, off: Int): Long =
-            (((bytes[off].toLong() and 0xFF) shl 24) or
-                ((bytes[off + 1].toLong() and 0xFF) shl 16) or
-                ((bytes[off + 2].toLong() and 0xFF) shl 8) or
-                (bytes[off + 3].toLong() and 0xFF))
     }
 }
 
@@ -902,26 +886,28 @@ private class CmapFormat4(
 
     companion object {
         fun parse(bytes: ByteArray, off: Int, limit: Int): CmapFormat4? {
-            if (!fits(off, 14, limit)) return null
-            val length = readU16(bytes, off + 2)
-            if (length < 16 || !fits(off, length, limit)) return null
-            val segCount = readU16(bytes, off + 6) / 2
+            val reader = SfntReader(bytes, limit)
+            if (!reader.fits(off, 14)) return null
+            val length = reader.u16(off + 2) ?: return null
+            if (length < 16 || !reader.fits(off, length)) return null
+            val subtable = SfntReader(bytes, off + length)
+            val segCount = (subtable.u16(off + 6) ?: return null) / 2
             if (segCount <= 0) return null
             var p = off + 14
-            if (!fits(p, segCount * 2 + 2, off + length)) return null
-            val end = IntArray(segCount) { readU16(bytes, p + it * 2) }
+            if (!subtable.fits(p, segCount * 2 + 2)) return null
+            val end = IntArray(segCount) { subtable.u16(p + it * 2) ?: return null }
             p += segCount * 2 + 2
-            if (!fits(p, segCount * 2, off + length)) return null
-            val start = IntArray(segCount) { readU16(bytes, p + it * 2) }
+            if (!subtable.fits(p, segCount * 2)) return null
+            val start = IntArray(segCount) { subtable.u16(p + it * 2) ?: return null }
             p += segCount * 2
-            if (!fits(p, segCount * 2, off + length)) return null
-            val deltas = IntArray(segCount) { readI16(bytes, p + it * 2).toInt() }
+            if (!subtable.fits(p, segCount * 2)) return null
+            val deltas = IntArray(segCount) { subtable.i16(p + it * 2)?.toInt() ?: return null }
             p += segCount * 2
-            if (!fits(p, segCount * 2, off + length)) return null
-            val rangeOffsets = IntArray(segCount) { readU16(bytes, p + it * 2) }
+            if (!subtable.fits(p, segCount * 2)) return null
+            val rangeOffsets = IntArray(segCount) { subtable.u16(p + it * 2) ?: return null }
             p += segCount * 2
             val glyphCount = max(0, (off + length - p) / 2)
-            val glyphs = IntArray(glyphCount) { readU16(bytes, p + it * 2) }
+            val glyphs = IntArray(glyphCount) { subtable.u16(p + it * 2) ?: return null }
             return CmapFormat4(end, start, deltas, rangeOffsets, glyphs)
         }
     }
@@ -939,19 +925,60 @@ private class CmapFormat12(private val groups: List<Group>) : Cmap {
 
     companion object {
         fun parse(bytes: ByteArray, off: Int, limit: Int): CmapFormat12? {
-            if (!fits(off, 16, limit)) return null
-            val length = readU32(bytes, off + 4).toIntOrNull() ?: return null
-            if (length < 16 || !fits(off, length, limit)) return null
-            val nGroups = readU32(bytes, off + 12).toIntOrNull() ?: return null
-            if (!fits(off + 16, nGroups.toLong() * 12L, off + length)) return null
+            val reader = SfntReader(bytes, limit)
+            if (!reader.fits(off, 16)) return null
+            val length = reader.u32(off + 4)?.toIntOrNull() ?: return null
+            if (length < 16 || !reader.fits(off, length)) return null
+            val subtable = SfntReader(bytes, off + length)
+            val nGroups = subtable.u32(off + 12)?.toIntOrNull() ?: return null
+            if (!subtable.fits(off + 16, nGroups.toLong() * 12L)) return null
             val groups = ArrayList<Group>(nGroups)
             var p = off + 16
             repeat(nGroups) {
-                groups.add(Group(readU32(bytes, p), readU32(bytes, p + 4), readU32(bytes, p + 8)))
+                val startChar = subtable.u32(p) ?: return null
+                val endChar = subtable.u32(p + 4) ?: return null
+                val startGlyph = subtable.u32(p + 8) ?: return null
+                groups.add(Group(startChar, endChar, startGlyph))
                 p += 12
             }
             return CmapFormat12(groups)
         }
+    }
+}
+
+private class SfntReader(
+    private val bytes: ByteArray,
+    private val limit: Int = bytes.size,
+) {
+    fun fits(offset: Int, length: Int): Boolean =
+        fits(offset, length.toLong())
+
+    fun fits(offset: Int, length: Long): Boolean =
+        offset >= 0 && length >= 0 && offset.toLong() + length <= limit.toLong()
+
+    fun u16(offset: Int): Int? {
+        if (!fits(offset, 2)) return null
+        return ((bytes[offset].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 1].toInt() and 0xFF)
+    }
+
+    fun i16(offset: Int): Short? =
+        u16(offset)?.toShort()
+
+    fun u32(offset: Int): Long? {
+        if (!fits(offset, 4)) return null
+        return ((bytes[offset].toLong() and 0xFF) shl 24) or
+            ((bytes[offset + 1].toLong() and 0xFF) shl 16) or
+            ((bytes[offset + 2].toLong() and 0xFF) shl 8) or
+            (bytes[offset + 3].toLong() and 0xFF)
+    }
+
+    fun tag(offset: Int): String? {
+        if (!fits(offset, 4)) return null
+        return String(
+            byteArrayOf(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]),
+            Charsets.ISO_8859_1,
+        )
     }
 }
 
@@ -1008,17 +1035,6 @@ private fun fits(offset: Int, length: Long, limit: Int): Boolean =
 
 private fun Long.toIntOrNull(): Int? =
     if (this <= Int.MAX_VALUE) toInt() else null
-
-private fun readU16(bytes: ByteArray, off: Int): Int =
-    (((bytes[off].toInt() and 0xFF) shl 8) or (bytes[off + 1].toInt() and 0xFF))
-
-private fun readI16(bytes: ByteArray, off: Int): Short = readU16(bytes, off).toShort()
-
-private fun readU32(bytes: ByteArray, off: Int): Long =
-    (((bytes[off].toLong() and 0xFF) shl 24) or
-        ((bytes[off + 1].toLong() and 0xFF) shl 16) or
-        ((bytes[off + 2].toLong() and 0xFF) shl 8) or
-        (bytes[off + 3].toLong() and 0xFF))
 
 private fun InputStream.readAllBytesCompat(): ByteArray {
     val out = ByteArrayOutputStream()
