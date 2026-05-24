@@ -84,6 +84,32 @@ class SkPngKotlinCodecTest {
     }
 
     @Test
+    fun `decodes Adam7 interlaced RGBA 8-bit pixels`() {
+        val rows = List(9) { y ->
+            IntArray(9) { x ->
+                argb(
+                    a = (0x40 + x * 7 + y * 5) and 0xFF,
+                    r = (0x10 + x * 17) and 0xFF,
+                    g = (0x20 + y * 19) and 0xFF,
+                    b = (0x30 + x * 11 + y * 13) and 0xFF,
+                )
+            }
+        }
+        val codec = SkPngKotlinCodec.Decoder.make(
+            adam7Png(width = 9, height = 9, colorType = 6, rows = rows, filters = intArrayOf(0, 1, 2, 3, 4)),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        for (y in rows.indices) {
+            for (x in rows[y].indices) {
+                assertEquals(rows[y][x], bitmap!!.getPixel(x, y), "x=$x y=$y")
+            }
+        }
+    }
+
+    @Test
     fun `decodes indexed 8-bit palette pixels as opaque RGBA`() {
         val palette = intArrayOf(
             argb(0xFF, 0x10, 0x20, 0x30),
@@ -179,6 +205,38 @@ class SkPngKotlinCodecTest {
                 for (x in indexes[y].indices) {
                     assertEquals(palette[indexes[y][x]], bitmap!!.getPixel(x, y), "bitDepth=$bitDepth x=$x y=$y")
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `decodes Adam7 interlaced packed palette pixels`() {
+        val palette = intArrayOf(
+            argb(0xFF, 0x00, 0x00, 0x00),
+            argb(0x80, 0x40, 0x50, 0x60),
+            argb(0x40, 0x80, 0x90, 0xA0),
+            argb(0x00, 0xC0, 0xD0, 0xE0),
+        )
+        val indexes = List(7) { y ->
+            IntArray(10) { x -> (x + y * 2) % palette.size }
+        }
+        val codec = SkPngKotlinCodec.Decoder.make(
+            adam7IndexedPng(
+                width = 10,
+                height = 7,
+                palette = palette,
+                indexes = indexes,
+                filters = intArrayOf(0, 1, 2, 3, 4),
+                bitDepth = 2,
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        for (y in indexes.indices) {
+            for (x in indexes[y].indices) {
+                assertEquals(palette[indexes[y][x]], bitmap!!.getPixel(x, y), "x=$x y=$y")
             }
         }
     }
@@ -466,6 +524,52 @@ class SkPngKotlinCodecTest {
         }.toByteArray()
     }
 
+    private fun adam7Png(
+        width: Int,
+        height: Int,
+        colorType: Int,
+        rows: List<IntArray>,
+        filters: IntArray,
+    ): ByteArray {
+        val bpp = if (colorType == 6) 4 else 3
+        var filterIndex = 0
+        val raw = ByteArrayOutputStream()
+        for (pass in ADAM7_PASSES) {
+            val passWidth = adam7Size(width, pass.xStart, pass.xStep)
+            val passHeight = adam7Size(height, pass.yStart, pass.yStep)
+            if (passWidth == 0 || passHeight == 0) continue
+            var previous = ByteArray(passWidth * bpp)
+            for (passY in 0 until passHeight) {
+                val y = pass.yStart + passY * pass.yStep
+                val row = encodeRow(
+                    IntArray(passWidth) { passX ->
+                        rows[y][pass.xStart + passX * pass.xStep]
+                    },
+                    colorType,
+                )
+                val filter = filters[filterIndex++ % filters.size]
+                raw.write(filter)
+                raw.write(filterRow(filter, row, previous, bpp))
+                previous = row
+            }
+        }
+
+        return ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            writeChunk("IHDR", ByteArrayOutputStream().apply {
+                writeI32BE(width)
+                writeI32BE(height)
+                write(8)
+                write(colorType)
+                write(0)
+                write(0)
+                write(1)
+            }.toByteArray())
+            writeChunk("IDAT", deflate(raw.toByteArray()))
+            writeChunk("IEND", ByteArray(0))
+        }.toByteArray()
+    }
+
     private fun indexedPng(
         width: Int,
         height: Int,
@@ -499,6 +603,56 @@ class SkPngKotlinCodecTest {
             }.toByteArray())
             if (includePalette) writeChunk("PLTE", paletteBytes)
             if (transparency != null) writeChunk("tRNS", transparency)
+            writeChunk("IDAT", deflate(raw.toByteArray()))
+            writeChunk("IEND", ByteArray(0))
+        }.toByteArray()
+    }
+
+    private fun adam7IndexedPng(
+        width: Int,
+        height: Int,
+        palette: IntArray,
+        indexes: List<IntArray>,
+        filters: IntArray,
+        bitDepth: Int,
+    ): ByteArray {
+        var filterIndex = 0
+        val raw = ByteArrayOutputStream()
+        for (pass in ADAM7_PASSES) {
+            val passWidth = adam7Size(width, pass.xStart, pass.xStep)
+            val passHeight = adam7Size(height, pass.yStart, pass.yStep)
+            if (passWidth == 0 || passHeight == 0) continue
+            var previous = ByteArray((passWidth * bitDepth + 7) / 8)
+            for (passY in 0 until passHeight) {
+                val y = pass.yStart + passY * pass.yStep
+                val row = packSamples(
+                    IntArray(passWidth) { passX ->
+                        indexes[y][pass.xStart + passX * pass.xStep]
+                    },
+                    bitDepth,
+                )
+                val filter = filters[filterIndex++ % filters.size]
+                raw.write(filter)
+                raw.write(filterRow(filter, row, previous, bpp = 1))
+                previous = row
+            }
+        }
+
+        return ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            writeChunk("IHDR", ByteArrayOutputStream().apply {
+                writeI32BE(width)
+                writeI32BE(height)
+                write(bitDepth)
+                write(3)
+                write(0)
+                write(0)
+                write(1)
+            }.toByteArray())
+            writeChunk("PLTE", encodePalette(palette))
+            if (palette.any { a(it) != 0xFF }) {
+                writeChunk("tRNS", ByteArray(palette.size) { a(palette[it]).toByte() })
+            }
             writeChunk("IDAT", deflate(raw.toByteArray()))
             writeChunk("IEND", ByteArray(0))
         }.toByteArray()
@@ -801,6 +955,26 @@ class SkPngKotlinCodecTest {
             else -> c
         }
     }
+
+    private data class Adam7Pass(
+        val xStart: Int,
+        val yStart: Int,
+        val xStep: Int,
+        val yStep: Int,
+    )
+
+    private fun adam7Size(size: Int, start: Int, step: Int): Int =
+        if (size <= start) 0 else (size - start + step - 1) / step
+
+    private val ADAM7_PASSES = arrayOf(
+        Adam7Pass(0, 0, 8, 8),
+        Adam7Pass(4, 0, 8, 8),
+        Adam7Pass(0, 4, 4, 8),
+        Adam7Pass(2, 0, 4, 4),
+        Adam7Pass(0, 2, 2, 4),
+        Adam7Pass(1, 0, 2, 2),
+        Adam7Pass(0, 1, 1, 2),
+    )
 
     private fun a(c: Int): Int = (c ushr 24) and 0xFF
     private fun r(c: Int): Int = (c ushr 16) and 0xFF

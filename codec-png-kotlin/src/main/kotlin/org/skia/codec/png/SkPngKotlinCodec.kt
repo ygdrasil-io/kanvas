@@ -18,13 +18,14 @@ import java.util.zip.Inflater
 /**
  * First pure-Kotlin PNG decoder slice.
  *
- * Supports the baseline non-interlaced PNG path used by small fixtures and
- * many generated assets: 8-bit grayscale (colour type 0), 8-bit RGB (colour
- * type 2), indexed colour (colour type 3, bit depths 1/2/4/8), 8-bit
- * grayscale+alpha (colour type 4), RGBA (colour type 6), and 16-bit
- * grayscale/RGB/grayscale+alpha/RGBA. It parses `iCCP` chunks best-effort:
- * malformed chunks reject the PNG, parseable profiles become the image color
- * space, and structurally-valid but unsupported profiles fall back to sRGB.
+ * Supports the baseline PNG path used by small fixtures and many generated
+ * assets: non-interlaced and Adam7-interlaced 8-bit grayscale (colour type 0),
+ * 8-bit RGB (colour type 2), indexed colour (colour type 3, bit depths
+ * 1/2/4/8), 8-bit grayscale+alpha (colour type 4), RGBA (colour type 6), and
+ * 16-bit grayscale/RGB/grayscale+alpha/RGBA. It parses `iCCP` chunks
+ * best-effort: malformed chunks reject the PNG, parseable profiles become the
+ * image color space, and structurally-valid but unsupported profiles fall back
+ * to sRGB.
  */
 public class SkPngKotlinCodec private constructor(
     private val png: ParsedPng,
@@ -58,9 +59,7 @@ public class SkPngKotlinCodec private constructor(
             return Result.kInvalidConversion
         }
 
-        val bpp = png.filterBytesPerPixel
-        val rowBytes = png.rowBytes
-        val expected = (rowBytes + 1) * png.height
+        val expected = png.inflatedBytes
         val inflated = try {
             inflate(png.idat, expected)
         } catch (_: DataFormatException) {
@@ -68,6 +67,16 @@ public class SkPngKotlinCodec private constructor(
         }
         if (inflated.size < expected) return Result.kIncompleteInput
 
+        return if (png.interlace == INTERLACE_ADAM7) {
+            decodeAdam7(inflated, dst)
+        } else {
+            decodeScanlines(inflated, dst)
+        }
+    }
+
+    private fun decodeScanlines(inflated: ByteArray, dst: SkBitmap): Result {
+        val bpp = png.filterBytesPerPixel
+        val rowBytes = png.rowBytes
         val previous = ByteArray(rowBytes)
         val current = ByteArray(rowBytes)
         var src = 0
@@ -89,100 +98,147 @@ public class SkPngKotlinCodec private constructor(
         return Result.kSuccess
     }
 
-    private fun decode8888Row(current: ByteArray, y: Int, dst: SkBitmap): Result {
-        var p = 0
-        for (x in 0 until png.width) {
-            when (png.colorType) {
-                COLOR_GRAYSCALE -> {
-                    val gray = if (png.bitDepth == 8) {
-                        current[p++].toInt() and 0xFF
+    private fun decodeAdam7(inflated: ByteArray, dst: SkBitmap): Result {
+        var src = 0
+        for (pass in ADAM7_PASSES) {
+            val passWidth = adam7Size(png.width, pass.xStart, pass.xStep)
+            val passHeight = adam7Size(png.height, pass.yStart, pass.yStep)
+            if (passWidth == 0 || passHeight == 0) continue
+
+            val rowBytes = rowBytesFor(passWidth, png.bitsPerPixel)
+            val previous = ByteArray(rowBytes)
+            val current = ByteArray(rowBytes)
+            for (passY in 0 until passHeight) {
+                if (src >= inflated.size) return Result.kIncompleteInput
+                val filter = inflated[src++].toInt() and 0xFF
+                if (src + rowBytes > inflated.size) return Result.kIncompleteInput
+                for (x in 0 until rowBytes) current[x] = inflated[src++]
+                if (!unfilter(filter, current, previous, png.filterBytesPerPixel)) return Result.kErrorInInput
+
+                val y = pass.yStart + passY * pass.yStep
+                for (passX in 0 until passWidth) {
+                    val x = pass.xStart + passX * pass.xStep
+                    val result = if (png.bitDepth == 16) {
+                        decodeF16Pixel(current, passX, x, y, dst)
                     } else {
-                        scaleSample(readPackedSample(current, x, png.bitDepth), png.bitDepth)
+                        decode8888Pixel(current, passX, x, y, dst)
                     }
-                    dst.setPixel(x, y, argb(0xFF, gray, gray, gray))
+                    if (result != Result.kSuccess) return result
                 }
-                COLOR_RGB -> {
-                    val r = current[p++].toInt() and 0xFF
-                    val g = current[p++].toInt() and 0xFF
-                    val b = current[p++].toInt() and 0xFF
-                    dst.setPixel(x, y, argb(0xFF, r, g, b))
-                }
-                COLOR_PALETTE -> {
-                    val index = if (png.bitDepth == 8) {
-                        current[p++].toInt() and 0xFF
-                    } else {
-                        readPackedSample(current, x, png.bitDepth)
-                    }
-                    val palette = png.palette ?: return Result.kErrorInInput
-                    if (index >= palette.size) return Result.kErrorInInput
-                    dst.setPixel(x, y, palette[index])
-                }
-                COLOR_GRAYSCALE_ALPHA -> {
-                    val gray = current[p++].toInt() and 0xFF
-                    val alpha = current[p++].toInt() and 0xFF
-                    dst.setPixel(x, y, argb(alpha, gray, gray, gray))
-                }
-                COLOR_RGBA -> {
-                    val r = current[p++].toInt() and 0xFF
-                    val g = current[p++].toInt() and 0xFF
-                    val b = current[p++].toInt() and 0xFF
-                    val a = current[p++].toInt() and 0xFF
-                    dst.setPixel(x, y, argb(a, r, g, b))
-                }
-                else -> return Result.kErrorInInput
+                current.copyInto(previous)
             }
         }
         return Result.kSuccess
     }
 
-    private fun decodeF16Row(current: ByteArray, y: Int, dst: SkBitmap): Result {
-        var p = 0
-        val out = dst.pixelsF16
-        val inv65535 = 1f / 65535f
+    private fun decode8888Row(current: ByteArray, y: Int, dst: SkBitmap): Result {
         for (x in 0 until png.width) {
-            var r: Float
-            var g: Float
-            var b: Float
-            val a: Float
-            when (png.colorType) {
-                COLOR_GRAYSCALE -> {
-                    val gray = readU16BE(current, p) * inv65535
-                    p += 2
-                    r = gray
-                    g = gray
-                    b = gray
-                    a = 1f
-                }
-                COLOR_RGB -> {
-                    r = readU16BE(current, p) * inv65535
-                    g = readU16BE(current, p + 2) * inv65535
-                    b = readU16BE(current, p + 4) * inv65535
-                    p += 6
-                    a = 1f
-                }
-                COLOR_GRAYSCALE_ALPHA -> {
-                    val gray = readU16BE(current, p) * inv65535
-                    a = readU16BE(current, p + 2) * inv65535
-                    p += 4
-                    r = gray
-                    g = gray
-                    b = gray
-                }
-                COLOR_RGBA -> {
-                    r = readU16BE(current, p) * inv65535
-                    g = readU16BE(current, p + 2) * inv65535
-                    b = readU16BE(current, p + 4) * inv65535
-                    a = readU16BE(current, p + 6) * inv65535
-                    p += 8
-                }
-                else -> return Result.kErrorInInput
-            }
-            val o = (y * png.width + x) * 4
-            out[o] = r * a
-            out[o + 1] = g * a
-            out[o + 2] = b * a
-            out[o + 3] = a
+            val result = decode8888Pixel(current, x, x, y, dst)
+            if (result != Result.kSuccess) return result
         }
+        return Result.kSuccess
+    }
+
+    private fun decode8888Pixel(current: ByteArray, sourceX: Int, dstX: Int, y: Int, dst: SkBitmap): Result {
+        var p = sourceOffset(sourceX)
+        when (png.colorType) {
+            COLOR_GRAYSCALE -> {
+                val gray = if (png.bitDepth == 8) {
+                    current[p].toInt() and 0xFF
+                } else {
+                    scaleSample(readPackedSample(current, sourceX, png.bitDepth), png.bitDepth)
+                }
+                dst.setPixel(dstX, y, argb(0xFF, gray, gray, gray))
+            }
+            COLOR_RGB -> {
+                val r = current[p++].toInt() and 0xFF
+                val g = current[p++].toInt() and 0xFF
+                val b = current[p].toInt() and 0xFF
+                dst.setPixel(dstX, y, argb(0xFF, r, g, b))
+            }
+            COLOR_PALETTE -> {
+                val index = if (png.bitDepth == 8) {
+                    current[p].toInt() and 0xFF
+                } else {
+                    readPackedSample(current, sourceX, png.bitDepth)
+                }
+                val palette = png.palette ?: return Result.kErrorInInput
+                if (index >= palette.size) return Result.kErrorInInput
+                dst.setPixel(dstX, y, palette[index])
+            }
+            COLOR_GRAYSCALE_ALPHA -> {
+                val gray = current[p++].toInt() and 0xFF
+                val alpha = current[p].toInt() and 0xFF
+                dst.setPixel(dstX, y, argb(alpha, gray, gray, gray))
+            }
+            COLOR_RGBA -> {
+                val r = current[p++].toInt() and 0xFF
+                val g = current[p++].toInt() and 0xFF
+                val b = current[p++].toInt() and 0xFF
+                val a = current[p].toInt() and 0xFF
+                dst.setPixel(dstX, y, argb(a, r, g, b))
+            }
+            else -> return Result.kErrorInInput
+        }
+        return Result.kSuccess
+    }
+
+    private fun sourceOffset(sourceX: Int): Int =
+        when {
+            png.bitDepth < 8 && (png.colorType == COLOR_GRAYSCALE || png.colorType == COLOR_PALETTE) -> 0
+            else -> sourceX * png.bitsPerPixel / 8
+        }
+
+    private fun decodeF16Row(current: ByteArray, y: Int, dst: SkBitmap): Result {
+        for (x in 0 until png.width) {
+            val result = decodeF16Pixel(current, x, x, y, dst)
+            if (result != Result.kSuccess) return result
+        }
+        return Result.kSuccess
+    }
+
+    private fun decodeF16Pixel(current: ByteArray, sourceX: Int, dstX: Int, y: Int, dst: SkBitmap): Result {
+        val p = sourceOffset(sourceX)
+        var r: Float
+        var g: Float
+        var b: Float
+        val a: Float
+        val inv65535 = 1f / 65535f
+        when (png.colorType) {
+            COLOR_GRAYSCALE -> {
+                val gray = readU16BE(current, p) * inv65535
+                r = gray
+                g = gray
+                b = gray
+                a = 1f
+            }
+            COLOR_RGB -> {
+                r = readU16BE(current, p) * inv65535
+                g = readU16BE(current, p + 2) * inv65535
+                b = readU16BE(current, p + 4) * inv65535
+                a = 1f
+            }
+            COLOR_GRAYSCALE_ALPHA -> {
+                val gray = readU16BE(current, p) * inv65535
+                a = readU16BE(current, p + 2) * inv65535
+                r = gray
+                g = gray
+                b = gray
+            }
+            COLOR_RGBA -> {
+                r = readU16BE(current, p) * inv65535
+                g = readU16BE(current, p + 2) * inv65535
+                b = readU16BE(current, p + 4) * inv65535
+                a = readU16BE(current, p + 6) * inv65535
+            }
+            else -> return Result.kErrorInInput
+        }
+        val o = (y * png.width + dstX) * 4
+        val out = dst.pixelsF16
+        out[o] = r * a
+        out[o + 1] = g * a
+        out[o + 2] = b * a
+        out[o + 3] = a
         return Result.kSuccess
     }
 
@@ -272,7 +328,10 @@ public class SkPngKotlinCodec private constructor(
                 bitDepth = h.bitDepth,
                 colorType = h.colorType,
                 rowBytes = h.rowBytes,
+                bitsPerPixel = h.bitsPerPixel,
                 filterBytesPerPixel = h.filterBytesPerPixel,
+                inflatedBytes = h.inflatedBytes,
+                interlace = h.interlace,
                 idat = idat.toByteArray(),
                 palette = finalPalette,
                 iccProfile = iccProfile,
@@ -289,11 +348,11 @@ public class SkPngKotlinCodec private constructor(
             val interlace = data[offset + 12].toInt() and 0xFF
             if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
             if (!isSupportedColorDepth(colorType, bitDepth)) return null
-            if (compression != 0 || filter != 0 || interlace != 0) return null
-            val rowBits = width.toLong() * bitsPerPixel(colorType, bitDepth).toLong()
-            val rowBytes = (rowBits + 7L) / 8L
+            if (compression != 0 || filter != 0 || interlace !in INTERLACE_NONE..INTERLACE_ADAM7) return null
+            val bitsPerPixel = bitsPerPixel(colorType, bitDepth)
+            val rowBytes = rowBytesFor(width, bitsPerPixel).toLong()
             if (rowBytes > Int.MAX_VALUE) return null
-            val expected = (rowBytes + 1L) * height.toLong()
+            val expected = inflatedBytes(width, height, bitsPerPixel, interlace) ?: return null
             if (expected > Int.MAX_VALUE) return null
             return Header(
                 width = width,
@@ -301,7 +360,10 @@ public class SkPngKotlinCodec private constructor(
                 bitDepth = bitDepth,
                 colorType = colorType,
                 rowBytes = rowBytes.toInt(),
+                bitsPerPixel = bitsPerPixel,
                 filterBytesPerPixel = filterBytesPerPixel(colorType, bitDepth),
+                inflatedBytes = expected.toInt(),
+                interlace = interlace,
             )
         }
 
@@ -396,7 +458,10 @@ public class SkPngKotlinCodec private constructor(
         val bitDepth: Int,
         val colorType: Int,
         val rowBytes: Int,
+        val bitsPerPixel: Int,
         val filterBytesPerPixel: Int,
+        val inflatedBytes: Int,
+        val interlace: Int,
     )
 
     private data class ParsedPng(
@@ -405,7 +470,10 @@ public class SkPngKotlinCodec private constructor(
         val bitDepth: Int,
         val colorType: Int,
         val rowBytes: Int,
+        val bitsPerPixel: Int,
         val filterBytesPerPixel: Int,
+        val inflatedBytes: Int,
+        val interlace: Int,
         val idat: ByteArray,
         val palette: IntArray?,
         val iccProfile: SkcmsICCProfile?,
@@ -425,6 +493,8 @@ private const val COLOR_RGB: Int = 2
 private const val COLOR_PALETTE: Int = 3
 private const val COLOR_GRAYSCALE_ALPHA: Int = 4
 private const val COLOR_RGBA: Int = 6
+private const val INTERLACE_NONE: Int = 0
+private const val INTERLACE_ADAM7: Int = 1
 private const val MAX_DIMENSION: Int = 100_000
 private const val TYPE_IHDR: Int = 0x49484452
 private const val TYPE_IDAT: Int = 0x49444154
@@ -433,6 +503,44 @@ private const val TYPE_ICCP: Int = 0x69434350
 private const val TYPE_PLTE: Int = 0x504C5445
 private const val TYPE_TRNS: Int = 0x74524E53
 private const val MAX_ICC_PROFILE_SIZE: Int = 16 * 1024 * 1024
+
+private data class Adam7Pass(
+    val xStart: Int,
+    val yStart: Int,
+    val xStep: Int,
+    val yStep: Int,
+)
+
+private val ADAM7_PASSES = arrayOf(
+    Adam7Pass(0, 0, 8, 8),
+    Adam7Pass(4, 0, 8, 8),
+    Adam7Pass(0, 4, 4, 8),
+    Adam7Pass(2, 0, 4, 4),
+    Adam7Pass(0, 2, 2, 4),
+    Adam7Pass(1, 0, 2, 2),
+    Adam7Pass(0, 1, 1, 2),
+)
+
+private fun adam7Size(size: Int, start: Int, step: Int): Int =
+    if (size <= start) 0 else (size - start + step - 1) / step
+
+private fun rowBytesFor(width: Int, bitsPerPixel: Int): Int =
+    ((width.toLong() * bitsPerPixel.toLong() + 7L) / 8L).toInt()
+
+private fun inflatedBytes(width: Int, height: Int, bitsPerPixel: Int, interlace: Int): Long? {
+    if (interlace == INTERLACE_NONE) {
+        return (rowBytesFor(width, bitsPerPixel).toLong() + 1L) * height.toLong()
+    }
+    var total = 0L
+    for (pass in ADAM7_PASSES) {
+        val passWidth = adam7Size(width, pass.xStart, pass.xStep)
+        val passHeight = adam7Size(height, pass.yStart, pass.yStep)
+        if (passWidth == 0 || passHeight == 0) continue
+        total += (rowBytesFor(passWidth, bitsPerPixel).toLong() + 1L) * passHeight.toLong()
+        if (total > Int.MAX_VALUE) return null
+    }
+    return total
+}
 
 private fun inflate(data: ByteArray, expectedSize: Int): ByteArray {
     val inflater = Inflater()
