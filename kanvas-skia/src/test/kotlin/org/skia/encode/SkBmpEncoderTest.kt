@@ -5,14 +5,13 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.codec.SkCodec
 import org.skia.foundation.SkBitmap
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import javax.imageio.ImageIO
 
 /**
  * R-suivi.19 verification suite for [SkBmpEncoder].
@@ -21,8 +20,7 @@ import javax.imageio.ImageIO
  *  - the framing starts with the `'BM'` signature and a well-formed
  *    `BITMAPFILEHEADER` + `BITMAPINFOHEADER` ;
  *  - encode → decode round-trips opaque RGB pixels byte-identical
- *    (Java's bundled ImageIO BMP reader is the verifier — pure JVM,
- *    no external dependency) ;
+ *    through [SkCodec] / codec-bmp-kotlin ;
  *  - the [SkBmpEncoder.BmpFormat.kBGR_888] code path drops alpha and
  *    pads rows correctly when the width is not a multiple of 4 bytes.
  */
@@ -50,16 +48,15 @@ class SkBmpEncoderTest {
     }
 
     @Test
-    fun `BGRA round-trip via ImageIO preserves RGB channels byte-identical`() {
+    fun `BGRA round-trip via pure Kotlin BMP codec preserves RGB channels byte-identical`() {
         val src = makeGradient(4, 4)
         val bytes = SkBmpEncoder.Encode(src)!!.toByteArray()
-        val decoded = ImageIO.read(ByteArrayInputStream(bytes))
-        assertNotNull(decoded, "ImageIO must round-trip a valid BMP")
+        val decoded = decodeBmp(bytes)
         assertEquals(src.width, decoded.width)
         assertEquals(src.height, decoded.height)
         for (y in 0 until src.height) for (x in 0 until src.width) {
             val expected = src.getPixel(x, y)
-            val actualArgb = decoded.getRGB(x, y)
+            val actualArgb = decoded.getPixel(x, y)
             // RGB channels must match. Alpha handling varies by reader,
             // so we only assert on R / G / B here.
             assertEquals(SkColorGetR(expected), SkColorGetR(actualArgb), "R($x,$y)")
@@ -83,13 +80,12 @@ class SkBmpEncoderTest {
         // Bits per pixel = 24
         val bpp = readU16LE(bytes, 14 + 14)
         assertEquals(24, bpp)
-        val decoded = ImageIO.read(ByteArrayInputStream(bytes))
-        assertNotNull(decoded)
+        val decoded = decodeBmp(bytes)
         // RGB must come back ignoring alpha.
-        assertEquals(0xFF, SkColorGetR(decoded.getRGB(0, 0)))
-        assertEquals(0xFF, SkColorGetG(decoded.getRGB(1, 0)))
+        assertEquals(0xFF, SkColorGetR(decoded.getPixel(0, 0)))
+        assertEquals(0xFF, SkColorGetG(decoded.getPixel(1, 0)))
         // Pixel 3 was fully transparent ; without alpha its RGB still encodes.
-        assertEquals(0x11, SkColorGetR(decoded.getRGB(1, 1)))
+        assertEquals(0x11, SkColorGetR(decoded.getPixel(1, 1)))
     }
 
     @Test
@@ -149,6 +145,15 @@ class SkBmpEncoderTest {
             b.pixels[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or 0x40
         }
         return b
+    }
+
+    private fun decodeBmp(bytes: ByteArray): SkBitmap {
+        val codec = SkCodec.MakeFromData(bytes)
+        assertNotNull(codec, "pure Kotlin BMP codec must decode the produced BMP")
+        val (bitmap, result) = codec!!.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        return bitmap!!
     }
 
     private fun readU32LE(buf: ByteArray, off: Int): Int =

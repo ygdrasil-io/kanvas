@@ -5,7 +5,8 @@ import org.skia.foundation.SkPixmap
 import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
-import javax.imageio.ImageIO
+import java.util.zip.CRC32
+import java.util.zip.Deflater
 
 /**
  * PNG encoder — D3.5 implementation of upstream's
@@ -14,26 +15,17 @@ import javax.imageio.ImageIO
  * Mirrors the upstream namespace as a Kotlin `object` carrying the
  * static `Encode` entry points, plus a Kotlin-idiomatic [Options]
  * data class that maps onto the upstream `SkPngEncoder::Options`
- * struct. Like the rest of the D3 family, the actual bitstream
- * encode is delegated to `javax.imageio.ImageIO` ; this slice only
- * owns the Skia-shaped surface.
+ * struct. The bitstream is written directly in Kotlin: PNG signature,
+ * `IHDR`, optional `tEXt`, `IDAT`, `IEND`, zlib compression, and CRC.
  *
- * **Honoured options** : none. Every [Options] field is plumbed for
- * source compatibility with upstream call sites, but the underlying
- * ImageIO PNG writer does not expose filter selection, zlib level,
- * or `tEXt` chunk control — passing non-default values does not
- * change the output. A future slice may either swap in a
- * configurable PNG writer (the JAI-ImageIO ext provides one) or
- * port the libpng filter heuristics directly. For D3.5 the goal is
- * just "produce a valid PNG round-trippable by [SkCodec]" ; no GM
- * test currently consumes encoded PNGs.
+ * **Honoured options** : [Options.zLibLevel], [Options.comments], and
+ * [Options.filterFlags]. When multiple filters are allowed, the encoder
+ * chooses the row filter with the smallest absolute-byte score.
  *
  * **Colour space** : the caller's [SkBitmap.colorSpace] is **not**
- * embedded as an `iCCP` chunk in D3.5, so a non-sRGB bitmap loses
+ * embedded as an `iCCP` chunk, so a non-sRGB bitmap loses
  * its working-space tag through an encode→decode round-trip. The
- * pixel values themselves are preserved (8-bit ARGB through
- * `BufferedImage.setRGB`). Embedding the profile is tracked as a
- * follow-up when a workflow needs it.
+ * pixel values themselves are preserved as 8-bit RGBA samples.
  */
 public object SkPngEncoder {
 
@@ -41,9 +33,8 @@ public object SkPngEncoder {
      * Mirrors `SkPngEncoder::FilterFlag`. Each flag is a libpng
      * filter selector ; combining them tells libpng to pick the
      * smallest-encoded filter per row. [kAll] matches libpng's
-     * default and also matches our actual behaviour (since the
-     * underlying ImageIO writer doesn't honour the selection
-     * either way).
+     * default and also matches this encoder's multi-filter row
+     * heuristic.
      */
     public enum class FilterFlag(public val mask: Int) {
         kZero(0x00),
@@ -56,12 +47,7 @@ public object SkPngEncoder {
     }
 
     /**
-     * Mirrors `SkPngEncoder::Options`. **All fields are currently
-     * advisory** — the ImageIO PNG writer does not honour them. They
-     * are kept on the surface to match upstream call sites (so a
-     * future Skia → kanvas-skia port doesn't have to remove the
-     * argument) and to document what a future, configurable PNG
-     * writer would look like.
+     * Mirrors `SkPngEncoder::Options`.
      */
     public data class Options(
         /** Bitfield of [FilterFlag]s. */
@@ -71,8 +57,7 @@ public object SkPngEncoder {
         /**
          * `tEXt` keyword/value pairs. Even-indexed entries are
          * keywords ; odd-indexed entries are the corresponding text.
-         * Currently advisory — ImageIO does not surface tEXt control
-         * via the standard write API.
+         * `tEXt` keyword/value pairs written before `IDAT`.
          */
         val comments: List<String> = emptyList(),
     ) {
@@ -103,10 +88,10 @@ public object SkPngEncoder {
      * const Options&)`. The caller retains ownership of [dst].
      */
     public fun Encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
-        @Suppress("UNUSED_VARIABLE") val _ignored = options // see kdoc on Options
-        val img = EncoderSupport.bitmapToBufferedImage(src)
         return try {
-            ImageIO.write(img, "png", dst)
+            if (src.width <= 0 || src.height <= 0) return false
+            writePng(dst, src, options)
+            true
         } catch (_: Throwable) {
             false
         }
@@ -118,16 +103,15 @@ public object SkPngEncoder {
     // mirror the upstream `SkWStream*` + `SkPixmap` signature. The Kotlin
     // implementation routes through the existing SkBitmap path : the pixmap
     // is materialised into a fresh 8888 bitmap via `getColor` (which honours
-    // the source colour type), then re-uses the proven ImageIO write
-    // pipeline. Slow for huge images but correct for the GM-sized inputs
-    // that exercise this overload.
+    // the source colour type), then the bitmap path writes the PNG directly.
+    // Slow for huge images but correct for the GM-sized inputs that exercise
+    // this overload.
 
     /**
      * Encode [src]'s pixels into [stream]. Returns `true` on success.
      * Mirrors upstream's `bool SkPngEncoder::Encode(SkWStream*, const
      * SkPixmap&, const Options&)`. The caller retains ownership of
-     * [stream]. See class kdoc for the list of honoured / advisory
-     * options (none of [Options]' fields are wired to ImageIO today).
+     * [stream]. See class kdoc for the list of honoured options.
      */
     public fun Encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
         val bitmap = EncoderSupport.pixmapToBitmap(src) ?: return false
@@ -153,4 +137,208 @@ public object SkPngEncoder {
         val bytes = Encode(src, options) ?: return false
         return stream.write(bytes, bytes.size)
     }
+
+    private fun writePng(dst: OutputStream, src: SkBitmap, options: Options) {
+        dst.write(PNG_SIGNATURE)
+        writeChunk(dst, TYPE_IHDR, ihdr(src.width, src.height))
+        options.comments.chunked(2).forEach { (keyword, text) ->
+            writeChunk(dst, TYPE_TEXT, textChunk(keyword, text))
+        }
+        writeChunk(dst, TYPE_IDAT, deflate(filteredRgbaRows(src, options.filterFlags), options.zLibLevel))
+        writeChunk(dst, TYPE_IEND, ByteArray(0))
+    }
+
+    private fun ihdr(width: Int, height: Int): ByteArray =
+        ByteArray(13).also { out ->
+            writeU32BE(out, 0, width)
+            writeU32BE(out, 4, height)
+            out[8] = 8 // bit depth
+            out[9] = 6 // colour type: RGBA
+            out[10] = 0 // compression
+            out[11] = 0 // filter
+            out[12] = 0 // interlace
+        }
+
+    private fun textChunk(keyword: String, text: String): ByteArray {
+        require(keyword.isNotEmpty()) { "PNG tEXt keyword must not be empty" }
+        require(keyword.length <= 79) { "PNG tEXt keyword must be at most 79 bytes" }
+        val keyBytes = keyword.encodeToByteArray()
+        val textBytes = text.encodeToByteArray()
+        return keyBytes + byteArrayOf(0) + textBytes
+    }
+
+    private fun filteredRgbaRows(src: SkBitmap, filterFlags: Int): ByteArray {
+        val allowedFilters = allowedFilters(filterFlags)
+        val rowBytes = src.width * RGBA_BYTES_PER_PIXEL
+        val out = ByteArray((rowBytes + 1) * src.height)
+        var offset = 0
+        var previous = ByteArray(rowBytes)
+        for (y in 0 until src.height) {
+            val current = rgbaRow(src, y)
+            val filter = chooseFilter(current, previous, allowedFilters)
+            out[offset++] = filter.toByte()
+            writeFilteredRow(filter, current, previous, out, offset)
+            offset += rowBytes
+            previous = current
+        }
+        return out
+    }
+
+    private fun allowedFilters(filterFlags: Int): IntArray {
+        val filters = ArrayList<Int>(5)
+        fun addIf(mask: Int, filter: Int) {
+            if ((filterFlags and mask) != 0) filters += filter
+        }
+        addIf(FilterFlag.kNone.mask, FILTER_NONE)
+        addIf(FilterFlag.kSub.mask, FILTER_SUB)
+        addIf(FilterFlag.kUp.mask, FILTER_UP)
+        addIf(FilterFlag.kAvg.mask, FILTER_AVG)
+        addIf(FilterFlag.kPaeth.mask, FILTER_PAETH)
+        if (filters.isEmpty() || (filterFlags and FilterFlag.kZero.mask) != 0) {
+            filters += FILTER_NONE
+        }
+        return filters.toIntArray()
+    }
+
+    private fun rgbaRow(src: SkBitmap, y: Int): ByteArray {
+        val row = ByteArray(src.width * RGBA_BYTES_PER_PIXEL)
+        var offset = 0
+        for (x in 0 until src.width) {
+            val argb = src.getPixel(x, y)
+            row[offset++] = ((argb ushr 16) and 0xFF).toByte()
+            row[offset++] = ((argb ushr 8) and 0xFF).toByte()
+            row[offset++] = (argb and 0xFF).toByte()
+            row[offset++] = ((argb ushr 24) and 0xFF).toByte()
+        }
+        return row
+    }
+
+    private fun chooseFilter(current: ByteArray, previous: ByteArray, allowed: IntArray): Int {
+        var bestFilter = allowed.first()
+        var bestScore = Long.MAX_VALUE
+        for (filter in allowed) {
+            val score = filterScore(filter, current, previous)
+            if (score < bestScore) {
+                bestScore = score
+                bestFilter = filter
+            }
+        }
+        return bestFilter
+    }
+
+    private fun filterScore(filter: Int, current: ByteArray, previous: ByteArray): Long {
+        var score = 0L
+        for (i in current.indices) {
+            val raw = current[i].toInt() and 0xFF
+            val left = if (i >= RGBA_BYTES_PER_PIXEL) current[i - RGBA_BYTES_PER_PIXEL].toInt() and 0xFF else 0
+            val up = previous[i].toInt() and 0xFF
+            val upLeft = if (i >= RGBA_BYTES_PER_PIXEL) previous[i - RGBA_BYTES_PER_PIXEL].toInt() and 0xFF else 0
+            val predictor = predictor(filter, left, up, upLeft)
+            val filtered = (raw - predictor) and 0xFF
+            score += if (filtered < 128) filtered else 256 - filtered
+        }
+        return score
+    }
+
+    private fun writeFilteredRow(filter: Int, current: ByteArray, previous: ByteArray, out: ByteArray, offset: Int) {
+        for (i in current.indices) {
+            val raw = current[i].toInt() and 0xFF
+            val left = if (i >= RGBA_BYTES_PER_PIXEL) current[i - RGBA_BYTES_PER_PIXEL].toInt() and 0xFF else 0
+            val up = previous[i].toInt() and 0xFF
+            val upLeft = if (i >= RGBA_BYTES_PER_PIXEL) previous[i - RGBA_BYTES_PER_PIXEL].toInt() and 0xFF else 0
+            out[offset + i] = ((raw - predictor(filter, left, up, upLeft)) and 0xFF).toByte()
+        }
+    }
+
+    private fun predictor(filter: Int, left: Int, up: Int, upLeft: Int): Int =
+        when (filter) {
+            FILTER_NONE -> 0
+            FILTER_SUB -> left
+            FILTER_UP -> up
+            FILTER_AVG -> (left + up) / 2
+            FILTER_PAETH -> paeth(left, up, upLeft)
+            else -> 0
+        }
+
+    private fun paeth(a: Int, b: Int, c: Int): Int {
+        val p = a + b - c
+        val pa = kotlin.math.abs(p - a)
+        val pb = kotlin.math.abs(p - b)
+        val pc = kotlin.math.abs(p - c)
+        return when {
+            pa <= pb && pa <= pc -> a
+            pb <= pc -> b
+            else -> c
+        }
+    }
+
+    private fun deflate(bytes: ByteArray, level: Int): ByteArray {
+        val deflater = Deflater(level)
+        return try {
+            deflater.setInput(bytes)
+            deflater.finish()
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            while (!deflater.finished()) {
+                val count = deflater.deflate(buffer)
+                if (count == 0 && deflater.needsInput()) break
+                out.write(buffer, 0, count)
+            }
+            out.toByteArray()
+        } finally {
+            deflater.end()
+        }
+    }
+
+    private fun writeChunk(dst: OutputStream, type: Int, data: ByteArray) {
+        writeU32BE(dst, data.size)
+        val typeBytes = byteArrayOf(
+            (type ushr 24).toByte(),
+            (type ushr 16).toByte(),
+            (type ushr 8).toByte(),
+            type.toByte(),
+        )
+        dst.write(typeBytes)
+        dst.write(data)
+        val crc = CRC32()
+        crc.update(typeBytes)
+        crc.update(data)
+        writeU32BE(dst, crc.value.toInt())
+    }
+
+    private fun writeU32BE(dst: OutputStream, value: Int) {
+        dst.write((value ushr 24) and 0xFF)
+        dst.write((value ushr 16) and 0xFF)
+        dst.write((value ushr 8) and 0xFF)
+        dst.write(value and 0xFF)
+    }
+
+    private fun writeU32BE(dst: ByteArray, offset: Int, value: Int) {
+        dst[offset] = (value ushr 24).toByte()
+        dst[offset + 1] = (value ushr 16).toByte()
+        dst[offset + 2] = (value ushr 8).toByte()
+        dst[offset + 3] = value.toByte()
+    }
+
+    private val PNG_SIGNATURE = byteArrayOf(
+        0x89.toByte(),
+        0x50,
+        0x4E,
+        0x47,
+        0x0D,
+        0x0A,
+        0x1A,
+        0x0A,
+    )
+
+    private const val RGBA_BYTES_PER_PIXEL = 4
+    private const val FILTER_NONE = 0
+    private const val FILTER_SUB = 1
+    private const val FILTER_UP = 2
+    private const val FILTER_AVG = 3
+    private const val FILTER_PAETH = 4
+    private const val TYPE_IHDR = 0x49484452
+    private const val TYPE_IDAT = 0x49444154
+    private const val TYPE_IEND = 0x49454E44
+    private const val TYPE_TEXT = 0x74455874
 }

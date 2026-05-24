@@ -86,8 +86,8 @@ class SkPngEncoderTest {
 
     @Test
     fun `Encode passes through a non-default options object without crashing`() {
-        // Even though the underlying ImageIO writer ignores most fields,
-        // the encoder must still accept them and produce valid bytes.
+        // Non-default filters, compression, and comments must still
+        // produce valid bytes.
         val bitmap = makeGradient(2, 2)
         val opts = SkPngEncoder.Options(
             filterFlags = SkPngEncoder.FilterFlag.kPaeth.mask,
@@ -96,6 +96,7 @@ class SkPngEncoderTest {
         )
         val bytes = SkPngEncoder.Encode(bitmap, opts)
         assertNotNull(bytes)
+        assertTrue(bytes!!.containsAscii("tEXtSoftware\u0000kanvas-skia"))
     }
 
     @Test
@@ -111,6 +112,35 @@ class SkPngEncoderTest {
         @Suppress("USELESS_IS_CHECK") assertNull(null as ByteArray?)
     }
 
+    @Test
+    fun `zLibLevel affects encoded IDAT size`() {
+        val bitmap = makeGradient(32, 32)
+        val uncompressed = SkPngEncoder.Encode(bitmap, SkPngEncoder.Options(zLibLevel = 0))!!
+        val compressed = SkPngEncoder.Encode(bitmap, SkPngEncoder.Options(zLibLevel = 9))!!
+
+        assertTrue(
+            compressed.size < uncompressed.size,
+            "higher zLibLevel should produce a smaller PNG for the gradient fixture",
+        )
+    }
+
+    @Test
+    fun `Encode round-trips BGRA and alpha-only bitmaps through pure Kotlin codec`() {
+        val bgra = SkBitmap(2, 1, SkColorSpace.makeSRGB(), SkColorType.kBGRA_8888)
+        bgra.setPixel(0, 0, 0xFF112233.toInt())
+        bgra.setPixel(1, 0, 0x80445566.toInt())
+        val decodedBgra = decode(SkPngEncoder.Encode(bgra)!!)
+        assertEquals(0xFF112233.toInt(), decodedBgra.getPixel(0, 0))
+        assertEquals(0x80445566.toInt(), decodedBgra.getPixel(1, 0))
+
+        val alpha = SkBitmap(2, 1, SkColorSpace.makeSRGB(), SkColorType.kAlpha_8)
+        alpha.setPixel(0, 0, 0x7F000000)
+        alpha.setPixel(1, 0, 0x11000000)
+        val decodedAlpha = decode(SkPngEncoder.Encode(alpha)!!)
+        assertEquals(0x7F000000, decodedAlpha.getPixel(0, 0))
+        assertEquals(0x11000000, decodedAlpha.getPixel(1, 0))
+    }
+
     private fun makeGradient(width: Int, height: Int): SkBitmap {
         val b = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
@@ -119,5 +149,20 @@ class SkPngEncoderTest {
             b.pixels[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or 0x40
         }
         return b
+    }
+
+    private fun decode(bytes: ByteArray): SkBitmap {
+        val codec = SkCodec.MakeFromData(bytes)!!
+        val (decoded, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(decoded)
+        return decoded!!
+    }
+
+    private fun ByteArray.containsAscii(text: String): Boolean {
+        val needle = text.encodeToByteArray()
+        return asList().windowed(needle.size).any { window ->
+            window == needle.asList()
+        }
     }
 }
