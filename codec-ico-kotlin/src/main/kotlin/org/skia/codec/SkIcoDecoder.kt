@@ -23,12 +23,8 @@ import java.io.InputStream
  *    Skia's `SkIcoCodec` synthesises a BMP stream for libpng-free
  *    decoding.
  *
- * Out of scope (matches Skia's `SkIcoCodec` exclusions) : the AND-mask
- * transparency channel that legacy 1bpp/4bpp/8bpp/24bpp DIBs append after
- * their pixel data is not synthesised back into the BMP payload — most
- * real-world icons newer than Windows XP are PNG-encoded or 32bpp BGRA
- * (which already carries alpha in the pixel data). Tests / GMs that
- * need 1bpp transparency masks should add an explicit follow-up.
+ * Legacy ICO DIBs append a 1bpp AND mask after their colour plane. When
+ * present, the mask is applied to alpha before synthesising the BMP payload.
  */
 public object SkIcoDecoder {
 
@@ -177,9 +173,12 @@ public object SkIcoDecoder {
         // the stored value as the pixel-data height, so the synthesised
         // BMP renders the colour plane only (the AND mask trails after
         // and is ignored).
+        val width = if (biSize >= 12) readIntLE(dib, 4) else 0
+        val storedHeight = if (biSize >= 12) readIntLE(dib, 8) else 0
         val bitCount = if (biSize >= 16) {
             (dib[14].toInt() and 0xFF) or ((dib[15].toInt() and 0xFF) shl 8)
         } else 0
+        val compression = if (biSize >= 20) readIntLE(dib, 16) else 0
         var clrUsed = 0
         if (biSize >= 36) clrUsed = readIntLE(dib, 32)
         val paletteEntries = when {
@@ -192,7 +191,12 @@ public object SkIcoDecoder {
         // overwhelmingly use the 40-byte BITMAPINFOHEADER, so we
         // assume 4-byte entries here.
         val paletteBytes = paletteEntries * 4
-        val pixelOffset = 14 + biSize + paletteBytes
+        val dibPixelOffset = biSize + paletteBytes
+        if (hasSupportedAndMask(width, storedHeight, bitCount, compression, dib, dibPixelOffset)) {
+            return synthesiseMaskedBmp(dib, biSize, width, storedHeight / 2, bitCount, paletteEntries, dibPixelOffset)
+        }
+
+        val pixelOffset = 14 + dibPixelOffset
         val totalSize = 14 + dib.size
         // Sanity : pixel offset must land inside or at the end of the
         // synthesised file (DIBs with truncated palettes would fail
@@ -206,11 +210,129 @@ public object SkIcoDecoder {
         // bfReserved1 / bfReserved2 are already zero (ByteArray default).
         writeIntLE(out, 10, pixelOffset)
         System.arraycopy(dib, 0, out, 14, dib.size)
-        if (biSize >= 24) {
-            val storedHeight = readIntLE(out, 14 + 8)
-            if (storedHeight > 1) writeIntLE(out, 14 + 8, storedHeight / 2)
+        if (biSize >= 24 && storedHeight > 1) writeIntLE(out, 14 + 8, storedHeight / 2)
+        return out
+    }
+
+    private fun hasSupportedAndMask(
+        width: Int,
+        storedHeight: Int,
+        bitCount: Int,
+        compression: Int,
+        dib: ByteArray,
+        pixelOffset: Int,
+    ): Boolean {
+        if (width <= 0 || storedHeight <= 1 || (storedHeight and 1) != 0) return false
+        if (compression != BI_RGB) return false
+        if (bitCount !in setOf(1, 4, 8, 24, 32)) return false
+        val height = storedHeight / 2
+        val colorRowBytes = dibRowBytes(width, bitCount)
+        val maskRowBytes = andMaskRowBytes(width)
+        val required = pixelOffset.toLong() +
+            colorRowBytes.toLong() * height.toLong() +
+            maskRowBytes.toLong() * height.toLong()
+        return required <= dib.size.toLong()
+    }
+
+    private fun synthesiseMaskedBmp(
+        dib: ByteArray,
+        biSize: Int,
+        width: Int,
+        height: Int,
+        bitCount: Int,
+        paletteEntries: Int,
+        dibPixelOffset: Int,
+    ): ByteArray? {
+        val palette = if (bitCount <= 8) {
+            readPalette(dib, biSize, paletteEntries) ?: return null
+        } else {
+            IntArray(0)
+        }
+        val inputRowBytes = dibRowBytes(width, bitCount)
+        val maskRowBytes = andMaskRowBytes(width)
+        val maskOffset = dibPixelOffset + inputRowBytes * height
+        val outputRowBytes = width * 4
+        val outputDibSize = 40 + outputRowBytes * height
+        val totalSize = 14 + outputDibSize
+        val out = ByteArray(totalSize)
+
+        out[0] = 'B'.code.toByte()
+        out[1] = 'M'.code.toByte()
+        writeIntLE(out, 2, totalSize)
+        writeIntLE(out, 10, 14 + 40)
+        writeIntLE(out, 14, 40)
+        writeIntLE(out, 18, width)
+        writeIntLE(out, 22, height)
+        writeShortLE(out, 26, 1)
+        writeShortLE(out, 28, 32)
+        writeIntLE(out, 34, outputRowBytes * height)
+
+        for (fileY in 0 until height) {
+            val inputRow = dibPixelOffset + fileY * inputRowBytes
+            val outputRow = 14 + 40 + fileY * outputRowBytes
+            val maskRow = maskOffset + fileY * maskRowBytes
+            for (x in 0 until width) {
+                val color = readDibPixel(dib, inputRow, x, bitCount, palette)
+                val masked = isMasked(dib, maskRow, x)
+                val outOff = outputRow + x * 4
+                out[outOff] = (color and 0xFF).toByte()
+                out[outOff + 1] = ((color ushr 8) and 0xFF).toByte()
+                out[outOff + 2] = ((color ushr 16) and 0xFF).toByte()
+                out[outOff + 3] = if (masked) 0 else ((color ushr 24) and 0xFF).toByte()
+            }
         }
         return out
+    }
+
+    private fun readPalette(dib: ByteArray, offset: Int, entryCount: Int): IntArray? {
+        if (entryCount < 0) return null
+        if (offset.toLong() + entryCount.toLong() * 4L > dib.size.toLong()) return null
+        val palette = IntArray(entryCount)
+        for (i in 0 until entryCount) {
+            val off = offset + i * 4
+            val b = dib[off].toInt() and 0xFF
+            val g = dib[off + 1].toInt() and 0xFF
+            val r = dib[off + 2].toInt() and 0xFF
+            palette[i] = argb(0xFF, r, g, b)
+        }
+        return palette
+    }
+
+    private fun readDibPixel(dib: ByteArray, row: Int, x: Int, bitCount: Int, palette: IntArray): Int =
+        when (bitCount) {
+            1 -> {
+                val packed = dib[row + x / 8].toInt() and 0xFF
+                palette[(packed ushr (7 - (x and 7))) and 0x01]
+            }
+            4 -> {
+                val packed = dib[row + x / 2].toInt() and 0xFF
+                palette[if ((x and 1) == 0) packed ushr 4 else packed and 0x0F]
+            }
+            8 -> palette[dib[row + x].toInt() and 0xFF]
+            24 -> {
+                val off = row + x * 3
+                argb(
+                    0xFF,
+                    dib[off + 2].toInt() and 0xFF,
+                    dib[off + 1].toInt() and 0xFF,
+                    dib[off].toInt() and 0xFF,
+                )
+            }
+            32 -> {
+                val off = row + x * 4
+                argb(
+                    dib[off + 3].toInt() and 0xFF,
+                    dib[off + 2].toInt() and 0xFF,
+                    dib[off + 1].toInt() and 0xFF,
+                    dib[off].toInt() and 0xFF,
+                )
+            }
+            else -> 0
+        }
+
+    private fun isMasked(dib: ByteArray, row: Int, x: Int): Boolean {
+        val packed = dib[row + x / 8].toInt() and 0xFF
+        return ((packed ushr (7 - (x and 7))) and 0x01) != 0
     }
 
     /**
@@ -248,4 +370,23 @@ public object SkIcoDecoder {
         b[off + 2] = (v ushr 16).toByte()
         b[off + 3] = (v ushr 24).toByte()
     }
+
+    private fun writeShortLE(b: ByteArray, off: Int, v: Int) {
+        b[off] = v.toByte()
+        b[off + 1] = (v ushr 8).toByte()
+    }
+
+    private fun dibRowBytes(width: Int, bitCount: Int): Int =
+        ((((width.toLong() * bitCount.toLong()) + 31L) / 32L) * 4L).toInt()
+
+    private fun andMaskRowBytes(width: Int): Int =
+        ((((width.toLong()) + 31L) / 32L) * 4L).toInt()
+
+    private fun argb(a: Int, r: Int, g: Int, b: Int): Int =
+        ((a and 0xFF) shl 24) or
+            ((r and 0xFF) shl 16) or
+            ((g and 0xFF) shl 8) or
+            (b and 0xFF)
+
+    private const val BI_RGB: Int = 0
 }
