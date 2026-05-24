@@ -92,6 +92,56 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes VP8L simple literal pixels`() {
+        val expected = intArrayOf(
+            argb(0xFF, 0x11, 0x22, 0x33),
+            argb(0x80, 0x44, 0x66, 0x77),
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lLiteralWebp(width = 2, height = 1, expected))!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        for (x in expected.indices) {
+            val actual = dst.getPixel(x, 0)
+            assertEquals(alpha(expected[x]), alpha(actual))
+            assertEquals(red(expected[x]), red(actual))
+            assertEquals(green(expected[x]), green(actual))
+            assertEquals(blue(expected[x]), blue(actual))
+        }
+    }
+
+    @Test
+    fun `VP8L pixel decode rejects unsupported transform`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lUnsupportedTransformWebp(width = 1, height = 1))!!
+        val dst = SkBitmap(
+            width = 1,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+    }
+
+    @Test
+    fun `VP8L pixel decode rejects non-simple Huffman code`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lNormalHuffmanWebp(width = 1, height = 1))!!
+        val dst = SkBitmap(
+            width = 1,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+    }
+
+    @Test
     fun `rejects truncated and metadata-less RIFF WEBP`() {
         assertNull(SkWebpKotlinCodec.Decoder.make(byteArrayOf('R'.code.toByte(), 'I'.code.toByte())))
         assertNull(SkWebpKotlinCodec.Decoder.make(riff("WEBP", chunk("VP8X", ByteArray(9)))))
@@ -118,6 +168,70 @@ class SkWebpKotlinCodecTest {
         payload[4] = ((bits ushr 24) and 0xFF).toByte()
         return riff("WEBP", chunk("VP8L", payload))
     }
+
+    private fun vp8lLiteralWebp(width: Int, height: Int, argb: IntArray): ByteArray {
+        require(argb.size == width * height)
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(0, 1) // transform_present
+        writer.writeBits(0, 1) // color_cache_present
+        writer.writeBits(0, 1) // meta_prefix_present
+        val green = argb.uniqueChannel { (it ushr 8) and 0xFF }
+        val red = argb.uniqueChannel { (it ushr 16) and 0xFF }
+        val blue = argb.uniqueChannel { it and 0xFF }
+        val alpha = argb.uniqueChannel { (it ushr 24) and 0xFF }
+        writeSimpleCode(writer, green)
+        writeSimpleCode(writer, red)
+        writeSimpleCode(writer, blue)
+        writeSimpleCode(writer, alpha)
+        writeSimpleCode(writer, intArrayOf(0)) // distance alphabet is unused by literal-only pixels.
+        for (pixel in argb) {
+            writer.writeSymbol(green, (pixel ushr 8) and 0xFF)
+            writer.writeSymbol(red, (pixel ushr 16) and 0xFF)
+            writer.writeSymbol(blue, pixel and 0xFF)
+            writer.writeSymbol(alpha, (pixel ushr 24) and 0xFF)
+        }
+        return vp8lWebpFromBits(writer)
+    }
+
+    private fun vp8lUnsupportedTransformWebp(width: Int, height: Int): ByteArray {
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(1, 1)
+        return vp8lWebpFromBits(writer)
+    }
+
+    private fun vp8lNormalHuffmanWebp(width: Int, height: Int): ByteArray {
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(0, 1) // transform_present
+        writer.writeBits(0, 1) // color_cache_present
+        writer.writeBits(0, 1) // meta_prefix_present
+        writer.writeBits(0, 1) // normal Huffman code, outside this worker's simple subset.
+        return vp8lWebpFromBits(writer)
+    }
+
+    private fun writeVp8lHeaderBits(writer: Vp8lTestBitWriter, width: Int, height: Int) {
+        writer.writeBits(width - 1, 14)
+        writer.writeBits(height - 1, 14)
+        writer.writeBits(1, 1) // alpha_is_used
+        writer.writeBits(0, 3) // version
+    }
+
+    private fun writeSimpleCode(writer: Vp8lTestBitWriter, symbols: IntArray) {
+        require(symbols.size in 1..2)
+        writer.writeBits(1, 1) // simple code
+        writer.writeBits(symbols.size - 1, 1)
+        writer.writeBits(1, 1) // first symbol uses 8 bits.
+        writer.writeBits(symbols[0], 8)
+        if (symbols.size == 2) writer.writeBits(symbols[1], 8)
+    }
+
+    private fun vp8lWebpFromBits(writer: Vp8lTestBitWriter): ByteArray =
+        riff("WEBP", chunk("VP8L", byteArrayOf(0x2F) + writer.toByteArray()))
+
+    private fun IntArray.uniqueChannel(component: (Int) -> Int): IntArray =
+        map(component).distinct().sorted().also { require(it.size <= 2) }.toIntArray()
 
     private fun vp8Webp(width: Int, height: Int): ByteArray {
         val payload = ByteArray(10)
@@ -160,10 +274,43 @@ class SkWebpKotlinCodecTest {
         out[offset + 1] = ((value ushr 8) and 0xFF).toByte()
     }
 
+    private fun argb(alpha: Int, red: Int, green: Int, blue: Int): Int =
+        (alpha shl 24) or (red shl 16) or (green shl 8) or blue
+
+    private fun alpha(pixel: Int): Int = (pixel ushr 24) and 0xFF
+    private fun red(pixel: Int): Int = (pixel ushr 16) and 0xFF
+    private fun green(pixel: Int): Int = (pixel ushr 8) and 0xFF
+    private fun blue(pixel: Int): Int = pixel and 0xFF
+
     private fun ByteArrayOutputStream.writeU32LE(value: Int) {
         write(value and 0xFF)
         write((value ushr 8) and 0xFF)
         write((value ushr 16) and 0xFF)
         write((value ushr 24) and 0xFF)
+    }
+
+    private class Vp8lTestBitWriter {
+        private val bytes = ArrayList<Int>()
+        private var bitOffset = 0
+
+        fun writeBits(value: Int, count: Int) {
+            for (i in 0 until count) {
+                if ((bitOffset and 7) == 0) bytes.add(0)
+                val bit = (value ushr i) and 1
+                val index = bytes.lastIndex
+                bytes[index] = bytes[index] or (bit shl (bitOffset and 7))
+                bitOffset++
+            }
+        }
+
+        fun writeSymbol(symbols: IntArray, value: Int) {
+            if (symbols.size == 1) {
+                require(symbols[0] == value)
+                return
+            }
+            writeBits(symbols.indexOf(value), 1)
+        }
+
+        fun toByteArray(): ByteArray = ByteArray(bytes.size) { bytes[it].toByte() }
     }
 }
