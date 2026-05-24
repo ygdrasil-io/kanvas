@@ -34,9 +34,8 @@ import org.graphiks.math.SkRect
  * }
  * ```
  *
- * **MISSING_API** — depends on [SkBlurMask.BlurRect] (internal analytic
- * blur-rect kernel), which is not yet implemented in `:kanvas-skia`.
- * The GM body calls the stub so the test can be `@Disabled("STUB.BLURRECT_GALLERY")`.
+ * Uses [SkBlurMask.BlurRect], which is backed by the same separable
+ * Gaussian/style implementation as [org.skia.foundation.SkBlurMaskFilter].
  */
 public class BlurRectGalleryGM : GM() {
 

@@ -2,6 +2,8 @@ package org.skia.foundation
 
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkRect
+import kotlin.math.ceil
+import kotlin.math.floor
 
 /**
  * Mirrors the internal Skia helper
@@ -11,10 +13,10 @@ import org.graphiks.math.SkRect
  * machinery.
  *
  * The Kotlin surface exposes only the small subset required by
- * `:skia-integration-tests` GMs (`blurrect_gallery`). The underlying
- * `BlurRect` algorithm (analytically compute the Gaussian convolution
- * of a rectangle's coverage at each pixel) is a non-trivial
- * implementation, deferred as a stub.
+ * `:skia-integration-tests` GMs (`blurrect_gallery`). `BlurRect` shares
+ * the same separable Gaussian implementation as [SkBlurMaskFilter], which
+ * keeps the low-level helper behaviour aligned with the paint mask-filter
+ * path.
  *
  * Upstream C++ lives in `src/core/SkBlurMask.cpp`.
  */
@@ -45,15 +47,44 @@ public object SkBlurMask {
      * `null`).
      *
      * Upstream: `SkBlurMask::BlurRect(sigma, *mask, bounds, style)`
-     * (`src/core/SkBlurMask.cpp`). The full analytic implementation is
-     * deferred; this stub always throws [NotImplementedError] with tag
-     * `STUB.BLURRECT_GALLERY` so the test can be @Disabled appropriately.
+     * (`src/core/SkBlurMask.cpp`). Skia's C++ implementation uses an
+     * analytic rectangle fast path; this port constructs the equivalent
+     * source A8 rect and delegates the Gaussian/style composition to the
+     * existing mask filter.
      */
     public fun BlurRect(
         sigma: Float,
         bounds: SkRect,
         style: SkBlurStyle,
-    ): BlurRectResult? = TODO("STUB.BLURRECT_GALLERY")
+    ): BlurRectResult? {
+        if (!sigma.isFinite() || sigma <= 0f) return null
+        if (bounds.isEmpty) return null
+
+        val filter = SkBlurMaskFilter.Make(style, sigma) ?: return null
+        val margin = filter.margin()
+
+        val left = floor(bounds.left.toDouble()).toInt()
+        val top = floor(bounds.top.toDouble()).toInt()
+        val right = ceil(bounds.right.toDouble()).toInt()
+        val bottom = ceil(bounds.bottom.toDouble()).toInt()
+        if (right <= left || bottom <= top) return null
+
+        val rectW = right - left
+        val rectH = bottom - top
+        val maskW = rectW + 2 * margin
+        val maskH = rectH + 2 * margin
+        if (maskW <= 0 || maskH <= 0) return null
+
+        val source = ByteArray(maskW * maskH)
+        for (y in 0 until rectH) {
+            val dst = (y + margin) * maskW + margin
+            java.util.Arrays.fill(source, dst, dst + rectW, 0xFF.toByte())
+        }
+
+        val image = filter.filterMask(source, maskW, maskH)
+        val resultBounds = SkIRect.MakeLTRB(left - margin, top - margin, right + margin, bottom + margin)
+        return BlurRectResult(resultBounds, image, maskW)
+    }
 
     /**
      * Result of [BlurRect] — mirrors the layout of Skia's `SkMask`

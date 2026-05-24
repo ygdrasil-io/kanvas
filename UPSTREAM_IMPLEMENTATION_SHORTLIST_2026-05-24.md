@@ -76,39 +76,41 @@ Completed since this snapshot:
   treats documented intentionally-empty ports such as `FiddleGM` as ported. The
   rebaseline bucket logic now lets already-`PORTED` rows override stale
   historical `STUB.*` tags.
+- `STUB.BLURRECT_GALLERY` and `STUB.BLUR_RECTS_FULL`: `SkBlurMask.BlurRect`
+  now delegates to the existing separable blur mask filter, and
+  `BlurRectGalleryGM` / `BlurRectGM` are enabled with raster, WebGPU, and
+  crossbackend ratchets. The remaining `blurrect` implementation item is the
+  analytic-vs-brute-force `BlurRectCompareGM` harness.
 
 ## Recommended order
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `blurrect` | 1 cpp | M | Raster/image-filter scope; not blocked by fonts, codecs, or WGSL. |
-| 2 | `dashcubics` / `SkTrimPathEffect` | 1 cpp | M | Clear missing path-effect primitive and a concrete disabled/no-op GM. |
-| 3 | `gradients` | 1 cpp | M/L | Isolated interpolation variants; useful after the tracker noise reduction. |
-| 4 | `savelayer` | 1 cpp | M/L | Raster-facing, but touches F16/save-behind semantics. |
-| 5 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
+| 1 | `blurrect_compare` | 1 cpp | M | Remaining blurrect work is the analytic-vs-brute-force comparison harness. |
+| 2 | `gradients` | 1 cpp | M/L | Isolated interpolation variants; useful after the tracker noise reduction. |
+| 3 | `savelayer` | 1 cpp | M/L | Raster-facing, but touches F16/save-behind semantics. |
+| 4 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
 
 | Upstream cpp | Tags | Local GM files |
 |---|---|---|
 | `addarc` | `STUB.MISSING_API` | `AddArcGM.kt`, `AddArcMeasGM.kt`, `FillCircleGM.kt`, `ManyArcsGM.kt`, `StrokeCircleGM.kt`, `TinyAngleArcsGM.kt` |
-| `blurrect` | `STUB.BLURRECT_GALLERY`, `STUB.BLUR_RECTS_FULL`, `STUB.BLUR_RECT_COMPARE` | `BlurMatrixRectGM.kt`, `BlurRectCompareGM.kt`, `BlurRectGM.kt`, `BlurRectGalleryGM.kt` |
-| `dashcubics` | disabled `TrimGM` without `STUB.*` tag | `DashCubicsGM.kt`, `TrimGM.kt` |
+| `blurrect` | `STUB.BLUR_RECT_COMPARE` | `BlurMatrixRectGM.kt`, `BlurRectCompareGM.kt`, `BlurRectGM.kt`, `BlurRectGalleryGM.kt` |
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION` | gradient interpolation variants |
 | `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
 | `mesh` | `STUB.MESH` | `MeshGMs.kt` |
 | `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`, `STUB.XYZ` | `RecordOptsGM.kt` |
-| `savelayer` | `STUB.F16_COLOR_TYPE`, `STUB.SAVE_BEHIND`; `Skbug14554GM` ported | `SaveBehindGM.kt`, `SaveLayerF16GM.kt`, `SaveLayerGM.kt`, `Skbug14554GM.kt` |
+| `savelayer` | `STUB.SAVE_BEHIND`; `SaveLayerF16GM` and `Skbug14554GM` ported | `SaveBehindGM.kt`, `SaveLayerF16GM.kt`, `SaveLayerGM.kt`, `Skbug14554GM.kt` |
 | `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
 
 - `STUB.MISSING_API` is too vague. The affected rows (`aaclip`, `addarc`)
   need tag cleanup before implementation selection.
-- `dashcubics` is classified as implementation because `TrimGM` is still a
-  documented no-op for missing `SkTrimPathEffect`, but the reason is not yet
-  normalized as a `STUB.*` tag.
+- `dashcubics` is now ported: `SkTrimPathEffect` is implemented and
+  `TrimGM` is reactivated with a 90% ratchet (`92.29%` in validation).
 - Text-related rows should be revisited after the font delivery if their
   implementation would touch glyph storage or shaping assumptions.
