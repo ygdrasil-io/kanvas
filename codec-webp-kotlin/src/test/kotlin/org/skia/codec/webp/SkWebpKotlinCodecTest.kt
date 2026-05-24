@@ -165,6 +165,30 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes VP8L subtract green transform`() {
+        val expected = intArrayOf(
+            argb(0xFF, 0x40, 0x25, 0x58),
+            argb(0x80, 0x04, 0xFE, 0x13),
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lSubtractGreenWebp(width = 2, height = 1, expected))!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        for (x in expected.indices) {
+            val actual = dst.getPixel(x, 0)
+            assertEquals(alpha(expected[x]), alpha(actual))
+            assertEquals(red(expected[x]), red(actual))
+            assertEquals(green(expected[x]), green(actual))
+            assertEquals(blue(expected[x]), blue(actual))
+        }
+    }
+
+    @Test
     fun `VP8L pixel decode rejects unsupported transform`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8lUnsupportedTransformWebp(width = 1, height = 1))!!
         val dst = SkBitmap(
@@ -247,6 +271,7 @@ class SkWebpKotlinCodecTest {
         val writer = Vp8lTestBitWriter()
         writeVp8lHeaderBits(writer, width, height)
         writer.writeBits(1, 1)
+        writer.writeBits(0, 2) // predictor transform is not supported yet.
         return vp8lWebpFromBits(writer)
     }
 
@@ -285,6 +310,43 @@ class SkWebpKotlinCodecTest {
         writeSimpleCode(writer, intArrayOf(1)) // distance prefix 1 maps to the left pixel.
         writer.writeBits(0, 1) // literal green 0x25.
         writer.writeBits(1, 1) // length prefix 1 => copy two pixels.
+        return vp8lWebpFromBits(writer)
+    }
+
+    private fun vp8lSubtractGreenWebp(width: Int, height: Int, argb: IntArray): ByteArray {
+        require(argb.size == width * height)
+        val transformed = IntArray(argb.size) { i ->
+            val pixel = argb[i]
+            val green = green(pixel)
+            argb(
+                alpha = alpha(pixel),
+                red = (red(pixel) - green) and 0xFF,
+                green = green,
+                blue = (blue(pixel) - green) and 0xFF,
+            )
+        }
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(1, 1) // transform_present
+        writer.writeBits(2, 2) // subtract green transform.
+        writer.writeBits(0, 1) // transform_present terminator
+        writer.writeBits(0, 1) // color_cache_present
+        writer.writeBits(0, 1) // meta_prefix_present
+        val green = transformed.uniqueChannel { (it ushr 8) and 0xFF }
+        val red = transformed.uniqueChannel { (it ushr 16) and 0xFF }
+        val blue = transformed.uniqueChannel { it and 0xFF }
+        val alpha = transformed.uniqueChannel { (it ushr 24) and 0xFF }
+        writeSimpleCode(writer, green)
+        writeSimpleCode(writer, red)
+        writeSimpleCode(writer, blue)
+        writeSimpleCode(writer, alpha)
+        writeSimpleCode(writer, intArrayOf(0))
+        for (pixel in transformed) {
+            writer.writeSymbol(green, (pixel ushr 8) and 0xFF)
+            writer.writeSymbol(red, (pixel ushr 16) and 0xFF)
+            writer.writeSymbol(blue, pixel and 0xFF)
+            writer.writeSymbol(alpha, (pixel ushr 24) and 0xFF)
+        }
         return vp8lWebpFromBits(writer)
     }
 
