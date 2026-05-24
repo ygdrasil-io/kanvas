@@ -116,6 +116,30 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes VP8L normal Huffman single-symbol literals`() {
+        val expected = intArrayOf(
+            argb(0x00, 0x00, 0x00, 0x00),
+            argb(0x00, 0x00, 0x00, 0x00),
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lNormalSingleSymbolWebp(width = 2, height = 1))!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        for (x in expected.indices) {
+            val actual = dst.getPixel(x, 0)
+            assertEquals(alpha(expected[x]), alpha(actual))
+            assertEquals(red(expected[x]), red(actual))
+            assertEquals(green(expected[x]), green(actual))
+            assertEquals(blue(expected[x]), blue(actual))
+        }
+    }
+
+    @Test
     fun `VP8L pixel decode rejects unsupported transform`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8lUnsupportedTransformWebp(width = 1, height = 1))!!
         val dst = SkBitmap(
@@ -129,7 +153,7 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `VP8L pixel decode rejects non-simple Huffman code`() {
+    fun `VP8L pixel decode rejects truncated normal Huffman code`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8lNormalHuffmanWebp(width = 1, height = 1))!!
         val dst = SkBitmap(
             width = 1,
@@ -138,7 +162,7 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
@@ -207,7 +231,19 @@ class SkWebpKotlinCodecTest {
         writer.writeBits(0, 1) // transform_present
         writer.writeBits(0, 1) // color_cache_present
         writer.writeBits(0, 1) // meta_prefix_present
-        writer.writeBits(0, 1) // normal Huffman code, outside this worker's simple subset.
+        writer.writeBits(0, 1) // normal Huffman code with no complete code description.
+        return vp8lWebpFromBits(writer)
+    }
+
+    private fun vp8lNormalSingleSymbolWebp(width: Int, height: Int): ByteArray {
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(0, 1) // transform_present
+        writer.writeBits(0, 1) // color_cache_present
+        writer.writeBits(0, 1) // meta_prefix_present
+        repeat(5) {
+            writeNormalSingleSymbolCode(writer, symbol = 0)
+        }
         return vp8lWebpFromBits(writer)
     }
 
@@ -225,6 +261,21 @@ class SkWebpKotlinCodecTest {
         writer.writeBits(1, 1) // first symbol uses 8 bits.
         writer.writeBits(symbols[0], 8)
         if (symbols.size == 2) writer.writeBits(symbols[1], 8)
+    }
+
+    private fun writeNormalSingleSymbolCode(writer: Vp8lTestBitWriter, symbol: Int) {
+        require(symbol in 0..1)
+        writer.writeBits(0, 1) // normal code
+        writer.writeBits(0, 4) // four code length code lengths.
+        writer.writeBits(0, 3) // symbol 17 length.
+        writer.writeBits(0, 3) // symbol 18 length.
+        writer.writeBits(1, 3) // symbol 0 length.
+        writer.writeBits(1, 3) // symbol 1 length.
+        writer.writeBits(1, 1) // custom max_symbol.
+        writer.writeBits(0, 3) // two bits encode max_symbol.
+        writer.writeBits(0, 2) // max_symbol = 2.
+        writer.writeBits(if (symbol == 0) 1 else 0, 1)
+        writer.writeBits(if (symbol == 0) 0 else 1, 1)
     }
 
     private fun vp8lWebpFromBits(writer: Vp8lTestBitWriter): ByteArray =
