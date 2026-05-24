@@ -912,6 +912,32 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 non B_PRED parsed pipeline rejects B_PRED before coefficient decode`() {
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
+            coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = 1)),
+        )
+        val modes = listOf(
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.B_PRED,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+                lumaSubblockModes = List(16) { Vp8LumaSubblockPredictionMode.B_DC },
+            ),
+        )
+
+        assertEquals(
+            Vp8ReconstructionResult.Unsupported,
+            reconstructVp8NonBPredKeyFramePlanes(
+                data = ByteArray(0),
+                layout = layout,
+                macroblockModes = modes,
+                probabilities = Vp8CoefficientProbabilities.filled(128),
+            ),
+        )
+    }
+
+    @Test
     fun `VP8 coefficient probability update parser preserves base table without update bits`() {
         val base = Vp8CoefficientProbabilities.filled(128)
         val updateProbabilities = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 255 }

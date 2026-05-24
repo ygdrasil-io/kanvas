@@ -1904,6 +1904,9 @@ internal fun reconstructVp8NonBPredKeyFramePlanes(
     macroblockModes: List<Vp8MacroblockMode>,
     probabilities: Vp8CoefficientProbabilities,
 ): Vp8ReconstructionResult {
+    if (macroblockModes.any { it.yMode == Vp8LumaPredictionMode.B_PRED }) {
+        return Vp8ReconstructionResult.Unsupported
+    }
     val coefficients = when (val result = decodeVp8MacroblockCoefficients(
         data = data,
         layout = layout,
