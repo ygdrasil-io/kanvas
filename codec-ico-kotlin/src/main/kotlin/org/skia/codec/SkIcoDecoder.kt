@@ -206,6 +206,10 @@ public object SkIcoDecoder {
         // bfReserved1 / bfReserved2 are already zero (ByteArray default).
         writeIntLE(out, 10, pixelOffset)
         System.arraycopy(dib, 0, out, 14, dib.size)
+        if (biSize >= 24) {
+            val storedHeight = readIntLE(out, 14 + 8)
+            if (storedHeight > 1) writeIntLE(out, 14 + 8, storedHeight / 2)
+        }
         return out
     }
 
