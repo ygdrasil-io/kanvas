@@ -233,6 +233,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val originX: Int,
         val originY: Int,
         val paint: SkPaint?,
+        val filters: List<SkImageFilter?>? = null,
     )
 
     private val stack: ArrayDeque<State> = ArrayDeque<State>().apply {
@@ -333,6 +334,37 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val popped = stack.removeLast()
         val layer = popped.layer ?: return
 
+        val layerFilters = layer.filters
+        val poppedBitmap = (popped.device as? SkBitmapDevice)?.bitmap
+        val parentBitmap = (layer.parentDevice as? SkBitmapDevice)
+        if (layerFilters != null && poppedBitmap != null && parentBitmap != null) {
+            val snapshot = poppedBitmap.asImage()
+            val filtersOrNull = if (layerFilters.isEmpty()) listOf<SkImageFilter?>(null) else layerFilters
+            val proxyPaint = layer.paint?.copy()?.apply { this.imageFilter = null }
+            for (filter in filtersOrNull) {
+                val filterResult = filter?.filterImage(snapshot, popped.matrix)
+                    ?: SkImageFilter.FilterResult(snapshot, 0, 0)
+                val filteredImg = filterResult.image
+                val filteredBitmap = SkBitmap(
+                    filteredImg.width, filteredImg.height,
+                    poppedBitmap.colorSpace, poppedBitmap.colorType,
+                )
+                for (yp in 0 until filteredImg.height) {
+                    for (xp in 0 until filteredImg.width) {
+                        filteredBitmap.setPixel(xp, yp, filteredImg.peekPixel(xp, yp))
+                    }
+                }
+                parentBitmap.compositeFrom(
+                    SkBitmapDevice(filteredBitmap),
+                    layer.originX + filterResult.offsetX,
+                    layer.originY + filterResult.offsetY,
+                    top.clip,
+                    proxyPaint,
+                )
+            }
+            return
+        }
+
         // Phase 7d.2 — when the layer's paint carries an imageFilter,
         // snapshot the layer to an SkImage, apply the filter, and
         // composite the filtered result onto the parent device with
@@ -345,8 +377,6 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         // deferred Phase G-imageFilter follow-up).
         val layerPaint = layer.paint
         val imageFilter = layerPaint?.imageFilter
-        val poppedBitmap = (popped.device as? SkBitmapDevice)?.bitmap
-        val parentBitmap = (layer.parentDevice as? SkBitmapDevice)
         if (imageFilter != null && poppedBitmap != null && parentBitmap != null) {
             val snapshot = poppedBitmap.asImage()
             val filterResult = imageFilter.filterImage(snapshot, popped.matrix)
@@ -2414,7 +2444,9 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * into the layer compose on top. `restore()` then composites
      * the layer back onto the parent with [SaveLayerRec.paint].
      */
-    public open fun saveLayer(rec: SaveLayerRec): Int {
+    public open fun saveLayer(rec: SaveLayerRec): Int = saveLayer(rec, filters = null)
+
+    private fun saveLayer(rec: SaveLayerRec, filters: List<SkImageFilter?>?): Int {
         val bounds = rec.bounds
         val paint = rec.paint
         val backdrop = rec.backdrop
@@ -2520,7 +2552,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                 minOf(h, s.clip.bottom - originY),
             ),
             device = layerDevice,
-            layer = Layer(s.device, originX, originY, paint),
+            layer = Layer(s.device, originX, originY, paint, filters),
         )
         stack.addLast(newState)
         return stack.size - 2
@@ -2974,17 +3006,17 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * filters to be applied simultaneously (e.g. dilate + erode, or
      * drop-shadow + null) to the saved layer's content. The first filter
      * in the span and the rest are run independently and composited
-     * together. This is not yet part of the public `:kanvas-skia` API.
-     *
-     * TODO("STUB.IFX.MULTIPLE_FILTERS_SPAN") — implement FilterSpan
-     * saveLayer path once upstream semantics are fully understood.
+     * together. The raster implementation stores the span on the layer
+     * and applies each filter independently on restore before compositing
+     * with [paint].
      */
     public open fun saveLayerWithMultipleFilters(
         bounds: SkRect?,
         paint: SkPaint?,
         filters: List<SkImageFilter?>,
     ): Int {
-        TODO("STUB.IFX.MULTIPLE_FILTERS_SPAN")
+        if (paint?.imageFilter != null) return saveLayer(bounds, paint)
+        return saveLayer(SaveLayerRec(bounds = bounds, paint = paint, backdrop = null, flags = 0), filters)
     }
 
     public open fun drawPicture(
