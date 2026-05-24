@@ -84,6 +84,29 @@ class SkPngKotlinCodecTest {
     }
 
     @Test
+    fun `decodes RGB tRNS color as transparent`() {
+        val rows = listOf(
+            intArrayOf(argb(0xFF, 0x10, 0x20, 0x30), argb(0xFF, 0x40, 0x50, 0x60)),
+        )
+        val codec = SkPngKotlinCodec.Decoder.make(
+            png(
+                width = 2,
+                height = 1,
+                colorType = 2,
+                rows = rows,
+                filters = intArrayOf(0),
+                transparency = u16Row(0x0010, 0x0020, 0x0030),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(argb(0x00, 0x10, 0x20, 0x30), bitmap!!.getPixel(0, 0))
+        assertEquals(argb(0xFF, 0x40, 0x50, 0x60), bitmap.getPixel(1, 0))
+    }
+
+    @Test
     fun `decodes Adam7 interlaced RGBA 8-bit pixels`() {
         val rows = List(9) { y ->
             IntArray(9) { x ->
@@ -263,6 +286,30 @@ class SkPngKotlinCodecTest {
     }
 
     @Test
+    fun `decodes grayscale tRNS sample as transparent`() {
+        val rows = listOf(
+            byteArrayOf(0x00, 0x40, 0x80.toByte()),
+        )
+        val codec = SkPngKotlinCodec.Decoder.make(
+            grayscalePng(
+                width = 3,
+                height = 1,
+                rows = rows,
+                filters = intArrayOf(0),
+                bitDepth = 8,
+                transparency = u16Row(0x0040),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(argb(0xFF, 0x00, 0x00, 0x00), bitmap!!.getPixel(0, 0))
+        assertEquals(argb(0x00, 0x40, 0x40, 0x40), bitmap.getPixel(1, 0))
+        assertEquals(argb(0xFF, 0x80, 0x80, 0x80), bitmap.getPixel(2, 0))
+    }
+
+    @Test
     fun `decodes packed grayscale bit depths`() {
         for (bitDepth in intArrayOf(1, 2, 4)) {
             val max = (1 shl bitDepth) - 1
@@ -334,6 +381,26 @@ class SkPngKotlinCodecTest {
     }
 
     @Test
+    fun `decodes grayscale 16-bit tRNS sample into transparent F16`() {
+        val codec = SkPngKotlinCodec.Decoder.make(
+            grayscalePng(
+                width = 2,
+                height = 1,
+                rows = listOf(u16Row(0x1234, 0x8000)),
+                filters = intArrayOf(0),
+                bitDepth = 16,
+                transparency = u16Row(0x1234),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertF16(bitmap!!, 0, 0, 0f, 0f, 0f, 0f)
+        assertF16(bitmap, 1, 0, 0x8000 / 65535f, 0x8000 / 65535f, 0x8000 / 65535f, 1f)
+    }
+
+    @Test
     fun `decodes RGBA 16-bit pixels into premul F16`() {
         val rows = listOf(
             longArrayOf(rgba64(0xFFFF, 0x8000, 0x0000, 0x8000), rgba64(0x0000, 0x4000, 0xFFFF, 0xFFFF)),
@@ -399,6 +466,28 @@ class SkPngKotlinCodecTest {
         assertF16(grayAlphaBitmap!!, 0, 0, gray * alpha, gray * alpha, gray * alpha, alpha)
     }
 
+    @Test
+    fun `decodes RGB 16-bit tRNS color into transparent F16`() {
+        val codec = SkPngKotlinCodec.Decoder.make(
+            truecolor16Png(
+                width = 2,
+                height = 1,
+                colorType = 2,
+                rows = listOf(
+                    longArrayOf(rgb48(0x1111, 0x2222, 0x3333), rgb48(0x8000, 0x4000, 0xFFFF)),
+                ),
+                filters = intArrayOf(0),
+                transparency = u16Row(0x1111, 0x2222, 0x3333),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertF16(bitmap!!, 0, 0, 0f, 0f, 0f, 0f)
+        assertF16(bitmap, 1, 0, 0x8000 / 65535f, 0x4000 / 65535f, 1f, 1f)
+    }
+
 
     @Test
     fun `iCCP with unsupported synthetic profile falls back to sRGB`() {
@@ -429,6 +518,34 @@ class SkPngKotlinCodecTest {
                     filters = intArrayOf(0),
                     bitDepth = 8,
                     iccp = iccpChunkData("synthetic", compressionMethod = 1, profileBytes = byteArrayOf(1, 2, 3)),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `rejects malformed tRNS chunks`() {
+        assertNull(
+            SkPngKotlinCodec.Decoder.make(
+                grayscalePng(
+                    width = 1,
+                    height = 1,
+                    rows = listOf(byteArrayOf(0x40)),
+                    filters = intArrayOf(0),
+                    bitDepth = 8,
+                    transparency = byteArrayOf(0x40),
+                ),
+            ),
+        )
+        assertNull(
+            SkPngKotlinCodec.Decoder.make(
+                png(
+                    width = 1,
+                    height = 1,
+                    colorType = 2,
+                    rows = listOf(intArrayOf(argb(0xFF, 0x01, 0x02, 0x03))),
+                    filters = intArrayOf(0),
+                    transparency = byteArrayOf(0x00, 0x01),
                 ),
             ),
         )
@@ -497,7 +614,14 @@ class SkPngKotlinCodecTest {
         assertNull(SkPngKotlinCodec.Decoder.make(data))
     }
 
-    private fun png(width: Int, height: Int, colorType: Int, rows: List<IntArray>, filters: IntArray): ByteArray {
+    private fun png(
+        width: Int,
+        height: Int,
+        colorType: Int,
+        rows: List<IntArray>,
+        filters: IntArray,
+        transparency: ByteArray? = null,
+    ): ByteArray {
         val bpp = if (colorType == 6) 4 else 3
         val raw = ByteArrayOutputStream()
         var previous = ByteArray(width * bpp)
@@ -519,6 +643,7 @@ class SkPngKotlinCodecTest {
                 write(0)
                 write(0)
             }.toByteArray())
+            if (transparency != null) writeChunk("tRNS", transparency)
             writeChunk("IDAT", deflate(raw.toByteArray()))
             writeChunk("IEND", ByteArray(0))
         }.toByteArray()
@@ -676,6 +801,7 @@ class SkPngKotlinCodecTest {
         filters: IntArray,
         bitDepth: Int,
         iccp: ByteArray? = null,
+        transparency: ByteArray? = null,
     ): ByteArray {
         val raw = ByteArrayOutputStream()
         var previous = ByteArray((width * bitDepth + 7) / 8)
@@ -698,12 +824,20 @@ class SkPngKotlinCodecTest {
                 write(0)
             }.toByteArray())
             if (iccp != null) writeChunk("iCCP", iccp)
+            if (transparency != null) writeChunk("tRNS", transparency)
             writeChunk("IDAT", deflate(raw.toByteArray()))
             writeChunk("IEND", ByteArray(0))
         }.toByteArray()
     }
 
-    private fun truecolor16Png(width: Int, height: Int, colorType: Int, rows: List<LongArray>, filters: IntArray): ByteArray {
+    private fun truecolor16Png(
+        width: Int,
+        height: Int,
+        colorType: Int,
+        rows: List<LongArray>,
+        filters: IntArray,
+        transparency: ByteArray? = null,
+    ): ByteArray {
         val bpp = if (colorType == 6) 8 else 6
         val raw = ByteArrayOutputStream()
         var previous = ByteArray(width * bpp)
@@ -725,6 +859,7 @@ class SkPngKotlinCodecTest {
                 write(0)
                 write(0)
             }.toByteArray())
+            if (transparency != null) writeChunk("tRNS", transparency)
             writeChunk("IDAT", deflate(raw.toByteArray()))
             writeChunk("IEND", ByteArray(0))
         }.toByteArray()
