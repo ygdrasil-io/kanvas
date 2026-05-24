@@ -1245,3 +1245,96 @@ internal fun inverseVp8WalshHadamard4x4(input: IntArray): IntArray {
     }
     return out
 }
+
+internal enum class Vp8IntraPredictionMode {
+    DC,
+    VERTICAL,
+    HORIZONTAL,
+    TRUE_MOTION,
+}
+
+internal fun reconstructVp8IntraPlane(
+    width: Int,
+    height: Int,
+    mode: Vp8IntraPredictionMode,
+    left: IntArray?,
+    top: IntArray?,
+    topLeft: Int?,
+    residual: IntArray = IntArray(width * height),
+): IntArray {
+    require(width > 0)
+    require(height > 0)
+    require(left == null || left.size >= height)
+    require(top == null || top.size >= width)
+    require(residual.size == width * height)
+
+    val dcPrediction = if (mode == Vp8IntraPredictionMode.DC) dcPrediction(width, height, left, top) else 0
+    val out = IntArray(width * height)
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            val predicted = when (mode) {
+                Vp8IntraPredictionMode.DC -> dcPrediction
+                Vp8IntraPredictionMode.VERTICAL -> top?.get(x) ?: 127
+                Vp8IntraPredictionMode.HORIZONTAL -> left?.get(y) ?: 129
+                Vp8IntraPredictionMode.TRUE_MOTION -> {
+                    val base = topLeft ?: 128
+                    clip8((left?.get(y) ?: 129) + (top?.get(x) ?: 127) - base)
+                }
+            }
+            val index = y * width + x
+            out[index] = clip8(predicted + residual[index])
+        }
+    }
+    return out
+}
+
+private fun dcPrediction(width: Int, height: Int, left: IntArray?, top: IntArray?): Int {
+    return when {
+        left != null && top != null -> {
+            val sum = left.sumPrefix(height) + top.sumPrefix(width)
+            (sum + ((width + height) / 2)) / (width + height)
+        }
+        left != null -> (left.sumPrefix(height) + (height / 2)) / height
+        top != null -> (top.sumPrefix(width) + (width / 2)) / width
+        else -> 128
+    }
+}
+
+private fun IntArray.sumPrefix(count: Int): Int {
+    var sum = 0
+    for (i in 0 until count) sum += this[i]
+    return sum
+}
+
+internal fun composeVp8Yuv420ToRgba(
+    yPlane: IntArray,
+    uPlane: IntArray,
+    vPlane: IntArray,
+    width: Int,
+    height: Int,
+): IntArray {
+    require(width > 0)
+    require(height > 0)
+    val chromaWidth = (width + 1) / 2
+    val chromaHeight = (height + 1) / 2
+    require(yPlane.size >= width * height)
+    require(uPlane.size >= chromaWidth * chromaHeight)
+    require(vPlane.size >= chromaWidth * chromaHeight)
+
+    val rgba = IntArray(width * height)
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            val luma = yPlane[y * width + x]
+            val chromaIndex = (y / 2) * chromaWidth + (x / 2)
+            val cb = uPlane[chromaIndex] - 128
+            val cr = vPlane[chromaIndex] - 128
+            val red = clip8(luma + ((91881 * cr) shr 16))
+            val green = clip8(luma - ((22554 * cb + 46802 * cr) shr 16))
+            val blue = clip8(luma + ((116130 * cb) shr 16))
+            rgba[y * width + x] = (red shl 24) or (green shl 16) or (blue shl 8) or 0xFF
+        }
+    }
+    return rgba
+}
+
+private fun clip8(value: Int): Int = value.coerceIn(0, 255)
