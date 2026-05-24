@@ -19,6 +19,8 @@ import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.ServiceLoader
 import kotlin.math.roundToInt
 
@@ -214,6 +216,44 @@ class SkJpegKotlinCodecTest {
         assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 8, height = 8, includeAdobe = false)))
         assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 8, height = 8, adobeTransform = 2)))
         assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 16, height = 8, cSampling = 0x21)))
+    }
+
+    @Test
+    fun `decodes real world baseline jpeg fixtures within lossy tolerance`() {
+        val cases = listOf(
+            LegacyJpegFixture(
+                name = "color_wheel.jpg",
+                width = 128,
+                height = 128,
+                samples = listOf(
+                    PixelSample(0, 0, 0xFF888888.toInt()),
+                    PixelSample(64, 64, 0xFF000000.toInt()),
+                    PixelSample(127, 127, 0xFF888888.toInt()),
+                ),
+            ),
+            LegacyJpegFixture(
+                name = "mandrill_h1v1.jpg",
+                width = 512,
+                height = 512,
+                samples = listOf(
+                    PixelSample(0, 0, 0xFFA39362.toInt()),
+                    PixelSample(256, 256, 0xFFCEBECB.toInt()),
+                    PixelSample(511, 511, 0xFF070000.toInt()),
+                ),
+            ),
+        )
+
+        for (case in cases) {
+            val codec = SkJpegKotlinCodec.Decoder.make(readLegacyJpeg(case.name))!!
+            val (bitmap, result) = codec.getImage()
+            assertEquals(SkCodec.Result.kSuccess, result)
+            val checked = bitmap!!
+            assertEquals(case.width, checked.width, case.name)
+            assertEquals(case.height, checked.height, case.name)
+            for (sample in case.samples) {
+                assertPixelNear(sample.argb, checked.getPixel(sample.x, sample.y), tolerance = 3, label = case.name)
+            }
+        }
     }
 
     @Test
@@ -1146,6 +1186,30 @@ class SkJpegKotlinCodecTest {
 
     private fun red(pixel: Int): Int = (pixel ushr 16) and 0xFF
 
+    private fun green(pixel: Int): Int = (pixel ushr 8) and 0xFF
+
+    private fun blue(pixel: Int): Int = pixel and 0xFF
+
+    private fun assertPixelNear(expected: Int, actual: Int, tolerance: Int, label: String) {
+        assertEquals(0xFF, (actual ushr 24) and 0xFF, "alpha $label")
+        assertNear(red(expected), red(actual), tolerance, "red $label")
+        assertNear(green(expected), green(actual), tolerance, "green $label")
+        assertNear(blue(expected), blue(actual), tolerance, "blue $label")
+    }
+
+    private fun assertNear(expected: Int, actual: Int, tolerance: Int, label: String) {
+        assertTrue(kotlin.math.abs(expected - actual) <= tolerance, "$label expected=$expected actual=$actual")
+    }
+
+    private fun readLegacyJpeg(name: String): ByteArray {
+        val candidates = listOf(
+            Path.of("kanvas-legacy/src/test/resources/images/$name"),
+            Path.of("../kanvas-legacy/src/test/resources/images/$name"),
+        )
+        val path = candidates.firstOrNull { Files.exists(it) } ?: error("missing legacy JPEG fixture: $name")
+        return Files.readAllBytes(path)
+    }
+
     private fun ByteArrayOutputStream.writeU16LE(value: Int) {
         write(value and 0xFF)
         write((value ushr 8) and 0xFF)
@@ -1164,4 +1228,17 @@ class SkJpegKotlinCodecTest {
         write((value ushr 16) and 0xFF)
         write((value ushr 24) and 0xFF)
     }
+
+    private data class LegacyJpegFixture(
+        val name: String,
+        val width: Int,
+        val height: Int,
+        val samples: List<PixelSample>,
+    )
+
+    private data class PixelSample(
+        val x: Int,
+        val y: Int,
+        val argb: Int,
+    )
 }
