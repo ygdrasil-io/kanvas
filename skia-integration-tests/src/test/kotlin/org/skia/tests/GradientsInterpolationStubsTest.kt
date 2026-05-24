@@ -9,8 +9,6 @@ import org.junit.jupiter.api.Test
  *
  * Affected GMs:
  *  - `gradients_color_space`          — 14 color spaces (sRGB…Rec2020)
- *  - `gradients_hue_method`           — HSL core exists; GM port still needs
- *                                       labels and explicit-position endpoint handling
  *  - `gradients_color_space_tilemode` — OKLCH × 4 tile modes
  *  - `gradients_color_space_many_stops` — OKLCH + 200 stops (GPU texture fallback)
  *  - `gradients_powerless_hue_LCH`   — powerless-hue in LCH
@@ -22,17 +20,12 @@ import org.junit.jupiter.api.Test
  * will throw `NotImplementedError` if accidentally called, ensuring no
  * silent empty-canvas passes occur.
  */
-@Disabled("STUB.GRADIENT_INTERPOLATION: perceptual/powerless hue GMs and hue-method GM port are not complete")
+@Disabled("STUB.GRADIENT_INTERPOLATION: perceptual/powerless hue GMs are not complete")
 class GradientsInterpolationStubsTest {
 
     @Test
     fun `gradients_color_space GM stub`() {
         GradientsColorSpaceGM()
-    }
-
-    @Test
-    fun `gradients_hue_method GM stub`() {
-        GradientsHueMethodGM()
     }
 
     @Test
