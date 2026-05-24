@@ -36,15 +36,9 @@ import org.skia.tools.ToolUtils
  *  - Column 2: an injected `translate(1, 0)` prevents the collapse
  *    (correct alpha).
  *
- * **Missing API** — the fourth draw procedure uses
- * [SkCanvas.experimental_DrawEdgeAAImageSet] which is stubbed as
- * `TODO("STUB.EDGE_AA_IMAGE_SET")` and will throw [NotImplementedError]
- * at runtime. The GM is therefore `@Disabled` until that API is
- * implemented.
- *
- * TODO: missing API — [SkCanvas.experimental_DrawEdgeAAImageSet]
- * (STUB.EDGE_AA_IMAGE_SET). When implemented, remove `@Disabled` from
- * [Skbug14554Test] and enable the ratchet comparison.
+ * The fourth draw procedure now uses the raster
+ * [SkCanvas.experimental_DrawEdgeAAImageSet] fallback, so this GM covers the
+ * layer-alpha collapse case for batched image-set draws too.
  */
 public class Skbug14554GM : GM() {
 
@@ -138,7 +132,6 @@ public class Skbug14554GM : GM() {
             SkCanvas.ImageSetEntry(image, r, r),
             SkCanvas.ImageSetEntry(image, r, r.makeOffset(50f, 50f)),
         )
-        // TODO("STUB.EDGE_AA_IMAGE_SET: SkCanvas::experimental_DrawEdgeAAImageSet")
         canvas.experimental_DrawEdgeAAImageSet(
             set = entries,
             count = 2,
