@@ -1335,7 +1335,9 @@ internal fun decodeVp8LossyPixels(data: ByteArray, metadata: WebpMetadata): Vp8L
         Vp8LossyBitstreamLayoutDecodeResult.Unsupported -> return Vp8LossyDecodeResult.Unsupported
         is Vp8LossyBitstreamLayoutDecodeResult.Layout -> result.layout
     }
-    if (layout.header.loopFilter.level != 0) return Vp8LossyDecodeResult.Unsupported
+    if (layout.header.loopFilter.level != 0 && !layout.header.loopFilter.simpleFilter) {
+        return Vp8LossyDecodeResult.Unsupported
+    }
 
     val firstPartitionOffset = payloadOffset + VP8_KEYFRAME_HEADER_SIZE
     val firstPartitionEnd = firstPartitionOffset + frameTag.firstPartitionSize
@@ -1381,7 +1383,8 @@ internal fun decodeVp8LossyPixels(data: ByteArray, metadata: WebpMetadata): Vp8L
         Vp8ReconstructionResult.Unsupported -> return Vp8LossyDecodeResult.Unsupported
         is Vp8ReconstructionResult.Planes -> result.planes
     }
-    val pixels = planes.cropTo(metadata.width, metadata.height).toRgba()
+    val filteredPlanes = applyVp8SimpleLoopFilterIfNeeded(planes, layout.header.loopFilter)
+    val pixels = filteredPlanes.cropTo(metadata.width, metadata.height).toRgba()
     return when (val alpha = decodeVp8AlphaPlane(data, metadata)) {
         Vp8AlphaDecodeResult.Absent -> Vp8LossyDecodeResult.Pixels(pixels)
         Vp8AlphaDecodeResult.Invalid -> Vp8LossyDecodeResult.Invalid
@@ -2991,6 +2994,62 @@ internal fun applyVp8SimpleHorizontalLoopFilter(
         filtered[edgeY * width + x] = sample.q0
     }
     return filtered
+}
+
+internal fun applyVp8SimpleLoopFilterIfNeeded(
+    planes: Vp8ReconstructedPlanes,
+    loopFilter: Vp8LoopFilterHeader,
+): Vp8ReconstructedPlanes {
+    if (!loopFilter.simpleFilter || loopFilter.level == 0) return planes
+
+    val limits = deriveVp8LoopFilterLimits(loopFilter)
+    var yPlane = planes.yPlane
+    for (edgeX in VP8_BLOCK_SIZE until planes.width step VP8_BLOCK_SIZE) {
+        if (edgeX in 2..(planes.width - 2)) {
+            yPlane = applyVp8SimpleVerticalLoopFilter(
+                plane = yPlane,
+                width = planes.width,
+                height = planes.height,
+                edgeX = edgeX,
+                limit = limits.forEdge(edgeX),
+            )
+        }
+    }
+    for (edgeY in VP8_BLOCK_SIZE until planes.height step VP8_BLOCK_SIZE) {
+        if (edgeY in 2..(planes.height - 2)) {
+            yPlane = applyVp8SimpleHorizontalLoopFilter(
+                plane = yPlane,
+                width = planes.width,
+                height = planes.height,
+                edgeY = edgeY,
+                limit = limits.forEdge(edgeY),
+            )
+        }
+    }
+
+    return planes.copy(yPlane = yPlane)
+}
+
+internal data class Vp8LoopFilterLimits(
+    val macroblockEdge: Int,
+    val subblockEdge: Int,
+) {
+    fun forEdge(edge: Int): Int =
+        if (edge % VP8_MACROBLOCK_SIZE == 0) macroblockEdge else subblockEdge
+}
+
+internal fun deriveVp8LoopFilterLimits(loopFilter: Vp8LoopFilterHeader): Vp8LoopFilterLimits {
+    var interiorLimit = loopFilter.level
+    if (loopFilter.sharpness != 0) {
+        interiorLimit = interiorLimit shr if (loopFilter.sharpness > 4) 2 else 1
+        interiorLimit = interiorLimit.coerceAtMost(9 - loopFilter.sharpness)
+    }
+    if (interiorLimit == 0) interiorLimit = 1
+
+    return Vp8LoopFilterLimits(
+        macroblockEdge = (((loopFilter.level + 2) * 2) + interiorLimit).coerceIn(0, 255),
+        subblockEdge = ((loopFilter.level * 2) + interiorLimit).coerceIn(0, 255),
+    )
 }
 
 private fun clip8(value: Int): Int = value.coerceIn(0, 255)
