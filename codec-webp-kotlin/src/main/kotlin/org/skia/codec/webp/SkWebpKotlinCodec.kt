@@ -2525,7 +2525,7 @@ private val VP8_ZIGZAG = intArrayOf(
     7, 11, 14, 15,
 )
 
-private val VP8_COEFFICIENT_BANDS = intArrayOf(
+internal val VP8_COEFFICIENT_BANDS = intArrayOf(
     // Values from libvpx entropy.c vp8_coef_bands.
     0, 1, 2, 3,
     6, 4, 5, 6,
