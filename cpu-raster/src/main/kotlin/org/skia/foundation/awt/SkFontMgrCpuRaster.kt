@@ -1,6 +1,7 @@
 package org.skia.foundation.awt
 
 import org.skia.foundation.SkFontMgr
+import org.skia.foundation.opentype.OpenTypeSystemFontMgr
 
 /**
  * Companion extension exposing the JVM AWT font manager.
@@ -21,13 +22,18 @@ import org.skia.foundation.SkFontMgr
  * explicitly; portable font paths should use
  * [org.skia.foundation.LiberationFontMgr.Make] instead.
  */
+@Deprecated(
+    message = "Use RefDefault() for the pure Kotlin OpenType system-font manager. RefAwtDefault() is a legacy AWT backend scheduled for removal.",
+    replaceWith = ReplaceWith("RefDefault()"),
+)
 public fun SkFontMgr.Companion.RefAwtDefault(): SkFontMgr = JvmAwtFontMgr.SINGLETON
 
 /**
- * Compatibility alias for older JVM/cpu-raster call sites.
+ * JVM default font manager backed by pure Kotlin OpenType system-font
+ * scanning. This does not use AWT or `GraphicsEnvironment`.
  */
-@Deprecated(
-    message = "Use RefAwtDefault() for the optional AWT system-font backend, or LiberationFontMgr.Make() for portable OpenType fonts.",
-    replaceWith = ReplaceWith("RefAwtDefault()"),
-)
-public fun SkFontMgr.Companion.RefDefault(): SkFontMgr = RefAwtDefault()
+public fun SkFontMgr.Companion.RefDefault(): SkFontMgr = OpenTypeSystemFontMgrHolder.SINGLETON
+
+private object OpenTypeSystemFontMgrHolder {
+    val SINGLETON: SkFontMgr by lazy { OpenTypeSystemFontMgr.Create() }
+}

@@ -34,6 +34,9 @@ font work from PR #786.
   table version 0. The backend can associate glyph IDs with SVG document
   bytes, but rendering still falls back to the monochrome outline path.
 - Bundled Liberation TTF resources used by the current tests.
+- Pure Kotlin system font discovery through `SystemFontScanner` and
+  `OpenTypeSystemFontMgr`, scanning standard OS font directories and parsing
+  loadable OpenType files without AWT.
 
 The backend has no AWT or JNI dependency. It is intended as the first portable
 font path for environments where JVM desktop font APIs or native Skia bindings
@@ -41,19 +44,19 @@ are unavailable.
 
 ## System Font Fallback Policy
 
-The portable backend deliberately does not enumerate host system fonts. Its
-default fallback surface is limited to bundled Liberation faces and fonts
-loaded explicitly through `OpenTypeTypeface.MakeFromBytes`,
-`OpenTypeFontMgr.makeFromData`, or related data/stream APIs. When no bundled
-or provided face can cover a family/style/codepoint request, portable managers
-return an empty style set or `null` rather than consulting the operating
-system.
+There are two pure Kotlin font-manager modes:
 
-Host system font enumeration remains a JVM/cpu-raster integration concern.
-The optional AWT backend is exposed from `org.skia.foundation.awt` with the
-explicit `SkFontMgr.RefAwtDefault()` extension and may use
-`java.awt.GraphicsEnvironment`. Portable `kanvas-skia` code must not import
-that package or depend on installed fonts.
+- `LiberationFontMgr.Make()` is deterministic and limited to bundled
+  Liberation faces.
+- `OpenTypeSystemFontMgr.Create()` enumerates host system font files through
+  `SystemFontScanner`, then loads only files supported by the current OpenType
+  parser.
+
+The JVM/cpu-raster `SkFontMgr.RefDefault()` extension now uses
+`OpenTypeSystemFontMgr` and never calls `java.awt.GraphicsEnvironment`. The
+optional AWT backend remains exposed only as the deprecated
+`org.skia.foundation.awt.SkFontMgr.RefAwtDefault()` extension until the legacy
+font surfaces are removed.
 
 The optional AWT shaper follows the same rule: JVM callers can opt in through
 `SkShaper.MakeJvmAwtTextLayout()`, while `SkShaper.MakePrimitive()` remains
@@ -85,8 +88,10 @@ new portable font code should use `OpenTypeTypeface` and
   gradients, composites, reusable layer graphs, CBDT/sbix bitmap strikes,
   and SVG-in-OpenType glyph rendering are not part of the current pure Kotlin
   backend.
-- System font family enumeration and platform font fallback beyond the bundled
-  portable Liberation manager are out of scope.
+- Platform font fallback through native desktop APIs remains out of scope.
+  System font enumeration itself is now provided by the pure Kotlin
+  `OpenTypeSystemFontMgr`, limited to files the current OpenType parser can
+  load.
 - Pixel-perfect FreeType/HarfBuzz parity is not guaranteed. This backend reads
   the font data directly, then converts outlines into `SkPath` and relies on
   the Kanvas raster path.
