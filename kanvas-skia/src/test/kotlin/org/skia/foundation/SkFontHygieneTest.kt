@@ -88,7 +88,7 @@ class SkFontHygieneTest {
     }
 
     @Test
-    fun `setHinting is silently honoured stored on SkFont but ignored by AWT backend`() {
+    fun `setHinting is stored on SkFont while portable backend still renders`() {
         val font = ToolUtils.DefaultPortableFont(20f)
         // Default = kNormal (matches Skia).
         assertEquals(SkFontHinting.kNormal, font.hinting)
@@ -96,8 +96,8 @@ class SkFontHygieneTest {
         font.hinting = SkFontHinting.kFull
         assertEquals(SkFontHinting.kFull, font.hinting)
         // Render with each level — all four should produce non-zero pixels.
-        // The AWT backend ignores the hinting value; this test just
-        // confirms the call doesn't crash and the property round-trips.
+        // The portable backend records hinting; this confirms the call
+        // doesn't crash and the property round-trips.
         for (h in SkFontHinting.entries) {
             val f = ToolUtils.DefaultPortableFont(24f).apply { hinting = h }
             val bm = SkBitmap(80, 40).apply { eraseColor(0xFFFFFFFF.toInt()) }

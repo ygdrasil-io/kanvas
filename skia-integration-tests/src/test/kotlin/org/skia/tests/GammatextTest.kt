@@ -11,7 +11,7 @@ import org.skia.testing.TestUtils
  * Wave 11A textual GM port — see [GammatextGM] for source-spec mapping.
  *
  * Tolerance 8 (default for textual GMs, [TestUtils.TEXTUAL_GM_TOLERANCE])
- * is used to absorb the AWT-vs-FreeType AA edge drift on the
+ * is used to absorb the OpenType-vs-FreeType AA edge drift on the
  * eight-colour Hamburgefons columns. Floor is set per the actual /
  * actual-minus-buffer rule from the wave brief.
  */

@@ -74,8 +74,8 @@ than silently approximated.
 
 ## Shaping Audit
 
-The repository already has a JVM/AWT shaper in `cpu-raster`, but the pure
-Kotlin OpenType backend must remain usable without AWT or JNI. The current
+The repository may integrate platform shapers outside `kanvas-skia`, but the
+pure Kotlin OpenType backend must remain usable without AWT or JNI. The current
 `kanvas-skia` text path for `OpenTypeTypeface` maps Unicode codepoints through
 `cmap`, places glyph paths in order, and now applies legacy `kern` pair
 adjustments plus `GPOS` pair-position fallback. It does not perform full

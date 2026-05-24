@@ -10,17 +10,9 @@ package org.skia.foundation
  *  - [kNormal] — outlines modified to improve contrast (Skia default).
  *  - [kFull]   — outlines modified for maximum contrast.
  *
- * **Behavioural note** — our AWT-backed rasteriser ignores this enum
- * silently. AWT applies its own hinting policy through
- * `RenderingHints.KEY_TEXT_ANTIALIASING` / `KEY_FRACTIONALMETRICS` /
- * `KEY_TEXT_LCD_CONTRAST` rather than per-glyph hint levels. The
- * value is recorded on [SkFont] for source-level compatibility with
- * upstream code (so `font.setHinting(...)` calls compile and execute
- * without crashing) but does not affect rendered pixels.
- *
- * Cf. `archives/MIGRATION_PLAN_TEXT.md` — same family of caveats as
- * [SkFont.Edging.kSubpixelAntiAlias] (which we silently downgrade to
- * `kAntiAlias`).
+ * **Behavioural note** — the portable OpenType backend records this enum
+ * for source-level compatibility with upstream code, but currently does
+ * not modify outlines or rendered pixels based on the requested hint level.
  */
 public enum class SkFontHinting {
     kNone,

@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.foundation.opentype.LiberationOpenTypeFontMgr
+import org.skia.foundation.opentype.OpenTypeTypeface
 
 /**
  * R-final.9 — sanity tests for the variable-font argument plumbing.
@@ -52,19 +54,18 @@ class SkFontArgumentsTest {
     }
 
     @Test
-    fun `AwtTypeface makeClone returns a new instance for empty args`() {
-        val src = org.skia.foundation.awt.AwtTypeface.DEFAULT
+    fun `OpenTypeTypeface makeClone returns a new instance for empty args`() {
+        val src = portableTypeface()
         val cloned = src.makeClone(SkFontArguments())
         assertNotNull(cloned)
-        // AWT clone path always rebuilds the wrapper to match Skia's
-        // "always a fresh sk_sp" contract. Identity differs but the
-        // typeface is valid.
+        // OpenType clone path rebuilds the wrapper to match Skia's
+        // "fresh sk_sp" contract. Identity differs but the typeface is valid.
         assertNotSame(src, cloned)
     }
 
     @Test
-    fun `AwtTypeface makeClone honours wght axis without crashing`() {
-        val src = org.skia.foundation.awt.AwtTypeface.DEFAULT
+    fun `OpenTypeTypeface makeClone accepts wght axis without crashing`() {
+        val src = portableTypeface()
         val args = SkFontArguments().setVariationDesignPosition(
             SkFontArguments.VariationPosition(
                 listOf(
@@ -75,7 +76,7 @@ class SkFontArgumentsTest {
             )
         )
         val cloned = src.makeClone(args)
-        assertNotNull(cloned, "makeClone should never return null for AwtTypeface")
+        assertNotNull(cloned, "makeClone should not return null for the bundled OpenType typeface")
         // The clone's typeface should be measurable — sanity: zero-width
         // text returns 0 advance, finite text returns positive.
         val font = SkFont(cloned!!, 12f)
@@ -84,8 +85,8 @@ class SkFontArgumentsTest {
     }
 
     @Test
-    fun `AwtTypeface makeClone silently drops unknown axis`() {
-        val src = org.skia.foundation.awt.AwtTypeface.DEFAULT
+    fun `OpenTypeTypeface makeClone silently drops unknown axis`() {
+        val src = portableTypeface()
         val args = SkFontArguments().setVariationDesignPosition(
             SkFontArguments.VariationPosition(
                 listOf(
@@ -101,4 +102,9 @@ class SkFontArgumentsTest {
         val cloned = src.makeClone(args)
         assertNotNull(cloned, "Unmappable axes should not block clone")
     }
+
+    private fun portableTypeface(): OpenTypeTypeface =
+        requireNotNull(
+            LiberationOpenTypeFontMgr.Create().matchFamilyStyle("Liberation Sans", SkFontStyle.Normal())
+        ) as OpenTypeTypeface
 }

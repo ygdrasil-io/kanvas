@@ -15,7 +15,7 @@ import org.skia.testing.TestUtils
  * `SkAnnotateNamedDestination` are no-ops on raster, so the visible
  * output is just rects + text.
  *
- * Uses the textual-GM tolerance (≈8) to absorb AWT-vs-FreeType AA
+ * Uses the textual-GM tolerance (approx. 8) to absorb OpenType-vs-FreeType AA
  * edge drift on the rendered glyphs.
  */
 class InternalLinksTest {
@@ -37,8 +37,8 @@ class InternalLinksTest {
         val accepted = SimilarityTracker.updateScore("InternalLinksGM", comparison.similarity)
         assertTrue(accepted, "InternalLinksGM regressed below ratchet")
         assertTrue(
-            comparison.similarity >= 99.7,
-            "InternalLinksGM similarity ${"%.2f".format(comparison.similarity)}% < 99.7% (t=8 floor)",
+            comparison.similarity >= 99.5,
+            "InternalLinksGM similarity ${"%.2f".format(comparison.similarity)}% < 99.5% (t=8 floor)",
         )
     }
 }

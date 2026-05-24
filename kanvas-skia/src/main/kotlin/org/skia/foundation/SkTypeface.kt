@@ -9,10 +9,10 @@ import org.graphiks.math.SkScalar
  * In Skia a typeface is a polymorphic, ref-counted handle on a font
  * resource — `SkFontMgr` produces concrete subclasses (FreeType,
  * CoreText, DirectWrite). We keep the abstraction (open class) but
- * **the only concrete subclass shipped with `:kanvas-skia` is the AWT
- * one** (`org.skia.foundation.awt.AwtTypeface`), which is the unique
- * production-grade backend in T1-T5. See `archives/MIGRATION_PLAN_TEXT.md` §
- * "Contrainte de design".
+ * ship portable OpenType-backed implementations in `:kanvas-skia`
+ * (`org.skia.foundation.opentype.OpenTypeTypeface` and the bundled
+ * Liberation manager). JVM desktop/AWT integration lives outside this
+ * portable foundation layer.
  *
  * The base `SkTypeface` returned by [MakeEmpty] is a no-op stand-in
  * suitable for tests that need a typeface object but don't actually
@@ -32,8 +32,7 @@ public open class SkTypeface protected constructor() {
     /**
      * Internal hook for [SkFont.measureText] — base class returns 0
      * (consistent with [MakeEmpty]'s no-op semantics). Concrete
-     * typefaces (e.g. `AwtTypeface`) override this to delegate to their
-     * native rasteriser.
+     * typefaces override this to delegate to their font scaler.
      *
      * `internal` because callers should always go through [SkFont.measureText]
      * (the API surface that mirrors upstream).
@@ -62,7 +61,7 @@ public open class SkTypeface protected constructor() {
      * does the CTM mapping.
      *
      * Base class returns `null` (no glyphs to draw — the canvas treats
-     * this as a no-op). Concrete typefaces (`AwtTypeface`) override.
+     * this as a no-op). Concrete typefaces override.
      *
      * `internal` because the public API is [org.skia.core.SkCanvas.drawString].
      */
@@ -148,16 +147,10 @@ public open class SkTypeface protected constructor() {
      *
      * **R-final.7 status — JNI required, returns `null`** :
      *
-     * AWT does not expose the OpenType `kern` table directly. Reading
-     * pair adjustments would require parsing the raw font binary (the
-     * `kern` and `GPOS` tables) — out of scope for the pure-JVM port
-     * (FreeType / HarfBuzz handle this upstream). Returning `null`
-     * matches Skia's contract for typefaces that don't carry a `kern`
-     * table : the caller should fall back to advance-only positioning.
-     *
-     * Concrete subclasses backed by a font binary loader (eventual
-     * Fontations / FreeType JNI bridge — see `STUB.FONTATIONS` in
-     * `API_FINALIZATION_PLAN.md`) may override.
+     * Returning `null` matches Skia's contract for typefaces that don't
+     * carry kerning data: the caller should fall back to advance-only
+     * positioning. Binary-backed subclasses such as `OpenTypeTypeface`
+     * override this when they can read `kern` or `GPOS` data.
      */
     public open fun getKerningPairAdjustments(glyphs: ShortArray): IntArray? = null
 
@@ -198,13 +191,9 @@ public open class SkTypeface protected constructor() {
      * no variation tables (the kanvas-skia [MakeEmpty] sentinel falls
      * here ; concrete subclasses with a real font binary override).
      *
-     * Concrete subclasses override the fast path in
-     * `AwtTypeface.makeClone(...)`, which maps the standard
-     * `wght` / `wdth` / `slnt` / `ital` axes onto AWT
-     * `java.awt.font.TextAttribute` values via `Font.deriveFont(Map<...>)`.
-     * Axes AWT cannot honour (`opsz`, `GRAD`, `XHGT`, custom) are
-     * silently dropped — see the AWT-typeface KDoc for the per-axis
-     * mapping table.
+     * Concrete subclasses override this to apply the arguments they
+     * understand. `OpenTypeTypeface` applies parsed `fvar` coordinates
+     * and COLR palette selection; unsupported axes are ignored.
      *
      * Returns `null` if the clone cannot be produced (e.g. the underlying
      * font format rejects the requested arguments). The base default
@@ -217,13 +206,13 @@ public open class SkTypeface protected constructor() {
      * [`int SkTypeface::countGlyphs() const`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h)
      * — number of glyphs this typeface carries (`maxp.numGlyphs` in
      * TrueType terms). Used by `gm/fontmgr.cpp::FontMgrBoundsGM` to
-     * skip typefaces with 0 glyphs (e.g. degenerate AWT fallbacks) and
+     * skip typefaces with 0 glyphs and
      * to bound the per-glyph bbox sweep at a thousand glyphs for
      * tractable runtimes.
      *
      * **Base-class default — 0** : the [MakeEmpty] sentinel carries no
-     * glyphs. Concrete subclasses (notably `AwtTypeface`) override
-     * with the underlying font's `numGlyphs`.
+     * glyphs. Binary-backed subclasses override with the underlying
+     * font's `numGlyphs`.
      */
     public open fun countGlyphs(): Int = 0
 
@@ -261,15 +250,14 @@ public open class SkTypeface protected constructor() {
      *
      * **STUB.FONTATIONS** — Accessing nameID entries requires raw OpenType
      * name-table parsing (`getTableData(SkSetFourByteTag('n','a','m','e'), …)`)
-     * which is not implemented in the pure-JVM / AWT backend. This method
+     * which is only available from binary-backed typefaces. The base sentinel
      * always throws [NotImplementedError] with the `STUB.FONTATIONS` tag.
      * Callers must annotate their tests `@Disabled("STUB.FONTATIONS")`.
-     * See [SkTypeface_Fontations] and `API_FINALIZATION_PLAN.md`.
+     * See [SkTypeface_Fontations].
      */
     public open fun getPostScriptName(): String? = TODO(
         "STUB.FONTATIONS: getPostScriptName() requires raw OpenType name-table access " +
-            "(nameID 6) — not available in the pure-JVM AWT backend. " +
-            "See API_FINALIZATION_PLAN.md § STUB.FONTATIONS.",
+            "(nameID 6) — not available on the empty base typeface.",
     )
 
     /**
@@ -280,15 +268,13 @@ public open class SkTypeface protected constructor() {
      * Each element is a `(name: String, language: String)` pair.
      *
      * **STUB.FONTATIONS** — Same blocker as [getPostScriptName]: raw
-     * name-table parsing is unavailable in the pure-JVM backend. This
+     * name-table parsing is unavailable on the empty base typeface. This
      * method always throws [NotImplementedError]. Callers must annotate
-     * their tests `@Disabled("STUB.FONTATIONS")`.
-     * See [SkTypeface_Fontations] and `API_FINALIZATION_PLAN.md`.
+     * their tests `@Disabled("STUB.FONTATIONS")`. See [SkTypeface_Fontations].
      */
     public open fun createFamilyNameIterator(): Iterator<LocalizedString> = TODO(
         "STUB.FONTATIONS: createFamilyNameIterator() requires raw OpenType name-table access " +
-            "— not available in the pure-JVM AWT backend. " +
-            "See API_FINALIZATION_PLAN.md § STUB.FONTATIONS.",
+            "— not available on the empty base typeface.",
     )
 
     /**
@@ -303,8 +289,8 @@ public open class SkTypeface protected constructor() {
     /**
      * Internal hook for [SkFont.getBounds] — single-glyph tight visual
      * bbox at the configured `size` / `scaleX` / `skewX`. The default
-     * returns the empty rect; concrete subclasses (notably `AwtTypeface`)
-     * compute the glyph outline's actual bounds.
+     * returns the empty rect; concrete subclasses compute the glyph
+     * outline's actual bounds.
      *
      * Mirrors the per-glyph branch of upstream's
      * `SkScalerContext::getMetrics(...)` (`src/core/SkScalerContext.cpp`)
@@ -345,9 +331,9 @@ public open class SkTypeface protected constructor() {
         /**
          * Mirrors Skia's `SkTypeface::MakeEmpty()`. Returns a singleton
          * no-op typeface — fine for unit tests, but won't actually render
-         * glyphs. Production callers should use
-         * [org.skia.tools.ToolUtils.DefaultPortableTypeface] which returns
-         * a real AWT-backed typeface.
+         * glyphs. Production callers should use a real font manager such
+         * as [LiberationFontMgr.Make] or
+         * [org.skia.tools.ToolUtils.DefaultPortableTypeface].
          */
         public fun MakeEmpty(): SkTypeface = EMPTY
 

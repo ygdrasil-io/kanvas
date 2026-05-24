@@ -43,8 +43,9 @@ public class SkFont(
     public var isEmbeddedBitmaps: Boolean = false
 
     /**
-     * Mirrors `SkFont::setHinting(SkFontHinting)`. The AWT backend
-     * ignores this value silently — see [SkFontHinting] for rationale.
+     * Mirrors `SkFont::setHinting(SkFontHinting)`. The portable OpenType
+     * backend records this value but does not alter outlines from it — see
+     * [SkFontHinting] for rationale.
      * Stored on [SkFont] so direct ports of upstream `.cpp` code that
      * call `font.setHinting(...)` compile and round-trip correctly.
      */
@@ -53,10 +54,9 @@ public class SkFont(
     /**
      * Variable-font design position — mirrors what Skia carries via
      * `SkFontArguments::VariationPosition` on a typeface clone (Phase
-     * I2.2 light). The current AWT-backed scaler does **not** consume
-     * this list yet ; it is exposed today so direct ports that
-     * propagate variations through their pipelines compile and
-     * round-trip. See [SkFontVariation] for axis semantics.
+     * I2.2 light). It is exposed so direct ports that propagate variations
+     * through their pipelines compile and round-trip. See [SkFontVariation]
+     * for axis semantics.
      */
     public var variations: List<SkFontVariation> = emptyList()
 
@@ -87,8 +87,7 @@ public class SkFont(
      * @param text       the string to measure.
      * @param byteLength number of bytes (or wchars) to consider; defaults
      *                   to the full string length.
-     * @param encoding   byte/word interpretation. T2: only [SkTextEncoding.kUTF8]
-     *                   is honoured by the AWT backend.
+     * @param encoding   byte/word interpretation.
      * @param bounds     optional out-param — populated with the tight bounding
      *                   box of the rendered glyph run, in text-local coords.
      * @return the advance width.
@@ -146,7 +145,7 @@ public class SkFont(
      *
      * Delegates to [SkTypeface.getGlyphBoundsInternal] — base
      * typeface ([SkTypeface.MakeEmpty]) returns the empty rect ;
-     * concrete subclasses (`AwtTypeface`) compute the outline bbox.
+     * concrete subclasses compute the outline bbox.
      */
     public fun getBounds(glyphId: Int, paint: SkPaint? = null): SkRect {
         @Suppress("UNUSED_PARAMETER") val unused = paint
@@ -210,9 +209,9 @@ public class SkFont(
      * are honoured — [SkTextEncoding.kGlyphID] short-circuits to a no-op
      * "text already is glyph IDs" passthrough by interpreting [text]'s
      * UTF-16 char codes as raw glyph IDs (mirrors upstream's
-     * `kGlyphID_SkTextEncoding` shortcut). For our AWT-backed pipeline
-     * the three Unicode encodings collapse to the same `String.codePoints()`
-     * walk because Kotlin `String` is already Unicode internally.
+     * `kGlyphID_SkTextEncoding` shortcut). The three Unicode encodings
+     * collapse to the same `String.codePoints()` walk because Kotlin
+     * `String` is already Unicode internally.
      *
      * Returned array length equals the input code-point count (≤
      * `text.length`, less for surrogate pairs in [SkTextEncoding.kUTF16]).

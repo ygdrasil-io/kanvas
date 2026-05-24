@@ -32,19 +32,15 @@ public object SkFontPriv {
      * When the typeface reports zero metrics (e.g.
      * [SkTypeface.MakeEmpty]), returns [SkRect.MakeEmpty].
      *
-     * Concrete typefaces (`AwtTypeface`) populate the metrics from
-     * AWT `LineMetrics` ; the resulting bbox matches Skia's
-     * upstream within a 1-2 ulp drift on em-relative axes (cf.
-     * `archives/MIGRATION_PLAN_TEXT.md` §T4).
+     * Concrete typefaces populate the metrics from their font backend.
      */
     public fun GetFontBounds(font: SkFont): SkRect {
         val metrics = SkFontMetrics()
         font.getMetrics(metrics)
         // Skia's reference impl multiplies `fXMin / fXMax` by `size *
-        // scaleX` because the metrics fields are in em-relative
-        // units upstream. Our AWT-backed [SkTypeface.getMetricsInternal]
-        // already scales them to the requested point size, so we
-        // consume them directly.
+        // scaleX` because the metrics fields are in em-relative units
+        // upstream. Our typeface metrics are already scaled to the
+        // requested point size, so we consume them directly.
         return SkRect.MakeLTRB(
             metrics.fXMin,
             metrics.fTop,
