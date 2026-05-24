@@ -1301,6 +1301,76 @@ internal sealed interface Vp8CoefficientDecodeResult {
     data object Invalid : Vp8CoefficientDecodeResult
 }
 
+internal sealed interface Vp8CoefficientProbabilityUpdateResult {
+    data class Probabilities(val probabilities: Vp8CoefficientProbabilities) : Vp8CoefficientProbabilityUpdateResult
+    data object Invalid : Vp8CoefficientProbabilityUpdateResult
+}
+
+internal class Vp8CoefficientProbabilities private constructor(
+    private val values: IntArray,
+) {
+    init {
+        require(values.size == VP8_COEFFICIENT_PROBABILITY_TOTAL)
+        require(values.all { it in 0..255 })
+    }
+
+    fun valueAt(type: Int, band: Int, context: Int, probability: Int): Int {
+        require(type in 0 until VP8_COEFFICIENT_TYPE_COUNT)
+        require(band in 0 until VP8_COEFFICIENT_BAND_COUNT)
+        require(context in 0 until VP8_COEFFICIENT_CONTEXT_COUNT)
+        require(probability in 0 until VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT)
+        return values[vp8CoefficientProbabilityIndex(type, band, context, probability)]
+    }
+
+    fun tokenProbabilities(type: Int, band: Int, context: Int): IntArray =
+        IntArray(VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT) { probability ->
+            valueAt(type, band, context, probability)
+        }
+
+    fun copyValues(): IntArray = values.copyOf()
+
+    companion object {
+        fun filled(value: Int): Vp8CoefficientProbabilities {
+            require(value in 0..255)
+            return Vp8CoefficientProbabilities(IntArray(VP8_COEFFICIENT_PROBABILITY_TOTAL) { value })
+        }
+
+        fun fromFlat(values: IntArray): Vp8CoefficientProbabilities =
+            Vp8CoefficientProbabilities(values.copyOf())
+    }
+}
+
+internal fun readVp8CoefficientProbabilityUpdates(
+    reader: Vp8BoolReader,
+    base: Vp8CoefficientProbabilities,
+    updateProbabilities: IntArray,
+): Vp8CoefficientProbabilityUpdateResult {
+    if (updateProbabilities.size != VP8_COEFFICIENT_PROBABILITY_TOTAL) {
+        return Vp8CoefficientProbabilityUpdateResult.Invalid
+    }
+    if (updateProbabilities.any { it !in 1..255 }) {
+        return Vp8CoefficientProbabilityUpdateResult.Invalid
+    }
+
+    val updated = base.copyValues()
+    for (type in 0 until VP8_COEFFICIENT_TYPE_COUNT) {
+        for (band in 0 until VP8_COEFFICIENT_BAND_COUNT) {
+            for (context in 0 until VP8_COEFFICIENT_CONTEXT_COUNT) {
+                for (probability in 0 until VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT) {
+                    val index = vp8CoefficientProbabilityIndex(type, band, context, probability)
+                    val shouldUpdate = reader.readBit(updateProbabilities[index])
+                        ?: return Vp8CoefficientProbabilityUpdateResult.Invalid
+                    if (shouldUpdate != 0) {
+                        updated[index] = reader.readLiteral(8)
+                            ?: return Vp8CoefficientProbabilityUpdateResult.Invalid
+                    }
+                }
+            }
+        }
+    }
+    return Vp8CoefficientProbabilityUpdateResult.Probabilities(Vp8CoefficientProbabilities.fromFlat(updated))
+}
+
 internal fun decodeVp8CoefficientBlock(
     reader: Vp8BoolReader,
     probabilities: IntArray,
@@ -1472,12 +1542,23 @@ private fun readVp8CoefficientCategory(reader: Vp8BoolReader, base: Int, probabi
 }
 
 private const val VP8_BLOCK_COEFFICIENT_COUNT: Int = 16
+private const val VP8_COEFFICIENT_TYPE_COUNT: Int = 4
+private const val VP8_COEFFICIENT_BAND_COUNT: Int = 8
 private const val VP8_COEFFICIENT_CONTEXT_COUNT: Int = 3
 private const val VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT: Int = 11
+private const val VP8_COEFFICIENT_PROBABILITY_TOTAL: Int =
+    VP8_COEFFICIENT_TYPE_COUNT *
+        VP8_COEFFICIENT_BAND_COUNT *
+        VP8_COEFFICIENT_CONTEXT_COUNT *
+        VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT
 private const val VP8_BLOCK_SIZE: Int = 4
 private const val VP8_BLOCKS_PER_MACROBLOCK_SIDE: Int = 4
 private const val VP8_LUMA_BLOCK_COUNT: Int = 16
 private const val VP8_MACROBLOCK_SIZE: Int = 16
+
+private fun vp8CoefficientProbabilityIndex(type: Int, band: Int, context: Int, probability: Int): Int =
+    (((type * VP8_COEFFICIENT_BAND_COUNT + band) * VP8_COEFFICIENT_CONTEXT_COUNT + context) *
+        VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT) + probability
 
 private val VP8_ZIGZAG = intArrayOf(
     0, 1, 4, 8,
