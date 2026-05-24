@@ -23,7 +23,7 @@ import kotlin.math.sqrt
  * DQT/DHT/SOF0/SOS, entropy bit reading, Huffman decode, dequantization, and
  * IDCT. The decode surface is intentionally narrow: sequential 8-bit grayscale,
  * 3-component YCbCr JPEGs with 4:4:4, 4:2:2, or 4:2:0 sampling, and
- * baseline Adobe CMYK JPEGs with 1x1 component sampling.
+ * baseline Adobe CMYK/YCCK JPEGs.
  */
 public class SkJpegKotlinCodec private constructor(
     private val jpeg: ParsedJpeg,
@@ -443,8 +443,21 @@ private fun buildParsed(
             if (y.h == 1 && y.v != 1) return null
         }
         4 -> {
-            if (adobeTransform != 0) return null
-            if (cs.any { it.h != 1 || it.v != 1 }) return null
+            when (adobeTransform) {
+                0 -> {
+                    if (cs.any { it.h != 1 || it.v != 1 }) return null
+                }
+                2 -> {
+                    val y = cs.firstOrNull { it.frameIndex == 0 } ?: return null
+                    val cb = cs.firstOrNull { it.frameIndex == 1 } ?: return null
+                    val cr = cs.firstOrNull { it.frameIndex == 2 } ?: return null
+                    val k = cs.firstOrNull { it.frameIndex == 3 } ?: return null
+                    if (cb.h != 1 || cb.v != 1 || cr.h != 1 || cr.v != 1 || k.h != 1 || k.v != 1) return null
+                    if ((y.h != 1 && y.h != 2) || (y.v != 1 && y.v != 2)) return null
+                    if (y.h == 1 && y.v != 1) return null
+                }
+                else -> return null
+            }
         }
     }
     if (scanData.isEmpty()) return null
@@ -577,7 +590,7 @@ private fun decodeBaseline(jpeg: ParsedJpeg): IntArray {
     return when (jpeg.components.size) {
         1 -> decodeGrayscale(jpeg)
         3 -> decodeColor(jpeg)
-        4 -> decodeCmyk(jpeg)
+        4 -> if (jpeg.adobeTransform == 2) decodeYcck(jpeg) else decodeCmyk(jpeg)
         else -> fail()
     }
 }
@@ -1035,6 +1048,62 @@ private fun decodeCmyk(jpeg: ParsedJpeg): IntArray {
     return pixels
 }
 
+private fun decodeYcck(jpeg: ParsedJpeg): IntArray {
+    val components = jpeg.components
+    val reader = EntropyBitReader(jpeg.scanData)
+    val pixels = IntArray(jpeg.width * jpeg.height)
+    val previousDc = IntArray(components.size)
+    val maxH = components.maxOf { it.h }
+    val maxV = components.maxOf { it.v }
+    val mcuWidth = maxH * 8
+    val mcuHeight = maxV * 8
+    val frameComponents = Array(components.size) { frameIndex ->
+        components.first { it.frameIndex == frameIndex }
+    }
+    val blocks = Array(frameComponents.size) { Array(frameComponents[it].h * frameComponents[it].v) { IntArray(64) } }
+    val blocksX = (jpeg.width + mcuWidth - 1) / mcuWidth
+    val blocksY = (jpeg.height + mcuHeight - 1) / mcuHeight
+    val totalMcus = blocksX * blocksY
+    var mcu = 0
+    var nextRestartMarker = 0
+
+    for (my in 0 until blocksY) {
+        for (mx in 0 until blocksX) {
+            for (component in components) {
+                for (blockY in 0 until component.v) {
+                    for (blockX in 0 until component.h) {
+                        val blockIndex = blockY * component.h + blockX
+                        blocks[component.frameIndex][blockIndex] =
+                            decodeBlock(jpeg, component, reader, previousDc, component.frameIndex)
+                    }
+                }
+            }
+
+            for (y in 0 until mcuHeight) {
+                val py = my * mcuHeight + y
+                if (py >= jpeg.height) continue
+                for (x in 0 until mcuWidth) {
+                    val px = mx * mcuWidth + x
+                    if (px >= jpeg.width) continue
+                    val yy = sampleComponent(blocks[0], frameComponents[0], x, y, mcuWidth, mcuHeight)
+                    val cb = sampleComponent(blocks[1], frameComponents[1], x, y, mcuWidth, mcuHeight)
+                    val cr = sampleComponent(blocks[2], frameComponents[2], x, y, mcuWidth, mcuHeight)
+                    val k = sampleComponent(blocks[3], frameComponents[3], x, y, mcuWidth, mcuHeight)
+                    pixels[py * jpeg.width + px] = ycckToArgb(yy, cb, cr, k)
+                }
+            }
+
+            mcu++
+            if (jpeg.restartInterval > 0 && mcu % jpeg.restartInterval == 0 && mcu < totalMcus) {
+                reader.consumeRestart(nextRestartMarker)
+                nextRestartMarker = (nextRestartMarker + 1) and 7
+                previousDc.fill(0)
+            }
+        }
+    }
+    return pixels
+}
+
 private fun sampleComponent(
     blocks: Array<IntArray>,
     component: Component,
@@ -1256,6 +1325,16 @@ private fun yCbCrToArgb(y: Int, cb: Int, cr: Int): Int {
     val g = (y - 0.344136 * cbShifted - 0.714136 * crShifted).roundToInt().coerceIn(0, 255)
     val b = (y + 1.772 * cbShifted).roundToInt().coerceIn(0, 255)
     return argb(0xFF, r, g, b)
+}
+
+private fun ycckToArgb(y: Int, cb: Int, cr: Int, k: Int): Int {
+    val rgb = yCbCrToArgb(y, cb, cr)
+    return argb(
+        0xFF,
+        (((rgb ushr 16) and 0xFF) * k + 127) / 255,
+        (((rgb ushr 8) and 0xFF) * k + 127) / 255,
+        ((rgb and 0xFF) * k + 127) / 255,
+    )
 }
 
 private fun invertedCmykToArgb(c: Int, m: Int, y: Int, k: Int): Int =
