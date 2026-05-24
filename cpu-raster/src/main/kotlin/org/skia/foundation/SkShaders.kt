@@ -146,6 +146,18 @@ public object SkShaders {
         localMatrix: SkMatrix = SkMatrix.Identity,
     ): SkShader {
         require(pts.size >= 2) { "SkShaders.LinearGradient requires two points" }
+        if (gradient.requiresDedicatedSampler()) {
+            gradient.validateDedicatedSampler()
+            return SkInterpolatedLinearGradient(
+                pts[0],
+                pts[1],
+                gradient.colors,
+                gradient.positions ?: evenlySpacedPositions(gradient.colors.size),
+                gradient.tileMode,
+                gradient.interpolation,
+                localMatrix,
+            )
+        }
         val shader = SkLinearGradient.Make(
             pts[0],
             pts[1],
