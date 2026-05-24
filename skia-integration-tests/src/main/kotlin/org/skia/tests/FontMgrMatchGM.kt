@@ -3,11 +3,11 @@ package org.skia.tests
 import org.graphiks.math.SkISize
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkFont
+import org.skia.foundation.LiberationFontMgr
 import org.skia.foundation.SkFontMgr
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkFontStyleSet
 import org.skia.foundation.SkGraphics
-import org.skia.foundation.awt.RefDefault
 import org.skia.tools.ToolUtils
 import org.graphiks.math.SkScalar
 
@@ -28,15 +28,13 @@ import org.graphiks.math.SkScalar
  *    label + the two CJK probe codepoints `U+5203` with `bcp47 =
  *    "zh"` / `"ja"`.
  *
- * The family is the first one of `Helvetica Neue / Arial / sans /
- * Roboto` that produces a non-empty style set ; on the JVM AWT
- * backend the lookup typically lands on `Arial` or `Helvetica`
- * depending on the JDK distribution.
+ * The family is the first one of `Liberation Sans / Liberation Serif /
+ * Liberation Mono / sans-serif` that produces a non-empty style set
+ * in the portable Liberation manager.
  *
  * **Font-set divergence** : same caveat as [FontMgrGM] — the
- * default JVM font manager enumerates system fonts, not upstream's
- * Liberation portable set. The matching test is `@Disabled` for
- * cross-platform stability.
+ * deterministic Liberation portable set exposed by [LiberationFontMgr.Make],
+ * not the host system font catalog.
  *
  * **API gap vs upstream — `SkFontMgr::Request`** : same as
  * [FontMgrGM] — the third `drawCharacter` pass is elided.
@@ -58,7 +56,7 @@ public class FontMgrMatchGM : GM() {
             isSubpixel = true
             size = 17f
         }
-        val fm: SkFontMgr = SkFontMgr.RefDefault()
+        val fm: SkFontMgr = LiberationFontMgr.Make()
 
         var fset: SkFontStyleSet? = null
         for (name in CANDIDATE_FAMILIES) {
@@ -152,14 +150,12 @@ public class FontMgrMatchGM : GM() {
 
     public companion object {
         /**
-         * Upstream's hard-coded family probe list (`gNames[]`) —
-         * tries Helvetica Neue / Arial / "sans" / Roboto in order ;
-         * the first non-empty match wins. On JVM AWT the resolution
-         * typically lands on Arial (Windows / Linux JDK) or
-         * Helvetica (macOS JDK).
+         * Portable family probe list for the Liberation manager. Keep
+         * aliases in the list so this GM exercises both canonical and
+         * generic family matching.
          */
         internal val CANDIDATE_FAMILIES: Array<String> = arrayOf(
-            "Helvetica Neue", "Arial", "sans", "Roboto",
+            "Liberation Sans", "Liberation Serif", "Liberation Mono", "sans-serif",
         )
     }
 }

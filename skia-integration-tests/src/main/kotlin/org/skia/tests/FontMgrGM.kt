@@ -3,13 +3,13 @@ package org.skia.tests
 import org.graphiks.math.SkISize
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkFont
+import org.skia.foundation.LiberationFontMgr
 import org.skia.foundation.SkFontMgr
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkFontStyleSet
 import org.skia.foundation.SkGraphics
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTypeface
-import org.skia.foundation.awt.RefDefault
 import org.skia.tools.ToolUtils
 import org.graphiks.math.SkScalar
 
@@ -37,13 +37,11 @@ import org.graphiks.math.SkScalar
  * fallback ; we elide that third pass and rely on the first two
  * (which already exercise the same character-fallback codepath).
  *
- * **Font-set divergence** : the default JVM AWT font manager
- * enumerates system fonts (the JDK ships Dialog / Liberation Sans /
- * SansSerif / Serif on every platform we test on), not the
- * Liberation portable set upstream's `LiberationFontMgr` uses. The
- * matching `FontMgrTest` is therefore `@Disabled` — a pixel diff
- * against `fontmgr_iter.png` would fail at the family-enumeration
- * step regardless of glyph-level fidelity.
+ * **Font-set divergence** : this port uses the deterministic
+ * Liberation portable set exposed by [LiberationFontMgr.Make], not
+ * the host system font catalog. The matching `FontMgrTest` remains
+ * a smoke test because the upstream reference image is still tied to
+ * Skia's C++ rasterisation details.
  */
 public class FontMgrGM : GM() {
 
@@ -68,7 +66,7 @@ public class FontMgrGM : GM() {
             size = 17f
         }
 
-        val fm: SkFontMgr = SkFontMgr.RefDefault()
+        val fm: SkFontMgr = LiberationFontMgr.Make()
         val count = minOf(fm.countFamilies(), MAX_FAMILIES)
         if (count == 0) {
             // Upstream returns `DrawResult::kSkip` here ; we just no-op

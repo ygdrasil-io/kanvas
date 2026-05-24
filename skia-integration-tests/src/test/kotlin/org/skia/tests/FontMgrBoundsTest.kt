@@ -9,9 +9,9 @@ import org.skia.testing.TestUtils
  * [org.skia.foundation.SkFont.getBounds] /
  * [org.skia.foundation.SkFontPriv.GetFontBounds] /
  * [org.skia.foundation.SkDashPathEffect.Make] surface. No PNG
- * comparison : same caveat as [FontMgrTest] — the per-glyph bbox
- * sweep depends on the JVM AWT font catalog, not upstream's
- * Liberation portable set.
+ * comparison : same caveat as [FontMgrTest] — this smoke test
+ * verifies the OpenType font-manager path without pinning pixels to
+ * upstream C++ rasterisation.
  *
  * The three registrations correspond to the three upstream
  * `DEF_GM` calls :

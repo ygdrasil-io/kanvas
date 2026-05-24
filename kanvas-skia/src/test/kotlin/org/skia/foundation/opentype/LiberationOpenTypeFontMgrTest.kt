@@ -135,6 +135,12 @@ class LiberationOpenTypeFontMgrTest {
             projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontTest.kt"),
             projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontTextToGlyphsTest.kt"),
             projectRoot.resolve("kanvas-skia/src/test/kotlin/org/skia/foundation/SkTextBlobGetInterceptsTest.kt"),
+            projectRoot.resolve("skia-integration-tests/src/main/kotlin/org/skia/tests/FontMgrBoundsGM.kt"),
+            projectRoot.resolve("skia-integration-tests/src/main/kotlin/org/skia/tests/FontMgrGM.kt"),
+            projectRoot.resolve("skia-integration-tests/src/main/kotlin/org/skia/tests/FontMgrMatchGM.kt"),
+            projectRoot.resolve("skia-integration-tests/src/test/kotlin/org/skia/tests/FontMgrBoundsTest.kt"),
+            projectRoot.resolve("skia-integration-tests/src/test/kotlin/org/skia/tests/FontMgrMatchTest.kt"),
+            projectRoot.resolve("skia-integration-tests/src/test/kotlin/org/skia/tests/FontMgrTest.kt"),
         )
 
         for (path in portableFontPaths) {
