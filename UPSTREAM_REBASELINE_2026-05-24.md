@@ -197,47 +197,34 @@ explicitly designed.
 
 ### Actionable implementation candidates
 
-These are the best candidates for work while fonts/codecs/WGSL are
-landing, subject to GM impact confirmation:
+These are the remaining generated rows in `bucket=implementation` after the
+follow-up PRs landed:
 
-- `STUB.EDGE_AA_IMAGE_SET`
-- `STUB.ASYNC_RESCALE_READ` / `STUB.ASYNC_RESCALE_AND_READ`
-- `STUB.MAKE_WITH_COLOR_FILTER`
-- `STUB.COLOR4F_BLEND_CF`
-- `STUB.GAUSSIAN_COLOR_FILTER`
-- `STUB.IFX.MULTIPLE_FILTERS_SPAN`
-- `STUB.DRAW_VERTICES`
-- `STUB.RSXBLOB`
-- `STUB.DF_TEXT_RASTER`
-
-Current generated rows in `bucket=implementation`:
-
-- `aaclip`
-- `addarc`
-- `bleed`
-- `blurrect`
-- `color4f`
-- `colorfilterimagefilter`
-- `complexclip`
 - `dftext_blob_persp`
 - `drawatlas`
-- `drawimageset`
-- `drawquadset`
 - `gradients`
-- `imagefilters`
-- `imagemasksubset`
-- `lumafilter`
 - `mesh`
-- `patharcto`
-- `patheffects`
-- `pathmeasure`
 - `recordopts`
-- `savelayer`
-- `shadowutils`
-- `strokedlines`
-- `surface`
-- `textblobmixedsizes`
 - `vertices`
+
+Best candidates while fonts/codecs/WGSL are landing:
+
+- `vertices`: `VerticesBatchingGM` is already ported; isolate the remaining
+  raster `VerticesGM` behavior before touching WebGPU wrappers.
+- `recordopts`: the stale `STUB.XYZ` marker is gone; the remaining blocker is
+  the measured saveLayer / detector color-filter fold delta.
+- `gradients`: RGB `SkGradient` API surface is present; remaining work is the
+  perceptual/hue/premul interpolation sampler.
+
+Deferred until dependency delivery or a larger API slice:
+
+- `drawatlas` / `STUB.RSXBLOB`: text/glyph transform work; revisit after font
+  delivery.
+- `dftext_blob_persp` / `STUB.DF_TEXT_RASTER`: text raster fidelity work;
+  revisit after font delivery.
+- `mesh` / `STUB.MESH`: actionable but broad API work; start with the
+  `custommesh` slice once `SkMesh`, `SkMeshSpecification`, and
+  `SkCanvas.drawMesh` are introduced.
 
 Rows in `bucket=partial-coverage` are not immediate blockers. They are
 multi-GM upstream files where the matcher sees mixed coverage but no

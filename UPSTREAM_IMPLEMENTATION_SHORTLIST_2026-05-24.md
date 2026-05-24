@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 11 upstream `.cpp` rows as
+The rebaseline currently classifies 6 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -99,8 +99,11 @@ Completed since this snapshot:
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `gradients` | 1 cpp | M/L | Isolated interpolation variants; useful after the tracker noise reduction. |
-| 2 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
+| 1 | `vertices` | 1 cpp | M | `VerticesBatchingGM` is already ported; the remaining raster `VerticesGM` slice may be smaller than the row suggests. |
+| 2 | `recordopts` | 1 cpp | M | The stale placeholder is gone and the remaining saveLayer/color-filter fold delta is measured. |
+| 3 | `gradients` | 1 cpp | M/L | RGB API surface exists; remaining work is the real interpolation sampler. |
+| 4 | `mesh` | 1 cpp | L/XL | Actionable but broad API work; start with the `custommesh` slice only. |
+| 5 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
 
