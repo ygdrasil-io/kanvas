@@ -576,6 +576,59 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 decoded coefficient tokens reconstruct an intra 4x4 block`() {
+        val tokenProbabilities = IntArray(11) { 128 }
+        // Pre-encoded for Vp8BoolReader; this is not a raw MSB-first bit sequence.
+        val tokens = byteArrayOf(0xB7.toByte(), 0x11, 0x00, 0x00)
+        val result = decodeVp8CoefficientBlock(Vp8BoolReader(tokens), tokenProbabilities)
+
+        assertTrue(result is Vp8CoefficientDecodeResult.Block)
+        val pixels = reconstructVp8Intra4x4Block(
+            mode = Vp8IntraPredictionMode.DC,
+            left = intArrayOf(100, 100, 100, 100),
+            top = intArrayOf(100, 100, 100, 100),
+            topLeft = 100,
+            coefficients = (result as Vp8CoefficientDecodeResult.Block).coefficients,
+            dcQuant = 1,
+            acQuant = 8,
+        )
+
+        assertArrayEquals(
+            intArrayOf(
+                100, 101, 101, 102,
+                100, 100, 101, 101,
+                99, 99, 100, 100,
+                98, 99, 99, 100,
+            ),
+            pixels,
+        )
+    }
+
+    @Test
+    fun `VP8 luma macroblock reconstruction wires dequantized IDCT blocks into 16x16 prediction`() {
+        val blocks = Array(16) {
+            IntArray(16).also { coefficients -> coefficients[0] = 16 }
+        }
+
+        val pixels = reconstructVp8Intra16x16LumaMacroblock(
+            mode = Vp8LumaPredictionMode.VERTICAL,
+            left = null,
+            top = IntArray(16) { x -> 32 + x },
+            topLeft = 0,
+            coefficientsByBlock = blocks,
+            dcQuant = 1,
+            acQuant = 1,
+        )
+
+        assertEquals(16 * 16, pixels.size)
+        for (y in 0 until 16) {
+            for (x in 0 until 16) {
+                assertEquals(34 + x, pixels[y * 16 + x])
+            }
+        }
+    }
+
+    @Test
     fun `VP8 intra reconstruction applies prediction and residuals`() {
         val dc = reconstructVp8IntraPlane(
             width = 4,
