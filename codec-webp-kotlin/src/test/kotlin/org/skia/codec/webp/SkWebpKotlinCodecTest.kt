@@ -494,6 +494,26 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 inverse Walsh Hadamard transform handles AC-bearing blocks`() {
+        val input = IntArray(16).also {
+            it[0] = 16
+            it[1] = 8
+            it[4] = -8
+            it[15] = 4
+        }
+
+        assertArrayEquals(
+            intArrayOf(
+                2, 1, 0, -1,
+                1, 2, -1, 0,
+                4, 3, 2, 1,
+                3, 4, 1, 2,
+            ),
+            inverseVp8WalshHadamard4x4(input),
+        )
+    }
+
+    @Test
     fun `VP8 coefficient token decode handles EOB zero one and small tokens`() {
         val tokenProbabilities = IntArray(11) { 128 }
         // Pre-encoded for Vp8BoolReader; this is not a raw MSB-first bit sequence.

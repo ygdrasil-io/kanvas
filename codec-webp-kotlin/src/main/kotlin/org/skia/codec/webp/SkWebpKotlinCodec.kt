@@ -1370,27 +1370,27 @@ internal fun inverseVp8WalshHadamard4x4(input: IntArray): IntArray {
     require(input.size == 16)
     val tmp = IntArray(16)
     for (i in 0 until 4) {
-        val base = i * 4
-        val a = input[base] + input[base + 3]
-        val b = input[base + 1] + input[base + 2]
-        val c = input[base + 1] - input[base + 2]
-        val d = input[base] - input[base + 3]
-        tmp[base] = a + b
-        tmp[base + 1] = c + d
-        tmp[base + 2] = d - c
-        tmp[base + 3] = a - b
+        val a = input[i] + input[12 + i]
+        val b = input[4 + i] + input[8 + i]
+        val c = input[4 + i] - input[8 + i]
+        val d = input[i] - input[12 + i]
+        tmp[i] = a + b
+        tmp[4 + i] = c + d
+        tmp[8 + i] = a - b
+        tmp[12 + i] = d - c
     }
 
     val out = IntArray(16)
     for (i in 0 until 4) {
-        val a = tmp[i] + tmp[12 + i]
-        val b = tmp[4 + i] + tmp[8 + i]
-        val c = tmp[4 + i] - tmp[8 + i]
-        val d = tmp[i] - tmp[12 + i]
-        out[i] = (a + b + 3) shr 3
-        out[4 + i] = (c + d + 3) shr 3
-        out[8 + i] = (d - c + 3) shr 3
-        out[12 + i] = (a - b + 3) shr 3
+        val base = i * 4
+        val a = tmp[base] + tmp[base + 3]
+        val b = tmp[base + 1] + tmp[base + 2]
+        val c = tmp[base + 1] - tmp[base + 2]
+        val d = tmp[base] - tmp[base + 3]
+        out[base] = (a + b + 3) shr 3
+        out[base + 1] = (c + d + 3) shr 3
+        out[base + 2] = (a - b + 3) shr 3
+        out[base + 3] = (d - c + 3) shr 3
     }
     return out
 }
