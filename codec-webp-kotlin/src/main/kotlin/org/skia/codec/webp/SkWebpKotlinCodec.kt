@@ -261,13 +261,14 @@ private fun decodeVp8lImage(
     allowTransforms: Boolean,
 ): Vp8lDecodeResult {
     val transforms = ArrayList<Vp8lTransform>()
+    var imageWidth = width
     if (allowTransforms) {
         while ((bits.readBits(1) ?: return Vp8lDecodeResult.Invalid) != 0) {
             val transform = when (bits.readBits(2) ?: return Vp8lDecodeResult.Invalid) {
                 VP8L_TRANSFORM_PREDICTOR -> {
                     val sizeBits = (bits.readBits(3) ?: return Vp8lDecodeResult.Invalid) + 2
                     val blockSize = 1 shl sizeBits
-                    val transformWidth = ceilDiv(width, blockSize)
+                    val transformWidth = ceilDiv(imageWidth, blockSize)
                     val transformHeight = ceilDiv(height, blockSize)
                     val predictors = when (val result = decodeVp8lImage(
                         bits = bits,
@@ -284,7 +285,7 @@ private fun decodeVp8lImage(
                 VP8L_TRANSFORM_COLOR -> {
                     val sizeBits = (bits.readBits(3) ?: return Vp8lDecodeResult.Invalid) + 2
                     val blockSize = 1 shl sizeBits
-                    val transformWidth = ceilDiv(width, blockSize)
+                    val transformWidth = ceilDiv(imageWidth, blockSize)
                     val transformHeight = ceilDiv(height, blockSize)
                     val multipliers = when (val result = decodeVp8lImage(
                         bits = bits,
@@ -299,7 +300,24 @@ private fun decodeVp8lImage(
                     Vp8lTransform.Color(sizeBits, transformWidth, multipliers)
                 }
                 VP8L_TRANSFORM_SUBTRACT_GREEN -> Vp8lTransform.SubtractGreen
-                else -> return Vp8lDecodeResult.Unsupported
+                VP8L_TRANSFORM_COLOR_INDEXING -> {
+                    val tableSize = (bits.readBits(8) ?: return Vp8lDecodeResult.Invalid) + 1
+                    val table = when (val result = decodeVp8lImage(
+                        bits = bits,
+                        width = tableSize,
+                        height = 1,
+                        allowTransforms = false,
+                    )) {
+                        Vp8lDecodeResult.Invalid -> return Vp8lDecodeResult.Invalid
+                        Vp8lDecodeResult.Unsupported -> return Vp8lDecodeResult.Unsupported
+                        is Vp8lDecodeResult.Pixels -> result.argb.cumulativeColorTable()
+                    }
+                    val widthBits = colorIndexingWidthBits(tableSize)
+                    val outputWidth = imageWidth
+                    imageWidth = ceilDiv(imageWidth, 1 shl widthBits)
+                    Vp8lTransform.ColorIndexing(table, widthBits, outputWidth)
+                }
+                else -> return Vp8lDecodeResult.Invalid
             }
             transforms += transform
         }
@@ -323,7 +341,7 @@ private fun decodeVp8lImage(
         is Vp8lPrefixGroupReadResult.Group -> groupResult.group
     }
 
-    val pixels = IntArray(width * height)
+    var pixels = IntArray(imageWidth * height)
     var i = 0
     while (i < pixels.size) {
         val green = group.green.decode(bits) ?: return Vp8lDecodeResult.Invalid
@@ -347,7 +365,7 @@ private fun decodeVp8lImage(
         val length = readVp8lPrefixValue(bits, green - 256) ?: return Vp8lDecodeResult.Invalid
         val distancePrefix = group.distance.decode(bits) ?: return Vp8lDecodeResult.Invalid
         val distanceCode = readVp8lPrefixValue(bits, distancePrefix) ?: return Vp8lDecodeResult.Invalid
-        val distance = pixelDistanceFromCode(distanceCode, width)
+        val distance = pixelDistanceFromCode(distanceCode, imageWidth)
         if (distance < 1 || distance > i || i + length > pixels.size) return Vp8lDecodeResult.Invalid
         repeat(length) {
             val pixel = pixels[i - distance]
@@ -356,13 +374,20 @@ private fun decodeVp8lImage(
             i++
         }
     }
+    var currentWidth = imageWidth
     transforms.asReversed().forEach { transform ->
         when (transform) {
             is Vp8lTransform.Predictor -> {
-                if (!pixels.applyPredictorTransform(width, transform)) return Vp8lDecodeResult.Invalid
+                if (!pixels.applyPredictorTransform(currentWidth, transform)) return Vp8lDecodeResult.Invalid
             }
             is Vp8lTransform.Color -> {
-                if (!pixels.applyColorTransform(width, transform)) return Vp8lDecodeResult.Invalid
+                if (!pixels.applyColorTransform(currentWidth, transform)) return Vp8lDecodeResult.Invalid
+            }
+            is Vp8lTransform.ColorIndexing -> {
+                val expanded = pixels.applyColorIndexingTransform(currentWidth, height, transform)
+                    ?: return Vp8lDecodeResult.Invalid
+                pixels = expanded
+                currentWidth = transform.outputWidth
             }
             Vp8lTransform.SubtractGreen -> pixels.applySubtractGreenTransform()
         }
@@ -373,6 +398,7 @@ private fun decodeVp8lImage(
 private const val VP8L_TRANSFORM_PREDICTOR: Int = 0
 private const val VP8L_TRANSFORM_COLOR: Int = 1
 private const val VP8L_TRANSFORM_SUBTRACT_GREEN: Int = 2
+private const val VP8L_TRANSFORM_COLOR_INDEXING: Int = 3
 private const val VP8L_LENGTH_PREFIX_CODE_COUNT: Int = 24
 
 private sealed interface Vp8lTransform {
@@ -385,6 +411,11 @@ private sealed interface Vp8lTransform {
         val sizeBits: Int,
         val width: Int,
         val multipliers: IntArray,
+    ) : Vp8lTransform
+    data class ColorIndexing(
+        val table: IntArray,
+        val widthBits: Int,
+        val outputWidth: Int,
     ) : Vp8lTransform
     data object SubtractGreen : Vp8lTransform
 }
@@ -439,6 +470,48 @@ private fun IntArray.applyColorTransform(width: Int, transform: Vp8lTransform.Co
     }
     return true
 }
+
+private fun IntArray.applyColorIndexingTransform(
+    width: Int,
+    height: Int,
+    transform: Vp8lTransform.ColorIndexing,
+): IntArray? {
+    if (height < 0 || transform.outputWidth < 0) return null
+    if (size != width * height) return null
+    val packedPixelsPerPixel = 1 shl transform.widthBits
+    if (width != ceilDiv(transform.outputWidth, packedPixelsPerPixel)) return null
+    val indexBits = 8 ushr transform.widthBits
+    val indexMask = (1 shl indexBits) - 1
+    val output = IntArray(transform.outputWidth * height)
+    for (y in 0 until height) {
+        for (x in 0 until transform.outputWidth) {
+            val packed = this[y * width + x / packedPixelsPerPixel]
+            val shift = (x and (packedPixelsPerPixel - 1)) * indexBits
+            val index = (green(packed) ushr shift) and indexMask
+            output[y * transform.outputWidth + x] =
+                if (index < transform.table.size) transform.table[index] else 0
+        }
+    }
+    return output
+}
+
+private fun IntArray.cumulativeColorTable(): IntArray {
+    val table = IntArray(size)
+    var previous = 0
+    for (i in indices) {
+        table[i] = addPixels(this[i], previous)
+        previous = table[i]
+    }
+    return table
+}
+
+private fun colorIndexingWidthBits(tableSize: Int): Int =
+    when (tableSize) {
+        in 1..2 -> 3
+        in 3..4 -> 2
+        in 5..16 -> 1
+        else -> 0
+    }
 
 private fun inverseColorTransform(pixel: Int, multiplier: Int): Int {
     val alpha = alpha(pixel)
