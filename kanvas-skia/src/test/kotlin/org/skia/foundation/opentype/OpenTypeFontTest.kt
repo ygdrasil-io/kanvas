@@ -1121,6 +1121,70 @@ class OpenTypeFontTest {
         assertNull(typeface.colorPaint(glyphs[0]))
     }
 
+    @Test
+    fun `SVG table metadata exposes document records without rendering integration`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
+        val svg = """<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h10v10z"/></svg>"""
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withTableContent("GPOS", "SVG ", syntheticSvgTable(glyphs[0], glyphs[1], svg)),
+        )!!
+
+        val document = requireNotNull(typeface.svgDocument(glyphs[0]))
+
+        assertEquals(glyphs[0], document.startGlyphId)
+        assertEquals(glyphs[1], document.endGlyphId)
+        assertEquals(svg, document.text)
+        assertEquals(document, typeface.svgDocument(glyphs[1]))
+        assertNull(typeface.svgDocument(glyphs[1] + 1))
+    }
+
+    @Test
+    fun `drawString falls back to monochrome for parsed SVG table before rendering integration`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("A")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withTableContent("GPOS", "SVG ", syntheticSvgTable(glyphs[0], glyphs[0])),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `malformed SVG table fails closed without rejecting font`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single()
+        val malformedTables = listOf(
+            syntheticSvgTable(glyph, glyph).copyOf(18),
+            syntheticSvgTable(glyph, glyph).also { writeU32(it, 2, 0) },
+            syntheticSvgTable(glyph, glyph).also { writeU16(it, 10, 0) },
+            syntheticSvgTable(glyph, glyph).also { writeU32(it, 16, 0) },
+            syntheticSvgTable(glyph, glyph).also { writeU32(it, 20, 0) },
+            syntheticSvgTableRecords(
+                SyntheticSvgRecord(glyph + 1, glyph + 1),
+                SyntheticSvgRecord(glyph, glyph),
+            ),
+            syntheticSvgTableRecords(
+                SyntheticSvgRecord(glyph, glyph + 1),
+                SyntheticSvgRecord(glyph + 1, glyph + 2),
+            ),
+        )
+
+        malformedTables.forEach { table ->
+            val bytes = liberationSansBytes().withTableContent("GPOS", "SVG ", table)
+            val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+
+            assertNull(typeface.svgDocument(glyph))
+        }
+    }
+
     private fun assertCompositePathTransform(
         bytes: ByteArray,
         codepoint: String,
@@ -1521,6 +1585,42 @@ class OpenTypeFontTest {
         writeFixed16Dot16(bytes, transformOffset + 20, -3f) // dy
         return bytes
     }
+
+    private fun syntheticSvgTable(
+        startGlyphId: Int,
+        endGlyphId: Int,
+        svg: String = """<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>""",
+    ): ByteArray =
+        syntheticSvgTableRecords(SyntheticSvgRecord(startGlyphId, endGlyphId, svg))
+
+    private fun syntheticSvgTableRecords(
+        vararg records: SyntheticSvgRecord,
+    ): ByteArray {
+        val documentListOffset = 10
+        val recordBytes = records.map { it.svg.toByteArray(Charsets.UTF_8) }
+        val recordsSize = records.size * 12
+        var nextDocumentOffset = 2 + recordsSize
+        val bytes = ByteArray(documentListOffset + nextDocumentOffset + recordBytes.sumOf { it.size })
+        writeU32(bytes, 2, documentListOffset) // svgDocumentListOffset
+        writeU16(bytes, documentListOffset, records.size) // numEntries
+        records.forEachIndexed { index, record ->
+            val svgBytes = recordBytes[index]
+            val recordOffset = documentListOffset + 2 + index * 12
+            writeU16(bytes, recordOffset, record.startGlyphId)
+            writeU16(bytes, recordOffset + 2, record.endGlyphId)
+            writeU32(bytes, recordOffset + 4, nextDocumentOffset)
+            writeU32(bytes, recordOffset + 8, svgBytes.size)
+            svgBytes.copyInto(bytes, documentListOffset + nextDocumentOffset)
+            nextDocumentOffset += svgBytes.size
+        }
+        return bytes
+    }
+
+    private data class SyntheticSvgRecord(
+        val startGlyphId: Int,
+        val endGlyphId: Int,
+        val svg: String = """<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>""",
+    )
 
     private fun writeBgra(bytes: ByteArray, off: Int, blue: Int, green: Int, red: Int, alpha: Int) {
         bytes[off] = blue.toByte()
