@@ -251,10 +251,12 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
          * R3.1-bis ; this field is purely an API-surface store so
          * `getLocalToDevice()` round-trips a previously-set
          * perspective matrix.
-         */
+        */
         var m44: SkM44? = null,
         /** Non-null iff this state was opened by `saveLayer`. */
         var layer: Layer? = null,
+        /** Non-null iff this state was opened by `saveBehind`. */
+        var saveBehind: SaveBehind? = null,
         /**
          * Phase I3.3.b — band-encoded AA clip carrying the
          * combined `clipPath` / `clipRRect` coverage. `null` = pure
@@ -310,6 +312,13 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val originY: Int,
         val paint: SkPaint?,
         val filters: List<SkImageFilter?>? = null,
+    )
+
+    private data class SaveBehind(
+        val snapshot: SkBitmapDevice,
+        val originX: Int,
+        val originY: Int,
+        val bounds: SkIRect,
     )
 
     private val stack: ArrayDeque<State> = ArrayDeque<State>().apply {
@@ -388,6 +397,58 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
     }
 
     /**
+     * Raster slice of Skia's private `SkCanvasPriv::SaveBehind`.
+     *
+     * The call pushes a regular save frame, snapshots [bounds] in device
+     * space, clears that saved region, then [restore] composites the
+     * snapshot back with `kDstOver`. This is intentionally public in the
+     * Kotlin port so GM code can cover the private upstream behavior.
+     */
+    public open fun saveBehind(bounds: SkRect?): Int {
+        val s = top
+        if (bounds != null && !getLocalClipBounds().intersects(bounds)) {
+            return save()
+        }
+
+        val saveCountBefore = save()
+        val saved = top
+        val raster = s.device as? SkBitmapDevice ?: return saveCountBefore
+        val devBounds = if (bounds == null) {
+            s.clip.copy()
+        } else {
+            s.matrix.mapRect(bounds).round().also {
+                if (!it.intersect(s.clip)) it.setEmpty()
+            }
+        }
+        if (devBounds.isEmpty) return saveCountBefore
+
+        val w = devBounds.width()
+        val h = devBounds.height()
+        val snapshotBitmap = SkBitmap(w, h, raster.bitmap.colorSpace, raster.bitmap.colorType)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                snapshotBitmap.setPixel(x, y, raster.bitmap.getPixel(devBounds.left + x, devBounds.top + y))
+            }
+        }
+        saved.saveBehind = SaveBehind(SkBitmapDevice(snapshotBitmap), devBounds.left, devBounds.top, devBounds)
+
+        drawBehind(SkPaint().apply { blendMode = SkBlendMode.kClear })
+        return saveCountBefore
+    }
+
+    /**
+     * Raster slice of Skia's private `SkCanvasPriv::DrawBehind`.
+     * Draws [paint] as a full-device paint clipped to the active save-behind
+     * bounds, using the current CTM for shader evaluation.
+     */
+    public open fun drawBehind(paint: SkPaint) {
+        val saveBehind = stack.asReversed().firstOrNull { it.saveBehind != null }?.saveBehind ?: return
+        val clip = top.clip.copy()
+        if (!clip.intersect(saveBehind.bounds)) return
+        top.device.drawPaint(top.matrix, clip, paint)
+    }
+
+    /**
      * Mirrors Skia's `SkCanvas::getSaveCount()` — returns the depth of the
      * save stack, where 1 = the implicit root state (empty CTM, full clip).
      * Each [save] / [saveLayer] increments the count by 1; each [restore]
@@ -408,6 +469,16 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
     public open fun restore() {
         if (stack.size <= 1) return
         val popped = stack.removeLast()
+        val saveBehind = popped.saveBehind
+        if (saveBehind != null) {
+            top.device.compositeFrom(
+                saveBehind.snapshot,
+                saveBehind.originX,
+                saveBehind.originY,
+                top.clip,
+                SkPaint().apply { blendMode = SkBlendMode.kDstOver },
+            )
+        }
         val layer = popped.layer ?: return
 
         val layerFilters = layer.filters

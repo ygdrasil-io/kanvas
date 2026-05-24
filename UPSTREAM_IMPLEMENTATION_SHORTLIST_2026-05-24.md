@@ -81,14 +81,16 @@ Completed since this snapshot:
   now delegates to the existing separable blur mask filter, and
   `BlurRectGalleryGM` / `BlurRectGM` / `BlurRectCompareGM` are enabled with
   raster, WebGPU, and crossbackend ratchets.
+- `STUB.SAVE_BEHIND`: raster `SkCanvas.saveBehind` / `drawBehind` shims are
+  implemented for the upstream private API behavior, and `SaveBehindGM` is
+  enabled with a raster ratchet.
 
 ## Recommended order
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
 | 1 | `gradients` | 1 cpp | M/L | Isolated interpolation variants; useful after the tracker noise reduction. |
-| 2 | `savelayer` | 1 cpp | M/L | Raster-facing, but touches F16/save-behind semantics. |
-| 3 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
+| 2 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
 
@@ -101,7 +103,6 @@ Completed since this snapshot:
 | `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
 | `mesh` | `STUB.MESH` | `MeshGMs.kt` |
 | `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`, `STUB.XYZ` | `RecordOptsGM.kt` |
-| `savelayer` | `STUB.SAVE_BEHIND`; `SaveLayerF16GM` and `Skbug14554GM` ported | `SaveBehindGM.kt`, `SaveLayerF16GM.kt`, `SaveLayerGM.kt`, `Skbug14554GM.kt` |
 | `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
