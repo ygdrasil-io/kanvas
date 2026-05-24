@@ -162,6 +162,18 @@ public open class SkTypeface protected constructor() {
     public open fun getKerningPairAdjustments(glyphs: ShortArray): IntArray? = null
 
     /**
+     * Mirrors the useful subset of Skia's `SkTypeface::copyTableData`.
+     * [tag] is a packed OpenType four-byte tag, for example
+     * `SkFontVariation.Tag.of("name").raw`.
+     *
+     * Base-class default returns `null`: the empty typeface and backends
+     * without raw font bytes cannot expose SFNT tables. Binary-backed
+     * subclasses may override and return a defensive copy of the table
+     * payload.
+     */
+    public open fun copyTableData(tag: Int): ByteArray? = null
+
+    /**
      * Mirrors Skia's
      * [`SkTypeface::makeClone(const SkFontArguments&)`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h).
      *
