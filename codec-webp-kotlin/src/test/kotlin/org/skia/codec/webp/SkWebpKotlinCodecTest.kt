@@ -301,6 +301,32 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes VP8L fixture with combined predictor color and subtract green transforms`() {
+        val expected = intArrayOf(
+            argb(0xFF, 40, 20, 60),
+            argb(0xFF, 45, 25, 65),
+            argb(0xFF, 45, 25, 65),
+            argb(0xFF, 50, 30, 70),
+        )
+        val multipliers = ColorTransformMultipliers(
+            greenToRed = 0x20,
+            greenToBlue = 0x10,
+            redToBlue = 0xE0,
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            vp8lCombinedTransformsWebp(
+                width = 2,
+                height = 2,
+                predictorMode = 1,
+                multipliers = multipliers,
+                argb = expected,
+            ),
+        )!!
+
+        assertWebpPixels(codec, width = 2, height = 2, expected)
+    }
+
+    @Test
     fun `decodes VP8L packed color indexing transform`() {
         val table = intArrayOf(
             argb(0xFF, 0x10, 0x20, 0x30),
@@ -562,6 +588,40 @@ class SkWebpKotlinCodecTest {
         return vp8lWebpFromBits(writer)
     }
 
+    private fun vp8lCombinedTransformsWebp(
+        width: Int,
+        height: Int,
+        predictorMode: Int,
+        multipliers: ColorTransformMultipliers,
+        argb: IntArray,
+    ): ByteArray {
+        require(argb.size == width * height)
+        require(predictorMode in 0..13)
+        val predictorResiduals = predictorResiduals(width, predictorMode, argb)
+        val colorTransformed = IntArray(argb.size) { i ->
+            applyColorTransformFixture(predictorResiduals[i], multipliers)
+        }
+        val transformed = IntArray(argb.size) { i -> applySubtractGreenFixture(colorTransformed[i]) }
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(1, 1) // transform_present
+        writer.writeBits(0, 2) // predictor transform.
+        writer.writeBits(0, 3) // size_bits = 2, so this tiny fixture has one predictor block.
+        writeVp8lLiteralImageData(writer, intArrayOf(argb(0xFF, 0, predictorMode, 0)))
+        writer.writeBits(1, 1) // transform_present
+        writer.writeBits(1, 2) // color transform.
+        writer.writeBits(0, 3) // size_bits = 2, so this tiny fixture has one multiplier block.
+        writeVp8lLiteralImageData(
+            writer,
+            intArrayOf(argb(0xFF, multipliers.redToBlue, multipliers.greenToBlue, multipliers.greenToRed)),
+        )
+        writer.writeBits(1, 1) // transform_present
+        writer.writeBits(2, 2) // subtract green transform.
+        writer.writeBits(0, 1) // transform_present terminator
+        writeVp8lLiteralImageData(writer, transformed)
+        return vp8lWebpFromBits(writer)
+    }
+
     private fun vp8lColorIndexingWebp(width: Int, height: Int, table: IntArray, indices: IntArray): ByteArray {
         require(table.size in 1..256)
         require(indices.size == width * height)
@@ -806,6 +866,30 @@ class SkWebpKotlinCodecTest {
                 colorTransformDelta(multipliers.redToBlue, red(pixel))
             ) and 0xFF
         return argb(alpha(pixel), transformedRed, green(pixel), transformedBlue)
+    }
+
+    private fun applySubtractGreenFixture(pixel: Int): Int =
+        argb(
+            alpha = alpha(pixel),
+            red = (red(pixel) - green(pixel)) and 0xFF,
+            green = green(pixel),
+            blue = (blue(pixel) - green(pixel)) and 0xFF,
+        )
+
+    private fun predictorResiduals(width: Int, mode: Int, pixels: IntArray): IntArray {
+        val residuals = IntArray(pixels.size)
+        for (i in pixels.indices) {
+            val x = i % width
+            val y = i / width
+            val predictor = when {
+                x == 0 && y == 0 -> argb(0xFF, 0, 0, 0)
+                y == 0 -> pixels[i - 1]
+                x == 0 -> pixels[i - width]
+                else -> predictorFixturePixel(pixels, width, x, y, mode)
+            }
+            residuals[i] = subtractPixels(pixels[i], predictor)
+        }
+        return residuals
     }
 
     private fun colorTransformDelta(multiplier: Int, color: Int): Int =
