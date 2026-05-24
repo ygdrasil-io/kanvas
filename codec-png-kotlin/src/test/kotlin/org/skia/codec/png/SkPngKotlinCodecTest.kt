@@ -654,6 +654,63 @@ class SkPngKotlinCodecTest {
     }
 
     @Test
+    fun `converts 8-bit PNG into additional bitmap backed color types`() {
+        val codec = SkPngKotlinCodec.Decoder.make(
+            png(
+                width = 1,
+                height = 1,
+                colorType = 6,
+                rows = listOf(intArrayOf(argb(0xFF, 0xFF, 0x00, 0x00))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val cases = listOf(
+            Triple(SkColorType.kBGRA_8888, SkAlphaType.kUnpremul, argb(0xFF, 0xFF, 0x00, 0x00)),
+            Triple(SkColorType.kARGB_4444, SkAlphaType.kPremul, argb(0xFF, 0xFF, 0x00, 0x00)),
+            Triple(SkColorType.kAlpha_8, SkAlphaType.kPremul, argb(0xFF, 0x00, 0x00, 0x00)),
+            Triple(SkColorType.kRGB_565, SkAlphaType.kOpaque, argb(0xFF, 0xFF, 0x00, 0x00)),
+            Triple(SkColorType.kGray_8, SkAlphaType.kOpaque, argb(0xFF, 0x4C, 0x4C, 0x4C)),
+        )
+
+        for ((colorType, alphaType, expected) in cases) {
+            val requested = SkImageInfo.Make(
+                width = 1,
+                height = 1,
+                colorType = colorType,
+                alphaType = alphaType,
+                colorSpace = codec.getInfo().colorSpace,
+            )
+            val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
+            assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst), colorType.name)
+            assertEquals(expected, dst.getPixel(0, 0), colorType.name)
+        }
+    }
+
+    @Test
+    fun `keeps 16-bit PNG extra color conversions unsupported`() {
+        val codec = SkPngKotlinCodec.Decoder.make(
+            truecolor16Png(
+                width = 1,
+                height = 1,
+                colorType = 6,
+                rows = listOf(longArrayOf(rgba64(0xFFFF, 0x0000, 0x0000, 0xFFFF))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val requested = SkImageInfo.Make(
+            width = 1,
+            height = 1,
+            colorType = SkColorType.kRGB_565,
+            alphaType = SkAlphaType.kOpaque,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkCodec.Result.kInvalidConversion, codec.getPixels(requested, dst))
+    }
+
+    @Test
     fun `rejects unsupported requested PNG color conversion`() {
         val codec = SkPngKotlinCodec.Decoder.make(
             png(
@@ -667,8 +724,8 @@ class SkPngKotlinCodecTest {
         val requested = SkImageInfo.Make(
             width = 1,
             height = 1,
-            colorType = SkColorType.kRGB_565,
-            alphaType = SkAlphaType.kOpaque,
+            colorType = SkColorType.kRGBA_F32,
+            alphaType = SkAlphaType.kPremul,
             colorSpace = codec.getInfo().colorSpace,
         )
         val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
