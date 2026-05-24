@@ -23,8 +23,9 @@ package org.skia.foundation
  *    see [SkTypeface.makeClone] KDoc) ; this matches Skia's contract
  *    of "best-effort" when the backend can't honour the request.
  *  - [palette] — selects a palette entry / palette overrides for COLR
- *    v0 / v1 typefaces. Stub today — full implementation is gated on
- *    `STUB.COLR_V1` (see `API_FINALIZATION_PLAN.md`).
+ *    typefaces. The pure Kotlin OpenType backend supports this for COLRv0
+ *    rendering; other backends may ignore it when they cannot honour color
+ *    font palettes.
  *
  * **AWT-backed variation status** : the typeface clone path maps the
  * standard 4 OpenType axes (`wght` / `wdth` / `slnt` / `ital`) onto
@@ -47,13 +48,7 @@ public class SkFontArguments {
      */
     public var collectionIndex: Int = 0
 
-    /**
-     * Palette selection — stub. Full implementation is gated on
-     * `STUB.COLR_V1` (see `API_FINALIZATION_PLAN.md`). The data class
-     * exists so callers carrying an `SkFontArguments::Palette` through
-     * compile and round-trip ; AWT can't honour palette overrides
-     * regardless (no COLR-v1 support).
-     */
+    /** Palette selection for color fonts. */
     public var palette: Palette = Palette()
 
     /**
@@ -120,11 +115,11 @@ public class SkFontArguments {
     }
 
     /**
-     * Stub for `SkFontArguments::Palette`. The full implementation
-     * (palette index + per-entry colour overrides) lands in the COLR v1
-     * sprint (`STUB.COLR_V1`). Today only the no-arg default exists so
-     * that variable-font code paths that never touch palette compile
-     * unchanged.
+     * Mirrors `SkFontArguments::Palette`.
+     *
+     * The pure Kotlin OpenType backend currently supports [index] and
+     * [overrides] for COLRv0 rendering. Override colors are packed
+     * [SkColor] ARGB values, matching the rest of the Kanvas color API.
      */
     public class Palette {
         /**
