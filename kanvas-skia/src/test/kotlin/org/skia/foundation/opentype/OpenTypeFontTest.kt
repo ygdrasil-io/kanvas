@@ -48,6 +48,22 @@ class OpenTypeFontTest {
         error("Missing table: $tag")
     }
 
+    private fun ByteArray.withTableTag(from: String, to: String): ByteArray {
+        require(from.length == 4)
+        require(to.length == 4)
+        val copy = copyOf()
+        val numTables = readU16(copy, 4)
+        var off = 12
+        repeat(numTables) {
+            if (String(copy, off, 4, Charsets.ISO_8859_1) == from) {
+                to.toByteArray(Charsets.ISO_8859_1).copyInto(copy, off)
+                return copy
+            }
+            off += 16
+        }
+        error("Missing table: $from")
+    }
+
     @Test
     fun `makeFromData loads bundled Liberation TTF without AWT`() {
         val mgr = OpenTypeFontMgr.Create()
@@ -204,8 +220,41 @@ class OpenTypeFontTest {
         assertTrue(metrics.fMaxCharWidth > 0f)
     }
 
+    @Test
+    fun `getKerningPairAdjustments returns one adjustment per adjacent glyph pair`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(typeface, 12f).textToGlyphs("AV").toShortArray()
+
+        val adjustments = requireNotNull(typeface.getKerningPairAdjustments(glyphs))
+
+        assertEquals(glyphs.size - 1, adjustments.size)
+        assertEquals(-152, adjustments[0])
+        assertTrue(adjustments[0] != 0)
+    }
+
+    @Test
+    fun `getKerningPairAdjustments returns null when font has no kern table`() {
+        val bytes = liberationSansBytes().withTableTag("kern", "zern")
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+        val glyphs = SkFont(typeface, 12f).textToGlyphs("AV").toShortArray()
+
+        assertNull(typeface.getKerningPairAdjustments(glyphs))
+    }
+
+    @Test
+    fun `getKerningPairAdjustments ignores malformed kern table`() {
+        val bytes = liberationSansBytes().withTableLength("kern", 4)
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+        val glyphs = SkFont(typeface, 12f).textToGlyphs("AV").toShortArray()
+
+        assertNull(typeface.getKerningPairAdjustments(glyphs))
+    }
+
     private fun readU16(bytes: ByteArray, off: Int): Int =
         ((bytes[off].toInt() and 0xFF) shl 8) or (bytes[off + 1].toInt() and 0xFF)
+
+    private fun IntArray.toShortArray(): ShortArray =
+        ShortArray(size) { this[it].toShort() }
 
     private fun writeU32(bytes: ByteArray, off: Int, value: Int) {
         bytes[off] = (value ushr 24).toByte()
