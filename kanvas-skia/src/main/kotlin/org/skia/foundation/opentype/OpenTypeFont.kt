@@ -178,6 +178,7 @@ public class OpenTypeTypeface private constructor(
                     ?.let { paint ->
                         colorPaintPaths(
                             paint = paint,
+                            seenColorGlyphs = setOf(glyphId),
                             palette = palette,
                             penX = penX,
                             baselineY = y,
@@ -220,6 +221,7 @@ public class OpenTypeTypeface private constructor(
 
     private fun colorPaintPaths(
         paint: OpenTypeColorPaint,
+        seenColorGlyphs: Set<Int>,
         palette: List<Int>,
         penX: SkScalar,
         baselineY: SkScalar,
@@ -232,6 +234,24 @@ public class OpenTypeTypeface private constructor(
     ): List<OpenTypeColorPath> {
         if (depth > MAX_COLOR_PAINT_DEPTH) return emptyList()
         return when (paint) {
+            is OpenTypeColorPaint.Layers -> {
+                if (paint.paints.size > MAX_LAYERS_PER_COLOR_GLYPH) return emptyList()
+                paint.paints.flatMap { layerPaint ->
+                    colorPaintPaths(
+                        paint = layerPaint,
+                        seenColorGlyphs = seenColorGlyphs,
+                        palette = palette,
+                        penX = penX,
+                        baselineY = baselineY,
+                        size = size,
+                        scaleX = scaleX,
+                        skewX = skewX,
+                        transform = transform,
+                        glyphPath = glyphPath,
+                        depth = depth + 1,
+                    )
+                }
+            }
             is OpenTypeColorPaint.Solid -> {
                 val currentPath = glyphPath ?: return emptyList()
                 val color = when (paint.paletteIndex) {
@@ -250,6 +270,7 @@ public class OpenTypeTypeface private constructor(
                     ?: return emptyList()
                 colorPaintPaths(
                     paint = paint.paint,
+                    seenColorGlyphs = seenColorGlyphs,
                     palette = palette,
                     penX = penX,
                     baselineY = baselineY,
@@ -261,10 +282,28 @@ public class OpenTypeTypeface private constructor(
                     depth = depth + 1,
                 )
             }
+            is OpenTypeColorPaint.ColrGlyph -> {
+                if (paint.glyphId in seenColorGlyphs) return emptyList()
+                val referenced = font.colorPaint(paint.glyphId) ?: return emptyList()
+                colorPaintPaths(
+                    paint = referenced,
+                    seenColorGlyphs = seenColorGlyphs + paint.glyphId,
+                    palette = palette,
+                    penX = penX,
+                    baselineY = baselineY,
+                    size = size,
+                    scaleX = scaleX,
+                    skewX = skewX,
+                    transform = transform,
+                    glyphPath = glyphPath,
+                    depth = depth + 1,
+                )
+            }
             is OpenTypeColorPaint.Transform -> {
                 val matrix = colrFontMatrixToCanvas(paint.xx, paint.yx, paint.xy, paint.yy, paint.dx, paint.dy, size, scaleX, skewX)
                 colorPaintPaths(
                     paint = paint.paint,
+                    seenColorGlyphs = seenColorGlyphs,
                     palette = palette,
                     penX = penX,
                     baselineY = baselineY,
@@ -280,6 +319,7 @@ public class OpenTypeTypeface private constructor(
                 val matrix = colrFontMatrixToCanvas(1f, 0f, 0f, 1f, paint.dx.toFloat(), paint.dy.toFloat(), size, scaleX, skewX)
                 colorPaintPaths(
                     paint = paint.paint,
+                    seenColorGlyphs = seenColorGlyphs,
                     palette = palette,
                     penX = penX,
                     baselineY = baselineY,
@@ -1483,6 +1523,7 @@ private class ParsedTrueTypeFont(
         private fun parseColrV1Paints(reader: SfntReader, table: TableRecord): Map<Int, OpenTypeColorPaint>? {
             val baseGlyphListOffset = reader.u32(table.offset + 14)?.toIntOrNull() ?: return null
             if (baseGlyphListOffset == 0) return emptyMap()
+            val layerPaintOffsets = parseColrV1LayerPaintOffsets(reader, table) ?: return null
             val baseGlyphListStart = table.offset + baseGlyphListOffset
             if (!reader.fits(baseGlyphListStart, 4)) return null
             val baseGlyphPaintCount = reader.u32(baseGlyphListStart)?.toIntOrNull() ?: return null
@@ -1497,6 +1538,7 @@ private class ParsedTrueTypeFont(
                     reader = reader,
                     colrStart = table.offset,
                     colrEnd = table.offset + table.length,
+                    layerPaintOffsets = layerPaintOffsets,
                     paintOffset = baseGlyphListStart + paintOffset,
                     depth = 0,
                 ) ?: return null
@@ -1505,10 +1547,27 @@ private class ParsedTrueTypeFont(
             return paintsByGlyph
         }
 
+        private fun parseColrV1LayerPaintOffsets(reader: SfntReader, table: TableRecord): List<Int>? {
+            val layerListOffset = reader.u32(table.offset + 18)?.toIntOrNull() ?: return null
+            if (layerListOffset == 0) return emptyList()
+            val layerListStart = table.offset + layerListOffset
+            if (!reader.fits(layerListStart, 4)) return null
+            val layerCount = reader.u32(layerListStart)?.toIntOrNull() ?: return null
+            if (layerCount > MAX_COLOR_LAYERS) return null
+            if (!reader.fits(layerListStart + 4, layerCount.toLong() * 4L)) return null
+            return List(layerCount) { index ->
+                val offset = reader.u32(layerListStart + 4 + index * 4)?.toIntOrNull() ?: return null
+                val paintOffset = layerListStart + offset
+                if (paintOffset < table.offset || paintOffset >= table.offset + table.length) return null
+                paintOffset
+            }
+        }
+
         private fun parseColorPaint(
             reader: SfntReader,
             colrStart: Int,
             colrEnd: Int,
+            layerPaintOffsets: List<Int>,
             paintOffset: Int,
             depth: Int,
         ): OpenTypeColorPaint? {
@@ -1516,6 +1575,24 @@ private class ParsedTrueTypeFont(
             if (paintOffset < colrStart || paintOffset >= colrEnd) return null
             val format = reader.u8(paintOffset) ?: return null
             return when (format) {
+                1 -> {
+                    if (!reader.fits(paintOffset, 6)) return null
+                    val layerCount = reader.u8(paintOffset + 1) ?: return null
+                    val firstLayerIndex = reader.u32(paintOffset + 2)?.toIntOrNull() ?: return null
+                    if (layerCount == 0 || layerCount > MAX_LAYERS_PER_COLOR_GLYPH) return null
+                    if (firstLayerIndex < 0 || firstLayerIndex + layerCount > layerPaintOffsets.size) return null
+                    val layers = List(layerCount) { index ->
+                        parseColorPaint(
+                            reader = reader,
+                            colrStart = colrStart,
+                            colrEnd = colrEnd,
+                            layerPaintOffsets = layerPaintOffsets,
+                            paintOffset = layerPaintOffsets[firstLayerIndex + index],
+                            depth = depth + 1,
+                        ) ?: return null
+                    }
+                    OpenTypeColorPaint.Layers(layers)
+                }
                 2 -> {
                     if (!reader.fits(paintOffset, 5)) return null
                     OpenTypeColorPaint.Solid(
@@ -1528,7 +1605,13 @@ private class ParsedTrueTypeFont(
                     val childOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
                     OpenTypeColorPaint.Glyph(
                         glyphId = reader.u16(paintOffset + 4) ?: return null,
-                        paint = parseColorPaint(reader, colrStart, colrEnd, childOffset, depth + 1) ?: return null,
+                        paint = parseColorPaint(reader, colrStart, colrEnd, layerPaintOffsets, childOffset, depth + 1) ?: return null,
+                    )
+                }
+                11 -> {
+                    if (!reader.fits(paintOffset, 3)) return null
+                    OpenTypeColorPaint.ColrGlyph(
+                        glyphId = reader.u16(paintOffset + 1) ?: return null,
                     )
                 }
                 12 -> {
@@ -1537,7 +1620,7 @@ private class ParsedTrueTypeFont(
                     val transformOffset = childPaintOffset(reader, paintOffset, 4) ?: return null
                     if (!reader.fits(transformOffset, 24)) return null
                     OpenTypeColorPaint.Transform(
-                        paint = parseColorPaint(reader, colrStart, colrEnd, childOffset, depth + 1) ?: return null,
+                        paint = parseColorPaint(reader, colrStart, colrEnd, layerPaintOffsets, childOffset, depth + 1) ?: return null,
                         xx = reader.fixed16Dot16(transformOffset) ?: return null,
                         yx = reader.fixed16Dot16(transformOffset + 4) ?: return null,
                         xy = reader.fixed16Dot16(transformOffset + 8) ?: return null,
@@ -1550,7 +1633,7 @@ private class ParsedTrueTypeFont(
                     if (!reader.fits(paintOffset, 8)) return null
                     val childOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
                     OpenTypeColorPaint.Translate(
-                        paint = parseColorPaint(reader, colrStart, colrEnd, childOffset, depth + 1) ?: return null,
+                        paint = parseColorPaint(reader, colrStart, colrEnd, layerPaintOffsets, childOffset, depth + 1) ?: return null,
                         dx = reader.i16(paintOffset + 4)?.toInt() ?: return null,
                         dy = reader.i16(paintOffset + 6)?.toInt() ?: return null,
                     )
@@ -2376,8 +2459,10 @@ private class OpenTypeSvgTable(
     }
 }
 internal sealed interface OpenTypeColorPaint {
+    data class Layers(val paints: List<OpenTypeColorPaint>) : OpenTypeColorPaint
     data class Solid(val paletteIndex: Int, val alpha: Float) : OpenTypeColorPaint
     data class Glyph(val glyphId: Int, val paint: OpenTypeColorPaint) : OpenTypeColorPaint
+    data class ColrGlyph(val glyphId: Int) : OpenTypeColorPaint
     data class Transform(
         val paint: OpenTypeColorPaint,
         val xx: Float,
