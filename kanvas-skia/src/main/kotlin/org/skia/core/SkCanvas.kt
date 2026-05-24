@@ -20,6 +20,7 @@ import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTileMode
+import org.skia.foundation.opentype.OpenTypeTypeface
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkM44
 import org.graphiks.math.SkMatrix
@@ -2187,6 +2188,30 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         paint: SkPaint,
     ) {
         if (str.isEmpty()) return
+        val typeface = font.typeface
+        if (paint.shader == null && typeface is OpenTypeTypeface) {
+            val colorPaths = typeface.makeColorTextPaths(
+                str,
+                x,
+                y,
+                font.size,
+                font.scaleX,
+                font.skewX,
+                font.isSubpixel,
+            )
+            if (colorPaths != null) {
+                for (colorPath in colorPaths) {
+                    val layerPaint = paint.copy().also {
+                        colorPath.color?.let { color ->
+                            it.color = color
+                            it.alphaf *= paint.alphaf
+                        }
+                    }
+                    drawPath(colorPath.path, layerPaint)
+                }
+                return
+            }
+        }
         val path = font.makeTextPath(str, x, y) ?: return
         // Glyph fills are AA whenever the font asks for it. Skia's
         // `paint.isAntiAlias` is independent — we honour it by ANDing
