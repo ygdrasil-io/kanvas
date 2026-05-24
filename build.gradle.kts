@@ -135,5 +135,6 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
         ":codec-all-kotlin:test",
         ":codec-all-kotlin:jar",
         ":codec-awt-kotlin-comparison-tests:test",
+        ":cpu-raster:testCodecWithKotlinBackend",
     )
 }
