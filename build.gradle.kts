@@ -5,6 +5,7 @@ val pureKotlinCodecProjects = setOf(
     "codec-core",
     "codec-common",
     "codec-test-fixtures",
+    "codec-real-image-tests",
     "codec-all-kotlin",
     "codec-png-api",
     "codec-png-kotlin",
@@ -133,6 +134,7 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
     dependsOn(
         "checkPureKotlinCodecNoAwt",
         ":codec-all-kotlin:test",
+        ":codec-real-image-tests:test",
         ":codec-all-kotlin:jar",
         ":codec-awt-kotlin-comparison-tests:test",
         ":cpu-raster:testCodecWithKotlinBackend",
