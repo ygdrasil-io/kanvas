@@ -11,6 +11,7 @@ dependencies {
     api(project(":codec-gif-kotlin"))
     api(project(":codec-wbmp-kotlin"))
     api(project(":codec-bmp-kotlin"))
+    api(project(":codec-webp-kotlin"))
     api(project(":codec-ico-kotlin"))
     api(project(":codec-extended"))
 }
