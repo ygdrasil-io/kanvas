@@ -2,6 +2,7 @@ package org.skia.foundation.awt
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkFontMgr
 import org.skia.foundation.SkFontStyle
@@ -21,8 +22,14 @@ import org.skia.foundation.SkFontStyle
 class SkFontMgrFallbackTest {
 
     @Test
+    @Suppress("DEPRECATION")
+    fun `RefDefault remains a compatibility alias for the explicit AWT manager`() {
+        assertSame(SkFontMgr.RefAwtDefault(), SkFontMgr.RefDefault())
+    }
+
+    @Test
     fun `matchFamilyStyleCharacter resolves U+0041 'A' to a non-null typeface`() {
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val tf = mgr.matchFamilyStyleCharacter(
             familyName = null,
             style = SkFontStyle.Normal(),
@@ -34,7 +41,7 @@ class SkFontMgrFallbackTest {
 
     @Test
     fun `matchFamilyStyleCharacter resolves U+0061 'a' to a non-null typeface`() {
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val tf = mgr.matchFamilyStyleCharacter(
             familyName = null,
             style = SkFontStyle.Normal(),

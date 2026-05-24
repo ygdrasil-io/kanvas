@@ -26,7 +26,7 @@ class SkFontMgrMakeFromSkStreamTest {
 
     @Test
     fun `makeFromStream(SkStream) loads a bundled TTF`() {
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val mem = SkMemoryStream(loadBundledTtfBytes())
         val tf = mgr.makeFromStream(mem)
         assertNotNull(tf, "makeFromStream(SkStream) should load Liberation Sans Regular")
@@ -34,14 +34,14 @@ class SkFontMgrMakeFromSkStreamTest {
 
     @Test
     fun `makeFromStream(SkStream) on empty stream returns null`() {
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val mem = SkMemoryStream(ByteArray(0))
         assertNull(mgr.makeFromStream(mem))
     }
 
     @Test
     fun `makeFromStream(SkStream) with garbage bytes returns null`() {
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val garbage = ByteArray(64) { it.toByte() }
         val mem = SkMemoryStream(garbage)
         assertNull(mgr.makeFromStream(mem))
@@ -49,7 +49,7 @@ class SkFontMgrMakeFromSkStreamTest {
 
     @Test
     fun `makeFromStream(SkStream) drains the stream to end-of-data`() {
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val bytes = loadBundledTtfBytes()
         val mem = SkMemoryStream(bytes)
         val tf = mgr.makeFromStream(mem)

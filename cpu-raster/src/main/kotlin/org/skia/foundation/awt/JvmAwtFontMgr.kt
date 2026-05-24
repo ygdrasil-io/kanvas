@@ -15,8 +15,8 @@ import java.io.IOException
 import java.io.InputStream
 
 /**
- * **NOTE D'IMPLÉMENTATION** — Default JVM font manager. Surfaces system
- * fonts to [SkFontMgr] consumers via
+ * **NOTE D'IMPLÉMENTATION** — Optional JVM AWT font manager. Surfaces system
+ * fonts to explicit `cpu-raster` AWT consumers via
  * `java.awt.GraphicsEnvironment.getAvailableFontFamilyNames()`. Each
  * family enumerates the 4 classical AWT styles (regular / bold /
  * italic / bold-italic) — that's an approximation versus upstream's
@@ -35,9 +35,9 @@ import java.io.InputStream
  *  - **TTC index ignored** : `Font.createFont(TRUETYPE_FONT, …)` always
  *    picks face 0 in a TrueType Collection.
  *
- * If/when a real fontconfig (or freetype) backend lands, only this file
- * (and its peers `Awt*.kt`) needs to change — the [SkFontMgr] API
- * surface stays pinned to the upstream signature.
+ * Portable `kanvas-skia` font paths do not use this manager. They use the
+ * bundled pure-Kotlin OpenType Liberation manager so tests and rendering do
+ * not depend on host system fonts.
  */
 internal class JvmAwtFontMgr private constructor(
     private val families: List<String>,
