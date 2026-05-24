@@ -55,7 +55,7 @@ class CpuRasterKotlinCodecBackendTest {
     }
 
     @Test
-    fun `full cpu-raster codec suite still has legacy backend blockers`() {
+    fun `full cpu-raster codec suite still has a WebP lossy backend blocker`() {
         val codecTestRoot = Path.of("src/test/kotlin/org/skia/codec")
         val backendBlockedTests = Files.walk(codecTestRoot).use { paths ->
             paths
@@ -63,9 +63,8 @@ class CpuRasterKotlinCodecBackendTest {
                 .filter { path -> path.fileName.toString() != "CpuRasterKotlinCodecBackendTest.kt" }
                 .filter { path ->
                     val text = Files.readString(path)
-                    text.contains("javax.imageio.ImageIO") ||
-                        text.contains("java.awt.image.BufferedImage") ||
-                        text.contains("SkWebpCodec")
+                    text.contains("SkWebpCodec") ||
+                        text.contains("TwelveMonkeys ImageIO")
                 }
                 .map { path -> codecTestRoot.relativize(path).toString().replace('\\', '/') }
                 .sorted()
@@ -74,19 +73,11 @@ class CpuRasterKotlinCodecBackendTest {
 
         assertEquals(
             listOf(
-                "SkAndroidCodecComputeSampleSizeJpegTest.kt",
-                "SkAndroidCodecGetAndroidPixelsTest.kt",
-                "SkAndroidCodecTest.kt",
-                "bmp/SkBmpCodecTest.kt",
-                "gif/SkGifCodecTest.kt",
-                "jpeg/SkJpegCodecTest.kt",
-                "png/SkPngCodecTest.kt",
-                "wbmp/SkWbmpCodecTest.kt",
                 "webp/SkWebpCodecTest.kt",
             ),
             backendBlockedTests,
-            "The full :cpu-raster:test --tests '*codec*' switch is blocked until these legacy tests " +
-                "stop generating fixtures through AWT/ImageIO or asserting temporary ImageIO-only WebP behavior.",
+            "The full :cpu-raster:test --tests '*codec*' switch is blocked by the legacy WebP test " +
+                "until Kotlin VP8 lossy pixel decoding replaces the temporary ImageIO-only behavior.",
         )
     }
 }

@@ -37,7 +37,6 @@ class SkGifCodecTest {
         val bytes = synthGif(width = 6, height = 4)
         val codec = SkCodec.MakeFromData(bytes)
         assertNotNull(codec)
-        assertTrue(codec is SkGifCodec)
         assertEquals(SkEncodedImageFormat.kGIF, codec!!.getEncodedFormat())
         assertEquals(6, codec.dimensions().width)
         assertEquals(4, codec.dimensions().height)

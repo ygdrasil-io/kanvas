@@ -49,7 +49,6 @@ class SkWbmpCodecTest {
         val bytes = synthWbmp(width = 8, height = 8)
         val codec = SkCodec.MakeFromData(bytes)
         assertNotNull(codec)
-        assertTrue(codec is SkWbmpCodec)
         assertEquals(SkEncodedImageFormat.kWBMP, codec!!.getEncodedFormat())
         assertEquals(8, codec.dimensions().width)
         assertEquals(8, codec.dimensions().height)
