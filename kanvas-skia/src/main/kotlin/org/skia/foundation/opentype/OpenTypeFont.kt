@@ -82,6 +82,7 @@ public class OpenTypeFontMgr public constructor() : SkFontMgr() {
 public class OpenTypeTypeface private constructor(
     private val font: ParsedTrueTypeFont,
     override val fontStyle: SkFontStyle,
+    private val paletteSelection: OpenTypePaletteSelection = OpenTypePaletteSelection.Default,
 ) : SkTypeface() {
     override fun countGlyphs(): Int = font.numGlyphs
 
@@ -146,7 +147,7 @@ public class OpenTypeTypeface private constructor(
         @Suppress("UNUSED_PARAMETER") isSubpixel: Boolean,
     ): List<OpenTypeColorPath>? {
         if (text.isEmpty()) return null
-        val palette = font.colorPalettes().firstOrNull() ?: return null
+        val palette = paletteSelection.resolve(font.colorPalettes()) ?: return null
         val out = ArrayList<OpenTypeColorPath>()
         var hasColorGlyph = false
         var penX = x
@@ -296,11 +297,11 @@ public class OpenTypeTypeface private constructor(
 
     override fun makeClone(args: SkFontArguments): SkTypeface? {
         // Variation deltas are deliberately not applied in this first slice.
-        return OpenTypeTypeface(font, fontStyle)
+        return OpenTypeTypeface(font, fontStyle, OpenTypePaletteSelection.from(args.palette))
     }
 
     internal fun withFontStyle(style: SkFontStyle): OpenTypeTypeface =
-        OpenTypeTypeface(font, style)
+        OpenTypeTypeface(font, style, paletteSelection)
 
     private fun positionedPath(path: SkPath, x: SkScalar, y: SkScalar): SkPath =
         SkPathBuilder()
@@ -1520,6 +1521,32 @@ private class SfntReader(
 private data class TableRecord(val offset: Int, val length: Int)
 internal data class OpenTypeColorLayer(val glyphId: Int, val paletteIndex: Int)
 internal data class OpenTypeColorPath(val color: Int?, val path: SkPath)
+private data class OpenTypePaletteSelection(
+    val index: Int,
+    val overrides: Map<Int, Int>,
+) {
+    fun resolve(palettes: List<List<Int>>): List<Int>? {
+        if (index < 0 || index >= palettes.size) return null
+        val palette = palettes[index]
+        if (overrides.isEmpty()) return palette
+        for (overrideIndex in overrides.keys) {
+            if (overrideIndex < 0 || overrideIndex >= palette.size) return null
+        }
+        return palette.mapIndexed { entryIndex, color ->
+            overrides[entryIndex] ?: color
+        }
+    }
+
+    companion object {
+        val Default = OpenTypePaletteSelection(0, emptyMap())
+
+        fun from(palette: SkFontArguments.Palette): OpenTypePaletteSelection =
+            OpenTypePaletteSelection(
+                index = palette.index,
+                overrides = palette.overrides.associate { it.index to it.color },
+            )
+    }
+}
 private data class OpenTypeColorFont(
     val palettes: List<List<Int>>,
     val layersByGlyph: Map<Int, List<OpenTypeColorLayer>>,
