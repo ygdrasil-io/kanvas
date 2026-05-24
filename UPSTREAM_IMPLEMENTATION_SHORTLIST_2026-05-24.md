@@ -89,10 +89,10 @@ Completed since this snapshot:
 - `STUB.GRADIENT_INTERPOLATION`: the `SkGradient` aggregate and
   `SkShaders.LinearGradient(pts, SkGradient)` overload now exist for RGB
   working color spaces, and the CPU linear-gradient path has a bounded HSL
-  hue-method sampler plus RGB `InPremul.kYes` acceptance. HSL premul remains
-  explicitly unsupported. The remaining
-  blocker is the perceptual/powerless hue sampler work and GM-level
-  `gradients_hue_method` port details such as explicit-position endpoints.
+  hue-method sampler plus RGB `InPremul.kYes` acceptance. `gradients_hue_method`
+  is enabled with labels and explicit-position endpoint coverage. HSL premul
+  remains explicitly unsupported; the remaining blocker is the
+  perceptual/powerless hue sampler work.
 - `addarc`: `SkPathBuilder.emitArc` now normalises huge sweeps before conic
   decomposition, and `ManyArcsGM` is enabled with a raster ratchet.
 - `STUB.TEXT_IMAGE_FILTER`: `imagefiltersbase`, `textfilter_image`, and
@@ -108,7 +108,7 @@ Completed since this snapshot:
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
 | 1 | `vertices` | 1 cpp | M | `VerticesBatchingGM` is already ported; after vertex blend and color-filter coverage, the remaining raster `VerticesGM` work is focused visual-diff reconnaissance. |
-| 2 | `gradients` | 1 cpp | M/L | RGB API surface and HSL hue-method core exist; remaining work is GM reactivation plus perceptual/powerless hue coverage. |
+| 2 | `gradients` | 1 cpp | M/L | RGB API surface and the HSL hue-method GM are covered; remaining work is perceptual/powerless hue sampler coverage. |
 | 3 | `mesh` | 1 cpp | L/XL | Actionable but broad API work; start with the `custommesh` slice only. |
 | 4 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
@@ -118,7 +118,7 @@ Completed since this snapshot:
 |---|---|---|
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
-| `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, HSL hue-method core implemented for CPU linear gradients, perceptual/powerless hue sampler still missing | gradient interpolation variants |
+| `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, HSL hue-method GM enabled, perceptual/powerless hue sampler still missing | gradient interpolation variants |
 | `mesh` | `STUB.MESH`; minimal CPU `SkMesh` / `SkMeshSpecification` / `SkCanvas.drawMesh` skeleton exists for position-only triangles, but all 11 upstream registrations remain compile-pinned until shader attributes, varyings, uniforms, and color output are implemented | `MeshGMs.kt` |
 | `vertices` | `STUB.DRAW_VERTICES_VISUAL_PARITY`; `VerticesGM` is source-ported, but focused validation still renders ~60% for both `vertices` and `vertices_scaled_shader` after vertex blend and paint color-filter coverage | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
