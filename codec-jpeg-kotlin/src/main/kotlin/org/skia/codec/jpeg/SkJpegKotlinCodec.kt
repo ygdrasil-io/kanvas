@@ -10,6 +10,8 @@ import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.skcmsParse
+import org.skia.utils.SkPixmapUtils
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -28,11 +30,11 @@ public class SkJpegKotlinCodec private constructor(
 
     private val cachedInfo: SkImageInfo by lazy {
         SkImageInfo.Make(
-            width = jpeg.width,
-            height = jpeg.height,
+            width = if (jpeg.origin.swapsWidthHeight()) jpeg.height else jpeg.width,
+            height = if (jpeg.origin.swapsWidthHeight()) jpeg.width else jpeg.height,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = jpeg.iccProfile?.let { SkColorSpace.make(it) } ?: SkColorSpace.makeSRGB(),
         )
     }
 
@@ -40,9 +42,9 @@ public class SkJpegKotlinCodec private constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG
 
-    override fun getICCProfile(): SkcmsICCProfile? = null
+    override fun getICCProfile(): SkcmsICCProfile? = jpeg.iccProfile
 
-    override fun getOrigin(): SkEncodedOrigin = SkEncodedOrigin.kTopLeft
+    override fun getOrigin(): SkEncodedOrigin = jpeg.origin
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (dst.width != info.width || dst.height != info.height) return Result.kInvalidParameters
@@ -54,7 +56,18 @@ public class SkJpegKotlinCodec private constructor(
         } catch (_: IllegalArgumentException) {
             return Result.kErrorInInput
         }
-        System.arraycopy(pixels, 0, dst.pixels8888, 0, pixels.size)
+        if (jpeg.origin == SkEncodedOrigin.kTopLeft) {
+            System.arraycopy(pixels, 0, dst.pixels8888, 0, pixels.size)
+            return Result.kSuccess
+        }
+        val raw = SkBitmap(
+            width = jpeg.width,
+            height = jpeg.height,
+            colorSpace = info.colorSpace,
+            colorType = SkColorType.kRGBA_8888,
+        )
+        System.arraycopy(pixels, 0, raw.pixels8888, 0, pixels.size)
+        if (!SkPixmapUtils.Orient(dst, raw, jpeg.origin)) return Result.kInvalidParameters
         return Result.kSuccess
     }
 
@@ -91,6 +104,9 @@ private data class ParsedJpeg(
     val acTables: Array<HuffmanTable?>,
     val components: List<Component>,
     val scanData: ByteArray,
+    val restartInterval: Int,
+    val iccProfile: SkcmsICCProfile?,
+    val origin: SkEncodedOrigin,
 )
 
 private data class Component(
@@ -151,6 +167,10 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
     var height = 0
     var frameComponents: List<Component>? = null
     var scanComponents: List<Component>? = null
+    var restartInterval = 0
+    var origin = SkEncodedOrigin.kTopLeft
+    val iccChunks = ArrayList<Pair<Int, ByteArray>>()
+    var iccChunkCount = -1
     var offset = 2
 
     while (offset < data.size) {
@@ -176,10 +196,21 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                         while (markerOffset < data.size && data[markerOffset] == 0xFF.toByte()) markerOffset++
                         if (markerOffset >= data.size) return null
                         val next = data[markerOffset].toInt() and 0xFF
-                        if (next != 0x00) {
+                        if (next != 0x00 && next !in 0xD0..0xD7) {
                             val scan = data.copyOfRange(scanStart, offset)
                             if (next != MARKER_EOI) return null
-                            return buildParsed(width, height, quantTables, dcTables, acTables, scanComponents, scan)
+                            return buildParsed(
+                                width,
+                                height,
+                                quantTables,
+                                dcTables,
+                                acTables,
+                                scanComponents,
+                                scan,
+                                restartInterval,
+                                parseIccProfile(iccChunks, iccChunkCount),
+                                origin,
+                            )
                         }
                         offset = markerOffset + 1
                     } else {
@@ -197,6 +228,16 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                 when (marker) {
                     MARKER_DQT -> parseDqt(data, payloadStart, payloadEnd, quantTables)
                     MARKER_DHT -> parseDht(data, payloadStart, payloadEnd, dcTables, acTables)
+                    MARKER_APP1 -> parseExifOrigin(data, payloadStart, payloadEnd)?.let { origin = it }
+                    MARKER_APP2 -> parseIccChunk(data, payloadStart, payloadEnd)?.let { chunk ->
+                        val (index, count, payload) = chunk
+                        if (iccChunkCount == -1) {
+                            iccChunkCount = count
+                        }
+                        if (count == iccChunkCount) {
+                            iccChunks += index to payload
+                        }
+                    }
                     MARKER_SOF0 -> {
                         val frame = parseSof0(data, payloadStart, payloadEnd) ?: return null
                         width = frame.width
@@ -204,7 +245,10 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                         frameComponents = frame.components
                     }
                     MARKER_SOF2 -> return null
-                    MARKER_DRI -> return null
+                    MARKER_DRI -> {
+                        if (payloadEnd - payloadStart != 2) return null
+                        restartInterval = readU16BE(data, payloadStart)
+                    }
                 }
                 offset = payloadEnd
             }
@@ -221,6 +265,9 @@ private fun buildParsed(
     acTables: Array<HuffmanTable?>,
     components: List<Component>?,
     scanData: ByteArray,
+    restartInterval: Int,
+    iccProfile: SkcmsICCProfile?,
+    origin: SkEncodedOrigin,
 ): ParsedJpeg? {
     val cs = components ?: return null
     if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
@@ -253,7 +300,7 @@ private fun buildParsed(
         if (y.h == 1 && y.v != 1) return null
     }
     if (scanData.isEmpty()) return null
-    return ParsedJpeg(width, height, quantTables, dcTables, acTables, cs, scanData)
+    return ParsedJpeg(width, height, quantTables, dcTables, acTables, cs, scanData, restartInterval, iccProfile, origin)
 }
 
 private fun parseDqt(data: ByteArray, start: Int, end: Int, tables: Array<IntArray?>) {
@@ -358,6 +405,9 @@ private fun decodeGrayscale(jpeg: ParsedJpeg): IntArray {
     var previousDc = 0
     val blocksX = (jpeg.width + 7) / 8
     val blocksY = (jpeg.height + 7) / 8
+    val totalMcus = blocksX * blocksY
+    var mcu = 0
+    var nextRestartMarker = 0
 
     for (by in 0 until blocksY) {
         for (bx in 0 until blocksX) {
@@ -398,6 +448,12 @@ private fun decodeGrayscale(jpeg: ParsedJpeg): IntArray {
                     pixels[py * jpeg.width + px] = argb(0xFF, v, v, v)
                 }
             }
+            mcu++
+            if (jpeg.restartInterval > 0 && mcu % jpeg.restartInterval == 0 && mcu < totalMcus) {
+                reader.consumeRestart(nextRestartMarker)
+                nextRestartMarker = (nextRestartMarker + 1) and 7
+                previousDc = 0
+            }
         }
     }
     return pixels
@@ -418,6 +474,9 @@ private fun decodeColor(jpeg: ParsedJpeg): IntArray {
     val blocks = Array(frameComponents.size) { Array(frameComponents[it].h * frameComponents[it].v) { IntArray(64) } }
     val blocksX = (jpeg.width + mcuWidth - 1) / mcuWidth
     val blocksY = (jpeg.height + mcuHeight - 1) / mcuHeight
+    val totalMcus = blocksX * blocksY
+    var mcu = 0
+    var nextRestartMarker = 0
 
     for (my in 0 until blocksY) {
         for (mx in 0 until blocksX) {
@@ -443,6 +502,12 @@ private fun decodeColor(jpeg: ParsedJpeg): IntArray {
                     val cr = sampleComponent(blocks[2], frameComponents[2], x, y, mcuWidth, mcuHeight)
                     pixels[py * jpeg.width + px] = yCbCrToArgb(yy, cb, cr)
                 }
+            }
+            mcu++
+            if (jpeg.restartInterval > 0 && mcu % jpeg.restartInterval == 0 && mcu < totalMcus) {
+                reader.consumeRestart(nextRestartMarker)
+                nextRestartMarker = (nextRestartMarker + 1) and 7
+                previousDc.fill(0)
             }
         }
     }
@@ -528,6 +593,103 @@ private class EntropyBitReader(private val bytes: ByteArray) {
         for (i in 0 until count) out = (out shl 1) or readBit()
         return out
     }
+
+    fun consumeRestart(expected: Int) {
+        remaining = 0
+        if (offset >= bytes.size) fail()
+        if (bytes[offset] != 0xFF.toByte()) fail()
+        while (offset < bytes.size && bytes[offset] == 0xFF.toByte()) offset++
+        if (offset >= bytes.size) fail()
+        val marker = bytes[offset++].toInt() and 0xFF
+        if (marker != 0xD0 + expected) fail()
+    }
+}
+
+private data class IccChunk(val index: Int, val count: Int, val payload: ByteArray)
+
+private fun parseIccChunk(data: ByteArray, start: Int, end: Int): IccChunk? {
+    if (end - start < ICC_SIGNATURE.size + 2 || !matchesAt(data, start, ICC_SIGNATURE)) return null
+    val index = data[start + ICC_SIGNATURE.size].toInt() and 0xFF
+    val count = data[start + ICC_SIGNATURE.size + 1].toInt() and 0xFF
+    if (index == 0 || count == 0 || index > count) return null
+    return IccChunk(index, count, data.copyOfRange(start + ICC_SIGNATURE.size + 2, end))
+}
+
+private fun parseIccProfile(chunks: List<Pair<Int, ByteArray>>, expectedCount: Int): SkcmsICCProfile? {
+    if (chunks.isEmpty() || expectedCount <= 0 || chunks.size != expectedCount) return null
+    val sorted = chunks.sortedBy { it.first }
+    for ((i, chunk) in sorted.withIndex()) {
+        if (chunk.first != i + 1) return null
+    }
+    val bytes = ByteArray(sorted.sumOf { it.second.size })
+    var offset = 0
+    for ((_, chunk) in sorted) {
+        chunk.copyInto(bytes, offset)
+        offset += chunk.size
+    }
+    return try {
+        skcmsParse(bytes)
+    } catch (_: Throwable) {
+        null
+    }
+}
+
+private fun parseExifOrigin(data: ByteArray, start: Int, end: Int): SkEncodedOrigin? {
+    if (end - start < EXIF_SIGNATURE.size + 8 || !matchesAt(data, start, EXIF_SIGNATURE)) return null
+    return parseExifTiffForOrigin(data, start + EXIF_SIGNATURE.size, end)
+}
+
+private fun parseExifTiffForOrigin(data: ByteArray, tiffStart: Int, end: Int): SkEncodedOrigin? {
+    if (tiffStart + 8 > end) return null
+    val littleEndian = when {
+        data[tiffStart] == 0x49.toByte() && data[tiffStart + 1] == 0x49.toByte() -> true
+        data[tiffStart] == 0x4D.toByte() && data[tiffStart + 1] == 0x4D.toByte() -> false
+        else -> return null
+    }
+    if (readU16(data, tiffStart + 2, littleEndian) != 0x002A) return null
+    val ifdOffset = readU32(data, tiffStart + 4, littleEndian)
+    val ifdStart = tiffStart + ifdOffset
+    if (ifdStart < tiffStart || ifdStart + 2 > end) return null
+    val count = readU16(data, ifdStart, littleEndian)
+    val entriesStart = ifdStart + 2
+    if (count > (end - entriesStart) / 12) return null
+    for (i in 0 until count) {
+        val entry = entriesStart + i * 12
+        if (readU16(data, entry, littleEndian) != EXIF_ORIENTATION_TAG) continue
+        val type = readU16(data, entry + 2, littleEndian)
+        val valueCount = readU32(data, entry + 4, littleEndian)
+        if (type != TIFF_TYPE_SHORT || valueCount != 1) return null
+        val raw = readU16(data, entry + 8, littleEndian)
+        if (raw !in 1..8) return null
+        return SkEncodedOrigin.fromExifValue(raw)
+    }
+    return null
+}
+
+private fun matchesAt(data: ByteArray, at: Int, signature: ByteArray): Boolean {
+    if (at + signature.size > data.size) return false
+    for (i in signature.indices) {
+        if (data[at + i] != signature[i]) return false
+    }
+    return true
+}
+
+private fun readU16(bytes: ByteArray, offset: Int, littleEndian: Boolean): Int {
+    val b0 = bytes[offset].toInt() and 0xFF
+    val b1 = bytes[offset + 1].toInt() and 0xFF
+    return if (littleEndian) (b1 shl 8) or b0 else (b0 shl 8) or b1
+}
+
+private fun readU32(bytes: ByteArray, offset: Int, littleEndian: Boolean): Int {
+    val b0 = bytes[offset].toInt() and 0xFF
+    val b1 = bytes[offset + 1].toInt() and 0xFF
+    val b2 = bytes[offset + 2].toInt() and 0xFF
+    val b3 = bytes[offset + 3].toInt() and 0xFF
+    return if (littleEndian) {
+        (b3 shl 24) or (b2 shl 16) or (b1 shl 8) or b0
+    } else {
+        (b0 shl 24) or (b1 shl 16) or (b2 shl 8) or b3
+    }
 }
 
 private fun receiveAndExtend(reader: EntropyBitReader, size: Int): Int {
@@ -583,10 +745,18 @@ private const val MARKER_DHT = 0xC4
 private const val MARKER_SOS = 0xDA
 private const val MARKER_DQT = 0xDB
 private const val MARKER_DRI = 0xDD
+private const val MARKER_APP1 = 0xE1
+private const val MARKER_APP2 = 0xE2
 private const val MARKER_EOI = 0xD9
 private const val MARKER_TEM = 0x01
 private const val MAX_DIMENSION = 100_000
+private const val EXIF_ORIENTATION_TAG = 0x0112
+private const val TIFF_TYPE_SHORT = 3
 private val INV_SQRT2 = 1.0 / sqrt(2.0)
+private val ICC_SIGNATURE = byteArrayOf(
+    0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x00,
+)
+private val EXIF_SIGNATURE = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00)
 
 private val ZIGZAG = intArrayOf(
     0, 1, 8, 16, 9, 2, 3, 10,
