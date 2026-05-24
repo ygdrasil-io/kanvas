@@ -262,6 +262,64 @@ class SkGifKotlinCodecTest {
     }
 
     @Test
+    fun `disposal none and do not dispose keep composed canvas`() {
+        for (disposal in listOf(DISPOSAL_NONE, DISPOSAL_DO_NOT_DISPOSE)) {
+            val codec = SkGifKotlinCodec.Decoder.make(
+                gif(
+                    width = 3,
+                    height = 1,
+                    palette = intArrayOf(RED, GREEN, BLUE, YELLOW),
+                    frames = listOf(
+                        GifFrameSpec(0, 0, 3, 1, intArrayOf(0, 0, 0)),
+                        GifFrameSpec(1, 0, 1, 1, intArrayOf(2), disposal = disposal),
+                        GifFrameSpec(2, 0, 1, 1, intArrayOf(1)),
+                    ),
+                ),
+            )!!
+
+            val frameInfo = codec.getFrameInfo()
+            assertEquals(1, frameInfo[2].requiredFrame)
+
+            val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+            val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 2))
+            assertEquals(SkCodec.Result.kSuccess, result)
+            assertEquals(RED, dst.getPixel(0, 0))
+            assertEquals(BLUE, dst.getPixel(1, 0))
+            assertEquals(GREEN, dst.getPixel(2, 0))
+        }
+    }
+
+    @Test
+    fun `skips netscape loop and comment extensions before frames`() {
+        val codec = SkGifKotlinCodec.Decoder.make(
+            gif(
+                width = 2,
+                height = 1,
+                palette = intArrayOf(RED, GREEN, BLUE, YELLOW),
+                extensions = listOf(
+                    netscapeLoopExtension(loopCount = 3),
+                    commentExtension("codec-gif-kotlin"),
+                ),
+                frames = listOf(
+                    GifFrameSpec(0, 0, 2, 1, intArrayOf(0, 1), delayCs = 4),
+                    GifFrameSpec(1, 0, 1, 1, intArrayOf(2), delayCs = 9),
+                ),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertEquals(2, codec!!.getFrameCount())
+        assertEquals(40, codec.getFrameInfo()[0].durationMs)
+        assertEquals(90, codec.getFrameInfo()[1].durationMs)
+
+        val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+        val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 1))
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(RED, dst.getPixel(0, 0))
+        assertEquals(BLUE, dst.getPixel(1, 0))
+    }
+
+    @Test
     fun `rejects truncated image data sub-block`() {
         val data = gif(
             width = 1,
@@ -273,6 +331,25 @@ class SkGifKotlinCodecTest {
         corrupted[firstImageDataSubBlockSizeOffset(corrupted)] = 127.toByte()
 
         assertNull(SkGifKotlinCodec.Decoder.make(corrupted))
+    }
+
+    @Test
+    fun `rejects truncated extension sub-block`() {
+        assertNull(
+            SkGifKotlinCodec.Decoder.make(
+                gif(
+                    width = 1,
+                    height = 1,
+                    palette = intArrayOf(RED, BLUE),
+                    extensions = listOf(
+                        byteArrayOf(0x21, 0xFE.toByte(), 0x05, 'o'.code.toByte(), 'o'.code.toByte()),
+                    ),
+                    frames = listOf(
+                        GifFrameSpec(0, 0, 1, 1, intArrayOf(0)),
+                    ),
+                ),
+            ),
+        )
     }
 
     @Test
@@ -359,6 +436,7 @@ class SkGifKotlinCodecTest {
         height: Int,
         palette: IntArray,
         backgroundIndex: Int = 0,
+        extensions: List<ByteArray> = emptyList(),
         frames: List<GifFrameSpec>,
     ): ByteArray {
         val out = ArrayList<Byte>()
@@ -369,6 +447,9 @@ class SkGifKotlinCodecTest {
         out += backgroundIndex.toByte()
         out += 0.toByte()
         out.addColorTable(palette)
+        for (extension in extensions) {
+            for (byte in extension) out += byte
+        }
 
         for (frame in frames) {
             out += 0x21.toByte()
@@ -395,6 +476,27 @@ class SkGifKotlinCodecTest {
             out.addSubBlocks(frame.rawImageData ?: lzwData(frame.indexes))
         }
         out += 0x3B.toByte()
+        return out.toByteArray()
+    }
+
+    private fun netscapeLoopExtension(loopCount: Int): ByteArray {
+        val out = ArrayList<Byte>()
+        out += 0x21.toByte()
+        out += 0xFF.toByte()
+        out += 11.toByte()
+        out.addAscii("NETSCAPE2.0")
+        out += 3.toByte()
+        out += 1.toByte()
+        out.addU16LE(loopCount)
+        out += 0.toByte()
+        return out.toByteArray()
+    }
+
+    private fun commentExtension(value: String): ByteArray {
+        val out = ArrayList<Byte>()
+        out += 0x21.toByte()
+        out += 0xFE.toByte()
+        out.addSubBlocks(value.encodeToByteArray())
         return out.toByteArray()
     }
 
@@ -487,6 +589,7 @@ class SkGifKotlinCodecTest {
 
 private const val MIN_CODE_SIZE: Int = 2
 private const val DISPOSAL_NONE: Int = 0
+private const val DISPOSAL_DO_NOT_DISPOSE: Int = 1
 private const val DISPOSAL_BACKGROUND: Int = 2
 private const val DISPOSAL_PREVIOUS: Int = 3
 private const val TRANSPARENT: Int = 0
