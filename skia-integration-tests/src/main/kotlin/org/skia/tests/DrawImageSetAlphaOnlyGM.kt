@@ -43,12 +43,8 @@ import org.skia.tools.ToolUtils
  * [SkColorType.kAlpha_8] re-tagged, mirroring upstream's intent without
  * requiring the extra factory method.
  *
- * ## Port status
- *
- * Body fully ported against the new [SkCanvas.experimental_DrawEdgeAAImageSet]
- * surface (resolves to `TODO("STUB.EDGE_AA_IMAGE_SET")` at runtime).
- * Matching [DrawImageSetAlphaOnlyTest] is `@Disabled` until that body
- * lands.
+ * Body fully ported against the raster
+ * [SkCanvas.experimental_DrawEdgeAAImageSet] fallback.
  */
 public class DrawImageSetAlphaOnlyGM : GM() {
 

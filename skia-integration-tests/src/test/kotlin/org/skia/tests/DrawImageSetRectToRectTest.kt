@@ -1,22 +1,29 @@
 package org.skia.tests
 
-import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.testing.SimilarityTracker
+import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
-@Disabled(
-    "STUB.EDGE_AA_IMAGE_SET: requires SkCanvas.experimental_DrawEdgeAAImageSet — " +
-        "the rect-stays-rect family of CTMs exercises the batched per-entry " +
-        "alpha multiplier + filter-mode behaviour. Body fully ported against " +
-        "the live API surface ; the matching device implementation resolves to " +
-        "`TODO(\"STUB.EDGE_AA_IMAGE_SET\")` until the batched entry-point lands " +
-        "in `kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt`.",
-)
 class DrawImageSetRectToRectTest {
 
     @Test
     fun `DrawImageSetRectToRectGM matches reference`() {
         val gm = DrawImageSetRectToRectGM()
-        TestUtils.runGmTest(gm)
+        val rendered = TestUtils.runGmTest(gm)
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "Missing reference image ${gm.name()}.png")
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 8)
+        TestReport.recordDetailed("DrawImageSetRectToRectGM", comparison)
+        if (comparison.similarity < 90.0) {
+            TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
+        }
+        assertTrue(SimilarityTracker.updateScore("DrawImageSetRectToRectGM", comparison.similarity))
+        assertTrue(
+            comparison.similarity >= 90.0,
+            "DrawImageSetRectToRectGM similarity ${"%.2f".format(comparison.similarity)}% < 90.0% floor",
+        )
     }
 }
