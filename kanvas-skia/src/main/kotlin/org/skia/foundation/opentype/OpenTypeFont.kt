@@ -136,6 +136,52 @@ public class OpenTypeTypeface private constructor(
     internal fun colorLayers(glyphId: Int): List<OpenTypeColorLayer> =
         font.colorLayers(glyphId)
 
+    internal fun makeColorTextPaths(
+        text: String,
+        x: SkScalar,
+        y: SkScalar,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+        @Suppress("UNUSED_PARAMETER") isSubpixel: Boolean,
+    ): List<OpenTypeColorPath>? {
+        if (text.isEmpty()) return null
+        val palette = font.colorPalettes().firstOrNull() ?: return null
+        val out = ArrayList<OpenTypeColorPath>()
+        var hasColorGlyph = false
+        var penX = x
+        val glyphs = text.codePoints().toArray().let { codepoints ->
+            IntArray(codepoints.size) { font.glyphForCodepoint(codepoints[it]) }
+        }
+        for (i in glyphs.indices) {
+            val glyphId = glyphs[i]
+            val layers = font.colorLayers(glyphId)
+            if (layers.isEmpty()) {
+                val glyphPath = font.glyphPath(glyphId, size, scaleX, skewX)
+                if (glyphPath != null && !glyphPath.isEmpty()) {
+                    out.add(OpenTypeColorPath(null, positionedPath(glyphPath, penX, y)))
+                }
+            } else {
+                hasColorGlyph = true
+                for (layer in layers) {
+                    val color = when (layer.paletteIndex) {
+                        COLR_FOREGROUND_PALETTE_INDEX -> null
+                        else -> palette.getOrNull(layer.paletteIndex) ?: return null
+                    }
+                    val layerPath = font.glyphPath(layer.glyphId, size, scaleX, skewX) ?: continue
+                    if (!layerPath.isEmpty()) {
+                        out.add(OpenTypeColorPath(color, positionedPath(layerPath, penX, y)))
+                    }
+                }
+            }
+            penX += font.advanceWidth(glyphId) * font.scale(size) * scaleX
+            if (i < glyphs.lastIndex) {
+                penX += font.kerningAdjustment(glyphId, glyphs[i + 1]) * font.scale(size) * scaleX
+            }
+        }
+        return out.takeIf { hasColorGlyph && it.isNotEmpty() }
+    }
+
     override fun makeTextPath(
         text: String,
         x: SkScalar,
@@ -255,6 +301,12 @@ public class OpenTypeTypeface private constructor(
 
     internal fun withFontStyle(style: SkFontStyle): OpenTypeTypeface =
         OpenTypeTypeface(font, style)
+
+    private fun positionedPath(path: SkPath, x: SkScalar, y: SkScalar): SkPath =
+        SkPathBuilder()
+            .setFillType(SkPathFillType.kWinding)
+            .addPathOffset(path, x, y)
+            .detach()
 
     public companion object {
         @Suppress("FunctionName")
@@ -1467,6 +1519,7 @@ private class SfntReader(
 
 private data class TableRecord(val offset: Int, val length: Int)
 internal data class OpenTypeColorLayer(val glyphId: Int, val paletteIndex: Int)
+internal data class OpenTypeColorPath(val color: Int?, val path: SkPath)
 private data class OpenTypeColorFont(
     val palettes: List<List<Int>>,
     val layersByGlyph: Map<Int, List<OpenTypeColorLayer>>,
@@ -1501,6 +1554,8 @@ private data class TtPoint(val x: Int, val y: Int, val onCurve: Boolean)
 private data class GlyphOutline(val contours: List<List<TtPoint>>) {
     val points: List<TtPoint> = contours.flatten()
 }
+
+private const val COLR_FOREGROUND_PALETTE_INDEX = 0xFFFF
 
 private const val FLAG_ON_CURVE = 0x01
 private const val FLAG_X_SHORT = 0x02

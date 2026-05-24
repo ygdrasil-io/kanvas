@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkData
@@ -463,6 +466,83 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `drawString renders COLRv0 layers with CPAL default palette`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2]),
+        )!!
+        val font = SkFont(typeface, 96f)
+        val bitmap = SkBitmap(220, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, font, paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlack))
+        assertEquals(0xFF000000.toInt(), paint.color)
+    }
+
+    @Test
+    fun `drawString renders mixed COLRv0 and monochrome glyphs in one run`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2]),
+        )!!
+        val font = SkFont(typeface, 72f)
+        val bitmap = SkBitmap(260, 120).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("AB", 12f, 92f, font, paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0)
+    }
+
+    @Test
+    fun `drawString renders COLRv0 foreground palette layers with original paint color`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV0(glyphs[0], glyphs[1], glyphs[1], 0xFFFF, 0xFFFF))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val font = SkFont(typeface, 96f)
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF0000FF.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, font, paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+    }
+
+    @Test
+    fun `drawString falls back to monochrome when color tables are malformed`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2])
+                .withTableLength("COLR", 4),
+        )!!
+        val font = SkFont(typeface, 96f)
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, font, paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+    }
+
+    @Test
     fun `font metrics are populated from OpenType tables`() {
         val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val font = SkFont(typeface, 20f)
@@ -780,6 +860,18 @@ class OpenTypeFontTest {
     private fun glyphString(glyphs: IntArray): String =
         glyphs.joinToString(separator = "") { (it and 0xFFFF).toChar().toString() }
 
+    private fun isMostlyRed(color: Int): Boolean =
+        SkColorGetR(color) > 200 && SkColorGetG(color) < 40 && SkColorGetB(color) < 40
+
+    private fun isMostlyGreen(color: Int): Boolean =
+        SkColorGetG(color) > 200 && SkColorGetR(color) < 40 && SkColorGetB(color) < 40
+
+    private fun isMostlyBlue(color: Int): Boolean =
+        SkColorGetB(color) > 200 && SkColorGetR(color) < 40 && SkColorGetG(color) < 40
+
+    private fun isMostlyBlack(color: Int): Boolean =
+        SkColorGetR(color) < 40 && SkColorGetG(color) < 40 && SkColorGetB(color) < 40
+
     private fun writeU16(bytes: ByteArray, off: Int, value: Int) {
         bytes[off] = (value ushr 8).toByte()
         bytes[off + 1] = value.toByte()
@@ -822,6 +914,16 @@ class OpenTypeFontTest {
     }
 
     private fun syntheticColrV0(baseGlyph: Int, layerGlyph0: Int, layerGlyph1: Int): ByteArray {
+        return syntheticColrV0(baseGlyph, layerGlyph0, layerGlyph1, 0, 1)
+    }
+
+    private fun syntheticColrV0(
+        baseGlyph: Int,
+        layerGlyph0: Int,
+        layerGlyph1: Int,
+        paletteIndex0: Int,
+        paletteIndex1: Int,
+    ): ByteArray {
         val bytes = ByteArray(28)
         writeU16(bytes, 2, 1) // numBaseGlyphRecords
         writeU32(bytes, 4, 14) // baseGlyphRecordsOffset
@@ -831,9 +933,9 @@ class OpenTypeFontTest {
         writeU16(bytes, 16, 0) // firstLayerIndex
         writeU16(bytes, 18, 2) // numLayers
         writeU16(bytes, 20, layerGlyph0)
-        writeU16(bytes, 22, 0) // paletteIndex
+        writeU16(bytes, 22, paletteIndex0) // paletteIndex
         writeU16(bytes, 24, layerGlyph1)
-        writeU16(bytes, 26, 1) // paletteIndex
+        writeU16(bytes, 26, paletteIndex1) // paletteIndex
         return bytes
     }
 

@@ -20,7 +20,8 @@ font work from PR #786.
   binary-backed OpenType typefaces.
 - Variable-font axis enumeration through OpenType `fvar` metadata.
 - Color-font metadata parsing for `CPAL` v0 palettes and `COLR` v0 base
-  glyph/layer records. Rendering layered color glyphs remains out of scope.
+  glyph/layer records, plus default-palette COLRv0 layered glyph rendering
+  through `SkCanvas.drawString`.
 - Bundled Liberation TTF resources used by the current tests.
 
 The backend has no AWT or JNI dependency. It is intended as the first portable
@@ -42,9 +43,9 @@ are unavailable.
 - Variable fonts beyond axis metadata: `gvar` outline deltas, `avar`, and
   applying `SkFontArguments.VariationPosition` to OpenType outlines are
   separate work.
-- Color font rendering: painting `COLR` layers, palette overrides, COLRv1
-  paint graphs, CBDT/sbix bitmap strikes, and SVG-in-OpenType glyphs are not
-  part of the current pure Kotlin backend.
+- Color font formats beyond default-palette COLRv0 rendering: palette
+  selection/overrides, COLRv1 paint graphs, CBDT/sbix bitmap strikes, and
+  SVG-in-OpenType glyphs are not part of the current pure Kotlin backend.
 - System font family enumeration and platform font fallback beyond the bundled
   portable Liberation manager are out of scope.
 - Pixel-perfect FreeType/HarfBuzz parity is not guaranteed. This backend reads
