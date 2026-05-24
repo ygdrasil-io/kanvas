@@ -18,21 +18,15 @@ package org.skia.foundation
  *    design value.
  *  - [collectionIndex] — index into a TrueType / OpenType **collection**
  *    file (`.ttc`/`.otc`) selecting which face is loaded. Default `0`
- *    (the first face). The kanvas-skia AWT backend currently ignores
- *    non-zero indices (AWT's `Font.createFont` always loads face 0 —
- *    see [SkTypeface.makeClone] KDoc) ; this matches Skia's contract
- *    of "best-effort" when the backend can't honour the request.
+ *    (the first face). Backends may treat unsupported non-zero indices as
+ *    best-effort when they cannot honour the request.
  *  - [palette] — selects a palette entry / palette overrides for COLR
  *    typefaces. The pure Kotlin OpenType backend supports this for COLRv0
  *    rendering; other backends may ignore it when they cannot honour color
  *    font palettes.
  *
- * **AWT-backed variation status** : the typeface clone path maps the
- * standard 4 OpenType axes (`wght` / `wdth` / `slnt` / `ital`) onto
- * `java.awt.font.TextAttribute` ; tags AWT does not model
- * (`opsz`, `GRAD`, `XHGT`, `XOPQ`, `YOPQ`, custom) are dropped silently
- * and logged at debug level. See [SkTypeface.makeClone] for the per-axis
- * mapping table.
+ * The pure Kotlin OpenType clone path applies parsed `fvar` coordinates
+ * and ignores unknown or unsupported axes.
  */
 public class SkFontArguments {
 

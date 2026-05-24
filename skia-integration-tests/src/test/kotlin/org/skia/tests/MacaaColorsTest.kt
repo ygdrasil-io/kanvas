@@ -13,7 +13,7 @@ import org.skia.testing.TestUtils
  * The GM renders four background colour panels with `Hamburgefons` at
  * five sizes × four (lcd, hinting) configs. `:kanvas-skia` collapses
  * each (lcd, hinting) quadruple to a single visual config (all four
- * configs route through AA-no-hint AWT ; cf. KDoc on [MacaaColorsGM]),
+ * configs route through AA-no-hint OpenType ; cf. KDoc on [MacaaColorsGM]),
  * so per-pixel comparison vs upstream's reference (which alternates
  * between LCD subpixel and full-coverage AA, and between hinted and
  * unhinted glyphs) drifts at every glyph edge.
@@ -21,7 +21,7 @@ import org.skia.testing.TestUtils
  * Tolerance accordingly loose. The dominant drift sources :
  *  - text rasteriser identity (Liberation Serif vs portable Times),
  *  - downgraded LCD AA (no subpixel mask path),
- *  - hinting collapsed to AWT default.
+ *  - hinting collapsed to the portable OpenType default.
  */
 class MacaaColorsTest {
 

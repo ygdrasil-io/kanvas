@@ -29,7 +29,7 @@ import org.skia.tools.ToolUtils
  *
  * Known fidelity caveats :
  *  - Subpixel rasterisation is downgraded to integer-snap on the
- *    AWT-backed glyph path (T3 limitation), so glyph edges may drift
+ *    portable OpenType glyph path, so glyph edges may drift
  *    1 px from the upstream reference at strong perspective.
  */
 public open class PerspTextGM public constructor(private val fMinimal: Boolean = false) : GM() {

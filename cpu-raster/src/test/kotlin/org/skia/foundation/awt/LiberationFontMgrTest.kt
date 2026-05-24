@@ -12,13 +12,10 @@ import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTypeface
 import org.skia.core.SkCanvas
-import org.skia.tools.ToolUtils
 
 /**
  * T4 — verifies that [LiberationFontMgr] loads Liberation TTFs from
- * the classpath and that [ToolUtils.DefaultPortableTypeface] now
- * resolves to **Liberation Sans Regular**, matching upstream Skia DM's
- * `gDefaultFontIndex = 4`.
+ * the classpath for the optional JVM/AWT backend.
  */
 class LiberationFontMgrTest {
 
@@ -37,10 +34,9 @@ class LiberationFontMgrTest {
     }
 
     @Test
-    fun `ToolUtils DefaultPortableTypeface routes to Liberation Sans Regular`() {
-        val direct = LiberationFontMgr.getDefault()
-        val via = ToolUtils.DefaultPortableTypeface()
-        assertSame(direct, via)
+    fun `AWT Liberation manager default routes to Liberation Sans Regular`() {
+        val via = LiberationFontMgr.matchFamilyStyle(null, SkFontStyle.Normal())
+        assertSame(LiberationFontMgr.getDefault(), via)
     }
 
     @Test
@@ -114,7 +110,7 @@ class LiberationFontMgrTest {
         val bm = SkBitmap(120, 50)
         bm.eraseColor(0xFFFFFFFF.toInt())
         val canvas = SkCanvas(bm)
-        val font = ToolUtils.DefaultPortableFont(28f)  // Liberation Sans Regular
+        val font = SkFont(LiberationFontMgr.getDefault(), 28f)
         val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = true }
 
         canvas.drawString("Hello", 6f, 36f, font, paint)
@@ -147,7 +143,7 @@ class LiberationFontMgrTest {
 
     @Test
     fun `getMetrics on Liberation Sans returns plausible values`() {
-        val font = ToolUtils.DefaultPortableFont(20f)
+        val font = SkFont(LiberationFontMgr.getDefault(), 20f)
         val m = org.skia.foundation.SkFontMetrics()
         val spacing = font.getMetrics(m)
         // Liberation Sans 20pt: ascent ~14-18 (negative), descent ~3-5 (positive).

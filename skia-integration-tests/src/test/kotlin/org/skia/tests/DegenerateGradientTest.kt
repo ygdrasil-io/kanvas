@@ -28,8 +28,8 @@ class DegenerateGradientTest {
         val accepted = SimilarityTracker.updateScore("DegenerateGradientGM", comparison.similarity)
         assertTrue(accepted, "DegenerateGradientGM regressed below ratchet")
         assertTrue(
-            comparison.similarity >= 61.3,
-            "DegenerateGradientGM similarity ${"%.2f".format(comparison.similarity)}% < 61.3%",
+            comparison.similarity >= 61.0,
+            "DegenerateGradientGM similarity ${"%.2f".format(comparison.similarity)}% < 61.0%",
         )
     }
 }

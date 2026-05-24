@@ -7,14 +7,13 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
-import org.skia.foundation.awt.AwtTypeface
+import org.skia.foundation.opentype.OpenTypeTypeface
 import org.graphiks.math.SkRect
 import org.skia.tools.ToolUtils
 
 /**
  * Slice T1 + T2 — covers the no-op rendering surface (`drawString`) and
- * the AWT-backed measurement surface (`measureText`, `getMetrics`). Real
- * glyph rasterisation lands in T3.
+ * the portable OpenType measurement surface (`measureText`, `getMetrics`).
  */
 class SkFontTest {
 
@@ -106,7 +105,7 @@ class SkFontTest {
     }
 
     @Test
-    fun `drawString with empty string is no-op even on AWT typeface`() {
+    fun `drawString with empty string is no-op even on portable OpenType typeface`() {
         val bm = SkBitmap(16, 16)
         bm.eraseColor(0xFFFFFFFF.toInt())
         val before = bm.pixels.copyOf()
@@ -119,7 +118,7 @@ class SkFontTest {
     }
 
     @Test
-    fun `drawString with AWT typeface paints non-zero pixels onto white canvas`() {
+    fun `drawString with portable OpenType typeface paints non-zero pixels onto white canvas`() {
         // Sanity: drawing black text on a white BG must leave at least one
         // pixel that isn't pure white.
         val bm = SkBitmap(80, 40)
@@ -229,7 +228,7 @@ class SkFontTest {
         assertEquals(12f, ToolUtils.DefaultPortableFont().size)
     }
 
-    // ---------- T2: measureText with AWT-backed typeface -------------------
+    // ---------- T2: measureText with portable OpenType typeface ------------
 
     @Test
     fun `measureText returns 0 for empty string regardless of typeface`() {
@@ -244,7 +243,7 @@ class SkFontTest {
     }
 
     @Test
-    fun `measureText is monotonic with string length AWT backend`() {
+    fun `measureText is monotonic with string length portable OpenType backend`() {
         val f = ToolUtils.DefaultPortableFont(20f)
         val w1 = f.measureText("X")
         val w2 = f.measureText("XX")
@@ -259,7 +258,7 @@ class SkFontTest {
         val text = "ABCDEFGH"
         val w12 = ToolUtils.DefaultPortableFont(12f).measureText(text)
         val w24 = ToolUtils.DefaultPortableFont(24f).measureText(text)
-        // 24pt ≈ 2 × 12pt within ~10% tolerance (AWT subpixel + hinting drift).
+        // 24pt roughly doubles 12pt, allowing raster/outline rounding drift.
         val ratio = w24 / w12
         assertTrue(ratio in 1.8f..2.2f, "expected ratio ~2 for size 12→24, got $ratio")
     }
@@ -293,7 +292,7 @@ class SkFontTest {
     }
 
     @Test
-    fun `getMetrics ascent is negative descent positive AWT backend`() {
+    fun `getMetrics ascent is negative descent positive portable OpenType backend`() {
         val f = ToolUtils.DefaultPortableFont(20f)
         val m = SkFontMetrics()
         val spacing = f.getMetrics(m)
@@ -314,7 +313,7 @@ class SkFontTest {
     }
 
     @Test
-    fun `getMetrics sets underline and strikeout valid flags AWT backend`() {
+    fun `getMetrics sets underline and strikeout valid flags portable OpenType backend`() {
         val f = ToolUtils.DefaultPortableFont(20f)
         val m = SkFontMetrics()
         f.getMetrics(m)
@@ -334,8 +333,7 @@ class SkFontTest {
     }
 
     @Test
-    fun `AwtTypeface DEFAULT singleton stable`() {
-        // Internal-visibility check that the cache works.
-        assertEquals(AwtTypeface.DEFAULT, AwtTypeface.DEFAULT)
+    fun `DefaultPortableTypeface is OpenType backed`() {
+        assertTrue(ToolUtils.DefaultPortableTypeface() is OpenTypeTypeface)
     }
 }

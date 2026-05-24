@@ -33,7 +33,7 @@ import org.skia.tools.ToolUtils
  *
  * Known fidelity caveats :
  *  - `SkFont.Edging.kSubpixelAntiAlias` collapses to `kAntiAlias` on
- *    the AWT-backed glyph path (T3), so the LCD variants will differ
+ *    the portable OpenType glyph path, so the LCD variants will differ
  *    from upstream where subpixel AA was used.
  */
 public class VariedTextGM public constructor(

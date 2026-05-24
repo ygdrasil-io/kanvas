@@ -17,7 +17,7 @@ class FontScalerTest {
         assertNotNull(reference, "Missing reference image fontscaler.png")
 
         // Heavy text GM — 1450 × 750 of small-to-medium glyphs at sizes 6..22
-        // across 10 columns. AWT-vs-FreeType scaler delta dominates the
+        // across 10 columns. OpenType-vs-FreeType scaler delta dominates the
         // residual, especially at 6-9pt where every pixel of an AA edge can
         // shift. Background remains majority white.
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)

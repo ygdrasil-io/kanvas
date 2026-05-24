@@ -12,7 +12,7 @@ import org.skia.tools.ToolUtils
  * S7-B sprint — covers the four [SkFont] helpers promoted from inline
  * GM duplicates: [SkFont.textToGlyphs], [SkFont.getPos],
  * [SkFont.getXPos], and [SkFont.getWidths]. The tests pair the
- * AWT-backed portable typeface (real glyph metrics) with [SkTypeface.MakeEmpty]
+ * portable OpenType typeface (real glyph metrics) with [SkTypeface.MakeEmpty]
  * (empty-typeface fallback) to guard both the happy path and the
  * "missing glyph → 0" semantics.
  */
@@ -29,7 +29,7 @@ class SkFontTextToGlyphsTest {
         val font = ToolUtils.DefaultPortableFont(16f)
         val glyphs = font.textToGlyphs("ABC")
         assertEquals(3, glyphs.size)
-        // AWT-backed Liberation Sans must resolve A/B/C to non-zero glyph IDs.
+        // OpenType-backed Liberation Sans must resolve A/B/C to non-zero glyph IDs.
         for (i in glyphs.indices) {
             assertNotEquals(0, glyphs[i], "glyph $i should be non-zero, got ${glyphs[i]}")
         }

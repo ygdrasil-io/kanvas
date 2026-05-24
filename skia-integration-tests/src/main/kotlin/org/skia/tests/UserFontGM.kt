@@ -44,7 +44,7 @@ import kotlin.math.roundToInt
  *    1-pt-unit semantics by rasterising at `size = 1f` directly
  *    (Liberation glyphs are exact rational scalars in design units, so
  *    `size = 1f` produces the path outlines at 1-source-unit per em).
- *    The drift vs upstream is the AWT-vs-FreeType outline precision at
+ *    The drift vs upstream is the OpenType-vs-FreeType outline precision at
  *    sub-pixel sizes, absorbed by the textual tolerance.
  *  - **No `SkTypeface.serialize` / `MakeDeserialize`** : we skip the
  *    `round_trip(tf)` step. Round-trip serialisation is an upstream-
