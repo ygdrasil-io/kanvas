@@ -2,6 +2,7 @@ package org.skia.foundation.opentype
 
 import org.graphiks.math.SkRect
 import org.graphiks.math.SkScalar
+import org.graphiks.math.SkMatrix
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFontArguments
 import org.skia.foundation.SkFontMetrics
@@ -173,9 +174,28 @@ public class OpenTypeTypeface private constructor(
             val glyphId = glyphs[i]
             val layers = font.colorLayers(glyphId)
             if (layers.isEmpty()) {
-                val glyphPath = font.glyphPath(glyphId, size, scaleX, skewX, variationPosition)
-                if (glyphPath != null && !glyphPath.isEmpty()) {
-                    out.add(OpenTypeColorPath(null, positionedPath(glyphPath, penX, y)))
+                val colorPaths = font.colorPaint(glyphId)
+                    ?.let { paint ->
+                        colorPaintPaths(
+                            paint = paint,
+                            palette = palette,
+                            penX = penX,
+                            baselineY = y,
+                            size = size,
+                            scaleX = scaleX,
+                            skewX = skewX,
+                            depth = 0,
+                        )
+                    }
+                    .orEmpty()
+                if (colorPaths.isNotEmpty()) {
+                    hasColorGlyph = true
+                    out.addAll(colorPaths)
+                } else {
+                    val glyphPath = font.glyphPath(glyphId, size, scaleX, skewX, variationPosition)
+                    if (glyphPath != null && !glyphPath.isEmpty()) {
+                        out.add(OpenTypeColorPath(null, positionedPath(glyphPath, penX, y)))
+                    }
                 }
             } else {
                 hasColorGlyph = true
@@ -196,6 +216,105 @@ public class OpenTypeTypeface private constructor(
             }
         }
         return out.takeIf { hasColorGlyph && it.isNotEmpty() }
+    }
+
+    private fun colorPaintPaths(
+        paint: OpenTypeColorPaint,
+        palette: List<Int>,
+        penX: SkScalar,
+        baselineY: SkScalar,
+        size: SkScalar,
+        scaleX: SkScalar,
+        skewX: SkScalar,
+        transform: SkMatrix = SkMatrix.Identity,
+        glyphPath: SkPath? = null,
+        depth: Int,
+    ): List<OpenTypeColorPath> {
+        if (depth > MAX_COLOR_PAINT_DEPTH) return emptyList()
+        return when (paint) {
+            is OpenTypeColorPaint.Solid -> {
+                val currentPath = glyphPath ?: return emptyList()
+                val color = when (paint.paletteIndex) {
+                    COLR_FOREGROUND_PALETTE_INDEX -> null
+                    else -> palette.getOrNull(paint.paletteIndex) ?: return emptyList()
+                }
+                if (currentPath.isEmpty()) {
+                    emptyList()
+                } else {
+                    listOf(OpenTypeColorPath(color, positionedPath(currentPath, penX, baselineY), paint.alpha))
+                }
+            }
+            is OpenTypeColorPaint.Glyph -> {
+                val childPath = font.glyphPath(paint.glyphId, size, scaleX, skewX, variationPosition)
+                    ?.makeTransform(transform)
+                    ?: return emptyList()
+                colorPaintPaths(
+                    paint = paint.paint,
+                    palette = palette,
+                    penX = penX,
+                    baselineY = baselineY,
+                    size = size,
+                    scaleX = scaleX,
+                    skewX = skewX,
+                    transform = transform,
+                    glyphPath = childPath,
+                    depth = depth + 1,
+                )
+            }
+            is OpenTypeColorPaint.Transform -> {
+                val matrix = colrFontMatrixToCanvas(paint.xx, paint.yx, paint.xy, paint.yy, paint.dx, paint.dy, size, scaleX, skewX)
+                colorPaintPaths(
+                    paint = paint.paint,
+                    palette = palette,
+                    penX = penX,
+                    baselineY = baselineY,
+                    size = size,
+                    scaleX = scaleX,
+                    skewX = skewX,
+                    transform = transform.preConcat(matrix),
+                    glyphPath = glyphPath?.makeTransform(matrix),
+                    depth = depth + 1,
+                )
+            }
+            is OpenTypeColorPaint.Translate -> {
+                val matrix = colrFontMatrixToCanvas(1f, 0f, 0f, 1f, paint.dx.toFloat(), paint.dy.toFloat(), size, scaleX, skewX)
+                colorPaintPaths(
+                    paint = paint.paint,
+                    palette = palette,
+                    penX = penX,
+                    baselineY = baselineY,
+                    size = size,
+                    scaleX = scaleX,
+                    skewX = skewX,
+                    transform = transform.preConcat(matrix),
+                    glyphPath = glyphPath?.makeTransform(matrix),
+                    depth = depth + 1,
+                )
+            }
+        }
+    }
+
+    private fun colrFontMatrixToCanvas(
+        xx: Float,
+        yx: Float,
+        xy: Float,
+        yy: Float,
+        dx: Float,
+        dy: Float,
+        size: Float,
+        scaleX: Float,
+        skewX: Float,
+    ): SkMatrix {
+        val s = font.scale(size)
+        val effectiveScaleX = scaleX.takeIf { it != 0f } ?: 1f
+        return SkMatrix(
+            sx = xx - (skewX / effectiveScaleX) * yx,
+            kx = -(effectiveScaleX * xy - skewX * yy + skewX * xx - (skewX * skewX / effectiveScaleX) * yx),
+            tx = s * (effectiveScaleX * dx - skewX * dy),
+            ky = -yx / effectiveScaleX,
+            sy = yy + (skewX / effectiveScaleX) * yx,
+            ty = -s * dy,
+        )
     }
 
     override fun makeTextPath(
@@ -2134,7 +2253,11 @@ private class SfntReader(
 
 private data class TableRecord(val offset: Int, val length: Int)
 internal data class OpenTypeColorLayer(val glyphId: Int, val paletteIndex: Int)
-internal data class OpenTypeColorPath(val color: Int?, val path: SkPath)
+internal data class OpenTypeColorPath(
+    val color: Int?,
+    val path: SkPath,
+    val alpha: Float = 1f,
+)
 private data class OpenTypePaletteSelection(
     val index: Int,
     val overrides: Map<Int, Int>,
