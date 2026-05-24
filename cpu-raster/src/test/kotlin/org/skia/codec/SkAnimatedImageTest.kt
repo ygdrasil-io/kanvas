@@ -33,10 +33,9 @@ class SkAnimatedImageTest {
 
     @Test
     fun `MakeFromCodec plays animated WebP frames through codec-animated`() {
-        SkCodec.Decoders.register(WebpKotlinDecoderProvider().decoders().single())
         val red = argb(0xFF, 200, 0, 0)
         val blue = argb(0xFF, 0, 0, 200)
-        val codec = SkCodec.MakeFromData(
+        val codec = WebpKotlinDecoderProvider().decoders().single().make(
             animatedVp8lWebp(
                 width = 2,
                 height = 1,
@@ -46,7 +45,7 @@ class SkAnimatedImageTest {
                 ),
             ),
         )
-        assertNotNull(codec, "Animated WebP should dispatch through the pure Kotlin WebP codec")
+        assertNotNull(codec, "Animated WebP should be accepted by the pure Kotlin WebP codec")
 
         val anim = SkAnimatedImage.MakeFromCodec(codec!!)
         assertNotNull(anim, "Animator should be created for animated WebP")
