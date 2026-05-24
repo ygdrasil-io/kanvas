@@ -145,6 +145,25 @@ public class SkLinearGradient internal constructor(
         }
     }
 
+    override fun sampleAtLocal(lx: Float, ly: Float): Int {
+        if (xformedColors.isEmpty()) return 0
+        val t = (lx - p0.fX) * invLenSqDirX + (ly - p0.fY) * invLenSqDirY
+        return lookupStop(t, positions, xformedColors, tileMode)
+    }
+
+    override fun sampleAtLocalF16(lx: Float, ly: Float, dst: FloatArray, dstOffset: Int) {
+        require(dst.size >= dstOffset + 4) { "dst too small at offset $dstOffset" }
+        if (xformedColorsF16.isEmpty()) {
+            dst[dstOffset] = 0f
+            dst[dstOffset + 1] = 0f
+            dst[dstOffset + 2] = 0f
+            dst[dstOffset + 3] = 0f
+            return
+        }
+        val t = (lx - p0.fX) * invLenSqDirX + (ly - p0.fY) * invLenSqDirY
+        lookupStopF16(t, positions, xformedColorsF16, tileMode, dst, dstOffset)
+    }
+
     public companion object {
         /**
          * Mirrors Skia's `SkGradientShader::MakeLinear(p0, p1, colors,
