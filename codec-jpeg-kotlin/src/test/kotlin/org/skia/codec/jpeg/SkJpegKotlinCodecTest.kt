@@ -156,6 +156,50 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
+    fun `applies all EXIF orientations to decoded pixels`() {
+        val width = 16
+        val height = 16
+        val cases = listOf(
+            1 to SkEncodedOrigin.kTopLeft,
+            2 to SkEncodedOrigin.kTopRight,
+            3 to SkEncodedOrigin.kBottomRight,
+            4 to SkEncodedOrigin.kBottomLeft,
+            5 to SkEncodedOrigin.kLeftTop,
+            6 to SkEncodedOrigin.kRightTop,
+            7 to SkEncodedOrigin.kRightBottom,
+            8 to SkEncodedOrigin.kLeftBottom,
+        )
+
+        for ((exifValue, origin) in cases) {
+            val codec = SkJpegKotlinCodec.Decoder.make(
+                withAppSegments(
+                    colorJpeg(width = width, height = height, ySampling = 0x22),
+                    exifOrientationSegment(orientation = exifValue, littleEndian = exifValue % 2 == 0),
+                ),
+            )
+
+            assertNotNull(codec, "origin=$origin")
+            assertEquals(origin, codec!!.getOrigin(), "origin=$origin")
+            val (bitmap, result) = codec.getImage()
+            assertEquals(SkCodec.Result.kSuccess, result, "origin=$origin")
+            assertNotNull(bitmap, "origin=$origin")
+            assertEquals(width, bitmap!!.width, "origin=$origin")
+            assertEquals(height, bitmap.height, "origin=$origin")
+
+            for (dy in 0 until height) {
+                for (dx in 0 until width) {
+                    val (sx, sy) = sourcePixelForOrientedDestination(origin, dx, dy, width, height)
+                    assertEquals(
+                        expectedColor420(sx, sy),
+                        bitmap.getPixel(dx, dy),
+                        "origin=$origin dx=$dx dy=$dy sx=$sx sy=$sy",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun `out of order ICC APP2 chunks do not crash`() {
         val codec = SkJpegKotlinCodec.Decoder.make(
             withAppSegments(
@@ -503,6 +547,29 @@ class SkJpegKotlinCodecTest {
         val g = (y - 0.344136 * cbShifted - 0.714136 * crShifted).roundToInt().coerceIn(0, 255)
         val b = (y + 1.772 * cbShifted).roundToInt().coerceIn(0, 255)
         return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    private fun expectedColor420(x: Int, y: Int): Int {
+        val yValues = intArrayOf(140, 152, 164, 176)
+        val quadrant = (if (y < 8) 0 else 2) + if (x < 8) 0 else 1
+        return yCbCrToArgb(yValues[quadrant], 80, 200)
+    }
+
+    private fun sourcePixelForOrientedDestination(
+        origin: SkEncodedOrigin,
+        dx: Int,
+        dy: Int,
+        width: Int,
+        height: Int,
+    ): Pair<Int, Int> = when (origin) {
+        SkEncodedOrigin.kTopLeft -> dx to dy
+        SkEncodedOrigin.kTopRight -> width - 1 - dx to dy
+        SkEncodedOrigin.kBottomRight -> width - 1 - dx to height - 1 - dy
+        SkEncodedOrigin.kBottomLeft -> dx to height - 1 - dy
+        SkEncodedOrigin.kLeftTop -> dy to dx
+        SkEncodedOrigin.kRightTop -> dy to height - 1 - dx
+        SkEncodedOrigin.kRightBottom -> width - 1 - dy to height - 1 - dx
+        SkEncodedOrigin.kLeftBottom -> width - 1 - dy to dx
     }
 
     private fun entropyForZeroBlocks(blockCount: Int): ByteArray {
