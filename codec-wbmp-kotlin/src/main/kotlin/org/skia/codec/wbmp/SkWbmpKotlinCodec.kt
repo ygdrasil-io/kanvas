@@ -71,9 +71,8 @@ public class SkWbmpKotlinCodec internal constructor(
 
         override fun make(data: ByteArray): SkCodec? {
             val header = parseHeader(data) ?: return null
-            val rowBytes = (header.width + 7) / 8
-            val required = header.pixelOffset + rowBytes * header.height
-            if (required > data.size) return null
+            val required = requiredBytes(header)
+            if (required > data.size.toLong()) return null
             return SkWbmpKotlinCodec(
                 bytes = data,
                 pixelOffset = header.pixelOffset,
@@ -85,11 +84,9 @@ public class SkWbmpKotlinCodec internal constructor(
         private fun parseHeader(data: ByteArray): Header? {
             if (data.size < 4) return null
             if (data[0] != 0.toByte()) return null
-            if ((data[1].toInt() and 0x9F) != 0) return null
-            val width = readVlq(data, 2) ?: return null
-            if (width.value !in 1..0xFFFF) return null
-            val height = readVlq(data, width.nextOffset) ?: return null
-            if (height.value !in 1..0xFFFF) return null
+            if (data[1] != 0.toByte()) return null
+            val width = readDimensionVlq(data, 2) ?: return null
+            val height = readDimensionVlq(data, width.nextOffset) ?: return null
             return Header(
                 width = width.value.toInt(),
                 height = height.value.toInt(),
@@ -97,18 +94,27 @@ public class SkWbmpKotlinCodec internal constructor(
             )
         }
 
-        private fun readVlq(data: ByteArray, start: Int): Vlq? {
+        private fun readDimensionVlq(data: ByteArray, start: Int): Vlq? {
             var n = 0L
             var i = start
             var consumed = 0
             while (i < data.size && consumed < 9) {
                 val b = data[i].toInt() and 0xFF
                 n = (n shl 7) or (b and 0x7F).toLong()
+                if (n > MAX_DIMENSION) return null
                 i++
                 consumed++
-                if ((b and 0x80) == 0) return Vlq(n, i)
+                if ((b and 0x80) == 0) {
+                    if (n == 0L) return null
+                    return Vlq(n, i)
+                }
             }
             return null
+        }
+
+        private fun requiredBytes(header: Header): Long {
+            val rowBytes = ((header.width.toLong() + 7L) / 8L)
+            return header.pixelOffset.toLong() + rowBytes * header.height.toLong()
         }
     }
 
@@ -122,3 +128,4 @@ public class WbmpKotlinDecoderProvider : CodecDecoderProvider {
 
 private const val BLACK: Int = -0x1000000
 private const val WHITE: Int = -0x1
+private const val MAX_DIMENSION: Long = 0xFFFFL
