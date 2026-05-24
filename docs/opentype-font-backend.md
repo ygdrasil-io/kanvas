@@ -57,15 +57,14 @@ The JVM/cpu-raster `SkFontMgr.RefDefault()` extension now uses
 old AWT system font manager and `RefAwtDefault()` entry point have been
 removed from the font scope.
 
-The optional AWT shaper follows the same rule: JVM callers can opt in through
-`SkShaper.MakeJvmAwtTextLayout()`, while `SkShaper.MakePrimitive()` remains
-the portable fallback. The older `MakeJavaTextLayout()` name is kept only as a
-compatibility alias.
+The old JVM/AWT shaper entry points, `SkShaper.MakeJvmAwtTextLayout()` and
+`SkShaper.MakeJavaTextLayout()`, have been removed from the font scope.
+`SkShaper.MakePrimitive()` is the only built-in shaper until a pure Kotlin
+complex shaper is introduced.
 
 The older `org.skia.foundation.awt.AwtTypeface` and
-`org.skia.foundation.awt.LiberationFontMgr` symbols are legacy cpu-raster
-surfaces. They remain available for tests and JVM/AWT compatibility work, but
-new portable font code should use `OpenTypeTypeface` and
+`org.skia.foundation.awt.LiberationFontMgr` font surfaces have also been
+removed. Portable font code should use `OpenTypeTypeface` and
 `org.skia.foundation.LiberationFontMgr.Make()`.
 
 ## Explicitly Unsupported

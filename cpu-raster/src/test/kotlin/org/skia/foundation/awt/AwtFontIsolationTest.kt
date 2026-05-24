@@ -8,15 +8,10 @@ import java.nio.file.Path
 class AwtFontIsolationTest {
 
     @Test
-    fun `AWT font imports stay confined to explicit legacy font surfaces`() {
+    fun `font scope does not import AWT font APIs`() {
         val projectRoot = findProjectRoot()
         val sourceRoot = projectRoot.resolve("cpu-raster/src/main/kotlin")
         val allowedPaths = setOf(
-            "org/skia/foundation/awt/AwtTypeface.kt",
-            "org/skia/foundation/awt/LiberationFontMgr.kt",
-            "org/skia/foundation/awt/AwtPathConverter.kt",
-            "org/skia/shaper/JavaTextLayoutShaper.kt",
-            "org/skia/shaper/SkShaper.kt",
             "org/skia/testing/DiffImage.kt",
         )
         val forbiddenImports = listOf(
@@ -40,7 +35,7 @@ class AwtFontIsolationTest {
 
         assertTrue(
             offenders.isEmpty(),
-            "AWT font imports must stay in explicit legacy/optional surfaces: $offenders",
+            "Font scope must not import AWT font APIs: $offenders",
         )
     }
 

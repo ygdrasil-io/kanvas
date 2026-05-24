@@ -77,7 +77,7 @@ import kotlin.math.roundToInt
  *
  * The Kotlin body below is **the real upstream pipeline** — the
  * three-phase `Fontations / FreeType / Comparison` loop, the
- * per-language sample iteration through [SkShaper.MakeJvmAwtTextLayout]
+ * per-language sample iteration through [SkShaper.MakePrimitive]
  * + [SkTextBlobShaperRunHandler] + [SkCanvas.drawTextBlob], the
  * `roundToDevicePixels` CTM-aware snap, the `comparePixels` per-pixel
  * absolute-difference loop, and the comparison-phase write-back
@@ -234,12 +234,10 @@ public class FontationsFtCompareGM(
                             originY = 0f,
                         )
                         // Upstream uses `SkShaper::Make()` — the
-                        // platform-default shaper (HarfBuzz when
-                        // available, primitive otherwise). The Kotlin
-                        // port picks `MakeJvmAwtTextLayout` because it
-                        // covers bidi + basic kerning / ligatures (the
-                        // Arabic / Hebrew samples need at least bidi).
-                        val shaper = SkShaper.MakeJvmAwtTextLayout()
+                        // platform-default shaper. The Kotlin port
+                        // uses the pure Kotlin primitive shaper until
+                        // complex shaping is implemented without AWT.
+                        val shaper = SkShaper.MakePrimitive()
                         shaper.shape(
                             utf8 = testString,
                             font = f,
