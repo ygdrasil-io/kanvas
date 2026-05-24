@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 6 upstream `.cpp` rows as
+The rebaseline currently classifies 4 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -95,16 +95,18 @@ Completed since this snapshot:
   `textfilter_color` are covered on raster. Remaining disabled wrappers are
   WebGPU text-filter dependency work, not an actionable raster
   `imagefiltersbase` implementation item.
+- `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`: `RecordOptsGM` is enabled
+  after preserving saveLayer image-filter working formats and routing
+  image-filtered rect draws through layer restore.
 
 ## Recommended order
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
 | 1 | `vertices` | 1 cpp | M | `VerticesBatchingGM` is already ported; the remaining raster `VerticesGM` slice may be smaller than the row suggests. |
-| 2 | `recordopts` | 1 cpp | M | The stale placeholder is gone and the remaining saveLayer/color-filter fold delta is measured. |
-| 3 | `gradients` | 1 cpp | M/L | RGB API surface exists; remaining work is the real interpolation sampler. |
-| 4 | `mesh` | 1 cpp | L/XL | Actionable but broad API work; start with the `custommesh` slice only. |
-| 5 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
+| 2 | `gradients` | 1 cpp | M/L | RGB API surface exists; remaining work is the real interpolation sampler. |
+| 3 | `mesh` | 1 cpp | L/XL | Actionable but broad API work; start with the `custommesh` slice only. |
+| 4 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
 
@@ -114,7 +116,6 @@ Completed since this snapshot:
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, perceptual/hue/premul sampler still missing | gradient interpolation variants |
 | `mesh` | `STUB.MESH`; all 11 upstream registrations are compile-pinned, but none can be re-enabled before `SkMesh` / `SkMeshSpecification` and `SkCanvas.drawMesh` exist in the active modules | `MeshGMs.kt` |
-| `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`; reactivation audit rendered 67.96% vs `original-888/recordopts.png` | `RecordOptsGM.kt` |
 | `vertices` | `STUB.DRAW_VERTICES_VERTEX_BLEND`; `VerticesGM` is source-ported, but focused validation renders ~59% for both `vertices` and `vertices_scaled_shader` because `drawVertices` only combines vertex colors with shader samples for `kSrc`, `kDst`, and `kModulate` | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
@@ -124,7 +125,7 @@ Completed since this snapshot:
 - `dashcubics` is now ported: `SkTrimPathEffect` is implemented and
   `TrimGM` is reactivated with a 90% ratchet (`92.29%` in validation).
 - `recordopts` no longer carries the stale `STUB.XYZ` placeholder; the
-  focused blocker is the saveLayer / detector color-filter fold path.
+  saveLayer / detector color-filter fold path is covered by `RecordOptsTest`.
 - Text-related rows should be revisited after the font delivery if their
   implementation would touch glyph storage or shaping assumptions.
 
