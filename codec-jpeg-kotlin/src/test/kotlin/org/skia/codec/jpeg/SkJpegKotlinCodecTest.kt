@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.codec.CodecDecoderProvider
 import org.skia.codec.SkCodec
+import org.skia.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
@@ -23,10 +24,29 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `rejects invalid signature and mismatched component scan`() {
-        assertFalse(SkJpegKotlinCodec.Decoder.matches(ByteArray(0)))
-        assertFalse(SkJpegKotlinCodec.Decoder.matches("not-a-jpeg".toByteArray()))
-        assertNull(SkJpegKotlinCodec.Decoder.make("not-a-jpeg".toByteArray()))
+        val cases = listOf(
+            CodecNegativeFixtures.invalidMagic("empty JPEG input", ByteArray(0)),
+            CodecNegativeFixtures.invalidMagic("ASCII non-JPEG payload", "not-a-jpeg"),
+        )
+        for (case in cases) {
+            assertFalse(SkJpegKotlinCodec.Decoder.matches(case.data), case.name)
+            assertNull(SkJpegKotlinCodec.Decoder.make(case.data), case.name)
+        }
+
         assertNull(SkJpegKotlinCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8, componentCount = 3)))
+    }
+
+    @Test
+    fun `rejects shared truncated JPEG fixtures`() {
+        val valid = grayscaleJpeg(width = 8, height = 8)
+        val cases = listOf(
+            CodecNegativeFixtures.truncated("SOI only", valid, size = 2),
+            CodecNegativeFixtures.truncatedTail("missing EOI", valid, droppedBytes = 2),
+        )
+
+        for (case in cases) {
+            assertNull(SkJpegKotlinCodec.Decoder.make(case.data), case.name)
+        }
     }
 
     @Test
