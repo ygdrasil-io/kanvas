@@ -310,6 +310,62 @@ class SkWebpKotlinCodecTest {
         assertEquals(640, codec.getInfo().width)
         assertEquals(480, codec.getInfo().height)
         assertEquals(SkAlphaType.kOpaque, codec.getInfo().alphaType)
+        assertEquals(20, codec.metadata.payloadOffset)
+        assertEquals(10, codec.metadata.payloadSize)
+    }
+
+    @Test
+    fun `rejects VP8 keyframe with first partition outside chunk`() {
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8Chunk(width = 2, height = 2, firstPartitionSize = 1),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `parses VP8 frame tag fields`() {
+        val frameTag = parseVp8FrameTag(
+            vp8Payload(width = 2, height = 2, firstPartitionSize = 2, version = 3, showFrame = false) +
+                byteArrayOf(0x11, 0x22),
+            offset = 0,
+            size = 12,
+        )
+
+        assertNotNull(frameTag)
+        assertTrue(frameTag!!.keyFrame)
+        assertEquals(3, frameTag.version)
+        assertFalse(frameTag.showFrame)
+        assertEquals(2, frameTag.firstPartitionSize)
+    }
+
+    @Test
+    fun `VP8 bool reader decodes deterministic branch bits`() {
+        assertEquals(0, Vp8BoolReader(byteArrayOf(0x00, 0x00)).readBit(128))
+        assertEquals(1, Vp8BoolReader(byteArrayOf(0xFF.toByte(), 0xFF.toByte())).readBit(128))
+        assertEquals(0, Vp8BoolReader(byteArrayOf(0x00, 0x00)).readBit(1))
+        assertEquals(1, Vp8BoolReader(byteArrayOf(0xFF.toByte(), 0xFF.toByte())).readBit(255))
+    }
+
+    @Test
+    fun `VP8 bool reader reads half-probability literals msb first`() {
+        val reader = Vp8BoolReader(byteArrayOf(0xA0.toByte(), 0x00, 0x00))
+
+        assertEquals(0b1010, reader.readLiteral(4))
+    }
+
+    @Test
+    fun `VP8 bool reader rejects invalid probability and truncated refill`() {
+        assertNull(Vp8BoolReader(byteArrayOf(0x00, 0x00)).readBit(0))
+
+        val reader = Vp8BoolReader(byteArrayOf(0x00, 0x00))
+        repeat(8) {
+            assertEquals(0, reader.readBit(128))
+        }
+        assertNull(reader.readBit(128))
     }
 
     @Test
@@ -1046,14 +1102,29 @@ class SkWebpKotlinCodecTest {
         return riff("WEBP", vp8Chunk(width, height))
     }
 
-    private fun vp8Chunk(width: Int, height: Int): ByteArray {
+    private fun vp8Chunk(width: Int, height: Int, firstPartitionSize: Int = 0): ByteArray =
+        chunk("VP8 ", vp8Payload(width, height, firstPartitionSize))
+
+    private fun vp8Payload(
+        width: Int,
+        height: Int,
+        firstPartitionSize: Int = 0,
+        version: Int = 0,
+        showFrame: Boolean = true,
+    ): ByteArray {
         val payload = ByteArray(10)
+        val tag = (firstPartitionSize shl 5) or
+            ((if (showFrame) 1 else 0) shl 4) or
+            (version shl 1)
+        payload[0] = (tag and 0xFF).toByte()
+        payload[1] = ((tag ushr 8) and 0xFF).toByte()
+        payload[2] = ((tag ushr 16) and 0xFF).toByte()
         payload[3] = 0x9D.toByte()
         payload[4] = 0x01
         payload[5] = 0x2A
         writeU16LE(payload, 6, width)
         writeU16LE(payload, 8, height)
-        return chunk("VP8 ", payload)
+        return payload
     }
 
     private fun alphaChunk(control: Int, payload: ByteArray): ByteArray =
