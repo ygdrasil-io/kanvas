@@ -20,7 +20,7 @@ import kotlin.math.sqrt
  * This backend owns the baseline JPEG container path directly: marker parsing,
  * DQT/DHT/SOF0/SOS, entropy bit reading, Huffman decode, dequantization, and
  * IDCT. The decode surface is intentionally narrow: sequential 8-bit grayscale
- * JPEGs and 3-component YCbCr JPEGs with 1x1 sampling.
+ * JPEGs and 3-component YCbCr JPEGs with 4:4:4, 4:2:2, or 4:2:0 sampling.
  */
 public class SkJpegKotlinCodec private constructor(
     private val jpeg: ParsedJpeg,
@@ -226,7 +226,7 @@ private fun buildParsed(
     if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
     if (cs.size != 1 && cs.size != 3) return null
     for (component in cs) {
-        if (component.h != 1 || component.v != 1) return null
+        if (component.h !in 1..2 || component.v !in 1..2) return null
         if (
             component.quantTable !in quantTables.indices ||
             component.dcTable !in dcTables.indices ||
@@ -241,6 +241,16 @@ private fun buildParsed(
         ) {
             return null
         }
+    }
+    if (cs.size == 1) {
+        if (cs.single().h != 1 || cs.single().v != 1) return null
+    } else {
+        val y = cs.firstOrNull { it.frameIndex == 0 } ?: return null
+        val cb = cs.firstOrNull { it.frameIndex == 1 } ?: return null
+        val cr = cs.firstOrNull { it.frameIndex == 2 } ?: return null
+        if (cb.h != 1 || cb.v != 1 || cr.h != 1 || cr.v != 1) return null
+        if ((y.h != 1 && y.h != 2) || (y.v != 1 && y.v != 2)) return null
+        if (y.h == 1 && y.v != 1) return null
     }
     if (scanData.isEmpty()) return null
     return ParsedJpeg(width, height, quantTables, dcTables, acTables, cs, scanData)
@@ -333,7 +343,7 @@ private fun parseSos(data: ByteArray, start: Int, end: Int, frameComponents: Lis
 private fun decodeBaseline(jpeg: ParsedJpeg): IntArray {
     return when (jpeg.components.size) {
         1 -> decodeGrayscale(jpeg)
-        3 -> decodeColor444(jpeg)
+        3 -> decodeColor(jpeg)
         else -> fail()
     }
 }
@@ -393,41 +403,66 @@ private fun decodeGrayscale(jpeg: ParsedJpeg): IntArray {
     return pixels
 }
 
-private fun decodeColor444(jpeg: ParsedJpeg): IntArray {
+private fun decodeColor(jpeg: ParsedJpeg): IntArray {
     val components = jpeg.components
     val reader = EntropyBitReader(jpeg.scanData)
     val pixels = IntArray(jpeg.width * jpeg.height)
     val previousDc = IntArray(components.size)
-    val blocks = Array(components.size) { IntArray(64) }
-    val blocksX = (jpeg.width + 7) / 8
-    val blocksY = (jpeg.height + 7) / 8
+    val maxH = components.maxOf { it.h }
+    val maxV = components.maxOf { it.v }
+    val mcuWidth = maxH * 8
+    val mcuHeight = maxV * 8
+    val frameComponents = Array(components.size) { frameIndex ->
+        components.first { it.frameIndex == frameIndex }
+    }
+    val blocks = Array(frameComponents.size) { Array(frameComponents[it].h * frameComponents[it].v) { IntArray(64) } }
+    val blocksX = (jpeg.width + mcuWidth - 1) / mcuWidth
+    val blocksY = (jpeg.height + mcuHeight - 1) / mcuHeight
 
-    for (by in 0 until blocksY) {
-        for (bx in 0 until blocksX) {
+    for (my in 0 until blocksY) {
+        for (mx in 0 until blocksX) {
             for (scanIndex in components.indices) {
                 val component = components[scanIndex]
-                blocks[component.frameIndex] = decodeBlock(jpeg, component, reader, previousDc, component.frameIndex)
+                for (blockY in 0 until component.v) {
+                    for (blockX in 0 until component.h) {
+                        val blockIndex = blockY * component.h + blockX
+                        blocks[component.frameIndex][blockIndex] =
+                            decodeBlock(jpeg, component, reader, previousDc, component.frameIndex)
+                    }
+                }
             }
 
-            val yBlock = blocks[0]
-            val cbBlock = blocks[1]
-            val crBlock = blocks[2]
-            for (y in 0 until 8) {
-                val py = by * 8 + y
+            for (y in 0 until mcuHeight) {
+                val py = my * mcuHeight + y
                 if (py >= jpeg.height) continue
-                for (x in 0 until 8) {
-                    val px = bx * 8 + x
+                for (x in 0 until mcuWidth) {
+                    val px = mx * mcuWidth + x
                     if (px >= jpeg.width) continue
-                    val offset = y * 8 + x
-                    val yy = (yBlock[offset] + 128).coerceIn(0, 255)
-                    val cb = (cbBlock[offset] + 128).coerceIn(0, 255)
-                    val cr = (crBlock[offset] + 128).coerceIn(0, 255)
+                    val yy = sampleComponent(blocks[0], frameComponents[0], x, y, mcuWidth, mcuHeight)
+                    val cb = sampleComponent(blocks[1], frameComponents[1], x, y, mcuWidth, mcuHeight)
+                    val cr = sampleComponent(blocks[2], frameComponents[2], x, y, mcuWidth, mcuHeight)
                     pixels[py * jpeg.width + px] = yCbCrToArgb(yy, cb, cr)
                 }
             }
         }
     }
     return pixels
+}
+
+private fun sampleComponent(
+    blocks: Array<IntArray>,
+    component: Component,
+    mcuX: Int,
+    mcuY: Int,
+    mcuWidth: Int,
+    mcuHeight: Int,
+): Int {
+    val componentX = mcuX * component.h * 8 / mcuWidth
+    val componentY = mcuY * component.v * 8 / mcuHeight
+    val blockX = componentX / 8
+    val blockY = componentY / 8
+    val block = blocks[blockY * component.h + blockX]
+    return (block[(componentY and 7) * 8 + (componentX and 7)] + 128).coerceIn(0, 255)
 }
 
 private fun decodeBlock(

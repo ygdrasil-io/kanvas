@@ -13,6 +13,7 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
+import kotlin.math.roundToInt
 
 class SkJpegKotlinCodecTest {
 
@@ -80,8 +81,47 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
-    fun `rejects color subsampling for this slice`() {
-        assertNull(SkJpegKotlinCodec.Decoder.make(color444Jpeg(ySampling = 0x21)))
+    fun `decodes baseline color 422 16x8 jpeg`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21))!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        for (y in 0 until 8) {
+            for (x in 0 until 8) {
+                assertEquals(yCbCrToArgb(140, 80, 200), bitmap!!.getPixel(x, y), "x=$x y=$y")
+            }
+            for (x in 8 until 16) {
+                assertEquals(yCbCrToArgb(152, 80, 200), bitmap!!.getPixel(x, y), "x=$x y=$y")
+            }
+        }
+    }
+
+    @Test
+    fun `decodes baseline color 420 16x16 jpeg`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 16, height = 16, ySampling = 0x22))!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        val expected = intArrayOf(
+            yCbCrToArgb(140, 80, 200),
+            yCbCrToArgb(152, 80, 200),
+            yCbCrToArgb(164, 80, 200),
+            yCbCrToArgb(176, 80, 200),
+        )
+        for (y in 0 until 16) {
+            for (x in 0 until 16) {
+                val quadrant = (if (y < 8) 0 else 2) + if (x < 8) 0 else 1
+                assertEquals(expected[quadrant], bitmap!!.getPixel(x, y), "x=$x y=$y")
+            }
+        }
+    }
+
+    @Test
+    fun `rejects exotic color sampling`() {
+        assertNull(SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 8, height = 16, ySampling = 0x12)))
+        assertNull(SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21)))
     }
 
     private fun grayscaleJpeg(width: Int, height: Int, componentCount: Int = 1): ByteArray {
@@ -128,6 +168,16 @@ class SkJpegKotlinCodecTest {
     }
 
     private fun color444Jpeg(ySampling: Int = 0x11): ByteArray {
+        return colorJpeg(width = 8, height = 8, ySampling = ySampling)
+    }
+
+    private fun colorJpeg(
+        width: Int,
+        height: Int,
+        ySampling: Int,
+        cbSampling: Int = 0x11,
+        crSampling: Int = 0x11,
+    ): ByteArray {
         val out = ByteArrayOutputStream()
         out.writeMarker(0xD8)
         out.writeSegment(0xDB) {
@@ -136,17 +186,17 @@ class SkJpegKotlinCodecTest {
         }
         out.writeSegment(0xC0) {
             write(8)
-            writeU16BE(8)
-            writeU16BE(8)
+            writeU16BE(height)
+            writeU16BE(width)
             write(3)
             write(1)
             write(ySampling)
             write(0)
             write(2)
-            write(0x11)
+            write(cbSampling)
             write(0)
             write(3)
-            write(0x11)
+            write(crSampling)
             write(0)
         }
         out.writeSegment(0xC4) {
@@ -176,15 +226,39 @@ class SkJpegKotlinCodecTest {
             write(63)
             write(0)
         }
+        val yBlocksPerMcu = (ySampling ushr 4) * (ySampling and 0x0F)
+        val mcuWidth = (ySampling ushr 4) * 8
+        val mcuHeight = (ySampling and 0x0F) * 8
+        val mcuCount = ((width + mcuWidth - 1) / mcuWidth) * ((height + mcuHeight - 1) / mcuHeight)
+        val bits = buildString {
+            repeat(mcuCount) {
+                repeat(yBlocksPerMcu) {
+                    append("00")
+                    append("1100000")
+                    append("0")
+                }
+                append("01")
+                append("001111111")
+                append("0")
+                append("10")
+                append("1001000000")
+                append("0")
+            }
+        }
         out.write(
-            entropyBits(
-                "00" + "1100000" + "0" + // Y = 140, DC coefficient 96, EOB
-                    "01" + "001111111" + "0" + // Cb = 80, DC coefficient -384, EOB
-                    "10" + "1001000000" + "0", // Cr = 200, DC coefficient 576, EOB
-            ),
+            entropyBits(bits),
         )
         out.writeMarker(0xD9)
         return out.toByteArray()
+    }
+
+    private fun yCbCrToArgb(y: Int, cb: Int, cr: Int): Int {
+        val cbShifted = cb - 128
+        val crShifted = cr - 128
+        val r = (y + 1.402 * crShifted).roundToInt().coerceIn(0, 255)
+        val g = (y - 0.344136 * cbShifted - 0.714136 * crShifted).roundToInt().coerceIn(0, 255)
+        val b = (y + 1.772 * cbShifted).roundToInt().coerceIn(0, 255)
+        return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
     }
 
     private fun entropyForZeroBlocks(blockCount: Int): ByteArray {
