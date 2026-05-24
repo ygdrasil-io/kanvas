@@ -1215,6 +1215,92 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `drawString renders COLRv1 linear gradients`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1LinearGradient(glyph))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlack))
+    }
+
+    @Test
+    fun `drawString accepts unsorted COLRv1 linear gradient stops`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1LinearGradient(glyph, stops = listOf(1f to 2, 0f to 0)))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
+    }
+
+    @Test
+    fun `drawString repeats COLRv1 linear gradient over stop interval`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1LinearGradient(glyph, extend = 1, stops = listOf(0.25f to 0, 0.75f to 2)))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
+    }
+
+    @Test
+    fun `drawString reflects COLRv1 linear gradient over stop interval`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1LinearGradient(glyph, extend = 2, stops = listOf(0.25f to 0, 0.75f to 2)))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
+    }
+
+    @Test
+    fun `COLRv1 color line overrunning COLR table fails closed`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val bytes = liberationSansBytes()
+            .withTableContent("GPOS", "COLR", syntheticColrV1LinearGradient(glyph).copyOf(syntheticColrV1LinearGradient(glyph).size - 1))
+            .withTableContent("kern", "CPAL", syntheticCpalV0())
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertNull(typeface.colorPaint(glyph))
+    }
+
+    @Test
     fun `malformed COLRv1 paint graph fails closed without rejecting font`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
@@ -1961,6 +2047,47 @@ class OpenTypeFontTest {
         writeI16(bytes, clipBoxOffset + 3, -400) // yMin
         writeI16(bytes, clipBoxOffset + 5, 500) // xMax
         writeI16(bytes, clipBoxOffset + 7, 1800) // yMax
+        return bytes
+    }
+
+    private fun syntheticColrV1LinearGradient(
+        glyph: Int,
+        extend: Int = 0,
+        stops: List<Pair<Float, Int>> = listOf(0f to 0, 1f to 2),
+    ): ByteArray {
+        val baseGlyphListOffset = 34
+        val glyphPaintOffset = baseGlyphListOffset + 10
+        val gradientPaintOffset = glyphPaintOffset + 6
+        val colorLineOffset = gradientPaintOffset + 16
+        val bytes = ByteArray(colorLineOffset + 3 + stops.size * 6)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, glyph)
+        writeU32(bytes, baseGlyphListOffset + 6, glyphPaintOffset - baseGlyphListOffset)
+
+        bytes[glyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, glyphPaintOffset + 1, gradientPaintOffset - glyphPaintOffset)
+        writeU16(bytes, glyphPaintOffset + 4, glyph)
+
+        bytes[gradientPaintOffset] = 4 // PaintLinearGradient
+        writeU24(bytes, gradientPaintOffset + 1, colorLineOffset - gradientPaintOffset)
+        writeI16(bytes, gradientPaintOffset + 4, 0) // x0
+        writeI16(bytes, gradientPaintOffset + 6, 0) // y0
+        writeI16(bytes, gradientPaintOffset + 8, 1600) // x1
+        writeI16(bytes, gradientPaintOffset + 10, 0) // y1
+        writeI16(bytes, gradientPaintOffset + 12, 0) // x2
+        writeI16(bytes, gradientPaintOffset + 14, 1200) // y2
+
+        bytes[colorLineOffset] = extend.toByte()
+        writeU16(bytes, colorLineOffset + 1, stops.size) // numStops
+        stops.forEachIndexed { index, (offset, paletteIndex) ->
+            val stopOffset = colorLineOffset + 3 + index * 6
+            writeI16(bytes, stopOffset, toF2Dot14(offset))
+            writeU16(bytes, stopOffset + 2, paletteIndex)
+            writeI16(bytes, stopOffset + 4, toF2Dot14(1f)) // alpha
+        }
         return bytes
     }
 
