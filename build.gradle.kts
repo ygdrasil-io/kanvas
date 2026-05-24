@@ -294,6 +294,37 @@ tasks.register("checkCpuRasterImageToolingNoAwt") {
     }
 }
 
+tasks.register("checkGpuRasterImageToolingNoAwt") {
+    group = "verification"
+    description = "Fails if gpu-raster image test tooling uses AWT/ImageIO/java.desktop APIs."
+
+    doLast {
+        val filesToCheck = listOf(
+            file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/testing/CrossBackendHarness.kt"),
+        )
+        val violations = mutableListOf<String>()
+        filesToCheck
+            .filter { source -> source.isFile }
+            .forEach { source ->
+                val sourceText = source.readText().withoutKotlinOrJavaComments()
+                forbiddenSourcePatterns.forEach { pattern ->
+                    if (pattern.containsMatchIn(sourceText)) {
+                        violations += "${source.relativeTo(rootDir)} contains forbidden image tooling API reference ${pattern.pattern}"
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("GPU raster image test tooling must not use AWT/ImageIO/java.desktop APIs.")
+                    violations.sorted().forEach { appendLine("- $it") }
+                }
+            )
+        }
+    }
+}
+
 tasks.register("checkCodecKotlinSwitchCriteria") {
     group = "verification"
     description = "Runs the non-destructive codec-all-kotlin switch-readiness checks."
