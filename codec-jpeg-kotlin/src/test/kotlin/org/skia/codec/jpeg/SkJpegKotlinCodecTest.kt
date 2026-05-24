@@ -194,6 +194,29 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
+    fun `decodes baseline Adobe CMYK jpeg`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 13, height = 9))!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(13, bitmap!!.width)
+        assertEquals(9, bitmap.height)
+        for (y in 0 until bitmap.height) {
+            for (x in 0 until bitmap.width) {
+                assertEquals(0xFF404040.toInt(), bitmap.getPixel(x, y), "x=$x y=$y")
+            }
+        }
+    }
+
+    @Test
+    fun `rejects unsupported four component jpeg variants`() {
+        assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 8, height = 8, includeAdobe = false)))
+        assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 8, height = 8, adobeTransform = 2)))
+        assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 16, height = 8, cSampling = 0x21)))
+    }
+
+    @Test
     fun `rejects exotic color sampling`() {
         assertNull(SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 8, height = 16, ySampling = 0x12)))
         assertNull(SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21)))
@@ -868,6 +891,79 @@ class SkJpegKotlinCodecTest {
         out.write(
             entropyBits(bits),
         )
+        out.writeMarker(0xD9)
+        return out.toByteArray()
+    }
+
+    private fun cmykJpeg(
+        width: Int,
+        height: Int,
+        includeAdobe: Boolean = true,
+        adobeTransform: Int = 0,
+        cSampling: Int = 0x11,
+    ): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        if (includeAdobe) {
+            out.writeSegment(0xEE) {
+                write(byteArrayOf(0x41, 0x64, 0x6F, 0x62, 0x65))
+                writeU16BE(100)
+                writeU16BE(0)
+                writeU16BE(0)
+                write(adobeTransform)
+            }
+        }
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(1) }
+        }
+        out.writeSegment(0xC0) {
+            write(8)
+            writeU16BE(height)
+            writeU16BE(width)
+            write(4)
+            write(1)
+            write(cSampling)
+            write(0)
+            write(2)
+            write(0x11)
+            write(0)
+            write(3)
+            write(0x11)
+            write(0)
+            write(4)
+            write(0x11)
+            write(0)
+        }
+        out.writeSegment(0xC4) {
+            write(0x00)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xC4) {
+            write(0x10)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xDA) {
+            write(4)
+            write(1)
+            write(0x00)
+            write(2)
+            write(0x00)
+            write(3)
+            write(0x00)
+            write(4)
+            write(0x00)
+            write(0)
+            write(63)
+            write(0)
+        }
+        val blocksX = (width + 7) / 8
+        val blocksY = (height + 7) / 8
+        out.write(entropyForZeroBlocks(blocksX * blocksY * 4))
         out.writeMarker(0xD9)
         return out.toByteArray()
     }
