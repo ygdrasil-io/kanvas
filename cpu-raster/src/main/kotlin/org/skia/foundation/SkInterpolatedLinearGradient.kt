@@ -23,7 +23,7 @@ internal class SkInterpolatedLinearGradient(
     private val interpolation: SkGradient.Interpolation,
     localMatrix: SkMatrix,
 ) : SkShader(localMatrix) {
-    private val stops: Array<Hsla> = Array(srcColors.size) { Hsla(0f, 0f, 0f, 0f) }
+    private val stops: Array<Hsla> = Array(srcColors.size) { Hsla(0f, 0f, 0f, 0f, true) }
     private var invLenSqDirX: Float = 0f
     private var invLenSqDirY: Float = 0f
     private var xformSteps: SkColorSpaceXformSteps? = null
@@ -41,7 +41,7 @@ internal class SkInterpolatedLinearGradient(
     override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
         super.setupForDraw(canvasCtm, xform)
         xformSteps = xform
-        for (i in srcColors.indices) stops[i] = colorToHsla(srcColors[i])
+        for (i in srcColors.indices) stops[i] = colorToHsla(srcColors[i], interpolation.inPremul)
         val dx = p1.fX - p0.fX
         val dy = p1.fY - p0.fY
         val lenSq = dx * dx + dy * dy
@@ -114,30 +114,51 @@ internal class SkInterpolatedLinearGradient(
     }
 
     private fun lerpHsla(a: Hsla, b: Hsla, t: Float): Hsla {
-        val dh = hueDelta(a.h, b.h, interpolation.hueMethod)
+        val startHue = if (a.powerless && !b.powerless) b.h else a.h
+        val endHue = if (b.powerless && !a.powerless) a.h else b.h
+        val dh = hueDelta(startHue, endHue, interpolation.hueMethod)
         return Hsla(
-            normalizeHue(a.h + dh * t),
+            normalizeHue(startHue + dh * t),
             lerp(a.s, b.s, t),
             lerp(a.l, b.l, t),
             lerp(a.a, b.a, t),
+            a.powerless && b.powerless,
         )
     }
 
     private fun hslaToWorkingColor(hsla: Hsla): SkColor {
-        val rgb = hslToRgb(hsla.h, hsla.s, hsla.l)
-        val rgba = floatArrayOf(rgb[0], rgb[1], rgb[2], hsla.a)
+        val a = hsla.a
+        val s = if (interpolation.inPremul == SkGradient.Interpolation.InPremul.kYes && a > 0f) {
+            (hsla.s / a).coerceIn(0f, 1f)
+        } else {
+            hsla.s
+        }
+        val l = if (interpolation.inPremul == SkGradient.Interpolation.InPremul.kYes && a > 0f) {
+            (hsla.l / a).coerceIn(0f, 1f)
+        } else {
+            hsla.l
+        }
+        val rgb = hslToRgb(hsla.h, s, l)
+        val rgba = floatArrayOf(rgb[0], rgb[1], rgb[2], a)
         xformSteps?.apply(rgba)
-        val a = (rgba[3] * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val outA = (rgba[3] * 255f + 0.5f).toInt().coerceIn(0, 255)
         val r = (rgba[0] * 255f + 0.5f).toInt().coerceIn(0, 255)
         val g = (rgba[1] * 255f + 0.5f).toInt().coerceIn(0, 255)
         val b = (rgba[2] * 255f + 0.5f).toInt().coerceIn(0, 255)
-        return SkColorSetARGB(a, r, g, b)
+        return SkColorSetARGB(outA, r, g, b)
     }
 }
 
-private data class Hsla(val h: Float, val s: Float, val l: Float, val a: Float)
+private data class Hsla(
+    val h: Float,
+    val s: Float,
+    val l: Float,
+    val a: Float,
+    val powerless: Boolean,
+)
 
-private fun colorToHsla(c: SkColor): Hsla {
+private fun colorToHsla(c: SkColor, inPremul: SkGradient.Interpolation.InPremul): Hsla {
+    val a = SkColorGetA(c) / 255f
     val r = SkColorGetR(c) / 255f
     val g = SkColorGetG(c) / 255f
     val b = SkColorGetB(c) / 255f
@@ -145,6 +166,7 @@ private fun colorToHsla(c: SkColor): Hsla {
     val minC = min(r, min(g, b))
     val l = (maxC + minC) * 0.5f
     val d = maxC - minC
+    val powerless = d == 0f
     val s = if (d == 0f) 0f else d / (1f - abs(2f * l - 1f))
     val h = when {
         d == 0f -> 0f
@@ -152,7 +174,8 @@ private fun colorToHsla(c: SkColor): Hsla {
         maxC == g -> 60f * (((b - r) / d) + 2f)
         else -> 60f * (((r - g) / d) + 4f)
     }
-    return Hsla(normalizeHue(h), s, l, SkColorGetA(c) / 255f)
+    val premulScale = if (inPremul == SkGradient.Interpolation.InPremul.kYes) a else 1f
+    return Hsla(normalizeHue(h), s * premulScale, l * premulScale, a, powerless)
 }
 
 private fun hslToRgb(h: Float, s: Float, l: Float): FloatArray {

@@ -139,6 +139,75 @@ class SkGradientInterpolationTest {
     }
 
     @Test
+    fun `HSL powerless hue borrows adjacent hue for white to blue`() {
+        val powerless = sampleGradient(
+            colors = intArrayOf(0xFFFFFFFF.toInt(), 0xFF0000FF.toInt()),
+            x = 50,
+        )
+
+        assertTrue(
+            (powerless and 0xFF) > SkColorGetR(powerless) &&
+                (powerless and 0xFF) > SkColorGetG(powerless),
+            "powerless white should borrow blue hue, got 0x${powerless.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `HSL powerless middle stop uses neighboring hues per side`() {
+        val left = sampleGradient(
+            colors = intArrayOf(0xFFFF0000.toInt(), 0xFFFFFFFF.toInt(), 0xFF0000FF.toInt()),
+            x = 25,
+        )
+        val right = sampleGradient(
+            colors = intArrayOf(0xFFFF0000.toInt(), 0xFFFFFFFF.toInt(), 0xFF0000FF.toInt()),
+            x = 75,
+        )
+
+        assertTrue(
+            SkColorGetR(left) > SkColorGetG(left) && SkColorGetR(left) > (left and 0xFF),
+            "left side should borrow red hue, got 0x${left.toUInt().toString(16)}",
+        )
+        assertTrue(
+            (right and 0xFF) > SkColorGetR(right) && (right and 0xFF) > SkColorGetG(right),
+            "right side should borrow blue hue, got 0x${right.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `HSL accepts premul interpolation for powerless transparent stop`() {
+        val sample = sampleGradient(
+            colors = intArrayOf(0x00000000, 0xFF0000FF.toInt()),
+            interpolation = SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kHSL,
+                inPremul = SkGradient.Interpolation.InPremul.kYes,
+            ),
+            x = 50,
+        )
+
+        assertTrue(
+            sample ushr 24 in 0x7F..0x81,
+            "premul HSL should interpolate alpha, got 0x${sample.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `HSL premul interpolation preserves transparent tinted hue`() {
+        val sample = sampleGradient(
+            colors = intArrayOf(0x000000FF, 0xFFFF0000.toInt()),
+            interpolation = SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kHSL,
+                inPremul = SkGradient.Interpolation.InPremul.kYes,
+            ),
+            x = 50,
+        )
+
+        assertTrue(
+            SkColorGetR(sample) > 200 && (sample and 0xFF) > 200 && SkColorGetG(sample) < 80,
+            "transparent blue should keep its hue hint before premul interpolation, got 0x${sample.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
     fun `linear gradient overload accepts bounded RGB color spaces`() {
         val pts = arrayOf(SkPoint(0f, 0f), SkPoint(10f, 0f))
         val rgbSpaces = listOf(
@@ -166,17 +235,34 @@ class SkGradientInterpolationTest {
     }
 
     private fun sampleMidpoint(interpolation: SkGradient.Interpolation): Int {
+        return sampleGradient(
+            colors = intArrayOf(0xFFFF0000.toInt(), 0xFF0000FF.toInt()),
+            interpolation = interpolation,
+            x = 50,
+        )
+    }
+
+    private fun sampleGradient(
+        colors: IntArray,
+        positions: FloatArray? = null,
+        interpolation: SkGradient.Interpolation = SkGradient.Interpolation(
+            colorSpace = SkGradient.Interpolation.ColorSpace.kHSL,
+        ),
+        x: Int,
+    ): Int {
         val pts = arrayOf(SkPoint(0f, 0f), SkPoint(100f, 0f))
         val shader = SkShaders.LinearGradient(
             pts,
             SkGradient(
-                colors = intArrayOf(0xFFFF0000.toInt(), 0xFF0000FF.toInt()),
+                colors = colors,
+                positions = positions,
                 interpolation = interpolation,
             ),
         )
         shader.setupForDraw(org.graphiks.math.SkMatrix.Identity, srgbXform)
         val row = IntArray(1)
-        shader.shadeRow(50, 0, row.size, row)
+        shader.shadeRow(x, 0, row.size, row)
         return row[0]
     }
+
 }
