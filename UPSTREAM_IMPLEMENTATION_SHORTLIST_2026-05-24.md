@@ -119,7 +119,7 @@ Completed since this snapshot:
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, HSL hue-method core implemented for CPU linear gradients, perceptual/powerless hue sampler still missing | gradient interpolation variants |
-| `mesh` | `STUB.MESH`; all 11 upstream registrations are compile-pinned, but none can be re-enabled before `SkMesh` / `SkMeshSpecification` and `SkCanvas.drawMesh` exist in the active modules | `MeshGMs.kt` |
+| `mesh` | `STUB.MESH`; minimal CPU `SkMesh` / `SkMeshSpecification` / `SkCanvas.drawMesh` skeleton exists for position-only triangles, but all 11 upstream registrations remain compile-pinned until shader attributes, varyings, uniforms, and color output are implemented | `MeshGMs.kt` |
 | `vertices` | `STUB.DRAW_VERTICES_VISUAL_PARITY`; `VerticesGM` is source-ported, but focused validation still renders ~60% for both `vertices` and `vertices_scaled_shader` after vertex blend and paint color-filter coverage | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
