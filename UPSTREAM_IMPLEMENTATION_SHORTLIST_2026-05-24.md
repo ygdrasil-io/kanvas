@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 26 upstream `.cpp` rows as
+The rebaseline currently classifies 25 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -57,6 +57,8 @@ Completed since this snapshot:
   covered by the similarity floor.
 - `STUB.STROKEDLINE_CAPS`: `StrokedLineCapsGM` is enabled with ratchet
   coverage; `StrokedLinesGM` was already enabled.
+- `fiddle`: upstream's intentionally empty GM is already ported and covered
+  by `FiddleTest`; the implementation bucket entry was stale.
 
 ## Recommended order
 
@@ -80,7 +82,7 @@ Completed since this snapshot:
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `drawimageset` | ported | `DrawImageSetAlphaOnlyGM.kt`, `DrawImageSetGM.kt`, `DrawImageSetRectToRectGM.kt` |
 | `drawquadset` | ported | `DrawQuadSetGM.kt` |
-| `fiddle` | stub file without `STUB.*` tag | `FiddleGM.kt` |
+| `fiddle` | ported | `FiddleGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION` | gradient interpolation variants |
 | `imagefilters` | `STUB.BACKDROP_FILTER` | `MultipleFiltersGM.kt`, `SaveLayerWithBackdropGM.kt`, others |
 | `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
@@ -103,7 +105,7 @@ Completed since this snapshot:
 
 - `STUB.MISSING_API` is too vague. The affected rows (`aaclip`, `addarc`)
   need tag cleanup before implementation selection.
-- `fiddle`, `dashcubics`, and `rrect` are classified as implementation
+- `dashcubics` and `rrect` are classified as implementation
   because their disabled/stub reason is actionable but not normalized as
   a `STUB.*` tag.
 - Text-related rows should be revisited after the font delivery if their
