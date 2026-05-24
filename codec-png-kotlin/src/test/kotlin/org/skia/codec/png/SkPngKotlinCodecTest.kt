@@ -241,27 +241,131 @@ class SkPngKotlinCodecTest {
             argb(0x80, 0x40, 0x50, 0x60),
             argb(0x40, 0x80, 0x90, 0xA0),
             argb(0x00, 0xC0, 0xD0, 0xE0),
+            argb(0xFF, 0x11, 0x22, 0x33),
+            argb(0xE0, 0x22, 0x33, 0x44),
+            argb(0xC0, 0x33, 0x44, 0x55),
+            argb(0xA0, 0x44, 0x55, 0x66),
+            argb(0x80, 0x55, 0x66, 0x77),
+            argb(0x60, 0x66, 0x77, 0x88),
+            argb(0x40, 0x77, 0x88, 0x99),
+            argb(0x20, 0x88, 0x99, 0xAA),
+            argb(0xFF, 0x99, 0xAA, 0xBB),
+            argb(0xCC, 0xAA, 0xBB, 0xCC),
+            argb(0x99, 0xBB, 0xCC, 0xDD),
+            argb(0x66, 0xCC, 0xDD, 0xEE),
         )
-        val indexes = List(7) { y ->
-            IntArray(10) { x -> (x + y * 2) % palette.size }
+        for (bitDepth in intArrayOf(1, 2, 4)) {
+            val colorCount = 1 shl bitDepth
+            val indexes = List(7) { y ->
+                IntArray(10) { x -> (x + y * 2) % colorCount }
+            }
+            val codec = SkPngKotlinCodec.Decoder.make(
+                adam7IndexedPng(
+                    width = 10,
+                    height = 7,
+                    palette = palette.copyOf(colorCount),
+                    indexes = indexes,
+                    filters = intArrayOf(0, 1, 2, 3, 4),
+                    bitDepth = bitDepth,
+                ),
+            )!!
+
+            val (bitmap, result) = codec.getImage()
+            assertEquals(SkCodec.Result.kSuccess, result, "bitDepth=$bitDepth")
+            assertNotNull(bitmap)
+            for (y in indexes.indices) {
+                for (x in indexes[y].indices) {
+                    assertEquals(palette[indexes[y][x]], bitmap!!.getPixel(x, y), "bitDepth=$bitDepth x=$x y=$y")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `decodes Adam7 interlaced grayscale bit depths`() {
+        for (bitDepth in intArrayOf(1, 2, 4, 8)) {
+            val max = (1 shl bitDepth) - 1
+            val samples = List(9) { y ->
+                IntArray(11) { x -> (x * 3 + y * 5) % (max + 1) }
+            }
+            val codec = SkPngKotlinCodec.Decoder.make(
+                adam7GrayscalePng(
+                    width = 11,
+                    height = 9,
+                    samples = samples,
+                    filters = intArrayOf(0, 1, 2, 3, 4),
+                    bitDepth = bitDepth,
+                ),
+            )!!
+
+            val (bitmap, result) = codec.getImage()
+            assertEquals(SkCodec.Result.kSuccess, result, "bitDepth=$bitDepth")
+            assertNotNull(bitmap)
+            for (y in samples.indices) {
+                for (x in samples[y].indices) {
+                    val gray = samples[y][x] * 255 / max
+                    assertEquals(argb(0xFF, gray, gray, gray), bitmap!!.getPixel(x, y), "bitDepth=$bitDepth x=$x y=$y")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `decodes Adam7 interlaced RGB 8-bit pixels`() {
+        val rows = List(8) { y ->
+            IntArray(10) { x ->
+                argb(
+                    a = 0xFF,
+                    r = (0x10 + x * 13 + y * 3) and 0xFF,
+                    g = (0x20 + x * 5 + y * 17) and 0xFF,
+                    b = (0x30 + x * 11 + y * 7) and 0xFF,
+                )
+            }
         }
         val codec = SkPngKotlinCodec.Decoder.make(
-            adam7IndexedPng(
+            adam7Png(
                 width = 10,
-                height = 7,
-                palette = palette,
-                indexes = indexes,
+                height = 8,
+                colorType = 2,
+                rows = rows,
                 filters = intArrayOf(0, 1, 2, 3, 4),
-                bitDepth = 2,
             ),
         )!!
 
         val (bitmap, result) = codec.getImage()
         assertEquals(SkCodec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        for (y in indexes.indices) {
-            for (x in indexes[y].indices) {
-                assertEquals(palette[indexes[y][x]], bitmap!!.getPixel(x, y), "x=$x y=$y")
+        for (y in rows.indices) {
+            for (x in rows[y].indices) {
+                assertEquals(rows[y][x], bitmap!!.getPixel(x, y), "x=$x y=$y")
+            }
+        }
+    }
+
+    @Test
+    fun `decodes Adam7 interlaced grayscale alpha 8-bit pixels`() {
+        val rows = List(8) { y ->
+            IntArray(10) { x ->
+                val gray = (0x10 + x * 19 + y * 7) and 0xFF
+                val alpha = (0x30 + x * 11 + y * 13) and 0xFF
+                argb(alpha, gray, gray, gray)
+            }
+        }
+        val codec = SkPngKotlinCodec.Decoder.make(
+            adam7GrayscaleAlphaPng(
+                width = 10,
+                height = 8,
+                rows = rows,
+                filters = intArrayOf(0, 1, 2, 3, 4),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        for (y in rows.indices) {
+            for (x in rows[y].indices) {
+                assertEquals(rows[y][x], bitmap!!.getPixel(x, y), "x=$x y=$y")
             }
         }
     }
@@ -949,6 +1053,85 @@ class SkPngKotlinCodecTest {
             if (palette.any { a(it) != 0xFF }) {
                 writeChunk("tRNS", ByteArray(palette.size) { a(palette[it]).toByte() })
             }
+            writeChunk("IDAT", deflate(raw.toByteArray()))
+            writeChunk("IEND", ByteArray(0))
+        }.toByteArray()
+    }
+
+    private fun adam7GrayscalePng(
+        width: Int,
+        height: Int,
+        samples: List<IntArray>,
+        filters: IntArray,
+        bitDepth: Int,
+    ): ByteArray =
+        adam7RawPng(
+            width = width,
+            height = height,
+            bitDepth = bitDepth,
+            colorType = 0,
+            filters = filters,
+            bpp = 1,
+        ) { pass, passWidth, passY ->
+            val y = pass.yStart + passY * pass.yStep
+            val passSamples = IntArray(passWidth) { passX ->
+                samples[y][pass.xStart + passX * pass.xStep]
+            }
+            if (bitDepth == 8) {
+                ByteArray(passWidth) { passSamples[it].toByte() }
+            } else {
+                packSamples(passSamples, bitDepth)
+            }
+        }
+
+    private fun adam7GrayscaleAlphaPng(width: Int, height: Int, rows: List<IntArray>, filters: IntArray): ByteArray =
+        adam7RawPng(
+            width = width,
+            height = height,
+            bitDepth = 8,
+            colorType = 4,
+            filters = filters,
+            bpp = 2,
+        ) { pass, passWidth, passY ->
+            val y = pass.yStart + passY * pass.yStep
+            encodeGrayscaleAlphaRow(
+                IntArray(passWidth) { passX ->
+                    rows[y][pass.xStart + passX * pass.xStep]
+                },
+            )
+        }
+
+    private fun adam7RawPng(
+        width: Int,
+        height: Int,
+        bitDepth: Int,
+        colorType: Int,
+        filters: IntArray,
+        bpp: Int,
+        rowForPass: (Adam7Pass, Int, Int) -> ByteArray,
+    ): ByteArray {
+        var filterIndex = 0
+        val raw = ByteArrayOutputStream()
+        for (pass in ADAM7_PASSES) {
+            val passWidth = adam7Size(width, pass.xStart, pass.xStep)
+            val passHeight = adam7Size(height, pass.yStart, pass.yStep)
+            if (passWidth == 0 || passHeight == 0) continue
+            var previous = ByteArray((passWidth * bitDepth * bpp + 7) / 8)
+            for (passY in 0 until passHeight) {
+                val row = rowForPass(pass, passWidth, passY)
+                val filter = filters[filterIndex++ % filters.size]
+                raw.write(filter)
+                raw.write(filterRow(filter, row, previous, bpp))
+                previous = row
+            }
+        }
+
+        return ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            writeChunk(
+                "IHDR",
+                ihdr(width = width, height = height, bitDepth = bitDepth, colorType = colorType, interlace = 1),
+            )
             writeChunk("IDAT", deflate(raw.toByteArray()))
             writeChunk("IEND", ByteArray(0))
         }.toByteArray()
