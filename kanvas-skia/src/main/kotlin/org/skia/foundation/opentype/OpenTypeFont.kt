@@ -143,6 +143,9 @@ public class OpenTypeTypeface private constructor(
     internal fun colorPaint(glyphId: Int): OpenTypeColorPaint? =
         font.colorPaint(glyphId)
 
+    internal fun svgDocument(glyphId: Int): OpenTypeSvgDocument? =
+        font.svgDocument(glyphId)
+
     internal fun makeColorTextPaths(
         text: String,
         x: SkScalar,
@@ -359,6 +362,7 @@ private class ParsedTrueTypeFont(
     private val kern: KernTable?,
     private val gpos: GposPairTable?,
     private val color: OpenTypeColorFont?,
+    private val svg: OpenTypeSvgTable?,
     private val gvar: GvarTable?,
 ) {
     private val pathCache = HashMap<Int, GlyphOutline?>()
@@ -398,6 +402,9 @@ private class ParsedTrueTypeFont(
 
     fun colorPaint(glyphId: Int): OpenTypeColorPaint? =
         color?.v1PaintsByGlyph?.get(glyphId)
+
+    fun svgDocument(glyphId: Int): OpenTypeSvgDocument? =
+        svg?.documentForGlyph(glyphId)
 
     fun variationPosition(position: SkFontArguments.VariationPosition): OpenTypeVariationPosition {
         if (variationAxes.isEmpty() || position.coordinates.isEmpty()) return OpenTypeVariationPosition.Default
@@ -772,6 +779,7 @@ private class ParsedTrueTypeFont(
             val gpos = if (kern == null && "kern" !in tables) parseGposPairTable(bytes, tables["GPOS"], numGlyphs) else null
             val variationAxes = parseFvarAxes(bytes, tables["fvar"]).orEmpty()
             val color = parseColorFont(bytes, tables["COLR"], tables["CPAL"])
+            val svg = parseSvgTable(bytes, tables["SVG "])
             val gvar = parseGvarTable(bytes, tables["gvar"], variationAxes.size, numGlyphs)
 
             return ParsedTrueTypeFont(
@@ -779,7 +787,7 @@ private class ParsedTrueTypeFont(
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
                 avg, sxHeight, sCapHeight, underlinePosition, underlineThickness,
                 strikeoutPosition, strikeoutThickness, familyName, names?.postScriptName, localizedNames,
-                variationAxes, cmap, advances, bearings, offsets, kern, gpos, color, gvar,
+                variationAxes, cmap, advances, bearings, offsets, kern, gpos, color, svg, gvar,
             )
         }
 
@@ -951,6 +959,41 @@ private class ParsedTrueTypeFont(
             val palettes = parseCpalTable(bytes, cpalTable) ?: return null
             val colr = parseColrTable(bytes, colrTable) ?: return null
             return OpenTypeColorFont(palettes, colr.layersByGlyph, colr.v1PaintsByGlyph)
+        }
+
+        private fun parseSvgTable(bytes: ByteArray, table: TableRecord?): OpenTypeSvgTable? {
+            table ?: return null
+            if (table.length < 10) return null
+            val tableEnd = table.offset + table.length
+            val reader = SfntReader(bytes, tableEnd)
+            val version = reader.u16(table.offset) ?: return null
+            if (version != 0) return null
+            val documentListOffset = reader.u32(table.offset + 2)?.toIntOrNull() ?: return null
+            if (documentListOffset == 0) return null
+            val documentListStart = table.offset + documentListOffset
+            if (!reader.fits(documentListStart, 2)) return null
+            val numEntries = reader.u16(documentListStart) ?: return null
+            if (numEntries == 0 || numEntries > MAX_SVG_DOCUMENT_RECORDS) return null
+            if (!reader.fits(documentListStart + 2, numEntries.toLong() * 12L)) return null
+            val documentRecordsEnd = documentListStart + 2 + numEntries * 12
+            val records = ArrayList<OpenTypeSvgDocumentRecord>(numEntries)
+            var previousEndGlyphId = -1
+            repeat(numEntries) { index ->
+                val recordOffset = documentListStart + 2 + index * 12
+                val startGlyphId = reader.u16(recordOffset) ?: return null
+                val endGlyphId = reader.u16(recordOffset + 2) ?: return null
+                val svgDocOffset = reader.u32(recordOffset + 4)?.toIntOrNull() ?: return null
+                val svgDocLength = reader.u32(recordOffset + 8)?.toIntOrNull() ?: return null
+                if (svgDocOffset == 0 || svgDocLength == 0) return null
+                if (startGlyphId > endGlyphId) return null
+                if (startGlyphId <= previousEndGlyphId) return null
+                if ((endGlyphId - startGlyphId + 1) > MAX_SVG_GLYPHS_PER_RECORD) return null
+                val documentStart = documentListStart + svgDocOffset
+                if (documentStart < documentRecordsEnd || !reader.fits(documentStart, svgDocLength)) return null
+                records.add(OpenTypeSvgDocumentRecord(startGlyphId, endGlyphId, documentStart, svgDocLength))
+                previousEndGlyphId = endGlyphId
+            }
+            return OpenTypeSvgTable(bytes, records)
         }
 
         private fun parseCpalTable(bytes: ByteArray, table: TableRecord?): List<List<Int>>? {
@@ -1855,6 +1898,46 @@ private data class OpenTypeColrTables(
     val layersByGlyph: Map<Int, List<OpenTypeColorLayer>>,
     val v1PaintsByGlyph: Map<Int, OpenTypeColorPaint>,
 )
+internal data class OpenTypeSvgDocument(
+    val startGlyphId: Int,
+    val endGlyphId: Int,
+    val bytes: ByteArray,
+) {
+    val text: String
+        get() = String(bytes, Charsets.UTF_8)
+
+    override fun equals(other: Any?): Boolean =
+        other is OpenTypeSvgDocument &&
+            startGlyphId == other.startGlyphId &&
+            endGlyphId == other.endGlyphId &&
+            bytes.contentEquals(other.bytes)
+
+    override fun hashCode(): Int {
+        var result = startGlyphId
+        result = 31 * result + endGlyphId
+        result = 31 * result + bytes.contentHashCode()
+        return result
+    }
+}
+private data class OpenTypeSvgDocumentRecord(
+    val startGlyphId: Int,
+    val endGlyphId: Int,
+    val offset: Int,
+    val length: Int,
+)
+private class OpenTypeSvgTable(
+    private val bytes: ByteArray,
+    private val records: List<OpenTypeSvgDocumentRecord>,
+) {
+    fun documentForGlyph(glyphId: Int): OpenTypeSvgDocument? {
+        val record = records.firstOrNull { glyphId in it.startGlyphId..it.endGlyphId } ?: return null
+        return OpenTypeSvgDocument(
+            startGlyphId = record.startGlyphId,
+            endGlyphId = record.endGlyphId,
+            bytes = bytes.copyOfRange(record.offset, record.offset + record.length),
+        )
+    }
+}
 internal sealed interface OpenTypeColorPaint {
     data class Solid(val paletteIndex: Int, val alpha: Float) : OpenTypeColorPaint
     data class Glyph(val glyphId: Int, val paint: OpenTypeColorPaint) : OpenTypeColorPaint
@@ -2144,6 +2227,8 @@ private const val MAX_COLOR_LAYERS = 16384
 private const val MAX_LAYERS_PER_COLOR_GLYPH = 256
 private const val MAX_EXPANDED_COLOR_LAYERS = 65536L
 private const val MAX_COLOR_PAINT_DEPTH = 32
+private const val MAX_SVG_DOCUMENT_RECORDS = 8192
+private const val MAX_SVG_GLYPHS_PER_RECORD = 4096
 private const val OS2_USE_TYPO_METRICS = 0x0080
 
 private fun openTypeTagToString(tag: Int): String = buildString(4) {
