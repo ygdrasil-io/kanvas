@@ -617,9 +617,9 @@ class SkWebpKotlinCodecTest {
                 it[1] = -1
                 it[4] = 2
             },
-            macroblocks[1].luma[0],
+            macroblocks[1].y2,
         )
-        assertTrue(macroblocks[1].luma.drop(1).all { block -> block.all { it == 0 } })
+        assertTrue(macroblocks[1].luma.all { block -> block.all { it == 0 } })
     }
 
     @Test
@@ -657,7 +657,42 @@ class SkWebpKotlinCodecTest {
                 it[1] = -1
                 it[4] = 2
             },
-            macroblocks[1].luma[0],
+            macroblocks[1].y2,
+        )
+        assertTrue(macroblocks[1].luma.all { block -> block.all { it == 0 } })
+    }
+
+    @Test
+    fun `VP8 macroblock coefficient decoder keeps B_PRED coefficients in luma blocks`() {
+        val partition = byteArrayOf(0xB7.toByte(), 0x11, 0x00, 0x00) + ByteArray(32)
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
+            coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = partition.size)),
+        )
+        val modes = listOf(
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.B_PRED,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+            ),
+        )
+
+        val result = decodeVp8MacroblockCoefficients(
+            data = partition,
+            layout = layout,
+            macroblockModes = modes,
+            probabilities = Vp8CoefficientProbabilities.filled(128),
+        )
+
+        assertTrue(result is Vp8MacroblockCoefficientDecodeResult.Macroblocks)
+        val macroblocks = (result as Vp8MacroblockCoefficientDecodeResult.Macroblocks).macroblocks
+        assertTrue(macroblocks.single().y2.all { it == 0 })
+        assertArrayEquals(
+            IntArray(16).also {
+                it[1] = -1
+                it[4] = 2
+            },
+            macroblocks.single().luma[0],
         )
     }
 
