@@ -15,7 +15,7 @@ import org.graphiks.math.SkColorSetARGB
 import org.graphiks.math.SkISize
 
 /**
- * R-final.S — **STUB.COLOR_FILTER_PRIV** consumer GM. Iso-aligned port of
+ * R-final.S — `SkColorFilterPriv.withWorkingFormat` consumer GM. Iso-aligned port of
  * upstream's `gm/lumafilter.cpp` `DEF_SIMPLE_GM(AlternateLuma, canvas, 384, 128)`.
  *
  * Upstream draws three panels (128×128 each) side-by-side from
@@ -29,17 +29,9 @@ import org.graphiks.math.SkISize
  *    When RGB holds CIE XYZ co-ordinates, splatting the G (= Y)
  *    channel produces near-greyscale.
  *
- * **Missing APIs** :
- *  - `SkColorFilterPriv::WithWorkingFormat` → [SkColorFilterPriv.withWorkingFormat]
- *    throws `STUB.COLOR_FILTER_PRIV`.
- *  - `images/mandrill_128.png` is not available in the test classpath;
- *    a synthetic 128×128 RGB gradient is used instead.
- *
- * [AlternateLumaTest] is `@Disabled` because [SkColorFilterPriv.withWorkingFormat]
- * throws at runtime.
- *
- * See [`API_FINALIZATION_PLAN.md`](../../../../../../../../API_FINALIZATION_PLAN.md)
- * § STUB.COLOR_FILTER_PRIV.
+ * `images/mandrill_128.png` is not available in the test classpath; a
+ * synthetic 128×128 RGB gradient is used instead, so the reference similarity
+ * is intentionally ratcheted from the current low baseline.
  */
 public class AlternateLumaGM : GM() {
 
@@ -76,14 +68,12 @@ public class AlternateLumaGM : GM() {
 
         // Panel 3 — G-channel splat in working format CIE XYZ / linear.
         // The inner SkSL filter replicates G into R, G, B (inColor.ggga).
-        // Wrapped by WithWorkingFormat so it operates on linear XYZ pixels —
-        // that call throws STUB.COLOR_FILTER_PRIV, hence @Disabled on the test.
+        // Wrapped by WithWorkingFormat so it operates on linear XYZ pixels.
         val sksl = SkBuiltinColorFilterEffects.G_CHANNEL_SPLAT_SKSL
         val effect = SkRuntimeEffect.MakeForColorFilter(sksl).effect
             ?: error("Unable to compile G-channel-splat color filter")
         val innerFilter = effect.makeColorFilter(uniforms = null)
             ?: error("makeColorFilter returned null")
-        // Touch the stubbed dispatch — throws STUB.COLOR_FILTER_PRIV at runtime.
         val workingFilter = SkColorFilterPriv.withWorkingFormat(
             child = innerFilter,
             tf = SkNamedTransferFn.kLinear,

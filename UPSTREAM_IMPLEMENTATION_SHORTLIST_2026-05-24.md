@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 23 upstream `.cpp` rows as
+The rebaseline currently classifies 21 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -65,6 +65,12 @@ Completed since this snapshot:
   95% floors.
 - `RRectBlurGM`: `SkCanvas.readPixels` / `writePixels` raster overloads are
   implemented, the diff GM is ported, and `RRectBlurTest` is enabled.
+- `STUB.BACKDROP_FILTER`: `SaveLayerWithBackdropGM` is ported and enabled on
+  raster, WebGPU, and crossbackend wrappers with ratchet coverage; the
+  remaining `imagefilters` bucket tag was stale tracking.
+- `STUB.COLOR_FILTER_PRIV`: `SkColorFilterPriv.withWorkingFormat` delegates to
+  the existing working-colour-space wrapper; `AlternateLumaGM` is enabled with a
+  low ratchet because the mandrill source asset is still synthetic.
 
 ## Recommended order
 
@@ -90,10 +96,9 @@ Completed since this snapshot:
 | `drawquadset` | ported | `DrawQuadSetGM.kt` |
 | `fiddle` | ported | `FiddleGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION` | gradient interpolation variants |
-| `imagefilters` | `STUB.BACKDROP_FILTER` | `MultipleFiltersGM.kt`, `SaveLayerWithBackdropGM.kt`, others |
 | `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
 | `imagemasksubset` | ported | `ImageMaskSubsetGM.kt` |
-| `lumafilter` | `STUB.COLOR_FILTER_PRIV` | `AlternateLumaGM.kt`, `LumaFilterGM.kt` |
+| `lumafilter` | ported | `AlternateLumaGM.kt`, `LumaFilterGM.kt` |
 | `mesh` | `STUB.MESH` | `MeshGMs.kt` |
 | `patharcto` | ported | `ArctoSkbug9272GM.kt`, `PathAppendExtendGM.kt`, `ShallowAnglePathArcToGM.kt` |
 | `patheffects` | ported | `CTMPathEffectGM.kt`, `PathEffectGM.kt` |
