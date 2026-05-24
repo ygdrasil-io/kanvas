@@ -55,11 +55,13 @@ public class SkWebpKotlinCodec internal constructor(
             return Result.kInvalidParameters
         }
         if (metadata.format == WebpBitstreamFormat.VP8) {
-            return when (decodeVp8LossyHeader(data, metadata)) {
-                Vp8LossyHeaderDecodeResult.Invalid -> Result.kErrorInInput
-                Vp8LossyHeaderDecodeResult.Unsupported,
-                is Vp8LossyHeaderDecodeResult.Header,
-                -> Result.kUnimplemented
+            return when (val decoded = decodeVp8LossyPixels(data, metadata)) {
+                Vp8LossyDecodeResult.Invalid -> Result.kErrorInInput
+                Vp8LossyDecodeResult.Unsupported -> Result.kUnimplemented
+                is Vp8LossyDecodeResult.Pixels -> {
+                    decoded.rgba.copyInto(dst.pixels8888)
+                    Result.kSuccess
+                }
             }
         }
         if (metadata.format != WebpBitstreamFormat.VP8L) {
@@ -1160,6 +1162,12 @@ internal sealed interface Vp8ReconstructionResult {
     data object Invalid : Vp8ReconstructionResult
 }
 
+internal sealed interface Vp8LossyDecodeResult {
+    data class Pixels(val rgba: IntArray) : Vp8LossyDecodeResult
+    data object Unsupported : Vp8LossyDecodeResult
+    data object Invalid : Vp8LossyDecodeResult
+}
+
 internal sealed interface Vp8LossyBitstreamLayoutDecodeResult {
     data class Layout(val layout: Vp8LossyBitstreamLayout) : Vp8LossyBitstreamLayoutDecodeResult
     data object Unsupported : Vp8LossyBitstreamLayoutDecodeResult
@@ -1316,12 +1324,71 @@ internal enum class Vp8LumaPredictionMode {
     B_PRED,
 }
 
-private fun decodeVp8LossyHeader(data: ByteArray, metadata: WebpMetadata): Vp8LossyHeaderDecodeResult {
-    return when (val result = decodeVp8LossyBitstreamLayout(data, metadata)) {
-        Vp8LossyBitstreamLayoutDecodeResult.Invalid -> Vp8LossyHeaderDecodeResult.Invalid
-        Vp8LossyBitstreamLayoutDecodeResult.Unsupported -> Vp8LossyHeaderDecodeResult.Unsupported
-        is Vp8LossyBitstreamLayoutDecodeResult.Layout -> Vp8LossyHeaderDecodeResult.Header(result.layout.header)
+internal fun decodeVp8LossyPixels(data: ByteArray, metadata: WebpMetadata): Vp8LossyDecodeResult {
+    if (metadata.format != WebpBitstreamFormat.VP8) return Vp8LossyDecodeResult.Invalid
+    if (metadata.flags.alpha || metadata.alphaChunk != null) return Vp8LossyDecodeResult.Unsupported
+
+    val payloadOffset = metadata.payloadOffset
+    val payloadSize = metadata.payloadSize
+    if (payloadOffset < 0 || payloadSize < VP8_KEYFRAME_HEADER_SIZE) return Vp8LossyDecodeResult.Invalid
+    if (payloadOffset + payloadSize > data.size) return Vp8LossyDecodeResult.Invalid
+    val frameTag = parseVp8FrameTag(data, payloadOffset, payloadSize.toLong())
+        ?: return Vp8LossyDecodeResult.Invalid
+    if (!frameTag.keyFrame) return Vp8LossyDecodeResult.Unsupported
+    if (!frameTag.showFrame) return Vp8LossyDecodeResult.Unsupported
+
+    val layout = when (val result = decodeVp8LossyBitstreamLayout(data, metadata)) {
+        Vp8LossyBitstreamLayoutDecodeResult.Invalid -> return Vp8LossyDecodeResult.Invalid
+        Vp8LossyBitstreamLayoutDecodeResult.Unsupported -> return Vp8LossyDecodeResult.Unsupported
+        is Vp8LossyBitstreamLayoutDecodeResult.Layout -> result.layout
     }
+    if (layout.header.loopFilter.level != 0) return Vp8LossyDecodeResult.Unsupported
+
+    val firstPartitionOffset = payloadOffset + VP8_KEYFRAME_HEADER_SIZE
+    val firstPartitionEnd = firstPartitionOffset + frameTag.firstPartitionSize
+    if (firstPartitionEnd > payloadOffset + payloadSize) return Vp8LossyDecodeResult.Invalid
+    val reader = Vp8BoolReader(data, firstPartitionOffset, firstPartitionEnd)
+    when (val header = readVp8LossyFrameHeader(reader, metadata.width, metadata.height)) {
+        Vp8LossyHeaderDecodeResult.Invalid -> return Vp8LossyDecodeResult.Invalid
+        Vp8LossyHeaderDecodeResult.Unsupported -> return Vp8LossyDecodeResult.Unsupported
+        is Vp8LossyHeaderDecodeResult.Header -> {
+            if (header.header != layout.header) return Vp8LossyDecodeResult.Invalid
+        }
+    }
+
+    val probabilities = when (val result = readVp8CoefficientProbabilityUpdates(
+        reader = reader,
+        base = Vp8CoefficientProbabilities.default(),
+        updateProbabilities = VP8_COEFFICIENT_UPDATE_PROBABILITIES,
+    )) {
+        Vp8CoefficientProbabilityUpdateResult.Invalid -> return Vp8LossyDecodeResult.Invalid
+        is Vp8CoefficientProbabilityUpdateResult.Probabilities -> result.probabilities
+    }
+    val noCoeffSkip = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8LossyDecodeResult.Invalid
+    if (noCoeffSkip != 0) {
+        reader.readLiteral(8) ?: return Vp8LossyDecodeResult.Invalid
+        return Vp8LossyDecodeResult.Unsupported
+    }
+    val macroblockModes = readVp8KeyFrameMacroblockModes(
+        reader = reader,
+        header = layout.header,
+        noCoeffSkip = false,
+    ) ?: return Vp8LossyDecodeResult.Invalid
+    if (macroblockModes.any { it.yMode == Vp8LumaPredictionMode.B_PRED }) {
+        return Vp8LossyDecodeResult.Unsupported
+    }
+
+    val planes = when (val result = reconstructVp8NonBPredKeyFramePlanes(
+        data = data,
+        layout = layout,
+        macroblockModes = macroblockModes,
+        probabilities = probabilities,
+    )) {
+        Vp8ReconstructionResult.Invalid -> return Vp8LossyDecodeResult.Invalid
+        Vp8ReconstructionResult.Unsupported -> return Vp8LossyDecodeResult.Unsupported
+        is Vp8ReconstructionResult.Planes -> result.planes
+    }
+    return Vp8LossyDecodeResult.Pixels(planes.cropTo(metadata.width, metadata.height).toRgba())
 }
 
 internal fun decodeVp8LossyBitstreamLayout(
@@ -1680,6 +1747,9 @@ internal class Vp8CoefficientProbabilities private constructor(
 
         fun fromFlat(values: IntArray): Vp8CoefficientProbabilities =
             Vp8CoefficientProbabilities(values.copyOf())
+
+        fun default(): Vp8CoefficientProbabilities =
+            fromFlat(VP8_DEFAULT_COEFFICIENT_PROBABILITIES)
     }
 }
 
@@ -1736,6 +1806,44 @@ internal fun decodeVp8CoefficientBlock(
         val sign = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8CoefficientDecodeResult.Invalid
         coefficients[VP8_ZIGZAG[coefficientIndex]] = if (sign == 0) magnitude else -magnitude
         hasNonZero = true
+    }
+    return Vp8CoefficientDecodeResult.Block(coefficients, hasNonZero)
+}
+
+internal fun decodeVp8CoefficientBlock(
+    reader: Vp8BoolReader,
+    probabilities: Vp8CoefficientProbabilities,
+    type: Int,
+    initialContext: Int,
+    startCoefficient: Int = 0,
+): Vp8CoefficientDecodeResult {
+    if (type !in 0 until VP8_COEFFICIENT_TYPE_COUNT) return Vp8CoefficientDecodeResult.Invalid
+    if (initialContext !in 0 until VP8_COEFFICIENT_CONTEXT_COUNT) return Vp8CoefficientDecodeResult.Invalid
+    if (startCoefficient !in 0 until VP8_BLOCK_COEFFICIENT_COUNT) return Vp8CoefficientDecodeResult.Invalid
+
+    val coefficients = IntArray(VP8_BLOCK_COEFFICIENT_COUNT)
+    var hasNonZero = false
+    var context = initialContext
+    for (coefficientIndex in startCoefficient until VP8_BLOCK_COEFFICIENT_COUNT) {
+        val tokenProbabilities = probabilities.tokenProbabilities(
+            type = type,
+            band = VP8_COEFFICIENT_BANDS[coefficientIndex],
+            context = context,
+        )
+        if ((reader.readBit(tokenProbabilities[0]) ?: return Vp8CoefficientDecodeResult.Invalid) == 0) {
+            return Vp8CoefficientDecodeResult.Block(coefficients, hasNonZero)
+        }
+        if ((reader.readBit(tokenProbabilities[1]) ?: return Vp8CoefficientDecodeResult.Invalid) == 0) {
+            context = VP8_COEFFICIENT_CONTEXT_ZERO
+            continue
+        }
+
+        val magnitude = readVp8CoefficientMagnitude(reader, tokenProbabilities)
+            ?: return Vp8CoefficientDecodeResult.Invalid
+        val sign = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8CoefficientDecodeResult.Invalid
+        coefficients[VP8_ZIGZAG[coefficientIndex]] = if (sign == 0) magnitude else -magnitude
+        hasNonZero = true
+        context = VP8_COEFFICIENT_CONTEXT_NON_ZERO
     }
     return Vp8CoefficientDecodeResult.Block(coefficients, hasNonZero)
 }
@@ -1810,11 +1918,9 @@ internal fun decodeVp8MacroblockCoefficients(
                     )
                     val y2Result = decodeVp8CoefficientBlock(
                         reader = reader,
-                        probabilities = probabilities.tokenProbabilities(
-                            type = VP8_COEFFICIENT_TYPE_LUMA_Y2,
-                            band = VP8_COEFFICIENT_BAND_FIRST,
-                            context = y2Context,
-                        ),
+                        probabilities = probabilities,
+                        type = VP8_COEFFICIENT_TYPE_LUMA_Y2,
+                        initialContext = y2Context,
                     )
                     if (y2Result !is Vp8CoefficientDecodeResult.Block) {
                         return Vp8MacroblockCoefficientDecodeResult.Invalid
@@ -2059,6 +2165,34 @@ internal fun reconstructVp8NonBPredKeyFramePlanes(
     )
 }
 
+private fun Vp8ReconstructedPlanes.cropTo(visibleWidth: Int, visibleHeight: Int): Vp8ReconstructedPlanes {
+    if (visibleWidth == width && visibleHeight == height) return this
+    if (visibleWidth !in 1..width || visibleHeight !in 1..height) return this
+
+    val croppedY = IntArray(visibleWidth * visibleHeight)
+    for (y in 0 until visibleHeight) {
+        System.arraycopy(yPlane, y * width, croppedY, y * visibleWidth, visibleWidth)
+    }
+
+    val chromaStride = (width + 1) / 2
+    val croppedChromaWidth = (visibleWidth + 1) / 2
+    val croppedChromaHeight = (visibleHeight + 1) / 2
+    val croppedU = IntArray(croppedChromaWidth * croppedChromaHeight)
+    val croppedV = IntArray(croppedChromaWidth * croppedChromaHeight)
+    for (y in 0 until croppedChromaHeight) {
+        System.arraycopy(uPlane, y * chromaStride, croppedU, y * croppedChromaWidth, croppedChromaWidth)
+        System.arraycopy(vPlane, y * chromaStride, croppedV, y * croppedChromaWidth, croppedChromaWidth)
+    }
+
+    return Vp8ReconstructedPlanes(
+        yPlane = croppedY,
+        uPlane = croppedU,
+        vPlane = croppedV,
+        width = visibleWidth,
+        height = visibleHeight,
+    )
+}
+
 private fun decodeVp8CoefficientPlane(
     reader: Vp8BoolReader,
     probabilities: Vp8CoefficientProbabilities,
@@ -2081,11 +2215,9 @@ private fun decodeVp8CoefficientPlane(
             )
             val result = decodeVp8CoefficientBlock(
                 reader = reader,
-                probabilities = probabilities.tokenProbabilities(
-                    type = type,
-                    band = VP8_COEFFICIENT_BAND_FIRST,
-                    context = context,
-                ),
+                probabilities = probabilities,
+                type = type,
+                initialContext = context,
                 startCoefficient = startCoefficient,
             )
             if (result !is Vp8CoefficientDecodeResult.Block) return false
@@ -2379,7 +2511,8 @@ private const val VP8_COEFFICIENT_TYPE_LUMA: Int = 0
 private const val VP8_COEFFICIENT_TYPE_LUMA_Y2: Int = 1
 private const val VP8_COEFFICIENT_TYPE_CHROMA: Int = 2
 private const val VP8_COEFFICIENT_TYPE_LUMA_AC: Int = 3
-private const val VP8_COEFFICIENT_BAND_FIRST: Int = 0
+private const val VP8_COEFFICIENT_CONTEXT_ZERO: Int = 1
+private const val VP8_COEFFICIENT_CONTEXT_NON_ZERO: Int = 2
 
 private fun vp8CoefficientProbabilityIndex(type: Int, band: Int, context: Int, probability: Int): Int =
     (((type * VP8_COEFFICIENT_BAND_COUNT + band) * VP8_COEFFICIENT_CONTEXT_COUNT + context) *
@@ -2390,6 +2523,214 @@ private val VP8_ZIGZAG = intArrayOf(
     5, 2, 3, 6,
     9, 12, 13, 10,
     7, 11, 14, 15,
+)
+
+internal val VP8_COEFFICIENT_BANDS = intArrayOf(
+    // Values from libvpx entropy.c vp8_coef_bands.
+    0, 1, 2, 3,
+    6, 4, 5, 6,
+    6, 6, 6, 6,
+    6, 6, 6, 7,
+)
+
+private val VP8_DEFAULT_COEFFICIENT_PROBABILITIES = intArrayOf(
+    // Values from libvpx default_coef_probs.h.
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    253, 136, 254, 255, 228, 219, 128, 128, 128, 128, 128,
+    189, 129, 242, 255, 227, 213, 255, 219, 128, 128, 128,
+    106, 126, 227, 252, 214, 209, 255, 255, 128, 128, 128,
+    1, 98, 248, 255, 236, 226, 255, 255, 128, 128, 128,
+    181, 133, 238, 254, 221, 234, 255, 154, 128, 128, 128,
+    78, 134, 202, 247, 198, 180, 255, 219, 128, 128, 128,
+    1, 185, 249, 255, 243, 255, 128, 128, 128, 128, 128,
+    184, 150, 247, 255, 236, 224, 128, 128, 128, 128, 128,
+    77, 110, 216, 255, 236, 230, 128, 128, 128, 128, 128,
+    1, 101, 251, 255, 241, 255, 128, 128, 128, 128, 128,
+    170, 139, 241, 252, 236, 209, 255, 255, 128, 128, 128,
+    37, 116, 196, 243, 228, 255, 255, 255, 128, 128, 128,
+    1, 204, 254, 255, 245, 255, 128, 128, 128, 128, 128,
+    207, 160, 250, 255, 238, 128, 128, 128, 128, 128, 128,
+    102, 103, 231, 255, 211, 171, 128, 128, 128, 128, 128,
+    1, 152, 252, 255, 240, 255, 128, 128, 128, 128, 128,
+    177, 135, 243, 255, 234, 225, 128, 128, 128, 128, 128,
+    80, 129, 211, 255, 194, 224, 128, 128, 128, 128, 128,
+    1, 1, 255, 128, 128, 128, 128, 128, 128, 128, 128,
+    246, 1, 255, 128, 128, 128, 128, 128, 128, 128, 128,
+    255, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    198, 35, 237, 223, 193, 187, 162, 160, 145, 155, 62,
+    131, 45, 198, 221, 172, 176, 220, 157, 252, 221, 1,
+    68, 47, 146, 208, 149, 167, 221, 162, 255, 223, 128,
+    1, 149, 241, 255, 221, 224, 255, 255, 128, 128, 128,
+    184, 141, 234, 253, 222, 220, 255, 199, 128, 128, 128,
+    81, 99, 181, 242, 176, 190, 249, 202, 255, 255, 128,
+    1, 129, 232, 253, 214, 197, 242, 196, 255, 255, 128,
+    99, 121, 210, 250, 201, 198, 255, 202, 128, 128, 128,
+    23, 91, 163, 242, 170, 187, 247, 210, 255, 255, 128,
+    1, 200, 246, 255, 234, 255, 128, 128, 128, 128, 128,
+    109, 178, 241, 255, 231, 245, 255, 255, 128, 128, 128,
+    44, 130, 201, 253, 205, 192, 255, 255, 128, 128, 128,
+    1, 132, 239, 251, 219, 209, 255, 165, 128, 128, 128,
+    94, 136, 225, 251, 218, 190, 255, 255, 128, 128, 128,
+    22, 100, 174, 245, 186, 161, 255, 199, 128, 128, 128,
+    1, 182, 249, 255, 232, 235, 128, 128, 128, 128, 128,
+    124, 143, 241, 255, 227, 234, 128, 128, 128, 128, 128,
+    35, 77, 181, 251, 193, 211, 255, 205, 128, 128, 128,
+    1, 157, 247, 255, 236, 231, 255, 255, 128, 128, 128,
+    121, 141, 235, 255, 225, 227, 255, 255, 128, 128, 128,
+    45, 99, 188, 251, 195, 217, 255, 224, 128, 128, 128,
+    1, 1, 251, 255, 213, 255, 128, 128, 128, 128, 128,
+    203, 1, 248, 255, 255, 128, 128, 128, 128, 128, 128,
+    137, 1, 177, 255, 224, 255, 128, 128, 128, 128, 128,
+    253, 9, 248, 251, 207, 208, 255, 192, 128, 128, 128,
+    175, 13, 224, 243, 193, 185, 249, 198, 255, 255, 128,
+    73, 17, 171, 221, 161, 179, 236, 167, 255, 234, 128,
+    1, 95, 247, 253, 212, 183, 255, 255, 128, 128, 128,
+    239, 90, 244, 250, 211, 209, 255, 255, 128, 128, 128,
+    155, 77, 195, 248, 188, 195, 255, 255, 128, 128, 128,
+    1, 24, 239, 251, 218, 219, 255, 205, 128, 128, 128,
+    201, 51, 219, 255, 196, 186, 128, 128, 128, 128, 128,
+    69, 46, 190, 239, 201, 218, 255, 228, 128, 128, 128,
+    1, 191, 251, 255, 255, 128, 128, 128, 128, 128, 128,
+    223, 165, 249, 255, 213, 255, 128, 128, 128, 128, 128,
+    141, 124, 248, 255, 255, 128, 128, 128, 128, 128, 128,
+    1, 16, 248, 255, 255, 128, 128, 128, 128, 128, 128,
+    190, 36, 230, 255, 236, 255, 128, 128, 128, 128, 128,
+    149, 1, 255, 128, 128, 128, 128, 128, 128, 128, 128,
+    1, 226, 255, 128, 128, 128, 128, 128, 128, 128, 128,
+    247, 192, 255, 128, 128, 128, 128, 128, 128, 128, 128,
+    240, 128, 255, 128, 128, 128, 128, 128, 128, 128, 128,
+    1, 134, 252, 255, 255, 128, 128, 128, 128, 128, 128,
+    213, 62, 250, 255, 255, 128, 128, 128, 128, 128, 128,
+    55, 93, 255, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    202, 24, 213, 235, 186, 191, 220, 160, 240, 175, 255,
+    126, 38, 182, 232, 169, 184, 228, 174, 255, 187, 128,
+    61, 46, 138, 219, 151, 178, 240, 170, 255, 216, 128,
+    1, 112, 230, 250, 199, 191, 247, 159, 255, 255, 128,
+    166, 109, 228, 252, 211, 215, 255, 174, 128, 128, 128,
+    39, 77, 162, 232, 172, 180, 245, 178, 255, 255, 128,
+    1, 52, 220, 246, 198, 199, 249, 220, 255, 255, 128,
+    124, 74, 191, 243, 183, 193, 250, 221, 255, 255, 128,
+    24, 71, 130, 219, 154, 170, 243, 182, 255, 255, 128,
+    1, 182, 225, 249, 219, 240, 255, 224, 128, 128, 128,
+    149, 150, 226, 252, 216, 205, 255, 171, 128, 128, 128,
+    28, 108, 170, 242, 183, 194, 254, 223, 255, 255, 128,
+    1, 81, 230, 252, 204, 203, 255, 192, 128, 128, 128,
+    123, 102, 209, 247, 188, 196, 255, 233, 128, 128, 128,
+    20, 95, 153, 243, 164, 173, 255, 203, 128, 128, 128,
+    1, 222, 248, 255, 216, 213, 128, 128, 128, 128, 128,
+    168, 175, 246, 252, 235, 205, 255, 255, 128, 128, 128,
+    47, 116, 215, 255, 211, 212, 255, 255, 128, 128, 128,
+    1, 121, 236, 253, 212, 214, 255, 255, 128, 128, 128,
+    141, 84, 213, 252, 201, 202, 255, 219, 128, 128, 128,
+    42, 80, 160, 240, 162, 185, 255, 205, 128, 128, 128,
+    1, 1, 255, 128, 128, 128, 128, 128, 128, 128, 128,
+    244, 1, 255, 128, 128, 128, 128, 128, 128, 128, 128,
+    238, 1, 255, 128, 128, 128, 128, 128, 128, 128, 128
+)
+
+private val VP8_COEFFICIENT_UPDATE_PROBABILITIES = intArrayOf(
+    // Values from libvpx coefupdateprobs.h.
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    176, 246, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    223, 241, 252, 255, 255, 255, 255, 255, 255, 255, 255,
+    249, 253, 253, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 244, 252, 255, 255, 255, 255, 255, 255, 255, 255,
+    234, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    253, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 246, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    239, 253, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    254, 255, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 248, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    251, 255, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 253, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    251, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    254, 255, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 254, 253, 255, 254, 255, 255, 255, 255, 255, 255,
+    250, 255, 254, 255, 254, 255, 255, 255, 255, 255, 255,
+    254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    217, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    225, 252, 241, 253, 255, 255, 254, 255, 255, 255, 255,
+    234, 250, 241, 250, 253, 255, 253, 254, 255, 255, 255,
+    255, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    223, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    238, 253, 254, 254, 255, 255, 255, 255, 255, 255, 255,
+    255, 248, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    249, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 253, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    247, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 253, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    252, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    253, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 254, 253, 255, 255, 255, 255, 255, 255, 255, 255,
+    250, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    186, 251, 250, 255, 255, 255, 255, 255, 255, 255, 255,
+    234, 251, 244, 254, 255, 255, 255, 255, 255, 255, 255,
+    251, 251, 243, 253, 254, 255, 254, 255, 255, 255, 255,
+    255, 253, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    236, 253, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    251, 253, 253, 254, 254, 255, 255, 255, 255, 255, 255,
+    255, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    254, 254, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    254, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    248, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    250, 254, 252, 254, 255, 255, 255, 255, 255, 255, 255,
+    248, 254, 249, 253, 255, 255, 255, 255, 255, 255, 255,
+    255, 253, 253, 255, 255, 255, 255, 255, 255, 255, 255,
+    246, 253, 253, 255, 255, 255, 255, 255, 255, 255, 255,
+    252, 254, 251, 254, 254, 255, 255, 255, 255, 255, 255,
+    255, 254, 252, 255, 255, 255, 255, 255, 255, 255, 255,
+    248, 254, 253, 255, 255, 255, 255, 255, 255, 255, 255,
+    253, 255, 254, 254, 255, 255, 255, 255, 255, 255, 255,
+    255, 251, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    245, 251, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    253, 253, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 251, 253, 255, 255, 255, 255, 255, 255, 255, 255,
+    252, 253, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 254, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 252, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    249, 255, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 254, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 253, 255, 255, 255, 255, 255, 255, 255, 255,
+    250, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    254, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
 )
 
 private val VP8_DC_QUANT = intArrayOf(

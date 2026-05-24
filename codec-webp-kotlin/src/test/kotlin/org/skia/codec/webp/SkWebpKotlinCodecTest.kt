@@ -24,6 +24,12 @@ import java.util.ServiceLoader
 class SkWebpKotlinCodecTest {
     private companion object {
         const val VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST: Int = 4 * 8 * 3 * 11
+
+        fun vp8CoefficientProbabilityIndexForTest(type: Int, band: Int, context: Int, probability: Int): Int =
+            (((type * 8 + band) * 3 + context) * 11) + probability
+
+        fun coefficientBandForTest(coefficient: Int): Int =
+            intArrayOf(0, 1, 2, 3, 6, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7)[coefficient]
     }
 
     @Test
@@ -619,6 +625,33 @@ class SkWebpKotlinCodecTest {
         assertArrayEquals(
             IntArray(16).also { it[1] = 5 },
             block.coefficients,
+        )
+    }
+
+    @Test
+    fun `VP8 coefficient token decode advances coefficient bands and token contexts`() {
+        val flat = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 128 }
+        flat[vp8CoefficientProbabilityIndexForTest(type = 0, band = 0, context = 0, probability = 0)] = 255
+        flat[vp8CoefficientProbabilityIndexForTest(type = 0, band = 1, context = 1, probability = 0)] = 1
+        val probabilities = Vp8CoefficientProbabilities.fromFlat(flat)
+
+        val result = decodeVp8CoefficientBlock(
+            reader = Vp8BoolReader(ByteArray(4)),
+            probabilities = probabilities,
+            type = 0,
+            initialContext = 0,
+        )
+
+        assertTrue(result is Vp8CoefficientDecodeResult.Block)
+        assertFalse((result as Vp8CoefficientDecodeResult.Block).hasNonZero)
+        assertTrue(result.coefficients.all { it == 0 })
+    }
+
+    @Test
+    fun `VP8 coefficient token decode keeps coefficient fourteen in band six`() {
+        assertArrayEquals(
+            intArrayOf(0, 1, 2, 3, 6, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7),
+            VP8_COEFFICIENT_BANDS,
         )
     }
 
@@ -1316,21 +1349,48 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `keeps VP8 lossy pixel decode unimplemented after supported header parse`() {
-        val partition = Vp8TestBitWriter().apply {
-            writeBit(0)
-            writeBit(0)
-            writeBit(0)
-            writeBit(0)
-            writeLiteral(0, 6)
-            writeLiteral(0, 3)
-            writeBit(0)
-            writeLiteral(0, 2)
-            writeLiteral(0, 7)
-            repeat(5) { writeSignedDelta(0) }
-        }.toByteArray()
+    fun `decodes supported VP8 lossy non B_PRED keyframe pixels`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8SupportedNonBPredWebp(width = 2, height = 2))!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 2,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertArrayEquals(IntArray(4) { argb(128, 128, 128) }, dst.pixels8888)
+    }
+
+    @Test
+    fun `VP8 lossy helper keeps B_PRED outside supported pixel subset`() {
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
+            coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = 0)),
+        )
+        val modes = listOf(
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.B_PRED,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+                lumaSubblockModes = List(16) { Vp8LumaSubblockPredictionMode.B_DC },
+            ),
+        )
+
+        assertEquals(
+            Vp8ReconstructionResult.Unsupported,
+            reconstructVp8NonBPredKeyFramePlanes(
+                layout = layout,
+                macroblockModes = modes,
+                macroblockCoefficients = listOf(zeroVp8MacroblockCoefficients()),
+            ),
+        )
+    }
+
+    @Test
+    fun `returns unimplemented for VP8 lossy loop filter pending integration`() {
         val codec = SkWebpKotlinCodec.Decoder.make(
-            riff("WEBP", vp8ChunkWithPartition(width = 2, height = 2, partition = partition)),
+            riff("WEBP", vp8ChunkWithPartition(width = 2, height = 2, partition = vp8FirstPartition(filterLevel = 1))),
         )!!
         val dst = SkBitmap(
             width = 2,
@@ -2161,6 +2221,32 @@ class SkWebpKotlinCodecTest {
 
     private fun vp8ChunkWithPartition(width: Int, height: Int, partition: ByteArray): ByteArray =
         chunk("VP8 ", vp8Payload(width, height, partition.size) + partition)
+
+    private fun vp8ChunkWithPartitions(width: Int, height: Int, firstPartition: ByteArray, coefficients: ByteArray): ByteArray =
+        chunk("VP8 ", vp8Payload(width, height, firstPartition.size) + firstPartition + coefficients)
+
+    private fun vp8SupportedNonBPredWebp(width: Int, height: Int): ByteArray =
+        riff("WEBP", vp8ChunkWithPartitions(width, height, vp8FirstPartition(), ByteArray(64)))
+
+    private fun vp8FirstPartition(filterLevel: Int = 0): ByteArray =
+        Vp8TestBitWriter().apply {
+            writeBit(0) // YUV color space.
+            writeBit(0) // No pixel value clamp.
+            writeBit(0) // Segmentation disabled.
+            writeBit(0) // Normal loop filter; level 0 is a no-op for this slice.
+            writeLiteral(filterLevel, 6)
+            writeLiteral(0, 3)
+            writeBit(0) // Loop filter deltas disabled.
+            writeLiteral(0, 2) // One coefficient partition.
+            writeLiteral(0, 7)
+            repeat(5) { writeSignedDelta(0) }
+            repeat(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) {
+                writeBit(0)
+            }
+            writeBit(0) // Macroblock skip flags omitted.
+            writeBit(0) // Y DC mode.
+            writeBit(0) // UV DC mode.
+        }.toByteArray()
 
     private fun vp8Payload(
         width: Int,
