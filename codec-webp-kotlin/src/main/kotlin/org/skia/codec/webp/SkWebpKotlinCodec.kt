@@ -1130,6 +1130,36 @@ internal data class Vp8LossyBitstreamLayout(
     val coefficientPartitions: List<Vp8CoefficientPartition>,
 )
 
+internal data class Vp8ReconstructedPlanes(
+    val yPlane: IntArray,
+    val uPlane: IntArray,
+    val vPlane: IntArray,
+    val width: Int,
+    val height: Int,
+) {
+    init {
+        require(width > 0)
+        require(height > 0)
+        require(yPlane.size >= width * height)
+        require(uPlane.size >= ((width + 1) / 2) * ((height + 1) / 2))
+        require(vPlane.size >= ((width + 1) / 2) * ((height + 1) / 2))
+    }
+
+    fun toRgba(): IntArray = composeVp8Yuv420ToRgba(
+        yPlane = yPlane,
+        uPlane = uPlane,
+        vPlane = vPlane,
+        width = width,
+        height = height,
+    )
+}
+
+internal sealed interface Vp8ReconstructionResult {
+    data class Planes(val planes: Vp8ReconstructedPlanes) : Vp8ReconstructionResult
+    data object Unsupported : Vp8ReconstructionResult
+    data object Invalid : Vp8ReconstructionResult
+}
+
 internal sealed interface Vp8LossyBitstreamLayoutDecodeResult {
     data class Layout(val layout: Vp8LossyBitstreamLayout) : Vp8LossyBitstreamLayoutDecodeResult
     data object Unsupported : Vp8LossyBitstreamLayoutDecodeResult
@@ -1868,6 +1898,164 @@ internal fun decodeVp8MacroblockCoefficients(
     return Vp8MacroblockCoefficientDecodeResult.Macroblocks(macroblocks)
 }
 
+internal fun reconstructVp8NonBPredKeyFramePlanes(
+    data: ByteArray,
+    layout: Vp8LossyBitstreamLayout,
+    macroblockModes: List<Vp8MacroblockMode>,
+    probabilities: Vp8CoefficientProbabilities,
+): Vp8ReconstructionResult {
+    val coefficients = when (val result = decodeVp8MacroblockCoefficients(
+        data = data,
+        layout = layout,
+        macroblockModes = macroblockModes,
+        probabilities = probabilities,
+    )) {
+        Vp8MacroblockCoefficientDecodeResult.Invalid -> return Vp8ReconstructionResult.Invalid
+        is Vp8MacroblockCoefficientDecodeResult.Macroblocks -> result.macroblocks
+    }
+    return reconstructVp8NonBPredKeyFramePlanes(
+        layout = layout,
+        macroblockModes = macroblockModes,
+        macroblockCoefficients = coefficients,
+    )
+}
+
+internal fun reconstructVp8NonBPredKeyFramePlanes(
+    layout: Vp8LossyBitstreamLayout,
+    macroblockModes: List<Vp8MacroblockMode>,
+    macroblockCoefficients: List<Vp8MacroblockCoefficients>,
+): Vp8ReconstructionResult {
+    val header = layout.header
+    val macroblockCount = header.macroblockWidth * header.macroblockHeight
+    if (header.macroblockWidth <= 0 || header.macroblockHeight <= 0) return Vp8ReconstructionResult.Invalid
+    if (macroblockModes.size != macroblockCount || macroblockCoefficients.size != macroblockCount) {
+        return Vp8ReconstructionResult.Invalid
+    }
+    if (macroblockModes.any { it.yMode == Vp8LumaPredictionMode.B_PRED }) {
+        return Vp8ReconstructionResult.Unsupported
+    }
+
+    val quantization = header.quantization.toVp8QuantizationFactors()
+    val width = header.macroblockWidth * VP8_MACROBLOCK_SIZE
+    val height = header.macroblockHeight * VP8_MACROBLOCK_SIZE
+    val chromaWidth = header.macroblockWidth * VP8_CHROMA_MACROBLOCK_SIZE
+    val chromaHeight = header.macroblockHeight * VP8_CHROMA_MACROBLOCK_SIZE
+    val yPlane = IntArray(width * height)
+    val uPlane = IntArray(chromaWidth * chromaHeight)
+    val vPlane = IntArray(chromaWidth * chromaHeight)
+
+    for (macroblockY in 0 until header.macroblockHeight) {
+        for (macroblockX in 0 until header.macroblockWidth) {
+            val macroblockIndex = macroblockY * header.macroblockWidth + macroblockX
+            val mode = macroblockModes[macroblockIndex]
+            val coefficients = macroblockCoefficients[macroblockIndex]
+
+            val luma = reconstructVp8Intra16x16LumaMacroblock(
+                mode = mode.yMode,
+                left = yPlane.leftSamples(
+                    stride = width,
+                    blockX = macroblockX * VP8_MACROBLOCK_SIZE,
+                    blockY = macroblockY * VP8_MACROBLOCK_SIZE,
+                    blockHeight = VP8_MACROBLOCK_SIZE,
+                ),
+                top = yPlane.topSamples(
+                    stride = width,
+                    blockX = macroblockX * VP8_MACROBLOCK_SIZE,
+                    blockY = macroblockY * VP8_MACROBLOCK_SIZE,
+                    blockWidth = VP8_MACROBLOCK_SIZE,
+                ),
+                topLeft = yPlane.topLeftSample(
+                    stride = width,
+                    blockX = macroblockX * VP8_MACROBLOCK_SIZE,
+                    blockY = macroblockY * VP8_MACROBLOCK_SIZE,
+                ),
+                y2Coefficients = coefficients.y2,
+                coefficientsByBlock = coefficients.luma,
+                dcQuant = quantization.yDc,
+                acQuant = quantization.yAc,
+                y2DcQuant = quantization.y2Dc,
+                y2AcQuant = quantization.y2Ac,
+            )
+            yPlane.copyBlock(
+                stride = width,
+                blockX = macroblockX * VP8_MACROBLOCK_SIZE,
+                blockY = macroblockY * VP8_MACROBLOCK_SIZE,
+                blockWidth = VP8_MACROBLOCK_SIZE,
+                blockHeight = VP8_MACROBLOCK_SIZE,
+                block = luma,
+            )
+
+            val chromaX = macroblockX * VP8_CHROMA_MACROBLOCK_SIZE
+            val chromaY = macroblockY * VP8_CHROMA_MACROBLOCK_SIZE
+            val u = reconstructVp8IntraChromaMacroblock(
+                mode = mode.uvMode,
+                left = uPlane.leftSamples(
+                    stride = chromaWidth,
+                    blockX = chromaX,
+                    blockY = chromaY,
+                    blockHeight = VP8_CHROMA_MACROBLOCK_SIZE,
+                ),
+                top = uPlane.topSamples(
+                    stride = chromaWidth,
+                    blockX = chromaX,
+                    blockY = chromaY,
+                    blockWidth = VP8_CHROMA_MACROBLOCK_SIZE,
+                ),
+                topLeft = uPlane.topLeftSample(stride = chromaWidth, blockX = chromaX, blockY = chromaY),
+                coefficientsByBlock = coefficients.u,
+                dcQuant = quantization.uvDc,
+                acQuant = quantization.uvAc,
+            )
+            uPlane.copyBlock(
+                stride = chromaWidth,
+                blockX = chromaX,
+                blockY = chromaY,
+                blockWidth = VP8_CHROMA_MACROBLOCK_SIZE,
+                blockHeight = VP8_CHROMA_MACROBLOCK_SIZE,
+                block = u,
+            )
+
+            val v = reconstructVp8IntraChromaMacroblock(
+                mode = mode.uvMode,
+                left = vPlane.leftSamples(
+                    stride = chromaWidth,
+                    blockX = chromaX,
+                    blockY = chromaY,
+                    blockHeight = VP8_CHROMA_MACROBLOCK_SIZE,
+                ),
+                top = vPlane.topSamples(
+                    stride = chromaWidth,
+                    blockX = chromaX,
+                    blockY = chromaY,
+                    blockWidth = VP8_CHROMA_MACROBLOCK_SIZE,
+                ),
+                topLeft = vPlane.topLeftSample(stride = chromaWidth, blockX = chromaX, blockY = chromaY),
+                coefficientsByBlock = coefficients.v,
+                dcQuant = quantization.uvDc,
+                acQuant = quantization.uvAc,
+            )
+            vPlane.copyBlock(
+                stride = chromaWidth,
+                blockX = chromaX,
+                blockY = chromaY,
+                blockWidth = VP8_CHROMA_MACROBLOCK_SIZE,
+                blockHeight = VP8_CHROMA_MACROBLOCK_SIZE,
+                block = v,
+            )
+        }
+    }
+
+    return Vp8ReconstructionResult.Planes(
+        Vp8ReconstructedPlanes(
+            yPlane = yPlane,
+            uPlane = uPlane,
+            vPlane = vPlane,
+            width = width,
+            height = height,
+        ),
+    )
+}
+
 private fun decodeVp8CoefficientPlane(
     reader: Vp8BoolReader,
     probabilities: Vp8CoefficientProbabilities,
@@ -1904,6 +2092,68 @@ private fun decodeVp8CoefficientPlane(
         }
     }
     return true
+}
+
+private data class Vp8QuantizationFactors(
+    val yDc: Int,
+    val yAc: Int,
+    val y2Dc: Int,
+    val y2Ac: Int,
+    val uvDc: Int,
+    val uvAc: Int,
+)
+
+private fun Vp8QuantizationHeader.toVp8QuantizationFactors(): Vp8QuantizationFactors {
+    val yAc = yAcIndex.coerceIn(0, 127)
+    return Vp8QuantizationFactors(
+        yDc = VP8_DC_QUANT[yAcIndex.withDelta(yDcDelta, max = 127)],
+        yAc = VP8_AC_QUANT[yAc],
+        y2Dc = VP8_DC_QUANT[yAcIndex.withDelta(y2DcDelta, max = 127)] * 2,
+        y2Ac = ((VP8_AC_QUANT[yAcIndex.withDelta(y2AcDelta, max = 127)] * 101581) shr 16).coerceAtLeast(8),
+        uvDc = VP8_DC_QUANT[yAcIndex.withDelta(uvDcDelta, max = 117)],
+        uvAc = VP8_AC_QUANT[yAcIndex.withDelta(uvAcDelta, max = 127)],
+    )
+}
+
+private fun Int.withDelta(delta: Int, max: Int): Int = (this + delta).coerceIn(0, max)
+
+private fun IntArray.leftSamples(
+    stride: Int,
+    blockX: Int,
+    blockY: Int,
+    blockHeight: Int,
+): IntArray? {
+    if (blockX == 0) return null
+    return IntArray(blockHeight) { y -> this[(blockY + y) * stride + blockX - 1] }
+}
+
+private fun IntArray.topSamples(
+    stride: Int,
+    blockX: Int,
+    blockY: Int,
+    blockWidth: Int,
+): IntArray? {
+    if (blockY == 0) return null
+    return IntArray(blockWidth) { x -> this[(blockY - 1) * stride + blockX + x] }
+}
+
+private fun IntArray.topLeftSample(stride: Int, blockX: Int, blockY: Int): Int? =
+    if (blockX == 0 || blockY == 0) null else this[(blockY - 1) * stride + blockX - 1]
+
+private fun IntArray.copyBlock(
+    stride: Int,
+    blockX: Int,
+    blockY: Int,
+    blockWidth: Int,
+    blockHeight: Int,
+    block: IntArray,
+) {
+    require(block.size >= blockWidth * blockHeight)
+    for (y in 0 until blockHeight) {
+        for (x in 0 until blockWidth) {
+            this[(blockY + y) * stride + blockX + x] = block[y * blockWidth + x]
+        }
+    }
 }
 
 private fun clearVp8CoefficientContexts(
@@ -2016,6 +2266,52 @@ internal fun reconstructVp8Intra16x16LumaMacroblock(
     )
 }
 
+internal fun reconstructVp8IntraChromaMacroblock(
+    mode: Vp8IntraPredictionMode,
+    left: IntArray?,
+    top: IntArray?,
+    topLeft: Int?,
+    coefficientsByBlock: Array<IntArray>,
+    dcQuant: Int,
+    acQuant: Int,
+): IntArray {
+    require(coefficientsByBlock.size == VP8_CHROMA_BLOCK_COUNT)
+    require(left == null || left.size >= VP8_CHROMA_MACROBLOCK_SIZE)
+    require(top == null || top.size >= VP8_CHROMA_MACROBLOCK_SIZE)
+
+    val residual = IntArray(VP8_CHROMA_MACROBLOCK_SIZE * VP8_CHROMA_MACROBLOCK_SIZE)
+    for (blockY in 0 until VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE) {
+        for (blockX in 0 until VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE) {
+            val blockIndex = blockY * VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE + blockX
+            val blockResidual = inverseVp8Dct4x4(
+                dequantizeVp8CoefficientBlock(
+                    coefficients = coefficientsByBlock[blockIndex],
+                    dcQuant = dcQuant,
+                    acQuant = acQuant,
+                ),
+            )
+            for (y in 0 until VP8_BLOCK_SIZE) {
+                for (x in 0 until VP8_BLOCK_SIZE) {
+                    residual[
+                        (blockY * VP8_BLOCK_SIZE + y) * VP8_CHROMA_MACROBLOCK_SIZE +
+                            blockX * VP8_BLOCK_SIZE + x
+                    ] = blockResidual[y * VP8_BLOCK_SIZE + x]
+                }
+            }
+        }
+    }
+
+    return reconstructVp8IntraPlane(
+        width = VP8_CHROMA_MACROBLOCK_SIZE,
+        height = VP8_CHROMA_MACROBLOCK_SIZE,
+        mode = mode,
+        left = left,
+        top = top,
+        topLeft = topLeft,
+        residual = residual,
+    )
+}
+
 private fun Vp8LumaPredictionMode.toIntraPredictionMode(): Vp8IntraPredictionMode =
     when (this) {
         Vp8LumaPredictionMode.DC -> Vp8IntraPredictionMode.DC
@@ -2075,6 +2371,7 @@ private const val VP8_LUMA_BLOCK_COUNT: Int = 16
 private const val VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE: Int = 2
 private const val VP8_CHROMA_BLOCK_COUNT: Int = 4
 private const val VP8_MACROBLOCK_SIZE: Int = 16
+private const val VP8_CHROMA_MACROBLOCK_SIZE: Int = 8
 private const val VP8_COEFFICIENT_TYPE_LUMA: Int = 0
 private const val VP8_COEFFICIENT_TYPE_LUMA_Y2: Int = 1
 private const val VP8_COEFFICIENT_TYPE_CHROMA: Int = 2
@@ -2090,6 +2387,44 @@ private val VP8_ZIGZAG = intArrayOf(
     5, 2, 3, 6,
     9, 12, 13, 10,
     7, 11, 14, 15,
+)
+
+private val VP8_DC_QUANT = intArrayOf(
+    4, 5, 6, 7, 8, 9, 10, 10,
+    11, 12, 13, 14, 15, 16, 17, 17,
+    18, 19, 20, 20, 21, 21, 22, 22,
+    23, 23, 24, 25, 25, 26, 27, 28,
+    29, 30, 31, 32, 33, 34, 35, 36,
+    37, 37, 38, 39, 40, 41, 42, 43,
+    44, 45, 46, 46, 47, 48, 49, 50,
+    51, 52, 53, 54, 55, 56, 57, 58,
+    59, 60, 61, 62, 63, 64, 65, 66,
+    67, 68, 69, 70, 71, 72, 73, 74,
+    75, 76, 76, 77, 78, 79, 80, 81,
+    82, 83, 84, 85, 86, 87, 88, 89,
+    91, 93, 95, 96, 98, 100, 101, 102,
+    104, 106, 108, 110, 112, 114, 116, 118,
+    122, 124, 126, 128, 130, 132, 134, 136,
+    138, 140, 143, 145, 148, 151, 154, 157,
+)
+
+private val VP8_AC_QUANT = intArrayOf(
+    4, 5, 6, 7, 8, 9, 10, 11,
+    12, 13, 14, 15, 16, 17, 18, 19,
+    20, 21, 22, 23, 24, 25, 26, 27,
+    28, 29, 30, 31, 32, 33, 34, 35,
+    36, 37, 38, 39, 40, 41, 42, 43,
+    44, 45, 46, 47, 48, 49, 50, 51,
+    52, 53, 54, 55, 56, 57, 58, 60,
+    62, 64, 66, 68, 70, 72, 74, 76,
+    78, 80, 82, 84, 86, 88, 90, 92,
+    94, 96, 98, 100, 102, 104, 106, 108,
+    110, 112, 114, 116, 119, 122, 125, 128,
+    131, 134, 137, 140, 143, 146, 149, 152,
+    155, 158, 161, 164, 167, 170, 173, 177,
+    181, 185, 189, 193, 197, 201, 205, 209,
+    213, 217, 221, 225, 229, 234, 239, 245,
+    249, 254, 259, 264, 269, 274, 279, 284,
 )
 
 private val VP8_COEFFICIENT_CATEGORY1_PROBS = intArrayOf(159)
