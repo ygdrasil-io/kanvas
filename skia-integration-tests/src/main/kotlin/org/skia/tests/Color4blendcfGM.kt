@@ -25,11 +25,8 @@ import org.skia.foundation.SkPaint
  * Upstream comment: "Use kModulate and a paint color of white so the final
  * drawn color is color-space managed 'c4'."
  *
- * **STUB.COLOR4F_BLEND_CF** — [SkColorFilters.Blend] with an
- * [SkColor4f] + [SkColorSpace] argument is not yet implemented; the very
- * first call in [onDraw] throws [NotImplementedError].  The matching
- * [Color4blendcfTest] is `@Disabled("STUB.COLOR4F_BLEND_CF")` until the
- * colour-space–aware blend filter lands.
+ * The [SkColor4f] + [SkColorSpace] [SkColorFilters.Blend] overload converts
+ * each fixed colour into the filter working space before blending.
  */
 public class Color4blendcfGM : GM() {
 
@@ -55,7 +52,6 @@ public class Color4blendcfGM : GM() {
         val r = SkRect.MakeWH(100f, 100f)
 
         for (c4 in colors) {
-            // Build the three filters — the first call throws STUB.COLOR4F_BLEND_CF.
             val filters = arrayOf(
                 SkColorFilters.Blend(c4, null, SkBlendMode.kModulate),
                 SkColorFilters.Blend(c4, srgb, SkBlendMode.kModulate),
