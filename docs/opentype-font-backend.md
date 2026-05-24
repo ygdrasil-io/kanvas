@@ -10,7 +10,8 @@ font work from PR #786.
   `OpenTypeTypeface`.
 - Single-face TTF files and basic TTC face selection backed by the core
   `cmap`, `head`, `hhea`, `hmtx`, `loca`, `glyf`, and `maxp` tables.
-- Optional `name`, `OS/2`, `post`, and legacy `kern` format 0 data.
+- Optional `name`, `OS/2`, `post`, legacy `kern` format 0 data, and `GPOS`
+  pair positioning lookup type 2 as a kerning fallback.
 - Simple and composite TrueType `glyf` outlines converted to `SkPath`.
 - Unicode-to-glyph lookup through `cmap`.
 - Family names, PostScript names, localized family-name iteration, advance
@@ -29,9 +30,10 @@ are unavailable.
 - Full text shaping: bidi, script itemization, reordering, mark positioning,
   cursive attachment, and script-specific shaping remain out of scope for the
   OpenType backend itself.
-- Advanced OpenType layout: `GSUB` ligatures/substitutions and `GPOS` pair
-  positioning are not implemented yet. The current kerning support is limited
-  to legacy `kern` format 0 tables.
+- Advanced OpenType layout beyond pair kerning: `GSUB` ligatures/substitutions
+  and full `GPOS` shaping remain unsupported. The current `GPOS` support is
+  limited to pair positioning lookup type 2 as a fallback when legacy `kern`
+  is absent.
 - Fontations factories: `SkTypeface_Fontations.MakeFromStream` and
   `MakeFromData` remain documented stubs because they require the external
   Rust Fontations stack through UniFFI/JNI or another native bridge.
@@ -64,12 +66,13 @@ The repository already has a JVM/AWT shaper in `cpu-raster`, but the pure
 Kotlin OpenType backend must remain usable without AWT or JNI. The current
 `kanvas-skia` text path for `OpenTypeTypeface` maps Unicode codepoints through
 `cmap`, places glyph paths in order, and now applies legacy `kern` pair
-adjustments. It does not perform full shaping.
+adjustments plus `GPOS` pair-position fallback. It does not perform full
+shaping.
 
-The smallest useful pure Kotlin shaping increment is `GPOS` pair positioning
-lookup type 2 as a kerning fallback when a font has no legacy `kern` table.
-This is directly measurable through the existing `measureTextInternal` and
-`makeTextPath` paths, requires no new public API, and can be tested with bundled
+The first pure Kotlin shaping increment is `GPOS` pair positioning lookup type
+2 as a kerning fallback when a font has no legacy `kern` table. This is
+directly measurable through the existing `measureTextInternal` and
+`makeTextPath` paths, requires no new public API, and is tested with bundled
 Liberation fonts that contain `GPOS` data.
 
 `GSUB` substitutions, including standard ligatures, should be split into a
@@ -91,7 +94,7 @@ rendering work:
   Unicode mapping, so formats beyond 4/12 are deferred until a fixture or
   product need requires them.
 - [#874](https://github.com/ygdrasil-io/kanvas/issues/874): `GPOS` pair
-  positioning as the next minimal shaping increment and kerning fallback.
+  positioning as the minimal shaping increment and kerning fallback.
 - [#875](https://github.com/ygdrasil-io/kanvas/issues/875): apply `fvar` /
   `gvar` variation positions to TrueType outlines.
 - [#876](https://github.com/ygdrasil-io/kanvas/issues/876): parse COLRv0 and
