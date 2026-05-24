@@ -24,6 +24,20 @@ public object TestReport {
 
     private const val REPORT_FILE: String = "test-similarity-report.md"
 
+    /**
+     * Mirrors the equivalent gate on [SimilarityTracker] : when this
+     * sysprop is `true`, [flush] short-circuits and the on-disk
+     * `test-similarity-report.md` is left untouched. Forwarded by
+     * `kanvas.ratchet.writes.disabled` in `gradle.properties` (the
+     * sprint default — see #671). This closes the gap that let agent
+     * test runs (e.g. `:cpu-raster:test` from a freshly-cloned worktree
+     * without the gradle.properties wiring picked up) overwrite the
+     * canonical report with a single-test-row truncation (see #815).
+     */
+    private val ratchetWriteDisabled: Boolean =
+        System.getProperty("kanvas.ratchet.writes.disabled", "false").toBoolean() ||
+            System.getenv("KANVAS_RATCHET_WRITES_DISABLED") == "true"
+
     private val records: ConcurrentHashMap<String, Record> = ConcurrentHashMap()
 
     @Volatile
@@ -79,6 +93,13 @@ public object TestReport {
     @Synchronized
     public fun flush() {
         if (records.isEmpty()) return
+        if (ratchetWriteDisabled) {
+            // Sprint mode : the in-memory map keeps the run's measurements,
+            // but the on-disk `test-similarity-report.md` is left untouched
+            // so parallel agent test runs don't truncate it to a single row
+            // (the failure mode that caused #815 to delete 717 lines).
+            return
+        }
         File(REPORT_FILE).writeText(buildMarkdown())
     }
 
