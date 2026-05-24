@@ -799,6 +799,16 @@ class SkWebpKotlinCodecTest {
         assertFalse(untouched.filtered)
         assertEquals(20, untouched.p0)
         assertEquals(240, untouched.q0)
+
+        val oddHalfDifferenceBoundary = filterVp8SimpleLoopFilterSample(
+            p1 = 100,
+            p0 = 100,
+            q0 = 104,
+            q1 = 105,
+            limit = 10,
+        )
+
+        assertTrue(oddHalfDifferenceBoundary.filtered)
     }
 
     @Test

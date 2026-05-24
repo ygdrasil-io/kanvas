@@ -1684,7 +1684,7 @@ internal fun filterVp8SimpleLoopFilterSample(
     require(q1 in 0..255)
     require(limit in 0..255)
 
-    if ((2 * kotlin.math.abs(p0 - q0) + ((kotlin.math.abs(p1 - q1) + 1) / 2)) > limit) {
+    if ((4 * kotlin.math.abs(p0 - q0) + kotlin.math.abs(p1 - q1)) > (2 * limit + 1)) {
         return Vp8SimpleLoopFilterSample(p0 = p0, q0 = q0, filtered = false)
     }
 
