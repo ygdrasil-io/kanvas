@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.codec.CodecDecoderProvider
 import org.skia.codec.SkCodec
+import org.skia.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
@@ -22,9 +23,15 @@ class SkPngKotlinCodecTest {
 
     @Test
     fun `rejects invalid signature`() {
-        assertFalse(SkPngKotlinCodec.Decoder.matches(ByteArray(0)))
-        assertFalse(SkPngKotlinCodec.Decoder.matches("not-a-png".toByteArray()))
-        assertNull(SkPngKotlinCodec.Decoder.make("not-a-png".toByteArray()))
+        val cases = listOf(
+            CodecNegativeFixtures.invalidMagic("empty PNG input", ByteArray(0)),
+            CodecNegativeFixtures.invalidMagic("ASCII non-PNG payload", "not-a-png"),
+        )
+
+        for (case in cases) {
+            assertFalse(SkPngKotlinCodec.Decoder.matches(case.data), case.name)
+            assertNull(SkPngKotlinCodec.Decoder.make(case.data), case.name)
+        }
     }
 
     @Test
@@ -836,15 +843,18 @@ class SkPngKotlinCodecTest {
     fun `rejects non contiguous IDAT chunks`() {
         val idat = deflate(byteArrayOf(0x00, 0x40))
         val split = idat.size / 2
-        val data = pngFromChunks(
-            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
-            "IDAT" to idat.copyOfRange(0, split),
-            "tEXt" to "note\u0000between-idats".toByteArray(Charsets.ISO_8859_1),
-            "IDAT" to idat.copyOfRange(split, idat.size),
-            "IEND" to ByteArray(0),
+        val case = CodecNegativeFixtures.misplacedMetadata(
+            "ancillary chunk between IDAT chunks",
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                "IDAT" to idat.copyOfRange(0, split),
+                "tEXt" to "note\u0000between-idats".toByteArray(Charsets.ISO_8859_1),
+                "IDAT" to idat.copyOfRange(split, idat.size),
+                "IEND" to ByteArray(0),
+            ),
         )
 
-        assertNull(SkPngKotlinCodec.Decoder.make(data))
+        assertNull(SkPngKotlinCodec.Decoder.make(case.data), case.name)
     }
 
     @Test
@@ -861,15 +871,18 @@ class SkPngKotlinCodecTest {
 
     @Test
     fun `rejects duplicate PLTE chunks`() {
-        val data = pngFromChunks(
-            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 3),
-            "PLTE" to byteArrayOf(0x10, 0x20, 0x30),
-            "PLTE" to byteArrayOf(0x40, 0x50, 0x60),
-            "IDAT" to deflate(byteArrayOf(0x00, 0x00)),
-            "IEND" to ByteArray(0),
+        val case = CodecNegativeFixtures.duplicateMetadata(
+            "duplicate PLTE chunks",
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 3),
+                "PLTE" to byteArrayOf(0x10, 0x20, 0x30),
+                "PLTE" to byteArrayOf(0x40, 0x50, 0x60),
+                "IDAT" to deflate(byteArrayOf(0x00, 0x00)),
+                "IEND" to ByteArray(0),
+            ),
         )
 
-        assertNull(SkPngKotlinCodec.Decoder.make(data))
+        assertNull(SkPngKotlinCodec.Decoder.make(case.data), case.name)
     }
 
     private fun png(
