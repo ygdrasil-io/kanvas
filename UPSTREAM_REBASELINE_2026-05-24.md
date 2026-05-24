@@ -67,8 +67,8 @@ The generated TSV applies a first-pass bucket on top of those statuses:
 
 | Bucket | `.cpp` rows |
 |---|---:|
-| `ported` | 308 |
-| `implementation` | 31 |
+| `ported` | 309 |
+| `implementation` | 30 |
 | `gpu-intractable` | 22 |
 | `partial-coverage` | 17 |
 | `missing-mapping` | 17 |
@@ -119,7 +119,6 @@ Top `STUB.*` tags across scanned Kotlin sources:
 | `STUB.COLOR_FILTER_PRIV` | 8 | implementation |
 | `STUB.CLIP_SUPER_RRECT` | 8 | WGSL/runtime-effect gated |
 | `STUB.SKSL` | 6 | WGSL/runtime-effect gated |
-| `STUB.IMAGE_MAKE_SCALED` | 6 | implementation |
 | `STUB.GAUSSIAN_COLOR_FILTER` | 5 | implementation |
 
 ## Disabled-test signals
@@ -203,7 +202,6 @@ landing, subject to GM impact confirmation:
 
 - `STUB.EDGE_AA_IMAGE_SET`
 - `STUB.ASYNC_RESCALE_READ` / `STUB.ASYNC_RESCALE_AND_READ`
-- `STUB.IMAGE_MAKE_SCALED`
 - `STUB.MAKE_WITH_COLOR_FILTER`
 - `STUB.COLOR4F_BLEND_CF`
 - `STUB.GAUSSIAN_COLOR_FILTER`

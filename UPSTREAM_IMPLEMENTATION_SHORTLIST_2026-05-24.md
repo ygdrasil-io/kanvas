@@ -22,22 +22,24 @@ Completed since this snapshot:
 
 - `STUB.SURFACE_SNAPSHOT_SUBSET`: implemented in `SkSurface.makeImageSnapshot(SkIRect)`
   and `SurfaceUnderdrawTest` is enabled.
+- `STUB.IMAGE_MAKE_SCALED`: implemented in `SkImage.makeScaled`
+  and `Crbug404394639Test` is enabled.
+- `STUB.SRC_RECT_CONSTRAINT`: implemented for raster `drawImageRect`
+  and `SrcRectConstraintTest` is enabled.
 
 ## Recommended order
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `STUB.IMAGE_MAKE_SCALED` | 1 cpp (`crbug_404394639`, currently `missing-mapping`) | S/M | Isolated image helper; can reuse existing sampling paths. |
-| 2 | `STUB.SRC_RECT_CONSTRAINT` | 1 cpp (`bleed`) | S/M | Adds an overload/constraint path around existing `drawImageRect`; bounded blast radius. |
-| 3 | `STUB.MAKE_WITH_COLOR_FILTER` | 1 cpp (`colorfilterimagefilter`) | M | Useful shader composition primitive; test surface is small. |
-| 4 | `STUB.COLOR4F_BLEND_CF` | 1 cpp (`color4f`) | M | Pure color-filter behavior; likely contained in foundation/effects. |
-| 5 | `STUB.POLY_TO_POLY` / `STUB.PERSPECTIVE_ADDPATH` | 2 cpps (`complexclip`, `patharcto`) | M/L | Core matrix/path correctness; useful but more geometry risk. |
-| 6 | `STUB.PATH_EFFECT_CTM` | 1 cpp (`patheffects`) | M/L | Needs CTM-aware path-effect behavior; moderate correctness risk. |
-| 7 | `STUB.GAUSSIAN_COLOR_FILTER` | 1 cpp (`shadowutils`) | M/L | Private color-filter behavior; useful but less central. |
-| 8 | `STUB.IFX.MULTIPLE_FILTERS_SPAN` | 1 cpp (`imagefilters`) | L | Image-filter/layer integration can touch saveLayer behavior. |
-| 9 | `STUB.EDGE_AA_IMAGE_SET` / `STUB.EDGE_AA_QUAD` | 3+ cpps (`drawimageset`, `savelayer`, `drawquadset`) | L | Higher impact, but batched image draw semantics are broad. |
-| 10 | `STUB.DRAW_VERTICES` | 1 cpp (`vertices`) | L | Shared drawing primitive; likely useful, but broad rendering surface. |
-| 11 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 3 cpps (`drawatlas`, `dftext_blob_persp`, `textblobmixedsizes`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
+| 1 | `STUB.MAKE_WITH_COLOR_FILTER` | 1 cpp (`colorfilterimagefilter`) | M | Useful shader composition primitive; test surface is small. |
+| 2 | `STUB.COLOR4F_BLEND_CF` | 1 cpp (`color4f`) | M | Pure color-filter behavior; likely contained in foundation/effects. |
+| 3 | `STUB.POLY_TO_POLY` / `STUB.PERSPECTIVE_ADDPATH` | 2 cpps (`complexclip`, `patharcto`) | M/L | Core matrix/path correctness; useful but more geometry risk. |
+| 4 | `STUB.PATH_EFFECT_CTM` | 1 cpp (`patheffects`) | M/L | Needs CTM-aware path-effect behavior; moderate correctness risk. |
+| 5 | `STUB.GAUSSIAN_COLOR_FILTER` | 1 cpp (`shadowutils`) | M/L | Private color-filter behavior; useful but less central. |
+| 6 | `STUB.IFX.MULTIPLE_FILTERS_SPAN` | 1 cpp (`imagefilters`) | L | Image-filter/layer integration can touch saveLayer behavior. |
+| 7 | `STUB.EDGE_AA_IMAGE_SET` / `STUB.EDGE_AA_QUAD` | 3+ cpps (`drawimageset`, `savelayer`, `drawquadset`) | L | Higher impact, but batched image draw semantics are broad. |
+| 8 | `STUB.DRAW_VERTICES` | 1 cpp (`vertices`) | L | Shared drawing primitive; likely useful, but broad rendering surface. |
+| 9 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 3 cpps (`drawatlas`, `dftext_blob_persp`, `textblobmixedsizes`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
 
@@ -45,7 +47,6 @@ Completed since this snapshot:
 |---|---|---|
 | `aaclip` | `STUB.MISSING_API` | `AaclipGM.kt`, `CgimageGM.kt`, `ClipCubicGM.kt` |
 | `addarc` | `STUB.MISSING_API` | `AddArcGM.kt`, `AddArcMeasGM.kt`, `FillCircleGM.kt`, `ManyArcsGM.kt`, `StrokeCircleGM.kt`, `TinyAngleArcsGM.kt` |
-| `bleed` | `STUB.SRC_RECT_CONSTRAINT` | `BleedDownscaleGM.kt`, `SrcRectConstraintGM.kt` |
 | `blurrect` | `STUB.BLURRECT_GALLERY`, `STUB.BLUR_RECTS_FULL`, `STUB.BLUR_RECT_COMPARE` | `BlurMatrixRectGM.kt`, `BlurRectCompareGM.kt`, `BlurRectGM.kt`, `BlurRectGalleryGM.kt` |
 | `color4f` | `STUB.COLOR4F_BLEND_CF` | `Color4blendcfGM.kt`, `Color4fGM.kt`, `Color4shaderGM.kt` |
 | `colorfilterimagefilter` | `STUB.MAKE_WITH_COLOR_FILTER` | `ColorFilterImageFilterGM.kt`, `ColorFilterImageFilterLayerGM.kt`, `ColorFilterShaderGM.kt` |

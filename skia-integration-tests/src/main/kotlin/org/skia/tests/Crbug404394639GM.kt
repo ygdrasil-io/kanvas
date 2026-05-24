@@ -28,12 +28,8 @@ import org.skia.foundation.SkTileMode
  * pixels when the source height exceeds 32768 (the historic Skia limit
  * that triggered undefined behaviour in the old raster mip-generation path).
  *
- * **`makeScaled` is not yet implemented** in the kanvas-skia raster backend
- * — the call is wired to `TODO("STUB.IMAGE_MAKE_SCALED")` in
- * [org.skia.foundation.SkImage.makeScaled]. The test is therefore disabled
- * pending that stub's implementation.
- *
- * Tracked as STUB.IMAGE_MAKE_SCALED.
+ * Exercises the raster `SkImage::makeScaled` path on an image taller than
+ * 32768 pixels.
  */
 public class Crbug404394639GM : GM() {
     override fun getName(): String = "crbug_404394639"
@@ -67,7 +63,6 @@ public class Crbug404394639GM : GM() {
         val largeSourceImage = surf.makeImageSnapshot()
 
         // ── makeScaled: 500×40000 → 500×500 with kLinear sampling. ──────
-        // NOTE: makeScaled is not yet implemented — TODO("STUB.IMAGE_MAKE_SCALED").
         val sampling = SkSamplingOptions(SkFilterMode.kLinear)
         val targetInfo = sourceInfo.makeWH(500, 500)
         val scaledImage = largeSourceImage.makeScaled(targetInfo, sampling) ?: return
