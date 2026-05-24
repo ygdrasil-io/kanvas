@@ -1,8 +1,15 @@
 package org.skia.foundation.opentype
 
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
+import org.graphiks.math.SkColorSetARGB
+import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
 import org.graphiks.math.SkScalar
-import org.graphiks.math.SkMatrix
+import org.skia.core.SkColorSpaceXformSteps
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFontArguments
 import org.skia.foundation.SkFontMetrics
@@ -13,8 +20,14 @@ import org.skia.foundation.SkFontStyleSet
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
+import org.skia.foundation.SkShader
 import org.skia.foundation.SkTextEncoding
+import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkTypeface
+import org.skia.foundation.lookupStop
+import org.skia.foundation.lookupStopF16
+import org.skia.foundation.transformStopColors
+import org.skia.foundation.transformStopColorsF16
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileNotFoundException
@@ -270,6 +283,13 @@ public class OpenTypeTypeface private constructor(
                     listOf(OpenTypeColorPath(color, positionedPath(currentPath, penX, baselineY), paint.alpha, clipPaths))
                 }
             }
+            is OpenTypeColorPaint.LinearGradient -> {
+                val currentPath = glyphPath ?: return emptyList()
+                if (currentPath.isEmpty()) return emptyList()
+                val shader = colorLinearGradientShader(paint, palette, penX, baselineY, size, scaleX, skewX, transform)
+                    ?: return emptyList()
+                listOf(OpenTypeColorPath(null, positionedPath(currentPath, penX, baselineY), shader = shader, clipPaths = clipPaths))
+            }
             is OpenTypeColorPaint.Glyph -> {
                 val childPath = font.glyphPath(paint.glyphId, size, scaleX, skewX, variationPosition)
                     ?.makeTransform(transform)
@@ -343,6 +363,79 @@ public class OpenTypeTypeface private constructor(
                 )
             }
         }
+    }
+
+    private fun colorLinearGradientShader(
+        paint: OpenTypeColorPaint.LinearGradient,
+        palette: List<Int>,
+        penX: Float,
+        baselineY: Float,
+        size: Float,
+        scaleX: Float,
+        skewX: Float,
+        transform: SkMatrix,
+    ): SkShader? {
+        val sortedStops = paint.colorLine.stops
+            .withIndex()
+            .sortedWith(compareBy<IndexedValue<OpenTypeColorStop>> { it.value.offset }.thenBy { it.index })
+            .map { it.value }
+        val firstOffset = sortedStops.first().offset
+        val lastOffset = sortedStops.last().offset
+        val offsetSpan = lastOffset - firstOffset
+        if (offsetSpan <= 0.000001f) return null
+        val colors = IntArray(sortedStops.size)
+        val positions = FloatArray(sortedStops.size)
+        for (i in sortedStops.indices) {
+            val stop = sortedStops[i]
+            if (stop.paletteIndex == COLR_FOREGROUND_PALETTE_INDEX) return null
+            val color = palette.getOrNull(stop.paletteIndex) ?: return null
+            val alpha = ((SkColorGetA(color) / 255f) * stop.alpha * 255f + 0.5f).toInt().coerceIn(0, 255)
+            colors[i] = SkColorSetARGB(alpha, SkColorGetR(color), SkColorGetG(color), SkColorGetB(color))
+            positions[i] = (stop.offset - firstOffset) / offsetSpan
+        }
+        val p0 = colorFontPointToCanvas(paint.x0, paint.y0, size, scaleX, skewX, transform, penX, baselineY)
+        val p1 = colorFontPointToCanvas(paint.x1, paint.y1, size, scaleX, skewX, transform, penX, baselineY)
+        val p2 = colorFontPointToCanvas(paint.x2, paint.y2, size, scaleX, skewX, transform, penX, baselineY)
+        val qx = p2.fX - p0.fX
+        val qy = p2.fY - p0.fY
+        val nx = -qy
+        val ny = qx
+        val denom = nx * nx + ny * ny
+        if (denom <= 0.000001f) return null
+        val vx = p1.fX - p0.fX
+        val vy = p1.fY - p0.fY
+        val projectedScale = (vx * nx + vy * ny) / denom
+        val end = SkPoint(p0.fX + nx * projectedScale, p0.fY + ny * projectedScale)
+        val dx = end.fX - p0.fX
+        val dy = end.fY - p0.fY
+        if (dx * dx + dy * dy <= 0.000001f) return null
+        return OpenTypeLinearGradientShader(
+            p0 = p0,
+            p1 = end,
+            srcColors = colors,
+            positions = positions,
+            tileMode = paint.colorLine.extend.toTileMode(),
+            tBias = firstOffset,
+            tScale = offsetSpan,
+        )
+    }
+
+    private fun colorFontPointToCanvas(
+        x: Int,
+        y: Int,
+        size: Float,
+        scaleX: Float,
+        skewX: Float,
+        transform: SkMatrix,
+        penX: Float,
+        baselineY: Float,
+    ): SkPoint {
+        val s = font.scale(size)
+        val localY = -y * s
+        val localX = x * s * scaleX + skewX * localY
+        val tx = transform.sx * localX + transform.kx * localY + transform.tx
+        val ty = transform.ky * localX + transform.sy * localY + transform.ty
+        return SkPoint(penX + tx, baselineY + ty)
     }
 
     private fun ParsedTrueTypeFont.colorClipPath(
@@ -1686,6 +1779,19 @@ private class ParsedTrueTypeFont(
                         alpha = reader.f2Dot14(paintOffset + 3)?.coerceIn(0f, 1f) ?: return null,
                     )
                 }
+                4 -> {
+                    if (!reader.fits(paintOffset, 16)) return null
+                    val colorLineOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
+                    OpenTypeColorPaint.LinearGradient(
+                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset) ?: return null,
+                        x0 = reader.i16(paintOffset + 4)?.toInt() ?: return null,
+                        y0 = reader.i16(paintOffset + 6)?.toInt() ?: return null,
+                        x1 = reader.i16(paintOffset + 8)?.toInt() ?: return null,
+                        y1 = reader.i16(paintOffset + 10)?.toInt() ?: return null,
+                        x2 = reader.i16(paintOffset + 12)?.toInt() ?: return null,
+                        y2 = reader.i16(paintOffset + 14)?.toInt() ?: return null,
+                    )
+                }
                 10 -> {
                     if (!reader.fits(paintOffset, 6)) return null
                     val childOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
@@ -1726,6 +1832,38 @@ private class ParsedTrueTypeFont(
                 }
                 else -> null
             }
+        }
+
+        private fun parseColorLine(
+            reader: SfntReader,
+            colrStart: Int,
+            colrEnd: Int,
+            colorLineOffset: Int,
+        ): OpenTypeColorLine? {
+            if (colorLineOffset < colrStart || colorLineOffset >= colrEnd) return null
+            if (!reader.fits(colorLineOffset, 3)) return null
+            val extend = when (reader.u8(colorLineOffset) ?: return null) {
+                0 -> OpenTypeColorExtend.PAD
+                1 -> OpenTypeColorExtend.REPEAT
+                2 -> OpenTypeColorExtend.REFLECT
+                else -> return null
+            }
+            val stopCount = reader.u16(colorLineOffset + 1) ?: return null
+            if (stopCount == 0 || stopCount > MAX_COLOR_STOPS) return null
+            val stopBytes = stopCount.toLong() * 6L
+            if (colorLineOffset.toLong() + 3L + stopBytes > colrEnd.toLong()) return null
+            if (!reader.fits(colorLineOffset + 3, stopBytes)) return null
+            val stops = ArrayList<OpenTypeColorStop>(stopCount)
+            repeat(stopCount) { index ->
+                val stopOffset = colorLineOffset + 3 + index * 6
+                val offset = reader.f2Dot14(stopOffset) ?: return null
+                stops += OpenTypeColorStop(
+                    offset = offset,
+                    paletteIndex = reader.u16(stopOffset + 2) ?: return null,
+                    alpha = reader.f2Dot14(stopOffset + 4)?.coerceIn(0f, 1f) ?: return null,
+                )
+            }
+            return OpenTypeColorLine(extend, stops)
         }
 
         private fun childPaintOffset(reader: SfntReader, parentOffset: Int, fieldOffset: Int): Int? {
@@ -2427,6 +2565,7 @@ internal data class OpenTypeColorPath(
     val path: SkPath,
     val alpha: Float = 1f,
     val clipPaths: List<SkPath> = emptyList(),
+    val shader: SkShader? = null,
 )
 private data class OpenTypePaletteSelection(
     val index: Int,
@@ -2467,6 +2606,19 @@ private data class OpenTypeColrTables(
 )
 private data class OpenTypeClipRange(val startGlyphId: Int, val endGlyphId: Int, val box: OpenTypeClipBox)
 private data class OpenTypeClipBox(val xMin: Int, val yMin: Int, val xMax: Int, val yMax: Int)
+internal enum class OpenTypeColorExtend {
+    PAD,
+    REPEAT,
+    REFLECT;
+
+    fun toTileMode(): SkTileMode = when (this) {
+        PAD -> SkTileMode.kClamp
+        REPEAT -> SkTileMode.kRepeat
+        REFLECT -> SkTileMode.kMirror
+    }
+}
+internal data class OpenTypeColorStop(val offset: Float, val paletteIndex: Int, val alpha: Float)
+internal data class OpenTypeColorLine(val extend: OpenTypeColorExtend, val stops: List<OpenTypeColorStop>)
 internal data class OpenTypeSvgDocument(
     val startGlyphId: Int,
     val endGlyphId: Int,
@@ -2552,6 +2704,15 @@ private class OpenTypeSvgTable(
 internal sealed interface OpenTypeColorPaint {
     data class Layers(val paints: List<OpenTypeColorPaint>) : OpenTypeColorPaint
     data class Solid(val paletteIndex: Int, val alpha: Float) : OpenTypeColorPaint
+    data class LinearGradient(
+        val colorLine: OpenTypeColorLine,
+        val x0: Int,
+        val y0: Int,
+        val x1: Int,
+        val y1: Int,
+        val x2: Int,
+        val y2: Int,
+    ) : OpenTypeColorPaint
     data class Glyph(val glyphId: Int, val paint: OpenTypeColorPaint) : OpenTypeColorPaint
     data class ColrGlyph(val glyphId: Int) : OpenTypeColorPaint
     data class Transform(
@@ -2564,6 +2725,83 @@ internal sealed interface OpenTypeColorPaint {
         val dy: Float,
     ) : OpenTypeColorPaint
     data class Translate(val paint: OpenTypeColorPaint, val dx: Int, val dy: Int) : OpenTypeColorPaint
+}
+
+private class OpenTypeLinearGradientShader(
+    private val p0: SkPoint,
+    private val p1: SkPoint,
+    private val srcColors: IntArray,
+    private val positions: FloatArray,
+    private val tileMode: SkTileMode,
+    private val tBias: Float,
+    private val tScale: Float,
+) : SkShader() {
+    private val xformedColors = IntArray(srcColors.size)
+    private val xformedColorsF16 = FloatArray(srcColors.size * 4)
+    private var invLenSqDirX = 0f
+    private var invLenSqDirY = 0f
+
+    override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
+        super.setupForDraw(canvasCtm, xform)
+        transformStopColors(srcColors, xformedColors, xform)
+        transformStopColorsF16(srcColors, xformedColorsF16, xform)
+        val dx = p1.fX - p0.fX
+        val dy = p1.fY - p0.fY
+        val lenSq = dx * dx + dy * dy
+        if (lenSq == 0f) {
+            invLenSqDirX = 0f
+            invLenSqDirY = 0f
+        } else {
+            val inv = 1f / lenSq
+            invLenSqDirX = dx * inv
+            invLenSqDirY = dy * inv
+        }
+    }
+
+    override fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray) {
+        val inv = deviceToLocal
+        if (inv == null) {
+            val color = xformedColors.firstOrNull() ?: 0
+            for (i in 0 until count) dst[i] = color
+            return
+        }
+        var lx = inv.sx * (devX + 0.5f) + inv.kx * (devY + 0.5f) + inv.tx
+        var ly = inv.ky * (devX + 0.5f) + inv.sy * (devY + 0.5f) + inv.ty
+        for (i in 0 until count) {
+            val rawT = (lx - p0.fX) * invLenSqDirX + (ly - p0.fY) * invLenSqDirY
+            val t = (rawT - tBias) / tScale
+            dst[i] = lookupStop(t, positions, xformedColors, tileMode)
+            lx += inv.sx
+            ly += inv.ky
+        }
+    }
+
+    override fun shadeRowF16(devX: Int, devY: Int, count: Int, dst: FloatArray) {
+        require(dst.size >= count * 4) { "dst too small: ${dst.size} < ${count * 4}" }
+        val inv = deviceToLocal
+        if (inv == null) {
+            var di = 0
+            for (i in 0 until count) {
+                dst[di] = xformedColorsF16[0]
+                dst[di + 1] = xformedColorsF16[1]
+                dst[di + 2] = xformedColorsF16[2]
+                dst[di + 3] = xformedColorsF16[3]
+                di += 4
+            }
+            return
+        }
+        var lx = inv.sx * (devX + 0.5f) + inv.kx * (devY + 0.5f) + inv.tx
+        var ly = inv.ky * (devX + 0.5f) + inv.sy * (devY + 0.5f) + inv.ty
+        var di = 0
+        for (i in 0 until count) {
+            val rawT = (lx - p0.fX) * invLenSqDirX + (ly - p0.fY) * invLenSqDirY
+            val t = (rawT - tBias) / tScale
+            lookupStopF16(t, positions, xformedColorsF16, tileMode, dst, di)
+            lx += inv.sx
+            ly += inv.ky
+            di += 4
+        }
+    }
 }
 private data class OpenTypeNames(
     val familyName: String?,
@@ -2845,6 +3083,7 @@ private const val MAX_COLOR_LAYERS = 16384
 private const val MAX_LAYERS_PER_COLOR_GLYPH = 256
 private const val MAX_EXPANDED_COLOR_LAYERS = 65536L
 private const val MAX_COLOR_PAINT_DEPTH = 32
+private const val MAX_COLOR_STOPS = 4096
 private const val MAX_SVG_DOCUMENT_RECORDS = 8192
 private const val MAX_SVG_GLYPHS_PER_RECORD = 4096
 private const val MAX_BITMAP_STRIKES = 64
