@@ -134,6 +134,7 @@ public class OpenTypeSystemFontMgr private constructor(
         }
 
         private fun inferStyle(typeface: SkTypeface, file: Path): SkFontStyle {
+            if (typeface is OpenTypeTypeface && typeface.hasParsedFontStyle) return typeface.fontStyle
             val source = buildString {
                 append(typeface.getPostScriptName().orEmpty())
                 append(' ')

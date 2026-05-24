@@ -82,6 +82,31 @@ class OpenTypeSystemFontMgrTest {
     }
 
     @Test
+    fun `system manager derives styles from OpenType tables before filenames`() {
+        copyFont("LiberationSans-Regular.ttf", tempDir.resolve("face-a.ttf"))
+        copyFont("LiberationSans-Bold.ttf", tempDir.resolve("face-b.ttf"))
+        copyFont("LiberationSans-Italic.ttf", tempDir.resolve("face-c.ttf"))
+        copyFont("LiberationSans-BoldItalic.ttf", tempDir.resolve("face-d.ttf"))
+
+        val mgr = OpenTypeSystemFontMgr.CreateFromRoots(listOf(tempDir))
+
+        assertEquals(SkFontStyle.Normal(), mgr.matchFamilyStyle("Liberation Sans", SkFontStyle.Normal())?.fontStyle)
+        assertEquals(SkFontStyle.Bold(), mgr.matchFamilyStyle("Liberation Sans", SkFontStyle.Bold())?.fontStyle)
+        assertEquals(SkFontStyle.Italic(), mgr.matchFamilyStyle("Liberation Sans", SkFontStyle.Italic())?.fontStyle)
+        assertEquals(SkFontStyle.BoldItalic(), mgr.matchFamilyStyle("Liberation Sans", SkFontStyle.BoldItalic())?.fontStyle)
+    }
+
+    @Test
+    fun `regular OpenType style wins over misleading filename`() {
+        copyFont("LiberationSans-Regular.ttf", tempDir.resolve("Definitely-Bold-Italic.ttf"))
+
+        val mgr = OpenTypeSystemFontMgr.CreateFromRoots(listOf(tempDir))
+
+        assertEquals(SkFontStyle.Normal(), mgr.matchFamilyStyle("Liberation Sans", SkFontStyle.Normal())?.fontStyle)
+        assertEquals(SkFontStyle.Normal(), mgr.matchFamilyStyle("Liberation Sans", SkFontStyle.Bold())?.fontStyle)
+    }
+
+    @Test
     fun `system manager supports aliases fallback and direct font loading`() {
         val regular = tempDir.resolve("LiberationSans-Regular.ttf")
         copyFont("LiberationSans-Regular.ttf", regular)
