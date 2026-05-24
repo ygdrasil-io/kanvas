@@ -85,13 +85,39 @@ class OpenTypeFontTest {
         return copy
     }
 
+    private fun ByteArray.withoutKerningTables(): ByteArray =
+        withTableTag("kern", "zern").withTableTag("GPOS", "zPOS")
+
+    private fun ByteArray.withGposFeatureTag(from: String, to: String): ByteArray {
+        require(from.length == 4)
+        require(to.length == 4)
+        val copy = copyOf()
+        val record = tableDirectoryRecord("GPOS")
+        val gposOffset = readU32(copy, record + 8)
+        val gposLength = readU32(copy, record + 12)
+        val fromBytes = from.toByteArray(Charsets.ISO_8859_1)
+        val toBytes = to.toByteArray(Charsets.ISO_8859_1)
+        for (off in gposOffset..(gposOffset + gposLength - fromBytes.size)) {
+            if (fromBytes.indices.all { copy[off + it] == fromBytes[it] }) {
+                toBytes.copyInto(copy, off)
+                return copy
+            }
+        }
+        error("Missing GPOS feature tag: $from")
+    }
+
     private fun ByteArray.tableRecord(tag: String): Int {
+        val record = tableDirectoryRecord(tag)
+        return readU32(this, record + 8)
+    }
+
+    private fun ByteArray.tableDirectoryRecord(tag: String): Int {
         require(tag.length == 4)
         val numTables = readU16(this, 4)
         var off = 12
         repeat(numTables) {
             if (String(this, off, 4, Charsets.ISO_8859_1) == tag) {
-                return readU32(this, off + 8)
+                return off
             }
             off += 16
         }
@@ -474,7 +500,7 @@ class OpenTypeFontTest {
         val font = SkFont(typeface, 20f)
         val glyphs = font.textToGlyphs("AV")
         val rawGlyphIds = glyphString(glyphs)
-        val noKerningFont = SkFont(OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableTag("kern", "zern"))!!, 20f)
+        val noKerningFont = SkFont(OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withoutKerningTables())!!, 20f)
         val kernedBounds = org.graphiks.math.SkRect.MakeEmpty()
         val unkernedBounds = org.graphiks.math.SkRect.MakeEmpty()
         val unkerned = font.getWidth(glyphs[0]) + font.getWidth(glyphs[1])
@@ -493,9 +519,34 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `measureText applies GPOS pair positioning when legacy kern table is absent`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableTag("kern", "zern"))!!
+        val font = SkFont(typeface, 20f)
+        val glyphs = font.textToGlyphs("AV")
+        val unkerned = font.getWidth(glyphs[0]) + font.getWidth(glyphs[1])
+        val expectedKerning = -152f * font.size / 2048f
+
+        val adjustments = requireNotNull(typeface.getKerningPairAdjustments(glyphs.toShortArray()))
+
+        assertEquals(-152, adjustments[0])
+        assertEquals(unkerned + expectedKerning, font.measureText("AV"), 0.001f)
+    }
+
+    @Test
+    fun `GPOS fallback only uses enabled kern feature lookups`() {
+        val bytes = liberationSansBytes()
+            .withTableTag("kern", "zern")
+            .withGposFeatureTag("kern", "zzzz")
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+        val glyphs = SkFont(typeface, 12f).textToGlyphs("AV").toShortArray()
+
+        assertNull(typeface.getKerningPairAdjustments(glyphs))
+    }
+
+    @Test
     fun `makeTextPath applies OpenType kern adjustments`() {
         val kernedTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
-        val unkernedTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableTag("kern", "zern"))!!
+        val unkernedTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withoutKerningTables())!!
         val kernedPath = requireNotNull(SkFont(kernedTypeface, 64f).makeTextPath("AV", 0f, 0f))
         val unkernedPath = requireNotNull(SkFont(unkernedTypeface, 64f).makeTextPath("AV", 0f, 0f))
 
@@ -503,8 +554,8 @@ class OpenTypeFontTest {
     }
 
     @Test
-    fun `getKerningPairAdjustments returns null when font has no kern table`() {
-        val bytes = liberationSansBytes().withTableTag("kern", "zern")
+    fun `getKerningPairAdjustments returns null when font has no kerning tables`() {
+        val bytes = liberationSansBytes().withoutKerningTables()
         val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
         val glyphs = SkFont(typeface, 12f).textToGlyphs("AV").toShortArray()
 
@@ -514,6 +565,17 @@ class OpenTypeFontTest {
     @Test
     fun `getKerningPairAdjustments ignores malformed kern table`() {
         val bytes = liberationSansBytes().withTableLength("kern", 4)
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+        val glyphs = SkFont(typeface, 12f).textToGlyphs("AV").toShortArray()
+
+        assertNull(typeface.getKerningPairAdjustments(glyphs))
+    }
+
+    @Test
+    fun `getKerningPairAdjustments ignores malformed GPOS table`() {
+        val bytes = liberationSansBytes()
+            .withTableTag("kern", "zern")
+            .withTableLength("GPOS", 4)
         val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
         val glyphs = SkFont(typeface, 12f).textToGlyphs("AV").toShortArray()
 

@@ -288,6 +288,7 @@ private class ParsedTrueTypeFont(
     private val leftSideBearings: ShortArray,
     private val glyphOffsets: IntArray,
     private val kern: KernTable?,
+    private val gpos: GposPairTable?,
 ) {
     private val pathCache = HashMap<Int, GlyphOutline?>()
 
@@ -301,7 +302,7 @@ private class ParsedTrueTypeFont(
     }
 
     fun kerningPairAdjustments(glyphs: ShortArray): IntArray? {
-        kern ?: return null
+        if (kern == null && gpos == null) return null
         if (glyphs.size <= 1) return IntArray(0)
         return IntArray(glyphs.size - 1) { i ->
             kerningAdjustment(glyphs[i].toInt() and 0xFFFF, glyphs[i + 1].toInt() and 0xFFFF)
@@ -309,7 +310,9 @@ private class ParsedTrueTypeFont(
     }
 
     fun kerningAdjustment(leftGlyphId: Int, rightGlyphId: Int): Int =
-        kern?.adjustment(leftGlyphId, rightGlyphId) ?: 0
+        kern?.adjustment(leftGlyphId, rightGlyphId)
+            ?: gpos?.adjustment(leftGlyphId, rightGlyphId)
+            ?: 0
 
     fun tableData(tag: Int): ByteArray? {
         val record = tables[openTypeTagToString(tag)] ?: return null
@@ -649,6 +652,7 @@ private class ParsedTrueTypeFont(
             val strikeoutThickness = os2?.takeIf { it.length >= 30 }?.let { reader.i16(it.offset + 26)?.toInt() ?: return null } ?: max(1, unitsPerEm / 14)
             val strikeoutPosition = os2?.takeIf { it.length >= 30 }?.let { reader.i16(it.offset + 28)?.toInt() ?: return null } ?: unitsPerEm * 3 / 10
             val kern = parseKernTable(bytes, tables["kern"])
+            val gpos = if (kern == null && "kern" !in tables) parseGposPairTable(bytes, tables["GPOS"], numGlyphs) else null
             val variationAxes = parseFvarAxes(bytes, tables["fvar"]).orEmpty()
 
             return ParsedTrueTypeFont(
@@ -656,7 +660,7 @@ private class ParsedTrueTypeFont(
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
                 avg, sxHeight, sCapHeight, underlinePosition, underlineThickness,
                 strikeoutPosition, strikeoutThickness, familyName, names?.postScriptName, localizedNames,
-                variationAxes, cmap, advances, bearings, offsets, kern,
+                variationAxes, cmap, advances, bearings, offsets, kern, gpos,
             )
         }
 
@@ -795,6 +799,330 @@ private class ParsedTrueTypeFont(
                 p += 6
             }
             return Unit
+        }
+
+        private fun parseGposPairTable(bytes: ByteArray, table: TableRecord?, numGlyphs: Int): GposPairTable? {
+            table ?: return null
+            if (table.length < 10) return null
+            val tableEnd = table.offset + table.length
+            val reader = SfntReader(bytes, tableEnd)
+            val majorVersion = reader.u16(table.offset) ?: return null
+            val minorVersion = reader.u16(table.offset + 2) ?: return null
+            if (majorVersion != 1 || minorVersion !in 0..1) return null
+            val scriptListOffset = reader.u16(table.offset + 4) ?: return null
+            val featureListOffset = reader.u16(table.offset + 6) ?: return null
+            val lookupListOffset = reader.u16(table.offset + 8) ?: return null
+            val kernLookupIndices = parseGposKernLookupIndices(
+                bytes = bytes,
+                tableEnd = tableEnd,
+                scriptListStart = table.offset + scriptListOffset,
+                featureListStart = table.offset + featureListOffset,
+            ) ?: return null
+            if (kernLookupIndices.isEmpty()) return null
+            val lookupListStart = table.offset + lookupListOffset
+            if (!reader.fits(lookupListStart, 2)) return null
+            val lookupCount = reader.u16(lookupListStart) ?: return null
+            if (!reader.fits(lookupListStart + 2, lookupCount.toLong() * 2L)) return null
+
+            val pairs = HashMap<Int, Int>()
+            for (lookupIndex in kernLookupIndices) {
+                if (lookupIndex !in 0 until lookupCount) return null
+                val lookupOffset = reader.u16(lookupListStart + 2 + lookupIndex * 2) ?: return null
+                parseGposPairLookup(bytes, lookupListStart + lookupOffset, tableEnd, numGlyphs, pairs)
+                    ?: return null
+            }
+            return pairs.takeIf { it.isNotEmpty() }?.let { GposPairTable(it) }
+        }
+
+        private fun parseGposKernLookupIndices(
+            bytes: ByteArray,
+            tableEnd: Int,
+            scriptListStart: Int,
+            featureListStart: Int,
+        ): Set<Int>? {
+            val reader = SfntReader(bytes, tableEnd)
+            val activeFeatureIndices = parseGposActiveFeatureIndices(bytes, scriptListStart, tableEnd)
+                ?: return null
+            if (activeFeatureIndices.isEmpty()) return emptySet()
+            if (!reader.fits(featureListStart, 2)) return null
+            val featureCount = reader.u16(featureListStart) ?: return null
+            if (!reader.fits(featureListStart + 2, featureCount.toLong() * 6L)) return null
+            val lookups = LinkedHashSet<Int>()
+            repeat(featureCount) { featureIndex ->
+                val record = featureListStart + 2 + featureIndex * 6
+                val tag = reader.tag(record) ?: return null
+                val featureOffset = reader.u16(record + 4) ?: return null
+                if (tag != "kern" || featureIndex !in activeFeatureIndices) return@repeat
+                val featureStart = featureListStart + featureOffset
+                if (!reader.fits(featureStart, 4)) return null
+                val lookupIndexCount = reader.u16(featureStart + 2) ?: return null
+                if (!reader.fits(featureStart + 4, lookupIndexCount.toLong() * 2L)) return null
+                repeat(lookupIndexCount) {
+                    lookups.add(reader.u16(featureStart + 4 + it * 2) ?: return null)
+                }
+            }
+            return lookups
+        }
+
+        private fun parseGposActiveFeatureIndices(
+            bytes: ByteArray,
+            scriptListStart: Int,
+            tableEnd: Int,
+        ): Set<Int>? {
+            val reader = SfntReader(bytes, tableEnd)
+            if (!reader.fits(scriptListStart, 2)) return null
+            val scriptCount = reader.u16(scriptListStart) ?: return null
+            if (!reader.fits(scriptListStart + 2, scriptCount.toLong() * 6L)) return null
+            val features = LinkedHashSet<Int>()
+            repeat(scriptCount) { scriptIndex ->
+                val record = scriptListStart + 2 + scriptIndex * 6
+                val tag = reader.tag(record) ?: return null
+                val scriptOffset = reader.u16(record + 4) ?: return null
+                if (tag != "DFLT" && tag != "latn") return@repeat
+                collectGposScriptFeatureIndices(bytes, scriptListStart + scriptOffset, tableEnd, features)
+                    ?: return null
+            }
+            return features
+        }
+
+        private fun collectGposScriptFeatureIndices(
+            bytes: ByteArray,
+            scriptStart: Int,
+            tableEnd: Int,
+            out: MutableSet<Int>,
+        ): Unit? {
+            val reader = SfntReader(bytes, tableEnd)
+            if (!reader.fits(scriptStart, 4)) return null
+            val defaultLangSysOffset = reader.u16(scriptStart) ?: return null
+            val langSysCount = reader.u16(scriptStart + 2) ?: return null
+            if (defaultLangSysOffset != 0) {
+                collectGposLangSysFeatureIndices(bytes, scriptStart + defaultLangSysOffset, tableEnd, out)
+                    ?: return null
+            }
+            if (!reader.fits(scriptStart + 4, langSysCount.toLong() * 6L)) return null
+            repeat(langSysCount) {
+                val record = scriptStart + 4 + it * 6
+                val langSysOffset = reader.u16(record + 4) ?: return null
+                collectGposLangSysFeatureIndices(bytes, scriptStart + langSysOffset, tableEnd, out)
+                    ?: return null
+            }
+            return Unit
+        }
+
+        private fun collectGposLangSysFeatureIndices(
+            bytes: ByteArray,
+            langSysStart: Int,
+            tableEnd: Int,
+            out: MutableSet<Int>,
+        ): Unit? {
+            val reader = SfntReader(bytes, tableEnd)
+            if (!reader.fits(langSysStart, 6)) return null
+            val requiredFeatureIndex = reader.u16(langSysStart + 2) ?: return null
+            if (requiredFeatureIndex != 0xFFFF) out.add(requiredFeatureIndex)
+            val featureIndexCount = reader.u16(langSysStart + 4) ?: return null
+            if (!reader.fits(langSysStart + 6, featureIndexCount.toLong() * 2L)) return null
+            repeat(featureIndexCount) {
+                out.add(reader.u16(langSysStart + 6 + it * 2) ?: return null)
+            }
+            return Unit
+        }
+
+        private fun parseGposPairLookup(
+            bytes: ByteArray,
+            lookupStart: Int,
+            tableEnd: Int,
+            numGlyphs: Int,
+            pairs: MutableMap<Int, Int>,
+        ): Unit? {
+            val reader = SfntReader(bytes, tableEnd)
+            if (!reader.fits(lookupStart, 6)) return null
+            val lookupType = reader.u16(lookupStart) ?: return null
+            val subtableCount = reader.u16(lookupStart + 4) ?: return null
+            if (!reader.fits(lookupStart + 6, subtableCount.toLong() * 2L)) return null
+            if (lookupType != GPOS_PAIR_ADJUSTMENT_LOOKUP) return Unit
+            repeat(subtableCount) { subtableIndex ->
+                val subtableOffset = reader.u16(lookupStart + 6 + subtableIndex * 2) ?: return null
+                parseGposPairSubtable(bytes, lookupStart + subtableOffset, tableEnd, numGlyphs, pairs)
+                    ?: return null
+            }
+            return Unit
+        }
+
+        private fun parseGposPairSubtable(
+            bytes: ByteArray,
+            subtableStart: Int,
+            tableEnd: Int,
+            numGlyphs: Int,
+            pairs: MutableMap<Int, Int>,
+        ): Unit? {
+            val reader = SfntReader(bytes, tableEnd)
+            if (!reader.fits(subtableStart, 10)) return null
+            val posFormat = reader.u16(subtableStart) ?: return null
+            val coverageOffset = reader.u16(subtableStart + 2) ?: return null
+            val valueFormat1 = reader.u16(subtableStart + 4) ?: return null
+            val valueFormat2 = reader.u16(subtableStart + 6) ?: return null
+            val coverage = parseCoverageTable(bytes, subtableStart + coverageOffset, tableEnd)
+                ?: return null
+            return when (posFormat) {
+                1 -> parseGposPairFormat1(bytes, subtableStart, tableEnd, coverage, valueFormat1, valueFormat2, pairs)
+                2 -> parseGposPairFormat2(bytes, subtableStart, tableEnd, numGlyphs, coverage, valueFormat1, valueFormat2, pairs)
+                else -> Unit
+            }
+        }
+
+        private fun parseGposPairFormat1(
+            bytes: ByteArray,
+            subtableStart: Int,
+            tableEnd: Int,
+            coverage: List<Int>,
+            valueFormat1: Int,
+            valueFormat2: Int,
+            pairs: MutableMap<Int, Int>,
+        ): Unit? {
+            val reader = SfntReader(bytes, tableEnd)
+            val pairSetCount = reader.u16(subtableStart + 8) ?: return null
+            if (pairSetCount != coverage.size) return null
+            if (!reader.fits(subtableStart + 10, pairSetCount.toLong() * 2L)) return null
+            val value1Size = valueRecordSize(valueFormat1)
+            val value2Size = valueRecordSize(valueFormat2)
+            repeat(pairSetCount) { pairSetIndex ->
+                val pairSetOffset = reader.u16(subtableStart + 10 + pairSetIndex * 2) ?: return null
+                val pairSetStart = subtableStart + pairSetOffset
+                if (!reader.fits(pairSetStart, 2)) return null
+                val pairValueCount = reader.u16(pairSetStart) ?: return null
+                var p = pairSetStart + 2
+                val recordSize = 2 + value1Size + value2Size
+                if (!reader.fits(p, pairValueCount.toLong() * recordSize.toLong())) return null
+                repeat(pairValueCount) {
+                    val rightGlyph = reader.u16(p) ?: return null
+                    val xAdvance = readGposXAdvance(reader, p + 2, valueFormat1) ?: return null
+                    if (xAdvance != 0) pairs[kernPairKey(coverage[pairSetIndex], rightGlyph)] = xAdvance
+                    p += recordSize
+                }
+            }
+            return Unit
+        }
+
+        private fun parseGposPairFormat2(
+            bytes: ByteArray,
+            subtableStart: Int,
+            tableEnd: Int,
+            numGlyphs: Int,
+            coverage: List<Int>,
+            valueFormat1: Int,
+            valueFormat2: Int,
+            pairs: MutableMap<Int, Int>,
+        ): Unit? {
+            val reader = SfntReader(bytes, tableEnd)
+            if (!reader.fits(subtableStart, 16)) return null
+            val classDef1Offset = reader.u16(subtableStart + 8) ?: return null
+            val classDef2Offset = reader.u16(subtableStart + 10) ?: return null
+            val class1Count = reader.u16(subtableStart + 12) ?: return null
+            val class2Count = reader.u16(subtableStart + 14) ?: return null
+            val classDef1 = parseClassDefTable(bytes, subtableStart + classDef1Offset, tableEnd)
+                ?: return null
+            val classDef2 = parseClassDefTable(bytes, subtableStart + classDef2Offset, tableEnd)
+                ?: return null
+            val value1Size = valueRecordSize(valueFormat1)
+            val value2Size = valueRecordSize(valueFormat2)
+            val recordSize = value1Size + value2Size
+            var p = subtableStart + 16
+            if (!reader.fits(p, class1Count.toLong() * class2Count.toLong() * recordSize.toLong())) return null
+            for (class1 in 0 until class1Count) {
+                for (class2 in 0 until class2Count) {
+                    val xAdvance = readGposXAdvance(reader, p, valueFormat1) ?: return null
+                    if (xAdvance != 0) {
+                        val leftGlyphs = coverage.filter { classDef1.classOf(it) == class1 }
+                        val rightGlyphs = classDef2.glyphsForClass(class2, numGlyphs)
+                        for (leftGlyph in leftGlyphs) {
+                            for (rightGlyph in rightGlyphs) {
+                                pairs[kernPairKey(leftGlyph, rightGlyph)] = xAdvance
+                            }
+                        }
+                    }
+                    p += recordSize
+                }
+            }
+            return Unit
+        }
+
+        private fun parseCoverageTable(bytes: ByteArray, coverageStart: Int, tableEnd: Int): List<Int>? {
+            val reader = SfntReader(bytes, tableEnd)
+            if (!reader.fits(coverageStart, 4)) return null
+            return when (reader.u16(coverageStart) ?: return null) {
+                1 -> {
+                    val glyphCount = reader.u16(coverageStart + 2) ?: return null
+                    if (!reader.fits(coverageStart + 4, glyphCount.toLong() * 2L)) return null
+                    List(glyphCount) { reader.u16(coverageStart + 4 + it * 2) ?: return null }
+                }
+                2 -> {
+                    val rangeCount = reader.u16(coverageStart + 2) ?: return null
+                    if (!reader.fits(coverageStart + 4, rangeCount.toLong() * 6L)) return null
+                    val glyphs = ArrayList<Int>()
+                    var p = coverageStart + 4
+                    repeat(rangeCount) {
+                        val startGlyph = reader.u16(p) ?: return null
+                        val endGlyph = reader.u16(p + 2) ?: return null
+                        if (endGlyph < startGlyph) return null
+                        for (glyph in startGlyph..endGlyph) glyphs.add(glyph)
+                        p += 6
+                    }
+                    glyphs
+                }
+                else -> null
+            }
+        }
+
+        private fun parseClassDefTable(
+            bytes: ByteArray,
+            classDefStart: Int,
+            tableEnd: Int,
+        ): GposClassDef? {
+            val reader = SfntReader(bytes, tableEnd)
+            if (!reader.fits(classDefStart, 4)) return null
+            val classes = HashMap<Int, Int>()
+            return when (reader.u16(classDefStart) ?: return null) {
+                1 -> {
+                    val startGlyph = reader.u16(classDefStart + 2) ?: return null
+                    val glyphCount = reader.u16(classDefStart + 4) ?: return null
+                    if (!reader.fits(classDefStart + 6, glyphCount.toLong() * 2L)) return null
+                    repeat(glyphCount) {
+                        val klass = reader.u16(classDefStart + 6 + it * 2) ?: return null
+                        classes[startGlyph + it] = klass
+                    }
+                    GposClassDef(classes)
+                }
+                2 -> {
+                    val classRangeCount = reader.u16(classDefStart + 2) ?: return null
+                    if (!reader.fits(classDefStart + 4, classRangeCount.toLong() * 6L)) return null
+                    var p = classDefStart + 4
+                    repeat(classRangeCount) {
+                        val startGlyph = reader.u16(p) ?: return null
+                        val endGlyph = reader.u16(p + 2) ?: return null
+                        val klass = reader.u16(p + 4) ?: return null
+                        if (endGlyph < startGlyph) return null
+                        for (glyph in startGlyph..endGlyph) classes[glyph] = klass
+                        p += 6
+                    }
+                    GposClassDef(classes)
+                }
+                else -> null
+            }
+        }
+
+        private fun valueRecordSize(format: Int): Int =
+            Integer.bitCount(format) * 2
+
+        private fun readGposXAdvance(reader: SfntReader, valueStart: Int, format: Int): Int? {
+            var off = valueStart
+            if ((format and GPOS_X_PLACEMENT) != 0) off += 2
+            if ((format and GPOS_Y_PLACEMENT) != 0) off += 2
+            val xAdvance = if ((format and GPOS_X_ADVANCE) != 0) {
+                reader.i16(off)?.toInt() ?: return null
+            } else {
+                0
+            }
+            return xAdvance
         }
 
         private fun chooseFamilyName(records: List<NameRecord>): String? =
@@ -1043,6 +1371,22 @@ private data class KernTable(private val pairs: Map<Int, Int>) {
     fun adjustment(leftGlyph: Int, rightGlyph: Int): Int =
         pairs[kernPairKey(leftGlyph, rightGlyph)] ?: 0
 }
+private data class GposPairTable(private val pairs: Map<Int, Int>) {
+    fun adjustment(leftGlyph: Int, rightGlyph: Int): Int =
+        pairs[kernPairKey(leftGlyph, rightGlyph)] ?: 0
+}
+private data class GposClassDef(private val classes: Map<Int, Int>) {
+    fun classOf(glyphId: Int): Int = classes[glyphId] ?: 0
+    fun glyphsForClass(klass: Int, numGlyphs: Int): List<Int> =
+        if (klass == 0) {
+            (0 until numGlyphs).filter { classOf(it) == 0 }
+        } else {
+            classes.entries.asSequence()
+                .filter { it.value == klass }
+                .map { it.key }
+                .toList()
+        }
+}
 private data class NameRecord(val value: String, val platform: Int, val language: Int)
 private data class TtPoint(val x: Int, val y: Int, val onCurve: Boolean)
 private data class GlyphOutline(val contours: List<List<TtPoint>>) {
@@ -1066,6 +1410,10 @@ private const val WE_HAVE_A_TWO_BY_TWO = 0x0080
 private const val KERN_HORIZONTAL = 0x0001
 private const val KERN_MINIMUM = 0x0002
 private const val KERN_CROSS_STREAM = 0x0004
+private const val GPOS_PAIR_ADJUSTMENT_LOOKUP = 2
+private const val GPOS_X_PLACEMENT = 0x0001
+private const val GPOS_Y_PLACEMENT = 0x0002
+private const val GPOS_X_ADVANCE = 0x0004
 private const val OS2_USE_TYPO_METRICS = 0x0080
 
 private fun openTypeTagToString(tag: Int): String = buildString(4) {
