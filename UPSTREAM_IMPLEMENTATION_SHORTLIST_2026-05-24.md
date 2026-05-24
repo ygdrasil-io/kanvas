@@ -88,6 +88,8 @@ Completed since this snapshot:
   `SkShaders.LinearGradient(pts, SkGradient)` overload now exist for RGB
   working color spaces. The remaining blocker is the actual perceptual
   color-space / hue-method / premul interpolation sampler.
+- `addarc`: `SkPathBuilder.emitArc` now normalises huge sweeps before conic
+  decomposition, and `ManyArcsGM` is enabled with a raster ratchet.
 
 ## Recommended order
 
@@ -100,7 +102,6 @@ Completed since this snapshot:
 
 | Upstream cpp | Tags | Local GM files |
 |---|---|---|
-| `addarc` | `STUB.MISSING_API` | `AddArcGM.kt`, `AddArcMeasGM.kt`, `FillCircleGM.kt`, `ManyArcsGM.kt`, `StrokeCircleGM.kt`, `TinyAngleArcsGM.kt` |
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, perceptual/hue/premul sampler still missing | gradient interpolation variants |

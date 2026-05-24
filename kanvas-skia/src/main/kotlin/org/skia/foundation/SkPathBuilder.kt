@@ -1101,7 +1101,8 @@ public class SkPathBuilder public constructor() {
         val rx = (oval.right - oval.left) * 0.5f
         val ry = (oval.bottom - oval.top) * 0.5f
         val startRad = startAngleDeg.toDouble() * PI / 180.0
-        val sweepRad = sweepAngleDeg.toDouble() * PI / 180.0
+        val sweepDeg = normalizeArcSweep(sweepAngleDeg.toDouble())
+        val sweepRad = sweepDeg * PI / 180.0
         val nSegs = max(1, ceil(abs(sweepRad) / (PI / 2.0)).toInt())
         val segAngle = sweepRad / nSegs
         val halfAngle = segAngle * 0.5
@@ -1145,5 +1146,15 @@ public class SkPathBuilder public constructor() {
         const val OVAL_CONIC_WEIGHT: Float = 0.707106781f
         /** Sub-pixel tolerance for "current point already on the arc start" check in [emitArc]. */
         const val ARC_JOIN_EPS: Float = 1e-4f
+
+        fun normalizeArcSweep(sweepDeg: Double): Double {
+            val fullTurn = 360.0
+            val remainder = sweepDeg % fullTurn
+            return if (remainder == 0.0 && sweepDeg != 0.0) {
+                if (sweepDeg > 0.0) fullTurn else -fullTurn
+            } else {
+                remainder
+            }
+        }
     }
 }
