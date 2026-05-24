@@ -66,6 +66,8 @@ bucket_for() {
         printf 'alias\n'
     elif [ "$status" = "HELPER" ]; then
         printf 'helper\n'
+    elif [ "$status" = "PORTED" ]; then
+        printf 'ported\n'
     elif [[ "$cpp" =~ ^(mac_aa_explorer)$ ]]; then
         printf 'platform-gated\n'
     elif [[ "$cpp" =~ ^(bitmaprect|blurs|drawbitmaprect|drawminibitmaprect|imageblur2|verylargebitmap)$ ]]; then
@@ -88,8 +90,6 @@ bucket_for() {
         printf 'gpu-intractable\n'
     elif [[ "$tags" =~ (EDGE_AA_IMAGE_SET|EDGE_AA_QUAD|ASYNC_RESCALE|SURFACE_SNAPSHOT_SUBSET|IMAGE_MAKE_SCALED|MAKE_WITH_COLOR_FILTER|COLOR4F_BLEND_CF|COLOR_FILTER_PRIV|GAUSSIAN_COLOR_FILTER|IFX\.MULTIPLE_FILTERS_SPAN|DRAW_VERTICES|RSXBLOB|DF_TEXT|PIXMAP_SCALE|SURFACE_PROPS|SRC_RECT_CONSTRAINT|BACKDROP_FILTER|PATH_EFFECT_CTM|POLY_TO_POLY|PERSPECTIVE_ADDPATH|ALPHA8_IMAGE_AS_MASK|BLURRECT_GALLERY|BLUR_RECTS_FULL|BLUR_RECT_COMPARE|GRADIENT_INTERPOLATION|MISSING_API|MESH|PATH_MEASURE_EXPLOSION|RECORDOPTS|SAVE_BEHIND|STROKEDLINE_CAPS|TEXT_IMAGE_FILTER|XYZ) ]]; then
         printf 'implementation\n'
-    elif [ "$status" = "PORTED" ]; then
-        printf 'ported\n'
     elif [ "$status" = "MISSING" ]; then
         printf 'missing-mapping\n'
     elif [[ "$test_files" =~ SLOW\.GM_STRESS ]] || [[ "$cpp" =~ (verylargebitmap|drawminibitmaprect|imageblur2) ]]; then

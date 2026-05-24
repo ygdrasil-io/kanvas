@@ -36,7 +36,8 @@ for arg in "$@"; do
     esac
 done
 
-INDEX=/tmp/gm-kt-index.$USER.tsv
+INDEX=$(mktemp -t gm-kt-index.XXXXXX)
+trap 'rm -f "$INDEX"' EXIT
 build_kt_index "$INDEX"
 
 # Per-cpp loop -----------------------------------------------------------
