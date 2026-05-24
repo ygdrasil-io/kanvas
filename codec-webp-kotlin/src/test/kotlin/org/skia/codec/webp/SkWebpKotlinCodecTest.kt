@@ -1125,6 +1125,158 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 B_PRED luma subblock reconstructs directional predictions`() {
+        val top = intArrayOf(10, 11, 12, 13, 14, 15, 16, 17)
+        val left = intArrayOf(20, 21, 22, 23)
+
+        assertArrayEquals(
+            intArrayOf(
+                10, 11, 12, 13,
+                10, 11, 12, 13,
+                10, 11, 12, 13,
+                10, 11, 12, 13,
+            ),
+            reconstructVp8LumaSubblock(
+                mode = Vp8LumaSubblockPredictionMode.B_VE,
+                left = left,
+                top = top,
+                topLeft = 9,
+                coefficients = IntArray(16),
+                dcQuant = 1,
+                acQuant = 1,
+            ),
+        )
+        assertArrayEquals(
+            intArrayOf(
+                18, 18, 18, 18,
+                21, 21, 21, 21,
+                22, 22, 22, 22,
+                23, 23, 23, 23,
+            ),
+            reconstructVp8LumaSubblock(
+                mode = Vp8LumaSubblockPredictionMode.B_HE,
+                left = left,
+                top = top,
+                topLeft = 9,
+                coefficients = IntArray(16),
+                dcQuant = 1,
+                acQuant = 1,
+            ),
+        )
+        assertArrayEquals(
+            intArrayOf(
+                11, 12, 13, 14,
+                12, 13, 14, 15,
+                13, 14, 15, 16,
+                14, 15, 16, 17,
+            ),
+            reconstructVp8LumaSubblock(
+                mode = Vp8LumaSubblockPredictionMode.B_LD,
+                left = left,
+                top = top,
+                topLeft = 9,
+                coefficients = IntArray(16),
+                dcQuant = 1,
+                acQuant = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `VP8 B_PRED luma macroblock reconstructs subblocks in raster order`() {
+        val blocks = Array(16) { IntArray(16) }
+        blocks[0][1] = -1
+        blocks[0][4] = 2
+
+        val pixels = reconstructVp8BPredLumaMacroblock(
+            lumaSubblockModes = List(16) { Vp8LumaSubblockPredictionMode.B_DC },
+            left = IntArray(16) { 100 },
+            top = IntArray(16) { 100 },
+            topLeft = 100,
+            coefficientsByBlock = blocks,
+            dcQuant = 1,
+            acQuant = 8,
+        )
+
+        assertArrayEquals(
+            intArrayOf(
+                100, 101, 101, 102,
+                100, 100, 101, 101,
+                99, 99, 100, 100,
+                98, 99, 99, 100,
+            ),
+            IntArray(16) { index ->
+                val y = index / 4
+                val x = index % 4
+                pixels[y * 16 + x]
+            },
+        )
+        assertEquals(100, pixels[4])
+        assertEquals(100, pixels[16 * 4])
+    }
+
+    @Test
+    fun `VP8 B_PRED right edge luma subblocks use external top right samples`() {
+        val pixels = reconstructVp8BPredLumaMacroblock(
+            lumaSubblockModes = List(16) { index ->
+                when (index) {
+                    3, 7 -> Vp8LumaSubblockPredictionMode.B_LD
+                    else -> Vp8LumaSubblockPredictionMode.B_DC
+                }
+            },
+            left = IntArray(16) { 100 },
+            top = IntArray(16) { x -> 10 + x },
+            topLeft = 9,
+            topRight = intArrayOf(26, 27, 28, 29),
+            coefficientsByBlock = Array(16) { IntArray(16) },
+            dcQuant = 1,
+            acQuant = 1,
+        )
+
+        assertArrayEquals(
+            intArrayOf(
+                23, 24, 25, 26,
+                24, 25, 26, 27,
+                25, 26, 27, 28,
+                26, 27, 28, 29,
+            ),
+            IntArray(16) { index ->
+                val y = index / 4
+                val x = index % 4
+                pixels[y * 16 + 12 + x]
+            },
+        )
+        assertArrayEquals(
+            intArrayOf(
+                27, 28, 28, 27,
+                28, 28, 27, 27,
+                28, 27, 27, 28,
+                27, 27, 28, 29,
+            ),
+            IntArray(16) { index ->
+                val y = index / 4
+                val x = index % 4
+                pixels[(4 + y) * 16 + 12 + x]
+            },
+        )
+    }
+
+    @Test
+    fun `VP8 B_PRED top left frame default uses above row sentinel`() {
+        val pixels = reconstructVp8BPredLumaMacroblock(
+            lumaSubblockModes = List(16) { Vp8LumaSubblockPredictionMode.B_TM },
+            left = null,
+            top = null,
+            topLeft = null,
+            coefficientsByBlock = Array(16) { IntArray(16) },
+            dcQuant = 1,
+            acQuant = 1,
+        )
+
+        assertEquals(129, pixels[0])
+    }
+
+    @Test
     fun `VP8 luma macroblock reconstruction excludes B_PRED`() {
         assertThrows<IllegalArgumentException> {
             reconstructVp8Intra16x16LumaMacroblock(
