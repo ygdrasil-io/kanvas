@@ -56,7 +56,7 @@ public class SkPngKotlinCodec private constructor(
         if (dst.colorType != info.colorType) {
             return Result.kInvalidParameters
         }
-        if (info.colorType != cachedInfo.colorType) {
+        if (!canDecodeTo(info.colorType)) {
             return Result.kInvalidConversion
         }
 
@@ -241,14 +241,14 @@ public class SkPngKotlinCodec private constructor(
             }
             else -> return Result.kErrorInInput
         }
-        val o = (y * png.width + dstX) * 4
-        val out = dst.pixelsF16
-        out[o] = r * a
-        out[o + 1] = g * a
-        out[o + 2] = b * a
-        out[o + 3] = a
+        dst.setPixelF16(dstX, y, r * a, g * a, b * a, a)
         return Result.kSuccess
     }
+
+    private fun canDecodeTo(colorType: SkColorType): Boolean =
+        colorType == cachedInfo.colorType ||
+            colorType == SkColorType.kRGBA_8888 ||
+            colorType == SkColorType.kRGBA_F16Norm
 
     internal companion object Decoder : SkCodec.Decoder {
         override val name: String = "png"
