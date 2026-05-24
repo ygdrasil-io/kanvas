@@ -2442,7 +2442,17 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                             it.alphaf *= colorPath.alpha
                         }
                     }
-                    drawPath(colorPath.path, layerPaint)
+                    if (colorPath.clipPaths.isEmpty()) {
+                        drawPath(colorPath.path, layerPaint)
+                    } else {
+                        val saveCount = getSaveCount()
+                        save()
+                        for (clip in colorPath.clipPaths) {
+                            clipPath(clip, doAntiAlias = paint.isAntiAlias)
+                        }
+                        drawPath(colorPath.path, layerPaint)
+                        restoreToCount(saveCount)
+                    }
                 }
                 return
             }

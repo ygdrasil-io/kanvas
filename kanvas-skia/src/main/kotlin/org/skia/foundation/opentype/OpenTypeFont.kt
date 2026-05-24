@@ -176,6 +176,9 @@ public class OpenTypeTypeface private constructor(
             if (layers.isEmpty()) {
                 val colorPaths = font.colorPaint(glyphId)
                     ?.let { paint ->
+                        val clipPaths = font.colorClipPath(glyphId, penX, y, size, scaleX, skewX, SkMatrix.Identity)
+                            ?.let(::listOf)
+                            .orEmpty()
                         colorPaintPaths(
                             paint = paint,
                             seenColorGlyphs = setOf(glyphId),
@@ -185,6 +188,7 @@ public class OpenTypeTypeface private constructor(
                             size = size,
                             scaleX = scaleX,
                             skewX = skewX,
+                            clipPaths = clipPaths,
                             depth = 0,
                         )
                     }
@@ -230,6 +234,7 @@ public class OpenTypeTypeface private constructor(
         skewX: SkScalar,
         transform: SkMatrix = SkMatrix.Identity,
         glyphPath: SkPath? = null,
+        clipPaths: List<SkPath> = emptyList(),
         depth: Int,
     ): List<OpenTypeColorPath> {
         if (depth > MAX_COLOR_PAINT_DEPTH) return emptyList()
@@ -248,6 +253,7 @@ public class OpenTypeTypeface private constructor(
                         skewX = skewX,
                         transform = transform,
                         glyphPath = glyphPath,
+                        clipPaths = clipPaths,
                         depth = depth + 1,
                     )
                 }
@@ -261,7 +267,7 @@ public class OpenTypeTypeface private constructor(
                 if (currentPath.isEmpty()) {
                     emptyList()
                 } else {
-                    listOf(OpenTypeColorPath(color, positionedPath(currentPath, penX, baselineY), paint.alpha))
+                    listOf(OpenTypeColorPath(color, positionedPath(currentPath, penX, baselineY), paint.alpha, clipPaths))
                 }
             }
             is OpenTypeColorPaint.Glyph -> {
@@ -279,12 +285,14 @@ public class OpenTypeTypeface private constructor(
                     skewX = skewX,
                     transform = transform,
                     glyphPath = childPath,
+                    clipPaths = clipPaths,
                     depth = depth + 1,
                 )
             }
             is OpenTypeColorPaint.ColrGlyph -> {
                 if (paint.glyphId in seenColorGlyphs) return emptyList()
                 val referenced = font.colorPaint(paint.glyphId) ?: return emptyList()
+                val referencedClip = font.colorClipPath(paint.glyphId, penX, baselineY, size, scaleX, skewX, transform)
                 colorPaintPaths(
                     paint = referenced,
                     seenColorGlyphs = seenColorGlyphs + paint.glyphId,
@@ -296,6 +304,7 @@ public class OpenTypeTypeface private constructor(
                     skewX = skewX,
                     transform = transform,
                     glyphPath = glyphPath,
+                    clipPaths = if (referencedClip == null) clipPaths else clipPaths + referencedClip,
                     depth = depth + 1,
                 )
             }
@@ -312,6 +321,7 @@ public class OpenTypeTypeface private constructor(
                     skewX = skewX,
                     transform = transform.preConcat(matrix),
                     glyphPath = glyphPath?.makeTransform(matrix),
+                    clipPaths = clipPaths,
                     depth = depth + 1,
                 )
             }
@@ -328,10 +338,39 @@ public class OpenTypeTypeface private constructor(
                     skewX = skewX,
                     transform = transform.preConcat(matrix),
                     glyphPath = glyphPath?.makeTransform(matrix),
+                    clipPaths = clipPaths,
                     depth = depth + 1,
                 )
             }
         }
+    }
+
+    private fun ParsedTrueTypeFont.colorClipPath(
+        glyphId: Int,
+        penX: Float,
+        baselineY: Float,
+        size: Float,
+        scaleX: Float,
+        skewX: Float,
+        transform: SkMatrix,
+    ): SkPath? {
+        val box = colorClipBox(glyphId) ?: return null
+        val s = scale(size)
+        fun tx(x: Float, y: Float): Float {
+            val sy = -y * s
+            return x * s * scaleX + skewX * sy
+        }
+        fun ty(y: Float): Float = -y * s
+        val path = SkPathBuilder()
+            .setFillType(SkPathFillType.kWinding)
+            .moveTo(tx(box.xMin.toFloat(), box.yMin.toFloat()), ty(box.yMin.toFloat()))
+            .lineTo(tx(box.xMax.toFloat(), box.yMin.toFloat()), ty(box.yMin.toFloat()))
+            .lineTo(tx(box.xMax.toFloat(), box.yMax.toFloat()), ty(box.yMax.toFloat()))
+            .lineTo(tx(box.xMin.toFloat(), box.yMax.toFloat()), ty(box.yMax.toFloat()))
+            .close()
+            .detach()
+            .makeTransform(transform)
+        return if (path.isEmpty()) null else positionedPath(path, penX, baselineY)
     }
 
     private fun colrFontMatrixToCanvas(
@@ -570,6 +609,9 @@ private class ParsedTrueTypeFont(
 
     fun colorPaint(glyphId: Int): OpenTypeColorPaint? =
         color?.v1PaintsByGlyph?.get(glyphId)
+
+    fun colorClipBox(glyphId: Int): OpenTypeClipBox? =
+        color?.clipBoxes?.firstOrNull { glyphId in it.startGlyphId..it.endGlyphId }?.box
 
     fun svgDocument(glyphId: Int): OpenTypeSvgDocument? =
         svg?.documentForGlyph(glyphId)
@@ -1186,7 +1228,7 @@ private class ParsedTrueTypeFont(
         ): OpenTypeColorFont? {
             val palettes = parseCpalTable(bytes, cpalTable) ?: return null
             val colr = parseColrTable(bytes, colrTable) ?: return null
-            return OpenTypeColorFont(palettes, colr.layersByGlyph, colr.v1PaintsByGlyph)
+            return OpenTypeColorFont(palettes, colr.layersByGlyph, colr.v1PaintsByGlyph, colr.clipBoxes)
         }
 
         private fun parseSvgTable(bytes: ByteArray, table: TableRecord?): OpenTypeSvgTable? {
@@ -1469,12 +1511,13 @@ private class ParsedTrueTypeFont(
             val reader = SfntReader(bytes, tableEnd)
             val version = reader.u16(table.offset) ?: return null
             return when (version) {
-                0 -> OpenTypeColrTables(parseColrV0Table(reader, table, expectedVersion = 0) ?: return null, emptyMap())
+                0 -> OpenTypeColrTables(parseColrV0Table(reader, table, expectedVersion = 0) ?: return null, emptyMap(), emptyList())
                 1 -> {
                     if (table.length < 34) return null
                     val layersByGlyph = parseColrV0Table(reader, table, expectedVersion = 1) ?: return null
                     val paintsByGlyph = parseColrV1Paints(reader, table) ?: return null
-                    OpenTypeColrTables(layersByGlyph, paintsByGlyph)
+                    val clipBoxes = parseColrV1ClipBoxes(reader, table) ?: return null
+                    OpenTypeColrTables(layersByGlyph, paintsByGlyph, clipBoxes)
                 }
                 else -> null
             }
@@ -1563,6 +1606,49 @@ private class ParsedTrueTypeFont(
             }
         }
 
+        private fun parseColrV1ClipBoxes(reader: SfntReader, table: TableRecord): List<OpenTypeClipRange>? {
+            val clipListOffset = reader.u32(table.offset + 22)?.toIntOrNull() ?: return null
+            if (clipListOffset == 0) return emptyList()
+            val clipListStart = table.offset + clipListOffset
+            if (!reader.fits(clipListStart, 5)) return null
+            if (reader.u8(clipListStart) != 1) return null
+            val clipCount = reader.u32(clipListStart + 1)?.toIntOrNull() ?: return null
+            if (clipCount > MAX_COLOR_BASE_GLYPHS) return null
+            if (!reader.fits(clipListStart + 5, clipCount.toLong() * 7L)) return null
+            val ranges = ArrayList<OpenTypeClipRange>(clipCount)
+            var previousEnd = -1
+            repeat(clipCount) { index ->
+                val recordOffset = clipListStart + 5 + index * 7
+                val startGlyphId = reader.u16(recordOffset) ?: return null
+                val endGlyphId = reader.u16(recordOffset + 2) ?: return null
+                if (startGlyphId > endGlyphId || startGlyphId <= previousEnd) return null
+                previousEnd = endGlyphId
+                val clipBoxOffset = reader.u24(recordOffset + 4) ?: return null
+                if (clipBoxOffset == 0) return null
+                val clipBoxStart = clipListStart + clipBoxOffset
+                if (clipBoxStart < table.offset || clipBoxStart >= table.offset + table.length) return null
+                val clipBox = parseColrV1ClipBox(reader, clipBoxStart) ?: return null
+                ranges += OpenTypeClipRange(startGlyphId, endGlyphId, clipBox)
+            }
+            return ranges
+        }
+
+        private fun parseColrV1ClipBox(reader: SfntReader, clipBoxStart: Int): OpenTypeClipBox? {
+            val format = reader.u8(clipBoxStart) ?: return null
+            val minSize = when (format) {
+                1 -> 9
+                2 -> 13
+                else -> return null
+            }
+            if (!reader.fits(clipBoxStart, minSize)) return null
+            val xMin = reader.i16(clipBoxStart + 1)?.toInt() ?: return null
+            val yMin = reader.i16(clipBoxStart + 3)?.toInt() ?: return null
+            val xMax = reader.i16(clipBoxStart + 5)?.toInt() ?: return null
+            val yMax = reader.i16(clipBoxStart + 7)?.toInt() ?: return null
+            if (xMin >= xMax || yMin >= yMax) return null
+            return OpenTypeClipBox(xMin, yMin, xMax, yMax)
+        }
+
         private fun parseColorPaint(
             reader: SfntReader,
             colrStart: Int,
@@ -1597,7 +1683,7 @@ private class ParsedTrueTypeFont(
                     if (!reader.fits(paintOffset, 5)) return null
                     OpenTypeColorPaint.Solid(
                         paletteIndex = reader.u16(paintOffset + 1) ?: return null,
-                        alpha = reader.f2Dot14(paintOffset + 3) ?: return null,
+                        alpha = reader.f2Dot14(paintOffset + 3)?.coerceIn(0f, 1f) ?: return null,
                     )
                 }
                 10 -> {
@@ -2340,6 +2426,7 @@ internal data class OpenTypeColorPath(
     val color: Int?,
     val path: SkPath,
     val alpha: Float = 1f,
+    val clipPaths: List<SkPath> = emptyList(),
 )
 private data class OpenTypePaletteSelection(
     val index: Int,
@@ -2371,11 +2458,15 @@ private data class OpenTypeColorFont(
     val palettes: List<List<Int>>,
     val layersByGlyph: Map<Int, List<OpenTypeColorLayer>>,
     val v1PaintsByGlyph: Map<Int, OpenTypeColorPaint>,
+    val clipBoxes: List<OpenTypeClipRange>,
 )
 private data class OpenTypeColrTables(
     val layersByGlyph: Map<Int, List<OpenTypeColorLayer>>,
     val v1PaintsByGlyph: Map<Int, OpenTypeColorPaint>,
+    val clipBoxes: List<OpenTypeClipRange>,
 )
+private data class OpenTypeClipRange(val startGlyphId: Int, val endGlyphId: Int, val box: OpenTypeClipBox)
+private data class OpenTypeClipBox(val xMin: Int, val yMin: Int, val xMax: Int, val yMax: Int)
 internal data class OpenTypeSvgDocument(
     val startGlyphId: Int,
     val endGlyphId: Int,
