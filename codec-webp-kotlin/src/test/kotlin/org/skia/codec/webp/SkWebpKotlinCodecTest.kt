@@ -369,8 +369,111 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `parses VP8 lossy keyframe macroblock header foundation`() {
+        val headerBits = Vp8TestBitWriter().apply {
+            writeBit(0) // YUV color space.
+            writeBit(0) // No pixel value clamp.
+            writeBit(0) // Segmentation disabled for this first supported slice.
+            writeBit(1) // Simple loop filter.
+            writeLiteral(17, 6)
+            writeLiteral(3, 3)
+            writeBit(0) // Loop filter deltas disabled for this first supported slice.
+            writeLiteral(0, 2) // One coefficient partition.
+            writeLiteral(42, 7)
+            writeSignedDelta(3)
+            writeSignedDelta(-2)
+            writeSignedDelta(0)
+            writeSignedDelta(4)
+            writeSignedDelta(0)
+        }.toByteArray()
+
+        val result = readVp8LossyFrameHeader(Vp8BoolReader(headerBits), width = 17, height = 33)
+
+        assertTrue(result is Vp8LossyHeaderDecodeResult.Header)
+        val header = (result as Vp8LossyHeaderDecodeResult.Header).header
+        assertEquals(0, header.colorSpace)
+        assertEquals(0, header.clampType)
+        assertEquals(2, header.macroblockWidth)
+        assertEquals(3, header.macroblockHeight)
+        assertTrue(header.loopFilter.simpleFilter)
+        assertEquals(17, header.loopFilter.level)
+        assertEquals(3, header.loopFilter.sharpness)
+        assertEquals(42, header.quantization.yAcIndex)
+        assertEquals(3, header.quantization.yDcDelta)
+        assertEquals(-2, header.quantization.y2DcDelta)
+        assertEquals(0, header.quantization.y2AcDelta)
+        assertEquals(4, header.quantization.uvDcDelta)
+        assertEquals(0, header.quantization.uvAcDelta)
+    }
+
+    @Test
+    fun `VP8 lossy header parser marks unsupported feature branches before pixel decode`() {
+        val segmented = Vp8TestBitWriter().apply {
+            writeBit(0)
+            writeBit(0)
+            writeBit(1)
+        }.toByteArray()
+
+        assertEquals(
+            Vp8LossyHeaderDecodeResult.Unsupported,
+            readVp8LossyFrameHeader(Vp8BoolReader(segmented), width = 16, height = 16),
+        )
+    }
+
+    @Test
+    fun `VP8 inverse transforms handle DC-only blocks`() {
+        val dctInput = IntArray(16).also { it[0] = 16 }
+        val whtInput = IntArray(16).also { it[0] = 8 }
+
+        assertArrayEquals(IntArray(16) { 2 }, inverseVp8Dct4x4(dctInput))
+        assertArrayEquals(IntArray(16) { 1 }, inverseVp8WalshHadamard4x4(whtInput))
+    }
+
+    @Test
     fun `returns unimplemented for pixel decode after metadata parse`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8xWebp(width = 2, height = 2, flags = 0))!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 2,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+    }
+
+    @Test
+    fun `returns input error for VP8 lossy with truncated first partition header`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff("WEBP", vp8ChunkWithPartition(width = 2, height = 2, partition = byteArrayOf(0x00))),
+        )!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 2,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
+    }
+
+    @Test
+    fun `keeps VP8 lossy pixel decode unimplemented after supported header parse`() {
+        val partition = Vp8TestBitWriter().apply {
+            writeBit(0)
+            writeBit(0)
+            writeBit(0)
+            writeBit(0)
+            writeLiteral(0, 6)
+            writeLiteral(0, 3)
+            writeBit(0)
+            writeLiteral(0, 2)
+            writeLiteral(0, 7)
+            repeat(5) { writeSignedDelta(0) }
+        }.toByteArray()
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff("WEBP", vp8ChunkWithPartition(width = 2, height = 2, partition = partition)),
+        )!!
         val dst = SkBitmap(
             width = 2,
             height = 2,
@@ -1105,6 +1208,9 @@ class SkWebpKotlinCodecTest {
     private fun vp8Chunk(width: Int, height: Int, firstPartitionSize: Int = 0): ByteArray =
         chunk("VP8 ", vp8Payload(width, height, firstPartitionSize))
 
+    private fun vp8ChunkWithPartition(width: Int, height: Int, partition: ByteArray): ByteArray =
+        chunk("VP8 ", vp8Payload(width, height, partition.size) + partition)
+
     private fun vp8Payload(
         width: Int,
         height: Int,
@@ -1431,5 +1537,49 @@ class SkWebpKotlinCodecTest {
         }
 
         fun toByteArray(): ByteArray = ByteArray(bytes.size) { bytes[it].toByte() }
+    }
+
+    private class Vp8TestBitWriter {
+        private val bytes = ArrayList<Int>()
+        private var currentByte = 0
+        private var bitCount = 0
+
+        fun writeBit(bit: Int) {
+            require(bit == 0 || bit == 1)
+            currentByte = currentByte or (bit shl (7 - bitCount))
+            bitCount++
+            if (bitCount == 8) flush()
+        }
+
+        fun writeLiteral(value: Int, bitCount: Int) {
+            require(bitCount in 0..31)
+            for (i in bitCount - 1 downTo 0) {
+                writeBit((value ushr i) and 1)
+            }
+        }
+
+        fun writeSignedDelta(value: Int) {
+            require(value in -15..15)
+            if (value == 0) {
+                writeBit(0)
+                return
+            }
+            writeBit(1)
+            writeLiteral(kotlin.math.abs(value), 4)
+            writeBit(if (value < 0) 1 else 0)
+        }
+
+        fun toByteArray(): ByteArray {
+            if (bitCount > 0) flush()
+            bytes += 0
+            bytes += 0
+            return ByteArray(bytes.size) { bytes[it].toByte() }
+        }
+
+        private fun flush() {
+            bytes += currentByte
+            currentByte = 0
+            bitCount = 0
+        }
     }
 }
