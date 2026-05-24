@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 4 upstream `.cpp` rows as
+The rebaseline currently classifies 5 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -41,10 +41,11 @@ Completed since this snapshot:
   tracked by the ratchet.
 - `STUB.IFX.MULTIPLE_FILTERS_SPAN`: raster `saveLayerWithMultipleFilters`
   is implemented for `MultipleFiltersGM` and the test is enabled.
-- `STUB.DRAW_VERTICES`: `VerticesBatchingGM` is ported through the existing
-  `drawVertices` raster path and the test is enabled. `VerticesGM` is now
-  source-ported, but remains disabled because raster `drawVertices` still
-  needs full vertex color/shader blend-mode semantics.
+- `STUB.DRAW_VERTICES_VISUAL_PARITY`: `VerticesBatchingGM` is ported through
+  the existing `drawVertices` raster path and the test is enabled. `VerticesGM`
+  is source-ported, and the vertex blend / paint color-filter paths are now
+  covered, but it remains disabled while the remaining ~60% visual-parity
+  mismatch is isolated.
 - `STUB.EDGE_AA_IMAGE_SET`: raster fallback implemented in
   `SkCanvas.experimental_DrawEdgeAAImageSet`; `DrawImageSetGM`,
   `DrawImageSetRectToRectGM`, `DrawImageSetAlphaOnlyGM`, and `Skbug14554GM`
@@ -106,7 +107,7 @@ Completed since this snapshot:
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `vertices` | 1 cpp | M | `VerticesBatchingGM` is already ported; the remaining raster `VerticesGM` slice may be smaller than the row suggests. |
+| 1 | `vertices` | 1 cpp | M | `VerticesBatchingGM` is already ported; after vertex blend and color-filter coverage, the remaining raster `VerticesGM` work is focused visual-diff reconnaissance. |
 | 2 | `gradients` | 1 cpp | M/L | RGB API surface and HSL hue-method core exist; remaining work is GM reactivation plus perceptual/powerless hue coverage. |
 | 3 | `mesh` | 1 cpp | L/XL | Actionable but broad API work; start with the `custommesh` slice only. |
 | 4 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
@@ -119,7 +120,7 @@ Completed since this snapshot:
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, HSL hue-method core implemented for CPU linear gradients, perceptual/powerless hue sampler still missing | gradient interpolation variants |
 | `mesh` | `STUB.MESH`; all 11 upstream registrations are compile-pinned, but none can be re-enabled before `SkMesh` / `SkMeshSpecification` and `SkCanvas.drawMesh` exist in the active modules | `MeshGMs.kt` |
-| `vertices` | `STUB.DRAW_VERTICES_VERTEX_BLEND`; `VerticesGM` is source-ported, but focused validation renders ~59% for both `vertices` and `vertices_scaled_shader` because `drawVertices` only combines vertex colors with shader samples for `kSrc`, `kDst`, and `kModulate` | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
+| `vertices` | `STUB.DRAW_VERTICES_VISUAL_PARITY`; `VerticesGM` is source-ported, but focused validation still renders ~60% for both `vertices` and `vertices_scaled_shader` after vertex blend and paint color-filter coverage | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
 
