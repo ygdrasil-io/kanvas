@@ -9,8 +9,10 @@ import org.junit.jupiter.api.Test
 import org.skia.codec.CodecDecoderProvider
 import org.skia.codec.SkCodec
 import org.skia.foundation.SkAlphaType
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
+import org.skia.foundation.SkImageInfo
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 import java.util.zip.CRC32
@@ -488,6 +490,80 @@ class SkPngKotlinCodecTest {
         assertF16(bitmap, 1, 0, 0x8000 / 65535f, 0x4000 / 65535f, 1f, 1f)
     }
 
+    @Test
+    fun `converts 16-bit RGBA natural F16 decode into requested RGBA 8888`() {
+        val codec = SkPngKotlinCodec.Decoder.make(
+            truecolor16Png(
+                width = 2,
+                height = 1,
+                colorType = 6,
+                rows = listOf(
+                    longArrayOf(rgba64(0xFFFF, 0x8000, 0x0000, 0x8000), rgba64(0x0000, 0x4000, 0xFFFF, 0xFFFF)),
+                ),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val requested = SkImageInfo.Make(
+            width = 2,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            alphaType = SkAlphaType.kUnpremul,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val dst = SkBitmap(2, 1, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst))
+        assertEquals(argb(0x80, 0xFF, 0x80, 0x00), dst.getPixel(0, 0))
+        assertEquals(argb(0xFF, 0x00, 0x40, 0xFF), dst.getPixel(1, 0))
+    }
+
+    @Test
+    fun `converts 8-bit RGBA natural 8888 decode into requested F16`() {
+        val codec = SkPngKotlinCodec.Decoder.make(
+            png(
+                width = 2,
+                height = 1,
+                colorType = 6,
+                rows = listOf(intArrayOf(argb(0x80, 0x40, 0x80, 0xC0), argb(0x00, 0x11, 0x22, 0x33))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val requested = SkImageInfo.Make(
+            width = 2,
+            height = 1,
+            colorType = SkColorType.kRGBA_F16Norm,
+            alphaType = SkAlphaType.kPremul,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val dst = SkBitmap(2, 1, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst))
+        assertF16(dst, 0, 0, (0x40 / 255f) * (0x80 / 255f), (0x80 / 255f) * (0x80 / 255f), (0xC0 / 255f) * (0x80 / 255f), 0x80 / 255f)
+        assertF16(dst, 1, 0, 0f, 0f, 0f, 0f)
+    }
+
+    @Test
+    fun `rejects unsupported requested PNG color conversion`() {
+        val codec = SkPngKotlinCodec.Decoder.make(
+            png(
+                width = 1,
+                height = 1,
+                colorType = 6,
+                rows = listOf(intArrayOf(argb(0xFF, 0x01, 0x02, 0x03))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val requested = SkImageInfo.Make(
+            width = 1,
+            height = 1,
+            colorType = SkColorType.kRGB_565,
+            alphaType = SkAlphaType.kOpaque,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkCodec.Result.kInvalidConversion, codec.getPixels(requested, dst))
+    }
 
     @Test
     fun `iCCP with unsupported synthetic profile falls back to sRGB`() {
