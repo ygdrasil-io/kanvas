@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package org.skia.foundation.awt
 
 import org.skia.foundation.SkFontStyle
@@ -5,10 +7,11 @@ import org.skia.foundation.SkTypeface
 import java.awt.Font
 
 /**
- * **NOTE D'IMPLÉMENTATION** — Ce fichier expose la surface API Skia
+ * **Legacy optional JVM/AWT backend** — Ce fichier expose la surface API Skia
  * (`SkTypeface`) mais l'implémentation sous-jacente repose sur
- * **`java.awt.Font.createFont(TRUETYPE_FONT, …)`** + AWT, pas sur le
- * moteur de fontes natif Skia (FreeType + SkScalerContext).
+ * **`java.awt.Font.createFont(TRUETYPE_FONT, …)`** + AWT. Les chemins
+ * portables doivent utiliser [org.skia.foundation.LiberationFontMgr], qui
+ * retourne le manager OpenType pure Kotlin.
  *
  * Conséquences :
  *  - Les outlines vectoriels sont identiques à ceux que Skia DM lit
@@ -34,6 +37,9 @@ import java.awt.Font
  * `gDefaultFontIndex = 4` upstream, the default typeface is
  * **Liberation Sans Regular** — which we mirror in [getDefault].
  */
+@Deprecated(
+    message = "Use org.skia.foundation.LiberationFontMgr.Make() for portable OpenType fonts. This object is the legacy optional AWT manager.",
+)
 public object LiberationFontMgr {
 
     /**

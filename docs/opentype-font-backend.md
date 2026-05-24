@@ -60,6 +60,12 @@ The optional AWT shaper follows the same rule: JVM callers can opt in through
 the portable fallback. The older `MakeJavaTextLayout()` name is kept only as a
 compatibility alias.
 
+The older `org.skia.foundation.awt.AwtTypeface` and
+`org.skia.foundation.awt.LiberationFontMgr` symbols are legacy cpu-raster
+surfaces. They remain available for tests and JVM/AWT compatibility work, but
+new portable font code should use `OpenTypeTypeface` and
+`org.skia.foundation.LiberationFontMgr.Make()`.
+
 ## Explicitly Unsupported
 
 - Full text shaping: bidi, script itemization, reordering, mark positioning,
