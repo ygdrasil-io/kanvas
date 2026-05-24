@@ -25,9 +25,6 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     testImplementation(project(":codec-test-fixtures"))
-    // Legacy ImageIO codec tests still run against the temporary AWT bundle,
-    // but production cpu-raster uses codec-all-kotlin above.
-    testImplementation(project(":codec-all-awt"))
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
     // D1.4 — PathOps regression harness loads upstream Skia
@@ -64,29 +61,12 @@ dependencies {
     kotlinCodecBackendRuntime(project(":codec-all-kotlin"))
 }
 
-val awtCodecBackendArtifacts = setOf(
-    "codec-all-awt",
-    "codec-png-imageio",
-    "codec-jpeg-imageio",
-    "codec-gif-imageio",
-    "codec-bmp-imageio",
-    "codec-wbmp-imageio",
-    "codec-webp-imageio",
-)
-
-fun File.isAwtCodecBackendArtifact(): Boolean =
-    awtCodecBackendArtifacts.any { artifact ->
-        name == "$artifact.jar" || name.startsWith("$artifact-")
-    }
-
 fun Test.useKotlinCodecBackendRuntime() {
     dependsOn("testClasses")
     shouldRunAfter(tasks.named("test"))
 
     testClassesDirs = sourceSets.test.get().output.classesDirs
-    classpath = sourceSets.test.get().runtimeClasspath.filter { file ->
-        !file.isAwtCodecBackendArtifact()
-    } + kotlinCodecBackendRuntime
+    classpath = sourceSets.test.get().runtimeClasspath + kotlinCodecBackendRuntime
 
     systemProperty("kanvas.codec.expectedBackend", "kotlin")
 }
@@ -102,21 +82,14 @@ tasks.register<Test>("testCodecWithKotlinBackend") {
     }
 }
 
-val legacyCodecSuiteKotlinBackendBlockers = listOf(
-    "org.skia.codec.webp.SkWebpCodecTest",
-)
-
 tasks.register<Test>("testCodecSuiteWithKotlinBackend") {
     group = "verification"
-    description = "Runs the backend-agnostic cpu-raster codec suite subset with codec-all-kotlin; excludes documented legacy ImageIO/VP8 lossy blockers."
+    description = "Runs the backend-agnostic cpu-raster codec suite subset with codec-all-kotlin."
 
     useKotlinCodecBackendRuntime()
 
     filter {
         includeTestsMatching("org.skia.codec.*")
-        legacyCodecSuiteKotlinBackendBlockers.forEach { testClass ->
-            excludeTestsMatching(testClass)
-        }
     }
 }
 

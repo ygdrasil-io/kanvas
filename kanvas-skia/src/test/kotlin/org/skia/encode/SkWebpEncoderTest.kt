@@ -8,13 +8,12 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import org.skia.codec.SkCodec
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import javax.imageio.ImageIO
 
 /**
  * R-suivi.23 verification suite for [SkWebpEncoder].
@@ -22,7 +21,7 @@ import javax.imageio.ImageIO
  * Covers :
  *  - the [SkWebpEncoder.Compression.kLossless] path produces a real
  *    VP8L bitstream wrapped in a RIFF/WEBP container, and round-trips
- *    pixel-identical through the TwelveMonkeys `imageio-webp` decoder ;
+ *    pixel-identical through the pure Kotlin WebP decoder ;
  *  - the RIFF header carries the correct magic bytes and the VP8L
  *    signature byte sits at offset 20 ;
  *  - the [SkWebpEncoder.Custom] hook short-circuits the built-in
@@ -66,21 +65,20 @@ class SkWebpEncoderTest {
     }
 
     @Test
-    fun `lossless encode round-trips pixel-identical through ImageIO`() {
+    fun `lossless encode round-trips pixel-identical through pure Kotlin WebP codec`() {
         val src = makeGradient(16, 16)
         val bytes = SkWebpEncoder.Encode(
             src,
             SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless, 100f),
         )
         assertNotNull(bytes, "lossless encode must succeed")
-        val decoded = ImageIO.read(ByteArrayInputStream(bytes!!))
-        assertNotNull(decoded, "TwelveMonkeys must decode the produced WebP")
-        assertEquals(src.width, decoded!!.width)
+        val decoded = decodeWebp(bytes!!)
+        assertEquals(src.width, decoded.width)
         assertEquals(src.height, decoded.height)
         for (y in 0 until src.height) {
             for (x in 0 until src.width) {
                 val expected = src.getPixel(x, y)
-                val actual = decoded.getRGB(x, y)
+                val actual = decoded.getPixel(x, y)
                 assertEquals(
                     expected,
                     actual,
@@ -106,10 +104,9 @@ class SkWebpEncoderTest {
             SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
         )
         assertNotNull(bytes)
-        val decoded = ImageIO.read(ByteArrayInputStream(bytes!!))
-        assertNotNull(decoded)
+        val decoded = decodeWebp(bytes!!)
         for (y in 0 until 8) for (x in 0 until 8) {
-            assertEquals(color, decoded!!.getRGB(x, y))
+            assertEquals(color, decoded.getPixel(x, y))
         }
     }
 
@@ -122,11 +119,10 @@ class SkWebpEncoderTest {
             SkWebpEncoder.Options(SkWebpEncoder.Compression.kLossless),
         )
         assertNotNull(bytes)
-        val decoded = ImageIO.read(ByteArrayInputStream(bytes!!))
-        assertNotNull(decoded)
-        assertEquals(1, decoded!!.width)
+        val decoded = decodeWebp(bytes!!)
+        assertEquals(1, decoded.width)
         assertEquals(1, decoded.height)
-        assertEquals(0xFF7F00FF.toInt(), decoded.getRGB(0, 0))
+        assertEquals(0xFF7F00FF.toInt(), decoded.getPixel(0, 0))
     }
 
     @Test
@@ -324,5 +320,14 @@ class SkWebpEncoderTest {
             b.pixels[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or 0x40
         }
         return b
+    }
+
+    private fun decodeWebp(bytes: ByteArray): SkBitmap {
+        val codec = SkCodec.MakeFromData(bytes)
+        assertNotNull(codec, "pure Kotlin WebP codec must decode the produced WebP")
+        val (bitmap, result) = codec!!.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        return bitmap!!
     }
 }

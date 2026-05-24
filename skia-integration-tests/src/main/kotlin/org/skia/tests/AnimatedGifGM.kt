@@ -28,7 +28,7 @@ import org.graphiks.math.SkISize
  * required frame's pixels are already on-hand (cached in `frames[]`),
  * we feed them through [SkCodec.Options.priorFrame] so the codec
  * shortcuts the dependency-chain reconstruction. kanvas-skia's
- * [SkGifCodec] pre-composes every frame at construction time, so the
+ * The GIF codec pre-composes every frame at construction time, so the
  * hint is informational on this back-end — but the upstream-faithful
  * call site keeps the GM portable across codec implementations.
  *

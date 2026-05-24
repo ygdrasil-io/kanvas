@@ -15,9 +15,9 @@ import java.io.InputStream
  * largest entry by area, prefer PNG when sizes tie, and delegate the
  * payload decode to the matching format-specific [SkCodec] :
  *  - **PNG payloads** route through [SkCodec.MakeFromData] which picks
- *    up [`org.skia.codec.png.SkPngCodec`] from the dispatch registry.
+ *    up the registered PNG decoder from the dispatch registry.
  *  - **BMP payloads** are wrapped in a synthetic 14-byte `BITMAPFILEHEADER`
- *    so the existing [`org.skia.codec.bmp.SkBmpCodec`] can decode them
+ *    so the registered BMP decoder can decode them
  *    unchanged. The bfOffBits field points past the synthetic header
  *    plus the DIB header / palette into the pixel data, mirroring how
  *    Skia's `SkIcoCodec` synthesises a BMP stream for libpng-free
@@ -140,7 +140,7 @@ public object SkIcoDecoder {
 
     /**
      * Synthesise a 14-byte `BITMAPFILEHEADER` in front of an embedded
-     * DIB so [SkBmpCodec] can decode it. Returns `null` when the
+     * DIB so the registered BMP decoder can decode it. Returns `null` when the
      * payload doesn't begin with a parseable BITMAPINFOHEADER.
      *
      * The BMP file header layout is :
@@ -169,7 +169,7 @@ public object SkIcoDecoder {
         // their first 16 bytes : biSize, biWidth, biHeight, biPlanes,
         // biBitCount, biCompression, biSizeImage, biXPelsPerMeter, ...
         // The ICO-DIB convention doubles `biHeight` to encode the AND
-        // mask ; we keep the value as-is — SkBmpCodec / ImageIO interpret
+        // mask ; we keep the value as-is — the BMP decoder interprets
         // the stored value as the pixel-data height, so the synthesised
         // BMP renders the colour plane only (the AND mask trails after
         // and is ignored).

@@ -21,7 +21,7 @@ import java.io.OutputStream
  *    minimal — but format-conformant — VP8L bitstream emitter. The
  *    output is **always** a valid RIFF/WEBP container that any
  *    standards-compliant WebP decoder (libwebp, Chrome, Firefox,
- *    TwelveMonkeys `imageio-webp`) decodes pixel-identical to the
+ *    Kanvas' pure Kotlin WebP decoder) decodes pixel-identical to the
  *    input. The encoder uses only literal pixels (no LZ77 backward
  *    references, no transformations, no color cache), so the bytes
  *    produced are larger than libwebp's lossless output — typically

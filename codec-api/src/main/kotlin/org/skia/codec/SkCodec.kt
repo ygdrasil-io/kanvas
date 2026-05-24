@@ -37,11 +37,9 @@ public interface CodecDecoderProvider {
  * the caller then drives the decode through [getPixels] (or its
  * convenience overloads).
  *
- * Slice **D3.1** ships the facade plus the PNG implementation — see
- * [SkPngCodec]. The plan ([MIGRATION_PLAN_RASTER_COMPLETION.md] § D3)
- * lays out the JPEG (D3.2), GIF/BMP/WBMP (D3.3), and WEBP (D3.4)
- * follow-ups ; each adds a sibling under `org.skia.codec.<format>` and
- * registers itself with [Decoders].
+ * The facade is implemented by format-specific codecs under
+ * `org.skia.codec.<format>` and each decoder registers itself with
+ * [Decoders].
  *
  * **API surface** (mapped from upstream) :
  *  - [getInfo] — a "reasonable [SkImageInfo] to decode into" ; carries
@@ -108,7 +106,7 @@ public abstract class SkCodec protected constructor() {
      *
      * **Default :** [SkEncodedOrigin.kTopLeft] — the encoded grid is
      * already upright. Format-specific subclasses with EXIF-aware
-     * decoders ([org.skia.codec.jpeg.SkJpegCodec]) override to surface
+     * decoders override to surface
      * the parsed value ; callers that wish to materialise the rotation
      * post-decode can compose [SkEncodedOrigin.toMatrix] /
      * [org.skia.utils.SkPixmapUtils.Orient].
@@ -142,8 +140,7 @@ public abstract class SkCodec protected constructor() {
      * `(dst, rowBytes)` into [SkBitmap] (see [getPixels] above) and
      * adds the [opts] hook for animated decoders. Default base-class
      * behaviour ignores [opts] and dispatches to the single-frame path
-     * — only multi-frame codecs ([SkGifCodec], future WebP-anim)
-     * override.
+     * — only multi-frame codecs (GIF, animated WebP) override.
      */
     public open fun getPixels(info: SkImageInfo, dst: SkBitmap, opts: Options): Result =
         getPixels(info, dst)
@@ -199,8 +196,7 @@ public abstract class SkCodec protected constructor() {
     /**
      * Mirrors `SkCodec::getFrameInfo()` (vector overload). Static
      * codecs return a single-element list describing the lone frame ;
-     * multi-frame codecs ([SkGifCodec]) override with the real per-
-     * frame metadata.
+     * multi-frame codecs override with the real per-frame metadata.
      */
     public open fun getFrameInfo(): List<FrameInfo> = listOf(
         FrameInfo(
