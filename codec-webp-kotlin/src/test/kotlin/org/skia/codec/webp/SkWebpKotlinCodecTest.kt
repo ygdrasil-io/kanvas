@@ -430,6 +430,76 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 intra reconstruction applies prediction and residuals`() {
+        val dc = reconstructVp8IntraPlane(
+            width = 4,
+            height = 4,
+            mode = Vp8IntraPredictionMode.DC,
+            left = intArrayOf(100, 104, 108, 112),
+            top = intArrayOf(120, 124, 128, 132),
+            topLeft = 96,
+            residual = IntArray(16).also {
+                it[0] = -200
+                it[5] = 9
+                it[15] = 200
+            },
+        )
+
+        assertEquals(0, dc[0])
+        assertEquals(116, dc[1])
+        assertEquals(125, dc[5])
+        assertEquals(255, dc[15])
+    }
+
+    @Test
+    fun `VP8 true-motion prediction uses neighboring samples`() {
+        val plane = reconstructVp8IntraPlane(
+            width = 4,
+            height = 4,
+            mode = Vp8IntraPredictionMode.TRUE_MOTION,
+            left = intArrayOf(90, 110, 130, 150),
+            top = intArrayOf(80, 100, 120, 140),
+            topLeft = 100,
+        )
+
+        assertArrayEquals(
+            intArrayOf(
+                70, 90, 110, 130,
+                90, 110, 130, 150,
+                110, 130, 150, 170,
+                130, 150, 170, 190,
+            ),
+            plane,
+        )
+    }
+
+    @Test
+    fun `VP8 YUV420 composition writes opaque project-packed pixels`() {
+        val pixels = composeVp8Yuv420ToRgba(
+            yPlane = intArrayOf(
+                10, 20, 30,
+                40, 50, 60,
+            ),
+            uPlane = intArrayOf(128, 140),
+            vPlane = intArrayOf(128, 120),
+            width = 3,
+            height = 2,
+        )
+
+        assertArrayEquals(
+            intArrayOf(
+                argb(10, 10, 10),
+                argb(20, 20, 20),
+                argb(18, 32, 51),
+                argb(40, 40, 40),
+                argb(50, 50, 50),
+                argb(48, 62, 81),
+            ),
+            pixels,
+        )
+    }
+
+    @Test
     fun `returns unimplemented for pixel decode after metadata parse`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8xWebp(width = 2, height = 2, flags = 0))!!
         val dst = SkBitmap(
@@ -1232,6 +1302,9 @@ class SkWebpKotlinCodecTest {
         writeU16LE(payload, 8, height)
         return payload
     }
+
+    private fun argb(red: Int, green: Int, blue: Int): Int =
+        (0xFF shl 24) or (red shl 16) or (green shl 8) or blue
 
     private fun alphaChunk(control: Int, payload: ByteArray): ByteArray =
         chunk("ALPH", byteArrayOf(control.toByte()) + payload)
