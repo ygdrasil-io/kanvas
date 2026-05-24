@@ -100,6 +100,33 @@ class SkJpegEncoderTest {
         }
     }
 
+    @Test
+    fun `BlendOnBlack composites transparent pixels before JPEG encode`() {
+        val ignored = SkJpegEncoder.Encode(
+            makeFlat(16, 16, 0x00FF0000.toInt()),
+            SkJpegEncoder.Options(quality = 100, alphaOption = SkJpegEncoder.AlphaOption.kIgnore),
+        )!!
+        val blended = SkJpegEncoder.Encode(
+            makeFlat(16, 16, 0x00FF0000.toInt()),
+            SkJpegEncoder.Options(quality = 100, alphaOption = SkJpegEncoder.AlphaOption.kBlendOnBlack),
+        )!!
+
+        val ignoredPixel = decode(ignored).getPixel(0, 0)
+        val blendedPixel = decode(blended).getPixel(0, 0)
+        assertTrue(((ignoredPixel ushr 16) and 0xFF) > 220, "kIgnore should preserve red RGB")
+        assertTrue(((blendedPixel ushr 16) and 0xFF) < 8, "kBlendOnBlack should encode transparent red as black")
+        assertTrue(((blendedPixel ushr 8) and 0xFF) < 8, "kBlendOnBlack green drift")
+        assertTrue((blendedPixel and 0xFF) < 8, "kBlendOnBlack blue drift")
+    }
+
+    @Test
+    fun `Downsample option is written into SOF0 sampling factors`() {
+        val bitmap = makeGradient(16, 16)
+        assertEquals(0x22, sof0YSampling(SkJpegEncoder.Encode(bitmap, SkJpegEncoder.Options(downsample = SkJpegEncoder.Downsample.k420))!!))
+        assertEquals(0x21, sof0YSampling(SkJpegEncoder.Encode(bitmap, SkJpegEncoder.Options(downsample = SkJpegEncoder.Downsample.k422))!!))
+        assertEquals(0x11, sof0YSampling(SkJpegEncoder.Encode(bitmap, SkJpegEncoder.Options(downsample = SkJpegEncoder.Downsample.k444))!!))
+    }
+
     private fun makeFlat(width: Int, height: Int, color: Int): SkBitmap {
         val b = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
@@ -119,5 +146,28 @@ class SkJpegEncoderTest {
             b.pixels[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b2
         }
         return b
+    }
+
+    private fun decode(bytes: ByteArray): SkBitmap {
+        val (decoded, result) = SkCodec.MakeFromData(bytes)!!.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(decoded)
+        return decoded!!
+    }
+
+    private fun sof0YSampling(bytes: ByteArray): Int {
+        var offset = 2
+        while (offset + 4 <= bytes.size) {
+            require(bytes[offset] == 0xFF.toByte()) { "expected marker at $offset" }
+            val marker = bytes[offset + 1].toInt() and 0xFF
+            val length = ((bytes[offset + 2].toInt() and 0xFF) shl 8) or (bytes[offset + 3].toInt() and 0xFF)
+            if (marker == 0xC0) {
+                val componentCountOffset = offset + 4 + 5
+                assertEquals(3, bytes[componentCountOffset].toInt() and 0xFF)
+                return bytes[componentCountOffset + 2].toInt() and 0xFF
+            }
+            offset += 2 + length
+        }
+        error("SOF0 marker not found")
     }
 }

@@ -6,10 +6,9 @@ import org.junit.jupiter.api.Test
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
 import org.graphiks.math.SkIRect
-import java.awt.image.BufferedImage
-import java.io.ByteArrayOutputStream
+import org.skia.encode.SkPngEncoder
+import org.skia.foundation.SkBitmap
 import java.nio.ByteBuffer
-import javax.imageio.ImageIO
 
 /**
  * R-suivi.34 verification — exercises [SkAndroidCodec.getAndroidPixels]
@@ -172,13 +171,13 @@ class SkAndroidCodecGetAndroidPixelsTest {
     // ─── Helpers ──────────────────────────────────────────────────────
 
     private fun synthPng(width: Int, height: Int): ByteArray {
-        val img = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
+        val img = SkBitmap(width, height)
         for (y in 0 until height) {
             for (x in 0 until width) {
-                img.setRGB(x, y, (0xFF shl 24) or (x * 8) or ((y * 8) shl 8))
+                img.setPixel(x, y, (0xFF shl 24) or (x * 8) or ((y * 8) shl 8))
             }
         }
-        return ByteArrayOutputStream().also { ImageIO.write(img, "png", it) }.toByteArray()
+        return SkPngEncoder.Encode(img) ?: error("Synthetic PNG encode failed")
     }
 
     @Test

@@ -29,7 +29,7 @@ import java.io.OutputStream
  *
  * Both honour the BMP-mandated 4-byte row alignment by zero-padding
  * each row up to the nearest multiple of 4. Java's bundled
- * `javax.imageio` BMP reader round-trips both layouts.
+ * the pure Kotlin BMP codec round-trips both layouts.
  *
  * Pure Kotlin — no JNI, no native libwebp-style dependency. The
  * encoder allocates one `ByteArrayOutputStream` sized to the exact

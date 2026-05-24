@@ -36,8 +36,7 @@ import java.io.OutputStream
  * ### Extension hook
  *
  * [Custom] lets a downstream consumer plug in any external encoder
- * (e.g. a libwebp JNI binding, an `ImageIO` writer plugin once one
- * ships, a Skija fallback) without dragging the dependency into
+ * (e.g. a libwebp JNI binding or a Skija fallback) without dragging the dependency into
  * `:kanvas-skia`. When registered, the callback takes precedence over
  * the built-in pure-Kotlin lossless encoder for **every** invocation
  * including [Compression.kLossless], so callers that want better

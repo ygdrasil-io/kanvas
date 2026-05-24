@@ -198,6 +198,102 @@ tasks.register("checkPureKotlinPngEncoderNoAwt") {
     }
 }
 
+tasks.register("checkProductionImageEncodeNoAwt") {
+    group = "verification"
+    description = "Fails if production image encoders use AWT/ImageIO/java.desktop APIs."
+
+    doLast {
+        val sourceRoot = file("kanvas-skia/src/main/kotlin/org/skia/encode")
+        val violations = mutableListOf<String>()
+        sourceRoot
+            .walkTopDown()
+            .filter { source -> source.isFile && source.extension in setOf("kt", "kts", "java") }
+            .forEach { source ->
+                val sourceText = source.readText().withoutKotlinOrJavaComments()
+                forbiddenSourcePatterns.forEach { pattern ->
+                    if (pattern.containsMatchIn(sourceText)) {
+                        violations += "${source.relativeTo(rootDir)} contains forbidden production API reference ${pattern.pattern}"
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("Production image encoders must not use AWT/ImageIO/java.desktop APIs.")
+                    violations.sorted().forEach { appendLine("- $it") }
+                }
+            )
+        }
+    }
+}
+
+tasks.register("checkImageEncodeTestsNoAwt") {
+    group = "verification"
+    description = "Fails if image encode tests use AWT/ImageIO as an oracle."
+
+    doLast {
+        val sourceRoot = file("kanvas-skia/src/test/kotlin/org/skia/encode")
+        val violations = mutableListOf<String>()
+        sourceRoot
+            .walkTopDown()
+            .filter { source -> source.isFile && source.extension in setOf("kt", "kts", "java") }
+            .forEach { source ->
+                val sourceText = source.readText().withoutKotlinOrJavaComments()
+                forbiddenSourcePatterns.forEach { pattern ->
+                    if (pattern.containsMatchIn(sourceText)) {
+                        violations += "${source.relativeTo(rootDir)} contains forbidden test oracle API reference ${pattern.pattern}"
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("Image encode tests must not use AWT/ImageIO/java.desktop APIs.")
+                    violations.sorted().forEach { appendLine("- $it") }
+                }
+            )
+        }
+    }
+}
+
+tasks.register("checkCpuRasterImageToolingNoAwt") {
+    group = "verification"
+    description = "Fails if cpu-raster image test tooling uses AWT/ImageIO/java.desktop APIs."
+
+    doLast {
+        val filesToCheck = listOf(
+            file("cpu-raster/src/main/kotlin/org/skia/testing/TestUtils.kt"),
+            file("cpu-raster/src/main/kotlin/org/skia/testing/DiffImage.kt"),
+            file("cpu-raster/src/test/kotlin/org/skia/testing/TestToolingTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/skia/codec/SkAndroidCodecComputeSampleSizeJpegTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/skia/codec/SkAndroidCodecGetAndroidPixelsTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/skia/codec/SkAndroidCodecTest.kt"),
+        )
+        val violations = mutableListOf<String>()
+        filesToCheck
+            .filter { source -> source.isFile }
+            .forEach { source ->
+                val sourceText = source.readText().withoutKotlinOrJavaComments()
+                forbiddenSourcePatterns.forEach { pattern ->
+                    if (pattern.containsMatchIn(sourceText)) {
+                        violations += "${source.relativeTo(rootDir)} contains forbidden image tooling API reference ${pattern.pattern}"
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("CPU raster image test tooling must not use AWT/ImageIO/java.desktop APIs.")
+                    violations.sorted().forEach { appendLine("- $it") }
+                }
+            )
+        }
+    }
+}
+
 tasks.register("checkCodecKotlinSwitchCriteria") {
     group = "verification"
     description = "Runs the non-destructive codec-all-kotlin switch-readiness checks."
