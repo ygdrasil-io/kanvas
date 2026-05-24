@@ -22,16 +22,10 @@ import org.graphiks.math.SkRect
  *     rounding errors and produces a subtly washed-out ring; an F16 layer is
  *     precise enough to reconstruct the exact source colours.
  *
- * **F16 flag not implemented** — `SkCanvas::kF16ColorType` (bitmask `1 << 4`)
- * is accepted in [org.skia.core.SaveLayerRec.flags] but **silently ignored**
- * by `:kanvas-skia`'s raster backend. The layer is always allocated as an
- * 8-bit ARGB bitmap, so both saveLayer passes produce identical (8-bit) output
- * and the rendered image deviates from the reference.
- *
- * TODO: missing API — `SkCanvas::kF16ColorType` save-layer flag
- * (`include/core/SkCanvas.h:687`). Implementing requires allocating the
- * offscreen layer as `SkColorType.kRGBA_F16Norm` when the flag is set, then
- * converting back to 8-bit on `restore()`.
+ * `SkCanvas::kF16ColorType` (bitmask `1 << 4`) is forwarded through
+ * [org.skia.core.SaveLayerRec.flags] so the second layer is allocated as
+ * `SkColorType.kRGBA_F16Norm` before being converted back to the parent
+ * surface on `restore()`.
  */
 public class SaveLayerF16GM : GM() {
 
@@ -63,9 +57,6 @@ public class SaveLayerF16GM : GM() {
         for (flags in intArrayOf(0, F16_COLOR_TYPE_FLAG)) {
             c.translate(r.width(), 0f)
 
-            // TODO("STUB.F16_COLOR_TYPE: kF16ColorType flag (1 << 4) is accepted but
-            // ignored — layer is always 8-bit. Both loop iterations produce identical
-            // 8-bit output; the second (F16) pass should show a more accurate composite.")
             val rec = SaveLayerRec(flags = flags)
             c.saveLayer(rec)
             repeat(n) {

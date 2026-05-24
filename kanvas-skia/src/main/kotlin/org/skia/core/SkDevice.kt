@@ -5,6 +5,7 @@ import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkColorType
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
@@ -85,10 +86,13 @@ public interface SkDevice {
     /**
      * Phase G-saveLayer — allocate a fresh, backend-matched offscreen
      * device of the given pixel size that subsequent layer draws will
-     * target. The returned device must share this device's colour
-     * profile (color space + color type for raster ; intermediate
-     * format / present-pass settings for GPU) so [compositeFrom] can
-     * blit pixels back without an extra colour-space conversion.
+     * target. [colorType] lets `SkCanvas::kF16ColorType` request a
+     * higher-precision raster layer ; `null` means "match the parent".
+     * The returned device must share this device's colour profile
+     * (color space, optionally a requested color type for raster ;
+     * intermediate format / present-pass settings for GPU) so
+     * [compositeFrom] can blit pixels back without an extra colour-space
+     * conversion.
      *
      * **Scope.** Used by [SkCanvas.saveLayer] to back a transparency
      * group. The simplest scaffolding implementation may bail with a
@@ -96,7 +100,7 @@ public interface SkDevice {
      * keeps the existing fail-fast contract for GMs that touch layers
      * on a backend that hasn't implemented them.
      */
-    public fun makeLayerDevice(width: Int, height: Int): SkDevice
+    public fun makeLayerDevice(width: Int, height: Int, colorType: SkColorType? = null): SkDevice
 
     /**
      * Phase G-saveLayer — composite [src]'s pixels onto this device,

@@ -11,6 +11,9 @@ import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorTRANSPARENT
 import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorType
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageFilter
 import org.graphiks.math.SkColor
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
@@ -18,6 +21,10 @@ import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkSamplingOptions
+import org.graphiks.math.SkIRect
+import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
 
 /**
@@ -139,6 +146,18 @@ class SkCanvasInternalsTest {
                 assertEquals(expected, bitmap.getPixel(x, y), "($x,$y)")
             }
         }
+    }
+
+    @Test
+    fun `saveLayer forwards F16 color type flag to raster layer allocation`() {
+        val device = RecordingLayerDevice(SkBitmapDevice(SkBitmap(8, 8)))
+        SkCanvas(device).apply {
+            saveLayer(SaveLayerRec(flags = F16_COLOR_TYPE_FLAG))
+            drawPaint(SkPaint(SK_ColorRED))
+            restore()
+        }
+
+        assertEquals(SkColorType.kRGBA_F16Norm, device.lastRequestedLayerColorType)
     }
 
     @Test
@@ -324,4 +343,56 @@ class SkCanvasInternalsTest {
         val baseline = render(8, 8) { /* no draw */ }
         assertNotEquals(a.pixels[0], baseline.pixels[0])
     }
+}
+
+private const val F16_COLOR_TYPE_FLAG: SaveLayerFlags = 1 shl 4
+
+private class RecordingLayerDevice(
+    private val delegate: SkBitmapDevice,
+) : SkDevice {
+    var lastRequestedLayerColorType: SkColorType? = null
+        private set
+
+    override val width: Int get() = delegate.width
+    override val height: Int get() = delegate.height
+
+    override fun deviceClipBounds(): SkIRect = delegate.deviceClipBounds()
+
+    override fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) =
+        delegate.drawRect(rect, clip, paint)
+
+    override fun drawPaint(ctm: SkMatrix, clip: SkIRect, paint: SkPaint) =
+        delegate.drawPaint(ctm, clip, paint)
+
+    override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) =
+        delegate.drawPath(path, ctm, clip, paint)
+
+    override fun drawImageRect(
+        image: SkImage,
+        src: SkRect,
+        devDst: SkRect,
+        sampling: SkSamplingOptions,
+        paint: SkPaint?,
+        constraint: SrcRectConstraint,
+        clip: SkIRect,
+    ) = delegate.drawImageRect(image, src, devDst, sampling, paint, constraint, clip)
+
+    override fun makeLayerDevice(width: Int, height: Int, colorType: SkColorType?): SkDevice {
+        lastRequestedLayerColorType = colorType
+        return delegate.makeLayerDevice(width, height, colorType)
+    }
+
+    override fun compositeFrom(src: SkDevice, originX: Int, originY: Int, clip: SkIRect, paint: SkPaint?) =
+        delegate.compositeFrom(src, originX, originY, clip, paint)
+
+    override fun setActiveClipShape(shape: SkClipShape?) = delegate.setActiveClipShape(shape)
+
+    override fun seedBackdropFrom(
+        parent: SkDevice,
+        originX: Int,
+        originY: Int,
+        width: Int,
+        height: Int,
+        backdrop: SkImageFilter?,
+    ): Boolean = delegate.seedBackdropFrom(parent, originX, originY, width, height, backdrop)
 }

@@ -4,6 +4,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkClipOp
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkRegion
 import org.graphiks.math.SkColor
 import org.skia.foundation.SkFilterMode
@@ -2598,7 +2599,9 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         // The backend is responsible for matching colour profile /
         // precision so the parent ↔ layer composite at `restore()`
         // doesn't introduce an extra colour-space conversion.
-        val layerDevice = s.device.makeLayerDevice(w, h)
+        val requestedLayerColorType =
+            if ((rec.flags and F16_COLOR_TYPE_SAVE_LAYER_FLAG) != 0) SkColorType.kRGBA_F16Norm else null
+        val layerDevice = s.device.makeLayerDevice(w, h, requestedLayerColorType)
         val originX = layerBounds.left
         val originY = layerBounds.top
 
@@ -2779,11 +2782,10 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
     public open fun saveLayer(): Int = saveLayer(null, null)
 
     /**
-     * Mirrors Skia's `SkCanvas::saveLayer(bounds, paint, flags)`. The
-     * [flags] field is accepted for API compatibility but ignored.
+     * Mirrors Skia's `SkCanvas::saveLayer(bounds, paint, flags)`.
      */
     public open fun saveLayer(bounds: SkRect?, paint: SkPaint?, flags: SaveLayerFlags): Int =
-        saveLayer(bounds, paint)
+        saveLayer(SaveLayerRec(bounds = bounds, paint = paint, backdrop = null, flags = flags))
 
     /**
      * Mirrors Skia's `SkCanvas::saveLayerAlphaf(const SkRect* bounds, float alpha)`.
@@ -3153,3 +3155,5 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         }
     }
 }
+
+private const val F16_COLOR_TYPE_SAVE_LAYER_FLAG: SaveLayerFlags = 1 shl 4
