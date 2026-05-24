@@ -403,6 +403,23 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
+    fun `decodes progressive grayscale ac successive refinement scan`() {
+        val initialCodec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleAcRefinementJpeg(refine = false))!!
+        val refinedCodec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleAcRefinementJpeg(refine = true))!!
+
+        val (initialBitmap, initialResult) = initialCodec.getImage()
+        val (refinedBitmap, refinedResult) = refinedCodec.getImage()
+
+        assertEquals(SkCodec.Result.kSuccess, initialResult)
+        assertEquals(SkCodec.Result.kSuccess, refinedResult)
+        assertNotNull(initialBitmap)
+        assertNotNull(refinedBitmap)
+        assertTrue(horizontalContrast(initialBitmap!!) > 0)
+        assertTrue(horizontalContrast(refinedBitmap!!) > horizontalContrast(initialBitmap))
+        assertTrue(pixelDistance(initialBitmap, refinedBitmap) > 0)
+    }
+
+    @Test
     fun `rejects invalid progressive scan parameters`() {
         assertNull(
             SkJpegKotlinCodec.Decoder.make(
@@ -578,6 +595,67 @@ class SkJpegKotlinCodecTest {
             write(0x43)
         }
         out.write(entropyBits("10"))
+        out.writeMarker(0xD9)
+        return out.toByteArray()
+    }
+
+    private fun progressiveGrayscaleAcRefinementJpeg(refine: Boolean): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(1) }
+        }
+        out.writeSegment(0xC2) {
+            write(8)
+            writeU16BE(8)
+            writeU16BE(8)
+            write(1)
+            write(1)
+            write(0x11)
+            write(0)
+        }
+        out.writeSegment(0xC4) {
+            write(0x00)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xC4) {
+            write(0x10)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x03)
+        }
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(0)
+            write(0)
+            write(0)
+        }
+        out.write(entropyBits("0"))
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(1)
+            write(1)
+            write(0x01)
+        }
+        out.write(entropyBits("0111"))
+        if (refine) {
+            out.writeSegment(0xDA) {
+                write(1)
+                write(1)
+                write(0x00)
+                write(1)
+                write(1)
+                write(0x10)
+            }
+            out.write(entropyBits("10"))
+        }
         out.writeMarker(0xD9)
         return out.toByteArray()
     }
@@ -877,6 +955,21 @@ class SkJpegKotlinCodecTest {
         assertEquals(b, pixel[2], 0.000001f, "b x=$x y=$y")
         assertEquals(a, pixel[3], 0.000001f, "a x=$x y=$y")
     }
+
+    private fun horizontalContrast(bitmap: SkBitmap): Int =
+        kotlin.math.abs(red(bitmap.getPixel(0, 0)) - red(bitmap.getPixel(7, 0)))
+
+    private fun pixelDistance(left: SkBitmap, right: SkBitmap): Int {
+        var distance = 0
+        for (y in 0 until left.height) {
+            for (x in 0 until left.width) {
+                distance += kotlin.math.abs(red(left.getPixel(x, y)) - red(right.getPixel(x, y)))
+            }
+        }
+        return distance
+    }
+
+    private fun red(pixel: Int): Int = (pixel ushr 16) and 0xFF
 
     private fun ByteArrayOutputStream.writeU16LE(value: Int) {
         write(value and 0xFF)

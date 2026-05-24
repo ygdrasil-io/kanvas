@@ -603,9 +603,13 @@ private fun decodeProgressiveGrayscaleInitial(jpeg: ParsedJpeg): IntArray? {
                 dcApproxLow = successiveLow
             }
         } else {
-            if (successiveHigh != 0 || successiveLow != 0) return null
             if (!sawDc) return null
-            decodeProgressiveGrayscaleAcScan(jpeg, entropyScan, blockCoeffs, quant)
+            if (successiveHigh == 0) {
+                decodeProgressiveGrayscaleAcScan(jpeg, entropyScan, blockCoeffs, quant, successiveLow)
+            } else {
+                if (successiveLow != successiveHigh - 1) return null
+                decodeProgressiveGrayscaleAcRefinementScan(jpeg, entropyScan, blockCoeffs, quant, successiveLow)
+            }
         }
     }
 
@@ -680,12 +684,14 @@ private fun decodeProgressiveGrayscaleAcScan(
     entropyScan: EntropyScan,
     blockCoeffs: Array<IntArray>,
     quant: IntArray,
+    successiveLow: Int,
 ) {
     val scan = entropyScan.scan
     val component = scan.components.single()
     val acTable = jpeg.acTables[component.acTable] ?: fail()
     val reader = EntropyBitReader(entropyScan.data)
     var nextRestartMarker = 0
+    val scale = 1 shl successiveLow
     for (blockIndex in blockCoeffs.indices) {
         var k = scan.spectralStart
         while (k <= scan.spectralEnd) {
@@ -703,7 +709,65 @@ private fun decodeProgressiveGrayscaleAcScan(
             k += run
             if (k > scan.spectralEnd) fail()
             val coefficientIndex = ZIGZAG[k]
-            blockCoeffs[blockIndex][coefficientIndex] = receiveAndExtend(reader, size) * quant[coefficientIndex]
+            blockCoeffs[blockIndex][coefficientIndex] =
+                receiveAndExtend(reader, size) * scale * quant[coefficientIndex]
+            k++
+        }
+        if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
+            reader.consumeRestart(nextRestartMarker)
+            nextRestartMarker = (nextRestartMarker + 1) and 7
+        }
+    }
+}
+
+private fun decodeProgressiveGrayscaleAcRefinementScan(
+    jpeg: ParsedJpeg,
+    entropyScan: EntropyScan,
+    blockCoeffs: Array<IntArray>,
+    quant: IntArray,
+    successiveLow: Int,
+) {
+    val scan = entropyScan.scan
+    val component = scan.components.single()
+    val acTable = jpeg.acTables[component.acTable] ?: fail()
+    val reader = EntropyBitReader(entropyScan.data)
+    var nextRestartMarker = 0
+    val refinement = 1 shl successiveLow
+    for (blockIndex in blockCoeffs.indices) {
+        var k = scan.spectralStart
+        while (k <= scan.spectralEnd) {
+            val coefficientIndex = ZIGZAG[k]
+            val coefficient = blockCoeffs[blockIndex][coefficientIndex]
+            if (coefficient != 0) {
+                if (reader.readBit() != 0) {
+                    blockCoeffs[blockIndex][coefficientIndex] +=
+                        if (coefficient > 0) {
+                            refinement * quant[coefficientIndex]
+                        } else {
+                            -refinement * quant[coefficientIndex]
+                        }
+                }
+                k++
+                continue
+            }
+
+            val rs = acTable.decode(reader)
+            val run = rs ushr 4
+            val size = rs and 0x0F
+            if (size == 0) {
+                if (run == 15) {
+                    k += 16
+                    continue
+                }
+                break
+            }
+            if (size != 1) fail()
+            k += run
+            if (k > scan.spectralEnd) fail()
+            val newCoefficientIndex = ZIGZAG[k]
+            val signBit = reader.readBit()
+            blockCoeffs[blockIndex][newCoefficientIndex] =
+                if (signBit == 0) -refinement * quant[newCoefficientIndex] else refinement * quant[newCoefficientIndex]
             k++
         }
         if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
