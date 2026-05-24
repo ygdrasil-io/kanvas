@@ -32,6 +32,12 @@ import kotlin.math.floor as kFloor
 private fun floor(v: Float): Int = kFloor(v.toDouble()).toInt()
 private fun ceil(v: Float): Int = kCeil(v.toDouble()).toInt()
 
+private fun strictSampleMin(edge: Float, max: Int): Int =
+    ceil(edge - 0.5f).coerceIn(0, max)
+
+private fun strictSampleMax(edge: Float, min: Int, max: Int): Int =
+    floor(edge - 0.5f).coerceIn(min, max)
+
 /** Chord-error tolerance (in device-space pixels) for Bézier flattening. */
 private const val PATH_FLATNESS: Float = 0.25f
 /** Squared tolerance — used to compare against `cross² / chord²` without `sqrt`. */
@@ -711,7 +717,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // **minor** axis. This is the same shortcut the shader path
         // takes — see [SkBitmapShader.sampleAniso8].
         if (sampling.useAniso && image.levelCount() > 1) {
-            drawImageRectAniso(image, src, devDst, sampling, paint, clip, ix0, iy0, ix1, iy1)
+            drawImageRectAniso(image, src, devDst, sampling, paint, constraint, clip, ix0, iy0, ix1, iy1)
             return
         }
         // Phase G10 — mip LOD : when the destination is small enough
@@ -759,6 +765,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         val blender = paint?.blender
         val maxX = image.width - 1
         val maxY = image.height - 1
+        val strict = constraint == SrcRectConstraint.kStrict
+        val strictMinX = strictSampleMin(src.left, maxX)
+        val strictMaxX = strictSampleMax(src.right, strictMinX, maxX)
+        val strictMinY = strictSampleMin(src.top, maxY)
+        val strictMaxY = strictSampleMax(src.bottom, strictMinY, maxY)
         val alphaMaskTint = alphaMaskTintColor(image, paint, colorFilter)
 
         // [SkImage] currently has no `colorSpace` property, so by convention
@@ -786,28 +797,32 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         if (cubic != null) {
             for (py in iy0 until iy1) {
                 val srcYf = src.top + (py + 0.5f - devDst.top) * scaleY - 0.5f
-                val iyc = floor(srcYf).toInt()
+                val iyc = floor(srcYf)
                 val fy = srcYf - iyc
                 val wy0 = SkCubicBC.weight(1f + fy, cubic.B, cubic.C)
                 val wy1 = SkCubicBC.weight(fy,       cubic.B, cubic.C)
                 val wy2 = SkCubicBC.weight(1f - fy,  cubic.B, cubic.C)
                 val wy3 = SkCubicBC.weight(2f - fy,  cubic.B, cubic.C)
-                val iy0c = (iyc - 1).coerceIn(0, maxY)
-                val iy1c = iyc.coerceIn(0, maxY)
-                val iy2c = (iyc + 1).coerceIn(0, maxY)
-                val iy3c = (iyc + 2).coerceIn(0, maxY)
+                val yMin = if (strict) strictMinY else 0
+                val yMax = if (strict) strictMaxY else maxY
+                val iy0c = (iyc - 1).coerceIn(yMin, yMax)
+                val iy1c = iyc.coerceIn(yMin, yMax)
+                val iy2c = (iyc + 1).coerceIn(yMin, yMax)
+                val iy3c = (iyc + 2).coerceIn(yMin, yMax)
                 for (px in ix0 until ix1) {
                     val srcXf = src.left + (px + 0.5f - devDst.left) * scaleX - 0.5f
-                    val ixc = floor(srcXf).toInt()
+                    val ixc = floor(srcXf)
                     val fx = srcXf - ixc
                     val wx0 = SkCubicBC.weight(1f + fx, cubic.B, cubic.C)
                     val wx1 = SkCubicBC.weight(fx,       cubic.B, cubic.C)
                     val wx2 = SkCubicBC.weight(1f - fx,  cubic.B, cubic.C)
                     val wx3 = SkCubicBC.weight(2f - fx,  cubic.B, cubic.C)
-                    val ix0c = (ixc - 1).coerceIn(0, maxX)
-                    val ix1c = ixc.coerceIn(0, maxX)
-                    val ix2c = (ixc + 1).coerceIn(0, maxX)
-                    val ix3c = (ixc + 2).coerceIn(0, maxX)
+                    val xMin = if (strict) strictMinX else 0
+                    val xMax = if (strict) strictMaxX else maxX
+                    val ix0c = (ixc - 1).coerceIn(xMin, xMax)
+                    val ix1c = ixc.coerceIn(xMin, xMax)
+                    val ix2c = (ixc + 1).coerceIn(xMin, xMax)
+                    val ix3c = (ixc + 2).coerceIn(xMin, xMax)
                     var sample = cubicSampleARGB(
                         devPixels, image.width,
                         ix0c, ix1c, ix2c, ix3c,
@@ -832,10 +847,18 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             SkFilterMode.kNearest -> {
                 for (py in iy0 until iy1) {
                     val srcYc = src.top + (py + 0.5f - devDst.top) * scaleY
-                    val iy = floor(srcYc).coerceIn(0, maxY)
+                    val iy = if (strict) {
+                        floor(srcYc).coerceIn(strictMinY, strictMaxY)
+                    } else {
+                        floor(srcYc).coerceIn(0, maxY)
+                    }
                     for (px in ix0 until ix1) {
                         val srcXc = src.left + (px + 0.5f - devDst.left) * scaleX
-                        val ix = floor(srcXc).coerceIn(0, maxX)
+                        val ix = if (strict) {
+                            floor(srcXc).coerceIn(strictMinX, strictMaxX)
+                        } else {
+                            floor(srcXc).coerceIn(0, maxX)
+                        }
                         var sample = if (alphaMaskTint != null) {
                             applyAlphaMaskTint(devPixels[iy * image.width + ix], alphaMaskTint, paintAlpha)
                         } else {
@@ -851,13 +874,23 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             SkFilterMode.kLinear -> {
                 for (py in iy0 until iy1) {
                     val srcYf = src.top + (py + 0.5f - devDst.top) * scaleY - 0.5f
-                    val iy0i = floor(srcYf).coerceIn(0, maxY)
-                    val iy1i = (iy0i + 1).coerceAtMost(maxY)
+                    val iyRaw = floor(srcYf)
+                    val iy0i = if (strict) iyRaw.coerceIn(strictMinY, strictMaxY) else iyRaw.coerceIn(0, maxY)
+                    val iy1i = if (strict) {
+                        (iyRaw + 1).coerceIn(strictMinY, strictMaxY)
+                    } else {
+                        (iy0i + 1).coerceAtMost(maxY)
+                    }
                     val fy = (srcYf - floor(srcYf).toFloat()).coerceIn(0f, 1f)
                     for (px in ix0 until ix1) {
                         val srcXf = src.left + (px + 0.5f - devDst.left) * scaleX - 0.5f
-                        val ix0i = floor(srcXf).coerceIn(0, maxX)
-                        val ix1i = (ix0i + 1).coerceAtMost(maxX)
+                        val ixRaw = floor(srcXf)
+                        val ix0i = if (strict) ixRaw.coerceIn(strictMinX, strictMaxX) else ixRaw.coerceIn(0, maxX)
+                        val ix1i = if (strict) {
+                            (ixRaw + 1).coerceIn(strictMinX, strictMaxX)
+                        } else {
+                            (ix0i + 1).coerceAtMost(maxX)
+                        }
                         val fx = (srcXf - floor(srcXf).toFloat()).coerceIn(0f, 1f)
                         val c00 = devPixels[iy0i * image.width + ix0i]
                         val c10 = devPixels[iy0i * image.width + ix1i]
@@ -958,6 +991,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         devDst: SkRect,
         sampling: SkSamplingOptions,
         paint: SkPaint?,
+        constraint: SrcRectConstraint,
         clip: SkIRect,
         ix0: Int, iy0: Int, ix1: Int, iy1: Int,
     ) {
@@ -994,6 +1028,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         val mustBlendZero = modeAffectsZeroAlphaSrc(mode) || colorFilter != null
         val maxX = mip.width - 1
         val maxY = mip.height - 1
+        val strict = constraint == SrcRectConstraint.kStrict
+        val strictMinX = strictSampleMin(src.left * mipScaleX, maxX)
+        val strictMaxX = strictSampleMax(src.right * mipScaleX, strictMinX, maxX)
+        val strictMinY = strictSampleMin(src.top * mipScaleY, maxY)
+        val strictMaxY = strictSampleMax(src.bottom * mipScaleY, strictMinY, maxY)
 
         // The aniso N-tap walks along the **major** axis at each device pixel.
         val majorIsX = scaleX >= scaleY
@@ -1016,11 +1055,21 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     // Bilinear sample on the chosen mip level.
                     val xf = sxF - 0.5f
                     val yf = syF - 0.5f
-                    val ix = floor(xf).coerceIn(0, maxX)
-                    val ixn = (ix + 1).coerceAtMost(maxX)
+                    val ixRaw = floor(xf)
+                    val ix = if (strict) ixRaw.coerceIn(strictMinX, strictMaxX) else ixRaw.coerceIn(0, maxX)
+                    val ixn = if (strict) {
+                        (ixRaw + 1).coerceIn(strictMinX, strictMaxX)
+                    } else {
+                        (ix + 1).coerceAtMost(maxX)
+                    }
                     val fx = (xf - floor(xf).toFloat()).coerceIn(0f, 1f)
-                    val iy = floor(yf).coerceIn(0, maxY)
-                    val iyn = (iy + 1).coerceAtMost(maxY)
+                    val iyRaw = floor(yf)
+                    val iy = if (strict) iyRaw.coerceIn(strictMinY, strictMaxY) else iyRaw.coerceIn(0, maxY)
+                    val iyn = if (strict) {
+                        (iyRaw + 1).coerceIn(strictMinY, strictMaxY)
+                    } else {
+                        (iy + 1).coerceAtMost(maxY)
+                    }
                     val fy = (yf - floor(yf).toFloat()).coerceIn(0f, 1f)
                     val c00 = devPixels[iy * mip.width + ix]
                     val c10 = devPixels[iy * mip.width + ixn]
