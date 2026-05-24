@@ -1,6 +1,7 @@
 package org.skia.core
 
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkBlender
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkClipOp
@@ -23,6 +24,7 @@ import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTileMode
+import org.skia.foundation.SkVertices
 import org.skia.foundation.opentype.OpenTypeTypeface
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkM44
@@ -2107,6 +2109,66 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             )
         }
     }
+
+    /**
+     * Experimental CPU-only skeleton for Skia's `SkCanvas::drawMesh`.
+     *
+     * Supported subset: [mesh] must be valid, CPU-backed, and its
+     * [SkMeshSpecification] must contain a `float2` attribute named
+     * `position`. The mesh is converted to [SkVertices] and drawn with the
+     * supplied [paint]. Mesh SkSL, uniforms, children, fragment colors, and
+     * [blender] are accepted by the surface API but not executed yet.
+     */
+    public open fun drawMesh(
+        mesh: SkMesh,
+        @Suppress("UNUSED_PARAMETER") blender: SkBlender? = null,
+        paint: SkPaint = SkPaint(),
+    ) {
+        if (!mesh.isValid()) return
+        val s = top
+        s.device.requireBitmap("drawMesh")
+
+        val spec = mesh.spec() ?: return
+        val position = spec.positionAttribute ?: return
+        val vb = mesh.vertexBuffer() ?: return
+        val vertexBytes = vb.bytesUnsafe()
+        val positions = Array(mesh.vertexCount()) { i ->
+            val base = mesh.vertexOffset() + i * spec.stride() + position.offset
+            SkPoint(readFloatLE(vertexBytes, base), readFloatLE(vertexBytes, base + 4))
+        }
+        val vertexMode = when (mesh.mode()) {
+            SkMesh.Mode.kTriangles -> SkVertices.VertexMode.kTriangles
+            SkMesh.Mode.kTriangleStrip -> SkVertices.VertexMode.kTriangleStrip
+        }
+        val indices = mesh.indexBuffer()?.let { ib ->
+            val bytes = ib.bytesUnsafe()
+            ShortArray(mesh.indexCount()) { i ->
+                readU16LE(bytes, mesh.indexOffset() + i * 2).toShort()
+            }
+        }
+        val vertices = SkVertices.MakeCopy(
+            mode = vertexMode,
+            positions = positions,
+            indices = indices,
+        )
+        drawVertices(vertices, SkBlendMode.kSrcOver, paint)
+    }
+
+    public open fun drawMesh(mesh: SkMesh, paint: SkPaint) {
+        drawMesh(mesh, null, paint)
+    }
+
+    private fun readFloatLE(bytes: ByteArray, offset: Int): Float =
+        Float.fromBits(
+            (bytes[offset].toInt() and 0xFF) or
+                ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
+                ((bytes[offset + 2].toInt() and 0xFF) shl 16) or
+                ((bytes[offset + 3].toInt() and 0xFF) shl 24),
+        )
+
+    private fun readU16LE(bytes: ByteArray, offset: Int): Int =
+        (bytes[offset].toInt() and 0xFF) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 8)
 
     /**
      * Mirrors Skia's
