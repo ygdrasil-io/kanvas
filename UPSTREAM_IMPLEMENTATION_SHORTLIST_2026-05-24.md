@@ -76,27 +76,25 @@ Completed since this snapshot:
   treats documented intentionally-empty ports such as `FiddleGM` as ported. The
   rebaseline bucket logic now lets already-`PORTED` rows override stale
   historical `STUB.*` tags.
-- `STUB.BLURRECT_GALLERY` and `STUB.BLUR_RECTS_FULL`: `SkBlurMask.BlurRect`
+- `STUB.BLURRECT_GALLERY`, `STUB.BLUR_RECTS_FULL`, and
+  `STUB.BLUR_RECT_COMPARE`: `SkBlurMask.BlurRect`
   now delegates to the existing separable blur mask filter, and
-  `BlurRectGalleryGM` / `BlurRectGM` are enabled with raster, WebGPU, and
-  crossbackend ratchets. The remaining `blurrect` implementation item is the
-  analytic-vs-brute-force `BlurRectCompareGM` harness.
+  `BlurRectGalleryGM` / `BlurRectGM` / `BlurRectCompareGM` are enabled with
+  raster, WebGPU, and crossbackend ratchets.
 
 ## Recommended order
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `blurrect_compare` | 1 cpp | M | Remaining blurrect work is the analytic-vs-brute-force comparison harness. |
-| 2 | `gradients` | 1 cpp | M/L | Isolated interpolation variants; useful after the tracker noise reduction. |
-| 3 | `savelayer` | 1 cpp | M/L | Raster-facing, but touches F16/save-behind semantics. |
-| 4 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
+| 1 | `gradients` | 1 cpp | M/L | Isolated interpolation variants; useful after the tracker noise reduction. |
+| 2 | `savelayer` | 1 cpp | M/L | Raster-facing, but touches F16/save-behind semantics. |
+| 3 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
 
 | Upstream cpp | Tags | Local GM files |
 |---|---|---|
 | `addarc` | `STUB.MISSING_API` | `AddArcGM.kt`, `AddArcMeasGM.kt`, `FillCircleGM.kt`, `ManyArcsGM.kt`, `StrokeCircleGM.kt`, `TinyAngleArcsGM.kt` |
-| `blurrect` | `STUB.BLUR_RECT_COMPARE` | `BlurMatrixRectGM.kt`, `BlurRectCompareGM.kt`, `BlurRectGM.kt`, `BlurRectGalleryGM.kt` |
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION` | gradient interpolation variants |
