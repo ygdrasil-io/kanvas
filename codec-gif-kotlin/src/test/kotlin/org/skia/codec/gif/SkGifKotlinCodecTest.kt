@@ -406,6 +406,29 @@ class SkGifKotlinCodecTest {
         )
     }
 
+    @Test
+    fun `make eagerly validates later frames before first image request`() {
+        val data = gif(
+            width = 2,
+            height = 1,
+            palette = intArrayOf(RED, GREEN, BLUE, YELLOW),
+            frames = listOf(
+                GifFrameSpec(0, 0, 2, 1, intArrayOf(0, 1), delayCs = 4),
+                GifFrameSpec(
+                    left = 1,
+                    top = 0,
+                    width = 1,
+                    height = 1,
+                    indexes = intArrayOf(2),
+                    delayCs = 9,
+                    rawImageData = byteArrayOf(0x04),
+                ),
+            ),
+        )
+
+        assertNull(SkGifKotlinCodec.Decoder.make(data))
+    }
+
     private fun gif(
         width: Int,
         height: Int,
