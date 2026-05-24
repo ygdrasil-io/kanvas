@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.skia.codec.test.CodecTestFixtures
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.ServiceLoader
 
 class CpuRasterKotlinCodecBackendTest {
@@ -50,5 +52,37 @@ class CpuRasterKotlinCodecBackendTest {
         CodecTestFixtures.SIMPLE_RGBA_PIXELS.zip(CodecTestFixtures.decodePixels(codec)).forEach { (expected, actual) ->
             assertArrayEquals(expected, actual)
         }
+    }
+
+    @Test
+    fun `full cpu-raster codec suite still has ImageIO fixture blockers`() {
+        val codecTestRoot = Path.of("src/test/kotlin/org/skia/codec")
+        val imageIoFixtureTests = Files.walk(codecTestRoot).use { paths ->
+            paths
+                .filter { path -> path.toString().endsWith("Test.kt") }
+                .filter { path ->
+                    val text = Files.readString(path)
+                    text.contains("javax.imageio.ImageIO") || text.contains("java.awt.image.BufferedImage")
+                }
+                .map { path -> codecTestRoot.relativize(path).toString().replace('\\', '/') }
+                .sorted()
+                .toList()
+        }
+
+        assertTrue(
+            imageIoFixtureTests.containsAll(
+                listOf(
+                    "SkAndroidCodecGetAndroidPixelsTest.kt",
+                    "SkAndroidCodecTest.kt",
+                    "bmp/SkBmpCodecTest.kt",
+                    "gif/SkGifCodecTest.kt",
+                    "jpeg/SkJpegCodecTest.kt",
+                    "png/SkPngCodecTest.kt",
+                    "wbmp/SkWbmpCodecTest.kt",
+                ),
+            ),
+            "The full :cpu-raster:test --tests '*codec*' switch is blocked until these legacy tests " +
+                "stop generating fixtures through AWT/ImageIO: $imageIoFixtureTests",
+        )
     }
 }

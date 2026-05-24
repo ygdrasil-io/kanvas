@@ -31,6 +31,13 @@ import org.skia.utils.SkPixmapUtils
  *    once the animation has completed (per [setRepetitionCount]).
  *  - [reset] / [setRepetitionCount] — playback controls.
  *
+ * **Ownership boundary.** `codec-animated` owns playback state, frame
+ * cursoring, orientation/crop/scale/post-processing, and snapshotting.
+ * Container-specific parsing and frame composition remain owned by the
+ * format codec that supplies the [SkCodec] (GIF today, future animated
+ * WebP later). This module therefore does not register any
+ * [CodecDecoderProvider] and should stay free of format sniffing logic.
+ *
  * **Implementation detail.** Built on top of R-final.5's
  * [SkCodec.getFrameCount] + [SkCodec.getFrameInfo] +
  * [SkCodec.getPixels] (`Options{frameIndex, priorFrame}`). The
