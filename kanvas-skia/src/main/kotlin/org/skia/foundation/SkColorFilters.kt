@@ -8,6 +8,8 @@ import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.graphiks.math.SkColorMatrix
+import org.skia.core.SkAlphaType
+import org.skia.core.SkColorSpaceXformSteps
 import kotlin.math.pow
 
 /**
@@ -143,14 +145,12 @@ public object SkColorFilters {
      * given [colorSpace] (or sRGB if `null`); upstream converts it to the
      * destination colour space before blending.
      *
-     * **STUB.COLOR4F_BLEND_CF** — colour-space–aware F32 blend filter.
-     * Full implementation requires propagating the destination colour
-     * space through the filter pipeline and running an xform on [colour]
-     * at draw time. Deferred until the filter pipeline carries explicit
-     * colour-space context (see `MIGRATION_PLAN_GPU_WEBGPU.md`).
+     * kanvas-skia's colour-filter pipeline evaluates filters in sRGB
+     * working space, so the fixed [colour] is transformed from
+     * [colorSpace] (or sRGB for `null`) to sRGB when the filter is built.
      */
     public fun Blend(colour: SkColor4f, colorSpace: SkColorSpace?, mode: SkBlendMode): SkColorFilter =
-        TODO("STUB.COLOR4F_BLEND_CF: SkColorFilters::Blend(SkColor4f, SkColorSpace, SkBlendMode)")
+        SkBlendColor4fFilter(colour, colorSpace, mode)
 
     /**
      * Mirrors Skia's `SkColorFilters::Lighting(SkColor mul, SkColor add)`.
@@ -484,22 +484,53 @@ internal class SkBlendColorFilter(
     )
 
     override fun filterColor4f(src: SkColor4f): SkColor4f {
-        // Premul both sides.
-        val sa = src4f.fA
-        val sr = src4f.fR * sa
-        val sg = src4f.fG * sa
-        val sb = src4f.fB * sa
-        val da = src.fA
-        val dr = src.fR * da
-        val dg = src.fG * da
-        val db = src.fB * da
-        val out = blendPremul(sr, sg, sb, sa, dr, dg, db, da, mode)
-        // Unpremul.
-        val oa = out[3]
-        if (oa <= 0f) return SkColorFloats(0f, 0f, 0f, 0f)
-        val invA = 1f / oa
-        return SkColorFloats(out[0] * invA, out[1] * invA, out[2] * invA, oa)
+        return blendColor4f(src4f, src, mode)
     }
+}
+
+/**
+ * F32 variant of [SkBlendColorFilter]. The fixed colour is transformed from
+ * its declared colour space into the filter working space once at creation
+ * time, preserving float precision instead of round-tripping through 8-bit
+ * [SkColor].
+ */
+internal class SkBlendColor4fFilter(
+    colour: SkColor4f,
+    colorSpace: SkColorSpace?,
+    private val mode: SkBlendMode,
+) : SkColorFilter() {
+    private val src4f: SkColor4f = transformBlendColorToSrgb(colour, colorSpace)
+
+    override fun filterColor4f(src: SkColor4f): SkColor4f =
+        blendColor4f(src4f, src, mode)
+}
+
+private fun transformBlendColorToSrgb(colour: SkColor4f, colorSpace: SkColorSpace?): SkColor4f {
+    val srcCS = colorSpace ?: SkColorSpace.makeSRGB()
+    val rgba = floatArrayOf(colour.fR, colour.fG, colour.fB, colour.fA)
+    SkColorSpaceXformSteps(
+        src = srcCS,
+        srcAT = SkAlphaType.kUnpremul,
+        dst = SkColorSpace.makeSRGB(),
+        dstAT = SkAlphaType.kUnpremul,
+    ).apply(rgba)
+    return SkColorFloats(rgba[0], rgba[1], rgba[2], rgba[3])
+}
+
+private fun blendColor4f(src4f: SkColor4f, dst4f: SkColor4f, mode: SkBlendMode): SkColor4f {
+    val sa = src4f.fA
+    val sr = src4f.fR * sa
+    val sg = src4f.fG * sa
+    val sb = src4f.fB * sa
+    val da = dst4f.fA
+    val dr = dst4f.fR * da
+    val dg = dst4f.fG * da
+    val db = dst4f.fB * da
+    val out = blendPremul(sr, sg, sb, sa, dr, dg, db, da, mode)
+    val oa = out[3]
+    if (oa <= 0f) return SkColorFloats(0f, 0f, 0f, 0f)
+    val invA = 1f / oa
+    return SkColorFloats(out[0] * invA, out[1] * invA, out[2] * invA, oa)
 }
 
 /**
