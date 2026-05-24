@@ -2,15 +2,14 @@ package org.skia.gpu.webgpu.testing
 
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
+import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.gpu.webgpu.WebGpuContext
 import org.skia.gpu.webgpu.WebGpuSink
 import org.skia.testing.BitmapComparison
 import org.skia.testing.TestUtils
 import org.skia.tests.GM
-import java.awt.image.BufferedImage
 import java.io.File
-import javax.imageio.ImageIO
 
 /**
  * Cross-backend variant of [CrossTestHarness].
@@ -50,11 +49,8 @@ import javax.imageio.ImageIO
  * viewer ; 1-LSB differences (the typical AA edge case) come out as a
  * dim 4/255 grey, while real geometric drift saturates to white. A
  * triage workflow opens all three files side by side in a file
- * browser ; we deliberately do NOT build a labelled `Graphics2D`-
- * based triptych image because `Graphics2D.drawString` on macOS pulls
- * in the AWT font subsystem on the AppKit main thread, which
- * deadlocks `glfwDestroyWindow` at WebGPU context close (see
- * [saveCrossBackendDiff] for the full rationale).
+     * browser. The dumps are plain PNGs written by the pure Kotlin encoder,
+     * which keeps this test harness out of the JVM desktop image stack.
  *
  * ## Migration pattern
  *
@@ -166,35 +162,13 @@ public object CrossBackendHarness {
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
-        // All Java2D + SkCanvas + ImageIO work happens INSIDE the
-        // WebGPU context's `.use { }` block, mirroring the existing
-        // single-backend tests. On macOS, GLFW's `glfwDestroyWindow`
-        // is routed through the AppKit main thread, and so is
-        // Java2D's Cocoa interop. If Java2D is *only* initialised
-        // outside the GLFW window's lifetime (e.g., after a previous
-        // test's use block closed), the next test's
-        // `glfwDestroyWindow` hangs in a Metal/AppKit deadlock.
-        // Keeping every Java2D / Skia call inside the same use block
-        // that opened GLFW keeps the AppKit dispatcher consistent
-        // across tests in a single JVM session, which is the
-        // arrangement the existing 17 GPU tests already rely on.
         val result = context!!.use { ctx ->
-            // **GPU draw first**, while GLFW is freshly opened and no
-            // CPU rasterizer / Java2D / SkCanvas work has yet run on
-            // this thread. The existing single-backend GPU tests do
-            // exactly this — call `WebGpuSink.draw` as the FIRST
-            // operation inside the use block — and they don't hang at
-            // `glfwDestroyWindow`. Doing CPU rasterization or
-            // `loadReferenceBitmap` (which goes through `SkCodec` →
-            // `ImageIO`) before the GPU draw triggers AWT init on the
-            // Test worker thread *between* GLFW init and the first
-            // Metal command submission, which on macOS deadlocks the
-            // Metal command queue at the next test's `glfwDestroyWindow`.
+            // GPU draw first, matching the single-backend WebGPU tests.
+            // CPU rasterization and reference decode are pure Kotlin here,
+            // but keeping GPU submission first still minimizes context
+            // lifetime surprises on macOS.
             val gpuBitmap = WebGpuSink.draw(ctx, gm)
 
-            // Now safe to touch Java2D / Skia codecs / SkCanvas — the
-            // GPU pipeline has submitted its work and the AppKit
-            // dispatcher is in a consistent state.
             val reference = TestUtils.loadReferenceBitmap(referenceName)
                 ?: error("original-888/$referenceName.png missing")
 
@@ -218,9 +192,8 @@ public object CrossBackendHarness {
                     "maxDiff=${rasterCmp.maxChannelDiff}",
             )
 
-            // Disk I/O — also kept inside the use block so PNG writes
-            // (the second Java2D-touching call site) happen with the
-            // GLFW window still open.
+            // Disk I/O is kept inside the use block so all diagnostics are
+            // emitted before the WebGPU context closes.
             TestUtils.saveDebugImage(rasterBitmap, "$referenceName-raster")
             TestUtils.saveDebugImage(gpuBitmap, "$referenceName-gpu")
 
@@ -273,16 +246,9 @@ public object CrossBackendHarness {
      *
      * The raster + GPU sources are dumped separately as
      * `<baseName>-raster.png` and `<baseName>-gpu.png` by the harness
-     * itself (so a triage workflow opens all three side by side in a
-     * file browser). We deliberately do NOT build a `Graphics2D`-based
-     * "triptych" image — on macOS, the AWT font / text-rendering
-     * machinery `Graphics2D.drawString` pulls in shares the AppKit
-     * main thread with GLFW, and instantiating it inside a WebGPU
-     * `.use { }` block can deadlock the test in `glfwDestroyWindow`
-     * at context close. A plain `setRGB` PNG (which is all this fn
-     * does) only touches `BufferedImage` + `ImageIO`, both of which
-     * are already initialised by the per-bitmap `saveDebugImage`
-     * calls upstream and don't pull in the font subsystem.
+     * itself, so a triage workflow opens all three side by side in a
+     * file browser. This path writes through [SkPngEncoder] and avoids
+     * the JVM desktop image stack.
      *
      * Exposed `public` so a test with a bespoke render path (multi-
      * sub-test files, custom color spaces) can still produce the same
@@ -295,7 +261,9 @@ public object CrossBackendHarness {
     ) {
         val dir = File("build/debug-images").apply { mkdirs() }
         val diff = pixelDiff(raster, gpu)
-        ImageIO.write(diff, "png", File(dir, "$baseName-diff.png"))
+        val bytes = SkPngEncoder.Encode(diff)
+            ?: throw IllegalStateException("Could not encode $baseName-diff.png")
+        File(dir, "$baseName-diff.png").writeBytes(bytes)
     }
 
     /**
@@ -313,15 +281,14 @@ public object CrossBackendHarness {
      * non-premul 8-bit ARGB int for either colorType, which is what the
      * diff amplification expects.
      */
-    public fun pixelDiff(a: SkBitmap, b: SkBitmap): BufferedImage {
+    public fun pixelDiff(a: SkBitmap, b: SkBitmap): SkBitmap {
         require(a.width == b.width && a.height == b.height) {
             "pixelDiff requires same-size bitmaps " +
                 "(a=${a.width}x${a.height}, b=${b.width}x${b.height})"
         }
         val w = a.width
         val h = a.height
-        val img = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
-        val out = IntArray(w * h)
+        val img = SkBitmap(w, h)
         for (y in 0 until h) {
             for (x in 0 until w) {
                 val pa = a.getPixel(x, y)
@@ -329,10 +296,9 @@ public object CrossBackendHarness {
                 val dR = kotlin.math.min(255, kotlin.math.abs(((pa ushr 16) and 0xFF) - ((pb ushr 16) and 0xFF)) * 4)
                 val dG = kotlin.math.min(255, kotlin.math.abs(((pa ushr 8) and 0xFF) - ((pb ushr 8) and 0xFF)) * 4)
                 val dB = kotlin.math.min(255, kotlin.math.abs((pa and 0xFF) - (pb and 0xFF)) * 4)
-                out[y * w + x] = (0xFF shl 24) or (dR shl 16) or (dG shl 8) or dB
+                img.setPixel(x, y, (0xFF shl 24) or (dR shl 16) or (dG shl 8) or dB)
             }
         }
-        img.setRGB(0, 0, w, h, out, 0, w)
         return img
     }
 

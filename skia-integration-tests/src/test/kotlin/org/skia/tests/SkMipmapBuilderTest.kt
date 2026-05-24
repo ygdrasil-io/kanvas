@@ -124,7 +124,7 @@ class SkMipmapBuilderTest {
         assertTrue(mippedLvl1 >= 1)
         // Smoke colour-channel sanity : the painted target has g=0xC0,
         // r=0x10, b=0x40 — those values should round-trip from the
-        // Graphics2D draw on an ARGB BufferedImage.
+        // raster draw on an ARGB bitmap.
         assertEquals(0x10, SkColorGetR(target))
         assertEquals(0xC0, SkColorGetG(target))
         assertEquals(0x40, SkColorGetB(target))
