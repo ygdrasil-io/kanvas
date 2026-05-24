@@ -11,10 +11,15 @@
 - `kanvas/src/test/resources/original-888/` — 989 PNG references rendered by upstream Skia (embedded `Google/Skia` ICC profile, see Phase 1 note in `archives/MIGRATION_PLAN.md`).
 - `kanvas/src/main/kotlin/` — the legacy hand-written `:kanvas` implementation (`com.kanvas.*`); useful as a porting reference but **not** to be depended upon — `:kanvas-skia` is autonomous.
 
-## Migration plan
-Raster/CPU port is essentially complete (357/437 GMs = 82 %, R-final closed). Historical phase tracking is archived in [archives/MIGRATION_PLAN.md](archives/MIGRATION_PLAN.md) (and the per-chantier mini-plans in [archives/](archives/)). Plans **live** au root :
-- [MIGRATION_PLAN_GPU_WEBGPU.md](MIGRATION_PLAN_GPU_WEBGPU.md) — WebGPU/WGSL divergence plan
-- [MIGRATION_PLAN_MATH_TOOLING.md](MIGRATION_PLAN_MATH_TOOLING.md) — Outillage qualité `:math` (map, doc, audit, fixes)
+## Upstream sync status
+The old root-level migration plans were archived on 2026-05-24 because
+their phase tracking no longer matches the implementation reliably.
+Use [UPSTREAM_SYNC_STATUS.md](UPSTREAM_SYNC_STATUS.md) as the current
+source of truth for upstream rapprochement work.
+
+Historical phase tracking lives in [archives/](archives/), including
+the 2026-05-24 snapshot under
+[archives/plan-snapshots-2026-05-24/](archives/plan-snapshots-2026-05-24/).
 
 ## Map de correspondance Kotlin ↔ Skia upstream
 La table Kotlin ↔ C++ vit dans [.upstream/source/map/](.upstream/source/map/) (TSV requêtable terminal, **hors du code Kotlin**). Spec dans [.upstream/source/map/README.md](.upstream/source/map/README.md) — format 4 colonnes `kotlin FQN | cpp FQN | kotlin path:line | cpp path:line`. Helpers : `_resolve_url.sh` (path:line → URL clickable) et `audit.sh <module>` (liste les symboles publics Kotlin sans entrée TSV).
