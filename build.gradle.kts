@@ -166,6 +166,38 @@ tasks.register("checkProductionCodecRuntimeNoAwt") {
     }
 }
 
+tasks.register("checkPureKotlinPngEncoderNoAwt") {
+    group = "verification"
+    description = "Fails if the pure Kotlin PNG encoder path uses AWT/ImageIO/java.desktop APIs."
+
+    doLast {
+        val filesToCheck = listOf(
+            file("kanvas-skia/src/main/kotlin/org/skia/encode/SkPngEncoder.kt"),
+            file("kanvas-skia/src/main/kotlin/org/skia/encode/EncoderSupport.kt"),
+        )
+        val violations = mutableListOf<String>()
+        filesToCheck
+            .filter { source -> source.isFile }
+            .forEach { source ->
+                val sourceText = source.readText().withoutKotlinOrJavaComments()
+                forbiddenSourcePatterns.forEach { pattern ->
+                    if (pattern.containsMatchIn(sourceText)) {
+                        violations += "${source.relativeTo(rootDir)} contains forbidden production API reference ${pattern.pattern}"
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("Pure Kotlin PNG encoder path must not use AWT/ImageIO/java.desktop APIs.")
+                    violations.sorted().forEach { appendLine("- $it") }
+                }
+            )
+        }
+    }
+}
+
 tasks.register("checkCodecKotlinSwitchCriteria") {
     group = "verification"
     description = "Runs the non-destructive codec-all-kotlin switch-readiness checks."
