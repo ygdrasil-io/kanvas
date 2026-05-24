@@ -398,6 +398,7 @@ class SkWebpKotlinCodecTest {
         assertEquals(0, header.clampType)
         assertEquals(2, header.macroblockWidth)
         assertEquals(3, header.macroblockHeight)
+        assertEquals(1, header.coefficientPartitionCount)
         assertTrue(header.loopFilter.simpleFilter)
         assertEquals(17, header.loopFilter.level)
         assertEquals(3, header.loopFilter.sharpness)
@@ -925,6 +926,99 @@ class SkWebpKotlinCodecTest {
         )
 
         assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+    }
+
+    @Test
+    fun `parses VP8 lossy multi coefficient partition layout`() {
+        val firstPartition = Vp8TestBitWriter().apply {
+            writeBit(0)
+            writeBit(0)
+            writeBit(0)
+            writeBit(1)
+            writeLiteral(12, 6)
+            writeLiteral(0, 3)
+            writeBit(0)
+            writeLiteral(2, 2) // Four coefficient partitions.
+            writeLiteral(8, 7)
+            repeat(5) { writeSignedDelta(0) }
+        }.toByteArray()
+        val coefficientPartitionSizes = byteArrayOf(
+            1, 0, 0,
+            2, 0, 0,
+            0, 0, 0,
+        )
+        val coefficientBytes = byteArrayOf(
+            0xA1.toByte(),
+            0xB1.toByte(),
+            0xB2.toByte(),
+            0xD1.toByte(),
+            0xD2.toByte(),
+            0xD3.toByte(),
+        )
+        val data = riff(
+            "WEBP",
+            chunk(
+                "VP8 ",
+                vp8Payload(width = 17, height = 17, firstPartitionSize = firstPartition.size) +
+                    firstPartition +
+                    coefficientPartitionSizes +
+                    coefficientBytes,
+            ),
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(data) as SkWebpKotlinCodec
+
+        val result = decodeVp8LossyBitstreamLayout(data, codec.metadata)
+
+        assertTrue(result is Vp8LossyBitstreamLayoutDecodeResult.Layout)
+        val layout = (result as Vp8LossyBitstreamLayoutDecodeResult.Layout).layout
+        assertEquals(4, layout.header.coefficientPartitionCount)
+        assertEquals(listOf(1, 2, 0, 3), layout.coefficientPartitions.map { it.size })
+        assertEquals(
+            listOf(
+                listOf(0xA1),
+                listOf(0xB1, 0xB2),
+                emptyList(),
+                listOf(0xD1, 0xD2, 0xD3),
+            ),
+            layout.coefficientPartitions.map { partition ->
+                data.copyOfRange(partition.offset, partition.end).map { it.toInt() and 0xFF }
+            },
+        )
+    }
+
+    @Test
+    fun `rejects VP8 lossy coefficient partition table outside payload`() {
+        val firstPartition = Vp8TestBitWriter().apply {
+            writeBit(0)
+            writeBit(0)
+            writeBit(0)
+            writeBit(0)
+            writeLiteral(0, 6)
+            writeLiteral(0, 3)
+            writeBit(0)
+            writeLiteral(1, 2) // Two coefficient partitions, requiring one 24-bit size.
+            writeLiteral(0, 7)
+            repeat(5) { writeSignedDelta(0) }
+        }.toByteArray()
+        val data = riff(
+            "WEBP",
+            chunk(
+                "VP8 ",
+                vp8Payload(width = 2, height = 2, firstPartitionSize = firstPartition.size) +
+                    firstPartition +
+                    byteArrayOf(5, 0),
+            ),
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(data) as SkWebpKotlinCodec
+        val dst = SkBitmap(
+            width = 2,
+            height = 2,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(Vp8LossyBitstreamLayoutDecodeResult.Invalid, decodeVp8LossyBitstreamLayout(data, codec.metadata))
+        assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
