@@ -17,6 +17,7 @@ import org.skia.foundation.skcms.SkcmsICCProfile
  * - Windows/OS2 file signature `BM`
  * - DIB headers with at least the BITMAPINFOHEADER fields
  * - BI_RGB, BI_BITFIELDS, BI_RLE8 and BI_RLE4 compression
+ * - BITMAPV4HEADER/BITMAPV5HEADER RGB(A) masks; embedded ICC data is accepted but ignored
  * - indexed 1/4/8 bpp palettes and direct 16/24/32 bpp pixels
  * - bottom-up and top-down row order
  */
@@ -106,11 +107,22 @@ public class SkBmpKotlinCodec private constructor(
             }
             32 -> {
                 val off = row + x * 4
-                val b = bytes[off].toInt() and 0xFF
-                val g = bytes[off + 1].toInt() and 0xFF
-                val r = bytes[off + 2].toInt() and 0xFF
-                val a = bytes[off + 3].toInt() and 0xFF
-                argb(a, r, g, b)
+                val masks = header.bitMasks
+                if (masks != null) {
+                    val value = readI32LE(bytes, off)
+                    argb(
+                        masks.alpha?.let { scaleMasked(value, it) } ?: 0xFF,
+                        scaleMasked(value, masks.red),
+                        scaleMasked(value, masks.green),
+                        scaleMasked(value, masks.blue),
+                    )
+                } else {
+                    val b = bytes[off].toInt() and 0xFF
+                    val g = bytes[off + 1].toInt() and 0xFF
+                    val r = bytes[off + 2].toInt() and 0xFF
+                    val a = bytes[off + 3].toInt() and 0xFF
+                    argb(a, r, g, b)
+                }
             }
             else -> TRANSPARENT_BLACK
         }
@@ -243,7 +255,7 @@ public class SkBmpKotlinCodec private constructor(
             if (bitsPerPixel !in SUPPORTED_BPP) return null
             if (width > MAX_DIMENSION || height > MAX_DIMENSION) return null
 
-            val bitMasks = if (compression == BI_BITFIELDS) {
+            val bitMasks = if (usesBitMasks(compression, dibSize, bitsPerPixel)) {
                 readBitMasks(data, dibSize) ?: return null
             } else {
                 null
@@ -286,6 +298,7 @@ public class SkBmpKotlinCodec private constructor(
                 red = readI32LE(data, maskOffset),
                 green = readI32LE(data, maskOffset + 4),
                 blue = readI32LE(data, maskOffset + 8),
+                alpha = if (dibSize >= 56) readI32LE(data, maskOffset + 12).takeIf { it != 0 } else null,
             )
             return if (masks.isSupportedRgb()) masks else null
         }
@@ -323,12 +336,18 @@ private data class BitMasks(
     val red: Int,
     val green: Int,
     val blue: Int,
+    val alpha: Int? = null,
 ) {
     fun isSupportedRgb(): Boolean =
         red != 0 && green != 0 && blue != 0 &&
             red and green == 0 &&
             red and blue == 0 &&
-            green and blue == 0
+            green and blue == 0 &&
+            (alpha == null ||
+                (alpha != 0 &&
+                    alpha and red == 0 &&
+                    alpha and green == 0 &&
+                    alpha and blue == 0))
 }
 
 public class BmpKotlinDecoderProvider : CodecDecoderProvider {
@@ -336,6 +355,7 @@ public class BmpKotlinDecoderProvider : CodecDecoderProvider {
 }
 
 private const val FILE_HEADER_SIZE: Int = 14
+private const val BITMAP_V4_HEADER_SIZE: Int = 108
 private const val BI_RGB: Int = 0
 private const val BI_RLE8: Int = 1
 private const val BI_RLE4: Int = 2
@@ -357,9 +377,12 @@ private fun isSupportedCompression(compression: Int, bitsPerPixel: Int, topDown:
         BI_RGB -> true
         BI_RLE8 -> bitsPerPixel == 8 && !topDown
         BI_RLE4 -> bitsPerPixel == 4 && !topDown
-        BI_BITFIELDS -> bitsPerPixel == 16
+        BI_BITFIELDS -> bitsPerPixel == 16 || bitsPerPixel == 32
         else -> false
     }
+
+private fun usesBitMasks(compression: Int, dibSize: Int, bitsPerPixel: Int): Boolean =
+    (compression == BI_BITFIELDS || dibSize >= BITMAP_V4_HEADER_SIZE) && (bitsPerPixel == 16 || bitsPerPixel == 32)
 
 private fun scaleMasked(pixel: Int, mask: Int): Int {
     val shift = Integer.numberOfTrailingZeros(mask)
