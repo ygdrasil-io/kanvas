@@ -485,6 +485,74 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `parses VP8 keyframe B_PRED luma subblock modes`() {
+        val modeBits = byteArrayOf(0x7C, 0x00, 0x00)
+        val header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1)
+
+        val macroblocks = readVp8KeyFrameMacroblockModes(
+            reader = Vp8BoolReader(modeBits),
+            header = header,
+            noCoeffSkip = true,
+        )
+
+        assertNotNull(macroblocks)
+        val macroblock = macroblocks!!.single()
+        assertEquals(Vp8LumaPredictionMode.B_PRED, macroblock.yMode)
+        assertEquals(Vp8IntraPredictionMode.DC, macroblock.uvMode)
+        assertFalse(macroblock.skipCoefficients)
+        assertEquals(List(16) { Vp8LumaSubblockPredictionMode.B_DC }, macroblock.lumaSubblockModes)
+    }
+
+    @Test
+    fun `VP8 keyframe B_PRED subblock parser uses left macroblock context`() {
+        val modeBits = byteArrayOf(0x7C, 0x66, 0x32, 0xB1.toByte(), 0xC4.toByte(), 0x00, 0x00)
+        val header = vp8CoefficientTestHeader(macroblockWidth = 2, macroblockHeight = 1, partitionCount = 1)
+
+        val macroblocks = readVp8KeyFrameMacroblockModes(
+            reader = Vp8BoolReader(modeBits),
+            header = header,
+            noCoeffSkip = true,
+        )
+
+        assertNotNull(macroblocks)
+        assertEquals(List(16) { Vp8LumaSubblockPredictionMode.B_DC }, macroblocks!![0].lumaSubblockModes)
+        assertEquals(
+            listOf(
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_TM,
+                Vp8LumaSubblockPredictionMode.B_TM,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_VE,
+                Vp8LumaSubblockPredictionMode.B_DC,
+                Vp8LumaSubblockPredictionMode.B_DC,
+            ),
+            macroblocks[1].lumaSubblockModes,
+        )
+    }
+
+    @Test
+    fun `VP8 keyframe B_PRED subblock mode parser rejects truncated stream`() {
+        val header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1)
+
+        assertNull(
+            readVp8KeyFrameMacroblockModes(
+                reader = Vp8BoolReader(byteArrayOf(0x7C)),
+                header = header,
+                noCoeffSkip = true,
+            ),
+        )
+    }
+
+    @Test
     fun `VP8 inverse transforms handle DC-only blocks`() {
         val dctInput = IntArray(16).also { it[0] = 16 }
         val whtInput = IntArray(16).also { it[0] = 8 }
