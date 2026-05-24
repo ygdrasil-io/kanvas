@@ -84,6 +84,10 @@ Completed since this snapshot:
 - `STUB.SAVE_BEHIND`: raster `SkCanvas.saveBehind` / `drawBehind` shims are
   implemented for the upstream private API behavior, and `SaveBehindGM` is
   enabled with a raster ratchet.
+- `STUB.GRADIENT_INTERPOLATION`: the `SkGradient` aggregate and
+  `SkShaders.LinearGradient(pts, SkGradient)` overload now exist for RGB
+  working color spaces. The remaining blocker is the actual perceptual
+  color-space / hue-method / premul interpolation sampler.
 
 ## Recommended order
 
@@ -99,7 +103,7 @@ Completed since this snapshot:
 | `addarc` | `STUB.MISSING_API` | `AddArcGM.kt`, `AddArcMeasGM.kt`, `FillCircleGM.kt`, `ManyArcsGM.kt`, `StrokeCircleGM.kt`, `TinyAngleArcsGM.kt` |
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
-| `gradients` | `STUB.GRADIENT_INTERPOLATION` | gradient interpolation variants |
+| `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, perceptual/hue/premul sampler still missing | gradient interpolation variants |
 | `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
 | `mesh` | `STUB.MESH` | `MeshGMs.kt` |
 | `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`, `STUB.XYZ` | `RecordOptsGM.kt` |

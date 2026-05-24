@@ -11,6 +11,7 @@ import org.graphiks.math.SkColorSetARGB
 import org.skia.core.SkColorSpaceXformSteps
 import org.graphiks.math.SkISize
 import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
 import org.graphiks.math.SkScalar
 
@@ -130,6 +131,32 @@ public object SkShaders {
      */
     public fun Blend(mode: SkBlendMode, dst: SkShader, src: SkShader): SkShader =
         SkBlendShader(mode, dst, src)
+
+    /**
+     * Mirrors Skia's `SkShaders::LinearGradient(pts, SkGradient)` overload
+     * for RGB interpolation spaces.
+     *
+     * CSS perceptual spaces (`Lab`, `OKLab`, `LCH`, `OKLCH`, `HSL`, `HWB`),
+     * hue methods, and premul interpolation remain explicit stubs because the
+     * existing raster gradient sampler only interpolates RGB stops.
+     */
+    public fun LinearGradient(
+        pts: Array<SkPoint>,
+        gradient: SkGradient,
+        localMatrix: SkMatrix = SkMatrix.Identity,
+    ): SkShader {
+        require(pts.size >= 2) { "SkShaders.LinearGradient requires two points" }
+        val shader = SkLinearGradient.Make(
+            pts[0],
+            pts[1],
+            gradient.colors,
+            gradient.positions,
+            gradient.tileMode,
+            localMatrix,
+        )
+        val workingCS = gradient.workingColorSpaceOrNull()
+        return if (workingCS == null) shader else shader.makeWithWorkingColorSpace(workingCS)
+    }
 
     /**
      * Mirrors Skia's `SkShaders::MakeFractalNoise(...)` — SVG

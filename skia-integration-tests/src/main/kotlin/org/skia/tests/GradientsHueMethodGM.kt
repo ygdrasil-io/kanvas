@@ -12,9 +12,8 @@ import org.graphiks.math.SkISize
  * Two additional rows exercise the kLonger hue method bug (skbug.com/40044215)
  * with explicit vs. implicit endpoint positions.
  *
- * **API gap** : requires `SkGradient::Interpolation::HueMethod` enum and
- * `SkGradient::Interpolation::ColorSpace::kHSL`. Neither is exposed in
- * `:cpu-raster`.
+ * **Implementation gap** : the `HueMethod` enum is exposed, but HSL/hue
+ * interpolation still needs a dedicated gradient sampler.
  */
 public class GradientsHueMethodGM : GM() {
 
@@ -22,6 +21,6 @@ public class GradientsHueMethodGM : GM() {
     override fun getISize(): SkISize = SkISize.Make(285, 155)
 
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.GRADIENT_INTERPOLATION: SkGradient.Interpolation.HueMethod not exposed in :cpu-raster")
+        TODO("STUB.GRADIENT_INTERPOLATION: hue-method gradient interpolation not implemented")
     }
 }
