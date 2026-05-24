@@ -237,16 +237,6 @@ class SkWebpKotlinCodecTest {
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x10),
-                    alphaChunk(control = 0, payload = byteArrayOf(1, 2, 3)),
-                    vp8Chunk(width = 2, height = 2),
-                ),
-            ),
-        )
-        assertNull(
-            SkWebpKotlinCodec.Decoder.make(
-                riff(
-                    "WEBP",
-                    vp8xChunk(width = 2, height = 2, flags = 0x10),
                     validAlpha,
                     vp8lChunk(width = 2, height = 2),
                 ),
@@ -1360,6 +1350,92 @@ class SkWebpKotlinCodecTest {
 
         assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         assertArrayEquals(IntArray(4) { argb(128, 128, 128) }, dst.pixels8888)
+    }
+
+    @Test
+    fun `composes uncompressed VP8X alpha into supported VP8 lossy pixels`() {
+        val alpha = byteArrayOf(0x00, 0x40, 0x80.toByte(), 0xFF.toByte())
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8xChunk(width = 2, height = 2, flags = 0x10),
+                alphaChunk(control = alphaControl(compression = WebpAlphaCompression.NONE), payload = alpha),
+                vp8ChunkWithPartitions(width = 2, height = 2, vp8FirstPartition(), ByteArray(64)),
+            ),
+        )!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 2,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+
+        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertArrayEquals(
+            intArrayOf(
+                argb(0, 128, 128, 128),
+                argb(64, 128, 128, 128),
+                argb(128, 128, 128, 128),
+                argb(255, 128, 128, 128),
+            ),
+            dst.pixels8888,
+        )
+    }
+
+    @Test
+    fun `returns unimplemented for unsupported VP8X alpha transforms on supported VP8 lossy pixels`() {
+        val unsupportedAlphaCases = listOf(
+            alphaControl(compression = WebpAlphaCompression.NONE, filtering = 1),
+            alphaControl(compression = WebpAlphaCompression.NONE, preprocessing = 1),
+            alphaControl(compression = WebpAlphaCompression.LOSSLESS),
+        )
+
+        for (control in unsupportedAlphaCases) {
+            val codec = SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0x10),
+                    alphaChunk(control = control, payload = byteArrayOf(1, 2, 3, 4)),
+                    vp8ChunkWithPartitions(width = 2, height = 2, vp8FirstPartition(), ByteArray(64)),
+                ),
+            )!!
+            val dst = SkBitmap(
+                width = 2,
+                height = 2,
+                colorType = SkColorType.kRGBA_8888,
+                colorSpace = SkColorSpace.makeSRGB(),
+            )
+
+            assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+        }
+    }
+
+    @Test
+    fun `returns input error for malformed VP8X uncompressed alpha on supported VP8 lossy pixels`() {
+        val malformedAlphaCases = listOf(
+            alphaChunk(control = alphaControl(compression = WebpAlphaCompression.NONE), payload = byteArrayOf(1, 2, 3)),
+            ByteArray(0),
+        )
+
+        for (alphaChunk in malformedAlphaCases) {
+            val codec = SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0x10),
+                    alphaChunk,
+                    vp8ChunkWithPartitions(width = 2, height = 2, vp8FirstPartition(), ByteArray(64)),
+                ),
+            )!!
+            val dst = SkBitmap(
+                width = 2,
+                height = 2,
+                colorType = SkColorType.kRGBA_8888,
+                colorSpace = SkColorSpace.makeSRGB(),
+            )
+
+            assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
+        }
     }
 
     @Test

@@ -182,7 +182,7 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
             "ALPH" -> {
                 val base = extended ?: return null
                 if (alphaChunk != null || size > Int.MAX_VALUE || !base.flags.alpha) return null
-                alphaChunk = parseAlphaChunk(data, payloadOffset, size.toInt(), base.width, base.height)
+                alphaChunk = parseAlphaChunk(data, payloadOffset, size.toInt())
                     ?: return null
             }
             "VP8L" -> {
@@ -222,8 +222,6 @@ private fun parseAlphaChunk(
     data: ByteArray,
     offset: Int,
     size: Int,
-    width: Int,
-    height: Int,
 ): WebpAlphaChunk? {
     if (size <= 1 || offset < 0 || offset + size > data.size) return null
     val control = data[offset].toInt() and 0xFF
@@ -232,10 +230,6 @@ private fun parseAlphaChunk(
         0 -> WebpAlphaCompression.NONE
         1 -> WebpAlphaCompression.LOSSLESS
         else -> return null
-    }
-    if (compression == WebpAlphaCompression.NONE) {
-        val expectedPayloadSize = width.toLong() * height.toLong()
-        if (expectedPayloadSize > Int.MAX_VALUE || size - 1 != expectedPayloadSize.toInt()) return null
     }
     return WebpAlphaChunk(
         compression = compression,
@@ -1326,7 +1320,6 @@ internal enum class Vp8LumaPredictionMode {
 
 internal fun decodeVp8LossyPixels(data: ByteArray, metadata: WebpMetadata): Vp8LossyDecodeResult {
     if (metadata.format != WebpBitstreamFormat.VP8) return Vp8LossyDecodeResult.Invalid
-    if (metadata.flags.alpha || metadata.alphaChunk != null) return Vp8LossyDecodeResult.Unsupported
 
     val payloadOffset = metadata.payloadOffset
     val payloadSize = metadata.payloadSize
@@ -1388,7 +1381,52 @@ internal fun decodeVp8LossyPixels(data: ByteArray, metadata: WebpMetadata): Vp8L
         Vp8ReconstructionResult.Unsupported -> return Vp8LossyDecodeResult.Unsupported
         is Vp8ReconstructionResult.Planes -> result.planes
     }
-    return Vp8LossyDecodeResult.Pixels(planes.cropTo(metadata.width, metadata.height).toRgba())
+    val pixels = planes.cropTo(metadata.width, metadata.height).toRgba()
+    return when (val alpha = decodeVp8AlphaPlane(data, metadata)) {
+        Vp8AlphaDecodeResult.Absent -> Vp8LossyDecodeResult.Pixels(pixels)
+        Vp8AlphaDecodeResult.Invalid -> Vp8LossyDecodeResult.Invalid
+        Vp8AlphaDecodeResult.Unsupported -> Vp8LossyDecodeResult.Unsupported
+        is Vp8AlphaDecodeResult.Plane -> Vp8LossyDecodeResult.Pixels(pixels.withAlphaPlane(alpha.alpha))
+    }
+}
+
+private sealed interface Vp8AlphaDecodeResult {
+    data class Plane(val alpha: ByteArray) : Vp8AlphaDecodeResult
+    data object Absent : Vp8AlphaDecodeResult
+    data object Unsupported : Vp8AlphaDecodeResult
+    data object Invalid : Vp8AlphaDecodeResult
+}
+
+private fun decodeVp8AlphaPlane(data: ByteArray, metadata: WebpMetadata): Vp8AlphaDecodeResult {
+    val alphaChunk = metadata.alphaChunk ?: return if (metadata.flags.alpha) {
+        Vp8AlphaDecodeResult.Invalid
+    } else {
+        Vp8AlphaDecodeResult.Absent
+    }
+    if (alphaChunk.compression != WebpAlphaCompression.NONE ||
+        alphaChunk.filtering != 0 ||
+        alphaChunk.preprocessing != 0
+    ) {
+        return Vp8AlphaDecodeResult.Unsupported
+    }
+
+    val expectedSize = metadata.width.toLong() * metadata.height.toLong()
+    if (expectedSize > Int.MAX_VALUE) return Vp8AlphaDecodeResult.Invalid
+    if (alphaChunk.payloadSize != expectedSize.toInt()) return Vp8AlphaDecodeResult.Invalid
+    if (alphaChunk.payloadOffset < 0 || alphaChunk.payloadOffset + alphaChunk.payloadSize > data.size) {
+        return Vp8AlphaDecodeResult.Invalid
+    }
+    return Vp8AlphaDecodeResult.Plane(
+        data.copyOfRange(alphaChunk.payloadOffset, alphaChunk.payloadOffset + alphaChunk.payloadSize),
+    )
+}
+
+private fun IntArray.withAlphaPlane(alpha: ByteArray): IntArray {
+    if (alpha.size != size) return this
+    return IntArray(size) { index ->
+        val alphaByte = alpha[index].toInt() and 0xFF
+        (this[index] and 0x00FF_FFFF) or (alphaByte shl 24)
+    }
 }
 
 internal fun decodeVp8LossyBitstreamLayout(
