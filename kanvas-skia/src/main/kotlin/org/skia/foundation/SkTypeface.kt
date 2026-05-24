@@ -174,6 +174,15 @@ public open class SkTypeface protected constructor() {
     public open fun copyTableData(tag: Int): ByteArray? = null
 
     /**
+     * Returns the OpenType `fvar` design axes exposed by this typeface.
+     *
+     * Base-class default is empty: non-variable typefaces and backends without
+     * raw OpenType access do not expose axis metadata. Binary-backed variable
+     * fonts may override this with parsed [SkFontVariation.Axis] entries.
+     */
+    public open fun getVariationDesignParameters(): List<SkFontVariation.Axis> = emptyList()
+
+    /**
      * Mirrors Skia's
      * [`SkTypeface::makeClone(const SkFontArguments&)`](https://github.com/google/skia/blob/main/include/core/SkTypeface.h).
      *

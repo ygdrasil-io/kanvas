@@ -5,6 +5,7 @@ import org.graphiks.math.SkScalar
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFontArguments
 import org.skia.foundation.SkFontMetrics
+import org.skia.foundation.SkFontVariation
 import org.skia.foundation.SkFontMgr
 import org.skia.foundation.SkFontStyle
 import org.skia.foundation.SkFontStyleSet
@@ -125,6 +126,9 @@ public class OpenTypeTypeface private constructor(
 
     override fun copyTableData(tag: Int): ByteArray? =
         font.tableData(tag)
+
+    override fun getVariationDesignParameters(): List<SkFontVariation.Axis> =
+        font.variationAxes
 
     override fun makeTextPath(
         text: String,
@@ -278,6 +282,7 @@ private class ParsedTrueTypeFont(
     val familyName: String,
     val postScriptName: String?,
     val localizedFamilyNames: List<SkTypeface.LocalizedString>,
+    val variationAxes: List<SkFontVariation.Axis>,
     private val cmap: Cmap,
     private val advanceWidths: IntArray,
     private val leftSideBearings: ShortArray,
@@ -644,13 +649,14 @@ private class ParsedTrueTypeFont(
             val strikeoutThickness = os2?.takeIf { it.length >= 30 }?.let { reader.i16(it.offset + 26)?.toInt() ?: return null } ?: max(1, unitsPerEm / 14)
             val strikeoutPosition = os2?.takeIf { it.length >= 30 }?.let { reader.i16(it.offset + 28)?.toInt() ?: return null } ?: unitsPerEm * 3 / 10
             val kern = parseKernTable(bytes, tables["kern"])
+            val variationAxes = parseFvarAxes(bytes, tables["fvar"]).orEmpty()
 
             return ParsedTrueTypeFont(
                 bytes, tables, unitsPerEm, indexToLocFormat, numGlyphs, numHMetrics,
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
                 avg, sxHeight, sCapHeight, underlinePosition, underlineThickness,
                 strikeoutPosition, strikeoutThickness, familyName, names?.postScriptName, localizedNames,
-                cmap, advances, bearings, offsets, kern,
+                variationAxes, cmap, advances, bearings, offsets, kern,
             )
         }
 
@@ -740,6 +746,33 @@ private class ParsedTrueTypeFont(
             }
             if (!hasUsableSubtable) return null
             return KernTable(pairs)
+        }
+
+        private fun parseFvarAxes(bytes: ByteArray, table: TableRecord?): List<SkFontVariation.Axis>? {
+            table ?: return null
+            if (table.length < 16) return null
+            val tableEnd = table.offset + table.length
+            val reader = SfntReader(bytes, tableEnd)
+            val majorVersion = reader.u16(table.offset) ?: return null
+            val minorVersion = reader.u16(table.offset + 2) ?: return null
+            if (majorVersion != 1 || minorVersion != 0) return null
+            val axesArrayOffset = reader.u16(table.offset + 4) ?: return null
+            val axisCount = reader.u16(table.offset + 8) ?: return null
+            val axisSize = reader.u16(table.offset + 10) ?: return null
+            if (axisSize < 20) return null
+            val axesStart = table.offset + axesArrayOffset
+            if (!reader.fits(axesStart, axisCount.toLong() * axisSize.toLong())) return null
+            return List(axisCount) { index ->
+                val off = axesStart + index * axisSize
+                SkFontVariation.Axis(
+                    tag = openTypeTagToInt(reader.tag(off) ?: return null),
+                    min = reader.fixed16Dot16(off + 4) ?: return null,
+                    default = reader.fixed16Dot16(off + 8) ?: return null,
+                    max = reader.fixed16Dot16(off + 12) ?: return null,
+                    flags = reader.u16(off + 16) ?: return null,
+                    nameId = reader.u16(off + 18) ?: return null,
+                )
+            }
         }
 
         private fun parseKernFormat0(
@@ -985,6 +1018,12 @@ private class SfntReader(
             (bytes[offset + 3].toLong() and 0xFF)
     }
 
+    fun fixed16Dot16(offset: Int): Float? {
+        val major = i16(offset)?.toInt() ?: return null
+        val minor = u16(offset + 2) ?: return null
+        return major + minor / 65536f
+    }
+
     fun tag(offset: Int): String? {
         if (!fits(offset, 4)) return null
         return String(
@@ -1034,6 +1073,14 @@ private fun openTypeTagToString(tag: Int): String = buildString(4) {
     append(((tag ushr 16) and 0xFF).toChar())
     append(((tag ushr 8) and 0xFF).toChar())
     append((tag and 0xFF).toChar())
+}
+
+private fun openTypeTagToInt(tag: String): Int {
+    require(tag.length == 4) { "OpenType tag must be 4 characters" }
+    return ((tag[0].code and 0xFF) shl 24) or
+        ((tag[1].code and 0xFF) shl 16) or
+        ((tag[2].code and 0xFF) shl 8) or
+        (tag[3].code and 0xFF)
 }
 
 private fun kernPairKey(leftGlyph: Int, rightGlyph: Int): Int =
