@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkColorFilters
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkVertices
 import org.graphiks.math.SkPoint
@@ -353,6 +354,23 @@ class DrawVerticesTest {
             textureColor = 0xFF4488CC.toInt(),
             includeTexCoords = false,
         )
+    }
+
+    @Test
+    fun `per-vertex colors apply paint color filter`() {
+        val (bm, canvas) = newWhiteCanvas(20, 20)
+        val red = 0xFFFF0000.toInt()
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangles,
+            arrayOf(SkPoint(2f, 2f), SkPoint(18f, 2f), SkPoint(2f, 18f)),
+            colors = intArrayOf(red, red, red),
+        )
+        val paint = SkPaint(0xFF000000.toInt()).apply {
+            blendMode = SkBlendMode.kSrc
+            colorFilter = SkColorFilters.Blend(0xFF808080.toInt(), SkBlendMode.kDarken)
+        }
+        canvas.drawVertices(v, SkBlendMode.kSrcOver, paint)
+        assertEquals(0xFF800000.toInt(), bm.getPixel(6, 6))
     }
 
     @Test
