@@ -82,10 +82,7 @@ fun File.isAwtCodecBackendArtifact(): Boolean =
         name == "$artifact.jar" || name.startsWith("$artifact-")
     }
 
-tasks.register<Test>("testCodecWithKotlinBackend") {
-    group = "verification"
-    description = "Runs the cpu-raster codec backend smoke test with codec-all-kotlin instead of the temporary AWT/ImageIO codec bundle."
-
+fun Test.useKotlinCodecBackendRuntime() {
     dependsOn("testClasses")
     shouldRunAfter(tasks.named("test"))
 
@@ -95,9 +92,42 @@ tasks.register<Test>("testCodecWithKotlinBackend") {
     } + kotlinCodecBackendRuntime
 
     systemProperty("kanvas.codec.expectedBackend", "kotlin")
+}
+
+tasks.register<Test>("testCodecWithKotlinBackend") {
+    group = "verification"
+    description = "Runs the cpu-raster codec backend smoke test with codec-all-kotlin instead of the temporary AWT/ImageIO codec bundle."
+
+    useKotlinCodecBackendRuntime()
 
     filter {
         includeTestsMatching("org.skia.codec.CpuRasterKotlinCodecBackendTest")
+    }
+}
+
+val legacyCodecSuiteKotlinBackendBlockers = listOf(
+    "org.skia.codec.SkAndroidCodecComputeSampleSizeJpegTest",
+    "org.skia.codec.SkAndroidCodecGetAndroidPixelsTest",
+    "org.skia.codec.SkAndroidCodecTest",
+    "org.skia.codec.bmp.SkBmpCodecTest",
+    "org.skia.codec.gif.SkGifCodecTest",
+    "org.skia.codec.jpeg.SkJpegCodecTest",
+    "org.skia.codec.png.SkPngCodecTest",
+    "org.skia.codec.wbmp.SkWbmpCodecTest",
+    "org.skia.codec.webp.SkWebpCodecTest",
+)
+
+tasks.register<Test>("testCodecSuiteWithKotlinBackend") {
+    group = "verification"
+    description = "Runs the backend-agnostic cpu-raster codec suite subset with codec-all-kotlin; excludes documented legacy ImageIO/VP8 lossy blockers."
+
+    useKotlinCodecBackendRuntime()
+
+    filter {
+        includeTestsMatching("org.skia.codec.*")
+        legacyCodecSuiteKotlinBackendBlockers.forEach { testClass ->
+            excludeTestsMatching(testClass)
+        }
     }
 }
 
