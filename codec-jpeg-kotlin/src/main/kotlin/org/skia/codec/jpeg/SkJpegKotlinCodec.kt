@@ -209,7 +209,8 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
         val marker = data[offset++].toInt() and 0xFF
         when (marker) {
             MARKER_EOI -> break
-            in 0xD0..0xD7, MARKER_TEM -> continue
+            in 0xD0..0xD7 -> return null
+            MARKER_TEM -> continue
             MARKER_SOS -> {
                 if (offset + 2 > data.size) return null
                 val length = readU16BE(data, offset)
@@ -235,6 +236,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                         while (markerOffset < data.size && data[markerOffset] == 0xFF.toByte()) markerOffset++
                         if (markerOffset >= data.size) return null
                         val next = data[markerOffset].toInt() and 0xFF
+                        if (next in 0xD0..0xD7 && restartInterval == 0) return null
                         if (next != 0x00 && next !in 0xD0..0xD7) {
                             scanData = data.copyOfRange(scanStart, offset)
                             scans += EntropyScan(current, scanData)
