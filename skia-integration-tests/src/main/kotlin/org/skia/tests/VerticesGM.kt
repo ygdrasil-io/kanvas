@@ -14,15 +14,12 @@ import org.graphiks.math.SkISize
  * per-vertex-colour interpolation + per-vertex-uv shader
  * sampling together.
  *
- * `:kanvas-skia` does not implement [SkCanvas.drawVertices] at
- * all -- the mesh primitive lives in the GPU plan but is not
- * wired through the canvas dispatcher. The
- * [VerticesPerspectiveGM] / [VerticesCollapsedGM] ports cover
- * the degenerate-mesh cases that don't need the full pipeline,
- * but the base `vertices` reference image needs the real
- * `drawVertices` call.
+ * The smaller [VerticesBatchingGM] slice now exercises the existing
+ * raster [SkCanvas.drawVertices] path. This broader GM still needs a
+ * faithful port of upstream's blend-mode grid, per-vertex colour
+ * interpolation, per-vertex UV shader sampling, and scaled variant.
  *
- * TODO: missing API -- `SkCanvas.drawVertices(vertices, blendMode, paint)`.
+ * TODO: complete the full `gm/vertices.cpp::VerticesGM` port.
  * Flag-planting stub: empty draw, fixed size.
  */
 public class VerticesGM(
@@ -35,6 +32,6 @@ public class VerticesGM(
     override fun getISize(): SkISize = SkISize.Make(975, 1175)
 
     override fun onDraw(canvas: SkCanvas?) {
-        // TODO: missing API -- SkCanvas.drawVertices.
+        // TODO: complete the full upstream vertices GM.
     }
 }
