@@ -92,6 +92,67 @@ class SkBmpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes 16-bit 565 bitfields BMP pixels`() {
+        val codec = SkBmpKotlinCodec.Decoder.make(
+            bitfieldsBmp(
+                width = 3,
+                height = 2,
+                redMask = 0xF800,
+                greenMask = 0x07E0,
+                blueMask = 0x001F,
+                rowsTopDown = listOf(
+                    listOf(RED, GREEN, BLUE),
+                    listOf(WHITE, BLACK, YELLOW),
+                ),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(RED, bitmap!!.getPixel(0, 0))
+        assertEquals(GREEN, bitmap.getPixel(1, 0))
+        assertEquals(BLUE, bitmap.getPixel(2, 0))
+        assertEquals(WHITE, bitmap.getPixel(0, 1))
+        assertEquals(BLACK, bitmap.getPixel(1, 1))
+        assertEquals(YELLOW, bitmap.getPixel(2, 1))
+    }
+
+    @Test
+    fun `decodes 16-bit 555 bitfields BMP pixels`() {
+        val codec = SkBmpKotlinCodec.Decoder.make(
+            bitfieldsBmp(
+                width = 2,
+                height = 2,
+                redMask = 0x7C00,
+                greenMask = 0x03E0,
+                blueMask = 0x001F,
+                topDown = true,
+                rowsTopDown = listOf(
+                    listOf(RED, GREEN),
+                    listOf(BLUE, WHITE),
+                ),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(RED, bitmap!!.getPixel(0, 0))
+        assertEquals(GREEN, bitmap.getPixel(1, 0))
+        assertEquals(BLUE, bitmap.getPixel(0, 1))
+        assertEquals(WHITE, bitmap.getPixel(1, 1))
+    }
+
+    @Test
+    fun `rejects truncated 16-bit bitfield masks`() {
+        val bytes = ByteArray(14 + 40)
+        writeFileAndInfoHeader(bytes, width = 1, height = 1, bitsPerPixel = 16, compression = 3, pixelOffset = 14 + 40 + 12, topDown = false)
+
+        assertNull(SkBmpKotlinCodec.Decoder.make(bytes))
+    }
+
+    @Test
     fun `decodes RLE8 palette BMP pixels`() {
         val palette = intArrayOf(BLACK, RED, GREEN, BLUE, WHITE)
         val codec = SkBmpKotlinCodec.Decoder.make(
@@ -318,6 +379,33 @@ class SkBmpKotlinCodecTest {
         return out
     }
 
+    private fun bitfieldsBmp(
+        width: Int,
+        height: Int,
+        redMask: Int,
+        greenMask: Int,
+        blueMask: Int,
+        topDown: Boolean = false,
+        rowsTopDown: List<List<Int>>,
+    ): ByteArray {
+        val bitsPerPixel = 16
+        val rowBytes = rowBytes(width, bitsPerPixel)
+        val pixelOffset = 14 + 40 + 12
+        val out = ByteArray(pixelOffset + rowBytes * height)
+        writeFileAndInfoHeader(out, width, height, bitsPerPixel, 3, pixelOffset, topDown)
+        writeI32LE(out, 14 + 40, redMask)
+        writeI32LE(out, 14 + 44, greenMask)
+        writeI32LE(out, 14 + 48, blueMask)
+        for (dy in 0 until height) {
+            val fileRow = if (topDown) dy else height - 1 - dy
+            val row = pixelOffset + fileRow * rowBytes
+            for (x in 0 until width) {
+                writeU16LE(out, row + x * 2, packBitfields(rowsTopDown[dy][x], redMask, greenMask, blueMask))
+            }
+        }
+        return out
+    }
+
     private fun writeFileAndInfoHeader(
         out: ByteArray,
         width: Int,
@@ -352,6 +440,15 @@ class SkBmpKotlinCodecTest {
         out[offset + 1] = (value ushr 8).toByte()
         out[offset + 2] = (value ushr 16).toByte()
         out[offset + 3] = (value ushr 24).toByte()
+    }
+
+    private fun packBitfields(color: Int, redMask: Int, greenMask: Int, blueMask: Int): Int =
+        packMasked(r(color), redMask) or packMasked(g(color), greenMask) or packMasked(b(color), blueMask)
+
+    private fun packMasked(component: Int, mask: Int): Int {
+        val shift = Integer.numberOfTrailingZeros(mask)
+        val max = mask ushr shift
+        return ((component * max + 127) / 255) shl shift
     }
 
     private fun a(c: Int): Int = (c ushr 24) and 0xFF
