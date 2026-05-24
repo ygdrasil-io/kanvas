@@ -223,10 +223,10 @@ private fun parseAlphaChunk(
     offset: Int,
     size: Int,
 ): WebpAlphaChunk? {
-    if (size <= 1 || offset < 0 || offset + size > data.size) return null
+    if (size < 1 || offset < 0 || offset + size > data.size) return null
     val control = data[offset].toInt() and 0xFF
-    if ((control and 0xE0) != 0) return null
-    val compression = when ((control ushr 4) and 0x01) {
+    if ((control and 0xC0) != 0) return null
+    val compression = when (control and 0x03) {
         0 -> WebpAlphaCompression.NONE
         1 -> WebpAlphaCompression.LOSSLESS
         else -> return null
@@ -234,7 +234,7 @@ private fun parseAlphaChunk(
     return WebpAlphaChunk(
         compression = compression,
         filtering = (control ushr 2) and 0x03,
-        preprocessing = control and 0x03,
+        preprocessing = (control ushr 4) and 0x03,
         payloadOffset = offset + 1,
         payloadSize = size - 1,
     )

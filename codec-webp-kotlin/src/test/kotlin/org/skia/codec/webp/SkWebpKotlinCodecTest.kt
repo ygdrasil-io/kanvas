@@ -227,7 +227,7 @@ class SkWebpKotlinCodecTest {
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x10),
-                    alphaChunk(control = 0x20, payload = byteArrayOf(1, 2, 3, 4)),
+                    alphaChunk(control = 0x40, payload = byteArrayOf(1, 2, 3, 4)),
                     vp8Chunk(width = 2, height = 2),
                 ),
             ),
@@ -1415,6 +1415,7 @@ class SkWebpKotlinCodecTest {
     fun `returns input error for malformed VP8X uncompressed alpha on supported VP8 lossy pixels`() {
         val malformedAlphaCases = listOf(
             alphaChunk(control = alphaControl(compression = WebpAlphaCompression.NONE), payload = byteArrayOf(1, 2, 3)),
+            alphaChunk(control = alphaControl(compression = WebpAlphaCompression.NONE), payload = ByteArray(0)),
             ByteArray(0),
         )
 
@@ -2359,11 +2360,11 @@ class SkWebpKotlinCodecTest {
     ): Int {
         require(filtering in 0..3)
         require(preprocessing in 0..3)
-        val compressionBit = when (compression) {
+        val compressionBits = when (compression) {
             WebpAlphaCompression.NONE -> 0
             WebpAlphaCompression.LOSSLESS -> 1
         }
-        return (compressionBit shl 4) or (filtering shl 2) or preprocessing
+        return (preprocessing shl 4) or (filtering shl 2) or compressionBits
     }
 
     private fun riff(type: String, vararg chunks: ByteArray): ByteArray {
