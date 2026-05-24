@@ -320,6 +320,138 @@ class SkGifKotlinCodecTest {
     }
 
     @Test
+    fun `decodes representative multi frame fixture corpus`() {
+        val codec = SkGifKotlinCodec.Decoder.make(
+            gif(
+                width = 4,
+                height = 4,
+                palette = intArrayOf(RED, GREEN, BLUE, YELLOW),
+                backgroundIndex = 3,
+                extensions = listOf(
+                    netscapeLoopExtension(loopCount = 2),
+                    commentExtension("synthetic multi-frame corpus"),
+                ),
+                frames = listOf(
+                    GifFrameSpec(
+                        left = 0,
+                        top = 0,
+                        width = 4,
+                        height = 4,
+                        indexes = intArrayOf(
+                            0, 0, 0, 0,
+                            0, 0, 0, 0,
+                            0, 0, 0, 0,
+                            0, 0, 0, 0,
+                        ),
+                        delayCs = 5,
+                    ),
+                    GifFrameSpec(
+                        left = 1,
+                        top = 1,
+                        width = 2,
+                        height = 2,
+                        indexes = intArrayOf(
+                            0, 1,
+                            1, 0,
+                        ),
+                        delayCs = 6,
+                        localPalette = intArrayOf(GREEN, BLUE),
+                    ),
+                    GifFrameSpec(
+                        left = 0,
+                        top = 0,
+                        width = 1,
+                        height = 4,
+                        indexes = intArrayOf(2, 3, 2, 3),
+                        delayCs = 7,
+                        interlaced = true,
+                    ),
+                    GifFrameSpec(
+                        left = 2,
+                        top = 0,
+                        width = 2,
+                        height = 2,
+                        indexes = intArrayOf(
+                            1, 2,
+                            2, 1,
+                        ),
+                        delayCs = 8,
+                        disposal = DISPOSAL_BACKGROUND,
+                    ),
+                    GifFrameSpec(
+                        left = 1,
+                        top = 2,
+                        width = 2,
+                        height = 2,
+                        indexes = intArrayOf(
+                            1, 3,
+                            3, 1,
+                        ),
+                        delayCs = 9,
+                        disposal = DISPOSAL_PREVIOUS,
+                    ),
+                ),
+            ),
+        )!!
+
+        val frameInfo = codec.getFrameInfo()
+        assertEquals(5, codec.getFrameCount())
+        assertEquals(listOf(50, 60, 70, 80, 90), frameInfo.map { it.durationMs })
+        assertEquals(listOf(SkCodec.kNoFrame, 0, 1, 2, 3), frameInfo.map { it.requiredFrame })
+
+        assertFramePixels(
+            codec,
+            frameIndex = 0,
+            expected = listOf(
+                intArrayOf(RED, RED, RED, RED),
+                intArrayOf(RED, RED, RED, RED),
+                intArrayOf(RED, RED, RED, RED),
+                intArrayOf(RED, RED, RED, RED),
+            ),
+        )
+        assertFramePixels(
+            codec,
+            frameIndex = 1,
+            expected = listOf(
+                intArrayOf(RED, RED, RED, RED),
+                intArrayOf(RED, GREEN, BLUE, RED),
+                intArrayOf(RED, BLUE, GREEN, RED),
+                intArrayOf(RED, RED, RED, RED),
+            ),
+        )
+        assertFramePixels(
+            codec,
+            frameIndex = 2,
+            expected = listOf(
+                intArrayOf(BLUE, RED, RED, RED),
+                intArrayOf(BLUE, GREEN, BLUE, RED),
+                intArrayOf(YELLOW, BLUE, GREEN, RED),
+                intArrayOf(YELLOW, RED, RED, RED),
+            ),
+        )
+        assertFramePixels(
+            codec,
+            frameIndex = 3,
+            expected = listOf(
+                intArrayOf(BLUE, RED, GREEN, BLUE),
+                intArrayOf(BLUE, GREEN, BLUE, GREEN),
+                intArrayOf(YELLOW, BLUE, GREEN, RED),
+                intArrayOf(YELLOW, RED, RED, RED),
+            ),
+        )
+        assertFramePixels(
+            codec,
+            frameIndex = 4,
+            expected = listOf(
+                intArrayOf(BLUE, RED, YELLOW, YELLOW),
+                intArrayOf(BLUE, GREEN, YELLOW, YELLOW),
+                intArrayOf(YELLOW, GREEN, YELLOW, RED),
+                intArrayOf(YELLOW, YELLOW, GREEN, RED),
+            ),
+        )
+    }
+
+    @Test
     fun `rejects truncated image data sub-block`() {
         val data = gif(
             width = 1,
@@ -590,6 +722,17 @@ class SkGifKotlinCodecTest {
         val imageSeparatorOffset = data.indexOf(0x2C.toByte())
         assertTrue(imageSeparatorOffset >= 0)
         return imageSeparatorOffset + 10 + 1
+    }
+
+    private fun assertFramePixels(codec: SkCodec, frameIndex: Int, expected: List<IntArray>) {
+        val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+        val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = frameIndex))
+        assertEquals(SkCodec.Result.kSuccess, result)
+        for (y in expected.indices) {
+            for (x in expected[y].indices) {
+                assertEquals(expected[y][x], dst.getPixel(x, y), "frame=$frameIndex x=$x y=$y")
+            }
+        }
     }
 
     private fun r(c: Int): Int = (c ushr 16) and 0xFF
