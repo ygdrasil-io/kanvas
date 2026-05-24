@@ -83,10 +83,16 @@ class SkIcoDecoderTest {
 
     @Test
     fun `prefers PNG over DIB when directory sizes tie`() {
-        val dib = entry(width = 2, height = 2, payload = dib32(2, 2, listOf(listOf(BLUE, BLUE), listOf(BLUE, BLUE))))
+        val dib = entry(
+            width = 2,
+            height = 2,
+            bitDepth = 32,
+            payload = dib32(2, 2, listOf(listOf(BLUE, BLUE), listOf(BLUE, BLUE))),
+        )
         val embeddedPng = entry(
             width = 2,
             height = 2,
+            bitDepth = 1,
             payload = png(2, 2, listOf(intArrayOf(RED, RED), intArrayOf(RED, RED))),
         )
         val codec = SkCodec.MakeFromData(ico(dib, embeddedPng))!!
@@ -96,6 +102,62 @@ class SkIcoDecoderTest {
         assertEquals(SkCodec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `selects larger DIB over smaller PNG even when directory bit depth is lower`() {
+        val smallerPng = entry(
+            width = 2,
+            height = 2,
+            bitDepth = 32,
+            payload = png(2, 2, listOf(intArrayOf(RED, RED), intArrayOf(RED, RED))),
+        )
+        val largerDib = entry(
+            width = 3,
+            height = 2,
+            bitDepth = 24,
+            payload = dib24WithMask(
+                3,
+                2,
+                listOf(
+                    listOf(GREEN, GREEN, GREEN),
+                    listOf(GREEN, GREEN, GREEN),
+                ),
+                listOf(
+                    booleanArrayOf(false, false, false),
+                    booleanArrayOf(false, false, false),
+                ),
+            ),
+        )
+        val codec = SkCodec.MakeFromData(ico(smallerPng, largerDib))!!
+
+        assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
+        assertEquals(3, codec.getInfo().width)
+        assertEquals(2, codec.getInfo().height)
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(GREEN, bitmap!!.getPixel(2, 1))
+    }
+
+    @Test
+    fun `treats zero directory dimension as 256 when ranking entries`() {
+        val row256 = listOf(IntArray(256) { GREEN })
+        val encodedAsZero = entry(width = 256, height = 1, payload = png(256, 1, row256))
+        val smallerSquare = entry(
+            width = 15,
+            height = 15,
+            payload = png(15, 15, List(15) { IntArray(15) { RED } }),
+        )
+        val codec = SkCodec.MakeFromData(ico(smallerSquare, encodedAsZero))!!
+
+        assertEquals(SkEncodedImageFormat.kPNG, codec.getEncodedFormat())
+        assertEquals(256, codec.getInfo().width)
+        assertEquals(1, codec.getInfo().height)
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(GREEN, bitmap!!.getPixel(255, 0))
     }
 
     @Test
@@ -123,10 +185,10 @@ class SkIcoDecoderTest {
         assertEquals(WHITE, bitmap.getPixel(1, 1))
     }
 
-    private data class Entry(val width: Int, val height: Int, val payload: ByteArray)
+    private data class Entry(val width: Int, val height: Int, val bitDepth: Int, val payload: ByteArray)
 
-    private fun entry(width: Int, height: Int, payload: ByteArray): Entry =
-        Entry(width = width, height = height, payload = payload)
+    private fun entry(width: Int, height: Int, bitDepth: Int = 32, payload: ByteArray): Entry =
+        Entry(width = width, height = height, bitDepth = bitDepth, payload = payload)
 
     private fun ico(vararg entries: Entry): ByteArray {
         val headerBytes = 6 + entries.size * 16
@@ -140,7 +202,7 @@ class SkIcoDecoderTest {
             out[entryOffset] = if (image.width == 256) 0 else image.width.toByte()
             out[entryOffset + 1] = if (image.height == 256) 0 else image.height.toByte()
             writeU16LE(out, entryOffset + 4, 1)
-            writeU16LE(out, entryOffset + 6, 32)
+            writeU16LE(out, entryOffset + 6, image.bitDepth)
             writeI32LE(out, entryOffset + 8, image.payload.size)
             writeI32LE(out, entryOffset + 12, payloadOffset)
             System.arraycopy(image.payload, 0, out, payloadOffset, image.payload.size)
