@@ -125,3 +125,15 @@ tasks.register("checkPureKotlinCodecNoAwt") {
         }
     }
 }
+
+tasks.register("checkCodecKotlinSwitchCriteria") {
+    group = "verification"
+    description = "Runs the non-destructive codec-all-kotlin switch-readiness checks."
+
+    dependsOn(
+        "checkPureKotlinCodecNoAwt",
+        ":codec-all-kotlin:test",
+        ":codec-all-kotlin:jar",
+        ":codec-awt-kotlin-comparison-tests:test",
+    )
+}
