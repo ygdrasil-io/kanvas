@@ -867,6 +867,69 @@ class OpenTypeFontTest {
         assertTrue(typeface.colorLayers(1).isEmpty())
     }
 
+    @Test
+    fun `COLRv1 paint graph metadata exposes solid glyph transform subset`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1Transform(glyphs[0], glyphs[1]))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+
+        val paint = typeface.colorPaint(glyphs[0])
+
+        assertEquals(
+            OpenTypeColorPaint.Transform(
+                paint = OpenTypeColorPaint.Glyph(
+                    glyphId = glyphs[1],
+                    paint = OpenTypeColorPaint.Solid(paletteIndex = 1, alpha = 0.5f),
+                ),
+                xx = 1f,
+                yx = 0f,
+                xy = 0f,
+                yy = 1f,
+                dx = 12f,
+                dy = -3f,
+            ),
+            paint,
+        )
+        assertTrue(typeface.colorLayers(glyphs[0]).isEmpty())
+    }
+
+    @Test
+    fun `drawString falls back to monochrome for parsed COLRv1 before rendering integration`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1Transform(glyphs[0], glyphs[1]))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `malformed COLRv1 paint graph fails closed without rejecting font`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
+        val bytes = liberationSansBytes()
+            .withTableContent("GPOS", "COLR", syntheticColrV1Transform(glyphs[0], glyphs[1]).copyOf(40))
+            .withTableContent("kern", "CPAL", syntheticCpalV0())
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertNull(typeface.colorPaint(glyphs[0]))
+    }
+
     private fun assertCompositePathTransform(
         bytes: ByteArray,
         codepoint: String,
@@ -1108,11 +1171,56 @@ class OpenTypeFontTest {
         return bytes
     }
 
+    private fun syntheticColrV1Transform(baseGlyph: Int, glyph: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val rootPaintOffset = baseGlyphListOffset + 10
+        val glyphPaintOffset = rootPaintOffset + 7
+        val solidPaintOffset = glyphPaintOffset + 6
+        val transformOffset = solidPaintOffset + 5
+        val bytes = ByteArray(transformOffset + 24)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, baseGlyph)
+        writeU32(bytes, baseGlyphListOffset + 6, rootPaintOffset - baseGlyphListOffset)
+
+        bytes[rootPaintOffset] = 12 // PaintTransform
+        writeU24(bytes, rootPaintOffset + 1, glyphPaintOffset - rootPaintOffset)
+        writeU24(bytes, rootPaintOffset + 4, transformOffset - rootPaintOffset)
+
+        bytes[glyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, glyphPaintOffset + 1, solidPaintOffset - glyphPaintOffset)
+        writeU16(bytes, glyphPaintOffset + 4, glyph)
+
+        bytes[solidPaintOffset] = 2 // PaintSolid
+        writeU16(bytes, solidPaintOffset + 1, 1) // paletteIndex
+        writeI16(bytes, solidPaintOffset + 3, 0x2000) // alpha = 0.5
+
+        writeFixed16Dot16(bytes, transformOffset, 1f) // xx
+        writeFixed16Dot16(bytes, transformOffset + 4, 0f) // yx
+        writeFixed16Dot16(bytes, transformOffset + 8, 0f) // xy
+        writeFixed16Dot16(bytes, transformOffset + 12, 1f) // yy
+        writeFixed16Dot16(bytes, transformOffset + 16, 12f) // dx
+        writeFixed16Dot16(bytes, transformOffset + 20, -3f) // dy
+        return bytes
+    }
+
     private fun writeBgra(bytes: ByteArray, off: Int, blue: Int, green: Int, red: Int, alpha: Int) {
         bytes[off] = blue.toByte()
         bytes[off + 1] = green.toByte()
         bytes[off + 2] = red.toByte()
         bytes[off + 3] = alpha.toByte()
+    }
+
+    private fun writeU24(bytes: ByteArray, off: Int, value: Int) {
+        bytes[off] = (value ushr 16).toByte()
+        bytes[off + 1] = (value ushr 8).toByte()
+        bytes[off + 2] = value.toByte()
+    }
+
+    private fun writeFixed16Dot16(bytes: ByteArray, off: Int, value: Float) {
+        writeU32(bytes, off, (value * 65536f).toInt())
     }
 
     private fun toF2Dot14(value: Float): Int =
