@@ -249,6 +249,71 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `simple glyph paths close contours and emit implicit quadratic curves`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val font = SkFont(typeface, 48f)
+        val glyphS = font.textToGlyphs("S").single()
+
+        val path = requireNotNull(font.getPath(glyphS))
+        val contourCount = path.verbs.count { it == SkPath.Verb.kMove }
+
+        assertTrue(contourCount > 0)
+        assertEquals(contourCount, path.verbs.count { it == SkPath.Verb.kClose })
+        assertTrue(path.verbs.count { it == SkPath.Verb.kQuad } >= 4)
+        assertTrue(path.computeTightBounds().width() > 0f)
+        assertTrue(path.computeTightBounds().height() > 0f)
+    }
+
+    @Test
+    fun `composite glyph paths apply translation scale xy scale and matrix transforms`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val baseFont = SkFont(baseTypeface, 2048f)
+        val baseGlyph = baseFont.textToGlyphs("A").single()
+        val basePath = requireNotNull(baseFont.getPath(baseGlyph))
+        val compositeCodepoint = "\u00e9"
+        val compositeGlyph = baseFont.textToGlyphs(compositeCodepoint).single()
+
+        assertCompositePathTransform(
+            bytes = liberationSansBytes().withCompositeGlyph(compositeGlyph, baseGlyph, dx = 256, dy = 128),
+            codepoint = compositeCodepoint,
+            basePath = basePath,
+            a = 1f,
+            b = 0f,
+            c = 0f,
+            d = 1f,
+            dx = 256f,
+            dy = 128f,
+        )
+        assertCompositePathTransform(
+            bytes = liberationSansBytes().withCompositeGlyph(compositeGlyph, baseGlyph, a = 0.5f, d = 0.5f),
+            codepoint = compositeCodepoint,
+            basePath = basePath,
+            a = 0.5f,
+            b = 0f,
+            c = 0f,
+            d = 0.5f,
+        )
+        assertCompositePathTransform(
+            bytes = liberationSansBytes().withCompositeGlyph(compositeGlyph, baseGlyph, a = 0.5f, d = 1.25f),
+            codepoint = compositeCodepoint,
+            basePath = basePath,
+            a = 0.5f,
+            b = 0f,
+            c = 0f,
+            d = 1.25f,
+        )
+        assertCompositePathTransform(
+            bytes = liberationSansBytes().withCompositeGlyph(compositeGlyph, baseGlyph, b = 0.25f, c = 0.5f),
+            codepoint = compositeCodepoint,
+            basePath = basePath,
+            a = 1f,
+            b = 0.25f,
+            c = 0.5f,
+            d = 1f,
+        )
+    }
+
+    @Test
     fun `glyph paths cover simple and composite Liberation glyphs`() {
         val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val font = SkFont(typeface, 48f)
@@ -370,8 +435,96 @@ class OpenTypeFontTest {
         assertNull(typeface.getKerningPairAdjustments(glyphs))
     }
 
+    private fun assertCompositePathTransform(
+        bytes: ByteArray,
+        codepoint: String,
+        basePath: SkPath,
+        a: Float,
+        b: Float,
+        c: Float,
+        d: Float,
+        dx: Float = 0f,
+        dy: Float = 0f,
+    ) {
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+        val font = SkFont(typeface, 2048f)
+        val path = requireNotNull(font.getPath(font.textToGlyphs(codepoint).single()))
+
+        assertEquals(basePath.verbs.toList(), path.verbs.toList())
+        assertEquals(basePath.coords.size, path.coords.size)
+        for (i in basePath.coords.indices step 2) {
+            val x = basePath.coords[i]
+            val y = basePath.coords[i + 1]
+            val transformedX = (a * x - b * y + dx).toInt().toFloat()
+            val transformedY = -((c * x - d * y + dy).toInt()).toFloat()
+            assertEquals(transformedX, path.coords[i], 0.001f, "x coord $i")
+            assertEquals(transformedY, path.coords[i + 1], 0.001f, "y coord ${i + 1}")
+        }
+    }
+
+    private fun ByteArray.withCompositeGlyph(
+        glyphId: Int,
+        componentGlyphId: Int,
+        dx: Int = 0,
+        dy: Int = 0,
+        a: Float = 1f,
+        b: Float = 0f,
+        c: Float = 0f,
+        d: Float = 1f,
+    ): ByteArray {
+        val copy = copyOf()
+        val glyphStart = copy.glyphDataOffset(glyphId)
+        val glyphEnd = copy.glyphDataOffset(glyphId + 1)
+        val glyphLength = glyphEnd - glyphStart
+        var flags = ARG_1_AND_2_ARE_WORDS or ARGS_ARE_XY_VALUES
+        val transformBytes = when {
+            b != 0f || c != 0f -> {
+                flags = flags or WE_HAVE_A_TWO_BY_TWO
+                floatArrayOf(a, b, c, d)
+            }
+            a != d -> {
+                flags = flags or WE_HAVE_AN_X_AND_Y_SCALE
+                floatArrayOf(a, d)
+            }
+            a != 1f -> {
+                flags = flags or WE_HAVE_A_SCALE
+                floatArrayOf(a)
+            }
+            else -> floatArrayOf()
+        }
+        val componentLength = 10 + 4 + 4 + transformBytes.size * 2
+        require(componentLength <= glyphLength)
+
+        writeU16(copy, glyphStart, 0xFFFF)
+        for (i in 2 until 10) copy[glyphStart + i] = 0
+        var off = glyphStart + 10
+        writeU16(copy, off, flags); off += 2
+        writeU16(copy, off, componentGlyphId); off += 2
+        writeI16(copy, off, dx); off += 2
+        writeI16(copy, off, dy); off += 2
+        transformBytes.forEach {
+            writeI16(copy, off, toF2Dot14(it)); off += 2
+        }
+        return copy
+    }
+
+    private fun ByteArray.glyphDataOffset(glyphId: Int): Int {
+        val head = tableRecord("head")
+        val loca = tableRecord("loca")
+        val glyf = tableRecord("glyf")
+        val indexToLocFormat = readI16(this, head + 50).toInt()
+        val glyphOffset = when (indexToLocFormat) {
+            0 -> readU16(this, loca + glyphId * 2) * 2
+            1 -> readU32(this, loca + glyphId * 4)
+            else -> error("Unsupported loca format: $indexToLocFormat")
+        }
+        return glyf + glyphOffset
+    }
+
     private fun readU16(bytes: ByteArray, off: Int): Int =
         ((bytes[off].toInt() and 0xFF) shl 8) or (bytes[off + 1].toInt() and 0xFF)
+
+    private fun readI16(bytes: ByteArray, off: Int): Short = readU16(bytes, off).toShort()
 
     private fun readU32(bytes: ByteArray, off: Int): Int =
         ((bytes[off].toInt() and 0xFF) shl 24) or
@@ -387,10 +540,25 @@ class OpenTypeFontTest {
         bytes[off + 1] = value.toByte()
     }
 
+    private fun writeI16(bytes: ByteArray, off: Int, value: Int) {
+        writeU16(bytes, off, value and 0xFFFF)
+    }
+
     private fun writeU32(bytes: ByteArray, off: Int, value: Int) {
         bytes[off] = (value ushr 24).toByte()
         bytes[off + 1] = (value ushr 16).toByte()
         bytes[off + 2] = (value ushr 8).toByte()
         bytes[off + 3] = value.toByte()
+    }
+
+    private fun toF2Dot14(value: Float): Int =
+        (value * 16384f).toInt()
+
+    private companion object {
+        private const val ARG_1_AND_2_ARE_WORDS = 0x0001
+        private const val ARGS_ARE_XY_VALUES = 0x0002
+        private const val WE_HAVE_A_SCALE = 0x0008
+        private const val WE_HAVE_AN_X_AND_Y_SCALE = 0x0040
+        private const val WE_HAVE_A_TWO_BY_TWO = 0x0080
     }
 }
