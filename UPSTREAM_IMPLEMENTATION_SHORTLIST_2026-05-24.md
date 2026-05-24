@@ -141,30 +141,32 @@ shader, the blue color shader, and all three vertex attribute combinations.
 Reactivation evidence:
 
 - Focused validation with `VerticesTest` compiled and rendered the new GM.
-- The normal variant reached `59.09%` similarity against
+- The normal variant reached `59.39%` similarity against
   `original-888/vertices.png`.
-- The scaled variant reached `59.16%` similarity against
+- The scaled variant reached `59.57%` similarity against
   `original-888/vertices_scaled_shader.png`.
 - `VerticesBatchingGM` still passes at its existing ratchet.
 
 Real blocker:
 
-- The blocker is not fonts, codecs, WGSL, `SkShaders.Color`, color filters, or
+- The blocker is not fonts, codecs, WGSL, `SkShaders.Color`, or
   the public blend-mode enum. Those dependencies are present on current
   `origin/master`.
-- The remaining blocker is `SkCanvas.drawVertices(vertices, blendMode, paint)`
-  semantics. Raster currently combines per-vertex colors with shader samples
-  only for `kSrc`, `kDst`, and `kModulate`; upstream `VerticesGM` intentionally
-  exercises all 29 vertex blend modes. Enabling the GM now would ratchet a
-  known-wrong image rather than prove upstream parity.
+- `SkCanvas.drawVertices(vertices, blendMode, paint)` now combines
+  interpolated vertex colors with shader samples through the shared
+  `SkBlendMode` dispatcher, including the no-`texCoords` shader case.
+- The remaining observed blocker is `paint.colorFilter` on the vertices path.
+  `VerticesGM` uses `SkColorFilters.Blend(0xFFAABBCC, kDarken)`, but applying
+  that filter currently hits the existing `SkBlendColorFilter` limitation for
+  separable/HSL modes in F16. Enabling the GM now would ratchet a known-wrong
+  image rather than prove upstream parity.
 
 Next implementation slice:
 
-1. Extend the raster `drawVertices` path so the `blendMode` argument combines
-   interpolated vertex color and shader sample for every `SkBlendMode`, while
-   `paint.blendMode` remains the destination compositing mode.
-2. Add focused unit tests in `DrawVerticesTest` for representative advanced
-   vertex blends such as `kSrcOver`, `kScreen`, `kOverlay`, and one HSL mode.
+1. Hoist or share the full float-premul blend dispatcher so
+   `SkBlendColorFilter` supports separable/HSL modes such as `kDarken`.
+2. Apply `paint.colorFilter` in the colored/textured `drawVertices` paths once
+   the filter can evaluate `kDarken` without throwing.
 3. Re-enable `VerticesTest` for both `vertices` and `vertices_scaled_shader`
    with a similarity floor only after the full vertex-blend matrix is covered.
 

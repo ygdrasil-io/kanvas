@@ -2102,6 +2102,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                 a.fX, a.fY, colors[tri[0]],
                 b.fX, b.fY, colors[tri[1]],
                 c.fX, c.fY, colors[tri[2]],
+                blendMode,
                 s.matrix, s.clip, paint,
             )
         }
