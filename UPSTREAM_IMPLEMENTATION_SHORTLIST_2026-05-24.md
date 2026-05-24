@@ -36,16 +36,21 @@ Completed since this snapshot:
   and `ShadowUtilsGaussianColorFilterGM` is enabled.
 - `STUB.PATH_EFFECT_CTM`: implemented in `CTMPathEffectGM` with CTM-aware
   line inflation and ratchet coverage.
+- `STUB.POLY_TO_POLY`: `ClipShaderPerspGM` is ported and enabled; the
+  matrix factory was already present, and the remaining visual delta is
+  tracked by the ratchet.
+- `STUB.IFX.MULTIPLE_FILTERS_SPAN`: raster `saveLayerWithMultipleFilters`
+  is implemented for `MultipleFiltersGM` and the test is enabled.
+- `STUB.DRAW_VERTICES`: `VerticesBatchingGM` is ported through the existing
+  `drawVertices` raster path and the test is enabled. The broader
+  `VerticesGM` remains a separate follow-up.
 
 ## Recommended order
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `STUB.POLY_TO_POLY` | 1 cpp (`complexclip`) | M/L | Core matrix/path correctness; useful but more geometry risk. |
-| 2 | `STUB.IFX.MULTIPLE_FILTERS_SPAN` | 1 cpp (`imagefilters`) | L | Image-filter/layer integration can touch saveLayer behavior. |
-| 3 | `STUB.EDGE_AA_IMAGE_SET` / `STUB.EDGE_AA_QUAD` | 3+ cpps (`drawimageset`, `savelayer`, `drawquadset`) | L | Higher impact, but batched image draw semantics are broad. |
-| 4 | `STUB.DRAW_VERTICES` | 1 cpp (`vertices`) | L | Shared drawing primitive; likely useful, but broad rendering surface. |
-| 5 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 3 cpps (`drawatlas`, `dftext_blob_persp`, `textblobmixedsizes`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
+| 1 | `STUB.EDGE_AA_IMAGE_SET` / `STUB.EDGE_AA_QUAD` | 3+ cpps (`drawimageset`, `savelayer`, `drawquadset`) | L | Higher impact, but batched image draw semantics are broad. |
+| 2 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 3 cpps (`drawatlas`, `dftext_blob_persp`, `textblobmixedsizes`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
 
@@ -56,7 +61,7 @@ Completed since this snapshot:
 | `blurrect` | `STUB.BLURRECT_GALLERY`, `STUB.BLUR_RECTS_FULL`, `STUB.BLUR_RECT_COMPARE` | `BlurMatrixRectGM.kt`, `BlurRectCompareGM.kt`, `BlurRectGM.kt`, `BlurRectGalleryGM.kt` |
 | `color4f` | ported | `Color4blendcfGM.kt`, `Color4fGM.kt`, `Color4shaderGM.kt` |
 | `colorfilterimagefilter` | ported | `ColorFilterImageFilterGM.kt`, `ColorFilterImageFilterLayerGM.kt`, `ColorFilterShaderGM.kt` |
-| `complexclip` | `STUB.POLY_TO_POLY` | `ClipShaderComplexClipGM.kt`, `ClipShaderPerspGM.kt`, `ComplexClipGM.kt` |
+| `complexclip` | ported | `ClipShaderComplexClipGM.kt`, `ClipShaderPerspGM.kt`, `ComplexClipGM.kt` |
 | `composeshader` | `STUB.COMPOSE_SHADER` | `ComposeShaderAlphaGM.kt`, `ComposeShaderBitmap2GM.kt`, `ComposeShaderBitmapGM.kt`, `ComposeShaderGM.kt`, `ComposeShaderGridGM.kt` |
 | `dashcubics` | disabled `TrimGM` without `STUB.*` tag | `DashCubicsGM.kt`, `TrimGM.kt` |
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
@@ -65,7 +70,7 @@ Completed since this snapshot:
 | `drawquadset` | `STUB.EDGE_AA_QUAD` | `DrawQuadSetGM.kt` |
 | `fiddle` | stub file without `STUB.*` tag | `FiddleGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION` | gradient interpolation variants |
-| `imagefilters` | `STUB.IFX.MULTIPLE_FILTERS_SPAN`, `STUB.BACKDROP_FILTER` | `MultipleFiltersGM.kt`, `SaveLayerWithBackdropGM.kt`, others |
+| `imagefilters` | `STUB.BACKDROP_FILTER` | `MultipleFiltersGM.kt`, `SaveLayerWithBackdropGM.kt`, others |
 | `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
 | `imagemasksubset` | `STUB.ALPHA8_IMAGE_AS_MASK` | `ImageMaskSubsetGM.kt` |
 | `lumafilter` | `STUB.COLOR_FILTER_PRIV` | `AlternateLumaGM.kt`, `LumaFilterGM.kt` |
@@ -80,7 +85,7 @@ Completed since this snapshot:
 | `strokedlines` | `STUB.STROKEDLINE_CAPS` | `StrokedLineCapsGM.kt`, `StrokedLinesGM.kt` |
 | `surface` | `STUB.SURFACE_PROPS` | `NewSurfaceGM.kt`, `SnapWithMipsGM.kt`, `SurfacePropsGM.kt` |
 | `textblobmixedsizes` | `STUB.DF_TEXT_RASTER` | `TextBlobMixedSizesGM.kt` |
-| `vertices` | `STUB.DRAW_VERTICES` | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
+| `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
 

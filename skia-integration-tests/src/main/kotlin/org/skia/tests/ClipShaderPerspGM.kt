@@ -1,9 +1,19 @@
 package org.skia.tests
 
-import org.skia.core.SkCanvas
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SkColorSetARGB
 import org.graphiks.math.SkISize
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
+import org.skia.core.SkCanvas
+import org.skia.foundation.SkFont
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkRadialGradient
+import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkShader
+import org.skia.foundation.SkTileMode
 import org.skia.tools.ToolUtils
 
 /**
@@ -16,14 +26,6 @@ import org.skia.tools.ToolUtils
  * clip-shader pipeline respects the perspective transform regardless of
  * when `concat(persp)` is called relative to the two `clipShader` calls.
  *
- * **STUB.POLY_TO_POLY** — The perspective matrix is computed via
- * `SkMatrix::setPolyToPoly(srcQuad, dstQuad)` which maps the four corners
- * of the rose image to a trapezoid. [SkMatrix.setPolyToPoly] is not yet
- * implemented in :math (full 4-point homogeneous solve deferred; see
- * [SkMatrix.setPolyToPoly] KDoc for rationale). All call sites are wired
- * through [SkMatrix.setPolyToPoly] so that `grep 'TODO("STUB.POLY_TO_POLY")'`
- * in `:kanvas-skia` finds them automatically once the stub is lifted.
- *
  * Reference image: `clip_shader_persp.png`, 1370 × 1030.
  */
 public class ClipShaderPerspGM : GM() {
@@ -35,6 +37,8 @@ public class ClipShaderPerspGM : GM() {
         val c = canvas ?: return
 
         val img = ToolUtils.GetResourceAsImage("images/yellow_rose.png") ?: return
+        val scale = SkMatrix.MakeScale(0.25f, 0.25f)
+        val imgRect = SkRect.MakeIWH(img.width, img.height)
 
         // Build the perspective matrix that maps the image quad to a trapezoid.
         // Upstream: SkMatrix persp; SkAssertResult(persp.setPolyToPoly(src, dst));
@@ -50,13 +54,157 @@ public class ClipShaderPerspGM : GM() {
             SkPoint.Make(img.width - 28f, img.height + 100f),
             SkPoint.Make(0f, img.height - 80f),
         )
-        // STUB.POLY_TO_POLY — throws NotImplementedError; @Disabled test captures it.
-        @Suppress("UNUSED_VARIABLE")
-        val persp: SkMatrix? = SkMatrix.setPolyToPoly(src, dst)
+        val persp = SkMatrix.setPolyToPoly(src, dst) ?: return
+        val perspScale = SkMatrix.concat(persp, scale)
+        val grid = persp.mapRect(imgRect).roundOut().apply {
+            left -= 20
+        }
 
-        // Body is unreachable (TODO above throws), but is listed here
-        // so grep("STUB.POLY_TO_POLY") surfaces this file as a live call site.
-        c.save()
-        c.restore()
+        val matches = arrayOf(
+            arrayOf(
+                Config(ConcatPerspective.BEFORE_CLIPS, ClipOrder.DOES_NOT_MATTER, LocalMatrix.NO_LOCAL_MATRIX),
+                Config(ConcatPerspective.AFTER_CLIPS, ClipOrder.DOES_NOT_MATTER, LocalMatrix.BOTH_WITH_LOCAL_MATRIX),
+            ),
+            arrayOf(
+                Config(ConcatPerspective.BETWEEN_CLIPS, ClipOrder.GRADIENT_FIRST, LocalMatrix.NO_LOCAL_MATRIX),
+                Config(ConcatPerspective.AFTER_CLIPS, ClipOrder.DOES_NOT_MATTER, LocalMatrix.IMAGE_WITH_LOCAL_MATRIX),
+            ),
+            arrayOf(
+                Config(ConcatPerspective.BETWEEN_CLIPS, ClipOrder.IMAGE_FIRST, LocalMatrix.NO_LOCAL_MATRIX),
+                Config(ConcatPerspective.AFTER_CLIPS, ClipOrder.DOES_NOT_MATTER, LocalMatrix.GRADIENT_WITH_LOCAL_MATRIX),
+            ),
+        )
+
+        c.translate(10f, 10f)
+        for (pair in matches) {
+            c.save()
+            c.translate(-grid.left.toFloat(), -grid.top.toFloat())
+            drawConfig(c, img, imgRect, scale, persp, perspScale, pair[0])
+            c.translate(0f, grid.height().toFloat())
+            drawConfig(c, img, imgRect, scale, persp, perspScale, pair[1])
+            c.restore()
+
+            c.translate(grid.width().toFloat(), 0f)
+        }
     }
+
+    private fun drawConfig(
+        canvas: SkCanvas,
+        img: SkImage,
+        imgRect: SkRect,
+        scale: SkMatrix,
+        persp: SkMatrix,
+        perspScale: SkMatrix,
+        config: Config,
+    ) {
+        canvas.save()
+
+        drawBanner(canvas, config)
+
+        val gradLM = config.localMatrix == LocalMatrix.GRADIENT_WITH_LOCAL_MATRIX ||
+            config.localMatrix == LocalMatrix.BOTH_WITH_LOCAL_MATRIX
+        val gradCenter = SkPoint(0.5f * img.width, 0.5f * img.height)
+        val gradColors = intArrayOf(SK_ColorBLACK, SkColorSetARGB(128, 128, 128, 128))
+        val gradShader = if (gradLM) {
+            SkRadialGradient.Make(
+                gradCenter,
+                0.1f * img.width,
+                gradColors,
+                null,
+                SkTileMode.kRepeat,
+                persp,
+            )
+        } else {
+            SkRadialGradient.Make(
+                gradCenter,
+                0.1f * img.width,
+                gradColors,
+                null,
+                SkTileMode.kRepeat,
+            )
+        }
+
+        val imageLM = config.localMatrix == LocalMatrix.IMAGE_WITH_LOCAL_MATRIX ||
+            config.localMatrix == LocalMatrix.BOTH_WITH_LOCAL_MATRIX
+        val imgShader = img.makeShader(
+            SkTileMode.kRepeat,
+            SkTileMode.kRepeat,
+            SkSamplingOptions(),
+            if (imageLM) perspScale else scale,
+        )
+
+        if (config.concatPerspective == ConcatPerspective.BEFORE_CLIPS) {
+            canvas.concat(persp)
+        }
+
+        canvas.clipShader(firstShader(config, imgShader, gradShader))
+
+        if (config.concatPerspective == ConcatPerspective.BETWEEN_CLIPS) {
+            canvas.concat(persp)
+        }
+
+        canvas.clipShader(secondShader(config, imgShader, gradShader))
+
+        if (config.concatPerspective == ConcatPerspective.AFTER_CLIPS) {
+            canvas.concat(persp)
+        }
+
+        canvas.clipRect(imgRect)
+        canvas.clear(SK_ColorBLACK)
+        canvas.drawImage(img, 0f, 0f)
+
+        canvas.restore()
+    }
+
+    private fun firstShader(config: Config, imgShader: SkShader, gradShader: SkShader): SkShader =
+        if (config.clipOrder == ClipOrder.IMAGE_FIRST) imgShader else gradShader
+
+    private fun secondShader(config: Config, imgShader: SkShader, gradShader: SkShader): SkShader =
+        if (config.clipOrder == ClipOrder.IMAGE_FIRST) gradShader else imgShader
+
+    private fun drawBanner(canvas: SkCanvas, config: Config) {
+        val perspectiveTarget =
+            if (config.concatPerspective == ConcatPerspective.BEFORE_CLIPS ||
+                config.localMatrix == LocalMatrix.BOTH_WITH_LOCAL_MATRIX
+            ) {
+                "Both Clips"
+            } else if (
+                (config.concatPerspective == ConcatPerspective.BETWEEN_CLIPS &&
+                    config.clipOrder == ClipOrder.IMAGE_FIRST) ||
+                config.localMatrix == LocalMatrix.GRADIENT_WITH_LOCAL_MATRIX
+            ) {
+                "Gradient"
+            } else {
+                "Image"
+            }
+        val suffix = if (config.localMatrix == LocalMatrix.NO_LOCAL_MATRIX) {
+            ""
+        } else {
+            " (w/ LM, should equal top row)"
+        }
+        canvas.drawString(
+            "Persp: $perspectiveTarget$suffix",
+            20f,
+            -30f,
+            SkFont(ToolUtils.DefaultPortableTypeface(), 12f),
+            SkPaint(),
+        )
+    }
+
+    private enum class ConcatPerspective { BEFORE_CLIPS, AFTER_CLIPS, BETWEEN_CLIPS }
+
+    private enum class ClipOrder { IMAGE_FIRST, GRADIENT_FIRST, DOES_NOT_MATTER }
+
+    private enum class LocalMatrix {
+        NO_LOCAL_MATRIX,
+        IMAGE_WITH_LOCAL_MATRIX,
+        GRADIENT_WITH_LOCAL_MATRIX,
+        BOTH_WITH_LOCAL_MATRIX,
+    }
+
+    private data class Config(
+        val concatPerspective: ConcatPerspective,
+        val clipOrder: ClipOrder,
+        val localMatrix: LocalMatrix,
+    )
 }

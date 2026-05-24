@@ -1,10 +1,14 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorGREEN
 import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
+import org.skia.foundation.SkImageFilter
 import org.skia.foundation.SkImageFilters
 import org.skia.foundation.SkPaint
+import org.skia.tools.ToolUtils
 
 /**
  * Port of Skia's `gm/imagefilters.cpp::DEF_SIMPLE_GM(multiple_filters, …)`
@@ -16,9 +20,8 @@ import org.skia.foundation.SkPaint
  * pass, or drop-shadow + null). The `FilterSpan` / `saveLayerWithMultipleFilters`
  * path is not yet part of the public `:kanvas-skia` API.
  *
- * The body intentionally calls [SkCanvas.saveLayerWithMultipleFilters] to
- * document the missing call-sites; the test is @Disabled until the stub is
- * implemented.
+ * The body calls [SkCanvas.saveLayerWithMultipleFilters], the Kotlin slice
+ * for upstream's private FilterSpan saveLayer path.
  */
 public class MultipleFiltersGM : GM() {
 
@@ -27,19 +30,26 @@ public class MultipleFiltersGM : GM() {
 
     override fun onDraw(canvas: SkCanvas?) {
         val c = canvas ?: return
-        // TODO("STUB.IFX.MULTIPLE_FILTERS_SPAN") — draw_checkerboard background
+        ToolUtils.draw_checkerboard(c, 0xFF999999.toInt(), 0xFF666666.toInt(), 8)
         c.translate(5f, 5f)
 
-        // Case 1: two non-null filters (dilate + erode)
-        val restorePaint1 = SkPaint().apply { alpha = 128 }
-        c.saveLayerWithMultipleFilters(
-            bounds = null,
-            paint = restorePaint1,
-            filters = listOf(
-                SkImageFilters.Dilate(5, 5, null),
-                SkImageFilters.Erode(5, 5, null),
-            ),
-        )
+        drawFilteredLayer(c, listOf(
+            SkImageFilters.Dilate(5, 5, null),
+            SkImageFilters.Erode(5, 5, null),
+        ))
+
+        drawFilteredLayer(c, listOf(
+            SkImageFilters.DropShadowOnly(7f, 7f, 5f, 5f, SK_ColorBLUE, null),
+            null,
+        ))
+    }
+
+    private fun drawFilteredLayer(c: SkCanvas, filters: List<SkImageFilter?>) {
+        val restorePaint = SkPaint().apply { alphaf = 0.5f }
+        c.save()
+        c.clipRect(SkRect.MakeLTRB(0f, 0f, 200f, 200f))
+        c.saveLayerWithMultipleFilters(bounds = null, paint = restorePaint, filters = filters)
+
         val circlePaint = SkPaint().apply {
             style = SkPaint.Style.kStroke_Style
             strokeWidth = 20f
@@ -47,19 +57,7 @@ public class MultipleFiltersGM : GM() {
         }
         c.drawCircle(100f, 100f, 70f, circlePaint)
         c.restore()
-        c.translate(205f, 0f)
-
-        // Case 2: one null filter (mirrors Canvas2D drop-shadow-only use-case)
-        val restorePaint2 = SkPaint().apply { alpha = 128 }
-        c.saveLayerWithMultipleFilters(
-            bounds = null,
-            paint = restorePaint2,
-            filters = listOf(
-                SkImageFilters.DropShadowOnly(7f, 7f, 5f, 5f, 0xFF0000FF.toInt(), null),
-                null,
-            ),
-        )
-        c.drawCircle(100f, 100f, 70f, circlePaint)
         c.restore()
+        c.translate(205f, 0f)
     }
 }
