@@ -55,6 +55,11 @@ explicit `SkFontMgr.RefAwtDefault()` extension and may use
 `java.awt.GraphicsEnvironment`. Portable `kanvas-skia` code must not import
 that package or depend on installed fonts.
 
+The optional AWT shaper follows the same rule: JVM callers can opt in through
+`SkShaper.MakeJvmAwtTextLayout()`, while `SkShaper.MakePrimitive()` remains
+the portable fallback. The older `MakeJavaTextLayout()` name is kept only as a
+compatibility alias.
+
 ## Explicitly Unsupported
 
 - Full text shaping: bidi, script itemization, reordering, mark positioning,
