@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 29 upstream `.cpp` rows as
+The rebaseline currently classifies 26 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -50,13 +50,19 @@ Completed since this snapshot:
   are enabled with ratchet coverage.
 - `STUB.COMPOSE_SHADER`: `ComposeShaderAlphaGM` is ported and enabled;
   the compose-shader family is now covered by ratcheted tests.
+- `STUB.ALPHA8_IMAGE_AS_MASK`: `ImageMaskSubsetGM` is enabled against the
+  existing alpha-mask tint path in `SkBitmapDevice.drawImageRect`.
+- `STUB.EDGE_AA_QUAD`: `DrawQuadSetGM` is enabled against the existing
+  `experimental_DrawEdgeAAQuad` raster fallback; the GPU-gradient residual is
+  covered by the similarity floor.
+- `STUB.STROKEDLINE_CAPS`: `StrokedLineCapsGM` is enabled with ratchet
+  coverage; `StrokedLinesGM` was already enabled.
 
 ## Recommended order
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `STUB.EDGE_AA_QUAD` | 1 cpp (`drawquadset`) | M | `experimental_DrawEdgeAAQuad` exists, but the GM is still gated by GPU-gradient-vs-raster fallback differences. |
-| 2 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 3 cpps (`drawatlas`, `dftext_blob_persp`, `textblobmixedsizes`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
+| 1 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 3 cpps (`drawatlas`, `dftext_blob_persp`, `textblobmixedsizes`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
 
@@ -73,12 +79,12 @@ Completed since this snapshot:
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `drawimageset` | ported | `DrawImageSetAlphaOnlyGM.kt`, `DrawImageSetGM.kt`, `DrawImageSetRectToRectGM.kt` |
-| `drawquadset` | `STUB.EDGE_AA_QUAD` | `DrawQuadSetGM.kt` |
+| `drawquadset` | ported | `DrawQuadSetGM.kt` |
 | `fiddle` | stub file without `STUB.*` tag | `FiddleGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION` | gradient interpolation variants |
 | `imagefilters` | `STUB.BACKDROP_FILTER` | `MultipleFiltersGM.kt`, `SaveLayerWithBackdropGM.kt`, others |
 | `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
-| `imagemasksubset` | `STUB.ALPHA8_IMAGE_AS_MASK` | `ImageMaskSubsetGM.kt` |
+| `imagemasksubset` | ported | `ImageMaskSubsetGM.kt` |
 | `lumafilter` | `STUB.COLOR_FILTER_PRIV` | `AlternateLumaGM.kt`, `LumaFilterGM.kt` |
 | `mesh` | `STUB.MESH` | `MeshGMs.kt` |
 | `patharcto` | ported | `ArctoSkbug9272GM.kt`, `PathAppendExtendGM.kt`, `ShallowAnglePathArcToGM.kt` |
@@ -88,7 +94,7 @@ Completed since this snapshot:
 | `rrect` | disabled `RRectBlurGM` without `STUB.*` tag | `RRectBlurGM.kt`, `RRectGM.kt` |
 | `savelayer` | `STUB.F16_COLOR_TYPE`, `STUB.SAVE_BEHIND`; `Skbug14554GM` ported | `SaveBehindGM.kt`, `SaveLayerF16GM.kt`, `SaveLayerGM.kt`, `Skbug14554GM.kt` |
 | `shadowutils` | ported | `ShadowUtilsDirectionalGM.kt`, `ShadowUtilsGaussianColorFilterGM.kt` |
-| `strokedlines` | `STUB.STROKEDLINE_CAPS` | `StrokedLineCapsGM.kt`, `StrokedLinesGM.kt` |
+| `strokedlines` | ported | `StrokedLineCapsGM.kt`, `StrokedLinesGM.kt` |
 | `surface` | `STUB.SURFACE_PROPS` | `NewSurfaceGM.kt`, `SnapWithMipsGM.kt`, `SurfacePropsGM.kt` |
 | `textblobmixedsizes` | `STUB.DF_TEXT_RASTER` | `TextBlobMixedSizesGM.kt` |
 | `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
