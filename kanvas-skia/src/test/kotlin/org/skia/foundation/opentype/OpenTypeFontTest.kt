@@ -5,9 +5,12 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.core.SkCanvas
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontMetrics
+import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkTextEncoding
 import kotlin.random.Random
@@ -226,6 +229,57 @@ class OpenTypeFontTest {
         assertTrue(path.verbs.contains(SkPath.Verb.kClose))
         assertTrue(path.computeTightBounds().width() > 0f)
         assertTrue(path.computeTightBounds().height() > 0f)
+    }
+
+    @Test
+    fun `glyph paths cover simple and composite Liberation glyphs`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val font = SkFont(typeface, 48f)
+
+        for ((text, expectedGlyphId) in listOf("A" to 36, "\u00e9" to 171, "\u00c5" to 135)) {
+            val glyphId = font.textToGlyphs(text).single()
+            val path = requireNotNull(font.getPath(glyphId))
+            val pathBounds = path.computeTightBounds()
+            val glyphBounds = font.getBounds(glyphId)
+
+            assertEquals(expectedGlyphId, glyphId)
+            assertTrue(glyphId > 0, "$text must resolve to a non-zero glyph")
+            assertFalse(path.isEmpty(), "$text glyph path must contain verbs")
+            assertTrue(pathBounds.width() > 0f, "$text path width must be positive")
+            assertTrue(pathBounds.height() > 0f, "$text path height must be positive")
+            assertTrue(glyphBounds.width() > 0f, "$text glyph width must be positive")
+            assertTrue(glyphBounds.height() > 0f, "$text glyph height must be positive")
+        }
+    }
+
+    @Test
+    fun `glyph bounds scale with font size for simple and composite glyphs`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val small = SkFont(typeface, 24f)
+        val large = SkFont(typeface, 48f)
+
+        for (text in listOf("A", "\u00e9")) {
+            val smallGlyph = small.textToGlyphs(text).single()
+            val largeGlyph = large.textToGlyphs(text).single()
+            val smallBounds = small.getBounds(smallGlyph)
+            val largeBounds = large.getBounds(largeGlyph)
+
+            assertEquals(smallGlyph, largeGlyph)
+            assertEquals(smallBounds.width() * 2f, largeBounds.width(), 0.001f)
+            assertEquals(smallBounds.height() * 2f, largeBounds.height(), 0.001f)
+        }
+    }
+
+    @Test
+    fun `drawString with OpenTypeTypeface paints visible pixels`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val font = SkFont(typeface, 42f)
+        val bitmap = SkBitmap(160, 90).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = true }
+
+        SkCanvas(bitmap).drawString("A\u00e9\u00c5", 8f, 62f, font, paint)
+
+        assertTrue(bitmap.pixels.any { it != 0xFFFFFFFF.toInt() })
     }
 
     @Test
