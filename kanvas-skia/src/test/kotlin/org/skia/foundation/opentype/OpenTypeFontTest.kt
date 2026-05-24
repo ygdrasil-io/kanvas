@@ -277,6 +277,126 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `makeClone applies Distortable gvar deltas to simple glyph paths`() {
+        val defaultTypeface = OpenTypeTypeface.MakeFromBytes(distortableBytes())!!
+        val lightTypeface = defaultTypeface.makeClone(
+            SkFontArguments().setVariationDesignPosition(
+                SkFontArguments.VariationPosition(
+                    listOf(SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.WEIGHT, 0.5f)),
+                ),
+            ),
+        )!!
+        val heavyTypeface = defaultTypeface.makeClone(
+            SkFontArguments().setVariationDesignPosition(
+                SkFontArguments.VariationPosition(
+                    listOf(SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.WEIGHT, 2f)),
+                ),
+            ),
+        )!!
+
+        val defaultPath = distortablePath(defaultTypeface, "a")
+        val lightPath = distortablePath(lightTypeface, "a")
+        val heavyPath = distortablePath(heavyTypeface, "a")
+        assertFalse(lightPath.coords.toList() == defaultPath.coords.toList())
+        assertFalse(heavyPath.coords.toList() == defaultPath.coords.toList())
+        assertFalse(lightPath.coords.toList() == heavyPath.coords.toList())
+    }
+
+    @Test
+    fun `variation clone clamps coordinates and duplicate axes use last value`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(distortableBytes())!!
+        val maxTypeface = typeface.makeClone(
+            SkFontArguments().setVariationDesignPosition(
+                SkFontArguments.VariationPosition(
+                    listOf(SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.WEIGHT, 2f)),
+                ),
+            ),
+        )!!
+        val clampedTypeface = typeface.makeClone(
+            SkFontArguments().setVariationDesignPosition(
+                SkFontArguments.VariationPosition(
+                    listOf(SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.WEIGHT, 999f)),
+                ),
+            ),
+        )!!
+        val duplicateTypeface = typeface.makeClone(
+            SkFontArguments().setVariationDesignPosition(
+                SkFontArguments.VariationPosition(
+                    listOf(
+                        SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.WEIGHT, 0.5f),
+                        SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.WEIGHT, 2f),
+                    ),
+                ),
+            ),
+        )!!
+
+        assertEquals(distortableBounds(maxTypeface, "b"), distortableBounds(clampedTypeface, "b"))
+        assertEquals(distortableBounds(maxTypeface, "b"), distortableBounds(duplicateTypeface, "b"))
+    }
+
+    @Test
+    fun `unknown variation axes are ignored by OpenType clones`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(distortableBytes())!!
+        val clone = typeface.makeClone(
+            SkFontArguments().setVariationDesignPosition(
+                SkFontArguments.VariationPosition(
+                    listOf(SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.Tag.of("XXXX"), 2f)),
+                ),
+            ),
+        )!!
+
+        assertEquals(distortableBounds(typeface, "c"), distortableBounds(clone, "c"))
+    }
+
+    @Test
+    fun `malformed gvar table fails closed without disabling fvar axes`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(distortableBytes())!!
+        val noGvar = OpenTypeTypeface.MakeFromBytes(distortableBytes().withTableTag("gvar", "zvar"))!!
+        val clone = noGvar.makeClone(
+            SkFontArguments().setVariationDesignPosition(
+                SkFontArguments.VariationPosition(
+                    listOf(SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.WEIGHT, 2f)),
+                ),
+            ),
+        )!!
+
+        assertEquals(typeface.getVariationDesignParameters(), noGvar.getVariationDesignParameters())
+        assertEquals(distortableBounds(noGvar, "a"), distortableBounds(clone, "a"))
+    }
+
+    @Test
+    fun `gvar parses private packed point counts without off by one`() {
+        val onePoint = OpenTypeTypeface.MakeFromBytes(
+            distortableBytes().withTableContent("gvar", "gvar", syntheticGvarPrivatePointDeltas(1, byteArrayOf(0x01))),
+        )!!
+        val fiftyPoints = OpenTypeTypeface.MakeFromBytes(
+            distortableBytes().withTableContent("gvar", "gvar", syntheticGvarPrivatePointDeltas(50, byteArrayOf(0x32))),
+        )!!
+        val twoByteCount = OpenTypeTypeface.MakeFromBytes(
+            distortableBytes().withTableContent("gvar", "gvar", syntheticGvarPrivatePointDeltas(50, byteArrayOf(0x80.toByte(), 0x32))),
+        )!!
+
+        assertFalse(distortablePath(onePoint, "a").coords.toList() == variedDistortablePath(onePoint, "a").coords.toList())
+        assertFalse(distortablePath(fiftyPoints, "a").coords.toList() == variedDistortablePath(fiftyPoints, "a").coords.toList())
+        assertFalse(distortablePath(twoByteCount, "a").coords.toList() == variedDistortablePath(twoByteCount, "a").coords.toList())
+    }
+
+    @Test
+    fun `gvar glyph data offset before tuple headers fails closed`() {
+        val bytes = distortableBytes().withTableContent(
+            "gvar",
+            "gvar",
+            syntheticGvarPrivatePointDeltas(1, byteArrayOf(0x01)).also {
+                val glyphDataStart = readU32(it, 16)
+                writeU16(it, glyphDataStart + 2, 4)
+            },
+        )
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+
+        assertEquals(distortablePath(typeface, "a").coords.toList(), variedDistortablePath(typeface, "a").coords.toList())
+    }
+
+    @Test
     fun `malformed name table falls back to documented OpenType family name`() {
         val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableLength("name", 0))!!
 
@@ -1116,6 +1236,27 @@ class OpenTypeFontTest {
     private fun isMostlyBlack(color: Int): Boolean =
         SkColorGetR(color) < 40 && SkColorGetG(color) < 40 && SkColorGetB(color) < 40
 
+    private fun distortableBounds(typeface: SkTypeface, text: String): org.graphiks.math.SkRect {
+        val font = SkFont(typeface, 96f)
+        return font.getBounds(font.textToGlyphs(text).single())
+    }
+
+    private fun distortablePath(typeface: SkTypeface, text: String): SkPath {
+        val font = SkFont(typeface, 96f)
+        return requireNotNull(font.getPath(font.textToGlyphs(text).single()))
+    }
+
+    private fun variedDistortablePath(typeface: SkTypeface, text: String): SkPath {
+        val clone = typeface.makeClone(
+            SkFontArguments().setVariationDesignPosition(
+                SkFontArguments.VariationPosition(
+                    listOf(SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.WEIGHT, 2f)),
+                ),
+            ),
+        )!!
+        return distortablePath(clone, text)
+    }
+
     private fun writeU16(bytes: ByteArray, off: Int, value: Int) {
         bytes[off] = (value ushr 8).toByte()
         bytes[off + 1] = value.toByte()
@@ -1130,6 +1271,44 @@ class OpenTypeFontTest {
         bytes[off + 1] = (value ushr 16).toByte()
         bytes[off + 2] = (value ushr 8).toByte()
         bytes[off + 3] = value.toByte()
+    }
+
+    private fun syntheticGvarPrivatePointDeltas(pointCount: Int, pointCountBytes: ByteArray): ByteArray {
+        require(pointCount in 1..53)
+        val glyphDataOffset = 50
+        val points = ByteArray(pointCount + 1)
+        points[0] = ((pointCount - 1) and 0x7F).toByte()
+        points[1] = 0
+        for (i in 1 until pointCount) points[i + 1] = 1
+        val xDeltas = ByteArray(pointCount + 1)
+        xDeltas[0] = ((pointCount - 1) and 0x3F).toByte()
+        xDeltas[1] = 10
+        val yDeltas = byteArrayOf((0x80 or (pointCount - 1)).toByte())
+        val variationDataSize = pointCountBytes.size + points.size + xDeltas.size + yDeltas.size
+        val glyphDataSize = 8 + variationDataSize
+        val bytes = ByteArray(glyphDataOffset + glyphDataSize)
+        writeU16(bytes, 0, 1) // majorVersion
+        writeU16(bytes, 4, 1) // axisCount
+        writeU16(bytes, 6, 1) // sharedTupleCount
+        writeU32(bytes, 8, 48) // sharedTuplesOffset
+        writeU16(bytes, 12, 6) // glyphCount
+        writeU16(bytes, 14, 1) // flags: long offsets
+        writeU32(bytes, 16, glyphDataOffset)
+        val offsets = intArrayOf(0, 0, 0, 0, glyphDataSize, glyphDataSize, glyphDataSize)
+        offsets.forEachIndexed { index, value -> writeU32(bytes, 20 + index * 4, value) }
+        writeI16(bytes, 48, 0x4000) // shared peak tuple = 1.0
+
+        val glyph = glyphDataOffset
+        writeU16(bytes, glyph, 1) // tupleVariationCount
+        writeU16(bytes, glyph + 2, 8) // offsetToData
+        writeU16(bytes, glyph + 4, variationDataSize)
+        writeU16(bytes, glyph + 6, 0x2000) // private point numbers, shared tuple 0
+        var off = glyph + 8
+        pointCountBytes.copyInto(bytes, off); off += pointCountBytes.size
+        points.copyInto(bytes, off); off += points.size
+        xDeltas.copyInto(bytes, off); off += xDeltas.size
+        yDeltas.copyInto(bytes, off)
+        return bytes
     }
 
     private fun syntheticCmapFormat0(glyphA: Int, glyphEAcute: Int): ByteArray {
