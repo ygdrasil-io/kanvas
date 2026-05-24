@@ -1665,4 +1665,92 @@ internal fun composeVp8Yuv420ToRgba(
     return pixels
 }
 
+internal data class Vp8SimpleLoopFilterSample(
+    val p0: Int,
+    val q0: Int,
+    val filtered: Boolean,
+)
+
+internal fun filterVp8SimpleLoopFilterSample(
+    p1: Int,
+    p0: Int,
+    q0: Int,
+    q1: Int,
+    limit: Int,
+): Vp8SimpleLoopFilterSample {
+    require(p1 in 0..255)
+    require(p0 in 0..255)
+    require(q0 in 0..255)
+    require(q1 in 0..255)
+    require(limit in 0..255)
+
+    if ((2 * kotlin.math.abs(p0 - q0) + ((kotlin.math.abs(p1 - q1) + 1) / 2)) > limit) {
+        return Vp8SimpleLoopFilterSample(p0 = p0, q0 = q0, filtered = false)
+    }
+
+    val adjustment = clipSigned8(3 * (q0 - p0) + (p1 - q1))
+    return Vp8SimpleLoopFilterSample(
+        p0 = clip8(p0 + ((adjustment + 3) shr 3)),
+        q0 = clip8(q0 - ((adjustment + 4) shr 3)),
+        filtered = true,
+    )
+}
+
+internal fun applyVp8SimpleVerticalLoopFilter(
+    plane: IntArray,
+    width: Int,
+    height: Int,
+    edgeX: Int,
+    limit: Int,
+): IntArray {
+    require(width > 3)
+    require(height > 0)
+    require(plane.size >= width * height)
+    require(edgeX in 2..(width - 2))
+
+    val filtered = plane.copyOf()
+    for (y in 0 until height) {
+        val row = y * width
+        val sample = filterVp8SimpleLoopFilterSample(
+            p1 = plane[row + edgeX - 2],
+            p0 = plane[row + edgeX - 1],
+            q0 = plane[row + edgeX],
+            q1 = plane[row + edgeX + 1],
+            limit = limit,
+        )
+        filtered[row + edgeX - 1] = sample.p0
+        filtered[row + edgeX] = sample.q0
+    }
+    return filtered
+}
+
+internal fun applyVp8SimpleHorizontalLoopFilter(
+    plane: IntArray,
+    width: Int,
+    height: Int,
+    edgeY: Int,
+    limit: Int,
+): IntArray {
+    require(width > 0)
+    require(height > 3)
+    require(plane.size >= width * height)
+    require(edgeY in 2..(height - 2))
+
+    val filtered = plane.copyOf()
+    for (x in 0 until width) {
+        val sample = filterVp8SimpleLoopFilterSample(
+            p1 = plane[(edgeY - 2) * width + x],
+            p0 = plane[(edgeY - 1) * width + x],
+            q0 = plane[edgeY * width + x],
+            q1 = plane[(edgeY + 1) * width + x],
+            limit = limit,
+        )
+        filtered[(edgeY - 1) * width + x] = sample.p0
+        filtered[edgeY * width + x] = sample.q0
+    }
+    return filtered
+}
+
 private fun clip8(value: Int): Int = value.coerceIn(0, 255)
+
+private fun clipSigned8(value: Int): Int = value.coerceIn(-128, 127)
