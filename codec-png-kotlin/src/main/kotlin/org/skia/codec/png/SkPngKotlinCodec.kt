@@ -22,7 +22,8 @@ import java.util.zip.Inflater
  * assets: non-interlaced and Adam7-interlaced 8-bit grayscale (colour type 0),
  * 8-bit RGB (colour type 2), indexed colour (colour type 3, bit depths
  * 1/2/4/8), 8-bit grayscale+alpha (colour type 4), RGBA (colour type 6), and
- * 16-bit grayscale/RGB/grayscale+alpha/RGBA. It parses `iCCP` chunks
+ * 16-bit grayscale/RGB/grayscale+alpha/RGBA. It handles `tRNS` transparency
+ * for grayscale, RGB, and indexed colour PNGs. It parses `iCCP` chunks
  * best-effort: malformed chunks reject the PNG, parseable profiles become the
  * image color space, and structurally-valid but unsupported profiles fall back
  * to sRGB.
@@ -143,18 +144,21 @@ public class SkPngKotlinCodec private constructor(
         var p = sourceOffset(sourceX)
         when (png.colorType) {
             COLOR_GRAYSCALE -> {
-                val gray = if (png.bitDepth == 8) {
+                val sample = if (png.bitDepth == 8) {
                     current[p].toInt() and 0xFF
                 } else {
-                    scaleSample(readPackedSample(current, sourceX, png.bitDepth), png.bitDepth)
+                    readPackedSample(current, sourceX, png.bitDepth)
                 }
-                dst.setPixel(dstX, y, argb(0xFF, gray, gray, gray))
+                val gray = scaleSample(sample, png.bitDepth)
+                val alpha = if (png.transparency.isTransparentGray(sample)) 0x00 else 0xFF
+                dst.setPixel(dstX, y, argb(alpha, gray, gray, gray))
             }
             COLOR_RGB -> {
                 val r = current[p++].toInt() and 0xFF
                 val g = current[p++].toInt() and 0xFF
                 val b = current[p].toInt() and 0xFF
-                dst.setPixel(dstX, y, argb(0xFF, r, g, b))
+                val alpha = if (png.transparency.isTransparentRgb(r, g, b)) 0x00 else 0xFF
+                dst.setPixel(dstX, y, argb(alpha, r, g, b))
             }
             COLOR_PALETTE -> {
                 val index = if (png.bitDepth == 8) {
@@ -206,17 +210,21 @@ public class SkPngKotlinCodec private constructor(
         val inv65535 = 1f / 65535f
         when (png.colorType) {
             COLOR_GRAYSCALE -> {
-                val gray = readU16BE(current, p) * inv65535
+                val graySample = readU16BE(current, p)
+                val gray = graySample * inv65535
                 r = gray
                 g = gray
                 b = gray
-                a = 1f
+                a = if (png.transparency.isTransparentGray(graySample)) 0f else 1f
             }
             COLOR_RGB -> {
-                r = readU16BE(current, p) * inv65535
-                g = readU16BE(current, p + 2) * inv65535
-                b = readU16BE(current, p + 4) * inv65535
-                a = 1f
+                val rSample = readU16BE(current, p)
+                val gSample = readU16BE(current, p + 2)
+                val bSample = readU16BE(current, p + 4)
+                r = rSample * inv65535
+                g = gSample * inv65535
+                b = bSample * inv65535
+                a = if (png.transparency.isTransparentRgb(rSample, gSample, bSample)) 0f else 1f
             }
             COLOR_GRAYSCALE_ALPHA -> {
                 val gray = readU16BE(current, p) * inv65535
@@ -258,7 +266,7 @@ public class SkPngKotlinCodec private constructor(
             var header: Header? = null
             val idat = ByteArrayOutputStream()
             var palette: IntArray? = null
-            var transparency: ByteArray? = null
+            var transparency: Transparency? = null
             var iccProfile: SkcmsICCProfile? = null
             var sawIccp = false
             var sawIdat = false
@@ -291,9 +299,13 @@ public class SkPngKotlinCodec private constructor(
                     }
                     TYPE_TRNS -> {
                         if (header == null || sawIdat || sawIend || transparency != null) return null
-                        if (header.colorType != COLOR_PALETTE || palette == null) return null
-                        if (length > palette.size) return null
-                        transparency = data.copyOfRange(dataOffset, dataOffset + length)
+                        transparency = parseTransparency(
+                            data = data,
+                            offset = dataOffset,
+                            length = length,
+                            header = header,
+                            palette = palette,
+                        ) ?: return null
                     }
                     TYPE_ICCP -> {
                         if (header == null || sawIdat || sawIend || sawIccp) return null
@@ -317,7 +329,7 @@ public class SkPngKotlinCodec private constructor(
             val h = header ?: return null
             if (!sawIdat || !sawIend || offset > data.size) return null
             val finalPalette = if (h.colorType == COLOR_PALETTE) {
-                paletteWithTransparency(palette, transparency) ?: return null
+                paletteWithTransparency(palette, transparency as? Transparency.Palette) ?: return null
             } else {
                 null
             }
@@ -334,6 +346,7 @@ public class SkPngKotlinCodec private constructor(
                 interlace = h.interlace,
                 idat = idat.toByteArray(),
                 palette = finalPalette,
+                transparency = if (h.colorType == COLOR_GRAYSCALE || h.colorType == COLOR_RGB) transparency else null,
                 iccProfile = iccProfile,
             )
         }
@@ -412,11 +425,41 @@ public class SkPngKotlinCodec private constructor(
             }
         }
 
-        private fun paletteWithTransparency(palette: IntArray?, transparency: ByteArray?): IntArray? {
+        private fun parseTransparency(
+            data: ByteArray,
+            offset: Int,
+            length: Int,
+            header: Header,
+            palette: IntArray?,
+        ): Transparency? =
+            when (header.colorType) {
+                COLOR_GRAYSCALE -> {
+                    if (length != 2) return null
+                    val sample = readU16BE(data, offset)
+                    if (sample >= (1 shl header.bitDepth)) return null
+                    Transparency.Gray(sample)
+                }
+                COLOR_RGB -> {
+                    if (length != 6) return null
+                    val maxSample = if (header.bitDepth == 16) 0xFFFF else 0xFF
+                    val r = readU16BE(data, offset)
+                    val g = readU16BE(data, offset + 2)
+                    val b = readU16BE(data, offset + 4)
+                    if (r > maxSample || g > maxSample || b > maxSample) return null
+                    Transparency.Rgb(r, g, b)
+                }
+                COLOR_PALETTE -> {
+                    if (palette == null || length > palette.size) return null
+                    Transparency.Palette(data.copyOfRange(offset, offset + length))
+                }
+                else -> null
+            }
+
+        private fun paletteWithTransparency(palette: IntArray?, transparency: Transparency.Palette?): IntArray? {
             val colors = palette?.copyOf() ?: return null
             if (transparency != null) {
-                for (i in transparency.indices) {
-                    colors[i] = (colors[i] and 0x00FFFFFF) or ((transparency[i].toInt() and 0xFF) shl 24)
+                for (i in transparency.alpha.indices) {
+                    colors[i] = (colors[i] and 0x00FFFFFF) or ((transparency.alpha[i].toInt() and 0xFF) shl 24)
                 }
             }
             return colors
@@ -476,6 +519,7 @@ public class SkPngKotlinCodec private constructor(
         val interlace: Int,
         val idat: ByteArray,
         val palette: IntArray?,
+        val transparency: Transparency?,
         val iccProfile: SkcmsICCProfile?,
     )
 }
@@ -636,6 +680,18 @@ private fun readPackedSample(row: ByteArray, x: Int, bitDepth: Int): Int {
 
 private fun scaleSample(value: Int, bitDepth: Int): Int =
     if (bitDepth == 8) value else value * 255 / ((1 shl bitDepth) - 1)
+
+private fun Transparency?.isTransparentGray(sample: Int): Boolean =
+    this is Transparency.Gray && this.sample == sample
+
+private fun Transparency?.isTransparentRgb(r: Int, g: Int, b: Int): Boolean =
+    this is Transparency.Rgb && this.r == r && this.g == g && this.b == b
+
+private sealed class Transparency {
+    data class Gray(val sample: Int) : Transparency()
+    data class Rgb(val r: Int, val g: Int, val b: Int) : Transparency()
+    data class Palette(val alpha: ByteArray) : Transparency()
+}
 
 private fun isCritical(type: Int): Boolean =
     (((type ushr 24) and 0x20) == 0)
