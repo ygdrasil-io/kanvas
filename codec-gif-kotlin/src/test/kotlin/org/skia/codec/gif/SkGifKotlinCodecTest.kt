@@ -98,6 +98,39 @@ class SkGifKotlinCodecTest {
     }
 
     @Test
+    fun `deinterlaces image data in gif pass order`() {
+        val codec = SkGifKotlinCodec.Decoder.make(
+            gif(
+                width = 1,
+                height = 8,
+                palette = intArrayOf(RED, GREEN, BLUE, YELLOW),
+                frames = listOf(
+                    GifFrameSpec(
+                        left = 0,
+                        top = 0,
+                        width = 1,
+                        height = 8,
+                        indexes = intArrayOf(0, 1, 2, 3, 0, 1, 2, 3),
+                        interlaced = true,
+                    ),
+                ),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(RED, bitmap!!.getPixel(0, 0))
+        assertEquals(RED, bitmap.getPixel(0, 1))
+        assertEquals(BLUE, bitmap.getPixel(0, 2))
+        assertEquals(GREEN, bitmap.getPixel(0, 3))
+        assertEquals(GREEN, bitmap.getPixel(0, 4))
+        assertEquals(BLUE, bitmap.getPixel(0, 5))
+        assertEquals(YELLOW, bitmap.getPixel(0, 6))
+        assertEquals(YELLOW, bitmap.getPixel(0, 7))
+    }
+
+    @Test
     fun `exposes partial frame rect delay and decodes selected frame`() {
         val codec = SkGifKotlinCodec.Decoder.make(
             gif(
@@ -228,6 +261,73 @@ class SkGifKotlinCodecTest {
         assertEquals(GREEN, dst.getPixel(2, 0))
     }
 
+    @Test
+    fun `rejects truncated image data sub-block`() {
+        val data = gif(
+            width = 1,
+            height = 1,
+            palette = intArrayOf(RED, BLUE),
+            indexes = intArrayOf(0),
+        )
+        val corrupted = data.copyOf()
+        corrupted[firstImageDataSubBlockSizeOffset(corrupted)] = 127.toByte()
+
+        assertNull(SkGifKotlinCodec.Decoder.make(corrupted))
+    }
+
+    @Test
+    fun `rejects frame rect outside canvas`() {
+        assertNull(
+            SkGifKotlinCodec.Decoder.make(
+                gif(
+                    width = 2,
+                    height = 1,
+                    palette = intArrayOf(RED, BLUE),
+                    frames = listOf(
+                        GifFrameSpec(1, 0, 2, 1, intArrayOf(0, 1)),
+                    ),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `rejects decoded index outside palette`() {
+        assertNull(
+            SkGifKotlinCodec.Decoder.make(
+                gif(
+                    width = 1,
+                    height = 1,
+                    palette = intArrayOf(RED, BLUE),
+                    indexes = intArrayOf(3),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `rejects invalid lzw stream`() {
+        assertNull(
+            SkGifKotlinCodec.Decoder.make(
+                gif(
+                    width = 1,
+                    height = 1,
+                    palette = intArrayOf(RED, BLUE),
+                    frames = listOf(
+                        GifFrameSpec(
+                            left = 0,
+                            top = 0,
+                            width = 1,
+                            height = 1,
+                            indexes = intArrayOf(0),
+                            rawImageData = byteArrayOf(0x04),
+                        ),
+                    ),
+                ),
+            ),
+        )
+    }
+
     private fun gif(
         width: Int,
         height: Int,
@@ -284,14 +384,15 @@ class SkGifKotlinCodecTest {
             out.addU16LE(frame.top)
             out.addU16LE(frame.width)
             out.addU16LE(frame.height)
+            val interlaceBit = if (frame.interlaced) 0x40 else 0
             if (frame.localPalette != null) {
-                out += (0x80 or colorTableSizeBits(frame.localPalette.size)).toByte()
+                out += (0x80 or interlaceBit or colorTableSizeBits(frame.localPalette.size)).toByte()
                 out.addColorTable(frame.localPalette)
             } else {
-                out += 0.toByte()
+                out += interlaceBit.toByte()
             }
             out += MIN_CODE_SIZE.toByte()
-            out.addSubBlocks(lzwData(frame.indexes))
+            out.addSubBlocks(frame.rawImageData ?: lzwData(frame.indexes))
         }
         out += 0x3B.toByte()
         return out.toByteArray()
@@ -359,6 +460,12 @@ class SkGifKotlinCodecTest {
         this += 0.toByte()
     }
 
+    private fun firstImageDataSubBlockSizeOffset(data: ByteArray): Int {
+        val imageSeparatorOffset = data.indexOf(0x2C.toByte())
+        assertTrue(imageSeparatorOffset >= 0)
+        return imageSeparatorOffset + 10 + 1
+    }
+
     private fun r(c: Int): Int = (c ushr 16) and 0xFF
     private fun g(c: Int): Int = (c ushr 8) and 0xFF
     private fun b(c: Int): Int = c and 0xFF
@@ -373,6 +480,8 @@ class SkGifKotlinCodecTest {
         val disposal: Int = DISPOSAL_NONE,
         val transparentIndex: Int = -1,
         val localPalette: IntArray? = null,
+        val interlaced: Boolean = false,
+        val rawImageData: ByteArray? = null,
     )
 }
 
