@@ -106,14 +106,6 @@ tasks.register<Test>("testCodecWithKotlinBackend") {
 }
 
 val legacyCodecSuiteKotlinBackendBlockers = listOf(
-    "org.skia.codec.SkAndroidCodecComputeSampleSizeJpegTest",
-    "org.skia.codec.SkAndroidCodecGetAndroidPixelsTest",
-    "org.skia.codec.SkAndroidCodecTest",
-    "org.skia.codec.bmp.SkBmpCodecTest",
-    "org.skia.codec.gif.SkGifCodecTest",
-    "org.skia.codec.jpeg.SkJpegCodecTest",
-    "org.skia.codec.png.SkPngCodecTest",
-    "org.skia.codec.wbmp.SkWbmpCodecTest",
     "org.skia.codec.webp.SkWebpCodecTest",
 )
 
