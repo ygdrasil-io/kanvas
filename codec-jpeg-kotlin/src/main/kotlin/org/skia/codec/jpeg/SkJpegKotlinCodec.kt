@@ -50,10 +50,12 @@ public class SkJpegKotlinCodec private constructor(
         if (dst.width != info.width || dst.height != info.height) return Result.kInvalidParameters
         if (dst.colorType != info.colorType) return Result.kInvalidParameters
         if (info.colorType != SkColorType.kRGBA_8888) return Result.kInvalidConversion
-        if (jpeg.coding == JpegCoding.kProgressive) return Result.kUnimplemented
-
         val pixels = try {
-            decodeBaseline(jpeg)
+            if (jpeg.coding == JpegCoding.kProgressive) {
+                decodeProgressive(jpeg) ?: return Result.kUnimplemented
+            } else {
+                decodeBaseline(jpeg)
+            }
         } catch (_: IllegalArgumentException) {
             return Result.kErrorInInput
         }
@@ -109,6 +111,10 @@ private data class ParsedJpeg(
     val iccProfile: SkcmsICCProfile?,
     val origin: SkEncodedOrigin,
     val coding: JpegCoding,
+    val scanSpectralStart: Int,
+    val scanSpectralEnd: Int,
+    val scanSuccessiveApprox: Int,
+    val scanCount: Int,
 )
 
 private data class Component(
@@ -125,6 +131,13 @@ private data class Frame(
     val width: Int,
     val height: Int,
     val components: List<Component>,
+)
+
+private data class Scan(
+    val components: List<Component>,
+    val spectralStart: Int,
+    val spectralEnd: Int,
+    val successiveApprox: Int,
 )
 
 private enum class JpegCoding {
@@ -173,8 +186,9 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
     var width = 0
     var height = 0
     var frameComponents: List<Component>? = null
-    var scanComponents: List<Component>? = null
+    var scan: Scan? = null
     var scanData = ByteArray(0)
+    var scanCount = 0
     var coding: JpegCoding? = null
     var restartInterval = 0
     var origin = SkEncodedOrigin.kTopLeft
@@ -203,7 +217,8 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                     frameComponents,
                     currentCoding == JpegCoding.kProgressive,
                 ) ?: return null
-                scanComponents = current
+                scan = current
+                scanCount++
                 offset = payloadEnd
                 val scanStart = offset
                 while (offset + 1 < data.size) {
@@ -222,12 +237,16 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                                     quantTables,
                                     dcTables,
                                     acTables,
-                                    if (currentCoding == JpegCoding.kProgressive) frameComponents else scanComponents,
+                                    if (currentCoding == JpegCoding.kProgressive) frameComponents else current.components,
                                     scanData,
                                     restartInterval,
                                     parseIccProfile(iccChunks, iccChunkCount),
                                     origin,
                                     currentCoding,
+                                    current.spectralStart,
+                                    current.spectralEnd,
+                                    current.successiveApprox,
+                                    scanCount,
                                 )
                             }
                             if (currentCoding == JpegCoding.kBaseline) return null
@@ -277,19 +296,24 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
             }
         }
     }
-    return if (scanComponents != null && coding != null) {
+    val lastScan = scan
+    return if (lastScan != null && coding != null) {
         buildParsed(
             width,
             height,
             quantTables,
             dcTables,
             acTables,
-            if (coding == JpegCoding.kProgressive) frameComponents else scanComponents,
+            if (coding == JpegCoding.kProgressive) frameComponents else lastScan.components,
             scanData,
             restartInterval,
             parseIccProfile(iccChunks, iccChunkCount),
             origin,
             coding,
+            lastScan.spectralStart,
+            lastScan.spectralEnd,
+            lastScan.successiveApprox,
+            scanCount,
         )
     } else {
         null
@@ -308,6 +332,10 @@ private fun buildParsed(
     iccProfile: SkcmsICCProfile?,
     origin: SkEncodedOrigin,
     coding: JpegCoding,
+    scanSpectralStart: Int,
+    scanSpectralEnd: Int,
+    scanSuccessiveApprox: Int,
+    scanCount: Int,
 ): ParsedJpeg? {
     val cs = components ?: return null
     if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
@@ -318,7 +346,23 @@ private fun buildParsed(
             if (component.quantTable !in quantTables.indices || quantTables[component.quantTable] == null) return null
         }
         if (scanData.isEmpty()) return null
-        return ParsedJpeg(width, height, quantTables, dcTables, acTables, cs, scanData, restartInterval, iccProfile, origin, coding)
+        return ParsedJpeg(
+            width,
+            height,
+            quantTables,
+            dcTables,
+            acTables,
+            cs,
+            scanData,
+            restartInterval,
+            iccProfile,
+            origin,
+            coding,
+            scanSpectralStart,
+            scanSpectralEnd,
+            scanSuccessiveApprox,
+            scanCount,
+        )
     }
     for (component in cs) {
         if (component.h !in 1..2 || component.v !in 1..2) return null
@@ -348,7 +392,23 @@ private fun buildParsed(
         if (y.h == 1 && y.v != 1) return null
     }
     if (scanData.isEmpty()) return null
-    return ParsedJpeg(width, height, quantTables, dcTables, acTables, cs, scanData, restartInterval, iccProfile, origin, coding)
+    return ParsedJpeg(
+        width,
+        height,
+        quantTables,
+        dcTables,
+        acTables,
+        cs,
+        scanData,
+        restartInterval,
+        iccProfile,
+        origin,
+        coding,
+        scanSpectralStart,
+        scanSpectralEnd,
+        scanSuccessiveApprox,
+        scanCount,
+    )
 }
 
 private fun parseDqt(data: ByteArray, start: Int, end: Int, tables: Array<IntArray?>) {
@@ -419,7 +479,7 @@ private fun parseSos(
     end: Int,
     frameComponents: List<Component>?,
     progressive: Boolean,
-): List<Component>? {
+): Scan? {
     val frame = frameComponents ?: return null
     if (end - start < 6) return null
     var p = start
@@ -452,7 +512,7 @@ private fun parseSos(
     } else if (spectralStart != 0 || spectralEnd != 63 || approx != 0) {
         return null
     }
-    return components
+    return Scan(components, spectralStart, spectralEnd, approx)
 }
 
 private fun decodeBaseline(jpeg: ParsedJpeg): IntArray {
@@ -461,6 +521,58 @@ private fun decodeBaseline(jpeg: ParsedJpeg): IntArray {
         3 -> decodeColor(jpeg)
         else -> fail()
     }
+}
+
+private fun decodeProgressive(jpeg: ParsedJpeg): IntArray? {
+    if (jpeg.components.size != 1) return null
+    if (jpeg.scanCount != 1) return null
+    if (jpeg.scanSpectralStart != 0 || jpeg.scanSpectralEnd != 0 || jpeg.scanSuccessiveApprox != 0) return null
+    return decodeProgressiveGrayscaleDcFirst(jpeg)
+}
+
+private fun decodeProgressiveGrayscaleDcFirst(jpeg: ParsedJpeg): IntArray {
+    val component = jpeg.components.single()
+    if (component.h != 1 || component.v != 1) fail()
+    val quant = jpeg.quantTables[component.quantTable] ?: fail()
+    val dcTable = jpeg.dcTables[component.dcTable] ?: fail()
+    val reader = EntropyBitReader(jpeg.scanData)
+    val pixels = IntArray(jpeg.width * jpeg.height)
+    var previousDc = 0
+    val blocksX = (jpeg.width + 7) / 8
+    val blocksY = (jpeg.height + 7) / 8
+    val totalMcus = blocksX * blocksY
+    var mcu = 0
+    var nextRestartMarker = 0
+
+    for (by in 0 until blocksY) {
+        for (bx in 0 until blocksX) {
+            val coeffs = IntArray(64)
+            val dcCategory = dcTable.decode(reader)
+            if (dcCategory !in 0..11) fail()
+            val dcDiff = receiveAndExtend(reader, dcCategory)
+            previousDc += dcDiff
+            coeffs[0] = previousDc * quant[0]
+
+            val block = idct(coeffs)
+            for (y in 0 until 8) {
+                val py = by * 8 + y
+                if (py >= jpeg.height) continue
+                for (x in 0 until 8) {
+                    val px = bx * 8 + x
+                    if (px >= jpeg.width) continue
+                    val v = (block[y * 8 + x] + 128).coerceIn(0, 255)
+                    pixels[py * jpeg.width + px] = argb(0xFF, v, v, v)
+                }
+            }
+            mcu++
+            if (jpeg.restartInterval > 0 && mcu % jpeg.restartInterval == 0 && mcu < totalMcus) {
+                reader.consumeRestart(nextRestartMarker)
+                nextRestartMarker = (nextRestartMarker + 1) and 7
+                previousDc = 0
+            }
+        }
+    }
+    return pixels
 }
 
 private fun decodeGrayscale(jpeg: ParsedJpeg): IntArray {

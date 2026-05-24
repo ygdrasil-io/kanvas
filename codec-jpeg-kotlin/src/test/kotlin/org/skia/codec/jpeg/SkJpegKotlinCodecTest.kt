@@ -200,6 +200,21 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
+    fun `decodes progressive grayscale dc first scan`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleJpeg(width = 13, height = 9))
+
+        assertNotNull(codec)
+        assertEquals(13, codec!!.getInfo().width)
+        assertEquals(9, codec.getInfo().height)
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(0xFF808080.toInt(), bitmap!!.getPixel(0, 0))
+        assertEquals(0xFF808080.toInt(), bitmap.getPixel(12, 8))
+    }
+
+    @Test
     fun `rejects invalid progressive scan parameters`() {
         assertNull(
             SkJpegKotlinCodec.Decoder.make(
@@ -299,7 +314,7 @@ class SkJpegKotlinCodecTest {
             write(spectralEnd)
             write(successiveApprox)
         }
-        out.write(entropyBits("0"))
+        out.write(entropyForZeroBlocks(((width + 7) / 8) * ((height + 7) / 8)))
         if (includeAcScan) {
             out.writeSegment(0xDA) {
                 write(1)
