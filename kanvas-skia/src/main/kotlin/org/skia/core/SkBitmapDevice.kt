@@ -633,8 +633,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      * device's colour profile. Always succeeds : raster always supports
      * layers (`SkCanvas.saveLayer` has worked on the CPU since Phase 7).
      */
-    override fun makeLayerDevice(width: Int, height: Int): SkDevice {
-        val layerBitmap = SkBitmap(width, height, bitmap.colorSpace, bitmap.colorType)
+    override fun makeLayerDevice(width: Int, height: Int, colorType: SkColorType?): SkDevice {
+        val layerBitmap = SkBitmap(width, height, bitmap.colorSpace, colorType ?: bitmap.colorType)
             .also { it.eraseColor(0) }
         return SkBitmapDevice(layerBitmap)
     }

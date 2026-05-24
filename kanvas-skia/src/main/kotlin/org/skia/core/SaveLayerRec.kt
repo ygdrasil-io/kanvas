@@ -21,9 +21,9 @@ import org.graphiks.math.SkRect
  *    pixels (within [bounds]) **before** any draws into the layer.
  *    The filtered backdrop becomes the layer's initial content.
  *    Mirrors `fBackdrop`.
- *  - [flags] — the upstream `SaveLayerFlags` bitfield. Currently a
- *    no-op (every flag bit gates a feature that the raster path
- *    doesn't implement yet) ; accepted for source-compat.
+ *  - [flags] — the upstream `SaveLayerFlags` bitfield. The raster path
+ *    honours `SkCanvas::kF16ColorType`; other bits are accepted for
+ *    source-compat and implemented incrementally as GMs need them.
  *
  * **Phase G6** introduces this type alongside
  * [SkCanvas.saveLayer] `(rec)`. The existing two-arg

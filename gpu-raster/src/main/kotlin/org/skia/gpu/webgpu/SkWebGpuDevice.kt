@@ -4400,7 +4400,11 @@ public class SkWebGpuDevice(
      *    on the layer paint fall through to `compositeFrom` with
      *    those slots dropped (documented deferred Phase G-saveLayer-X).
      */
-    override fun makeLayerDevice(width: Int, height: Int): SkDevice =
+    override fun makeLayerDevice(
+        width: Int,
+        height: Int,
+        colorType: org.skia.foundation.SkColorType?,
+    ): SkDevice =
         SkWebGpuDevice(
             context = context,
             width = width,
