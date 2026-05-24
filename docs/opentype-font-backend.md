@@ -83,9 +83,10 @@ removed. Portable font code should use `OpenTypeTypeface` and
   composite glyph variation deltas, `avar`, IUP edge cases, hinting, and
   phantom advance deltas are separate work.
 - Color font rendering beyond COLRv0: COLRv1 draw-path integration,
-  gradients, composites, reusable layer graphs, CBDT/sbix bitmap strikes,
-  and SVG-in-OpenType glyph rendering are not part of the current pure Kotlin
-  backend.
+  gradients, composites, reusable layer graphs, decoded CBDT/sbix bitmap
+  strike rendering, and SVG-in-OpenType glyph rendering are not part of the
+  current pure Kotlin backend. CBDT/CBLC, sbix, and SVG metadata parsing may
+  exist without enabling those draw paths.
 - Platform font fallback through native desktop APIs remains out of scope.
   System font enumeration itself is now provided by the pure Kotlin
   `OpenTypeSystemFontMgr`, limited to files the current OpenType parser can
@@ -136,35 +137,35 @@ generated-fixture slices, not by adding external binary fonts to the
 repository. The existing `OpenTypeFontTest` table replacement helpers are
 sufficient for PR-sized fixtures.
 
-Current gaps:
+Current state:
 
-- **CBDT/CBLC PNG**: no parser exists yet for bitmap strikes, `CBLC` index
-  subtables, `CBDT` bitmap-data formats, strike selection by requested size,
-  PNG decode, origin placement, or fallback from missing bitmap strikes to
-  `glyf` outlines. The first safe slice should parse a single generated
-  `CBLC` index format and prove glyph-to-PNG metadata selection before adding
-  decoding.
-- **sbix PNG**: no parser exists yet for strike tables, per-glyph records,
-  offsets, image format tags, origin handling, or PNG decode. This should not
-  share the `CBDT/CBLC` parser because `sbix` has a different table layout and
-  placement model even when the payload is also PNG.
+- **CBDT/CBLC PNG**: the backend parses bounded bitmap strikes, the generated
+  fixture path, supported PNG image formats, and glyph-to-PNG metadata
+  selection. PNG decode, requested-size strike selection, origin placement, and
+  draw-path integration remain separate follow-ups. Unsupported or malformed
+  optional bitmap tables fail closed and text rendering keeps using `glyf`
+  outlines.
+- **sbix PNG**: the backend parses bounded strike tables, per-glyph records,
+  image format tags, origins, and PNG payload metadata. This parser remains
+  separate from `CBDT/CBLC` because `sbix` has a different table layout and
+  placement model even when the payload is also PNG. PNG decode and rendering
+  integration remain follow-ups.
 - **SVG-in-OpenType**: version 0 document records are parsed as internal
   metadata and malformed optional `SVG ` tables fail closed without rejecting
-  the font. There is deliberately no SVG renderer integration yet, so draw
-  paths keep using the current monochrome outline fallback.
+  the font. The explicit current strategy is to keep SVG records as unsupported
+  render metadata and preserve the monochrome outline fallback. A future SVG
+  draw path must first introduce or select a pure Kotlin SVG renderer; it must
+  not add AWT, JNI, or a native bridge implicitly.
 
 Fixture and implementation plan:
 
-- **CBDT/CBLC**: generate a tiny bitmap-strike fixture by replacing two
-  optional tables in a bundled TTF. The bitmap payload should start with a
-  single PNG glyph image because `codec-png-kotlin` already provides a pure
-  Kotlin decoder. A later parser slice should read only the minimal index
-  subtable needed by that fixture and leave other CBDT index formats for
-  follow-up PRs.
-- **sbix**: generate a separate tiny fixture with a single PNG strike and one
-  glyph record. Keep it independent from CBDT/CBLC because the table layout and
-  origin handling are different even when the embedded image format is also
-  PNG.
+- **CBDT/CBLC**: keep the generated bitmap-strike fixture that replaces two
+  optional tables in a bundled TTF. The current parser proves metadata
+  extraction from PNG payloads before any rendering integration.
+- **sbix**: keep the separate generated fixture with a single PNG strike and
+  one glyph record. Keep it independent from CBDT/CBLC because the table
+  layout and origin handling are different even when the embedded image format
+  is also PNG.
 - **SVG-in-OpenType**: generate an `SVG ` table fixture containing one compact
   SVG document record for one glyph ID. The first parser slice now exposes
   document metadata and a draw-disabled fallback test; renderer dependency
@@ -172,15 +173,15 @@ Fixture and implementation plan:
 
 Implementation should be split in this order:
 
-1. Parse CBDT/CBLC metadata and prove glyph-to-bitmap selection against the
-   generated PNG fixture.
+1. Keep CBDT/CBLC metadata parsing green against the generated PNG fixture.
 2. Render the selected CBDT/CBLC PNG strike through the pure Kotlin codec path
    if `codec-png-kotlin` is available to the target module without introducing
    AWT or JNI.
-3. Parse sbix metadata and render its PNG strike as a separate slice.
-4. Decide the SVG renderer dependency separately. If the pure Kotlin SVG stack
-   is not available in `kanvas-skia`, keep SVG records as unsupported metadata
-   rather than adding a native dependency.
+3. Render the selected sbix PNG strike as a separate slice after preserving the
+   current sbix metadata tests.
+4. Keep SVG records as unsupported metadata and use the monochrome outline
+   fallback until a dedicated pure Kotlin SVG renderer is accepted for
+   `kanvas-skia`.
 
 Fallback behavior is fixed for all bitmap/SVG color formats: missing decode
 dependencies, unsupported strike formats, malformed optional color tables,
