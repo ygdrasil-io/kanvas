@@ -16,8 +16,8 @@ import org.skia.foundation.skcms.SkcmsICCProfile
  * Supported in this first backend slice:
  * - Windows/OS2 file signature `BM`
  * - DIB headers with at least the BITMAPINFOHEADER fields
- * - BI_RGB, BI_RLE8 and BI_RLE4 compression
- * - indexed 1/4/8 bpp palettes and direct 24/32 bpp BGRA pixels
+ * - BI_RGB, BI_BITFIELDS, BI_RLE8 and BI_RLE4 compression
+ * - indexed 1/4/8 bpp palettes and direct 16/24/32 bpp pixels
  * - bottom-up and top-down row order
  */
 public class SkBmpKotlinCodec private constructor(
@@ -85,6 +85,17 @@ public class SkBmpKotlinCodec private constructor(
             8 -> {
                 val index = bytes[row + x].toInt() and 0xFF
                 header.palette[index]
+            }
+            16 -> {
+                val off = row + x * 2
+                val value = readU16LE(bytes, off)
+                val masks = header.bitMasks ?: DEFAULT_RGB555_MASKS
+                argb(
+                    0xFF,
+                    scaleMasked(value, masks.red),
+                    scaleMasked(value, masks.green),
+                    scaleMasked(value, masks.blue),
+                )
             }
             24 -> {
                 val off = row + x * 3
@@ -232,6 +243,12 @@ public class SkBmpKotlinCodec private constructor(
             if (bitsPerPixel !in SUPPORTED_BPP) return null
             if (width > MAX_DIMENSION || height > MAX_DIMENSION) return null
 
+            val bitMasks = if (compression == BI_BITFIELDS) {
+                readBitMasks(data, dibSize) ?: return null
+            } else {
+                null
+            }
+
             val palette = if (bitsPerPixel <= 8) {
                 val defaultEntries = 1 shl bitsPerPixel
                 val entryCount = if (colorsUsed > 0) colorsUsed else defaultEntries
@@ -241,7 +258,7 @@ public class SkBmpKotlinCodec private constructor(
                 IntArray(0)
             }
 
-            if (compression == BI_RGB) {
+            if (compression == BI_RGB || compression == BI_BITFIELDS) {
                 val rowBytes = rowBytes(width, bitsPerPixel)
                 val required = pixelOffset.toLong() + rowBytes.toLong() * height.toLong()
                 if (required > data.size.toLong()) return null
@@ -257,7 +274,20 @@ public class SkBmpKotlinCodec private constructor(
                 compression = compression,
                 pixelOffset = pixelOffset,
                 palette = palette,
+                bitMasks = bitMasks,
             )
+        }
+
+        private fun readBitMasks(data: ByteArray, dibSize: Int): BitMasks? {
+            val maskOffset = 14 + 40
+            if (dibSize < 52 && data.size < maskOffset + 12) return null
+            if (data.size < maskOffset + 12) return null
+            val masks = BitMasks(
+                red = readI32LE(data, maskOffset),
+                green = readI32LE(data, maskOffset + 4),
+                blue = readI32LE(data, maskOffset + 8),
+            )
+            return if (masks.isSupportedRgb()) masks else null
         }
 
         private fun readPalette(data: ByteArray, offset: Int, entryCount: Int): IntArray? {
@@ -284,7 +314,21 @@ public class SkBmpKotlinCodec private constructor(
         val compression: Int,
         val pixelOffset: Int,
         val palette: IntArray,
+        val bitMasks: BitMasks?,
     )
+
+}
+
+private data class BitMasks(
+    val red: Int,
+    val green: Int,
+    val blue: Int,
+) {
+    fun isSupportedRgb(): Boolean =
+        red != 0 && green != 0 && blue != 0 &&
+            red and green == 0 &&
+            red and blue == 0 &&
+            green and blue == 0
 }
 
 public class BmpKotlinDecoderProvider : CodecDecoderProvider {
@@ -295,20 +339,34 @@ private const val FILE_HEADER_SIZE: Int = 14
 private const val BI_RGB: Int = 0
 private const val BI_RLE8: Int = 1
 private const val BI_RLE4: Int = 2
+private const val BI_BITFIELDS: Int = 3
 private const val RLE_EOL: Int = 0
 private const val RLE_EOF: Int = 1
 private const val RLE_DELTA: Int = 2
 private const val MAX_DIMENSION: Int = 100_000
 private const val TRANSPARENT_BLACK: Int = 0
-private val SUPPORTED_BPP: Set<Int> = setOf(1, 4, 8, 24, 32)
+private val DEFAULT_RGB555_MASKS: BitMasks = BitMasks(
+    red = 0x7C00,
+    green = 0x03E0,
+    blue = 0x001F,
+)
+private val SUPPORTED_BPP: Set<Int> = setOf(1, 4, 8, 16, 24, 32)
 
 private fun isSupportedCompression(compression: Int, bitsPerPixel: Int, topDown: Boolean): Boolean =
     when (compression) {
         BI_RGB -> true
         BI_RLE8 -> bitsPerPixel == 8 && !topDown
         BI_RLE4 -> bitsPerPixel == 4 && !topDown
+        BI_BITFIELDS -> bitsPerPixel == 16
         else -> false
     }
+
+private fun scaleMasked(pixel: Int, mask: Int): Int {
+    val shift = Integer.numberOfTrailingZeros(mask)
+    val max = mask ushr shift
+    val value = (pixel and mask) ushr shift
+    return (value * 255 + max / 2) / max
+}
 
 private fun rowBytes(width: Int, bitsPerPixel: Int): Int =
     ((((width.toLong() * bitsPerPixel.toLong()) + 31L) / 32L) * 4L).toInt()
