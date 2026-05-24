@@ -62,8 +62,8 @@ import org.skia.tools.ToolUtils
  * compiles. At runtime [EmojiTypeface.create] throws
  * `STUB.EMOJI_TABLES` (see
  * [`API_FINALIZATION_PLAN.md`](../../../../../../../../API_FINALIZATION_PLAN.md))
- * because the AWT scaler cannot decode SBIX / CBDT / COLRv0 / SVG
- * glyph tables — those need FreeType (or librsvg for SVG) via JNI.
+ * because the pure Kotlin path does not yet dispatch SBIX / CBDT /
+ * COLRv0 / SVG emoji glyph tables.
  * The matching [ColorEmojiTest] is `@Disabled("STUB.EMOJI_TABLES")`
  * until that dispatch lands. Sibling [ColoremojiBlendmodesGM] holds
  * the same contract.

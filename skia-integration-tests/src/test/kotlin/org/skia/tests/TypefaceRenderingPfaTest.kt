@@ -12,9 +12,9 @@ import org.junit.jupiter.api.Test
  * [org.skia.tools.ToolUtils.CreateTypefaceFromResource] returns `null`,
  * so executing this test would always throw [NotImplementedError].
  *
- * Additionally, AWT's `Font.createFont` does not support Type 1 PFA
- * format on all JVMs, so even if the file were present, loading it
- * would require a JNI-backed FreeType pipeline.
+ * Additionally, the pure Kotlin OpenType backend does not support Type 1 PFA,
+ * so even if the file were present, loading it would require a dedicated
+ * Type 1 backend or native FreeType pipeline.
  *
  * Re-enable when the fixture font is added and a Type 1 typeface
  * backend is implemented.

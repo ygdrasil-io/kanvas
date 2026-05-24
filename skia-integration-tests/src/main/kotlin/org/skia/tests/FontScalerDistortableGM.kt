@@ -33,17 +33,13 @@ import org.skia.tools.ToolUtils
  *     `setLinearMetrics(true)` / `setBaselineSnap(false)` to exercise
  *     the subpixel-positioning code paths.
  *
- * **AWT-backend caveat — known limitation** : `Distortable.ttf` is a
- * variable font whose visible difference between `wght` instances comes
- * from the OpenType `gvar` (glyph variation) table. AWT's
- * `Font.deriveFont(Map(WEIGHT, …))` does **not** read `gvar` ; it picks
- * one of AWT's own faux-bold weights. So all 10 cells render with the
- * same outline (a faux-weighted 'abc'), losing the per-cell axis-driven
- * width changes the upstream PNG shows. The visual layout (10 cells in
- * a 2 × 5 grid, rotated columns, sizes 6 → 22) still matches, so the
- * structural similarity is meaningful even though the per-glyph fidelity
- * trails. Score < 100% is expected here ; the test floor is set
- * accordingly.
+ * **OpenType variable-font caveat** : `Distortable.ttf` is a variable
+ * font whose visible difference between `wght` instances comes from the
+ * OpenType `gvar` table. The pure Kotlin backend currently supports the
+ * simple-glyph subset of `gvar`, so this GM is a structural guard for
+ * clone/axis plumbing and a fidelity ratchet for future variable-outline
+ * work. Score < 100% is expected until the remaining variable-font
+ * interpolation gaps are closed.
  */
 public class FontScalerDistortableGM : GM() {
 

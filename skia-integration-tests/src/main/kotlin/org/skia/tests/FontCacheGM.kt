@@ -46,8 +46,8 @@ import org.skia.tools.ToolUtils
  * 6-typeface × 9-size × 4-string nested loop with sub-pixel offset
  * walk. The reference `fontcache.png` was Ganesh-rendered ; raster
  * output exists and exercises the full glyph-path-fill pipeline, but
- * sub-pixel positioning + AWT vs FreeType scaler differences make the
- * pixels diverge wholesale from the GPU reference (see
+ * sub-pixel positioning + OpenType-vs-FreeType scaler differences make
+ * the pixels diverge wholesale from the GPU reference (see
  * [FontCacheTest] for the bucket classification).
  *
  * The `fontcache-mt` variant (10× CTM, multi-page atlas) is **not**

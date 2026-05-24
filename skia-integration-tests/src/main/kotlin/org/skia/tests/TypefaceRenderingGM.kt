@@ -111,7 +111,7 @@ import kotlin.math.ceil
  * `SkGlyphID` pointer, which our Kotlin port represents by encoding the
  * glyph ID into a `Char` (two-byte, matching a `kGlyphID` `sizeof(SkGlyphID)`
  * payload). For the invalid-glyph ID `0xFFFF` the char is `'￿'` which
- * maps to glyph 0 (`.notdef`) through the AWT font scaler — the same
+ * maps to glyph 0 (`.notdef`) through the OpenType font scaler — the same
  * "draw nothing but don't crash" behaviour upstream verifies.
  */
 internal fun drawTypefaceRenderingGm(canvas: SkCanvas, face: SkTypeface, glyphId: Int) {
@@ -360,8 +360,8 @@ public class TypefaceRenderingGM : GM() {
  * [drawTypefaceRenderingGm].
  *
  * **STUB.FIXTURE** : `fonts/Roboto2-Regular.pfa` is not present in the
- * kanvas-skia classpath resources. The font is a Skia test asset and AWT's
- * `Font.createFont` does not support the PFA/PFB Type 1 format on all JVMs.
+ * kanvas-skia classpath resources. The font is a Skia test asset and the
+ * pure Kotlin OpenType backend does not support PFA/PFB Type 1 fonts.
  * [TypefaceRenderingPfaTest] is `@Disabled`.
  *
  * The C++ GM is guarded with `#ifndef SK_BUILD_FOR_WIN` (Type 1 fonts do not
@@ -378,7 +378,7 @@ public class TypefaceRenderingPfaGM : GM() {
 
         val face: SkTypeface = ToolUtils.CreateTypefaceFromResource("fonts/Roboto2-Regular.pfa")
             ?: TODO("STUB.FIXTURE: fonts/Roboto2-Regular.pfa is not available as a classpath " +
-                    "resource. AWT does not support Type 1 PFA fonts on all JVMs. " +
+                    "resource. The pure Kotlin OpenType backend does not support Type 1 PFA fonts. " +
                     "Add the font fixture to make this GM renderable.")
 
         drawTypefaceRenderingGm(c, face, face.unicharToGlyph('O'.code))
@@ -395,8 +395,8 @@ public class TypefaceRenderingPfaGM : GM() {
  * [drawTypefaceRenderingGm].
  *
  * **STUB.FIXTURE** : `fonts/Roboto2-Regular.pfb` is not present in the
- * kanvas-skia classpath resources. The font is a Skia test asset and AWT's
- * `Font.createFont` does not support the PFA/PFB Type 1 format on all JVMs.
+ * kanvas-skia classpath resources. The font is a Skia test asset and the
+ * pure Kotlin OpenType backend does not support PFA/PFB Type 1 fonts.
  * [TypefaceRenderingPfbTest] is `@Disabled`.
  *
  * The C++ GM is guarded with `#ifndef SK_BUILD_FOR_WIN`. See
@@ -412,7 +412,7 @@ public class TypefaceRenderingPfbGM : GM() {
 
         val face: SkTypeface = ToolUtils.CreateTypefaceFromResource("fonts/Roboto2-Regular.pfb")
             ?: TODO("STUB.FIXTURE: fonts/Roboto2-Regular.pfb is not available as a classpath " +
-                    "resource. AWT does not support Type 1 PFB fonts on all JVMs. " +
+                    "resource. The pure Kotlin OpenType backend does not support Type 1 PFB fonts. " +
                     "Add the font fixture to make this GM renderable.")
 
         drawTypefaceRenderingGm(c, face, face.unicharToGlyph('O'.code))

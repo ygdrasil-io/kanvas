@@ -17,17 +17,16 @@ import org.skia.tools.ToolUtils
  * end-to-end:
  *  - T1: `SkFont` ctor, `SkTextEncoding`.
  *  - T2: `SkFont.measureText` with `bounds` out-param to centre the glyph.
- *  - T3: `SkCanvas.drawSimpleText` rendering glyph outlines via AWT
- *        `GlyphVector` → `SkPath` → existing scanline-fill pipeline.
+ *  - T3: `SkCanvas.drawSimpleText` rendering OpenType glyph outlines
+ *        as `SkPath` data through the existing scanline-fill pipeline.
  *  - T4: `ToolUtils.DefaultPortableTypeface` resolves to Liberation
  *        Sans Regular (matching upstream's `gDefaultFontIndex = 4`).
  *
  * The GM is small (640 × 480) but exercises a stress-test condition:
- * **font size 1500pt**, which forces both AWT and FreeType to take
- * the path-fill route (no glyph cache hit, no bitmap mask) — meaning
- * the only divergence between us and upstream is hinting + scaler
- * (which are different) plus AA scanline-fill (which is structurally
- * the same).
+ * **font size 1500pt**, which forces both the pure Kotlin OpenType
+ * backend and upstream FreeType to take a path-fill route (no glyph
+ * cache hit, no bitmap mask). The remaining divergence is scaler /
+ * hinting details plus AA scanline-fill.
  *
  * C++ original:
  * ```cpp

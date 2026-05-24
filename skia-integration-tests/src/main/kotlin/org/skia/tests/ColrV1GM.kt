@@ -36,8 +36,9 @@ import org.skia.tools.ToolUtils
  *
  *  1. **`STUB.COLR_V1`** — resolving a COLR v1 glyph to a drawable
  *     graph (gradients, blend modes, sub-glyph composition) requires
- *     walking the OpenType `COLR` v1 paint graph through FreeType +
- *     HarfBuzz. AWT's font scaler stops at COLR v0 — see
+ *     draw-path integration for OpenType `COLR` v1 paint graphs. The
+ *     pure Kotlin backend currently parses only a safe metadata subset;
+ *     see
  *     [`SkColrV1`][org.skia.foundation.colr.SkColrV1] and
  *     `API_FINALIZATION_PLAN.md` § `STUB.COLR_V1`.
  *  2. **`STUB.FONTATIONS`** — upstream wires the variable axes
@@ -47,8 +48,8 @@ import org.skia.tools.ToolUtils
  *     org.skia.foundation.SkTypeface_Fontations] is a surface stub.
  *  3. **`STUB.FIXTURE`** — `fonts/test_glyphs-glyf_colr_1.ttf` and its
  *     `_variable` sibling are not shipped under
- *     `kanvas-legacy/src/test/resources/fonts/`. AWT cannot parse them
- *     anyway (the codec rejects COLR v1 emoji formats — see
+ *     `kanvas-legacy/src/test/resources/fonts/`. The pure Kotlin path
+ *     does not yet render those COLR v1 glyphs; see
  *     [`ToolUtils.CreateTypefaceFromResource`][
  *     org.skia.tools.ToolUtils.CreateTypefaceFromResource] KDoc).
  *
@@ -95,9 +96,9 @@ public class ColrV1GM(
 
     override fun onOnceBeforeDraw() {
         // Variable-font variants pull from the `_variable` sibling — both
-        // resources resolve to `null` today because COLR v1 emoji fonts
-        // are not in the AWT scaler's accepted-format list. Kept here so
-        // the call graph mirrors upstream byte-for-byte once JNI lands.
+        // resources resolve to `null` today because COLR v1 rendering and
+        // the matching fixtures are not wired into the pure Kotlin path.
+        // Kept here so the call graph mirrors upstream once that lands.
         val resource = if (variations.isNotEmpty()) K_TEST_FONT_NAME_VARIABLE else K_TEST_FONT_NAME
         typeface = ToolUtils.CreateTypefaceFromResource(resource)
     }
@@ -127,12 +128,9 @@ public class ColrV1GM(
     /**
      * Mirrors upstream's `makeVariedTypeface()` — clones the base
      * typeface with the configured variation coordinates applied. The
-     * AWT-backed [SkTypeface.makeClone] currently maps only the four
-     * standard OpenType axes (`wght` / `wdth` / `slnt` / `ital`) ; the
-     * COLR v1 test font uses custom axes (`SWPS`, `COL1`, `GRR0`, …)
-     * which fall outside that set and are silently dropped — that's
-     * fine because the resolved-glyph rendering is gated on
-     * `STUB.COLR_V1` anyway.
+     * COLR v1 test font uses custom axes (`SWPS`, `COL1`, `GRR0`, …);
+     * those remain gated by the unresolved COLRv1 renderer and fixture
+     * path, so this stays a compile-pinned call graph for now.
      */
     private fun makeVariedTypeface(): SkTypeface? {
         val tf = typeface ?: return null

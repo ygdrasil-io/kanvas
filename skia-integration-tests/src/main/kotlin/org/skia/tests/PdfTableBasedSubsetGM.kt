@@ -22,8 +22,8 @@ import org.graphiks.math.SkISize
  *     [org.skia.tools.ToolUtils] — the Kotlin port only provides
  *     [org.skia.tools.ToolUtils.DefaultPortableTypeface] /
  *     [org.skia.tools.ToolUtils.CreateTypefaceFromResource] backed by
- *     AWT; a `TestFontMgr`-style registry that round-trips woff/woff2
- *     streams via FreeType is not yet wired up.
+ *     the portable OpenType path; a `TestFontMgr`-style registry that
+ *     round-trips woff/woff2 streams is not yet wired up.
  *  2. The font resources (`SpiderSymbol.ttf/.woff/.woff2`) are not
  *     bundled in `:kanvas-skia`'s classpath.
  *  3. The 7-argument `drawGlyphs` (with cluster/utf8 overload for PDF

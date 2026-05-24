@@ -45,9 +45,10 @@ import org.skia.tools.ToolUtils
  *     throws [NotImplementedError]. Rendering requires the Fontations Rust
  *     crate wired via UniFFI or JNI, both out of scope for the pure-JVM
  *     `:kanvas-skia` module.
- *  2. **`STUB.FONTATIONS`** — [SkTypeface.getPostScriptName] and
- *     [SkTypeface.createFamilyNameIterator] also throw, because they
- *     require raw OpenType name-table access unavailable in the AWT backend.
+ *  2. **`STUB.FONTATIONS`** — this GM targets the upstream Fontations
+ *     construction path and metadata reporting. The portable OpenType
+ *     backend exposes basic name-table data, but it is not the Fontations
+ *     factory under test here.
  *
  * The [onDraw] body calls these stubs so the class stays compile-pinned
  * to the full [SkTypeface_Fontations] and [SkTypeface] API surface.

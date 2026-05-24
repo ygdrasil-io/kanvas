@@ -44,8 +44,8 @@ public class MixedTextBlobsGM : GM() {
     }
 
     private var fBlob: SkTextBlob? = null
-    // PlanetTypeface() is null on raster (colour emoji not supported by AWT) ;
-    // we keep the field for parity with upstream but it stays null.
+    // PlanetTypeface() is null on raster until colour-emoji table
+    // dispatch/fallback is implemented; keep the field for upstream parity.
     private val fEmojiTypeface: SkTypeface? = ToolUtils.PlanetTypeface()
     private val fEmojiText: String = "♁♃"  // ♁♃ — Earth + Jupiter glyphs.
     private var fReallyBigATypeface: SkTypeface = SkTypeface.MakeEmpty()
@@ -178,4 +178,3 @@ public class MixedTextBlobsGM : GM() {
         c.restore()
     }
 }
-

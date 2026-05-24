@@ -20,7 +20,8 @@ import org.skia.testing.TestUtils
  *
  * The floor is set to 0 % (just above catastrophic-blank regression) and
  * the ratchet tracks the real number.  The tolerance uses the standard
- * textual-GM value (8) to absorb AWT vs FreeType AA drift on the "H" edges.
+ * textual-GM value (8) to absorb OpenType-vs-FreeType AA drift on the
+ * "H" edges.
  */
 class BigTextCrbug1370488Test {
 
