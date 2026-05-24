@@ -270,7 +270,6 @@ public class SkPngKotlinCodec private constructor(
             var iccProfile: SkcmsICCProfile? = null
             var sawIccp = false
             var sawIdat = false
-            var sawNonIdatAfterIdat = false
             var sawIend = false
 
             while (offset + CHUNK_OVERHEAD <= data.size) {
@@ -289,14 +288,13 @@ public class SkPngKotlinCodec private constructor(
                         header = parseHeader(data, dataOffset) ?: return null
                     }
                     TYPE_IDAT -> {
-                        if (header == null || sawIend || sawNonIdatAfterIdat) return null
+                        if (header == null || sawIend) return null
                         if (header.colorType == COLOR_PALETTE && palette == null) return null
                         idat.write(data, dataOffset, length)
                         sawIdat = true
                     }
                     TYPE_PLTE -> {
                         if (header == null || sawIdat || sawIend || palette != null) return null
-                        if (header.colorType == COLOR_GRAYSCALE || header.colorType == COLOR_GRAYSCALE_ALPHA) return null
                         palette = parsePalette(data, dataOffset, length) ?: return null
                     }
                     TYPE_TRNS -> {
@@ -323,14 +321,13 @@ public class SkPngKotlinCodec private constructor(
                     }
                     else -> {
                         if (isCritical(type)) return null
-                        if (sawIdat) sawNonIdatAfterIdat = true
                     }
                 }
                 offset = crcOffset + 4
             }
 
             val h = header ?: return null
-            if (!sawIdat || !sawIend || offset != data.size) return null
+            if (!sawIdat || !sawIend || offset > data.size) return null
             val finalPalette = if (h.colorType == COLOR_PALETTE) {
                 paletteWithTransparency(palette, transparency as? Transparency.Palette) ?: return null
             } else {
