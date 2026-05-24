@@ -713,6 +713,70 @@ class SkPngKotlinCodecTest {
     }
 
     @Test
+    fun `gAMA cHRM and sRGB chunks are accepted but do not synthesize ICC`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "gAMA" to u32Chunk(45_455),
+            "cHRM" to chrmChunk(
+                whiteX = 31_270,
+                whiteY = 32_900,
+                redX = 64_000,
+                redY = 33_000,
+                greenX = 30_000,
+                greenY = 60_000,
+                blueX = 15_000,
+                blueY = 6_000,
+            ),
+            "sRGB" to byteArrayOf(0),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val codec = SkPngKotlinCodec.Decoder.make(data)
+
+        assertNotNull(codec)
+        assertNull(codec!!.getICCProfile())
+        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `rejects malformed gAMA cHRM and sRGB chunks`() {
+        assertNull(
+            SkPngKotlinCodec.Decoder.make(
+                pngFromChunks(
+                    "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                    "gAMA" to byteArrayOf(0, 0, 0),
+                    "IDAT" to deflate(byteArrayOf(0, 0x40)),
+                    "IEND" to ByteArray(0),
+                ),
+            ),
+        )
+        assertNull(
+            SkPngKotlinCodec.Decoder.make(
+                pngFromChunks(
+                    "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                    "cHRM" to ByteArray(31),
+                    "IDAT" to deflate(byteArrayOf(0, 0x40)),
+                    "IEND" to ByteArray(0),
+                ),
+            ),
+        )
+        assertNull(
+            SkPngKotlinCodec.Decoder.make(
+                pngFromChunks(
+                    "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                    "sRGB" to byteArrayOf(4),
+                    "IDAT" to deflate(byteArrayOf(0, 0x40)),
+                    "IEND" to ByteArray(0),
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `rejects malformed iCCP chunk`() {
         assertNull(
             SkPngKotlinCodec.Decoder.make(
@@ -922,6 +986,32 @@ class SkPngKotlinCodecTest {
             write(0)
             write(0)
             write(interlace)
+        }.toByteArray()
+
+    private fun u32Chunk(value: Int): ByteArray =
+        ByteArrayOutputStream().apply {
+            writeI32BE(value)
+        }.toByteArray()
+
+    private fun chrmChunk(
+        whiteX: Int,
+        whiteY: Int,
+        redX: Int,
+        redY: Int,
+        greenX: Int,
+        greenY: Int,
+        blueX: Int,
+        blueY: Int,
+    ): ByteArray =
+        ByteArrayOutputStream().apply {
+            writeI32BE(whiteX)
+            writeI32BE(whiteY)
+            writeI32BE(redX)
+            writeI32BE(redY)
+            writeI32BE(greenX)
+            writeI32BE(greenY)
+            writeI32BE(blueX)
+            writeI32BE(blueY)
         }.toByteArray()
 
     private fun adam7Png(
