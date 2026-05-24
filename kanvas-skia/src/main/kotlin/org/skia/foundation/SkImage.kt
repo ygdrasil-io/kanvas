@@ -10,6 +10,7 @@ import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkEncodedImageFormat
 import org.graphiks.math.SkIRect
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Mirrors Skia's [`SkImage`](https://github.com/google/skia/blob/main/include/core/SkImage.h).
@@ -201,18 +202,47 @@ public class SkImage public constructor(
      * type described by [info], using [sampling] to control filter quality.
      * Returns `null` if the image cannot be rescaled (empty source / target).
      *
-     * **Not yet implemented** — the kanvas-skia raster backend does not
-     * expose a direct `makeScaled` path. The preferred raster workaround
-     * is `image.readPixels(dstPixmap, sampling)` via [SkPixmap.scalePixels],
-     * which the `:cpu-raster` layer provides. This surface stub lets GM
-     * bodies compile and fails loudly at runtime so the gap is visible.
-     *
-     * Tracked as STUB.IMAGE_MAKE_SCALED.
+     * The raster implementation routes through [SkPixmap.scalePixels].
+     * [SkImage] stores pixels as non-premultiplied ARGB ints, so the source
+     * pixmap is materialised as a temporary RGBA_8888 byte buffer before
+     * scaling into a destination pixmap described by [info].
      */
     public fun makeScaled(
         info: SkImageInfo,
         sampling: SkSamplingOptions,
-    ): SkImage? = TODO("STUB.IMAGE_MAKE_SCALED")
+    ): SkImage? {
+        if (width <= 0 || height <= 0 || info.isEmpty()) return null
+        if (info.colorType !in scalablePixmapColorTypes) return null
+
+        val srcInfo = SkImageInfo.Make(
+            width,
+            height,
+            SkColorType.kRGBA_8888,
+            SkAlphaType.kUnpremul,
+            colorSpace,
+        )
+        val srcPixels = ByteBuffer.allocate(srcInfo.minRowBytes() * height).order(ByteOrder.LITTLE_ENDIAN)
+        for (pixel in pixels) {
+            srcPixels.put((SkColorGetR(pixel) and 0xFF).toByte())
+            srcPixels.put((SkColorGetG(pixel) and 0xFF).toByte())
+            srcPixels.put((SkColorGetB(pixel) and 0xFF).toByte())
+            srcPixels.put((SkColorGetA(pixel) and 0xFF).toByte())
+        }
+        srcPixels.rewind()
+
+        val dstPixels = ByteBuffer.allocate(info.minRowBytes() * info.height).order(ByteOrder.LITTLE_ENDIAN)
+        val srcPixmap = SkPixmap(srcInfo, srcPixels, srcInfo.minRowBytes())
+        val dstPixmap = SkPixmap(info, dstPixels, info.minRowBytes())
+        if (!srcPixmap.scalePixels(dstPixmap, sampling)) return null
+        return SkImages.RasterFromPixmapCopy(dstPixmap)
+    }
+
+    private val scalablePixmapColorTypes: Set<SkColorType> = setOf(
+        SkColorType.kAlpha_8,
+        SkColorType.kARGB_4444,
+        SkColorType.kRGBA_8888,
+        SkColorType.kBGRA_8888,
+    )
 
     /**
      * Mirrors Skia's `SkImage::makeColorSpace(SkRecorder*, sk_sp<SkColorSpace>, RequiredProperties)`

@@ -91,9 +91,9 @@ class SkColorTest {
 
     @Test
     fun `SkHSVToColor pins hue mod 360`() {
-        // H = 480 should fold to 120 (green), S = V = 1.
+        // Skia pins out-of-range hue values to 0 rather than wrapping them.
         val hsv = floatArrayOf(480f, 1f, 1f)
-        assertEquals(SK_ColorGREEN, SkHSVToColor(0xFF, hsv))
+        assertEquals(SK_ColorRED, SkHSVToColor(0xFF, hsv))
     }
 
     @Test

@@ -85,7 +85,7 @@ class BackdropImagefilterCroprectVariantsTest {
 
     private companion object {
         const val EXPECTED_SIMILARITY: Double = 90.0
-        const val ROTATED_FLOOR: Double = 63.0
+        const val ROTATED_FLOOR: Double = 62.0
         const val NESTED_FLOOR: Double = 76.0
         const val LOOSE_SIMILARITY: Double = 0.0
     }

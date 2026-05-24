@@ -126,7 +126,6 @@ These are implementation candidates once the rebaseline confirms impact:
 - async rescale/read APIs
 - YUVA pixmap/channel helpers
 - compressed texture helpers, unless delivered by codec work
-- `SkImage.makeScaled`
 - `SkShader.makeWithColorFilter`
 - color-space-aware `SkColorFilters.Blend`
 - image-filter multi-filter spans

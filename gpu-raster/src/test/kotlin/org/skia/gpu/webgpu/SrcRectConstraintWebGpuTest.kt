@@ -5,10 +5,10 @@ import org.junit.jupiter.api.Test
 import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.SrcRectConstraintGM
 
-@Disabled("STUB.SRC_RECT_CONSTRAINT: SkCanvas.drawImageRect lacks SrcRectConstraint param")
+@Disabled("WEBGPU.SRC_RECT_CONSTRAINT: strict/fast sampler-domain parity is not wired through bitmap_shader.wgsl yet")
 class SrcRectConstraintWebGpuTest {
     @Test
-    fun `SrcRectConstraintGM placeholder`() {
+    fun `SrcRectConstraintGM strict and fast columns`() {
         runGpuCrossTest(SrcRectConstraintGM(), floor = 0.0)
     }
 }
