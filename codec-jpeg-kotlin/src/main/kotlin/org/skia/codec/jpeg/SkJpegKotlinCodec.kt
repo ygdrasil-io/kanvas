@@ -50,6 +50,7 @@ public class SkJpegKotlinCodec private constructor(
         if (dst.width != info.width || dst.height != info.height) return Result.kInvalidParameters
         if (dst.colorType != info.colorType) return Result.kInvalidParameters
         if (info.colorType != SkColorType.kRGBA_8888) return Result.kInvalidConversion
+        if (jpeg.coding == JpegCoding.kProgressive) return Result.kUnimplemented
 
         val pixels = try {
             decodeBaseline(jpeg)
@@ -107,6 +108,7 @@ private data class ParsedJpeg(
     val restartInterval: Int,
     val iccProfile: SkcmsICCProfile?,
     val origin: SkEncodedOrigin,
+    val coding: JpegCoding,
 )
 
 private data class Component(
@@ -124,6 +126,11 @@ private data class Frame(
     val height: Int,
     val components: List<Component>,
 )
+
+private enum class JpegCoding {
+    kBaseline,
+    kProgressive,
+}
 
 private class HuffmanTable(lengths: IntArray, symbols: IntArray) {
     private val entries: List<Entry>
@@ -167,6 +174,8 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
     var height = 0
     var frameComponents: List<Component>? = null
     var scanComponents: List<Component>? = null
+    var scanData = ByteArray(0)
+    var coding: JpegCoding? = null
     var restartInterval = 0
     var origin = SkEncodedOrigin.kTopLeft
     val iccChunks = ArrayList<Pair<Int, ByteArray>>()
@@ -186,38 +195,51 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                 val payloadStart = offset + 2
                 val payloadEnd = offset + length
                 if (length < 2 || payloadEnd > data.size) return null
-                val current = parseSos(data, payloadStart, payloadEnd, frameComponents) ?: return null
+                val currentCoding = coding ?: return null
+                val current = parseSos(
+                    data,
+                    payloadStart,
+                    payloadEnd,
+                    frameComponents,
+                    currentCoding == JpegCoding.kProgressive,
+                ) ?: return null
                 scanComponents = current
                 offset = payloadEnd
                 val scanStart = offset
                 while (offset + 1 < data.size) {
                     if (data[offset] == 0xFF.toByte()) {
+                        val markerStart = offset
                         var markerOffset = offset + 1
                         while (markerOffset < data.size && data[markerOffset] == 0xFF.toByte()) markerOffset++
                         if (markerOffset >= data.size) return null
                         val next = data[markerOffset].toInt() and 0xFF
                         if (next != 0x00 && next !in 0xD0..0xD7) {
-                            val scan = data.copyOfRange(scanStart, offset)
-                            if (next != MARKER_EOI) return null
-                            return buildParsed(
-                                width,
-                                height,
-                                quantTables,
-                                dcTables,
-                                acTables,
-                                scanComponents,
-                                scan,
-                                restartInterval,
-                                parseIccProfile(iccChunks, iccChunkCount),
-                                origin,
-                            )
+                            scanData = data.copyOfRange(scanStart, offset)
+                            if (next == MARKER_EOI) {
+                                return buildParsed(
+                                    width,
+                                    height,
+                                    quantTables,
+                                    dcTables,
+                                    acTables,
+                                    if (currentCoding == JpegCoding.kProgressive) frameComponents else scanComponents,
+                                    scanData,
+                                    restartInterval,
+                                    parseIccProfile(iccChunks, iccChunkCount),
+                                    origin,
+                                    currentCoding,
+                                )
+                            }
+                            if (currentCoding == JpegCoding.kBaseline) return null
+                            offset = markerStart
+                            break
                         }
                         offset = markerOffset + 1
                     } else {
                         offset++
                     }
                 }
-                return null
+                if (offset + 1 >= data.size) return null
             }
             else -> {
                 if (offset + 2 > data.size) return null
@@ -238,13 +260,14 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                             iccChunks += index to payload
                         }
                     }
-                    MARKER_SOF0 -> {
-                        val frame = parseSof0(data, payloadStart, payloadEnd) ?: return null
+                    MARKER_SOF0, MARKER_SOF2 -> {
+                        if (coding != null) return null
+                        val frame = parseSof(data, payloadStart, payloadEnd) ?: return null
                         width = frame.width
                         height = frame.height
                         frameComponents = frame.components
+                        coding = if (marker == MARKER_SOF0) JpegCoding.kBaseline else JpegCoding.kProgressive
                     }
-                    MARKER_SOF2 -> return null
                     MARKER_DRI -> {
                         if (payloadEnd - payloadStart != 2) return null
                         restartInterval = readU16BE(data, payloadStart)
@@ -254,7 +277,23 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
             }
         }
     }
-    return null
+    return if (scanComponents != null && coding != null) {
+        buildParsed(
+            width,
+            height,
+            quantTables,
+            dcTables,
+            acTables,
+            if (coding == JpegCoding.kProgressive) frameComponents else scanComponents,
+            scanData,
+            restartInterval,
+            parseIccProfile(iccChunks, iccChunkCount),
+            origin,
+            coding,
+        )
+    } else {
+        null
+    }
 }
 
 private fun buildParsed(
@@ -268,10 +307,19 @@ private fun buildParsed(
     restartInterval: Int,
     iccProfile: SkcmsICCProfile?,
     origin: SkEncodedOrigin,
+    coding: JpegCoding,
 ): ParsedJpeg? {
     val cs = components ?: return null
     if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
     if (cs.size != 1 && cs.size != 3) return null
+    if (coding == JpegCoding.kProgressive) {
+        for (component in cs) {
+            if (component.h !in 1..4 || component.v !in 1..4) return null
+            if (component.quantTable !in quantTables.indices || quantTables[component.quantTable] == null) return null
+        }
+        if (scanData.isEmpty()) return null
+        return ParsedJpeg(width, height, quantTables, dcTables, acTables, cs, scanData, restartInterval, iccProfile, origin, coding)
+    }
     for (component in cs) {
         if (component.h !in 1..2 || component.v !in 1..2) return null
         if (
@@ -300,7 +348,7 @@ private fun buildParsed(
         if (y.h == 1 && y.v != 1) return null
     }
     if (scanData.isEmpty()) return null
-    return ParsedJpeg(width, height, quantTables, dcTables, acTables, cs, scanData, restartInterval, iccProfile, origin)
+    return ParsedJpeg(width, height, quantTables, dcTables, acTables, cs, scanData, restartInterval, iccProfile, origin, coding)
 }
 
 private fun parseDqt(data: ByteArray, start: Int, end: Int, tables: Array<IntArray?>) {
@@ -345,7 +393,7 @@ private fun parseDht(
     if (p != end) fail()
 }
 
-private fun parseSof0(data: ByteArray, start: Int, end: Int): Frame? {
+private fun parseSof(data: ByteArray, start: Int, end: Int): Frame? {
     if (end - start < 8) return null
     var p = start
     val precision = data[p++].toInt() and 0xFF
@@ -365,12 +413,23 @@ private fun parseSof0(data: ByteArray, start: Int, end: Int): Frame? {
     return Frame(width, height, components)
 }
 
-private fun parseSos(data: ByteArray, start: Int, end: Int, frameComponents: List<Component>?): List<Component>? {
+private fun parseSos(
+    data: ByteArray,
+    start: Int,
+    end: Int,
+    frameComponents: List<Component>?,
+    progressive: Boolean,
+): List<Component>? {
     val frame = frameComponents ?: return null
     if (end - start < 6) return null
     var p = start
     val componentCount = data[p++].toInt() and 0xFF
-    if (componentCount != frame.size || end - start != 4 + componentCount * 2) return null
+    if (end - start != 4 + componentCount * 2) return null
+    if (progressive) {
+        if (componentCount !in 1..frame.size) return null
+    } else if (componentCount != frame.size) {
+        return null
+    }
     val components = ArrayList<Component>(componentCount)
     val seen = HashSet<Int>()
     for (i in 0 until componentCount) {
@@ -383,7 +442,16 @@ private fun parseSos(data: ByteArray, start: Int, end: Int, frameComponents: Lis
     val spectralStart = data[p++].toInt() and 0xFF
     val spectralEnd = data[p++].toInt() and 0xFF
     val approx = data[p++].toInt() and 0xFF
-    if (spectralStart != 0 || spectralEnd != 63 || approx != 0) return null
+    if (progressive) {
+        val successiveHigh = approx ushr 4
+        val successiveLow = approx and 0x0F
+        if (spectralStart !in 0..63 || spectralEnd !in spectralStart..63) return null
+        if (successiveHigh > 13 || successiveLow > 13) return null
+        if (spectralStart == 0 && spectralEnd != 0) return null
+        if (spectralStart != 0 && componentCount != 1) return null
+    } else if (spectralStart != 0 || spectralEnd != 63 || approx != 0) {
+        return null
+    }
     return components
 }
 
