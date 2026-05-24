@@ -10,9 +10,11 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontMetrics
+import org.skia.foundation.SkFontVariation
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkTextEncoding
+import org.skia.foundation.SkTypeface
 import kotlin.random.Random
 
 class OpenTypeFontTest {
@@ -155,6 +157,21 @@ class OpenTypeFontTest {
         assertTrue(names.size >= 2)
         assertTrue(names.any { it.fString == "Liberation Sans" })
         assertTrue(names.any { it.fLanguage == "en" })
+    }
+
+    @Test
+    fun `copyTableData returns raw OpenType table bytes defensively`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val nameTag = SkFontVariation.Tag.of("name").raw
+
+        val table = requireNotNull(typeface.copyTableData(nameTag))
+        val secondRead = requireNotNull(typeface.copyTableData(nameTag))
+        table[0] = (table[0].toInt() xor 0x7F).toByte()
+
+        assertTrue(table.size > 6)
+        assertEquals(0, secondRead[0].toInt())
+        assertEquals(null, typeface.copyTableData(SkFontVariation.Tag.of("ZZZZ").raw))
+        assertEquals(null, SkTypeface.MakeEmpty().copyTableData(nameTag))
     }
 
     @Test
