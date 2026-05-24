@@ -910,7 +910,7 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `VP8 non B_PRED pipeline rejects B_PRED macroblocks`() {
+    fun `VP8 reconstruction pipeline accepts B_PRED macroblocks`() {
         val layout = Vp8LossyBitstreamLayout(
             header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
             coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = 0)),
@@ -924,18 +924,18 @@ class SkWebpKotlinCodecTest {
             ),
         )
 
-        assertEquals(
-            Vp8ReconstructionResult.Unsupported,
+        val result =
             reconstructVp8NonBPredKeyFramePlanes(
                 layout = layout,
                 macroblockModes = modes,
                 macroblockCoefficients = listOf(zeroVp8MacroblockCoefficients()),
-            ),
-        )
+            )
+        assertTrue(result is Vp8ReconstructionResult.Planes)
+        assertTrue((result as Vp8ReconstructionResult.Planes).planes.yPlane.all { it in 128..129 })
     }
 
     @Test
-    fun `VP8 non B_PRED parsed pipeline rejects B_PRED before coefficient decode`() {
+    fun `VP8 parsed pipeline reports invalid B_PRED coefficient data`() {
         val layout = Vp8LossyBitstreamLayout(
             header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
             coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = 1)),
@@ -950,7 +950,7 @@ class SkWebpKotlinCodecTest {
         )
 
         assertEquals(
-            Vp8ReconstructionResult.Unsupported,
+            Vp8ReconstructionResult.Invalid,
             reconstructVp8NonBPredKeyFramePlanes(
                 data = ByteArray(0),
                 layout = layout,
@@ -1635,7 +1635,7 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `VP8 lossy helper keeps B_PRED outside supported pixel subset`() {
+    fun `VP8 lossy helper reconstructs B_PRED luma macroblocks`() {
         val layout = Vp8LossyBitstreamLayout(
             header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
             coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = 0)),
@@ -1649,14 +1649,41 @@ class SkWebpKotlinCodecTest {
             ),
         )
 
-        assertEquals(
-            Vp8ReconstructionResult.Unsupported,
+        val result =
             reconstructVp8NonBPredKeyFramePlanes(
                 layout = layout,
                 macroblockModes = modes,
                 macroblockCoefficients = listOf(zeroVp8MacroblockCoefficients()),
+            )
+        assertTrue(result is Vp8ReconstructionResult.Planes)
+        val planes = (result as Vp8ReconstructionResult.Planes).planes
+        assertEquals(128, planes.yPlane[0])
+        assertEquals(128, planes.uPlane[0])
+        assertEquals(128, planes.vPlane[0])
+    }
+
+    @Test
+    fun `decodes VP8 lossy B_PRED keyframe pixels`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8ChunkWithPartitions(
+                    width = 2,
+                    height = 2,
+                    firstPartition = vp8BPredFirstPartition(),
+                    coefficients = ByteArray(64),
+                ),
             ),
+        )!!
+        val dst = SkBitmap(
+            width = 2,
+            height = 2,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
         )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertArrayEquals(IntArray(4) { argb(128, 128, 128) }, dst.pixels8888)
     }
 
     @Test
@@ -2540,6 +2567,27 @@ class SkWebpKotlinCodecTest {
             }
             writeBit(0) // Macroblock skip flags omitted.
             writeBit(0) // Y DC mode.
+            writeBit(0) // UV DC mode.
+        }.toByteArray()
+
+    private fun vp8BPredFirstPartition(): ByteArray =
+        Vp8TestBitWriter().apply {
+            writeBit(0) // YUV color space.
+            writeBit(0) // No pixel value clamp.
+            writeBit(0) // Segmentation disabled.
+            writeBit(0) // Normal loop filter disabled by level 0.
+            writeLiteral(0, 6)
+            writeLiteral(0, 3)
+            writeBit(0) // Loop filter deltas disabled.
+            writeLiteral(0, 2) // One coefficient partition.
+            writeLiteral(0, 7)
+            repeat(5) { writeSignedDelta(0) }
+            repeat(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) {
+                writeBit(0)
+            }
+            writeBit(0) // Macroblock skip flags omitted.
+            repeat(4) { writeBit(1) } // B_PRED luma mode.
+            repeat(16) { writeBit(0) } // B_DC subblock modes.
             writeBit(0) // UV DC mode.
         }.toByteArray()
 
