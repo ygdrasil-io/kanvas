@@ -1,15 +1,30 @@
 package org.skia.tests
 
-import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.testing.SimilarityTracker
+import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
-@Disabled("STUB.COLOR_FILTER_PRIV: SkColorFilterPriv::WithWorkingFormat requires per-pixel colour-space xform steps in the raster pipeline — see API_FINALIZATION_PLAN.md")
 class AlternateLumaTest {
 
     @Test
     fun `AlternateLumaGM matches reference`() {
         val gm = AlternateLumaGM()
-        TestUtils.runGmTest(gm)
+        val rendered = TestUtils.runGmTest(gm)
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "Missing reference image ${gm.name()}.png")
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 8)
+        TestReport.recordDetailed("AlternateLumaGM", comparison)
+        if (comparison.similarity < 4.0) {
+            TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
+        }
+        val accepted = SimilarityTracker.updateScore("AlternateLumaGM", comparison.similarity)
+        assertTrue(accepted, "AlternateLumaGM regressed below ratchet")
+        assertTrue(
+            comparison.similarity >= 4.0,
+            "AlternateLumaGM similarity ${"%.2f".format(comparison.similarity)}% < 4.0% floor",
+        )
     }
 }

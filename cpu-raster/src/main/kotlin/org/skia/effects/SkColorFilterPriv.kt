@@ -5,9 +5,10 @@ import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkColorFilter
+import org.skia.foundation.SkColorSpace
 
 /**
- * R-final.S **STUB.COLOR_FILTER_PRIV** — surface stub for Skia's
+ * R-final.S — private color-filter helpers for Skia's
  * `src/core/SkColorFilterPriv.h::SkColorFilterPriv::WithWorkingFormat`.
  *
  * `WithWorkingFormat` wraps an inner [SkColorFilter] so that it runs
@@ -16,16 +17,9 @@ import org.skia.foundation.SkColorFilter
  * pixel into the target colour space, invokes the inner filter, then
  * re-premultiplies and converts back to the device colour space.
  *
- * `:kanvas-skia`'s raster pipeline does not yet model working-format
- * colour-space conversions per filter ; implementing this path requires
- * hooking `SkColorSpaceXformSteps` into the per-pixel filter call,
- * which is deferred. The API is exposed here so that the
- * `AlternateLuma` port (see
- * [`AlternateLumaGM`](../../../../tests/AlternateLumaGM.kt)) compiles
- * and references the documented surface.
- *
- * A future implementation can replace [withWorkingFormat]'s body
- * without touching call sites.
+ * The raster wrapper delegates to [SkColorFilter.makeWithWorkingColorSpace],
+ * which runs the child through `SkColorSpaceXformSteps` before and after
+ * the child filter.
  */
 @Suppress("UNUSED_PARAMETER")
 public object SkColorFilterPriv {
@@ -56,18 +50,21 @@ public object SkColorFilterPriv {
      * space before passing it to [child], and converts the result back
      * to the device space afterwards.
      *
-     * @throws NotImplementedError always — pending implementation.
+     * Returns [child] unchanged when ([tf], [gamut]) describes sRGB.
      */
     public fun withWorkingFormat(
         child: SkColorFilter,
         tf: SkcmsTransferFunction,
         gamut: SkcmsMatrix3x3,
         at: SkAlphaType,
-    ): SkColorFilter = throw NotImplementedError(
-        "STUB.COLOR_FILTER_PRIV: SkColorFilterPriv::WithWorkingFormat requires " +
-            "per-pixel colour-space xform steps in the raster pipeline — " +
-            "see API_FINALIZATION_PLAN.md.",
-    )
+    ): SkColorFilter {
+        require(at == SkAlphaType.kUnpremul) {
+            "SkColorFilterPriv.withWorkingFormat currently supports kUnpremul only, got $at"
+        }
+        val workingCS = SkColorSpace.makeRGB(tf, gamut)
+            ?: error("Invalid working colour space for SkColorFilterPriv.withWorkingFormat")
+        return child.makeWithWorkingColorSpace(workingCS)
+    }
 
     private object GaussianColorFilter : SkColorFilter() {
         override fun filterColor4f(src: SkColor4f): SkColor4f {
