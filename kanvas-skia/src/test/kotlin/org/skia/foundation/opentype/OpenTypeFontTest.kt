@@ -523,6 +523,25 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `drawString paints later COLRv0 layers over earlier layers`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV0(glyphs[0], glyphs[1], glyphs[1]))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val font = SkFont(typeface, 96f)
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, font, paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+    }
+
+    @Test
     fun `drawString falls back to monochrome when color tables are malformed`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
