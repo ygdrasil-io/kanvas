@@ -19,8 +19,10 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sign
 
 /**
  * Pure-Kotlin OpenType/TrueType font manager.
@@ -83,6 +85,7 @@ public class OpenTypeTypeface private constructor(
     private val font: ParsedTrueTypeFont,
     override val fontStyle: SkFontStyle,
     private val paletteSelection: OpenTypePaletteSelection = OpenTypePaletteSelection.Default,
+    private val variationPosition: OpenTypeVariationPosition = OpenTypeVariationPosition.Default,
 ) : SkTypeface() {
     override fun countGlyphs(): Int = font.numGlyphs
 
@@ -113,14 +116,14 @@ public class OpenTypeTypeface private constructor(
         size: SkScalar,
         scaleX: SkScalar,
         skewX: SkScalar,
-    ): SkPath? = font.glyphPath(glyphId, size, scaleX, skewX)
+    ): SkPath? = font.glyphPath(glyphId, size, scaleX, skewX, variationPosition)
 
     override fun getGlyphBoundsInternal(
         glyphId: Int,
         size: SkScalar,
         scaleX: SkScalar,
         skewX: SkScalar,
-    ): SkRect = font.glyphBounds(glyphId, size, scaleX, skewX)
+    ): SkRect = font.glyphBounds(glyphId, size, scaleX, skewX, variationPosition)
 
     override fun getKerningPairAdjustments(glyphs: ShortArray): IntArray? =
         font.kerningPairAdjustments(glyphs)
@@ -161,7 +164,7 @@ public class OpenTypeTypeface private constructor(
             val glyphId = glyphs[i]
             val layers = font.colorLayers(glyphId)
             if (layers.isEmpty()) {
-                val glyphPath = font.glyphPath(glyphId, size, scaleX, skewX)
+                val glyphPath = font.glyphPath(glyphId, size, scaleX, skewX, variationPosition)
                 if (glyphPath != null && !glyphPath.isEmpty()) {
                     out.add(OpenTypeColorPath(null, positionedPath(glyphPath, penX, y)))
                 }
@@ -172,7 +175,7 @@ public class OpenTypeTypeface private constructor(
                         COLR_FOREGROUND_PALETTE_INDEX -> null
                         else -> palette.getOrNull(layer.paletteIndex) ?: return null
                     }
-                    val layerPath = font.glyphPath(layer.glyphId, size, scaleX, skewX) ?: continue
+                    val layerPath = font.glyphPath(layer.glyphId, size, scaleX, skewX, variationPosition) ?: continue
                     if (!layerPath.isEmpty()) {
                         out.add(OpenTypeColorPath(color, positionedPath(layerPath, penX, y)))
                     }
@@ -203,7 +206,7 @@ public class OpenTypeTypeface private constructor(
         }
         for (i in glyphs.indices) {
             val glyphId = glyphs[i]
-            val glyphPath = font.glyphPath(glyphId, size, scaleX, skewX)
+            val glyphPath = font.glyphPath(glyphId, size, scaleX, skewX, variationPosition)
             if (glyphPath != null && !glyphPath.isEmpty()) {
                 builder.addPathOffset(glyphPath, penX, y)
             }
@@ -244,7 +247,7 @@ public class OpenTypeTypeface private constructor(
         for (i in cps.indices) {
             val glyphId = cps[i]
             if (bounds != null) {
-                val glyphBounds = font.glyphBounds(glyphId, size, scaleX, skewX)
+                val glyphBounds = font.glyphBounds(glyphId, size, scaleX, skewX, variationPosition)
                 if (!glyphBounds.isEmpty) {
                     val shifted = SkRect.MakeLTRB(
                         glyphBounds.left + advance,
@@ -299,12 +302,16 @@ public class OpenTypeTypeface private constructor(
     }
 
     override fun makeClone(args: SkFontArguments): SkTypeface? {
-        // Variation deltas are deliberately not applied in this first slice.
-        return OpenTypeTypeface(font, fontStyle, OpenTypePaletteSelection.from(args.palette))
+        return OpenTypeTypeface(
+            font,
+            fontStyle,
+            OpenTypePaletteSelection.from(args.palette),
+            font.variationPosition(args.variationDesignPosition),
+        )
     }
 
     internal fun withFontStyle(style: SkFontStyle): OpenTypeTypeface =
-        OpenTypeTypeface(font, style, paletteSelection)
+        OpenTypeTypeface(font, style, paletteSelection, variationPosition)
 
     private fun positionedPath(path: SkPath, x: SkScalar, y: SkScalar): SkPath =
         SkPathBuilder()
@@ -352,6 +359,7 @@ private class ParsedTrueTypeFont(
     private val kern: KernTable?,
     private val gpos: GposPairTable?,
     private val color: OpenTypeColorFont?,
+    private val gvar: GvarTable?,
 ) {
     private val pathCache = HashMap<Int, GlyphOutline?>()
 
@@ -391,8 +399,28 @@ private class ParsedTrueTypeFont(
     fun colorPaint(glyphId: Int): OpenTypeColorPaint? =
         color?.v1PaintsByGlyph?.get(glyphId)
 
-    fun glyphBounds(glyphId: Int, size: Float, scaleX: Float, skewX: Float): SkRect {
-        val outline = glyphOutline(glyphId) ?: return SkRect.MakeEmpty()
+    fun variationPosition(position: SkFontArguments.VariationPosition): OpenTypeVariationPosition {
+        if (variationAxes.isEmpty() || position.coordinates.isEmpty()) return OpenTypeVariationPosition.Default
+        val values = variationAxes.associate { it.tag to it.default }.toMutableMap()
+        for (coordinate in position.coordinates) {
+            val axis = variationAxes.firstOrNull { it.tag == coordinate.axis } ?: continue
+            values[axis.tag] = coordinate.value.coerceIn(axis.min, axis.max)
+        }
+        val normalized = FloatArray(variationAxes.size)
+        variationAxes.forEachIndexed { index, axis ->
+            val value = values[axis.tag] ?: axis.default
+            normalized[index] = when {
+                value == axis.default -> 0f
+                value < axis.default && axis.default != axis.min -> (value - axis.default) / (axis.default - axis.min)
+                value > axis.default && axis.max != axis.default -> (value - axis.default) / (axis.max - axis.default)
+                else -> 0f
+            }.coerceIn(-1f, 1f)
+        }
+        return if (normalized.all { it == 0f }) OpenTypeVariationPosition.Default else OpenTypeVariationPosition(normalized)
+    }
+
+    fun glyphBounds(glyphId: Int, size: Float, scaleX: Float, skewX: Float, variation: OpenTypeVariationPosition): SkRect {
+        val outline = glyphOutline(glyphId, variation) ?: return SkRect.MakeEmpty()
         if (outline.points.isEmpty()) return SkRect.MakeEmpty()
         var l = Float.POSITIVE_INFINITY
         var t = Float.POSITIVE_INFINITY
@@ -406,8 +434,8 @@ private class ParsedTrueTypeFont(
         return if (l.isFinite()) SkRect.MakeLTRB(l, t, r, b) else SkRect.MakeEmpty()
     }
 
-    fun glyphPath(glyphId: Int, size: Float, scaleX: Float, skewX: Float): SkPath? {
-        val outline = glyphOutline(glyphId) ?: return null
+    fun glyphPath(glyphId: Int, size: Float, scaleX: Float, skewX: Float, variation: OpenTypeVariationPosition): SkPath? {
+        val outline = glyphOutline(glyphId, variation) ?: return null
         if (outline.contours.isEmpty()) return null
         val builder = SkPathBuilder().setFillType(SkPathFillType.kWinding)
         for (contour in outline.contours) {
@@ -417,10 +445,14 @@ private class ParsedTrueTypeFont(
         return if (out.isEmpty()) null else out
     }
 
-    private fun glyphOutline(glyphId: Int): GlyphOutline? =
-        pathCache.getOrPut(glyphId) { readGlyph(glyphId, depth = 0) }
+    private fun glyphOutline(glyphId: Int, variation: OpenTypeVariationPosition): GlyphOutline? =
+        if (variation.isDefault || gvar == null) {
+            pathCache.getOrPut(glyphId) { readGlyph(glyphId, depth = 0, variation = OpenTypeVariationPosition.Default) }
+        } else {
+            readGlyph(glyphId, depth = 0, variation = variation)
+        }
 
-    private fun readGlyph(glyphId: Int, depth: Int): GlyphOutline? {
+    private fun readGlyph(glyphId: Int, depth: Int, variation: OpenTypeVariationPosition): GlyphOutline? {
         if (glyphId < 0 || glyphId >= numGlyphs || depth > 8) return null
         val glyf = tables["glyf"] ?: return null
         val start = glyphOffsets[glyphId]
@@ -430,11 +462,16 @@ private class ParsedTrueTypeFont(
         val p = glyf.offset + start
         if (!fits(p, 10, bytes.size)) return null
         val numberOfContours = i16(p).toInt()
-        if (numberOfContours >= 0) return readSimpleGlyph(p, numberOfContours)
-        return readCompositeGlyph(p, depth)
+        if (numberOfContours >= 0) return readSimpleGlyph(glyphId, p, numberOfContours, variation)
+        return readCompositeGlyph(p, depth, variation)
     }
 
-    private fun readSimpleGlyph(p: Int, numberOfContours: Int): GlyphOutline? {
+    private fun readSimpleGlyph(
+        glyphId: Int,
+        p: Int,
+        numberOfContours: Int,
+        variation: OpenTypeVariationPosition,
+    ): GlyphOutline? {
         if (numberOfContours == 0) return GlyphOutline(emptyList())
         var off = p + 10
         if (!fits(off, numberOfContours * 2, bytes.size)) return null
@@ -461,7 +498,7 @@ private class ParsedTrueTypeFont(
                 repeat(repeat) { if (i < pointCount) flags[i++] = flag }
             }
         }
-        val xs = IntArray(pointCount)
+        val xs = FloatArray(pointCount)
         var x = 0
         for (j in 0 until pointCount) {
             val flag = flags[j]
@@ -476,9 +513,9 @@ private class ParsedTrueTypeFont(
                 }
             }
             x += dx
-            xs[j] = x
+            xs[j] = x.toFloat()
         }
-        val ys = IntArray(pointCount)
+        val ys = FloatArray(pointCount)
         var y = 0
         for (j in 0 until pointCount) {
             val flag = flags[j]
@@ -493,7 +530,15 @@ private class ParsedTrueTypeFont(
                 }
             }
             y += dy
-            ys[j] = y
+            ys[j] = y.toFloat()
+        }
+        if (!variation.isDefault && gvar != null) {
+            gvar.simpleGlyphDeltas(glyphId, pointCount, variation.normalizedCoordinates)?.let { deltas ->
+                for (pointIndex in 0 until pointCount) {
+                    xs[pointIndex] += deltas.x[pointIndex]
+                    ys[pointIndex] += deltas.y[pointIndex]
+                }
+            }
         }
         val contours = ArrayList<List<TtPoint>>(numberOfContours)
         var start = 0
@@ -508,7 +553,7 @@ private class ParsedTrueTypeFont(
         return GlyphOutline(contours)
     }
 
-    private fun readCompositeGlyph(p: Int, depth: Int): GlyphOutline? {
+    private fun readCompositeGlyph(p: Int, depth: Int, variation: OpenTypeVariationPosition): GlyphOutline? {
         var off = p + 10
         val contours = ArrayList<List<TtPoint>>()
         do {
@@ -545,25 +590,25 @@ private class ParsedTrueTypeFont(
                     c = f2dot14(off + 4); d = f2dot14(off + 6); off += 8
                 }
             }
-            val child = readGlyph(componentGlyph, depth + 1)
+            val child = readGlyph(componentGlyph, depth + 1, variation)
             child?.contours?.forEach { contour ->
                 contours.add(contour.map { pt ->
                     val x = a * pt.x + b * pt.y + dx
                     val y = c * pt.x + d * pt.y + dy
-                    TtPoint(x.toInt(), y.toInt(), pt.onCurve)
+                    TtPoint(x.toInt().toFloat(), y.toInt().toFloat(), pt.onCurve)
                 })
             }
         } while ((flags and MORE_COMPONENTS) != 0)
         return GlyphOutline(contours)
     }
 
-    private fun transformX(x: Int, y: Int, size: Float, scaleX: Float, skewX: Float): Float {
+    private fun transformX(x: Float, y: Float, size: Float, scaleX: Float, skewX: Float): Float {
         val s = scale(size)
         val sy = -y * s
         return x * s * scaleX + skewX * sy
     }
 
-    private fun transformY(y: Int, size: Float): Float = -y * scale(size)
+    private fun transformY(y: Float, size: Float): Float = -y * scale(size)
 
     private fun emitContour(
         builder: SkPathBuilder,
@@ -727,13 +772,14 @@ private class ParsedTrueTypeFont(
             val gpos = if (kern == null && "kern" !in tables) parseGposPairTable(bytes, tables["GPOS"], numGlyphs) else null
             val variationAxes = parseFvarAxes(bytes, tables["fvar"]).orEmpty()
             val color = parseColorFont(bytes, tables["COLR"], tables["CPAL"])
+            val gvar = parseGvarTable(bytes, tables["gvar"], variationAxes.size, numGlyphs)
 
             return ParsedTrueTypeFont(
                 bytes, tables, unitsPerEm, indexToLocFormat, numGlyphs, numHMetrics,
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
                 avg, sxHeight, sCapHeight, underlinePosition, underlineThickness,
                 strikeoutPosition, strikeoutThickness, familyName, names?.postScriptName, localizedNames,
-                variationAxes, cmap, advances, bearings, offsets, kern, gpos, color,
+                variationAxes, cmap, advances, bearings, offsets, kern, gpos, color, gvar,
             )
         }
 
@@ -850,6 +896,51 @@ private class ParsedTrueTypeFont(
                     nameId = reader.u16(off + 18) ?: return null,
                 )
             }
+        }
+
+        private fun parseGvarTable(
+            bytes: ByteArray,
+            table: TableRecord?,
+            axisCount: Int,
+            glyphCount: Int,
+        ): GvarTable? {
+            table ?: return null
+            if (axisCount <= 0 || glyphCount <= 0 || table.length < 20) return null
+            val tableEnd = table.offset + table.length
+            val reader = SfntReader(bytes, tableEnd)
+            val majorVersion = reader.u16(table.offset) ?: return null
+            val minorVersion = reader.u16(table.offset + 2) ?: return null
+            if (majorVersion != 1 || minorVersion != 0) return null
+            val parsedAxisCount = reader.u16(table.offset + 4) ?: return null
+            if (parsedAxisCount != axisCount) return null
+            val sharedTupleCount = reader.u16(table.offset + 6) ?: return null
+            val sharedTupleOffset = reader.u32(table.offset + 8)?.toIntOrNull() ?: return null
+            val parsedGlyphCount = reader.u16(table.offset + 12) ?: return null
+            if (parsedGlyphCount != glyphCount) return null
+            val flags = reader.u16(table.offset + 14) ?: return null
+            val glyphDataOffset = reader.u32(table.offset + 16)?.toIntOrNull() ?: return null
+            val sharedTupleStart = table.offset + sharedTupleOffset
+            if (!reader.fits(sharedTupleStart, sharedTupleCount.toLong() * axisCount.toLong() * 2L)) return null
+            val sharedTuples = List(sharedTupleCount) { tupleIndex ->
+                FloatArray(axisCount) { axis ->
+                    reader.f2Dot14(sharedTupleStart + tupleIndex * axisCount * 2 + axis * 2) ?: return null
+                }
+            }
+            val longOffsets = (flags and GVAR_LONG_OFFSETS) != 0
+            val offsetsStart = table.offset + 20
+            val offsets = IntArray(glyphCount + 1)
+            if (longOffsets) {
+                if (!reader.fits(offsetsStart, (glyphCount + 1).toLong() * 4L)) return null
+                for (i in 0..glyphCount) offsets[i] = reader.u32(offsetsStart + i * 4)?.toIntOrNull() ?: return null
+            } else {
+                if (!reader.fits(offsetsStart, (glyphCount + 1).toLong() * 2L)) return null
+                for (i in 0..glyphCount) offsets[i] = (reader.u16(offsetsStart + i * 2) ?: return null) * 2
+            }
+            val glyphDataStart = table.offset + glyphDataOffset
+            if (!reader.fits(glyphDataStart, 0)) return null
+            for (i in 0 until offsets.lastIndex) if (offsets[i] > offsets[i + 1]) return null
+            if (offsets.last() < 0 || !reader.fits(glyphDataStart, offsets.last())) return null
+            return GvarTable(bytes, tableEnd, axisCount, sharedTuples, offsets, glyphDataStart)
         }
 
         private fun parseColorFont(
@@ -1688,6 +1779,11 @@ private class SfntReader(
         return bytes[offset].toInt() and 0xFF
     }
 
+    fun i8(offset: Int): Byte? {
+        if (!fits(offset, 1)) return null
+        return bytes[offset]
+    }
+
     fun u32(offset: Int): Long? {
         if (!fits(offset, 4)) return null
         return ((bytes[offset].toLong() and 0xFF) shl 24) or
@@ -1799,12 +1895,224 @@ private data class GposClassDef(private val classes: Map<Int, Int>) {
         }
 }
 private data class NameRecord(val value: String, val platform: Int, val language: Int)
-private data class TtPoint(val x: Int, val y: Int, val onCurve: Boolean)
+private data class TtPoint(val x: Float, val y: Float, val onCurve: Boolean)
 private data class GlyphOutline(val contours: List<List<TtPoint>>) {
     val points: List<TtPoint> = contours.flatten()
 }
+private data class OpenTypeVariationPosition(val normalizedCoordinates: FloatArray) {
+    val isDefault: Boolean = normalizedCoordinates.isEmpty() || normalizedCoordinates.all { it == 0f }
+
+    companion object {
+        val Default = OpenTypeVariationPosition(FloatArray(0))
+    }
+}
+private data class GlyphDeltas(val x: FloatArray, val y: FloatArray)
+
+private class GvarTable(
+    private val bytes: ByteArray,
+    private val limit: Int,
+    private val axisCount: Int,
+    private val sharedTuples: List<FloatArray>,
+    private val glyphOffsets: IntArray,
+    private val glyphDataStart: Int,
+) {
+    fun simpleGlyphDeltas(glyphId: Int, pointCount: Int, normalizedCoordinates: FloatArray): GlyphDeltas? {
+        if (glyphId < 0 || glyphId + 1 >= glyphOffsets.size || pointCount <= 0) return null
+        val start = glyphDataStart + glyphOffsets[glyphId]
+        val end = glyphDataStart + glyphOffsets[glyphId + 1]
+        if (start == end) return null
+        val reader = SfntReader(bytes, min(limit, end))
+        if (!reader.fits(start, 4)) return null
+        val tupleVariationCountField = reader.u16(start) ?: return null
+        val tupleVariationCount = tupleVariationCountField and GVAR_TUPLE_COUNT_MASK
+        if (tupleVariationCount <= 0) return null
+        val offsetToData = reader.u16(start + 2) ?: return null
+        val tupleDataStart = start + offsetToData
+        if (!reader.fits(tupleDataStart, 0)) return null
+        val headers = ArrayList<GvarTupleHeader>(tupleVariationCount)
+        var headerOffset = start + 4
+        repeat(tupleVariationCount) {
+            if (!reader.fits(headerOffset, 4)) return null
+            val variationDataSize = reader.u16(headerOffset) ?: return null
+            val tupleIndex = reader.u16(headerOffset + 2) ?: return null
+            headerOffset += 4
+            val peak = when {
+                (tupleIndex and GVAR_EMBEDDED_PEAK_TUPLE) != 0 -> {
+                    if (!reader.fits(headerOffset, axisCount * 2)) return null
+                    FloatArray(axisCount) { axis -> reader.f2Dot14(headerOffset + axis * 2) ?: return null }
+                        .also { headerOffset += axisCount * 2 }
+                }
+                else -> sharedTuples.getOrNull(tupleIndex and GVAR_TUPLE_INDEX_MASK) ?: return null
+            }
+            val startTuple: FloatArray?
+            val endTuple: FloatArray?
+            if ((tupleIndex and GVAR_INTERMEDIATE_REGION) != 0) {
+                if (!reader.fits(headerOffset, axisCount * 4)) return null
+                startTuple = FloatArray(axisCount) { axis -> reader.f2Dot14(headerOffset + axis * 2) ?: return null }
+                headerOffset += axisCount * 2
+                endTuple = FloatArray(axisCount) { axis -> reader.f2Dot14(headerOffset + axis * 2) ?: return null }
+                headerOffset += axisCount * 2
+            } else {
+                startTuple = null
+                endTuple = null
+            }
+            headers.add(GvarTupleHeader(variationDataSize, tupleIndex, peak, startTuple, endTuple))
+        }
+        if (tupleDataStart < headerOffset || tupleDataStart > end) return null
+        var dataOffset = tupleDataStart
+        val sharedPoints: IntArray?
+        if ((tupleVariationCountField and GVAR_SHARED_POINT_NUMBERS) != 0) {
+            val points = readPackedPoints(reader, dataOffset, pointCount + PHANTOM_POINT_COUNT) ?: return null
+            sharedPoints = points.values
+            dataOffset = points.nextOffset
+        } else {
+            sharedPoints = null
+        }
+        val x = FloatArray(pointCount)
+        val y = FloatArray(pointCount)
+        for (header in headers) {
+            if (!reader.fits(dataOffset, header.variationDataSize)) return null
+            val tupleEnd = dataOffset + header.variationDataSize
+            var tupleDataOffset = dataOffset
+            val points = if ((header.tupleIndex and GVAR_PRIVATE_POINT_NUMBERS) != 0) {
+                val packed = readPackedPoints(reader, tupleDataOffset, pointCount + PHANTOM_POINT_COUNT) ?: return null
+                tupleDataOffset = packed.nextOffset
+                packed.values
+            } else {
+                sharedPoints
+            }
+            val targetPoints = points ?: IntArray(pointCount + PHANTOM_POINT_COUNT) { it }
+            val xDeltas = readPackedDeltas(reader, tupleDataOffset, targetPoints.size) ?: return null
+            tupleDataOffset = xDeltas.nextOffset
+            val yDeltas = readPackedDeltas(reader, tupleDataOffset, targetPoints.size) ?: return null
+            if (yDeltas.nextOffset > tupleEnd) return null
+            val scalar = tupleScalar(normalizedCoordinates, header.peak, header.startTuple, header.endTuple)
+            if (scalar != 0f) {
+                for (i in targetPoints.indices) {
+                    val point = targetPoints[i]
+                    if (point in 0 until pointCount) {
+                        x[point] += xDeltas.values[i] * scalar
+                        y[point] += yDeltas.values[i] * scalar
+                    }
+                }
+            }
+            dataOffset = tupleEnd
+        }
+        return GlyphDeltas(x, y)
+    }
+
+    private fun tupleScalar(
+        normalizedCoordinates: FloatArray,
+        peak: FloatArray,
+        startTuple: FloatArray?,
+        endTuple: FloatArray?,
+    ): Float {
+        var scalar = 1f
+        for (axis in 0 until axisCount) {
+            val coordinate = normalizedCoordinates.getOrElse(axis) { 0f }
+            val peakValue = peak[axis]
+            if (peakValue == 0f) continue
+            val axisScalar = if (startTuple != null && endTuple != null) {
+                val start = startTuple[axis]
+                val end = endTuple[axis]
+                when {
+                    coordinate < start || coordinate > end || start > peakValue || peakValue > end -> 0f
+                    coordinate == peakValue -> 1f
+                    coordinate < peakValue -> (coordinate - start) / (peakValue - start)
+                    else -> (end - coordinate) / (end - peakValue)
+                }
+            } else {
+                if (coordinate == 0f || coordinate.sign != peakValue.sign || abs(coordinate) > abs(peakValue)) {
+                    0f
+                } else {
+                    coordinate / peakValue
+                }
+            }
+            scalar *= axisScalar
+            if (scalar == 0f) return 0f
+        }
+        return scalar
+    }
+
+    private fun readPackedPoints(reader: SfntReader, offset: Int, maxPointCount: Int): PackedInts? {
+        var off = offset
+        val first = reader.u8(off++) ?: return null
+        if (first == 0) return PackedInts(IntArray(maxPointCount) { it }, off)
+        val pointCount = if ((first and 0x80) != 0) {
+            val second = reader.u8(off++) ?: return null
+            ((first and 0x7F) shl 8) or second
+        } else {
+            first
+        }
+        if (pointCount < 0 || pointCount > maxPointCount) return null
+        val points = IntArray(pointCount)
+        var pointIndex = 0
+        var point = 0
+        while (pointIndex < pointCount) {
+            val control = reader.u8(off++) ?: return null
+            val wordDeltas = (control and 0x80) != 0
+            val runCount = (control and 0x7F) + 1
+            if (pointIndex + runCount > pointCount) return null
+            repeat(runCount) {
+                val delta = if (wordDeltas) {
+                    val value = reader.u16(off) ?: return null
+                    off += 2
+                    value
+                } else {
+                    reader.u8(off++) ?: return null
+                }
+                point += delta
+                if (point >= maxPointCount) return null
+                points[pointIndex++] = point
+            }
+        }
+        return PackedInts(points, off)
+    }
+
+    private fun readPackedDeltas(reader: SfntReader, offset: Int, count: Int): PackedInts? {
+        val values = IntArray(count)
+        var off = offset
+        var index = 0
+        while (index < count) {
+            val control = reader.u8(off++) ?: return null
+            val runCount = (control and 0x3F) + 1
+            if (index + runCount > count) return null
+            when {
+                (control and 0x80) != 0 -> repeat(runCount) {
+                    values[index++] = 0
+                }
+                (control and 0x40) != 0 -> repeat(runCount) {
+                    values[index++] = reader.i16(off)?.toInt() ?: return null
+                    off += 2
+                }
+                else -> repeat(runCount) {
+                    values[index++] = reader.i8(off)?.toInt() ?: return null
+                    off += 1
+                }
+            }
+        }
+        return PackedInts(values, off)
+    }
+}
+
+private data class GvarTupleHeader(
+    val variationDataSize: Int,
+    val tupleIndex: Int,
+    val peak: FloatArray,
+    val startTuple: FloatArray?,
+    val endTuple: FloatArray?,
+)
+private data class PackedInts(val values: IntArray, val nextOffset: Int)
 
 private const val COLR_FOREGROUND_PALETTE_INDEX = 0xFFFF
+private const val GVAR_LONG_OFFSETS = 0x0001
+private const val GVAR_SHARED_POINT_NUMBERS = 0x8000
+private const val GVAR_TUPLE_COUNT_MASK = 0x0FFF
+private const val GVAR_EMBEDDED_PEAK_TUPLE = 0x8000
+private const val GVAR_INTERMEDIATE_REGION = 0x4000
+private const val GVAR_PRIVATE_POINT_NUMBERS = 0x2000
+private const val GVAR_TUPLE_INDEX_MASK = 0x0FFF
+private const val PHANTOM_POINT_COUNT = 4
 
 private const val FLAG_ON_CURVE = 0x01
 private const val FLAG_X_SHORT = 0x02

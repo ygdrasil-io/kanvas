@@ -21,6 +21,9 @@ font work from PR #786.
 - Defensive raw SFNT table reads via `SkTypeface.copyTableData(tag)` for
   binary-backed OpenType typefaces.
 - Variable-font axis enumeration through OpenType `fvar` metadata.
+- Initial variable-font outline support for simple TrueType glyphs through
+  OpenType `gvar` version 1.0 shared/embedded peak tuples, applied from
+  `SkFontArguments.VariationPosition` on `OpenTypeTypeface.makeClone(args)`.
 - Color-font metadata parsing for `CPAL` v0 palettes and `COLR` v0 base
   glyph/layer records, plus COLRv0 layered glyph rendering through
   `SkCanvas.drawString` with `SkFontArguments.Palette` palette selection
@@ -45,9 +48,9 @@ are unavailable.
 - Fontations factories: `SkTypeface_Fontations.MakeFromStream` and
   `MakeFromData` remain documented stubs because they require the external
   Rust Fontations stack through UniFFI/JNI or another native bridge.
-- Variable fonts beyond axis metadata: `gvar` outline deltas, `avar`, and
-  applying `SkFontArguments.VariationPosition` to OpenType outlines are
-  separate work.
+- Variable font support beyond the initial simple-glyph `gvar` subset:
+  composite glyph variation deltas, `avar`, IUP edge cases, hinting, and
+  phantom advance deltas are separate work.
 - Color font rendering beyond COLRv0: COLRv1 draw-path integration,
   gradients, composites, reusable layer graphs, CBDT/sbix bitmap strikes,
   and SVG-in-OpenType glyphs are not part of the current pure Kotlin backend.
@@ -104,8 +107,9 @@ rendering work:
   deferred until a fixture or product need requires them.
 - [#874](https://github.com/ygdrasil-io/kanvas/issues/874): `GPOS` pair
   positioning as the minimal shaping increment and kerning fallback.
-- [#875](https://github.com/ygdrasil-io/kanvas/issues/875): apply `fvar` /
-  `gvar` variation positions to TrueType outlines.
+- [#875](https://github.com/ygdrasil-io/kanvas/issues/875): apply broader
+  `fvar` / `gvar` variation positions to TrueType outlines beyond the initial
+  simple-glyph subset.
 - [#876](https://github.com/ygdrasil-io/kanvas/issues/876): parse COLRv0 and
   CPAL metadata with a synthetic color-font fixture.
 - [#877](https://github.com/ygdrasil-io/kanvas/issues/877): plan color-font
