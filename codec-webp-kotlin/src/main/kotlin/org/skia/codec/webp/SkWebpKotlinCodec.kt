@@ -2384,6 +2384,50 @@ internal fun reconstructVp8Intra4x4Block(
     )
 }
 
+internal fun reconstructVp8BPredLumaMacroblock(
+    lumaSubblockModes: List<Vp8LumaSubblockPredictionMode>,
+    left: IntArray?,
+    top: IntArray?,
+    topLeft: Int?,
+    coefficientsByBlock: Array<IntArray>,
+    dcQuant: Int,
+    acQuant: Int,
+    topRight: IntArray? = null,
+): IntArray {
+    require(lumaSubblockModes.size == VP8_LUMA_BLOCK_COUNT)
+    require(left == null || left.size >= VP8_MACROBLOCK_SIZE)
+    require(top == null || top.size >= VP8_MACROBLOCK_SIZE)
+    require(topRight == null || topRight.size >= VP8_BLOCK_SIZE)
+    require(coefficientsByBlock.size == VP8_LUMA_BLOCK_COUNT)
+
+    val out = IntArray(VP8_MACROBLOCK_SIZE * VP8_MACROBLOCK_SIZE)
+    for (blockY in 0 until VP8_BLOCKS_PER_MACROBLOCK_SIDE) {
+        for (blockX in 0 until VP8_BLOCKS_PER_MACROBLOCK_SIDE) {
+            val blockIndex = blockY * VP8_BLOCKS_PER_MACROBLOCK_SIDE + blockX
+            val pixelX = blockX * VP8_BLOCK_SIZE
+            val pixelY = blockY * VP8_BLOCK_SIZE
+            val block = reconstructVp8LumaSubblock(
+                mode = lumaSubblockModes[blockIndex],
+                left = bPredLeftSamples(out, left, pixelX, pixelY),
+                top = bPredTopSamples(out, top, topRight, pixelX, pixelY),
+                topLeft = bPredTopLeftSample(out, left, top, topLeft, pixelX, pixelY),
+                coefficients = coefficientsByBlock[blockIndex],
+                dcQuant = dcQuant,
+                acQuant = acQuant,
+            )
+            out.copyBlock(
+                stride = VP8_MACROBLOCK_SIZE,
+                blockX = pixelX,
+                blockY = pixelY,
+                blockWidth = VP8_BLOCK_SIZE,
+                blockHeight = VP8_BLOCK_SIZE,
+                block = block,
+            )
+        }
+    }
+    return out
+}
+
 internal fun reconstructVp8Intra16x16LumaMacroblock(
     mode: Vp8LumaPredictionMode,
     left: IntArray?,
@@ -2909,6 +2953,205 @@ internal fun composeVp8Yuv420ToRgba(
     }
     return pixels
 }
+
+internal fun reconstructVp8LumaSubblock(
+    mode: Vp8LumaSubblockPredictionMode,
+    left: IntArray,
+    top: IntArray,
+    topLeft: Int,
+    coefficients: IntArray,
+    dcQuant: Int,
+    acQuant: Int,
+): IntArray {
+    require(left.size >= VP8_BLOCK_SIZE)
+    require(top.size >= VP8_BLOCK_SIZE * 2)
+    require(topLeft in 0..255)
+    require(coefficients.size == VP8_BLOCK_COEFFICIENT_COUNT)
+
+    val predicted = predictVp8LumaSubblock(mode, left, top, topLeft)
+    val residual = inverseVp8Dct4x4(
+        dequantizeVp8CoefficientBlock(
+            coefficients = coefficients,
+            dcQuant = dcQuant,
+            acQuant = acQuant,
+        ),
+    )
+    return IntArray(VP8_BLOCK_SIZE * VP8_BLOCK_SIZE) { index ->
+        clip8(predicted[index] + residual[index])
+    }
+}
+
+private fun predictVp8LumaSubblock(
+    mode: Vp8LumaSubblockPredictionMode,
+    left: IntArray,
+    top: IntArray,
+    topLeft: Int,
+): IntArray {
+    val pred = IntArray(VP8_BLOCK_SIZE * VP8_BLOCK_SIZE)
+    fun set(x: Int, y: Int, value: Int) {
+        pred[y * VP8_BLOCK_SIZE + x] = value
+    }
+
+    when (mode) {
+        Vp8LumaSubblockPredictionMode.B_DC -> {
+            val dc = (left[0] + left[1] + left[2] + left[3] + top[0] + top[1] + top[2] + top[3] + 4) shr 3
+            for (i in pred.indices) pred[i] = dc
+        }
+        Vp8LumaSubblockPredictionMode.B_TM -> {
+            for (y in 0 until VP8_BLOCK_SIZE) {
+                for (x in 0 until VP8_BLOCK_SIZE) set(x, y, clip8(left[y] + top[x] - topLeft))
+            }
+        }
+        Vp8LumaSubblockPredictionMode.B_VE -> {
+            val values = intArrayOf(
+                avg3(topLeft, top[0], top[1]),
+                avg3(top[0], top[1], top[2]),
+                avg3(top[1], top[2], top[3]),
+                avg3(top[2], top[3], top[4]),
+            )
+            for (y in 0 until VP8_BLOCK_SIZE) for (x in 0 until VP8_BLOCK_SIZE) set(x, y, values[x])
+        }
+        Vp8LumaSubblockPredictionMode.B_HE -> {
+            val values = intArrayOf(
+                avg3(topLeft, left[0], left[1]),
+                avg3(left[0], left[1], left[2]),
+                avg3(left[1], left[2], left[3]),
+                avg3(left[2], left[3], left[3]),
+            )
+            for (y in 0 until VP8_BLOCK_SIZE) for (x in 0 until VP8_BLOCK_SIZE) set(x, y, values[y])
+        }
+        Vp8LumaSubblockPredictionMode.B_LD -> {
+            val p0 = avg3(top[0], top[1], top[2])
+            val p1 = avg3(top[1], top[2], top[3])
+            val p2 = avg3(top[2], top[3], top[4])
+            val p3 = avg3(top[3], top[4], top[5])
+            val p4 = avg3(top[4], top[5], top[6])
+            val p5 = avg3(top[5], top[6], top[7])
+            val p6 = avg3(top[6], top[7], top[7])
+            val values = intArrayOf(p0, p1, p2, p3, p1, p2, p3, p4, p2, p3, p4, p5, p3, p4, p5, p6)
+            for (i in values.indices) pred[i] = values[i]
+        }
+        Vp8LumaSubblockPredictionMode.B_RD -> {
+            val p0 = avg3(left[0], topLeft, top[0])
+            val p1 = avg3(topLeft, top[0], top[1])
+            val p2 = avg3(top[0], top[1], top[2])
+            val p3 = avg3(top[1], top[2], top[3])
+            val p4 = avg3(left[1], left[0], topLeft)
+            val p5 = avg3(left[2], left[1], left[0])
+            val p6 = avg3(left[3], left[2], left[1])
+            val values = intArrayOf(p0, p1, p2, p3, p4, p0, p1, p2, p5, p4, p0, p1, p6, p5, p4, p0)
+            for (i in values.indices) pred[i] = values[i]
+        }
+        Vp8LumaSubblockPredictionMode.B_VR -> {
+            val p0 = avg2(topLeft, top[0])
+            val p1 = avg2(top[0], top[1])
+            val p2 = avg2(top[1], top[2])
+            val p3 = avg2(top[2], top[3])
+            val p4 = avg3(left[0], topLeft, top[0])
+            val p5 = avg3(topLeft, top[0], top[1])
+            val p6 = avg3(top[0], top[1], top[2])
+            val p7 = avg3(top[1], top[2], top[3])
+            val p8 = avg3(left[1], left[0], topLeft)
+            val p9 = avg3(left[2], left[1], left[0])
+            val values = intArrayOf(p0, p1, p2, p3, p4, p5, p6, p7, p8, p0, p1, p2, p9, p4, p5, p6)
+            for (i in values.indices) pred[i] = values[i]
+        }
+        Vp8LumaSubblockPredictionMode.B_VL -> {
+            val p0 = avg2(top[0], top[1])
+            val p1 = avg2(top[1], top[2])
+            val p2 = avg2(top[2], top[3])
+            val p3 = avg2(top[3], top[4])
+            val p4 = avg3(top[0], top[1], top[2])
+            val p5 = avg3(top[1], top[2], top[3])
+            val p6 = avg3(top[2], top[3], top[4])
+            val p7 = avg3(top[3], top[4], top[5])
+            val p8 = avg3(top[4], top[5], top[6])
+            val p9 = avg3(top[5], top[6], top[7])
+            val values = intArrayOf(p0, p1, p2, p3, p4, p5, p6, p7, p1, p2, p3, p8, p5, p6, p7, p9)
+            for (i in values.indices) pred[i] = values[i]
+        }
+        Vp8LumaSubblockPredictionMode.B_HD -> {
+            val p0 = avg2(left[0], topLeft)
+            val p1 = avg3(left[0], topLeft, top[0])
+            val p2 = avg3(topLeft, top[0], top[1])
+            val p3 = avg3(top[0], top[1], top[2])
+            val p4 = avg2(left[1], left[0])
+            val p5 = avg3(left[1], left[0], topLeft)
+            val p6 = avg2(left[2], left[1])
+            val p7 = avg3(left[2], left[1], left[0])
+            val p8 = avg2(left[3], left[2])
+            val p9 = avg3(left[3], left[2], left[1])
+            val values = intArrayOf(p0, p1, p2, p3, p4, p5, p0, p1, p6, p7, p4, p5, p8, p9, p6, p7)
+            for (i in values.indices) pred[i] = values[i]
+        }
+        Vp8LumaSubblockPredictionMode.B_HU -> {
+            val p0 = avg2(left[0], left[1])
+            val p1 = avg3(left[0], left[1], left[2])
+            val p2 = avg2(left[1], left[2])
+            val p3 = avg3(left[1], left[2], left[3])
+            val p4 = avg2(left[2], left[3])
+            val p5 = avg3(left[2], left[3], left[3])
+            val p6 = left[3]
+            val values = intArrayOf(p0, p1, p2, p3, p2, p3, p4, p5, p4, p5, p6, p6, p6, p6, p6, p6)
+            for (i in values.indices) pred[i] = values[i]
+        }
+    }
+    return pred
+}
+
+private fun bPredLeftSamples(
+    macroblock: IntArray,
+    externalLeft: IntArray?,
+    pixelX: Int,
+    pixelY: Int,
+): IntArray = IntArray(VP8_BLOCK_SIZE) { y ->
+    when {
+        pixelX > 0 -> macroblock[(pixelY + y) * VP8_MACROBLOCK_SIZE + pixelX - 1]
+        externalLeft != null -> externalLeft[pixelY + y]
+        else -> 129
+    }
+}
+
+private fun bPredTopSamples(
+    macroblock: IntArray,
+    externalTop: IntArray?,
+    externalTopRight: IntArray?,
+    pixelX: Int,
+    pixelY: Int,
+): IntArray {
+    val samples = IntArray(VP8_BLOCK_SIZE * 2)
+    for (x in samples.indices) {
+        val sourceX = pixelX + x
+        samples[x] = when {
+            pixelY > 0 && sourceX < VP8_MACROBLOCK_SIZE -> macroblock[(pixelY - 1) * VP8_MACROBLOCK_SIZE + sourceX]
+            pixelY > 0 && externalTopRight != null -> externalTopRight[sourceX - VP8_MACROBLOCK_SIZE]
+            pixelY > 0 -> samples[x - 1]
+            externalTop != null && sourceX < VP8_MACROBLOCK_SIZE -> externalTop[sourceX]
+            externalTopRight != null -> externalTopRight[sourceX - VP8_MACROBLOCK_SIZE]
+            externalTop != null -> externalTop[VP8_MACROBLOCK_SIZE - 1]
+            else -> 127
+        }
+    }
+    return samples
+}
+
+private fun bPredTopLeftSample(
+    macroblock: IntArray,
+    externalLeft: IntArray?,
+    externalTop: IntArray?,
+    externalTopLeft: Int?,
+    pixelX: Int,
+    pixelY: Int,
+): Int = when {
+    pixelX > 0 && pixelY > 0 -> macroblock[(pixelY - 1) * VP8_MACROBLOCK_SIZE + pixelX - 1]
+    pixelX > 0 -> externalTop?.get(pixelX - 1) ?: 127
+    pixelY > 0 -> externalLeft?.get(pixelY - 1) ?: 129
+    else -> externalTopLeft ?: 127
+}
+
+private fun avg2(a: Int, b: Int): Int = (a + b + 1) shr 1
+
+private fun avg3(a: Int, b: Int, c: Int): Int = (a + 2 * b + c + 2) shr 2
 
 internal data class Vp8SimpleLoopFilterSample(
     val p0: Int,
