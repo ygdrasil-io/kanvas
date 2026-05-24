@@ -10,7 +10,9 @@ import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkColorFilters
+import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkVertices
 import org.graphiks.math.SkPoint
 
@@ -102,7 +104,7 @@ class DrawVerticesTest {
             SkVertices.VertexMode.kTriangles,
             arrayOf(SkPoint(5f, 5f)),
         )
-        canvas.drawVertices(v, SkBlendMode.kSrcOver, SkPaint(0xFF000000.toInt()))
+        canvas.drawVertices(v, SkBlendMode.kDst, SkPaint(0xFF000000.toInt()))
         assertEquals(before.toList(), bm.pixels.toList())
     }
 
@@ -151,7 +153,7 @@ class DrawVerticesTest {
             arrayOf(SkPoint(5f, 5f), SkPoint(25f, 5f), SkPoint(5f, 25f)),
             colors = intArrayOf(red, red, red),
         )
-        canvas.drawVertices(v, SkBlendMode.kSrcOver, SkPaint(0xFF000000.toInt()))
+        canvas.drawVertices(v, SkBlendMode.kDst, SkPaint(0xFF000000.toInt()))
         // Interior pixel is red.
         assertEquals(red, bm.getPixel(10, 10))
         // Outside stays white.
@@ -170,7 +172,7 @@ class DrawVerticesTest {
             arrayOf(SkPoint(5f, 5f), SkPoint(35f, 5f), SkPoint(5f, 35f)),
             colors = intArrayOf(red, green, blue),
         )
-        canvas.drawVertices(v, SkBlendMode.kSrcOver, SkPaint(0xFF000000.toInt()))
+        canvas.drawVertices(v, SkBlendMode.kDst, SkPaint(0xFF000000.toInt()))
         // Near red vertex (5, 5) → strong red.
         val nearRed = bm.getPixel(7, 7)
         val rR = (nearRed shr 16) and 0xFF
@@ -200,10 +202,25 @@ class DrawVerticesTest {
             arrayOf(SkPoint(5f, 5f), SkPoint(25f, 5f), SkPoint(5f, 25f)),
             colors = intArrayOf(red, red, red),
         )
-        // Paint alpha = 0 — vertex colors get modulated to transparent
-        // → no pixel writes under SrcOver.
-        canvas.drawVertices(v, SkBlendMode.kSrcOver, SkPaint(0x00000000))
+        // Paint alpha = 0: vertex colors get modulated to transparent.
+        canvas.drawVertices(v, SkBlendMode.kDst, SkPaint(0x00000000))
         assertEquals(before.toList(), bm.pixels.toList())
+    }
+
+    @Test
+    fun `per-vertex colors ignore opaque paint color when no shader is present`() {
+        val (bm, canvas) = newWhiteCanvas()
+        val red = 0xFFFF0000.toInt()
+        val bluePaint = SkPaint(0xFF0000FF.toInt()).apply {
+            blendMode = SkBlendMode.kSrc
+        }
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangles,
+            arrayOf(SkPoint(5f, 5f), SkPoint(25f, 5f), SkPoint(5f, 25f)),
+            colors = intArrayOf(red, red, red),
+        )
+        canvas.drawVertices(v, SkBlendMode.kSrc, bluePaint)
+        assertEquals(red, bm.getPixel(10, 10))
     }
 
     // ─── Phase I5.3.c — texture sampling via shader ────────────────
@@ -279,6 +296,37 @@ class DrawVerticesTest {
         assertEquals(0xFF00FF00.toInt(), bm.getPixel(25, 5))
         // (25, 25) in dst ↔ atlas (12.5, 12.5) — white.
         assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(25, 25))
+    }
+
+    @Test
+    fun `texCoords with linear gradient shader sample gradient local coordinates`() {
+        val (bm, canvas) = newWhiteCanvas(40, 40)
+        val paint = SkPaint(0xFF000000.toInt()).apply {
+            shader = SkLinearGradient.Make(
+                SkPoint(0f, 0f),
+                SkPoint(16f, 0f),
+                intArrayOf(0xFFFF0000.toInt(), 0xFF0000FF.toInt()),
+                null,
+                SkTileMode.kClamp,
+            )
+            blendMode = SkBlendMode.kSrc
+            isAntiAlias = false
+        }
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangles,
+            arrayOf(SkPoint(0f, 0f), SkPoint(32f, 0f), SkPoint(0f, 32f)),
+            texCoords = arrayOf(SkPoint(0f, 0f), SkPoint(16f, 0f), SkPoint(0f, 16f)),
+        )
+        canvas.drawVertices(v, SkBlendMode.kModulate, paint)
+
+        val left = bm.getPixel(4, 4)
+        val right = bm.getPixel(24, 4)
+        assertTrue(((left shr 16) and 0xFF) > (left and 0xFF)) {
+            "left sample should be closer to red: ${Integer.toHexString(left)}"
+        }
+        assertTrue((right and 0xFF) > ((right shr 16) and 0xFF)) {
+            "right sample should be closer to blue: ${Integer.toHexString(right)}"
+        }
     }
 
     @Test
@@ -369,7 +417,7 @@ class DrawVerticesTest {
             blendMode = SkBlendMode.kSrc
             colorFilter = SkColorFilters.Blend(0xFF808080.toInt(), SkBlendMode.kDarken)
         }
-        canvas.drawVertices(v, SkBlendMode.kSrcOver, paint)
+        canvas.drawVertices(v, SkBlendMode.kDst, paint)
         assertEquals(0xFF800000.toInt(), bm.getPixel(6, 6))
     }
 
@@ -410,7 +458,7 @@ class DrawVerticesTest {
             colors = intArrayOf(vertexColor, vertexColor, vertexColor),
         )
         canvas.drawVertices(v, mode, paint)
-        val expected = SkBitmapDevice(SkBitmap(1, 1)).blendPixel(vertexColor, textureColor, mode)
+        val expected = SkBitmapDevice(SkBitmap(1, 1)).blendPixel(textureColor, vertexColor, mode)
         assertEquals(expected, bm.getPixel(6, 6))
     }
 }

@@ -365,9 +365,9 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      *     `w0 + w1 + w2 = 1` ;
      *  2. linearly interpolates the per-vertex ARGB values per
      *     channel ;
-     *  3. if [paint] has a shader, samples it in device space and
-     *     combines the vertex colour with the shader sample via
-     *     [vertexBlend] ;
+     *  3. if [paint] has a shader, combines that shader sample as
+     *     the blend src with the interpolated vertex colour as the
+     *     blend dst via [vertexBlend] ;
      *  4. modulates by `paint.color.alpha` (paint colour acts as a
      *     post-multiplier when [SkVertices.colors] are present) ;
      *  5. dispatches to [blend] with `paint.blendMode`.
@@ -435,7 +435,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 val vertexColor = transformPaintColor(SkColorSetARGB(ai, ri, gi, bi))
                 val combinedRaw = if (shader != null) {
                     shader.shadeRow(x, y, 1, shaderRow)
-                    blendPixel(vertexColor, shaderRow[0], vertexBlend)
+                    blendPixel(shaderRow[0], vertexColor, vertexBlend)
                 } else {
                     vertexColor
                 }
@@ -459,8 +459,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      *  2. linearly interpolate the texture coords to `(uvX, uvY)` ;
      *  3. sample the shader via [SkShader.sampleAtLocal] ;
      *  4. if [c0] / [c1] / [c2] are non-null, also interpolate the
-     *     vertex ARGB and combine `vertexColor × shaderSample` under
-     *     [vertexBlend] ;
+     *     vertex ARGB and combine `shaderSample` as src with
+     *     `vertexColor` as dst under [vertexBlend] ;
      *  5. modulate by `paint.color.alpha` ;
      *  6. dispatch to [blend] with `paint.blendMode`.
      *
@@ -545,8 +545,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      * interpolated vertex colour (passed as float per channel to
      * preserve barycentric precision) with the sampled texture
      * colour under the requested vertex blend mode. Honours the
-     * full [SkBlendMode] set, with the vertex colour as `src` and the
-     * sampled texture as `dst`.
+     * full [SkBlendMode] set, with the sampled texture as `src` and
+     * the vertex colour as `dst`.
      */
     private fun combineVertexColorTexture(
         vA: Float, vR: Float, vG: Float, vB: Float,
@@ -558,7 +558,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         val viG = vG.toInt().coerceIn(0, 255)
         val viB = vB.toInt().coerceIn(0, 255)
         val vertexColor = transformPaintColor(SkColorSetARGB(viA, viR, viG, viB))
-        return blendPixel(vertexColor, texColor, vertexBlend)
+        return blendPixel(texColor, vertexColor, vertexBlend)
     }
 
     /**
