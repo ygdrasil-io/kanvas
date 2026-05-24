@@ -242,7 +242,23 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `VP8L pixel decode rejects unsupported color transform`() {
+    fun `decodes VP8L color transform`() {
+        val expected = intArrayOf(
+            argb(0xFF, 0x5A, 0x40, 0x46),
+            argb(0xC0, 0x1E, 0x20, 0x78),
+        )
+        val multipliers = ColorTransformMultipliers(
+            greenToRed = 0x20,
+            greenToBlue = 0x10,
+            redToBlue = 0xE0,
+        )
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorTransformWebp(width = 2, height = 1, multipliers, expected))!!
+
+        assertWebpPixels(codec, width = 2, height = 1, expected)
+    }
+
+    @Test
+    fun `VP8L pixel decode rejects unsupported color indexing transform`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8lUnsupportedTransformWebp(width = 1, height = 1))!!
         val dst = SkBitmap(
             width = 1,
@@ -337,7 +353,7 @@ class SkWebpKotlinCodecTest {
         val writer = Vp8lTestBitWriter()
         writeVp8lHeaderBits(writer, width, height)
         writer.writeBits(1, 1)
-        writer.writeBits(1, 2) // color transform is not supported yet.
+        writer.writeBits(3, 2) // color indexing transform is not supported yet.
         return vp8lWebpFromBits(writer)
     }
 
@@ -448,6 +464,28 @@ class SkWebpKotlinCodecTest {
         writeVp8lLiteralImageData(writer, intArrayOf(argb(0xFF, 0, mode, 0)))
         writer.writeBits(0, 1) // transform_present terminator
         writeVp8lLiteralImageData(writer, residuals)
+        return vp8lWebpFromBits(writer)
+    }
+
+    private fun vp8lColorTransformWebp(
+        width: Int,
+        height: Int,
+        multipliers: ColorTransformMultipliers,
+        argb: IntArray,
+    ): ByteArray {
+        require(argb.size == width * height)
+        val transformed = IntArray(argb.size) { i -> applyColorTransformFixture(argb[i], multipliers) }
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(1, 1) // transform_present
+        writer.writeBits(1, 2) // color transform.
+        writer.writeBits(0, 3) // size_bits = 2, so this tiny fixture has one multiplier block.
+        writeVp8lLiteralImageData(
+            writer,
+            intArrayOf(argb(0xFF, multipliers.redToBlue, multipliers.greenToBlue, multipliers.greenToRed)),
+        )
+        writer.writeBits(0, 1) // transform_present terminator
+        writeVp8lLiteralImageData(writer, transformed)
         return vp8lWebpFromBits(writer)
     }
 
@@ -598,6 +636,12 @@ class SkWebpKotlinCodecTest {
     private fun green(pixel: Int): Int = (pixel ushr 8) and 0xFF
     private fun blue(pixel: Int): Int = pixel and 0xFF
 
+    private data class ColorTransformMultipliers(
+        val greenToRed: Int,
+        val greenToBlue: Int,
+        val redToBlue: Int,
+    )
+
     private fun assertWebpPixels(codec: SkCodec, width: Int, height: Int, expected: IntArray) {
         val dst = SkBitmap(
             width = width,
@@ -635,6 +679,22 @@ class SkWebpKotlinCodecTest {
         }
         return pixels
     }
+
+    private fun applyColorTransformFixture(pixel: Int, multipliers: ColorTransformMultipliers): Int {
+        val transformedRed = (red(pixel) - colorTransformDelta(multipliers.greenToRed, green(pixel))) and 0xFF
+        val transformedBlue = (
+            blue(pixel) -
+                colorTransformDelta(multipliers.greenToBlue, green(pixel)) -
+                colorTransformDelta(multipliers.redToBlue, red(pixel))
+            ) and 0xFF
+        return argb(alpha(pixel), transformedRed, green(pixel), transformedBlue)
+    }
+
+    private fun colorTransformDelta(multiplier: Int, color: Int): Int =
+        (signedByte(multiplier) * signedByte(color)) shr 5
+
+    private fun signedByte(value: Int): Int =
+        if ((value and 0x80) == 0) value and 0xFF else (value and 0xFF) - 256
 
     private fun predictorFixturePixel(pixels: IntArray, width: Int, x: Int, y: Int, mode: Int): Int {
         val left = pixels[y * width + x - 1]
