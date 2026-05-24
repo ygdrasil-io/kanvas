@@ -1092,6 +1092,7 @@ internal data class Vp8LossyFrameHeader(
     val clampType: Int,
     val macroblockWidth: Int,
     val macroblockHeight: Int,
+    val coefficientPartitionCount: Int = 1,
     val loopFilter: Vp8LoopFilterHeader,
     val quantization: Vp8QuantizationHeader,
 )
@@ -1117,6 +1118,24 @@ internal sealed interface Vp8LossyHeaderDecodeResult {
     data object Invalid : Vp8LossyHeaderDecodeResult
 }
 
+internal data class Vp8CoefficientPartition(
+    val offset: Int,
+    val end: Int,
+) {
+    val size: Int get() = end - offset
+}
+
+internal data class Vp8LossyBitstreamLayout(
+    val header: Vp8LossyFrameHeader,
+    val coefficientPartitions: List<Vp8CoefficientPartition>,
+)
+
+internal sealed interface Vp8LossyBitstreamLayoutDecodeResult {
+    data class Layout(val layout: Vp8LossyBitstreamLayout) : Vp8LossyBitstreamLayoutDecodeResult
+    data object Unsupported : Vp8LossyBitstreamLayoutDecodeResult
+    data object Invalid : Vp8LossyBitstreamLayoutDecodeResult
+}
+
 internal data class Vp8MacroblockMode(
     val yMode: Vp8LumaPredictionMode,
     val uvMode: Vp8IntraPredictionMode,
@@ -1132,19 +1151,49 @@ internal enum class Vp8LumaPredictionMode {
 }
 
 private fun decodeVp8LossyHeader(data: ByteArray, metadata: WebpMetadata): Vp8LossyHeaderDecodeResult {
+    return when (val result = decodeVp8LossyBitstreamLayout(data, metadata)) {
+        Vp8LossyBitstreamLayoutDecodeResult.Invalid -> Vp8LossyHeaderDecodeResult.Invalid
+        Vp8LossyBitstreamLayoutDecodeResult.Unsupported -> Vp8LossyHeaderDecodeResult.Unsupported
+        is Vp8LossyBitstreamLayoutDecodeResult.Layout -> Vp8LossyHeaderDecodeResult.Header(result.layout.header)
+    }
+}
+
+internal fun decodeVp8LossyBitstreamLayout(
+    data: ByteArray,
+    metadata: WebpMetadata,
+): Vp8LossyBitstreamLayoutDecodeResult {
     val payloadOffset = metadata.payloadOffset
     val payloadSize = metadata.payloadSize
-    if (payloadOffset < 0 || payloadSize < VP8_KEYFRAME_HEADER_SIZE) return Vp8LossyHeaderDecodeResult.Invalid
-    if (payloadOffset + payloadSize > data.size) return Vp8LossyHeaderDecodeResult.Invalid
+    if (payloadOffset < 0 || payloadSize < VP8_KEYFRAME_HEADER_SIZE) {
+        return Vp8LossyBitstreamLayoutDecodeResult.Invalid
+    }
+    if (payloadOffset + payloadSize > data.size) return Vp8LossyBitstreamLayoutDecodeResult.Invalid
     val frameTag = parseVp8FrameTag(data, payloadOffset, payloadSize.toLong())
-        ?: return Vp8LossyHeaderDecodeResult.Invalid
-    if (frameTag.firstPartitionSize == 0) return Vp8LossyHeaderDecodeResult.Unsupported
+        ?: return Vp8LossyBitstreamLayoutDecodeResult.Invalid
+    if (frameTag.firstPartitionSize == 0) return Vp8LossyBitstreamLayoutDecodeResult.Unsupported
 
     val firstPartitionOffset = payloadOffset + VP8_KEYFRAME_HEADER_SIZE
     val firstPartitionEnd = firstPartitionOffset + frameTag.firstPartitionSize
-    if (firstPartitionEnd > payloadOffset + payloadSize) return Vp8LossyHeaderDecodeResult.Invalid
+    if (firstPartitionEnd > payloadOffset + payloadSize) return Vp8LossyBitstreamLayoutDecodeResult.Invalid
     val reader = Vp8BoolReader(data, firstPartitionOffset, firstPartitionEnd)
-    return readVp8LossyFrameHeader(reader, metadata.width, metadata.height)
+    val header = when (val result = readVp8LossyFrameHeader(reader, metadata.width, metadata.height)) {
+        Vp8LossyHeaderDecodeResult.Invalid -> return Vp8LossyBitstreamLayoutDecodeResult.Invalid
+        Vp8LossyHeaderDecodeResult.Unsupported -> return Vp8LossyBitstreamLayoutDecodeResult.Unsupported
+        is Vp8LossyHeaderDecodeResult.Header -> result.header
+    }
+    val coefficientPartitions = readVp8CoefficientPartitions(
+        data = data,
+        payloadOffset = payloadOffset,
+        payloadSize = payloadSize,
+        firstPartitionEnd = firstPartitionEnd,
+        partitionCount = header.coefficientPartitionCount,
+    ) ?: return Vp8LossyBitstreamLayoutDecodeResult.Invalid
+    return Vp8LossyBitstreamLayoutDecodeResult.Layout(
+        Vp8LossyBitstreamLayout(
+            header = header,
+            coefficientPartitions = coefficientPartitions,
+        ),
+    )
 }
 
 internal fun readVp8LossyFrameHeader(
@@ -1166,7 +1215,7 @@ internal fun readVp8LossyFrameHeader(
     if (loopFilterDeltaEnabled != 0) return Vp8LossyHeaderDecodeResult.Unsupported
 
     val partitionBits = reader.readLiteral(2) ?: return Vp8LossyHeaderDecodeResult.Invalid
-    if (partitionBits != 0) return Vp8LossyHeaderDecodeResult.Unsupported
+    val coefficientPartitionCount = 1 shl partitionBits
 
     val yAcIndex = reader.readLiteral(7) ?: return Vp8LossyHeaderDecodeResult.Invalid
     val quantization = Vp8QuantizationHeader(
@@ -1184,6 +1233,7 @@ internal fun readVp8LossyFrameHeader(
             clampType = clampType,
             macroblockWidth = (width + 15) / 16,
             macroblockHeight = (height + 15) / 16,
+            coefficientPartitionCount = coefficientPartitionCount,
             loopFilter = Vp8LoopFilterHeader(
                 simpleFilter = simpleFilter != 0,
                 level = filterLevel,
@@ -1192,6 +1242,36 @@ internal fun readVp8LossyFrameHeader(
             quantization = quantization,
         ),
     )
+}
+
+private fun readVp8CoefficientPartitions(
+    data: ByteArray,
+    payloadOffset: Int,
+    payloadSize: Int,
+    firstPartitionEnd: Int,
+    partitionCount: Int,
+): List<Vp8CoefficientPartition>? {
+    if (partitionCount !in 1..8) return null
+    val payloadEnd = payloadOffset + payloadSize
+    val sizeTableSize = (partitionCount - 1) * 3
+    val coefficientPartitionOffset = firstPartitionEnd + sizeTableSize
+    if (coefficientPartitionOffset > payloadEnd) return null
+
+    val partitions = ArrayList<Vp8CoefficientPartition>(partitionCount)
+    var offset = coefficientPartitionOffset
+    for (partitionIndex in 0 until partitionCount) {
+        val end = if (partitionIndex == partitionCount - 1) {
+            payloadEnd
+        } else {
+            val sizeOffset = firstPartitionEnd + partitionIndex * 3
+            val size = read24LE(data, sizeOffset)
+            offset + size
+        }
+        if (end < offset || end > payloadEnd) return null
+        partitions += Vp8CoefficientPartition(offset = offset, end = end)
+        offset = end
+    }
+    return partitions
 }
 
 internal fun readVp8KeyFrameMacroblockModes(
