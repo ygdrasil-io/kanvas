@@ -820,6 +820,124 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 non B_PRED pipeline reconstructs a neutral keyframe macroblock`() {
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
+            coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = 0)),
+        )
+        val modes = listOf(
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.DC,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+            ),
+        )
+
+        val result = reconstructVp8NonBPredKeyFramePlanes(
+            layout = layout,
+            macroblockModes = modes,
+            macroblockCoefficients = listOf(zeroVp8MacroblockCoefficients()),
+        )
+
+        assertTrue(result is Vp8ReconstructionResult.Planes)
+        val planes = (result as Vp8ReconstructionResult.Planes).planes
+        assertEquals(16, planes.width)
+        assertEquals(16, planes.height)
+        assertTrue(planes.yPlane.all { it == 128 })
+        assertTrue(planes.uPlane.all { it == 128 })
+        assertTrue(planes.vPlane.all { it == 128 })
+        assertArrayEquals(IntArray(16 * 16) { argb(128, 128, 128) }, planes.toRgba())
+    }
+
+    @Test
+    fun `VP8 non B_PRED pipeline reconstructs adjacent macroblocks with parsed coefficients`() {
+        val partition = ByteArray(16)
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 2, macroblockHeight = 1, partitionCount = 1),
+            coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = partition.size)),
+        )
+        val modes = listOf(
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.DC,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+            ),
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.HORIZONTAL,
+                uvMode = Vp8IntraPredictionMode.HORIZONTAL,
+                skipCoefficients = false,
+            ),
+        )
+
+        val result = reconstructVp8NonBPredKeyFramePlanes(
+            data = partition,
+            layout = layout,
+            macroblockModes = modes,
+            probabilities = Vp8CoefficientProbabilities.filled(128),
+        )
+
+        assertTrue(result is Vp8ReconstructionResult.Planes)
+        val planes = (result as Vp8ReconstructionResult.Planes).planes
+        assertEquals(32, planes.width)
+        assertEquals(16, planes.height)
+        assertTrue(planes.yPlane.all { it == 128 })
+        assertTrue(planes.uPlane.all { it == 128 })
+        assertTrue(planes.vPlane.all { it == 128 })
+        assertArrayEquals(IntArray(32 * 16) { argb(128, 128, 128) }, planes.toRgba())
+    }
+
+    @Test
+    fun `VP8 non B_PRED pipeline rejects B_PRED macroblocks`() {
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
+            coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = 0)),
+        )
+        val modes = listOf(
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.B_PRED,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+                lumaSubblockModes = List(16) { Vp8LumaSubblockPredictionMode.B_DC },
+            ),
+        )
+
+        assertEquals(
+            Vp8ReconstructionResult.Unsupported,
+            reconstructVp8NonBPredKeyFramePlanes(
+                layout = layout,
+                macroblockModes = modes,
+                macroblockCoefficients = listOf(zeroVp8MacroblockCoefficients()),
+            ),
+        )
+    }
+
+    @Test
+    fun `VP8 non B_PRED parsed pipeline rejects B_PRED before coefficient decode`() {
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
+            coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = 1)),
+        )
+        val modes = listOf(
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.B_PRED,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+                lumaSubblockModes = List(16) { Vp8LumaSubblockPredictionMode.B_DC },
+            ),
+        )
+
+        assertEquals(
+            Vp8ReconstructionResult.Unsupported,
+            reconstructVp8NonBPredKeyFramePlanes(
+                data = ByteArray(0),
+                layout = layout,
+                macroblockModes = modes,
+                probabilities = Vp8CoefficientProbabilities.filled(128),
+            ),
+        )
+    }
+
+    @Test
     fun `VP8 coefficient probability update parser preserves base table without update bits`() {
         val base = Vp8CoefficientProbabilities.filled(128)
         val updateProbabilities = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 255 }
@@ -2352,6 +2470,14 @@ class SkWebpKotlinCodecTest {
                 uvDcDelta = 0,
                 uvAcDelta = 0,
             ),
+        )
+
+    private fun zeroVp8MacroblockCoefficients(): Vp8MacroblockCoefficients =
+        Vp8MacroblockCoefficients(
+            y2 = IntArray(16),
+            luma = Array(16) { IntArray(16) },
+            u = Array(4) { IntArray(16) },
+            v = Array(4) { IntArray(16) },
         )
 
     private fun colorCacheIndex(pixel: Int, bits: Int): Int =
