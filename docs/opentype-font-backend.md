@@ -57,6 +57,27 @@ APIs requiring shaping, variable-outline interpolation, color glyph paint
 graphs, or platform font fallback should stay documented as unsupported rather
 than silently approximated.
 
+## Shaping Audit
+
+The repository already has a JVM/AWT shaper in `cpu-raster`, but the pure
+Kotlin OpenType backend must remain usable without AWT or JNI. The current
+`kanvas-skia` text path for `OpenTypeTypeface` maps Unicode codepoints through
+`cmap`, places glyph paths in order, and now applies legacy `kern` pair
+adjustments. It does not perform full shaping.
+
+The smallest useful pure Kotlin shaping increment is `GPOS` pair positioning
+lookup type 2 as a kerning fallback when a font has no legacy `kern` table.
+This is directly measurable through the existing `measureTextInternal` and
+`makeTextPath` paths, requires no new public API, and can be tested with bundled
+Liberation fonts that contain `GPOS` data.
+
+`GSUB` substitutions, including standard ligatures, should be split into a
+separate ticket because they need cluster mapping and a clear policy for
+enabled features. Bidi, script itemization, mark positioning, cursive
+attachment, Indic/Arabic shaping, HarfBuzz parity, and multi-font fallback
+belong outside the OpenType typeface reader and should be tracked as dedicated
+`SkShaper` or text-layout work.
+
 ## Validation
 
 Run the focused OpenType tests:
