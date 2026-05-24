@@ -335,19 +335,20 @@ class SkGifKotlinCodecTest {
 
     @Test
     fun `rejects truncated extension sub-block`() {
+        val dataWithTrailer = gif(
+            width = 1,
+            height = 1,
+            palette = intArrayOf(RED, BLUE),
+            extensions = listOf(
+                byteArrayOf(0x21, 0xFE.toByte(), 0x05, 'o'.code.toByte(), 'o'.code.toByte()),
+            ),
+            frames = emptyList(),
+        )
+        val truncatedAtEof = dataWithTrailer.copyOf(dataWithTrailer.size - 1)
+
         assertNull(
             SkGifKotlinCodec.Decoder.make(
-                gif(
-                    width = 1,
-                    height = 1,
-                    palette = intArrayOf(RED, BLUE),
-                    extensions = listOf(
-                        byteArrayOf(0x21, 0xFE.toByte(), 0x05, 'o'.code.toByte(), 'o'.code.toByte()),
-                    ),
-                    frames = listOf(
-                        GifFrameSpec(0, 0, 1, 1, intArrayOf(0)),
-                    ),
-                ),
+                truncatedAtEof,
             ),
         )
     }
