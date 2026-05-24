@@ -136,16 +136,12 @@ tasks.register("checkPureKotlinCodecNoAwt") {
 
 tasks.register("checkProductionCodecRuntimeNoAwt") {
     group = "verification"
-    description = "Fails if production modules outside the legacy codec ImageIO backends depend on temporary AWT/ImageIO codec bundles."
+    description = "Fails if production modules depend on removed temporary AWT/ImageIO codec bundles."
 
     doLast {
-        val allowedProjects = forbiddenCodecBackendProjects + setOf(
-            "codec-awt-kotlin-comparison-tests",
-        )
         val violations = mutableListOf<String>()
 
         allprojects
-            .filter { project -> project.name !in allowedProjects }
             .forEach { project ->
                 productionProjectDependencyConfigurations
                     .mapNotNull { configurationName -> project.configurations.findByName(configurationName) }
@@ -162,7 +158,7 @@ tasks.register("checkProductionCodecRuntimeNoAwt") {
             throw GradleException(
                 buildString {
                     appendLine("Production modules must not depend on temporary AWT/ImageIO codec backends.")
-                    appendLine("Use :codec-all-kotlin for runtime codec dispatch, or keep ImageIO backends test-only.")
+                    appendLine("Use :codec-all-kotlin for runtime codec dispatch.")
                     violations.sorted().forEach { appendLine("- $it") }
                 }
             )
@@ -180,7 +176,6 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
         ":codec-all-kotlin:test",
         ":codec-real-image-tests:test",
         ":codec-all-kotlin:jar",
-        ":codec-awt-kotlin-comparison-tests:test",
         ":cpu-raster:testCodecWithKotlinBackend",
     )
 }

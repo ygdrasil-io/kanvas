@@ -9,9 +9,9 @@ import org.skia.foundation.SkBitmap
 /**
  * S7-A verification suite for the real (non-stub) [SkIcoDecoder.Decode]
  * implementation. We hand-build a 16x16 single-image ICO whose payload
- * is a freshly-encoded PNG and verify the decoder routes through to
- * [`org.skia.codec.png.SkPngCodec`] and surfaces the encoded image
- * back via [SkCodec.getImage].
+ * is a freshly-encoded PNG and verify the decoder routes through the
+ * registered PNG decoder and surfaces the encoded image back via
+ * [SkCodec.getImage].
  */
 class SkIcoDecoderRealTest {
 
@@ -65,7 +65,7 @@ class SkIcoDecoderRealTest {
     }
 
     @Test
-    fun `Decode picks the embedded PNG payload and decodes it through SkPngCodec`() {
+    fun `Decode picks the embedded PNG payload and decodes it through the PNG codec`() {
         val source = makeReferenceBitmap()
         val png: ByteArray? = SkPngEncoder.Encode(source)
         assertNotNull(png, "test prelude — PNG encoder must produce bytes")

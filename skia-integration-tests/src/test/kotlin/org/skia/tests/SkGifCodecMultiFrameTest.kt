@@ -10,7 +10,7 @@ import org.skia.tools.ToolUtils
 
 /**
  * Tests for the R-final.5 [SkCodec] multi-frame extension implemented
- * by [org.skia.codec.gif.SkGifCodec].
+ * by the registered GIF codec.
  */
 class SkGifCodecMultiFrameTest {
 

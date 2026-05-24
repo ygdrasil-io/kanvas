@@ -263,7 +263,7 @@ public class FlightAnimatedImageGM : AnimatedImageOrientationGM(
 /**
  * `stoplight_animated_image` GM — the `stoplight_h.webp` source variant
  * (animated WebP with non-trivial EXIF orientation). Animated WebP is
- * not yet supported by [org.skia.codec.webp.SkWebpCodec] and the
+ * not yet supported by the registered WebP codec and the
  * vendored resource (`images/stoplight_h.webp`) is missing, so this
  * GM falls back to the synthetic checker until both arrive.
  */
