@@ -258,16 +258,28 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `VP8L pixel decode rejects unsupported color indexing transform`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lUnsupportedTransformWebp(width = 1, height = 1))!!
-        val dst = SkBitmap(
-            width = 1,
-            height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+    fun `decodes VP8L packed color indexing transform`() {
+        val table = intArrayOf(
+            argb(0xFF, 0x10, 0x20, 0x30),
+            argb(0xFF, 0x20, 0x40, 0x60),
+            argb(0xFF, 0x30, 0x60, 0x90),
+            argb(0xFF, 0x40, 0x80, 0xC0),
         )
+        val indices = intArrayOf(0, 1, 2, 3, 0)
+        val expected = IntArray(indices.size) { table[indices[it]] }
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorIndexingWebp(width = 5, height = 1, table, indices))!!
 
-        assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+        assertWebpPixels(codec, width = 5, height = 1, expected)
+    }
+
+    @Test
+    fun `decodes VP8L unbundled color indexing transform and transparent invalid index`() {
+        val table = IntArray(17) { i -> argb(0xFF, i, i * 2, i * 3) }
+        val indices = intArrayOf(16, 17)
+        val expected = intArrayOf(table[16], 0)
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorIndexingWebp(width = 2, height = 1, table, indices))!!
+
+        assertWebpPixels(codec, width = 2, height = 1, expected)
     }
 
     @Test
@@ -346,14 +358,6 @@ class SkWebpKotlinCodecTest {
             writer.writeSymbol(blue, pixel and 0xFF)
             writer.writeSymbol(alpha, (pixel ushr 24) and 0xFF)
         }
-        return vp8lWebpFromBits(writer)
-    }
-
-    private fun vp8lUnsupportedTransformWebp(width: Int, height: Int): ByteArray {
-        val writer = Vp8lTestBitWriter()
-        writeVp8lHeaderBits(writer, width, height)
-        writer.writeBits(1, 1)
-        writer.writeBits(3, 2) // color indexing transform is not supported yet.
         return vp8lWebpFromBits(writer)
     }
 
@@ -486,6 +490,23 @@ class SkWebpKotlinCodecTest {
         )
         writer.writeBits(0, 1) // transform_present terminator
         writeVp8lLiteralImageData(writer, transformed)
+        return vp8lWebpFromBits(writer)
+    }
+
+    private fun vp8lColorIndexingWebp(width: Int, height: Int, table: IntArray, indices: IntArray): ByteArray {
+        require(table.size in 1..256)
+        require(indices.size == width * height)
+        val widthBits = colorIndexingWidthBits(table.size)
+        val packedWidth = (width + (1 shl widthBits) - 1) / (1 shl widthBits)
+        val indexedPixels = packColorIndexes(indices, width, height, packedWidth, widthBits)
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(1, 1) // transform_present
+        writer.writeBits(3, 2) // color indexing transform.
+        writer.writeBits(table.size - 1, 8)
+        writeVp8lLiteralImageData(writer, colorTableDeltas(table))
+        writer.writeBits(0, 1) // transform_present terminator
+        writeVp8lLiteralImageData(writer, indexedPixels)
         return vp8lWebpFromBits(writer)
     }
 
@@ -696,6 +717,48 @@ class SkWebpKotlinCodecTest {
     private fun signedByte(value: Int): Int =
         if ((value and 0x80) == 0) value and 0xFF else (value and 0xFF) - 256
 
+    private fun colorTableDeltas(table: IntArray): IntArray {
+        val deltas = IntArray(table.size)
+        var previous = 0
+        for (i in table.indices) {
+            deltas[i] = subtractPixels(table[i], previous)
+            previous = table[i]
+        }
+        return deltas
+    }
+
+    private fun packColorIndexes(
+        indices: IntArray,
+        width: Int,
+        height: Int,
+        packedWidth: Int,
+        widthBits: Int,
+    ): IntArray {
+        val packed = IntArray(packedWidth * height)
+        val pixelsPerPackedPixel = 1 shl widthBits
+        val indexBits = 8 ushr widthBits
+        val mask = (1 shl indexBits) - 1
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val index = indices[y * width + x]
+                require(index and mask == index)
+                val packedOffset = y * packedWidth + x / pixelsPerPackedPixel
+                val shift = (x and (pixelsPerPackedPixel - 1)) * indexBits
+                val green = green(packed[packedOffset]) or (index shl shift)
+                packed[packedOffset] = argb(0xFF, 0, green, 0)
+            }
+        }
+        return packed
+    }
+
+    private fun colorIndexingWidthBits(tableSize: Int): Int =
+        when (tableSize) {
+            in 1..2 -> 3
+            in 3..4 -> 2
+            in 5..16 -> 1
+            else -> 0
+        }
+
     private fun predictorFixturePixel(pixels: IntArray, width: Int, x: Int, y: Int, mode: Int): Int {
         val left = pixels[y * width + x - 1]
         val top = pixels[(y - 1) * width + x]
@@ -771,6 +834,14 @@ class SkWebpKotlinCodecTest {
 
     private fun colorCacheIndex(pixel: Int, bits: Int): Int =
         (pixel * 0x1e35a7bd) ushr (32 - bits)
+
+    private fun subtractPixels(pixel: Int, predictor: Int): Int =
+        argb(
+            alpha = (alpha(pixel) - alpha(predictor)) and 0xFF,
+            red = (red(pixel) - red(predictor)) and 0xFF,
+            green = (green(pixel) - green(predictor)) and 0xFF,
+            blue = (blue(pixel) - blue(predictor)) and 0xFF,
+        )
 
     private fun ByteArrayOutputStream.writeU32LE(value: Int) {
         write(value and 0xFF)
