@@ -55,11 +55,13 @@ public class SkWebpKotlinCodec internal constructor(
             return Result.kInvalidParameters
         }
         if (metadata.format == WebpBitstreamFormat.VP8) {
-            return when (decodeVp8LossyHeader(data, metadata)) {
-                Vp8LossyHeaderDecodeResult.Invalid -> Result.kErrorInInput
-                Vp8LossyHeaderDecodeResult.Unsupported,
-                is Vp8LossyHeaderDecodeResult.Header,
-                -> Result.kUnimplemented
+            return when (val decoded = decodeVp8LossyPixels(data, metadata)) {
+                Vp8LossyDecodeResult.Invalid -> Result.kErrorInInput
+                Vp8LossyDecodeResult.Unsupported -> Result.kUnimplemented
+                is Vp8LossyDecodeResult.Pixels -> {
+                    decoded.rgba.copyInto(dst.pixels8888)
+                    Result.kSuccess
+                }
             }
         }
         if (metadata.format != WebpBitstreamFormat.VP8L) {
@@ -1160,6 +1162,12 @@ internal sealed interface Vp8ReconstructionResult {
     data object Invalid : Vp8ReconstructionResult
 }
 
+internal sealed interface Vp8LossyDecodeResult {
+    data class Pixels(val rgba: IntArray) : Vp8LossyDecodeResult
+    data object Unsupported : Vp8LossyDecodeResult
+    data object Invalid : Vp8LossyDecodeResult
+}
+
 internal sealed interface Vp8LossyBitstreamLayoutDecodeResult {
     data class Layout(val layout: Vp8LossyBitstreamLayout) : Vp8LossyBitstreamLayoutDecodeResult
     data object Unsupported : Vp8LossyBitstreamLayoutDecodeResult
@@ -1316,12 +1324,71 @@ internal enum class Vp8LumaPredictionMode {
     B_PRED,
 }
 
-private fun decodeVp8LossyHeader(data: ByteArray, metadata: WebpMetadata): Vp8LossyHeaderDecodeResult {
-    return when (val result = decodeVp8LossyBitstreamLayout(data, metadata)) {
-        Vp8LossyBitstreamLayoutDecodeResult.Invalid -> Vp8LossyHeaderDecodeResult.Invalid
-        Vp8LossyBitstreamLayoutDecodeResult.Unsupported -> Vp8LossyHeaderDecodeResult.Unsupported
-        is Vp8LossyBitstreamLayoutDecodeResult.Layout -> Vp8LossyHeaderDecodeResult.Header(result.layout.header)
+internal fun decodeVp8LossyPixels(data: ByteArray, metadata: WebpMetadata): Vp8LossyDecodeResult {
+    if (metadata.format != WebpBitstreamFormat.VP8) return Vp8LossyDecodeResult.Invalid
+    if (metadata.flags.alpha || metadata.alphaChunk != null) return Vp8LossyDecodeResult.Unsupported
+
+    val payloadOffset = metadata.payloadOffset
+    val payloadSize = metadata.payloadSize
+    if (payloadOffset < 0 || payloadSize < VP8_KEYFRAME_HEADER_SIZE) return Vp8LossyDecodeResult.Invalid
+    if (payloadOffset + payloadSize > data.size) return Vp8LossyDecodeResult.Invalid
+    val frameTag = parseVp8FrameTag(data, payloadOffset, payloadSize.toLong())
+        ?: return Vp8LossyDecodeResult.Invalid
+    if (!frameTag.keyFrame) return Vp8LossyDecodeResult.Unsupported
+    if (!frameTag.showFrame) return Vp8LossyDecodeResult.Unsupported
+
+    val layout = when (val result = decodeVp8LossyBitstreamLayout(data, metadata)) {
+        Vp8LossyBitstreamLayoutDecodeResult.Invalid -> return Vp8LossyDecodeResult.Invalid
+        Vp8LossyBitstreamLayoutDecodeResult.Unsupported -> return Vp8LossyDecodeResult.Unsupported
+        is Vp8LossyBitstreamLayoutDecodeResult.Layout -> result.layout
     }
+    if (layout.header.loopFilter.level != 0) return Vp8LossyDecodeResult.Unsupported
+
+    val firstPartitionOffset = payloadOffset + VP8_KEYFRAME_HEADER_SIZE
+    val firstPartitionEnd = firstPartitionOffset + frameTag.firstPartitionSize
+    if (firstPartitionEnd > payloadOffset + payloadSize) return Vp8LossyDecodeResult.Invalid
+    val reader = Vp8BoolReader(data, firstPartitionOffset, firstPartitionEnd)
+    when (val header = readVp8LossyFrameHeader(reader, metadata.width, metadata.height)) {
+        Vp8LossyHeaderDecodeResult.Invalid -> return Vp8LossyDecodeResult.Invalid
+        Vp8LossyHeaderDecodeResult.Unsupported -> return Vp8LossyDecodeResult.Unsupported
+        is Vp8LossyHeaderDecodeResult.Header -> {
+            if (header.header != layout.header) return Vp8LossyDecodeResult.Invalid
+        }
+    }
+
+    val probabilities = when (val result = readVp8CoefficientProbabilityUpdates(
+        reader = reader,
+        base = Vp8CoefficientProbabilities.default(),
+        updateProbabilities = VP8_COEFFICIENT_UPDATE_PROBABILITIES,
+    )) {
+        Vp8CoefficientProbabilityUpdateResult.Invalid -> return Vp8LossyDecodeResult.Invalid
+        is Vp8CoefficientProbabilityUpdateResult.Probabilities -> result.probabilities
+    }
+    val noCoeffSkip = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8LossyDecodeResult.Invalid
+    if (noCoeffSkip != 0) {
+        reader.readLiteral(8) ?: return Vp8LossyDecodeResult.Invalid
+        return Vp8LossyDecodeResult.Unsupported
+    }
+    val macroblockModes = readVp8KeyFrameMacroblockModes(
+        reader = reader,
+        header = layout.header,
+        noCoeffSkip = false,
+    ) ?: return Vp8LossyDecodeResult.Invalid
+    if (macroblockModes.any { it.yMode == Vp8LumaPredictionMode.B_PRED }) {
+        return Vp8LossyDecodeResult.Unsupported
+    }
+
+    val planes = when (val result = reconstructVp8NonBPredKeyFramePlanes(
+        data = data,
+        layout = layout,
+        macroblockModes = macroblockModes,
+        probabilities = probabilities,
+    )) {
+        Vp8ReconstructionResult.Invalid -> return Vp8LossyDecodeResult.Invalid
+        Vp8ReconstructionResult.Unsupported -> return Vp8LossyDecodeResult.Unsupported
+        is Vp8ReconstructionResult.Planes -> result.planes
+    }
+    return Vp8LossyDecodeResult.Pixels(planes.cropTo(metadata.width, metadata.height).toRgba())
 }
 
 internal fun decodeVp8LossyBitstreamLayout(
@@ -1680,6 +1747,9 @@ internal class Vp8CoefficientProbabilities private constructor(
 
         fun fromFlat(values: IntArray): Vp8CoefficientProbabilities =
             Vp8CoefficientProbabilities(values.copyOf())
+
+        fun default(): Vp8CoefficientProbabilities =
+            fromFlat(VP8_DEFAULT_COEFFICIENT_PROBABILITIES)
     }
 }
 
@@ -2059,6 +2129,34 @@ internal fun reconstructVp8NonBPredKeyFramePlanes(
     )
 }
 
+private fun Vp8ReconstructedPlanes.cropTo(visibleWidth: Int, visibleHeight: Int): Vp8ReconstructedPlanes {
+    if (visibleWidth == width && visibleHeight == height) return this
+    if (visibleWidth !in 1..width || visibleHeight !in 1..height) return this
+
+    val croppedY = IntArray(visibleWidth * visibleHeight)
+    for (y in 0 until visibleHeight) {
+        System.arraycopy(yPlane, y * width, croppedY, y * visibleWidth, visibleWidth)
+    }
+
+    val chromaStride = (width + 1) / 2
+    val croppedChromaWidth = (visibleWidth + 1) / 2
+    val croppedChromaHeight = (visibleHeight + 1) / 2
+    val croppedU = IntArray(croppedChromaWidth * croppedChromaHeight)
+    val croppedV = IntArray(croppedChromaWidth * croppedChromaHeight)
+    for (y in 0 until croppedChromaHeight) {
+        System.arraycopy(uPlane, y * chromaStride, croppedU, y * croppedChromaWidth, croppedChromaWidth)
+        System.arraycopy(vPlane, y * chromaStride, croppedV, y * croppedChromaWidth, croppedChromaWidth)
+    }
+
+    return Vp8ReconstructedPlanes(
+        yPlane = croppedY,
+        uPlane = croppedU,
+        vPlane = croppedV,
+        width = visibleWidth,
+        height = visibleHeight,
+    )
+}
+
 private fun decodeVp8CoefficientPlane(
     reader: Vp8BoolReader,
     probabilities: Vp8CoefficientProbabilities,
@@ -2391,6 +2489,10 @@ private val VP8_ZIGZAG = intArrayOf(
     9, 12, 13, 10,
     7, 11, 14, 15,
 )
+
+private val VP8_DEFAULT_COEFFICIENT_PROBABILITIES = IntArray(VP8_COEFFICIENT_PROBABILITY_TOTAL) { 128 }
+
+private val VP8_COEFFICIENT_UPDATE_PROBABILITIES = IntArray(VP8_COEFFICIENT_PROBABILITY_TOTAL) { 255 }
 
 private val VP8_DC_QUANT = intArrayOf(
     4, 5, 6, 7, 8, 9, 10, 10,
