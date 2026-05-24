@@ -20,6 +20,6 @@ public class AsyncRescaleAndReadAlphaTypeGM : GM() {
     override fun getISize(): SkISize = SkISize.Make(512, 512)
 
     override fun onDraw(canvas: SkCanvas?) {
-        // TODO: missing API — SkSurface.asyncRescaleAndReadPixels.
+        TODO("STUB.ASYNC_RESCALE_READ: SkSurface.asyncRescaleAndReadPixels not yet implemented")
     }
 }
