@@ -348,7 +348,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val parentBitmap = (layer.parentDevice as? SkBitmapDevice)
         if (imageFilter != null && poppedBitmap != null && parentBitmap != null) {
             val snapshot = poppedBitmap.asImage()
-            val filterResult = imageFilter.filterImage(snapshot, top.matrix)
+            val filterResult = imageFilter.filterImage(snapshot, popped.matrix)
             val filteredImg = filterResult.image
             val filteredBitmap = SkBitmap(
                 filteredImg.width, filteredImg.height,
