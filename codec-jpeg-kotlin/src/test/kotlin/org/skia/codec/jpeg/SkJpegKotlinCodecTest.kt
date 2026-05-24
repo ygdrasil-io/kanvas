@@ -184,6 +184,35 @@ class SkJpegKotlinCodecTest {
         assertEquals(0xFF808080.toInt(), bitmap.getPixel(15, 7))
     }
 
+    @Test
+    fun `parses progressive grayscale metadata without decoding pixels yet`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleJpeg(width = 11, height = 7, includeAcScan = true))
+
+        assertNotNull(codec)
+        assertEquals(SkEncodedImageFormat.kJPEG, codec!!.getEncodedFormat())
+        assertEquals(11, codec.getInfo().width)
+        assertEquals(7, codec.getInfo().height)
+        assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
+
+        val (bitmap, result) = codec.getImage()
+        assertNull(bitmap)
+        assertEquals(SkCodec.Result.kUnimplemented, result)
+    }
+
+    @Test
+    fun `rejects invalid progressive scan parameters`() {
+        assertNull(
+            SkJpegKotlinCodec.Decoder.make(
+                progressiveGrayscaleJpeg(width = 8, height = 8, spectralStart = 1, spectralEnd = 0),
+            ),
+        )
+        assertNull(
+            SkJpegKotlinCodec.Decoder.make(
+                progressiveGrayscaleJpeg(width = 8, height = 8, successiveApprox = 0xE0),
+            ),
+        )
+    }
+
     private fun grayscaleJpeg(width: Int, height: Int, componentCount: Int = 1): ByteArray {
         val out = ByteArrayOutputStream()
         out.writeMarker(0xD8)
@@ -223,6 +252,65 @@ class SkJpegKotlinCodecTest {
             write(0)
         }
         out.write(entropyForZeroBlocks(((width + 7) / 8) * ((height + 7) / 8)))
+        out.writeMarker(0xD9)
+        return out.toByteArray()
+    }
+
+    private fun progressiveGrayscaleJpeg(
+        width: Int,
+        height: Int,
+        spectralStart: Int = 0,
+        spectralEnd: Int = 0,
+        successiveApprox: Int = 0,
+        includeAcScan: Boolean = false,
+    ): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(1) }
+        }
+        out.writeSegment(0xC2) {
+            write(8)
+            writeU16BE(height)
+            writeU16BE(width)
+            write(1)
+            write(1)
+            write(0x11)
+            write(0)
+        }
+        out.writeSegment(0xC4) {
+            write(0x00)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xC4) {
+            write(0x10)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(spectralStart)
+            write(spectralEnd)
+            write(successiveApprox)
+        }
+        out.write(entropyBits("0"))
+        if (includeAcScan) {
+            out.writeSegment(0xDA) {
+                write(1)
+                write(1)
+                write(0x00)
+                write(1)
+                write(63)
+                write(0)
+            }
+            out.write(entropyBits("0"))
+        }
         out.writeMarker(0xD9)
         return out.toByteArray()
     }
