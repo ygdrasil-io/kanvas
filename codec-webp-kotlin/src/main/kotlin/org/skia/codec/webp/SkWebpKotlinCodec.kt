@@ -1749,25 +1749,38 @@ internal fun reconstructVp8Intra16x16LumaMacroblock(
     left: IntArray?,
     top: IntArray?,
     topLeft: Int?,
+    y2Coefficients: IntArray,
     coefficientsByBlock: Array<IntArray>,
     dcQuant: Int,
     acQuant: Int,
+    y2DcQuant: Int,
+    y2AcQuant: Int,
 ): IntArray {
     require(mode != Vp8LumaPredictionMode.B_PRED)
+    require(y2Coefficients.size == VP8_BLOCK_COEFFICIENT_COUNT)
     require(coefficientsByBlock.size == VP8_LUMA_BLOCK_COUNT)
     require(left == null || left.size >= VP8_MACROBLOCK_SIZE)
     require(top == null || top.size >= VP8_MACROBLOCK_SIZE)
 
+    val lumaDcCoefficients = inverseVp8WalshHadamard4x4(
+        dequantizeVp8CoefficientBlock(
+            coefficients = y2Coefficients,
+            dcQuant = y2DcQuant,
+            acQuant = y2AcQuant,
+        ),
+    )
     val residual = IntArray(VP8_MACROBLOCK_SIZE * VP8_MACROBLOCK_SIZE)
     for (blockY in 0 until VP8_BLOCKS_PER_MACROBLOCK_SIDE) {
         for (blockX in 0 until VP8_BLOCKS_PER_MACROBLOCK_SIDE) {
             val blockIndex = blockY * VP8_BLOCKS_PER_MACROBLOCK_SIDE + blockX
+            val dequantizedBlock = dequantizeVp8CoefficientBlock(
+                coefficients = coefficientsByBlock[blockIndex],
+                dcQuant = dcQuant,
+                acQuant = acQuant,
+            )
+            dequantizedBlock[0] = lumaDcCoefficients[blockIndex]
             val blockResidual = inverseVp8Dct4x4(
-                dequantizeVp8CoefficientBlock(
-                    coefficients = coefficientsByBlock[blockIndex],
-                    dcQuant = dcQuant,
-                    acQuant = acQuant,
-                ),
+                dequantizedBlock,
             )
             for (y in 0 until VP8_BLOCK_SIZE) {
                 for (x in 0 until VP8_BLOCK_SIZE) {

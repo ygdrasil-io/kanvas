@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.skia.codec.CodecDecoderProvider
 import org.skia.codec.SkCodec
 import org.skia.foundation.SkAlphaType
@@ -833,19 +834,21 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `VP8 luma macroblock reconstruction wires dequantized IDCT blocks into 16x16 prediction`() {
-        val blocks = Array(16) {
-            IntArray(16).also { coefficients -> coefficients[0] = 16 }
-        }
+    fun `VP8 luma macroblock reconstruction injects inverse Y2 DC into 16x16 prediction`() {
+        val y2 = IntArray(16).also { coefficients -> coefficients[0] = 128 }
+        val blocks = Array(16) { IntArray(16) }
 
         val pixels = reconstructVp8Intra16x16LumaMacroblock(
             mode = Vp8LumaPredictionMode.VERTICAL,
             left = null,
             top = IntArray(16) { x -> 32 + x },
             topLeft = 0,
+            y2Coefficients = y2,
             coefficientsByBlock = blocks,
             dcQuant = 1,
             acQuant = 1,
+            y2DcQuant = 1,
+            y2AcQuant = 1,
         )
 
         assertEquals(16 * 16, pixels.size)
@@ -853,6 +856,60 @@ class SkWebpKotlinCodecTest {
             for (x in 0 until 16) {
                 assertEquals(34 + x, pixels[y * 16 + x])
             }
+        }
+    }
+
+    @Test
+    fun `VP8 luma macroblock reconstruction preserves luma AC residuals with zero Y2`() {
+        val blocks = Array(16) { IntArray(16) }
+        blocks[0][1] = -1
+        blocks[0][4] = 2
+
+        val pixels = reconstructVp8Intra16x16LumaMacroblock(
+            mode = Vp8LumaPredictionMode.DC,
+            left = IntArray(16) { 100 },
+            top = IntArray(16) { 100 },
+            topLeft = 100,
+            y2Coefficients = IntArray(16),
+            coefficientsByBlock = blocks,
+            dcQuant = 1,
+            acQuant = 8,
+            y2DcQuant = 1,
+            y2AcQuant = 1,
+        )
+
+        assertArrayEquals(
+            intArrayOf(
+                100, 101, 101, 102,
+                100, 100, 101, 101,
+                99, 99, 100, 100,
+                98, 99, 99, 100,
+            ),
+            IntArray(16) { index ->
+                val y = index / 4
+                val x = index % 4
+                pixels[y * 16 + x]
+            },
+        )
+        assertEquals(100, pixels[4])
+        assertEquals(100, pixels[16 * 4])
+    }
+
+    @Test
+    fun `VP8 luma macroblock reconstruction excludes B_PRED`() {
+        assertThrows<IllegalArgumentException> {
+            reconstructVp8Intra16x16LumaMacroblock(
+                mode = Vp8LumaPredictionMode.B_PRED,
+                left = null,
+                top = null,
+                topLeft = null,
+                y2Coefficients = IntArray(16),
+                coefficientsByBlock = Array(16) { IntArray(16) },
+                dcQuant = 1,
+                acQuant = 1,
+                y2DcQuant = 1,
+                y2AcQuant = 1,
+            )
         }
     }
 
