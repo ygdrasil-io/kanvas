@@ -464,9 +464,8 @@ internal class SkUserTypeface internal constructor(
         isSubpixel: Boolean,
     ): SkPath? {
         if (text.isEmpty()) return null
-        // skewX is folded into the scale matrix as an X-shear ; mirrors
-        // AwtTypeface.derivedFont where `tx.shear(shx, 0)` is composed
-        // after the `scale(scaleX, 1)`.
+        // skewX is folded into the scale matrix as an X-shear after
+        // the `scale(scaleX, 1)` transform.
         val sx = size * scaleX
         val sy = size
         val builder = SkPathBuilder()
