@@ -1,5 +1,6 @@
 package org.skia.codec.webp
 
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -97,6 +98,78 @@ class SkWebpKotlinCodecTest {
         assertNull(codec.getICCProfile())
         assertEquals(2, codec.getInfo().width)
         assertEquals(1, codec.getInfo().height)
+    }
+
+    @Test
+    fun `extracts VP8X EXIF and XMP metadata chunks`() {
+        val exif = byteArrayOf(
+            0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
+            0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00,
+        )
+        val xmp = "<x:xmpmeta><rdf:RDF/></x:xmpmeta>".toByteArray(Charsets.UTF_8)
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8xChunk(width = 2, height = 1, flags = 0x0C),
+                chunk("EXIF", exif),
+                chunk("XMP ", xmp),
+                vp8lChunk(width = 2, height = 1),
+            ),
+        ) as SkWebpKotlinCodec?
+
+        assertNotNull(codec)
+        val metadata = codec!!.metadata
+        assertEquals(WebpBitstreamFormat.VP8L, metadata.format)
+        assertTrue(metadata.flags.exif)
+        assertTrue(metadata.flags.xmp)
+        assertArrayEquals(exif, metadata.exifData)
+        assertArrayEquals(xmp, metadata.xmpData)
+    }
+
+    @Test
+    fun `keeps odd sized VP8X EXIF chunk payload separate from padding`() {
+        val exif = byteArrayOf(1, 2, 3)
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8xChunk(width = 1, height = 1, flags = 0x08),
+                chunk("EXIF", exif),
+                vp8lChunk(width = 1, height = 1),
+            ),
+        ) as SkWebpKotlinCodec?
+
+        assertNotNull(codec)
+        assertArrayEquals(exif, codec!!.metadata.exifData)
+        assertEquals(WebpBitstreamFormat.VP8L, codec.metadata.format)
+    }
+
+    @Test
+    fun `rejects duplicate VP8X EXIF and XMP chunks`() {
+        val exif = byteArrayOf(1, 2, 3, 4)
+        val xmp = byteArrayOf(5, 6, 7, 8)
+
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 1, height = 1, flags = 0x08),
+                    chunk("EXIF", exif),
+                    chunk("EXIF", exif),
+                    vp8lChunk(width = 1, height = 1),
+                ),
+            ),
+        )
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 1, height = 1, flags = 0x04),
+                    chunk("XMP ", xmp),
+                    chunk("XMP ", xmp),
+                    vp8lChunk(width = 1, height = 1),
+                ),
+            ),
+        )
     }
 
     @Test
