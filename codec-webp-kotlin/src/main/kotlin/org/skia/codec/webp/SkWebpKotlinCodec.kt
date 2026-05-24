@@ -289,37 +289,37 @@ private sealed interface Vp8lPrefixGroupReadResult {
 }
 
 private data class SimpleVp8lPrefixGroup(
-    val green: SimpleVp8lHuffmanCode,
-    val red: SimpleVp8lHuffmanCode,
-    val blue: SimpleVp8lHuffmanCode,
-    val alpha: SimpleVp8lHuffmanCode,
-    val distance: SimpleVp8lHuffmanCode,
+    val green: Vp8lHuffmanCode,
+    val red: Vp8lHuffmanCode,
+    val blue: Vp8lHuffmanCode,
+    val alpha: Vp8lHuffmanCode,
+    val distance: Vp8lHuffmanCode,
 ) {
     val isLiteralOnly: Boolean get() = green.maxSymbol < 256
 
     companion object {
         fun read(bits: Vp8lBitReader): Vp8lPrefixGroupReadResult {
-            val green = when (val result = SimpleVp8lHuffmanCode.read(bits, alphabetSize = 256 + 24)) {
+            val green = when (val result = Vp8lHuffmanCode.read(bits, alphabetSize = 256 + 24)) {
                 Vp8lHuffmanReadResult.Invalid -> return Vp8lPrefixGroupReadResult.Invalid
                 Vp8lHuffmanReadResult.Unsupported -> return Vp8lPrefixGroupReadResult.Unsupported
                 is Vp8lHuffmanReadResult.Code -> result.code
             }
-            val red = when (val result = SimpleVp8lHuffmanCode.read(bits, alphabetSize = 256)) {
+            val red = when (val result = Vp8lHuffmanCode.read(bits, alphabetSize = 256)) {
                 Vp8lHuffmanReadResult.Invalid -> return Vp8lPrefixGroupReadResult.Invalid
                 Vp8lHuffmanReadResult.Unsupported -> return Vp8lPrefixGroupReadResult.Unsupported
                 is Vp8lHuffmanReadResult.Code -> result.code
             }
-            val blue = when (val result = SimpleVp8lHuffmanCode.read(bits, alphabetSize = 256)) {
+            val blue = when (val result = Vp8lHuffmanCode.read(bits, alphabetSize = 256)) {
                 Vp8lHuffmanReadResult.Invalid -> return Vp8lPrefixGroupReadResult.Invalid
                 Vp8lHuffmanReadResult.Unsupported -> return Vp8lPrefixGroupReadResult.Unsupported
                 is Vp8lHuffmanReadResult.Code -> result.code
             }
-            val alpha = when (val result = SimpleVp8lHuffmanCode.read(bits, alphabetSize = 256)) {
+            val alpha = when (val result = Vp8lHuffmanCode.read(bits, alphabetSize = 256)) {
                 Vp8lHuffmanReadResult.Invalid -> return Vp8lPrefixGroupReadResult.Invalid
                 Vp8lHuffmanReadResult.Unsupported -> return Vp8lPrefixGroupReadResult.Unsupported
                 is Vp8lHuffmanReadResult.Code -> result.code
             }
-            val distance = when (val result = SimpleVp8lHuffmanCode.read(bits, alphabetSize = 40)) {
+            val distance = when (val result = Vp8lHuffmanCode.read(bits, alphabetSize = 40)) {
                 Vp8lHuffmanReadResult.Invalid -> return Vp8lPrefixGroupReadResult.Invalid
                 Vp8lHuffmanReadResult.Unsupported -> return Vp8lPrefixGroupReadResult.Unsupported
                 is Vp8lHuffmanReadResult.Code -> result.code
@@ -330,26 +330,34 @@ private data class SimpleVp8lPrefixGroup(
 }
 
 private sealed interface Vp8lHuffmanReadResult {
-    data class Code(val code: SimpleVp8lHuffmanCode) : Vp8lHuffmanReadResult
+    data class Code(val code: Vp8lHuffmanCode) : Vp8lHuffmanReadResult
     data object Unsupported : Vp8lHuffmanReadResult
     data object Invalid : Vp8lHuffmanReadResult
 }
 
-private class SimpleVp8lHuffmanCode(
+private class Vp8lHuffmanCode(
     private val symbols: IntArray,
+    private val entries: List<Vp8lHuffmanEntry>,
+    private val maxCodeLength: Int,
 ) {
     val maxSymbol: Int = symbols.max()
 
     fun decode(bits: Vp8lBitReader): Int? {
         if (symbols.size == 1) return symbols[0]
-        val bit = bits.readBits(1) ?: return null
-        return symbols[bit]
+        var code = 0
+        for (length in 1..maxCodeLength) {
+            val bit = bits.readBits(1) ?: return null
+            code = code or (bit shl (length - 1))
+            val entry = entries.firstOrNull { it.length == length && it.reversedCode == code }
+            if (entry != null) return entry.symbol
+        }
+        return null
     }
 
     companion object {
         fun read(bits: Vp8lBitReader, alphabetSize: Int): Vp8lHuffmanReadResult {
             val isSimple = bits.readBits(1) ?: return Vp8lHuffmanReadResult.Invalid
-            if (isSimple == 0) return Vp8lHuffmanReadResult.Unsupported
+            if (isSimple == 0) return readNormal(bits, alphabetSize)
             val symbolCount = (bits.readBits(1) ?: return Vp8lHuffmanReadResult.Invalid) + 1
             val isFirst8Bits = bits.readBits(1) ?: return Vp8lHuffmanReadResult.Invalid
             val first = bits.readBits(1 + 7 * isFirst8Bits) ?: return Vp8lHuffmanReadResult.Invalid
@@ -360,9 +368,121 @@ private class SimpleVp8lHuffmanCode(
                 intArrayOf(first, second).also { it.sort() }
             }
             if (symbols.any { it !in 0 until alphabetSize }) return Vp8lHuffmanReadResult.Invalid
-            return Vp8lHuffmanReadResult.Code(SimpleVp8lHuffmanCode(symbols))
+            return fromCodeLengths(IntArray(alphabetSize) { symbol ->
+                if (symbol in symbols) 1 else 0
+            })
+        }
+
+        private fun readNormal(bits: Vp8lBitReader, alphabetSize: Int): Vp8lHuffmanReadResult {
+            val codeLengthCodeLengths = IntArray(CODE_LENGTH_CODE_COUNT)
+            val codeLengthCount = 4 + (bits.readBits(4) ?: return Vp8lHuffmanReadResult.Invalid)
+            if (codeLengthCount > CODE_LENGTH_CODE_ORDER.size) return Vp8lHuffmanReadResult.Invalid
+            for (i in 0 until codeLengthCount) {
+                codeLengthCodeLengths[CODE_LENGTH_CODE_ORDER[i]] =
+                    bits.readBits(3) ?: return Vp8lHuffmanReadResult.Invalid
+            }
+            val codeLengthCode = when (val result = fromCodeLengths(codeLengthCodeLengths)) {
+                Vp8lHuffmanReadResult.Invalid -> return Vp8lHuffmanReadResult.Invalid
+                Vp8lHuffmanReadResult.Unsupported -> return Vp8lHuffmanReadResult.Unsupported
+                is Vp8lHuffmanReadResult.Code -> result.code
+            }
+            val maxSymbol = if ((bits.readBits(1) ?: return Vp8lHuffmanReadResult.Invalid) == 0) {
+                alphabetSize
+            } else {
+                val lengthBits = 2 + 2 * (bits.readBits(3) ?: return Vp8lHuffmanReadResult.Invalid)
+                2 + (bits.readBits(lengthBits) ?: return Vp8lHuffmanReadResult.Invalid)
+            }
+            if (maxSymbol > alphabetSize) return Vp8lHuffmanReadResult.Invalid
+
+            val codeLengths = IntArray(alphabetSize)
+            var symbol = 0
+            var previousLength = 8
+            while (symbol < maxSymbol) {
+                when (val codeLength = codeLengthCode.decode(bits) ?: return Vp8lHuffmanReadResult.Invalid) {
+                    in 0..15 -> {
+                        codeLengths[symbol++] = codeLength
+                        if (codeLength != 0) previousLength = codeLength
+                    }
+                    16 -> {
+                        val repeat = 3 + (bits.readBits(2) ?: return Vp8lHuffmanReadResult.Invalid)
+                        if (symbol + repeat > maxSymbol) return Vp8lHuffmanReadResult.Invalid
+                        repeat(repeat) { codeLengths[symbol++] = previousLength }
+                    }
+                    17 -> {
+                        val repeat = 3 + (bits.readBits(3) ?: return Vp8lHuffmanReadResult.Invalid)
+                        if (symbol + repeat > maxSymbol) return Vp8lHuffmanReadResult.Invalid
+                        symbol += repeat
+                    }
+                    18 -> {
+                        val repeat = 11 + (bits.readBits(7) ?: return Vp8lHuffmanReadResult.Invalid)
+                        if (symbol + repeat > maxSymbol) return Vp8lHuffmanReadResult.Invalid
+                        symbol += repeat
+                    }
+                    else -> return Vp8lHuffmanReadResult.Invalid
+                }
+            }
+            return fromCodeLengths(codeLengths)
+        }
+
+        private fun fromCodeLengths(codeLengths: IntArray): Vp8lHuffmanReadResult {
+            val symbols = codeLengths.indices.filter { codeLengths[it] > 0 }.toIntArray()
+            if (symbols.isEmpty()) return Vp8lHuffmanReadResult.Invalid
+            if (codeLengths.any { it !in 0..MAX_HUFFMAN_CODE_LENGTH }) return Vp8lHuffmanReadResult.Invalid
+
+            val counts = IntArray(MAX_HUFFMAN_CODE_LENGTH + 1)
+            for (length in codeLengths) {
+                if (length > 0) counts[length]++
+            }
+            var remaining = 1
+            for (length in 1..MAX_HUFFMAN_CODE_LENGTH) {
+                remaining = (remaining shl 1) - counts[length]
+                if (remaining < 0) return Vp8lHuffmanReadResult.Invalid
+            }
+            if (symbols.size > 1 && remaining != 0) return Vp8lHuffmanReadResult.Invalid
+
+            val nextCode = IntArray(MAX_HUFFMAN_CODE_LENGTH + 1)
+            var code = 0
+            for (bits in 1..MAX_HUFFMAN_CODE_LENGTH) {
+                code = (code + counts[bits - 1]) shl 1
+                nextCode[bits] = code
+            }
+            val entries = ArrayList<Vp8lHuffmanEntry>()
+            for (symbol in codeLengths.indices) {
+                val length = codeLengths[symbol]
+                if (length == 0) continue
+                entries += Vp8lHuffmanEntry(symbol, length, reverseBits(nextCode[length], length))
+                nextCode[length]++
+            }
+            return Vp8lHuffmanReadResult.Code(
+                Vp8lHuffmanCode(
+                    symbols = symbols,
+                    entries = entries,
+                    maxCodeLength = entries.maxOf { it.length },
+                ),
+            )
         }
     }
+
+}
+
+private data class Vp8lHuffmanEntry(
+    val symbol: Int,
+    val length: Int,
+    val reversedCode: Int,
+)
+
+private const val CODE_LENGTH_CODE_COUNT: Int = 19
+private const val MAX_HUFFMAN_CODE_LENGTH: Int = 15
+private val CODE_LENGTH_CODE_ORDER = intArrayOf(
+    17, 18, 0, 1, 2, 3, 4, 5, 16, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+)
+
+private fun reverseBits(value: Int, length: Int): Int {
+    var result = 0
+    for (i in 0 until length) {
+        result = (result shl 1) or ((value ushr i) and 1)
+    }
+    return result
 }
 
 private class Vp8lBitReader(
