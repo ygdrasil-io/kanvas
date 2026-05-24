@@ -34,15 +34,6 @@ class PlaceholderGMsTest {
     // FontCacheGM — real body port landed in its own FontCacheTest
     //                (cross-backend ratchet at ~84 %, see PR notes).
 
-    @Test @Disabled("Needs portable LiberationFontMgr (R-suivi).")
-    fun `FontMgrBoundsGM placeholder`() { FontMgrBoundsGM() }
-
-    @Test @Disabled("Needs portable LiberationFontMgr (R-suivi).")
-    fun `FontMgrGM placeholder`() { FontMgrGM() }
-
-    @Test @Disabled("Needs portable LiberationFontMgr + matchFamilyStyleCharacter (R-suivi).")
-    fun `FontMgrMatchGM placeholder`() { FontMgrMatchGM() }
-
     // FontPaletteGM — real body port landed in its own FontPaletteTest
     //                 (STUB.COLR_V1 / STUB.FONTATIONS / STUB.FIXTURE —
     //                  same blocker trio as ColrV1Test).

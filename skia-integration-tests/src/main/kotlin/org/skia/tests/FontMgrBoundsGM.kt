@@ -12,14 +12,13 @@ import org.skia.core.SkCanvas
 import org.skia.core.withSave
 import org.skia.foundation.SkDashPathEffect
 import org.skia.foundation.SkFont
+import org.skia.foundation.LiberationFontMgr
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkFontMgr
 import org.skia.foundation.SkFontPriv
 import org.skia.foundation.SkFontStyleSet
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTextEncoding
-import org.skia.foundation.SkTypeface
-import org.skia.foundation.awt.RefDefault
 import org.skia.tools.ToolUtils
 
 /**
@@ -39,9 +38,9 @@ import org.skia.tools.ToolUtils
  * or 700 px of vertical space is consumed.
  *
  * **Font-set divergence** : same caveat as the other two
- * `fontmgr.cpp` GMs — the JVM AWT font manager enumerates a
- * platform-dependent font set, not upstream's Liberation portable
- * set. The matching `FontMgrBoundsTest` is therefore `@Disabled`.
+ * `fontmgr.cpp` GMs — this port uses the deterministic
+ * Liberation portable set exposed by [LiberationFontMgr.Make], not
+ * the host system font catalog.
  *
  * **API gap vs upstream — `SkMetaData` controls** : upstream
  * exposes a `Label Bounds` toggle on the GM panel ; the kanvas-skia
@@ -80,7 +79,7 @@ public class FontMgrBoundsGM(
 
         val boundsColors = intArrayOf(SK_ColorRED, SK_ColorBLUE)
 
-        val fm: SkFontMgr = SkFontMgr.RefDefault()
+        val fm: SkFontMgr = LiberationFontMgr.Make()
         val count = fm.countFamilies()
         if (count == 0) {
             // Upstream returns `DrawResult::kSkip` here.
