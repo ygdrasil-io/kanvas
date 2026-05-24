@@ -94,6 +94,47 @@ attachment, Indic/Arabic shaping, HarfBuzz parity, and multi-font fallback
 belong outside the OpenType typeface reader and should be tracked as dedicated
 `SkShaper` or text-layout work.
 
+## Bitmap And SVG Color Font Plan
+
+Bitmap and SVG color fonts should be implemented in generated-fixture slices,
+not by adding external binary fonts to the repository. The existing
+`OpenTypeFontTest` table replacement helpers are sufficient for PR-sized
+fixtures:
+
+- **CBDT/CBLC**: generate a tiny bitmap-strike fixture by replacing two
+  optional tables in a bundled TTF. The bitmap payload should start with a
+  single PNG glyph image because `codec-png-kotlin` already provides a pure
+  Kotlin decoder. A later parser slice should read only the minimal index
+  subtable needed by that fixture and leave other CBDT index formats for
+  follow-up PRs.
+- **sbix**: generate a separate tiny fixture with a single PNG strike and one
+  glyph record. Keep it independent from CBDT/CBLC because the table layout and
+  origin handling are different even when the embedded image format is also
+  PNG.
+- **SVG-in-OpenType**: generate an `SVG ` table fixture containing one compact
+  SVG document record for one glyph ID. The first parser slice should expose
+  document metadata or a draw-disabled fallback test before wiring any SVG
+  renderer.
+
+Implementation should be split in this order:
+
+1. Parse CBDT/CBLC metadata and prove glyph-to-bitmap selection against the
+   generated PNG fixture.
+2. Render the selected CBDT/CBLC PNG strike through the pure Kotlin codec path
+   if `codec-png-kotlin` is available to the target module without introducing
+   AWT or JNI.
+3. Parse sbix metadata and render its PNG strike as a separate slice.
+4. Parse SVG document records and decide renderer dependency separately. If the
+   pure Kotlin SVG stack is not available in `kanvas-skia`, keep SVG records as
+   unsupported metadata rather than adding a native dependency.
+
+Fallback behavior is fixed for all bitmap/SVG color formats: missing decode
+dependencies, unsupported strike formats, malformed optional color tables,
+unmapped glyphs, or absent strikes must fall back to the current monochrome
+outline path and must not reject an otherwise usable font. Rendering slices
+should preserve the existing COLRv0/COLRv1 behavior and should add focused
+malformed-table tests before enabling any new draw path.
+
 ## Follow-Up Tickets
 
 The remaining roadmap items from issue
