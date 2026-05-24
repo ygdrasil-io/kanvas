@@ -1259,13 +1259,11 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * entry's AA flags driving per-edge anti-aliasing (raster's
      * all-or-nothing approximation per [experimental_DrawEdgeAAQuad]).
      *
-     * **STUB.EDGE_AA_IMAGE_SET** — this is the central batched API used by
-     * the compositor and tile renderer. The single-quad case is already
-     * covered by [drawImageRect] today ; the batched fast-path (vertex
-     * coalescing, BSP clipping, preview-matrix indirection) is the missing
-     * piece. Surface stub kept here so GM ports compile against the real
-     * signature ; the body is a [NotImplementedError] until the batched
-     * device entry-point lands.
+     * This raster implementation is deliberately a correctness fallback:
+     * it walks entries and replays them through [drawImageRect], folding the
+     * per-entry alpha into a copied paint and applying optional preview
+     * matrices / destination clip quads around the individual draw. GPU-style
+     * vertex coalescing remains an optimization for future backends.
      */
     public open fun experimental_DrawEdgeAAImageSet(
         set: Array<ImageSetEntry>,
@@ -1275,18 +1273,58 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         sampling: SkSamplingOptions,
         paint: SkPaint?,
         constraint: SrcRectConstraint,
-    ): Unit = TODO(
-        "STUB.EDGE_AA_IMAGE_SET: SkCanvas::experimental_DrawEdgeAAImageSet — " +
-            "batched per-image draw with edge-AA flags + per-image transform / " +
-            "alpha. Required by gm/drawimageset.cpp (`draw_image_set`, " +
-            "`draw_image_set_rect_to_rect`, `draw_image_set_alpha_only`) and " +
-            "gm/compositor_quads.cpp. Implement by walking the entries and " +
-            "routing each through drawImageRect with the per-entry alpha " +
-            "folded into the paint and aaFlags into the AA-rect path ; " +
-            "preViewMatrices[entry.matrixIndex] pre-multiplies the CTM, " +
-            "dstClips[4*i..4*i+3] (when entry.hasClip) replaces the dstRect " +
-            "with a quadrilateral clip.",
-    )
+    ) {
+        val n = count.coerceIn(0, set.size)
+        for (i in 0 until n) {
+            val entry = set[i]
+            if (entry.alpha <= 0f) continue
+            if (entry.srcRect.isEmpty || entry.dstRect.isEmpty) continue
+
+            val entryPaint = (paint?.copy() ?: SkPaint()).apply {
+                alphaf *= entry.alpha.coerceIn(0f, 1f)
+                if (entry.aaFlags == QuadAAFlags.kAll_QuadAAFlags) {
+                    isAntiAlias = true
+                }
+            }
+
+            save()
+            try {
+                if (entry.matrixIndex >= 0) {
+                    val matrices = requireNotNull(preViewMatrices) {
+                        "experimental_DrawEdgeAAImageSet: entry $i references matrix ${entry.matrixIndex} but preViewMatrices is null"
+                    }
+                    require(entry.matrixIndex < matrices.size) {
+                        "experimental_DrawEdgeAAImageSet: entry $i references matrix ${entry.matrixIndex}, only ${matrices.size} provided"
+                    }
+                    concat(matrices[entry.matrixIndex])
+                }
+
+                if (entry.hasClip) {
+                    val clips = requireNotNull(dstClips) {
+                        "experimental_DrawEdgeAAImageSet: entry $i hasClip=true but dstClips is null"
+                    }
+                    val base = i * 4
+                    require(base + 3 < clips.size) {
+                        "experimental_DrawEdgeAAImageSet: entry $i needs dstClips[$base..${base + 3}], only ${clips.size} points provided"
+                    }
+                    val clipPath = SkPath.Polygon(
+                        arrayOf(
+                            clips[base + 0].fX to clips[base + 0].fY,
+                            clips[base + 1].fX to clips[base + 1].fY,
+                            clips[base + 2].fX to clips[base + 2].fY,
+                            clips[base + 3].fX to clips[base + 3].fY,
+                        ),
+                        isClosed = true,
+                    )
+                    clipPath(clipPath, doAntiAlias = entry.aaFlags == QuadAAFlags.kAll_QuadAAFlags)
+                }
+
+                drawImageRect(entry.image, entry.srcRect, entry.dstRect, sampling, entryPaint, constraint)
+            } finally {
+                restore()
+            }
+        }
+    }
 
     /**
      * Mirrors Skia's `SkCanvas::drawLine(x0, y0, x1, y1, paint)`. Emits a

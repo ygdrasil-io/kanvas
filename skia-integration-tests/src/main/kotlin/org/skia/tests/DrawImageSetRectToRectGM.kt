@@ -32,12 +32,8 @@ import org.skia.tools.ToolUtils
  * sets `alpha = 0.4f` on every third entry to verify the per-entry alpha
  * multiplier is honoured.
  *
- * ## Port status
- *
- * Body fully ported against the new [SkCanvas.experimental_DrawEdgeAAImageSet]
- * surface (resolves to `TODO("STUB.EDGE_AA_IMAGE_SET")` at runtime).
- * Matching [DrawImageSetRectToRectTest] is `@Disabled` until that body
- * lands.
+ * Body fully ported against the raster
+ * [SkCanvas.experimental_DrawEdgeAAImageSet] fallback.
  */
 public class DrawImageSetRectToRectGM : GM() {
 

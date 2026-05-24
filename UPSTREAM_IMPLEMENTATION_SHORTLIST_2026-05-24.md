@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 31 upstream `.cpp` rows as
+The rebaseline currently classifies 30 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -44,12 +44,16 @@ Completed since this snapshot:
 - `STUB.DRAW_VERTICES`: `VerticesBatchingGM` is ported through the existing
   `drawVertices` raster path and the test is enabled. The broader
   `VerticesGM` remains a separate follow-up.
+- `STUB.EDGE_AA_IMAGE_SET`: raster fallback implemented in
+  `SkCanvas.experimental_DrawEdgeAAImageSet`; `DrawImageSetGM`,
+  `DrawImageSetRectToRectGM`, `DrawImageSetAlphaOnlyGM`, and `Skbug14554GM`
+  are enabled with ratchet coverage.
 
 ## Recommended order
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `STUB.EDGE_AA_IMAGE_SET` / `STUB.EDGE_AA_QUAD` | 3+ cpps (`drawimageset`, `savelayer`, `drawquadset`) | L | Higher impact, but batched image draw semantics are broad. |
+| 1 | `STUB.EDGE_AA_QUAD` | 1 cpp (`drawquadset`) | M | `experimental_DrawEdgeAAQuad` exists, but the GM is still gated by GPU-gradient-vs-raster fallback differences. |
 | 2 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 3 cpps (`drawatlas`, `dftext_blob_persp`, `textblobmixedsizes`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
 
 ## Implementation bucket rows
@@ -66,7 +70,7 @@ Completed since this snapshot:
 | `dashcubics` | disabled `TrimGM` without `STUB.*` tag | `DashCubicsGM.kt`, `TrimGM.kt` |
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
-| `drawimageset` | `STUB.EDGE_AA_IMAGE_SET` | `DrawImageSetAlphaOnlyGM.kt`, `DrawImageSetGM.kt`, `DrawImageSetRectToRectGM.kt` |
+| `drawimageset` | ported | `DrawImageSetAlphaOnlyGM.kt`, `DrawImageSetGM.kt`, `DrawImageSetRectToRectGM.kt` |
 | `drawquadset` | `STUB.EDGE_AA_QUAD` | `DrawQuadSetGM.kt` |
 | `fiddle` | stub file without `STUB.*` tag | `FiddleGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION` | gradient interpolation variants |
@@ -80,7 +84,7 @@ Completed since this snapshot:
 | `pathmeasure` | `STUB.PATH_MEASURE_EXPLOSION` | `PathMeasureExplosionGM.kt` |
 | `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`, `STUB.XYZ` | `RecordOptsGM.kt` |
 | `rrect` | disabled `RRectBlurGM` without `STUB.*` tag | `RRectBlurGM.kt`, `RRectGM.kt` |
-| `savelayer` | `STUB.EDGE_AA_IMAGE_SET`, `STUB.F16_COLOR_TYPE`, `STUB.SAVE_BEHIND` | `SaveBehindGM.kt`, `SaveLayerF16GM.kt`, `SaveLayerGM.kt`, `Skbug14554GM.kt` |
+| `savelayer` | `STUB.F16_COLOR_TYPE`, `STUB.SAVE_BEHIND`; `Skbug14554GM` ported | `SaveBehindGM.kt`, `SaveLayerF16GM.kt`, `SaveLayerGM.kt`, `Skbug14554GM.kt` |
 | `shadowutils` | ported | `ShadowUtilsDirectionalGM.kt`, `ShadowUtilsGaussianColorFilterGM.kt` |
 | `strokedlines` | `STUB.STROKEDLINE_CAPS` | `StrokedLineCapsGM.kt`, `StrokedLinesGM.kt` |
 | `surface` | `STUB.SURFACE_PROPS` | `NewSurfaceGM.kt`, `SnapWithMipsGM.kt`, `SurfacePropsGM.kt` |

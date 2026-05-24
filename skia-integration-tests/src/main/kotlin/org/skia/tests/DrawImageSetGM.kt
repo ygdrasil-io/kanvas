@@ -43,12 +43,8 @@ import kotlin.math.sqrt
  *
  * The C++ original lives at the link above.
  *
- * ## Port status
- *
- * Body fully ported against the new [SkCanvas.experimental_DrawEdgeAAImageSet]
- * surface — which resolves to `TODO("STUB.EDGE_AA_IMAGE_SET")` at runtime
- * (single shared stub in `kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt`).
- * The matching [DrawImageSetTest] is `@Disabled` until that body lands.
+ * Body fully ported against the raster
+ * [SkCanvas.experimental_DrawEdgeAAImageSet] fallback.
  */
 public class DrawImageSetGM : GM() {
 
