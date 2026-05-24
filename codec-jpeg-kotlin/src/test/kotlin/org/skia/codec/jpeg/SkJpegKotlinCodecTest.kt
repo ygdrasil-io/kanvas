@@ -254,6 +254,20 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
+    fun `rejects restart marker outside entropy scan`() {
+        assertNull(
+            SkJpegKotlinCodec.Decoder.make(
+                insertAfterSoi(grayscaleJpeg(width = 8, height = 8), byteArrayOf(0xFF.toByte(), 0xD0.toByte())),
+            ),
+        )
+    }
+
+    @Test
+    fun `rejects entropy restart marker without DRI`() {
+        assertNull(SkJpegKotlinCodec.Decoder.make(grayscaleRestartJpeg(includeDri = false)))
+    }
+
+    @Test
     fun `decodes progressive grayscale metadata with empty ac scan`() {
         val codec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleJpeg(width = 11, height = 7, includeAcScan = true))
 
@@ -434,7 +448,7 @@ class SkJpegKotlinCodecTest {
         return out.toByteArray()
     }
 
-    private fun grayscaleRestartJpeg(): ByteArray {
+    private fun grayscaleRestartJpeg(includeDri: Boolean = true): ByteArray {
         val out = ByteArrayOutputStream()
         out.writeMarker(0xD8)
         out.writeSegment(0xDB) {
@@ -462,8 +476,10 @@ class SkJpegKotlinCodecTest {
             repeat(15) { write(0) }
             write(0x00)
         }
-        out.writeSegment(0xDD) {
-            writeU16BE(1)
+        if (includeDri) {
+            out.writeSegment(0xDD) {
+                writeU16BE(1)
+            }
         }
         out.writeSegment(0xDA) {
             write(1)
@@ -636,6 +652,14 @@ class SkJpegKotlinCodecTest {
         val out = ByteArrayOutputStream()
         out.write(jpeg, 0, 2)
         for (segment in segments) out.write(segment)
+        out.write(jpeg, 2, jpeg.size - 2)
+        return out.toByteArray()
+    }
+
+    private fun insertAfterSoi(jpeg: ByteArray, bytes: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.write(jpeg, 0, 2)
+        out.write(bytes)
         out.write(jpeg, 2, jpeg.size - 2)
         return out.toByteArray()
     }
