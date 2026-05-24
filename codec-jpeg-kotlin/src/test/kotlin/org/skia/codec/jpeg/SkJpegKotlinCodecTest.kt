@@ -11,6 +11,7 @@ import org.skia.codec.SkCodec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
+import org.skia.foundation.SkEncodedOrigin
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 import kotlin.math.roundToInt
@@ -124,6 +125,65 @@ class SkJpegKotlinCodecTest {
         assertNull(SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21)))
     }
 
+    @Test
+    fun `parses EXIF orientation from big endian APP1`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(
+            withAppSegments(
+                grayscaleJpeg(width = 8, height = 6),
+                exifOrientationSegment(orientation = 6, littleEndian = false),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertEquals(SkEncodedOrigin.kRightTop, codec!!.getOrigin())
+        assertEquals(6, codec.getInfo().width)
+        assertEquals(8, codec.getInfo().height)
+    }
+
+    @Test
+    fun `parses EXIF orientation from little endian APP1`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(
+            withAppSegments(
+                grayscaleJpeg(width = 9, height = 5),
+                exifOrientationSegment(orientation = 8, littleEndian = true),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertEquals(SkEncodedOrigin.kLeftBottom, codec!!.getOrigin())
+        assertEquals(5, codec.getInfo().width)
+        assertEquals(9, codec.getInfo().height)
+    }
+
+    @Test
+    fun `out of order ICC APP2 chunks do not crash`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(
+            withAppSegments(
+                grayscaleJpeg(width = 8, height = 8),
+                iccSegment(index = 2, count = 2, payload = byteArrayOf(4, 5, 6)),
+                iccSegment(index = 1, count = 2, payload = byteArrayOf(1, 2, 3)),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertNull(codec!!.getICCProfile())
+        val (_, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+    }
+
+    @Test
+    fun `decodes grayscale restart marker interval`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(grayscaleRestartJpeg())!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(16, bitmap!!.width)
+        assertEquals(8, bitmap.height)
+        assertEquals(0xFF808080.toInt(), bitmap.getPixel(0, 0))
+        assertEquals(0xFF808080.toInt(), bitmap.getPixel(15, 7))
+    }
+
     private fun grayscaleJpeg(width: Int, height: Int, componentCount: Int = 1): ByteArray {
         val out = ByteArrayOutputStream()
         out.writeMarker(0xD8)
@@ -163,6 +223,52 @@ class SkJpegKotlinCodecTest {
             write(0)
         }
         out.write(entropyForZeroBlocks(((width + 7) / 8) * ((height + 7) / 8)))
+        out.writeMarker(0xD9)
+        return out.toByteArray()
+    }
+
+    private fun grayscaleRestartJpeg(): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(1) }
+        }
+        out.writeSegment(0xC0) {
+            write(8)
+            writeU16BE(8)
+            writeU16BE(16)
+            write(1)
+            write(1)
+            write(0x11)
+            write(0)
+        }
+        out.writeSegment(0xC4) {
+            write(0x00)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xC4) {
+            write(0x10)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xDD) {
+            writeU16BE(1)
+        }
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(0)
+            write(63)
+            write(0)
+        }
+        out.write(entropyBits("00"))
+        out.writeMarker(0xD0)
+        out.write(entropyBits("00"))
         out.writeMarker(0xD9)
         return out.toByteArray()
     }
@@ -296,6 +402,60 @@ class SkJpegKotlinCodecTest {
         return out
     }
 
+    private fun withAppSegments(jpeg: ByteArray, vararg segments: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.write(jpeg, 0, 2)
+        for (segment in segments) out.write(segment)
+        out.write(jpeg, 2, jpeg.size - 2)
+        return out.toByteArray()
+    }
+
+    private fun exifOrientationSegment(orientation: Int, littleEndian: Boolean): ByteArray {
+        return segmentBytes(0xE1) {
+            write(byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00))
+            if (littleEndian) {
+                write('I'.code)
+                write('I'.code)
+                writeU16LE(0x002A)
+                writeU32LE(8)
+                writeU16LE(1)
+                writeU16LE(0x0112)
+                writeU16LE(3)
+                writeU32LE(1)
+                writeU16LE(orientation)
+                writeU16LE(0)
+                writeU32LE(0)
+            } else {
+                write('M'.code)
+                write('M'.code)
+                writeU16BE(0x002A)
+                writeU32BE(8)
+                writeU16BE(1)
+                writeU16BE(0x0112)
+                writeU16BE(3)
+                writeU32BE(1)
+                writeU16BE(orientation)
+                writeU16BE(0)
+                writeU32BE(0)
+            }
+        }
+    }
+
+    private fun iccSegment(index: Int, count: Int, payload: ByteArray): ByteArray {
+        return segmentBytes(0xE2) {
+            write(byteArrayOf(0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x00))
+            write(index)
+            write(count)
+            write(payload)
+        }
+    }
+
+    private fun segmentBytes(marker: Int, writePayload: ByteArrayOutputStream.() -> Unit): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeSegment(marker, writePayload)
+        return out.toByteArray()
+    }
+
     private fun ByteArrayOutputStream.writeMarker(marker: Int) {
         write(0xFF)
         write(marker)
@@ -311,5 +471,24 @@ class SkJpegKotlinCodecTest {
     private fun ByteArrayOutputStream.writeU16BE(value: Int) {
         write((value ushr 8) and 0xFF)
         write(value and 0xFF)
+    }
+
+    private fun ByteArrayOutputStream.writeU16LE(value: Int) {
+        write(value and 0xFF)
+        write((value ushr 8) and 0xFF)
+    }
+
+    private fun ByteArrayOutputStream.writeU32BE(value: Int) {
+        write((value ushr 24) and 0xFF)
+        write((value ushr 16) and 0xFF)
+        write((value ushr 8) and 0xFF)
+        write(value and 0xFF)
+    }
+
+    private fun ByteArrayOutputStream.writeU32LE(value: Int) {
+        write(value and 0xFF)
+        write((value ushr 8) and 0xFF)
+        write((value ushr 16) and 0xFF)
+        write((value ushr 24) and 0xFF)
     }
 }
