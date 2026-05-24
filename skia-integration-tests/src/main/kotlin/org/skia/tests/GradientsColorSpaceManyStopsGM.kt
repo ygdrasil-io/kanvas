@@ -11,8 +11,8 @@ import org.graphiks.math.SkISize
  * From the upstream comment: "We're mostly interested in making sure that
  * the texture fallback on GPU works correctly."
  *
- * **API gap** : requires `SkGradient::Interpolation::ColorSpace::kOKLCH` and
- * the `SkGradient` struct overload of `SkShaders::LinearGradient`.
+ * **Implementation gap** : requires OKLCH interpolation in the gradient
+ * sampler. The `SkGradient` struct overload itself exists for RGB spaces.
  */
 public class GradientsColorSpaceManyStopsGM : GM() {
 
@@ -20,6 +20,6 @@ public class GradientsColorSpaceManyStopsGM : GM() {
     override fun getISize(): SkISize = SkISize.Make(500, 500)
 
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.GRADIENT_INTERPOLATION: SkGradient.Interpolation.ColorSpace::kOKLCH not exposed in :cpu-raster")
+        TODO("STUB.GRADIENT_INTERPOLATION: OKLCH gradient interpolation not implemented")
     }
 }

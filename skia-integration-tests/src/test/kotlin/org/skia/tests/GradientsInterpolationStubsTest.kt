@@ -4,9 +4,8 @@ import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 
 /**
- * Disabled test stubs for `gm/gradients.cpp` GMs that require
- * `SkGradient::Interpolation` (CSS color space gradient interpolation) —
- * an API not yet exposed in `:cpu-raster`.
+ * Disabled test stubs for `gm/gradients.cpp` GMs that require the remaining
+ * non-RGB pieces of `SkGradient::Interpolation`.
  *
  * Affected GMs:
  *  - `gradients_color_space`          — 14 color spaces (sRGB…Rec2020)
@@ -22,7 +21,7 @@ import org.junit.jupiter.api.Test
  * will throw `NotImplementedError` if accidentally called, ensuring no
  * silent empty-canvas passes occur.
  */
-@Disabled("STUB.GRADIENT_INTERPOLATION: SkGradient.Interpolation.ColorSpace / HueMethod not exposed in :cpu-raster")
+@Disabled("STUB.GRADIENT_INTERPOLATION: perceptual color spaces / HueMethod not implemented in the gradient sampler")
 class GradientsInterpolationStubsTest {
 
     @Test
