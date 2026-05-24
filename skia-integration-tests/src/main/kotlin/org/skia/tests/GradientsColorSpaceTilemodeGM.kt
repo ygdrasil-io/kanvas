@@ -11,8 +11,8 @@ import org.graphiks.math.SkISize
  * all four tile modes (Clamp, Repeat, Mirror, Decal). The gradient intentionally
  * sits inside `[20, 120]` of a 350-wide rect so tile modes are visible.
  *
- * **API gap** : requires `SkGradient::Interpolation::ColorSpace::kOKLCH` and
- * the `SkGradient` struct overload of `SkShaders::LinearGradient`.
+ * **Implementation gap** : requires OKLCH interpolation in the gradient
+ * sampler. The `SkGradient` struct overload itself exists for RGB spaces.
  */
 public class GradientsColorSpaceTilemodeGM : GM() {
 
@@ -20,6 +20,6 @@ public class GradientsColorSpaceTilemodeGM : GM() {
     override fun getISize(): SkISize = SkISize.Make(360, 105)
 
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.GRADIENT_INTERPOLATION: SkGradient.Interpolation.ColorSpace::kOKLCH not exposed in :cpu-raster")
+        TODO("STUB.GRADIENT_INTERPOLATION: OKLCH gradient interpolation not implemented")
     }
 }

@@ -13,10 +13,9 @@ import org.graphiks.math.SkISize
  * HWB, a98RGB, ProPhotoRGB, DisplayP3, Rec2020. A label column identifies
  * each row.
  *
- * **API gap** : requires `SkGradient::Interpolation::ColorSpace` enum and
- * the overloaded `SkShaders::LinearGradient(pts, SkGradient{…, interpolation})`
- * factory. Neither is exposed in `:cpu-raster` — the current [SkLinearGradient]
- * only supports the default sRGB interpolation path.
+ * **Implementation gap** : the `SkGradient` aggregate and linear-gradient
+ * overload are exposed for RGB working spaces, but the perceptual CSS
+ * interpolation spaces still need a dedicated sampler.
  */
 public class GradientsColorSpaceGM : GM() {
 
@@ -24,6 +23,6 @@ public class GradientsColorSpaceGM : GM() {
     override fun getISize(): SkISize = SkISize.Make(265, 355)
 
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.GRADIENT_INTERPOLATION: SkGradient.Interpolation.ColorSpace not exposed in :cpu-raster")
+        TODO("STUB.GRADIENT_INTERPOLATION: perceptual gradient color-space interpolation not implemented")
     }
 }
