@@ -12,6 +12,7 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
+import org.skia.foundation.SkFontArguments
 import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkFontVariation
 import org.skia.foundation.SkPaint
@@ -542,6 +543,96 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `makeClone palette index selects COLRv0 CPAL palette`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV0(glyphs[0], glyphs[1], glyphs[2]))
+                .withTableContent("kern", "CPAL", syntheticTwoPaletteCpalV0()),
+        )!!
+        val palette = SkFontArguments.Palette().also { it.index = 1 }
+        val clone = typeface.makeClone(SkFontArguments().setPalette(palette)) as OpenTypeTypeface
+        val bitmap = SkBitmap(220, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+    }
+
+    @Test
+    fun `makeClone palette overrides replace selected COLRv0 CPAL entries`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2]),
+        )!!
+        val palette = SkFontArguments.Palette().also {
+            it.overrides = listOf(SkFontArguments.Palette.Override(0, 0xFF0000FF.toInt()))
+        }
+        val clone = typeface.makeClone(SkFontArguments().setPalette(palette)) as OpenTypeTypeface
+        val bitmap = SkBitmap(220, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+    }
+
+    @Test
+    fun `invalid COLRv0 palette selection falls back to monochrome`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2]),
+        )!!
+
+        for (badIndex in listOf(-1, 99)) {
+            val palette = SkFontArguments.Palette().also { it.index = badIndex }
+            val clone = typeface.makeClone(SkFontArguments().setPalette(palette)) as OpenTypeTypeface
+            val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+            val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+            SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
+
+            assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0, "palette index $badIndex")
+            assertEquals(0, bitmap.pixels.count(::isMostlyRed), "palette index $badIndex")
+            assertEquals(0, bitmap.pixels.count(::isMostlyGreen), "palette index $badIndex")
+            assertEquals(0, bitmap.pixels.count(::isMostlyBlue), "palette index $badIndex")
+        }
+    }
+
+    @Test
+    fun `invalid COLRv0 palette override falls back to monochrome`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2]),
+        )!!
+
+        for (badIndex in listOf(-1, 99)) {
+            val palette = SkFontArguments.Palette().also {
+                it.overrides = listOf(SkFontArguments.Palette.Override(badIndex, 0xFF0000FF.toInt()))
+            }
+            val clone = typeface.makeClone(SkFontArguments().setPalette(palette)) as OpenTypeTypeface
+            val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+            val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+            SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
+
+            assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0, "override index $badIndex")
+            assertEquals(0, bitmap.pixels.count(::isMostlyRed), "override index $badIndex")
+            assertEquals(0, bitmap.pixels.count(::isMostlyGreen), "override index $badIndex")
+            assertEquals(0, bitmap.pixels.count(::isMostlyBlue), "override index $badIndex")
+        }
+    }
+
+    @Test
     fun `drawString falls back to monochrome when color tables are malformed`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
@@ -908,15 +999,50 @@ class OpenTypeFontTest {
     }
 
     private fun syntheticCpalV0(): ByteArray {
-        val bytes = ByteArray(26)
-        writeU16(bytes, 2, 3) // numPaletteEntries
-        writeU16(bytes, 4, 1) // numPalettes
-        writeU16(bytes, 6, 3) // numColorRecords
-        writeU32(bytes, 8, 14) // colorRecordsArrayOffset
-        writeU16(bytes, 12, 0) // firstColorRecordIndex
-        writeBgra(bytes, 14, blue = 0, green = 0, red = 0xFF, alpha = 0xFF)
-        writeBgra(bytes, 18, blue = 0, green = 0xFF, red = 0, alpha = 0xFF)
-        writeBgra(bytes, 22, blue = 0xFF, green = 0, red = 0, alpha = 0xFF)
+        return syntheticCpalV0(
+            listOf(
+                intArrayOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt()),
+            ),
+        )
+    }
+
+    private fun syntheticTwoPaletteCpalV0(): ByteArray {
+        return syntheticCpalV0(
+            listOf(
+                intArrayOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt()),
+                intArrayOf(0xFF0000FF.toInt(), 0xFFFF0000.toInt(), 0xFF00FF00.toInt()),
+            ),
+        )
+    }
+
+    private fun syntheticCpalV0(palettes: List<IntArray>): ByteArray {
+        require(palettes.isNotEmpty())
+        val entryCount = palettes.first().size
+        require(entryCount > 0)
+        require(palettes.all { it.size == entryCount })
+        val colorRecordsOffset = 12 + palettes.size * 2
+        val bytes = ByteArray(colorRecordsOffset + palettes.size * entryCount * 4)
+        writeU16(bytes, 2, entryCount) // numPaletteEntries
+        writeU16(bytes, 4, palettes.size) // numPalettes
+        writeU16(bytes, 6, palettes.size * entryCount) // numColorRecords
+        writeU32(bytes, 8, colorRecordsOffset) // colorRecordsArrayOffset
+        palettes.forEachIndexed { paletteIndex, _ ->
+            writeU16(bytes, 12 + paletteIndex * 2, paletteIndex * entryCount) // firstColorRecordIndex
+        }
+        var off = colorRecordsOffset
+        for (palette in palettes) {
+            for (color in palette) {
+                writeBgra(
+                    bytes,
+                    off,
+                    blue = SkColorGetB(color),
+                    green = SkColorGetG(color),
+                    red = SkColorGetR(color),
+                    alpha = color ushr 24,
+                )
+                off += 4
+            }
+        }
         return bytes
     }
 
