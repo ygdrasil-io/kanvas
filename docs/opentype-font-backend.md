@@ -30,6 +30,9 @@ font work from PR #786.
   and per-entry overrides on `OpenTypeTypeface.makeClone(args)`.
 - Non-rendered COLRv1 paint graph metadata parsing for a first safe subset:
   `PaintSolid`, `PaintGlyph`, `PaintTransform`, and `PaintTranslate`.
+- Non-rendered SVG-in-OpenType document-list metadata parsing for `SVG `
+  table version 0. The backend can associate glyph IDs with SVG document
+  bytes, but rendering still falls back to the monochrome outline path.
 - Bundled Liberation TTF resources used by the current tests.
 
 The backend has no AWT or JNI dependency. It is intended as the first portable
@@ -53,7 +56,8 @@ are unavailable.
   phantom advance deltas are separate work.
 - Color font rendering beyond COLRv0: COLRv1 draw-path integration,
   gradients, composites, reusable layer graphs, CBDT/sbix bitmap strikes,
-  and SVG-in-OpenType glyphs are not part of the current pure Kotlin backend.
+  and SVG-in-OpenType glyph rendering are not part of the current pure Kotlin
+  backend.
 - System font family enumeration and platform font fallback beyond the bundled
   portable Liberation manager are out of scope.
 - Pixel-perfect FreeType/HarfBuzz parity is not guaranteed. This backend reads
@@ -96,10 +100,30 @@ belong outside the OpenType typeface reader and should be tracked as dedicated
 
 ## Bitmap And SVG Color Font Plan
 
-Bitmap and SVG color fonts should be implemented in generated-fixture slices,
-not by adding external binary fonts to the repository. The existing
-`OpenTypeFontTest` table replacement helpers are sufficient for PR-sized
-fixtures:
+Issue [#926](https://github.com/ygdrasil-io/kanvas/issues/926) should stay
+split by table family. Bitmap and SVG color fonts should be implemented in
+generated-fixture slices, not by adding external binary fonts to the
+repository. The existing `OpenTypeFontTest` table replacement helpers are
+sufficient for PR-sized fixtures.
+
+Current gaps:
+
+- **CBDT/CBLC PNG**: no parser exists yet for bitmap strikes, `CBLC` index
+  subtables, `CBDT` bitmap-data formats, strike selection by requested size,
+  PNG decode, origin placement, or fallback from missing bitmap strikes to
+  `glyf` outlines. The first safe slice should parse a single generated
+  `CBLC` index format and prove glyph-to-PNG metadata selection before adding
+  decoding.
+- **sbix PNG**: no parser exists yet for strike tables, per-glyph records,
+  offsets, image format tags, origin handling, or PNG decode. This should not
+  share the `CBDT/CBLC` parser because `sbix` has a different table layout and
+  placement model even when the payload is also PNG.
+- **SVG-in-OpenType**: version 0 document records are parsed as internal
+  metadata and malformed optional `SVG ` tables fail closed without rejecting
+  the font. There is deliberately no SVG renderer integration yet, so draw
+  paths keep using the current monochrome outline fallback.
+
+Fixture and implementation plan:
 
 - **CBDT/CBLC**: generate a tiny bitmap-strike fixture by replacing two
   optional tables in a bundled TTF. The bitmap payload should start with a
@@ -112,9 +136,9 @@ fixtures:
   origin handling are different even when the embedded image format is also
   PNG.
 - **SVG-in-OpenType**: generate an `SVG ` table fixture containing one compact
-  SVG document record for one glyph ID. The first parser slice should expose
-  document metadata or a draw-disabled fallback test before wiring any SVG
-  renderer.
+  SVG document record for one glyph ID. The first parser slice now exposes
+  document metadata and a draw-disabled fallback test; renderer dependency
+  selection remains separate.
 
 Implementation should be split in this order:
 
@@ -124,9 +148,9 @@ Implementation should be split in this order:
    if `codec-png-kotlin` is available to the target module without introducing
    AWT or JNI.
 3. Parse sbix metadata and render its PNG strike as a separate slice.
-4. Parse SVG document records and decide renderer dependency separately. If the
-   pure Kotlin SVG stack is not available in `kanvas-skia`, keep SVG records as
-   unsupported metadata rather than adding a native dependency.
+4. Decide the SVG renderer dependency separately. If the pure Kotlin SVG stack
+   is not available in `kanvas-skia`, keep SVG records as unsupported metadata
+   rather than adding a native dependency.
 
 Fallback behavior is fixed for all bitmap/SVG color formats: missing decode
 dependencies, unsupported strike formats, malformed optional color tables,
