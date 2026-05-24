@@ -19,6 +19,8 @@ font work from PR #786.
 - Defensive raw SFNT table reads via `SkTypeface.copyTableData(tag)` for
   binary-backed OpenType typefaces.
 - Variable-font axis enumeration through OpenType `fvar` metadata.
+- Color-font metadata parsing for `CPAL` v0 palettes and `COLR` v0 base
+  glyph/layer records. Rendering layered color glyphs remains out of scope.
 - Bundled Liberation TTF resources used by the current tests.
 
 The backend has no AWT or JNI dependency. It is intended as the first portable
@@ -40,8 +42,9 @@ are unavailable.
 - Variable fonts beyond axis metadata: `gvar` outline deltas, `avar`, and
   applying `SkFontArguments.VariationPosition` to OpenType outlines are
   separate work.
-- Color fonts: `CPAL`/`COLR`, COLRv1 paint graphs, CBDT/sbix bitmap strikes,
-  and SVG-in-OpenType glyphs are not part of the current pure Kotlin backend.
+- Color font rendering: painting `COLR` layers, palette overrides, COLRv1
+  paint graphs, CBDT/sbix bitmap strikes, and SVG-in-OpenType glyphs are not
+  part of the current pure Kotlin backend.
 - System font family enumeration and platform font fallback beyond the bundled
   portable Liberation manager are out of scope.
 - Pixel-perfect FreeType/HarfBuzz parity is not guaranteed. This backend reads
@@ -98,7 +101,7 @@ rendering work:
 - [#875](https://github.com/ygdrasil-io/kanvas/issues/875): apply `fvar` /
   `gvar` variation positions to TrueType outlines.
 - [#876](https://github.com/ygdrasil-io/kanvas/issues/876): parse COLRv0 and
-  CPAL metadata with a dedicated color-font fixture.
+  CPAL metadata with a synthetic color-font fixture.
 - [#877](https://github.com/ygdrasil-io/kanvas/issues/877): plan color-font
   rendering, palette overrides, COLRv1, CBDT/sbix, and SVG-in-OpenType work.
 
