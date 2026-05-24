@@ -1,25 +1,25 @@
-org.graphiks.math.SkRectTest	RectTest	math/src/test/kotlin/SkRectTest.kt:15	tests/RectTest.cpp:1
-org.graphiks.math.SkRectTest.isEmpty when degenerate or NaN	InfRect	math/src/test/kotlin/SkRectTest.kt:48	tests/InfRectTest.cpp:26
-org.graphiks.math.SkRectTest.isSorted vs isFinite	InfRect	math/src/test/kotlin/SkRectTest.kt:57	tests/InfRectTest.cpp:26
-org.graphiks.math.SkRectTest.centerX and centerY use double-precision midpoint	Rect_whOverflow	math/src/test/kotlin/SkRectTest.kt:66	tests/RectTest.cpp:163
-org.graphiks.math.SkRectTest.MakeLTRB stores corners verbatim	Rect	math/src/test/kotlin/SkRectTest.kt:20	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.MakeXYWH adds w h to origin	Rect	math/src/test/kotlin/SkRectTest.kt:28	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.MakeWH origin is zero	Rect	math/src/test/kotlin/SkRectTest.kt:34	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.Make from SkIRect promotes to float	Rect	math/src/test/kotlin/SkRectTest.kt:40	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.setLTRB and setXYWH replace coordinates	Rect_setbounds	math/src/test/kotlin/SkRectTest.kt:78	tests/RectTest.cpp:133
-org.graphiks.math.SkRectTest.offset and offsetTo	Rect	math/src/test/kotlin/SkRectTest.kt:87	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.inset and outset are symmetric	Rect_grow	math/src/test/kotlin/SkRectTest.kt:96	tests/RectTest.cpp:108
-org.graphiks.math.SkRectTest.adjust shifts each edge independently	Rect	math/src/test/kotlin/SkRectTest.kt:105	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.sort and makeSorted swap reversed edges	Rect	math/src/test/kotlin/SkRectTest.kt:112	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.makeOffset Inset Outset return new rects	Rect	math/src/test/kotlin/SkRectTest.kt:126	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.contains point is half-open	Rect	math/src/test/kotlin/SkRectTest.kt:138	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.contains rect requires non-empty inner	Rect	math/src/test/kotlin/SkRectTest.kt:148	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.intersect overlapping rects clips to overlap	Rect	math/src/test/kotlin/SkRectTest.kt:159	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.intersect non-overlapping returns false leaves unchanged	Rect	math/src/test/kotlin/SkRectTest.kt:166	tests/RectTest.cpp:103
-org.graphiks.math.SkRectTest.intersects predicate is NaN-safe	Rect_path_nan	math/src/test/kotlin/SkRectTest.kt:173	tests/RectTest.cpp:113
-org.graphiks.math.SkRectTest.join expands to encompass r	Rect_setbounds	math/src/test/kotlin/SkRectTest.kt:189	tests/RectTest.cpp:133
-org.graphiks.math.SkRectTest.join with empty r is no-op	Rect_setbounds	math/src/test/kotlin/SkRectTest.kt:196	tests/RectTest.cpp:133
-org.graphiks.math.SkRectTest.join into empty becomes r	Rect_setbounds	math/src/test/kotlin/SkRectTest.kt:203	tests/RectTest.cpp:133
-org.graphiks.math.SkRectTest.Bounds returns tight bbox	Rect_setbounds	math/src/test/kotlin/SkRectTest.kt:250	tests/RectTest.cpp:133
-org.graphiks.math.SkRectTest.Bounds returns null on non-finite point	Rect_setbounds	math/src/test/kotlin/SkRectTest.kt:257	tests/RectTest.cpp:133
-org.graphiks.math.SkRectTest.Bounds of empty array is empty rect	Rect_setbounds	math/src/test/kotlin/SkRectTest.kt:263	tests/RectTest.cpp:133
+org.graphiks.math.SkRectTest	RectTest	math/src/commonTest/kotlin/SkRectTest.kt:15	tests/RectTest.cpp:1
+org.graphiks.math.SkRectTest.isEmpty when degenerate or NaN	InfRect	math/src/commonTest/kotlin/SkRectTest.kt:48	tests/InfRectTest.cpp:26
+org.graphiks.math.SkRectTest.isSorted vs isFinite	InfRect	math/src/commonTest/kotlin/SkRectTest.kt:57	tests/InfRectTest.cpp:26
+org.graphiks.math.SkRectTest.centerX and centerY use double-precision midpoint	Rect_whOverflow	math/src/commonTest/kotlin/SkRectTest.kt:66	tests/RectTest.cpp:163
+org.graphiks.math.SkRectTest.MakeLTRB stores corners verbatim	Rect	math/src/commonTest/kotlin/SkRectTest.kt:20	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.MakeXYWH adds w h to origin	Rect	math/src/commonTest/kotlin/SkRectTest.kt:28	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.MakeWH origin is zero	Rect	math/src/commonTest/kotlin/SkRectTest.kt:34	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.Make from SkIRect promotes to float	Rect	math/src/commonTest/kotlin/SkRectTest.kt:40	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.setLTRB and setXYWH replace coordinates	Rect_setbounds	math/src/commonTest/kotlin/SkRectTest.kt:78	tests/RectTest.cpp:133
+org.graphiks.math.SkRectTest.offset and offsetTo	Rect	math/src/commonTest/kotlin/SkRectTest.kt:87	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.inset and outset are symmetric	Rect_grow	math/src/commonTest/kotlin/SkRectTest.kt:96	tests/RectTest.cpp:108
+org.graphiks.math.SkRectTest.adjust shifts each edge independently	Rect	math/src/commonTest/kotlin/SkRectTest.kt:105	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.sort and makeSorted swap reversed edges	Rect	math/src/commonTest/kotlin/SkRectTest.kt:112	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.makeOffset Inset Outset return new rects	Rect	math/src/commonTest/kotlin/SkRectTest.kt:126	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.contains point is half-open	Rect	math/src/commonTest/kotlin/SkRectTest.kt:138	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.contains rect requires non-empty inner	Rect	math/src/commonTest/kotlin/SkRectTest.kt:148	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.intersect overlapping rects clips to overlap	Rect	math/src/commonTest/kotlin/SkRectTest.kt:159	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.intersect non-overlapping returns false leaves unchanged	Rect	math/src/commonTest/kotlin/SkRectTest.kt:166	tests/RectTest.cpp:103
+org.graphiks.math.SkRectTest.intersects predicate is NaN-safe	Rect_path_nan	math/src/commonTest/kotlin/SkRectTest.kt:173	tests/RectTest.cpp:113
+org.graphiks.math.SkRectTest.join expands to encompass r	Rect_setbounds	math/src/commonTest/kotlin/SkRectTest.kt:189	tests/RectTest.cpp:133
+org.graphiks.math.SkRectTest.join with empty r is no-op	Rect_setbounds	math/src/commonTest/kotlin/SkRectTest.kt:196	tests/RectTest.cpp:133
+org.graphiks.math.SkRectTest.join into empty becomes r	Rect_setbounds	math/src/commonTest/kotlin/SkRectTest.kt:203	tests/RectTest.cpp:133
+org.graphiks.math.SkRectTest.Bounds returns tight bbox	Rect_setbounds	math/src/commonTest/kotlin/SkRectTest.kt:250	tests/RectTest.cpp:133
+org.graphiks.math.SkRectTest.Bounds returns null on non-finite point	Rect_setbounds	math/src/commonTest/kotlin/SkRectTest.kt:257	tests/RectTest.cpp:133
+org.graphiks.math.SkRectTest.Bounds of empty array is empty rect	Rect_setbounds	math/src/commonTest/kotlin/SkRectTest.kt:263	tests/RectTest.cpp:133

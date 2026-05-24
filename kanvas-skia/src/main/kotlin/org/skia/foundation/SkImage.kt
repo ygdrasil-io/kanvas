@@ -195,6 +195,26 @@ public class SkImage public constructor(
     }
 
     /**
+     * Mirrors Skia's `SkImage::makeScaled(SkRecorder*, const SkImageInfo&, const SkSamplingOptions&)`.
+     *
+     * Returns a rescaled version of this image with the geometry and colour
+     * type described by [info], using [sampling] to control filter quality.
+     * Returns `null` if the image cannot be rescaled (empty source / target).
+     *
+     * **Not yet implemented** — the kanvas-skia raster backend does not
+     * expose a direct `makeScaled` path. The preferred raster workaround
+     * is `image.readPixels(dstPixmap, sampling)` via [SkPixmap.scalePixels],
+     * which the `:cpu-raster` layer provides. This surface stub lets GM
+     * bodies compile and fails loudly at runtime so the gap is visible.
+     *
+     * Tracked as STUB.IMAGE_MAKE_SCALED.
+     */
+    public fun makeScaled(
+        info: SkImageInfo,
+        sampling: SkSamplingOptions,
+    ): SkImage? = TODO("STUB.IMAGE_MAKE_SCALED")
+
+    /**
      * Mirrors Skia's `SkImage::makeColorSpace(SkRecorder*, sk_sp<SkColorSpace>, RequiredProperties)`
      * — returns a new image whose pixels have been converted from
      * `this.colorSpace` to [target].
@@ -241,6 +261,57 @@ public class SkImage public constructor(
         }
         return SkImage(width, height, out, colorType, target)
     }
+
+    /**
+     * Mirrors Skia's `SkImage::reinterpretColorSpace(sk_sp<SkColorSpace>)`.
+     *
+     * Returns a new [SkImage] that shares the same underlying pixels as
+     * `this` but is tagged with [newColorSpace] instead of the original
+     * colour space. No pixel data is converted — the raw bytes are
+     * reinterpreted as-is in the new space.
+     *
+     * This is a metadata-only operation. The returned image has a fresh
+     * wrapper and the same immutable pixel buffer, so callers can compose
+     * it with [makeColorSpace] without an extra conversion pass.
+     */
+    public fun reinterpretColorSpace(newColorSpace: SkColorSpace): SkImage =
+        if (colorSpace.hash() == newColorSpace.hash()) this
+        else SkImage(width, height, pixels, colorType, newColorSpace, mipLevels)
+
+    /**
+     * Mirrors Skia's `SkImage::makeColorTypeAndColorSpace(SkRecorder*,
+     * SkColorType, sk_sp<SkColorSpace>, RequiredProperties)`.
+     *
+     * Returns a new [SkImage] with both the colour type and colour space
+     * changed simultaneously. The internal storage remains 8888 for the
+     * raster backend, but pixels are quantized through the requested
+     * [newColorType] so drawing observes the same precision loss as the
+     * source colour type. The conversion path is intentionally scoped to
+     * the colour types the GM suite exercises today.
+     */
+    public fun makeColorTypeAndColorSpace(
+        newColorType: SkColorType,
+        newColorSpace: SkColorSpace,
+    ): SkImage? {
+        if (newColorType == SkColorType.kUnknown) return null
+        val converted = makeColorSpace(newColorSpace) ?: return null
+        if (converted.colorType == newColorType) return converted
+
+        val out = IntArray(width * height)
+        for (i in converted.pixels.indices) {
+            out[i] = quantizeToColorType(converted.pixels[i], newColorType)
+        }
+        return SkImage(width, height, out, newColorType, newColorSpace)
+    }
+
+    /**
+     * Mirrors Skia's `SkImage::makeRasterImage(SkRecorder*)` — on the GPU
+     * path this reads back the texture into a CPU-backed raster image.
+     *
+     * On the kanvas-skia CPU raster backend every [SkImage] is already a
+     * raster image, so this is a no-op returning `this`.
+     */
+    public fun makeRasterImage(): SkImage = this
 
     /**
      * Mirrors Skia's `SkImage::encodeToData()` convenience entry point
@@ -434,6 +505,33 @@ public class SkImage public constructor(
          */
         private val SCRATCH_RGBA: ThreadLocal<FloatArray> =
             ThreadLocal.withInitial { FloatArray(4) }
+
+        private fun quantizeToColorType(c: SkColor, colorType: SkColorType): SkColor {
+            val a = SkColorGetA(c)
+            val r = SkColorGetR(c)
+            val g = SkColorGetG(c)
+            val b = SkColorGetB(c)
+            return when (colorType) {
+                SkColorType.kRGB_565 -> SkBitmap.unpackRGB565(
+                    SkBitmap.packRGB565(r / 255f, g / 255f, b / 255f),
+                )
+                SkColorType.kGray_8 -> {
+                    val y = (r * 0.299f + g * 0.587f + b * 0.114f + 0.5f)
+                        .toInt()
+                        .coerceIn(0, 255)
+                    SkColorSetARGB(0xFF, y, y, y)
+                }
+                SkColorType.kAlpha_8 -> SkColorSetARGB(a, 0, 0, 0)
+                SkColorType.kARGB_4444 -> SkBitmap.unpackARGB4444Premul(
+                    SkBitmap.packARGB4444Premul(a / 255f, r / 255f, g / 255f, b / 255f),
+                )
+                SkColorType.kRGB_888x -> SkColorSetARGB(0xFF, r, g, b)
+                SkColorType.kRGBA_8888,
+                SkColorType.kBGRA_8888,
+                SkColorType.kSRGBA_8888 -> c
+                else -> c
+            }
+        }
 
         /**
          * Write a single non-premultiplied 8-bit ARGB [SkColor] at

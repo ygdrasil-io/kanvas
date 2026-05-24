@@ -43,8 +43,8 @@ import org.graphiks.math.SkRect
  *    8-pixel checker, 0xFFA0A0A0 / 0xFF404040 palette).
  *
  * C++ original (class form) — see `gm/imagefiltersclipped.cpp` ;
- * the DEF_SIMPLE_GM `imagefilter_convolve_subset` is intentionally
- * not part of this port.
+ * the DEF_SIMPLE_GM `imagefilter_convolve_subset` is ported separately
+ * in [ImageFilterConvolveSubsetGM].
  */
 public class ImageFiltersClippedGM : GM() {
 

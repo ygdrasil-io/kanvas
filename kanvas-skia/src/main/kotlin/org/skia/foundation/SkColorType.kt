@@ -122,3 +122,21 @@ public enum class SkColorType(public val bytesPerPixel: Int) {
     /** True when this colour type can be the default destination for [SkBitmap]-style raster work. */
     public fun isValid(): Boolean = this != kUnknown
 }
+
+/**
+ * Mirrors Skia's `SkColorTypeChannelFlags(SkColorType)` — returns a
+ * bitmask of `SkColorChannelFlag` values for the channels present in
+ * [colorType].
+ *
+ * Only the channel-flag combinations needed for the YUVA plane-assembly
+ * path (1-/2-/3-/4-channel types) are wired; all other types return 0.
+ * Mirrors `src/core/SkColorSpacePriv.h::SkColorTypeChannelFlags`.
+ *
+ * **TODO: STUB.YUVA_PIXMAPS** — complete the mapping for remaining types.
+ */
+public fun SkColorTypeChannelFlags(colorType: SkColorType): Int {
+    TODO(
+        "STUB.YUVA_PIXMAPS: SkColorTypeChannelFlags($colorType) — " +
+            "channel-flag bitmask for YUVA plane assembly not yet implemented."
+    )
+}

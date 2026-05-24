@@ -10,7 +10,7 @@
 # the symbol to Skia later, REMOVE the entry and add a TSV line instead.
 
 # ────────────────────────────────────────────────────────────────────────
-# src/main/kotlin — production symbols without Skia counterpart
+# src/commonMain/kotlin — production symbols without Skia counterpart
 # ────────────────────────────────────────────────────────────────────────
 
 org.graphiks.math.SK_Scalar2PI
@@ -33,6 +33,9 @@ org.graphiks.math.SkMatrix.det2x2
 org.graphiks.math.SkMatrix.Companion.SCALE_KIND_MIN
 org.graphiks.math.SkMatrix.Companion.SCALE_KIND_MAX
 org.graphiks.math.SkMatrix.Companion.SCALE_KIND_BOTH
+# Skia's SkM44 exposes equality and the identity constructor/setter, but no
+# direct isIdentity() predicate.
+org.graphiks.math.SkM44.isIdentity
 # Skia's SkRect (float) does not expose `topLeft()` or `adjust()` ; they
 # live only on SkIRect (int). The Kotlin port mirrors them on the float
 # struct for symmetry.
@@ -45,7 +48,7 @@ org.graphiks.math.SkcmsMatrix3x3.Companion.of
 org.graphiks.math.SkcmsMatrix3x3.get
 
 # ────────────────────────────────────────────────────────────────────────
-# src/test/kotlin — test names with Kotlin-style backtick descriptions
+# src/commonTest/kotlin — test names with Kotlin-style backtick descriptions
 # ────────────────────────────────────────────────────────────────────────
 #
 # Test FQNs are descriptive backtick identifiers (e.g. `mapPoints identity
@@ -61,7 +64,11 @@ org.graphiks.math.SkcmsMatrix3x3.get
 org.graphiks.math.SkIPointTest.equals overload returns false on mismatch
 org.graphiks.math.SkIPointTest.saturating ops are exact when inputs do not overflow
 
+# --- SkColor4fTest ---
+org.graphiks.math.SkColor4fTest.SkHSVToColor treats out-of-range hue as zero instead of wrapping
+
 # --- SkIRectTest ---
+org.graphiks.math.SkIRectTest.MakePtSize delegates to MakeXYWH saturation semantics
 org.graphiks.math.SkIRectTest.topLeft returns SkIPoint
 
 # --- SkM44Test ---
@@ -69,6 +76,8 @@ org.graphiks.math.SkM44Test.copy constructor produces independent backing array
 org.graphiks.math.SkM44Test.equals and hashCode match by content
 
 # --- SkMatrixTest ---
+org.graphiks.math.SkMatrixTest.MakeRSXform pivoted matches SkRSXform anchor translation
+org.graphiks.math.SkMatrixTest.cheapEqualTo compares perspective fields
 org.graphiks.math.SkMatrixTest.computeMaxScale never returns NaN for typical inputs
 org.graphiks.math.SkMatrixTest.concat of two perspective matrices builds 3x3 product
 org.graphiks.math.SkMatrixTest.deprecated computeMaxScale forwards to getMaxScale
@@ -87,8 +96,10 @@ org.graphiks.math.SkMatrixTest.mapPoints scale-translate fast path
 org.graphiks.math.SkMatrixTest.mapPoints translate adds tx ty
 org.graphiks.math.SkMatrixTest.mapRadius equals scale magnitude for pure scale
 org.graphiks.math.SkMatrixTest.mapRadius is invariant under rotation
+org.graphiks.math.SkMatrixTest.mapRadius uses mapped axis vector lengths under perspective
 org.graphiks.math.SkMatrixTest.mapRectScaleTranslate throws when not scale-translate
 org.graphiks.math.SkMatrixTest.mapVector ignores translation
+org.graphiks.math.SkMatrixTest.mapVector with perspective matches mapPoint minus origin
 org.graphiks.math.SkMatrixTest.mapVectors affine fast path unchanged
 org.graphiks.math.SkMatrixTest.mapVectors ignores translation
 org.graphiks.math.SkMatrixTest.mapVectors with perspective matches mapPoint - mapPoint(0, 0)
@@ -104,6 +115,7 @@ org.graphiks.math.SkMatrixTest.pivoted preScale matches preConcat-with-MakeScale
 org.graphiks.math.SkMatrixTest.preservesRightAngles identity translate scale rotate skew
 org.graphiks.math.SkMatrixTest.singular value matches sqrt(eigenvalue) sanity check
 org.graphiks.math.SkMatrixTest.singular values are positive
+org.graphiks.math.SkMatrixTest.setPolyToPoly delegates to MakePolyToPoly
 
 # --- SkPoint3Test ---
 org.graphiks.math.SkPoint3Test.default ctor is origin
@@ -138,6 +150,7 @@ org.graphiks.math.SkRectTest.roundOut floors min ceils max
 # --- SkScalarTest ---
 org.graphiks.math.SkScalarTest.SkDegreesToRadians and SkRadiansToDegrees round-trip
 org.graphiks.math.SkScalarTest.SkDoubleToScalar narrows to float
+org.graphiks.math.SkScalarTest.SkScalar to-int conversions saturate NaN and extremes like Skia
 org.graphiks.math.SkScalarTest.SkScalarAve midpoint
 org.graphiks.math.SkScalarTest.SkScalarCopySign
 org.graphiks.math.SkScalarTest.SkScalarCosSnapToZero snaps cardinal angles
@@ -152,6 +165,7 @@ org.graphiks.math.SkScalarTest.SkScalarNearlyZero accepts default tolerance
 org.graphiks.math.SkScalarTest.SkScalarNearlyZero respects custom tolerance
 org.graphiks.math.SkScalarTest.SkScalarPow Exp Log Log2
 org.graphiks.math.SkScalarTest.SkScalarRound is half-toward-positive-infinity, not banker's rounding
+org.graphiks.math.SkScalarTest.SkScalarRound uses double math for tricky float inputs
 org.graphiks.math.SkScalarTest.SkScalarRoundToInt is half-toward-positive-infinity, not banker's rounding
 org.graphiks.math.SkScalarTest.SkScalarSignAsInt and SignAsScalar
 org.graphiks.math.SkScalarTest.SkScalarSinSnapToZero snaps cardinal angles
@@ -159,4 +173,10 @@ org.graphiks.math.SkScalarTest.SkScalarSquare
 org.graphiks.math.SkScalarTest.SkScalarTruncToScalar and TruncToInt
 org.graphiks.math.SkScalarTest.SkScalarsEqual element-wise
 org.graphiks.math.SkScalarTest.constants match Skia values
-org.graphiks.math.SkScalarTest.nearly-zero constants match Skia exactly
+org.graphiks.math.SkScalarTest.nearly-zero constants match Skia
+
+# --- SkMathScalar ---
+org.graphiks.math.dot2
+org.graphiks.math.dot3
+org.graphiks.math.dot4
+org.graphiks.math.m44Concat

@@ -13,6 +13,7 @@ import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkCubicBC
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
@@ -758,6 +759,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         val blender = paint?.blender
         val maxX = image.width - 1
         val maxY = image.height - 1
+        val alphaMaskTint = alphaMaskTintColor(image, paint, colorFilter)
 
         // [SkImage] currently has no `colorSpace` property, so by convention
         // image pixels are sRGB-encoded (same as SkColor). Phase 7e — when
@@ -770,7 +772,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // further xform inside the loop.
         val needsXform = !xformSteps.flags.isIdentity
         val deferXform = colorFilter != null && needsXform
-        val devPixels = if (deferXform) image.pixels else imagePixelsInDeviceColorSpace(image)
+        val devPixels = if (deferXform || alphaMaskTint != null) image.pixels else imagePixelsInDeviceColorSpace(image)
 
         // For modes whose formula reduces to a non-`dst` value at sa=0
         // (e.g. kClear, kSrc, kSrcIn, kSrcOut, kDstIn, kDstATop, kModulate),
@@ -813,7 +815,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                         wx0, wx1, wx2, wx3,
                         wy0, wy1, wy2, wy3,
                     )
-                    sample = applyAlpha(sample, paintAlpha)
+                    sample = if (alphaMaskTint != null) {
+                        applyAlphaMaskTint(sample, alphaMaskTint, paintAlpha)
+                    } else {
+                        applyAlpha(sample, paintAlpha)
+                    }
                     if (colorFilter != null) sample = colorFilter.filterColor(sample)
                     if (deferXform) sample = transformPaintColor(sample)
                     if (sample ushr 24 == 0 && !mustBlendZero) continue
@@ -830,7 +836,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     for (px in ix0 until ix1) {
                         val srcXc = src.left + (px + 0.5f - devDst.left) * scaleX
                         val ix = floor(srcXc).coerceIn(0, maxX)
-                        var sample = applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
+                        var sample = if (alphaMaskTint != null) {
+                            applyAlphaMaskTint(devPixels[iy * image.width + ix], alphaMaskTint, paintAlpha)
+                        } else {
+                            applyAlpha(devPixels[iy * image.width + ix], paintAlpha)
+                        }
                         if (colorFilter != null) sample = colorFilter.filterColor(sample)
                         if (deferXform) sample = transformPaintColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
@@ -853,7 +863,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                         val c10 = devPixels[iy0i * image.width + ix1i]
                         val c01 = devPixels[iy1i * image.width + ix0i]
                         val c11 = devPixels[iy1i * image.width + ix1i]
-                        var sample = applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
+                        var sample = if (alphaMaskTint != null) {
+                            applyAlphaMaskTint(bilerpARGB(c00, c10, c01, c11, fx, fy), alphaMaskTint, paintAlpha)
+                        } else {
+                            applyAlpha(bilerpARGB(c00, c10, c01, c11, fx, fy), paintAlpha)
+                        }
                         if (colorFilter != null) sample = colorFilter.filterColor(sample)
                         if (deferXform) sample = transformPaintColor(sample)
                         if (sample ushr 24 == 0 && !mustBlendZero) continue
@@ -973,9 +987,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         if (paintAlpha == 0 && colorFilter == null) return
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
         val blender = paint?.blender
+        val alphaMaskTint = alphaMaskTintColor(mip, paint, colorFilter)
         val needsXform = !xformSteps.flags.isIdentity
         val deferXform = colorFilter != null && needsXform
-        val devPixels = if (deferXform) mip.pixels else imagePixelsInDeviceColorSpace(mip)
+        val devPixels = if (deferXform || alphaMaskTint != null) mip.pixels else imagePixelsInDeviceColorSpace(mip)
         val mustBlendZero = modeAffectsZeroAlphaSrc(mode) || colorFilter != null
         val maxX = mip.width - 1
         val maxY = mip.height - 1
@@ -1028,7 +1043,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 val r = (sumR * invN + 0.5f).toInt().coerceIn(0, 255)
                 val g = (sumG * invN + 0.5f).toInt().coerceIn(0, 255)
                 val b = (sumB * invN + 0.5f).toInt().coerceIn(0, 255)
-                var sample = applyAlpha(SkColorSetARGB(a, r, g, b), paintAlpha)
+                var sample = if (alphaMaskTint != null) {
+                    applyAlphaMaskTint(SkColorSetARGB(a, r, g, b), alphaMaskTint, paintAlpha)
+                } else {
+                    applyAlpha(SkColorSetARGB(a, r, g, b), paintAlpha)
+                }
                 if (colorFilter != null) sample = colorFilter.filterColor(sample)
                 if (deferXform) sample = transformPaintColor(sample)
                 if (sample ushr 24 == 0 && !mustBlendZero) continue
@@ -1046,6 +1065,17 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         val sa = SkColorGetA(src)
         val newA = (sa * paintAlpha + 127) / 255
         return (src and 0x00FFFFFF) or (newA shl 24)
+    }
+
+    private fun alphaMaskTintColor(image: SkImage, paint: SkPaint?, colorFilter: SkColorFilter?): SkColor? {
+        if (image.colorType != SkColorType.kAlpha_8 || paint == null || colorFilter != null) return null
+        return transformPaintColor(SkColorSetARGB(0xFF, SkColorGetR(paint.color), SkColorGetG(paint.color), SkColorGetB(paint.color)))
+    }
+
+    /** Use an A8 image sample as coverage for the paint colour. */
+    private fun applyAlphaMaskTint(maskSample: SkColor, tintColor: SkColor, paintAlpha: Int): SkColor {
+        val finalA = (SkColorGetA(maskSample) * paintAlpha + 127) / 255
+        return (finalA shl 24) or (tintColor and 0x00FFFFFF)
     }
 
     /** Bilinear interpolation in non-premultiplied ARGB; matches Skia for opaque samples. */
@@ -1095,7 +1125,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // stipple ; the stroker thickens each segment. When the effect
         // returns an empty path (degenerate intervals etc.) we drop the
         // draw.
-        val effectivePath = paint.pathEffect?.filterPath(path, ctm) ?: path
+        val effectivePath = paint.pathEffect?.filterPath(path, ctm, pathEffectCullRect(clip, ctm, paint)) ?: path
         if (effectivePath !== path && effectivePath.isEmpty() && !effectivePath.fillType.isInverse()) return
 
         // Phase 7c — when a mask filter (e.g. Gaussian blur) is set,
@@ -1510,6 +1540,28 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         out[1] = c.fG * a
         out[2] = c.fB * a
         out[3] = a
+    }
+
+    private fun pathEffectCullRect(clip: SkIRect, ctm: SkMatrix, paint: SkPaint): SkRect? {
+        if (!ctm.isScaleTranslate()) return null
+        val sx = ctm.getScaleX()
+        val sy = ctm.getScaleY()
+        if (sx == 0f || sy == 0f) return null
+
+        val halfStroke = if (paint.style == SkPaint.Style.kFill_Style) 0f else paint.strokeWidth * 0.5f
+        val padX = halfStroke / kotlin.math.abs(sx) + 1f
+        val padY = halfStroke / kotlin.math.abs(sy) + 1f
+        val x0 = (clip.left().toFloat() - ctm.getTranslateX()) / sx
+        val x1 = (clip.right().toFloat() - ctm.getTranslateX()) / sx
+        val y0 = (clip.top().toFloat() - ctm.getTranslateY()) / sy
+        val y1 = (clip.bottom().toFloat() - ctm.getTranslateY()) / sy
+
+        return SkRect.MakeLTRB(
+            kotlin.math.min(x0, x1) - padX,
+            kotlin.math.min(y0, y1) - padY,
+            kotlin.math.max(x0, x1) + padX,
+            kotlin.math.max(y0, y1) + padY,
+        )
     }
 
     // --------------------------------------------------------------------

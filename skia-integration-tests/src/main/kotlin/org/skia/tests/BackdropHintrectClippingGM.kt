@@ -42,11 +42,11 @@ public class BackdropHintrectClippingGM : GM() {
         for (useHintRect in booleanArrayOf(false, true)) {
             for (useClip in booleanArrayOf(false, true)) {
                 c.save()
-                doDraw(c, useClip, useHintRect, 1.0f)
+                backdropDoDraw(c, useClip, useHintRect, 1.0f)
 
                 val rec = SkPictureRecorder()
                 val pCanvas = rec.beginRecording(256f, 256f)
-                doDraw(pCanvas, useClip, useHintRect, 1.0f)
+                backdropDoDraw(pCanvas, useClip, useHintRect, 1.0f)
                 c.translate(256f, 0f)
                 rec.finishRecordingAsPicture().playback(c)
                 c.restore()
@@ -57,41 +57,9 @@ public class BackdropHintrectClippingGM : GM() {
     }
 }
 
-/**
- * Port of Skia's `gm/backdrop.cpp::DEF_SIMPLE_GM(backdrop_scalefactor, 768, 1024)`.
- *
- * 3x4 grid : same row pattern as [BackdropHintrectClippingGM], but the
- * three columns vary the intermediate scale factor passed to
- * `ScaledBackdropLayer` : `1.0`, `0.25`, `0.1`. kanvas-skia's public
- * API exposes only the non-scaled [SaveLayerRec], so all three columns
- * render with `scaleFactor == 1` here.
- */
-public class BackdropScalefactorGM : GM() {
+// -- shared helpers for backdrop.cpp GMs --------------------------------
 
-    override fun getName(): String = "backdrop_scalefactor"
-    override fun getISize(): SkISize = SkISize.Make(768, 1024)
-
-    override fun onDraw(canvas: SkCanvas?) {
-        val c = canvas ?: return
-        for (useHintRect in booleanArrayOf(false, true)) {
-            for (useClip in booleanArrayOf(false, true)) {
-                c.save()
-                doDraw(c, useClip, useHintRect, 1.0f)
-                c.translate(256f, 0f)
-                doDraw(c, useClip, useHintRect, 0.25f)
-                c.translate(256f, 0f)
-                doDraw(c, useClip, useHintRect, 0.1f)
-                c.restore()
-
-                c.translate(0f, 256f)
-            }
-        }
-    }
-}
-
-// -- shared helpers ---------------------------------------------------
-
-private fun makeShader(cx: Float, cy: Float): SkSweepGradient {
+internal fun backdropMakeShader(cx: Float, cy: Float): SkSweepGradient {
     val red = 0xFFFF0000.toInt()
     val blue = 0xFF0000FF.toInt()
     val green = 0xFF00FF00.toInt()
@@ -110,7 +78,7 @@ private fun makeShader(cx: Float, cy: Float): SkSweepGradient {
 }
 
 @Suppress("UNUSED_PARAMETER")
-private fun doDraw(canvas: SkCanvas, useClip: Boolean, useHintRect: Boolean, scaleFactor: Float) {
+internal fun backdropDoDraw(canvas: SkCanvas, useClip: Boolean, useHintRect: Boolean, scaleFactor: Float) {
     canvas.save()
     canvas.clipRect(SkRect.MakeWH(256f, 256f))
 
@@ -118,7 +86,7 @@ private fun doDraw(canvas: SkCanvas, useClip: Boolean, useHintRect: Boolean, sca
     val cy = 128f
     val rad = 100f
     val p = SkPaint().apply {
-        shader = makeShader(cx, cy)
+        shader = backdropMakeShader(cx, cy)
         isAntiAlias = true
     }
     canvas.drawCircle(cx, cy, rad, p)

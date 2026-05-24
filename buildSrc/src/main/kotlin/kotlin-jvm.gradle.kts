@@ -22,11 +22,21 @@ tasks.withType<Test>().configureEach {
     // independent of `org.gradle.jvmargs` (which only sizes the build
     // daemon). Several GMs (ManyCirclesGM, HitTestPathGM, SimpleRectGM, …)
     // allocate enough bitmap surfaces during a full :test run to trip
-    // OutOfMemoryError under that default. 4 GB clears every GM we
-    // exercise today with comfortable headroom and stays well under the
-    // 6 GB daemon ceiling defined in `gradle.properties`, so a single
-    // worker JVM cannot starve the rest of the build.
-    maxHeapSize = "4g"
+    // OutOfMemoryError under that default. 8 GB clears the large backdrop
+    // / shadow GM cases exercised today. The value can still be overridden
+    // per run with `-Pkanvas.test.maxHeapSize=...` when bisecting memory.
+    maxHeapSize = findProperty("kanvas.test.maxHeapSize")?.toString() ?: "8g"
+
+    // Forward the ratchet-write gate from `gradle.properties` to the test
+    // worker JVMs. The `SimilarityTracker` (in :cpu-raster) reads this
+    // sysprop ; when `true`, scores validate against the existing ratchet
+    // but the on-disk `test-similarity-scores.properties` is not mutated.
+    // Used during the STUB/PARTIAL porting sprint so 10+ parallel agent
+    // PRs don't conflict on the shared properties file. See the property
+    // definition in `gradle.properties` for re-enable instructions.
+    findProperty("kanvas.ratchet.writes.disabled")?.let {
+        systemProperty("kanvas.ratchet.writes.disabled", it.toString())
+    }
 
     // Log information about all test results, not only the failed ones.
     testLogging {

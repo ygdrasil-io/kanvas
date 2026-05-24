@@ -1,76 +1,76 @@
-org.graphiks.math.SkMatrixTest	MatrixTest	math/src/test/kotlin/SkMatrixTest.kt:19	tests/MatrixTest.cpp:1
-org.graphiks.math.SkMatrixTest.Identity is identity	Matrix_Ctor	math/src/test/kotlin/SkMatrixTest.kt:27	tests/MatrixTest.cpp:1096
-org.graphiks.math.SkMatrixTest.MakeTrans translates points	Matrix	math/src/test/kotlin/SkMatrixTest.kt:36	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeScale scales points	Matrix	math/src/test/kotlin/SkMatrixTest.kt:45	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRotate(90) maps (1,0) to (0,1)	Matrix_SetRotateSnap	math/src/test/kotlin/SkMatrixTest.kt:52	tests/MatrixTest.cpp:1106
-org.graphiks.math.SkMatrixTest.MakeRotate(deg, px, py) rotates around the pivot	Matrix	math/src/test/kotlin/SkMatrixTest.kt:65	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.concat applies right matrix first	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:83	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.preTranslate matches concat-with-Translate	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:92	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.preScale composes scales	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:103	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.mapRect returns axis-aligned bbox of rotated rect	Matrix_maprects	math/src/test/kotlin/SkMatrixTest.kt:111	tests/MatrixTest.cpp:1042
-org.graphiks.math.SkMatrixTest.computeMaxScale of pure scale returns max abs scale	Matrix	math/src/test/kotlin/SkMatrixTest.kt:125	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.computeMaxScale of pure rotation is 1	Matrix	math/src/test/kotlin/SkMatrixTest.kt:133	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.computeMaxScale of rotated scale equals scale	Matrix	math/src/test/kotlin/SkMatrixTest.kt:141	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.computeMaxScale of identity is 1	Matrix	math/src/test/kotlin/SkMatrixTest.kt:148	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.concat with Identity is identity	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:163	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.MakeAll constructs raw matrix	Matrix	math/src/test/kotlin/SkMatrixTest.kt:179	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRotate cardinal angles produce bit-exact axis-aligned matrices	Matrix_SetRotateSnap	math/src/test/kotlin/SkMatrixTest.kt:245	tests/MatrixTest.cpp:1106
-org.graphiks.math.SkMatrixTest.MakeAll round-trips through fields	Matrix	math/src/test/kotlin/SkMatrixTest.kt:266	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRotate snap does not leak negative zero	Matrix_SetRotateSnap	math/src/test/kotlin/SkMatrixTest.kt:273	tests/MatrixTest.cpp:1106
-org.graphiks.math.SkMatrixTest.invert exactly-singular returns null	Matrix	math/src/test/kotlin/SkMatrixTest.kt:288	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.invert near-singular returns null	Matrix	math/src/test/kotlin/SkMatrixTest.kt:295	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.invert non-singular returns valid inverse	Matrix	math/src/test/kotlin/SkMatrixTest.kt:304	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRotate(0) and MakeRotate(180) are isAxisAligned	Matrix_SetRotateSnap	math/src/test/kotlin/SkMatrixTest.kt:315	tests/MatrixTest.cpp:1106
-org.graphiks.math.SkMatrixTest.concat 10-step chain stable to 1 ulp vs double reference	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:328	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.getType identity matrix	Matrix	math/src/test/kotlin/SkMatrixTest.kt:400	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.getType pure translate	Matrix	math/src/test/kotlin/SkMatrixTest.kt:408	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.getType pure scale sets translate too when off-origin	Matrix_rectStaysRect_zeroScale	math/src/test/kotlin/SkMatrixTest.kt:418	tests/MatrixTest.cpp:1125
-org.graphiks.math.SkMatrixTest.getType cardinal rotate sets affine plus rectStaysRect	Matrix_SetRotateSnap	math/src/test/kotlin/SkMatrixTest.kt:430	tests/MatrixTest.cpp:1106
-org.graphiks.math.SkMatrixTest.getType arbitrary rotate clears rectStaysRect	Matrix	math/src/test/kotlin/SkMatrixTest.kt:440	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.cheapEqualTo is IEEE-strict on NaN	Matrix	math/src/test/kotlin/SkMatrixTest.kt:486	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.det2x2 and det match algebraic value	Matrix	math/src/test/kotlin/SkMatrixTest.kt:643	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.get9 round-trips through MakeFrom9	Matrix	math/src/test/kotlin/SkMatrixTest.kt:652	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeFrom9 accepts arbitrary perspective row	Matrix	math/src/test/kotlin/SkMatrixTest.kt:662	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.asAffine round-trips through MakeFromAffine	Matrix	math/src/test/kotlin/SkMatrixTest.kt:673	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRectToRect kFill stretches independently	Matrix	math/src/test/kotlin/SkMatrixTest.kt:685	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRectToRect kCenter uses uniform scale and centres in dst	Matrix	math/src/test/kotlin/SkMatrixTest.kt:700	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRectToRect returns null for empty src	Matrix_rectStaysRect_zeroScale	math/src/test/kotlin/SkMatrixTest.kt:711	tests/MatrixTest.cpp:1125
-org.graphiks.math.SkMatrixTest.getMaxScale matches legacy computeMaxScale on canonical inputs	Matrix	math/src/test/kotlin/SkMatrixTest.kt:722	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.getMinScale on pure scale returns smaller absolute axis	Matrix	math/src/test/kotlin/SkMatrixTest.kt:732	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.getMinMaxScales returns sorted min and max	Matrix	math/src/test/kotlin/SkMatrixTest.kt:738	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.getMinMaxScales for rotated scale returns scale axes	Matrix	math/src/test/kotlin/SkMatrixTest.kt:745	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.decomposeScale on pure scale returns scale and identity remaining	Matrix	math/src/test/kotlin/SkMatrixTest.kt:763	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.decomposeScale on rotated scale extracts magnitudes	Matrix	math/src/test/kotlin/SkMatrixTest.kt:772	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.decomposeScale fails on near-singular matrix	Matrix	math/src/test/kotlin/SkMatrixTest.kt:782	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.default constructor has identity perspective row	Matrix_Ctor	math/src/test/kotlin/SkMatrixTest.kt:791	tests/MatrixTest.cpp:1096
-org.graphiks.math.SkMatrixTest.mapHomogeneousPoints identity returns w=1	Matrix	math/src/test/kotlin/SkMatrixTest.kt:877	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.mapHomogeneousPoints affine returns w=1 with mapped xy	Matrix	math/src/test/kotlin/SkMatrixTest.kt:886	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.mapHomogeneousPoints perspective returns un-divided w	Matrix	math/src/test/kotlin/SkMatrixTest.kt:896	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.mapRectScaleTranslate fast path matches mapRect	Matrix_maprects	math/src/test/kotlin/SkMatrixTest.kt:587	tests/MatrixTest.cpp:1042
-org.graphiks.math.SkMatrixTest.mapRectScaleTranslate handles negative scale by sorting	Matrix_maprects	math/src/test/kotlin/SkMatrixTest.kt:597	tests/MatrixTest.cpp:1042
-org.graphiks.math.SkMatrixTest.operator times equals concat	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1133	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.I returns Identity	Matrix_Ctor	math/src/test/kotlin/SkMatrixTest.kt:1170	tests/MatrixTest.cpp:1096
-org.graphiks.math.SkMatrixTest.MakeTrans SkVector overload matches dx dy form	Matrix	math/src/test/kotlin/SkMatrixTest.kt:1175	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakePerspective flips hasPerspective and getType	Matrix	math/src/test/kotlin/SkMatrixTest.kt:847	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeSkew skews points	Matrix	math/src/test/kotlin/SkMatrixTest.kt:73	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRSXform identity yields identity matrix	Matrix	math/src/test/kotlin/SkMatrixTest.kt:958	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRSXform 90 deg rotation maps (1, 0) to (0, 1) plus translate	Matrix	math/src/test/kotlin/SkMatrixTest.kt:964	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakeRSXform with uniform scale 2 doubles vector lengths	Matrix	math/src/test/kotlin/SkMatrixTest.kt:972	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakePolyToPoly empty returns identity	Matrix	math/src/test/kotlin/SkMatrixTest.kt:982	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakePolyToPoly 1 point is pure translate	Matrix	math/src/test/kotlin/SkMatrixTest.kt:988	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakePolyToPoly 3 points is general affine	Matrix	math/src/test/kotlin/SkMatrixTest.kt:1016	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakePolyToPoly 4 points unit square to skewed quad maps corners	Matrix	math/src/test/kotlin/SkMatrixTest.kt:998	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakePolyToPoly mismatched sizes returns null	Matrix	math/src/test/kotlin/SkMatrixTest.kt:1030	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.MakePolyToPoly more than 4 points returns null	Matrix	math/src/test/kotlin/SkMatrixTest.kt:1038	tests/MatrixTest.cpp:861
-org.graphiks.math.SkMatrixTest.postTranslate matches T concat M for any matrix	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1058	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.postTranslate affine adds dx dy directly	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1047	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.postTranslate perspective uses postConcat	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1071	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.postScale closed form matches postConcat	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1082	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.postScale unity short-circuit returns same matrix	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1095	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.postScale pivoted fixes pivot in device space	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1102	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.postRotate matches R concat M	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1111	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.postRotate pivoted anchors at pivot	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1120	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.postSkew matches Skew concat M	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1129	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.preTranslate perspective dispatches through preConcat	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1140	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.preScale perspective propagates to persp0 and persp1	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1151	tests/MatrixTest.cpp:1028
-org.graphiks.math.SkMatrixTest.preScale on affine leaves persp row at (0, 0, 1)	Matrix_Concat	math/src/test/kotlin/SkMatrixTest.kt:1161	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest	MatrixTest	math/src/commonTest/kotlin/SkMatrixTest.kt:19	tests/MatrixTest.cpp:1
+org.graphiks.math.SkMatrixTest.Identity is identity	Matrix_Ctor	math/src/commonTest/kotlin/SkMatrixTest.kt:27	tests/MatrixTest.cpp:1096
+org.graphiks.math.SkMatrixTest.MakeTrans translates points	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:36	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeScale scales points	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:45	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRotate(90) maps (1,0) to (0,1)	Matrix_SetRotateSnap	math/src/commonTest/kotlin/SkMatrixTest.kt:52	tests/MatrixTest.cpp:1106
+org.graphiks.math.SkMatrixTest.MakeRotate(deg, px, py) rotates around the pivot	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:65	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.concat applies right matrix first	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:83	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.preTranslate matches concat-with-Translate	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:92	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.preScale composes scales	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:103	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.mapRect returns axis-aligned bbox of rotated rect	Matrix_maprects	math/src/commonTest/kotlin/SkMatrixTest.kt:111	tests/MatrixTest.cpp:1042
+org.graphiks.math.SkMatrixTest.computeMaxScale of pure scale returns max abs scale	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:125	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.computeMaxScale of pure rotation is 1	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:133	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.computeMaxScale of rotated scale equals scale	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:141	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.computeMaxScale of identity is 1	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:148	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.concat with Identity is identity	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:163	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.MakeAll constructs raw matrix	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:179	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRotate cardinal angles produce bit-exact axis-aligned matrices	Matrix_SetRotateSnap	math/src/commonTest/kotlin/SkMatrixTest.kt:245	tests/MatrixTest.cpp:1106
+org.graphiks.math.SkMatrixTest.MakeAll round-trips through fields	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:266	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRotate snap does not leak negative zero	Matrix_SetRotateSnap	math/src/commonTest/kotlin/SkMatrixTest.kt:273	tests/MatrixTest.cpp:1106
+org.graphiks.math.SkMatrixTest.invert exactly-singular returns null	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:288	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.invert near-singular returns null	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:295	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.invert non-singular returns valid inverse	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:304	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRotate(0) and MakeRotate(180) are isAxisAligned	Matrix_SetRotateSnap	math/src/commonTest/kotlin/SkMatrixTest.kt:315	tests/MatrixTest.cpp:1106
+org.graphiks.math.SkMatrixTest.concat 10-step chain stable to 1 ulp vs double reference	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:328	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.getType identity matrix	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:400	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.getType pure translate	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:408	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.getType pure scale sets translate too when off-origin	Matrix_rectStaysRect_zeroScale	math/src/commonTest/kotlin/SkMatrixTest.kt:418	tests/MatrixTest.cpp:1125
+org.graphiks.math.SkMatrixTest.getType cardinal rotate sets affine plus rectStaysRect	Matrix_SetRotateSnap	math/src/commonTest/kotlin/SkMatrixTest.kt:430	tests/MatrixTest.cpp:1106
+org.graphiks.math.SkMatrixTest.getType arbitrary rotate clears rectStaysRect	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:440	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.cheapEqualTo is IEEE-strict on NaN	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:486	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.det2x2 and det match algebraic value	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:643	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.get9 round-trips through MakeFrom9	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:652	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeFrom9 accepts arbitrary perspective row	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:662	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.asAffine round-trips through MakeFromAffine	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:673	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRectToRect kFill stretches independently	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:685	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRectToRect kCenter uses uniform scale and centres in dst	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:700	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRectToRect returns null for empty src	Matrix_rectStaysRect_zeroScale	math/src/commonTest/kotlin/SkMatrixTest.kt:711	tests/MatrixTest.cpp:1125
+org.graphiks.math.SkMatrixTest.getMaxScale matches legacy computeMaxScale on canonical inputs	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:722	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.getMinScale on pure scale returns smaller absolute axis	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:732	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.getMinMaxScales returns sorted min and max	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:738	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.getMinMaxScales for rotated scale returns scale axes	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:745	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.decomposeScale on pure scale returns scale and identity remaining	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:763	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.decomposeScale on rotated scale extracts magnitudes	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:772	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.decomposeScale fails on near-singular matrix	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:782	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.default constructor has identity perspective row	Matrix_Ctor	math/src/commonTest/kotlin/SkMatrixTest.kt:791	tests/MatrixTest.cpp:1096
+org.graphiks.math.SkMatrixTest.mapHomogeneousPoints identity returns w=1	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:877	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.mapHomogeneousPoints affine returns w=1 with mapped xy	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:886	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.mapHomogeneousPoints perspective returns un-divided w	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:896	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.mapRectScaleTranslate fast path matches mapRect	Matrix_maprects	math/src/commonTest/kotlin/SkMatrixTest.kt:587	tests/MatrixTest.cpp:1042
+org.graphiks.math.SkMatrixTest.mapRectScaleTranslate handles negative scale by sorting	Matrix_maprects	math/src/commonTest/kotlin/SkMatrixTest.kt:597	tests/MatrixTest.cpp:1042
+org.graphiks.math.SkMatrixTest.operator times equals concat	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1133	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.I returns Identity	Matrix_Ctor	math/src/commonTest/kotlin/SkMatrixTest.kt:1170	tests/MatrixTest.cpp:1096
+org.graphiks.math.SkMatrixTest.MakeTrans SkVector overload matches dx dy form	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:1175	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePerspective flips hasPerspective and getType	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:847	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeSkew skews points	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:73	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRSXform identity yields identity matrix	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:958	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRSXform 90 deg rotation maps (1, 0) to (0, 1) plus translate	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:964	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakeRSXform with uniform scale 2 doubles vector lengths	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:972	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly empty returns identity	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:982	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly 1 point is pure translate	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:988	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly 3 points is general affine	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:1016	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly 4 points unit square to skewed quad maps corners	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:998	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly mismatched sizes returns null	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:1030	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.MakePolyToPoly more than 4 points returns null	Matrix	math/src/commonTest/kotlin/SkMatrixTest.kt:1038	tests/MatrixTest.cpp:861
+org.graphiks.math.SkMatrixTest.postTranslate matches T concat M for any matrix	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1058	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postTranslate affine adds dx dy directly	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1047	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postTranslate perspective uses postConcat	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1071	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postScale closed form matches postConcat	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1082	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postScale unity short-circuit returns same matrix	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1095	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postScale pivoted fixes pivot in device space	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1102	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postRotate matches R concat M	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1111	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postRotate pivoted anchors at pivot	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1120	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.postSkew matches Skew concat M	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1129	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.preTranslate perspective dispatches through preConcat	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1140	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.preScale perspective propagates to persp0 and persp1	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1151	tests/MatrixTest.cpp:1028
+org.graphiks.math.SkMatrixTest.preScale on affine leaves persp row at (0, 0, 1)	Matrix_Concat	math/src/commonTest/kotlin/SkMatrixTest.kt:1161	tests/MatrixTest.cpp:1028

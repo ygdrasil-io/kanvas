@@ -13,8 +13,9 @@ import org.graphiks.math.SkRect
  *
  * **Phase I1 scope** : `HorizontalSpread` (uniform x-advance per
  * glyph, constant baseline y) and `FullPositions` (per-glyph `(x, y)`)
- * runs only. `RotateScale` / `RSXform` runs are deferred — no GM in
- * scope uses them.
+ * runs. Phase R-RSX extended this with `RSXformPositions` — one
+ * [SkRSXform] per glyph carrying rotation-scale-translate, used by
+ * upstream's `rsxtext.cpp::RSXShaderGM` (text-on-path-style draws).
  *
  * @property runs immutable list of glyph runs ; each run has its own
  *   font and is drawn left-to-right inside the blob's local space.
@@ -122,6 +123,11 @@ public class SkTextBlob public constructor(
         }
         is Run.HorizontalPositions -> run.xs[i] to run.constY
         is Run.FullPositions       -> run.positions[2 * i] to run.positions[2 * i + 1]
+        // RSXform glyphs carry their own rotation/scale on top of a translate
+        // — `getIntercepts` is undefined for non-affine-aligned runs upstream
+        // too (the underline-skip pipeline never feeds RSXform blobs). Report
+        // the translate as the conservative origin.
+        is Run.RSXformPositions    -> run.xforms[i].fTx to run.xforms[i].fTy
     }
 
     /**
@@ -166,5 +172,101 @@ public class SkTextBlob public constructor(
             /** Interleaved `[x0, y0, x1, y1, …]`, length = `glyphIds.size * 2`. */
             val positions: FloatArray,
         ) : Run()
+
+        /**
+         * `allocRunRSXform` : per-glyph rotation-scale-translate transform
+         * carried as an [SkRSXform]. Mirrors Skia's `kRSXform_Positioning`
+         * — used by `rsxtext.cpp::RSXShaderGM` and the text-on-path
+         * primitives where each glyph needs its own 2×2 affine + translate
+         * (e.g. characters following a curve).
+         *
+         * Each `xforms[i]` maps the glyph's origin-relative outline into
+         * blob-local space :
+         * ```
+         * dst.x = fSCos * srcX − fSSin * srcY + fTx
+         * dst.y = fSSin * srcX + fSCos * srcY + fTy
+         * ```
+         * The translate `(fTx, fTy)` is the glyph's destination origin.
+         */
+        data class RSXformPositions(
+            override val font: SkFont,
+            override val glyphIds: IntArray,
+            val xforms: Array<SkRSXform>,
+        ) : Run() {
+            override fun equals(other: Any?): Boolean {
+                if (this === other) return true
+                if (other !is RSXformPositions) return false
+                return font == other.font &&
+                    glyphIds.contentEquals(other.glyphIds) &&
+                    xforms.contentEquals(other.xforms)
+            }
+            override fun hashCode(): Int {
+                var h = font.hashCode()
+                h = 31 * h + glyphIds.contentHashCode()
+                h = 31 * h + xforms.contentHashCode()
+                return h
+            }
+        }
+    }
+
+    public companion object {
+        /**
+         * Mirrors Skia's `SkTextBlob::MakeFromString(const char* string,
+         * const SkFont& font)`. Resolves [text] (UTF-8) to glyph IDs via
+         * [font.textToGlyphs][SkFont.textToGlyphs] and packs them into a
+         * single [Run.HorizontalSpread] run anchored at `(0, 0)`.
+         *
+         * Returns `null` when [text] is empty (matching upstream's contract —
+         * Skia returns `null`/`nullptr` for empty-string blobs).
+         *
+         * The resulting blob is ready for `SkCanvas.drawTextBlob(blob, x, y, paint)`.
+         */
+        public fun MakeFromString(text: String, font: SkFont): SkTextBlob? {
+            if (text.isEmpty()) return null
+            val glyphs = font.textToGlyphs(text)
+            if (glyphs.isEmpty()) return null
+            // Conservative cull rect: N glyphs × font.size wide, one line tall.
+            val pad = font.size
+            val width = glyphs.size * pad
+            val cull = SkRect.MakeLTRB(-pad, -pad, width + pad, pad)
+            val run = Run.HorizontalSpread(SkFont(font), glyphs, 0f, 0f)
+            return SkTextBlob(listOf(run), cull)
+        }
+
+        /**
+         * Mirrors Skia's `SkTextBlob::MakeFromRSXformGlyphs(glyphs, count,
+         * xforms, font)`. Builds a single-run RSXform text blob from an
+         * already-resolved glyph-ID array.
+         *
+         * **STUB.RSXBLOB** — per-glyph RSXform glyph-blob rendering is not
+         * yet supported end-to-end (the [Run.RSXformPositions] run type
+         * exists but [org.skia.core.SkCanvas.drawTextBlob] does not yet
+         * apply the per-glyph affine transforms when rasterising). Returns a
+         * structurally valid [SkTextBlob] so callers compile; the visual
+         * output will fall back to the glyph origins at `(fTx, fTy)` only
+         * (no rotation or scale).
+         */
+        public fun MakeFromRSXformGlyphs(
+            glyphs: IntArray,
+            xforms: Array<SkRSXform>,
+            font: SkFont,
+        ): SkTextBlob {
+            TODO("STUB.RSXBLOB")
+        }
+
+        /**
+         * Mirrors Skia's `SkTextBlob::MakeFromRSXform(text, byteLength,
+         * xforms, font)`. Resolves [text] (UTF-8) to glyph IDs via [font],
+         * then delegates to [MakeFromRSXformGlyphs].
+         *
+         * **STUB.RSXBLOB** — see [MakeFromRSXformGlyphs].
+         */
+        public fun MakeFromRSXform(
+            text: String,
+            xforms: Array<SkRSXform>,
+            font: SkFont,
+        ): SkTextBlob {
+            TODO("STUB.RSXBLOB")
+        }
     }
 }

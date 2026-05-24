@@ -3,7 +3,7 @@
 Audit la map de correspondance Kotlin ↔ Skia pour un module donné.
 
 Compare l'ensemble des symboles publics Kotlin (depuis les sources
-`<module>/src/{main,test}/kotlin/**/*.kt`) à la colonne 1 (kotlin FQN)
+`<module>/src/{commonMain,commonTest,main,test}/kotlin/**/*.kt`) à la colonne 1 (kotlin FQN)
 des TSVs dans `.upstream/source/map/<module>/`.
 
 Reporte :
@@ -431,22 +431,27 @@ def main(argv: list[str]) -> int:
     script_dir = Path(__file__).resolve().parent
     repo_root = find_repo_root(script_dir)
 
-    # Source dirs: <module>/src/main/kotlin AND <module>/src/test/kotlin.
+    # Source dirs: MPP layout first, then legacy JVM layout.
     # Tests are mapped in their own *Test.tsv files; including both keeps the
     # "stale" set focused on genuinely orphaned entries.
     module_root = repo_root / module.split("/")[0]
-    src_main = module_root / "src" / "main" / "kotlin"
-    src_test = module_root / "src" / "test" / "kotlin"
-    if not src_main.is_dir() and not src_test.is_dir():
-        print(f"error: no src dir at {src_main} or {src_test}", file=sys.stderr)
+    src_roots = [
+        module_root / "src" / "commonMain" / "kotlin",
+        module_root / "src" / "commonTest" / "kotlin",
+        module_root / "src" / "main" / "kotlin",
+        module_root / "src" / "test" / "kotlin",
+    ]
+    existing_src_roots = [root for root in src_roots if root.is_dir()]
+    if not existing_src_roots:
+        roots = " or ".join(str(root) for root in src_roots)
+        print(f"error: no src dir at {roots}", file=sys.stderr)
         return 2
 
     # For sub-paths like "kanvas-skia/foundation", further filter Kotlin files
     sub = "/".join(module.split("/")[1:])
     kt_files: list[Path] = []
-    for root in (src_main, src_test):
-        if root.is_dir():
-            kt_files.extend(root.rglob("*.kt"))
+    for root in existing_src_roots:
+        kt_files.extend(root.rglob("*.kt"))
     kt_files.sort()
     if sub:
         kt_files = [f for f in kt_files if f"/{sub}/" in str(f) or str(f).endswith(f"/{sub}")]

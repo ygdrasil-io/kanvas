@@ -1,18 +1,18 @@
-org.graphiks.math.SkIRectTest	RectTest	math/src/test/kotlin/SkIRectTest.kt:13	tests/RectTest.cpp:1
-org.graphiks.math.SkIRectTest.MakeLTRB stores corners	Rect	math/src/test/kotlin/SkIRectTest.kt:16	tests/RectTest.cpp:103
-org.graphiks.math.SkIRectTest.MakeXYWH adds w h to origin	Rect	math/src/test/kotlin/SkIRectTest.kt:24	tests/RectTest.cpp:103
-org.graphiks.math.SkIRectTest.width and height wrap on overflow but width64 stays exact	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:30	tests/RectTest.cpp:163
-org.graphiks.math.SkIRectTest.isEmpty checks 64-bit dimensions and int32 fit	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:39	tests/RectTest.cpp:163
-org.graphiks.math.SkIRectTest.MakeXYWH saturates instead of wrapping on int32 overflow	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:55	tests/RectTest.cpp:163
-org.graphiks.math.SkIRectTest.setXYWH offset inset adjust all saturate	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:63	tests/RectTest.cpp:163
-org.graphiks.math.SkIRectTest.makeOffset makeInset makeOutset saturate	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:96	tests/RectTest.cpp:163
-org.graphiks.math.SkIRectTest.setLTRB and setXYWH replace coordinates	Rect_setbounds	math/src/test/kotlin/SkIRectTest.kt:125	tests/RectTest.cpp:133
-org.graphiks.math.SkIRectTest.offset offsetTo inset outset adjust	Rect	math/src/test/kotlin/SkIRectTest.kt:134	tests/RectTest.cpp:103
-org.graphiks.math.SkIRectTest.offsetTo uses 64-bit pinned arithmetic	Rect_whOverflow	math/src/test/kotlin/SkIRectTest.kt:114	tests/RectTest.cpp:163
-org.graphiks.math.SkIRectTest.sort and makeSorted swap reversed edges	Rect	math/src/test/kotlin/SkIRectTest.kt:149	tests/RectTest.cpp:103
-org.graphiks.math.SkIRectTest.contains point is half-open	Rect	math/src/test/kotlin/SkIRectTest.kt:156	tests/RectTest.cpp:103
-org.graphiks.math.SkIRectTest.contains rect requires non-empty inner	Rect	math/src/test/kotlin/SkIRectTest.kt:165	tests/RectTest.cpp:103
-org.graphiks.math.SkIRectTest.intersect overlapping clips to overlap	Rect	math/src/test/kotlin/SkIRectTest.kt:174	tests/RectTest.cpp:103
-org.graphiks.math.SkIRectTest.intersect non-overlapping returns false unchanged	Rect	math/src/test/kotlin/SkIRectTest.kt:181	tests/RectTest.cpp:103
-org.graphiks.math.SkIRectTest.Intersects companion	Rect	math/src/test/kotlin/SkIRectTest.kt:188	tests/RectTest.cpp:103
-org.graphiks.math.SkIRectTest.join expands to encompass r and skips empty args	Rect_setbounds	math/src/test/kotlin/SkIRectTest.kt:194	tests/RectTest.cpp:133
+org.graphiks.math.SkIRectTest	RectTest	math/src/commonTest/kotlin/SkIRectTest.kt:13	tests/RectTest.cpp:1
+org.graphiks.math.SkIRectTest.MakeLTRB stores corners	Rect	math/src/commonTest/kotlin/SkIRectTest.kt:16	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.MakeXYWH adds w h to origin	Rect	math/src/commonTest/kotlin/SkIRectTest.kt:24	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.width and height wrap on overflow but width64 stays exact	Rect_whOverflow	math/src/commonTest/kotlin/SkIRectTest.kt:30	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.isEmpty checks 64-bit dimensions and int32 fit	Rect_whOverflow	math/src/commonTest/kotlin/SkIRectTest.kt:39	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.MakeXYWH saturates instead of wrapping on int32 overflow	Rect_whOverflow	math/src/commonTest/kotlin/SkIRectTest.kt:55	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.setXYWH offset inset adjust all saturate	Rect_whOverflow	math/src/commonTest/kotlin/SkIRectTest.kt:63	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.makeOffset makeInset makeOutset saturate	Rect_whOverflow	math/src/commonTest/kotlin/SkIRectTest.kt:96	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.setLTRB and setXYWH replace coordinates	Rect_setbounds	math/src/commonTest/kotlin/SkIRectTest.kt:125	tests/RectTest.cpp:133
+org.graphiks.math.SkIRectTest.offset offsetTo inset outset adjust	Rect	math/src/commonTest/kotlin/SkIRectTest.kt:134	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.offsetTo uses 64-bit pinned arithmetic	Rect_whOverflow	math/src/commonTest/kotlin/SkIRectTest.kt:114	tests/RectTest.cpp:163
+org.graphiks.math.SkIRectTest.sort and makeSorted swap reversed edges	Rect	math/src/commonTest/kotlin/SkIRectTest.kt:149	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.contains point is half-open	Rect	math/src/commonTest/kotlin/SkIRectTest.kt:156	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.contains rect requires non-empty inner	Rect	math/src/commonTest/kotlin/SkIRectTest.kt:165	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.intersect overlapping clips to overlap	Rect	math/src/commonTest/kotlin/SkIRectTest.kt:174	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.intersect non-overlapping returns false unchanged	Rect	math/src/commonTest/kotlin/SkIRectTest.kt:181	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.Intersects companion	Rect	math/src/commonTest/kotlin/SkIRectTest.kt:188	tests/RectTest.cpp:103
+org.graphiks.math.SkIRectTest.join expands to encompass r and skips empty args	Rect_setbounds	math/src/commonTest/kotlin/SkIRectTest.kt:194	tests/RectTest.cpp:133
