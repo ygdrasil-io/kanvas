@@ -251,8 +251,14 @@ private fun decodeSimpleVp8l(data: ByteArray, metadata: WebpMetadata): Vp8lDecod
     if (version != 0) return Vp8lDecodeResult.Invalid
     if (width + 1 != metadata.width || height + 1 != metadata.height) return Vp8lDecodeResult.Invalid
 
-    val transformPresent = bits.readBits(1) ?: return Vp8lDecodeResult.Invalid
-    if (transformPresent != 0) return Vp8lDecodeResult.Unsupported
+    val transforms = ArrayList<Vp8lTransform>()
+    while ((bits.readBits(1) ?: return Vp8lDecodeResult.Invalid) != 0) {
+        val transform = when (bits.readBits(2) ?: return Vp8lDecodeResult.Invalid) {
+            VP8L_TRANSFORM_SUBTRACT_GREEN -> Vp8lTransform.SubtractGreen
+            else -> return Vp8lDecodeResult.Unsupported
+        }
+        transforms += transform
+    }
 
     val colorCachePresent = bits.readBits(1) ?: return Vp8lDecodeResult.Invalid
     if (colorCachePresent != 0) return Vp8lDecodeResult.Unsupported
@@ -288,10 +294,30 @@ private fun decodeSimpleVp8l(data: ByteArray, metadata: WebpMetadata): Vp8lDecod
             i++
         }
     }
+    transforms.asReversed().forEach { transform ->
+        when (transform) {
+            Vp8lTransform.SubtractGreen -> pixels.applySubtractGreenTransform()
+        }
+    }
     return Vp8lDecodeResult.Pixels(pixels)
 }
 
+private const val VP8L_TRANSFORM_SUBTRACT_GREEN: Int = 2
 private const val VP8L_LENGTH_PREFIX_CODE_COUNT: Int = 24
+
+private enum class Vp8lTransform {
+    SubtractGreen,
+}
+
+private fun IntArray.applySubtractGreenTransform() {
+    for (i in indices) {
+        val pixel = this[i]
+        val green = (pixel ushr 8) and 0xFF
+        val red = (((pixel ushr 16) and 0xFF) + green) and 0xFF
+        val blue = ((pixel and 0xFF) + green) and 0xFF
+        this[i] = packArgb((pixel ushr 24) and 0xFF, red, green, blue)
+    }
+}
 
 private fun readVp8lPrefixValue(bits: Vp8lBitReader, prefixCode: Int): Int? {
     if (prefixCode !in 0..39) return null
