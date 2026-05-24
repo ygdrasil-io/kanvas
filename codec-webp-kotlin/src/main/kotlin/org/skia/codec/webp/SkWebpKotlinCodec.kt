@@ -16,8 +16,9 @@ import org.skia.foundation.skcms.skcmsParse
  *
  * This first slice only sniffs RIFF/WEBP and parses the container
  * metadata needed by [SkCodec.getInfo]. Pixel reconstruction is only
- * implemented for the current VP8L subset; VP8, alpha chunks, and
- * animation are intentionally left for later slices.
+ * implemented for the current VP8L subset; VP8 alpha metadata is parsed,
+ * but VP8 lossy pixel reconstruction and animation are intentionally left
+ * for later slices.
  */
 public class SkWebpKotlinCodec internal constructor(
     internal val metadata: WebpMetadata,
@@ -96,8 +97,22 @@ internal data class WebpMetadata(
     val iccProfile: SkcmsICCProfile? = null,
     val exifData: ByteArray? = null,
     val xmpData: ByteArray? = null,
+    val alphaChunk: WebpAlphaChunk? = null,
 ) {
-    val hasAlpha: Boolean get() = flags.alpha || format == WebpBitstreamFormat.VP8L
+    val hasAlpha: Boolean get() = flags.alpha || alphaChunk != null || format == WebpBitstreamFormat.VP8L
+}
+
+internal data class WebpAlphaChunk(
+    val compression: WebpAlphaCompression,
+    val filtering: Int,
+    val preprocessing: Int,
+    val payloadOffset: Int,
+    val payloadSize: Int,
+)
+
+internal enum class WebpAlphaCompression {
+    NONE,
+    LOSSLESS,
 }
 
 internal enum class WebpBitstreamFormat {
@@ -128,6 +143,7 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
     var iccProfile: SkcmsICCProfile? = null
     var exifData: ByteArray? = null
     var xmpData: ByteArray? = null
+    var alphaChunk: WebpAlphaChunk? = null
     var offset = RIFF_HEADER_SIZE
     while (offset <= data.size - CHUNK_HEADER_SIZE) {
         val fourcc = readFourcc(data, offset)
@@ -153,6 +169,12 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
                 if (xmpData != null || size > Int.MAX_VALUE) return null
                 xmpData = copyChunkPayload(data, payloadOffset, size.toInt()) ?: return null
             }
+            "ALPH" -> {
+                val base = extended ?: return null
+                if (alphaChunk != null || size > Int.MAX_VALUE || !base.flags.alpha) return null
+                alphaChunk = parseAlphaChunk(data, payloadOffset, size.toInt(), base.width, base.height)
+                    ?: return null
+            }
             "VP8L" -> {
                 val bitstream = parseVp8l(data, payloadOffset, size) ?: return null
                 if (extended == null) return bitstream
@@ -174,6 +196,7 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
     }
     val base = extended ?: return null
     val bitstream = extendedBitstream
+    if (alphaChunk != null && bitstream?.format != WebpBitstreamFormat.VP8) return null
     return base.copy(
         format = bitstream?.format ?: base.format,
         payloadOffset = bitstream?.payloadOffset ?: base.payloadOffset,
@@ -181,6 +204,35 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
         iccProfile = iccProfile,
         exifData = exifData,
         xmpData = xmpData,
+        alphaChunk = alphaChunk,
+    )
+}
+
+private fun parseAlphaChunk(
+    data: ByteArray,
+    offset: Int,
+    size: Int,
+    width: Int,
+    height: Int,
+): WebpAlphaChunk? {
+    if (size <= 1 || offset < 0 || offset + size > data.size) return null
+    val control = data[offset].toInt() and 0xFF
+    if ((control and 0xE0) != 0) return null
+    val compression = when ((control ushr 4) and 0x01) {
+        0 -> WebpAlphaCompression.NONE
+        1 -> WebpAlphaCompression.LOSSLESS
+        else -> return null
+    }
+    if (compression == WebpAlphaCompression.NONE) {
+        val expectedPayloadSize = width.toLong() * height.toLong()
+        if (expectedPayloadSize > Int.MAX_VALUE || size - 1 != expectedPayloadSize.toInt()) return null
+    }
+    return WebpAlphaChunk(
+        compression = compression,
+        filtering = (control ushr 2) and 0x03,
+        preprocessing = control and 0x03,
+        payloadOffset = offset + 1,
+        payloadSize = size - 1,
     )
 }
 
