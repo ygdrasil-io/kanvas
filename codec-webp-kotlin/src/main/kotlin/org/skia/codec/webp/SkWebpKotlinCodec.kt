@@ -54,6 +54,14 @@ public class SkWebpKotlinCodec internal constructor(
         if (dst.colorType != info.colorType) {
             return Result.kInvalidParameters
         }
+        if (metadata.format == WebpBitstreamFormat.VP8) {
+            return when (decodeVp8LossyHeader(data, metadata)) {
+                Vp8LossyHeaderDecodeResult.Invalid -> Result.kErrorInInput
+                Vp8LossyHeaderDecodeResult.Unsupported,
+                is Vp8LossyHeaderDecodeResult.Header,
+                -> Result.kUnimplemented
+            }
+        }
         if (metadata.format != WebpBitstreamFormat.VP8L) {
             return Result.kUnimplemented
         }
@@ -1078,3 +1086,162 @@ internal class Vp8BoolReader(
 }
 
 private const val VP8_BOOL_HALF_PROBABILITY: Int = 128
+
+internal data class Vp8LossyFrameHeader(
+    val colorSpace: Int,
+    val clampType: Int,
+    val macroblockWidth: Int,
+    val macroblockHeight: Int,
+    val loopFilter: Vp8LoopFilterHeader,
+    val quantization: Vp8QuantizationHeader,
+)
+
+internal data class Vp8LoopFilterHeader(
+    val simpleFilter: Boolean,
+    val level: Int,
+    val sharpness: Int,
+)
+
+internal data class Vp8QuantizationHeader(
+    val yAcIndex: Int,
+    val yDcDelta: Int,
+    val y2DcDelta: Int,
+    val y2AcDelta: Int,
+    val uvDcDelta: Int,
+    val uvAcDelta: Int,
+)
+
+internal sealed interface Vp8LossyHeaderDecodeResult {
+    data class Header(val header: Vp8LossyFrameHeader) : Vp8LossyHeaderDecodeResult
+    data object Unsupported : Vp8LossyHeaderDecodeResult
+    data object Invalid : Vp8LossyHeaderDecodeResult
+}
+
+private fun decodeVp8LossyHeader(data: ByteArray, metadata: WebpMetadata): Vp8LossyHeaderDecodeResult {
+    val payloadOffset = metadata.payloadOffset
+    val payloadSize = metadata.payloadSize
+    if (payloadOffset < 0 || payloadSize < VP8_KEYFRAME_HEADER_SIZE) return Vp8LossyHeaderDecodeResult.Invalid
+    if (payloadOffset + payloadSize > data.size) return Vp8LossyHeaderDecodeResult.Invalid
+    val frameTag = parseVp8FrameTag(data, payloadOffset, payloadSize.toLong())
+        ?: return Vp8LossyHeaderDecodeResult.Invalid
+    if (frameTag.firstPartitionSize == 0) return Vp8LossyHeaderDecodeResult.Unsupported
+
+    val firstPartitionOffset = payloadOffset + VP8_KEYFRAME_HEADER_SIZE
+    val firstPartitionEnd = firstPartitionOffset + frameTag.firstPartitionSize
+    if (firstPartitionEnd > payloadOffset + payloadSize) return Vp8LossyHeaderDecodeResult.Invalid
+    val reader = Vp8BoolReader(data, firstPartitionOffset, firstPartitionEnd)
+    return readVp8LossyFrameHeader(reader, metadata.width, metadata.height)
+}
+
+internal fun readVp8LossyFrameHeader(
+    reader: Vp8BoolReader,
+    width: Int,
+    height: Int,
+): Vp8LossyHeaderDecodeResult {
+    val colorSpace = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8LossyHeaderDecodeResult.Invalid
+    val clampType = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8LossyHeaderDecodeResult.Invalid
+
+    val segmentationEnabled = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8LossyHeaderDecodeResult.Invalid
+    if (segmentationEnabled != 0) return Vp8LossyHeaderDecodeResult.Unsupported
+
+    val simpleFilter = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8LossyHeaderDecodeResult.Invalid
+    val filterLevel = reader.readLiteral(6) ?: return Vp8LossyHeaderDecodeResult.Invalid
+    val sharpness = reader.readLiteral(3) ?: return Vp8LossyHeaderDecodeResult.Invalid
+    val loopFilterDeltaEnabled = reader.readBit(VP8_BOOL_HALF_PROBABILITY)
+        ?: return Vp8LossyHeaderDecodeResult.Invalid
+    if (loopFilterDeltaEnabled != 0) return Vp8LossyHeaderDecodeResult.Unsupported
+
+    val partitionBits = reader.readLiteral(2) ?: return Vp8LossyHeaderDecodeResult.Invalid
+    if (partitionBits != 0) return Vp8LossyHeaderDecodeResult.Unsupported
+
+    val yAcIndex = reader.readLiteral(7) ?: return Vp8LossyHeaderDecodeResult.Invalid
+    val quantization = Vp8QuantizationHeader(
+        yAcIndex = yAcIndex,
+        yDcDelta = reader.readVp8SignedDelta() ?: return Vp8LossyHeaderDecodeResult.Invalid,
+        y2DcDelta = reader.readVp8SignedDelta() ?: return Vp8LossyHeaderDecodeResult.Invalid,
+        y2AcDelta = reader.readVp8SignedDelta() ?: return Vp8LossyHeaderDecodeResult.Invalid,
+        uvDcDelta = reader.readVp8SignedDelta() ?: return Vp8LossyHeaderDecodeResult.Invalid,
+        uvAcDelta = reader.readVp8SignedDelta() ?: return Vp8LossyHeaderDecodeResult.Invalid,
+    )
+
+    return Vp8LossyHeaderDecodeResult.Header(
+        Vp8LossyFrameHeader(
+            colorSpace = colorSpace,
+            clampType = clampType,
+            macroblockWidth = (width + 15) / 16,
+            macroblockHeight = (height + 15) / 16,
+            loopFilter = Vp8LoopFilterHeader(
+                simpleFilter = simpleFilter != 0,
+                level = filterLevel,
+                sharpness = sharpness,
+            ),
+            quantization = quantization,
+        ),
+    )
+}
+
+private fun Vp8BoolReader.readVp8SignedDelta(): Int? {
+    val present = readBit(VP8_BOOL_HALF_PROBABILITY) ?: return null
+    if (present == 0) return 0
+    val magnitude = readLiteral(4) ?: return null
+    val negative = readBit(VP8_BOOL_HALF_PROBABILITY) ?: return null
+    return if (negative == 0) magnitude else -magnitude
+}
+
+internal fun inverseVp8Dct4x4(input: IntArray): IntArray {
+    require(input.size == 16)
+    val tmp = IntArray(16)
+    for (i in 0 until 4) {
+        val a = input[i] + input[8 + i]
+        val b = input[i] - input[8 + i]
+        val c = ((input[4 + i] * 20091) shr 16) - ((input[12 + i] * 35468) shr 16)
+        val d = ((input[4 + i] * 35468) shr 16) + ((input[12 + i] * 20091) shr 16)
+        tmp[i] = a + d
+        tmp[4 + i] = b + c
+        tmp[8 + i] = b - c
+        tmp[12 + i] = a - d
+    }
+
+    val out = IntArray(16)
+    for (i in 0 until 4) {
+        val base = i * 4
+        val a = tmp[base] + tmp[base + 2]
+        val b = tmp[base] - tmp[base + 2]
+        val c = ((tmp[base + 1] * 20091) shr 16) - ((tmp[base + 3] * 35468) shr 16)
+        val d = ((tmp[base + 1] * 35468) shr 16) + ((tmp[base + 3] * 20091) shr 16)
+        out[base] = (a + d + 4) shr 3
+        out[base + 1] = (b + c + 4) shr 3
+        out[base + 2] = (b - c + 4) shr 3
+        out[base + 3] = (a - d + 4) shr 3
+    }
+    return out
+}
+
+internal fun inverseVp8WalshHadamard4x4(input: IntArray): IntArray {
+    require(input.size == 16)
+    val tmp = IntArray(16)
+    for (i in 0 until 4) {
+        val base = i * 4
+        val a = input[base] + input[base + 3]
+        val b = input[base + 1] + input[base + 2]
+        val c = input[base + 1] - input[base + 2]
+        val d = input[base] - input[base + 3]
+        tmp[base] = a + b
+        tmp[base + 1] = c + d
+        tmp[base + 2] = d - c
+        tmp[base + 3] = a - b
+    }
+
+    val out = IntArray(16)
+    for (i in 0 until 4) {
+        val a = tmp[i] + tmp[12 + i]
+        val b = tmp[4 + i] + tmp[8 + i]
+        val c = tmp[4 + i] - tmp[8 + i]
+        val d = tmp[i] - tmp[12 + i]
+        out[i] = (a + b + 3) shr 3
+        out[4 + i] = (c + d + 3) shr 3
+        out[8 + i] = (d - c + 3) shr 3
+        out[12 + i] = (a - b + 3) shr 3
+    }
+    return out
+}
