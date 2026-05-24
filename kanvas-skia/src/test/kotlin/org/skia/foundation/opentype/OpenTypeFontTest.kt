@@ -418,6 +418,52 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `measureText applies OpenType kern adjustments`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val font = SkFont(typeface, 20f)
+        val glyphs = font.textToGlyphs("AV")
+        val unkerned = font.getWidth(glyphs[0]) + font.getWidth(glyphs[1])
+        val expectedKerning = -152f * font.size / 2048f
+
+        assertEquals(unkerned + expectedKerning, font.measureText("AV"), 0.001f)
+        assertTrue(font.measureText("AV") < unkerned)
+    }
+
+    @Test
+    fun `measureText applies kerning to bounds glyph id encoding and scaleX`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val font = SkFont(typeface, 20f)
+        val glyphs = font.textToGlyphs("AV")
+        val rawGlyphIds = glyphString(glyphs)
+        val noKerningFont = SkFont(OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableTag("kern", "zern"))!!, 20f)
+        val kernedBounds = org.graphiks.math.SkRect.MakeEmpty()
+        val unkernedBounds = org.graphiks.math.SkRect.MakeEmpty()
+        val unkerned = font.getWidth(glyphs[0]) + font.getWidth(glyphs[1])
+        val expectedKerning = -152f * font.size / 2048f
+
+        val kerned = font.measureText("AV", bounds = kernedBounds)
+        noKerningFont.measureText("AV", bounds = unkernedBounds)
+
+        assertEquals(kerned, font.measureText(rawGlyphIds, encoding = SkTextEncoding.kGlyphID), 0.001f)
+        assertEquals(unkerned + expectedKerning, kerned, 0.001f)
+        assertEquals(unkerned, noKerningFont.measureText("AV"), 0.001f)
+        assertTrue(kernedBounds.right < unkernedBounds.right)
+
+        font.scaleX = 2f
+        assertEquals(2f * (unkerned + expectedKerning), font.measureText("AV"), 0.001f)
+    }
+
+    @Test
+    fun `makeTextPath applies OpenType kern adjustments`() {
+        val kernedTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val unkernedTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableTag("kern", "zern"))!!
+        val kernedPath = requireNotNull(SkFont(kernedTypeface, 64f).makeTextPath("AV", 0f, 0f))
+        val unkernedPath = requireNotNull(SkFont(unkernedTypeface, 64f).makeTextPath("AV", 0f, 0f))
+
+        assertTrue(kernedPath.computeTightBounds().right < unkernedPath.computeTightBounds().right)
+    }
+
+    @Test
     fun `getKerningPairAdjustments returns null when font has no kern table`() {
         val bytes = liberationSansBytes().withTableTag("kern", "zern")
         val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
@@ -534,6 +580,9 @@ class OpenTypeFontTest {
 
     private fun IntArray.toShortArray(): ShortArray =
         ShortArray(size) { this[it].toShort() }
+
+    private fun glyphString(glyphs: IntArray): String =
+        glyphs.joinToString(separator = "") { (it and 0xFFFF).toChar().toString() }
 
     private fun writeU16(bytes: ByteArray, off: Int, value: Int) {
         bytes[off] = (value ushr 8).toByte()

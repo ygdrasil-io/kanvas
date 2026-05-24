@@ -138,14 +138,19 @@ public class OpenTypeTypeface private constructor(
         if (text.isEmpty()) return null
         val builder = SkPathBuilder().setFillType(SkPathFillType.kWinding)
         var penX = x
-        val cps = text.codePoints().toArray()
-        for (cp in cps) {
-            val glyphId = font.glyphForCodepoint(cp)
+        val glyphs = text.codePoints().toArray().let { codepoints ->
+            IntArray(codepoints.size) { font.glyphForCodepoint(codepoints[it]) }
+        }
+        for (i in glyphs.indices) {
+            val glyphId = glyphs[i]
             val glyphPath = font.glyphPath(glyphId, size, scaleX, skewX)
             if (glyphPath != null && !glyphPath.isEmpty()) {
                 builder.addPathOffset(glyphPath, penX, y)
             }
             penX += font.advanceWidth(glyphId) * font.scale(size) * scaleX
+            if (i < glyphs.lastIndex) {
+                penX += font.kerningAdjustment(glyphId, glyphs[i + 1]) * font.scale(size) * scaleX
+            }
         }
         val out = builder.detach()
         return if (out.isEmpty()) null else out
@@ -176,7 +181,8 @@ public class OpenTypeTypeface private constructor(
         var advance = 0f
         var haveBounds = false
         var joined = SkRect.MakeEmpty()
-        for (glyphId in cps) {
+        for (i in cps.indices) {
+            val glyphId = cps[i]
             if (bounds != null) {
                 val glyphBounds = font.glyphBounds(glyphId, size, scaleX, skewX)
                 if (!glyphBounds.isEmpty) {
@@ -193,6 +199,9 @@ public class OpenTypeTypeface private constructor(
                 }
             }
             advance += font.advanceWidth(glyphId) * font.scale(size) * scaleX
+            if (i < cps.lastIndex) {
+                advance += font.kerningAdjustment(glyphId, cps[i + 1]) * font.scale(size) * scaleX
+            }
         }
         bounds?.let {
             if (haveBounds) {
@@ -287,12 +296,15 @@ private class ParsedTrueTypeFont(
     }
 
     fun kerningPairAdjustments(glyphs: ShortArray): IntArray? {
-        val kernTable = kern ?: return null
+        kern ?: return null
         if (glyphs.size <= 1) return IntArray(0)
         return IntArray(glyphs.size - 1) { i ->
-            kernTable.adjustment(glyphs[i].toInt() and 0xFFFF, glyphs[i + 1].toInt() and 0xFFFF)
+            kerningAdjustment(glyphs[i].toInt() and 0xFFFF, glyphs[i + 1].toInt() and 0xFFFF)
         }
     }
+
+    fun kerningAdjustment(leftGlyphId: Int, rightGlyphId: Int): Int =
+        kern?.adjustment(leftGlyphId, rightGlyphId) ?: 0
 
     fun tableData(tag: Int): ByteArray? {
         val record = tables[openTypeTagToString(tag)] ?: return null
