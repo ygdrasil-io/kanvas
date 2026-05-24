@@ -250,7 +250,17 @@ public class SkPngKotlinCodec private constructor(
     private fun canDecodeTo(colorType: SkColorType): Boolean =
         colorType == cachedInfo.colorType ||
             colorType == SkColorType.kRGBA_8888 ||
-            colorType == SkColorType.kRGBA_F16Norm
+            colorType == SkColorType.kRGBA_F16Norm ||
+            (
+                png.bitDepth < 16 &&
+                    (
+                        colorType == SkColorType.kBGRA_8888 ||
+                            colorType == SkColorType.kARGB_4444 ||
+                            colorType == SkColorType.kAlpha_8 ||
+                            colorType == SkColorType.kRGB_565 ||
+                            colorType == SkColorType.kGray_8
+                        )
+                )
 
     internal companion object Decoder : SkCodec.Decoder {
         override val name: String = "png"
