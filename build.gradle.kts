@@ -4,6 +4,7 @@ val pureKotlinCodecProjects = setOf(
     "codec-api",
     "codec-core",
     "codec-common",
+    "codec-test-fixtures",
     "codec-all-kotlin",
     "codec-png-api",
     "codec-png-kotlin",

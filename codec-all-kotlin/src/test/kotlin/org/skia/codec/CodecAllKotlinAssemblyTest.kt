@@ -1,7 +1,11 @@
 package org.skia.codec
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Test
+import org.skia.codec.test.CodecTestFixtures
+import org.skia.codec.test.CodecTestFixtures.decodePixels
 import java.util.ServiceLoader
 
 class CodecAllKotlinAssemblyTest {
@@ -46,5 +50,17 @@ class CodecAllKotlinAssemblyTest {
             ),
             providers,
         )
+    }
+
+    @Test
+    fun `decodes shared rgba png fixture through kotlin assembly`() {
+        val codec = SkCodec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
+
+        assertNotNull(codec)
+        val actual = decodePixels(codec!!)
+        assertEquals(CodecTestFixtures.SIMPLE_RGBA_PIXELS.size, actual.size)
+        for (y in CodecTestFixtures.SIMPLE_RGBA_PIXELS.indices) {
+            assertArrayEquals(CodecTestFixtures.SIMPLE_RGBA_PIXELS[y], actual[y], "row=$y")
+        }
     }
 }
