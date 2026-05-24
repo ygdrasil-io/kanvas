@@ -107,7 +107,7 @@ Completed since this snapshot:
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, perceptual/hue/premul sampler still missing | gradient interpolation variants |
 | `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
 | `mesh` | `STUB.MESH` | `MeshGMs.kt` |
-| `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`, `STUB.XYZ` | `RecordOptsGM.kt` |
+| `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`; reactivation audit rendered 67.96% vs `original-888/recordopts.png` | `RecordOptsGM.kt` |
 | `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
@@ -116,5 +116,7 @@ Completed since this snapshot:
   need tag cleanup before implementation selection.
 - `dashcubics` is now ported: `SkTrimPathEffect` is implemented and
   `TrimGM` is reactivated with a 90% ratchet (`92.29%` in validation).
+- `recordopts` no longer carries the stale `STUB.XYZ` placeholder; the
+  focused blocker is the saveLayer / detector color-filter fold path.
 - Text-related rows should be revisited after the font delivery if their
   implementation would touch glyph storage or shaping assumptions.
