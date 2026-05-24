@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.codec.SkCodec
+import org.skia.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 
@@ -45,26 +46,50 @@ class SkWbmpKotlinCodecTest {
 
     @Test
     fun `rejects invalid signature and fixed header`() {
-        assertFalse(SkWbmpKotlinCodec.Decoder.matches(ByteArray(0)))
-        assertFalse(SkWbmpKotlinCodec.Decoder.matches("not-a-wbmp".toByteArray()))
-        assertNull(SkWbmpKotlinCodec.Decoder.make(byteArrayOf(1, 0, 1, 1, 0)))
-        assertNull(SkWbmpKotlinCodec.Decoder.make(byteArrayOf(0, 0x20, 1, 1, 0)))
+        val magicCases = listOf(
+            CodecNegativeFixtures.invalidMagic("empty WBMP input", ByteArray(0)),
+            CodecNegativeFixtures.invalidMagic("ASCII non-WBMP payload", "not-a-wbmp"),
+        )
+        for (case in magicCases) {
+            assertFalse(SkWbmpKotlinCodec.Decoder.matches(case.data), case.name)
+        }
+
+        val headerCases = listOf(
+            CodecNegativeFixtures.invalidMagic("unsupported WBMP type", byteArrayOf(1, 0, 1, 1, 0)),
+            CodecNegativeFixtures.invalidMagic("non-zero WBMP fixed header", byteArrayOf(0, 0x20, 1, 1, 0)),
+        )
+        for (case in headerCases) {
+            assertNull(SkWbmpKotlinCodec.Decoder.make(case.data), case.name)
+        }
     }
 
     @Test
     fun `rejects zero and overflow dimensions`() {
-        assertNull(SkWbmpKotlinCodec.Decoder.make(byteArrayOf(0, 0, 0, 1, 0)))
-        assertNull(SkWbmpKotlinCodec.Decoder.make(byteArrayOf(0, 0, 1, 0, 0)))
-        assertNull(SkWbmpKotlinCodec.Decoder.make(byteArrayOf(0, 0, 0x84.toByte(), 0x80.toByte(), 0, 1, 0)))
-        assertNull(SkWbmpKotlinCodec.Decoder.make(byteArrayOf(0, 0, 1, 0x84.toByte(), 0x80.toByte(), 0, 0)))
+        val cases = listOf(
+            CodecNegativeFixtures.invalidSize("zero WBMP width", byteArrayOf(0, 0, 0, 1, 0)),
+            CodecNegativeFixtures.invalidSize("zero WBMP height", byteArrayOf(0, 0, 1, 0, 0)),
+            CodecNegativeFixtures.invalidSize(
+                "overflow WBMP width",
+                byteArrayOf(0, 0, 0x84.toByte(), 0x80.toByte(), 0, 1, 0),
+            ),
+            CodecNegativeFixtures.invalidSize(
+                "overflow WBMP height",
+                byteArrayOf(0, 0, 1, 0x84.toByte(), 0x80.toByte(), 0, 0),
+            ),
+        )
+
+        for (case in cases) {
+            assertNull(SkWbmpKotlinCodec.Decoder.make(case.data), case.name)
+        }
     }
 
     @Test
     fun `rejects truncated vlq dimensions`() {
-        assertNull(SkWbmpKotlinCodec.Decoder.make(byteArrayOf(0, 0, 0x81.toByte())))
-        assertNull(SkWbmpKotlinCodec.Decoder.make(byteArrayOf(0, 0, 1, 0x81.toByte())))
-        assertNull(
-            SkWbmpKotlinCodec.Decoder.make(
+        val cases = listOf(
+            CodecNegativeFixtures.truncated("truncated WBMP width VLQ", byteArrayOf(0, 0, 0x81.toByte()), size = 3),
+            CodecNegativeFixtures.truncated("truncated WBMP height VLQ", byteArrayOf(0, 0, 1, 0x81.toByte()), size = 4),
+            CodecNegativeFixtures.truncated(
+                "unterminated WBMP width VLQ",
                 byteArrayOf(
                     0,
                     0,
@@ -78,8 +103,13 @@ class SkWbmpKotlinCodecTest {
                     0x81.toByte(),
                     0x81.toByte(),
                 ),
+                size = 11,
             ),
         )
+
+        for (case in cases) {
+            assertNull(SkWbmpKotlinCodec.Decoder.make(case.data), case.name)
+        }
     }
 
     @Test

@@ -100,3 +100,42 @@ public object CodecTestFixtures {
         write(value and 0xFF)
     }
 }
+
+public object CodecNegativeFixtures {
+    public data class NegativeCase(
+        public val name: String,
+        public val data: ByteArray,
+    )
+
+    public fun invalidMagic(name: String, data: ByteArray): NegativeCase =
+        NegativeCase(name, data)
+
+    public fun invalidMagic(name: String, ascii: String): NegativeCase =
+        invalidMagic(name, ascii.toByteArray(Charsets.US_ASCII))
+
+    public fun truncated(name: String, data: ByteArray, size: Int): NegativeCase {
+        require(size in 0..data.size) { "truncated fixture size must be within the input" }
+        return NegativeCase(name, data.copyOf(size))
+    }
+
+    public fun truncatedTail(name: String, data: ByteArray, droppedBytes: Int): NegativeCase {
+        require(droppedBytes in 0..data.size) { "dropped byte count must be within the input" }
+        return truncated(name, data, data.size - droppedBytes)
+    }
+
+    public fun mutatedByte(name: String, data: ByteArray, index: Int, value: Int): NegativeCase {
+        require(index in data.indices) { "mutation index must be within the input" }
+        val copy = data.copyOf()
+        copy[index] = value.toByte()
+        return NegativeCase(name, copy)
+    }
+
+    public fun invalidSize(name: String, data: ByteArray): NegativeCase =
+        NegativeCase(name, data)
+
+    public fun duplicateMetadata(name: String, data: ByteArray): NegativeCase =
+        NegativeCase(name, data)
+
+    public fun misplacedMetadata(name: String, data: ByteArray): NegativeCase =
+        NegativeCase(name, data)
+}
