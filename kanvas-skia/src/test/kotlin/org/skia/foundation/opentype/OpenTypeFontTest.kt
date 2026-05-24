@@ -1,6 +1,7 @@
 package org.skia.foundation.opentype
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -95,6 +96,36 @@ class OpenTypeFontTest {
     fun `makeFromBytes rejects truncated OS2 metrics table`() {
         assertNull(OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableLength("OS/2", 0)))
         assertNull(OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableLength("OS/2", 2)))
+    }
+
+    @Test
+    fun `getPostScriptName returns bundled Liberation Sans name table entry`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+
+        assertEquals("LiberationSans", typeface.getPostScriptName())
+    }
+
+    @Test
+    fun `createFamilyNameIterator exposes family and full names from bundled Liberation Sans`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+
+        val names = typeface.createFamilyNameIterator().asSequence().toList()
+
+        assertTrue(names.size >= 2)
+        assertTrue(names.any { it.fString == "Liberation Sans" })
+        assertTrue(names.any { it.fLanguage == "en" })
+    }
+
+    @Test
+    fun `malformed name table falls back to documented OpenType family name`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes().withTableLength("name", 0))!!
+
+        val names = typeface.createFamilyNameIterator().asSequence().toList()
+
+        assertEquals("OpenType", typeface.getFamilyName())
+        assertNull(typeface.getPostScriptName())
+        assertFalse(names.isEmpty())
+        assertTrue(names.any { it.fString == "OpenType" })
     }
 
     @Test
