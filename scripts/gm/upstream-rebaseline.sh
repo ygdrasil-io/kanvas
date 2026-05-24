@@ -54,6 +54,10 @@ test_candidates_for_kt() {
         "$GPU_TEST_DIR/${stem}WebGpuTest.kt" \
         "$GPU_TEST_DIR/${stem}CrossBackendTest.kt" \
         "$GPU_TEST_DIR/crossbackend/${stem}CrossBackendTest.kt"
+
+    if [ "$base" = "ImageFiltersTextBaseGM" ]; then
+        printf '%s\n' "$KT_TEST_DIR/ImageFiltersTextTest.kt"
+    fi
 }
 
 bucket_for() {
