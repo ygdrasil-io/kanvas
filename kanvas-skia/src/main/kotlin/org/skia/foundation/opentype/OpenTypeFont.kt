@@ -89,6 +89,11 @@ public class OpenTypeTypeface private constructor(
         name.append(font.familyName)
     }
 
+    override fun getPostScriptName(): String? = font.postScriptName
+
+    override fun createFamilyNameIterator(): Iterator<SkTypeface.LocalizedString> =
+        font.localizedFamilyNames.iterator()
+
     override fun unicharsToGlyphsInternal(unichars: IntArray, count: Int, glyphs: ShortArray) {
         for (i in 0 until count) {
             glyphs[i] = font.glyphForCodepoint(unichars[i]).toShort()
@@ -250,6 +255,8 @@ private class ParsedTrueTypeFont(
     val xHeight: Int,
     val capHeight: Int,
     val familyName: String,
+    val postScriptName: String?,
+    val localizedFamilyNames: List<SkTypeface.LocalizedString>,
     private val cmap: Cmap,
     private val advanceWidths: IntArray,
     private val leftSideBearings: ShortArray,
@@ -576,7 +583,11 @@ private class ParsedTrueTypeFont(
             if (offsets.any { it < 0 || it > glyf.length }) return null
             for (i in 0 until offsets.lastIndex) if (offsets[i] > offsets[i + 1]) return null
             val cmap = Cmap.parse(bytes, cmapTable) ?: return null
-            val familyName = parseName(bytes, tables["name"]) ?: "OpenType"
+            val names = parseNameTable(bytes, tables["name"])
+            val familyName = names?.familyName ?: "OpenType"
+            val localizedNames = names?.localizedFamilyNames
+                ?.takeIf { it.isNotEmpty() }
+                ?: listOf(SkTypeface.LocalizedString(familyName, "und"))
             val os2 = tables["OS/2"]
             if (os2 != null && os2.length < 4) return null
             val avg = os2?.let { readI16(bytes, it.offset + 2).toInt() } ?: advances.average().toInt()
@@ -586,7 +597,8 @@ private class ParsedTrueTypeFont(
             return ParsedTrueTypeFont(
                 bytes, tables, unitsPerEm, indexToLocFormat, numGlyphs, numHMetrics,
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
-                avg, sxHeight, sCapHeight, familyName, cmap, advances, bearings, offsets,
+                avg, sxHeight, sCapHeight, familyName, names?.postScriptName, localizedNames,
+                cmap, advances, bearings, offsets,
             )
         }
 
@@ -602,33 +614,57 @@ private class ParsedTrueTypeFont(
             return if (ttcIndex == 0) bytes else null
         }
 
-        private fun parseName(bytes: ByteArray, table: TableRecord?): String? {
+        private fun parseNameTable(bytes: ByteArray, table: TableRecord?): OpenTypeNames? {
             table ?: return null
             if (table.length < 6) return null
+            val tableEnd = table.offset + table.length
             val count = readU16(bytes, table.offset + 2)
             val stringOffset = table.offset + readU16(bytes, table.offset + 4)
-            var fallback: String? = null
+            if (!fits(table.offset + 6, count.toLong() * 12L, tableEnd)) return null
+            if (stringOffset !in table.offset..tableEnd) return null
+            val familyCandidates = ArrayList<NameRecord>()
+            val postScriptCandidates = ArrayList<NameRecord>()
+            val localized = ArrayList<SkTypeface.LocalizedString>()
+            val seenLocalized = HashSet<Pair<String, String>>()
             var off = table.offset + 6
             repeat(count) {
-                if (off + 12 <= table.offset + table.length) {
-                    val platform = readU16(bytes, off)
-                    val encoding = readU16(bytes, off + 2)
-                    val language = readU16(bytes, off + 4)
-                    val nameId = readU16(bytes, off + 6)
-                    val length = readU16(bytes, off + 8)
-                    val strOff = stringOffset + readU16(bytes, off + 10)
-                    if (nameId == 1 && strOff >= table.offset && strOff + length <= table.offset + table.length) {
-                        val s = decodeName(bytes, strOff, length, platform, encoding)
-                        if (!s.isNullOrBlank()) {
-                            if (platform == 3 && language == 0x0409) return s
-                            fallback = fallback ?: s
+                val platform = readU16(bytes, off)
+                val encoding = readU16(bytes, off + 2)
+                val language = readU16(bytes, off + 4)
+                val nameId = readU16(bytes, off + 6)
+                val length = readU16(bytes, off + 8)
+                val strOff = stringOffset + readU16(bytes, off + 10)
+                if (strOff >= stringOffset && fits(strOff, length, tableEnd)) {
+                    val s = decodeName(bytes, strOff, length, platform, encoding)
+                    if (!s.isNullOrBlank()) {
+                        val record = NameRecord(s, platform, language)
+                        when (nameId) {
+                            1 -> familyCandidates.add(record)
+                            6 -> postScriptCandidates.add(record)
+                        }
+                        if (nameId == 1 || nameId == 4) {
+                            val localizedName = SkTypeface.LocalizedString(s, languageTag(platform, language))
+                            if (seenLocalized.add(localizedName.fString to localizedName.fLanguage)) {
+                                localized.add(localizedName)
+                            }
                         }
                     }
                 }
                 off += 12
             }
-            return fallback
+            val familyName = chooseFamilyName(familyCandidates)
+            return OpenTypeNames(familyName, chooseName(postScriptCandidates), localized)
         }
+
+        private fun chooseFamilyName(records: List<NameRecord>): String? =
+            records.firstOrNull { it.platform == 3 && it.language == 0x0409 }?.value
+                ?: records.firstOrNull()?.value
+
+        private fun chooseName(records: List<NameRecord>): String? =
+            records.firstOrNull { it.platform == 3 && it.language == 0x0409 }?.value
+                ?: records.firstOrNull { it.platform == 0 }?.value
+                ?: records.firstOrNull { it.platform == 1 && it.language == 0 }?.value
+                ?: records.firstOrNull()?.value
 
         private fun decodeName(bytes: ByteArray, off: Int, len: Int, platform: Int, encoding: Int): String? =
             try {
@@ -639,6 +675,49 @@ private class ParsedTrueTypeFont(
                 }
             } catch (e: RuntimeException) {
                 null
+            }
+
+        private fun languageTag(platform: Int, language: Int): String =
+            when (platform) {
+                1 -> macLanguageTag(language)
+                3 -> windowsLanguageTag(language)
+                else -> "und"
+            }
+
+        private fun macLanguageTag(language: Int): String =
+            when (language) {
+                0 -> "en"
+                1 -> "fr"
+                2 -> "de"
+                3 -> "it"
+                4 -> "nl"
+                5 -> "sv"
+                6 -> "es"
+                11 -> "ja"
+                12 -> "ar"
+                19 -> "zh-Hant"
+                23 -> "ko"
+                33 -> "zh-Hans"
+                else -> "und"
+            }
+
+        private fun windowsLanguageTag(language: Int): String =
+            when (language) {
+                0x0401 -> "ar-SA"
+                0x0404 -> "zh-TW"
+                0x0407 -> "de-DE"
+                0x0409 -> "en-US"
+                0x040A -> "es-ES"
+                0x040C -> "fr-FR"
+                0x0410 -> "it-IT"
+                0x0411 -> "ja-JP"
+                0x0412 -> "ko-KR"
+                0x0413 -> "nl-NL"
+                0x041D -> "sv-SE"
+                0x0804 -> "zh-CN"
+                0x0809 -> "en-GB"
+                0x0C0A -> "es-ES"
+                else -> "und"
             }
 
         private fun readU16(bytes: ByteArray, off: Int): Int =
@@ -786,6 +865,12 @@ private class CmapFormat12(private val groups: List<Group>) : Cmap {
 }
 
 private data class TableRecord(val offset: Int, val length: Int)
+private data class OpenTypeNames(
+    val familyName: String?,
+    val postScriptName: String?,
+    val localizedFamilyNames: List<SkTypeface.LocalizedString>,
+)
+private data class NameRecord(val value: String, val platform: Int, val language: Int)
 private data class TtPoint(val x: Int, val y: Int, val onCurve: Boolean)
 private data class GlyphOutline(val contours: List<List<TtPoint>>) {
     val points: List<TtPoint> = contours.flatten()
