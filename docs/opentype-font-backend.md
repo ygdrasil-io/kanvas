@@ -79,6 +79,26 @@ attachment, Indic/Arabic shaping, HarfBuzz parity, and multi-font fallback
 belong outside the OpenType typeface reader and should be tracked as dedicated
 `SkShaper` or text-layout work.
 
+## Follow-Up Tickets
+
+The remaining roadmap items from issue
+[#807](https://github.com/ygdrasil-io/kanvas/issues/807) were split because
+they require dedicated fixtures, larger layout decisions, or format-specific
+rendering work:
+
+- [#871](https://github.com/ygdrasil-io/kanvas/issues/871): legacy and
+  advanced `cmap` formats. Current bundled fonts all have a usable format 4
+  Unicode mapping, so formats beyond 4/12 are deferred until a fixture or
+  product need requires them.
+- [#874](https://github.com/ygdrasil-io/kanvas/issues/874): `GPOS` pair
+  positioning as the next minimal shaping increment and kerning fallback.
+- [#875](https://github.com/ygdrasil-io/kanvas/issues/875): apply `fvar` /
+  `gvar` variation positions to TrueType outlines.
+- [#876](https://github.com/ygdrasil-io/kanvas/issues/876): parse COLRv0 and
+  CPAL metadata with a dedicated color-font fixture.
+- [#877](https://github.com/ygdrasil-io/kanvas/issues/877): plan color-font
+  rendering, palette overrides, COLRv1, CBDT/sbix, and SVG-in-OpenType work.
+
 ## Validation
 
 Run the focused OpenType tests:
