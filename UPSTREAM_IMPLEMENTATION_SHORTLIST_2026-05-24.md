@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 24 upstream `.cpp` rows as
+The rebaseline currently classifies 23 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -61,7 +61,8 @@ Completed since this snapshot:
   by `FiddleTest`; the implementation bucket entry was stale.
 - `STUB.SURFACE_PROPS`: `SurfacePropsGM` is ported for the raster path via
   `SkSurface.MakeRaster(..., SkSurfaceProps)` and enabled with ratchet
-  coverage. WebGPU wrapper tests remain disabled separately.
+  coverage. The WebGPU and crossbackend wrappers are also enabled with
+  95% floors.
 - `RRectBlurGM`: `SkCanvas.readPixels` / `writePixels` raster overloads are
   implemented, the diff GM is ported, and `RRectBlurTest` is enabled.
 
@@ -102,7 +103,6 @@ Completed since this snapshot:
 | `savelayer` | `STUB.F16_COLOR_TYPE`, `STUB.SAVE_BEHIND`; `Skbug14554GM` ported | `SaveBehindGM.kt`, `SaveLayerF16GM.kt`, `SaveLayerGM.kt`, `Skbug14554GM.kt` |
 | `shadowutils` | ported | `ShadowUtilsDirectionalGM.kt`, `ShadowUtilsGaussianColorFilterGM.kt` |
 | `strokedlines` | ported | `StrokedLineCapsGM.kt`, `StrokedLinesGM.kt` |
-| `surface` | partial: raster `SurfacePropsGM` ported; WebGPU wrappers still `STUB.SURFACE_PROPS` | `NewSurfaceGM.kt`, `SnapWithMipsGM.kt`, `SurfacePropsGM.kt` |
 | `textblobmixedsizes` | `STUB.DF_TEXT_RASTER` | `TextBlobMixedSizesGM.kt` |
 | `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
