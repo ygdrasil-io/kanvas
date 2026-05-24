@@ -17,6 +17,7 @@ font work from PR #786.
   widths, bounds, font metrics, and typeface-level kerning pair adjustments.
 - Defensive raw SFNT table reads via `SkTypeface.copyTableData(tag)` for
   binary-backed OpenType typefaces.
+- Variable-font axis enumeration through OpenType `fvar` metadata.
 - Bundled Liberation TTF resources used by the current tests.
 
 The backend has no AWT or JNI dependency. It is intended as the first portable
@@ -34,9 +35,9 @@ are unavailable.
 - Fontations factories: `SkTypeface_Fontations.MakeFromStream` and
   `MakeFromData` remain documented stubs because they require the external
   Rust Fontations stack through UniFFI/JNI or another native bridge.
-- Variable fonts beyond carrying arguments: `fvar` axis enumeration, `gvar`
-  outline deltas, `avar`, and applying `SkFontArguments.VariationPosition`
-  to OpenType outlines are separate work.
+- Variable fonts beyond axis metadata: `gvar` outline deltas, `avar`, and
+  applying `SkFontArguments.VariationPosition` to OpenType outlines are
+  separate work.
 - Color fonts: `CPAL`/`COLR`, COLRv1 paint graphs, CBDT/sbix bitmap strikes,
   and SVG-in-OpenType glyphs are not part of the current pure Kotlin backend.
 - System font family enumeration and platform font fallback beyond the bundled
