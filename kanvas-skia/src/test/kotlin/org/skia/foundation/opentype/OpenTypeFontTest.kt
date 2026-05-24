@@ -1128,6 +1128,45 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `drawString renders COLRv1 layer list and reused color glyph subset`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1LayersAndColrGlyph(glyphs[0], glyphs[1], glyphs[2]))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(220, 160).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 126f, SkFont(typeface, 112f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `cyclic COLRv1 PaintColrGlyph falls back to monochrome without looping`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1SelfReferencingColrGlyph(glyph))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(160, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
     fun `malformed COLRv1 paint graph fails closed without rejecting font`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
@@ -1754,6 +1793,69 @@ class OpenTypeFontTest {
         bytes[solidPaintOffset] = 2 // PaintSolid
         writeU16(bytes, solidPaintOffset + 1, 2) // paletteIndex
         writeI16(bytes, solidPaintOffset + 3, 0x4000) // alpha = 1.0
+        return bytes
+    }
+
+    private fun syntheticColrV1LayersAndColrGlyph(baseGlyph: Int, layerGlyph: Int, reusedGlyph: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val layerListOffset = 50
+        val rootLayersPaintOffset = 62
+        val layerGlyphPaintOffset = 68
+        val layerSolidPaintOffset = layerGlyphPaintOffset + 6
+        val colrGlyphPaintOffset = layerSolidPaintOffset + 5
+        val reusedGlyphPaintOffset = colrGlyphPaintOffset + 3
+        val reusedSolidPaintOffset = reusedGlyphPaintOffset + 6
+        val bytes = ByteArray(reusedSolidPaintOffset + 5)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+        writeU32(bytes, 18, layerListOffset) // layerListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 2) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, baseGlyph)
+        writeU32(bytes, baseGlyphListOffset + 6, rootLayersPaintOffset - baseGlyphListOffset)
+        writeU16(bytes, baseGlyphListOffset + 10, reusedGlyph)
+        writeU32(bytes, baseGlyphListOffset + 12, reusedGlyphPaintOffset - baseGlyphListOffset)
+
+        writeU32(bytes, layerListOffset, 2) // numLayers
+        writeU32(bytes, layerListOffset + 4, layerGlyphPaintOffset - layerListOffset)
+        writeU32(bytes, layerListOffset + 8, colrGlyphPaintOffset - layerListOffset)
+
+        bytes[rootLayersPaintOffset] = 1 // PaintColrLayers
+        bytes[rootLayersPaintOffset + 1] = 2 // numLayers
+        writeU32(bytes, rootLayersPaintOffset + 2, 0) // firstLayerIndex
+
+        bytes[layerGlyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, layerGlyphPaintOffset + 1, layerSolidPaintOffset - layerGlyphPaintOffset)
+        writeU16(bytes, layerGlyphPaintOffset + 4, layerGlyph)
+        bytes[layerSolidPaintOffset] = 2 // PaintSolid
+        writeU16(bytes, layerSolidPaintOffset + 1, 0) // red paletteIndex
+        writeI16(bytes, layerSolidPaintOffset + 3, 0x4000) // alpha = 1.0
+
+        bytes[colrGlyphPaintOffset] = 11 // PaintColrGlyph
+        writeU16(bytes, colrGlyphPaintOffset + 1, reusedGlyph)
+
+        bytes[reusedGlyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, reusedGlyphPaintOffset + 1, reusedSolidPaintOffset - reusedGlyphPaintOffset)
+        writeU16(bytes, reusedGlyphPaintOffset + 4, reusedGlyph)
+        bytes[reusedSolidPaintOffset] = 2 // PaintSolid
+        writeU16(bytes, reusedSolidPaintOffset + 1, 1) // green paletteIndex
+        writeI16(bytes, reusedSolidPaintOffset + 3, 0x4000) // alpha = 1.0
+        return bytes
+    }
+
+    private fun syntheticColrV1SelfReferencingColrGlyph(glyph: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val colrGlyphPaintOffset = baseGlyphListOffset + 10
+        val bytes = ByteArray(colrGlyphPaintOffset + 3)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, glyph)
+        writeU32(bytes, baseGlyphListOffset + 6, colrGlyphPaintOffset - baseGlyphListOffset)
+
+        bytes[colrGlyphPaintOffset] = 11 // PaintColrGlyph
+        writeU16(bytes, colrGlyphPaintOffset + 1, glyph)
         return bytes
     }
 
