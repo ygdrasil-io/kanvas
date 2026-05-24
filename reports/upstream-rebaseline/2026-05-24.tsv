@@ -329,7 +329,7 @@ quadpaths	2	QuadClosePathGM.kt,QuadPathGM.kt	PARTIAL	-	skia-integration-tests/sr
 radial_gradient_precision	1	RadialGradientPrecisionGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/RadialGradientPrecisionTest.kt	-	ported
 rasterhandleallocator	1	RasterAllocatorGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/RasterAllocatorTest.kt	-	ported
 readpixels	3	ReadPixelsCodecGM.kt,ReadPixelsGM.kt,ReadPixelsPictureGM.kt	PARTIAL	STUB.FIXTURE.GOOGLE_CHROME_ICO,STUB.ICO_DECODE	skia-integration-tests/src/test/kotlin/org/skia/tests/ReadPixelsTest.kt	STUB.FIXTURE.GOOGLE_CHROME_ICO,STUB.FIXTURE.READPIXELSCODEC_REFERENCE,STUB.FIXTURE.READPIXELSPICTURE_REFERENCE,STUB.ICO_DECODE	fixture-gated
-recordopts	1	RecordOptsGM.kt	TEST_DISABLED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/RecordOptsTest.kt	STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD,STUB.XYZ	implementation
+recordopts	1	RecordOptsGM.kt	TEST_DISABLED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/RecordOptsTest.kt	STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD	implementation
 rect_poly_stroke	1	RectPolyStrokeGM.kt	PORTED	-	gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RectPolyStrokeWebGpuTest.kt,gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/RectPolyStrokeCrossBackendTest.kt	-	ported
 rectangletexture	1	RectangleTextureGM.kt	TEST_DISABLED	STUB.GL_TEXTURE_RECTANGLE	skia-integration-tests/src/test/kotlin/org/skia/tests/RectangleTextureTest.kt	STUB.GL_TEXTURE_RECTANGLE	gpu-intractable
 rendertomipmappedyuvimageplanes	1	RenderToMipmappedYUVImagePlanesGM.kt	TEST_DISABLED	STUB.GPU_RENDER_TARGET,STUB.YUVA_PIXMAPS	skia-integration-tests/src/test/kotlin/org/skia/tests/RenderToMipmappedYUVImagePlanesTest.kt	STUB.YUVA_PIXMAPS	codec-gated

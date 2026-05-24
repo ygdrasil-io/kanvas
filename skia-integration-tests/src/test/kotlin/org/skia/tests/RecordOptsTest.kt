@@ -16,19 +16,14 @@ import org.skia.testing.TestUtils
  * into an [org.skia.core.SkPictureRecorder] and replays it. Both columns must
  * produce identical pixels.
  *
- * @Disabled because the saveLayer alpha-folding optimization and the
- * TableARGB detector colour filter rely on STUB.XYZ APIs not yet fully
- * wired into the CPU raster pipeline's saveLayer → colorFilter compositing
- * path. Specifically:
- *
- * TODO("STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD: alpha folding from outer
- * saveLayer into inner draw is not yet implemented in SkBitmapDevice's
- * saveLayer compositor — the detector TableARGB color filter currently
- * passes through unchanged instead of being applied in the correct pipeline
- * stage, causing the right column (picture recording path) to diverge from
- * the left column on rows 4-15.")
+ * @Disabled because current raster output still diverges from the upstream
+ * reference. Reactivation audit on 2026-05-24 rendered at 67.96% similarity
+ * against `original-888/recordopts.png`, with 53,030 / 78,030 pixels outside
+ * tolerance. The remaining blocker is the saveLayer / detector color-filter
+ * pipeline exercised by the recorded column, tracked as
+ * `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`.
  */
-@Disabled("STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD — see KDoc above")
+@Disabled("STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD")
 class RecordOptsTest {
 
     @Test
