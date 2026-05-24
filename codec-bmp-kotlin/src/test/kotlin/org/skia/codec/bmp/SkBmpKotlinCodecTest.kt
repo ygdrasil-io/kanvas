@@ -18,14 +18,14 @@ class SkBmpKotlinCodecTest {
         assertNull(SkBmpKotlinCodec.Decoder.make("not-a-bmp".toByteArray()))
         assertNull(SkBmpKotlinCodec.Decoder.make(byteArrayOf(0x42, 0x00, 0x00, 0x00)))
 
-        val rleCompressed = bmp(
+        val invalidRleCompressed = bmp(
             width = 1,
             height = 1,
             bitsPerPixel = 24,
             compression = 1,
             rowsTopDown = listOf(listOf(RED)),
         )
-        assertNull(SkBmpKotlinCodec.Decoder.make(rleCompressed))
+        assertNull(SkBmpKotlinCodec.Decoder.make(invalidRleCompressed))
     }
 
     @Test
@@ -89,6 +89,89 @@ class SkBmpKotlinCodecTest {
         assertPaletteDecode(bitsPerPixel = 8)
         assertPaletteDecode(bitsPerPixel = 4)
         assertPaletteDecode(bitsPerPixel = 1)
+    }
+
+    @Test
+    fun `decodes RLE8 palette BMP pixels`() {
+        val palette = intArrayOf(BLACK, RED, GREEN, BLUE, WHITE)
+        val codec = SkBmpKotlinCodec.Decoder.make(
+            rleBmp(
+                width = 4,
+                height = 2,
+                bitsPerPixel = 8,
+                compression = 1,
+                palette = palette,
+                encoded = byteArrayOf(
+                    4, 1, // bottom row: four red pixels
+                    0, 0, // end of line
+                    0, 4, 2, 3, 4, 0, // top row absolute: green, blue, white, black
+                    0, 0,
+                    0, 1,
+                ),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(GREEN, bitmap!!.getPixel(0, 0))
+        assertEquals(BLUE, bitmap.getPixel(1, 0))
+        assertEquals(WHITE, bitmap.getPixel(2, 0))
+        assertEquals(BLACK, bitmap.getPixel(3, 0))
+        assertEquals(RED, bitmap.getPixel(0, 1))
+        assertEquals(RED, bitmap.getPixel(3, 1))
+    }
+
+    @Test
+    fun `decodes RLE4 palette BMP pixels with delta`() {
+        val palette = intArrayOf(BLACK, RED, GREEN, BLUE, WHITE)
+        val codec = SkBmpKotlinCodec.Decoder.make(
+            rleBmp(
+                width = 4,
+                height = 2,
+                bitsPerPixel = 4,
+                compression = 2,
+                palette = palette,
+                encoded = byteArrayOf(
+                    2, 0x12, // bottom row: red, green
+                    0, 2, 1, 0, // delta one pixel right
+                    1, 0x30, // bottom row x=3: blue
+                    0, 0,
+                    0, 4, 0x24, 0x10, // top row absolute: green, white, red, black
+                    0, 0,
+                    0, 1,
+                ),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(GREEN, bitmap!!.getPixel(0, 0))
+        assertEquals(WHITE, bitmap.getPixel(1, 0))
+        assertEquals(RED, bitmap.getPixel(2, 0))
+        assertEquals(BLACK, bitmap.getPixel(3, 0))
+        assertEquals(RED, bitmap.getPixel(0, 1))
+        assertEquals(GREEN, bitmap.getPixel(1, 1))
+        assertEquals(BLACK, bitmap.getPixel(2, 1))
+        assertEquals(BLUE, bitmap.getPixel(3, 1))
+    }
+
+    @Test
+    fun `reports incomplete RLE input while keeping header accepted`() {
+        val codec = SkBmpKotlinCodec.Decoder.make(
+            rleBmp(
+                width = 2,
+                height = 1,
+                bitsPerPixel = 8,
+                compression = 1,
+                palette = intArrayOf(BLACK, RED),
+                encoded = byteArrayOf(2),
+            ),
+        )!!
+
+        val (_, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kIncompleteInput, result)
     }
 
     @Test
@@ -207,6 +290,31 @@ class SkBmpKotlinCodecTest {
                 }
             }
         }
+        return out
+    }
+
+    private fun rleBmp(
+        width: Int,
+        height: Int,
+        bitsPerPixel: Int,
+        compression: Int,
+        palette: IntArray,
+        encoded: ByteArray,
+    ): ByteArray {
+        val paletteBytes = palette.size * 4
+        val pixelOffset = 14 + 40 + paletteBytes
+        val out = ByteArray(pixelOffset + encoded.size)
+        writeFileAndInfoHeader(out, width, height, bitsPerPixel, compression, pixelOffset, topDown = false)
+        writeI32LE(out, 34, encoded.size)
+        writeI32LE(out, 46, palette.size)
+        for (i in palette.indices) {
+            val c = palette[i]
+            val off = 14 + 40 + i * 4
+            out[off] = b(c).toByte()
+            out[off + 1] = g(c).toByte()
+            out[off + 2] = r(c).toByte()
+        }
+        System.arraycopy(encoded, 0, out, pixelOffset, encoded.size)
         return out
     }
 
