@@ -10,7 +10,7 @@ WGSL/parser delivery are still pending.
 
 ## Summary
 
-The rebaseline currently classifies 30 upstream `.cpp` rows as
+The rebaseline currently classifies 29 upstream `.cpp` rows as
 `implementation`. These are not blocked by the font delivery, codec
 delivery, or the WGSL/runtime-effect parser track.
 
@@ -48,6 +48,8 @@ Completed since this snapshot:
   `SkCanvas.experimental_DrawEdgeAAImageSet`; `DrawImageSetGM`,
   `DrawImageSetRectToRectGM`, `DrawImageSetAlphaOnlyGM`, and `Skbug14554GM`
   are enabled with ratchet coverage.
+- `STUB.COMPOSE_SHADER`: `ComposeShaderAlphaGM` is ported and enabled;
+  the compose-shader family is now covered by ratcheted tests.
 
 ## Recommended order
 
@@ -66,7 +68,7 @@ Completed since this snapshot:
 | `color4f` | ported | `Color4blendcfGM.kt`, `Color4fGM.kt`, `Color4shaderGM.kt` |
 | `colorfilterimagefilter` | ported | `ColorFilterImageFilterGM.kt`, `ColorFilterImageFilterLayerGM.kt`, `ColorFilterShaderGM.kt` |
 | `complexclip` | ported | `ClipShaderComplexClipGM.kt`, `ClipShaderPerspGM.kt`, `ComplexClipGM.kt` |
-| `composeshader` | `STUB.COMPOSE_SHADER` | `ComposeShaderAlphaGM.kt`, `ComposeShaderBitmap2GM.kt`, `ComposeShaderBitmapGM.kt`, `ComposeShaderGM.kt`, `ComposeShaderGridGM.kt` |
+| `composeshader` | ported | `ComposeShaderAlphaGM.kt`, `ComposeShaderBitmap2GM.kt`, `ComposeShaderBitmapGM.kt`, `ComposeShaderGM.kt`, `ComposeShaderGridGM.kt` |
 | `dashcubics` | disabled `TrimGM` without `STUB.*` tag | `DashCubicsGM.kt`, `TrimGM.kt` |
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
@@ -100,5 +102,3 @@ Completed since this snapshot:
   a `STUB.*` tag.
 - Text-related rows should be revisited after the font delivery if their
   implementation would touch glyph storage or shaping assumptions.
-- `STUB.COMPOSE_SHADER` may overlap with WGSL/parser work on the GPU side,
-  but the raster factory itself can be evaluated independently.
