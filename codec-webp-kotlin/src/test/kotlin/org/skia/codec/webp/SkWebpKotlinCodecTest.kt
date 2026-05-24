@@ -474,8 +474,8 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `VP8 YUV420 composition writes opaque RGBA pixels`() {
-        val rgba = composeVp8Yuv420ToRgba(
+    fun `VP8 YUV420 composition writes opaque project-packed pixels`() {
+        val pixels = composeVp8Yuv420ToRgba(
             yPlane = intArrayOf(
                 10, 20, 30,
                 40, 50, 60,
@@ -488,14 +488,14 @@ class SkWebpKotlinCodecTest {
 
         assertArrayEquals(
             intArrayOf(
-                rgba(10, 10, 10),
-                rgba(20, 20, 20),
-                rgba(18, 32, 51),
-                rgba(40, 40, 40),
-                rgba(50, 50, 50),
-                rgba(48, 62, 81),
+                argb(10, 10, 10),
+                argb(20, 20, 20),
+                argb(18, 32, 51),
+                argb(40, 40, 40),
+                argb(50, 50, 50),
+                argb(48, 62, 81),
             ),
-            rgba,
+            pixels,
         )
     }
 
@@ -1303,8 +1303,8 @@ class SkWebpKotlinCodecTest {
         return payload
     }
 
-    private fun rgba(red: Int, green: Int, blue: Int): Int =
-        (red shl 24) or (green shl 16) or (blue shl 8) or 0xFF
+    private fun argb(red: Int, green: Int, blue: Int): Int =
+        (0xFF shl 24) or (red shl 16) or (green shl 8) or blue
 
     private fun alphaChunk(control: Int, payload: ByteArray): ByteArray =
         chunk("ALPH", byteArrayOf(control.toByte()) + payload)

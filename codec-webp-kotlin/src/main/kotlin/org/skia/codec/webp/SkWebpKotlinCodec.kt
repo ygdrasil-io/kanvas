@@ -1321,7 +1321,7 @@ internal fun composeVp8Yuv420ToRgba(
     require(uPlane.size >= chromaWidth * chromaHeight)
     require(vPlane.size >= chromaWidth * chromaHeight)
 
-    val rgba = IntArray(width * height)
+    val pixels = IntArray(width * height)
     for (y in 0 until height) {
         for (x in 0 until width) {
             val luma = yPlane[y * width + x]
@@ -1331,10 +1331,10 @@ internal fun composeVp8Yuv420ToRgba(
             val red = clip8(luma + ((91881 * cr) shr 16))
             val green = clip8(luma - ((22554 * cb + 46802 * cr) shr 16))
             val blue = clip8(luma + ((116130 * cb) shr 16))
-            rgba[y * width + x] = (red shl 24) or (green shl 16) or (blue shl 8) or 0xFF
+            pixels[y * width + x] = (0xFF shl 24) or (red shl 16) or (green shl 8) or blue
         }
     }
-    return rgba
+    return pixels
 }
 
 private fun clip8(value: Int): Int = value.coerceIn(0, 255)
