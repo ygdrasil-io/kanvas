@@ -44,7 +44,7 @@ class SkJpegCodecTest {
         assertNull(SkCodec.MakeFromData("not a jpeg".toByteArray()))
         // PNG signature : matches the PNG decoder, not us.
         val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
-        assertTrue(SkCodec.MakeFromData(png) !is SkJpegCodec)
+        assertTrue(SkCodec.MakeFromData(png)?.getEncodedFormat() != SkEncodedImageFormat.kJPEG)
     }
 
     @Test
@@ -52,7 +52,6 @@ class SkJpegCodecTest {
         val bytes = synthJpeg(width = 8, height = 6)
         val codec = SkCodec.MakeFromData(bytes)
         assertNotNull(codec, "synthetic JPEG must be decodable")
-        assertTrue(codec is SkJpegCodec, "dispatcher must pick SkJpegCodec for FF D8 FF")
         assertEquals(SkEncodedImageFormat.kJPEG, codec!!.getEncodedFormat())
         assertEquals(8, codec.dimensions().width)
         assertEquals(6, codec.dimensions().height)
