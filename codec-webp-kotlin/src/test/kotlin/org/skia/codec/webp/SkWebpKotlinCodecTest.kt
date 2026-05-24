@@ -430,6 +430,64 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 coefficient token decode handles EOB zero one and small tokens`() {
+        val tokenProbabilities = IntArray(11) { 128 }
+        // Pre-encoded for Vp8BoolReader; this is not a raw MSB-first bit sequence.
+        val tokens = byteArrayOf(0xB7.toByte(), 0x11, 0x00, 0x00)
+
+        val result = decodeVp8CoefficientBlock(Vp8BoolReader(tokens), tokenProbabilities)
+
+        assertTrue(result is Vp8CoefficientDecodeResult.Block)
+        val block = (result as Vp8CoefficientDecodeResult.Block)
+        assertTrue(block.hasNonZero)
+        assertArrayEquals(
+            IntArray(16).also {
+                it[1] = -1
+                it[4] = 2
+            },
+            block.coefficients,
+        )
+    }
+
+    @Test
+    fun `VP8 coefficient token decode handles category tokens and start coefficient`() {
+        val tokenProbabilities = IntArray(11) { 128 }
+        // Pre-encoded for Vp8BoolReader; this is not a raw MSB-first bit sequence.
+        val tokens = byteArrayOf(0xF0.toByte(), 0x00, 0x00, 0x00)
+
+        val result = decodeVp8CoefficientBlock(
+            reader = Vp8BoolReader(tokens),
+            probabilities = tokenProbabilities,
+            startCoefficient = 1,
+        )
+
+        assertTrue(result is Vp8CoefficientDecodeResult.Block)
+        val block = (result as Vp8CoefficientDecodeResult.Block)
+        assertTrue(block.hasNonZero)
+        assertArrayEquals(
+            IntArray(16).also { it[1] = 5 },
+            block.coefficients,
+        )
+    }
+
+    @Test
+    fun `VP8 coefficient token decode rejects invalid probabilities and truncated tokens`() {
+        assertEquals(
+            Vp8CoefficientDecodeResult.Invalid,
+            decodeVp8CoefficientBlock(Vp8BoolReader(byteArrayOf(0x00, 0x00)), IntArray(10) { 128 }),
+        )
+        assertEquals(
+            Vp8CoefficientDecodeResult.Invalid,
+            decodeVp8CoefficientBlock(Vp8BoolReader(byteArrayOf(0x00, 0x00)), IntArray(11) { 0 }),
+        )
+
+        assertEquals(
+            Vp8CoefficientDecodeResult.Invalid,
+            decodeVp8CoefficientBlock(Vp8BoolReader(byteArrayOf(0xFF.toByte())), IntArray(11) { 128 }),
+        )
+    }
+
+    @Test
     fun `VP8 intra reconstruction applies prediction and residuals`() {
         val dc = reconstructVp8IntraPlane(
             width = 4,
