@@ -272,6 +272,27 @@ class SkColorFilterTest {
             eps = 0.0001f, tag = "Blend Color4f spin CS")
     }
 
+    @Test
+    fun `Blend kDarken separable mode is supported`() {
+        val cf = SkColorFilters.Blend(0xFFFFFFFF.toInt(), SkBlendMode.kDarken)
+        val out = cf.filterColor4f(SkColor4f(0f, 0f, 1f, 1f))
+        assertColorClose(SkColor4f(0f, 0f, 1f, 1f), out, tag = "Blend kDarken white over blue")
+    }
+
+    @Test
+    fun `Blend kOverlay separable mode is supported`() {
+        val cf = SkColorFilters.Blend(SK_ColorRED, SkBlendMode.kOverlay)
+        val out = cf.filterColor4f(SkColor4f(1f, 1f, 1f, 1f))
+        assertColorClose(SkColor4f(1f, 1f, 1f, 1f), out, tag = "Blend kOverlay red over white")
+    }
+
+    @Test
+    fun `Blend kHue HSL mode is supported`() {
+        val cf = SkColorFilters.Blend(SK_ColorRED, SkBlendMode.kHue)
+        val out = cf.filterColor4f(SkColor4f(0.5f, 0.5f, 0.5f, 1f))
+        assertColorClose(SkColor4f(0.5f, 0.5f, 0.5f, 1f), out, eps = 0.002f, tag = "Blend kHue red over grey")
+    }
+
     // -- SkLumaColorFilter ---------------------------------------------------
 
     @Test

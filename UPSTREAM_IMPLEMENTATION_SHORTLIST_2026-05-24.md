@@ -141,9 +141,9 @@ shader, the blue color shader, and all three vertex attribute combinations.
 Reactivation evidence:
 
 - Focused validation with `VerticesTest` compiled and rendered the new GM.
-- The normal variant reached `59.39%` similarity against
+- The normal variant reached `59.70%` similarity against
   `original-888/vertices.png`.
-- The scaled variant reached `59.57%` similarity against
+- The scaled variant reached `59.84%` similarity against
   `original-888/vertices_scaled_shader.png`.
 - `VerticesBatchingGM` still passes at its existing ratchet.
 
@@ -155,20 +155,22 @@ Real blocker:
 - `SkCanvas.drawVertices(vertices, blendMode, paint)` now combines
   interpolated vertex colors with shader samples through the shared
   `SkBlendMode` dispatcher, including the no-`texCoords` shader case.
-- The remaining observed blocker is `paint.colorFilter` on the vertices path.
-  `VerticesGM` uses `SkColorFilters.Blend(0xFFAABBCC, kDarken)`, but applying
-  that filter currently hits the existing `SkBlendColorFilter` limitation for
-  separable/HSL modes in F16. Enabling the GM now would ratchet a known-wrong
-  image rather than prove upstream parity.
+- `SkColorFilters.Blend` now supports separable/HSL modes, including the
+  `kDarken` filter used by `VerticesGM`, and the colored/textured vertices
+  paths apply `paint.colorFilter`.
+- The remaining observed blocker is visual parity: enabling `VerticesTest`
+  still renders at ~60% similarity, so the next step is focused image-diff
+  reconnaissance before setting a ratchet.
 
 Next implementation slice:
 
-1. Hoist or share the full float-premul blend dispatcher so
-   `SkBlendColorFilter` supports separable/HSL modes such as `kDarken`.
-2. Apply `paint.colorFilter` in the colored/textured `drawVertices` paths once
-   the filter can evaluate `kDarken` without throwing.
+1. Diff the generated `vertices` / `vertices_scaled_shader` comparison images
+   by row/column group to identify which attribute/mode combinations dominate
+   the remaining mismatch.
+2. Check shader-local sampling and gradient interpolation semantics in
+   `VerticesGM` before changing the ratchet.
 3. Re-enable `VerticesTest` for both `vertices` and `vertices_scaled_shader`
-   with a similarity floor only after the full vertex-blend matrix is covered.
+   only after the remaining mismatch has a bounded implementation fix.
 
 ### Mesh reconnaissance
 
