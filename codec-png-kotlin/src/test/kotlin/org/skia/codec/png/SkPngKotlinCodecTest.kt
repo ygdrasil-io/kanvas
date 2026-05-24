@@ -255,6 +255,128 @@ class SkPngKotlinCodecTest {
     }
 
     @Test
+    fun `decodes grayscale 16-bit pixels into premul F16`() {
+        val rows = listOf(
+            u16Row(0x0000, 0x8000),
+            u16Row(0xFFFF, 0x4000),
+        )
+        val codec = SkPngKotlinCodec.Decoder.make(
+            grayscalePng(width = 2, height = 2, rows = rows, filters = intArrayOf(0, 1), bitDepth = 16),
+        )!!
+
+        assertEquals(SkColorType.kRGBA_F16Norm, codec.getInfo().colorType)
+        assertEquals(SkAlphaType.kPremul, codec.getInfo().alphaType)
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertF16(bitmap!!, 0, 0, 0f, 0f, 0f, 1f)
+        assertF16(bitmap, 1, 0, 0x8000 / 65535f, 0x8000 / 65535f, 0x8000 / 65535f, 1f)
+        assertF16(bitmap, 0, 1, 1f, 1f, 1f, 1f)
+        assertF16(bitmap, 1, 1, 0x4000 / 65535f, 0x4000 / 65535f, 0x4000 / 65535f, 1f)
+    }
+
+    @Test
+    fun `decodes RGBA 16-bit pixels into premul F16`() {
+        val rows = listOf(
+            longArrayOf(rgba64(0xFFFF, 0x8000, 0x0000, 0x8000), rgba64(0x0000, 0x4000, 0xFFFF, 0xFFFF)),
+            longArrayOf(rgba64(0x2000, 0x6000, 0xA000, 0x0000), rgba64(0x1111, 0x2222, 0x3333, 0x4000)),
+        )
+        val codec = SkPngKotlinCodec.Decoder.make(
+            truecolor16Png(width = 2, height = 2, colorType = 6, rows = rows, filters = intArrayOf(0, 1)),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(SkColorType.kRGBA_F16Norm, bitmap!!.colorType)
+        assertF16(
+            bitmap,
+            0,
+            0,
+            (0xFFFF / 65535f) * (0x8000 / 65535f),
+            (0x8000 / 65535f) * (0x8000 / 65535f),
+            0f,
+            0x8000 / 65535f,
+        )
+        assertF16(bitmap, 1, 0, 0f, 0x4000 / 65535f, 1f, 1f)
+        assertF16(bitmap, 0, 1, 0f, 0f, 0f, 0f)
+        assertF16(
+            bitmap,
+            1,
+            1,
+            (0x1111 / 65535f) * (0x4000 / 65535f),
+            (0x2222 / 65535f) * (0x4000 / 65535f),
+            (0x3333 / 65535f) * (0x4000 / 65535f),
+            0x4000 / 65535f,
+        )
+    }
+
+    @Test
+    fun `decodes RGB and grayscale alpha 16-bit pixels into premul F16`() {
+        val rgbCodec = SkPngKotlinCodec.Decoder.make(
+            truecolor16Png(
+                width = 1,
+                height = 1,
+                colorType = 2,
+                rows = listOf(longArrayOf(rgb48(0x1111, 0x8000, 0xFFFF))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val (rgbBitmap, rgbResult) = rgbCodec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, rgbResult)
+        assertF16(rgbBitmap!!, 0, 0, 0x1111 / 65535f, 0x8000 / 65535f, 1f, 1f)
+
+        val grayAlphaCodec = SkPngKotlinCodec.Decoder.make(
+            grayscaleAlpha16Png(
+                width = 1,
+                height = 1,
+                rows = listOf(u16Row(0x8000, 0x4000)),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val (grayAlphaBitmap, grayAlphaResult) = grayAlphaCodec.getImage()
+        val gray = 0x8000 / 65535f
+        val alpha = 0x4000 / 65535f
+        assertEquals(SkCodec.Result.kSuccess, grayAlphaResult)
+        assertF16(grayAlphaBitmap!!, 0, 0, gray * alpha, gray * alpha, gray * alpha, alpha)
+    }
+
+
+    @Test
+    fun `iCCP with unsupported synthetic profile falls back to sRGB`() {
+        val codec = SkPngKotlinCodec.Decoder.make(
+            grayscalePng(
+                width = 1,
+                height = 1,
+                rows = listOf(byteArrayOf(0x40)),
+                filters = intArrayOf(0),
+                bitDepth = 8,
+                iccp = iccpChunkData("synthetic", profileBytes = "not an icc profile".toByteArray()),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertNull(codec!!.getICCProfile())
+        assertTrue(codec.getInfo().colorSpace.isSRGB())
+    }
+
+    @Test
+    fun `rejects malformed iCCP chunk`() {
+        assertNull(
+            SkPngKotlinCodec.Decoder.make(
+                grayscalePng(
+                    width = 1,
+                    height = 1,
+                    rows = listOf(byteArrayOf(0x40)),
+                    filters = intArrayOf(0),
+                    bitDepth = 8,
+                    iccp = iccpChunkData("synthetic", compressionMethod = 1, profileBytes = byteArrayOf(1, 2, 3)),
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `rejects indexed PNG without palette`() {
         assertNull(
             SkPngKotlinCodec.Decoder.make(
@@ -393,13 +515,20 @@ class SkPngKotlinCodecTest {
         return out
     }
 
-    private fun grayscalePng(width: Int, height: Int, rows: List<ByteArray>, filters: IntArray, bitDepth: Int): ByteArray {
+    private fun grayscalePng(
+        width: Int,
+        height: Int,
+        rows: List<ByteArray>,
+        filters: IntArray,
+        bitDepth: Int,
+        iccp: ByteArray? = null,
+    ): ByteArray {
         val raw = ByteArrayOutputStream()
         var previous = ByteArray((width * bitDepth + 7) / 8)
         for (y in 0 until height) {
             val row = rows[y]
             raw.write(filters[y])
-            raw.write(filterRow(filters[y], row, previous, bpp = 1))
+            raw.write(filterRow(filters[y], row, previous, bpp = if (bitDepth == 16) 2 else 1))
             previous = row
         }
 
@@ -414,10 +543,65 @@ class SkPngKotlinCodecTest {
                 write(0)
                 write(0)
             }.toByteArray())
+            if (iccp != null) writeChunk("iCCP", iccp)
             writeChunk("IDAT", deflate(raw.toByteArray()))
             writeChunk("IEND", ByteArray(0))
         }.toByteArray()
     }
+
+    private fun truecolor16Png(width: Int, height: Int, colorType: Int, rows: List<LongArray>, filters: IntArray): ByteArray {
+        val bpp = if (colorType == 6) 8 else 6
+        val raw = ByteArrayOutputStream()
+        var previous = ByteArray(width * bpp)
+        for (y in 0 until height) {
+            val row = encodeTruecolor16Row(rows[y], colorType)
+            raw.write(filters[y])
+            raw.write(filterRow(filters[y], row, previous, bpp))
+            previous = row
+        }
+
+        return ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            writeChunk("IHDR", ByteArrayOutputStream().apply {
+                writeI32BE(width)
+                writeI32BE(height)
+                write(16)
+                write(colorType)
+                write(0)
+                write(0)
+                write(0)
+            }.toByteArray())
+            writeChunk("IDAT", deflate(raw.toByteArray()))
+            writeChunk("IEND", ByteArray(0))
+        }.toByteArray()
+    }
+
+    private fun grayscaleAlpha16Png(width: Int, height: Int, rows: List<ByteArray>, filters: IntArray): ByteArray {
+        val raw = ByteArrayOutputStream()
+        var previous = ByteArray(width * 4)
+        for (y in 0 until height) {
+            val row = rows[y]
+            raw.write(filters[y])
+            raw.write(filterRow(filters[y], row, previous, bpp = 4))
+            previous = row
+        }
+
+        return ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            writeChunk("IHDR", ByteArrayOutputStream().apply {
+                writeI32BE(width)
+                writeI32BE(height)
+                write(16)
+                write(4)
+                write(0)
+                write(0)
+                write(0)
+            }.toByteArray())
+            writeChunk("IDAT", deflate(raw.toByteArray()))
+            writeChunk("IEND", ByteArray(0))
+        }.toByteArray()
+    }
+
 
     private fun grayscaleAlphaPng(width: Int, height: Int, rows: List<IntArray>, filters: IntArray): ByteArray {
         val raw = ByteArrayOutputStream()
@@ -464,6 +648,25 @@ class SkPngKotlinCodecTest {
         for (c in colors) {
             row[offset++] = r(c).toByte()
             row[offset++] = a(c).toByte()
+        }
+        return row
+    }
+
+    private fun encodeTruecolor16Row(colors: LongArray, colorType: Int): ByteArray {
+        val channels = if (colorType == 6) 4 else 3
+        val row = ByteArray(colors.size * channels * 2)
+        var offset = 0
+        for (c in colors) {
+            writeU16BE(row, offset, ((c ushr 48) and 0xFFFF).toInt())
+            offset += 2
+            writeU16BE(row, offset, ((c ushr 32) and 0xFFFF).toInt())
+            offset += 2
+            writeU16BE(row, offset, ((c ushr 16) and 0xFFFF).toInt())
+            offset += 2
+            if (colorType == 6) {
+                writeU16BE(row, offset, (c and 0xFFFF).toInt())
+                offset += 2
+            }
         }
         return row
     }
@@ -517,6 +720,11 @@ class SkPngKotlinCodecTest {
         write(value and 0xFF)
     }
 
+    private fun ByteArrayOutputStream.writeU16BE(value: Int) {
+        write((value ushr 8) and 0xFF)
+        write(value and 0xFF)
+    }
+
     private fun deflate(data: ByteArray): ByteArray {
         val deflater = Deflater()
         deflater.setInput(data)
@@ -528,6 +736,58 @@ class SkPngKotlinCodecTest {
         }
         deflater.end()
         return out.toByteArray()
+    }
+
+    private fun iccpChunkData(
+        name: String,
+        compressionMethod: Int = 0,
+        profileBytes: ByteArray,
+    ): ByteArray = ByteArrayOutputStream().apply {
+        write(name.toByteArray(Charsets.ISO_8859_1))
+        write(0)
+        write(compressionMethod)
+        write(deflate(profileBytes))
+    }.toByteArray()
+
+    private fun u16Row(vararg samples: Int): ByteArray = ByteArray(samples.size * 2).also { row ->
+        var offset = 0
+        for (sample in samples) {
+            writeU16BE(row, offset, sample)
+            offset += 2
+        }
+    }
+
+    private fun writeU16BE(row: ByteArray, offset: Int, value: Int) {
+        row[offset] = ((value ushr 8) and 0xFF).toByte()
+        row[offset + 1] = (value and 0xFF).toByte()
+    }
+
+    private fun rgba64(r: Int, g: Int, b: Int, a: Int): Long =
+        ((r and 0xFFFF).toLong() shl 48) or
+            ((g and 0xFFFF).toLong() shl 32) or
+            ((b and 0xFFFF).toLong() shl 16) or
+            (a and 0xFFFF).toLong()
+
+    private fun rgb48(r: Int, g: Int, b: Int): Long =
+        ((r and 0xFFFF).toLong() shl 48) or
+            ((g and 0xFFFF).toLong() shl 32) or
+            ((b and 0xFFFF).toLong() shl 16)
+
+    private fun assertF16(
+        bitmap: org.skia.foundation.SkBitmap,
+        x: Int,
+        y: Int,
+        r: Float,
+        g: Float,
+        b: Float,
+        a: Float,
+    ) {
+        val pixel = FloatArray(4)
+        bitmap.getPixelF16(x, y, pixel)
+        assertEquals(r, pixel[0], 0.000001f, "r x=$x y=$y")
+        assertEquals(g, pixel[1], 0.000001f, "g x=$x y=$y")
+        assertEquals(b, pixel[2], 0.000001f, "b x=$x y=$y")
+        assertEquals(a, pixel[3], 0.000001f, "a x=$x y=$y")
     }
 
     private fun paeth(a: Int, b: Int, c: Int): Int {

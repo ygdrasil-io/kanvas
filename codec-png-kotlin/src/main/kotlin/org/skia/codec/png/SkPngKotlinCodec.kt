@@ -9,6 +9,7 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.skcmsParse
 import java.io.ByteArrayOutputStream
 import java.util.zip.CRC32
 import java.util.zip.DataFormatException
@@ -20,20 +21,23 @@ import java.util.zip.Inflater
  * Supports the baseline non-interlaced PNG path used by small fixtures and
  * many generated assets: 8-bit grayscale (colour type 0), 8-bit RGB (colour
  * type 2), indexed colour (colour type 3, bit depths 1/2/4/8), 8-bit
- * grayscale+alpha (colour type 4), and RGBA (colour type 6), deflated IDAT
- * data, and the five standard PNG scanline filters.
+ * grayscale+alpha (colour type 4), RGBA (colour type 6), and 16-bit
+ * grayscale/RGB/grayscale+alpha/RGBA. It parses `iCCP` chunks best-effort:
+ * malformed chunks reject the PNG, parseable profiles become the image color
+ * space, and structurally-valid but unsupported profiles fall back to sRGB.
  */
 public class SkPngKotlinCodec private constructor(
     private val png: ParsedPng,
 ) : SkCodec() {
 
     private val cachedInfo: SkImageInfo by lazy {
+        val isF16 = png.bitDepth == 16
         SkImageInfo.Make(
             width = png.width,
             height = png.height,
-            colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorType = if (isF16) SkColorType.kRGBA_F16Norm else SkColorType.kRGBA_8888,
+            alphaType = if (isF16) SkAlphaType.kPremul else SkAlphaType.kUnpremul,
+            colorSpace = png.iccProfile?.let { SkColorSpace.make(it) } ?: SkColorSpace.makeSRGB(),
         )
     }
 
@@ -41,7 +45,7 @@ public class SkPngKotlinCodec private constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
 
-    override fun getICCProfile(): SkcmsICCProfile? = null
+    override fun getICCProfile(): SkcmsICCProfile? = png.iccProfile
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (dst.width != info.width || dst.height != info.height) {
@@ -50,7 +54,7 @@ public class SkPngKotlinCodec private constructor(
         if (dst.colorType != info.colorType) {
             return Result.kInvalidParameters
         }
-        if (info.colorType != SkColorType.kRGBA_8888) {
+        if (info.colorType != cachedInfo.colorType) {
             return Result.kInvalidConversion
         }
 
@@ -73,50 +77,111 @@ public class SkPngKotlinCodec private constructor(
             for (x in 0 until rowBytes) current[x] = inflated[src++]
             if (!unfilter(filter, current, previous, bpp)) return Result.kErrorInInput
 
-            var p = 0
-            for (x in 0 until png.width) {
-                when (png.colorType) {
-                    COLOR_GRAYSCALE -> {
-                        val gray = if (png.bitDepth == 8) {
-                            current[p++].toInt() and 0xFF
-                        } else {
-                            scaleSample(readPackedSample(current, x, png.bitDepth), png.bitDepth)
-                        }
-                        dst.setPixel(x, y, argb(0xFF, gray, gray, gray))
-                    }
-                    COLOR_RGB -> {
-                        val r = current[p++].toInt() and 0xFF
-                        val g = current[p++].toInt() and 0xFF
-                        val b = current[p++].toInt() and 0xFF
-                        dst.setPixel(x, y, argb(0xFF, r, g, b))
-                    }
-                    COLOR_PALETTE -> {
-                        val index = if (png.bitDepth == 8) {
-                            current[p++].toInt() and 0xFF
-                        } else {
-                            readPackedSample(current, x, png.bitDepth)
-                        }
-                        val palette = png.palette ?: return Result.kErrorInInput
-                        if (index >= palette.size) return Result.kErrorInInput
-                        dst.setPixel(x, y, palette[index])
-                    }
-                    COLOR_GRAYSCALE_ALPHA -> {
-                        val gray = current[p++].toInt() and 0xFF
-                        val alpha = current[p++].toInt() and 0xFF
-                        dst.setPixel(x, y, argb(alpha, gray, gray, gray))
-                    }
-                    COLOR_RGBA -> {
-                        val r = current[p++].toInt() and 0xFF
-                        val g = current[p++].toInt() and 0xFF
-                        val b = current[p++].toInt() and 0xFF
-                        val a = current[p++].toInt() and 0xFF
-                        dst.setPixel(x, y, argb(a, r, g, b))
-                    }
-                    else -> return Result.kErrorInInput
-                }
+            val result = if (png.bitDepth == 16) {
+                decodeF16Row(current, y, dst)
+            } else {
+                decode8888Row(current, y, dst)
             }
+            if (result != Result.kSuccess) return result
 
             current.copyInto(previous)
+        }
+        return Result.kSuccess
+    }
+
+    private fun decode8888Row(current: ByteArray, y: Int, dst: SkBitmap): Result {
+        var p = 0
+        for (x in 0 until png.width) {
+            when (png.colorType) {
+                COLOR_GRAYSCALE -> {
+                    val gray = if (png.bitDepth == 8) {
+                        current[p++].toInt() and 0xFF
+                    } else {
+                        scaleSample(readPackedSample(current, x, png.bitDepth), png.bitDepth)
+                    }
+                    dst.setPixel(x, y, argb(0xFF, gray, gray, gray))
+                }
+                COLOR_RGB -> {
+                    val r = current[p++].toInt() and 0xFF
+                    val g = current[p++].toInt() and 0xFF
+                    val b = current[p++].toInt() and 0xFF
+                    dst.setPixel(x, y, argb(0xFF, r, g, b))
+                }
+                COLOR_PALETTE -> {
+                    val index = if (png.bitDepth == 8) {
+                        current[p++].toInt() and 0xFF
+                    } else {
+                        readPackedSample(current, x, png.bitDepth)
+                    }
+                    val palette = png.palette ?: return Result.kErrorInInput
+                    if (index >= palette.size) return Result.kErrorInInput
+                    dst.setPixel(x, y, palette[index])
+                }
+                COLOR_GRAYSCALE_ALPHA -> {
+                    val gray = current[p++].toInt() and 0xFF
+                    val alpha = current[p++].toInt() and 0xFF
+                    dst.setPixel(x, y, argb(alpha, gray, gray, gray))
+                }
+                COLOR_RGBA -> {
+                    val r = current[p++].toInt() and 0xFF
+                    val g = current[p++].toInt() and 0xFF
+                    val b = current[p++].toInt() and 0xFF
+                    val a = current[p++].toInt() and 0xFF
+                    dst.setPixel(x, y, argb(a, r, g, b))
+                }
+                else -> return Result.kErrorInInput
+            }
+        }
+        return Result.kSuccess
+    }
+
+    private fun decodeF16Row(current: ByteArray, y: Int, dst: SkBitmap): Result {
+        var p = 0
+        val out = dst.pixelsF16
+        val inv65535 = 1f / 65535f
+        for (x in 0 until png.width) {
+            var r: Float
+            var g: Float
+            var b: Float
+            val a: Float
+            when (png.colorType) {
+                COLOR_GRAYSCALE -> {
+                    val gray = readU16BE(current, p) * inv65535
+                    p += 2
+                    r = gray
+                    g = gray
+                    b = gray
+                    a = 1f
+                }
+                COLOR_RGB -> {
+                    r = readU16BE(current, p) * inv65535
+                    g = readU16BE(current, p + 2) * inv65535
+                    b = readU16BE(current, p + 4) * inv65535
+                    p += 6
+                    a = 1f
+                }
+                COLOR_GRAYSCALE_ALPHA -> {
+                    val gray = readU16BE(current, p) * inv65535
+                    a = readU16BE(current, p + 2) * inv65535
+                    p += 4
+                    r = gray
+                    g = gray
+                    b = gray
+                }
+                COLOR_RGBA -> {
+                    r = readU16BE(current, p) * inv65535
+                    g = readU16BE(current, p + 2) * inv65535
+                    b = readU16BE(current, p + 4) * inv65535
+                    a = readU16BE(current, p + 6) * inv65535
+                    p += 8
+                }
+                else -> return Result.kErrorInInput
+            }
+            val o = (y * png.width + x) * 4
+            out[o] = r * a
+            out[o + 1] = g * a
+            out[o + 2] = b * a
+            out[o + 3] = a
         }
         return Result.kSuccess
     }
@@ -138,6 +203,8 @@ public class SkPngKotlinCodec private constructor(
             val idat = ByteArrayOutputStream()
             var palette: IntArray? = null
             var transparency: ByteArray? = null
+            var iccProfile: SkcmsICCProfile? = null
+            var sawIccp = false
             var sawIdat = false
             var sawIend = false
 
@@ -172,6 +239,12 @@ public class SkPngKotlinCodec private constructor(
                         if (length > palette.size) return null
                         transparency = data.copyOfRange(dataOffset, dataOffset + length)
                     }
+                    TYPE_ICCP -> {
+                        if (header == null || sawIdat || sawIend || sawIccp) return null
+                        sawIccp = true
+                        val profileBytes = parseIccp(data, dataOffset, length) ?: return null
+                        iccProfile = skcmsParse(profileBytes)
+                    }
                     TYPE_IEND -> {
                         if (length != 0 || header == null) return null
                         sawIend = true
@@ -202,6 +275,7 @@ public class SkPngKotlinCodec private constructor(
                 filterBytesPerPixel = h.filterBytesPerPixel,
                 idat = idat.toByteArray(),
                 palette = finalPalette,
+                iccProfile = iccProfile,
             )
         }
 
@@ -233,11 +307,11 @@ public class SkPngKotlinCodec private constructor(
 
         private fun isSupportedColorDepth(colorType: Int, bitDepth: Int): Boolean =
             when (colorType) {
-                COLOR_GRAYSCALE -> bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8
-                COLOR_RGB -> bitDepth == 8
+                COLOR_GRAYSCALE -> bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 || bitDepth == 16
+                COLOR_RGB -> bitDepth == 8 || bitDepth == 16
                 COLOR_PALETTE -> bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8
-                COLOR_GRAYSCALE_ALPHA -> bitDepth == 8
-                COLOR_RGBA -> bitDepth == 8
+                COLOR_GRAYSCALE_ALPHA -> bitDepth == 8 || bitDepth == 16
+                COLOR_RGBA -> bitDepth == 8 || bitDepth == 16
                 else -> false
             }
 
@@ -252,11 +326,14 @@ public class SkPngKotlinCodec private constructor(
 
         private fun filterBytesPerPixel(colorType: Int, bitDepth: Int): Int =
             when (colorType) {
-                COLOR_RGB -> 3
-                COLOR_GRAYSCALE_ALPHA -> 2
-                COLOR_RGBA -> 4
+                COLOR_RGB -> 3 * bytesPerSample(bitDepth)
+                COLOR_GRAYSCALE_ALPHA -> 2 * bytesPerSample(bitDepth)
+                COLOR_RGBA -> 4 * bytesPerSample(bitDepth)
+                COLOR_GRAYSCALE -> bytesPerSample(bitDepth)
                 else -> 1
             }
+
+        private fun bytesPerSample(bitDepth: Int): Int = if (bitDepth == 16) 2 else 1
 
         private fun parsePalette(data: ByteArray, offset: Int, length: Int): IntArray? {
             if (length == 0 || length % 3 != 0) return null
@@ -281,6 +358,21 @@ public class SkPngKotlinCodec private constructor(
                 }
             }
             return colors
+        }
+
+        private fun parseIccp(data: ByteArray, offset: Int, length: Int): ByteArray? {
+            val end = offset + length
+            var nameEnd = offset
+            while (nameEnd < end && data[nameEnd] != 0.toByte()) nameEnd++
+            val nameLength = nameEnd - offset
+            if (nameLength !in 1..79) return null
+            if (nameEnd + 2 > end) return null
+            if ((data[nameEnd + 1].toInt() and 0xFF) != 0) return null
+            return try {
+                inflateAll(data.copyOfRange(nameEnd + 2, end), maxSize = MAX_ICC_PROFILE_SIZE)
+            } catch (_: DataFormatException) {
+                null
+            }
         }
 
         private fun hasPngSignature(data: ByteArray): Boolean {
@@ -316,6 +408,7 @@ public class SkPngKotlinCodec private constructor(
         val filterBytesPerPixel: Int,
         val idat: ByteArray,
         val palette: IntArray?,
+        val iccProfile: SkcmsICCProfile?,
     )
 }
 
@@ -336,8 +429,10 @@ private const val MAX_DIMENSION: Int = 100_000
 private const val TYPE_IHDR: Int = 0x49484452
 private const val TYPE_IDAT: Int = 0x49444154
 private const val TYPE_IEND: Int = 0x49454E44
+private const val TYPE_ICCP: Int = 0x69434350
 private const val TYPE_PLTE: Int = 0x504C5445
 private const val TYPE_TRNS: Int = 0x74524E53
+private const val MAX_ICC_PROFILE_SIZE: Int = 16 * 1024 * 1024
 
 private fun inflate(data: ByteArray, expectedSize: Int): ByteArray {
     val inflater = Inflater()
@@ -352,6 +447,28 @@ private fun inflate(data: ByteArray, expectedSize: Int): ByteArray {
                 inflater.needsInput() || inflater.needsDictionary() -> break
             }
             if (out.size() > expectedSize) break
+        }
+        return out.toByteArray()
+    } finally {
+        inflater.end()
+    }
+}
+
+private fun inflateAll(data: ByteArray, maxSize: Int): ByteArray {
+    val inflater = Inflater()
+    inflater.setInput(data)
+    val out = ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    try {
+        while (!inflater.finished()) {
+            val count = inflater.inflate(buffer)
+            when {
+                count > 0 -> {
+                    out.write(buffer, 0, count)
+                    if (out.size() > maxSize) throw DataFormatException("inflated data too large")
+                }
+                inflater.needsInput() || inflater.needsDictionary() -> throw DataFormatException("truncated deflate stream")
+            }
         }
         return out.toByteArray()
     } finally {
@@ -397,6 +514,10 @@ private fun readI32BE(bytes: ByteArray, offset: Int): Int =
         (bytes[offset + 3].toInt() and 0xFF)
 
 private fun readType(bytes: ByteArray, offset: Int): Int = readI32BE(bytes, offset)
+
+private fun readU16BE(bytes: ByteArray, offset: Int): Int =
+    ((bytes[offset].toInt() and 0xFF) shl 8) or
+        (bytes[offset + 1].toInt() and 0xFF)
 
 private fun readPackedSample(row: ByteArray, x: Int, bitDepth: Int): Int {
     val bitOffset = x * bitDepth
