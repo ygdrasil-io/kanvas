@@ -178,7 +178,7 @@ encode_srgb	1	-	MISSING	-	-	-	missing-mapping
 exoticformats	1	ExoticFormatsGM.kt	TEST_DISABLED	STUB.COMPRESSED_TEXTURES	skia-integration-tests/src/test/kotlin/org/skia/tests/ExoticFormatsTest.kt	STUB.COMPRESSED_TEXTURES	codec-gated
 fadefilter	1	FadeFilterGM.kt	PORTED	-	-	-	ported
 fatpathfill	1	FatPathFillGM.kt	PORTED	-	-	-	ported
-fiddle	1	FiddleGM.kt	STUB	-	gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/FiddleWebGpuTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/FiddleTest.kt,gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/FiddleCrossBackendTest.kt	-	implementation
+fiddle	1	FiddleGM.kt	PORTED	-	gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/FiddleWebGpuTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/FiddleTest.kt,gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/FiddleCrossBackendTest.kt	-	ported
 fillrect_gradient	1	FillrectGradientGM.kt	PORTED	-	gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/FillrectGradientWebGpuTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/FillrectGradientTest.kt,gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/FillrectGradientCrossBackendTest.kt	-	ported
 filltypes	1	FillTypeGM.kt	PORTED	-	gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/FillTypeWebGpuTest.kt	-	ported
 filltypespersp	1	FillTypePerspGM.kt	PORTED	-	-	-	ported
