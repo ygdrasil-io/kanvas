@@ -25,7 +25,7 @@ class ImageBlurTest {
         // numerical match : the rendered image has the same blob
         // distribution and overall texture as the reference, just
         // with sub-pixel glyph placement skew. The text-rasterisation
-        // skew is a known property of `:kanvas-skia`'s AWT scaler
+        // skew is a known property of the pure Kotlin OpenType scaler
         // (see TEXTUAL_GM_TOLERANCE doc), unblurred GMs like
         // `Crbug1073670GM` show the same pattern.
         val comparison = TestUtils.compareBitmapsDetailed(

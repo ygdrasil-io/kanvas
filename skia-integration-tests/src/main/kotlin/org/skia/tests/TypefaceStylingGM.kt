@@ -20,14 +20,13 @@ import org.skia.tools.ToolUtils
  *   2. emboldened
  *   3. normal (yellow) on top of emboldened (shows the embolden delta).
  *
- * **Embolden caveat**: AWT's `Font.deriveFont` with `Font.BOLD` widens
- * the strokes, but we don't expose a per-glyph fake-bold offset in the
- * AWT typeface; the [SkFont.isEmbolden] flag is propagated through
- * [SkFont] and consumed only when the typeface actually carries an
- * "embolden" hook. In practice we render the typeface unchanged for
- * both passes — the third row's yellow overlay therefore lines up
- * exactly with the underlying glyph, instead of showing a delta. The
- * pixel comparison absorbs this via the textual tolerance.
+ * **Embolden caveat**: the pure Kotlin OpenType path does not yet
+ * synthesize a per-glyph fake-bold offset. The [SkFont.isEmbolden] flag
+ * is propagated through [SkFont], but the portable typeface currently
+ * renders the same outline for both passes. The third row's yellow
+ * overlay therefore lines up exactly with the underlying glyph instead
+ * of showing a delta. The pixel comparison absorbs this via the textual
+ * tolerance.
  *
  * 710 × 360 canvas. The original `drawGlyphs(glyphs, pos, origin, …)`
  * primitive is not yet ported in `:kanvas-skia` ; we use

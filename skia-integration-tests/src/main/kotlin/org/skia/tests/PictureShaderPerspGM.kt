@@ -45,8 +45,8 @@ import kotlin.math.PI
  *
  * **Note** — `SkTextBlob.MakeFromString` is used here and is implemented
  * via [SkTextBlob.MakeFromString] in kanvas-skia's companion. Font hinting
- * is set to [SkFontHinting.kNormal] (stored on the font; AWT ignores it
- * silently per the established convention).
+ * is set to [SkFontHinting.kNormal] and stored on the font; the current
+ * raster text path does not implement distinct hinting modes.
  */
 public class PictureShaderPerspGM : GM() {
 

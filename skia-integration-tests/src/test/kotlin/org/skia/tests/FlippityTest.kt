@@ -19,7 +19,7 @@ import org.skia.testing.TestUtils
  * render compares directly to the reference.
  *
  * Tolerance is widened to 8 to absorb the residual drift between our
- * AWT-backed text rasteriser (label glyphs) and upstream's libfreetype
+ * OpenType-backed text rasteriser (label glyphs) and upstream's libfreetype
  * path — the labels carry small advance-width / hinting differences
  * that don't affect the matrix-driven image-orientation invariants
  * the GM is actually probing.

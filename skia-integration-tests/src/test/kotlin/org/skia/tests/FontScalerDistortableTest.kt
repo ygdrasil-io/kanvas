@@ -8,11 +8,11 @@ import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
 /**
- * R-final.9 — variable-font test. The AWT scaler can only honour
- * the standard `wght` weight / `wdth` width axes via faux-bold, so
- * the per-cell axis-driven outline differences from the upstream PNG
- * don't materialise (cf. [FontScalerDistortableGM] KDoc). The test
- * floor is set conservatively : the structural layout still matches.
+ * R-final.9 — variable-font test. The pure Kotlin OpenType backend
+ * supports the simple-glyph subset of `gvar`, but this GM still tracks
+ * remaining variable-outline interpolation gaps against the upstream
+ * FreeType reference. The test floor is conservative: the structural
+ * layout still matches.
  */
 class FontScalerDistortableTest {
 
@@ -34,11 +34,9 @@ class FontScalerDistortableTest {
     }
 
     private companion object {
-        // AWT cannot read the gvar table of Distortable.ttf — every
-        // grid cell renders the same outline (faux-bold variant), so
-        // the per-cell axis sweep is invisible. Set the floor low to
-        // accept this divergence ; the SimilarityTracker ratchet keeps
-        // raising it on regressions.
+        // Variable-outline interpolation is not yet FreeType-complete.
+        // Keep the hard floor low enough for the current OpenType
+        // backend while the SimilarityTracker ratchets real results.
         const val EXPECTED_SIMILARITY: Double = 75.0
     }
 }

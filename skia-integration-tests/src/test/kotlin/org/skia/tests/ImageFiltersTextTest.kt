@@ -14,8 +14,9 @@ import org.skia.testing.TestUtils
  * Both GMs render a waterfall of "Hamburgefon" in three font edging modes
  * (alias, AA, subpixelAA) across four combinations of filter presence and
  * saveLayer usage. The reference PNGs use Skia's embedded test font; our
- * port uses AWT/Liberation so per-pixel similarity will be below 100%.
- * Floors are set conservatively to accommodate font metric differences.
+ * port uses the portable OpenType/Liberation path, so per-pixel similarity
+ * will be below 100%. Floors are set conservatively to accommodate font
+ * metric and scaler differences.
  */
 class ImageFiltersTextTest {
 

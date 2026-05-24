@@ -18,8 +18,8 @@ class TileImageFilterTest {
 
         // Observed similarity ~79.5% — the tile + colour-filter pipelines
         // run correctly. Drift comes from the inline `CreateStringImage`
-        // helper rendering the "e" with the kanvas-skia AWT font scaler
-        // (slightly different glyph mask vs. upstream FreeType) and from
+        // helper rendering the "e" with the kanvas-skia OpenType font
+        // scaler (slightly different glyph mask vs. upstream FreeType) and from
         // saveLayer (block 2) routing through an identity colour matrix
         // whose AA edges differ subtly from upstream.
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 8)

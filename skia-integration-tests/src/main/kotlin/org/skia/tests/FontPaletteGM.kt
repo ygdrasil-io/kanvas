@@ -46,9 +46,9 @@ import org.skia.tools.ToolUtils
  * ## Port status — **INTRACTABLE without JNI COLRv1 path**
  *
  *  1. **`STUB.COLR_V1`** — `SkFontArguments.Palette` is a compile-pinned
- *     surface (see [SkFontArguments.Palette] KDoc) but the AWT scaler
- *     stops at COLR v0 ; resolving the v1 paint graph + applying palette
- *     overrides needs FreeType + HarfBuzz via JNI. See
+ *     surface (see [SkFontArguments.Palette] KDoc), but resolving the
+ *     COLR v1 paint graph and applying palette overrides needs renderer
+ *     work beyond the current pure Kotlin COLRv0 path. See
  *     `API_FINALIZATION_PLAN.md` § `STUB.COLR_V1`.
  *  2. **`STUB.FONTATIONS`** — when the JNI path lands, upstream wires
  *     palette overrides through Google's Rust `fontations` crate
@@ -56,8 +56,8 @@ import org.skia.tools.ToolUtils
  *     `:kanvas-skia`'s [org.skia.foundation.SkTypeface_Fontations]
  *     is a surface stub.
  *  3. **`STUB.FIXTURE`** — `fonts/test_glyphs-glyf_colr_1.ttf` is not
- *     shipped under `kanvas-legacy/src/test/resources/fonts/` ; AWT
- *     would reject it as an unsupported emoji format anyway (same gap
+ *     shipped under `kanvas-legacy/src/test/resources/fonts/`. Even with
+ *     the fixture, rendering remains gated by the COLRv1 path (same gap
  *     as [ColrV1GM] / [ColorEmojiGM]).
  *
  * The body below is **the real upstream pipeline** — apply the palette
@@ -186,13 +186,11 @@ public class FontPaletteGM(
      * `sk_sp<SkTypeface> MakeTypefaceFromResource(const char* resource, const SkFontArguments& args)`
      * — load the COLR v1 test font and apply [args] at load time.
      *
-     * Today routes through [ToolUtils.CreateTypefaceFromResource] which
-     * does **not** thread [SkFontArguments] through to the AWT scaler
-     * (palette overrides are silently dropped — fine because the AWT
-     * path can't honour them regardless). When the JNI COLR v1 binding
-     * lands, switch this to `SkFontMgr.makeFromStream(stream, args)` so
-     * the palette is resolved at load time, matching upstream byte-for-
-     * byte.
+     * Today routes through [ToolUtils.CreateTypefaceFromResource], and
+     * palette overrides remain ineffective because COLRv1 rendering is
+     * not wired into the pure Kotlin path. When that renderer lands,
+     * switch this to `SkFontMgr.makeFromStream(stream, args)` so the
+     * palette is resolved at load time, matching upstream byte-for-byte.
      */
     @Suppress("UNUSED_PARAMETER")
     private fun makeTypefaceFromResource(resource: String, args: SkFontArguments): SkTypeface? {

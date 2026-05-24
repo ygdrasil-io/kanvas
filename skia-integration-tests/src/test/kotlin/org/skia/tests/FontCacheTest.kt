@@ -17,7 +17,8 @@ import org.skia.testing.TestUtils
  * evict every entry (`fGlyphCacheTextureMaximumBytes = 0`). The
  * raster body still renders the same 9-size × 6-typeface × 4-string
  * loop with sub-pixel offsets, but :
- *  - the AWT scaler differs from FreeType on glyph edges (~1-2 ulp),
+ *  - the pure Kotlin OpenType scaler differs from FreeType on glyph
+ *    edges,
  *  - sub-pixel positioning under `font.isSubpixel = true` is
  *    quarter-phase quantised on raster vs continuous on the GPU
  *    SDF path,

@@ -34,17 +34,17 @@ import org.skia.tools.ToolUtils
  *    falls through to [ToolUtils.DefaultPortableTypeface] when the
  *    portable mgr has no "Times" family alias. `:kanvas-skia` ships
  *    Liberation Serif as the closest portable Times analogue ; the
- *    glyph shapes match upstream's portable Times within AWT/FreeType
+ *    glyph shapes match upstream's portable Times within OpenType/FreeType
  *    edge AA drift.
  *  - **Subpixel AA** — `:kanvas-skia` silently downgrades
  *    [SkFont.Edging.kSubpixelAntiAlias] to `kAntiAlias` (no LCD
  *    subpixel mask path on the raster pipeline). The two `lcd ∈
  *    {false, true}` rows therefore render identically here ; on
  *    upstream they differ by the LCD-RGB fringe pattern.
- *  - **Hinting** — both `kNone` and `kNormal` route through AWT's
- *    scaler unchanged ; the AWT glyph cache absorbs hinting hints
- *    silently. The two `hinting ∈ {kNone, kNormal}` per-row entries
- *    therefore render identically here too.
+ *  - **Hinting** — both `kNone` and `kNormal` are stored on [SkFont],
+ *    but the current raster text path does not implement distinct
+ *    hinting modes. The two `hinting ∈ {kNone, kNormal}` per-row
+ *    entries therefore render identically here too.
  *
  * Per-row spacing is `font.getSpacing() + 2` (pre-config-switch)
  * with an extra 8-px gutter between size groups, exactly as upstream.

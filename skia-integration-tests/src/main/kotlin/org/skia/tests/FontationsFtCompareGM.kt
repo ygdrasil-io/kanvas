@@ -59,7 +59,7 @@ import kotlin.math.roundToInt
  *     instantiates `SkTypeface_FreeType::MakeFromStream`. The Kotlin
  *     port routes that call through
  *     [org.skia.tools.ToolUtils.CreateTypefaceFromResource] (the
- *     default AWT-backed scaler), which decodes a subset of OpenType
+ *     default pure Kotlin OpenType scaler), which decodes a subset of OpenType
  *     but is **not** a FreeType binding — so even if both calls
  *     returned typefaces, their rasterised pixels would not byte-match
  *     upstream's reference.
@@ -236,7 +236,7 @@ public class FontationsFtCompareGM(
                         // Upstream uses `SkShaper::Make()` — the
                         // platform-default shaper. The Kotlin port
                         // uses the pure Kotlin primitive shaper until
-                        // complex shaping is implemented without AWT.
+                        // complex shaping is implemented; see #927.
                         val shaper = SkShaper.MakePrimitive()
                         shaper.shape(
                             utf8 = testString,
