@@ -390,14 +390,22 @@ class SkGifKotlinCodecTest {
                         delayCs = 9,
                         disposal = DISPOSAL_PREVIOUS,
                     ),
+                    GifFrameSpec(
+                        left = 3,
+                        top = 3,
+                        width = 1,
+                        height = 1,
+                        indexes = intArrayOf(2),
+                        delayCs = 10,
+                    ),
                 ),
             ),
         )!!
 
         val frameInfo = codec.getFrameInfo()
-        assertEquals(5, codec.getFrameCount())
-        assertEquals(listOf(50, 60, 70, 80, 90), frameInfo.map { it.durationMs })
-        assertEquals(listOf(SkCodec.kNoFrame, 0, 1, 2, 3), frameInfo.map { it.requiredFrame })
+        assertEquals(6, codec.getFrameCount())
+        assertEquals(listOf(50, 60, 70, 80, 90, 100), frameInfo.map { it.durationMs })
+        assertEquals(listOf(SkCodec.kNoFrame, 0, 1, 2, 3, 3), frameInfo.map { it.requiredFrame })
 
         assertFramePixels(
             codec,
@@ -447,6 +455,16 @@ class SkGifKotlinCodecTest {
                 intArrayOf(BLUE, GREEN, YELLOW, YELLOW),
                 intArrayOf(YELLOW, GREEN, YELLOW, RED),
                 intArrayOf(YELLOW, YELLOW, GREEN, RED),
+            ),
+        )
+        assertFramePixels(
+            codec,
+            frameIndex = 5,
+            expected = listOf(
+                intArrayOf(BLUE, RED, YELLOW, YELLOW),
+                intArrayOf(BLUE, GREEN, YELLOW, YELLOW),
+                intArrayOf(YELLOW, BLUE, GREEN, RED),
+                intArrayOf(YELLOW, RED, RED, BLUE),
             ),
         )
     }
