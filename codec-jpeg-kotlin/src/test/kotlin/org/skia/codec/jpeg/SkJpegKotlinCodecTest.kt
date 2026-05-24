@@ -210,9 +210,26 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
+    fun `decodes baseline Adobe YCCK jpeg`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(ycckJpeg(width = 8, height = 8))!!
+        val (bitmap, result) = codec.getImage()
+        val expected = scaleRgb(yCbCrToArgb(140, 80, 200), k = 140)
+
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(8, bitmap!!.width)
+        assertEquals(8, bitmap.height)
+        for (y in 0 until bitmap.height) {
+            for (x in 0 until bitmap.width) {
+                assertEquals(expected, bitmap.getPixel(x, y), "x=$x y=$y")
+            }
+        }
+    }
+
+    @Test
     fun `rejects unsupported four component jpeg variants`() {
         assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 8, height = 8, includeAdobe = false)))
-        assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 8, height = 8, adobeTransform = 2)))
+        assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 8, height = 8, adobeTransform = 1)))
         assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 16, height = 8, cSampling = 0x21)))
     }
 
@@ -968,12 +985,102 @@ class SkJpegKotlinCodecTest {
         return out.toByteArray()
     }
 
+    private fun ycckJpeg(width: Int, height: Int): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        out.writeSegment(0xEE) {
+            write(byteArrayOf(0x41, 0x64, 0x6F, 0x62, 0x65))
+            writeU16BE(100)
+            writeU16BE(0)
+            writeU16BE(0)
+            write(2)
+        }
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(1) }
+        }
+        out.writeSegment(0xC0) {
+            write(8)
+            writeU16BE(height)
+            writeU16BE(width)
+            write(4)
+            write(1)
+            write(0x11)
+            write(0)
+            write(2)
+            write(0x11)
+            write(0)
+            write(3)
+            write(0x11)
+            write(0)
+            write(4)
+            write(0x11)
+            write(0)
+        }
+        out.writeSegment(0xC4) {
+            write(0x00)
+            write(0)
+            write(3)
+            repeat(14) { write(0) }
+            write(0x07)
+            write(0x09)
+            write(0x0A)
+        }
+        out.writeSegment(0xC4) {
+            write(0x10)
+            write(1)
+            repeat(15) { write(0) }
+            write(0x00)
+        }
+        out.writeSegment(0xDA) {
+            write(4)
+            write(1)
+            write(0x00)
+            write(2)
+            write(0x00)
+            write(3)
+            write(0x00)
+            write(4)
+            write(0x00)
+            write(0)
+            write(63)
+            write(0)
+        }
+        val mcuCount = ((width + 7) / 8) * ((height + 7) / 8)
+        val bits = buildString {
+            repeat(mcuCount) {
+                append("00")
+                append("1100000")
+                append("0")
+                append("01")
+                append("001111111")
+                append("0")
+                append("10")
+                append("1001000000")
+                append("0")
+                append("00")
+                append("1100000")
+                append("0")
+            }
+        }
+        out.write(entropyBits(bits))
+        out.writeMarker(0xD9)
+        return out.toByteArray()
+    }
+
     private fun yCbCrToArgb(y: Int, cb: Int, cr: Int): Int {
         val cbShifted = cb - 128
         val crShifted = cr - 128
         val r = (y + 1.402 * crShifted).roundToInt().coerceIn(0, 255)
         val g = (y - 0.344136 * cbShifted - 0.714136 * crShifted).roundToInt().coerceIn(0, 255)
         val b = (y + 1.772 * cbShifted).roundToInt().coerceIn(0, 255)
+        return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    private fun scaleRgb(pixel: Int, k: Int): Int {
+        val r = (((pixel ushr 16) and 0xFF) * k + 127) / 255
+        val g = (((pixel ushr 8) and 0xFF) * k + 127) / 255
+        val b = ((pixel and 0xFF) * k + 127) / 255
         return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
     }
 
