@@ -115,6 +115,7 @@ private data class ParsedJpeg(
     val scanSpectralEnd: Int,
     val scanSuccessiveApprox: Int,
     val scanCount: Int,
+    val scans: List<EntropyScan>,
 )
 
 private data class Component(
@@ -138,6 +139,11 @@ private data class Scan(
     val spectralStart: Int,
     val spectralEnd: Int,
     val successiveApprox: Int,
+)
+
+private data class EntropyScan(
+    val scan: Scan,
+    val data: ByteArray,
 )
 
 private enum class JpegCoding {
@@ -189,6 +195,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
     var scan: Scan? = null
     var scanData = ByteArray(0)
     var scanCount = 0
+    val scans = ArrayList<EntropyScan>()
     var coding: JpegCoding? = null
     var restartInterval = 0
     var origin = SkEncodedOrigin.kTopLeft
@@ -230,6 +237,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                         val next = data[markerOffset].toInt() and 0xFF
                         if (next != 0x00 && next !in 0xD0..0xD7) {
                             scanData = data.copyOfRange(scanStart, offset)
+                            scans += EntropyScan(current, scanData)
                             if (next == MARKER_EOI) {
                                 return buildParsed(
                                     width,
@@ -247,6 +255,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                                     current.spectralEnd,
                                     current.successiveApprox,
                                     scanCount,
+                                    if (currentCoding == JpegCoding.kProgressive) scans.toList() else emptyList(),
                                 )
                             }
                             if (currentCoding == JpegCoding.kBaseline) return null
@@ -314,6 +323,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
             lastScan.spectralEnd,
             lastScan.successiveApprox,
             scanCount,
+            if (coding == JpegCoding.kProgressive) scans.toList() else emptyList(),
         )
     } else {
         null
@@ -336,6 +346,7 @@ private fun buildParsed(
     scanSpectralEnd: Int,
     scanSuccessiveApprox: Int,
     scanCount: Int,
+    scans: List<EntropyScan>,
 ): ParsedJpeg? {
     val cs = components ?: return null
     if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
@@ -362,6 +373,7 @@ private fun buildParsed(
             scanSpectralEnd,
             scanSuccessiveApprox,
             scanCount,
+            scans,
         )
     }
     for (component in cs) {
@@ -408,6 +420,7 @@ private fun buildParsed(
         scanSpectralEnd,
         scanSuccessiveApprox,
         scanCount,
+        scans,
     )
 }
 
@@ -525,35 +538,45 @@ private fun decodeBaseline(jpeg: ParsedJpeg): IntArray {
 
 private fun decodeProgressive(jpeg: ParsedJpeg): IntArray? {
     if (jpeg.components.size != 1) return null
-    if (jpeg.scanCount != 1) return null
-    if (jpeg.scanSpectralStart != 0 || jpeg.scanSpectralEnd != 0 || jpeg.scanSuccessiveApprox != 0) return null
-    return decodeProgressiveGrayscaleDcFirst(jpeg)
+    if (jpeg.scans.isEmpty()) return null
+    if (jpeg.scans.size == 1) {
+        val scan = jpeg.scans.single().scan
+        if (scan.spectralStart != 0 || scan.spectralEnd != 0 || scan.successiveApprox != 0) return null
+    }
+    return decodeProgressiveGrayscaleInitial(jpeg)
 }
 
-private fun decodeProgressiveGrayscaleDcFirst(jpeg: ParsedJpeg): IntArray {
+private fun decodeProgressiveGrayscaleInitial(jpeg: ParsedJpeg): IntArray? {
     val component = jpeg.components.single()
     if (component.h != 1 || component.v != 1) fail()
     val quant = jpeg.quantTables[component.quantTable] ?: fail()
-    val dcTable = jpeg.dcTables[component.dcTable] ?: fail()
-    val reader = EntropyBitReader(jpeg.scanData)
-    val pixels = IntArray(jpeg.width * jpeg.height)
-    var previousDc = 0
     val blocksX = (jpeg.width + 7) / 8
     val blocksY = (jpeg.height + 7) / 8
     val totalMcus = blocksX * blocksY
-    var mcu = 0
-    var nextRestartMarker = 0
+    val blockCoeffs = Array(totalMcus) { IntArray(64) }
+    var sawDc = false
 
+    for (entropyScan in jpeg.scans) {
+        val scan = entropyScan.scan
+        if (scan.components.size != 1 || scan.components.single().id != component.id) return null
+        val successiveHigh = scan.successiveApprox ushr 4
+        val successiveLow = scan.successiveApprox and 0x0F
+        if (successiveHigh != 0 || successiveLow != 0) return null
+        if (scan.spectralStart == 0) {
+            if (scan.spectralEnd != 0 || sawDc) return null
+            decodeProgressiveGrayscaleDcScan(jpeg, entropyScan, blockCoeffs, quant)
+            sawDc = true
+        } else {
+            if (!sawDc) return null
+            decodeProgressiveGrayscaleAcScan(jpeg, entropyScan, blockCoeffs, quant)
+        }
+    }
+
+    if (!sawDc) return null
+    val pixels = IntArray(jpeg.width * jpeg.height)
     for (by in 0 until blocksY) {
         for (bx in 0 until blocksX) {
-            val coeffs = IntArray(64)
-            val dcCategory = dcTable.decode(reader)
-            if (dcCategory !in 0..11) fail()
-            val dcDiff = receiveAndExtend(reader, dcCategory)
-            previousDc += dcDiff
-            coeffs[0] = previousDc * quant[0]
-
-            val block = idct(coeffs)
+            val block = idct(blockCoeffs[by * blocksX + bx])
             for (y in 0 until 8) {
                 val py = by * 8 + y
                 if (py >= jpeg.height) continue
@@ -564,15 +587,71 @@ private fun decodeProgressiveGrayscaleDcFirst(jpeg: ParsedJpeg): IntArray {
                     pixels[py * jpeg.width + px] = argb(0xFF, v, v, v)
                 }
             }
-            mcu++
-            if (jpeg.restartInterval > 0 && mcu % jpeg.restartInterval == 0 && mcu < totalMcus) {
-                reader.consumeRestart(nextRestartMarker)
-                nextRestartMarker = (nextRestartMarker + 1) and 7
-                previousDc = 0
-            }
         }
     }
     return pixels
+}
+
+private fun decodeProgressiveGrayscaleDcScan(
+    jpeg: ParsedJpeg,
+    entropyScan: EntropyScan,
+    blockCoeffs: Array<IntArray>,
+    quant: IntArray,
+) {
+    val component = entropyScan.scan.components.single()
+    val dcTable = jpeg.dcTables[component.dcTable] ?: fail()
+    val reader = EntropyBitReader(entropyScan.data)
+    var previousDc = 0
+    var nextRestartMarker = 0
+    for (blockIndex in blockCoeffs.indices) {
+        val dcCategory = dcTable.decode(reader)
+        if (dcCategory !in 0..11) fail()
+        previousDc += receiveAndExtend(reader, dcCategory)
+        blockCoeffs[blockIndex][0] = previousDc * quant[0]
+        if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
+            reader.consumeRestart(nextRestartMarker)
+            nextRestartMarker = (nextRestartMarker + 1) and 7
+            previousDc = 0
+        }
+    }
+}
+
+private fun decodeProgressiveGrayscaleAcScan(
+    jpeg: ParsedJpeg,
+    entropyScan: EntropyScan,
+    blockCoeffs: Array<IntArray>,
+    quant: IntArray,
+) {
+    val scan = entropyScan.scan
+    val component = scan.components.single()
+    val acTable = jpeg.acTables[component.acTable] ?: fail()
+    val reader = EntropyBitReader(entropyScan.data)
+    var nextRestartMarker = 0
+    for (blockIndex in blockCoeffs.indices) {
+        var k = scan.spectralStart
+        while (k <= scan.spectralEnd) {
+            val rs = acTable.decode(reader)
+            if (rs == 0x00) break
+            val run = rs ushr 4
+            val size = rs and 0x0F
+            if (size == 0) {
+                if (run == 15) {
+                    k += 16
+                    continue
+                }
+                fail()
+            }
+            k += run
+            if (k > scan.spectralEnd) fail()
+            val coefficientIndex = ZIGZAG[k]
+            blockCoeffs[blockIndex][coefficientIndex] = receiveAndExtend(reader, size) * quant[coefficientIndex]
+            k++
+        }
+        if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
+            reader.consumeRestart(nextRestartMarker)
+            nextRestartMarker = (nextRestartMarker + 1) and 7
+        }
+    }
 }
 
 private fun decodeGrayscale(jpeg: ParsedJpeg): IntArray {

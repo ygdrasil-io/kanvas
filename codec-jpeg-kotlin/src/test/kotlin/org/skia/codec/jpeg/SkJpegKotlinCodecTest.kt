@@ -185,7 +185,7 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
-    fun `parses progressive grayscale metadata without decoding pixels yet`() {
+    fun `decodes progressive grayscale metadata with empty ac scan`() {
         val codec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleJpeg(width = 11, height = 7, includeAcScan = true))
 
         assertNotNull(codec)
@@ -195,8 +195,9 @@ class SkJpegKotlinCodecTest {
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
 
         val (bitmap, result) = codec.getImage()
-        assertNull(bitmap)
-        assertEquals(SkCodec.Result.kUnimplemented, result)
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(0xFF808080.toInt(), bitmap!!.getPixel(10, 6))
     }
 
     @Test
@@ -212,6 +213,20 @@ class SkJpegKotlinCodecTest {
         assertNotNull(bitmap)
         assertEquals(0xFF808080.toInt(), bitmap!!.getPixel(0, 0))
         assertEquals(0xFF808080.toInt(), bitmap.getPixel(12, 8))
+    }
+
+    @Test
+    fun `decodes progressive grayscale dc and ac scans`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(
+            progressiveGrayscaleJpeg(width = 8, height = 8, includeAcScan = true, acScanHasCoefficient = true),
+        )
+
+        assertNotNull(codec)
+        val (bitmap, result) = codec!!.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertTrue(bitmap!!.getPixel(0, 0) != 0xFF808080.toInt())
+        assertTrue(bitmap.getPixel(0, 0) > bitmap.getPixel(7, 0))
     }
 
     @Test
@@ -278,6 +293,7 @@ class SkJpegKotlinCodecTest {
         spectralEnd: Int = 0,
         successiveApprox: Int = 0,
         includeAcScan: Boolean = false,
+        acScanHasCoefficient: Boolean = false,
     ): ByteArray {
         val out = ByteArrayOutputStream()
         out.writeMarker(0xD8)
@@ -302,9 +318,16 @@ class SkJpegKotlinCodecTest {
         }
         out.writeSegment(0xC4) {
             write(0x10)
-            write(1)
-            repeat(15) { write(0) }
+            if (acScanHasCoefficient) {
+                write(1)
+                write(1)
+                repeat(14) { write(0) }
+            } else {
+                write(1)
+                repeat(15) { write(0) }
+            }
             write(0x00)
+            if (acScanHasCoefficient) write(0x08)
         }
         out.writeSegment(0xDA) {
             write(1)
@@ -316,6 +339,7 @@ class SkJpegKotlinCodecTest {
         }
         out.write(entropyForZeroBlocks(((width + 7) / 8) * ((height + 7) / 8)))
         if (includeAcScan) {
+            val blockCount = ((width + 7) / 8) * ((height + 7) / 8)
             out.writeSegment(0xDA) {
                 write(1)
                 write(1)
@@ -324,7 +348,18 @@ class SkJpegKotlinCodecTest {
                 write(63)
                 write(0)
             }
-            out.write(entropyBits("0"))
+            val bits = if (acScanHasCoefficient) {
+                buildString {
+                    repeat(blockCount) {
+                        append("10")
+                        append("11111111")
+                        append("0")
+                    }
+                }
+            } else {
+                "0".repeat(blockCount)
+            }
+            out.write(entropyBits(bits))
         }
         out.writeMarker(0xD9)
         return out.toByteArray()
