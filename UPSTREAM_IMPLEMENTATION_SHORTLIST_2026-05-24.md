@@ -42,8 +42,9 @@ Completed since this snapshot:
 - `STUB.IFX.MULTIPLE_FILTERS_SPAN`: raster `saveLayerWithMultipleFilters`
   is implemented for `MultipleFiltersGM` and the test is enabled.
 - `STUB.DRAW_VERTICES`: `VerticesBatchingGM` is ported through the existing
-  `drawVertices` raster path and the test is enabled. The broader
-  `VerticesGM` remains a separate follow-up.
+  `drawVertices` raster path and the test is enabled. `VerticesGM` is now
+  source-ported, but remains disabled because raster `drawVertices` still
+  needs full vertex color/shader blend-mode semantics.
 - `STUB.EDGE_AA_IMAGE_SET`: raster fallback implemented in
   `SkCanvas.experimental_DrawEdgeAAImageSet`; `DrawImageSetGM`,
   `DrawImageSetRectToRectGM`, `DrawImageSetAlphaOnlyGM`, and `Skbug14554GM`
@@ -114,7 +115,7 @@ Completed since this snapshot:
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, perceptual/hue/premul sampler still missing | gradient interpolation variants |
 | `mesh` | `STUB.MESH`; all 11 upstream registrations are compile-pinned, but none can be re-enabled before `SkMesh` / `SkMeshSpecification` and `SkCanvas.drawMesh` exist in the active modules | `MeshGMs.kt` |
 | `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`; reactivation audit rendered 67.96% vs `original-888/recordopts.png` | `RecordOptsGM.kt` |
-| `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
+| `vertices` | `STUB.DRAW_VERTICES_VERTEX_BLEND`; `VerticesGM` is source-ported, but focused validation renders ~59% for both `vertices` and `vertices_scaled_shader` because `drawVertices` only combines vertex colors with shader samples for `kSrc`, `kDst`, and `kModulate` | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
 
@@ -126,6 +127,45 @@ Completed since this snapshot:
   focused blocker is the saveLayer / detector color-filter fold path.
 - Text-related rows should be revisited after the font delivery if their
   implementation would touch glyph storage or shaping assumptions.
+
+### Vertices reconnaissance
+
+The `vertices` row is actionable raster work, but not reactivatable as a
+GM-only patch. `skia-integration-tests/src/main/kotlin/org/skia/tests/VerticesGM.kt`
+now mirrors upstream `gm/vertices.cpp::VerticesGM`, including the normal and
+`vertices_scaled_shader` variants, the 29 `SkBlendMode` grid, paint alpha,
+optional `SkColorFilters.Blend(0xFFAABBCC, kDarken)`, the linear-gradient
+shader, the blue color shader, and all three vertex attribute combinations.
+
+Reactivation evidence:
+
+- Focused validation with `VerticesTest` compiled and rendered the new GM.
+- The normal variant reached `59.09%` similarity against
+  `original-888/vertices.png`.
+- The scaled variant reached `59.16%` similarity against
+  `original-888/vertices_scaled_shader.png`.
+- `VerticesBatchingGM` still passes at its existing ratchet.
+
+Real blocker:
+
+- The blocker is not fonts, codecs, WGSL, `SkShaders.Color`, color filters, or
+  the public blend-mode enum. Those dependencies are present on current
+  `origin/master`.
+- The remaining blocker is `SkCanvas.drawVertices(vertices, blendMode, paint)`
+  semantics. Raster currently combines per-vertex colors with shader samples
+  only for `kSrc`, `kDst`, and `kModulate`; upstream `VerticesGM` intentionally
+  exercises all 29 vertex blend modes. Enabling the GM now would ratchet a
+  known-wrong image rather than prove upstream parity.
+
+Next implementation slice:
+
+1. Extend the raster `drawVertices` path so the `blendMode` argument combines
+   interpolated vertex color and shader sample for every `SkBlendMode`, while
+   `paint.blendMode` remains the destination compositing mode.
+2. Add focused unit tests in `DrawVerticesTest` for representative advanced
+   vertex blends such as `kSrcOver`, `kScreen`, `kOverlay`, and one HSL mode.
+3. Re-enable `VerticesTest` for both `vertices` and `vertices_scaled_shader`
+   with a similarity floor only after the full vertex-blend matrix is covered.
 
 ### Mesh reconnaissance
 

@@ -24,8 +24,8 @@ class O6UnportableGMsTest {
     /** `gm/bleed.cpp::SrcRectConstraintGM` (×6 variants) — needs custom surfaces, color images. */
     @Test fun `SrcRectConstraintGM family requires custom surfaces and per-mipmap sampling control`() {}
 
-    /** `gm/vertices.cpp::VerticesGM` (1× + scaled) — needs SkShaders.Color and many blend modes. */
-    @Test fun `VerticesGM requires SkShaders Color and 29-blend-mode coverage`() {}
+    /** `gm/vertices.cpp::VerticesGM` (1× + scaled) — needs 29-mode vertex color/shader blending in drawVertices. */
+    @Test fun `VerticesGM requires drawVertices vertex blend mode coverage`() {}
 
     /** `gm/wacky_yuv_formats.cpp::WackyYUVFormatsGM` — needs YUV plane API + 8 formats. */
     @Test fun `WackyYUVFormatsGM requires SkYUVAPixmaps and 8 YUV layout formats`() {}
