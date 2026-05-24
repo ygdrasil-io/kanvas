@@ -553,7 +553,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `stroketext.cpp` | ✅ | `StrokeTextGM.kt` | — (dash-on-text panel no-op) |
 | `subsetshader.cpp` | ✅ | `BitmapSubsetShaderGM.kt` | — |
 | `surface.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
-| `swizzle.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
+| `swizzle.cpp` | 🚧 | `SwizzleGM.kt` | GPU-only — STUB.GANESH (`GrFragmentProcessor::SwizzleOutput`) |
 | `tablecolorfilter.cpp` | ✅ | `TableColorFilterGM.kt` | — |
 | `tablemaskfilter.cpp` | ✅ | `TableMaskFilterGM.kt` | R-final.7 |
 | `tallstretchedbitmaps.cpp` | ✅ | `TallStretchedBitmapsGM.kt` | — |
