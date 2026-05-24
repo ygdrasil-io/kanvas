@@ -1342,6 +1342,101 @@ internal fun decodeVp8CoefficientBlockWithContext(
 internal fun vp8CoefficientContext(leftHasNonZero: Boolean, topHasNonZero: Boolean): Int =
     (if (leftHasNonZero) 1 else 0) + (if (topHasNonZero) 1 else 0)
 
+internal fun dequantizeVp8CoefficientBlock(
+    coefficients: IntArray,
+    dcQuant: Int,
+    acQuant: Int,
+): IntArray {
+    require(coefficients.size == VP8_BLOCK_COEFFICIENT_COUNT)
+    require(dcQuant >= 0)
+    require(acQuant >= 0)
+
+    return IntArray(VP8_BLOCK_COEFFICIENT_COUNT) { index ->
+        coefficients[index] * if (index == 0) dcQuant else acQuant
+    }
+}
+
+internal fun reconstructVp8Intra4x4Block(
+    mode: Vp8IntraPredictionMode,
+    left: IntArray?,
+    top: IntArray?,
+    topLeft: Int?,
+    coefficients: IntArray,
+    dcQuant: Int,
+    acQuant: Int,
+): IntArray {
+    val residual = inverseVp8Dct4x4(
+        dequantizeVp8CoefficientBlock(
+            coefficients = coefficients,
+            dcQuant = dcQuant,
+            acQuant = acQuant,
+        ),
+    )
+    return reconstructVp8IntraPlane(
+        width = 4,
+        height = 4,
+        mode = mode,
+        left = left,
+        top = top,
+        topLeft = topLeft,
+        residual = residual,
+    )
+}
+
+internal fun reconstructVp8Intra16x16LumaMacroblock(
+    mode: Vp8LumaPredictionMode,
+    left: IntArray?,
+    top: IntArray?,
+    topLeft: Int?,
+    coefficientsByBlock: Array<IntArray>,
+    dcQuant: Int,
+    acQuant: Int,
+): IntArray {
+    require(mode != Vp8LumaPredictionMode.B_PRED)
+    require(coefficientsByBlock.size == VP8_LUMA_BLOCK_COUNT)
+    require(left == null || left.size >= VP8_MACROBLOCK_SIZE)
+    require(top == null || top.size >= VP8_MACROBLOCK_SIZE)
+
+    val residual = IntArray(VP8_MACROBLOCK_SIZE * VP8_MACROBLOCK_SIZE)
+    for (blockY in 0 until VP8_BLOCKS_PER_MACROBLOCK_SIDE) {
+        for (blockX in 0 until VP8_BLOCKS_PER_MACROBLOCK_SIDE) {
+            val blockIndex = blockY * VP8_BLOCKS_PER_MACROBLOCK_SIDE + blockX
+            val blockResidual = inverseVp8Dct4x4(
+                dequantizeVp8CoefficientBlock(
+                    coefficients = coefficientsByBlock[blockIndex],
+                    dcQuant = dcQuant,
+                    acQuant = acQuant,
+                ),
+            )
+            for (y in 0 until VP8_BLOCK_SIZE) {
+                for (x in 0 until VP8_BLOCK_SIZE) {
+                    residual[(blockY * VP8_BLOCK_SIZE + y) * VP8_MACROBLOCK_SIZE + blockX * VP8_BLOCK_SIZE + x] =
+                        blockResidual[y * VP8_BLOCK_SIZE + x]
+                }
+            }
+        }
+    }
+
+    return reconstructVp8IntraPlane(
+        width = VP8_MACROBLOCK_SIZE,
+        height = VP8_MACROBLOCK_SIZE,
+        mode = mode.toIntraPredictionMode(),
+        left = left,
+        top = top,
+        topLeft = topLeft,
+        residual = residual,
+    )
+}
+
+private fun Vp8LumaPredictionMode.toIntraPredictionMode(): Vp8IntraPredictionMode =
+    when (this) {
+        Vp8LumaPredictionMode.DC -> Vp8IntraPredictionMode.DC
+        Vp8LumaPredictionMode.VERTICAL -> Vp8IntraPredictionMode.VERTICAL
+        Vp8LumaPredictionMode.HORIZONTAL -> Vp8IntraPredictionMode.HORIZONTAL
+        Vp8LumaPredictionMode.TRUE_MOTION -> Vp8IntraPredictionMode.TRUE_MOTION
+        Vp8LumaPredictionMode.B_PRED -> error("B_PRED uses per-4x4 luma modes")
+    }
+
 private fun readVp8CoefficientMagnitude(reader: Vp8BoolReader, probabilities: IntArray): Int? {
     if ((reader.readBit(probabilities[2]) ?: return null) == 0) return 1
     if ((reader.readBit(probabilities[3]) ?: return null) == 0) {
@@ -1379,6 +1474,10 @@ private fun readVp8CoefficientCategory(reader: Vp8BoolReader, base: Int, probabi
 private const val VP8_BLOCK_COEFFICIENT_COUNT: Int = 16
 private const val VP8_COEFFICIENT_CONTEXT_COUNT: Int = 3
 private const val VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT: Int = 11
+private const val VP8_BLOCK_SIZE: Int = 4
+private const val VP8_BLOCKS_PER_MACROBLOCK_SIDE: Int = 4
+private const val VP8_LUMA_BLOCK_COUNT: Int = 16
+private const val VP8_MACROBLOCK_SIZE: Int = 16
 
 private val VP8_ZIGZAG = intArrayOf(
     0, 1, 4, 8,
