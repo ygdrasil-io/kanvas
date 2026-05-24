@@ -27,6 +27,9 @@ class SkWebpKotlinCodecTest {
 
         fun vp8CoefficientProbabilityIndexForTest(type: Int, band: Int, context: Int, probability: Int): Int =
             (((type * 8 + band) * 3 + context) * 11) + probability
+
+        fun coefficientBandForTest(coefficient: Int): Int =
+            intArrayOf(0, 1, 2, 3, 6, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7)[coefficient]
     }
 
     @Test
@@ -642,6 +645,27 @@ class SkWebpKotlinCodecTest {
         assertTrue(result is Vp8CoefficientDecodeResult.Block)
         assertFalse((result as Vp8CoefficientDecodeResult.Block).hasNonZero)
         assertTrue(result.coefficients.all { it == 0 })
+    }
+
+    @Test
+    fun `VP8 coefficient token decode keeps coefficient fourteen in band six`() {
+        val flat = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 128 }
+        for (coefficient in 0 until 14) {
+            flat[vp8CoefficientProbabilityIndexForTest(type = 0, band = coefficientBandForTest(coefficient), context = 0, probability = 0)] = 255
+        }
+        flat[vp8CoefficientProbabilityIndexForTest(type = 0, band = 6, context = 0, probability = 0)] = 255
+        flat[vp8CoefficientProbabilityIndexForTest(type = 0, band = 7, context = 0, probability = 0)] = 1
+        val probabilities = Vp8CoefficientProbabilities.fromFlat(flat)
+
+        val result = decodeVp8CoefficientBlock(
+            reader = Vp8BoolReader(ByteArray(8)),
+            probabilities = probabilities,
+            type = 0,
+            initialContext = 0,
+        )
+
+        assertTrue(result is Vp8CoefficientDecodeResult.Block)
+        assertFalse((result as Vp8CoefficientDecodeResult.Block).hasNonZero)
     }
 
     @Test

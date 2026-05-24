@@ -2530,7 +2530,7 @@ private val VP8_COEFFICIENT_BANDS = intArrayOf(
     0, 1, 2, 3,
     6, 4, 5, 6,
     6, 6, 6, 6,
-    6, 6, 7, 7,
+    6, 6, 6, 7,
 )
 
 private val VP8_DEFAULT_COEFFICIENT_PROBABILITIES = intArrayOf(
