@@ -123,7 +123,6 @@ behind their existing module boundaries.
 These are implementation candidates once the rebaseline confirms impact:
 
 - `SkCanvas.experimental_DrawEdgeAAImageSet`
-- `SkSurface.makeImageSnapshot(subset)`
 - async rescale/read APIs
 - YUVA pixmap/channel helpers
 - compressed texture helpers, unless delivered by codec work

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkIRect
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
@@ -78,6 +79,37 @@ class SkSurfaceTest {
         val a = surface.makeImageSnapshot()
         val b = surface.makeImageSnapshot()
         assertNotSame(a, b)
+    }
+
+    @Test
+    fun `makeImageSnapshot subset captures sanitized surface rectangle`() {
+        val bitmap = SkBitmap(4, 4).also { it.eraseColor(SK_ColorWHITE) }
+        bitmap.setPixel(0, 0, SK_ColorBLUE)
+        bitmap.setPixel(1, 0, SK_ColorRED)
+        bitmap.setPixel(0, 1, SK_ColorRED)
+        bitmap.setPixel(1, 1, SK_ColorBLUE)
+
+        val surface = SkSurface.MakeRasterDirect(bitmap)
+        val snapshot = surface.makeImageSnapshot(SkIRect.MakeLTRB(-1, -1, 2, 2))
+
+        assertEquals(2, snapshot.width)
+        assertEquals(2, snapshot.height)
+        assertEquals(SK_ColorBLUE, snapshot.peekPixel(0, 0))
+        assertEquals(SK_ColorRED, snapshot.peekPixel(1, 0))
+        assertEquals(SK_ColorRED, snapshot.peekPixel(0, 1))
+        assertEquals(SK_ColorBLUE, snapshot.peekPixel(1, 1))
+
+        surface.canvas.drawRect(SkRect.MakeWH(4f, 4f), SkPaint(SK_ColorRED))
+        assertEquals(SK_ColorBLUE, snapshot.peekPixel(0, 0), "subset snapshot must be immutable")
+    }
+
+    @Test
+    fun `makeImageSnapshot subset returns empty sentinel for non-intersecting bounds`() {
+        val surface = SkSurface.MakeRasterN32Premul(4, 4)
+        val snapshot = surface.makeImageSnapshot(SkIRect.MakeLTRB(10, 10, 12, 12))
+
+        assertEquals(0, snapshot.width)
+        assertEquals(0, snapshot.height)
     }
 
     @Test

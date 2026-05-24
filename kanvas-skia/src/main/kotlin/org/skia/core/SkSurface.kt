@@ -9,6 +9,7 @@ import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSurfaceProps
+import org.graphiks.math.SkIRect
 
 /**
  * Mirrors Skia's
@@ -85,14 +86,22 @@ public abstract class SkSurface protected constructor(
      * returns an immutable [SkImage] of the sub-rectangle [subset] of
      * this surface's current pixels.
      *
-     * **TODO: STUB.SURFACE_SNAPSHOT_SUBSET** — the full-surface overload
-     * is implemented; this rectangular-crop variant is not yet wired
-     * through the raster backend. Required by `gm/surface.cpp::surface_underdraw`
-     * (and any other GM that saves-away a strip before drawing the foreground
-     * layer, then composites the strip back underneath via `kDstOver`).
+     * The requested rectangle is sanitized like upstream:
+     *  - bounds extending beyond the surface are trimmed to the intersection.
+     *  - non-intersecting bounds produce an empty image sentinel because this
+     *    Kotlin surface API is non-nullable.
      */
-    public open fun makeImageSnapshot(subset: org.graphiks.math.SkIRect): SkImage =
-        TODO("STUB.SURFACE_SNAPSHOT_SUBSET: SkSurface.makeImageSnapshot(SkIRect)")
+    public open fun makeImageSnapshot(subset: SkIRect): SkImage {
+        val bounds = SkIRect.MakeWH(width, height)
+        val sanitized = SkIRect.MakeLTRB(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        if (!sanitized.intersect(subset)) {
+            val info = imageInfo()
+            return SkImage(0, 0, IntArray(0), info.colorType, info.colorSpace)
+        }
+        if (sanitized == bounds) return makeImageSnapshot()
+        return makeImageSnapshot().makeSubset(sanitized)
+            ?: SkImage(0, 0, IntArray(0), imageInfo().colorType, imageInfo().colorSpace)
+    }
 
     /**
      * Draw this surface's current contents onto another canvas, with

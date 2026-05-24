@@ -22,10 +22,8 @@ import org.graphiks.math.SkRect
  * a striped foreground, fades the strip with a `kDstIn` gradient, then
  * composites the original strip back underneath via `kDstOver`.
  *
- * **TODO: STUB.SURFACE_SNAPSHOT_SUBSET** — requires
- * `SkSurface.makeImageSnapshot(SkIRect)` which is not yet implemented
- * in `:kanvas-skia`. The body calls the stub so the gap is visible at
- * runtime.
+ * This GM exercises `SkSurface.makeImageSnapshot(SkIRect)` after the
+ * subset rectangle has been sanitized against the surface bounds.
  *
  * C++ body (`DEF_SURFACE_TESTS(surface_underdraw, canvas, 256, 256)`):
  * ```cpp
@@ -66,8 +64,7 @@ public class SurfaceUnderdrawGM : GM() {
         val bgPaint = SkPaint().apply { shader = bgShader }
         surf.canvas.drawPaint(bgPaint)
 
-        // Save strip then clear it — requires the missing subset snapshot.
-        // This call throws TODO("STUB.SURFACE_SNAPSHOT_SUBSET") at runtime.
+        // Save strip then clear it.
         val saveImg = surf.makeImageSnapshot(subset)
 
         val clearPaint = SkPaint().apply { blendMode = SkBlendMode.kClear }
