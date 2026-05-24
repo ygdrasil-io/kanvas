@@ -13,6 +13,7 @@ import org.skia.foundation.skcms.SkcmsICCProfile
 import org.skia.foundation.skcms.skcmsParse
 import org.skia.utils.SkPixmapUtils
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -723,7 +724,17 @@ private fun decodeProgressiveGrayscaleAcScan(
     val reader = EntropyBitReader(entropyScan.data)
     var nextRestartMarker = 0
     val scale = 1 shl successiveLow
+    var eobRun = 0
     for (blockIndex in blockCoeffs.indices) {
+        if (eobRun > 0) {
+            eobRun--
+            if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
+                reader.consumeRestart(nextRestartMarker)
+                nextRestartMarker = (nextRestartMarker + 1) and 7
+                eobRun = 0
+            }
+            continue
+        }
         var k = scan.spectralStart
         while (k <= scan.spectralEnd) {
             val rs = acTable.decode(reader)
@@ -735,7 +746,9 @@ private fun decodeProgressiveGrayscaleAcScan(
                     k += 16
                     continue
                 }
-                fail()
+                eobRun = (1 shl run) + reader.readBits(run)
+                eobRun--
+                break
             }
             k += run
             if (k > scan.spectralEnd) fail()
@@ -747,6 +760,7 @@ private fun decodeProgressiveGrayscaleAcScan(
         if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
             reader.consumeRestart(nextRestartMarker)
             nextRestartMarker = (nextRestartMarker + 1) and 7
+            eobRun = 0
         }
     }
 }
@@ -1112,8 +1126,32 @@ private fun sampleComponent(
     mcuWidth: Int,
     mcuHeight: Int,
 ): Int {
-    val componentX = mcuX * component.h * 8 / mcuWidth
-    val componentY = mcuY * component.v * 8 / mcuHeight
+    val componentWidth = component.h * 8
+    val componentHeight = component.v * 8
+    if (componentWidth != mcuWidth || componentHeight != mcuHeight) {
+        val sourceX = ((mcuX + 0.5) * componentWidth / mcuWidth) - 0.5
+        val sourceY = ((mcuY + 0.5) * componentHeight / mcuHeight) - 0.5
+        val x0 = floor(sourceX).toInt().coerceIn(0, componentWidth - 1)
+        val y0 = floor(sourceY).toInt().coerceIn(0, componentHeight - 1)
+        val x1 = (x0 + 1).coerceAtMost(componentWidth - 1)
+        val y1 = (y0 + 1).coerceAtMost(componentHeight - 1)
+        val fx = (sourceX - x0).coerceIn(0.0, 1.0)
+        val fy = (sourceY - y0).coerceIn(0.0, 1.0)
+        val top = sampleComponentAt(blocks, component, x0, y0) * (1.0 - fx) +
+            sampleComponentAt(blocks, component, x1, y0) * fx
+        val bottom = sampleComponentAt(blocks, component, x0, y1) * (1.0 - fx) +
+            sampleComponentAt(blocks, component, x1, y1) * fx
+        return (top * (1.0 - fy) + bottom * fy).roundToInt().coerceIn(0, 255)
+    }
+    return sampleComponentAt(blocks, component, mcuX, mcuY)
+}
+
+private fun sampleComponentAt(
+    blocks: Array<IntArray>,
+    component: Component,
+    componentX: Int,
+    componentY: Int,
+): Int {
     val blockX = componentX / 8
     val blockY = componentY / 8
     val block = blocks[blockY * component.h + blockX]
