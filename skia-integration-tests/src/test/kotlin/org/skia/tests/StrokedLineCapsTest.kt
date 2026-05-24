@@ -2,13 +2,11 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
-@Disabled("STUB.STROKEDLINE_CAPS: gradient-local-coords on stroked-line outlines diverges from GPU reference")
 class StrokedLineCapsTest {
 
     @Test
@@ -25,5 +23,9 @@ class StrokedLineCapsTest {
         }
         val accepted = SimilarityTracker.updateScore("StrokedLineCapsGM", comparison.similarity)
         assertTrue(accepted, "StrokedLineCapsGM regressed below ratchet")
+        assertTrue(
+            comparison.similarity >= 90.0,
+            "StrokedLineCapsGM similarity ${"%.2f".format(comparison.similarity)}% < 90.0% floor",
+        )
     }
 }

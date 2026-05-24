@@ -159,7 +159,7 @@ drawglyphs	1	DrawGlyphsGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org
 drawimageset	3	DrawImageSetAlphaOnlyGM.kt,DrawImageSetGM.kt,DrawImageSetRectToRectGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/DrawImageSetAlphaOnlyTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/DrawImageSetTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/DrawImageSetRectToRectTest.kt	-	ported
 drawlines_with_local_matrix	1	DrawlinesWithLocalMatrixGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/DrawlinesWithLocalMatrixTest.kt	-	ported
 drawminibitmaprect	1	DrawMiniBitmapRectGM.kt	TEST_DISABLED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/DrawMiniBitmapRectTest.kt	SLOW.GM_STRESS	slow-or-reference
-drawquadset	1	DrawQuadSetGM.kt	TEST_DISABLED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/DrawQuadSetTest.kt	STUB.EDGE_AA_QUAD	implementation
+drawquadset	1	DrawQuadSetGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/DrawQuadSetTest.kt	-	ported
 drawregion	1	DrawRegionGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/DrawRegionTest.kt	-	ported
 drawregionmodes	1	DrawRegionModesGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/DrawRegionModesTest.kt	-	ported
 dropshadowimagefilter	2	DropShadowImageFilterGM.kt,DropShadowPseudoPerspGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/DropShadowPseudoPerspTest.kt	-	ported
@@ -244,7 +244,7 @@ imagefiltersunpremul	1	ImageFiltersUnpremulGM.kt	PORTED	-	skia-integration-tests
 imagefromyuvtextures	1	-	MISSING	-	-	-	missing-mapping
 imagemagnifier	3	ImageMagnifierGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/ImageMagnifierTest.kt	-	ported
 imagemakewithfilter	1	ImageMakeWithFilterGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/ImageMakeWithFilterTest.kt	-	ported
-imagemasksubset	1	ImageMaskSubsetGM.kt	TEST_DISABLED	STUB.ALPHA8_IMAGE_AS_MASK	skia-integration-tests/src/test/kotlin/org/skia/tests/ImageMaskSubsetTest.kt	STUB.ALPHA8_IMAGE_AS_MASK	implementation
+imagemasksubset	1	ImageMaskSubsetGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/ImageMaskSubsetTest.kt	-	ported
 imageresizetiled	1	ImageResizeTiledGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/ImageResizeTiledTest.kt	-	ported
 imagesource	1	ImageSourceGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/ImageSourceTest.kt	-	ported
 imagesource2	1	ImageSourceGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/ImageSourceTest.kt	-	ported
@@ -381,7 +381,7 @@ srgb	1	SrgbGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/
 stlouisarch	1	StLouisArchGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/StLouisArchTest.kt	-	ported
 stringart	1	StringArtGM.kt	PORTED	-	-	-	ported
 stroke_rect_shader	1	StrokeRectShaderGM.kt	PORTED	-	gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeRectShaderWebGpuTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/StrokeRectShaderTest.kt,gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/StrokeRectShaderCrossBackendTest.kt	-	ported
-strokedlines	2	StrokedLineCapsGM.kt,StrokedLinesGM.kt	PARTIAL	-	skia-integration-tests/src/test/kotlin/org/skia/tests/StrokedLineCapsTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/StrokedLinesTest.kt	STUB.STROKEDLINE_CAPS	implementation
+strokedlines	2	StrokedLineCapsGM.kt,StrokedLinesGM.kt	PORTED	-	skia-integration-tests/src/test/kotlin/org/skia/tests/StrokedLineCapsTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/StrokedLinesTest.kt	-	ported
 strokefill	3	Bug339297GM.kt,Bug6987GM.kt	PARTIAL	-	gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/Bug6987WebGpuTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/Bug339297Test.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/Bug6987Test.kt,gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/Bug6987CrossBackendTest.kt	-	partial-coverage
 strokerect	2	StrokeRectGM.kt,StrokerectAnisotropic5408GM.kt	PORTED	-	gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeRectWebGpuTest.kt,skia-integration-tests/src/test/kotlin/org/skia/tests/StrokeRectTest.kt,gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/StrokeRectCrossBackendTest.kt,gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/StrokerectAnisotropic5408CrossBackendTest.kt	-	ported
 strokerect_anisotropic	1	-	MISSING	-	-	-	missing-mapping

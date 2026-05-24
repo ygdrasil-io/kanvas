@@ -40,8 +40,6 @@ import java.nio.ByteOrder
  * The paint carries `color = 0xFF00FF00` (green). In Skia, drawing an
  * `kAlpha_8` image with a coloured paint uses the image as an alpha mask:
  * the paint's RGB fills covered pixels, modulated by the image's alpha.
- * This semantic (STUB.ALPHA8_IMAGE_AS_MASK) is not yet implemented in the
- * kanvas-skia raster backend — the test is therefore [org.junit.jupiter.api.Disabled].
  */
 public class ImageMaskSubsetGM : GM() {
 
