@@ -120,6 +120,9 @@ public class OpenTypeTypeface private constructor(
         skewX: SkScalar,
     ): SkRect = font.glyphBounds(glyphId, size, scaleX, skewX)
 
+    override fun getKerningPairAdjustments(glyphs: ShortArray): IntArray? =
+        font.kerningPairAdjustments(glyphs)
+
     override fun makeTextPath(
         text: String,
         x: SkScalar,
@@ -263,6 +266,7 @@ private class ParsedTrueTypeFont(
     private val advanceWidths: IntArray,
     private val leftSideBearings: ShortArray,
     private val glyphOffsets: IntArray,
+    private val kern: KernTable?,
 ) {
     private val pathCache = HashMap<Int, GlyphOutline?>()
 
@@ -273,6 +277,14 @@ private class ParsedTrueTypeFont(
     fun advanceWidth(glyphId: Int): Int {
         if (glyphId < 0 || glyphId >= numGlyphs) return 0
         return advanceWidths[min(glyphId, advanceWidths.lastIndex)]
+    }
+
+    fun kerningPairAdjustments(glyphs: ShortArray): IntArray? {
+        val kernTable = kern ?: return null
+        if (glyphs.size <= 1) return IntArray(0)
+        return IntArray(glyphs.size - 1) { i ->
+            kernTable.adjustment(glyphs[i].toInt() and 0xFFFF, glyphs[i + 1].toInt() and 0xFFFF)
+        }
     }
 
     fun glyphBounds(glyphId: Int, size: Float, scaleX: Float, skewX: Float): SkRect {
@@ -595,12 +607,13 @@ private class ParsedTrueTypeFont(
             val avg = os2?.let { readI16(bytes, it.offset + 2).toInt() } ?: advances.average().toInt()
             val sxHeight = os2?.takeIf { it.length >= 88 }?.let { readI16(bytes, it.offset + 86).toInt() } ?: unitsPerEm / 2
             val sCapHeight = os2?.takeIf { it.length >= 90 }?.let { readI16(bytes, it.offset + 88).toInt() } ?: (unitsPerEm * 7 / 10)
+            val kern = parseKernTable(bytes, tables["kern"])
 
             return ParsedTrueTypeFont(
                 bytes, tables, unitsPerEm, indexToLocFormat, numGlyphs, numHMetrics,
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
                 avg, sxHeight, sCapHeight, familyName, names?.postScriptName, localizedNames,
-                cmap, advances, bearings, offsets,
+                cmap, advances, bearings, offsets, kern,
             )
         }
 
@@ -656,6 +669,58 @@ private class ParsedTrueTypeFont(
             }
             val familyName = chooseFamilyName(familyCandidates)
             return OpenTypeNames(familyName, chooseName(postScriptCandidates), localized)
+        }
+
+        private fun parseKernTable(bytes: ByteArray, table: TableRecord?): KernTable? {
+            table ?: return null
+            if (table.length < 4) return null
+            val tableEnd = table.offset + table.length
+            if (readU16(bytes, table.offset) != 0) return null
+            val subtableCount = readU16(bytes, table.offset + 2)
+            val pairs = HashMap<Int, Int>()
+            var off = table.offset + 4
+            var hasUsableSubtable = false
+            repeat(subtableCount) {
+                if (!fits(off, 6, tableEnd)) return null
+                val subtableVersion = readU16(bytes, off)
+                val subtableLength = readU16(bytes, off + 2)
+                val coverage = readU16(bytes, off + 4)
+                if (subtableVersion != 0 || subtableLength < 6 || !fits(off, subtableLength, tableEnd)) return null
+
+                val format = coverage ushr 8
+                val horizontal = (coverage and KERN_HORIZONTAL) != 0
+                val minimum = (coverage and KERN_MINIMUM) != 0
+                val crossStream = (coverage and KERN_CROSS_STREAM) != 0
+                if (format == 0 && horizontal && !minimum && !crossStream) {
+                    parseKernFormat0(bytes, off + 6, off + subtableLength, pairs)
+                        ?: return null
+                    hasUsableSubtable = true
+                }
+                off += subtableLength
+            }
+            if (!hasUsableSubtable) return null
+            return KernTable(pairs)
+        }
+
+        private fun parseKernFormat0(
+            bytes: ByteArray,
+            off: Int,
+            limit: Int,
+            pairs: MutableMap<Int, Int>,
+        ): Unit? {
+            if (!fits(off, 8, limit)) return null
+            val pairCount = readU16(bytes, off)
+            if (!fits(off + 8, pairCount.toLong() * 6L, limit)) return null
+            var p = off + 8
+            repeat(pairCount) {
+                val left = readU16(bytes, p)
+                val right = readU16(bytes, p + 2)
+                val value = readI16(bytes, p + 4).toInt()
+                val key = kernPairKey(left, right)
+                pairs[key] = (pairs[key] ?: 0) + value
+                p += 6
+            }
+            return Unit
         }
 
         private fun chooseFamilyName(records: List<NameRecord>): String? =
@@ -872,6 +937,10 @@ private data class OpenTypeNames(
     val postScriptName: String?,
     val localizedFamilyNames: List<SkTypeface.LocalizedString>,
 )
+private data class KernTable(private val pairs: Map<Int, Int>) {
+    fun adjustment(leftGlyph: Int, rightGlyph: Int): Int =
+        pairs[kernPairKey(leftGlyph, rightGlyph)] ?: 0
+}
 private data class NameRecord(val value: String, val platform: Int, val language: Int)
 private data class TtPoint(val x: Int, val y: Int, val onCurve: Boolean)
 private data class GlyphOutline(val contours: List<List<TtPoint>>) {
@@ -891,6 +960,13 @@ private const val WE_HAVE_A_SCALE = 0x0008
 private const val MORE_COMPONENTS = 0x0020
 private const val WE_HAVE_AN_X_AND_Y_SCALE = 0x0040
 private const val WE_HAVE_A_TWO_BY_TWO = 0x0080
+
+private const val KERN_HORIZONTAL = 0x0001
+private const val KERN_MINIMUM = 0x0002
+private const val KERN_CROSS_STREAM = 0x0004
+
+private fun kernPairKey(leftGlyph: Int, rightGlyph: Int): Int =
+    ((leftGlyph and 0xFFFF) shl 16) or (rightGlyph and 0xFFFF)
 
 private fun fits(offset: Int, length: Int, limit: Int): Boolean =
     fits(offset, length.toLong(), limit)
