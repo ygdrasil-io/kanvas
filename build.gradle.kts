@@ -40,6 +40,13 @@ val productionDependencyConfigurations = setOf(
     "runtimeClasspath",
 )
 
+val productionProjectDependencyConfigurations = setOf(
+    "api",
+    "implementation",
+    "compileOnly",
+    "runtimeOnly",
+)
+
 val forbiddenSourcePatterns = listOf(
     Regex("""\bimport\s+java\.awt(?:\.|\s|$)"""),
     Regex("""\bimport\s+javax\.imageio(?:\.|\s|$)"""),
@@ -127,11 +134,48 @@ tasks.register("checkPureKotlinCodecNoAwt") {
     }
 }
 
+tasks.register("checkProductionCodecRuntimeNoAwt") {
+    group = "verification"
+    description = "Fails if production modules outside the legacy codec ImageIO backends depend on temporary AWT/ImageIO codec bundles."
+
+    doLast {
+        val allowedProjects = forbiddenCodecBackendProjects + setOf(
+            "codec-awt-kotlin-comparison-tests",
+        )
+        val violations = mutableListOf<String>()
+
+        allprojects
+            .filter { project -> project.name !in allowedProjects }
+            .forEach { project ->
+                productionProjectDependencyConfigurations
+                    .mapNotNull { configurationName -> project.configurations.findByName(configurationName) }
+                    .forEach { configuration ->
+                        configuration.dependencies.forEach { dependency ->
+                            if (dependency.name in forbiddenCodecBackendProjects) {
+                                violations += "${project.path}:${configuration.name} depends on temporary backend :${dependency.name}"
+                            }
+                        }
+                    }
+            }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("Production modules must not depend on temporary AWT/ImageIO codec backends.")
+                    appendLine("Use :codec-all-kotlin for runtime codec dispatch, or keep ImageIO backends test-only.")
+                    violations.sorted().forEach { appendLine("- $it") }
+                }
+            )
+        }
+    }
+}
+
 tasks.register("checkCodecKotlinSwitchCriteria") {
     group = "verification"
     description = "Runs the non-destructive codec-all-kotlin switch-readiness checks."
 
     dependsOn(
+        "checkProductionCodecRuntimeNoAwt",
         "checkPureKotlinCodecNoAwt",
         ":codec-all-kotlin:test",
         ":codec-real-image-tests:test",
