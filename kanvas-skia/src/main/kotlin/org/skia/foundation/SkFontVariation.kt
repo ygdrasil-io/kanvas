@@ -32,6 +32,22 @@ package org.skia.foundation
 public data class SkFontVariation(public val axis: Int, public val value: Float) {
 
     /**
+     * Description of one OpenType `fvar` design axis.
+     *
+     * Values are in the axis' design coordinate space. For example, `wght`
+     * commonly uses values around `400` for regular text, while custom axes
+     * may use font-specific ranges.
+     */
+    public data class Axis(
+        public val tag: Int,
+        public val min: Float,
+        public val default: Float,
+        public val max: Float,
+        public val flags: Int = 0,
+        public val nameId: Int = 0,
+    )
+
+    /**
      * 4-byte OpenType axis tag, packed big-endian into a 32-bit
      * integer. Mirrors Skia's `SkSetFourByteTag` macro / `SkFourByteTag`
      * typedef. Construct via [Make] or the [String] constructor — the

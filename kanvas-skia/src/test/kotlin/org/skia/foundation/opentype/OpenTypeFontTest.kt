@@ -25,6 +25,13 @@ class OpenTypeFontTest {
         return stream.use { it.readBytes() }
     }
 
+    private fun distortableBytes(): ByteArray {
+        val resource = "/fonts/Distortable.ttf"
+        val stream = OpenTypeFontTest::class.java.getResourceAsStream(resource)
+            ?: error("Missing bundled resource: $resource")
+        return stream.use { it.readBytes() }
+    }
+
     private fun singletonTtcBytes(fontBytes: ByteArray): ByteArray {
         val ttc = ByteArray(16 + fontBytes.size)
         ttc[0] = 't'.code.toByte()
@@ -172,6 +179,38 @@ class OpenTypeFontTest {
         assertEquals(0, secondRead[0].toInt())
         assertEquals(null, typeface.copyTableData(SkFontVariation.Tag.of("ZZZZ").raw))
         assertEquals(null, SkTypeface.MakeEmpty().copyTableData(nameTag))
+    }
+
+    @Test
+    fun `variable font fvar axes expose Distortable weight range`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(distortableBytes())!!
+
+        val axes = typeface.getVariationDesignParameters()
+
+        assertEquals(1, axes.size)
+        assertEquals(SkFontVariation.WEIGHT.raw, axes.single().tag)
+        assertEquals(0.5f, axes.single().min, 0.0001f)
+        assertEquals(1f, axes.single().default, 0.0001f)
+        assertEquals(2f, axes.single().max, 0.0001f)
+        assertEquals(1, axes.single().flags)
+        assertEquals(256, axes.single().nameId)
+    }
+
+    @Test
+    fun `non-variable fonts expose no fvar axes`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+
+        assertTrue(typeface.getVariationDesignParameters().isEmpty())
+        assertTrue(SkTypeface.MakeEmpty().getVariationDesignParameters().isEmpty())
+    }
+
+    @Test
+    fun `malformed fvar table does not prevent font loading`() {
+        val renamed = distortableBytes().withTableTag("fvar", "zvar")
+        val truncated = distortableBytes().withTableLength("fvar", 12)
+
+        assertTrue(OpenTypeTypeface.MakeFromBytes(renamed)!!.getVariationDesignParameters().isEmpty())
+        assertTrue(OpenTypeTypeface.MakeFromBytes(truncated)!!.getVariationDesignParameters().isEmpty())
     }
 
     @Test
