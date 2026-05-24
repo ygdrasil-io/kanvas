@@ -21,8 +21,9 @@ import kotlin.math.sqrt
  *
  * This backend owns the baseline JPEG container path directly: marker parsing,
  * DQT/DHT/SOF0/SOS, entropy bit reading, Huffman decode, dequantization, and
- * IDCT. The decode surface is intentionally narrow: sequential 8-bit grayscale
- * JPEGs and 3-component YCbCr JPEGs with 4:4:4, 4:2:2, or 4:2:0 sampling.
+ * IDCT. The decode surface is intentionally narrow: sequential 8-bit grayscale,
+ * 3-component YCbCr JPEGs with 4:4:4, 4:2:2, or 4:2:0 sampling, and
+ * baseline Adobe CMYK JPEGs with 1x1 component sampling.
  */
 public class SkJpegKotlinCodec private constructor(
     private val jpeg: ParsedJpeg,
@@ -142,6 +143,7 @@ private data class ParsedJpeg(
     val scanSuccessiveApprox: Int,
     val scanCount: Int,
     val scans: List<EntropyScan>,
+    val adobeTransform: Int?,
 )
 
 private data class Component(
@@ -225,6 +227,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
     var coding: JpegCoding? = null
     var restartInterval = 0
     var origin = SkEncodedOrigin.kTopLeft
+    var adobeTransform: Int? = null
     val iccChunks = ArrayList<Pair<Int, ByteArray>>()
     var iccChunkCount = -1
     var offset = 2
@@ -284,6 +287,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                                     current.successiveApprox,
                                     scanCount,
                                     if (currentCoding == JpegCoding.kProgressive) scans.toList() else emptyList(),
+                                    adobeTransform,
                                 )
                             }
                             if (currentCoding == JpegCoding.kBaseline) return null
@@ -307,6 +311,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                     MARKER_DQT -> parseDqt(data, payloadStart, payloadEnd, quantTables)
                     MARKER_DHT -> parseDht(data, payloadStart, payloadEnd, dcTables, acTables)
                     MARKER_APP1 -> parseExifOrigin(data, payloadStart, payloadEnd)?.let { origin = it }
+                    MARKER_APP14 -> parseAdobeTransform(data, payloadStart, payloadEnd)?.let { adobeTransform = it }
                     MARKER_APP2 -> parseIccChunk(data, payloadStart, payloadEnd)?.let { chunk ->
                         val (index, count, payload) = chunk
                         if (iccChunkCount == -1) {
@@ -352,6 +357,7 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
             lastScan.successiveApprox,
             scanCount,
             if (coding == JpegCoding.kProgressive) scans.toList() else emptyList(),
+            adobeTransform,
         )
     } else {
         null
@@ -375,10 +381,12 @@ private fun buildParsed(
     scanSuccessiveApprox: Int,
     scanCount: Int,
     scans: List<EntropyScan>,
+    adobeTransform: Int?,
 ): ParsedJpeg? {
     val cs = components ?: return null
     if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
-    if (cs.size != 1 && cs.size != 3) return null
+    if (cs.size !in listOf(1, 3, 4)) return null
+    if (coding == JpegCoding.kProgressive && cs.size == 4) return null
     if (coding == JpegCoding.kProgressive) {
         for (component in cs) {
             if (component.h !in 1..4 || component.v !in 1..4) return null
@@ -402,6 +410,7 @@ private fun buildParsed(
             scanSuccessiveApprox,
             scanCount,
             scans,
+            adobeTransform,
         )
     }
     for (component in cs) {
@@ -421,15 +430,22 @@ private fun buildParsed(
             return null
         }
     }
-    if (cs.size == 1) {
-        if (cs.single().h != 1 || cs.single().v != 1) return null
-    } else {
-        val y = cs.firstOrNull { it.frameIndex == 0 } ?: return null
-        val cb = cs.firstOrNull { it.frameIndex == 1 } ?: return null
-        val cr = cs.firstOrNull { it.frameIndex == 2 } ?: return null
-        if (cb.h != 1 || cb.v != 1 || cr.h != 1 || cr.v != 1) return null
-        if ((y.h != 1 && y.h != 2) || (y.v != 1 && y.v != 2)) return null
-        if (y.h == 1 && y.v != 1) return null
+    when (cs.size) {
+        1 -> {
+            if (cs.single().h != 1 || cs.single().v != 1) return null
+        }
+        3 -> {
+            val y = cs.firstOrNull { it.frameIndex == 0 } ?: return null
+            val cb = cs.firstOrNull { it.frameIndex == 1 } ?: return null
+            val cr = cs.firstOrNull { it.frameIndex == 2 } ?: return null
+            if (cb.h != 1 || cb.v != 1 || cr.h != 1 || cr.v != 1) return null
+            if ((y.h != 1 && y.h != 2) || (y.v != 1 && y.v != 2)) return null
+            if (y.h == 1 && y.v != 1) return null
+        }
+        4 -> {
+            if (adobeTransform != 0) return null
+            if (cs.any { it.h != 1 || it.v != 1 }) return null
+        }
     }
     if (scanData.isEmpty()) return null
     return ParsedJpeg(
@@ -449,6 +465,7 @@ private fun buildParsed(
         scanSuccessiveApprox,
         scanCount,
         scans,
+        adobeTransform,
     )
 }
 
@@ -501,7 +518,7 @@ private fun parseSof(data: ByteArray, start: Int, end: Int): Frame? {
     val height = readU16BE(data, p).also { p += 2 }
     val width = readU16BE(data, p).also { p += 2 }
     val componentCount = data[p++].toInt() and 0xFF
-    if (precision != 8 || componentCount !in listOf(1, 3) || end - p != componentCount * 3) return null
+    if (precision != 8 || componentCount !in listOf(1, 3, 4) || end - p != componentCount * 3) return null
     val components = ArrayList<Component>(componentCount)
     val ids = HashSet<Int>()
     for (index in 0 until componentCount) {
@@ -560,6 +577,7 @@ private fun decodeBaseline(jpeg: ParsedJpeg): IntArray {
     return when (jpeg.components.size) {
         1 -> decodeGrayscale(jpeg)
         3 -> decodeColor(jpeg)
+        4 -> decodeCmyk(jpeg)
         else -> fail()
     }
 }
@@ -973,6 +991,50 @@ private fun decodeColor(jpeg: ParsedJpeg): IntArray {
     return pixels
 }
 
+private fun decodeCmyk(jpeg: ParsedJpeg): IntArray {
+    val components = jpeg.components
+    val reader = EntropyBitReader(jpeg.scanData)
+    val pixels = IntArray(jpeg.width * jpeg.height)
+    val previousDc = IntArray(components.size)
+    val blocks = Array(components.size) { IntArray(64) }
+    val blocksX = (jpeg.width + 7) / 8
+    val blocksY = (jpeg.height + 7) / 8
+    val totalMcus = blocksX * blocksY
+    var mcu = 0
+    var nextRestartMarker = 0
+
+    for (my in 0 until blocksY) {
+        for (mx in 0 until blocksX) {
+            for (component in components) {
+                blocks[component.frameIndex] = decodeBlock(jpeg, component, reader, previousDc, component.frameIndex)
+            }
+
+            for (y in 0 until 8) {
+                val py = my * 8 + y
+                if (py >= jpeg.height) continue
+                for (x in 0 until 8) {
+                    val px = mx * 8 + x
+                    if (px >= jpeg.width) continue
+                    val index = y * 8 + x
+                    val c = (blocks[0][index] + 128).coerceIn(0, 255)
+                    val m = (blocks[1][index] + 128).coerceIn(0, 255)
+                    val yy = (blocks[2][index] + 128).coerceIn(0, 255)
+                    val k = (blocks[3][index] + 128).coerceIn(0, 255)
+                    pixels[py * jpeg.width + px] = invertedCmykToArgb(c, m, yy, k)
+                }
+            }
+
+            mcu++
+            if (jpeg.restartInterval > 0 && mcu % jpeg.restartInterval == 0 && mcu < totalMcus) {
+                reader.consumeRestart(nextRestartMarker)
+                nextRestartMarker = (nextRestartMarker + 1) and 7
+                previousDc.fill(0)
+            }
+        }
+    }
+    return pixels
+}
+
 private fun sampleComponent(
     blocks: Array<IntArray>,
     component: Component,
@@ -1196,6 +1258,20 @@ private fun yCbCrToArgb(y: Int, cb: Int, cr: Int): Int {
     return argb(0xFF, r, g, b)
 }
 
+private fun invertedCmykToArgb(c: Int, m: Int, y: Int, k: Int): Int =
+    argb(
+        0xFF,
+        (c * k + 127) / 255,
+        (m * k + 127) / 255,
+        (y * k + 127) / 255,
+    )
+
+private fun parseAdobeTransform(data: ByteArray, start: Int, end: Int): Int? {
+    if (end - start != 12 || !matchesAt(data, start, ADOBE_SIGNATURE)) return null
+    val transform = data[start + 11].toInt() and 0xFF
+    return if (transform in 0..2) transform else null
+}
+
 private fun fail(): Nothing = throw IllegalArgumentException("invalid JPEG")
 
 private const val MARKER_SOF0 = 0xC0
@@ -1206,6 +1282,7 @@ private const val MARKER_DQT = 0xDB
 private const val MARKER_DRI = 0xDD
 private const val MARKER_APP1 = 0xE1
 private const val MARKER_APP2 = 0xE2
+private const val MARKER_APP14 = 0xEE
 private const val MARKER_EOI = 0xD9
 private const val MARKER_TEM = 0x01
 private const val MAX_DIMENSION = 100_000
@@ -1216,6 +1293,7 @@ private val ICC_SIGNATURE = byteArrayOf(
     0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x00,
 )
 private val EXIF_SIGNATURE = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00)
+private val ADOBE_SIGNATURE = byteArrayOf(0x41, 0x64, 0x6F, 0x62, 0x65)
 
 private val ZIGZAG = intArrayOf(
     0, 1, 8, 16, 9, 2, 3, 10,
