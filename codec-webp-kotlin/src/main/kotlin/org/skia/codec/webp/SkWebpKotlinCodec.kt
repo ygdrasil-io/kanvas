@@ -1142,6 +1142,23 @@ internal data class Vp8MacroblockMode(
     val skipCoefficients: Boolean,
 )
 
+internal data class Vp8MacroblockCoefficients(
+    val luma: Array<IntArray>,
+    val u: Array<IntArray>,
+    val v: Array<IntArray>,
+) {
+    init {
+        require(luma.size == VP8_LUMA_BLOCK_COUNT)
+        require(u.size == VP8_CHROMA_BLOCK_COUNT)
+        require(v.size == VP8_CHROMA_BLOCK_COUNT)
+    }
+}
+
+internal sealed interface Vp8MacroblockCoefficientDecodeResult {
+    data class Macroblocks(val macroblocks: List<Vp8MacroblockCoefficients>) : Vp8MacroblockCoefficientDecodeResult
+    data object Invalid : Vp8MacroblockCoefficientDecodeResult
+}
+
 internal enum class Vp8LumaPredictionMode {
     DC,
     VERTICAL,
@@ -1492,6 +1509,160 @@ internal fun decodeVp8CoefficientBlockWithContext(
 internal fun vp8CoefficientContext(leftHasNonZero: Boolean, topHasNonZero: Boolean): Int =
     (if (leftHasNonZero) 1 else 0) + (if (topHasNonZero) 1 else 0)
 
+internal fun decodeVp8MacroblockCoefficients(
+    data: ByteArray,
+    layout: Vp8LossyBitstreamLayout,
+    macroblockModes: List<Vp8MacroblockMode>,
+    probabilities: Vp8CoefficientProbabilities,
+): Vp8MacroblockCoefficientDecodeResult {
+    val header = layout.header
+    val macroblockCount = header.macroblockWidth * header.macroblockHeight
+    if (macroblockModes.size != macroblockCount) return Vp8MacroblockCoefficientDecodeResult.Invalid
+    if (header.coefficientPartitionCount !in 1..8) return Vp8MacroblockCoefficientDecodeResult.Invalid
+    if (layout.coefficientPartitions.size != header.coefficientPartitionCount) {
+        return Vp8MacroblockCoefficientDecodeResult.Invalid
+    }
+    if (layout.coefficientPartitions.any { it.offset < 0 || it.end < it.offset || it.end > data.size }) {
+        return Vp8MacroblockCoefficientDecodeResult.Invalid
+    }
+
+    val readers = layout.coefficientPartitions.map { partition ->
+        Vp8BoolReader(data, partition.offset, partition.end)
+    }
+    val macroblocks = ArrayList<Vp8MacroblockCoefficients>(macroblockCount)
+    val topLumaNonZero = BooleanArray(header.macroblockWidth * VP8_BLOCKS_PER_MACROBLOCK_SIDE)
+    val topUNonZero = BooleanArray(header.macroblockWidth * VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE)
+    val topVNonZero = BooleanArray(header.macroblockWidth * VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE)
+
+    for (macroblockY in 0 until header.macroblockHeight) {
+        val leftLumaNonZero = BooleanArray(VP8_BLOCKS_PER_MACROBLOCK_SIDE)
+        val leftUNonZero = BooleanArray(VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE)
+        val leftVNonZero = BooleanArray(VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE)
+        val reader = readers[macroblockY and (header.coefficientPartitionCount - 1)]
+
+        for (macroblockX in 0 until header.macroblockWidth) {
+            val mode = macroblockModes[macroblockY * header.macroblockWidth + macroblockX]
+            val luma = Array(VP8_LUMA_BLOCK_COUNT) { IntArray(VP8_BLOCK_COEFFICIENT_COUNT) }
+            val u = Array(VP8_CHROMA_BLOCK_COUNT) { IntArray(VP8_BLOCK_COEFFICIENT_COUNT) }
+            val v = Array(VP8_CHROMA_BLOCK_COUNT) { IntArray(VP8_BLOCK_COEFFICIENT_COUNT) }
+
+            if (!mode.skipCoefficients) {
+                val lumaResult = decodeVp8CoefficientPlane(
+                    reader = reader,
+                    probabilities = probabilities,
+                    type = VP8_COEFFICIENT_TYPE_LUMA,
+                    macroblockX = macroblockX,
+                    blockColumns = VP8_BLOCKS_PER_MACROBLOCK_SIDE,
+                    blockRows = VP8_BLOCKS_PER_MACROBLOCK_SIDE,
+                    topNonZero = topLumaNonZero,
+                    leftNonZero = leftLumaNonZero,
+                    destination = luma,
+                )
+                if (!lumaResult) return Vp8MacroblockCoefficientDecodeResult.Invalid
+
+                val uResult = decodeVp8CoefficientPlane(
+                    reader = reader,
+                    probabilities = probabilities,
+                    type = VP8_COEFFICIENT_TYPE_CHROMA,
+                    macroblockX = macroblockX,
+                    blockColumns = VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE,
+                    blockRows = VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE,
+                    topNonZero = topUNonZero,
+                    leftNonZero = leftUNonZero,
+                    destination = u,
+                )
+                if (!uResult) return Vp8MacroblockCoefficientDecodeResult.Invalid
+
+                val vResult = decodeVp8CoefficientPlane(
+                    reader = reader,
+                    probabilities = probabilities,
+                    type = VP8_COEFFICIENT_TYPE_CHROMA,
+                    macroblockX = macroblockX,
+                    blockColumns = VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE,
+                    blockRows = VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE,
+                    topNonZero = topVNonZero,
+                    leftNonZero = leftVNonZero,
+                    destination = v,
+                )
+                if (!vResult) return Vp8MacroblockCoefficientDecodeResult.Invalid
+            } else {
+                clearVp8CoefficientContexts(
+                    macroblockX = macroblockX,
+                    blockColumns = VP8_BLOCKS_PER_MACROBLOCK_SIDE,
+                    blockRows = VP8_BLOCKS_PER_MACROBLOCK_SIDE,
+                    topNonZero = topLumaNonZero,
+                    leftNonZero = leftLumaNonZero,
+                )
+                clearVp8CoefficientContexts(
+                    macroblockX = macroblockX,
+                    blockColumns = VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE,
+                    blockRows = VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE,
+                    topNonZero = topUNonZero,
+                    leftNonZero = leftUNonZero,
+                )
+                clearVp8CoefficientContexts(
+                    macroblockX = macroblockX,
+                    blockColumns = VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE,
+                    blockRows = VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE,
+                    topNonZero = topVNonZero,
+                    leftNonZero = leftVNonZero,
+                )
+            }
+
+            macroblocks += Vp8MacroblockCoefficients(luma = luma, u = u, v = v)
+        }
+    }
+
+    return Vp8MacroblockCoefficientDecodeResult.Macroblocks(macroblocks)
+}
+
+private fun decodeVp8CoefficientPlane(
+    reader: Vp8BoolReader,
+    probabilities: Vp8CoefficientProbabilities,
+    type: Int,
+    macroblockX: Int,
+    blockColumns: Int,
+    blockRows: Int,
+    topNonZero: BooleanArray,
+    leftNonZero: BooleanArray,
+    destination: Array<IntArray>,
+): Boolean {
+    for (blockY in 0 until blockRows) {
+        for (blockX in 0 until blockColumns) {
+            val blockIndex = blockY * blockColumns + blockX
+            val topIndex = macroblockX * blockColumns + blockX
+            val context = vp8CoefficientContext(
+                leftHasNonZero = leftNonZero[blockY],
+                topHasNonZero = topNonZero[topIndex],
+            )
+            val result = decodeVp8CoefficientBlock(
+                reader = reader,
+                probabilities = probabilities.tokenProbabilities(
+                    type = type,
+                    band = VP8_COEFFICIENT_BAND_FIRST,
+                    context = context,
+                ),
+            )
+            if (result !is Vp8CoefficientDecodeResult.Block) return false
+            destination[blockIndex] = result.coefficients
+            leftNonZero[blockY] = result.hasNonZero
+            topNonZero[topIndex] = result.hasNonZero
+        }
+    }
+    return true
+}
+
+private fun clearVp8CoefficientContexts(
+    macroblockX: Int,
+    blockColumns: Int,
+    blockRows: Int,
+    topNonZero: BooleanArray,
+    leftNonZero: BooleanArray,
+) {
+    for (blockY in 0 until blockRows) leftNonZero[blockY] = false
+    for (blockX in 0 until blockColumns) topNonZero[macroblockX * blockColumns + blockX] = false
+}
+
 internal fun dequantizeVp8CoefficientBlock(
     coefficients: IntArray,
     dcQuant: Int,
@@ -1634,7 +1805,12 @@ private const val VP8_COEFFICIENT_PROBABILITY_TOTAL: Int =
 private const val VP8_BLOCK_SIZE: Int = 4
 private const val VP8_BLOCKS_PER_MACROBLOCK_SIDE: Int = 4
 private const val VP8_LUMA_BLOCK_COUNT: Int = 16
+private const val VP8_CHROMA_BLOCKS_PER_MACROBLOCK_SIDE: Int = 2
+private const val VP8_CHROMA_BLOCK_COUNT: Int = 4
 private const val VP8_MACROBLOCK_SIZE: Int = 16
+private const val VP8_COEFFICIENT_TYPE_LUMA: Int = 0
+private const val VP8_COEFFICIENT_TYPE_CHROMA: Int = 2
+private const val VP8_COEFFICIENT_BAND_FIRST: Int = 0
 
 private fun vp8CoefficientProbabilityIndex(type: Int, band: Int, context: Int, probability: Int): Int =
     (((type * VP8_COEFFICIENT_BAND_COUNT + band) * VP8_COEFFICIENT_CONTEXT_COUNT + context) *

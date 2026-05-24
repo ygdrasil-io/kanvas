@@ -580,6 +580,122 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 macroblock coefficient decoder reads selected row partitions`() {
+        val partition0 = ByteArray(16)
+        val partition1 = byteArrayOf(0xB7.toByte(), 0x11, 0x00, 0x00) + ByteArray(32)
+        val data = partition0 + partition1
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 2, partitionCount = 2),
+            coefficientPartitions = listOf(
+                Vp8CoefficientPartition(offset = 0, end = partition0.size),
+                Vp8CoefficientPartition(offset = partition0.size, end = data.size),
+            ),
+        )
+        val modes = List(2) {
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.DC,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+            )
+        }
+
+        val result = decodeVp8MacroblockCoefficients(
+            data = data,
+            layout = layout,
+            macroblockModes = modes,
+            probabilities = Vp8CoefficientProbabilities.filled(128),
+        )
+
+        assertTrue(result is Vp8MacroblockCoefficientDecodeResult.Macroblocks)
+        val macroblocks = (result as Vp8MacroblockCoefficientDecodeResult.Macroblocks).macroblocks
+        assertEquals(2, macroblocks.size)
+        assertTrue(macroblocks[0].luma.all { block -> block.all { it == 0 } })
+        assertTrue(macroblocks[0].u.all { block -> block.all { it == 0 } })
+        assertTrue(macroblocks[0].v.all { block -> block.all { it == 0 } })
+        assertArrayEquals(
+            IntArray(16).also {
+                it[1] = -1
+                it[4] = 2
+            },
+            macroblocks[1].luma[0],
+        )
+        assertTrue(macroblocks[1].luma.drop(1).all { block -> block.all { it == 0 } })
+    }
+
+    @Test
+    fun `VP8 macroblock coefficient decoder preserves skipped coefficient contexts`() {
+        val partition = byteArrayOf(0xB7.toByte(), 0x11, 0x00, 0x00) + ByteArray(32)
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 2, macroblockHeight = 1, partitionCount = 1),
+            coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = partition.size)),
+        )
+        val modes = listOf(
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.DC,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = true,
+            ),
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.DC,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+            ),
+        )
+
+        val result = decodeVp8MacroblockCoefficients(
+            data = partition,
+            layout = layout,
+            macroblockModes = modes,
+            probabilities = Vp8CoefficientProbabilities.filled(128),
+        )
+
+        assertTrue(result is Vp8MacroblockCoefficientDecodeResult.Macroblocks)
+        val macroblocks = (result as Vp8MacroblockCoefficientDecodeResult.Macroblocks).macroblocks
+        assertTrue(macroblocks[0].luma.all { block -> block.all { it == 0 } })
+        assertArrayEquals(
+            IntArray(16).also {
+                it[1] = -1
+                it[4] = 2
+            },
+            macroblocks[1].luma[0],
+        )
+    }
+
+    @Test
+    fun `VP8 macroblock coefficient decoder rejects inconsistent inputs`() {
+        val layout = Vp8LossyBitstreamLayout(
+            header = vp8CoefficientTestHeader(macroblockWidth = 1, macroblockHeight = 1, partitionCount = 1),
+            coefficientPartitions = listOf(Vp8CoefficientPartition(offset = 0, end = 1)),
+        )
+        val modes = listOf(
+            Vp8MacroblockMode(
+                yMode = Vp8LumaPredictionMode.DC,
+                uvMode = Vp8IntraPredictionMode.DC,
+                skipCoefficients = false,
+            ),
+        )
+
+        assertEquals(
+            Vp8MacroblockCoefficientDecodeResult.Invalid,
+            decodeVp8MacroblockCoefficients(
+                data = ByteArray(0),
+                layout = layout,
+                macroblockModes = modes,
+                probabilities = Vp8CoefficientProbabilities.filled(128),
+            ),
+        )
+        assertEquals(
+            Vp8MacroblockCoefficientDecodeResult.Invalid,
+            decodeVp8MacroblockCoefficients(
+                data = ByteArray(1),
+                layout = layout,
+                macroblockModes = emptyList(),
+                probabilities = Vp8CoefficientProbabilities.filled(128),
+            ),
+        )
+    }
+
+    @Test
     fun `VP8 coefficient probability update parser preserves base table without update bits`() {
         val base = Vp8CoefficientProbabilities.filled(128)
         val updateProbabilities = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 255 }
@@ -2035,6 +2151,28 @@ class SkWebpKotlinCodecTest {
         )
 
     private fun clampByte(value: Int): Int = value.coerceIn(0, 255)
+
+    private fun vp8CoefficientTestHeader(
+        macroblockWidth: Int,
+        macroblockHeight: Int,
+        partitionCount: Int,
+    ): Vp8LossyFrameHeader =
+        Vp8LossyFrameHeader(
+            colorSpace = 0,
+            clampType = 0,
+            macroblockWidth = macroblockWidth,
+            macroblockHeight = macroblockHeight,
+            coefficientPartitionCount = partitionCount,
+            loopFilter = Vp8LoopFilterHeader(simpleFilter = false, level = 0, sharpness = 0),
+            quantization = Vp8QuantizationHeader(
+                yAcIndex = 0,
+                yDcDelta = 0,
+                y2DcDelta = 0,
+                y2AcDelta = 0,
+                uvDcDelta = 0,
+                uvAcDelta = 0,
+            ),
+        )
 
     private fun colorCacheIndex(pixel: Int, bits: Int): Int =
         (pixel * 0x1e35a7bd) ushr (32 - bits)
