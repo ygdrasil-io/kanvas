@@ -54,9 +54,8 @@ There are two pure Kotlin font-manager modes:
 
 The JVM/cpu-raster `SkFontMgr.RefDefault()` extension now uses
 `OpenTypeSystemFontMgr` and never calls `java.awt.GraphicsEnvironment`. The
-optional AWT backend remains exposed only as the deprecated
-`org.skia.foundation.awt.SkFontMgr.RefAwtDefault()` extension until the legacy
-font surfaces are removed.
+old AWT system font manager and `RefAwtDefault()` entry point have been
+removed from the font scope.
 
 The optional AWT shaper follows the same rule: JVM callers can opt in through
 `SkShaper.MakeJvmAwtTextLayout()`, while `SkShaper.MakePrimitive()` remains
