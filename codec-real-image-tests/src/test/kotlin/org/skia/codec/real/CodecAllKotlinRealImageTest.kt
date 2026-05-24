@@ -513,6 +513,63 @@ class CodecAllKotlinRealImageTest {
                 pixelProbes = listOf(PixelProbe(0, 0, 0xFF808080.toInt(), tolerance = 1)),
             ),
             RealImageFixture(
+                name = "webp animated vp8l blend dispose",
+                path = "/codec-real-images/webp/animated_vp8l_blend_dispose_4x1.webp",
+                format = SkEncodedImageFormat.kWEBP,
+                width = 4,
+                height = 1,
+                frameCount = 3,
+                hasAlpha = true,
+                frameInfo = listOf(
+                    FrameInfoExpectation(
+                        index = 0,
+                        requiredFrame = SkCodec.kNoFrame,
+                        durationMs = 10,
+                        alphaType = SkAlphaType.kUnpremul,
+                        frameRect = SkIRect.MakeXYWH(0, 0, 4, 1),
+                    ),
+                    FrameInfoExpectation(
+                        index = 1,
+                        requiredFrame = 0,
+                        durationMs = 20,
+                        alphaType = SkAlphaType.kUnpremul,
+                        frameRect = SkIRect.MakeXYWH(0, 0, 4, 1),
+                    ),
+                    FrameInfoExpectation(
+                        index = 2,
+                        requiredFrame = 1,
+                        durationMs = 30,
+                        alphaType = SkAlphaType.kUnpremul,
+                        frameRect = SkIRect.MakeXYWH(2, 0, 2, 1),
+                    ),
+                ),
+                pixelProbes = listOf(
+                    PixelProbe(0, 0, 0x00000000),
+                    PixelProbe(1, 0, 0xFFC80000.toInt()),
+                    PixelProbe(3, 0, 0xFFC80000.toInt()),
+                ),
+                framePixelProbes = listOf(
+                    FramePixelProbe(
+                        1,
+                        listOf(
+                            PixelProbe(0, 0, 0x00000000),
+                            PixelProbe(1, 0, 0xFF640064.toInt()),
+                            PixelProbe(2, 0, 0xFF640064.toInt()),
+                            PixelProbe(3, 0, 0xFFC80000.toInt()),
+                        ),
+                    ),
+                    FramePixelProbe(
+                        2,
+                        listOf(
+                            PixelProbe(0, 0, 0x00000000),
+                            PixelProbe(1, 0, 0x00000000),
+                            PixelProbe(2, 0, 0xFF00C800.toInt()),
+                            PixelProbe(3, 0, 0xFF00C800.toInt()),
+                        ),
+                    ),
+                ),
+            ),
+            RealImageFixture(
                 name = "webp vp8x animated stoplight",
                 path = "/codec-real-images/webp/stoplight.webp",
                 format = SkEncodedImageFormat.kWEBP,
