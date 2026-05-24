@@ -9,8 +9,8 @@ import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
 @Disabled(
-    "STUB.DRAW_VERTICES_VERTEX_BLEND: VerticesGM renders ~59% because drawVertices " +
-        "only combines vertex colors with shader samples for kSrc/kDst/kModulate",
+    "STUB.DRAW_VERTICES_COLOR_FILTER: VerticesGM still renders ~59% after vertex/shader blend " +
+        "coverage; remaining parity needs paint colorFilter support on vertices, including kDarken.",
 )
 class VerticesTest {
 

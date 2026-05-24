@@ -365,9 +365,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      *     `w0 + w1 + w2 = 1` ;
      *  2. linearly interpolates the per-vertex ARGB values per
      *     channel ;
-     *  3. modulates by `paint.color.alpha` (paint colour acts as a
+     *  3. if [paint] has a shader, samples it in device space and
+     *     combines the vertex colour with the shader sample via
+     *     [vertexBlend] ;
+     *  4. modulates by `paint.color.alpha` (paint colour acts as a
      *     post-multiplier when [SkVertices.colors] are present) ;
-     *  4. dispatches to [blend] with `paint.blendMode`.
+     *  5. dispatches to [blend] with `paint.blendMode`.
      *
      * Color-space xform is applied to each interpolated colour
      * before blending — same pipeline as the solid-colour
@@ -381,8 +384,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         p0x: Float, p0y: Float, c0: SkColor,
         p1x: Float, p1y: Float, c1: SkColor,
         p2x: Float, p2y: Float, c2: SkColor,
+        vertexBlend: SkBlendMode,
         ctm: SkMatrix, clip: SkIRect, paint: SkPaint,
     ) {
+        val shader = paint.shader
+        shader?.setupForDraw(ctm, xformSteps)
+
         val (ax, ay) = ctm.mapXY(p0x, p0y)
         val (bx, by) = ctm.mapXY(p1x, p1y)
         val (cx, cy) = ctm.mapXY(p2x, p2y)
@@ -404,6 +411,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         val mode = paint.blendMode
         val blender = paint.blender
         val paintAlpha = SkColorGetA(paint.color)
+        val shaderRow = IntArray(1)
 
         val a0a = SkColorGetA(c0); val a0r = SkColorGetR(c0)
         val a0g = SkColorGetG(c0); val a0b = SkColorGetB(c0)
@@ -424,9 +432,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 val ri = (a0r * w0 + a1r * w1 + a2r * w2).toInt().coerceIn(0, 255)
                 val gi = (a0g * w0 + a1g * w1 + a2g * w2).toInt().coerceIn(0, 255)
                 val bi = (a0b * w0 + a1b * w1 + a2b * w2).toInt().coerceIn(0, 255)
-                val finalA = (ai * paintAlpha + 127) / 255
+                val vertexColor = transformPaintColor(SkColorSetARGB(ai, ri, gi, bi))
+                val combinedRaw = if (shader != null) {
+                    shader.shadeRow(x, y, 1, shaderRow)
+                    blendPixel(vertexColor, shaderRow[0], vertexBlend)
+                } else {
+                    vertexColor
+                }
+                val combinedA = SkColorGetA(combinedRaw)
+                val finalA = (combinedA * paintAlpha + 127) / 255
                 if (finalA == 0 && !modeAffectsZeroAlphaSrc(mode)) continue
-                val src = transformPaintColor(SkColorSetARGB(finalA, ri, gi, bi))
+                val src = SkColorSetARGB(
+                    finalA, SkColorGetR(combinedRaw), SkColorGetG(combinedRaw), SkColorGetB(combinedRaw),
+                )
                 dispatchBlend(x, y, src, mode, blender)
             }
         }
@@ -448,9 +466,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      *
      * @param vertexBlend mirrors the `blendMode` argument of
      *   `SkCanvas::drawVertices` — combines the per-vertex colour
-     *   with the texture sample (currently only [SkBlendMode.kSrc],
-     *   [SkBlendMode.kModulate] and [SkBlendMode.kDst] are honoured ;
-     *   other modes default to `kModulate` for now).
+     *   with the texture sample.
      */
     @Suppress("LongParameterList")
     internal fun drawTexturedTriangle(
@@ -498,11 +514,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 val texColor = shader.sampleAtLocal(uvX, uvY)
 
                 val combinedRaw: SkColor = if (haveColors) {
+                    val color0 = c0 ?: error("drawTexturedTriangle: missing c0 despite haveColors")
+                    val color1 = c1 ?: error("drawTexturedTriangle: missing c1 despite haveColors")
+                    val color2 = c2 ?: error("drawTexturedTriangle: missing c2 despite haveColors")
                     val vci = combineVertexColorTexture(
-                        SkColorGetA(c0!!) * w0 + SkColorGetA(c1!!) * w1 + SkColorGetA(c2!!) * w2,
-                        SkColorGetR(c0) * w0 + SkColorGetR(c1) * w1 + SkColorGetR(c2) * w2,
-                        SkColorGetG(c0) * w0 + SkColorGetG(c1) * w1 + SkColorGetG(c2) * w2,
-                        SkColorGetB(c0) * w0 + SkColorGetB(c1) * w1 + SkColorGetB(c2) * w2,
+                        SkColorGetA(color0) * w0 + SkColorGetA(color1) * w1 + SkColorGetA(color2) * w2,
+                        SkColorGetR(color0) * w0 + SkColorGetR(color1) * w1 + SkColorGetR(color2) * w2,
+                        SkColorGetG(color0) * w0 + SkColorGetG(color1) * w1 + SkColorGetG(color2) * w2,
+                        SkColorGetB(color0) * w0 + SkColorGetB(color1) * w1 + SkColorGetB(color2) * w2,
                         texColor, vertexBlend,
                     )
                     vci
@@ -526,34 +545,20 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      * interpolated vertex colour (passed as float per channel to
      * preserve barycentric precision) with the sampled texture
      * colour under the requested vertex blend mode. Honours the
-     * common `kSrc` / `kDst` / `kModulate` modes ; falls back to
-     * `kModulate` for the rest (deferred to a future polish slice).
+     * full [SkBlendMode] set, with the vertex colour as `src` and the
+     * sampled texture as `dst`.
      */
     private fun combineVertexColorTexture(
         vA: Float, vR: Float, vG: Float, vB: Float,
         texColor: SkColor,
         vertexBlend: SkBlendMode,
     ): SkColor {
-        val tA = SkColorGetA(texColor)
-        val tR = SkColorGetR(texColor)
-        val tG = SkColorGetG(texColor)
-        val tB = SkColorGetB(texColor)
         val viA = vA.toInt().coerceIn(0, 255)
         val viR = vR.toInt().coerceIn(0, 255)
         val viG = vG.toInt().coerceIn(0, 255)
         val viB = vB.toInt().coerceIn(0, 255)
-        return when (vertexBlend) {
-            SkBlendMode.kSrc -> SkColorSetARGB(viA, viR, viG, viB)
-            SkBlendMode.kDst -> texColor
-            else -> {
-                // kModulate (and anything else) : per-channel multiply.
-                val a = (viA * tA + 127) / 255
-                val r = (viR * tR + 127) / 255
-                val g = (viG * tG + 127) / 255
-                val b = (viB * tB + 127) / 255
-                SkColorSetARGB(a, r, g, b)
-            }
-        }
+        val vertexColor = transformPaintColor(SkColorSetARGB(viA, viR, viG, viB))
+        return blendPixel(vertexColor, texColor, vertexBlend)
     }
 
     /**

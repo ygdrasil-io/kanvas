@@ -310,6 +310,52 @@ class DrawVerticesTest {
     }
 
     @Test
+    fun `texCoords + per-vertex colors honor SrcOver vertex blend`() {
+        assertTexturedVertexBlend(
+            SkBlendMode.kSrcOver,
+            vertexColor = 0x80FF0000.toInt(),
+            textureColor = 0xFF0000FF.toInt(),
+        )
+    }
+
+    @Test
+    fun `texCoords + per-vertex colors honor Screen vertex blend`() {
+        assertTexturedVertexBlend(
+            SkBlendMode.kScreen,
+            vertexColor = 0xFF00AA44.toInt(),
+            textureColor = 0xFF882200.toInt(),
+        )
+    }
+
+    @Test
+    fun `texCoords + per-vertex colors honor Overlay vertex blend`() {
+        assertTexturedVertexBlend(
+            SkBlendMode.kOverlay,
+            vertexColor = 0xFFCC3344.toInt(),
+            textureColor = 0xFF4488CC.toInt(),
+        )
+    }
+
+    @Test
+    fun `texCoords + per-vertex colors honor Hue vertex blend`() {
+        assertTexturedVertexBlend(
+            SkBlendMode.kHue,
+            vertexColor = 0xFFFF0000.toInt(),
+            textureColor = 0xFF3366CC.toInt(),
+        )
+    }
+
+    @Test
+    fun `per-vertex colors without texCoords still blend with paint shader`() {
+        assertTexturedVertexBlend(
+            SkBlendMode.kOverlay,
+            vertexColor = 0xFFCC3344.toInt(),
+            textureColor = 0xFF4488CC.toInt(),
+            includeTexCoords = false,
+        )
+    }
+
+    @Test
     fun `kTriangleStrip tessellates a strip into a quad`() {
         val (bm, canvas) = newWhiteCanvas()
         // Strip : (5,5)-(25,5)-(5,25)-(25,25). Two triangles cover quad.
@@ -320,5 +366,33 @@ class DrawVerticesTest {
         canvas.drawVertices(v, SkBlendMode.kSrcOver, SkPaint(0xFF0000FF.toInt()))
         assertEquals(0xFF0000FF.toInt(), bm.getPixel(15, 15))
         assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(2, 2))
+    }
+
+    private fun assertTexturedVertexBlend(
+        mode: SkBlendMode,
+        vertexColor: Int,
+        textureColor: Int,
+        includeTexCoords: Boolean = true,
+    ) {
+        val (bm, canvas) = newWhiteCanvas(20, 20)
+        val atlas = SkBitmap(2, 2).apply { eraseColor(textureColor) }.asImage()
+        val paint = SkPaint(0xFF000000.toInt()).apply {
+            shader = atlas.makeShader()
+            blendMode = SkBlendMode.kSrc
+            isAntiAlias = false
+        }
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangles,
+            arrayOf(SkPoint(2f, 2f), SkPoint(18f, 2f), SkPoint(2f, 18f)),
+            texCoords = if (includeTexCoords) {
+                arrayOf(SkPoint(0f, 0f), SkPoint(0f, 0f), SkPoint(0f, 0f))
+            } else {
+                null
+            },
+            colors = intArrayOf(vertexColor, vertexColor, vertexColor),
+        )
+        canvas.drawVertices(v, mode, paint)
+        val expected = SkBitmapDevice(SkBitmap(1, 1)).blendPixel(vertexColor, textureColor, mode)
+        assertEquals(expected, bm.getPixel(6, 6))
     }
 }
