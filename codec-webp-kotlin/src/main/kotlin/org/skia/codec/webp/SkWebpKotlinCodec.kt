@@ -292,8 +292,8 @@ private fun parseVp8l(data: ByteArray, offset: Int, size: Long): WebpMetadata? {
 
 private fun parseVp8(data: ByteArray, offset: Int, size: Long): WebpMetadata? {
     if (size < VP8_KEYFRAME_HEADER_SIZE) return null
-    val frameTag = data[offset].toInt() and 0xFF
-    if ((frameTag and 0x01) != 0) return null
+    val frameTag = parseVp8FrameTag(data, offset, size) ?: return null
+    if (!frameTag.keyFrame) return null
     if ((data[offset + 3].toInt() and 0xFF) != 0x9D ||
         (data[offset + 4].toInt() and 0xFF) != 0x01 ||
         (data[offset + 5].toInt() and 0xFF) != 0x2A
@@ -307,6 +307,28 @@ private fun parseVp8(data: ByteArray, offset: Int, size: Long): WebpMetadata? {
         width = width,
         height = height,
         format = WebpBitstreamFormat.VP8,
+        payloadOffset = offset,
+        payloadSize = size.toInt(),
+    )
+}
+
+internal data class Vp8FrameTag(
+    val keyFrame: Boolean,
+    val version: Int,
+    val showFrame: Boolean,
+    val firstPartitionSize: Int,
+)
+
+internal fun parseVp8FrameTag(data: ByteArray, offset: Int, size: Long): Vp8FrameTag? {
+    if (size < 3 || size > Int.MAX_VALUE || offset < 0 || offset + size > data.size) return null
+    val tag = read24LE(data, offset)
+    val firstPartitionSize = tag ushr 5
+    if (firstPartitionSize > size.toInt() - VP8_KEYFRAME_HEADER_SIZE) return null
+    return Vp8FrameTag(
+        keyFrame = (tag and 0x01) == 0,
+        version = (tag ushr 1) and 0x07,
+        showFrame = ((tag ushr 4) and 0x01) != 0,
+        firstPartitionSize = firstPartitionSize,
     )
 }
 
@@ -996,3 +1018,63 @@ private class Vp8lBitReader(
         return value
     }
 }
+
+internal class Vp8BoolReader(
+    private val data: ByteArray,
+    private val start: Int = 0,
+    private val end: Int = data.size,
+) {
+    private val validRange: Boolean = start >= 0 && end >= start && end <= data.size
+    private var offset: Int = start
+    private var range: Int = 255
+    private var value: Int = 0
+    private var bitCount: Int = 8
+
+    init {
+        if (!validRange) {
+            offset = end
+        } else {
+            value = readByte() shl 8
+            value = value or readByte()
+        }
+    }
+
+    fun readBit(probability: Int): Int? {
+        if (!validRange || probability !in 1..255) return null
+        val split = 1 + (((range - 1) * probability) ushr 8)
+        val bigSplit = split shl 8
+        var bit = 0
+        if (value >= bigSplit) {
+            range -= split
+            value -= bigSplit
+            bit = 1
+        } else {
+            range = split
+        }
+        while (range < 128) {
+            range = range shl 1
+            value = (value shl 1) and 0xFFFF
+            bitCount--
+            if (bitCount == 0) {
+                if (offset >= end) return null
+                value = value or readByte()
+                bitCount = 8
+            }
+        }
+        return bit
+    }
+
+    fun readLiteral(bitCount: Int): Int? {
+        if (bitCount !in 0..31) return null
+        var value = 0
+        repeat(bitCount) {
+            value = (value shl 1) or (readBit(VP8_BOOL_HALF_PROBABILITY) ?: return null)
+        }
+        return value
+    }
+
+    private fun readByte(): Int =
+        if (offset < end) data[offset++].toInt() and 0xFF else 0
+}
+
+private const val VP8_BOOL_HALF_PROBABILITY: Int = 128
