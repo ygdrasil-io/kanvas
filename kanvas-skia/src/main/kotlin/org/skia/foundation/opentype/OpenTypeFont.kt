@@ -34,9 +34,12 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
 import kotlin.math.abs
+import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sign
+import kotlin.math.sqrt
 
 /**
  * Pure-Kotlin OpenType/TrueType font manager.
@@ -290,6 +293,20 @@ public class OpenTypeTypeface private constructor(
                     ?: return emptyList()
                 listOf(OpenTypeColorPath(null, positionedPath(currentPath, penX, baselineY), shader = shader, clipPaths = clipPaths))
             }
+            is OpenTypeColorPaint.RadialGradient -> {
+                val currentPath = glyphPath ?: return emptyList()
+                if (currentPath.isEmpty()) return emptyList()
+                val shader = colorRadialGradientShader(paint, palette, penX, baselineY, size, scaleX, skewX, transform)
+                    ?: return emptyList()
+                listOf(OpenTypeColorPath(null, positionedPath(currentPath, penX, baselineY), shader = shader, clipPaths = clipPaths))
+            }
+            is OpenTypeColorPaint.SweepGradient -> {
+                val currentPath = glyphPath ?: return emptyList()
+                if (currentPath.isEmpty()) return emptyList()
+                val shader = colorSweepGradientShader(paint, palette, penX, baselineY, size, scaleX, skewX, transform)
+                    ?: return emptyList()
+                listOf(OpenTypeColorPath(null, positionedPath(currentPath, penX, baselineY), shader = shader, clipPaths = clipPaths))
+            }
             is OpenTypeColorPaint.Glyph -> {
                 val childPath = font.glyphPath(paint.glyphId, size, scaleX, skewX, variationPosition)
                     ?.makeTransform(transform)
@@ -375,24 +392,7 @@ public class OpenTypeTypeface private constructor(
         skewX: Float,
         transform: SkMatrix,
     ): SkShader? {
-        val sortedStops = paint.colorLine.stops
-            .withIndex()
-            .sortedWith(compareBy<IndexedValue<OpenTypeColorStop>> { it.value.offset }.thenBy { it.index })
-            .map { it.value }
-        val firstOffset = sortedStops.first().offset
-        val lastOffset = sortedStops.last().offset
-        val offsetSpan = lastOffset - firstOffset
-        if (offsetSpan <= 0.000001f) return null
-        val colors = IntArray(sortedStops.size)
-        val positions = FloatArray(sortedStops.size)
-        for (i in sortedStops.indices) {
-            val stop = sortedStops[i]
-            if (stop.paletteIndex == COLR_FOREGROUND_PALETTE_INDEX) return null
-            val color = palette.getOrNull(stop.paletteIndex) ?: return null
-            val alpha = ((SkColorGetA(color) / 255f) * stop.alpha * 255f + 0.5f).toInt().coerceIn(0, 255)
-            colors[i] = SkColorSetARGB(alpha, SkColorGetR(color), SkColorGetG(color), SkColorGetB(color))
-            positions[i] = (stop.offset - firstOffset) / offsetSpan
-        }
+        val stops = colorShaderStops(paint.colorLine, palette) ?: return null
         val p0 = colorFontPointToCanvas(paint.x0, paint.y0, size, scaleX, skewX, transform, penX, baselineY)
         val p1 = colorFontPointToCanvas(paint.x1, paint.y1, size, scaleX, skewX, transform, penX, baselineY)
         val p2 = colorFontPointToCanvas(paint.x2, paint.y2, size, scaleX, skewX, transform, penX, baselineY)
@@ -412,13 +412,78 @@ public class OpenTypeTypeface private constructor(
         return OpenTypeLinearGradientShader(
             p0 = p0,
             p1 = end,
-            srcColors = colors,
-            positions = positions,
-            tileMode = paint.colorLine.extend.toTileMode(),
-            tBias = firstOffset,
-            tScale = offsetSpan,
+            srcColors = stops.colors,
+            positions = stops.positions,
+            tileMode = stops.tileMode,
+            tBias = stops.tBias,
+            tScale = stops.tScale,
         )
     }
+
+    private fun colorRadialGradientShader(
+        paint: OpenTypeColorPaint.RadialGradient,
+        palette: List<Int>,
+        penX: Float,
+        baselineY: Float,
+        size: Float,
+        scaleX: Float,
+        skewX: Float,
+        transform: SkMatrix,
+    ): SkShader? {
+        if (!transform.isIdentity) return null
+        val stops = colorShaderStops(paint.colorLine, palette) ?: return null
+        val c0 = colorFontPointToCanvas(paint.x0, paint.y0, size, scaleX, skewX, transform, penX, baselineY)
+        val c1 = colorFontPointToCanvas(paint.x1, paint.y1, size, scaleX, skewX, transform, penX, baselineY)
+        val s = font.scale(size)
+        val r0 = paint.radius0 * s * abs(scaleX)
+        val r1 = paint.radius1 * s * abs(scaleX)
+        if (r0 < 0f || r1 < 0f) return null
+        if (c0.fX == c1.fX && c0.fY == c1.fY && r0 == r1) return null
+        return OpenTypeTwoPointRadialGradientShader(c0, r0, c1, r1, stops.colors, stops.positions, stops.tileMode, stops.tBias, stops.tScale)
+    }
+
+    private fun colorSweepGradientShader(
+        paint: OpenTypeColorPaint.SweepGradient,
+        palette: List<Int>,
+        penX: Float,
+        baselineY: Float,
+        size: Float,
+        scaleX: Float,
+        skewX: Float,
+        transform: SkMatrix,
+    ): SkShader? {
+        if (!transform.isIdentity) return null
+        val stops = colorShaderStops(paint.colorLine, palette) ?: return null
+        val center = colorFontPointToCanvas(paint.centerX, paint.centerY, size, scaleX, skewX, transform, penX, baselineY)
+        val startAngle = colorSweepAngleToDesignDegrees(paint.startAngle)
+        val endAngle = colorSweepAngleToDesignDegrees(paint.endAngle)
+        if (!startAngle.isFinite() || !endAngle.isFinite() || startAngle == endAngle) return null
+        return OpenTypeSweepGradientShader(center, startAngle, endAngle, stops.colors, stops.positions, stops.tileMode, stops.tBias, stops.tScale)
+    }
+
+    private fun colorShaderStops(colorLine: OpenTypeColorLine, palette: List<Int>): OpenTypeShaderStops? {
+        val sortedStops = colorLine.stops
+            .withIndex()
+            .sortedWith(compareBy<IndexedValue<OpenTypeColorStop>> { it.value.offset }.thenBy { it.index })
+            .map { it.value }
+        val firstOffset = sortedStops.first().offset
+        val lastOffset = sortedStops.last().offset
+        val offsetSpan = lastOffset - firstOffset
+        if (offsetSpan <= 0.000001f) return null
+        val colors = IntArray(sortedStops.size)
+        val positions = FloatArray(sortedStops.size)
+        for (i in sortedStops.indices) {
+            val stop = sortedStops[i]
+            if (stop.paletteIndex == COLR_FOREGROUND_PALETTE_INDEX) return null
+            val color = palette.getOrNull(stop.paletteIndex) ?: return null
+            val alpha = ((SkColorGetA(color) / 255f) * stop.alpha * 255f + 0.5f).toInt().coerceIn(0, 255)
+            colors[i] = SkColorSetARGB(alpha, SkColorGetR(color), SkColorGetG(color), SkColorGetB(color))
+            positions[i] = (stop.offset - firstOffset) / offsetSpan
+        }
+        return OpenTypeShaderStops(colors, positions, colorLine.extend.toTileMode(), firstOffset, offsetSpan)
+    }
+
+    private fun colorSweepAngleToDesignDegrees(angle: Float): Float = (angle + 1f) * 180f
 
     private fun colorFontPointToCanvas(
         x: Int,
@@ -1792,6 +1857,30 @@ private class ParsedTrueTypeFont(
                         y2 = reader.i16(paintOffset + 14)?.toInt() ?: return null,
                     )
                 }
+                6 -> {
+                    if (!reader.fits(paintOffset, 16)) return null
+                    val colorLineOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
+                    OpenTypeColorPaint.RadialGradient(
+                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset) ?: return null,
+                        x0 = reader.i16(paintOffset + 4)?.toInt() ?: return null,
+                        y0 = reader.i16(paintOffset + 6)?.toInt() ?: return null,
+                        radius0 = reader.u16(paintOffset + 8) ?: return null,
+                        x1 = reader.i16(paintOffset + 10)?.toInt() ?: return null,
+                        y1 = reader.i16(paintOffset + 12)?.toInt() ?: return null,
+                        radius1 = reader.u16(paintOffset + 14) ?: return null,
+                    )
+                }
+                8 -> {
+                    if (!reader.fits(paintOffset, 12)) return null
+                    val colorLineOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
+                    OpenTypeColorPaint.SweepGradient(
+                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset) ?: return null,
+                        centerX = reader.i16(paintOffset + 4)?.toInt() ?: return null,
+                        centerY = reader.i16(paintOffset + 6)?.toInt() ?: return null,
+                        startAngle = reader.f2Dot14(paintOffset + 8) ?: return null,
+                        endAngle = reader.f2Dot14(paintOffset + 10) ?: return null,
+                    )
+                }
                 10 -> {
                     if (!reader.fits(paintOffset, 6)) return null
                     val childOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
@@ -2713,6 +2802,22 @@ internal sealed interface OpenTypeColorPaint {
         val x2: Int,
         val y2: Int,
     ) : OpenTypeColorPaint
+    data class RadialGradient(
+        val colorLine: OpenTypeColorLine,
+        val x0: Int,
+        val y0: Int,
+        val radius0: Int,
+        val x1: Int,
+        val y1: Int,
+        val radius1: Int,
+    ) : OpenTypeColorPaint
+    data class SweepGradient(
+        val colorLine: OpenTypeColorLine,
+        val centerX: Int,
+        val centerY: Int,
+        val startAngle: Float,
+        val endAngle: Float,
+    ) : OpenTypeColorPaint
     data class Glyph(val glyphId: Int, val paint: OpenTypeColorPaint) : OpenTypeColorPaint
     data class ColrGlyph(val glyphId: Int) : OpenTypeColorPaint
     data class Transform(
@@ -2726,6 +2831,14 @@ internal sealed interface OpenTypeColorPaint {
     ) : OpenTypeColorPaint
     data class Translate(val paint: OpenTypeColorPaint, val dx: Int, val dy: Int) : OpenTypeColorPaint
 }
+
+private data class OpenTypeShaderStops(
+    val colors: IntArray,
+    val positions: FloatArray,
+    val tileMode: SkTileMode,
+    val tBias: Float,
+    val tScale: Float,
+)
 
 private class OpenTypeLinearGradientShader(
     private val p0: SkPoint,
@@ -2801,6 +2914,196 @@ private class OpenTypeLinearGradientShader(
             ly += inv.ky
             di += 4
         }
+    }
+}
+
+private class OpenTypeTwoPointRadialGradientShader(
+    private val c0: SkPoint,
+    private val r0: Float,
+    private val c1: SkPoint,
+    private val r1: Float,
+    private val srcColors: IntArray,
+    private val positions: FloatArray,
+    private val tileMode: SkTileMode,
+    private val tBias: Float,
+    private val tScale: Float,
+) : SkShader() {
+    private val xformedColors = IntArray(srcColors.size)
+    private val xformedColorsF16 = FloatArray(srcColors.size * 4)
+    private val dcx = c1.fX - c0.fX
+    private val dcy = c1.fY - c0.fY
+    private val dr = r1 - r0
+
+    override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
+        super.setupForDraw(canvasCtm, xform)
+        transformStopColors(srcColors, xformedColors, xform)
+        transformStopColorsF16(srcColors, xformedColorsF16, xform)
+    }
+
+    override fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray) {
+        val inv = deviceToLocal
+        if (inv == null) {
+            val color = xformedColors.firstOrNull() ?: 0
+            for (i in 0 until count) dst[i] = color
+            return
+        }
+        var lx = inv.sx * (devX + 0.5f) + inv.kx * (devY + 0.5f) + inv.tx
+        var ly = inv.ky * (devX + 0.5f) + inv.sy * (devY + 0.5f) + inv.ty
+        for (i in 0 until count) {
+            val omega = radialOmega(lx, ly)
+            dst[i] = if (omega == null) 0 else lookupStop((omega - tBias) / tScale, positions, xformedColors, tileMode)
+            lx += inv.sx
+            ly += inv.ky
+        }
+    }
+
+    override fun shadeRowF16(devX: Int, devY: Int, count: Int, dst: FloatArray) {
+        require(dst.size >= count * 4) { "dst too small: ${dst.size} < ${count * 4}" }
+        val inv = deviceToLocal
+        if (inv == null) {
+            var di = 0
+            for (i in 0 until count) {
+                dst[di] = xformedColorsF16[0]
+                dst[di + 1] = xformedColorsF16[1]
+                dst[di + 2] = xformedColorsF16[2]
+                dst[di + 3] = xformedColorsF16[3]
+                di += 4
+            }
+            return
+        }
+        var lx = inv.sx * (devX + 0.5f) + inv.kx * (devY + 0.5f) + inv.tx
+        var ly = inv.ky * (devX + 0.5f) + inv.sy * (devY + 0.5f) + inv.ty
+        var di = 0
+        for (i in 0 until count) {
+            val omega = radialOmega(lx, ly)
+            if (omega == null) {
+                dst[di] = 0f
+                dst[di + 1] = 0f
+                dst[di + 2] = 0f
+                dst[di + 3] = 0f
+            } else {
+                lookupStopF16((omega - tBias) / tScale, positions, xformedColorsF16, tileMode, dst, di)
+            }
+            lx += inv.sx
+            ly += inv.ky
+            di += 4
+        }
+    }
+
+    private fun radialOmega(x: Float, y: Float): Float? {
+        val fx = x - c0.fX
+        val fy = y - c0.fY
+        val a = dcx * dcx + dcy * dcy - dr * dr
+        val b = -2f * (fx * dcx + fy * dcy + r0 * dr)
+        val c = fx * fx + fy * fy - r0 * r0
+        val roots = FloatArray(2)
+        var count = 0
+        if (abs(a) <= 0.000001f) {
+            if (abs(b) <= 0.000001f) return null
+            roots[count++] = -c / b
+        } else {
+            val disc = b * b - 4f * a * c
+            if (disc < 0f) return null
+            val s = sqrt(disc)
+            val denom = 2f * a
+            roots[count++] = (-b + s) / denom
+            roots[count++] = (-b - s) / denom
+        }
+        var best: Float? = null
+        for (i in 0 until count) {
+            val omega = roots[i]
+            if (!omega.isFinite()) continue
+            val radius = r0 + dr * omega
+            if (radius <= 0f) continue
+            if (best == null || omega > best) best = omega
+        }
+        return best
+    }
+}
+
+private class OpenTypeSweepGradientShader(
+    private val center: SkPoint,
+    private val startAngle: Float,
+    private val endAngle: Float,
+    private val srcColors: IntArray,
+    private val positions: FloatArray,
+    private val tileMode: SkTileMode,
+    private val tBias: Float,
+    private val tScale: Float,
+) : SkShader() {
+    private val xformedColors = IntArray(srcColors.size)
+    private val xformedColorsF16 = FloatArray(srcColors.size * 4)
+    private val angleSpan = if (startAngle <= endAngle) endAngle - startAngle else startAngle - endAngle
+
+    override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
+        super.setupForDraw(canvasCtm, xform)
+        transformStopColors(srcColors, xformedColors, xform)
+        transformStopColorsF16(srcColors, xformedColorsF16, xform)
+    }
+
+    override fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray) {
+        val inv = deviceToLocal
+        if (inv == null) {
+            val color = xformedColors.firstOrNull() ?: 0
+            for (i in 0 until count) dst[i] = color
+            return
+        }
+        var lx = inv.sx * (devX + 0.5f) + inv.kx * (devY + 0.5f) + inv.tx
+        var ly = inv.ky * (devX + 0.5f) + inv.sy * (devY + 0.5f) + inv.ty
+        for (i in 0 until count) {
+            val rawT = sweepT(canvasAngleToDesignAngle(canvasSweepAngle(lx - center.fX, ly - center.fY)))
+            dst[i] = lookupStop((rawT - tBias) / tScale, positions, xformedColors, tileMode)
+            lx += inv.sx
+            ly += inv.ky
+        }
+    }
+
+    override fun shadeRowF16(devX: Int, devY: Int, count: Int, dst: FloatArray) {
+        require(dst.size >= count * 4) { "dst too small: ${dst.size} < ${count * 4}" }
+        val inv = deviceToLocal
+        if (inv == null) {
+            var di = 0
+            for (i in 0 until count) {
+                dst[di] = xformedColorsF16[0]
+                dst[di + 1] = xformedColorsF16[1]
+                dst[di + 2] = xformedColorsF16[2]
+                dst[di + 3] = xformedColorsF16[3]
+                di += 4
+            }
+            return
+        }
+        var lx = inv.sx * (devX + 0.5f) + inv.kx * (devY + 0.5f) + inv.tx
+        var ly = inv.ky * (devX + 0.5f) + inv.sy * (devY + 0.5f) + inv.ty
+        var di = 0
+        for (i in 0 until count) {
+            val rawT = sweepT(canvasAngleToDesignAngle(canvasSweepAngle(lx - center.fX, ly - center.fY)))
+            lookupStopF16((rawT - tBias) / tScale, positions, xformedColorsF16, tileMode, dst, di)
+            lx += inv.sx
+            ly += inv.ky
+            di += 4
+        }
+    }
+
+    private fun sweepT(angle: Float): Float {
+        return if (startAngle <= endAngle) {
+            (angle - startAngle) / angleSpan
+        } else {
+            1f - (angle - endAngle) / angleSpan
+        }
+    }
+}
+
+private fun canvasSweepAngle(x: Float, y: Float): Float {
+    if (x == 0f && y == 0f) return 0f
+    return atan2(y, x) * 180f / PI.toFloat()
+}
+
+private fun canvasAngleToDesignAngle(angle: Float): Float {
+    val design = -angle
+    return when {
+        design < 0f -> design + 360f
+        design >= 360f -> design - 360f
+        else -> design
     }
 }
 private data class OpenTypeNames(
