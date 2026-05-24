@@ -7,12 +7,9 @@ import org.skia.testing.TestUtils
  * Smoke-test the `fontmgr_iter` GM body — just renders into a
  * bitmap to exercise the [FontMgrGM] code path against the live
  * [org.skia.foundation.SkFontMgr] / [org.skia.foundation.SkFontStyleSet]
- * surface. No PNG comparison : the JVM AWT-backed
- * `SkFontMgr.RefDefault()` enumerates the host's fonts, so a pixel
- * diff against upstream `fontmgr_iter.png` (captured with
- * Liberation portable fonts) would fail at the family-enumeration
- * step regardless of glyph-level fidelity. See [FontMgrGM]'s KDoc
- * for the deferred portable-`SkFontMgr` path.
+ * surface. No PNG comparison : the GM now uses the deterministic
+ * Liberation OpenType manager, but the upstream reference still
+ * bakes in C++ rasterisation details outside this smoke test's scope.
  */
 class FontMgrTest {
 

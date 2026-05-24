@@ -19,8 +19,8 @@ class Skbug5321Test {
         // Tiny canvas (128x128), two short text strings with kAlias edging
         // ; the background is white and the glyph ink is small. Floor is
         // set conservatively — combining-mark handling depends on the
-        // backing typeface's cmap (AwtTypeface may emit `.notdef` for the
-        // U+0300 combining accent if the system font lacks it).
+        // backing typeface's cmap (the portable OpenType backend may emit
+        // `.notdef` for U+0300 if the selected face lacks it).
         val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 4)
         TestReport.recordDetailed("Skbug5321GM", comparison)
         if (comparison.similarity < 95.0) {

@@ -19,8 +19,8 @@ import org.skia.tools.ToolUtils
  * Port of Skia's `gm/colorwheel.cpp::colorwheelnative`.
  *
  * Smaller and more diverse than [BigTextGM] — exercises:
- *  - `ToolUtils.CreatePortableTypeface("sans-serif", Bold)` → Liberation
- *    Sans Bold via [org.skia.foundation.awt.LiberationFontMgr.matchFamilyStyle].
+ *  - `ToolUtils.CreatePortableTypeface("sans-serif", Bold)` -> Liberation
+ *    Sans Bold via the portable OpenType Liberation manager.
  *  - `font.setEdging(SkFont.Edging.kAlias)` → **non-AA text**, a code
  *    path different from the AA bigtext path.
  *  - 7 distinct colours via 7 paints (R, G, B, C, M, Y, K) on a single
