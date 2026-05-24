@@ -167,7 +167,8 @@ public class SkPixmap {
     public fun readPixels(dst: SkPixmap, srcX: Int = 0, srcY: Int = 0): Boolean {
         if (colorType() == SkColorType.kUnknown || dst.colorType() == SkColorType.kUnknown) return false
         if (width() <= 0 || height() <= 0 || dst.width() <= 0 || dst.height() <= 0) return false
-        if (kotlin.math.abs(srcX) >= width() || kotlin.math.abs(srcY) >= height()) return false
+        if (srcX >= width() || srcY >= height()) return false
+        if (srcX + dst.width() <= 0 || srcY + dst.height() <= 0) return false
         // Compute the overlap rect in source coords.
         val srcL = maxOf(srcX, 0)
         val srcT = maxOf(srcY, 0)
