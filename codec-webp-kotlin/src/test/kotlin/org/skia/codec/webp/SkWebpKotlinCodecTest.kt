@@ -127,6 +127,124 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `parses VP8X alpha chunk for VP8 bitstream`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8xChunk(width = 2, height = 2, flags = 0x10),
+                alphaChunk(
+                    control = alphaControl(
+                        compression = WebpAlphaCompression.NONE,
+                        filtering = 1,
+                        preprocessing = 2,
+                    ),
+                    payload = byteArrayOf(0x00, 0x40, 0x80.toByte(), 0xFF.toByte()),
+                ),
+                vp8Chunk(width = 2, height = 2),
+            ),
+        ) as SkWebpKotlinCodec?
+
+        assertNotNull(codec)
+        val metadata = codec!!.metadata
+        assertEquals(WebpBitstreamFormat.VP8, metadata.format)
+        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertTrue(metadata.flags.alpha)
+        assertNotNull(metadata.alphaChunk)
+        val alpha = metadata.alphaChunk!!
+        assertEquals(WebpAlphaCompression.NONE, alpha.compression)
+        assertEquals(1, alpha.filtering)
+        assertEquals(2, alpha.preprocessing)
+        assertEquals(4, alpha.payloadSize)
+
+        val dst = SkBitmap(
+            width = 2,
+            height = 2,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
+        )
+        assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+    }
+
+    @Test
+    fun `parses VP8X lossless-compressed alpha chunk metadata`() {
+        val codec = SkWebpKotlinCodec.Decoder.make(
+            riff(
+                "WEBP",
+                vp8xChunk(width = 3, height = 1, flags = 0x10),
+                alphaChunk(
+                    control = alphaControl(compression = WebpAlphaCompression.LOSSLESS),
+                    payload = byteArrayOf(0x2F, 0x00, 0x00),
+                ),
+                vp8Chunk(width = 3, height = 1),
+            ),
+        ) as SkWebpKotlinCodec?
+
+        assertNotNull(codec)
+        val alpha = codec!!.metadata.alphaChunk
+        assertNotNull(alpha)
+        assertEquals(WebpAlphaCompression.LOSSLESS, alpha!!.compression)
+        assertEquals(3, alpha.payloadSize)
+        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+    }
+
+    @Test
+    fun `rejects malformed VP8X alpha chunks`() {
+        val validAlpha = alphaChunk(control = 0, payload = byteArrayOf(1, 2, 3, 4))
+
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0),
+                    validAlpha,
+                    vp8Chunk(width = 2, height = 2),
+                ),
+            ),
+        )
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0x10),
+                    validAlpha,
+                    validAlpha,
+                    vp8Chunk(width = 2, height = 2),
+                ),
+            ),
+        )
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0x10),
+                    alphaChunk(control = 0x20, payload = byteArrayOf(1, 2, 3, 4)),
+                    vp8Chunk(width = 2, height = 2),
+                ),
+            ),
+        )
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0x10),
+                    alphaChunk(control = 0, payload = byteArrayOf(1, 2, 3)),
+                    vp8Chunk(width = 2, height = 2),
+                ),
+            ),
+        )
+        assertNull(
+            SkWebpKotlinCodec.Decoder.make(
+                riff(
+                    "WEBP",
+                    vp8xChunk(width = 2, height = 2, flags = 0x10),
+                    validAlpha,
+                    vp8lChunk(width = 2, height = 2),
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `keeps odd sized VP8X EXIF chunk payload separate from padding`() {
         val exif = byteArrayOf(1, 2, 3)
         val codec = SkWebpKotlinCodec.Decoder.make(
@@ -839,13 +957,34 @@ class SkWebpKotlinCodecTest {
         map(component).distinct().sorted().also { require(it.size <= 2) }.toIntArray()
 
     private fun vp8Webp(width: Int, height: Int): ByteArray {
+        return riff("WEBP", vp8Chunk(width, height))
+    }
+
+    private fun vp8Chunk(width: Int, height: Int): ByteArray {
         val payload = ByteArray(10)
         payload[3] = 0x9D.toByte()
         payload[4] = 0x01
         payload[5] = 0x2A
         writeU16LE(payload, 6, width)
         writeU16LE(payload, 8, height)
-        return riff("WEBP", chunk("VP8 ", payload))
+        return chunk("VP8 ", payload)
+    }
+
+    private fun alphaChunk(control: Int, payload: ByteArray): ByteArray =
+        chunk("ALPH", byteArrayOf(control.toByte()) + payload)
+
+    private fun alphaControl(
+        compression: WebpAlphaCompression,
+        filtering: Int = 0,
+        preprocessing: Int = 0,
+    ): Int {
+        require(filtering in 0..3)
+        require(preprocessing in 0..3)
+        val compressionBit = when (compression) {
+            WebpAlphaCompression.NONE -> 0
+            WebpAlphaCompression.LOSSLESS -> 1
+        }
+        return (compressionBit shl 4) or (filtering shl 2) or preprocessing
     }
 
     private fun riff(type: String, vararg chunks: ByteArray): ByteArray {
