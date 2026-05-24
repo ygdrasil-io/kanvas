@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package org.skia.foundation.awt
 
 import org.skia.foundation.SkData

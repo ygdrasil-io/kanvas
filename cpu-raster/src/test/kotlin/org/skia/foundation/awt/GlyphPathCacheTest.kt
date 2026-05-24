@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package org.skia.foundation.awt
 
 import org.junit.jupiter.api.Assertions.assertEquals

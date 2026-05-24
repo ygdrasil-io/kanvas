@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package org.skia.foundation.awt
 
 import org.skia.foundation.SkFontArguments
@@ -17,10 +19,12 @@ import java.awt.geom.AffineTransform
 import kotlin.math.floor
 
 /**
- * **NOTE D'IMPLÉMENTATION** — Ce fichier expose la surface API Skia
+ * **Legacy optional JVM/AWT backend** — Ce fichier expose la surface API Skia
  * (`SkTypeface` / `SkFont` / `SkFontMetrics` / …) mais l'implémentation
- * sous-jacente repose sur **`java.awt.Font` + `java.awt.font.GlyphVector`**,
- * pas sur le moteur de fontes natif Skia (FreeType + SkScalerContext).
+ * sous-jacente repose sur **`java.awt.Font` + `java.awt.font.GlyphVector`**.
+ * Les chemins fonts portables doivent utiliser
+ * [org.skia.foundation.opentype.OpenTypeTypeface] et le manager
+ * [org.skia.foundation.LiberationFontMgr].
  *
  * Conséquences :
  *  - Les métriques peuvent diverger de 1-2 ulps des valeurs upstream.
@@ -51,6 +55,9 @@ import kotlin.math.floor
  * @property advanceX      total run advance — same value as
  *                         `positions[n * 2]` for convenience.
  */
+@Deprecated(
+    message = "AWT shaping is a legacy optional JVM surface. Prefer portable OpenType text paths when complex JVM/AWT shaping is not required.",
+)
 public data class AwtShapedRun(
     val glyphIds: IntArray,
     val positions: FloatArray,
@@ -64,6 +71,9 @@ public data class AwtShapedRun(
     override fun hashCode(): Int = System.identityHashCode(this)
 }
 
+@Deprecated(
+    message = "AwtTypeface is a legacy optional JVM backend. Use OpenTypeTypeface for portable fonts, or opt in through cpu-raster AWT APIs only when required.",
+)
 public class AwtTypeface internal constructor(
     private val baseFont: Font,
     public override val fontStyle: SkFontStyle = SkFontStyle.Normal(),
