@@ -145,6 +145,56 @@ class SkBmpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes V4 32-bit bit masks with alpha`() {
+        val translucent = argb(0x44, 0x11, 0x22, 0x33)
+        val codec = SkBmpKotlinCodec.Decoder.make(
+            v4BitfieldsBmp(
+                width = 2,
+                height = 2,
+                redMask = 0x000000FF,
+                greenMask = 0x0000FF00,
+                blueMask = 0x00FF0000,
+                alphaMask = -0x1000000,
+                rowsTopDown = listOf(
+                    listOf(translucent, GREEN),
+                    listOf(BLUE, argb(0x7F, 0xFE, 0xDC, 0xBA)),
+                ),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(translucent, bitmap!!.getPixel(0, 0))
+        assertEquals(GREEN, bitmap.getPixel(1, 0))
+        assertEquals(BLUE, bitmap.getPixel(0, 1))
+        assertEquals(argb(0x7F, 0xFE, 0xDC, 0xBA), bitmap.getPixel(1, 1))
+    }
+
+    @Test
+    fun `decodes V5 32-bit bit masks and ignores embedded ICC profile for now`() {
+        val codec = SkBmpKotlinCodec.Decoder.make(
+            v4BitfieldsBmp(
+                width = 1,
+                height = 1,
+                headerSize = 124,
+                redMask = 0x00FF0000,
+                greenMask = 0x0000FF00,
+                blueMask = 0x000000FF,
+                alphaMask = -0x1000000,
+                iccProfile = byteArrayOf(0x41, 0x42, 0x43, 0x44),
+                rowsTopDown = listOf(listOf(argb(0x80, 0x12, 0x34, 0x56))),
+            ),
+        )!!
+
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(argb(0x80, 0x12, 0x34, 0x56), bitmap!!.getPixel(0, 0))
+        assertNull(codec.getICCProfile())
+    }
+
+    @Test
     fun `rejects truncated 16-bit bitfield masks`() {
         val bytes = ByteArray(14 + 40)
         writeFileAndInfoHeader(bytes, width = 1, height = 1, bitsPerPixel = 16, compression = 3, pixelOffset = 14 + 40 + 12, topDown = false)
@@ -406,6 +456,37 @@ class SkBmpKotlinCodecTest {
         return out
     }
 
+    private fun v4BitfieldsBmp(
+        width: Int,
+        height: Int,
+        headerSize: Int = 108,
+        redMask: Int,
+        greenMask: Int,
+        blueMask: Int,
+        alphaMask: Int,
+        iccProfile: ByteArray = ByteArray(0),
+        rowsTopDown: List<List<Int>>,
+    ): ByteArray {
+        val bitsPerPixel = 32
+        val rowBytes = rowBytes(width, bitsPerPixel)
+        val pixelOffset = 14 + headerSize
+        val out = ByteArray(pixelOffset + rowBytes * height + iccProfile.size)
+        writeV4OrV5Header(out, width, height, bitsPerPixel, headerSize, pixelOffset, iccProfile)
+        writeI32LE(out, 14 + 40, redMask)
+        writeI32LE(out, 14 + 44, greenMask)
+        writeI32LE(out, 14 + 48, blueMask)
+        writeI32LE(out, 14 + 52, alphaMask)
+        for (dy in 0 until height) {
+            val fileRow = height - 1 - dy
+            val row = pixelOffset + fileRow * rowBytes
+            for (x in 0 until width) {
+                writeI32LE(out, row + x * 4, packBitfields(rowsTopDown[dy][x], redMask, greenMask, blueMask, alphaMask))
+            }
+        }
+        iccProfile.copyInto(out, pixelOffset + rowBytes * height)
+        return out
+    }
+
     private fun writeFileAndInfoHeader(
         out: ByteArray,
         width: Int,
@@ -427,6 +508,31 @@ class SkBmpKotlinCodecTest {
         writeI32LE(out, 30, compression)
     }
 
+    private fun writeV4OrV5Header(
+        out: ByteArray,
+        width: Int,
+        height: Int,
+        bitsPerPixel: Int,
+        headerSize: Int,
+        pixelOffset: Int,
+        iccProfile: ByteArray,
+    ) {
+        out[0] = 'B'.code.toByte()
+        out[1] = 'M'.code.toByte()
+        writeI32LE(out, 2, out.size)
+        writeI32LE(out, 10, pixelOffset)
+        writeI32LE(out, 14, headerSize)
+        writeI32LE(out, 18, width)
+        writeI32LE(out, 22, height)
+        writeU16LE(out, 26, 1)
+        writeU16LE(out, 28, bitsPerPixel)
+        writeI32LE(out, 30, 3)
+        if (headerSize >= 124 && iccProfile.isNotEmpty()) {
+            writeI32LE(out, 14 + 112, pixelOffset + rowBytes(width, bitsPerPixel) * height)
+            writeI32LE(out, 14 + 116, iccProfile.size)
+        }
+    }
+
     private fun rowBytes(width: Int, bitsPerPixel: Int): Int =
         ((((width.toLong() * bitsPerPixel.toLong()) + 31L) / 32L) * 4L).toInt()
 
@@ -444,6 +550,9 @@ class SkBmpKotlinCodecTest {
 
     private fun packBitfields(color: Int, redMask: Int, greenMask: Int, blueMask: Int): Int =
         packMasked(r(color), redMask) or packMasked(g(color), greenMask) or packMasked(b(color), blueMask)
+
+    private fun packBitfields(color: Int, redMask: Int, greenMask: Int, blueMask: Int, alphaMask: Int): Int =
+        packBitfields(color, redMask, greenMask, blueMask) or packMasked(a(color), alphaMask)
 
     private fun packMasked(component: Int, mask: Int): Int {
         val shift = Integer.numberOfTrailingZeros(mask)
