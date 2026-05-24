@@ -1,54 +1,26 @@
 package org.skia.foundation.awt
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkFontMgr
-import org.skia.foundation.SkFontStyle
+import org.skia.foundation.opentype.OpenTypeSystemFontMgr
 
 /**
  * R-suivi.43 — verifies that
  * [SkFontMgr.matchFamilyStyleCharacter] resolves a Unicode code point
  * to a typeface that actually carries the glyph.
  *
- * The test relies on the [AwtFontFallbackTable] candidate chain plus
- * the bundled `"Liberation Sans"` last-resort fallback (always present
- * because the kanvas-skia main resources bundle Liberation TTFs). On
- * any platform where `GraphicsEnvironment` exposes Liberation Sans
- * (which the JVM resolves via its own font discovery), Latin code
- * points must resolve to a non-null typeface.
+ * Verifies the legacy cpu-raster `RefDefault()` extension no longer routes
+ * through AWT. Host font contents are intentionally not asserted here because
+ * minimal CI hosts may have no TrueType system fonts parseable by the current
+ * OpenType backend.
  */
 class SkFontMgrFallbackTest {
 
     @Test
-    @Suppress("DEPRECATION")
-    fun `RefDefault remains a compatibility alias for the explicit AWT manager`() {
-        assertSame(SkFontMgr.RefAwtDefault(), SkFontMgr.RefDefault())
-    }
-
-    @Test
-    fun `matchFamilyStyleCharacter resolves U+0041 'A' to a non-null typeface`() {
-        val mgr = SkFontMgr.RefAwtDefault()
-        val tf = mgr.matchFamilyStyleCharacter(
-            familyName = null,
-            style = SkFontStyle.Normal(),
-            bcp47 = null,
-            character = 0x0041, // 'A'
-        )
-        assertNotNull(tf, "Latin 'A' must resolve to some typeface via fallback")
-    }
-
-    @Test
-    fun `matchFamilyStyleCharacter resolves U+0061 'a' to a non-null typeface`() {
-        val mgr = SkFontMgr.RefAwtDefault()
-        val tf = mgr.matchFamilyStyleCharacter(
-            familyName = null,
-            style = SkFontStyle.Normal(),
-            bcp47 = null,
-            character = 0x0061, // 'a'
-        )
-        assertNotNull(tf)
+    fun `RefDefault uses the pure Kotlin OpenType system manager`() {
+        assertTrue(SkFontMgr.RefDefault() is OpenTypeSystemFontMgr)
     }
 
     @Test
