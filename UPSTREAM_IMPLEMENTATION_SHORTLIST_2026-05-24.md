@@ -90,6 +90,10 @@ Completed since this snapshot:
   color-space / hue-method / premul interpolation sampler.
 - `addarc`: `SkPathBuilder.emitArc` now normalises huge sweeps before conic
   decomposition, and `ManyArcsGM` is enabled with a raster ratchet.
+- `STUB.TEXT_IMAGE_FILTER`: `imagefiltersbase`, `textfilter_image`, and
+  `textfilter_color` are covered on raster. Remaining disabled wrappers are
+  WebGPU text-filter dependency work, not an actionable raster
+  `imagefiltersbase` implementation item.
 
 ## Recommended order
 
@@ -105,7 +109,6 @@ Completed since this snapshot:
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, perceptual/hue/premul sampler still missing | gradient interpolation variants |
-| `imagefiltersbase` | `STUB.TEXT_IMAGE_FILTER` | `ImageFiltersBaseGM.kt`, `ImageFiltersTextBaseGM.kt` |
 | `mesh` | `STUB.MESH` | `MeshGMs.kt` |
 | `recordopts` | `STUB.RECORDOPTS.SAVELAYER_COLOR_FILTER_FOLD`, `STUB.XYZ` | `RecordOptsGM.kt` |
 | `vertices` | partial: `VerticesBatchingGM` ported; `VerticesGM` still disabled | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |

@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test
 import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.ImageFiltersTextIfGM
 
-@Disabled("STUB.TEXT_IMAGE_FILTER: requires SkPaint.imageFilter for text glyph runs")
+@Disabled("WebGPU text filter dependency: raster textfilter GMs are covered by ImageFiltersTextTest")
 class ImageFiltersTextBaseWebGpuTest {
     @Test
     fun `ImageFiltersTextIfGM placeholder`() {

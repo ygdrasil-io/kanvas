@@ -184,3 +184,6 @@ public class ImageFiltersTextCfGM : ImageFiltersTextBaseGM("color") {
         paint.colorFilter = SkColorFilters.Blend(SK_ColorBLUE, SkBlendMode.kSrcIn)
     }
 }
+
+public typealias ImageFiltersText_IFGM = ImageFiltersTextIfGM
+public typealias ImageFiltersText_CFGM = ImageFiltersTextCfGM

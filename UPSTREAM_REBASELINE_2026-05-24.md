@@ -225,7 +225,6 @@ Current generated rows in `bucket=implementation`:
 - `drawquadset`
 - `gradients`
 - `imagefilters`
-- `imagefiltersbase`
 - `imagemasksubset`
 - `lumafilter`
 - `mesh`
