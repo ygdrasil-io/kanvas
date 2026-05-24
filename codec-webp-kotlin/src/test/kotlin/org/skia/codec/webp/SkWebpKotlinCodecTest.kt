@@ -283,6 +283,24 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `decodes VP8L color indexing copy distances using packed width`() {
+        val table = intArrayOf(
+            argb(0xFF, 0x10, 0x20, 0x30),
+            argb(0xFF, 0x20, 0x40, 0x60),
+            argb(0xFF, 0x30, 0x60, 0x90),
+            argb(0xFF, 0x40, 0x80, 0xC0),
+        )
+        val indices = intArrayOf(
+            0, 1, 2, 3,
+            0, 1, 2, 3,
+        )
+        val expected = IntArray(indices.size) { table[indices[it]] }
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorIndexingCopyWebp(width = 4, height = 2, table, indices))!!
+
+        assertWebpPixels(codec, width = 4, height = 2, expected)
+    }
+
+    @Test
     fun `VP8L pixel decode rejects invalid color cache size`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8lInvalidColorCacheWebp(width = 1, height = 1))!!
         val dst = SkBitmap(
@@ -507,6 +525,34 @@ class SkWebpKotlinCodecTest {
         writeVp8lLiteralImageData(writer, colorTableDeltas(table))
         writer.writeBits(0, 1) // transform_present terminator
         writeVp8lLiteralImageData(writer, indexedPixels)
+        return vp8lWebpFromBits(writer)
+    }
+
+    private fun vp8lColorIndexingCopyWebp(width: Int, height: Int, table: IntArray, indices: IntArray): ByteArray {
+        require(table.size in 1..4)
+        require(indices.size == width * height)
+        val widthBits = colorIndexingWidthBits(table.size)
+        val packedWidth = (width + (1 shl widthBits) - 1) / (1 shl widthBits)
+        require(packedWidth == 1 && height == 2)
+        val indexedPixels = packColorIndexes(indices, width, height, packedWidth, widthBits)
+        require(indexedPixels[0] == indexedPixels[1])
+
+        val writer = Vp8lTestBitWriter()
+        writeVp8lHeaderBits(writer, width, height)
+        writer.writeBits(1, 1) // transform_present
+        writer.writeBits(3, 2) // color indexing transform.
+        writer.writeBits(table.size - 1, 8)
+        writeVp8lLiteralImageData(writer, colorTableDeltas(table))
+        writer.writeBits(0, 1) // transform_present terminator
+        writer.writeBits(0, 1) // color_cache_present
+        writer.writeBits(0, 1) // meta_prefix_present
+        writeNormalTwoSymbolCode(writer, first = green(indexedPixels[0]), second = 256)
+        writeSimpleCode(writer, intArrayOf(red(indexedPixels[0])))
+        writeSimpleCode(writer, intArrayOf(blue(indexedPixels[0])))
+        writeSimpleCode(writer, intArrayOf(alpha(indexedPixels[0])))
+        writeSimpleCode(writer, intArrayOf(0)) // distance code 1 maps to the previous packed row.
+        writer.writeBits(0, 1) // literal packed indexes for row 0.
+        writer.writeBits(1, 1) // length prefix 0 => copy one packed pixel for row 1.
         return vp8lWebpFromBits(writer)
     }
 

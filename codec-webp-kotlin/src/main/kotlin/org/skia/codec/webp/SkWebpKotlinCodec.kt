@@ -365,7 +365,7 @@ private fun decodeVp8lImage(
         val length = readVp8lPrefixValue(bits, green - 256) ?: return Vp8lDecodeResult.Invalid
         val distancePrefix = group.distance.decode(bits) ?: return Vp8lDecodeResult.Invalid
         val distanceCode = readVp8lPrefixValue(bits, distancePrefix) ?: return Vp8lDecodeResult.Invalid
-        val distance = pixelDistanceFromCode(distanceCode, width)
+        val distance = pixelDistanceFromCode(distanceCode, imageWidth)
         if (distance < 1 || distance > i || i + length > pixels.size) return Vp8lDecodeResult.Invalid
         repeat(length) {
             val pixel = pixels[i - distance]
