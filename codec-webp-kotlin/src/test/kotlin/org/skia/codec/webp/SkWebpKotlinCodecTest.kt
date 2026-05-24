@@ -775,6 +775,104 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `VP8 simple loop filter smooths eligible edge samples`() {
+        val filtered = filterVp8SimpleLoopFilterSample(
+            p1 = 100,
+            p0 = 100,
+            q0 = 108,
+            q1 = 108,
+            limit = 20,
+        )
+
+        assertTrue(filtered.filtered)
+        assertEquals(102, filtered.p0)
+        assertEquals(106, filtered.q0)
+
+        val clippedAdjustment = filterVp8SimpleLoopFilterSample(
+            p1 = 0,
+            p0 = 0,
+            q0 = 45,
+            q1 = 0,
+            limit = 100,
+        )
+
+        assertTrue(clippedAdjustment.filtered)
+        assertEquals(15, clippedAdjustment.p0)
+        assertEquals(30, clippedAdjustment.q0)
+
+        val untouched = filterVp8SimpleLoopFilterSample(
+            p1 = 0,
+            p0 = 20,
+            q0 = 240,
+            q1 = 255,
+            limit = 20,
+        )
+
+        assertFalse(untouched.filtered)
+        assertEquals(20, untouched.p0)
+        assertEquals(240, untouched.q0)
+
+        val oddHalfDifferenceBoundary = filterVp8SimpleLoopFilterSample(
+            p1 = 100,
+            p0 = 100,
+            q0 = 104,
+            q1 = 105,
+            limit = 10,
+        )
+
+        assertTrue(oddHalfDifferenceBoundary.filtered)
+    }
+
+    @Test
+    fun `VP8 simple loop filter applies vertical and horizontal plane edges`() {
+        val verticalPlane = intArrayOf(
+            100, 100, 108, 108, 126,
+            100, 100, 108, 108, 126,
+            10, 20, 240, 250, 255,
+        )
+
+        assertArrayEquals(
+            intArrayOf(
+                100, 102, 106, 108, 126,
+                100, 102, 106, 108, 126,
+                10, 20, 240, 250, 255,
+            ),
+            applyVp8SimpleVerticalLoopFilter(
+                plane = verticalPlane,
+                width = 5,
+                height = 3,
+                edgeX = 2,
+                limit = 25,
+            ),
+        )
+
+        val horizontalPlane = intArrayOf(
+            100, 100, 10,
+            100, 100, 20,
+            108, 108, 240,
+            108, 108, 250,
+            126, 126, 255,
+        )
+
+        assertArrayEquals(
+            intArrayOf(
+                100, 100, 10,
+                102, 102, 20,
+                106, 106, 240,
+                108, 108, 250,
+                126, 126, 255,
+            ),
+            applyVp8SimpleHorizontalLoopFilter(
+                plane = horizontalPlane,
+                width = 3,
+                height = 5,
+                edgeY = 2,
+                limit = 25,
+            ),
+        )
+    }
+
+    @Test
     fun `returns unimplemented for pixel decode after metadata parse`() {
         val codec = SkWebpKotlinCodec.Decoder.make(vp8xWebp(width = 2, height = 2, flags = 0))!!
         val dst = SkBitmap(
