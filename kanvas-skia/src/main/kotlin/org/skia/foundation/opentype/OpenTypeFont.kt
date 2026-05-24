@@ -149,6 +149,9 @@ public class OpenTypeTypeface private constructor(
     internal fun svgDocument(glyphId: Int): OpenTypeSvgDocument? =
         font.svgDocument(glyphId)
 
+    internal fun bitmapGlyph(glyphId: Int): OpenTypeBitmapGlyph? =
+        font.bitmapGlyph(glyphId)
+
     internal fun makeColorTextPaths(
         text: String,
         x: SkScalar,
@@ -368,6 +371,7 @@ private class ParsedTrueTypeFont(
     private val gpos: GposPairTable?,
     private val color: OpenTypeColorFont?,
     private val svg: OpenTypeSvgTable?,
+    private val bitmap: OpenTypeBitmapFont?,
     private val gvar: GvarTable?,
 ) {
     private val pathCache = HashMap<Int, GlyphOutline?>()
@@ -410,6 +414,9 @@ private class ParsedTrueTypeFont(
 
     fun svgDocument(glyphId: Int): OpenTypeSvgDocument? =
         svg?.documentForGlyph(glyphId)
+
+    fun bitmapGlyph(glyphId: Int): OpenTypeBitmapGlyph? =
+        bitmap?.glyph(glyphId)
 
     fun variationPosition(position: SkFontArguments.VariationPosition): OpenTypeVariationPosition {
         if (variationAxes.isEmpty() || position.coordinates.isEmpty()) return OpenTypeVariationPosition.Default
@@ -786,6 +793,7 @@ private class ParsedTrueTypeFont(
             val variationAxes = parseFvarAxes(bytes, tables["fvar"]).orEmpty()
             val color = parseColorFont(bytes, tables["COLR"], tables["CPAL"])
             val svg = parseSvgTable(bytes, tables["SVG "])
+            val bitmap = parseBitmapFont(bytes, tables["CBDT"], tables["CBLC"], tables["sbix"], numGlyphs)
             val gvar = parseGvarTable(bytes, tables["gvar"], variationAxes.size, numGlyphs)
 
             return ParsedTrueTypeFont(
@@ -793,7 +801,7 @@ private class ParsedTrueTypeFont(
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
                 avg, sxHeight, sCapHeight, underlinePosition, underlineThickness,
                 strikeoutPosition, strikeoutThickness, familyName, names?.postScriptName, localizedNames,
-                fontStyle.style, fontStyle.hasMetadata, variationAxes, cmap, advances, bearings, offsets, kern, gpos, color, svg, gvar,
+                fontStyle.style, fontStyle.hasMetadata, variationAxes, cmap, advances, bearings, offsets, kern, gpos, color, svg, bitmap, gvar,
             )
         }
 
@@ -1055,6 +1063,209 @@ private class ParsedTrueTypeFont(
                 previousEndGlyphId = endGlyphId
             }
             return OpenTypeSvgTable(bytes, records)
+        }
+
+        private fun parseBitmapFont(
+            bytes: ByteArray,
+            cbdtTable: TableRecord?,
+            cblcTable: TableRecord?,
+            sbixTable: TableRecord?,
+            numGlyphs: Int,
+        ): OpenTypeBitmapFont? {
+            val cbdt = parseCbdtCblcTables(bytes, cbdtTable, cblcTable, numGlyphs)
+            val sbix = parseSbixTable(bytes, sbixTable, numGlyphs)
+            if (cbdt.isEmpty() && sbix.isEmpty()) return null
+            return OpenTypeBitmapFont(cbdt + sbix)
+        }
+
+        private fun parseCbdtCblcTables(
+            bytes: ByteArray,
+            cbdtTable: TableRecord?,
+            cblcTable: TableRecord?,
+            numGlyphs: Int,
+        ): Map<Int, OpenTypeBitmapGlyph> {
+            cbdtTable ?: return emptyMap()
+            cblcTable ?: return emptyMap()
+            if (cbdtTable.length < 4 || cblcTable.length < 8) return emptyMap()
+            val cbdtEnd = cbdtTable.offset + cbdtTable.length
+            val cblcEnd = cblcTable.offset + cblcTable.length
+            val cbdtReader = SfntReader(bytes, cbdtEnd)
+            val cblcReader = SfntReader(bytes, cblcEnd)
+            if (cbdtReader.u16(cbdtTable.offset) != 3 || cblcReader.u16(cblcTable.offset) != 3) return emptyMap()
+            if (cbdtReader.u16(cbdtTable.offset + 2) !in 0..99 || cblcReader.u16(cblcTable.offset + 2) !in 0..99) return emptyMap()
+            val numSizes = cblcReader.u32(cblcTable.offset + 4)?.toIntOrNull() ?: return emptyMap()
+            if (numSizes == 0 || numSizes > MAX_BITMAP_STRIKES) return emptyMap()
+            if (!cblcReader.fits(cblcTable.offset + 8, numSizes.toLong() * CBLC_BITMAP_SIZE_TABLE_SIZE)) return emptyMap()
+
+            val out = LinkedHashMap<Int, OpenTypeBitmapGlyph>()
+            repeat(numSizes) { sizeIndex ->
+                val sizeOffset = cblcTable.offset + 8 + sizeIndex * CBLC_BITMAP_SIZE_TABLE_SIZE
+                val subtableArrayOffset = cblcReader.u32(sizeOffset)?.toIntOrNull() ?: return@repeat
+                val numberOfSubtables = cblcReader.u32(sizeOffset + 8)?.toIntOrNull() ?: return@repeat
+                val startGlyph = cblcReader.u16(sizeOffset + 40) ?: return@repeat
+                val endGlyph = cblcReader.u16(sizeOffset + 42) ?: return@repeat
+                val ppemX = cblcReader.u8(sizeOffset + 44) ?: return@repeat
+                val ppemY = cblcReader.u8(sizeOffset + 45) ?: return@repeat
+                val bitDepth = cblcReader.u8(sizeOffset + 46) ?: return@repeat
+                if (startGlyph > endGlyph || endGlyph >= numGlyphs) return@repeat
+                if (numberOfSubtables <= 0 || numberOfSubtables > MAX_BITMAP_SUBTABLES) return@repeat
+                val arrayStart = cblcTable.offset + subtableArrayOffset
+                if (!cblcReader.fits(arrayStart, numberOfSubtables.toLong() * 8L)) return@repeat
+                repeat(numberOfSubtables) { index ->
+                    val entry = arrayStart + index * 8
+                    val firstGlyph = cblcReader.u16(entry) ?: return@repeat
+                    val lastGlyph = cblcReader.u16(entry + 2) ?: return@repeat
+                    val subtableOffset = cblcReader.u32(entry + 4)?.toIntOrNull() ?: return@repeat
+                    if (firstGlyph > lastGlyph || firstGlyph < startGlyph || lastGlyph > endGlyph) return@repeat
+                    val subtableStart = arrayStart + subtableOffset
+                    parseCblcIndexSubtable(
+                        bytes = bytes,
+                        cblcReader = cblcReader,
+                        cbdtReader = cbdtReader,
+                        cbdtTable = cbdtTable,
+                        subtableStart = subtableStart,
+                        firstGlyph = firstGlyph,
+                        lastGlyph = lastGlyph,
+                        ppemX = ppemX,
+                        ppemY = ppemY,
+                        bitDepth = bitDepth,
+                        out = out,
+                    )
+                }
+            }
+            return out
+        }
+
+        private fun parseCblcIndexSubtable(
+            bytes: ByteArray,
+            cblcReader: SfntReader,
+            cbdtReader: SfntReader,
+            cbdtTable: TableRecord,
+            subtableStart: Int,
+            firstGlyph: Int,
+            lastGlyph: Int,
+            ppemX: Int,
+            ppemY: Int,
+            bitDepth: Int,
+            out: MutableMap<Int, OpenTypeBitmapGlyph>,
+        ) {
+            if (!cblcReader.fits(subtableStart, 8)) return
+            val indexFormat = cblcReader.u16(subtableStart) ?: return
+            val imageFormat = cblcReader.u16(subtableStart + 2) ?: return
+            if (imageFormat !in CBDT_PNG_IMAGE_FORMATS) return
+            val imageDataOffset = cblcReader.u32(subtableStart + 4)?.toIntOrNull() ?: return
+            val glyphCount = lastGlyph - firstGlyph + 1
+            val offsets: IntArray = when (indexFormat) {
+                1 -> {
+                    if (!cblcReader.fits(subtableStart + 8, (glyphCount + 1).toLong() * 4L)) return
+                    IntArray(glyphCount + 1) { i ->
+                        cblcReader.u32(subtableStart + 8 + i * 4)?.toIntOrNull() ?: return
+                    }
+                }
+                3 -> {
+                    if (!cblcReader.fits(subtableStart + 8, (glyphCount + 1).toLong() * 2L)) return
+                    IntArray(glyphCount + 1) { i ->
+                        cblcReader.u16(subtableStart + 8 + i * 2) ?: return
+                    }
+                }
+                else -> return
+            }
+            for (i in 0 until offsets.lastIndex) if (offsets[i] > offsets[i + 1]) return
+            for (i in 0 until glyphCount) {
+                val payloadLength = offsets[i + 1] - offsets[i]
+                if (payloadLength <= 0 || payloadLength > MAX_BITMAP_PAYLOAD_BYTES) continue
+                val payloadOffset = cbdtTable.offset + imageDataOffset + offsets[i]
+                if (!cbdtReader.fits(payloadOffset, payloadLength)) return
+                val imageHeaderLength = when (imageFormat) {
+                    17 -> 5
+                    18 -> 8
+                    19 -> 0
+                    else -> return
+                }
+                val pngOffset = payloadOffset + imageHeaderLength
+                val pngLength = payloadLength - imageHeaderLength
+                if (pngLength <= 0 || !cbdtReader.fits(pngOffset, pngLength) || !isPngPayload(bytes, pngOffset, pngLength)) continue
+                val glyphId = firstGlyph + i
+                out.putIfAbsent(
+                    glyphId,
+                    OpenTypeBitmapGlyph(
+                        glyphId = glyphId,
+                        source = OpenTypeBitmapGlyphSource.CBDT_CBLC,
+                        ppemX = ppemX,
+                        ppemY = ppemY,
+                        bitDepth = bitDepth,
+                        originOffsetX = 0,
+                        originOffsetY = 0,
+                        imageFormat = "png ",
+                        bytes = bytes.copyOfRange(pngOffset, pngOffset + pngLength),
+                    ),
+                )
+            }
+        }
+
+        private fun parseSbixTable(
+            bytes: ByteArray,
+            table: TableRecord?,
+            numGlyphs: Int,
+        ): Map<Int, OpenTypeBitmapGlyph> {
+            table ?: return emptyMap()
+            if (table.length < 8) return emptyMap()
+            val tableEnd = table.offset + table.length
+            val reader = SfntReader(bytes, tableEnd)
+            val version = reader.u16(table.offset) ?: return emptyMap()
+            if (version != 1) return emptyMap()
+            val numStrikes = reader.u32(table.offset + 4)?.toIntOrNull() ?: return emptyMap()
+            if (numStrikes == 0 || numStrikes > MAX_BITMAP_STRIKES) return emptyMap()
+            if (!reader.fits(table.offset + 8, numStrikes.toLong() * 4L)) return emptyMap()
+            val out = LinkedHashMap<Int, OpenTypeBitmapGlyph>()
+            repeat(numStrikes) { strikeIndex ->
+                val strikeOffset = reader.u32(table.offset + 8 + strikeIndex * 4)?.toIntOrNull() ?: return@repeat
+                val strikeStart = table.offset + strikeOffset
+                if (!reader.fits(strikeStart, 4L + (numGlyphs + 1).toLong() * 4L)) return@repeat
+                val ppem = reader.u16(strikeStart) ?: return@repeat
+                reader.u16(strikeStart + 2) ?: return@repeat
+                val offsetsStart = strikeStart + 4
+                val offsets = IntArray(numGlyphs + 1) { i ->
+                    reader.u32(offsetsStart + i * 4)?.toIntOrNull() ?: return@repeat
+                }
+                for (i in 0 until offsets.lastIndex) if (offsets[i] > offsets[i + 1]) return@repeat
+                for (glyphId in 0 until numGlyphs) {
+                    val glyphStart = strikeStart + offsets[glyphId]
+                    val glyphEnd = strikeStart + offsets[glyphId + 1]
+                    val payloadLength = glyphEnd - glyphStart
+                    if (payloadLength <= 0) continue
+                    if (payloadLength < 8 || payloadLength > MAX_BITMAP_PAYLOAD_BYTES) continue
+                    if (!reader.fits(glyphStart, payloadLength)) return@repeat
+                    val graphicType = reader.tag(glyphStart + 4) ?: continue
+                    if (graphicType != "png ") continue
+                    val pngOffset = glyphStart + 8
+                    val pngLength = glyphEnd - pngOffset
+                    if (!isPngPayload(bytes, pngOffset, pngLength)) continue
+                    out.putIfAbsent(
+                        glyphId,
+                        OpenTypeBitmapGlyph(
+                            glyphId = glyphId,
+                            source = OpenTypeBitmapGlyphSource.SBIX,
+                            ppemX = ppem,
+                            ppemY = ppem,
+                            bitDepth = 32,
+                            originOffsetX = reader.i16(glyphStart)?.toInt() ?: continue,
+                            originOffsetY = reader.i16(glyphStart + 2)?.toInt() ?: continue,
+                            imageFormat = graphicType,
+                            bytes = bytes.copyOfRange(pngOffset, glyphEnd),
+                        ),
+                    )
+                }
+            }
+            return out
+        }
+
+        private fun isPngPayload(bytes: ByteArray, offset: Int, length: Int): Boolean {
+            if (length < PNG_SIGNATURE.size || !fits(offset, PNG_SIGNATURE.size, bytes.size)) return false
+            for (i in PNG_SIGNATURE.indices) {
+                if (bytes[offset + i] != PNG_SIGNATURE[i]) return false
+            }
+            return true
         }
 
         private fun parseCpalTable(bytes: ByteArray, table: TableRecord?): List<List<Int>>? {
@@ -1980,6 +2191,48 @@ internal data class OpenTypeSvgDocument(
         return result
     }
 }
+internal enum class OpenTypeBitmapGlyphSource { CBDT_CBLC, SBIX }
+internal data class OpenTypeBitmapGlyph(
+    val glyphId: Int,
+    val source: OpenTypeBitmapGlyphSource,
+    val ppemX: Int,
+    val ppemY: Int,
+    val bitDepth: Int,
+    val originOffsetX: Int,
+    val originOffsetY: Int,
+    val imageFormat: String,
+    val bytes: ByteArray,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is OpenTypeBitmapGlyph &&
+            glyphId == other.glyphId &&
+            source == other.source &&
+            ppemX == other.ppemX &&
+            ppemY == other.ppemY &&
+            bitDepth == other.bitDepth &&
+            originOffsetX == other.originOffsetX &&
+            originOffsetY == other.originOffsetY &&
+            imageFormat == other.imageFormat &&
+            bytes.contentEquals(other.bytes)
+
+    override fun hashCode(): Int {
+        var result = glyphId
+        result = 31 * result + source.hashCode()
+        result = 31 * result + ppemX
+        result = 31 * result + ppemY
+        result = 31 * result + bitDepth
+        result = 31 * result + originOffsetX
+        result = 31 * result + originOffsetY
+        result = 31 * result + imageFormat.hashCode()
+        result = 31 * result + bytes.contentHashCode()
+        return result
+    }
+}
+private class OpenTypeBitmapFont(
+    private val glyphs: Map<Int, OpenTypeBitmapGlyph>,
+) {
+    fun glyph(glyphId: Int): OpenTypeBitmapGlyph? = glyphs[glyphId]
+}
 private data class OpenTypeSvgDocumentRecord(
     val startGlyphId: Int,
     val endGlyphId: Int,
@@ -2295,6 +2548,12 @@ private const val MAX_EXPANDED_COLOR_LAYERS = 65536L
 private const val MAX_COLOR_PAINT_DEPTH = 32
 private const val MAX_SVG_DOCUMENT_RECORDS = 8192
 private const val MAX_SVG_GLYPHS_PER_RECORD = 4096
+private const val MAX_BITMAP_STRIKES = 64
+private const val MAX_BITMAP_SUBTABLES = 4096
+private const val MAX_BITMAP_PAYLOAD_BYTES = 16 * 1024 * 1024
+private const val CBLC_BITMAP_SIZE_TABLE_SIZE = 48
+private val CBDT_PNG_IMAGE_FORMATS = setOf(17, 18, 19)
+private val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 private const val OS2_FS_SELECTION_ITALIC = 0x0001
 private const val OS2_FS_SELECTION_BOLD = 0x0020
 private const val OS2_USE_TYPO_METRICS = 0x0080
