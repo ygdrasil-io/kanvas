@@ -55,34 +55,38 @@ class CpuRasterKotlinCodecBackendTest {
     }
 
     @Test
-    fun `full cpu-raster codec suite still has ImageIO fixture blockers`() {
+    fun `full cpu-raster codec suite still has legacy backend blockers`() {
         val codecTestRoot = Path.of("src/test/kotlin/org/skia/codec")
-        val imageIoFixtureTests = Files.walk(codecTestRoot).use { paths ->
+        val backendBlockedTests = Files.walk(codecTestRoot).use { paths ->
             paths
                 .filter { path -> path.toString().endsWith("Test.kt") }
+                .filter { path -> path.fileName.toString() != "CpuRasterKotlinCodecBackendTest.kt" }
                 .filter { path ->
                     val text = Files.readString(path)
-                    text.contains("javax.imageio.ImageIO") || text.contains("java.awt.image.BufferedImage")
+                    text.contains("javax.imageio.ImageIO") ||
+                        text.contains("java.awt.image.BufferedImage") ||
+                        text.contains("SkWebpCodec")
                 }
                 .map { path -> codecTestRoot.relativize(path).toString().replace('\\', '/') }
                 .sorted()
                 .toList()
         }
 
-        assertTrue(
-            imageIoFixtureTests.containsAll(
-                listOf(
-                    "SkAndroidCodecGetAndroidPixelsTest.kt",
-                    "SkAndroidCodecTest.kt",
-                    "bmp/SkBmpCodecTest.kt",
-                    "gif/SkGifCodecTest.kt",
-                    "jpeg/SkJpegCodecTest.kt",
-                    "png/SkPngCodecTest.kt",
-                    "wbmp/SkWbmpCodecTest.kt",
-                ),
+        assertEquals(
+            listOf(
+                "SkAndroidCodecComputeSampleSizeJpegTest.kt",
+                "SkAndroidCodecGetAndroidPixelsTest.kt",
+                "SkAndroidCodecTest.kt",
+                "bmp/SkBmpCodecTest.kt",
+                "gif/SkGifCodecTest.kt",
+                "jpeg/SkJpegCodecTest.kt",
+                "png/SkPngCodecTest.kt",
+                "wbmp/SkWbmpCodecTest.kt",
+                "webp/SkWebpCodecTest.kt",
             ),
+            backendBlockedTests,
             "The full :cpu-raster:test --tests '*codec*' switch is blocked until these legacy tests " +
-                "stop generating fixtures through AWT/ImageIO: $imageIoFixtureTests",
+                "stop generating fixtures through AWT/ImageIO or asserting temporary ImageIO-only WebP behavior.",
         )
     }
 }
