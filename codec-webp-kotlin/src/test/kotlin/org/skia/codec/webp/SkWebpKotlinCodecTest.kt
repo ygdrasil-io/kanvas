@@ -213,32 +213,32 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
-    fun `decodes VP8L predictor transform`() {
-        val expected = intArrayOf(
-            argb(0xFF, 0x0A, 0x14, 0x1E),
-            argb(0xFF, 0x0D, 0x18, 0x23),
-            argb(0xFF, 0x0D, 0x18, 0x23),
-            argb(0xFF, 0x10, 0x1C, 0x28),
-        )
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lPredictorWebp(width = 2, height = 2, mode = 1, expected))!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
-        )
+    fun `decodes VP8L predictor transform modes`() {
+        val width = 5
+        val height = 3
+        val residuals = IntArray(width * height) { argb(0x00, 0x03, 0x05, 0x07) }
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
-        for (y in 0 until 2) {
-            for (x in 0 until 2) {
-                val expectedPixel = expected[y * 2 + x]
-                val actual = dst.getPixel(x, y)
-                assertEquals(alpha(expectedPixel), alpha(actual))
-                assertEquals(red(expectedPixel), red(actual))
-                assertEquals(green(expectedPixel), green(actual))
-                assertEquals(blue(expectedPixel), blue(actual))
-            }
+        for (mode in 0..13) {
+            val expected = applyPredictorFixture(width, height, mode, residuals)
+            val codec = SkWebpKotlinCodec.Decoder.make(vp8lPredictorWebp(width, height, mode, residuals))!!
+
+            assertWebpPixels(codec, width, height, expected)
         }
+    }
+
+    @Test
+    fun `decodes VP8L predictor transform border rules`() {
+        val width = 4
+        val height = 3
+        val residuals = IntArray(width * height) { argb(0x00, 0x01, 0x02, 0x03) }
+        val expected = applyPredictorFixture(width, height, mode = 3, residuals)
+        val codec = SkWebpKotlinCodec.Decoder.make(vp8lPredictorWebp(width, height, mode = 3, residuals))!!
+
+        assertEquals(argb(0xFF, 0x01, 0x02, 0x03), expected[0])
+        assertEquals(argb(0xFF, 0x02, 0x04, 0x06), expected[1]) // top row uses L.
+        assertEquals(argb(0xFF, 0x02, 0x04, 0x06), expected[width]) // left column uses T.
+        assertEquals(argb(0xFF, 0x03, 0x06, 0x09), expected[width * 2 - 1]) // right edge TR wraps to row start.
+        assertWebpPixels(codec, width, height, expected)
     }
 
     @Test
@@ -437,21 +437,9 @@ class SkWebpKotlinCodecTest {
         return vp8lWebpFromBits(writer)
     }
 
-    private fun vp8lPredictorWebp(width: Int, height: Int, mode: Int, argb: IntArray): ByteArray {
-        require(argb.size == width * height)
+    private fun vp8lPredictorWebp(width: Int, height: Int, mode: Int, residuals: IntArray): ByteArray {
+        require(residuals.size == width * height)
         require(mode in 0..13)
-        val residuals = IntArray(argb.size) { i ->
-            val x = i % width
-            val y = i / width
-            val predictor = when {
-                x == 0 && y == 0 -> argb(0xFF, 0, 0, 0)
-                y == 0 -> argb[i - 1]
-                x == 0 -> argb[i - width]
-                mode == 1 -> argb[i - 1]
-                else -> error("test helper only supports left predictor mode")
-            }
-            subtractPixels(argb[i], predictor)
-        }
         val writer = Vp8lTestBitWriter()
         writeVp8lHeaderBits(writer, width, height)
         writer.writeBits(1, 1) // transform_present
@@ -610,13 +598,116 @@ class SkWebpKotlinCodecTest {
     private fun green(pixel: Int): Int = (pixel ushr 8) and 0xFF
     private fun blue(pixel: Int): Int = pixel and 0xFF
 
-    private fun subtractPixels(pixel: Int, predictor: Int): Int =
-        argb(
-            alpha = (alpha(pixel) - alpha(predictor)) and 0xFF,
-            red = (red(pixel) - red(predictor)) and 0xFF,
-            green = (green(pixel) - green(predictor)) and 0xFF,
-            blue = (blue(pixel) - blue(predictor)) and 0xFF,
+    private fun assertWebpPixels(codec: SkCodec, width: Int, height: Int, expected: IntArray) {
+        val dst = SkBitmap(
+            width = width,
+            height = height,
+            colorType = SkColorType.kRGBA_8888,
+            colorSpace = SkColorSpace.makeSRGB(),
         )
+
+        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val expectedPixel = expected[y * width + x]
+                val actual = dst.getPixel(x, y)
+                assertEquals(alpha(expectedPixel), alpha(actual))
+                assertEquals(red(expectedPixel), red(actual))
+                assertEquals(green(expectedPixel), green(actual))
+                assertEquals(blue(expectedPixel), blue(actual))
+            }
+        }
+    }
+
+    private fun applyPredictorFixture(width: Int, height: Int, mode: Int, residuals: IntArray): IntArray {
+        require(residuals.size == width * height)
+        val pixels = IntArray(residuals.size)
+        for (i in residuals.indices) {
+            val x = i % width
+            val y = i / width
+            val predictor = when {
+                x == 0 && y == 0 -> argb(0xFF, 0, 0, 0)
+                y == 0 -> pixels[i - 1]
+                x == 0 -> pixels[i - width]
+                else -> predictorFixturePixel(pixels, width, x, y, mode)
+            }
+            pixels[i] = addPixels(residuals[i], predictor)
+        }
+        return pixels
+    }
+
+    private fun predictorFixturePixel(pixels: IntArray, width: Int, x: Int, y: Int, mode: Int): Int {
+        val left = pixels[y * width + x - 1]
+        val top = pixels[(y - 1) * width + x]
+        val topLeft = pixels[(y - 1) * width + x - 1]
+        val topRight = if (x == width - 1) pixels[y * width] else pixels[(y - 1) * width + x + 1]
+        return when (mode) {
+            0 -> argb(0xFF, 0, 0, 0)
+            1 -> left
+            2 -> top
+            3 -> topRight
+            4 -> topLeft
+            5 -> averagePixels(averagePixels(left, topRight), top)
+            6 -> averagePixels(left, topLeft)
+            7 -> averagePixels(left, top)
+            8 -> averagePixels(topLeft, top)
+            9 -> averagePixels(top, topRight)
+            10 -> averagePixels(averagePixels(left, topLeft), averagePixels(top, topRight))
+            11 -> selectPredictor(left, top, topLeft)
+            12 -> clampAddSubtractFull(left, top, topLeft)
+            else -> clampAddSubtractHalf(averagePixels(left, top), topLeft)
+        }
+    }
+
+    private fun addPixels(residual: Int, predictor: Int): Int =
+        argb(
+            alpha = (alpha(residual) + alpha(predictor)) and 0xFF,
+            red = (red(residual) + red(predictor)) and 0xFF,
+            green = (green(residual) + green(predictor)) and 0xFF,
+            blue = (blue(residual) + blue(predictor)) and 0xFF,
+        )
+
+    private fun averagePixels(a: Int, b: Int): Int =
+        argb(
+            alpha = (alpha(a) + alpha(b)) ushr 1,
+            red = (red(a) + red(b)) ushr 1,
+            green = (green(a) + green(b)) ushr 1,
+            blue = (blue(a) + blue(b)) ushr 1,
+        )
+
+    private fun selectPredictor(left: Int, top: Int, topLeft: Int): Int {
+        val pa = alpha(left) + alpha(top) - alpha(topLeft)
+        val pr = red(left) + red(top) - red(topLeft)
+        val pg = green(left) + green(top) - green(topLeft)
+        val pb = blue(left) + blue(top) - blue(topLeft)
+        val leftDistance = kotlin.math.abs(pa - alpha(left)) +
+            kotlin.math.abs(pr - red(left)) +
+            kotlin.math.abs(pg - green(left)) +
+            kotlin.math.abs(pb - blue(left))
+        val topDistance = kotlin.math.abs(pa - alpha(top)) +
+            kotlin.math.abs(pr - red(top)) +
+            kotlin.math.abs(pg - green(top)) +
+            kotlin.math.abs(pb - blue(top))
+        return if (leftDistance < topDistance) left else top
+    }
+
+    private fun clampAddSubtractFull(left: Int, top: Int, topLeft: Int): Int =
+        argb(
+            alpha = clampByte(alpha(left) + alpha(top) - alpha(topLeft)),
+            red = clampByte(red(left) + red(top) - red(topLeft)),
+            green = clampByte(green(left) + green(top) - green(topLeft)),
+            blue = clampByte(blue(left) + blue(top) - blue(topLeft)),
+        )
+
+    private fun clampAddSubtractHalf(average: Int, topLeft: Int): Int =
+        argb(
+            alpha = clampByte(alpha(average) + (alpha(average) - alpha(topLeft)) / 2),
+            red = clampByte(red(average) + (red(average) - red(topLeft)) / 2),
+            green = clampByte(green(average) + (green(average) - green(topLeft)) / 2),
+            blue = clampByte(blue(average) + (blue(average) - blue(topLeft)) / 2),
+        )
+
+    private fun clampByte(value: Int): Int = value.coerceIn(0, 255)
 
     private fun colorCacheIndex(pixel: Int, bits: Int): Int =
         (pixel * 0x1e35a7bd) ushr (32 - bits)
