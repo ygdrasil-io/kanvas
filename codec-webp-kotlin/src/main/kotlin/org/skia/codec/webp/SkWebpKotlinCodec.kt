@@ -1810,6 +1810,44 @@ internal fun decodeVp8CoefficientBlock(
     return Vp8CoefficientDecodeResult.Block(coefficients, hasNonZero)
 }
 
+internal fun decodeVp8CoefficientBlock(
+    reader: Vp8BoolReader,
+    probabilities: Vp8CoefficientProbabilities,
+    type: Int,
+    initialContext: Int,
+    startCoefficient: Int = 0,
+): Vp8CoefficientDecodeResult {
+    if (type !in 0 until VP8_COEFFICIENT_TYPE_COUNT) return Vp8CoefficientDecodeResult.Invalid
+    if (initialContext !in 0 until VP8_COEFFICIENT_CONTEXT_COUNT) return Vp8CoefficientDecodeResult.Invalid
+    if (startCoefficient !in 0 until VP8_BLOCK_COEFFICIENT_COUNT) return Vp8CoefficientDecodeResult.Invalid
+
+    val coefficients = IntArray(VP8_BLOCK_COEFFICIENT_COUNT)
+    var hasNonZero = false
+    var context = initialContext
+    for (coefficientIndex in startCoefficient until VP8_BLOCK_COEFFICIENT_COUNT) {
+        val tokenProbabilities = probabilities.tokenProbabilities(
+            type = type,
+            band = VP8_COEFFICIENT_BANDS[coefficientIndex],
+            context = context,
+        )
+        if ((reader.readBit(tokenProbabilities[0]) ?: return Vp8CoefficientDecodeResult.Invalid) == 0) {
+            return Vp8CoefficientDecodeResult.Block(coefficients, hasNonZero)
+        }
+        if ((reader.readBit(tokenProbabilities[1]) ?: return Vp8CoefficientDecodeResult.Invalid) == 0) {
+            context = VP8_COEFFICIENT_CONTEXT_ZERO
+            continue
+        }
+
+        val magnitude = readVp8CoefficientMagnitude(reader, tokenProbabilities)
+            ?: return Vp8CoefficientDecodeResult.Invalid
+        val sign = reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return Vp8CoefficientDecodeResult.Invalid
+        coefficients[VP8_ZIGZAG[coefficientIndex]] = if (sign == 0) magnitude else -magnitude
+        hasNonZero = true
+        context = VP8_COEFFICIENT_CONTEXT_NON_ZERO
+    }
+    return Vp8CoefficientDecodeResult.Block(coefficients, hasNonZero)
+}
+
 internal fun decodeVp8CoefficientBlockWithContext(
     reader: Vp8BoolReader,
     probabilitiesByContext: Array<IntArray>,
@@ -1880,11 +1918,9 @@ internal fun decodeVp8MacroblockCoefficients(
                     )
                     val y2Result = decodeVp8CoefficientBlock(
                         reader = reader,
-                        probabilities = probabilities.tokenProbabilities(
-                            type = VP8_COEFFICIENT_TYPE_LUMA_Y2,
-                            band = VP8_COEFFICIENT_BAND_FIRST,
-                            context = y2Context,
-                        ),
+                        probabilities = probabilities,
+                        type = VP8_COEFFICIENT_TYPE_LUMA_Y2,
+                        initialContext = y2Context,
                     )
                     if (y2Result !is Vp8CoefficientDecodeResult.Block) {
                         return Vp8MacroblockCoefficientDecodeResult.Invalid
@@ -2179,11 +2215,9 @@ private fun decodeVp8CoefficientPlane(
             )
             val result = decodeVp8CoefficientBlock(
                 reader = reader,
-                probabilities = probabilities.tokenProbabilities(
-                    type = type,
-                    band = VP8_COEFFICIENT_BAND_FIRST,
-                    context = context,
-                ),
+                probabilities = probabilities,
+                type = type,
+                initialContext = context,
                 startCoefficient = startCoefficient,
             )
             if (result !is Vp8CoefficientDecodeResult.Block) return false
@@ -2477,7 +2511,8 @@ private const val VP8_COEFFICIENT_TYPE_LUMA: Int = 0
 private const val VP8_COEFFICIENT_TYPE_LUMA_Y2: Int = 1
 private const val VP8_COEFFICIENT_TYPE_CHROMA: Int = 2
 private const val VP8_COEFFICIENT_TYPE_LUMA_AC: Int = 3
-private const val VP8_COEFFICIENT_BAND_FIRST: Int = 0
+private const val VP8_COEFFICIENT_CONTEXT_ZERO: Int = 1
+private const val VP8_COEFFICIENT_CONTEXT_NON_ZERO: Int = 2
 
 private fun vp8CoefficientProbabilityIndex(type: Int, band: Int, context: Int, probability: Int): Int =
     (((type * VP8_COEFFICIENT_BAND_COUNT + band) * VP8_COEFFICIENT_CONTEXT_COUNT + context) *
@@ -2488,6 +2523,14 @@ private val VP8_ZIGZAG = intArrayOf(
     5, 2, 3, 6,
     9, 12, 13, 10,
     7, 11, 14, 15,
+)
+
+private val VP8_COEFFICIENT_BANDS = intArrayOf(
+    // Values from libvpx entropy.c vp8_coef_bands.
+    0, 1, 2, 3,
+    6, 4, 5, 6,
+    6, 6, 6, 6,
+    6, 6, 7, 7,
 )
 
 private val VP8_DEFAULT_COEFFICIENT_PROBABILITIES = intArrayOf(

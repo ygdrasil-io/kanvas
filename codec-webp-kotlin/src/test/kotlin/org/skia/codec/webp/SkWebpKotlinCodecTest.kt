@@ -24,6 +24,9 @@ import java.util.ServiceLoader
 class SkWebpKotlinCodecTest {
     private companion object {
         const val VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST: Int = 4 * 8 * 3 * 11
+
+        fun vp8CoefficientProbabilityIndexForTest(type: Int, band: Int, context: Int, probability: Int): Int =
+            (((type * 8 + band) * 3 + context) * 11) + probability
     }
 
     @Test
@@ -620,6 +623,25 @@ class SkWebpKotlinCodecTest {
             IntArray(16).also { it[1] = 5 },
             block.coefficients,
         )
+    }
+
+    @Test
+    fun `VP8 coefficient token decode advances coefficient bands and token contexts`() {
+        val flat = IntArray(VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST) { 128 }
+        flat[vp8CoefficientProbabilityIndexForTest(type = 0, band = 0, context = 0, probability = 0)] = 255
+        flat[vp8CoefficientProbabilityIndexForTest(type = 0, band = 1, context = 1, probability = 0)] = 1
+        val probabilities = Vp8CoefficientProbabilities.fromFlat(flat)
+
+        val result = decodeVp8CoefficientBlock(
+            reader = Vp8BoolReader(ByteArray(4)),
+            probabilities = probabilities,
+            type = 0,
+            initialContext = 0,
+        )
+
+        assertTrue(result is Vp8CoefficientDecodeResult.Block)
+        assertFalse((result as Vp8CoefficientDecodeResult.Block).hasNonZero)
+        assertTrue(result.coefficients.all { it == 0 })
     }
 
     @Test
