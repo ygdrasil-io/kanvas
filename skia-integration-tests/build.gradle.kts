@@ -6,21 +6,11 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
     implementation(project(":kanvas-skia"))
-    implementation(project(":cpu-raster")) {
-        // GM ratchets still compare against the historical AWT/ImageIO
-        // codec output. Keep this suite on that backend while cpu-raster
-        // production consumers move to codec-all-kotlin.
-        exclude(module = "codec-all-kotlin")
-    }
+    implementation(project(":cpu-raster"))
     implementation(project(":codec-core"))
-    implementation(project(":codec-all-awt"))
     implementation(project(":codec-android"))
     implementation(project(":codec-animated"))
     implementation(project(":codec-image-generator"))
-    implementation(project(":codec-png-imageio"))
-    implementation(project(":codec-jpeg-imageio"))
-    implementation(project(":codec-gif-imageio"))
-    implementation(project(":codec-webp-imageio"))
     implementation(project(":codec-extended"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")

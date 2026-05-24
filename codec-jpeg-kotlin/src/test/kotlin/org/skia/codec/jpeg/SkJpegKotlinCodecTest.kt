@@ -274,6 +274,19 @@ class SkJpegKotlinCodecTest {
     }
 
     @Test
+    fun `decodes real world progressive grayscale fixture`() {
+        val codec = SkJpegKotlinCodec.Decoder.make(readLegacyJpeg("grayscale.jpg"))!!
+        val (bitmap, result) = codec.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        val checked = bitmap!!
+        assertEquals(128, checked.width)
+        assertEquals(128, checked.height)
+        assertTrue(red(checked.getPixel(0, 0)) < 16, "top-left should stay dark")
+        assertTrue(red(checked.getPixel(127, 127)) > 240, "bottom-right should stay light")
+        assertTrue(red(checked.getPixel(64, 64)) in 96..192, "center should decode to a mid tone")
+    }
+
+    @Test
     fun `rejects exotic color sampling`() {
         assertNull(SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 8, height = 16, ySampling = 0x12)))
         assertNull(SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21)))
