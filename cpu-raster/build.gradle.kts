@@ -25,13 +25,9 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     testImplementation(project(":codec-test-fixtures"))
+    // Legacy ImageIO codec tests still run against the temporary AWT bundle,
+    // but production cpu-raster uses codec-all-kotlin above.
     testImplementation(project(":codec-all-awt"))
-    testImplementation(project(":codec-png-imageio"))
-    testImplementation(project(":codec-jpeg-imageio"))
-    testImplementation(project(":codec-gif-imageio"))
-    testImplementation(project(":codec-bmp-imageio"))
-    testImplementation(project(":codec-wbmp-imageio"))
-    testImplementation(project(":codec-webp-imageio"))
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
     // D1.4 — PathOps regression harness loads upstream Skia

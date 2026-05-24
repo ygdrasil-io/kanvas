@@ -22,7 +22,6 @@ dependencies {
     // the main JAR stays raster-free.
     testImplementation(project(":cpu-raster"))
     testImplementation(project(":codec-core"))
-    testImplementation(project(":codec-webp-imageio"))
     testImplementation(project(":codec-image-generator"))
     testImplementation(project(":skia-integration-tests"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
@@ -36,6 +35,9 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
+    // SkWebpEncoder tests verify the produced bytes through ImageIO's SPI.
+    // Keep the temporary WebP ImageIO backend runtime-only for that verifier.
+    testRuntimeOnly(project(":codec-webp-imageio"))
     // D1.4 — PathOps regression harness loads upstream Skia
     // fixtures from a JSON resource. jackson-databind is the
     // standard mature JSON parser ; only the harness imports it.
