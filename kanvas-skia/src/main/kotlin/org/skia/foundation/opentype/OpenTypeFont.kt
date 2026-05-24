@@ -130,6 +130,12 @@ public class OpenTypeTypeface private constructor(
     override fun getVariationDesignParameters(): List<SkFontVariation.Axis> =
         font.variationAxes
 
+    internal fun colorPalettes(): List<List<Int>> =
+        font.colorPalettes()
+
+    internal fun colorLayers(glyphId: Int): List<OpenTypeColorLayer> =
+        font.colorLayers(glyphId)
+
     override fun makeTextPath(
         text: String,
         x: SkScalar,
@@ -289,6 +295,7 @@ private class ParsedTrueTypeFont(
     private val glyphOffsets: IntArray,
     private val kern: KernTable?,
     private val gpos: GposPairTable?,
+    private val color: OpenTypeColorFont?,
 ) {
     private val pathCache = HashMap<Int, GlyphOutline?>()
 
@@ -318,6 +325,12 @@ private class ParsedTrueTypeFont(
         val record = tables[openTypeTagToString(tag)] ?: return null
         return bytes.copyOfRange(record.offset, record.offset + record.length)
     }
+
+    fun colorPalettes(): List<List<Int>> =
+        color?.palettes ?: emptyList()
+
+    fun colorLayers(glyphId: Int): List<OpenTypeColorLayer> =
+        color?.layersByGlyph?.get(glyphId) ?: emptyList()
 
     fun glyphBounds(glyphId: Int, size: Float, scaleX: Float, skewX: Float): SkRect {
         val outline = glyphOutline(glyphId) ?: return SkRect.MakeEmpty()
@@ -654,13 +667,14 @@ private class ParsedTrueTypeFont(
             val kern = parseKernTable(bytes, tables["kern"])
             val gpos = if (kern == null && "kern" !in tables) parseGposPairTable(bytes, tables["GPOS"], numGlyphs) else null
             val variationAxes = parseFvarAxes(bytes, tables["fvar"]).orEmpty()
+            val color = parseColorFont(bytes, tables["COLR"], tables["CPAL"])
 
             return ParsedTrueTypeFont(
                 bytes, tables, unitsPerEm, indexToLocFormat, numGlyphs, numHMetrics,
                 ascent, descent, lineGap, maxAdvanceWidth, xMin, yMin, xMax, yMax,
                 avg, sxHeight, sCapHeight, underlinePosition, underlineThickness,
                 strikeoutPosition, strikeoutThickness, familyName, names?.postScriptName, localizedNames,
-                variationAxes, cmap, advances, bearings, offsets, kern, gpos,
+                variationAxes, cmap, advances, bearings, offsets, kern, gpos, color,
             )
         }
 
@@ -777,6 +791,91 @@ private class ParsedTrueTypeFont(
                     nameId = reader.u16(off + 18) ?: return null,
                 )
             }
+        }
+
+        private fun parseColorFont(
+            bytes: ByteArray,
+            colrTable: TableRecord?,
+            cpalTable: TableRecord?,
+        ): OpenTypeColorFont? {
+            val palettes = parseCpalTable(bytes, cpalTable) ?: return null
+            val layersByGlyph = parseColrV0Table(bytes, colrTable) ?: return null
+            return OpenTypeColorFont(palettes, layersByGlyph)
+        }
+
+        private fun parseCpalTable(bytes: ByteArray, table: TableRecord?): List<List<Int>>? {
+            table ?: return null
+            if (table.length < 12) return null
+            val tableEnd = table.offset + table.length
+            val reader = SfntReader(bytes, tableEnd)
+            val version = reader.u16(table.offset) ?: return null
+            if (version != 0) return null
+            val numPaletteEntries = reader.u16(table.offset + 2) ?: return null
+            val numPalettes = reader.u16(table.offset + 4) ?: return null
+            val numColorRecords = reader.u16(table.offset + 6) ?: return null
+            val colorRecordsArrayOffset = reader.u32(table.offset + 8)?.toIntOrNull() ?: return null
+            if (numPaletteEntries > MAX_COLOR_PALETTE_ENTRIES) return null
+            if (numPalettes > MAX_COLOR_PALETTES) return null
+            if (numColorRecords > MAX_COLOR_RECORDS) return null
+            if (numPalettes.toLong() * numPaletteEntries.toLong() > MAX_EXPANDED_COLOR_RECORDS) return null
+            if (!reader.fits(table.offset + 12, numPalettes.toLong() * 2L)) return null
+            val colorRecordsStart = table.offset + colorRecordsArrayOffset
+            if (!reader.fits(colorRecordsStart, numColorRecords.toLong() * 4L)) return null
+            return List(numPalettes) { paletteIndex ->
+                val firstColorRecordIndex = reader.u16(table.offset + 12 + paletteIndex * 2) ?: return null
+                if (firstColorRecordIndex + numPaletteEntries > numColorRecords) return null
+                List(numPaletteEntries) { entryIndex ->
+                    val colorOffset = colorRecordsStart + (firstColorRecordIndex + entryIndex) * 4
+                    val blue = reader.u8(colorOffset) ?: return null
+                    val green = reader.u8(colorOffset + 1) ?: return null
+                    val red = reader.u8(colorOffset + 2) ?: return null
+                    val alpha = reader.u8(colorOffset + 3) ?: return null
+                    ((alpha and 0xFF) shl 24) or
+                        ((red and 0xFF) shl 16) or
+                        ((green and 0xFF) shl 8) or
+                        (blue and 0xFF)
+                }
+            }
+        }
+
+        private fun parseColrV0Table(bytes: ByteArray, table: TableRecord?): Map<Int, List<OpenTypeColorLayer>>? {
+            table ?: return null
+            if (table.length < 14) return null
+            val tableEnd = table.offset + table.length
+            val reader = SfntReader(bytes, tableEnd)
+            val version = reader.u16(table.offset) ?: return null
+            if (version != 0) return null
+            val numBaseGlyphRecords = reader.u16(table.offset + 2) ?: return null
+            val baseGlyphRecordsOffset = reader.u32(table.offset + 4)?.toIntOrNull() ?: return null
+            val layerRecordsOffset = reader.u32(table.offset + 8)?.toIntOrNull() ?: return null
+            val numLayerRecords = reader.u16(table.offset + 12) ?: return null
+            if (numBaseGlyphRecords > MAX_COLOR_BASE_GLYPHS) return null
+            if (numLayerRecords > MAX_COLOR_LAYERS) return null
+            val baseGlyphRecordsStart = table.offset + baseGlyphRecordsOffset
+            val layerRecordsStart = table.offset + layerRecordsOffset
+            if (!reader.fits(baseGlyphRecordsStart, numBaseGlyphRecords.toLong() * 6L)) return null
+            if (!reader.fits(layerRecordsStart, numLayerRecords.toLong() * 4L)) return null
+            val layersByGlyph = HashMap<Int, List<OpenTypeColorLayer>>()
+            var expandedLayerCount = 0L
+            repeat(numBaseGlyphRecords) { baseIndex ->
+                val baseOffset = baseGlyphRecordsStart + baseIndex * 6
+                val glyphId = reader.u16(baseOffset) ?: return null
+                val firstLayerIndex = reader.u16(baseOffset + 2) ?: return null
+                val numLayers = reader.u16(baseOffset + 4) ?: return null
+                if (numLayers > MAX_LAYERS_PER_COLOR_GLYPH) return null
+                expandedLayerCount += numLayers.toLong()
+                if (expandedLayerCount > MAX_EXPANDED_COLOR_LAYERS) return null
+                if (firstLayerIndex + numLayers > numLayerRecords) return null
+                val layers = List(numLayers) { layerIndex ->
+                    val layerOffset = layerRecordsStart + (firstLayerIndex + layerIndex) * 4
+                    OpenTypeColorLayer(
+                        glyphId = reader.u16(layerOffset) ?: return null,
+                        paletteIndex = reader.u16(layerOffset + 2) ?: return null,
+                    )
+                }
+                layersByGlyph[glyphId] = layers
+            }
+            return layersByGlyph
         }
 
         private fun parseKernFormat0(
@@ -1338,6 +1437,11 @@ private class SfntReader(
     fun i16(offset: Int): Short? =
         u16(offset)?.toShort()
 
+    fun u8(offset: Int): Int? {
+        if (!fits(offset, 1)) return null
+        return bytes[offset].toInt() and 0xFF
+    }
+
     fun u32(offset: Int): Long? {
         if (!fits(offset, 4)) return null
         return ((bytes[offset].toLong() and 0xFF) shl 24) or
@@ -1362,6 +1466,11 @@ private class SfntReader(
 }
 
 private data class TableRecord(val offset: Int, val length: Int)
+internal data class OpenTypeColorLayer(val glyphId: Int, val paletteIndex: Int)
+private data class OpenTypeColorFont(
+    val palettes: List<List<Int>>,
+    val layersByGlyph: Map<Int, List<OpenTypeColorLayer>>,
+)
 private data class OpenTypeNames(
     val familyName: String?,
     val postScriptName: String?,
@@ -1414,6 +1523,14 @@ private const val GPOS_PAIR_ADJUSTMENT_LOOKUP = 2
 private const val GPOS_X_PLACEMENT = 0x0001
 private const val GPOS_Y_PLACEMENT = 0x0002
 private const val GPOS_X_ADVANCE = 0x0004
+private const val MAX_COLOR_PALETTES = 256
+private const val MAX_COLOR_PALETTE_ENTRIES = 4096
+private const val MAX_COLOR_RECORDS = 4096
+private const val MAX_EXPANDED_COLOR_RECORDS = 65536L
+private const val MAX_COLOR_BASE_GLYPHS = 8192
+private const val MAX_COLOR_LAYERS = 16384
+private const val MAX_LAYERS_PER_COLOR_GLYPH = 256
+private const val MAX_EXPANDED_COLOR_LAYERS = 65536L
 private const val OS2_USE_TYPO_METRICS = 0x0080
 
 private fun openTypeTagToString(tag: Int): String = buildString(4) {

@@ -88,6 +88,39 @@ class OpenTypeFontTest {
     private fun ByteArray.withoutKerningTables(): ByteArray =
         withTableTag("kern", "zern").withTableTag("GPOS", "zPOS")
 
+    private fun ByteArray.withColrCpalFixture(baseGlyph: Int, layerGlyph0: Int, layerGlyph1: Int): ByteArray =
+        withTableContent("GPOS", "COLR", syntheticColrV0(baseGlyph, layerGlyph0, layerGlyph1))
+            .withTableContent("kern", "CPAL", syntheticCpalV0())
+
+    private fun ByteArray.withTableContent(from: String, to: String, content: ByteArray): ByteArray {
+        require(from.length == 4)
+        require(to.length == 4)
+        val copy = copyOf()
+        val record = copy.tableDirectoryRecord(from)
+        val offset = readU32(copy, record + 8)
+        val length = readU32(copy, record + 12)
+        require(content.size <= length) { "$from table too small for synthetic $to table" }
+        to.toByteArray(Charsets.ISO_8859_1).copyInto(copy, record)
+        writeU32(copy, record + 12, content.size)
+        content.copyInto(copy, offset)
+        for (i in offset + content.size until offset + length) copy[i] = 0
+        return copy
+    }
+
+    private fun ByteArray.withTableContentKeepingOriginalLength(from: String, to: String, content: ByteArray): ByteArray {
+        require(from.length == 4)
+        require(to.length == 4)
+        val copy = copyOf()
+        val record = copy.tableDirectoryRecord(from)
+        val offset = readU32(copy, record + 8)
+        val length = readU32(copy, record + 12)
+        require(content.size <= length) { "$from table too small for synthetic $to table" }
+        to.toByteArray(Charsets.ISO_8859_1).copyInto(copy, record)
+        content.copyInto(copy, offset)
+        for (i in offset + content.size until offset + length) copy[i] = 0
+        return copy
+    }
+
     private fun ByteArray.withGposFeatureTag(from: String, to: String): ByteArray {
         require(from.length == 4)
         require(to.length == 4)
@@ -582,6 +615,68 @@ class OpenTypeFontTest {
         assertNull(typeface.getKerningPairAdjustments(glyphs))
     }
 
+    @Test
+    fun `COLRv0 and CPAL metadata expose palettes and color layers`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2]),
+        )!!
+
+        val palettes = typeface.colorPalettes()
+        val layers = typeface.colorLayers(glyphs[0])
+
+        assertEquals(listOf(listOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt())), palettes)
+        assertEquals(listOf(OpenTypeColorLayer(glyphs[1], 0), OpenTypeColorLayer(glyphs[2], 1)), layers)
+        assertTrue(typeface.colorLayers(glyphs[1]).isEmpty())
+    }
+
+    @Test
+    fun `fonts without COLR and CPAL expose no color metadata`() {
+        val typeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(typeface, 12f).textToGlyphs("A").single()
+
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertTrue(typeface.colorLayers(glyph).isEmpty())
+    }
+
+    @Test
+    fun `malformed color tables fail closed without rejecting the font`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val bytes = liberationSansBytes()
+            .withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2])
+            .withTableLength("COLR", 4)
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertTrue(typeface.colorLayers(glyphs[0]).isEmpty())
+    }
+
+    @Test
+    fun `oversized color table counts fail closed before expansion`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val bytes = liberationSansBytes()
+            .withTableContent("GPOS", "COLR", syntheticColrV0(glyphs[0], glyphs[1], glyphs[2]))
+            .withTableContentKeepingOriginalLength("kern", "CPAL", syntheticOversizedCpalV0())
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertTrue(typeface.colorLayers(glyphs[0]).isEmpty())
+    }
+
+    @Test
+    fun `duplicated COLR layer ranges fail closed before expansion`() {
+        val bytes = liberationSansBytes()
+            .withTableContentKeepingOriginalLength("GPOS", "COLR", syntheticOversizedColrV0())
+            .withTableContent("kern", "CPAL", syntheticCpalV0())
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertTrue(typeface.colorLayers(1).isEmpty())
+    }
+
     private fun assertCompositePathTransform(
         bytes: ByteArray,
         codepoint: String,
@@ -699,6 +794,78 @@ class OpenTypeFontTest {
         bytes[off + 1] = (value ushr 16).toByte()
         bytes[off + 2] = (value ushr 8).toByte()
         bytes[off + 3] = value.toByte()
+    }
+
+    private fun syntheticCpalV0(): ByteArray {
+        val bytes = ByteArray(26)
+        writeU16(bytes, 2, 3) // numPaletteEntries
+        writeU16(bytes, 4, 1) // numPalettes
+        writeU16(bytes, 6, 3) // numColorRecords
+        writeU32(bytes, 8, 14) // colorRecordsArrayOffset
+        writeU16(bytes, 12, 0) // firstColorRecordIndex
+        writeBgra(bytes, 14, blue = 0, green = 0, red = 0xFF, alpha = 0xFF)
+        writeBgra(bytes, 18, blue = 0, green = 0xFF, red = 0, alpha = 0xFF)
+        writeBgra(bytes, 22, blue = 0xFF, green = 0, red = 0, alpha = 0xFF)
+        return bytes
+    }
+
+    private fun syntheticOversizedCpalV0(): ByteArray {
+        val paletteCount = 1024
+        val colorRecordsOffset = 12 + paletteCount * 2
+        val bytes = ByteArray(colorRecordsOffset + 4)
+        writeU16(bytes, 2, 1) // numPaletteEntries
+        writeU16(bytes, 4, paletteCount)
+        writeU16(bytes, 6, 1) // numColorRecords
+        writeU32(bytes, 8, colorRecordsOffset)
+        writeBgra(bytes, colorRecordsOffset, blue = 0, green = 0, red = 0xFF, alpha = 0xFF)
+        return bytes
+    }
+
+    private fun syntheticColrV0(baseGlyph: Int, layerGlyph0: Int, layerGlyph1: Int): ByteArray {
+        val bytes = ByteArray(28)
+        writeU16(bytes, 2, 1) // numBaseGlyphRecords
+        writeU32(bytes, 4, 14) // baseGlyphRecordsOffset
+        writeU32(bytes, 8, 20) // layerRecordsOffset
+        writeU16(bytes, 12, 2) // numLayerRecords
+        writeU16(bytes, 14, baseGlyph)
+        writeU16(bytes, 16, 0) // firstLayerIndex
+        writeU16(bytes, 18, 2) // numLayers
+        writeU16(bytes, 20, layerGlyph0)
+        writeU16(bytes, 22, 0) // paletteIndex
+        writeU16(bytes, 24, layerGlyph1)
+        writeU16(bytes, 26, 1) // paletteIndex
+        return bytes
+    }
+
+    private fun syntheticOversizedColrV0(): ByteArray {
+        val baseGlyphCount = 300
+        val layerCount = 256
+        val baseOffset = 14
+        val layerOffset = baseOffset + baseGlyphCount * 6
+        val bytes = ByteArray(layerOffset + layerCount * 4)
+        writeU16(bytes, 2, baseGlyphCount)
+        writeU32(bytes, 4, baseOffset)
+        writeU32(bytes, 8, layerOffset)
+        writeU16(bytes, 12, layerCount)
+        repeat(baseGlyphCount) {
+            val off = baseOffset + it * 6
+            writeU16(bytes, off, it + 1)
+            writeU16(bytes, off + 2, 0)
+            writeU16(bytes, off + 4, layerCount)
+        }
+        repeat(layerCount) {
+            val off = layerOffset + it * 4
+            writeU16(bytes, off, it + 1)
+            writeU16(bytes, off + 2, 0)
+        }
+        return bytes
+    }
+
+    private fun writeBgra(bytes: ByteArray, off: Int, blue: Int, green: Int, red: Int, alpha: Int) {
+        bytes[off] = blue.toByte()
+        bytes[off + 1] = green.toByte()
+        bytes[off + 2] = red.toByte()
+        bytes[off + 3] = alpha.toByte()
     }
 
     private fun toF2Dot14(value: Float): Int =
