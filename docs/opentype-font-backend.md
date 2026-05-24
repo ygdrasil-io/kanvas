@@ -39,6 +39,22 @@ The backend has no AWT or JNI dependency. It is intended as the first portable
 font path for environments where JVM desktop font APIs or native Skia bindings
 are unavailable.
 
+## System Font Fallback Policy
+
+The portable backend deliberately does not enumerate host system fonts. Its
+default fallback surface is limited to bundled Liberation faces and fonts
+loaded explicitly through `OpenTypeTypeface.MakeFromBytes`,
+`OpenTypeFontMgr.makeFromData`, or related data/stream APIs. When no bundled
+or provided face can cover a family/style/codepoint request, portable managers
+return an empty style set or `null` rather than consulting the operating
+system.
+
+Host system font enumeration remains a JVM/cpu-raster integration concern.
+The optional AWT backend is exposed from `org.skia.foundation.awt` with the
+explicit `SkFontMgr.RefAwtDefault()` extension and may use
+`java.awt.GraphicsEnvironment`. Portable `kanvas-skia` code must not import
+that package or depend on installed fonts.
+
 ## Explicitly Unsupported
 
 - Full text shaping: bidi, script itemization, reordering, mark positioning,

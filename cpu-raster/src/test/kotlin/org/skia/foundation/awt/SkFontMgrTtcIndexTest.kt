@@ -68,7 +68,7 @@ class SkFontMgrTtcIndexTest {
 
     @Test
     fun `makeFromData index 0 and 1 produce different faces`() {
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val face0Bytes = loadTtf("LiberationSans-Regular.ttf")
         val face1Bytes = loadTtf("LiberationSerif-Regular.ttf")
         val ttc = SkData.MakeWithCopy(buildTtc(face0Bytes, face1Bytes))
@@ -90,7 +90,7 @@ class SkFontMgrTtcIndexTest {
 
     @Test
     fun `makeFromData with ttcIndex out of range returns null`() {
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val face0Bytes = loadTtf("LiberationSans-Regular.ttf")
         val face1Bytes = loadTtf("LiberationSerif-Regular.ttf")
         val ttc = SkData.MakeWithCopy(buildTtc(face0Bytes, face1Bytes))
@@ -101,7 +101,7 @@ class SkFontMgrTtcIndexTest {
 
     @Test
     fun `makeFromData with non-TTC and ttcIndex non-zero returns null`() {
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val singleFace = SkData.MakeWithCopy(loadTtf("LiberationSans-Regular.ttf"))
         // Single-face TTF — only ttcIndex=0 is valid.
         assertNotNull(mgr.makeFromData(singleFace, ttcIndex = 0))
@@ -112,7 +112,7 @@ class SkFontMgrTtcIndexTest {
     fun `makeFromData index 0 matches direct TTF load`() {
         // Sanity check: TTC face 0 should yield the same metrics as
         // loading the underlying TTF directly.
-        val mgr = SkFontMgr.RefDefault()
+        val mgr = SkFontMgr.RefAwtDefault()
         val face0Bytes = loadTtf("LiberationSans-Regular.ttf")
         val face1Bytes = loadTtf("LiberationSerif-Regular.ttf")
         val ttc = SkData.MakeWithCopy(buildTtc(face0Bytes, face1Bytes))
