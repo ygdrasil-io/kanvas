@@ -26,7 +26,9 @@ import java.util.zip.Inflater
  * for grayscale, RGB, and indexed colour PNGs. It parses `iCCP` chunks
  * best-effort: malformed chunks reject the PNG, parseable profiles become the
  * image color space, and structurally-valid but unsupported profiles fall back
- * to sRGB.
+ * to sRGB. Colour metadata chunks `gAMA`, `cHRM`, and `sRGB` are recognized and
+ * structurally validated, but do not currently synthesize an ICC profile; the
+ * decoder keeps using sRGB unless an embedded `iCCP` profile is parsed.
  */
 public class SkPngKotlinCodec private constructor(
     private val png: ParsedPng,
@@ -269,6 +271,9 @@ public class SkPngKotlinCodec private constructor(
             var transparency: Transparency? = null
             var iccProfile: SkcmsICCProfile? = null
             var sawIccp = false
+            var sawGamma = false
+            var sawChrm = false
+            var sawSrgb = false
             var sawIdat = false
             var sawNonIdatAfterIdat = false
             var sawIend = false
@@ -314,6 +319,23 @@ public class SkPngKotlinCodec private constructor(
                         sawIccp = true
                         val profileBytes = parseIccp(data, dataOffset, length) ?: return null
                         iccProfile = skcmsParse(profileBytes)
+                    }
+                    TYPE_GAMA -> {
+                        if (header == null || sawIdat || sawIend || sawGamma || palette != null) return null
+                        if (length != 4) return null
+                        sawGamma = true
+                    }
+                    TYPE_CHRM -> {
+                        if (header == null || sawIdat || sawIend || sawChrm || palette != null) return null
+                        if (length != 32) return null
+                        sawChrm = true
+                    }
+                    TYPE_SRGB -> {
+                        if (header == null || sawIdat || sawIend || sawSrgb || palette != null) return null
+                        if (length != 1) return null
+                        val intent = data[dataOffset].toInt() and 0xFF
+                        if (intent > 3) return null
+                        sawSrgb = true
                     }
                     TYPE_IEND -> {
                         if (length != 0 || header == null) return null
@@ -546,8 +568,11 @@ private const val MAX_DIMENSION: Int = 100_000
 private const val TYPE_IHDR: Int = 0x49484452
 private const val TYPE_IDAT: Int = 0x49444154
 private const val TYPE_IEND: Int = 0x49454E44
+private const val TYPE_CHRM: Int = 0x6348524D
+private const val TYPE_GAMA: Int = 0x67414D41
 private const val TYPE_ICCP: Int = 0x69434350
 private const val TYPE_PLTE: Int = 0x504C5445
+private const val TYPE_SRGB: Int = 0x73524742
 private const val TYPE_TRNS: Int = 0x74524E53
 private const val MAX_ICC_PROFILE_SIZE: Int = 16 * 1024 * 1024
 
