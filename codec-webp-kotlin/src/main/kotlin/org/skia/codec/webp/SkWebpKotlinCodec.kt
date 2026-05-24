@@ -260,13 +260,19 @@ private fun decodeSimpleVp8l(data: ByteArray, metadata: WebpMetadata): Vp8lDecod
         transforms += transform
     }
 
-    val colorCachePresent = bits.readBits(1) ?: return Vp8lDecodeResult.Invalid
-    if (colorCachePresent != 0) return Vp8lDecodeResult.Unsupported
+    val colorCache = when (bits.readBits(1) ?: return Vp8lDecodeResult.Invalid) {
+        0 -> null
+        else -> {
+            val colorCacheBits = bits.readBits(4) ?: return Vp8lDecodeResult.Invalid
+            if (colorCacheBits !in 1..11) return Vp8lDecodeResult.Invalid
+            Vp8lColorCache(colorCacheBits)
+        }
+    }
 
     val metaPrefixPresent = bits.readBits(1) ?: return Vp8lDecodeResult.Invalid
     if (metaPrefixPresent != 0) return Vp8lDecodeResult.Unsupported
 
-    val group = when (val groupResult = SimpleVp8lPrefixGroup.read(bits)) {
+    val group = when (val groupResult = SimpleVp8lPrefixGroup.read(bits, colorCacheSize = colorCache?.size ?: 0)) {
         Vp8lPrefixGroupReadResult.Invalid -> return Vp8lDecodeResult.Invalid
         Vp8lPrefixGroupReadResult.Unsupported -> return Vp8lDecodeResult.Unsupported
         is Vp8lPrefixGroupReadResult.Group -> groupResult.group
@@ -280,17 +286,28 @@ private fun decodeSimpleVp8l(data: ByteArray, metadata: WebpMetadata): Vp8lDecod
             val red = group.red.decode(bits) ?: return Vp8lDecodeResult.Invalid
             val blue = group.blue.decode(bits) ?: return Vp8lDecodeResult.Invalid
             val alpha = group.alpha.decode(bits) ?: return Vp8lDecodeResult.Invalid
-            pixels[i++] = packArgb(alpha, red, green, blue)
+            val pixel = packArgb(alpha, red, green, blue)
+            pixels[i++] = pixel
+            colorCache?.insert(pixel)
             continue
         }
-        if (green >= 256 + VP8L_LENGTH_PREFIX_CODE_COUNT) return Vp8lDecodeResult.Unsupported
+        if (green >= 256 + VP8L_LENGTH_PREFIX_CODE_COUNT) {
+            val cache = colorCache ?: return Vp8lDecodeResult.Unsupported
+            val cacheIndex = green - 256 - VP8L_LENGTH_PREFIX_CODE_COUNT
+            val pixel = cache[cacheIndex] ?: return Vp8lDecodeResult.Invalid
+            pixels[i++] = pixel
+            cache.insert(pixel)
+            continue
+        }
         val length = readVp8lPrefixValue(bits, green - 256) ?: return Vp8lDecodeResult.Invalid
         val distancePrefix = group.distance.decode(bits) ?: return Vp8lDecodeResult.Invalid
         val distanceCode = readVp8lPrefixValue(bits, distancePrefix) ?: return Vp8lDecodeResult.Invalid
         val distance = pixelDistanceFromCode(distanceCode, metadata.width)
         if (distance < 1 || distance > i || i + length > pixels.size) return Vp8lDecodeResult.Invalid
         repeat(length) {
-            pixels[i] = pixels[i - distance]
+            val pixel = pixels[i - distance]
+            pixels[i] = pixel
+            colorCache?.insert(pixel)
             i++
         }
     }
@@ -308,6 +325,26 @@ private const val VP8L_LENGTH_PREFIX_CODE_COUNT: Int = 24
 private enum class Vp8lTransform {
     SubtractGreen,
 }
+
+private class Vp8lColorCache(
+    private val bits: Int,
+) {
+    private val colors = IntArray(1 shl bits)
+
+    val size: Int get() = colors.size
+
+    operator fun get(index: Int): Int? =
+        if (index in colors.indices) colors[index] else null
+
+    fun insert(color: Int) {
+        colors[index(color)] = color
+    }
+
+    private fun index(color: Int): Int =
+        (color * VP8L_COLOR_CACHE_HASH_MULTIPLIER) ushr (32 - bits)
+}
+
+private const val VP8L_COLOR_CACHE_HASH_MULTIPLIER: Int = 0x1e35a7bd
 
 private fun IntArray.applySubtractGreenTransform() {
     for (i in indices) {
@@ -350,8 +387,9 @@ private data class SimpleVp8lPrefixGroup(
     val distance: Vp8lHuffmanCode,
 ) {
     companion object {
-        fun read(bits: Vp8lBitReader): Vp8lPrefixGroupReadResult {
-            val green = when (val result = Vp8lHuffmanCode.read(bits, alphabetSize = 256 + 24)) {
+        fun read(bits: Vp8lBitReader, colorCacheSize: Int): Vp8lPrefixGroupReadResult {
+            val greenAlphabetSize = 256 + VP8L_LENGTH_PREFIX_CODE_COUNT + colorCacheSize
+            val green = when (val result = Vp8lHuffmanCode.read(bits, alphabetSize = greenAlphabetSize)) {
                 Vp8lHuffmanReadResult.Invalid -> return Vp8lPrefixGroupReadResult.Invalid
                 Vp8lHuffmanReadResult.Unsupported -> return Vp8lPrefixGroupReadResult.Unsupported
                 is Vp8lHuffmanReadResult.Code -> result.code
