@@ -9,8 +9,8 @@ import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
 @Disabled(
-    "STUB.DRAW_VERTICES_COLOR_FILTER: VerticesGM still renders ~59% after vertex/shader blend " +
-        "coverage; remaining parity needs paint colorFilter support on vertices, including kDarken.",
+    "STUB.DRAW_VERTICES_VISUAL_PARITY: vertex blend and colorFilter paths are covered, " +
+        "but VerticesGM still renders ~60% and needs focused image-diff follow-up.",
 )
 class VerticesTest {
 

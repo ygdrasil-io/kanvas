@@ -11,6 +11,7 @@ import org.graphiks.math.SkColorMatrix
 import org.skia.core.SkAlphaType
 import org.skia.core.SkColorSpaceXformSteps
 import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * Mirrors Skia's
@@ -623,20 +624,167 @@ internal fun blendPremul(
             out[2] = sb + db - sb * db
             out[3] = sa + da - sa * da
         }
-        // Separable + HSL [SkBlendMode]s are not yet supported as
-        // SkBlendColorFilter inputs — they're rare in practice (tint
-        // filters use kModulate / kSrcIn / kSrcOver) and the in-device
-        // implementations live behind `internal` visibility in the
-        // `org.skia.core` package, which `org.skia.foundation` can't
-        // reach without a refactor. A follow-up slice will hoist the
-        // pure-float blend dispatcher out of [org.skia.core.SkBitmapDevice]
-        // and reuse it here.
-        else -> throw UnsupportedOperationException(
-            "SkBlendColorFilter does not support separable/HSL mode $mode yet — " +
-                "use a SkColorMatrix or open a follow-up to hoist the float blend dispatcher.",
-        )
+        SkBlendMode.kMultiply, SkBlendMode.kDarken, SkBlendMode.kLighten,
+        SkBlendMode.kDifference, SkBlendMode.kExclusion,
+        SkBlendMode.kOverlay, SkBlendMode.kHardLight,
+        SkBlendMode.kColorDodge, SkBlendMode.kColorBurn, SkBlendMode.kSoftLight -> {
+            out[0] = sepChannel(sr, dr, sa, da, mode)
+            out[1] = sepChannel(sg, dg, sa, da, mode)
+            out[2] = sepChannel(sb, db, sa, da, mode)
+            out[3] = sa + da - sa * da
+        }
+        SkBlendMode.kHue, SkBlendMode.kSaturation,
+        SkBlendMode.kColor, SkBlendMode.kLuminosity -> {
+            val body = FloatArray(3)
+            blendHSLBody(sr, sg, sb, sa, dr, dg, db, da, mode, body)
+            out[0] = sr * (1f - da) + dr * (1f - sa) + body[0]
+            out[1] = sg * (1f - da) + dg * (1f - sa) + body[1]
+            out[2] = sb * (1f - da) + db * (1f - sa) + body[2]
+            out[3] = sa + da - sa * da
+        }
     }
     return out
+}
+
+private fun sepChannel(s: Float, d: Float, sa: Float, da: Float, mode: SkBlendMode): Float = when (mode) {
+    SkBlendMode.kMultiply -> (1f - sa) * d + (1f - da) * s + s * d
+    SkBlendMode.kDarken -> s + d - maxOf(s * da, d * sa)
+    SkBlendMode.kLighten -> s + d - minOf(s * da, d * sa)
+    SkBlendMode.kDifference -> s + d - 2f * minOf(s * da, d * sa)
+    SkBlendMode.kExclusion -> s + d - 2f * s * d
+    SkBlendMode.kHardLight -> hardLightChannel(s, d, sa, da)
+    SkBlendMode.kOverlay -> hardLightChannel(d, s, da, sa)
+    SkBlendMode.kColorDodge -> colorDodgeChannel(s, d, sa, da)
+    SkBlendMode.kColorBurn -> colorBurnChannel(s, d, sa, da)
+    SkBlendMode.kSoftLight -> softLightChannel(s, d, sa, da)
+    else -> error("sepChannel called with non-separable mode: $mode")
+}
+
+private fun hardLightChannel(s: Float, d: Float, sa: Float, da: Float): Float {
+    val carrier = (1f - sa) * d + (1f - da) * s
+    val body = if (2f * s <= sa) {
+        2f * s * d
+    } else {
+        sa * da - 2f * (da - d) * (sa - s)
+    }
+    return carrier + body
+}
+
+private fun colorDodgeChannel(s: Float, d: Float, sa: Float, da: Float): Float {
+    if (d <= 0f) return s * (1f - da)
+    if (s >= sa) return sa * da + s * (1f - da) + d * (1f - sa)
+    val ratio = d * sa / (sa - s)
+    val n = if (ratio < da) ratio else da
+    return n * sa + s * (1f - da) + d * (1f - sa)
+}
+
+private fun colorBurnChannel(s: Float, d: Float, sa: Float, da: Float): Float {
+    if (d >= da) return sa * da + s * (1f - da) + d * (1f - sa)
+    if (s <= 0f) return d * (1f - sa)
+    val ratio = (da - d) * sa / s
+    val n = if (ratio < da) ratio else da
+    return (da - n) * sa + s * (1f - da) + d * (1f - sa)
+}
+
+private fun softLightChannel(s: Float, d: Float, sa: Float, da: Float): Float {
+    val carrier = s * (1f - da) + d * (1f - sa)
+    if (2f * s <= sa) {
+        val m = if (da > 0f) d / da else 0f
+        val body = d * (sa + (2f * s - sa) * (1f - m))
+        return carrier + body
+    }
+    val m = if (da > 0f) d / da else 0f
+    val correction = if (4f * d <= da) {
+        val mm = 4f * m
+        mm * (mm + 1f) * (mm - 1f) + 7f * m - 1f
+    } else {
+        sqrt(m) - m
+    }
+    val body = d * sa + da * (2f * s - sa) * correction
+    return carrier + body
+}
+
+private fun blendHSLBody(
+    sr: Float, sg: Float, sb: Float, sa: Float,
+    dr: Float, dg: Float, db: Float, da: Float,
+    mode: SkBlendMode,
+    out: FloatArray,
+) {
+    val a = sa * da
+    val srA = sr * da; val sgA = sg * da; val sbA = sb * da
+    val drA = dr * sa; val dgA = dg * sa; val dbA = db * sa
+    when (mode) {
+        SkBlendMode.kHue -> {
+            out[0] = srA; out[1] = sgA; out[2] = sbA
+            setSat(out, sat3(drA, dgA, dbA))
+            setLum(out, a, lum3(drA, dgA, dbA))
+        }
+        SkBlendMode.kSaturation -> {
+            out[0] = drA; out[1] = dgA; out[2] = dbA
+            setSat(out, sat3(srA, sgA, sbA))
+            setLum(out, a, lum3(drA, dgA, dbA))
+        }
+        SkBlendMode.kColor -> {
+            out[0] = srA; out[1] = sgA; out[2] = sbA
+            setLum(out, a, lum3(drA, dgA, dbA))
+        }
+        SkBlendMode.kLuminosity -> {
+            out[0] = drA; out[1] = dgA; out[2] = dbA
+            setLum(out, a, lum3(srA, sgA, sbA))
+        }
+        else -> error("blendHSLBody called with non-HSL mode: $mode")
+    }
+}
+
+private fun lum3(r: Float, g: Float, b: Float): Float =
+    r * 0.3f + g * 0.59f + b * 0.11f
+
+private fun sat3(r: Float, g: Float, b: Float): Float =
+    maxOf(r, maxOf(g, b)) - minOf(r, minOf(g, b))
+
+private fun setLum(rgb: FloatArray, alpha: Float, newLum: Float) {
+    val diff = newLum - lum3(rgb[0], rgb[1], rgb[2])
+    rgb[0] += diff
+    rgb[1] += diff
+    rgb[2] += diff
+    clipColor(rgb, alpha)
+}
+
+private fun setSat(rgb: FloatArray, newSat: Float) {
+    val r = rgb[0]; val g = rgb[1]; val b = rgb[2]
+    val mn = minOf(r, minOf(g, b))
+    val mx = maxOf(r, maxOf(g, b))
+    val s = mx - mn
+    if (s > 0f) {
+        val factor = newSat / s
+        rgb[0] = (r - mn) * factor
+        rgb[1] = (g - mn) * factor
+        rgb[2] = (b - mn) * factor
+    } else {
+        rgb[0] = 0f; rgb[1] = 0f; rgb[2] = 0f
+    }
+}
+
+private fun clipColor(rgb: FloatArray, alpha: Float) {
+    val l = lum3(rgb[0], rgb[1], rgb[2])
+    var r = rgb[0]; var g = rgb[1]; var b = rgb[2]
+    val mn = minOf(r, minOf(g, b))
+    val mx = maxOf(r, maxOf(g, b))
+    if (mn < 0f) {
+        val denom = l - mn
+        val factor = if (denom > 0f) l / denom else 0f
+        r = l + (r - l) * factor
+        g = l + (g - l) * factor
+        b = l + (b - l) * factor
+    }
+    if (mx > alpha) {
+        val denom = mx - l
+        val factor = if (denom > 0f) (alpha - l) / denom else 0f
+        r = l + (r - l) * factor
+        g = l + (g - l) * factor
+        b = l + (b - l) * factor
+    }
+    rgb[0] = r; rgb[1] = g; rgb[2] = b
 }
 
 // -- Backend-facing extractors ----------------------------------------------

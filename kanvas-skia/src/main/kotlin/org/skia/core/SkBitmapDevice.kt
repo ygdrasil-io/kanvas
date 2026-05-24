@@ -445,7 +445,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 val src = SkColorSetARGB(
                     finalA, SkColorGetR(combinedRaw), SkColorGetG(combinedRaw), SkColorGetB(combinedRaw),
                 )
-                dispatchBlend(x, y, src, mode, blender)
+                dispatchBlend(x, y, applyColorFilter(paint.colorFilter, src), mode, blender)
             }
         }
     }
@@ -535,7 +535,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 val src = SkColorSetARGB(
                     finalA, SkColorGetR(combinedRaw), SkColorGetG(combinedRaw), SkColorGetB(combinedRaw),
                 )
-                dispatchBlend(x, y, src, mode, blender)
+                dispatchBlend(x, y, applyColorFilter(paint.colorFilter, src), mode, blender)
             }
         }
     }
