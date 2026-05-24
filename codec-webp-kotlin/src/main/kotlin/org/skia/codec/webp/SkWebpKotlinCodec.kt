@@ -1117,6 +1117,20 @@ internal sealed interface Vp8LossyHeaderDecodeResult {
     data object Invalid : Vp8LossyHeaderDecodeResult
 }
 
+internal data class Vp8MacroblockMode(
+    val yMode: Vp8LumaPredictionMode,
+    val uvMode: Vp8IntraPredictionMode,
+    val skipCoefficients: Boolean,
+)
+
+internal enum class Vp8LumaPredictionMode {
+    DC,
+    VERTICAL,
+    HORIZONTAL,
+    TRUE_MOTION,
+    B_PRED,
+}
+
 private fun decodeVp8LossyHeader(data: ByteArray, metadata: WebpMetadata): Vp8LossyHeaderDecodeResult {
     val payloadOffset = metadata.payloadOffset
     val payloadSize = metadata.payloadSize
@@ -1178,6 +1192,42 @@ internal fun readVp8LossyFrameHeader(
             quantization = quantization,
         ),
     )
+}
+
+internal fun readVp8KeyFrameMacroblockModes(
+    reader: Vp8BoolReader,
+    header: Vp8LossyFrameHeader,
+    noCoeffSkip: Boolean,
+): List<Vp8MacroblockMode>? {
+    val macroblocks = ArrayList<Vp8MacroblockMode>(header.macroblockWidth * header.macroblockHeight)
+    repeat(header.macroblockWidth * header.macroblockHeight) {
+        val skipCoefficients = if (noCoeffSkip) {
+            reader.readBit(VP8_BOOL_HALF_PROBABILITY) ?: return null
+        } else {
+            0
+        }
+        macroblocks += Vp8MacroblockMode(
+            yMode = reader.readVp8KeyFrameYMode() ?: return null,
+            uvMode = reader.readVp8KeyFrameUvMode() ?: return null,
+            skipCoefficients = skipCoefficients != 0,
+        )
+    }
+    return macroblocks
+}
+
+private fun Vp8BoolReader.readVp8KeyFrameYMode(): Vp8LumaPredictionMode? {
+    if ((readBit(145) ?: return null) == 0) return Vp8LumaPredictionMode.DC
+    if ((readBit(156) ?: return null) == 0) return Vp8LumaPredictionMode.VERTICAL
+    if ((readBit(163) ?: return null) == 0) return Vp8LumaPredictionMode.HORIZONTAL
+    if ((readBit(128) ?: return null) == 0) return Vp8LumaPredictionMode.TRUE_MOTION
+    return Vp8LumaPredictionMode.B_PRED
+}
+
+private fun Vp8BoolReader.readVp8KeyFrameUvMode(): Vp8IntraPredictionMode? {
+    if ((readBit(142) ?: return null) == 0) return Vp8IntraPredictionMode.DC
+    if ((readBit(114) ?: return null) == 0) return Vp8IntraPredictionMode.VERTICAL
+    if ((readBit(183) ?: return null) == 0) return Vp8IntraPredictionMode.HORIZONTAL
+    return Vp8IntraPredictionMode.TRUE_MOTION
 }
 
 private fun Vp8BoolReader.readVp8SignedDelta(): Int? {
@@ -1277,6 +1327,21 @@ internal fun decodeVp8CoefficientBlock(
     return Vp8CoefficientDecodeResult.Block(coefficients, hasNonZero)
 }
 
+internal fun decodeVp8CoefficientBlockWithContext(
+    reader: Vp8BoolReader,
+    probabilitiesByContext: Array<IntArray>,
+    leftHasNonZero: Boolean,
+    topHasNonZero: Boolean,
+    startCoefficient: Int = 0,
+): Vp8CoefficientDecodeResult {
+    if (probabilitiesByContext.size != VP8_COEFFICIENT_CONTEXT_COUNT) return Vp8CoefficientDecodeResult.Invalid
+    val context = vp8CoefficientContext(leftHasNonZero, topHasNonZero)
+    return decodeVp8CoefficientBlock(reader, probabilitiesByContext[context], startCoefficient)
+}
+
+internal fun vp8CoefficientContext(leftHasNonZero: Boolean, topHasNonZero: Boolean): Int =
+    (if (leftHasNonZero) 1 else 0) + (if (topHasNonZero) 1 else 0)
+
 private fun readVp8CoefficientMagnitude(reader: Vp8BoolReader, probabilities: IntArray): Int? {
     if ((reader.readBit(probabilities[2]) ?: return null) == 0) return 1
     if ((reader.readBit(probabilities[3]) ?: return null) == 0) {
@@ -1312,6 +1377,7 @@ private fun readVp8CoefficientCategory(reader: Vp8BoolReader, base: Int, probabi
 }
 
 private const val VP8_BLOCK_COEFFICIENT_COUNT: Int = 16
+private const val VP8_COEFFICIENT_CONTEXT_COUNT: Int = 3
 private const val VP8_COEFFICIENT_TOKEN_PROBABILITY_COUNT: Int = 11
 
 private val VP8_ZIGZAG = intArrayOf(

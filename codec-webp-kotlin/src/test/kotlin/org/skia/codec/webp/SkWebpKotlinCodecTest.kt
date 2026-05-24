@@ -421,6 +421,65 @@ class SkWebpKotlinCodecTest {
     }
 
     @Test
+    fun `parses VP8 keyframe macroblock modes from positioned bitstream`() {
+        val modeBits = Vp8TestBitWriter().apply {
+            repeat(4) {
+                writeBit(0) // Macroblock is not skipped.
+                writeBit(0) // Y DC mode.
+                writeBit(0) // UV DC mode.
+            }
+        }.toByteArray()
+        val header = Vp8LossyFrameHeader(
+            colorSpace = 0,
+            clampType = 0,
+            macroblockWidth = 2,
+            macroblockHeight = 2,
+            loopFilter = Vp8LoopFilterHeader(simpleFilter = false, level = 0, sharpness = 0),
+            quantization = Vp8QuantizationHeader(
+                yAcIndex = 0,
+                yDcDelta = 0,
+                y2DcDelta = 0,
+                y2AcDelta = 0,
+                uvDcDelta = 0,
+                uvAcDelta = 0,
+            ),
+        )
+
+        val macroblocks = readVp8KeyFrameMacroblockModes(
+            reader = Vp8BoolReader(modeBits),
+            header = header,
+            noCoeffSkip = true,
+        )
+
+        assertNotNull(macroblocks)
+        assertEquals(4, macroblocks!!.size)
+        assertTrue(macroblocks.all { it.yMode == Vp8LumaPredictionMode.DC })
+        assertTrue(macroblocks.all { it.uvMode == Vp8IntraPredictionMode.DC })
+        assertTrue(macroblocks.none { it.skipCoefficients })
+    }
+
+    @Test
+    fun `VP8 keyframe macroblock mode parser rejects truncated mode stream`() {
+        val header = Vp8LossyFrameHeader(
+            colorSpace = 0,
+            clampType = 0,
+            macroblockWidth = 4,
+            macroblockHeight = 4,
+            loopFilter = Vp8LoopFilterHeader(simpleFilter = false, level = 0, sharpness = 0),
+            quantization = Vp8QuantizationHeader(
+                yAcIndex = 0,
+                yDcDelta = 0,
+                y2DcDelta = 0,
+                y2AcDelta = 0,
+                uvDcDelta = 0,
+                uvAcDelta = 0,
+            ),
+        )
+
+        assertNull(readVp8KeyFrameMacroblockModes(Vp8BoolReader(byteArrayOf()), header, noCoeffSkip = true))
+    }
+
+    @Test
     fun `VP8 inverse transforms handle DC-only blocks`() {
         val dctInput = IntArray(16).also { it[0] = 16 }
         val whtInput = IntArray(16).also { it[0] = 8 }
@@ -484,6 +543,35 @@ class SkWebpKotlinCodecTest {
         assertEquals(
             Vp8CoefficientDecodeResult.Invalid,
             decodeVp8CoefficientBlock(Vp8BoolReader(byteArrayOf(0xFF.toByte())), IntArray(11) { 128 }),
+        )
+    }
+
+    @Test
+    fun `VP8 coefficient context selects probabilities from neighboring nonzero blocks`() {
+        val probabilitiesByContext = arrayOf(
+            IntArray(11) { 1 },
+            IntArray(11) { 128 },
+            IntArray(11) { 255 },
+        )
+        val tokens = byteArrayOf(0xB7.toByte(), 0x11, 0x00, 0x00)
+
+        val result = decodeVp8CoefficientBlockWithContext(
+            reader = Vp8BoolReader(tokens),
+            probabilitiesByContext = probabilitiesByContext,
+            leftHasNonZero = true,
+            topHasNonZero = false,
+        )
+
+        assertEquals(0, vp8CoefficientContext(leftHasNonZero = false, topHasNonZero = false))
+        assertEquals(1, vp8CoefficientContext(leftHasNonZero = true, topHasNonZero = false))
+        assertEquals(2, vp8CoefficientContext(leftHasNonZero = true, topHasNonZero = true))
+        assertTrue(result is Vp8CoefficientDecodeResult.Block)
+        assertArrayEquals(
+            IntArray(16).also {
+                it[1] = -1
+                it[4] = 2
+            },
+            (result as Vp8CoefficientDecodeResult.Block).coefficients,
         )
     }
 
