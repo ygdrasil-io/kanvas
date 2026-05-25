@@ -15,6 +15,7 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.SkVertices
 import org.graphiks.math.SkPoint
+import org.graphiks.math.SkMatrix
 
 /**
  * Phase I5.3.a — `SkCanvas.drawVertices` solid-color path semantics.
@@ -326,6 +327,34 @@ class DrawVerticesTest {
         }
         assertTrue((right and 0xFF) > ((right shr 16) and 0xFF)) {
             "right sample should be closer to blue: ${Integer.toHexString(right)}"
+        }
+    }
+
+    @Test
+    fun `texCoords honor gradient localMatrix scaling`() {
+        val (bm, canvas) = newWhiteCanvas(48, 32)
+        val paint = SkPaint(0xFF000000.toInt()).apply {
+            shader = SkLinearGradient.Make(
+                SkPoint(0f, 0f),
+                SkPoint(16f, 0f),
+                intArrayOf(0xFFFF0000.toInt(), 0xFF0000FF.toInt()),
+                null,
+                SkTileMode.kClamp,
+                localMatrix = SkMatrix.MakeScale(2f, 1f),
+            )
+            blendMode = SkBlendMode.kSrc
+            isAntiAlias = false
+        }
+        val v = SkVertices.MakeCopy(
+            SkVertices.VertexMode.kTriangles,
+            arrayOf(SkPoint(0f, 0f), SkPoint(32f, 0f), SkPoint(0f, 32f)),
+            texCoords = arrayOf(SkPoint(0f, 0f), SkPoint(32f, 0f), SkPoint(0f, 32f)),
+        )
+        canvas.drawVertices(v, SkBlendMode.kModulate, paint)
+
+        val mid = bm.getPixel(12, 4)
+        assertTrue(((mid shr 16) and 0xFF) > (mid and 0xFF)) {
+            "mid sample should still be red-dominant with 2x localMatrix scale: ${Integer.toHexString(mid)}"
         }
     }
 
