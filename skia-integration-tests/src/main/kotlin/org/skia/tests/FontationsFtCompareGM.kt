@@ -68,7 +68,7 @@ import kotlin.math.roundToInt
  *     Thai, SC, TC, KR, Tamil, Newa, Kannada, Tagalog, Telugu,
  *     Gujarati, Georgian, Malayalam, Khmer, Sinhala, Myanmar,
  *     Javanese, Mongolian, Armenian, Elbasan, Vithkuqi, Gurmukhi)
- *     are not shipped under `kanvas-legacy/src/test/resources/fonts/`.
+ *     are not shipped under `skia-integration-tests/src/test/resources/fonts/`.
  *     [TestFontDataProvider] resolves filenames optimistically through
  *     [ToolUtils.GetResourceAsData] — every entry returns `null`
  *     today, mirroring upstream's `SkStream::MakeFromFile` failure

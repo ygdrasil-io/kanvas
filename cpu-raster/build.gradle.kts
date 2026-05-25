@@ -39,12 +39,8 @@ dependencies {
 
 sourceSets {
     test {
-        // kanvas-legacy is excluded from the build (see settings.gradle.kts)
-        // but its src/test/resources/{images,original-888} are still required
-        // at runtime for cpu-raster's GMs (during transit through this module
-        // before iter 4-5 splits them into :skia-integration-tests /
-        // :integration-tests) and DM harness.
-        resources.srcDir("../kanvas-legacy/src/test/resources")
+        // Skia GM and image fixtures are owned by :skia-integration-tests.
+        resources.srcDir("../skia-integration-tests/src/test/resources")
     }
 }
 

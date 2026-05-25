@@ -61,10 +61,9 @@ dependencies {
 sourceSets {
     test {
         // G2.3b — cross-tests load `original-888/<gm>.png` reference
-        // bitmaps via TestUtils.loadReferenceBitmap. Those PNGs live in
-        // :kanvas-legacy (frozen reference assets), same wiring as
-        // :cpu-raster/build.gradle.kts.
-        resources.srcDir("../kanvas-legacy/src/test/resources")
+        // bitmaps via TestUtils.loadReferenceBitmap. Those PNGs are owned by
+        // :skia-integration-tests, same wiring as :cpu-raster/build.gradle.kts.
+        resources.srcDir("../skia-integration-tests/src/test/resources")
     }
 }
 
