@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.TestUtils
 
-@Disabled("STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI — see API_FINALIZATION_PLAN.md")
+@Disabled("STUB.FFMPEG: video decode is outside the portable pure-Kotlin codec matrix")
 class VideoDecoderTest {
 
     @Test

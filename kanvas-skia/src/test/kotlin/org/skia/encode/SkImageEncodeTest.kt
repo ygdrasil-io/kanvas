@@ -25,7 +25,8 @@ import org.skia.foundation.SkImage
  *  - default format (PNG) round-trips byte-identical via [SkCodec].
  *  - JPEG dispatch honours the [quality] argument (lower → smaller).
  *  - Unsupported formats (GIF / BMP / WBMP / WEBP / …) return `null`
- *    rather than crashing — encoders are PNG / JPEG only.
+ *    rather than crashing. This convenience API remains PNG/JPEG-only;
+ *    direct BMP/WBMP/WebP encoder entry points are tested separately.
  *  - The member agrees pixel-for-pixel with calling
  *    [SkPngEncoder.Encode] directly (so it really is just plumbing,
  *    no transformation in between).
@@ -72,11 +73,11 @@ class SkImageEncodeTest {
     @Test
     fun `unsupported formats return null`() {
         val image = makeImage(2, 2)
-        // GIF / BMP / WBMP have decoders (D3.3) but no encoders.
+        // The member convenience dispatch is intentionally PNG/JPEG-only.
+        // BMP/WBMP/WebP have direct encoder APIs with their own tests.
         assertNull(image.encodeToData(SkEncodedImageFormat.kGIF, 100))
         assertNull(image.encodeToData(SkEncodedImageFormat.kBMP, 100))
         assertNull(image.encodeToData(SkEncodedImageFormat.kWBMP, 100))
-        // WEBP is not in the codec family at all (D3.4 deferred).
         assertNull(image.encodeToData(SkEncodedImageFormat.kWEBP, 100))
     }
 

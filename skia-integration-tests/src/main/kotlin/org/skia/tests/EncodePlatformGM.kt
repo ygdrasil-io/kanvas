@@ -31,9 +31,8 @@ import org.skia.tools.ToolUtils
  *     indistinguishable, matching upstream when the encode path is
  *     alpha-preserving (PNG, WEBP-lossless).
  *  2. WEBP-lossy ([SkWebpEncoder.Compression.kLossy]) is currently a
- *     STUB returning `null` (see [SkWebpEncoder] kdoc and
- *     `API_FINALIZATION_PLAN.md` §R-final.S) — the WEBP-lossy column
- *     short-circuits to a blank cell.
+ *     documented unsupported path in `SUPPORTED_CODECS.md`, so the
+ *     WEBP-lossy column short-circuits to a blank cell.
  *
  * C++ original:
  * ```cpp
