@@ -13,6 +13,22 @@ table below with source, license, and transformation details.
   redistributable with this repository's test suite.
 - `Repository generated negative`: deliberately malformed or truncated original
   test data authored for this repository.
+- `libpng/PngSuite`: copied from the libpng-hosted PngSuite page or Willem van
+  Schaik's PngSuite archive; use the PngSuite permission statement recorded at
+  `http://www.schaik.com/pngsuite2011/PngSuite.LICENSE`.
+- `ImageMagick`: copied from ImageMagick project resources; use ImageMagick
+  project pages and the ImageMagick License for provenance. Redistribution
+  attribution and license obligations are recorded in
+  `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md`.
+- `GIMP`: copied from the official GIMP website; use the site's default
+  CC-BY-SA 4.0 licensing rules unless a source page states otherwise.
+  Redistribution attribution and ShareAlike obligations are recorded in
+  `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md`.
+- `Device camera`: copied or reduced from a source page that identifies a real
+  capture device and redistribution license.
+- `Browser`: rendered from a committed local browser source file and captured
+  through a browser/web pipeline; redistributable with this repository's test
+  suite.
 - Do not add third-party photographs, icons, screenshots, device captures, or
   external tool output unless the source URL/path, license, and transformation
   are recorded in this file.
@@ -23,18 +39,19 @@ Issue #993 asks that real-image coverage include files from different tools or
 sources such as libpng, ImageMagick, Photoshop/GIMP, devices, and browsers. The
 current checked-in corpus intentionally documents only what can be traced:
 
-- `libpng`: present indirectly through PNG fixtures with standard chunks and
-  decoder-visible metadata, but no external libpng command provenance is
-  recorded for these files.
-- `ImageMagick`: not represented by a fixture with auditable source provenance.
-- `Photoshop/GIMP`: not represented by a fixture with auditable source
-  provenance; some files contain ICC profile names that mention Photoshop, but
-  that is metadata content rather than fixture provenance.
-- `Device camera`: not represented by a fixture with auditable source
-  provenance.
-- `Browser`: represented only by the Skia upstream WebP/GIF resources when those
-  resources are used by upstream browser-facing codec tests; no browser export
-  command provenance is recorded locally.
+- `libpng`: represented by the libpng-hosted PngSuite icon fixture.
+- `ImageMagick`: represented by the ImageMagick built-in `ROSE` fixture
+  published on the project site.
+- `Photoshop/GIMP`: represented on the GIMP side by the official
+  `gfx_by_gimp.png` website image. Photoshop remains unrepresented because no
+  redistributable Photoshop-authored fixture has been audited here.
+- `Device camera`: represented by a public-domain Wikimedia Commons JPEG whose
+  metadata identifies a Motorola moto e6 play capture.
+- `Browser`: represented by a committed HTML canvas source rendered and captured
+  through a localhost browser session.
+
+Third-party redistribution notices for the externally sourced fixtures are kept
+in `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md`.
 
 These statuses are intentionally conservative. They prevent the checklist from
 claiming tool-family coverage that the repository cannot audit.
@@ -50,12 +67,17 @@ claiming tool-family coverage that the repository cannot audit.
 | `codec-real-images/png/grayscale_8.png` | Repository generated | `CodecAllKotlinRealImageTest` structural fixture set | Repository test fixture | Generated as 3x2 8-bit grayscale PNG | Grayscale PNG |
 | `codec-real-images/png/grayscale_16.png` | Repository generated | `CodecAllKotlinRealImageTest` structural fixture set | Repository test fixture | Generated as 2x2 16-bit grayscale PNG | 16 bpc PNG |
 | `codec-real-images/png/palette_alpha.png` | Repository generated | `CodecAllKotlinRealImageTest` structural fixture set | Repository test fixture | Generated as 3x2 palette PNG with tRNS alpha | Palette transparency |
+| `codec-real-images/libpng/pngsuite2.png` | libpng/PngSuite | `https://libpng.org/pub/png/img_png/pngsuite2.png`; suite page `https://libpng.org/pub/png/pngsuite.html`; license `http://www.schaik.com/pngsuite2011/PngSuite.LICENSE`; notices `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md` | PngSuite permission grant | Copied unchanged into codec corpus | 48x48 interlaced palette PNG with alpha |
+| `codec-real-images/imagemagick/rose.png` | ImageMagick | `https://imagemagick.org/image/rose.png`; built-in image documented as `ROSE` at `https://imagemagick.org/formats/`; license `https://imagemagick.org/license/`; notices `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md` | ImageMagick License | Copied unchanged into codec corpus | 70x46 RGB PNG from ImageMagick project resources; attribution: ImageMagick Studio LLC |
+| `codec-real-images/gimp/gfx_by_gimp.png` | GIMP | `https://www.gimp.org/images/gfx_by_gimp.png`; site reuse policy `https://www.gimp.org/about/linking.html`; notices `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md` | CC-BY-SA 4.0 unless otherwise noted by GIMP website | Copied unchanged into codec corpus | 90x36 palette PNG from official GIMP website; attribution: GIMP team |
 | `codec-real-images/jpeg/dog.jpg` | Skia upstream | `kanvas-legacy/src/test/resources/images/dog.jpg`; original import from `/resources/images/dog.jpg` in upstream Skia checkout | Skia license | Copied into codec corpus unchanged | Baseline JFIF JPEG |
 | `codec-real-images/jpeg/ducky_icc_exif.jpg` | Skia upstream | `kanvas-legacy/src/test/resources/images/ducky.jpg`; original import from `/resources/images/ducky.jpg` in upstream Skia checkout | Skia license | Copied into codec corpus with ICC/EXIF-bearing metadata retained | Baseline JPEG with ICC and EXIF |
 | `codec-real-images/jpeg/color_wheel_420.jpg` | Skia upstream | `kanvas-legacy/src/test/resources/images/color_wheel.jpg`; lineage copied from Skia image resources in repo history | Skia license | Copied into codec corpus as 4:2:0 JPEG fixture | Baseline 4:2:0 JPEG |
 | `codec-real-images/jpeg/mandrill_h1v1_444.jpg` | Skia upstream | `kanvas-legacy/src/test/resources/images/mandrill_h1v1.jpg`; original import from `/resources/images/mandrill_h1v1.jpg` in upstream Skia checkout | Skia license | Copied into codec corpus unchanged | Baseline 4:4:4 JPEG |
 | `codec-real-images/jpeg/grayscale_progressive.jpg` | Repository generated | `CodecAllKotlinRealImageTest` structural fixture set | Repository test fixture | Generated as 128x128 progressive grayscale JPEG | Progressive grayscale JPEG |
 | `codec-real-images/jpeg/grayscale_progressive_legacy.jpg` | Repository generated | Legacy grayscale progressive JPEG fixture from repo history | Repository test fixture | Copied into codec corpus for regression compatibility | Legacy progressive grayscale JPEG |
+| `codec-real-images/camera/motorola_moto_e6_play.jpg` | Device camera | `https://commons.wikimedia.org/wiki/File:Vivitar_Vivicam_S126.jpg`; original file `https://upload.wikimedia.org/wikipedia/commons/2/23/Vivitar_Vivicam_S126.jpg` | Public domain dedication by copyright holder | Downloaded original and downscaled with `sips -Z 256` to keep the fixture small | JPEG EXIF metadata identifies `motorola` / `moto e6 play` |
+| `codec-real-images/browser/canvas_checker.jpg` | Browser | `codec-real-image-tests/sources/browser/canvas_checker_source.html`; rendered at `http://localhost:8765/canvas_checker_source.html` in the Codex in-app browser | Repository test fixture | Captured 24x16 viewport screenshot from the committed HTML canvas source | Browser/web pipeline JPEG fixture |
 | `codec-real-images/jpeg/orientation/1_444.jpg` | Repository generated | EXIF orientation fixture set for issue #993 | Repository test fixture | Generated 100x80 4:4:4 JPEG with EXIF orientation value 1 | EXIF orientation 1 |
 | `codec-real-images/jpeg/orientation/2_444.jpg` | Repository generated | EXIF orientation fixture set for issue #993 | Repository test fixture | Generated 100x80 4:4:4 JPEG with EXIF orientation value 2 | EXIF orientation 2 |
 | `codec-real-images/jpeg/orientation/3_444.jpg` | Repository generated | EXIF orientation fixture set for issue #993 | Repository test fixture | Generated 100x80 4:4:4 JPEG with EXIF orientation value 3 | EXIF orientation 3 |

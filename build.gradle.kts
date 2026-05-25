@@ -145,15 +145,20 @@ tasks.register("checkRealImageFixtureDocumentation") {
 
     doLast {
         val doc = file("codec-real-image-tests/FIXTURES.md")
+        val notice = file("codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md")
         val fixtureRoot = file("codec-real-image-tests/src/test/resources/codec-real-images")
         if (!doc.isFile) {
             throw GradleException("Missing codec-real-image-tests/FIXTURES.md provenance document.")
+        }
+        if (!notice.isFile) {
+            throw GradleException("Missing codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md notice document.")
         }
         if (!fixtureRoot.isDirectory) {
             throw GradleException("Missing real image fixture resource directory: ${fixtureRoot.relativeTo(rootDir)}")
         }
 
         val text = doc.readText()
+        val noticeText = notice.readText()
         val fixturePaths = fixtureRoot.walkTopDown()
             .filter { file -> file.isFile }
             .map { file -> file.relativeTo(fixtureRoot.parentFile).invariantSeparatorsPath }
@@ -185,6 +190,11 @@ tasks.register("checkRealImageFixtureDocumentation") {
             "Skia upstream",
             "Repository generated",
             "Repository generated negative",
+            "libpng/PngSuite",
+            "ImageMagick",
+            "GIMP",
+            "Device camera",
+            "Browser",
         )
         val malformedRows = rowsByPath.values.mapNotNull { cells ->
             val path = cells.getOrNull(0)?.removeSurrounding("`") ?: "<unknown>"
@@ -203,6 +213,7 @@ tasks.register("checkRealImageFixtureDocumentation") {
                 notes.isBlank() -> "$path must record notes"
                 family == "Skia upstream" && license != "Skia license" -> "$path Skia-derived row must use 'Skia license'"
                 family.startsWith("Repository generated") && license != "Repository test fixture" -> "$path generated row must use 'Repository test fixture'"
+                family == "Browser" && !source.startsWith("`codec-real-image-tests/sources/") -> "$path browser row must record the local browser source path"
                 else -> null
             }
         }
@@ -212,14 +223,29 @@ tasks.register("checkRealImageFixtureDocumentation") {
             "## Fixture Index",
             "Skia license",
             "Repository test fixture",
+            "THIRD_PARTY_FIXTURE_NOTICES.md",
             "`libpng`:",
             "`ImageMagick`:",
             "`Photoshop/GIMP`:",
             "`Device camera`:",
             "`Browser`:",
         ).filterNot { marker -> text.contains(marker) }
+        val requiredNoticeMarkers = listOf(
+            "## PngSuite",
+            "## ImageMagick",
+            "ImageMagick Studio LLC",
+            "redistributions must include a copy of the license",
+            "provide clear attribution to ImageMagick Studio LLC",
+            "## GIMP",
+            "GIMP team",
+            "Creative Commons Attribution-ShareAlike 4.0 International",
+            "mention the author",
+            "mention the license",
+            "compatible license",
+            "## Wikimedia Commons Public Domain Camera Fixture",
+        ).filterNot { marker -> noticeText.contains(marker) }
 
-        if (missing.isNotEmpty() || duplicateRows.isNotEmpty() || orphanRows.isNotEmpty() || malformedRows.isNotEmpty() || requiredMarkers.isNotEmpty()) {
+        if (missing.isNotEmpty() || duplicateRows.isNotEmpty() || orphanRows.isNotEmpty() || malformedRows.isNotEmpty() || requiredMarkers.isNotEmpty() || requiredNoticeMarkers.isNotEmpty()) {
             throw GradleException(
                 buildString {
                     if (missing.isNotEmpty()) {
@@ -243,6 +269,10 @@ tasks.register("checkRealImageFixtureDocumentation") {
                     if (requiredMarkers.isNotEmpty()) {
                         appendLine("FIXTURES.md is missing required provenance markers.")
                         requiredMarkers.forEach { appendLine("- $it") }
+                    }
+                    if (requiredNoticeMarkers.isNotEmpty()) {
+                        appendLine("THIRD_PARTY_FIXTURE_NOTICES.md is missing required notice markers.")
+                        requiredNoticeMarkers.forEach { appendLine("- $it") }
                     }
                 }
             )
