@@ -1,6 +1,7 @@
 package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.math.SkColorGetA
@@ -16,7 +17,11 @@ class PaletteTest {
     fun `PaletteGM renders portable palette override glyphs`() {
         val gm = PaletteGM()
         val rendered = TestUtils.runGmTest(gm)
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
 
+        assertNotNull(reference, "Missing reference image palette.png")
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 1)
+        assertTrue(comparison.similarity >= 99.99)
         assertTrue(rendered.countPixelsMatching { it.isDominantGreen() } > 0)
         assertTrue(rendered.countPixelsMatching { it.isDominantBlue() } > 0)
         assertEquals(0, rendered.countPixels(0xFF000000.toInt()))
