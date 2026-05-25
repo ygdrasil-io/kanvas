@@ -8,8 +8,10 @@ import org.skia.foundation.SkColorSpace
  *
  * This intentionally does not compile or execute mesh SkSL. The supported
  * subset is a direct vertex-buffer layout with a `float2` attribute named
- * `position`; [SkCanvas.drawMesh] uses that attribute as local coordinates and
- * fills the mesh with the supplied [org.skia.foundation.SkPaint].
+ * `position` and, optionally, a `ubyte4_unorm` attribute named `color` encoded
+ * as RGBA bytes. [SkCanvas.drawMesh] lowers that subset to [org.skia.foundation.SkVertices].
+ * Mesh SkSL, uniforms, children, varyings, and fragment output remain out of
+ * scope for this CPU path.
  */
 public class SkMeshSpecification private constructor(
     private val attributesStorage: List<Attribute>,
@@ -76,6 +78,9 @@ public class SkMeshSpecification private constructor(
     internal val positionAttribute: Attribute?
         get() = findAttribute("position")?.takeIf { it.type == Attribute.Type.kFloat2 }
 
+    internal val colorAttribute: Attribute?
+        get() = findAttribute("color")?.takeIf { it.type == Attribute.Type.kUByte4_unorm }
+
     public companion object {
         public const val kMaxStride: Int = 1024
         public const val kMaxAttributes: Int = 8
@@ -117,7 +122,7 @@ public class SkMeshSpecification private constructor(
         ): String? {
             if (attributes.isEmpty()) return "SkMeshSpecification requires at least one attribute"
             if (attributes.size > kMaxAttributes) return "SkMeshSpecification supports at most $kMaxAttributes attributes"
-            if (varyings.size > kMaxVaryings) return "SkMeshSpecification supports at most $kMaxVaryings varyings"
+            if (varyings.isNotEmpty()) return "CPU SkMesh does not support varyings yet"
             if (vertexStride <= 0) return "SkMeshSpecification vertexStride must be positive"
             if (vertexStride > kMaxStride) return "SkMeshSpecification vertexStride exceeds $kMaxStride"
             if (vertexStride % kStrideAlignment != 0) {
@@ -141,6 +146,11 @@ public class SkMeshSpecification private constructor(
                 ?: return "CPU SkMesh requires a float2 attribute named 'position'"
             if (position.type != Attribute.Type.kFloat2) {
                 return "CPU SkMesh requires 'position' to have type kFloat2"
+            }
+            for (attribute in attributes) {
+                if (attribute.name == "position") continue
+                if (attribute.name == "color" && attribute.type == Attribute.Type.kUByte4_unorm) continue
+                return "CPU SkMesh only supports float2 position plus optional ubyte4_unorm color"
             }
             return null
         }
