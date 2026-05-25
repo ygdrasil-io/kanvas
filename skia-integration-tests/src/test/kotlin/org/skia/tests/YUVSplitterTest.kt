@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.TestUtils
 
-@Disabled("STUB.YUVA_SPLIT_KERNEL + STUB.GPU_YUVA_TEXTURE_PATH: requires MakeYUVAPlanesAsA8 and GPU texture assembly path")
+@Disabled("STUB.GPU_YUVA_TEXTURE_PATH: YUV splitter CPU planes are implemented; raster GM sink still blocks texture-style assembly parity")
 class YUVSplitterTest {
 
     @Test
