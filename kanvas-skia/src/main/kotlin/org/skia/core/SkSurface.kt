@@ -11,6 +11,7 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSurfaceProps
+import org.skia.gpu.YUVUtils
 import org.graphiks.math.SkIRect
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -217,7 +218,9 @@ public abstract class SkSurface protected constructor(
         rescaleGamma: RescaleGamma = RescaleGamma.kSrc,
         rescaleMode: RescaleMode = RescaleMode.kNearest,
         callback: (AsyncReadResult?) -> Unit,
-    ): Unit = TODO("STUB.ASYNC_RESCALE_READ_YUV: SkSurface.asyncRescaleAndReadPixelsYUV420")
+    ) {
+        callback(readPixelsRescaledYuv(dstSize, srcRect, yuvColorSpace, includeAlpha = false, rescaleGamma, rescaleMode))
+    }
 
     /**
      * Async rescale + readback into YUVA-420 (3 planes + alpha plane,
@@ -234,7 +237,9 @@ public abstract class SkSurface protected constructor(
         rescaleGamma: RescaleGamma = RescaleGamma.kSrc,
         rescaleMode: RescaleMode = RescaleMode.kNearest,
         callback: (AsyncReadResult?) -> Unit,
-    ): Unit = TODO("STUB.ASYNC_RESCALE_READ_YUV: SkSurface.asyncRescaleAndReadPixelsYUVA420")
+    ) {
+        callback(readPixelsRescaledYuv(dstSize, srcRect, yuvColorSpace, includeAlpha = true, rescaleGamma, rescaleMode))
+    }
 
     /** Linearisation hint for the async rescale step. Mirrors `SkImage::RescaleGamma`. */
     public enum class RescaleGamma { kSrc, kLinear }
@@ -325,6 +330,51 @@ public abstract class SkSurface protected constructor(
         return RasterAsyncReadResult(bytes, dstRowBytes)
     }
 
+    private fun readPixelsRescaledYuv(
+        dstSize: org.graphiks.math.SkISize,
+        srcRect: SkIRect,
+        yuvColorSpace: SkYUVColorSpace,
+        includeAlpha: Boolean,
+        rescaleGamma: RescaleGamma,
+        rescaleMode: RescaleMode,
+    ): AsyncReadResult? {
+        if (dstSize.width <= 0 || dstSize.height <= 0) return null
+        val rgbaInfo = SkImageInfo.Make(
+            dstSize.width,
+            dstSize.height,
+            SkColorType.kRGBA_8888,
+            SkAlphaType.kUnpremul,
+            SkColorSpace.makeSRGB(),
+        )
+        val rgba = readPixelsRescaled(rgbaInfo, srcRect, rescaleGamma, rescaleMode) as? RasterAsyncReadResult ?: return null
+        val rgbaBitmap = SkBitmap(dstSize.width, dstSize.height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
+        val raw = ByteBuffer.wrap(rgba.data(0)).order(ByteOrder.LITTLE_ENDIAN)
+        for (y in 0 until dstSize.height) {
+            for (x in 0 until dstSize.width) {
+                rgbaBitmap.setPixel(x, y, raw.int)
+            }
+        }
+        val cs = when (yuvColorSpace) {
+            SkYUVColorSpace.kJPEG_Full_YUV -> YUVUtils.YUVColorSpace.BT601
+            SkYUVColorSpace.kRec601_Limited_YUV -> YUVUtils.YUVColorSpace.BT601
+            else -> YUVUtils.YUVColorSpace.BT709
+        }
+        val (yPlane, uPlane, vPlane) = YUVUtils.yuvFromRgba(rgbaBitmap, YUVUtils.YUVSubsampling.k420, cs)
+        val alpha = if (includeAlpha) {
+            ByteArray(dstSize.width * dstSize.height).also { out ->
+                var i = 0
+                for (y in 0 until dstSize.height) {
+                    for (x in 0 until dstSize.width) {
+                        out[i++] = org.graphiks.math.SkColorGetA(rgbaBitmap.getPixel(x, y)).toByte()
+                    }
+                }
+            }
+        } else {
+            null
+        }
+        return RasterYuvAsyncReadResult(dstSize.width, dstSize.height, yPlane, uPlane, vPlane, alpha)
+    }
+
     private class RasterAsyncReadResult(
         private val bytes: ByteArray,
         private val stride: Int,
@@ -339,6 +389,36 @@ public abstract class SkSurface protected constructor(
         override fun rowBytes(planeIndex: Int): Int {
             require(planeIndex == 0) { "RGBA async readback has one plane, requested $planeIndex" }
             return stride
+        }
+    }
+
+    private class RasterYuvAsyncReadResult(
+        width: Int,
+        height: Int,
+        private val yPlane: ByteArray,
+        private val uPlane: ByteArray,
+        private val vPlane: ByteArray,
+        private val aPlane: ByteArray?,
+    ) : AsyncReadResult() {
+        private val uvRowBytes: Int = (width + 1) / 2
+        private val yRowBytes: Int = width
+        private val aRowBytes: Int = width
+
+        override fun count(): Int = if (aPlane != null) 4 else 3
+
+        override fun data(planeIndex: Int): ByteArray = when (planeIndex) {
+            0 -> yPlane
+            1 -> uPlane
+            2 -> vPlane
+            3 -> aPlane ?: throw IllegalArgumentException("No alpha plane")
+            else -> throw IllegalArgumentException("Invalid plane index $planeIndex")
+        }
+
+        override fun rowBytes(planeIndex: Int): Int = when (planeIndex) {
+            0 -> yRowBytes
+            1, 2 -> uvRowBytes
+            3 -> if (aPlane != null) aRowBytes else throw IllegalArgumentException("No alpha plane")
+            else -> throw IllegalArgumentException("Invalid plane index $planeIndex")
         }
     }
 
