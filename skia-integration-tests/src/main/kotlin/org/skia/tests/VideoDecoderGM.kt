@@ -14,9 +14,6 @@ import org.graphiks.math.SkISize
  * The body is a one-liner that touches [SkVideoDecoder.MakeFromStream]
  * so the surface stays compile-pinned. [VideoDecoderTest] is
  * `@Disabled` because the dispatch throws `STUB.FFMPEG`.
- *
- * See [`API_FINALIZATION_PLAN.md`](../../../../../../../../API_FINALIZATION_PLAN.md)
- * § STUB.FFMPEG.
  */
 public class VideoDecoderGM : GM() {
 

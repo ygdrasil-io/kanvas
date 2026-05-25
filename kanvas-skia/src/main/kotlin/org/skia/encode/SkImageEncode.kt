@@ -16,9 +16,10 @@ import org.skia.foundation.SkImage
  * The wrapper takes the same single snapshot ([SkImage.peekPixel]
  * into a fresh `SkBitmap` tagged sRGB) the previous extension built,
  * then routes through [SkPngEncoder] or [SkJpegEncoder]. Returns
- * `null` for any unsupported [SkEncodedImageFormat] — the codec
- * family ships decoders only for GIF / BMP / WBMP, no encoders ;
- * WEBP / HEIF / AVIF / JPEGXL aren't in the codec family at all.
+ * `null` for formats that this convenience API intentionally does
+ * not dispatch. BMP, WBMP, and lossless WebP have dedicated encoder
+ * entry points, but `SkImage.encodeToData` remains PNG/JPEG-only to
+ * preserve its documented public contract.
  */
 internal fun encodeImageToBytes(
     image: SkImage,

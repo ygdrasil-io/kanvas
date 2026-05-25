@@ -10,10 +10,9 @@ import org.skia.foundation.stream.SkStream
  * `libavcodec` for container demuxing + frame decoding, which lives
  * outside a pure-JVM port.
  *
- * This stub exists so call sites in ported GMs (e.g. `video_decoder`
- * — see [`API_FINALIZATION_PLAN.md`](../../../../../../../../API_FINALIZATION_PLAN.md))
- * compile and reference the documented public surface ; **every
- * runtime entry-point throws [NotImplementedError]** with the
+ * This stub exists so call sites in ported GMs (for example
+ * `video_decoder`) compile and reference the documented public
+ * surface; **every runtime entry-point throws [NotImplementedError]** with the
  * `STUB.FFMPEG` tag so the technical debt is visible the moment a
  * test attempts to exercise it. Consumers that need a working video
  * decoder must register their own JNI binding behind this surface
@@ -31,7 +30,7 @@ public object SkVideoDecoder {
     public fun MakeFromStream(stream: SkStream): SkVideoDecoderInstance =
         throw NotImplementedError(
             "STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI — " +
-                "see API_FINALIZATION_PLAN.md.",
+                "outside the portable codec matrix.",
         )
 
     /**
@@ -42,7 +41,7 @@ public object SkVideoDecoder {
     public fun MakeFromData(bytes: ByteArray): SkVideoDecoderInstance =
         throw NotImplementedError(
             "STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI — " +
-                "see API_FINALIZATION_PLAN.md.",
+                "outside the portable codec matrix.",
         )
 }
 

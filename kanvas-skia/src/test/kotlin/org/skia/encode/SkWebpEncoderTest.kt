@@ -168,7 +168,7 @@ class SkWebpEncoderTest {
     fun `lossy encode returns null without a Custom override`() {
         // VP8 lossy is out of scope for the pure-Kotlin port — see
         // the encoder kdoc. The kLossy path is reserved for future
-        // work (or a libwebp JNI binding via Custom).
+        // work or a downstream Custom encoder.
         val bitmap = makeGradient(4, 4)
         assertNull(
             SkWebpEncoder.Encode(

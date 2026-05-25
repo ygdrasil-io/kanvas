@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.TestUtils
 
-@Disabled("STUB.WEBP_LOSSY: requires libwebp via JNI — see API_FINALIZATION_PLAN.md")
+@Disabled("STUB.WEBP_LOSSY: lossy WebP encode is outside the portable pure-Kotlin codec matrix")
 class EncodeAlphaJpegLossyWebpTest {
 
     @Test
