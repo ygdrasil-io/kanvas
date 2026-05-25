@@ -71,6 +71,70 @@ fun String.withoutKotlinOrJavaComments(): String {
         }
 }
 
+tasks.register("checkSupportedCodecsDoc") {
+    group = "verification"
+    description = "Fails if the official codec support matrix is missing required format rows."
+
+    doLast {
+        val doc = file("SUPPORTED_CODECS.md")
+        if (!doc.isFile) {
+            throw GradleException("Missing SUPPORTED_CODECS.md codec support matrix.")
+        }
+
+        val text = doc.readText()
+        val requiredSections = listOf(
+            "## Decode Matrix",
+            "## Encode Matrix",
+            "## Guardrails",
+        )
+        val requiredRows = listOf(
+            "| PNG |",
+            "| JPEG |",
+            "| GIF |",
+            "| BMP |",
+            "| WBMP |",
+            "| ICO / CUR |",
+            "| WebP |",
+            "| AVIF / JPEG XL / RAW / video |",
+            "| GIF / ICO / AVIF / HEIF / JPEG XL / RAW / video |",
+        )
+        val requiredEncodeMarkers = listOf(
+            "Supported through `SkPngEncoder`.",
+            "Supported through `SkJpegEncoder`",
+            "Supported through `SkBmpEncoder`.",
+            "Supported through `SkWbmpEncoder`.",
+            "Supported through `SkWebpEncoder`",
+            "Lossy VP8 encode intentionally returns `null`",
+            "Public encode APIs must return `null` or a documented stub behavior",
+        )
+
+        val missing = (requiredSections + requiredRows + requiredEncodeMarkers)
+            .filterNot { marker -> text.contains(marker) }
+        val requiredEncodeTestFiles = listOf(
+            "kanvas-skia/src/test/kotlin/org/skia/encode/SkPngEncoderTest.kt",
+            "kanvas-skia/src/test/kotlin/org/skia/encode/SkJpegEncoderTest.kt",
+            "kanvas-skia/src/test/kotlin/org/skia/encode/SkBmpEncoderTest.kt",
+            "kanvas-skia/src/test/kotlin/org/skia/encode/SkWbmpEncoderTest.kt",
+            "kanvas-skia/src/test/kotlin/org/skia/encode/SkWebpEncoderTest.kt",
+        ).filterNot { path -> file(path).isFile }
+
+        if (missing.isNotEmpty() || requiredEncodeTestFiles.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    if (missing.isNotEmpty()) {
+                        appendLine("SUPPORTED_CODECS.md is missing required codec support markers.")
+                        missing.forEach { appendLine("- $it") }
+                    }
+                    if (requiredEncodeTestFiles.isNotEmpty()) {
+                        appendLine("Required image encode test files are missing.")
+                        requiredEncodeTestFiles.forEach { appendLine("- $it") }
+                    }
+                }
+            )
+        }
+    }
+}
+
 tasks.register("checkPureKotlinCodecNoAwt") {
     group = "verification"
     description = "Fails if pure Kotlin codec modules depend on or use AWT/ImageIO/java.desktop APIs."
@@ -330,8 +394,12 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
     description = "Runs the non-destructive codec-all-kotlin switch-readiness checks."
 
     dependsOn(
+        "checkSupportedCodecsDoc",
         "checkProductionCodecRuntimeNoAwt",
         "checkPureKotlinCodecNoAwt",
+        "checkPureKotlinPngEncoderNoAwt",
+        "checkProductionImageEncodeNoAwt",
+        "checkImageEncodeTestsNoAwt",
         ":codec-all-kotlin:test",
         ":codec-real-image-tests:test",
         ":codec-all-kotlin:jar",
