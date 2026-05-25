@@ -58,6 +58,7 @@ public class SkMeshSpecification private constructor(
         public val type: Type,
         public val offset: Int,
         public val name: String,
+        public val colorManaged: Boolean = false,
     ) {
         public enum class Type(
             public val size: Int,
@@ -98,10 +99,12 @@ public class SkMeshSpecification private constructor(
     public fun stride(): Int = vertexStride
 
     internal val positionAttribute: Attribute?
-        get() = findAttribute("position")?.takeIf { it.type == Attribute.Type.kFloat2 }
+        get() = (findAttribute("position") ?: findAttribute("pos"))?.takeIf { it.type == Attribute.Type.kFloat2 }
 
     internal val colorAttribute: Attribute?
-        get() = findAttribute("color")?.takeIf { it.type == Attribute.Type.kUByte4_unorm }
+        get() = findAttribute("color")?.takeIf {
+            it.type == Attribute.Type.kUByte4_unorm || it.type == Attribute.Type.kFloat4
+        }
 
     public companion object {
         public const val kMaxStride: Int = 1024
@@ -167,20 +170,26 @@ public class SkMeshSpecification private constructor(
                     return "attribute '${attribute.name}' exceeds vertexStride"
                 }
             }
-            val position = attributes.firstOrNull { it.name == "position" }
-                ?: return "CPU SkMesh requires a float2 attribute named 'position'"
+            val position = attributes.firstOrNull { it.name == "position" || it.name == "pos" }
+                ?: return "CPU SkMesh requires a float2 attribute named 'position' or 'pos'"
             if (position.type != Attribute.Type.kFloat2) {
-                return "CPU SkMesh requires 'position' to have type kFloat2"
+                return "CPU SkMesh requires '${position.name}' to have type kFloat2"
             }
             for (attribute in attributes) {
-                if (attribute.name == "position") continue
-                if (attribute.name == "color" && attribute.type == Attribute.Type.kUByte4_unorm) continue
-                return "CPU SkMesh only supports float2 position plus optional ubyte4_unorm color"
+                if (attribute.name == position.name) continue
+                if (attribute.name == "color" &&
+                    (attribute.type == Attribute.Type.kUByte4_unorm || attribute.type == Attribute.Type.kFloat4)
+                ) {
+                    continue
+                }
+                return "CPU SkMesh only supports float2 position plus optional ubyte4_unorm/float4 color"
             }
             return null
         }
 
-        private val uniformDecl = Regex("""\buniform\s+(float|float2|float3|float4|half|half2|half3|half4)\s+([A-Za-z_][A-Za-z0-9_]*)\s*;""")
+        private val uniformDecl = Regex(
+            """(?:(layout\s*\(\s*color\s*\))\s*)?\buniform\s+(float|float2|float3|float4|half|half2|half3|half4)\s+([A-Za-z_][A-Za-z0-9_]*)\s*;""",
+        )
 
         private fun parseUniforms(vs: String, fs: String): List<Uniform> {
             val source = "$vs\n$fs"
@@ -188,7 +197,7 @@ public class SkMeshSpecification private constructor(
             val seen = HashSet<String>()
             var cursor = 0
             uniformDecl.findAll(source).forEach { match ->
-                val type = when (match.groupValues[1]) {
+                val type = when (match.groupValues[2]) {
                     "float" -> Uniform.Type.kFloat
                     "float2" -> Uniform.Type.kFloat2
                     "float3" -> Uniform.Type.kFloat3
@@ -199,10 +208,10 @@ public class SkMeshSpecification private constructor(
                     "half4" -> Uniform.Type.kHalf4
                     else -> return@forEach
                 }
-                val name = match.groupValues[2]
+                val name = match.groupValues[3]
                 if (!seen.add(name)) return@forEach
                 cursor = alignUp(cursor, type.alignment)
-                uniforms.add(Uniform(type = type, offset = cursor, name = name))
+                uniforms.add(Uniform(type = type, offset = cursor, name = name, colorManaged = match.groupValues[1].isNotEmpty()))
                 cursor += type.size
             }
             return uniforms

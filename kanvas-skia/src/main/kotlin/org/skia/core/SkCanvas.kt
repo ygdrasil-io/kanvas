@@ -5,6 +5,7 @@ import org.skia.foundation.SkBlender
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkClipOp
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkRegion
 import org.graphiks.math.SkColor
@@ -2142,10 +2143,16 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             val base = mesh.vertexOffset() + i * spec.stride() + position.offset
             SkPoint(readFloatLE(vertexBytes, base), readFloatLE(vertexBytes, base + 4))
         }
+        val meshToSrgb = SkColorSpaceXformSteps(
+            src = spec.colorSpace ?: SkColorSpace.makeSRGB(),
+            srcAT = spec.alphaType.toCoreAlphaType(),
+            dst = SkColorSpace.makeSRGB(),
+            dstAT = SkAlphaType.kUnpremul,
+        )
         val colors = color?.let {
             IntArray(mesh.vertexCount()) { i ->
                 val base = mesh.vertexOffset() + i * spec.stride() + it.offset
-                readRgbaColorLE(vertexBytes, base)
+                readMeshColor(vertexBytes, base, it.type, meshToSrgb)
             }
         }
         val fragmentMode = detectCpuMeshFragmentMode(spec.fragmentProgram, spec.uniforms())
@@ -2193,12 +2200,29 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         (bytes[offset].toInt() and 0xFF) or
             ((bytes[offset + 1].toInt() and 0xFF) shl 8)
 
-    private fun readRgbaColorLE(bytes: ByteArray, offset: Int): Int {
-        val r = bytes[offset].toInt() and 0xFF
-        val g = bytes[offset + 1].toInt() and 0xFF
-        val b = bytes[offset + 2].toInt() and 0xFF
-        val a = bytes[offset + 3].toInt() and 0xFF
-        return (a shl 24) or (r shl 16) or (g shl 8) or b
+    private fun readMeshColor(
+        bytes: ByteArray,
+        offset: Int,
+        type: SkMeshSpecification.Attribute.Type,
+        meshToSrgb: SkColorSpaceXformSteps,
+    ): Int {
+        val rgba = when (type) {
+            SkMeshSpecification.Attribute.Type.kUByte4_unorm -> floatArrayOf(
+                (bytes[offset].toInt() and 0xFF) / 255f,
+                (bytes[offset + 1].toInt() and 0xFF) / 255f,
+                (bytes[offset + 2].toInt() and 0xFF) / 255f,
+                (bytes[offset + 3].toInt() and 0xFF) / 255f,
+            )
+            SkMeshSpecification.Attribute.Type.kFloat4 -> floatArrayOf(
+                readFloatLE(bytes, offset + 0),
+                readFloatLE(bytes, offset + 4),
+                readFloatLE(bytes, offset + 8),
+                readFloatLE(bytes, offset + 12),
+            )
+            else -> return 0xFFFFFFFF.toInt()
+        }
+        meshToSrgb.apply(rgba)
+        return packUnpremulColor(rgba)
     }
 
     private enum class CpuMeshFragmentMode {
@@ -2219,6 +2243,9 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             returnExpr == uniformToken -> CpuMeshFragmentMode.UNIFORM_SOLID
             returnExpr == "meshcolor*$uniformToken" || returnExpr == "$uniformToken*meshcolor" ->
                 CpuMeshFragmentMode.UNIFORM_TIMES_COLOR
+            Regex("""[a-z_][a-z0-9_]*=$uniformToken;""").containsMatchIn(
+                fragmentProgram.replace(Regex("""\s+"""), "").lowercase(),
+            ) -> CpuMeshFragmentMode.UNIFORM_SOLID
             else -> CpuMeshFragmentMode.DEFAULT
         }
     }
@@ -2242,10 +2269,44 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         } ?: return null
         val bytes = uniforms.toByteArray()
         if (bytes.size < colorUniform.offset + 16) return null
-        val r = clamp01(readFloatLE(bytes, colorUniform.offset + 0))
-        val g = clamp01(readFloatLE(bytes, colorUniform.offset + 4))
-        val b = clamp01(readFloatLE(bytes, colorUniform.offset + 8))
-        val a = clamp01(readFloatLE(bytes, colorUniform.offset + 12))
+        val rgba = floatArrayOf(
+            readFloatLE(bytes, colorUniform.offset + 0),
+            readFloatLE(bytes, colorUniform.offset + 4),
+            readFloatLE(bytes, colorUniform.offset + 8),
+            readFloatLE(bytes, colorUniform.offset + 12),
+        )
+        val meshCS = spec.colorSpace ?: SkColorSpace.makeSRGB()
+        val meshAT = spec.alphaType.toCoreAlphaType()
+        if (colorUniform.colorManaged) {
+            SkColorSpaceXformSteps(
+                src = SkColorSpace.makeSRGB(),
+                srcAT = SkAlphaType.kUnpremul,
+                dst = meshCS,
+                dstAT = meshAT,
+            ).apply(rgba)
+        }
+        SkColorSpaceXformSteps(
+            src = meshCS,
+            srcAT = meshAT,
+            dst = SkColorSpace.makeSRGB(),
+            dstAT = SkAlphaType.kUnpremul,
+        ).apply(rgba)
+        return packUnpremulColor(rgba)
+    }
+
+    private fun org.skia.foundation.SkAlphaType.toCoreAlphaType(): SkAlphaType =
+        when (this) {
+            org.skia.foundation.SkAlphaType.kOpaque -> SkAlphaType.kOpaque
+            org.skia.foundation.SkAlphaType.kPremul -> SkAlphaType.kPremul
+            org.skia.foundation.SkAlphaType.kUnpremul -> SkAlphaType.kUnpremul
+            org.skia.foundation.SkAlphaType.kUnknown -> SkAlphaType.kUnknown
+        }
+
+    private fun packUnpremulColor(rgba: FloatArray): Int {
+        val r = clamp01(rgba[0])
+        val g = clamp01(rgba[1])
+        val b = clamp01(rgba[2])
+        val a = clamp01(rgba[3])
         return ((a * 255f + 0.5f).toInt() shl 24) or
             ((r * 255f + 0.5f).toInt() shl 16) or
             ((g * 255f + 0.5f).toInt() shl 8) or
