@@ -30,13 +30,12 @@ import java.io.OutputStream
  *    bitstream layout.
  *  - [Compression.kLossy] returns `null`. Porting the VP8 lossy
  *    encoder is several thousand LOC of bit-exact DCT / quantizer
- *    arithmetic ; consumers who need lossy WebP should register a
- *    libwebp JNI binding via [Custom]. Tracked as R-suivi follow-up.
+ *    arithmetic; this limitation is documented in `SUPPORTED_CODECS.md`.
  *
  * ### Extension hook
  *
  * [Custom] lets a downstream consumer plug in any external encoder
- * (e.g. a libwebp JNI binding or a Skija fallback) without dragging the dependency into
+ * (for example a platform-specific encoder) without dragging the dependency into
  * `:kanvas-skia`. When registered, the callback takes precedence over
  * the built-in pure-Kotlin lossless encoder for **every** invocation
  * including [Compression.kLossless], so callers that want better
@@ -106,9 +105,9 @@ public object SkWebpEncoder {
      * bytes or `null` to signal a soft failure (in which case
      * [Encode] returns `null` — the built-in is **not** retried).
      *
-     * Typical use : binding `WebPEncodeLossless` / `WebPEncode` from
-     * libwebp via JNI in the consumer module without forcing every
-     * `:kanvas-skia` user to depend on a native artefact.
+     * Typical use: binding a platform encoder in the consumer module
+     * without forcing every `:kanvas-skia` user to depend on that
+     * artifact.
      */
     @Suppress("FunctionName")
     public fun Custom(callback: ((SkBitmap, Options) -> ByteArray?)?) {
@@ -228,24 +227,21 @@ public object SkWebpEncoder {
             // [SkWebpEncoderTest] suite assume the soft-failure
             // contract). Consumers that want to *fail loud* on the
             // missing path call [requireLossy] instead. To plug a
-            // real encoder, register a libwebp JNI binding via
-            // [Custom] (the [customEncoder] short-circuit at the top
+            // real encoder, register it via [Custom] (the
+            // [customEncoder] short-circuit at the top
             // of this method runs before this dispatch).
             Compression.kLossy -> null
         }
     }
 
     /**
-     * R-final.S **STUB.WEBP_LOSSY** sharp-edge entry-point. Routes
+     * Sharp-edge entry-point for the documented lossy WebP gap. Routes
      * to [Encode] ; if it returns `null` (because no [Custom] hook is
      * registered and the built-in lossy path is unimplemented),
      * throws [NotImplementedError] tagged `STUB.WEBP_LOSSY` so the
      * gap is visible at the call site rather than silently producing
      * an empty asset. Use this from GMs / tests that *require* a
      * working lossy WebP encode.
-     *
-     * See [`API_FINALIZATION_PLAN.md`](../../../../../../../../API_FINALIZATION_PLAN.md)
-     * § STUB.WEBP_LOSSY.
      */
     @Suppress("FunctionName")
     public fun requireLossy(bitmap: SkBitmap, options: Options = defaultOptions): ByteArray {
@@ -253,8 +249,8 @@ public object SkWebpEncoder {
             "requireLossy() must be called with options.compression = kLossy, got ${options.compression}"
         }
         return Encode(bitmap, options) ?: throw NotImplementedError(
-            "STUB.WEBP_LOSSY: requires libwebp via JNI — see API_FINALIZATION_PLAN.md " +
-                "(register a libwebp binding via SkWebpEncoder.Custom(...) to override).",
+            "STUB.WEBP_LOSSY: lossy WebP encode is not implemented; " +
+                "register an encoder via SkWebpEncoder.Custom(...) to override.",
         )
     }
 }
