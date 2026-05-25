@@ -61,9 +61,29 @@ class MeshTest {
     }
 
     @Test
-    @Disabled("STUB.MESH.COLOR_SPACE: mesh specification color-space and alpha-type semantics are not implemented")
-    fun `CustomMeshCsGM placeholder`() {
-        TestUtils.runGmTest(CustomMeshCsGM())
+    fun `CustomMeshCsGM runs cpu color-space subset`() {
+        val rendered = TestUtils.runGmTest(CustomMeshCsGM())
+        assertTrue(rendered.width > 0)
+        assertTrue(rendered.height > 0)
+        val srgbPremul = rendered.getPixel(40, 40)
+        val spinPremul = rendered.getPixel(40, 170)
+        val srgbUnpremul = rendered.getPixel(150, 40)
+        val shaderSrgbPremul = rendered.getPixel(260, 40)
+        assertTrue(srgbPremul != 0xFFFFFFFF.toInt(), "sRGB premul mesh cell should draw")
+        assertTrue(spinPremul != 0xFFFFFFFF.toInt(), "color-spun premul mesh cell should draw")
+        assertTrue(srgbUnpremul != 0xFFFFFFFF.toInt(), "sRGB unpremul mesh cell should draw")
+        assertTrue(
+            srgbPremul != spinPremul,
+            "color-spun mesh specification should transform vertex colors differently from sRGB",
+        )
+        assertTrue(
+            srgbPremul != srgbUnpremul,
+            "premul and unpremul mesh specifications should not collapse to identical color output",
+        )
+        assertTrue(
+            srgbPremul != shaderSrgbPremul,
+            "mesh color-space cell with paint shader should exercise shader/color blending path",
+        )
     }
 
     @Test
@@ -126,8 +146,55 @@ class MeshTest {
     }
 
     @Test
-    @Disabled("STUB.MESH.COLOR_MANAGED_UNIFORMS: color-managed mesh uniforms are not implemented")
-    fun `CustomMeshCsUniformsGM placeholder`() {
-        TestUtils.runGmTest(CustomMeshCsUniformsGM())
+    fun `CustomMeshCsUniformsGM runs cpu color-managed uniforms subset`() {
+        val rendered = TestUtils.runGmTest(CustomMeshCsUniformsGM())
+        assertTrue(rendered.width > 0)
+        assertTrue(rendered.height > 0)
+        for (row in 0 until 7) {
+            assertColorsClose(
+                actual = rendered.getPixel(50, row * 100 + 50),
+                expected = rendered.getPixel(150, row * 100 + 50),
+                tolerance = 18,
+                message = "managed uniform row $row should match its expected red swatch",
+            )
+        }
+        assertColorsClose(
+            actual = rendered.getPixel(50, 750),
+            expected = rendered.getPixel(150, 750),
+            tolerance = 18,
+            message = "raw color-spin uniform row should match its expected green swatch",
+        )
+        assertColorsClose(
+            actual = rendered.getPixel(50, 850),
+            expected = rendered.getPixel(150, 850),
+            tolerance = 18,
+            message = "raw wide-gamut uniform row should match its expected green swatch",
+        )
+        assertTrue(
+            rendered.getPixel(50, 50) != rendered.getPixel(50, 750),
+            "managed red and raw spin-green controls should remain distinguishable",
+        )
+    }
+
+    private fun assertColorsClose(actual: Int, expected: Int, tolerance: Int, message: String) {
+        val da = kotlin.math.abs(((actual ushr 24) and 0xFF) - ((expected ushr 24) and 0xFF))
+        val dr = kotlin.math.abs(((actual ushr 16) and 0xFF) - ((expected ushr 16) and 0xFF))
+        val dg = kotlin.math.abs(((actual ushr 8) and 0xFF) - ((expected ushr 8) and 0xFF))
+        val db = kotlin.math.abs((actual and 0xFF) - (expected and 0xFF))
+        assertTrue(
+            maxOf(da, dr, dg, db) <= tolerance,
+            "$message: actual=${actual.toUInt().toString(16)}, expected=${expected.toUInt().toString(16)}",
+        )
+    }
+
+    private fun hasNonWhitePixel(rendered: org.skia.foundation.SkBitmap): Boolean {
+        for (y in 0 until rendered.height) {
+            for (x in 0 until rendered.width) {
+                if (rendered.getPixel(x, y) != 0xFFFFFFFF.toInt()) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 }
