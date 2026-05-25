@@ -10,7 +10,8 @@ import org.skia.testing.TestUtils
 
 @Disabled(
     "STUB.DRAW_VERTICES_VISUAL_PARITY: vertex blend order and gradient local sampling are covered, " +
-        "but VerticesGM still renders ~62% and needs follow-up on remaining color pipeline drift.",
+        "but VerticesGM still renders ~62%; current diagnostics isolate the remaining drift beyond " +
+        "paint alpha / paint.colorFilter ordering, so no ratchet is set yet.",
 )
 class VerticesTest {
 
