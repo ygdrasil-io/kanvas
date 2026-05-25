@@ -1,6 +1,6 @@
 # Upstream sync status
 
-Snapshot date: 2026-05-24.
+Snapshot date: 2026-05-25.
 
 This file is the current source of truth for the rapprochement between
 `kanvas-skia` and upstream Skia. The previous phase plans have been
@@ -31,14 +31,19 @@ Hard decisions:
 Known from the current tree:
 
 - First mechanical rebaseline: `UPSTREAM_REBASELINE_2026-05-24.md`.
+- Current post-#999 rebaseline:
+  `reports/upstream-rebaseline/2026-05-25-post-999.md`.
+- Current generated TSV:
+  `reports/upstream-rebaseline/2026-05-25-post-999.tsv`.
 - Gradle modules include `:kanvas-skia`, `:cpu-raster`, `:gpu-raster`,
   `:skia-integration-tests`, `:integration-tests`, `:math`, and the
   split codec family (`:codec-*`).
 - The root no longer contains active `MIGRATION_PLAN_*.md` or
   `API_*PLAN.md` files. Historical copies are archived.
-- GM status in the archived snapshot claims 357 / 437 upstream GM files
-  ported, with 80 classified as blocked. This number must be treated as
-  a starting hypothesis, not a current truth, until regenerated.
+- GM status in the post-#999 snapshot reports 334 `PORTED`, 41
+  `TEST_DISABLED`, 40 `PARTIAL`, 17 `MISSING`, 4 `HELPER`, and 1 `STUB`
+  row. The mechanical bucket summary has 333 `ported` rows and 105
+  non-ported rows.
 - Similarity reports exist in `kanvas-skia/`, `cpu-raster/`, and
   `skia-integration-tests/`. `gpu-raster` currently has ratchet
   properties but no generated markdown report in the tree.
@@ -51,7 +56,8 @@ Known from the current tree:
 
 ### 1. Rebaseline upstream delta
 
-Goal: regenerate a current, mechanical view of the gap.
+Goal: keep the current mechanical view of the gap fresh as upstream and
+local deliveries land.
 
 Inputs:
 
@@ -67,6 +73,21 @@ Outputs:
 - Current public API delta by header/package.
 - Current `STUB.*` inventory grouped by owner track.
 - Current WebGPU GM coverage and missing backend features.
+
+Current actionable tickets from the post-#999 rebaseline:
+
+- https://github.com/ygdrasil-io/kanvas/issues/1007 — vertices
+  texOnly/scaled-gradient sampling.
+- https://github.com/ygdrasil-io/kanvas/issues/1008 — bounded LCH
+  powerless-hue interpolation.
+- https://github.com/ygdrasil-io/kanvas/issues/1009 — `custommesh` CPU
+  subset activation.
+- https://github.com/ygdrasil-io/kanvas/issues/1010 — RGBA
+  `asyncRescaleAndReadPixels` CPU path.
+- https://github.com/ygdrasil-io/kanvas/issues/1011 — YUVA channel flags
+  and location metadata helpers.
+- https://github.com/ygdrasil-io/kanvas/issues/1012 — WebGPU strict
+  source-rect constraint sampling.
 
 ### 2. Single backlog, no phase-plan drift
 
@@ -120,15 +141,26 @@ behind their existing module boundaries.
 
 ### 6. Actionable raster/API gaps
 
-These are implementation candidates once the rebaseline confirms impact:
+These are current implementation candidates confirmed by the post-#999
+rebaseline. Keep the scope aligned with the linked tickets rather than
+reviving older broad API lists:
 
-- `SkCanvas.experimental_DrawEdgeAAImageSet`
-- async rescale/read APIs
-- YUVA pixmap/channel helpers
-- compressed texture helpers, unless delivered by codec work
-- `SkShader.makeWithColorFilter`
-- color-space-aware `SkColorFilters.Blend`
-- image-filter multi-filter spans
+- Vertices texOnly/scaled-gradient sampling: #1007.
+- Bounded LCH powerless-hue interpolation: #1008.
+- `custommesh` CPU subset activation: #1009.
+- RGBA `asyncRescaleAndReadPixels` CPU path: #1010.
+- YUVA channel flags and location metadata helpers: #1011.
+- WebGPU strict source-rect constraint sampling: #1012.
+
+Retired or non-actionable in this snapshot:
+
+- `SkShader.makeWithColorFilter` is implemented and covered.
+- Image-filter multi-filter spans are covered by the current merge/filter
+  graph unless a future public API delta proves a separate overload gap.
+- Compressed texture work remains codec/media-gated, not a raster/API
+  implementation shortcut.
+- Broad color-filter/color-space and edge-AA entries need fresh API-delta
+  evidence before returning to the active backlog.
 
 ## Archived plans
 
