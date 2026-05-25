@@ -122,10 +122,34 @@ class SkMeshTest {
     }
 
     @Test
-    fun `mesh rejects uniforms in cpu subset`() {
+    fun `mesh validates uniform block size against specification`() {
         val spec = positionSpec().specification!!
-        val mesh = SkMesh.Make(
+        val meshWithoutUniforms = SkMesh.Make(
             specification = spec,
+            mode = SkMesh.Mode.kTriangles,
+            vertexBuffer = SkMeshes.MakeVertexBuffer(floatBytes(0f, 0f, 10f, 0f, 0f, 10f), 24),
+            vertexCount = 3,
+            vertexOffset = 0,
+            uniforms = SkData.MakeWithCopy(byteArrayOf(1, 2, 3, 4)),
+            bounds = SkRect.MakeLTRB(0f, 0f, 10f, 10f),
+        )
+        assertFalse(meshWithoutUniforms.mesh.isValid())
+        assertTrue(meshWithoutUniforms.error.contains("declares none"))
+
+        val uniformSpec = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            ),
+            vertexStride = 8,
+            vs = "uniform float4 uColor; Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v) { return uColor; }",
+        ).specification!!
+        val mesh = SkMesh.Make(
+            specification = uniformSpec,
             mode = SkMesh.Mode.kTriangles,
             vertexBuffer = SkMeshes.MakeVertexBuffer(floatBytes(0f, 0f, 10f, 0f, 0f, 10f), 24),
             vertexCount = 3,
@@ -135,7 +159,30 @@ class SkMeshTest {
         )
 
         assertFalse(mesh.mesh.isValid())
-        assertTrue(mesh.error.contains("uniforms"))
+        assertTrue(mesh.error.contains("uniform block size"))
+    }
+
+    @Test
+    fun `specification computes deterministic uniform layout`() {
+        val spec = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            ),
+            vertexStride = 8,
+            vs = "uniform float2 t; uniform half4 color;",
+            fs = "float4 main(const Varyings v) { return color; }",
+        ).specification!!
+
+        assertEquals(2, spec.uniforms().size)
+        assertEquals("t", spec.uniforms()[0].name)
+        assertEquals(0, spec.uniforms()[0].offset)
+        assertEquals("color", spec.uniforms()[1].name)
+        assertEquals(16, spec.uniforms()[1].offset)
+        assertEquals(32, spec.uniformSize())
     }
 
     @Test
@@ -253,6 +300,47 @@ class SkMeshTest {
 
         assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(10, 10))
         assertEquals(null, paint.blender, "drawMesh must not mutate the caller paint")
+    }
+
+    @Test
+    fun `drawMesh executes uniforms fragment subset for solid color`() {
+        val bm = whiteBitmap()
+        val canvas = SkCanvas(bm)
+        val spec = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            ),
+            vertexStride = 8,
+            vs = "uniform float4 uColor; Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v) { return uColor; }",
+        ).specification!!
+        val mesh = SkMesh.Make(
+            specification = spec,
+            mode = SkMesh.Mode.kTriangles,
+            vertexBuffer = SkMeshes.MakeVertexBuffer(
+                floatBytes(5f, 5f, 25f, 5f, 5f, 25f),
+                24,
+            ),
+            vertexCount = 3,
+            vertexOffset = 0,
+            uniforms = SkData.MakeWithCopy(
+                ByteBuffer.allocate(16)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .putFloat(0f)
+                    .putFloat(1f)
+                    .putFloat(0f)
+                    .putFloat(1f)
+                    .array(),
+            ),
+            bounds = SkRect.MakeLTRB(5f, 5f, 25f, 25f),
+        ).mesh
+
+        canvas.drawMesh(mesh, SkPaint(0xFFFF0000.toInt()))
+        assertEquals(0xFF00FF00.toInt(), bm.getPixel(10, 10))
     }
 
     private fun positionSpec(): SkMeshSpecification.Result =

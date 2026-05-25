@@ -9,6 +9,7 @@ import org.skia.core.SkMeshSpecification
 import org.skia.core.SkMeshes
 import org.skia.foundation.SkBlender
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkData
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
@@ -250,8 +251,71 @@ public class CustomMeshCsGM : GM() {
 public class CustomMeshUniformsGM : GM() {
     override fun getName(): String = "custommesh_uniforms"
     override fun getISize(): SkISize = SkISize.Make(140, 250)
+    private lateinit var spec: SkMeshSpecification
+    private lateinit var vb: SkMesh.VertexBuffer
+
+    override fun onOnceBeforeDraw() {
+        val result = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kUByte4_unorm,
+                    offset = 8,
+                    name = "color",
+                ),
+            ),
+            vertexStride = 12,
+            vs = "uniform float4 uColor; Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v, float4 meshColor) { return meshColor * uColor; }",
+        )
+        spec = result.specification ?: error("CustomMeshUniformsGM spec creation failed: ${result.error}")
+        vb = SkMeshes.MakeVertexBuffer(vertexBytes(), 4 * 12)
+    }
+
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.MESH")
+        val c = canvas ?: return
+        val mesh = SkMesh.Make(
+            specification = spec,
+            mode = SkMesh.Mode.kTriangleStrip,
+            vertexBuffer = vb,
+            vertexCount = 4,
+            vertexOffset = 0,
+            uniforms = SkData.MakeWithCopy(
+                ByteBuffer.allocate(16)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .putFloat(0.8f)
+                    .putFloat(0.35f)
+                    .putFloat(0.9f)
+                    .putFloat(0.85f)
+                    .array(),
+            ),
+            bounds = SkRect.MakeLTRB(20f, 20f, 120f, 220f),
+        ).mesh
+        c.drawMesh(mesh, SkPaint(0xFFFFFFFF.toInt()))
+    }
+
+    private fun vertexBytes(): ByteArray =
+        ByteBuffer.allocate(4 * 12)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .apply {
+                putVertex(20f, 20f, 255, 255, 255, 255)
+                putVertex(120f, 20f, 0, 0, 255, 255)
+                putVertex(20f, 220f, 0, 255, 0, 255)
+                putVertex(120f, 220f, 255, 0, 0, 255)
+            }
+            .array()
+
+    private fun ByteBuffer.putVertex(x: Float, y: Float, r: Int, g: Int, b: Int, a: Int) {
+        putFloat(x)
+        putFloat(y)
+        put(r.toByte())
+        put(g.toByte())
+        put(b.toByte())
+        put(a.toByte())
     }
 }
 
