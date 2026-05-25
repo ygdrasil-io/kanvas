@@ -2,6 +2,18 @@ package org.skia.tests
 
 import org.skia.core.SkCanvas
 import org.graphiks.math.SkISize
+import org.skia.foundation.SkAlphaType
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkYUVAInfo
+import org.skia.foundation.SkYUVAPixmaps
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Stub port of Skia's `gm/yuvtorgbeffect.cpp::YUVMakeColorSpaceGM`
@@ -29,6 +41,54 @@ public class YUVMakeColorSpaceGM : GM() {
     override fun getISize(): SkISize = SkISize.Make(1100, 750)
 
     override fun onDraw(canvas: SkCanvas?) {
-        // TODO: missing API -- YUVA SkImage + makeColorSpace.
+        if (canvas == null) return
+        val src = makeYuvaSampleImage() ?: return
+        val p3 = SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3) ?: return
+        val dst = src.makeColorSpace(p3) ?: return
+        canvas.drawImage(src, 40f, 40f)
+        canvas.drawImage(dst, 560f, 40f)
+    }
+
+    private fun makeYuvaSampleImage(): SkImage? {
+        val w = 420
+        val h = 320
+        val y = ByteArray(w * h)
+        val u = ByteArray(w * h)
+        val v = ByteArray(w * h)
+        for (yy in 0 until h) {
+            for (xx in 0 until w) {
+                val i = yy * w + xx
+                y[i] = (32 + (190 * xx) / (w - 1)).toByte()
+                u[i] = (96 + (80 * yy) / (h - 1)).toByte()
+                v[i] = (64 + (140 * xx) / (w - 1)).toByte()
+            }
+        }
+        val info = SkYUVAInfo(
+            dimensions = SkISize.Make(w, h),
+            planeConfig = SkYUVAInfo.PlaneConfig.kY_U_V,
+            subsampling = SkYUVAInfo.Subsampling.k444,
+            yuvColorSpace = SkYUVAInfo.YUVColorSpace.kJPEG_Full_YUV_ColorSpace,
+        )
+        val pixmaps = SkYUVAPixmaps(
+            info,
+            arrayOf(
+                alpha8Plane(w, h, y),
+                alpha8Plane(w, h, u),
+                alpha8Plane(w, h, v),
+            ),
+        )
+        return SkImage.MakeFromYUVAPixmaps(pixmaps)
+    }
+
+    private fun alpha8Plane(w: Int, h: Int, bytes: ByteArray): SkPixmap {
+        val info = SkImageInfo.Make(w, h, SkColorType.kAlpha_8, SkAlphaType.kUnpremul)
+        val rowBytes = info.minRowBytes()
+        val buf = ByteBuffer.allocate(rowBytes * h).order(ByteOrder.LITTLE_ENDIAN)
+        for (yy in 0 until h) {
+            for (xx in 0 until w) {
+                buf.put(yy * rowBytes + xx, bytes[yy * w + xx])
+            }
+        }
+        return SkPixmap(info, buf, rowBytes)
     }
 }
