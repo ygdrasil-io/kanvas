@@ -2,14 +2,18 @@ package org.skia.core
 
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkCubicResampler
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPixmap
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkSurfaceProps
 import org.graphiks.math.SkIRect
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Mirrors Skia's
@@ -173,9 +177,9 @@ public abstract class SkSurface protected constructor(
     // surface — the GPU-side async readback pipeline that asynchronously
     // rescales the surface's content to a target [SkImageInfo] /
     // [SkISize] and delivers the resulting pixels to a [callback].
-    // Skia's raster path bypasses this entirely by sync-reading +
-    // resampling on the CPU ; kanvas-skia does not implement either,
-    // so the surface here is flag-planting (`TODO("STUB.ASYNC_RESCALE_READ")`).
+    // Skia's GPU path is genuinely asynchronous. The raster fallback here
+    // follows Skia's CPU shape: synchronously snapshot, crop, resample, then
+    // invoke the callback before returning.
     //
     // Used by `gm/asyncrescaleandread.cpp` (3 × 2 grid of rescaled
     // reads — nearest / repeated-linear / repeated-cubic × src-gamma /
@@ -185,9 +189,8 @@ public abstract class SkSurface protected constructor(
     /**
      * Async rescale + readback into RGBA pixels.
      *
-     * **TODO: STUB.ASYNC_RESCALE_READ** — requires the upstream
-     * `SkSurface::asyncRescaleAndReadPixels` implementation (raster
-     * sync-resample is acceptable on the kanvas-skia side).
+     * CPU-raster fallback for the RGBA readback path. YUV/YUVA variants
+     * remain dependency-gated separately.
      */
     public open fun asyncRescaleAndReadPixels(
         info: SkImageInfo,
@@ -195,14 +198,16 @@ public abstract class SkSurface protected constructor(
         rescaleGamma: RescaleGamma = RescaleGamma.kSrc,
         rescaleMode: RescaleMode = RescaleMode.kNearest,
         callback: (AsyncReadResult?) -> Unit,
-    ): Unit = TODO("STUB.ASYNC_RESCALE_READ: SkSurface.asyncRescaleAndReadPixels")
+    ) {
+        callback(readPixelsRescaled(info, srcRect, rescaleGamma, rescaleMode))
+    }
 
     /**
      * Async rescale + readback into YUV-420 (3 planes, 4:2:0 chroma
      * subsampled). Used by video-encoder feed paths.
      *
-     * **TODO: STUB.ASYNC_RESCALE_READ** — same status as the RGBA
-     * variant.
+     * **TODO: STUB.ASYNC_RESCALE_READ_YUV** — YUV/YUVA readback stays
+     * dependency-gated outside the RGBA CPU fallback.
      */
     public open fun asyncRescaleAndReadPixelsYUV420(
         yuvColorSpace: SkYUVColorSpace,
@@ -212,14 +217,14 @@ public abstract class SkSurface protected constructor(
         rescaleGamma: RescaleGamma = RescaleGamma.kSrc,
         rescaleMode: RescaleMode = RescaleMode.kNearest,
         callback: (AsyncReadResult?) -> Unit,
-    ): Unit = TODO("STUB.ASYNC_RESCALE_READ: SkSurface.asyncRescaleAndReadPixelsYUV420")
+    ): Unit = TODO("STUB.ASYNC_RESCALE_READ_YUV: SkSurface.asyncRescaleAndReadPixelsYUV420")
 
     /**
      * Async rescale + readback into YUVA-420 (3 planes + alpha plane,
      * 4:2:0 chroma subsampled).
      *
-     * **TODO: STUB.ASYNC_RESCALE_READ** — same status as the YUV420
-     * variant.
+     * **TODO: STUB.ASYNC_RESCALE_READ_YUV** — same gated status as the
+     * YUV420 variant.
      */
     public open fun asyncRescaleAndReadPixelsYUVA420(
         yuvColorSpace: SkYUVColorSpace,
@@ -229,7 +234,7 @@ public abstract class SkSurface protected constructor(
         rescaleGamma: RescaleGamma = RescaleGamma.kSrc,
         rescaleMode: RescaleMode = RescaleMode.kNearest,
         callback: (AsyncReadResult?) -> Unit,
-    ): Unit = TODO("STUB.ASYNC_RESCALE_READ: SkSurface.asyncRescaleAndReadPixelsYUVA420")
+    ): Unit = TODO("STUB.ASYNC_RESCALE_READ_YUV: SkSurface.asyncRescaleAndReadPixelsYUVA420")
 
     /** Linearisation hint for the async rescale step. Mirrors `SkImage::RescaleGamma`. */
     public enum class RescaleGamma { kSrc, kLinear }
@@ -243,7 +248,8 @@ public abstract class SkSurface protected constructor(
      * Mirrors Skia's `SkSurface::AsyncReadResult` — a small handle that
      * exposes the per-plane pixel buffers and row-bytes.
      *
-     * **TODO: STUB.ASYNC_RESCALE_READ** — surface only ; no plane data.
+     * RGBA readbacks return a single plane. YUV/YUVA variants will add
+     * multiple planes when those paths are implemented.
      */
     public abstract class AsyncReadResult internal constructor() {
         public abstract fun count(): Int
@@ -287,7 +293,69 @@ public abstract class SkSurface protected constructor(
         kIdentity,
     }
 
+    private fun readPixelsRescaled(
+        info: SkImageInfo,
+        srcRect: SkIRect,
+        @Suppress("UNUSED_PARAMETER") rescaleGamma: RescaleGamma,
+        rescaleMode: RescaleMode,
+    ): AsyncReadResult? {
+        if (info.isEmpty()) return null
+        if (info.colorType !in rgbaAsyncColorTypes) return null
+        if (srcRect.isEmpty) return null
+        if (!SkIRect.MakeWH(width, height).contains(srcRect)) return null
+
+        val srcInfo = info.makeWH(srcRect.width(), srcRect.height())
+        val srcRowBytes = srcInfo.minRowBytes()
+        val srcPixels = ByteBuffer.allocate(srcRowBytes * srcInfo.height).order(ByteOrder.LITTLE_ENDIAN)
+        if (!makeImageSnapshot().readPixels(srcInfo, srcPixels, srcRowBytes, srcRect.left, srcRect.top)) {
+            return null
+        }
+
+        val dstRowBytes = info.minRowBytes()
+        val dstPixels = ByteBuffer.allocate(dstRowBytes * info.height).order(ByteOrder.LITTLE_ENDIAN)
+        val srcPixmap = SkPixmap(srcInfo, srcPixels, srcRowBytes)
+        val dstPixmap = SkPixmap(info, dstPixels, dstRowBytes)
+        if (!srcPixmap.scalePixels(dstPixmap, rescaleMode.toSamplingOptions())) return null
+
+        val bytes = ByteArray(dstPixels.capacity())
+        dstPixels.duplicate().also {
+            it.position(0)
+            it.get(bytes)
+        }
+        return RasterAsyncReadResult(bytes, dstRowBytes)
+    }
+
+    private class RasterAsyncReadResult(
+        private val bytes: ByteArray,
+        private val stride: Int,
+    ) : AsyncReadResult() {
+        override fun count(): Int = 1
+
+        override fun data(planeIndex: Int): ByteArray {
+            require(planeIndex == 0) { "RGBA async readback has one plane, requested $planeIndex" }
+            return bytes
+        }
+
+        override fun rowBytes(planeIndex: Int): Int {
+            require(planeIndex == 0) { "RGBA async readback has one plane, requested $planeIndex" }
+            return stride
+        }
+    }
+
+    private fun RescaleMode.toSamplingOptions(): SkSamplingOptions = when (this) {
+        RescaleMode.kNearest -> SkSamplingOptions.nearest()
+        RescaleMode.kRepeatedLinear -> SkSamplingOptions.linear()
+        RescaleMode.kRepeatedCubic -> SkSamplingOptions(SkCubicResampler.Mitchell)
+    }
+
     public companion object {
+        private val rgbaAsyncColorTypes: Set<SkColorType> = setOf(
+            SkColorType.kAlpha_8,
+            SkColorType.kARGB_4444,
+            SkColorType.kRGBA_8888,
+            SkColorType.kBGRA_8888,
+        )
+
         /**
          * Allocate a raster surface with a freshly created backing
          * [SkBitmap] sized and configured per [info]. The bitmap is
