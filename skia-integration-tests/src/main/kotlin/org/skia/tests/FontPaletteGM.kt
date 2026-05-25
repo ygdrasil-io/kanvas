@@ -15,11 +15,11 @@ import org.skia.tools.ToolUtils
  * Portable palette-override GM inspired by Skia's
  * [`gm/palette.cpp::FontPaletteGM`](https://github.com/google/skia/blob/main/gm/palette.cpp).
  *
- * The upstream GM uses `test_glyphs-glyf_colr_1.ttf`, which is not
- * shipped here. This GM keeps the same palette-selection contract on
- * the portable path by injecting tiny COLRv1/CPAL tables into bundled
- * Liberation Sans and rendering a single colour glyph through
- * [SkTypeface.makeClone].
+ * The upstream fixture `test_glyphs-glyf_colr_1.ttf` is bundled for
+ * broader COLRv1 coverage. This GM keeps the palette-override contract
+ * intentionally small and deterministic by injecting tiny COLRv1/CPAL
+ * tables into bundled Liberation Sans and rendering colour glyphs
+ * through [SkTypeface.makeClone].
  *
  * ## Constructor parameters
  *
