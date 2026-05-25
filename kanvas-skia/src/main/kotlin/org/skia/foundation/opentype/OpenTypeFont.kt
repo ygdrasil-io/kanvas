@@ -1892,11 +1892,31 @@ private class ParsedTrueTypeFont(
                         alpha = reader.f2Dot14(paintOffset + 3)?.coerceIn(0f, 1f) ?: return null,
                     )
                 }
+                3 -> {
+                    if (!reader.fits(paintOffset, 9)) return null
+                    OpenTypeColorPaint.Solid(
+                        paletteIndex = reader.u16(paintOffset + 1) ?: return null,
+                        alpha = reader.f2Dot14(paintOffset + 3)?.coerceIn(0f, 1f) ?: return null,
+                    )
+                }
                 4 -> {
                     if (!reader.fits(paintOffset, 16)) return null
                     val colorLineOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
                     OpenTypeColorPaint.LinearGradient(
-                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset) ?: return null,
+                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset, variableStops = false) ?: return null,
+                        x0 = reader.i16(paintOffset + 4)?.toInt() ?: return null,
+                        y0 = reader.i16(paintOffset + 6)?.toInt() ?: return null,
+                        x1 = reader.i16(paintOffset + 8)?.toInt() ?: return null,
+                        y1 = reader.i16(paintOffset + 10)?.toInt() ?: return null,
+                        x2 = reader.i16(paintOffset + 12)?.toInt() ?: return null,
+                        y2 = reader.i16(paintOffset + 14)?.toInt() ?: return null,
+                    )
+                }
+                5 -> {
+                    if (!reader.fits(paintOffset, 20)) return null
+                    val colorLineOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
+                    OpenTypeColorPaint.LinearGradient(
+                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset, variableStops = true) ?: return null,
                         x0 = reader.i16(paintOffset + 4)?.toInt() ?: return null,
                         y0 = reader.i16(paintOffset + 6)?.toInt() ?: return null,
                         x1 = reader.i16(paintOffset + 8)?.toInt() ?: return null,
@@ -1909,7 +1929,20 @@ private class ParsedTrueTypeFont(
                     if (!reader.fits(paintOffset, 16)) return null
                     val colorLineOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
                     OpenTypeColorPaint.RadialGradient(
-                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset) ?: return null,
+                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset, variableStops = false) ?: return null,
+                        x0 = reader.i16(paintOffset + 4)?.toInt() ?: return null,
+                        y0 = reader.i16(paintOffset + 6)?.toInt() ?: return null,
+                        radius0 = reader.u16(paintOffset + 8) ?: return null,
+                        x1 = reader.i16(paintOffset + 10)?.toInt() ?: return null,
+                        y1 = reader.i16(paintOffset + 12)?.toInt() ?: return null,
+                        radius1 = reader.u16(paintOffset + 14) ?: return null,
+                    )
+                }
+                7 -> {
+                    if (!reader.fits(paintOffset, 20)) return null
+                    val colorLineOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
+                    OpenTypeColorPaint.RadialGradient(
+                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset, variableStops = true) ?: return null,
                         x0 = reader.i16(paintOffset + 4)?.toInt() ?: return null,
                         y0 = reader.i16(paintOffset + 6)?.toInt() ?: return null,
                         radius0 = reader.u16(paintOffset + 8) ?: return null,
@@ -1922,7 +1955,18 @@ private class ParsedTrueTypeFont(
                     if (!reader.fits(paintOffset, 12)) return null
                     val colorLineOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
                     OpenTypeColorPaint.SweepGradient(
-                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset) ?: return null,
+                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset, variableStops = false) ?: return null,
+                        centerX = reader.i16(paintOffset + 4)?.toInt() ?: return null,
+                        centerY = reader.i16(paintOffset + 6)?.toInt() ?: return null,
+                        startAngle = reader.f2Dot14(paintOffset + 8) ?: return null,
+                        endAngle = reader.f2Dot14(paintOffset + 10) ?: return null,
+                    )
+                }
+                9 -> {
+                    if (!reader.fits(paintOffset, 16)) return null
+                    val colorLineOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
+                    OpenTypeColorPaint.SweepGradient(
+                        colorLine = parseColorLine(reader, colrStart, colrEnd, colorLineOffset, variableStops = true) ?: return null,
                         centerX = reader.i16(paintOffset + 4)?.toInt() ?: return null,
                         centerY = reader.i16(paintOffset + 6)?.toInt() ?: return null,
                         startAngle = reader.f2Dot14(paintOffset + 8) ?: return null,
@@ -1947,19 +1991,25 @@ private class ParsedTrueTypeFont(
                     if (!reader.fits(paintOffset, 7)) return null
                     val childOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
                     val transformOffset = childPaintOffset(reader, paintOffset, 4) ?: return null
-                    if (!reader.fits(transformOffset, 24)) return null
-                    OpenTypeColorPaint.Transform(
-                        paint = parseColorPaint(reader, colrStart, colrEnd, layerPaintOffsets, childOffset, depth + 1) ?: return null,
-                        xx = reader.fixed16Dot16(transformOffset) ?: return null,
-                        yx = reader.fixed16Dot16(transformOffset + 4) ?: return null,
-                        xy = reader.fixed16Dot16(transformOffset + 8) ?: return null,
-                        yy = reader.fixed16Dot16(transformOffset + 12) ?: return null,
-                        dx = reader.fixed16Dot16(transformOffset + 16) ?: return null,
-                        dy = reader.fixed16Dot16(transformOffset + 20) ?: return null,
-                    )
+                    parseColorTransformPaint(reader, colrStart, colrEnd, layerPaintOffsets, childOffset, transformOffset, variableTransform = false, depth = depth)
+                }
+                13 -> {
+                    if (!reader.fits(paintOffset, 7)) return null
+                    val childOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
+                    val transformOffset = childPaintOffset(reader, paintOffset, 4) ?: return null
+                    parseColorTransformPaint(reader, colrStart, colrEnd, layerPaintOffsets, childOffset, transformOffset, variableTransform = true, depth = depth)
                 }
                 14 -> {
                     if (!reader.fits(paintOffset, 8)) return null
+                    val childOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
+                    OpenTypeColorPaint.Translate(
+                        paint = parseColorPaint(reader, colrStart, colrEnd, layerPaintOffsets, childOffset, depth + 1) ?: return null,
+                        dx = reader.i16(paintOffset + 4)?.toInt() ?: return null,
+                        dy = reader.i16(paintOffset + 6)?.toInt() ?: return null,
+                    )
+                }
+                15 -> {
+                    if (!reader.fits(paintOffset, 12)) return null
                     val childOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
                     OpenTypeColorPaint.Translate(
                         paint = parseColorPaint(reader, colrStart, colrEnd, layerPaintOffsets, childOffset, depth + 1) ?: return null,
@@ -2014,11 +2064,36 @@ private class ParsedTrueTypeFont(
             else -> SkBlendMode.kClear
         }
 
+        private fun parseColorTransformPaint(
+            reader: SfntReader,
+            colrStart: Int,
+            colrEnd: Int,
+            layerPaintOffsets: List<Int>,
+            childOffset: Int,
+            transformOffset: Int,
+            variableTransform: Boolean,
+            depth: Int,
+        ): OpenTypeColorPaint? {
+            val transformSize = if (variableTransform) 28 else 24
+            if (transformOffset < colrStart || transformOffset >= colrEnd) return null
+            if (!reader.fits(transformOffset, transformSize)) return null
+            return OpenTypeColorPaint.Transform(
+                paint = parseColorPaint(reader, colrStart, colrEnd, layerPaintOffsets, childOffset, depth + 1) ?: return null,
+                xx = reader.fixed16Dot16(transformOffset) ?: return null,
+                yx = reader.fixed16Dot16(transformOffset + 4) ?: return null,
+                xy = reader.fixed16Dot16(transformOffset + 8) ?: return null,
+                yy = reader.fixed16Dot16(transformOffset + 12) ?: return null,
+                dx = reader.fixed16Dot16(transformOffset + 16) ?: return null,
+                dy = reader.fixed16Dot16(transformOffset + 20) ?: return null,
+            )
+        }
+
         private fun parseColorLine(
             reader: SfntReader,
             colrStart: Int,
             colrEnd: Int,
             colorLineOffset: Int,
+            variableStops: Boolean,
         ): OpenTypeColorLine? {
             if (colorLineOffset < colrStart || colorLineOffset >= colrEnd) return null
             if (!reader.fits(colorLineOffset, 3)) return null
@@ -2030,12 +2105,13 @@ private class ParsedTrueTypeFont(
             }
             val stopCount = reader.u16(colorLineOffset + 1) ?: return null
             if (stopCount == 0 || stopCount > MAX_COLOR_STOPS) return null
-            val stopBytes = stopCount.toLong() * 6L
+            val stopStride = if (variableStops) 10 else 6
+            val stopBytes = stopCount.toLong() * stopStride.toLong()
             if (colorLineOffset.toLong() + 3L + stopBytes > colrEnd.toLong()) return null
             if (!reader.fits(colorLineOffset + 3, stopBytes)) return null
             val stops = ArrayList<OpenTypeColorStop>(stopCount)
             repeat(stopCount) { index ->
-                val stopOffset = colorLineOffset + 3 + index * 6
+                val stopOffset = colorLineOffset + 3 + index * stopStride
                 val offset = reader.f2Dot14(stopOffset) ?: return null
                 stops += OpenTypeColorStop(
                     offset = offset,
