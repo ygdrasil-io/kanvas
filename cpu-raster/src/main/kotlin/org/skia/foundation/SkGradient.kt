@@ -6,10 +6,10 @@ import org.skia.foundation.skcms.SkNamedTransferFn
 /**
  * Small public mirror of Skia's `SkGradient` aggregate.
  *
- * This slice intentionally supports only RGB interpolation spaces that can be
- * expressed with the existing `SkShader.makeWithWorkingColorSpace` wrapper.
- * Perceptual CSS spaces and hue interpolation need a dedicated gradient
- * sampler, so they remain explicit `STUB.GRADIENT_INTERPOLATION` failures.
+ * This slice supports RGB interpolation spaces that can be expressed with the
+ * existing `SkShader.makeWithWorkingColorSpace` wrapper, plus a bounded HSL
+ * dedicated sampler. Remaining perceptual CSS spaces stay explicit
+ * `STUB.GRADIENT_INTERPOLATION` failures.
  */
 public class SkGradient(
     colors: IntArray,
@@ -99,11 +99,8 @@ public class SkGradient(
         interpolation.colorSpace == Interpolation.ColorSpace.kHSL
 
     internal fun validateDedicatedSampler() {
-        if (interpolation.colorSpace == Interpolation.ColorSpace.kHSL &&
-            interpolation.inPremul != Interpolation.InPremul.kNo
-        ) {
-            unsupported("ColorSpace.kHSL with InPremul.${interpolation.inPremul}")
-        }
+        // HSL is intentionally the only dedicated sampler slice here. Other
+        // perceptual spaces still require their own conversion pipelines.
     }
 
     private fun unsupported(feature: String): Nothing =
