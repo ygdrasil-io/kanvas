@@ -33,6 +33,7 @@ import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
 import org.graphiks.math.SkScalar
 import java.nio.ByteBuffer
+import java.util.zip.Inflater
 import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
 
@@ -2478,6 +2479,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
          * SkVertices's 16-bit index limit.
          */
         private const val PATCH_TESS_N: Int = 8
+        private val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 
         init {
             // Eagerly load :cpu-raster's SkShadowUtils so its `init` block
@@ -2595,6 +2597,10 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                 }
                 return
             }
+            val bitmapGlyphs = typeface.makeBitmapTextGlyphs(str, x, y, font.size, font.scaleX)
+            if (bitmapGlyphs.isNotEmpty() && drawOpenTypeBitmapGlyphs(bitmapGlyphs, font.size, paint)) {
+                return
+            }
         }
         val path = font.makeTextPath(str, x, y) ?: return
         // Glyph fills are AA whenever the font asks for it. Skia's
@@ -2603,6 +2609,143 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         // For T3 we keep paint.isAntiAlias as the source of truth and
         // let drawPath decide; future slices may refine.
         drawPath(path, paint)
+    }
+
+    private fun drawOpenTypeBitmapGlyphs(
+        bitmapGlyphs: List<org.skia.foundation.opentype.OpenTypePositionedBitmapGlyph>,
+        fontSize: SkScalar,
+        paint: SkPaint,
+    ): Boolean {
+        val imageCache = HashMap<Int, SkImage>()
+        var drewAny = false
+        for (positioned in bitmapGlyphs) {
+            val glyph = positioned.glyph
+            val image = imageCache[glyph.glyphId] ?: decodePngGlyph(glyph.bytes)?.also {
+                imageCache[glyph.glyphId] = it
+            } ?: continue
+            val ppem = glyph.ppemY.takeIf { it > 0 } ?: 1
+            val scale = fontSize / ppem.toFloat()
+            val left = positioned.x + glyph.originOffsetX * scale
+            val top = positioned.y - image.height * scale + glyph.originOffsetY * scale
+            val dst = SkRect.MakeXYWH(left, top, image.width * scale, image.height * scale)
+            val src = SkRect.MakeWH(image.width.toFloat(), image.height.toFloat())
+            drawImageRect(image, src, dst, SkSamplingOptions.Default, paint, SrcRectConstraint.kFast)
+            drewAny = true
+        }
+        return drewAny
+    }
+
+    private fun decodePngGlyph(bytes: ByteArray): SkImage? {
+        if (bytes.size < 8 || !bytes.copyOfRange(0, 8).contentEquals(PNG_SIGNATURE)) return null
+        var offset = 8
+        var width = 0
+        var height = 0
+        var bitDepth = 0
+        var colorType = 0
+        var interlace = 0
+        val idat = ArrayList<Byte>()
+        while (offset + 8 <= bytes.size) {
+            val length = readU32(bytes, offset) ?: return null
+            offset += 4
+            val type = String(bytes, offset, 4, Charsets.US_ASCII)
+            offset += 4
+            if (offset + length + 4 > bytes.size) return null
+            val chunkData = bytes.copyOfRange(offset, offset + length)
+            offset += length + 4 // Skip CRC
+            when (type) {
+                "IHDR" -> {
+                    if (length != 13) return null
+                    width = readU32(chunkData, 0) ?: return null
+                    height = readU32(chunkData, 4) ?: return null
+                    bitDepth = chunkData[8].toInt() and 0xFF
+                    colorType = chunkData[9].toInt() and 0xFF
+                    interlace = chunkData[12].toInt() and 0xFF
+                }
+                "IDAT" -> idat.addAll(chunkData.toList())
+                "IEND" -> break
+            }
+        }
+        if (width <= 0 || height <= 0 || bitDepth != 8 || colorType != 6 || interlace != 0) return null
+        val inflater = Inflater()
+        inflater.setInput(idat.toByteArray())
+        val rowBytes = width * 4
+        val expected = height * (rowBytes + 1)
+        val inflated = ByteArray(expected)
+        val inflatedSize = try {
+            inflater.inflate(inflated)
+        } catch (_: Exception) {
+            return null
+        } finally {
+            inflater.end()
+        }
+        if (inflatedSize != expected) return null
+        val pixels = IntArray(width * height)
+        val prev = ByteArray(rowBytes)
+        val cur = ByteArray(rowBytes)
+        var src = 0
+        for (y in 0 until height) {
+            val filter = inflated[src].toInt() and 0xFF
+            src += 1
+            for (i in 0 until rowBytes) cur[i] = inflated[src + i]
+            src += rowBytes
+            unfilterPngRow(cur, prev, filter, 4)
+            for (x in 0 until width) {
+                val i = x * 4
+                val r = cur[i].toInt() and 0xFF
+                val g = cur[i + 1].toInt() and 0xFF
+                val b = cur[i + 2].toInt() and 0xFF
+                val a = cur[i + 3].toInt() and 0xFF
+                pixels[y * width + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
+            }
+            System.arraycopy(cur, 0, prev, 0, rowBytes)
+        }
+        return SkImage(width, height, pixels)
+    }
+
+    private fun unfilterPngRow(cur: ByteArray, prev: ByteArray, filter: Int, bpp: Int) {
+        when (filter) {
+            0 -> return
+            1 -> for (i in cur.indices) {
+                val left = if (i >= bpp) cur[i - bpp].toInt() and 0xFF else 0
+                cur[i] = ((cur[i].toInt() and 0xFF) + left).toByte()
+            }
+            2 -> for (i in cur.indices) {
+                val up = prev[i].toInt() and 0xFF
+                cur[i] = ((cur[i].toInt() and 0xFF) + up).toByte()
+            }
+            3 -> for (i in cur.indices) {
+                val left = if (i >= bpp) cur[i - bpp].toInt() and 0xFF else 0
+                val up = prev[i].toInt() and 0xFF
+                cur[i] = ((cur[i].toInt() and 0xFF) + ((left + up) / 2)).toByte()
+            }
+            4 -> for (i in cur.indices) {
+                val a = if (i >= bpp) cur[i - bpp].toInt() and 0xFF else 0
+                val b = prev[i].toInt() and 0xFF
+                val c = if (i >= bpp) prev[i - bpp].toInt() and 0xFF else 0
+                cur[i] = ((cur[i].toInt() and 0xFF) + paeth(a, b, c)).toByte()
+            }
+            else -> return
+        }
+    }
+
+    private fun paeth(a: Int, b: Int, c: Int): Int {
+        val p = a + b - c
+        val pa = kotlin.math.abs(p - a)
+        val pb = kotlin.math.abs(p - b)
+        val pc = kotlin.math.abs(p - c)
+        return when {
+            pa <= pb && pa <= pc -> a
+            pb <= pc -> b
+            else -> c
+        }
+    }
+
+    private fun readU32(bytes: ByteArray, offset: Int): Int? {
+        if (offset + 4 > bytes.size) return null
+        return ((bytes[offset].toInt() and 0xFF) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 3].toInt() and 0xFF)
     }
 
     private fun drawOpenTypeColorPath(
