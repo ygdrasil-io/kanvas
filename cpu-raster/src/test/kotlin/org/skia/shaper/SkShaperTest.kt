@@ -148,6 +148,42 @@ class SkShaperTest {
     }
 
     @Test
+    fun `cluster offsets are monotonic for LTR visual order`() {
+        val handler = CapturingHandler()
+        SkShaper.MakePortable().shape(
+            utf8 = "abé",
+            font = makeFont(),
+            leftToRight = true,
+            width = 100f,
+            runHandler = handler,
+        )
+        val clusters = handler.capturedBuffer!!.clusters
+        for (i in 1 until clusters.size) {
+            assertTrue(clusters[i] >= clusters[i - 1]) {
+                "clusters must be monotonic in LTR visual order: ${clusters.toList()}"
+            }
+        }
+    }
+
+    @Test
+    fun `cluster offsets are monotonic for RTL visual order`() {
+        val handler = CapturingHandler()
+        SkShaper.MakePortable().shape(
+            utf8 = "abé",
+            font = makeFont(),
+            leftToRight = false,
+            width = 100f,
+            runHandler = handler,
+        )
+        val clusters = handler.capturedBuffer!!.clusters
+        for (i in 1 until clusters.size) {
+            assertTrue(clusters[i] >= clusters[i - 1]) {
+                "clusters must be monotonic in visual run order: ${clusters.toList()}"
+            }
+        }
+    }
+
+    @Test
     fun `SkTextBlobShaperRunHandler produces a blob with FullPositions run`() {
         val handler = SkTextBlobShaperRunHandler("ABC", originX = 10f, originY = 50f)
         SkShaper.MakePrimitive().shape(

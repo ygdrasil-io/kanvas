@@ -163,6 +163,11 @@ directly measurable through the existing `measureTextInternal` and
 `makeTextPath` paths, requires no new public API, and is tested with bundled
 Liberation fonts that contain `GPOS` data.
 
+`SkCanvas.drawString` remains intentionally simple-text in this architecture:
+it uses the font path pipeline and does not implicitly run a complex shaper.
+Portable complex shaping must be requested through explicit `SkShaper` or
+text-layout entry points so fallback behavior stays predictable and measurable.
+
 `GSUB` substitutions, including standard ligatures, are tracked by #976 because
 they need cluster mapping and a clear policy for enabled features. Bidi, script
 itemization, mark positioning, cursive attachment, Indic/Arabic shaping,

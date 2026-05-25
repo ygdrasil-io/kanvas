@@ -47,6 +47,16 @@ public abstract class SkShaper protected constructor() {
      * positions + cluster indices for the run described by the
      * preceding [RunInfo]. The arrays are owned by the handler ;
      * [SkShaper] writes into them directly.
+     *
+     * Cluster contract (portable shaping boundary):
+     * - each `clusters[i]` is a UTF-8 byte offset into the original
+     *   input line;
+     * - one-to-many substitutions may repeat the same cluster value
+     *   across several glyphs;
+     * - many-to-one substitutions may skip intermediate source
+     *   offsets and point several source code points to one glyph;
+     * - cluster values for a run are monotonic in visual glyph order
+     *   for the emitted run direction.
      */
     public class Buffer(
         public val glyphs: IntArray,
@@ -83,6 +93,9 @@ public abstract class SkShaper protected constructor() {
      * before wrapping ; for I4.1 the primitive shaper ignores
      * wrapping (single-line output regardless of [width]) and the
      * full text becomes a single run.
+     *
+     * Cluster values written to [Buffer.clusters] follow [Buffer]'s
+     * contract and are suitable as caret/source mapping anchors.
      */
     public abstract fun shape(
         utf8: String,

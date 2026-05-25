@@ -2491,6 +2491,15 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      *    `kAntiAlias` silently — the path-fill rasteriser only does
      *    coverage AA, not LCD subpixel AA.
      *  - No glyph mask cache yet (T5).
+     *
+     * Policy boundary for #976:
+     *  - `drawString` remains a simple-text API routed through
+     *    `SkFont.makeTextPath` (cmap + kern/limited GPOS in the
+     *    current portable OpenType path);
+     *  - complex shaping (`GSUB`, bidi reordering, script itemization,
+     *    marks/cursive attachment, multi-font fallback splitting) must
+     *    be routed through explicit `SkShaper`/text-layout entry
+     *    points instead of being implicitly folded into `drawString`.
      */
     public open fun drawString(
         str: String,
