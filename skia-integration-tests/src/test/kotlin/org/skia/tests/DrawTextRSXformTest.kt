@@ -2,7 +2,6 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
@@ -10,11 +9,7 @@ import org.skia.testing.TestUtils
 
 /**
  * Test for [DrawTextRSXformGM].
- * Disabled: [SkTextBlob.MakeFromRSXformGlyphs] is a STUB.RSXBLOB that
- * throws NotImplementedError at runtime; the GM body calls it so
- * execution cannot proceed.
  */
-@Disabled("STUB.RSXBLOB")
 class DrawTextRSXformTest {
     @Test
     fun `DrawTextRSXformGM matches drawTextRSXform_png within tolerance`() {
