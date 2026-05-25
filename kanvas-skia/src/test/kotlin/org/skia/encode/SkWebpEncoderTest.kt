@@ -27,7 +27,7 @@ import java.io.ByteArrayOutputStream
  *  - the [SkWebpEncoder.Custom] hook short-circuits the built-in
  *    encoder when registered and falls back to it after `Custom(null)` ;
  *  - the [SkWebpEncoder.Compression.kLossy] path returns `null`
- *    (left as TODO — see encoder kdoc) ;
+ *    as the documented unsupported portable encode path ;
  *  - the legacy [SkWebpEncoder.Options] invariants are still enforced.
  */
 class SkWebpEncoderTest {
