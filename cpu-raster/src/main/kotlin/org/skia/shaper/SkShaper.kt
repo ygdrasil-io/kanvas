@@ -26,6 +26,10 @@ import org.graphiks.math.SkRect
  *    common consumer).
  */
 public abstract class SkShaper protected constructor() {
+    public data class Features(
+        val standardLigatures: Boolean = false,
+        val discretionaryLigatures: Boolean = false,
+    )
 
     /**
      * Per-run information emitted by [shape] (font + glyph count +
@@ -119,6 +123,7 @@ public abstract class SkShaper protected constructor() {
          * pure-Kotlin shaping slices land.
          */
         public fun MakePortable(): SkShaper = PrimitiveShaper()
+        public fun MakePortable(features: Features): SkShaper = PrimitiveShaper(features)
 
         /**
          * OpenType-oriented alias for [MakePortable]. Keeping this
@@ -126,6 +131,7 @@ public abstract class SkShaper protected constructor() {
          * naming.
          */
         public fun MakeOpenType(): SkShaper = MakePortable()
+        public fun MakeOpenType(features: Features): SkShaper = MakePortable(features)
 
     }
 }
@@ -136,7 +142,9 @@ public abstract class SkShaper protected constructor() {
  * run). `bidiLevel = 0` (LTR) or `1` (RTL) per [SkShaper.shape]'s
  * `leftToRight` flag.
  */
-internal class PrimitiveShaper : SkShaper() {
+internal class PrimitiveShaper(
+    private val features: Features = Features(),
+) : SkShaper() {
 
     override fun shape(
         utf8: String,
@@ -154,21 +162,11 @@ internal class PrimitiveShaper : SkShaper() {
             runHandler.commitLine()
             return
         }
-        val glyphsShort = ShortArray(n)
-        font.unicharsToGlyphs(codepoints, n, glyphsShort)
-        val glyphsInt = IntArray(n) { glyphsShort[it].toInt() and 0xFFFF }
-
-        // Compute advance widths + cluster indices (utf8 byte offset
-        // per code point — for ASCII / Latin, byte offset = char
-        // offset ; for non-Latin we fall back to char offset which is
-        // still useful for caret placement at the codepoint
-        // granularity).
-        val utf8Bytes = utf8.toByteArray(Charsets.UTF_8)
-        val clusters = IntArray(n)
+        val sourceClusters = IntArray(n)
         run {
             var byteIdx = 0
             for (i in 0 until n) {
-                clusters[i] = byteIdx
+                sourceClusters[i] = byteIdx
                 val cp = codepoints[i]
                 byteIdx += when {
                     cp < 0x80 -> 1
@@ -179,8 +177,44 @@ internal class PrimitiveShaper : SkShaper() {
             }
         }
 
+        // Minimal shaping substitutions gated by explicit feature toggles.
+        val shapedCodepoints = ArrayList<Int>(n)
+        val shapedClusters = ArrayList<Int>(n)
+        var src = 0
+        while (src < n) {
+            val cp = codepoints[src]
+            if (features.discretionaryLigatures && src + 2 < n &&
+                cp == 'f'.code && codepoints[src + 1] == 'f'.code && codepoints[src + 2] == 'i'.code
+            ) {
+                shapedCodepoints.add(0xFB03) // ffi
+                shapedClusters.add(sourceClusters[src])
+                src += 3
+                continue
+            }
+            if (features.standardLigatures && src + 1 < n &&
+                cp == 'f'.code && codepoints[src + 1] == 'i'.code
+            ) {
+                shapedCodepoints.add(0xFB01) // fi
+                shapedClusters.add(sourceClusters[src])
+                src += 2
+                continue
+            }
+            shapedCodepoints.add(cp)
+            shapedClusters.add(sourceClusters[src])
+            src += 1
+        }
+
+        val outCount = shapedCodepoints.size
+        val glyphsShort = ShortArray(outCount)
+        val shapedCodepointArray = shapedCodepoints.toIntArray()
+        font.unicharsToGlyphs(shapedCodepointArray, outCount, glyphsShort)
+        val glyphsInt = IntArray(outCount) { glyphsShort[it].toInt() and 0xFFFF }
+
+        val utf8Bytes = utf8.toByteArray(Charsets.UTF_8)
+        val clusters = shapedClusters.toIntArray()
+
         // Per-glyph advance widths via the font.
-        val xAdvances = FloatArray(n) { font.getWidth(glyphsInt[it]) }
+        val xAdvances = FloatArray(outCount) { font.getWidth(glyphsInt[it]) }
         val totalAdvance = xAdvances.sum()
 
         // Font metrics for ascent / line-height.
@@ -192,7 +226,7 @@ internal class PrimitiveShaper : SkShaper() {
             bidiLevel = if (leftToRight) 0 else 1,
             advanceX = totalAdvance,
             advanceY = 0f,
-            glyphCount = n,
+            glyphCount = outCount,
             utf8Range = 0..utf8Bytes.size,
             lineHeight = lineHeight,
             ascent = metrics.fAscent,
@@ -201,11 +235,13 @@ internal class PrimitiveShaper : SkShaper() {
         runHandler.commitRunInfo()
 
         val buffer = runHandler.runBuffer(info)
-        require(buffer.glyphs.size >= n) { "buffer.glyphs too small : ${buffer.glyphs.size} < $n" }
-        require(buffer.positions.size >= n * 2) {
-            "buffer.positions too small : ${buffer.positions.size} < ${n * 2}"
+        require(buffer.glyphs.size >= outCount) { "buffer.glyphs too small : ${buffer.glyphs.size} < $outCount" }
+        require(buffer.positions.size >= outCount * 2) {
+            "buffer.positions too small : ${buffer.positions.size} < ${outCount * 2}"
         }
-        require(buffer.clusters.size >= n) { "buffer.clusters too small : ${buffer.clusters.size} < $n" }
+        require(buffer.clusters.size >= outCount) {
+            "buffer.clusters too small : ${buffer.clusters.size} < $outCount"
+        }
 
         // Lay glyphs out at the run's origin point. RTL flips the
         // direction (last glyph first).
@@ -213,7 +249,7 @@ internal class PrimitiveShaper : SkShaper() {
         val originY = buffer.point.getOrElse(1) { 0f }
         var penX = 0f
         if (leftToRight) {
-            for (i in 0 until n) {
+            for (i in 0 until outCount) {
                 buffer.glyphs[i] = glyphsInt[i]
                 buffer.positions[i * 2] = originX + penX
                 buffer.positions[i * 2 + 1] = originY
@@ -224,7 +260,7 @@ internal class PrimitiveShaper : SkShaper() {
             // Lay out RTL : visually right-to-left. The last codepoint
             // anchors at originX ; preceding ones extend leftward.
             penX = totalAdvance
-            for (i in 0 until n) {
+            for (i in 0 until outCount) {
                 penX -= xAdvances[i]
                 buffer.glyphs[i] = glyphsInt[i]
                 buffer.positions[i * 2] = originX + penX

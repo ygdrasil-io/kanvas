@@ -174,6 +174,11 @@ itemization, mark positioning, cursive attachment, Indic/Arabic shaping,
 HarfBuzz parity, and multi-font fallback belong outside the OpenType typeface
 reader and should be tracked as dedicated `SkShaper` or text-layout work.
 
+Current #976 slice adds explicit portable feature toggles on `SkShaper` and a
+minimal synthetic ligature path (`f` + `i` -> `fi`), gated behind
+`Features(standardLigatures = true)`. Defaults remain conservative: no implicit
+ligature substitution unless the caller opts in.
+
 ## Bitmap And SVG Color Font Plan
 
 Issue [#926](https://github.com/ygdrasil-io/kanvas/issues/926) should stay
