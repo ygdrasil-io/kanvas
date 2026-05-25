@@ -821,7 +821,7 @@ class OpenTypeFontTest {
     }
 
     @Test
-    fun `invalid COLRv0 palette override falls back to monochrome`() {
+    fun `out of bounds COLRv0 palette overrides are ignored`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
         val typeface = OpenTypeTypeface.MakeFromBytes(
@@ -838,11 +838,35 @@ class OpenTypeFontTest {
 
             SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
 
-            assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0, "override index $badIndex")
-            assertEquals(0, bitmap.pixels.count(::isMostlyRed), "override index $badIndex")
-            assertEquals(0, bitmap.pixels.count(::isMostlyGreen), "override index $badIndex")
+            assertTrue(bitmap.pixels.count(::isMostlyRed) > 0, "override index $badIndex")
+            assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0, "override index $badIndex")
+            assertEquals(0, bitmap.pixels.count(::isMostlyBlack), "override index $badIndex")
             assertEquals(0, bitmap.pixels.count(::isMostlyBlue), "override index $badIndex")
         }
+    }
+
+    @Test
+    fun `duplicate COLRv0 palette overrides use last value`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2]),
+        )!!
+        val palette = SkFontArguments.Palette().also {
+            it.overrides = listOf(
+                SkFontArguments.Palette.Override(0, 0xFF0000FF.toInt()),
+                SkFontArguments.Palette.Override(0, 0xFFFF0000.toInt()),
+            )
+        }
+        val clone = typeface.makeClone(SkFontArguments().setPalette(palette)) as OpenTypeTypeface
+        val bitmap = SkBitmap(220, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
     }
 
     @Test
@@ -1127,6 +1151,96 @@ class OpenTypeFontTest {
         assertTrue(bitmap.pixels.count(::isGreenTint) > 0)
         assertEquals(0, bitmap.pixels.count(::isMostlyRed))
         assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `makeClone palette index selects COLRv1 solid palette`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1Transform(glyphs[0], glyphs[1]))
+                .withTableContent("kern", "CPAL", syntheticTwoPaletteCpalV0()),
+        )!!
+        val palette = SkFontArguments.Palette().also { it.index = 1 }
+        val clone = typeface.makeClone(SkFontArguments().setPalette(palette)) as OpenTypeTypeface
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isRedTint) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `makeClone palette overrides replace COLRv1 solid entries`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1Transform(glyphs[0], glyphs[1]))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val palette = SkFontArguments.Palette().also {
+            it.overrides = listOf(SkFontArguments.Palette.Override(1, 0xFF0000FF.toInt()))
+        }
+        val clone = typeface.makeClone(SkFontArguments().setPalette(palette)) as OpenTypeTypeface
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isBlueTint) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
+    }
+
+    @Test
+    fun `makeClone palette overrides replace COLRv1 gradient stops`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1LinearGradient(glyph))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val palette = SkFontArguments.Palette().also {
+            it.overrides = listOf(SkFontArguments.Palette.Override(2, 0xFF00FF00.toInt()))
+        }
+        val clone = typeface.makeClone(SkFontArguments().setPalette(palette)) as OpenTypeTypeface
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `foreground palette override does not invalidate COLRv1 foreground paint`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1ForegroundAlpha(glyph, alpha = 0x4000))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val palette = SkFontArguments.Palette().also {
+            it.overrides = listOf(SkFontArguments.Palette.Override(0xFFFF, 0xFFFF0000.toInt()))
+        }
+        val clone = typeface.makeClone(SkFontArguments().setPalette(palette)) as OpenTypeTypeface
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF0000FF.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(clone, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
     }
 
     @Test
@@ -1740,6 +1854,9 @@ class OpenTypeFontTest {
     private fun isMostlyRed(color: Int): Boolean =
         SkColorGetR(color) > 200 && SkColorGetG(color) < 40 && SkColorGetB(color) < 40
 
+    private fun isRedTint(color: Int): Boolean =
+        SkColorGetR(color) > SkColorGetG(color) + 40 && SkColorGetR(color) > SkColorGetB(color) + 40
+
     private fun isMostlyGreen(color: Int): Boolean =
         SkColorGetG(color) > 200 && SkColorGetR(color) < 40 && SkColorGetB(color) < 40
 
@@ -1748,6 +1865,9 @@ class OpenTypeFontTest {
 
     private fun isMostlyBlue(color: Int): Boolean =
         SkColorGetB(color) > 200 && SkColorGetR(color) < 40 && SkColorGetG(color) < 40
+
+    private fun isBlueTint(color: Int): Boolean =
+        SkColorGetB(color) > SkColorGetR(color) + 40 && SkColorGetB(color) > SkColorGetG(color) + 40
 
     private fun isMostlyBlack(color: Int): Boolean =
         SkColorGetR(color) < 40 && SkColorGetG(color) < 40 && SkColorGetB(color) < 40
