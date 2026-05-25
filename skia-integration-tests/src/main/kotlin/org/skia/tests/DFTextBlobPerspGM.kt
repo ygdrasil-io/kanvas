@@ -12,6 +12,7 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSurfaceProps
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTextBlobBuilder
+import org.skia.foundation.awt.SkSdfGlyphCache
 import org.graphiks.math.SkColor
 import org.graphiks.math.SkScalar
 import org.skia.tools.ToolUtils
@@ -32,19 +33,11 @@ import org.skia.tools.ToolUtils
  * of the per-size glyph atlas (`gm/dftext.cpp` is the broader DF-text
  * showcase ; see [DFTextGM]).
  *
- * **`:kanvas-skia` raster behaviour** — distance-field text is a
- * GPU-only path : the raster backend renders glyphs by walking
- * [SkFont.getPath] outlines (see [SkCanvas.drawTextBlob]) and is not
- * affected by [SkSurfaceProps.kUseDeviceIndependentFonts_Flag] (the
- * flag is reserved for parity but has no behavioural effect on raster,
- * cf. `SkSurfaceProps.kt`). The port still threads the upstream
- * recipe verbatim (surface props + offscreen surface fallback +
- * matrix-driven perspective) so the API surface gets exercised and any
- * future SDF path lands without further GM edits — but the rendered
- * output is path-based glyph text under perspective, which will not be
- * pixel-identical to the upstream GPU-rendered reference. The matching
- * [org.skia.tests.DFTextBlobPerspTest] is therefore `@Disabled` with
- * a `STUB.DF_TEXT_RASTER` reason.
+ * **`:kanvas-skia` raster behaviour** — the upstream Ganesh atlas/shader
+ * path is replaced here by [SkSdfGlyphCache], a portable raster SDF glyph
+ * cache that materialises A8 glyph images and samples them through the
+ * existing image-shader path. This keeps the surface-props and perspective
+ * plumbing live without porting Ganesh/Graphite.
  *
  * Upstream creates an offscreen Ganesh `SkSurface` when
  * `inputCanvas->recordingContext()` is non-null and falls back to
@@ -230,7 +223,7 @@ public class DFTextBlobPerspGM : GM() {
             }
 
             val paint = SkPaint().apply { this.color = color }
-            canvas.drawTextBlob(blob, x, y, paint)
+            SkSdfGlyphCache.drawTextBlob(canvas, blob, x, y, paint)
         }
     }
 
