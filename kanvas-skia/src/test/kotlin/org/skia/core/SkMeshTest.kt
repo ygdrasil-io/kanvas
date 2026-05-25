@@ -343,6 +343,40 @@ class SkMeshTest {
         assertEquals(0xFF00FF00.toInt(), bm.getPixel(10, 10))
     }
 
+    @Test
+    fun `drawMesh falls back when fragment return is not supported subset`() {
+        val bm = whiteBitmap()
+        val canvas = SkCanvas(bm)
+        val spec = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            ),
+            vertexStride = 8,
+            vs = "uniform float4 uColor; Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v) { return float4(uColor.rgb, 1.0); }",
+        ).specification!!
+        val mesh = SkMesh.Make(
+            specification = spec,
+            mode = SkMesh.Mode.kTriangles,
+            vertexBuffer = SkMeshes.MakeVertexBuffer(floatBytes(5f, 5f, 25f, 5f, 5f, 25f), 24),
+            vertexCount = 3,
+            vertexOffset = 0,
+            uniforms = SkData.MakeWithCopy(
+                ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+                    .putFloat(0f).putFloat(1f).putFloat(0f).putFloat(1f)
+                    .array(),
+            ),
+            bounds = SkRect.MakeLTRB(5f, 5f, 25f, 25f),
+        ).mesh
+
+        canvas.drawMesh(mesh, SkPaint(0xFFFF0000.toInt()))
+        assertEquals(0xFFFF0000.toInt(), bm.getPixel(10, 10))
+    }
+
     private fun positionSpec(): SkMeshSpecification.Result =
         SkMeshSpecification.Make(
             attributes = listOf(

@@ -2148,7 +2148,9 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             }
         }
         val fragmentMode = detectCpuMeshFragmentMode(spec.fragmentProgram, spec.uniforms())
-        val uniformColor = decodeUniformColor(spec, mesh.uniforms())
+        val uniformColor =
+            if (fragmentMode == CpuMeshFragmentMode.DEFAULT) null
+            else decodeUniformColor(spec, mesh.uniforms())
         val effectiveColors = if (fragmentMode == CpuMeshFragmentMode.UNIFORM_SOLID) null else colors
         val vertexMode = when (mesh.mode()) {
             SkMesh.Mode.kTriangles -> SkVertices.VertexMode.kTriangles
@@ -2210,13 +2212,23 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
     ): CpuMeshFragmentMode {
         val colorUniform = uniforms.firstOrNull { it.type == SkMeshSpecification.Uniform.Type.kFloat4 || it.type == SkMeshSpecification.Uniform.Type.kHalf4 }
             ?: return CpuMeshFragmentMode.DEFAULT
-        val src = fragmentProgram.lowercase()
         val uniformToken = colorUniform.name.lowercase()
+        val returnExpr = extractReturnExpression(fragmentProgram) ?: return CpuMeshFragmentMode.DEFAULT
         return when {
-            src.contains("meshcolor") && src.contains(uniformToken) -> CpuMeshFragmentMode.UNIFORM_TIMES_COLOR
-            src.contains(uniformToken) -> CpuMeshFragmentMode.UNIFORM_SOLID
+            returnExpr == uniformToken -> CpuMeshFragmentMode.UNIFORM_SOLID
+            returnExpr == "meshcolor*$uniformToken" || returnExpr == "$uniformToken*meshcolor" ->
+                CpuMeshFragmentMode.UNIFORM_TIMES_COLOR
             else -> CpuMeshFragmentMode.DEFAULT
         }
+    }
+
+    private fun extractReturnExpression(fragmentProgram: String): String? {
+        val returnMatch = Regex("""return\s+([^;]+);""", RegexOption.IGNORE_CASE).find(fragmentProgram) ?: return null
+        return returnMatch.groupValues[1]
+            .replace("(", "")
+            .replace(")", "")
+            .replace(Regex("""\s+"""), "")
+            .lowercase()
     }
 
     private fun decodeUniformColor(

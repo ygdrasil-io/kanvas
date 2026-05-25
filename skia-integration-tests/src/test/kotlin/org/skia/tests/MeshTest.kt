@@ -71,7 +71,11 @@ class MeshTest {
         val rendered = TestUtils.runGmTest(CustomMeshUniformsGM())
         assertTrue(rendered.width > 0)
         assertTrue(rendered.height > 0)
-        assertTrue(rendered.getPixel(70, 120) != 0xFFFFFFFF.toInt())
+        val top = rendered.getPixel(30, 40)
+        val bottom = rendered.getPixel(30, 200)
+        assertTrue(top != 0xFFFFFFFF.toInt())
+        assertTrue(bottom != 0xFFFFFFFF.toInt())
+        assertTrue(top != bottom, "uniform*meshColor subset should preserve varying color differences")
     }
 
     @Test
