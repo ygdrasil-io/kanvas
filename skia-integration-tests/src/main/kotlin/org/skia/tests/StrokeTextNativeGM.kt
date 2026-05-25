@@ -1,6 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
+import org.skia.foundation.SkFontArguments
+import org.skia.foundation.SkFontVariation
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
 import org.graphiks.math.SkISize
@@ -69,16 +71,24 @@ public class StrokeTextNativeGM : GM() {
             c.drawString("○◉  ⁰¹³ᶠ", 10f, 300f, font, p)
         }
 
-        // Overlap branch — requires TestFontMgr() which is STUB.LIBERATION_FM.
-        // Calling it here ensures the stub is exercised (post-#678 contract):
-        // the TODO() fires at runtime, the @Disabled test gate prevents CI failure.
-        @Suppress("UNUSED_VARIABLE")
-        val _fm = ToolUtils.TestFontMgr()   // throws TODO("STUB.LIBERATION_FM: …")
-
-        // Dead code (never reached): mirrors the variable-font wght=721 path.
+        // Overlap branch: pure Kotlin variable-font load + clone path.
+        // If the bundled variable fixture is missing or invalid, skip only
+        // this branch while keeping the TTF/OTF subset deterministic.
         val overlapStroke = p.copy().apply { strokeWidth = 1f }
-        @Suppress("UNUSED_VARIABLE")
-        val _overlapFont = SkFont(ToolUtils.DefaultPortableTypeface(), 100f)
-        c.drawString("tŧ", 10f, 400f, _overlapFont, overlapStroke)
+        val overlapTypeface = StrokeTextNativeGM::class.java.classLoader
+            .getResourceAsStream("fonts/Variable.ttf")
+            ?.use { stream -> ToolUtils.TestFontMgr().makeFromStream(stream) }
+            ?.makeClone(
+                SkFontArguments().setVariationDesignPosition(
+                    SkFontArguments.VariationPosition(
+                        listOf(
+                            SkFontArguments.VariationPosition.Coordinate.of(SkFontVariation.WEIGHT, 721f),
+                        ),
+                    ),
+                ),
+            )
+            ?: ToolUtils.DefaultPortableTypeface()
+        val overlapFont = SkFont(overlapTypeface, 100f)
+        c.drawString("tŧ", 10f, 400f, overlapFont, overlapStroke)
     }
 }
