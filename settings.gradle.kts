@@ -42,10 +42,6 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-
-// :kanvas-legacy — hand-written legacy implementation under `kanvas-legacy/`.
-// Excluded from the build (frozen as a read-only reference). Skia fixtures now
-// live under skia-integration-tests/src/test/resources.
 include(":math")
 include(":kanvas-skia")
 include(":codec-api")
