@@ -69,8 +69,10 @@ files and planned fallback order events for troubleshooting.
 
 The old JVM/AWT shaper entry points, `SkShaper.MakeJvmAwtTextLayout()` and
 `SkShaper.MakeJavaTextLayout()`, have been removed from the font scope.
-`SkShaper.MakePrimitive()` is the only built-in shaper until a pure Kotlin
-complex shaper is introduced.
+The built-in portable shaping entry points are `SkShaper.MakePrimitive()`,
+`SkShaper.MakePortable()`, and `SkShaper.MakeOpenType()`. Today they resolve
+to the same minimal primitive shaping behavior until a pure Kotlin complex
+shaper is introduced.
 
 The older `org.skia.foundation.awt.AwtTypeface` and
 `org.skia.foundation.awt.LiberationFontMgr` font surfaces have also been
@@ -160,6 +162,11 @@ The first pure Kotlin shaping increment is `GPOS` pair positioning lookup type
 directly measurable through the existing `measureTextInternal` and
 `makeTextPath` paths, requires no new public API, and is tested with bundled
 Liberation fonts that contain `GPOS` data.
+
+`SkCanvas.drawString` remains intentionally simple-text in this architecture:
+it uses the font path pipeline and does not implicitly run a complex shaper.
+Portable complex shaping must be requested through explicit `SkShaper` or
+text-layout entry points so fallback behavior stays predictable and measurable.
 
 `GSUB` substitutions, including standard ligatures, are tracked by #976 because
 they need cluster mapping and a clear policy for enabled features. Bidi, script
