@@ -234,9 +234,14 @@ tasks.register("checkRealImageFixtureDocumentation") {
             "## PngSuite",
             "## ImageMagick",
             "ImageMagick Studio LLC",
+            "redistributions must include a copy of the license",
+            "provide clear attribution to ImageMagick Studio LLC",
             "## GIMP",
             "GIMP team",
             "Creative Commons Attribution-ShareAlike 4.0 International",
+            "mention the author",
+            "mention the license",
+            "compatible license",
             "## Wikimedia Commons Public Domain Camera Fixture",
         ).filterNot { marker -> noticeText.contains(marker) }
 

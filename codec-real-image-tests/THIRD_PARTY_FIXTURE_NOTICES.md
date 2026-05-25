@@ -19,9 +19,9 @@ This file records redistribution notices for third-party files committed under
 - Attribution: ImageMagick Studio LLC
 - License: ImageMagick License, `https://imagemagick.org/license/`
 - Redistribution obligations recorded from the project license page:
-  redistributions must include a copy of the license and provide clear
-  attribution to ImageMagick Studio LLC; ImageMagick marks must not imply
-  endorsement or authorship by this repository.
+  redistributions must include a copy of the license; redistributions must
+  provide clear attribution to ImageMagick Studio LLC. ImageMagick marks must
+  not imply endorsement or authorship by this repository.
 
 ## GIMP
 
