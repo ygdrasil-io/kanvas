@@ -185,6 +185,11 @@ tasks.register("checkRealImageFixtureDocumentation") {
             "Skia upstream",
             "Repository generated",
             "Repository generated negative",
+            "libpng/PngSuite",
+            "ImageMagick",
+            "GIMP",
+            "Device camera",
+            "Browser",
         )
         val malformedRows = rowsByPath.values.mapNotNull { cells ->
             val path = cells.getOrNull(0)?.removeSurrounding("`") ?: "<unknown>"
@@ -203,6 +208,7 @@ tasks.register("checkRealImageFixtureDocumentation") {
                 notes.isBlank() -> "$path must record notes"
                 family == "Skia upstream" && license != "Skia license" -> "$path Skia-derived row must use 'Skia license'"
                 family.startsWith("Repository generated") && license != "Repository test fixture" -> "$path generated row must use 'Repository test fixture'"
+                family == "Browser" && !source.startsWith("`codec-real-image-tests/sources/") -> "$path browser row must record the local browser source path"
                 else -> null
             }
         }
