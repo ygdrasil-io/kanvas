@@ -5,17 +5,12 @@ import org.junit.jupiter.api.Test
 import org.skia.testing.TestUtils
 
 @Disabled(
-    "STUB.COLR_V1 / STUB.FONTATIONS / STUB.FIXTURE: " +
-        "SkFontArguments::Palette palette-override on COLR v1 colour fonts " +
-        "requires (a) `fonts/test_glyphs-glyf_colr_1.ttf` under " +
+    "STUB.FIXTURE / GM_REFERENCES: SkFontArguments.Palette clones are covered " +
+        "by pure Kotlin unit fixtures, but this upstream GM still requires " +
+        "(a) `fonts/test_glyphs-glyf_colr_1.ttf` under " +
         "`kanvas-legacy/src/test/resources/fonts/` (not shipped), " +
-        "(b) FreeType+HarfBuzz COLR v1 paint-graph resolution via JNI " +
-        "(see `SkColrV1` + `API_FINALIZATION_PLAN.md`), (c) Fontations " +
-        "Rust-crate binding for the palette-override path " +
-        "(see `SkTypeface_Fontations`). The GM body is fully ported " +
-        "against the live `SkFontArguments.Palette` / `SkTypeface.makeClone` " +
-        "/ `SkCanvas.drawSimpleText` surface — drop this `@Disabled` once " +
-        "the JNI + fixture trio lands. Same blocker as sibling `ColrV1Test`.",
+        "(b) accepted reference images, and (c) integration of the " +
+        "stream-load-with-args palette route. See #1020.",
 )
 class FontPaletteTest {
 

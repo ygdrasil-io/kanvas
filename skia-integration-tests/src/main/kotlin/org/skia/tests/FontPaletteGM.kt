@@ -43,22 +43,17 @@ import org.skia.tools.ToolUtils
  *    entries (indices 12 / 13 / -1, which should be silently ignored by
  *    a compliant `SkFontArguments::Palette` consumer).
  *
- * ## Port status — **INTRACTABLE without JNI COLRv1 path**
+ * ## Port status — blocked by upstream fixtures / GM wiring
  *
- *  1. **`STUB.COLR_V1`** — `SkFontArguments.Palette` is a compile-pinned
- *     surface (see [SkFontArguments.Palette] KDoc), but resolving the
- *     COLR v1 paint graph and applying palette overrides needs renderer
- *     work beyond the current pure Kotlin COLRv0 path. See
- *     `API_FINALIZATION_PLAN.md` § `STUB.COLR_V1`.
- *  2. **`STUB.FONTATIONS`** — when the JNI path lands, upstream wires
- *     palette overrides through Google's Rust `fontations` crate
- *     (`SK_TYPEFACE_FACTORY_FONTATIONS` gate in the upstream `.cpp`).
- *     `:kanvas-skia`'s [org.skia.foundation.SkTypeface_Fontations]
- *     is a surface stub.
- *  3. **`STUB.FIXTURE`** — `fonts/test_glyphs-glyf_colr_1.ttf` is not
+ *  1. **`STUB.FIXTURE`** — `fonts/test_glyphs-glyf_colr_1.ttf` is not
  *     shipped under `kanvas-legacy/src/test/resources/fonts/`. Even with
- *     the fixture, rendering remains gated by the COLRv1 path (same gap
- *     as [ColrV1GM] / [ColorEmojiGM]).
+ *     the fixture, this GM needs accepted references for the pure Kotlin
+ *     COLRv1 renderer.
+ *  2. **Load-time palette route** — the post-load
+ *     [SkTypeface.makeClone] route is covered by unit fixtures; the
+ *     upstream stream-load-with-args route still needs GM integration.
+ *  3. **GM references** — reactivation is tracked in #1020 so this
+ *     test does not imply FreeType/HarfBuzz/Fontations are mandatory.
  *
  * The body below is **the real upstream pipeline** — apply the palette
  * to a fresh [SkFontArguments], take both the "stream-load" and
@@ -69,8 +64,8 @@ import org.skia.tools.ToolUtils
  * typeface resolutions return `null` and the GM short-circuits to a
  * white canvas (matching upstream's `errorMsg = "Did not recognize
  * COLR v1 test font format."` + `DrawResult::kSkip` branch).
- * [FontPaletteTest] is `@Disabled` with the `STUB.COLR_V1` tag until
- * the native COLR v1 binding lands.
+ * [FontPaletteTest] remains disabled until #1020 supplies accepted
+ * fixtures and references for the pure Kotlin renderer.
  *
  * ## Constructor parameters
  *
@@ -100,7 +95,7 @@ public class FontPaletteGM(
         //   2) clone-with-args of the default load (right column, route A),
         //   3) palette-args resource load (right column, route B).
         // The two right-column handles should agree pixel-for-pixel once
-        // STUB.COLR_V1 lands.
+        // #1020 wires the GM fixture/reference path.
         val paletteArgs = SkFontArguments().setPalette(paletteOverride)
 
         typefaceDefault = makeTypefaceFromResource(K_COLR_CPAL_TEST_FONT_PATH, SkFontArguments())
@@ -119,9 +114,9 @@ public class FontPaletteGM(
 
         c.translate(10f, 20f)
 
-        // Mirror upstream's `kSkip` branch — without the native COLR v1
-        // path, the two palette-aware handles are null and there is
-        // nothing to draw beyond the white background.
+        // Mirror upstream's `kSkip` branch. Until #1020 wires the GM
+        // fixture/reference path, the two palette-aware handles are null
+        // and there is nothing to draw beyond the white background.
         if (typefaceCloned == null || typefaceFromStream == null) {
             // errorMsg = "Did not recognize COLR v1 test font format."
             return
@@ -186,16 +181,14 @@ public class FontPaletteGM(
      * `sk_sp<SkTypeface> MakeTypefaceFromResource(const char* resource, const SkFontArguments& args)`
      * — load the COLR v1 test font and apply [args] at load time.
      *
-     * Today routes through [ToolUtils.CreateTypefaceFromResource], and
-     * palette overrides remain ineffective because COLRv1 rendering is
-     * not wired into the pure Kotlin path. When that renderer lands,
-     * switch this to `SkFontMgr.makeFromStream(stream, args)` so the
-     * palette is resolved at load time, matching upstream byte-for-byte.
+     * Today routes through [ToolUtils.CreateTypefaceFromResource]. The
+     * pure Kotlin renderer covers palette clones; #1020 tracks the
+     * remaining stream-load-with-args GM route and reference images.
      */
     @Suppress("UNUSED_PARAMETER")
     private fun makeTypefaceFromResource(resource: String, args: SkFontArguments): SkTypeface? {
-        // `args` is the compile-pinned palette surface — kept on the
-        // signature so the JNI swap is a no-touch call-site change.
+        // `args` is the compile-pinned palette surface. #1020 tracks
+        // routing this load-time palette path through accepted fixtures.
         return ToolUtils.CreateTypefaceFromResource(resource)
     }
 

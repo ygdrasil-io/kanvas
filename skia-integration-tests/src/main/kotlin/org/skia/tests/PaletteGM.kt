@@ -8,17 +8,18 @@ import org.skia.foundation.colr.SkColrV1
 import org.graphiks.math.SkISize
 
 /**
- * R-final.S — **STUB.COLR_V1** consumer GM. Iso-aligned port of
+ * R-final.S — palette surface GM. Iso-aligned port of
  * upstream's `gm/palette.cpp` (which renders a colour-emoji
  * glyph through every entry of the font's `CPAL` table, plus a
  * couple of [SkFontArguments.Palette.overrides] cases).
  *
  * The body assembles a [SkFontArguments.Palette] (compile-pinned
  * surface) and touches [SkColrV1.makeColrV1Glyphs]. [PaletteTest]
- * is `@Disabled` because the dispatch throws `STUB.COLR_V1`.
+ * remains `@Disabled` because this GM still targets the `cpu-raster`
+ * `SkColrV1` surface stub instead of the pure Kotlin OpenType text
+ * path. Follow-up #1020 tracks replacing or isolating that dependency.
  *
- * See [`API_FINALIZATION_PLAN.md`](../../../../../../../../API_FINALIZATION_PLAN.md)
- * § STUB.COLR_V1.
+ * See #1020 for the remaining GM migration work.
  */
 public class PaletteGM : GM() {
 
@@ -38,7 +39,8 @@ public class PaletteGM : GM() {
         }
         // Silence "unused" lint without leaking lazy-init oddities.
         @Suppress("UNUSED_VARIABLE") val _kept = args
-        // Touch the stubbed dispatch — throws STUB.COLR_V1 at runtime.
+        // Touch the cpu-raster surface stub. The portable OpenType text
+        // path is covered separately; #1020 tracks this GM's migration.
         SkColrV1.makeColrV1Glyphs(SkTypeface.MakeEmpty(), shortArrayOf(0))
     }
 }
