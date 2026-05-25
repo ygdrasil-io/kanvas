@@ -61,7 +61,10 @@ public object EmojiTypeface {
      * - `COLRv0`: loads via [OpenTypeTypeface] when [data] is non-empty,
      *   otherwise falls back to a portable pure-Kotlin typeface so GM
      *   call-sites can execute without JNI.
-     * - `Sbix` / `CBDT` / `SVG`: still tracked as explicit stubs.
+     * - `Sbix` / `CBDT`: load via [OpenTypeTypeface] when [data] is non-empty,
+     *   otherwise fall back to a portable pure-Kotlin typeface so GM call-sites
+     *   can execute without JNI.
+     * - `SVG`: still tracked as an explicit stub.
      */
     public fun create(format: Format, data: SkData): SkTypeface = when (format) {
         Format.COLRv0 -> {
@@ -72,12 +75,14 @@ public object EmojiTypeface {
                 ToolUtils.CreatePortableTypeface(null, SkFontStyle.Normal())
             }
         }
-        Format.Sbix -> throw NotImplementedError(
-            "STUB.EMOJI_TABLES.SBIX_PNG_RENDER: pure-Kotlin sbix PNG glyph rendering is not wired yet.",
-        )
-        Format.CBDT -> throw NotImplementedError(
-            "STUB.EMOJI_TABLES.CBDT_PNG_RENDER: pure-Kotlin CBDT/CBLC PNG glyph rendering is not wired yet.",
-        )
+        Format.Sbix, Format.CBDT -> {
+            if (data.size > 0) {
+                OpenTypeTypeface.MakeFromBytes(data.toByteArray())
+                    ?: throw IllegalArgumentException("$format data could not be parsed as OpenType.")
+            } else {
+                ToolUtils.CreatePortableTypeface(null, SkFontStyle.Normal())
+            }
+        }
         Format.SVG -> throw NotImplementedError(
             "STUB.EMOJI_TABLES.SVG: OpenType SVG glyph table dispatch is not wired yet.",
         )

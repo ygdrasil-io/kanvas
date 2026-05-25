@@ -10,6 +10,7 @@ import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.skia.core.SkCanvas
+import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkData
@@ -1796,7 +1797,7 @@ class OpenTypeFontTest {
     }
 
     @Test
-    fun `drawString falls back to monochrome for parsed CBDT CBLC before bitmap rendering integration`() {
+    fun `drawString renders parsed CBDT CBLC bitmap glyphs`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single()
         val typeface = OpenTypeTypeface.MakeFromBytes(
@@ -1805,14 +1806,13 @@ class OpenTypeFontTest {
                 .withTableContent("kern", "CBDT", syntheticCbdtTable(syntheticPngPayload())),
         )!!
         val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
-        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+        val paint = SkPaint(0xFFFFFFFF.toInt()).also { it.isAntiAlias = false }
 
         SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
 
-        assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0)
-        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
-        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
-        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+        assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0)
+        assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
     }
 
     @Test
@@ -2868,12 +2868,15 @@ class OpenTypeFontTest {
         return bytes
     }
 
-    private fun syntheticPngPayload(): ByteArray =
-        byteArrayOf(
-            0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(),
-            0x0D, 0x0A, 0x1A, 0x0A,
-            0x00, 0x00, 0x00, 0x00,
-        )
+    private fun syntheticPngPayload(): ByteArray {
+        val bitmap = SkBitmap(2, 2).apply {
+            setPixel(0, 0, 0xFFFF0000.toInt())
+            setPixel(1, 0, 0xFF00FF00.toInt())
+            setPixel(0, 1, 0xFF0000FF.toInt())
+            setPixel(1, 1, 0xFFFFFFFF.toInt())
+        }
+        return SkPngEncoder.Encode(bitmap) ?: error("Failed to encode synthetic PNG payload")
+    }
 
     private fun syntheticCbdtTable(png: ByteArray): ByteArray {
         val bytes = ByteArray(4 + png.size)
