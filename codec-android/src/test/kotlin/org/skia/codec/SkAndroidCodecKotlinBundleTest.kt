@@ -5,8 +5,12 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.skia.codec.test.CodecTestFixtures
+import org.skia.foundation.SkAlphaType
+import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
+import org.skia.foundation.skcms.SkcmsICCProfile
 import java.nio.ByteBuffer
 
 class SkAndroidCodecKotlinBundleTest {
@@ -73,6 +77,79 @@ class SkAndroidCodecKotlinBundleTest {
         assertRgba(pixels.buffer, pixels.rowBytes, x = 0, y = 0, color = rows[1][1])
     }
 
+    @Test
+    fun `getAndroidPixels rejects invalid parameters before decode`() {
+        val codec = SkAndroidCodec.MakeFromData(fiveByFivePng())!!
+        val info = SkImageInfo.MakeN32(width = 2, height = 2)
+        val rowBytes = info.minRowBytes()
+        val pixels = ByteBuffer.allocate(rowBytes * info.height)
+
+        assertEquals(
+            SkCodec.Result.kInvalidParameters,
+            codec.getAndroidPixels(info, pixels, rowBytes, SkAndroidCodec.AndroidOptions(sampleSize = 0)),
+        )
+        assertEquals(
+            SkCodec.Result.kInvalidParameters,
+            codec.getAndroidPixels(info, pixels, rowBytes = rowBytes - 1),
+        )
+        assertEquals(
+            SkCodec.Result.kInvalidParameters,
+            codec.getAndroidPixels(info, ByteBuffer.allocate(rowBytes * info.height - 1), rowBytes),
+        )
+        assertEquals(
+            SkCodec.Result.kInvalidParameters,
+            codec.getAndroidPixels(
+                info,
+                ByteBuffer.allocate(rowBytes * info.height).limit(rowBytes * info.height - 1),
+                rowBytes,
+            ),
+        )
+        assertEquals(
+            SkCodec.Result.kInvalidParameters,
+            codec.getAndroidPixels(
+                info = info,
+                pixels = pixels,
+                rowBytes = rowBytes,
+                options = SkAndroidCodec.AndroidOptions(subset = SkIRect.MakeLTRB(9, 9, 10, 10)),
+            ),
+        )
+    }
+
+    @Test
+    fun `getAndroidPixels reports invalid conversion for F16 output`() {
+        val codec = SkAndroidCodec.MakeFromData(fiveByFivePng())!!
+        val info = SkImageInfo.Make(
+            width = 5,
+            height = 5,
+            colorType = SkColorType.kRGBA_F16Norm,
+            alphaType = SkAlphaType.kPremul,
+        )
+        val rowBytes = info.minRowBytes()
+
+        assertEquals(
+            SkCodec.Result.kInvalidConversion,
+            codec.getAndroidPixels(info, ByteBuffer.allocate(rowBytes * info.height), rowBytes),
+        )
+    }
+
+    @Test
+    fun `getAndroidPixels reports invalid input and propagates codec failures`() {
+        val info = SkImageInfo.MakeN32(width = 1, height = 1)
+        val rowBytes = info.minRowBytes()
+        val pixels = ByteBuffer.allocate(rowBytes * info.height)
+
+        assertEquals(
+            SkCodec.Result.kInvalidInput,
+            SkAndroidCodec.MakeFromCodec(StubCodec(info.makeWH(0, 1)))
+                .getAndroidPixels(info, pixels, rowBytes),
+        )
+        assertEquals(
+            SkCodec.Result.kIncompleteInput,
+            SkAndroidCodec.MakeFromCodec(StubCodec(info, decodeResult = SkCodec.Result.kIncompleteInput))
+                .getAndroidPixels(info, pixels, rowBytes),
+        )
+    }
+
     private fun fiveByFivePng(): ByteArray =
         CodecTestFixtures.rgbaPng(
             List(5) { y ->
@@ -115,4 +192,20 @@ class SkAndroidCodecKotlinBundleTest {
     }
 
     private data class PixelBuffer(val buffer: ByteBuffer, val rowBytes: Int)
+
+    private class StubCodec(
+        private val info: SkImageInfo,
+        private val decodeResult: SkCodec.Result = SkCodec.Result.kSuccess,
+    ) : SkCodec() {
+        override fun getInfo(): SkImageInfo = info
+        override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
+        override fun getICCProfile(): SkcmsICCProfile? = null
+
+        override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
+            if (decodeResult == Result.kSuccess) {
+                dst.setPixel(0, 0, 0xFF112233.toInt())
+            }
+            return decodeResult
+        }
+    }
 }

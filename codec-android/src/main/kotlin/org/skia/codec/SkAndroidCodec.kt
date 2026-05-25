@@ -243,6 +243,9 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
         if (info.width <= 0 || info.height <= 0) return SkCodec.Result.kInvalidParameters
         if (rowBytes < info.minRowBytes()) return SkCodec.Result.kInvalidParameters
         if (options.sampleSize < 1) return SkCodec.Result.kInvalidParameters
+        val bpp = info.bytesPerPixel()
+        val requiredBytes = (info.height - 1).toLong() * rowBytes + info.width.toLong() * bpp
+        if (pixels.limit().toLong() < requiredBytes) return SkCodec.Result.kInvalidParameters
         val srcInfo = codec.getInfo()
         if (srcInfo.width <= 0 || srcInfo.height <= 0) return SkCodec.Result.kInvalidInput
 
@@ -293,7 +296,6 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
         //    * s)` and writing the colour-type-converted byte sequence
         //    to the caller's buffer.
         val view = pixels.duplicate().order(ByteOrder.LITTLE_ENDIAN)
-        val bpp = info.bytesPerPixel()
         for (dy in 0 until info.height) {
             val sy = subset.top + dy * s
             val rowStart = dy * rowBytes
