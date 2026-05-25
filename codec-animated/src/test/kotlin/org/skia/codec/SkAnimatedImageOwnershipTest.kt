@@ -25,15 +25,42 @@ class SkAnimatedImageOwnershipTest {
         animated!!
 
         assertEquals(listOf(0), codec.decodedFrameIndexes)
+        assertEquals(listOf(SkCodec.Options(frameIndex = 0, priorFrame = SkCodec.kNoFrame)), codec.decodedOptions)
         assertEquals(2, animated.getFrameCount())
         assertEquals(40, animated.currentFrameDuration())
         assertEquals(RED, animated.getCurrentFrame().peekPixel(0, 0))
 
         assertEquals(70, animated.decodeNextFrame())
         assertEquals(listOf(0, 1), codec.decodedFrameIndexes)
+        assertEquals(
+            listOf(
+                SkCodec.Options(frameIndex = 0, priorFrame = SkCodec.kNoFrame),
+                SkCodec.Options(frameIndex = 1, priorFrame = SkCodec.kNoFrame),
+            ),
+            codec.decodedOptions,
+        )
         assertEquals(BLUE, animated.getCurrentFrame().peekPixel(0, 0))
 
         assertEquals(SkAnimatedImage.kFinished, animated.decodeNextFrame())
+    }
+
+    @Test
+    fun `codec options carry explicit frame and prior frame indexes`() {
+        val codec = RecordingAnimatedCodec(
+            frames = listOf(RED, BLUE),
+            delaysMs = listOf(40, 70),
+        )
+        val dst = SkBitmap(1, 1, codec.getInfo().colorSpace, codec.getInfo().colorType)
+
+        val result = codec.getPixels(
+            codec.getInfo(),
+            dst,
+            SkCodec.Options(frameIndex = 1, priorFrame = 0),
+        )
+
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(BLUE, dst.getPixel(0, 0))
+        assertEquals(listOf(SkCodec.Options(frameIndex = 1, priorFrame = 0)), codec.decodedOptions)
     }
 
     private class RecordingAnimatedCodec(
@@ -41,6 +68,7 @@ class SkAnimatedImageOwnershipTest {
         private val delaysMs: List<Int>,
     ) : SkCodec() {
         val decodedFrameIndexes = mutableListOf<Int>()
+        val decodedOptions = mutableListOf<Options>()
         private val info = SkImageInfo.Make(
             width = 1,
             height = 1,
@@ -69,6 +97,7 @@ class SkAnimatedImageOwnershipTest {
             if (info != this.info || dst.width != 1 || dst.height != 1) {
                 return Result.kInvalidParameters
             }
+            decodedOptions += opts
             decodedFrameIndexes += opts.frameIndex
             dst.setPixel(0, 0, frames[opts.frameIndex])
             return Result.kSuccess
