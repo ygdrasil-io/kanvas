@@ -11,6 +11,7 @@ import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontArguments
@@ -675,6 +676,26 @@ class OpenTypeFontTest {
         assertTrue(bitmap.pixels.count(::isMostlyGreen) > 0)
         assertEquals(0, bitmap.pixels.count(::isMostlyBlack))
         assertEquals(0xFF000000.toInt(), paint.color)
+    }
+
+    @Test
+    fun `drawString keeps caller blend mode for non composite COLRv0 glyphs`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withColrCpalFixture(glyphs[0], glyphs[1], glyphs[2]),
+        )!!
+        val font = SkFont(typeface, 96f)
+        val bitmap = SkBitmap(220, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also {
+            it.isAntiAlias = false
+            it.blendMode = SkBlendMode.kClear
+        }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, font, paint)
+
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyGreen))
     }
 
     @Test
@@ -1375,6 +1396,44 @@ class OpenTypeFontTest {
             assertEquals(0, bitmap.pixels.count(::isMostlyRed))
             assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
         }
+    }
+
+    @Test
+    fun `drawString renders COLRv1 composite blend mode`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1Composite(glyph, compositeMode = 23))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertTrue(bitmap.pixels.count(::isMostlyBlack) > 0)
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
+    }
+
+    @Test
+    fun `unknown COLRv1 composite mode falls back to clear`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", syntheticColrV1Composite(glyph, compositeMode = 255))
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+        val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+        SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlack))
+        assertEquals(0, bitmap.pixels.count(::isMostlyRed))
+        assertEquals(0, bitmap.pixels.count(::isMostlyBlue))
     }
 
     @Test
@@ -2124,6 +2183,42 @@ class OpenTypeFontTest {
         writeI16(bytes, clipBoxOffset + 3, -400) // yMin
         writeI16(bytes, clipBoxOffset + 5, 500) // xMax
         writeI16(bytes, clipBoxOffset + 7, 1800) // yMax
+        return bytes
+    }
+
+    private fun syntheticColrV1Composite(glyph: Int, compositeMode: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val compositePaintOffset = baseGlyphListOffset + 10
+        val backdropGlyphPaintOffset = compositePaintOffset + 8
+        val backdropSolidPaintOffset = backdropGlyphPaintOffset + 6
+        val sourceGlyphPaintOffset = backdropSolidPaintOffset + 5
+        val sourceSolidPaintOffset = sourceGlyphPaintOffset + 6
+        val bytes = ByteArray(sourceSolidPaintOffset + 5)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, glyph)
+        writeU32(bytes, baseGlyphListOffset + 6, compositePaintOffset - baseGlyphListOffset)
+
+        bytes[compositePaintOffset] = 32 // PaintComposite
+        writeU24(bytes, compositePaintOffset + 1, sourceGlyphPaintOffset - compositePaintOffset)
+        bytes[compositePaintOffset + 4] = compositeMode.toByte()
+        writeU24(bytes, compositePaintOffset + 5, backdropGlyphPaintOffset - compositePaintOffset)
+
+        bytes[backdropGlyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, backdropGlyphPaintOffset + 1, backdropSolidPaintOffset - backdropGlyphPaintOffset)
+        writeU16(bytes, backdropGlyphPaintOffset + 4, glyph)
+        bytes[backdropSolidPaintOffset] = 2 // PaintSolid
+        writeU16(bytes, backdropSolidPaintOffset + 1, 0) // red paletteIndex
+        writeI16(bytes, backdropSolidPaintOffset + 3, toF2Dot14(1f))
+
+        bytes[sourceGlyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, sourceGlyphPaintOffset + 1, sourceSolidPaintOffset - sourceGlyphPaintOffset)
+        writeU16(bytes, sourceGlyphPaintOffset + 4, glyph)
+        bytes[sourceSolidPaintOffset] = 2 // PaintSolid
+        writeU16(bytes, sourceSolidPaintOffset + 1, 2) // blue paletteIndex
+        writeI16(bytes, sourceSolidPaintOffset + 3, toF2Dot14(1f))
         return bytes
     }
 
