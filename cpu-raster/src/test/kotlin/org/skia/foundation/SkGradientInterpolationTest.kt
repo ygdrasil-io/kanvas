@@ -208,6 +208,50 @@ class SkGradientInterpolationTest {
     }
 
     @Test
+    fun `LCH powerless hue borrows adjacent hue for white to blue`() {
+        val powerless = sampleGradient(
+            colors = intArrayOf(0xFFFFFFFF.toInt(), 0xFF0000FF.toInt()),
+            interpolation = SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kLCH,
+            ),
+            x = 50,
+        )
+
+        assertTrue(
+            (powerless and 0xFF) > SkColorGetR(powerless) &&
+                (powerless and 0xFF) > SkColorGetG(powerless),
+            "LCH powerless white should borrow blue hue, got 0x${powerless.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `LCH powerless middle stop uses neighboring hues per side`() {
+        val left = sampleGradient(
+            colors = intArrayOf(0xFFFF0000.toInt(), 0xFFFFFFFF.toInt(), 0xFF0000FF.toInt()),
+            interpolation = SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kLCH,
+            ),
+            x = 25,
+        )
+        val right = sampleGradient(
+            colors = intArrayOf(0xFFFF0000.toInt(), 0xFFFFFFFF.toInt(), 0xFF0000FF.toInt()),
+            interpolation = SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kLCH,
+            ),
+            x = 75,
+        )
+
+        assertTrue(
+            SkColorGetR(left) > SkColorGetG(left) && SkColorGetR(left) > (left and 0xFF),
+            "LCH left side should borrow red hue, got 0x${left.toUInt().toString(16)}",
+        )
+        assertTrue(
+            (right and 0xFF) > SkColorGetR(right) && (right and 0xFF) > SkColorGetG(right),
+            "LCH right side should borrow blue hue, got 0x${right.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
     fun `linear gradient overload accepts bounded RGB color spaces`() {
         val pts = arrayOf(SkPoint(0f, 0f), SkPoint(10f, 0f))
         val rgbSpaces = listOf(
