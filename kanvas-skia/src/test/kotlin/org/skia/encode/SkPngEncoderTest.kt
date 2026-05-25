@@ -21,6 +21,9 @@ import java.io.ByteArrayOutputStream
  *  - Encode → decode round-trip via [SkCodec] is **byte-identical**
  *    on opaque pixels — PNG is lossless.
  *  - Encode-to-stream agrees with encode-to-bytes.
+ *  - Real fixture bitmaps from the shared codec corpus round-trip
+ *    losslessly, exercise zlib compression/filter selection, and
+ *    preserve the documented 8-bit RGBA/no-colour-metadata contract.
  *  - [SkPngEncoder.Options] validates `zLibLevel` and `comments`
  *    invariants.
  */
@@ -141,6 +144,44 @@ class SkPngEncoderTest {
         assertEquals(0x11000000, decodedAlpha.getPixel(1, 0))
     }
 
+    @Test
+    fun `real PNG fixtures re-encode as 8-bit RGBA without color metadata and round-trip pixels`() {
+        val fixtures = listOf(
+            "/codec-real-images/png/mandrill_64.png",
+            "/codec-real-images/png/color_wheel.png",
+            "/codec-real-images/png/grayscale_16.png",
+        )
+        for (fixture in fixtures) {
+            val src = decode(readFixture(fixture))
+            val encoded = SkPngEncoder.Encode(src, SkPngEncoder.Options(zLibLevel = 9))!!
+            assertPng8BitRgbaNoColorChunks(encoded, fixture)
+            assertSamePixels(src, decode(encoded), fixture)
+        }
+    }
+
+    @Test
+    fun `real PNG fixture compression and filters reduce encoded size`() {
+        val src = decode(readFixture("/codec-real-images/png/mandrill_64.png"))
+        val uncompressed = SkPngEncoder.Encode(
+            src,
+            SkPngEncoder.Options(
+                filterFlags = SkPngEncoder.FilterFlag.kNone.mask,
+                zLibLevel = 0,
+            ),
+        )!!
+        val compressed = SkPngEncoder.Encode(
+            src,
+            SkPngEncoder.Options(
+                filterFlags = SkPngEncoder.FilterFlag.kAll.mask,
+                zLibLevel = 9,
+            ),
+        )!!
+        assertTrue(
+            compressed.size < uncompressed.size,
+            "filtered/compressed real PNG output should be smaller than unfiltered zlib level 0",
+        )
+    }
+
     private fun makeGradient(width: Int, height: Int): SkBitmap {
         val b = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
@@ -159,10 +200,62 @@ class SkPngEncoderTest {
         return decoded!!
     }
 
+    private fun readFixture(path: String): ByteArray {
+        val stream = javaClass.getResourceAsStream(path)
+        assertNotNull(stream, "missing real-image fixture $path")
+        return stream!!.use { it.readBytes() }
+    }
+
+    private fun assertSamePixels(expected: SkBitmap, actual: SkBitmap, label: String) {
+        assertEquals(expected.width, actual.width, "$label width")
+        assertEquals(expected.height, actual.height, "$label height")
+        for (y in 0 until expected.height) for (x in 0 until expected.width) {
+            assertEquals(expected.getPixel(x, y), actual.getPixel(x, y), "$label pixel($x,$y)")
+        }
+    }
+
+    private fun assertPng8BitRgbaNoColorChunks(bytes: ByteArray, label: String) {
+        val chunks = pngChunks(bytes)
+        val ihdr = chunks.firstOrNull { it.type == "IHDR" } ?: error("$label missing IHDR")
+        assertEquals(8, ihdr.data[8].toInt() and 0xFF, "$label bit depth")
+        assertEquals(6, ihdr.data[9].toInt() and 0xFF, "$label color type")
+        assertEquals(0, ihdr.data[12].toInt() and 0xFF, "$label interlace")
+        val chunkTypes = chunks.map { it.type }.toSet()
+        assertTrue("iCCP" !in chunkTypes, "$label must not emit iCCP until color-space transport is supported")
+        assertTrue("sRGB" !in chunkTypes, "$label must not emit sRGB until color-space transport is supported")
+        assertTrue("gAMA" !in chunkTypes, "$label must not emit gAMA until color-space transport is supported")
+        assertTrue("cHRM" !in chunkTypes, "$label must not emit cHRM until color-space transport is supported")
+    }
+
+    private fun pngChunks(bytes: ByteArray): List<PngChunk> {
+        assertEquals(0x89.toByte(), bytes[0])
+        assertEquals(0x50.toByte(), bytes[1])
+        val chunks = mutableListOf<PngChunk>()
+        var offset = 8
+        while (offset + 12 <= bytes.size) {
+            val length = readU32BE(bytes, offset)
+            val type = bytes.copyOfRange(offset + 4, offset + 8).decodeToString()
+            val dataStart = offset + 8
+            val dataEnd = dataStart + length
+            chunks += PngChunk(type, bytes.copyOfRange(dataStart, dataEnd))
+            offset = dataEnd + 4
+            if (type == "IEND") break
+        }
+        return chunks
+    }
+
+    private fun readU32BE(bytes: ByteArray, offset: Int): Int =
+        ((bytes[offset].toInt() and 0xFF) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 3].toInt() and 0xFF)
+
     private fun ByteArray.containsAscii(text: String): Boolean {
         val needle = text.encodeToByteArray()
         return asList().windowed(needle.size).any { window ->
             window == needle.asList()
         }
     }
+
+    private data class PngChunk(val type: String, val data: ByteArray)
 }
