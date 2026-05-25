@@ -1,7 +1,7 @@
 # Supported Codecs
 
 This matrix is the official support contract for the portable codec and image
-encode paths outside `kanvas-legacy`.
+encode paths.
 
 Validation command:
 
@@ -42,7 +42,6 @@ gaps or as out-of-scope behavior.
 ## Guardrails
 
 - Production portable codec runtime is `codec-all-kotlin`.
-- `kanvas-legacy` is intentionally outside this matrix.
 - The runtime and image encode production paths must not depend on AWT,
   ImageIO, or JNI codec backends.
 - Unsupported variants should fail explicitly by returning `null`,
