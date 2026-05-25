@@ -48,7 +48,7 @@ public class GradientsPowerlessHueOklchGM : GM() {
     override fun getName(): String = "gradients_powerless_hue_OKLCH"
     override fun getISize(): SkISize = SkISize.Make(415, 330)
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.GRADIENT_INTERPOLATION: OKLCH powerless-hue interpolation not implemented")
+        drawPowerlessHueGradients(canvas, SkGradient.Interpolation.ColorSpace.kOKLCH)
     }
 }
 
@@ -64,7 +64,7 @@ public class GradientsPowerlessHueHwbGM : GM() {
     override fun getName(): String = "gradients_powerless_hue_HWB"
     override fun getISize(): SkISize = SkISize.Make(415, 330)
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.GRADIENT_INTERPOLATION: HWB powerless-hue interpolation not implemented")
+        drawPowerlessHueGradients(canvas, SkGradient.Interpolation.ColorSpace.kHWB)
     }
 }
 

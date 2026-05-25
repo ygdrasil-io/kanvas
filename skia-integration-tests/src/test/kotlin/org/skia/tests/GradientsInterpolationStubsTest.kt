@@ -2,53 +2,36 @@ package org.skia.tests
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
-/**
- * Disabled test stubs for `gm/gradients.cpp` GMs that require the remaining
- * non-RGB pieces of `SkGradient::Interpolation`.
- *
- * Affected GMs:
- *  - `gradients_color_space`          — 14 color spaces (sRGB…Rec2020)
- *  - `gradients_color_space_tilemode` — OKLCH × 4 tile modes
- *  - `gradients_color_space_many_stops` — OKLCH + 200 stops (GPU texture fallback)
- *  - `gradients_powerless_hue_OKLCH` — powerless-hue in OKLCH
- *  - `gradients_powerless_hue_HWB`   — powerless-hue in HWB
- *
- * Each GM's `onDraw` contains a `TODO("STUB.GRADIENT_INTERPOLATION")` that
- * will throw `NotImplementedError` if accidentally called, ensuring no
- * silent empty-canvas passes occur.
- */
-@Disabled("STUB.GRADIENT_INTERPOLATION: perceptual/powerless hue GMs are not complete (except LCH/HSL)")
-class GradientsInterpolationStubsTest {
+class GradientsInterpolationSmokeTest {
 
     @Test
-    fun `gradients_color_space GM stub`() {
-        GradientsColorSpaceGM()
+    fun `gradients_color_space GM draws`() {
+        TestUtils.runGmTest(GradientsColorSpaceGM())
     }
 
     @Test
-    fun `gradients_color_space_tilemode GM stub`() {
-        GradientsColorSpaceTilemodeGM()
+    fun `gradients_color_space_tilemode GM draws`() {
+        TestUtils.runGmTest(GradientsColorSpaceTilemodeGM())
     }
 
     @Test
-    fun `gradients_color_space_many_stops GM stub`() {
-        GradientsColorSpaceManyStopsGM()
+    fun `gradients_color_space_many_stops GM draws`() {
+        TestUtils.runGmTest(GradientsColorSpaceManyStopsGM())
     }
 
     @Test
-    fun `gradients_powerless_hue_OKLCH GM stub`() {
-        GradientsPowerlessHueOklchGM()
+    fun `gradients_powerless_hue_OKLCH GM draws`() {
+        TestUtils.runGmTest(GradientsPowerlessHueOklchGM())
     }
 
     @Test
-    fun `gradients_powerless_hue_HWB GM stub`() {
-        GradientsPowerlessHueHwbGM()
+    fun `gradients_powerless_hue_HWB GM draws`() {
+        TestUtils.runGmTest(GradientsPowerlessHueHwbGM())
     }
 }
 

@@ -50,7 +50,7 @@ class SkGradientInterpolationTest {
                 SkGradient(
                     colors = intArrayOf(0xFFFF0000.toInt(), 0xFF0000FF.toInt()),
                     interpolation = SkGradient.Interpolation(
-                        colorSpace = SkGradient.Interpolation.ColorSpace.kOKLCH,
+                        colorSpace = SkGradient.Interpolation.ColorSpace.kOKLab,
                     ),
                 ),
             )
@@ -248,6 +248,40 @@ class SkGradientInterpolationTest {
         assertTrue(
             (right and 0xFF) > SkColorGetR(right) && (right and 0xFF) > SkColorGetG(right),
             "LCH right side should borrow blue hue, got 0x${right.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `OKLCH powerless hue borrows adjacent hue for white to blue`() {
+        val powerless = sampleGradient(
+            colors = intArrayOf(0xFFFFFFFF.toInt(), 0xFF0000FF.toInt()),
+            interpolation = SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kOKLCH,
+            ),
+            x = 50,
+        )
+
+        assertTrue(
+            (powerless and 0xFF) > SkColorGetR(powerless) &&
+                (powerless and 0xFF) > SkColorGetG(powerless),
+            "OKLCH powerless white should borrow blue hue, got 0x${powerless.toUInt().toString(16)}",
+        )
+    }
+
+    @Test
+    fun `HWB powerless hue borrows adjacent hue for white to blue`() {
+        val powerless = sampleGradient(
+            colors = intArrayOf(0xFFFFFFFF.toInt(), 0xFF0000FF.toInt()),
+            interpolation = SkGradient.Interpolation(
+                colorSpace = SkGradient.Interpolation.ColorSpace.kHWB,
+            ),
+            x = 50,
+        )
+
+        assertTrue(
+            (powerless and 0xFF) > SkColorGetR(powerless) &&
+                (powerless and 0xFF) > SkColorGetG(powerless),
+            "HWB powerless white should borrow blue hue, got 0x${powerless.toUInt().toString(16)}",
         )
     }
 
