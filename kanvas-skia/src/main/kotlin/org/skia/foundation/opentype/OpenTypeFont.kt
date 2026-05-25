@@ -170,6 +170,33 @@ public class OpenTypeTypeface private constructor(
     internal fun bitmapGlyph(glyphId: Int): OpenTypeBitmapGlyph? =
         font.bitmapGlyph(glyphId)
 
+    internal fun makeBitmapTextGlyphs(
+        text: String,
+        x: SkScalar,
+        y: SkScalar,
+        size: SkScalar,
+        scaleX: SkScalar,
+    ): List<OpenTypePositionedBitmapGlyph> {
+        if (text.isEmpty()) return emptyList()
+        val out = ArrayList<OpenTypePositionedBitmapGlyph>()
+        var penX = x
+        val glyphs = text.codePoints().toArray().let { codepoints ->
+            IntArray(codepoints.size) { font.glyphForCodepoint(codepoints[it]) }
+        }
+        for (i in glyphs.indices) {
+            val glyphId = glyphs[i]
+            val bitmapGlyph = font.bitmapGlyph(glyphId)
+            if (bitmapGlyph != null) {
+                out += OpenTypePositionedBitmapGlyph(bitmapGlyph, penX, y)
+            }
+            penX += font.advanceWidth(glyphId) * font.scale(size) * scaleX
+            if (i < glyphs.lastIndex) {
+                penX += font.kerningAdjustment(glyphId, glyphs[i + 1]) * font.scale(size) * scaleX
+            }
+        }
+        return out
+    }
+
     internal fun makeColorTextPaths(
         text: String,
         x: SkScalar,
@@ -2932,6 +2959,11 @@ internal data class OpenTypeBitmapGlyph(
         return result
     }
 }
+internal data class OpenTypePositionedBitmapGlyph(
+    val glyph: OpenTypeBitmapGlyph,
+    val x: Float,
+    val y: Float,
+)
 private class OpenTypeBitmapFont(
     private val glyphs: Map<Int, OpenTypeBitmapGlyph>,
 ) {
