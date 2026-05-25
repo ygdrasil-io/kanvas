@@ -97,7 +97,9 @@ public class SkGradient(
 
     internal fun requiresDedicatedSampler(): Boolean =
         interpolation.colorSpace == Interpolation.ColorSpace.kHSL ||
-            interpolation.colorSpace == Interpolation.ColorSpace.kLCH
+            interpolation.colorSpace == Interpolation.ColorSpace.kLCH ||
+            interpolation.colorSpace == Interpolation.ColorSpace.kOKLCH ||
+            interpolation.colorSpace == Interpolation.ColorSpace.kHWB
 
     internal fun validateDedicatedSampler() {
         if (!requiresDedicatedSampler()) {
