@@ -9,6 +9,7 @@ SKIA_GM_DIR="${SKIA_GM_DIR:-/Users/chaos/workspace/kanvas-forge/skia-main/gm}"
 KT_GM_DIR="${KT_GM_DIR:-skia-integration-tests/src/main/kotlin/org/skia/tests}"
 KT_TEST_DIR="${KT_TEST_DIR:-skia-integration-tests/src/test/kotlin/org/skia/tests}"
 KANVAS_SKIA_DIR="${KANVAS_SKIA_DIR:-kanvas-skia/src/main/kotlin}"
+GM_NAME_HINTS="${GM_NAME_HINTS:-scripts/gm/gm-name-hints.tsv}"
 
 # ─── cpp extraction ─────────────────────────────────────────────────────
 
@@ -201,6 +202,18 @@ build_kt_index() {
         FNR == NR { status[$1] = $2; next }      # first pass : status map
         { print $1 "\t" $2 "\t" (status[$2] ? status[$2] : "EMPTY") }
     ' "$tmp_status" "$tmp_keys" >> "$out"
+
+    # Pass 3 : explicit upstream-name hints for ports whose registered GM
+    # names are computed from constructor state or otherwise differ in case /
+    # spelling from the Kotlin class name. Format :
+    #   <upstream GM registration key><TAB><Kotlin GM filename>
+    if [ -f "$GM_NAME_HINTS" ]; then
+        awk -F'\t' '
+            FNR == NR { status[$1] = $2; next }
+            /^[[:space:]]*(#|$)/ { next }
+            NF >= 2 { print $1 "\t" $2 "\t" (status[$2] ? status[$2] : "EMPTY") }
+        ' "$tmp_status" "$GM_NAME_HINTS" >> "$out"
+    fi
 
     rm -f "$tmp_keys" "$tmp_status"
     sort -u -o "$out" "$out"
