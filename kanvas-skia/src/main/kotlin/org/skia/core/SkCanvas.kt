@@ -2117,9 +2117,11 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      * [SkMeshSpecification] must contain a `float2` attribute named
      * `position` and may contain one `ubyte4_unorm` attribute named `color`
      * encoded as RGBA bytes. The mesh is converted to [SkVertices] and drawn
-     * with the supplied [paint]. Mesh SkSL, uniforms, children, varyings,
-     * fragment output, and [blender] are accepted by the surface API but not
-     * executed yet.
+     * with the supplied [paint]. CPU fragment-program execution is intentionally
+     * bounded to deterministic uniforms-only colour outputs:
+     * - `return uniformColor;`
+     * - `return uniformColor * varyingColor;`
+     * Child shaders remain out of scope.
      */
     public open fun drawMesh(
         mesh: SkMesh,
@@ -2145,6 +2147,11 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                 readRgbaColorLE(vertexBytes, base)
             }
         }
+        val fragmentMode = detectCpuMeshFragmentMode(spec.fragmentProgram, spec.uniforms())
+        val uniformColor =
+            if (fragmentMode == CpuMeshFragmentMode.DEFAULT) null
+            else decodeUniformColor(spec, mesh.uniforms())
+        val effectiveColors = if (fragmentMode == CpuMeshFragmentMode.UNIFORM_SOLID) null else colors
         val vertexMode = when (mesh.mode()) {
             SkMesh.Mode.kTriangles -> SkVertices.VertexMode.kTriangles
             SkMesh.Mode.kTriangleStrip -> SkVertices.VertexMode.kTriangleStrip
@@ -2158,10 +2165,14 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val vertices = SkVertices.MakeCopy(
             mode = vertexMode,
             positions = positions,
-            colors = colors,
+            colors = effectiveColors,
             indices = indices,
         )
         val meshPaint = if (blender == null) paint else paint.copy().also { it.blender = blender }
+        if (uniformColor != null) {
+            meshPaint.shader = null
+            meshPaint.color = uniformColor
+        }
         drawVertices(vertices, SkBlendMode.kSrcOver, meshPaint)
     }
 
@@ -2188,6 +2199,64 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val a = bytes[offset + 3].toInt() and 0xFF
         return (a shl 24) or (r shl 16) or (g shl 8) or b
     }
+
+    private enum class CpuMeshFragmentMode {
+        DEFAULT,
+        UNIFORM_SOLID,
+        UNIFORM_TIMES_COLOR,
+    }
+
+    private fun detectCpuMeshFragmentMode(
+        fragmentProgram: String,
+        uniforms: List<SkMeshSpecification.Uniform>,
+    ): CpuMeshFragmentMode {
+        val colorUniform = uniforms.firstOrNull { it.type == SkMeshSpecification.Uniform.Type.kFloat4 || it.type == SkMeshSpecification.Uniform.Type.kHalf4 }
+            ?: return CpuMeshFragmentMode.DEFAULT
+        val uniformToken = colorUniform.name.lowercase()
+        val returnExpr = extractReturnExpression(fragmentProgram) ?: return CpuMeshFragmentMode.DEFAULT
+        return when {
+            returnExpr == uniformToken -> CpuMeshFragmentMode.UNIFORM_SOLID
+            returnExpr == "meshcolor*$uniformToken" || returnExpr == "$uniformToken*meshcolor" ->
+                CpuMeshFragmentMode.UNIFORM_TIMES_COLOR
+            else -> CpuMeshFragmentMode.DEFAULT
+        }
+    }
+
+    private fun extractReturnExpression(fragmentProgram: String): String? {
+        val returnMatch = Regex("""return\s+([^;]+);""", RegexOption.IGNORE_CASE).find(fragmentProgram) ?: return null
+        return returnMatch.groupValues[1]
+            .replace("(", "")
+            .replace(")", "")
+            .replace(Regex("""\s+"""), "")
+            .lowercase()
+    }
+
+    private fun decodeUniformColor(
+        spec: SkMeshSpecification,
+        uniforms: org.skia.foundation.SkData?,
+    ): Int? {
+        if (spec.uniformSize() == 0 || uniforms == null) return null
+        val colorUniform = spec.uniforms().firstOrNull {
+            it.type == SkMeshSpecification.Uniform.Type.kFloat4 || it.type == SkMeshSpecification.Uniform.Type.kHalf4
+        } ?: return null
+        val bytes = uniforms.toByteArray()
+        if (bytes.size < colorUniform.offset + 16) return null
+        val r = clamp01(readFloatLE(bytes, colorUniform.offset + 0))
+        val g = clamp01(readFloatLE(bytes, colorUniform.offset + 4))
+        val b = clamp01(readFloatLE(bytes, colorUniform.offset + 8))
+        val a = clamp01(readFloatLE(bytes, colorUniform.offset + 12))
+        return ((a * 255f + 0.5f).toInt() shl 24) or
+            ((r * 255f + 0.5f).toInt() shl 16) or
+            ((g * 255f + 0.5f).toInt() shl 8) or
+            ((b * 255f + 0.5f).toInt())
+    }
+
+    private fun clamp01(v: Float): Float =
+        when {
+            v < 0f -> 0f
+            v > 1f -> 1f
+            else -> v
+        }
 
     /**
      * Mirrors Skia's

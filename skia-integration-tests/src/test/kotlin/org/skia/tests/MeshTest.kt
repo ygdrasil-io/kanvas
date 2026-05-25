@@ -67,9 +67,15 @@ class MeshTest {
     }
 
     @Test
-    @Disabled("STUB.MESH.UNIFORMS: mesh uniform layout and fragment-program execution are not implemented")
-    fun `CustomMeshUniformsGM placeholder`() {
-        TestUtils.runGmTest(CustomMeshUniformsGM())
+    fun `CustomMeshUniformsGM runs cpu uniforms subset`() {
+        val rendered = TestUtils.runGmTest(CustomMeshUniformsGM())
+        assertTrue(rendered.width > 0)
+        assertTrue(rendered.height > 0)
+        val top = rendered.getPixel(30, 40)
+        val bottom = rendered.getPixel(30, 200)
+        assertTrue(top != 0xFFFFFFFF.toInt())
+        assertTrue(bottom != 0xFFFFFFFF.toInt())
+        assertTrue(top != bottom, "uniform*meshColor subset should preserve varying color differences")
     }
 
     @Test

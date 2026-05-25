@@ -16,6 +16,8 @@ import org.skia.foundation.SkColorSpace
 public class SkMeshSpecification private constructor(
     private val attributesStorage: List<Attribute>,
     private val varyingsStorage: List<Varying>,
+    private val uniformsStorage: List<Uniform>,
+    private val uniformSizeStorage: Int,
     private val vertexStride: Int,
     public val vertexProgram: String,
     public val fragmentProgram: String,
@@ -52,6 +54,26 @@ public class SkMeshSpecification private constructor(
         }
     }
 
+    public data class Uniform(
+        public val type: Type,
+        public val offset: Int,
+        public val name: String,
+    ) {
+        public enum class Type(
+            public val size: Int,
+            public val alignment: Int,
+        ) {
+            kFloat(4, 4),
+            kFloat2(8, 8),
+            kFloat3(12, 16),
+            kFloat4(16, 16),
+            kHalf(4, 4),
+            kHalf2(8, 8),
+            kHalf3(12, 16),
+            kHalf4(16, 16),
+        }
+    }
+
     public data class Result(
         public val specification: SkMeshSpecification?,
         public val error: String,
@@ -61,11 +83,11 @@ public class SkMeshSpecification private constructor(
 
     public fun varyings(): List<Varying> = varyingsStorage
 
-    public fun uniforms(): List<Nothing> = emptyList()
+    public fun uniforms(): List<Uniform> = uniformsStorage
 
     public fun children(): List<Nothing> = emptyList()
 
-    public fun uniformSize(): Int = 0
+    public fun uniformSize(): Int = uniformSizeStorage
 
     public fun findAttribute(name: String): Attribute? =
         attributesStorage.firstOrNull { it.name == name }
@@ -100,10 +122,13 @@ public class SkMeshSpecification private constructor(
             validate(attributes, vertexStride, varyings, at)?.let {
                 return Result(null, it)
             }
+            val uniforms = parseUniforms(vs, fs)
             return Result(
                 SkMeshSpecification(
                     attributesStorage = attributes.toList(),
                     varyingsStorage = varyings.toList(),
+                    uniformsStorage = uniforms,
+                    uniformSizeStorage = uniforms.lastOrNull()?.let { alignUp(it.offset + it.type.size, 16) } ?: 0,
                     vertexStride = vertexStride,
                     vertexProgram = vs,
                     fragmentProgram = fs,
@@ -154,5 +179,36 @@ public class SkMeshSpecification private constructor(
             }
             return null
         }
+
+        private val uniformDecl = Regex("""\buniform\s+(float|float2|float3|float4|half|half2|half3|half4)\s+([A-Za-z_][A-Za-z0-9_]*)\s*;""")
+
+        private fun parseUniforms(vs: String, fs: String): List<Uniform> {
+            val source = "$vs\n$fs"
+            val uniforms = ArrayList<Uniform>()
+            val seen = HashSet<String>()
+            var cursor = 0
+            uniformDecl.findAll(source).forEach { match ->
+                val type = when (match.groupValues[1]) {
+                    "float" -> Uniform.Type.kFloat
+                    "float2" -> Uniform.Type.kFloat2
+                    "float3" -> Uniform.Type.kFloat3
+                    "float4" -> Uniform.Type.kFloat4
+                    "half" -> Uniform.Type.kHalf
+                    "half2" -> Uniform.Type.kHalf2
+                    "half3" -> Uniform.Type.kHalf3
+                    "half4" -> Uniform.Type.kHalf4
+                    else -> return@forEach
+                }
+                val name = match.groupValues[2]
+                if (!seen.add(name)) return@forEach
+                cursor = alignUp(cursor, type.alignment)
+                uniforms.add(Uniform(type = type, offset = cursor, name = name))
+                cursor += type.size
+            }
+            return uniforms
+        }
+
+        private fun alignUp(value: Int, alignment: Int): Int =
+            ((value + alignment - 1) / alignment) * alignment
     }
 }

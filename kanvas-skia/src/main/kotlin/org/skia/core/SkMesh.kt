@@ -216,7 +216,14 @@ public class SkMesh private constructor(
             if (vertexOffset % spec.stride() != 0) return "SkMesh vertexOffset must be aligned to specification stride"
             val vertexBytes = spec.stride() * vertexCount
             if (vertexOffset + vertexBytes > vb.size()) return "SkMesh vertex buffer is too small"
-            if (uniforms != null) return "CPU SkMesh does not support uniforms yet"
+            if (spec.uniformSize() == 0) {
+                if (uniforms != null) return "SkMesh uniforms were provided but specification declares none"
+            } else {
+                val provided = uniforms ?: return "SkMesh requires a uniform block of ${spec.uniformSize()} bytes"
+                if (provided.size != spec.uniformSize()) {
+                    return "SkMesh uniform block size ${provided.size} does not match specification size ${spec.uniformSize()}"
+                }
+            }
             if (children.isNotEmpty()) return "CPU SkMesh does not support runtime-effect children yet"
 
             if (indexBuffer == null) {
