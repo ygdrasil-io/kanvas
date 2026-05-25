@@ -527,6 +527,17 @@ public class SkImage public constructor(
             return SkImage(w, h, out, bitmap.colorType, bitmap.colorSpace)
         }
 
+        /**
+         * Mirrors Skia's `SkImage::MakeFromYUVAPixmaps`.
+         *
+         * Raster-only bridge: we materialize an RGBA image through
+         * [SkImages.YUVA]. GPU texture/image-backed variants remain out of
+         * scope and are covered by separate `SkImages.TextureFrom*` stubs.
+         */
+        @Suppress("FunctionName")
+        public fun MakeFromYUVAPixmaps(pixmaps: SkYUVAPixmaps): SkImage? =
+            SkImages.YUVA(pixmaps)
+
         // ─── Phase R2.12 — readPixels internals ───────────────────────
 
         /**
