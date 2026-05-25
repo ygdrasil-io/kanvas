@@ -1,5 +1,7 @@
 package org.skia.foundation
 
+import org.graphiks.math.SkColorChannelFlag
+
 /**
  * Describes how a pixel's bits encode colour. Mirrors Skia's `SkColorType`.
  *
@@ -135,8 +137,39 @@ public enum class SkColorType(public val bytesPerPixel: Int) {
  * **TODO: STUB.YUVA_PIXMAPS** — complete the mapping for remaining types.
  */
 public fun SkColorTypeChannelFlags(colorType: SkColorType): Int {
-    TODO(
-        "STUB.YUVA_PIXMAPS: SkColorTypeChannelFlags($colorType) — " +
-            "channel-flag bitmask for YUVA plane assembly not yet implemented."
-    )
+    return when (colorType) {
+        SkColorType.kUnknown -> 0
+        SkColorType.kAlpha_8,
+        SkColorType.kA16_float,
+        SkColorType.kA16_unorm,
+        -> SkColorChannelFlag.kAlpha_SkColorChannelFlag
+        SkColorType.kRGB_565,
+        SkColorType.kRGB_888x,
+        SkColorType.kRGB_101010x,
+        SkColorType.kBGR_101010x,
+        SkColorType.kBGR_101010x_XR,
+        SkColorType.kRGB_F16F16F16x,
+        -> SkColorChannelFlag.kRGB_SkColorChannelFlags
+        SkColorType.kARGB_4444,
+        SkColorType.kRGBA_8888,
+        SkColorType.kBGRA_8888,
+        SkColorType.kRGBA_1010102,
+        SkColorType.kBGRA_1010102,
+        SkColorType.kBGRA_10101010_XR,
+        SkColorType.kRGBA_10x6,
+        SkColorType.kRGBA_F16Norm,
+        SkColorType.kRGBA_F16,
+        SkColorType.kRGBA_F32,
+        SkColorType.kR16G16B16A16_unorm,
+        SkColorType.kSRGBA_8888,
+        -> SkColorChannelFlag.kRGBA_SkColorChannelFlags
+        SkColorType.kGray_8 -> SkColorChannelFlag.kGray_SkColorChannelFlag
+        SkColorType.kR8G8_unorm,
+        SkColorType.kR16G16_float,
+        SkColorType.kR16G16_unorm,
+        -> SkColorChannelFlag.kRG_SkColorChannelFlags
+        SkColorType.kR16_unorm,
+        SkColorType.kR8_unorm,
+        -> SkColorChannelFlag.kRed_SkColorChannelFlag
+    }
 }

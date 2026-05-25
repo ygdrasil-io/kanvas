@@ -2,6 +2,7 @@ package org.skia.foundation
 
 import org.skia.foundation.SkEncodedOrigin
 import org.graphiks.math.SkColorChannel
+import org.graphiks.math.SkColorChannelFlag
 import org.graphiks.math.SkISize
 
 /**
@@ -132,11 +133,69 @@ public data class SkYUVAInfo(
      * location dispatch from upstream's `SkYUVAInfo::GetYUVALocations`.
      */
     public fun toYUVALocations(channelFlags: IntArray): YUVALocations {
-        TODO(
-            "STUB.YUVA_PIXMAPS: SkYUVAInfo.toYUVALocations(channelFlags) — " +
-                "channel-flag → YUVA location mapping not yet ported from " +
-                "src/core/SkYUVAInfoLocation.cpp."
-        )
+        data class PlaneAndIndex(val plane: Int, val channelIndex: Int)
+        val planesAndIndices = when (planeConfig) {
+            PlaneConfig.kUnknown -> return invalidYUVALocations()
+            PlaneConfig.kY_U_V -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(1, 0), PlaneAndIndex(2, 0), PlaneAndIndex(-1, -1))
+            PlaneConfig.kY_V_U -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(2, 0), PlaneAndIndex(1, 0), PlaneAndIndex(-1, -1))
+            PlaneConfig.kY_UV -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(1, 0), PlaneAndIndex(1, 1), PlaneAndIndex(-1, -1))
+            PlaneConfig.kY_VU -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(1, 1), PlaneAndIndex(1, 0), PlaneAndIndex(-1, -1))
+            PlaneConfig.kYUV -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(0, 1), PlaneAndIndex(0, 2), PlaneAndIndex(-1, -1))
+            PlaneConfig.kUYV -> arrayOf(PlaneAndIndex(0, 1), PlaneAndIndex(0, 0), PlaneAndIndex(0, 2), PlaneAndIndex(-1, -1))
+            PlaneConfig.kY_U_V_A -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(1, 0), PlaneAndIndex(2, 0), PlaneAndIndex(3, 0))
+            PlaneConfig.kY_V_U_A -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(2, 0), PlaneAndIndex(1, 0), PlaneAndIndex(3, 0))
+            PlaneConfig.kY_UV_A -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(1, 0), PlaneAndIndex(1, 1), PlaneAndIndex(2, 0))
+            PlaneConfig.kY_VU_A -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(1, 1), PlaneAndIndex(1, 0), PlaneAndIndex(2, 0))
+            PlaneConfig.kYUVA -> arrayOf(PlaneAndIndex(0, 0), PlaneAndIndex(0, 1), PlaneAndIndex(0, 2), PlaneAndIndex(0, 3))
+            PlaneConfig.kUYVA -> arrayOf(PlaneAndIndex(0, 1), PlaneAndIndex(0, 0), PlaneAndIndex(0, 2), PlaneAndIndex(0, 3))
+        }
+
+        val out = Array(kYUVAChannelCount) { YUVALocation() }
+        for (i in 0 until kYUVAChannelCount) {
+            val plane = planesAndIndices[i].plane
+            val index = planesAndIndices[i].channelIndex
+            if (plane < 0) {
+                out[i] = YUVALocation(-1, SkColorChannel.kR)
+                continue
+            }
+            if (plane >= channelFlags.size) return invalidYUVALocations()
+            val channel = channelIndexToChannel(channelFlags[plane], index) ?: return invalidYUVALocations()
+            out[i] = YUVALocation(plane, channel)
+        }
+        return out
+    }
+
+    private fun invalidYUVALocations(): YUVALocations = Array(kYUVAChannelCount) { YUVALocation() }
+
+    private fun channelIndexToChannel(channelFlags: Int, channelIdx: Int): SkColorChannel? = when (channelFlags) {
+        SkColorChannelFlag.kGray_SkColorChannelFlag,
+        SkColorChannelFlag.kRed_SkColorChannelFlag,
+        -> if (channelIdx == 0) SkColorChannel.kR else null
+        SkColorChannelFlag.kGrayAlpha_SkColorChannelFlags -> when (channelIdx) {
+            0 -> SkColorChannel.kR
+            1 -> SkColorChannel.kA
+            else -> null
+        }
+        SkColorChannelFlag.kAlpha_SkColorChannelFlag -> if (channelIdx == 0) SkColorChannel.kA else null
+        SkColorChannelFlag.kRG_SkColorChannelFlags -> when (channelIdx) {
+            0 -> SkColorChannel.kR
+            1 -> SkColorChannel.kG
+            else -> null
+        }
+        SkColorChannelFlag.kRGB_SkColorChannelFlags -> when (channelIdx) {
+            0 -> SkColorChannel.kR
+            1 -> SkColorChannel.kG
+            2 -> SkColorChannel.kB
+            else -> null
+        }
+        SkColorChannelFlag.kRGBA_SkColorChannelFlags -> when (channelIdx) {
+            0 -> SkColorChannel.kR
+            1 -> SkColorChannel.kG
+            2 -> SkColorChannel.kB
+            3 -> SkColorChannel.kA
+            else -> null
+        }
+        else -> null
     }
 
     /** Width of the displayed full-resolution image. */

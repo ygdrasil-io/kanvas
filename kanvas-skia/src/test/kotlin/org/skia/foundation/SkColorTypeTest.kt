@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.graphiks.math.SkColorChannelFlag
 
 class SkColorTypeTest {
 
@@ -80,5 +81,42 @@ class SkColorTypeTest {
         assertEquals(1, SkColorType.kGray_8.bytesPerPixel)
         assertFalse(SkColorType.kAlpha_8.isAlwaysOpaque())
         assertTrue(SkColorType.kGray_8.isAlwaysOpaque())
+    }
+
+    @Test
+    fun `SkColorTypeChannelFlags mirrors upstream channel presence mapping`() {
+        val expected = mapOf(
+            SkColorType.kUnknown to 0,
+            SkColorType.kAlpha_8 to SkColorChannelFlag.kAlpha_SkColorChannelFlag,
+            SkColorType.kRGB_565 to SkColorChannelFlag.kRGB_SkColorChannelFlags,
+            SkColorType.kARGB_4444 to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kRGBA_8888 to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kRGB_888x to SkColorChannelFlag.kRGB_SkColorChannelFlags,
+            SkColorType.kBGRA_8888 to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kRGBA_1010102 to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kBGRA_1010102 to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kRGB_101010x to SkColorChannelFlag.kRGB_SkColorChannelFlags,
+            SkColorType.kBGR_101010x to SkColorChannelFlag.kRGB_SkColorChannelFlags,
+            SkColorType.kBGR_101010x_XR to SkColorChannelFlag.kRGB_SkColorChannelFlags,
+            SkColorType.kBGRA_10101010_XR to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kRGBA_10x6 to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kGray_8 to SkColorChannelFlag.kGray_SkColorChannelFlag,
+            SkColorType.kRGBA_F16Norm to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kRGBA_F16 to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kRGB_F16F16F16x to SkColorChannelFlag.kRGB_SkColorChannelFlags,
+            SkColorType.kRGBA_F32 to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kR8G8_unorm to SkColorChannelFlag.kRG_SkColorChannelFlags,
+            SkColorType.kA16_float to SkColorChannelFlag.kAlpha_SkColorChannelFlag,
+            SkColorType.kR16G16_float to SkColorChannelFlag.kRG_SkColorChannelFlags,
+            SkColorType.kA16_unorm to SkColorChannelFlag.kAlpha_SkColorChannelFlag,
+            SkColorType.kR16_unorm to SkColorChannelFlag.kRed_SkColorChannelFlag,
+            SkColorType.kR16G16_unorm to SkColorChannelFlag.kRG_SkColorChannelFlags,
+            SkColorType.kR16G16B16A16_unorm to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kSRGBA_8888 to SkColorChannelFlag.kRGBA_SkColorChannelFlags,
+            SkColorType.kR8_unorm to SkColorChannelFlag.kRed_SkColorChannelFlag,
+        )
+        for (ct in SkColorType.entries) {
+            assertEquals(expected[ct], SkColorTypeChannelFlags(ct), "channel flags mismatch on $ct")
+        }
     }
 }
