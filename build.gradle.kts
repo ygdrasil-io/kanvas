@@ -234,6 +234,43 @@ tasks.register("checkProductionCodecRuntimeNoAwt") {
     }
 }
 
+tasks.register("checkProductionCodecImageClasspathNoJavaDesktop") {
+    group = "verification"
+    description = "Fails if portable production codec/image classpaths declare java.desktop or temporary image backends."
+
+    doLast {
+        val violations = mutableListOf<String>()
+        val projectsToCheck = (pureKotlinCodecProjects + "codec-image-generator" + "kanvas-skia" + "cpu-raster" + "gpu-raster")
+            .mapNotNull { name -> findProject(":$name") }
+
+        projectsToCheck.forEach { checkedProject ->
+            productionDependencyConfigurations
+                .mapNotNull { configurationName -> checkedProject.configurations.findByName(configurationName) }
+                .forEach { configuration ->
+                    configuration.dependencies.forEach { dependency ->
+                        val dependencyId = listOfNotNull(dependency.group, dependency.name)
+                            .joinToString(":")
+                        if (dependency.name == "java.desktop" || dependencyId.contains("java.desktop")) {
+                            violations += "${checkedProject.path}:${configuration.name} declares forbidden java.desktop dependency $dependencyId"
+                        }
+                        if (dependency.name in forbiddenCodecBackendProjects) {
+                            violations += "${checkedProject.path}:${configuration.name} declares forbidden image backend $dependencyId"
+                        }
+                    }
+                }
+        }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("Portable production codec/image classpaths must not declare java.desktop or temporary image backends.")
+                    violations.sorted().forEach { appendLine("- $it") }
+                }
+            )
+        }
+    }
+}
+
 tasks.register("checkPureKotlinPngEncoderNoAwt") {
     group = "verification"
     description = "Fails if the pure Kotlin PNG encoder path uses AWT/ImageIO/java.desktop APIs."
@@ -408,5 +445,28 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
         ":codec-real-image-tests:test",
         ":codec-all-kotlin:jar",
         ":cpu-raster:testCodecWithKotlinBackend",
+    )
+}
+
+tasks.register("checkCodecImageComplete") {
+    group = "verification"
+    description = "Runs the official portable codec/image validation suite and AWT/ImageIO guardrails."
+
+    dependsOn(
+        "checkCodecKotlinSwitchCriteria",
+        "checkCpuRasterImageToolingNoAwt",
+        "checkGpuRasterImageToolingNoAwt",
+        "checkProductionCodecImageClasspathNoJavaDesktop",
+        ":codec-png-kotlin:test",
+        ":codec-jpeg-kotlin:test",
+        ":codec-gif-kotlin:test",
+        ":codec-bmp-kotlin:test",
+        ":codec-wbmp-kotlin:test",
+        ":codec-ico-kotlin:test",
+        ":codec-webp-kotlin:test",
+        ":codec-animated:test",
+        ":codec-android:test",
+        ":codec-image-generator:test",
+        ":kanvas-skia:test",
     )
 }
