@@ -9,10 +9,15 @@ import org.graphiks.math.SkColorSetARGB
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkPoint
 import org.skia.core.SkColorSpaceXformSteps
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sin
 
 internal class SkInterpolatedLinearGradient(
     private val p0: SkPoint,
@@ -23,7 +28,7 @@ internal class SkInterpolatedLinearGradient(
     private val interpolation: SkGradient.Interpolation,
     localMatrix: SkMatrix,
 ) : SkShader(localMatrix) {
-    private val stops: Array<Hsla> = Array(srcColors.size) { Hsla(0f, 0f, 0f, 0f, true) }
+    private val stops: Array<HueStop> = Array(srcColors.size) { HueStop(0f, 0f, 0f, 0f, true) }
     private var invLenSqDirX: Float = 0f
     private var invLenSqDirY: Float = 0f
     private var xformSteps: SkColorSpaceXformSteps? = null
@@ -33,15 +38,24 @@ internal class SkInterpolatedLinearGradient(
         require(positions.size == srcColors.size) {
             "positions.size (${positions.size}) must match colors.size (${srcColors.size})"
         }
-        require(interpolation.colorSpace == SkGradient.Interpolation.ColorSpace.kHSL) {
-            "SkInterpolatedLinearGradient only supports HSL interpolation"
+        require(
+            interpolation.colorSpace == SkGradient.Interpolation.ColorSpace.kHSL ||
+                interpolation.colorSpace == SkGradient.Interpolation.ColorSpace.kLCH,
+        ) {
+            "SkInterpolatedLinearGradient only supports HSL and LCH interpolation"
         }
     }
 
     override fun setupForDraw(canvasCtm: SkMatrix, xform: SkColorSpaceXformSteps) {
         super.setupForDraw(canvasCtm, xform)
         xformSteps = xform
-        for (i in srcColors.indices) stops[i] = colorToHsla(srcColors[i], interpolation.inPremul)
+        for (i in srcColors.indices) {
+            stops[i] = when (interpolation.colorSpace) {
+                SkGradient.Interpolation.ColorSpace.kHSL -> colorToHslStop(srcColors[i], interpolation.inPremul)
+                SkGradient.Interpolation.ColorSpace.kLCH -> colorToLchStop(srcColors[i], interpolation.inPremul)
+                else -> error("unsupported interpolation space: ${interpolation.colorSpace}")
+            }
+        }
         val dx = p1.fX - p0.fX
         val dy = p1.fY - p0.fY
         val lenSq = dx * dx + dy * dy
@@ -58,7 +72,7 @@ internal class SkInterpolatedLinearGradient(
     override fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray) {
         val inv = deviceToLocal
         if (inv == null) {
-            val c = if (stops.isNotEmpty()) hslaToWorkingColor(stops[0]) else 0
+            val c = if (stops.isNotEmpty()) hueStopToWorkingColor(stops[0]) else 0
             for (i in 0 until count) dst[i] = c
             return
         }
@@ -86,9 +100,9 @@ internal class SkInterpolatedLinearGradient(
     private fun sampleAtT(t: Float): SkColor {
         val tt = tileT(t) ?: return 0
         val n = positions.size
-        if (n == 1) return hslaToWorkingColor(stops[0])
-        if (tt <= positions[0]) return hslaToWorkingColor(stops[0])
-        if (tt >= positions[n - 1]) return hslaToWorkingColor(stops[n - 1])
+        if (n == 1) return hueStopToWorkingColor(stops[0])
+        if (tt <= positions[0]) return hueStopToWorkingColor(stops[0])
+        if (tt >= positions[n - 1]) return hueStopToWorkingColor(stops[n - 1])
 
         var lo = 0
         var hi = n - 1
@@ -99,7 +113,7 @@ internal class SkInterpolatedLinearGradient(
         val t0 = positions[lo]
         val t1 = positions[hi]
         val u = if (t1 > t0) (tt - t0) / (t1 - t0) else 0f
-        return hslaToWorkingColor(lerpHsla(stops[lo], stops[hi], u))
+        return hueStopToWorkingColor(lerpHueStop(stops[lo], stops[hi], u))
     }
 
     private fun tileT(t: Float): Float? = when (tileMode) {
@@ -113,32 +127,44 @@ internal class SkInterpolatedLinearGradient(
         SkTileMode.kDecal -> if (t < 0f || t > 1f) null else t
     }
 
-    private fun lerpHsla(a: Hsla, b: Hsla, t: Float): Hsla {
+    private fun lerpHueStop(a: HueStop, b: HueStop, t: Float): HueStop {
         val startHue = if (a.powerless && !b.powerless) b.h else a.h
         val endHue = if (b.powerless && !a.powerless) a.h else b.h
         val dh = hueDelta(startHue, endHue, interpolation.hueMethod)
-        return Hsla(
+        return HueStop(
             normalizeHue(startHue + dh * t),
-            lerp(a.s, b.s, t),
-            lerp(a.l, b.l, t),
+            lerp(a.c1, b.c1, t),
+            lerp(a.c2, b.c2, t),
             lerp(a.a, b.a, t),
             a.powerless && b.powerless,
         )
     }
 
-    private fun hslaToWorkingColor(hsla: Hsla): SkColor {
-        val a = hsla.a
-        val s = if (interpolation.inPremul == SkGradient.Interpolation.InPremul.kYes && a > 0f) {
-            (hsla.s / a).coerceIn(0f, 1f)
+    private fun hueStopToWorkingColor(stop: HueStop): SkColor {
+        val a = stop.a
+        val c1 = if (interpolation.inPremul == SkGradient.Interpolation.InPremul.kYes && a > 0f) {
+            stop.c1 / a
         } else {
-            hsla.s
+            stop.c1
         }
-        val l = if (interpolation.inPremul == SkGradient.Interpolation.InPremul.kYes && a > 0f) {
-            (hsla.l / a).coerceIn(0f, 1f)
+        val c2 = if (interpolation.inPremul == SkGradient.Interpolation.InPremul.kYes && a > 0f) {
+            stop.c2 / a
         } else {
-            hsla.l
+            stop.c2
         }
-        val rgb = hslToRgb(hsla.h, s, l)
+        val rgb = when (interpolation.colorSpace) {
+            SkGradient.Interpolation.ColorSpace.kHSL -> hslToRgb(
+                stop.h,
+                c1.coerceIn(0f, 1f),
+                c2.coerceIn(0f, 1f),
+            )
+            SkGradient.Interpolation.ColorSpace.kLCH -> lchToRgb(
+                stop.h,
+                c1.coerceIn(0f, 150f),
+                c2.coerceIn(0f, 100f),
+            )
+            else -> error("unsupported interpolation space: ${interpolation.colorSpace}")
+        }
         val rgba = floatArrayOf(rgb[0], rgb[1], rgb[2], a)
         xformSteps?.apply(rgba)
         val outA = (rgba[3] * 255f + 0.5f).toInt().coerceIn(0, 255)
@@ -149,15 +175,15 @@ internal class SkInterpolatedLinearGradient(
     }
 }
 
-private data class Hsla(
+private data class HueStop(
     val h: Float,
-    val s: Float,
-    val l: Float,
+    val c1: Float,
+    val c2: Float,
     val a: Float,
     val powerless: Boolean,
 )
 
-private fun colorToHsla(c: SkColor, inPremul: SkGradient.Interpolation.InPremul): Hsla {
+private fun colorToHslStop(c: SkColor, inPremul: SkGradient.Interpolation.InPremul): HueStop {
     val a = SkColorGetA(c) / 255f
     val r = SkColorGetR(c) / 255f
     val g = SkColorGetG(c) / 255f
@@ -175,7 +201,24 @@ private fun colorToHsla(c: SkColor, inPremul: SkGradient.Interpolation.InPremul)
         else -> 60f * (((r - g) / d) + 4f)
     }
     val premulScale = if (inPremul == SkGradient.Interpolation.InPremul.kYes) a else 1f
-    return Hsla(normalizeHue(h), s * premulScale, l * premulScale, a, powerless)
+    return HueStop(normalizeHue(h), s * premulScale, l * premulScale, a, powerless)
+}
+
+private fun colorToLchStop(c: SkColor, inPremul: SkGradient.Interpolation.InPremul): HueStop {
+    val a = SkColorGetA(c) / 255f
+    val r = SkColorGetR(c) / 255f
+    val g = SkColorGetG(c) / 255f
+    val b = SkColorGetB(c) / 255f
+    val lch = rgbToLch(r, g, b)
+    val powerless = lch[1] <= 1e-4f
+    val premulScale = if (inPremul == SkGradient.Interpolation.InPremul.kYes) a else 1f
+    return HueStop(
+        h = lch[2],
+        c1 = lch[1] * premulScale,
+        c2 = lch[0] * premulScale,
+        a = a,
+        powerless = powerless,
+    )
 }
 
 private fun hslToRgb(h: Float, s: Float, l: Float): FloatArray {
@@ -193,6 +236,82 @@ private fun hslToRgb(h: Float, s: Float, l: Float): FloatArray {
     }
     val m = l - c * 0.5f
     return floatArrayOf((r1 + m).coerceIn(0f, 1f), (g1 + m).coerceIn(0f, 1f), (b1 + m).coerceIn(0f, 1f))
+}
+
+private fun rgbToLch(r: Float, g: Float, b: Float): FloatArray {
+    val rl = srgbToLinear(r)
+    val gl = srgbToLinear(g)
+    val bl = srgbToLinear(b)
+
+    val x = 0.4124564f * rl + 0.3575761f * gl + 0.1804375f * bl
+    val y = 0.2126729f * rl + 0.7151522f * gl + 0.0721750f * bl
+    val z = 0.0193339f * rl + 0.1191920f * gl + 0.9503041f * bl
+    val lab = xyzToLab(x, y, z)
+    val aa = lab[1]
+    val bb = lab[2]
+    val c = kotlin.math.sqrt(aa * aa + bb * bb)
+    val h = normalizeHue((atan2(bb, aa) * 180.0 / PI).toFloat())
+    return floatArrayOf(lab[0], c, h)
+}
+
+private fun lchToRgb(h: Float, c: Float, l: Float): FloatArray {
+    val rad = h * (PI / 180.0f).toFloat()
+    val a = c * cos(rad)
+    val b = c * sin(rad)
+    val xyz = labToXyz(l, a, b)
+    val rl = 3.2404542f * xyz[0] - 1.5371385f * xyz[1] - 0.4985314f * xyz[2]
+    val gl = -0.9692660f * xyz[0] + 1.8760108f * xyz[1] + 0.0415560f * xyz[2]
+    val bl = 0.0556434f * xyz[0] - 0.2040259f * xyz[1] + 1.0572252f * xyz[2]
+    return floatArrayOf(
+        linearToSrgb(rl).coerceIn(0f, 1f),
+        linearToSrgb(gl).coerceIn(0f, 1f),
+        linearToSrgb(bl).coerceIn(0f, 1f),
+    )
+}
+
+private fun xyzToLab(x: Float, y: Float, z: Float): FloatArray {
+    val xn = 0.95047f
+    val yn = 1.00000f
+    val zn = 1.08883f
+    val fx = labF(x / xn)
+    val fy = labF(y / yn)
+    val fz = labF(z / zn)
+    val l = 116f * fy - 16f
+    val a = 500f * (fx - fy)
+    val b = 200f * (fy - fz)
+    return floatArrayOf(l, a, b)
+}
+
+private fun labToXyz(l: Float, a: Float, b: Float): FloatArray {
+    val xn = 0.95047f
+    val yn = 1.00000f
+    val zn = 1.08883f
+    val fy = (l + 16f) / 116f
+    val fx = fy + (a / 500f)
+    val fz = fy - (b / 200f)
+    val x = xn * labFInv(fx)
+    val y = yn * labFInv(fy)
+    val z = zn * labFInv(fz)
+    return floatArrayOf(x, y, z)
+}
+
+private fun labF(t: Float): Float {
+    val delta = 6f / 29f
+    val delta3 = delta * delta * delta
+    return if (t > delta3) t.pow(1f / 3f) else (t / (3f * delta * delta)) + (4f / 29f)
+}
+
+private fun labFInv(t: Float): Float {
+    val delta = 6f / 29f
+    return if (t > delta) t * t * t else 3f * delta * delta * (t - 4f / 29f)
+}
+
+private fun srgbToLinear(c: Float): Float =
+    if (c <= 0.04045f) c / 12.92f else ((c + 0.055f) / 1.055f).pow(2.4f)
+
+private fun linearToSrgb(c: Float): Float {
+    val clamped = c.coerceIn(0f, 1f)
+    return if (clamped <= 0.0031308f) 12.92f * clamped else 1.055f * clamped.pow(1f / 2.4f) - 0.055f
 }
 
 private fun hueDelta(

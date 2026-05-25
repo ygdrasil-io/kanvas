@@ -16,7 +16,6 @@ import org.skia.testing.TestUtils
  *  - `gradients_color_space`          — 14 color spaces (sRGB…Rec2020)
  *  - `gradients_color_space_tilemode` — OKLCH × 4 tile modes
  *  - `gradients_color_space_many_stops` — OKLCH + 200 stops (GPU texture fallback)
- *  - `gradients_powerless_hue_LCH`   — powerless-hue in LCH
  *  - `gradients_powerless_hue_OKLCH` — powerless-hue in OKLCH
  *  - `gradients_powerless_hue_HWB`   — powerless-hue in HWB
  *
@@ -24,7 +23,7 @@ import org.skia.testing.TestUtils
  * will throw `NotImplementedError` if accidentally called, ensuring no
  * silent empty-canvas passes occur.
  */
-@Disabled("STUB.GRADIENT_INTERPOLATION: perceptual/powerless hue GMs are not complete")
+@Disabled("STUB.GRADIENT_INTERPOLATION: perceptual/powerless hue GMs are not complete (except LCH/HSL)")
 class GradientsInterpolationStubsTest {
 
     @Test
@@ -40,11 +39,6 @@ class GradientsInterpolationStubsTest {
     @Test
     fun `gradients_color_space_many_stops GM stub`() {
         GradientsColorSpaceManyStopsGM()
-    }
-
-    @Test
-    fun `gradients_powerless_hue_LCH GM stub`() {
-        GradientsPowerlessHueLchGM()
     }
 
     @Test
@@ -81,6 +75,33 @@ class GradientsPowerlessHueHslTest {
         assertTrue(
             comparison.similarity >= 60.0,
             "GradientsPowerlessHueHslGM similarity ${"%.2f".format(comparison.similarity)}% < 60.0% floor",
+        )
+    }
+}
+
+class GradientsPowerlessHueLchTest {
+
+    @Test
+    fun `GradientsPowerlessHueLchGM matches reference within tolerance`() {
+        val gm = GradientsPowerlessHueLchGM()
+        val rendered = TestUtils.runGmTest(gm)
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "Missing reference image ${gm.name()}.png")
+
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 2)
+        TestReport.recordDetailed("GradientsPowerlessHueLchGM", comparison)
+        if (comparison.similarity < 80.0) {
+            TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
+        }
+
+        val accepted = SimilarityTracker.updateScore(
+            "GradientsPowerlessHueLchGM",
+            comparison.similarity,
+        )
+        assertTrue(accepted, "GradientsPowerlessHueLchGM regressed below ratchet")
+        assertTrue(
+            comparison.similarity >= 60.0,
+            "GradientsPowerlessHueLchGM similarity ${"%.2f".format(comparison.similarity)}% < 60.0% floor",
         )
     }
 }

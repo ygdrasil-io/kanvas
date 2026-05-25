@@ -32,15 +32,15 @@ import org.skia.tools.ToolUtils
  * bearing color space. Also tests hue propagation with kShorter / kIncreasing
  * / kDecreasing / kLonger hue methods on black-white sequences.
  *
- * **Implementation gap** : HSL is implemented as a bounded sampler slice.
- * LCH, OKLCH, and HWB still need their own perceptual conversion pipelines.
+ * **Implementation gap** : LCH and HSL are implemented as bounded sampler
+ * slices. OKLCH and HWB still need their own perceptual conversion pipelines.
  */
 
 public class GradientsPowerlessHueLchGM : GM() {
     override fun getName(): String = "gradients_powerless_hue_LCH"
     override fun getISize(): SkISize = SkISize.Make(415, 330)
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.GRADIENT_INTERPOLATION: LCH powerless-hue interpolation not implemented")
+        drawPowerlessHueGradients(canvas, SkGradient.Interpolation.ColorSpace.kLCH)
     }
 }
 
