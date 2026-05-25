@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.math.SkColorChannel
 import org.graphiks.math.SkISize
 
 /**
@@ -232,5 +233,59 @@ class SkYUVAInfoTest {
         assertEquals(2, n)
         assertEquals(SkISize.Make(16, 16), out[0])
         assertEquals(SkISize.Make(8, 8), out[1])
+    }
+
+    @Test
+    fun `toYUVALocations maps Y_UV layout with alpha only plane`() {
+        val info = SkYUVAInfo(
+            dimensions = SkISize.Make(16, 16),
+            planeConfig = SkYUVAInfo.PlaneConfig.kY_UV_A,
+            subsampling = SkYUVAInfo.Subsampling.k420,
+        )
+        val locations = info.toYUVALocations(
+            intArrayOf(
+                SkColorTypeChannelFlags(SkColorType.kGray_8),
+                SkColorTypeChannelFlags(SkColorType.kR8G8_unorm),
+                SkColorTypeChannelFlags(SkColorType.kAlpha_8),
+            ),
+        )
+        assertEquals(SkYUVAInfo.YUVALocation(0, SkColorChannel.kR), locations[0]) // Y
+        assertEquals(SkYUVAInfo.YUVALocation(1, SkColorChannel.kR), locations[1]) // U
+        assertEquals(SkYUVAInfo.YUVALocation(1, SkColorChannel.kG), locations[2]) // V
+        assertEquals(SkYUVAInfo.YUVALocation(2, SkColorChannel.kA), locations[3]) // A
+    }
+
+    @Test
+    fun `toYUVALocations maps interleaved UYVA from RGBA plane`() {
+        val info = SkYUVAInfo(
+            dimensions = SkISize.Make(8, 8),
+            planeConfig = SkYUVAInfo.PlaneConfig.kUYVA,
+            subsampling = SkYUVAInfo.Subsampling.k444,
+        )
+        val locations = info.toYUVALocations(
+            intArrayOf(SkColorTypeChannelFlags(SkColorType.kRGBA_8888)),
+        )
+        assertEquals(SkYUVAInfo.YUVALocation(0, SkColorChannel.kG), locations[0]) // Y
+        assertEquals(SkYUVAInfo.YUVALocation(0, SkColorChannel.kR), locations[1]) // U
+        assertEquals(SkYUVAInfo.YUVALocation(0, SkColorChannel.kB), locations[2]) // V
+        assertEquals(SkYUVAInfo.YUVALocation(0, SkColorChannel.kA), locations[3]) // A
+    }
+
+    @Test
+    fun `toYUVALocations returns invalid locations when channel flags are incompatible`() {
+        val info = SkYUVAInfo(
+            dimensions = SkISize.Make(4, 4),
+            planeConfig = SkYUVAInfo.PlaneConfig.kY_UV,
+            subsampling = SkYUVAInfo.Subsampling.k420,
+        )
+        val locations = info.toYUVALocations(
+            intArrayOf(
+                SkColorTypeChannelFlags(SkColorType.kGray_8),
+                SkColorTypeChannelFlags(SkColorType.kR8_unorm),
+            ),
+        )
+        for (loc in locations) {
+            assertEquals(-1, loc.fPlane)
+        }
     }
 }
