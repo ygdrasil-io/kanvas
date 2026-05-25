@@ -72,6 +72,8 @@ bucket_for() {
         printf 'helper\n'
     elif [ "$status" = "PORTED" ]; then
         printf 'ported\n'
+    elif [[ "$cpp" =~ ^(hello_bazel_world)$ ]]; then
+        printf 'build-example\n'
     elif [[ "$cpp" =~ ^(mac_aa_explorer)$ ]]; then
         printf 'platform-gated\n'
     elif [[ "$cpp" =~ ^(bitmaprect|blurs|drawbitmaprect|drawminibitmaprect|imageblur2|verylargebitmap)$ ]]; then
