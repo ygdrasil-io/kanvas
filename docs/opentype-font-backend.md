@@ -168,16 +168,27 @@ it uses the font path pipeline and does not implicitly run a complex shaper.
 Portable complex shaping must be requested through explicit `SkShaper` or
 text-layout entry points so fallback behavior stays predictable and measurable.
 
-`GSUB` substitutions, including standard ligatures, are tracked by #976 because
-they need cluster mapping and a clear policy for enabled features. Bidi, script
-itemization, mark positioning, cursive attachment, Indic/Arabic shaping,
-HarfBuzz parity, and multi-font fallback belong outside the OpenType typeface
-reader and should be tracked as dedicated `SkShaper` or text-layout work.
+`GSUB` substitutions, including standard ligatures, are tracked by #976/#1048
+because they need cluster mapping and a clear policy for enabled features.
+Bidi, script itemization, mark positioning, cursive attachment, Indic/Arabic
+shaping, HarfBuzz parity, and multi-font fallback belong outside the OpenType
+typeface reader and should be tracked as dedicated `SkShaper` or text-layout
+work.
 
-Current #976 slice adds explicit portable feature toggles on `SkShaper` and a
-minimal synthetic ligature path (`f` + `i` -> `fi`), gated behind
-`Features(standardLigatures = true)`. Defaults remain conservative: no implicit
-ligature substitution unless the caller opts in.
+The current `SkShaper` slice provides an explicit portable shaping entry point
+with Unicode bidi runs, script itemization, stable original-text clusters,
+text-local glyph positions, missing-glyph diagnostics, and opt-in multi-font
+fallback run splitting. It also adds conservative feature controls for standard
+ligatures, Arabic joining presentation forms, Devanagari pre-base vowel
+reordering, script/language gating, and external mark/cursive positioning
+providers.
+
+Defaults remain conservative: no implicit ligature substitution, no implicit
+complex shaping through `SkCanvas.drawString`, and no silent approximation when
+mark/cursive positioning is requested without a provider. HarfBuzz-equivalent
+coverage, full GSUB/GPOS table interpretation, and broad Indic/Arabic shaping
+remain future depth work, but the portable API boundary and deterministic
+fixture surface are now in place.
 
 ## Bitmap And SVG Color Font Plan
 
