@@ -22,8 +22,8 @@ package org.skia.foundation
  *    best-effort when they cannot honour the request.
  *  - [palette] — selects a palette entry / palette overrides for COLR
  *    typefaces. The pure Kotlin OpenType backend supports this for COLRv0
- *    rendering; other backends may ignore it when they cannot honour color
- *    font palettes.
+ *    and the non-variable COLRv1 paint subset it renders; other backends
+ *    may ignore it when they cannot honour color font palettes.
  *
  * The pure Kotlin OpenType clone path applies parsed `fvar` coordinates
  * and ignores unknown or unsupported axes.
@@ -112,8 +112,9 @@ public class SkFontArguments {
      * Mirrors `SkFontArguments::Palette`.
      *
      * The pure Kotlin OpenType backend currently supports [index] and
-     * [overrides] for COLRv0 rendering. Override colors are packed
-     * [SkColor] ARGB values, matching the rest of the Kanvas color API.
+     * [overrides] for COLRv0 and the non-variable COLRv1 paint subset it
+     * renders. Override colors are packed [SkColor] ARGB values, matching
+     * the rest of the Kanvas color API.
      */
     public class Palette {
         /**

@@ -2757,9 +2757,6 @@ private data class OpenTypePaletteSelection(
         if (index < 0 || index >= palettes.size) return null
         val palette = palettes[index]
         if (overrides.isEmpty()) return palette
-        for (overrideIndex in overrides.keys) {
-            if (overrideIndex < 0 || overrideIndex >= palette.size) return null
-        }
         return palette.mapIndexed { entryIndex, color ->
             overrides[entryIndex] ?: color
         }
