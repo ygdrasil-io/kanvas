@@ -107,8 +107,12 @@ tasks.register("checkSupportedCodecsDoc") {
             "Lossy VP8 encode intentionally returns `null`",
             "Public encode APIs must return `null` or a documented stub behavior",
         )
+        val requiredMetadataMarkers = listOf(
+            "Netscape loop count metadata exposed through `SkCodec.getRepetitionCount()`",
+            "ANIM loop count exposed through `SkCodec.getRepetitionCount()`",
+        )
 
-        val missing = (requiredSections + requiredRows + requiredEncodeMarkers)
+        val missing = (requiredSections + requiredRows + requiredEncodeMarkers + requiredMetadataMarkers)
             .filterNot { marker -> text.contains(marker) }
         val requiredEncodeTestFiles = listOf(
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkPngEncoderTest.kt",
