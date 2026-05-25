@@ -332,9 +332,135 @@ public class CustomMeshUniformsGM : GM() {
 public class MeshUpdateGM : GM() {
     override fun getName(): String = "mesh_updates"
     override fun getISize(): SkISize = SkISize.Make(270, 490)
-    override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.MESH")
+
+    private lateinit var spec: SkMeshSpecification
+
+    override fun onOnceBeforeDraw() {
+        val result = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            ),
+            vertexStride = 8,
+            vs = "Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v) { return float4(1); }",
+        )
+        spec = result.specification ?: error("MeshUpdateGM spec creation failed: ${result.error}")
     }
+
+    override fun onDraw(canvas: SkCanvas?) {
+        val c = canvas ?: return
+        drawStrip(
+            canvas = c,
+            yOffset = 20f,
+            color = 0xFF0055FF.toInt(),
+            leftStart = 15f,
+            rightStart = 95f,
+            leftUpdated = 45f,
+            rightUpdated = 125f,
+            useIndexed = false,
+        )
+        drawStrip(
+            canvas = c,
+            yOffset = 170f,
+            color = 0xFFFF6A00.toInt(),
+            leftStart = 15f,
+            rightStart = 95f,
+            leftUpdated = 45f,
+            rightUpdated = 125f,
+            useIndexed = true,
+        )
+        drawStrip(
+            canvas = c,
+            yOffset = 320f,
+            color = 0xFF0A9F43.toInt(),
+            leftStart = 15f,
+            rightStart = 95f,
+            leftUpdated = 45f,
+            rightUpdated = 125f,
+            useIndexed = true,
+            indexSwap = true,
+        )
+    }
+
+    private fun drawStrip(
+        canvas: SkCanvas,
+        yOffset: Float,
+        color: Int,
+        leftStart: Float,
+        rightStart: Float,
+        leftUpdated: Float,
+        rightUpdated: Float,
+        useIndexed: Boolean,
+        indexSwap: Boolean = false,
+    ) {
+        val initialVertices = quadVertices(leftStart, yOffset, rightStart, yOffset + 110f)
+        val vertexBuffer = SkMeshes.MakeVertexBuffer(initialVertices, initialVertices.size)
+
+        val updateBytes = ByteBuffer.allocate(16)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .putFloat(leftUpdated)
+            .putFloat(yOffset)
+            .putFloat(rightUpdated)
+            .putFloat(yOffset)
+            .array()
+        check(vertexBuffer.update(updateBytes, offset = 0, size = updateBytes.size))
+
+        val mesh = if (useIndexed) {
+            val initialIndices = shortBytes(shortArrayOf(0, 1, 2, 1, 3, 2))
+            val indexBuffer = SkMeshes.MakeIndexBuffer(initialIndices, initialIndices.size)
+            if (indexSwap) {
+                val swapped = shortBytes(shortArrayOf(0, 2, 1, 1, 2, 3))
+                check(indexBuffer.update(swapped, offset = 0, size = swapped.size))
+            }
+            SkMesh.MakeIndexed(
+                specification = spec,
+                mode = SkMesh.Mode.kTriangles,
+                vertexBuffer = vertexBuffer,
+                vertexCount = 4,
+                vertexOffset = 0,
+                indexBuffer = indexBuffer,
+                indexCount = 6,
+                indexOffset = 0,
+                bounds = SkRect.MakeLTRB(leftUpdated, yOffset, rightUpdated, yOffset + 110f),
+            ).mesh
+        } else {
+            SkMesh.Make(
+                specification = spec,
+                mode = SkMesh.Mode.kTriangleStrip,
+                vertexBuffer = vertexBuffer,
+                vertexCount = 4,
+                vertexOffset = 0,
+                bounds = SkRect.MakeLTRB(leftUpdated, yOffset, rightUpdated, yOffset + 110f),
+            ).mesh
+        }
+
+        canvas.drawMesh(mesh, SkPaint(color))
+    }
+
+    private fun quadVertices(left: Float, top: Float, right: Float, bottom: Float): ByteArray =
+        ByteBuffer.allocate(32)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .apply {
+                putFloat(left)
+                putFloat(top)
+                putFloat(right)
+                putFloat(top)
+                putFloat(left)
+                putFloat(bottom)
+                putFloat(right)
+                putFloat(bottom)
+            }
+            .array()
+
+    private fun shortBytes(values: ShortArray): ByteArray =
+        ByteBuffer.allocate(values.size * 2)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .apply { values.forEach { putShort(it) } }
+            .array()
 }
 
 /**
