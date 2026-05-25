@@ -64,7 +64,8 @@ Inputs:
 - Upstream Skia tree: `/Users/chaos/workspace/kanvas-forge/skia-main/`
 - Kotlin source tree: this repository
 - Existing symbol map: `.upstream/source/map/`
-- GM references: legacy `original-888/` resources
+- GM references: `skia-integration-tests/src/test/resources/original-888/`
+  resources
 
 Outputs:
 

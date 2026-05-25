@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
  *    `SkCanvas::writePixels(SkBitmap, …)` gated on
  *    `#if defined(SK_GRAPHITE)`, loading
  *    `images/color_wheel.gif` (which isn't shipped under
- *    `kanvas-legacy/src/test/resources/images/` anyway — only the
+ *    `skia-integration-tests/src/test/resources/images/` anyway — only the
  *    `.png` and `.jpg` siblings). Raster CPU upstream also produces a
  *    black cell for this tile.
  *  - **`STUB.GRAPHITE.gaussianCF`** : slot `[4]` of the upper-right

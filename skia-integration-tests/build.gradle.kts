@@ -20,14 +20,6 @@ dependencies {
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.16.1")
 }
 
-sourceSets {
-    test {
-        // GMs and DM harness consume font + reference PNG fixtures from
-        // the legacy kanvas tree. Mirrors the :cpu-raster setup.
-        resources.srcDir("../kanvas-legacy/src/test/resources")
-    }
-}
-
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }

@@ -261,7 +261,7 @@ class SkJpegKotlinCodecTest {
         )
 
         for (case in cases) {
-            val codec = SkJpegKotlinCodec.Decoder.make(readLegacyJpeg(case.name))!!
+            val codec = SkJpegKotlinCodec.Decoder.make(readSkiaJpeg(case.name))!!
             val (bitmap, result) = codec.getImage()
             assertEquals(SkCodec.Result.kSuccess, result)
             val checked = bitmap!!
@@ -275,7 +275,7 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes real world progressive grayscale fixture`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(readLegacyJpeg("grayscale.jpg"))!!
+        val codec = SkJpegKotlinCodec.Decoder.make(readSkiaJpeg("grayscale.jpg"))!!
         val (bitmap, result) = codec.getImage()
         assertEquals(SkCodec.Result.kSuccess, result)
         val checked = bitmap!!
@@ -1321,12 +1321,12 @@ class SkJpegKotlinCodecTest {
         assertTrue(kotlin.math.abs(expected - actual) <= tolerance, "$label expected=$expected actual=$actual")
     }
 
-    private fun readLegacyJpeg(name: String): ByteArray {
+    private fun readSkiaJpeg(name: String): ByteArray {
         val candidates = listOf(
-            Path.of("kanvas-legacy/src/test/resources/images/$name"),
-            Path.of("../kanvas-legacy/src/test/resources/images/$name"),
+            Path.of("skia-integration-tests/src/test/resources/images/$name"),
+            Path.of("../skia-integration-tests/src/test/resources/images/$name"),
         )
-        val path = candidates.firstOrNull { Files.exists(it) } ?: error("missing legacy JPEG fixture: $name")
+        val path = candidates.firstOrNull { Files.exists(it) } ?: error("missing Skia JPEG fixture: $name")
         return Files.readAllBytes(path)
     }
 
