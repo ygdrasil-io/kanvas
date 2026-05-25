@@ -11,13 +11,10 @@ import org.skia.testing.TestUtils
  * Tests for the R-final.8 [AnimatedImageOrientationGM] family
  * (`flight_animated_image` + `stoplight_animated_image`).
  *
- * Both upstream resources (`images/flightAnim.gif`,
- * `images/stoplight_h.webp`) are not yet vendored in
- * `kanvas/src/test/resources/images/`, so the GMs fall back to a
- * synthetic checker matching the upstream PNG dimensions. The
- * [org.skia.testing.SimilarityTracker] ratchets monotonically once
- * the resources arrive — the test asserts the score only weakly
- * (`>= 0`) until then.
+ * Upstream resources (`images/flightAnim.gif`,
+ * `images/stoplight_h.webp`) are vendored. If decode is unavailable
+ * for a fixture (notably animated-WebP feature gaps), the GM still
+ * uses a deterministic checker fallback at the upstream PNG dimensions.
  *
  * The triptych-save side-effect path (which builds a 3-up rendered /
  * reference / diff image, used when similarity < 30 %) is gated by

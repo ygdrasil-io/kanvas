@@ -41,13 +41,10 @@ import kotlin.math.floor
  *  - `flight_animated_image` (`flightAnim.gif`)
  *  - `stoplight_animated_image` (`stoplight_h.webp`)
  *
- * kanvas-skia ships neither resource (no animated-WebP back-end yet,
- * and `flightAnim.gif` isn't in `src/test/resources/images/`). The GM
- * silently substitutes an unavailable resource with a synthetic 32×32
- * checker so the GM still surfaces a deterministic image — the
- * pixel-fidelity ratchet stays low until the upstream resources are
- * vendored, but the API surface (SkAnimatedImage construction, frame
- * iteration, picture playback) is exercised end-to-end.
+ * When a source cannot be decoded (missing fixture or unsupported
+ * animated-WebP feature set), the GM substitutes a synthetic checker so
+ * the test remains deterministic while still exercising the
+ * [SkAnimatedImage] call chain end-to-end.
  */
 public open class AnimatedImageOrientationGM(
     private val resourcePath: String,
@@ -246,9 +243,7 @@ public open class AnimatedImageOrientationGM(
 
 /**
  * `flight_animated_image` GM — the `flightAnim.gif` source variant.
- * Resource is vendored under `images/flightAnim.gif` ; if absent, the
- * GM silently falls back to the synthetic checker (see
- * [AnimatedImageOrientationGM]).
+ * Resource path: `images/flightAnim.gif`.
  */
 public class FlightAnimatedImageGM : AnimatedImageOrientationGM(
     resourcePath = "images/flightAnim.gif",
@@ -264,8 +259,8 @@ public class FlightAnimatedImageGM : AnimatedImageOrientationGM(
  * `stoplight_animated_image` GM — the `stoplight_h.webp` source variant
  * (animated WebP with non-trivial EXIF orientation). Animated WebP is
  * not yet supported by the registered WebP codec and the
- * vendored resource (`images/stoplight_h.webp`) is missing, so this
- * GM falls back to the synthetic checker until both arrive.
+ * this GM falls back to the synthetic checker when decode is not
+ * supported by the current WebP animated path.
  */
 public class StoplightAnimatedImageGM : AnimatedImageOrientationGM(
     resourcePath = "images/stoplight_h.webp",
