@@ -616,6 +616,26 @@ class CodecAllKotlinRealImageTest {
                 path = "/codec-real-images/wbmp/invalid_truncated_raster.wbmp",
                 reason = "declared bitmap raster is incomplete",
             ),
+            NegativeFixture(
+                name = "webp truncated RIFF header",
+                path = "/codec-real-images/webp/invalid_truncated_riff.webp",
+                reason = "RIFF header is incomplete",
+            ),
+            NegativeFixture(
+                name = "webp truncated VP8X chunk",
+                path = "/codec-real-images/webp/invalid_truncated_vp8x.webp",
+                reason = "VP8X chunk declares bytes past the file end",
+            ),
+            NegativeFixture(
+                name = "webp truncated VP8L chunk",
+                path = "/codec-real-images/webp/invalid_truncated_vp8l.webp",
+                reason = "VP8L chunk declares bytes past the file end",
+            ),
+            NegativeFixture(
+                name = "webp truncated VP8 chunk",
+                path = "/codec-real-images/webp/invalid_truncated_vp8.webp",
+                reason = "VP8 chunk declares bytes past the file end",
+            ),
         )
 
         private fun jpegOrientationFixtures(): List<RealImageFixture> {
