@@ -8,8 +8,15 @@ import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkImages
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkSamplingOptions
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
+import org.graphiks.math.SkRect
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Port of upstream Skia
@@ -36,13 +43,8 @@ import org.graphiks.math.SkISize
  * [SkSurface.asyncRescaleAndReadPixelsYUVA420] (YUV / YUVA).
  *
  * This representative port covers the `async_rescale_and_read_rose`
- * variant (surface, RGBA, 3×410×410 grid). The body wires every cell of
- * the 3×2 grid through the async API ; each call resolves to
- * `TODO("STUB.ASYNC_RESCALE_READ")` at runtime so the matching
- * [AsyncRescaleAndReadGridTest] is `@Disabled` until the readback
- * pipeline lands. The YUV / YUVA variants are flag-planting only —
- * adding them as siblings is a one-class-per-row exercise once the
- * RGBA path drops the `TODO()` and produces actual pixels.
+ * variant (surface, RGBA, 3×410×410 grid). The YUV / YUVA variants stay
+ * dependency-gated and are not scheduled from this RGBA GM.
  */
 public class AsyncRescaleAndReadGridGM : GM() {
     override fun getName(): String = "async_rescale_and_read_rose"
@@ -53,65 +55,66 @@ public class AsyncRescaleAndReadGridGM : GM() {
     override fun onDraw(canvas: SkCanvas?) {
         val c = canvas ?: return
 
-        // Bind a scratch raster surface around the GM's canvas-owned
-        // bitmap so we can exercise the async readback API. In the
-        // upstream test the surface is the one the canvas already draws
-        // into (saveLayer pop snapshot) — for our flag-planting stub
-        // anything that satisfies the call-site grep is enough.
         val surface = SkSurface.MakeRaster(
             SkImageInfo.Make(
-                3 * 410, 2 * 410,
+                410, 410,
                 SkColorType.kRGBA_8888,
                 SkAlphaType.kUnpremul,
                 SkColorSpace.MakeSRGB(),
             ),
         )
+        drawSource(surface.canvas, 410f, 410f)
 
         // 3 × 2 grid : columns ∈ {kNearest, kRepeatedLinear, kRepeatedCubic},
-        // rows ∈ {kSrc, kLinear}. Each cell schedules an async readback ;
-        // the API is `TODO("STUB.ASYNC_RESCALE_READ")` so the very first
-        // call throws and the GM short-circuits — visible in the
-        // @Disabled test's `STUB.ASYNC_RESCALE_READ` reason.
-        for (gamma in listOf(RescaleGamma.kSrc, RescaleGamma.kLinear)) {
-            for (mode in listOf(
-                RescaleMode.kNearest,
-                RescaleMode.kRepeatedLinear,
-                RescaleMode.kRepeatedCubic,
-            )) {
+        // rows ∈ {kSrc, kLinear}. The CPU fallback invokes callbacks
+        // synchronously, so each cell is drawn during the loop.
+        val modes = listOf(
+            RescaleMode.kNearest,
+            RescaleMode.kRepeatedLinear,
+            RescaleMode.kRepeatedCubic,
+        )
+        for ((row, gamma) in listOf(RescaleGamma.kSrc, RescaleGamma.kLinear).withIndex()) {
+            for ((col, mode) in modes.withIndex()) {
+                val info = SkImageInfo.Make(
+                    410, 410,
+                    SkColorType.kRGBA_8888,
+                    SkAlphaType.kUnpremul,
+                    SkColorSpace.MakeSRGB(),
+                )
                 surface.asyncRescaleAndReadPixels(
-                    info = SkImageInfo.Make(
-                        410, 410,
-                        SkColorType.kRGBA_8888,
-                        SkAlphaType.kUnpremul,
-                        SkColorSpace.MakeSRGB(),
-                    ),
+                    info = info,
                     srcRect = SkIRect.MakeLTRB(0, 0, 410, 410),
                     rescaleGamma = gamma,
                     rescaleMode = mode,
-                ) { _ -> /* not reached — TODO() */ }
+                ) { result ->
+                    drawAsyncReadResult(c, result, info, x = col * 410f, y = row * 410f)
+                }
             }
         }
-
-        // Touch the YUV / YUVA paths so a future implementer's
-        // `grep TODO()` sees them as live call sites too.
-        surface.asyncRescaleAndReadPixelsYUV420(
-            yuvColorSpace = SkSurface.SkYUVColorSpace.kJPEG_Full_YUV,
-            dstColorSpace = SkColorSpace.MakeSRGB(),
-            srcRect = SkIRect.MakeLTRB(0, 0, 410, 410),
-            dstSize = SkISize.Make(410, 410),
-        ) { _ -> }
-        surface.asyncRescaleAndReadPixelsYUVA420(
-            yuvColorSpace = SkSurface.SkYUVColorSpace.kJPEG_Full_YUV,
-            dstColorSpace = SkColorSpace.MakeSRGB(),
-            srcRect = SkIRect.MakeLTRB(0, 0, 410, 410),
-            dstSize = SkISize.Make(410, 410),
-        ) { _ -> }
-
-        // Suppress unused-receiver warnings on `c` — the upstream paints
-        // a checkerboard background while waiting for the readback. We
-        // skip it ; the @Disabled test asserts on the API stub, not the
-        // composition.
-        @Suppress("UNUSED_PARAMETER") fun _ignore(canvas: SkCanvas) {}
-        _ignore(c)
     }
+
+    private fun drawSource(c: SkCanvas, w: Float, h: Float) {
+        c.drawRect(SkRect.MakeWH(w, h), SkPaint(0xFFFFFFFF.toInt()))
+        c.drawRect(SkRect.MakeXYWH(0f, 0f, w / 2f, h / 2f), SkPaint(0xFFFF5555.toInt()))
+        c.drawRect(SkRect.MakeXYWH(w / 2f, 0f, w / 2f, h / 2f), SkPaint(0xFF55FF55.toInt()))
+        c.drawRect(SkRect.MakeXYWH(0f, h / 2f, w / 2f, h / 2f), SkPaint(0xFF5555FF.toInt()))
+        c.drawRect(SkRect.MakeXYWH(w / 2f, h / 2f, w / 2f, h / 2f), SkPaint(0xFFFFFF55.toInt()))
+    }
+}
+
+internal fun drawAsyncReadResult(
+    canvas: SkCanvas,
+    result: SkSurface.AsyncReadResult?,
+    info: SkImageInfo,
+    x: Float,
+    y: Float,
+) {
+    val actual = result ?: return
+    val pixmap = SkPixmap(
+        info,
+        ByteBuffer.wrap(actual.data(0)).order(ByteOrder.LITTLE_ENDIAN),
+        actual.rowBytes(0),
+    )
+    val image = SkImages.RasterFromPixmapCopy(pixmap) ?: return
+    canvas.drawImage(image, x, y, SkSamplingOptions.Default)
 }
