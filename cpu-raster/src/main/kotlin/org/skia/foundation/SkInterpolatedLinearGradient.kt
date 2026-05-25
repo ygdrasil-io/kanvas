@@ -40,9 +40,11 @@ internal class SkInterpolatedLinearGradient(
         }
         require(
             interpolation.colorSpace == SkGradient.Interpolation.ColorSpace.kHSL ||
-                interpolation.colorSpace == SkGradient.Interpolation.ColorSpace.kLCH,
+                interpolation.colorSpace == SkGradient.Interpolation.ColorSpace.kLCH ||
+                interpolation.colorSpace == SkGradient.Interpolation.ColorSpace.kOKLCH ||
+                interpolation.colorSpace == SkGradient.Interpolation.ColorSpace.kHWB,
         ) {
-            "SkInterpolatedLinearGradient only supports HSL and LCH interpolation"
+            "SkInterpolatedLinearGradient only supports HSL/LCH/OKLCH/HWB interpolation"
         }
     }
 
@@ -53,6 +55,8 @@ internal class SkInterpolatedLinearGradient(
             stops[i] = when (interpolation.colorSpace) {
                 SkGradient.Interpolation.ColorSpace.kHSL -> colorToHslStop(srcColors[i], interpolation.inPremul)
                 SkGradient.Interpolation.ColorSpace.kLCH -> colorToLchStop(srcColors[i], interpolation.inPremul)
+                SkGradient.Interpolation.ColorSpace.kOKLCH -> colorToOklchStop(srcColors[i], interpolation.inPremul)
+                SkGradient.Interpolation.ColorSpace.kHWB -> colorToHwbStop(srcColors[i], interpolation.inPremul)
                 else -> error("unsupported interpolation space: ${interpolation.colorSpace}")
             }
         }
@@ -163,6 +167,16 @@ internal class SkInterpolatedLinearGradient(
                 c1.coerceIn(0f, 150f),
                 c2.coerceIn(0f, 100f),
             )
+            SkGradient.Interpolation.ColorSpace.kOKLCH -> oklchToRgb(
+                stop.h,
+                c1.coerceIn(0f, 0.6f),
+                c2.coerceIn(0f, 1f),
+            )
+            SkGradient.Interpolation.ColorSpace.kHWB -> hwbToRgb(
+                stop.h,
+                c1.coerceIn(0f, 1f),
+                c2.coerceIn(0f, 1f),
+            )
             else -> error("unsupported interpolation space: ${interpolation.colorSpace}")
         }
         val rgba = floatArrayOf(rgb[0], rgb[1], rgb[2], a)
@@ -221,6 +235,40 @@ private fun colorToLchStop(c: SkColor, inPremul: SkGradient.Interpolation.InPrem
     )
 }
 
+private fun colorToOklchStop(c: SkColor, inPremul: SkGradient.Interpolation.InPremul): HueStop {
+    val a = SkColorGetA(c) / 255f
+    val r = SkColorGetR(c) / 255f
+    val g = SkColorGetG(c) / 255f
+    val b = SkColorGetB(c) / 255f
+    val oklch = rgbToOklch(r, g, b)
+    val powerless = oklch[1] <= 1e-5f
+    val premulScale = if (inPremul == SkGradient.Interpolation.InPremul.kYes) a else 1f
+    return HueStop(
+        h = oklch[2],
+        c1 = oklch[1] * premulScale,
+        c2 = oklch[0] * premulScale,
+        a = a,
+        powerless = powerless,
+    )
+}
+
+private fun colorToHwbStop(c: SkColor, inPremul: SkGradient.Interpolation.InPremul): HueStop {
+    val a = SkColorGetA(c) / 255f
+    val r = SkColorGetR(c) / 255f
+    val g = SkColorGetG(c) / 255f
+    val b = SkColorGetB(c) / 255f
+    val hwb = rgbToHwb(r, g, b)
+    val powerless = hwb[1] + hwb[2] >= 1f - 1e-6f
+    val premulScale = if (inPremul == SkGradient.Interpolation.InPremul.kYes) a else 1f
+    return HueStop(
+        h = hwb[0],
+        c1 = hwb[1] * premulScale,
+        c2 = hwb[2] * premulScale,
+        a = a,
+        powerless = powerless,
+    )
+}
+
 private fun hslToRgb(h: Float, s: Float, l: Float): FloatArray {
     if (s == 0f) return floatArrayOf(l, l, l)
     val c = (1f - abs(2f * l - 1f)) * s
@@ -266,6 +314,69 @@ private fun lchToRgb(h: Float, c: Float, l: Float): FloatArray {
         linearToSrgb(rl).coerceIn(0f, 1f),
         linearToSrgb(gl).coerceIn(0f, 1f),
         linearToSrgb(bl).coerceIn(0f, 1f),
+    )
+}
+
+private fun rgbToOklch(r: Float, g: Float, b: Float): FloatArray {
+    val rl = srgbToLinear(r)
+    val gl = srgbToLinear(g)
+    val bl = srgbToLinear(b)
+    val l = 0.41222146f * rl + 0.53633255f * gl + 0.051445995f * bl
+    val m = 0.2119035f * rl + 0.6806995f * gl + 0.10739696f * bl
+    val s = 0.08830246f * rl + 0.28171885f * gl + 0.6299787f * bl
+    val l_ = l.pow(1f / 3f)
+    val m_ = m.pow(1f / 3f)
+    val s_ = s.pow(1f / 3f)
+    val okL = 0.21045426f * l_ + 0.7936178f * m_ - 0.004072047f * s_
+    val okA = 1.9779985f * l_ - 2.4285922f * m_ + 0.4505937f * s_
+    val okB = 0.025904037f * l_ + 0.78277177f * m_ - 0.80867577f * s_
+    val c = kotlin.math.sqrt(okA * okA + okB * okB)
+    val h = normalizeHue((atan2(okB, okA) * 180.0 / PI).toFloat())
+    return floatArrayOf(okL, c, h)
+}
+
+private fun oklchToRgb(h: Float, c: Float, l: Float): FloatArray {
+    val rad = h * (PI / 180.0f).toFloat()
+    val okA = c * cos(rad)
+    val okB = c * sin(rad)
+    val l_ = l + 0.39633778f * okA + 0.21580376f * okB
+    val m_ = l - 0.105561346f * okA - 0.06385417f * okB
+    val s_ = l - 0.08948418f * okA - 1.2914855f * okB
+    val l3 = l_ * l_ * l_
+    val m3 = m_ * m_ * m_
+    val s3 = s_ * s_ * s_
+    val rl = 4.0767417f * l3 - 3.3077116f * m3 + 0.23096994f * s3
+    val gl = -1.268438f * l3 + 2.6097574f * m3 - 0.34131938f * s3
+    val bl = -0.0041960863f * l3 - 0.7034186f * m3 + 1.7076147f * s3
+    return floatArrayOf(
+        linearToSrgb(rl).coerceIn(0f, 1f),
+        linearToSrgb(gl).coerceIn(0f, 1f),
+        linearToSrgb(bl).coerceIn(0f, 1f),
+    )
+}
+
+private fun rgbToHwb(r: Float, g: Float, b: Float): FloatArray {
+    val hsl = colorToHslStop(
+        ((255 shl 24) or ((r * 255f + 0.5f).toInt() shl 16) or ((g * 255f + 0.5f).toInt() shl 8) or (b * 255f + 0.5f).toInt()),
+        SkGradient.Interpolation.InPremul.kNo,
+    )
+    val w = min(r, min(g, b))
+    val bl = 1f - max(r, max(g, b))
+    return floatArrayOf(hsl.h, w, bl)
+}
+
+private fun hwbToRgb(h: Float, w: Float, bl: Float): FloatArray {
+    val sum = w + bl
+    if (sum >= 1f) {
+        val g = if (sum == 0f) 0f else w / sum
+        return floatArrayOf(g, g, g)
+    }
+    val rgb = hslToRgb(h, 1f, 0.5f)
+    val factor = 1f - w - bl
+    return floatArrayOf(
+        (rgb[0] * factor + w).coerceIn(0f, 1f),
+        (rgb[1] * factor + w).coerceIn(0f, 1f),
+        (rgb[2] * factor + w).coerceIn(0f, 1f),
     )
 }
 
