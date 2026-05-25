@@ -176,4 +176,52 @@ class SkShaperTest {
         // 0 metrics so we only assert the X extent here.
         assertTrue(b.width() > 0f) { "bounds=$b expected non-empty width" }
     }
+
+    @Test
+    fun `MakePortable matches primitive shaping output`() {
+        val primitive = CapturingHandler()
+        val portable = CapturingHandler()
+        val font = makeFont()
+        val text = "aéB"
+
+        SkShaper.MakePrimitive().shape(text, font, leftToRight = true, width = 200f, runHandler = primitive)
+        SkShaper.MakePortable().shape(text, font, leftToRight = true, width = 200f, runHandler = portable)
+
+        assertNotNull(primitive.lastInfo)
+        assertNotNull(portable.lastInfo)
+        assertEquals(primitive.lastInfo!!.glyphCount, portable.lastInfo!!.glyphCount)
+        assertEquals(primitive.lastInfo!!.bidiLevel, portable.lastInfo!!.bidiLevel)
+        assertEquals(primitive.lastInfo!!.advanceX, portable.lastInfo!!.advanceX)
+        assertEquals(primitive.lastInfo!!.advanceY, portable.lastInfo!!.advanceY)
+        assertEquals(primitive.lastInfo!!.utf8Range, portable.lastInfo!!.utf8Range)
+        assertNotNull(primitive.capturedBuffer)
+        assertNotNull(portable.capturedBuffer)
+        assertTrue(primitive.capturedBuffer!!.glyphs.contentEquals(portable.capturedBuffer!!.glyphs))
+        assertTrue(primitive.capturedBuffer!!.positions.contentEquals(portable.capturedBuffer!!.positions))
+        assertTrue(primitive.capturedBuffer!!.clusters.contentEquals(portable.capturedBuffer!!.clusters))
+    }
+
+    @Test
+    fun `MakeOpenType is an alias of portable factory behavior`() {
+        val openType = CapturingHandler()
+        val portable = CapturingHandler()
+        val font = makeFont()
+        val text = "ffi"
+
+        SkShaper.MakeOpenType().shape(text, font, leftToRight = true, width = 200f, runHandler = openType)
+        SkShaper.MakePortable().shape(text, font, leftToRight = true, width = 200f, runHandler = portable)
+
+        assertNotNull(openType.lastInfo)
+        assertNotNull(portable.lastInfo)
+        assertEquals(openType.lastInfo!!.glyphCount, portable.lastInfo!!.glyphCount)
+        assertEquals(openType.lastInfo!!.bidiLevel, portable.lastInfo!!.bidiLevel)
+        assertEquals(openType.lastInfo!!.advanceX, portable.lastInfo!!.advanceX)
+        assertEquals(openType.lastInfo!!.advanceY, portable.lastInfo!!.advanceY)
+        assertEquals(openType.lastInfo!!.utf8Range, portable.lastInfo!!.utf8Range)
+        assertNotNull(openType.capturedBuffer)
+        assertNotNull(portable.capturedBuffer)
+        assertTrue(openType.capturedBuffer!!.glyphs.contentEquals(portable.capturedBuffer!!.glyphs))
+        assertTrue(openType.capturedBuffer!!.positions.contentEquals(portable.capturedBuffer!!.positions))
+        assertTrue(openType.capturedBuffer!!.clusters.contentEquals(portable.capturedBuffer!!.clusters))
+    }
 }

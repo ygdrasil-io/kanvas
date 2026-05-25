@@ -69,8 +69,10 @@ files and planned fallback order events for troubleshooting.
 
 The old JVM/AWT shaper entry points, `SkShaper.MakeJvmAwtTextLayout()` and
 `SkShaper.MakeJavaTextLayout()`, have been removed from the font scope.
-`SkShaper.MakePrimitive()` is the only built-in shaper until a pure Kotlin
-complex shaper is introduced.
+The built-in portable shaping entry points are `SkShaper.MakePrimitive()`,
+`SkShaper.MakePortable()`, and `SkShaper.MakeOpenType()`. Today they resolve
+to the same minimal primitive shaping behavior until a pure Kotlin complex
+shaper is introduced.
 
 The older `org.skia.foundation.awt.AwtTypeface` and
 `org.skia.foundation.awt.LiberationFontMgr` font surfaces have also been

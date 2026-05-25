@@ -100,6 +100,20 @@ public abstract class SkShaper protected constructor() {
          */
         public fun MakePrimitive(): SkShaper = PrimitiveShaper()
 
+        /**
+         * Explicit portable shaping factory. Current implementation
+         * intentionally matches [MakePrimitive] until complex
+         * pure-Kotlin shaping slices land.
+         */
+        public fun MakePortable(): SkShaper = PrimitiveShaper()
+
+        /**
+         * OpenType-oriented alias for [MakePortable]. Keeping this
+         * explicit avoids coupling callers to the primitive fallback
+         * naming.
+         */
+        public fun MakeOpenType(): SkShaper = MakePortable()
+
     }
 }
 
