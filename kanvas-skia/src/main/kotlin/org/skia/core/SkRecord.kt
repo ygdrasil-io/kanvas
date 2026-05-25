@@ -9,6 +9,7 @@ import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkTextEncoding
+import org.skia.foundation.SkBlender
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
 import org.graphiks.math.SkScalar
@@ -127,6 +128,17 @@ public sealed class SkRecord {
         public val blob: org.skia.foundation.SkTextBlob,
         public val x: SkScalar,
         public val y: SkScalar,
+        public val paint: SkPaint,
+    ) : SkRecord()
+
+    /**
+     * `SkCanvas::drawMesh`. Carries a recording-time snapshot of the mesh
+     * buffers so later client-side `VertexBuffer.update()` /
+     * `IndexBuffer.update()` calls cannot mutate picture playback.
+     */
+    public class DrawMesh(
+        public val mesh: SkMesh,
+        public val blender: SkBlender?,
         public val paint: SkPaint,
     ) : SkRecord()
 

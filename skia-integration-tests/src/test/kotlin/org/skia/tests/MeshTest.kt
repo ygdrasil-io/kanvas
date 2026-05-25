@@ -1,12 +1,24 @@
 package org.skia.tests
 
 import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.graphiks.math.SkRect
+import org.skia.core.SkCanvas
+import org.skia.core.SkMesh
+import org.skia.core.SkMeshSpecification
+import org.skia.core.SkMeshes
+import org.skia.core.SkPictureRecorder
+import org.skia.core.SkRTreeFactory
+import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkPaint
 import org.skia.testing.SimilarityTracker
 import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Mesh GM coverage split by currently-supported CPU subset.
@@ -116,9 +128,135 @@ class MeshTest {
     }
 
     @Test
-    @Disabled("STUB.MESH.PICTURE_PLAYBACK: drawMesh picture recording/playback coverage is not implemented")
-    fun `PictureMeshGM placeholder`() {
-        TestUtils.runGmTest(PictureMeshGM())
+    fun `PictureMeshGM records and replays drawMesh through SkPicture`() {
+        val rendered = TestUtils.runGmTest(PictureMeshGM())
+        assertTrue(rendered.width > 0)
+        assertTrue(rendered.height > 0)
+        for (mode in 0 until 4) {
+            val x = 20 + mode * 50
+            val direct = rendered.getPixel(x, 20)
+            val picture = rendered.getPixel(x, 70)
+            assertTrue(direct != 0xFFFFFFFF.toInt(), "direct drawMesh mode $mode should render")
+            assertTrue(picture != 0xFFFFFFFF.toInt(), "picture playback drawMesh mode $mode should render")
+            assertEquals(direct, picture, "picture playback mode $mode should match direct drawMesh output")
+        }
+    }
+
+    @Test
+    fun `SkPicture drawMesh records a buffer snapshot`() {
+        val spec = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            ),
+            vertexStride = 8,
+            vs = "Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v) { return float4(1); }",
+        ).specification ?: error("mesh spec failed")
+        val vertexBuffer = SkMeshes.MakeVertexBuffer(quadBytes(10f, 10f, 40f, 40f), 32)
+        val mesh = SkMesh.Make(
+            specification = spec,
+            mode = SkMesh.Mode.kTriangleStrip,
+            vertexBuffer = vertexBuffer,
+            vertexCount = 4,
+            vertexOffset = 0,
+            bounds = SkRect.MakeLTRB(10f, 10f, 40f, 40f),
+        ).mesh
+
+        val recorder = SkPictureRecorder()
+        recorder.beginRecording(100f, 60f).drawMesh(mesh, SkPaint(0xFFFF0000.toInt()))
+        val picture = recorder.finishRecordingAsPicture()
+        assertTrue(vertexBuffer.update(quadBytes(60f, 10f, 90f, 40f)))
+
+        val bitmap = SkBitmap(100, 60)
+        val canvas = SkCanvas(bitmap)
+        canvas.clear(0xFFFFFFFF.toInt())
+        picture.playback(canvas)
+
+        assertTrue(bitmap.getPixel(20, 20) != 0xFFFFFFFF.toInt(), "recorded mesh should stay at original bounds")
+        assertTrue(bitmap.getPixel(70, 20) == 0xFFFFFFFF.toInt(), "post-record vertex updates must not affect playback")
+    }
+
+    @Test
+    fun `SkPicture drawMesh records an index buffer snapshot`() {
+        val spec = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            ),
+            vertexStride = 8,
+            vs = "Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v) { return float4(1); }",
+        ).specification ?: error("mesh spec failed")
+        val vertexBuffer = SkMeshes.MakeVertexBuffer(
+            quadBytes(10f, 10f, 40f, 40f) + quadBytes(60f, 10f, 90f, 40f),
+            64,
+        )
+        val indexBuffer = SkMeshes.MakeIndexBuffer(shortBytes(intArrayOf(0, 1, 2, 1, 3, 2)), 12)
+        val mesh = SkMesh.MakeIndexed(
+            specification = spec,
+            mode = SkMesh.Mode.kTriangles,
+            vertexBuffer = vertexBuffer,
+            vertexCount = 8,
+            vertexOffset = 0,
+            indexBuffer = indexBuffer,
+            indexCount = 6,
+            indexOffset = 0,
+            bounds = SkRect.MakeLTRB(10f, 10f, 90f, 40f),
+        ).mesh
+
+        val recorder = SkPictureRecorder()
+        recorder.beginRecording(100f, 60f).drawMesh(mesh, SkPaint(0xFFFF0000.toInt()))
+        val picture = recorder.finishRecordingAsPicture()
+        assertTrue(indexBuffer.update(shortBytes(intArrayOf(4, 5, 6, 5, 7, 6))))
+
+        val bitmap = SkBitmap(100, 60)
+        val canvas = SkCanvas(bitmap)
+        canvas.clear(0xFFFFFFFF.toInt())
+        picture.playback(canvas)
+
+        assertTrue(bitmap.getPixel(20, 20) != 0xFFFFFFFF.toInt(), "recorded index buffer should keep original quad")
+        assertTrue(bitmap.getPixel(70, 20) == 0xFFFFFFFF.toInt(), "post-record index updates must not affect playback")
+    }
+
+    @Test
+    fun `SkPicture drawMesh bounds participate in RTree culling`() {
+        val spec = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            ),
+            vertexStride = 8,
+            vs = "Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v) { return float4(1); }",
+        ).specification ?: error("mesh spec failed")
+        val leftMesh = meshForQuad(spec, 10f, 10f, 40f, 40f)
+        val rightMesh = meshForQuad(spec, 60f, 10f, 90f, 40f)
+
+        val recorder = SkPictureRecorder()
+        recorder.beginRecording(100f, 60f, SkRTreeFactory).apply {
+            drawMesh(leftMesh, SkPaint(0xFFFF0000.toInt()))
+            drawMesh(rightMesh, SkPaint(0xFF0000FF.toInt()))
+        }
+        val picture = recorder.finishRecordingAsPicture()
+
+        val bitmap = SkBitmap(100, 60)
+        val canvas = SkCanvas(bitmap)
+        canvas.clear(0xFFFFFFFF.toInt())
+        canvas.clipRect(SkRect.MakeLTRB(55f, 0f, 100f, 60f))
+        picture.playback(canvas)
+
+        assertTrue(bitmap.getPixel(70, 20) != 0xFFFFFFFF.toInt(), "RTree playback should keep mesh intersecting clip")
+        assertTrue(bitmap.getPixel(20, 20) == 0xFFFFFFFF.toInt(), "clip should exclude mesh outside the sub-rect")
     }
 
     @Test
@@ -197,4 +335,43 @@ class MeshTest {
         }
         return false
     }
+
+    private fun quadBytes(left: Float, top: Float, right: Float, bottom: Float): ByteArray =
+        ByteBuffer.allocate(32)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .apply {
+                putFloat(left)
+                putFloat(top)
+                putFloat(right)
+                putFloat(top)
+                putFloat(left)
+                putFloat(bottom)
+                putFloat(right)
+                putFloat(bottom)
+            }
+            .array()
+
+    private fun meshForQuad(
+        spec: SkMeshSpecification,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+    ): SkMesh {
+        val vertexBuffer = SkMeshes.MakeVertexBuffer(quadBytes(left, top, right, bottom), 32)
+        return SkMesh.Make(
+            specification = spec,
+            mode = SkMesh.Mode.kTriangleStrip,
+            vertexBuffer = vertexBuffer,
+            vertexCount = 4,
+            vertexOffset = 0,
+            bounds = SkRect.MakeLTRB(left, top, right, bottom),
+        ).mesh
+    }
+
+    private fun shortBytes(values: IntArray): ByteArray =
+        ByteBuffer.allocate(values.size * 2)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .apply { values.forEach { putShort(it.toShort()) } }
+            .array()
 }

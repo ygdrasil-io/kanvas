@@ -7,6 +7,7 @@ import org.skia.core.SkCanvas
 import org.skia.core.SkMesh
 import org.skia.core.SkMeshSpecification
 import org.skia.core.SkMeshes
+import org.skia.core.SkPictureRecorder
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBlender
 import org.skia.foundation.SkBlendMode
@@ -16,6 +17,7 @@ import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSurfaces
+import org.skia.foundation.SkSweepGradient
 import org.skia.foundation.SkTileMode
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
@@ -592,19 +594,154 @@ public class MeshZeroInitGM : GM() {
 }
 
 /**
- * Stub for Skia's `PictureMesh` ("picture_mesh", 390×90).
+ * CPU subset for Skia's `PictureMesh` ("picture_mesh", 390×90).
  *
- * Upstream records an SkMesh draw into an SkPicture and plays it back,
- * exercising the picture→GPU path. Tests four draw modes (triangles /
- * triangleStrip × non-indexed / indexed) with a sweep-gradient paint.
- *
- * TODO("STUB.MESH") — SkMesh / SkMeshSpecification not implemented.
+ * Upstream records an SkMesh draw into an SkPicture and plays it back. This
+ * portable slice keeps the record/playback surface and four draw modes
+ * (triangles / triangleStrip × non-indexed / indexed), while leaving upstream's
+ * color-space-varying fragment program and GPU buffer copies out of scope.
  */
 public class PictureMeshGM : GM() {
     override fun getName(): String = "picture_mesh"
     override fun getISize(): SkISize = SkISize.Make(390, 90)
+
+    private lateinit var spec: SkMeshSpecification
+    private lateinit var vertexBuffer: SkMesh.VertexBuffer
+    private lateinit var indexBuffer: SkMesh.IndexBuffer
+
+    override fun onOnceBeforeDraw() {
+        val result = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            ),
+            vertexStride = VERTEX_STRIDE,
+            vs = "Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v) { return float4(1); }",
+        )
+        spec = result.specification ?: error("PictureMeshGM spec creation failed: ${result.error}")
+        vertexBuffer = SkMeshes.MakeVertexBuffer(vertexBytes(), VERTICES.size * VERTEX_STRIDE)
+        indexBuffer = SkMeshes.MakeIndexBuffer(shortBytes(INDICES), INDICES.size * 2)
+    }
+
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.MESH")
+        val c = canvas ?: return
+        val paint = SkPaint(0xFF33AAE0.toInt()).apply {
+            shader = SkSweepGradient.Make(
+                center = SkPoint(RECT.centerX(), RECT.centerY()),
+                startAngle = 0f,
+                endAngle = 360f,
+                colors = intArrayOf(
+                    0xFFE91E63.toInt(),
+                    0xFF00BCD4.toInt(),
+                    0xFFFFEB3B.toInt(),
+                    0xFFE91E63.toInt(),
+                ),
+                positions = null,
+                tileMode = SkTileMode.kRepeat,
+            )
+        }
+
+        for (picture in listOf(false, true)) {
+            c.save()
+            for (mode in 0 until 4) {
+                val mesh = makeMesh(mode)
+                val draw: (SkCanvas) -> Unit = {
+                    it.drawMesh(mesh, SkBlender.Mode(SkBlendMode.kDifference), paint)
+                }
+                if (picture) {
+                    val recorder = SkPictureRecorder()
+                    draw(recorder.beginRecording(getISize().width.toFloat(), getISize().height.toFloat()))
+                    recorder.finishRecordingAsPicture().playback(c)
+                } else {
+                    draw(c)
+                }
+                c.translate(RECT.width() + 10f, 0f)
+            }
+            c.restore()
+            c.translate(0f, RECT.height() + 10f)
+        }
+    }
+
+    private fun makeMesh(mode: Int): SkMesh {
+        val result = when (mode) {
+            0 -> SkMesh.Make(
+                specification = spec,
+                mode = SkMesh.Mode.kTriangles,
+                vertexBuffer = vertexBuffer,
+                vertexCount = 6,
+                vertexOffset = VERTEX_STRIDE,
+                bounds = RECT,
+            )
+            1 -> SkMesh.Make(
+                specification = spec,
+                mode = SkMesh.Mode.kTriangleStrip,
+                vertexBuffer = vertexBuffer,
+                vertexCount = 4,
+                vertexOffset = VERTEX_STRIDE,
+                bounds = RECT,
+            )
+            2 -> SkMesh.MakeIndexed(
+                specification = spec,
+                mode = SkMesh.Mode.kTriangles,
+                vertexBuffer = vertexBuffer,
+                vertexCount = VERTICES.size,
+                vertexOffset = 0,
+                indexBuffer = indexBuffer,
+                indexCount = 6,
+                indexOffset = 2 * 2,
+                bounds = RECT,
+            )
+            else -> SkMesh.MakeIndexed(
+                specification = spec,
+                mode = SkMesh.Mode.kTriangleStrip,
+                vertexBuffer = vertexBuffer,
+                vertexCount = VERTICES.size,
+                vertexOffset = 0,
+                indexBuffer = indexBuffer,
+                indexCount = 6,
+                indexOffset = 2 * 2,
+                bounds = RECT,
+            )
+        }
+        return result.mesh.takeIf { it.isValid() } ?: error("PictureMeshGM mesh creation failed: ${result.error}")
+    }
+
+    private data class Vertex(val x: Float, val y: Float)
+
+    private companion object {
+        private const val VERTEX_STRIDE = 8
+        private val RECT: SkRect = SkRect.MakeWH(40f, 40f)
+        private val VERTICES = arrayOf(
+            Vertex(1000f, 1000f),
+            Vertex(RECT.left, RECT.top),
+            Vertex(RECT.right, RECT.top),
+            Vertex(RECT.left, RECT.bottom),
+            Vertex(RECT.right, RECT.bottom),
+            Vertex(RECT.left, RECT.bottom),
+            Vertex(RECT.right, RECT.top),
+        )
+        private val INDICES = intArrayOf(1000, 2000, 1, 2, 3, 4, 5, 6)
+
+        private fun vertexBytes(): ByteArray =
+            ByteBuffer.allocate(VERTICES.size * VERTEX_STRIDE)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .apply {
+                    VERTICES.forEach {
+                        putFloat(it.x)
+                        putFloat(it.y)
+                    }
+                }
+                .array()
+
+        private fun shortBytes(values: IntArray): ByteArray =
+            ByteBuffer.allocate(values.size * 2)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .apply { values.forEach { putShort(it.toShort()) } }
+                .array()
     }
 }
 
