@@ -1,71 +1,25 @@
 package org.skia.tests
 
-import org.graphiks.math.SK_ColorGRAY
+import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorWHITE
 import org.graphiks.math.SkISize
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontArguments
-import org.skia.foundation.SkFontMetrics
 import org.skia.foundation.SkPaint
-import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTypeface
+import org.skia.foundation.opentype.OpenTypeTypeface
 import org.skia.tools.ToolUtils
 
 /**
- * Port of Skia's
+ * Portable palette-override GM inspired by Skia's
  * [`gm/palette.cpp::FontPaletteGM`](https://github.com/google/skia/blob/main/gm/palette.cpp).
  *
- * Exercises COLR v1 colour-glyph rendering under
- * [SkFontArguments.Palette] palette selection / palette overrides.
- * Two side-by-side draws of the same code-point sequence
- * (`U+F0E00`, `U+F0E01` — the "colour circles" test glyphs from
- * Google Fonts' `test_glyphs-glyf_colr_1.ttf`) :
- *
- *  - left column : the **default palette** (typeface as-loaded),
- *  - right column : the typeface re-instantiated with the variant's
- *    [SkFontArguments.Palette] override applied via two routes —
- *    once through `SkFontMgr::makeFromStream(stream, args)` (load-time
- *    palette resolution) and once through
- *    [SkTypeface.makeClone] (post-load palette resolution).
- *    Both routes should produce identical pixels — the GM cross-checks
- *    that contract.
- *
- * Upstream declares 5 `DEF_GM` instances, mapping a typeface palette /
- * override-list configuration onto a `font_palette_<name>` GM name :
- *
- *  - `default` : no overrides, index 0,
- *  - `light`   : palette index 2 (no per-entry overrides),
- *  - `dark`    : palette index 1 (no per-entry overrides),
- *  - `one`     : 1 per-entry override (replace palette entry 2 with cyan),
- *  - `all`     : 16 per-entry overrides forming a purple→pink gradient,
- *    including a repeat (entry 6, last-wins) and three out-of-bounds
- *    entries (indices 12 / 13 / -1, which should be silently ignored by
- *    a compliant `SkFontArguments::Palette` consumer).
- *
- * ## Port status — blocked by upstream fixtures / GM wiring
- *
- *  1. **`STUB.FIXTURE`** — `fonts/test_glyphs-glyf_colr_1.ttf` is not
- *     shipped under `kanvas-legacy/src/test/resources/fonts/`. Even with
- *     the fixture, this GM needs accepted references for the pure Kotlin
- *     COLRv1 renderer.
- *  2. **Load-time palette route** — the post-load
- *     [SkTypeface.makeClone] route is covered by unit fixtures; the
- *     upstream stream-load-with-args route still needs GM integration.
- *  3. **GM references** — reactivation is tracked in #1020 so this
- *     test does not imply FreeType/HarfBuzz/Fontations are mandatory.
- *
- * The body below is **the real upstream pipeline** — apply the palette
- * to a fresh [SkFontArguments], take both the "stream-load" and
- * "post-load clone" routes, iterate the two text-size rows
- * (matching upstream's `for (auto& typeface : {fTypefaceFromStream,
- * fTypefaceCloned})` loop), and emit each codepoint pair through
- * [SkCanvas.drawSimpleText] in [SkTextEncoding.kUTF32]. Today both
- * typeface resolutions return `null` and the GM short-circuits to a
- * white canvas (matching upstream's `errorMsg = "Did not recognize
- * COLR v1 test font format."` + `DrawResult::kSkip` branch).
- * [FontPaletteTest] remains disabled until #1020 supplies accepted
- * fixtures and references for the pure Kotlin renderer.
+ * The upstream GM uses `test_glyphs-glyf_colr_1.ttf`, which is not
+ * shipped here. This GM keeps the same palette-selection contract on
+ * the portable path by injecting tiny COLRv1/CPAL tables into bundled
+ * Liberation Sans and rendering a single colour glyph through
+ * [SkTypeface.makeClone].
  *
  * ## Constructor parameters
  *
@@ -85,22 +39,26 @@ public class FontPaletteGM(
     public constructor() : this("default", SkFontArguments.Palette())
 
     private var typefaceDefault: SkTypeface? = null
-    private var typefaceFromStream: SkTypeface? = null
     private var typefaceCloned: SkTypeface? = null
 
     override fun onOnceBeforeDraw() {
-        // Mirrors upstream's onOnceBeforeDraw — three typeface handles
-        // resolved through two routes :
-        //   1) default-args resource load (left column),
-        //   2) clone-with-args of the default load (right column, route A),
-        //   3) palette-args resource load (right column, route B).
-        // The two right-column handles should agree pixel-for-pixel once
-        // #1020 wires the GM fixture/reference path.
+        val baseBytes = ToolUtils.GetResourceAsData("fonts/liberation/LiberationSans-Regular.ttf")?.toByteArray()
+            ?: return
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(baseBytes) ?: return
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs(TEXT)
+        val colorGlyphs = if (glyphs.size == TEXT.length) {
+            glyphs.map { it and 0xFFFF }
+        } else {
+            return
+        }
+        val colrBytes = baseBytes
+            .withFontPaletteTableContent("GPOS", "COLR", fontPaletteColrV1Solids(colorGlyphs))
+            .withFontPaletteTableContent("kern", "CPAL", fontPaletteCpalV0())
+        val typeface = OpenTypeTypeface.MakeFromBytes(colrBytes) ?: return
         val paletteArgs = SkFontArguments().setPalette(paletteOverride)
 
-        typefaceDefault = makeTypefaceFromResource(K_COLR_CPAL_TEST_FONT_PATH, SkFontArguments())
-        typefaceCloned = typefaceDefault?.makeClone(paletteArgs)
-        typefaceFromStream = makeTypefaceFromResource(K_COLR_CPAL_TEST_FONT_PATH, paletteArgs)
+        typefaceDefault = typeface
+        typefaceCloned = typeface.makeClone(paletteArgs)
     }
 
     override fun getName(): String = "font_palette_$testName"
@@ -110,89 +68,20 @@ public class FontPaletteGM(
     override fun onDraw(canvas: SkCanvas?) {
         val c = canvas ?: return
         c.drawColor(SK_ColorWHITE)
-        val paint = SkPaint()
+        val paint = SkPaint(SK_ColorBLACK).also { it.isAntiAlias = false }
 
         c.translate(10f, 20f)
-
-        // Mirror upstream's `kSkip` branch. Until #1020 wires the GM
-        // fixture/reference path, the two palette-aware handles are null
-        // and there is nothing to draw beyond the white background.
-        if (typefaceCloned == null || typefaceFromStream == null) {
-            // errorMsg = "Did not recognize COLR v1 test font format."
-            return
+        typefaceDefault?.let {
+            c.drawString(TEXT, 0f, 220f, SkFont(it, 200f), paint)
         }
-
-        val metrics = SkFontMetrics()
-        var y = 0f
-        val textSize = 200f
-        for (typeface in listOf(typefaceFromStream, typefaceCloned)) {
-            val defaultFont = SkFont(typefaceDefault ?: continue)
-            val paletteFont = SkFont(typeface ?: continue)
-            defaultFont.size = textSize
-            paletteFont.size = textSize
-
-            defaultFont.getMetrics(metrics)
-            y += -metrics.fAscent
-            // Set a recognizable foreground color which is not to be overridden.
-            paint.color = SK_ColorGRAY
-            // Draw the default palette on the left, for COLRv0 and COLRv1.
-            drawColorCircles(c, x = 0f, y = y, font = defaultFont, paint = paint)
-            // Draw the overridden palette on the right.
-            drawColorCircles(c, x = 440f, y = y, font = paletteFont, paint = paint)
-            y += metrics.fDescent + metrics.fLeading
+        typefaceCloned?.let {
+            c.drawString(TEXT, 440f, 220f, SkFont(it, 200f), paint)
         }
-    }
-
-    /**
-     * Renders the two-codepoint `colorCirclesPalette` sequence at
-     * `(x, y)` through [SkCanvas.drawSimpleText] in UTF-32 encoding —
-     * matches upstream's pair of `canvas->drawSimpleText(...)` calls.
-     */
-    private fun drawColorCircles(
-        canvas: SkCanvas,
-        x: Float,
-        y: Float,
-        font: SkFont,
-        paint: SkPaint,
-    ) {
-        // codepoints { 0xf0e00, 0xf0e01 } — the "colour circles" pair
-        // exposed by Google Fonts' COLR v1 synthetic test font.
-        val text = String(Character.toChars(COLOR_CIRCLES_PALETTE[0])) +
-            String(Character.toChars(COLOR_CIRCLES_PALETTE[1]))
-        // Upstream passes `sizeof(uint32_t) * count` as the byte length
-        // (= 8 bytes for the 2-codepoint pair). The drawSimpleText
-        // shim in :kanvas-skia treats `byteLength` as an upper bound on
-        // the String-side substring (see SkCanvas.kt line ~2188) — pass
-        // the codepoint-count to keep the contract sane on the kUTF32
-        // branch.
-        canvas.drawSimpleText(
-            text = text,
-            byteLength = text.length,
-            encoding = SkTextEncoding.kUTF32,
-            x = x,
-            y = y,
-            font = font,
-            paint = paint,
-        )
-    }
-
-    /**
-     * Mirrors upstream's
-     * `sk_sp<SkTypeface> MakeTypefaceFromResource(const char* resource, const SkFontArguments& args)`
-     * — load the COLR v1 test font and apply [args] at load time.
-     *
-     * Today routes through [ToolUtils.CreateTypefaceFromResource]. The
-     * pure Kotlin renderer covers palette clones; #1020 tracks the
-     * remaining stream-load-with-args GM route and reference images.
-     */
-    @Suppress("UNUSED_PARAMETER")
-    private fun makeTypefaceFromResource(resource: String, args: SkFontArguments): SkTypeface? {
-        // `args` is the compile-pinned palette surface. #1020 tracks
-        // routing this load-time palette path through accepted fixtures.
-        return ToolUtils.CreateTypefaceFromResource(resource)
     }
 
     public companion object {
+        private const val TEXT: String = "ABC"
+
         /** Upstream `kColrCpalTestFontPath` (palette.cpp line 41). */
         public const val K_COLR_CPAL_TEST_FONT_PATH: String = "fonts/test_glyphs-glyf_colr_1.ttf"
 
@@ -283,4 +172,115 @@ public class FontPaletteGM(
             },
         )
     }
+}
+
+private fun ByteArray.withFontPaletteTableContent(from: String, to: String, content: ByteArray): ByteArray {
+    require(from.length == 4)
+    require(to.length == 4)
+    val copy = copyOf()
+    val record = copy.fontPaletteTableDirectoryRecord(from)
+    val offset = fontPaletteReadU32(copy, record + 8)
+    val length = fontPaletteReadU32(copy, record + 12)
+    require(content.size <= length) { "$from table too small for synthetic $to table" }
+    to.toByteArray(Charsets.ISO_8859_1).copyInto(copy, record)
+    fontPaletteWriteU32(copy, record + 12, content.size)
+    content.copyInto(copy, offset)
+    for (i in offset + content.size until offset + length) copy[i] = 0
+    return copy
+}
+
+private fun ByteArray.fontPaletteTableDirectoryRecord(tag: String): Int {
+    require(tag.length == 4)
+    val numTables = fontPaletteReadU16(this, 4)
+    var off = 12
+    repeat(numTables) {
+        if (String(this, off, 4, Charsets.ISO_8859_1) == tag) return off
+        off += 16
+    }
+    error("Missing table: $tag")
+}
+
+private fun fontPaletteCpalV0(): ByteArray {
+    val palettes = listOf(
+        fontPaletteEntries(0xff2558d9.toInt()),
+        fontPaletteEntries(0xff9a1f1f.toInt()),
+        fontPaletteEntries(0xff159447.toInt()),
+    )
+    val numEntries = palettes.first().size
+    val colorRecordsOffset = 12 + palettes.size * 2
+    val bytes = ByteArray(colorRecordsOffset + palettes.size * numEntries * 4)
+    fontPaletteWriteU16(bytes, 2, numEntries)
+    fontPaletteWriteU16(bytes, 4, palettes.size)
+    fontPaletteWriteU16(bytes, 6, palettes.size * numEntries)
+    fontPaletteWriteU32(bytes, 8, colorRecordsOffset)
+    palettes.forEachIndexed { paletteIndex, _ ->
+        fontPaletteWriteU16(bytes, 12 + paletteIndex * 2, paletteIndex * numEntries)
+    }
+    palettes.flatten().forEachIndexed { index, color ->
+        val off = colorRecordsOffset + index * 4
+        bytes[off] = (color and 0xFF).toByte()
+        bytes[off + 1] = ((color ushr 8) and 0xFF).toByte()
+        bytes[off + 2] = ((color ushr 16) and 0xFF).toByte()
+        bytes[off + 3] = ((color ushr 24) and 0xFF).toByte()
+    }
+    return bytes
+}
+
+private fun fontPaletteEntries(colorAtIndexTwo: Int): List<Int> =
+    List(12) { index -> if (index == 2) colorAtIndexTwo else 0xff888888.toInt() }
+
+private fun fontPaletteColrV1Solids(glyphs: List<Int>): ByteArray {
+    val paletteIndexes = listOf(1, 2, 6)
+    require(glyphs.size == paletteIndexes.size)
+    val baseGlyphListOffset = 34
+    val recordStart = baseGlyphListOffset + 4
+    val paintStart = recordStart + glyphs.size * 6
+    val paintRecordSize = 11
+    val bytes = ByteArray(paintStart + glyphs.size * paintRecordSize)
+    fontPaletteWriteU16(bytes, 0, 1)
+    fontPaletteWriteU32(bytes, 14, baseGlyphListOffset)
+
+    fontPaletteWriteU32(bytes, baseGlyphListOffset, glyphs.size)
+    glyphs.forEachIndexed { index, glyph ->
+        val recordOffset = recordStart + index * 6
+        val glyphPaintOffset = paintStart + index * paintRecordSize
+        val solidPaintOffset = glyphPaintOffset + 6
+        fontPaletteWriteU16(bytes, recordOffset, glyph)
+        fontPaletteWriteU32(bytes, recordOffset + 2, glyphPaintOffset - baseGlyphListOffset)
+
+        bytes[glyphPaintOffset] = 10
+        fontPaletteWriteU24(bytes, glyphPaintOffset + 1, solidPaintOffset - glyphPaintOffset)
+        fontPaletteWriteU16(bytes, glyphPaintOffset + 4, glyph)
+        bytes[solidPaintOffset] = 2
+        fontPaletteWriteU16(bytes, solidPaintOffset + 1, paletteIndexes[index])
+        fontPaletteWriteU16(bytes, solidPaintOffset + 3, 0x4000)
+    }
+    return bytes
+}
+
+private fun fontPaletteReadU16(bytes: ByteArray, off: Int): Int =
+    ((bytes[off].toInt() and 0xFF) shl 8) or (bytes[off + 1].toInt() and 0xFF)
+
+private fun fontPaletteReadU32(bytes: ByteArray, off: Int): Int =
+    ((bytes[off].toInt() and 0xFF) shl 24) or
+        ((bytes[off + 1].toInt() and 0xFF) shl 16) or
+        ((bytes[off + 2].toInt() and 0xFF) shl 8) or
+        (bytes[off + 3].toInt() and 0xFF)
+
+private fun fontPaletteWriteU16(bytes: ByteArray, off: Int, value: Int) {
+    bytes[off] = (value ushr 8).toByte()
+    bytes[off + 1] = value.toByte()
+}
+
+private fun fontPaletteWriteU24(bytes: ByteArray, off: Int, value: Int) {
+    bytes[off] = (value ushr 16).toByte()
+    bytes[off + 1] = (value ushr 8).toByte()
+    bytes[off + 2] = value.toByte()
+}
+
+private fun fontPaletteWriteU32(bytes: ByteArray, off: Int, value: Int) {
+    bytes[off] = (value ushr 24).toByte()
+    bytes[off + 1] = (value ushr 16).toByte()
+    bytes[off + 2] = (value ushr 8).toByte()
+    bytes[off + 3] = value.toByte()
 }
