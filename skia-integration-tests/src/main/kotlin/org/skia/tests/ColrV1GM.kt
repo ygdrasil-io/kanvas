@@ -33,24 +33,21 @@ import org.skia.tools.ToolUtils
  * ## Portable fallback status
  *
  * The portable OpenType backend now renders the supported COLR v1
- * paint graph subset with synthetic unit fixtures. When the upstream
- * `test_glyphs-glyf_colr_1.ttf` fixtures are absent, the default
+ * paint graph subset. The upstream `test_glyphs-glyf_colr_1.ttf`
+ * fixtures are bundled as test resources with their Apache-2.0 license.
+ * When those fixtures are absent in a downstream build, the default
  * no-variation GM falls back to a tiny generated COLRv1/CPAL font based
- * on bundled Liberation Sans. Variable-axis/upstream-category parity
- * remains gated by accepted binary fixtures and references:
+ * on bundled Liberation Sans. Full variable-axis and reference-image
+ * parity remain follow-up scope:
  *
- *  1. **`STUB.FIXTURE`** — `fonts/test_glyphs-glyf_colr_1.ttf` and its
- *     `_variable` sibling are not shipped under
- *     `kanvas-legacy/src/test/resources/fonts/`. See
- *     [`ToolUtils.CreateTypefaceFromResource`][
- *     org.skia.tools.ToolUtils.CreateTypefaceFromResource] KDoc).
- *  2. **`STUB.FONTATIONS` parity** — upstream wires some variable-axis
+ *  1. **Variable COLRv1 parity** — upstream wires some variable-axis
  *     cases through Google's
  *     [`fontations`](https://github.com/googlefonts/fontations) Rust
  *     crate. The pure Kotlin renderer currently covers base/default
  *     COLR variation paint values, not COLR `ItemVariationStore` deltas.
- *  3. **GM references** — the upstream reference images are tied to
- *     the binary fixtures above. Reactivation is tracked in #1020.
+ *  2. **GM references** — some upstream reference images remain broader
+ *     than the currently-supported pure Kotlin COLRv1 paint subset.
+ *     Reference parity is tracked in #1020.
  *
  * The upstream body below is preserved for real fixtures. The fallback
  * path is intentionally smaller: it draws `ABCD` through COLRv1 solid
@@ -89,10 +86,13 @@ public class ColrV1GM(
 
     private var typeface: SkTypeface? = null
     private var fallbackText: String? = null
+    public var didLoadBundledFixture: Boolean = false
+        private set
 
     override fun onOnceBeforeDraw() {
         val resource = if (variations.isNotEmpty()) K_TEST_FONT_NAME_VARIABLE else K_TEST_FONT_NAME
         typeface = ToolUtils.CreateTypefaceFromResource(resource)
+        didLoadBundledFixture = typeface != null
         if (typeface != null || variations.isNotEmpty()) return
 
         val baseBytes = ToolUtils.GetResourceAsData("fonts/liberation/LiberationSans-Regular.ttf")?.toByteArray()
