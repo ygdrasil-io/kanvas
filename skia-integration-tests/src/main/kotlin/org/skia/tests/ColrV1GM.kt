@@ -29,29 +29,26 @@ import org.skia.tools.ToolUtils
  * skewed and with the variable-font axes pinned to specific design
  * coordinates.
  *
- * ## Port status — **INTRACTABLE without JNI / native bindings**
+ * ## Port status — blocked by upstream fixtures / GM wiring
  *
- * Two upstream dependencies that `:kanvas-skia` cannot honour from
- * pure-JVM today :
+ * The portable OpenType backend now renders the supported COLR v1
+ * paint graph subset with synthetic unit fixtures. This GM still
+ * stays disabled because the upstream GM pipeline depends on assets
+ * and surfaces that are not wired into the pure Kotlin integration
+ * suite yet:
  *
- *  1. **`STUB.COLR_V1`** — resolving a COLR v1 glyph to a drawable
- *     graph (gradients, blend modes, sub-glyph composition) requires
- *     draw-path integration for OpenType `COLR` v1 paint graphs. The
- *     pure Kotlin backend currently parses only a safe metadata subset;
- *     see
- *     [`SkColrV1`][org.skia.foundation.colr.SkColrV1] and
- *     `API_FINALIZATION_PLAN.md` § `STUB.COLR_V1`.
- *  2. **`STUB.FONTATIONS`** — upstream wires the variable axes
- *     (`SkFontArguments::VariationPosition`) through Google's
- *     [`fontations`](https://github.com/googlefonts/fontations) Rust
- *     crate ; `:kanvas-skia`'s [SkTypeface_Fontations][
- *     org.skia.foundation.SkTypeface_Fontations] is a surface stub.
- *  3. **`STUB.FIXTURE`** — `fonts/test_glyphs-glyf_colr_1.ttf` and its
+ *  1. **`STUB.FIXTURE`** — `fonts/test_glyphs-glyf_colr_1.ttf` and its
  *     `_variable` sibling are not shipped under
- *     `kanvas-legacy/src/test/resources/fonts/`. The pure Kotlin path
- *     does not yet render those COLR v1 glyphs; see
+ *     `kanvas-legacy/src/test/resources/fonts/`. See
  *     [`ToolUtils.CreateTypefaceFromResource`][
  *     org.skia.tools.ToolUtils.CreateTypefaceFromResource] KDoc).
+ *  2. **`STUB.FONTATIONS` parity** — upstream wires some variable-axis
+ *     cases through Google's
+ *     [`fontations`](https://github.com/googlefonts/fontations) Rust
+ *     crate. The pure Kotlin renderer currently covers base/default
+ *     COLR variation paint values, not COLR `ItemVariationStore` deltas.
+ *  3. **GM references** — the upstream reference images are tied to
+ *     the binary fixtures above. Reactivation is tracked in #1020.
  *
  * The body below is **the real upstream pipeline** — load the test
  * font, apply variation coordinates via [SkTypeface.makeClone], iterate
@@ -59,8 +56,9 @@ import org.skia.tools.ToolUtils
  * [SkCanvas.drawSimpleText] + per-glyph line-wrap. Today the font load
  * returns `null` and the GM short-circuits to a white canvas (matching
  * upstream's `DrawResult::kSkip` branch — `errorMsg = "Did not
- * recognize COLR v1 font format."`). [ColrV1Test] is `@Disabled` with
- * the `STUB.COLR_V1` tag until the native binding lands.
+ * recognize COLR v1 font format."`). [ColrV1Test] remains disabled
+ * until #1020 supplies accepted fixtures and references for the pure
+ * Kotlin renderer.
  *
  * ## Constructor parameters
  *
@@ -95,10 +93,9 @@ public class ColrV1GM(
     private var typeface: SkTypeface? = null
 
     override fun onOnceBeforeDraw() {
-        // Variable-font variants pull from the `_variable` sibling — both
-        // resources resolve to `null` today because COLR v1 rendering and
-        // the matching fixtures are not wired into the pure Kotlin path.
-        // Kept here so the call graph mirrors upstream once that lands.
+        // Variable-font variants pull from the `_variable` sibling. The
+        // upstream fixtures are not shipped yet, so resource lookup returns
+        // null until #1020 wires accepted fixtures and references.
         val resource = if (variations.isNotEmpty()) K_TEST_FONT_NAME_VARIABLE else K_TEST_FONT_NAME
         typeface = ToolUtils.CreateTypefaceFromResource(resource)
     }
@@ -129,8 +126,8 @@ public class ColrV1GM(
      * Mirrors upstream's `makeVariedTypeface()` — clones the base
      * typeface with the configured variation coordinates applied. The
      * COLR v1 test font uses custom axes (`SWPS`, `COL1`, `GRR0`, …);
-     * those remain gated by the unresolved COLRv1 renderer and fixture
-     * path, so this stays a compile-pinned call graph for now.
+     * those remain gated by the upstream fixture/reference path tracked
+     * in #1020, so this stays a compile-pinned call graph for now.
      */
     private fun makeVariedTypeface(): SkTypeface? {
         val tf = typeface ?: return null

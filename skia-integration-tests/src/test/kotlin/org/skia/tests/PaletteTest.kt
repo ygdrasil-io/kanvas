@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.skia.testing.TestUtils
 
-@Disabled("STUB.COLR_V1: requires FreeType+HarfBuzz COLR v1 path via JNI — see API_FINALIZATION_PLAN.md")
+@Disabled("STUB.COLR_V1: still targets the cpu-raster SkColrV1 surface stub; migrate or isolate in #1020")
 class PaletteTest {
 
     @Test
