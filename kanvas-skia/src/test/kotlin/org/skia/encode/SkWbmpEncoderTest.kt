@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.codec.SkCodec
 import org.skia.foundation.SkBitmap
 import java.io.ByteArrayOutputStream
 
@@ -77,6 +78,20 @@ class SkWbmpEncoderTest {
     }
 
     @Test
+    fun `real WBMP fixture re-encodes with valid header and round-trips pixels`() {
+        val src = decodeWbmp(readFixture("/codec-real-images/wbmp/type0_3x2.wbmp"))
+        val bytes = SkWbmpEncoder.Encode(src)!!.toByteArray()
+        assertEquals(0.toByte(), bytes[0], "type field")
+        assertEquals(0.toByte(), bytes[1], "fixed header field")
+        assertEquals(0x03.toByte(), bytes[2], "width")
+        assertEquals(0x02.toByte(), bytes[3], "height")
+        assertEquals(6, bytes.size, "4-byte header + 2 one-byte rows")
+
+        val roundTrip = decodeWbmp(bytes)
+        assertSamePixels(src, roundTrip, "type0_3x2.wbmp")
+    }
+
+    @Test
     fun `luminance threshold picks bright colours as white`() {
         val src = SkBitmap(4, 1)
         src.pixels[0] = 0xFFFFFFFF.toInt() // pure white → 1
@@ -120,5 +135,28 @@ class SkWbmpEncoderTest {
             b.pixels[y * width + x] = if (white) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
         }
         return b
+    }
+
+    private fun decodeWbmp(bytes: ByteArray): SkBitmap {
+        val codec = SkCodec.MakeFromData(bytes)
+        assertNotNull(codec, "pure Kotlin WBMP codec must decode WBMP bytes")
+        val (bitmap, result) = codec!!.getImage()
+        assertEquals(SkCodec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        return bitmap!!
+    }
+
+    private fun readFixture(path: String): ByteArray {
+        val stream = javaClass.getResourceAsStream(path)
+        assertNotNull(stream, "missing real-image fixture $path")
+        return stream!!.use { it.readBytes() }
+    }
+
+    private fun assertSamePixels(expected: SkBitmap, actual: SkBitmap, label: String) {
+        assertEquals(expected.width, actual.width, "$label width")
+        assertEquals(expected.height, actual.height, "$label height")
+        for (y in 0 until expected.height) for (x in 0 until expected.width) {
+            assertEquals(expected.getPixel(x, y), actual.getPixel(x, y), "$label pixel($x,$y)")
+        }
     }
 }
