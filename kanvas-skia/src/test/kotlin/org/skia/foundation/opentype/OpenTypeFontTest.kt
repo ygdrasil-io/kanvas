@@ -1428,6 +1428,27 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `drawString renders COLRv1 var radial and sweep gradient base values`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        for (colr in listOf(syntheticColrV1VarRadialGradient(glyph), syntheticColrV1VarSweepGradient(glyph))) {
+            val typeface = OpenTypeTypeface.MakeFromBytes(
+                liberationSansBytes()
+                    .withTableContent("GPOS", "COLR", colr)
+                    .withTableContent("kern", "CPAL", syntheticCpalV0()),
+            )!!
+            val bitmap = SkBitmap(180, 140).apply { eraseColor(0xFFFFFFFF.toInt()) }
+            val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+
+            SkCanvas(bitmap).drawString("A", 12f, 112f, SkFont(typeface, 96f), paint)
+
+            assertTrue(bitmap.pixels.count(::isMostlyRed) > 0)
+            assertTrue(bitmap.pixels.count(::isMostlyBlue) > 0)
+            assertEquals(0, bitmap.pixels.count(::isMostlyBlack))
+        }
+    }
+
+    @Test
     fun `drawString accepts unsorted COLRv1 linear gradient stops`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
@@ -2591,6 +2612,37 @@ class OpenTypeFontTest {
         return bytes
     }
 
+    private fun syntheticColrV1VarRadialGradient(glyph: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val glyphPaintOffset = baseGlyphListOffset + 10
+        val gradientPaintOffset = glyphPaintOffset + 6
+        val colorLineOffset = gradientPaintOffset + 20
+        val bytes = ByteArray(colorLineOffset + 3 + 2 * 10)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, glyph)
+        writeU32(bytes, baseGlyphListOffset + 6, glyphPaintOffset - baseGlyphListOffset)
+
+        bytes[glyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, glyphPaintOffset + 1, gradientPaintOffset - glyphPaintOffset)
+        writeU16(bytes, glyphPaintOffset + 4, glyph)
+
+        bytes[gradientPaintOffset] = 7 // PaintVarRadialGradient
+        writeU24(bytes, gradientPaintOffset + 1, colorLineOffset - gradientPaintOffset)
+        writeI16(bytes, gradientPaintOffset + 4, 700) // x0
+        writeI16(bytes, gradientPaintOffset + 6, 700) // y0
+        writeU16(bytes, gradientPaintOffset + 8, 400) // radius0
+        writeI16(bytes, gradientPaintOffset + 10, 700) // x1
+        writeI16(bytes, gradientPaintOffset + 12, 700) // y1
+        writeU16(bytes, gradientPaintOffset + 14, 900) // radius1
+        writeU32(bytes, gradientPaintOffset + 16, 0) // varIndexBase
+
+        writeVarColorLine(bytes, colorLineOffset, listOf(0f to 0, 1f to 2))
+        return bytes
+    }
+
     private fun syntheticColrV1SweepGradient(glyph: Int, startAngle: Float = 0f, endAngle: Float = 360f): ByteArray {
         val baseGlyphListOffset = 34
         val glyphPaintOffset = baseGlyphListOffset + 10
@@ -2616,6 +2668,35 @@ class OpenTypeFontTest {
         writeI16(bytes, gradientPaintOffset + 10, toF2Dot14(endAngle / 180f - 1f))
 
         writeColorLine(bytes, colorLineOffset, listOf(0f to 0, 0.75f to 2))
+        return bytes
+    }
+
+    private fun syntheticColrV1VarSweepGradient(glyph: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val glyphPaintOffset = baseGlyphListOffset + 10
+        val gradientPaintOffset = glyphPaintOffset + 6
+        val colorLineOffset = gradientPaintOffset + 16
+        val bytes = ByteArray(colorLineOffset + 3 + 2 * 10)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, glyph)
+        writeU32(bytes, baseGlyphListOffset + 6, glyphPaintOffset - baseGlyphListOffset)
+
+        bytes[glyphPaintOffset] = 10 // PaintGlyph
+        writeU24(bytes, glyphPaintOffset + 1, gradientPaintOffset - glyphPaintOffset)
+        writeU16(bytes, glyphPaintOffset + 4, glyph)
+
+        bytes[gradientPaintOffset] = 9 // PaintVarSweepGradient
+        writeU24(bytes, gradientPaintOffset + 1, colorLineOffset - gradientPaintOffset)
+        writeI16(bytes, gradientPaintOffset + 4, 700) // centerX
+        writeI16(bytes, gradientPaintOffset + 6, 700) // centerY
+        writeI16(bytes, gradientPaintOffset + 8, toF2Dot14(-1f))
+        writeI16(bytes, gradientPaintOffset + 10, toF2Dot14(1f))
+        writeU32(bytes, gradientPaintOffset + 12, 0) // varIndexBase
+
+        writeVarColorLine(bytes, colorLineOffset, listOf(0f to 0, 0.75f to 2))
         return bytes
     }
 
