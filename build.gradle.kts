@@ -145,15 +145,20 @@ tasks.register("checkRealImageFixtureDocumentation") {
 
     doLast {
         val doc = file("codec-real-image-tests/FIXTURES.md")
+        val notice = file("codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md")
         val fixtureRoot = file("codec-real-image-tests/src/test/resources/codec-real-images")
         if (!doc.isFile) {
             throw GradleException("Missing codec-real-image-tests/FIXTURES.md provenance document.")
+        }
+        if (!notice.isFile) {
+            throw GradleException("Missing codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md notice document.")
         }
         if (!fixtureRoot.isDirectory) {
             throw GradleException("Missing real image fixture resource directory: ${fixtureRoot.relativeTo(rootDir)}")
         }
 
         val text = doc.readText()
+        val noticeText = notice.readText()
         val fixturePaths = fixtureRoot.walkTopDown()
             .filter { file -> file.isFile }
             .map { file -> file.relativeTo(fixtureRoot.parentFile).invariantSeparatorsPath }
@@ -218,14 +223,24 @@ tasks.register("checkRealImageFixtureDocumentation") {
             "## Fixture Index",
             "Skia license",
             "Repository test fixture",
+            "THIRD_PARTY_FIXTURE_NOTICES.md",
             "`libpng`:",
             "`ImageMagick`:",
             "`Photoshop/GIMP`:",
             "`Device camera`:",
             "`Browser`:",
         ).filterNot { marker -> text.contains(marker) }
+        val requiredNoticeMarkers = listOf(
+            "## PngSuite",
+            "## ImageMagick",
+            "ImageMagick Studio LLC",
+            "## GIMP",
+            "GIMP team",
+            "Creative Commons Attribution-ShareAlike 4.0 International",
+            "## Wikimedia Commons Public Domain Camera Fixture",
+        ).filterNot { marker -> noticeText.contains(marker) }
 
-        if (missing.isNotEmpty() || duplicateRows.isNotEmpty() || orphanRows.isNotEmpty() || malformedRows.isNotEmpty() || requiredMarkers.isNotEmpty()) {
+        if (missing.isNotEmpty() || duplicateRows.isNotEmpty() || orphanRows.isNotEmpty() || malformedRows.isNotEmpty() || requiredMarkers.isNotEmpty() || requiredNoticeMarkers.isNotEmpty()) {
             throw GradleException(
                 buildString {
                     if (missing.isNotEmpty()) {
@@ -249,6 +264,10 @@ tasks.register("checkRealImageFixtureDocumentation") {
                     if (requiredMarkers.isNotEmpty()) {
                         appendLine("FIXTURES.md is missing required provenance markers.")
                         requiredMarkers.forEach { appendLine("- $it") }
+                    }
+                    if (requiredNoticeMarkers.isNotEmpty()) {
+                        appendLine("THIRD_PARTY_FIXTURE_NOTICES.md is missing required notice markers.")
+                        requiredNoticeMarkers.forEach { appendLine("- $it") }
                     }
                 }
             )

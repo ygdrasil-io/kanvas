@@ -17,9 +17,13 @@ table below with source, license, and transformation details.
   Schaik's PngSuite archive; use the PngSuite permission statement recorded at
   `http://www.schaik.com/pngsuite2011/PngSuite.LICENSE`.
 - `ImageMagick`: copied from ImageMagick project resources; use ImageMagick
-  project pages and the ImageMagick License for provenance.
+  project pages and the ImageMagick License for provenance. Redistribution
+  attribution and license obligations are recorded in
+  `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md`.
 - `GIMP`: copied from the official GIMP website; use the site's default
   CC-BY-SA 4.0 licensing rules unless a source page states otherwise.
+  Redistribution attribution and ShareAlike obligations are recorded in
+  `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md`.
 - `Device camera`: copied or reduced from a source page that identifies a real
   capture device and redistribution license.
 - `Browser`: rendered from a committed local browser source file and captured
@@ -46,6 +50,9 @@ current checked-in corpus intentionally documents only what can be traced:
 - `Browser`: represented by a committed HTML canvas source rendered and captured
   through a localhost browser session.
 
+Third-party redistribution notices for the externally sourced fixtures are kept
+in `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md`.
+
 These statuses are intentionally conservative. They prevent the checklist from
 claiming tool-family coverage that the repository cannot audit.
 
@@ -60,9 +67,9 @@ claiming tool-family coverage that the repository cannot audit.
 | `codec-real-images/png/grayscale_8.png` | Repository generated | `CodecAllKotlinRealImageTest` structural fixture set | Repository test fixture | Generated as 3x2 8-bit grayscale PNG | Grayscale PNG |
 | `codec-real-images/png/grayscale_16.png` | Repository generated | `CodecAllKotlinRealImageTest` structural fixture set | Repository test fixture | Generated as 2x2 16-bit grayscale PNG | 16 bpc PNG |
 | `codec-real-images/png/palette_alpha.png` | Repository generated | `CodecAllKotlinRealImageTest` structural fixture set | Repository test fixture | Generated as 3x2 palette PNG with tRNS alpha | Palette transparency |
-| `codec-real-images/libpng/pngsuite2.png` | libpng/PngSuite | `https://libpng.org/pub/png/img_png/pngsuite2.png`; suite page `https://libpng.org/pub/png/pngsuite.html`; license `http://www.schaik.com/pngsuite2011/PngSuite.LICENSE` | PngSuite permission grant | Copied unchanged into codec corpus | 48x48 interlaced palette PNG with alpha |
-| `codec-real-images/imagemagick/rose.png` | ImageMagick | `https://imagemagick.org/image/rose.png`; built-in image documented as `ROSE` at `https://imagemagick.org/formats/`; license `https://imagemagick.org/license/` | ImageMagick License | Copied unchanged into codec corpus | 70x46 RGB PNG from ImageMagick project resources |
-| `codec-real-images/gimp/gfx_by_gimp.png` | GIMP | `https://www.gimp.org/images/gfx_by_gimp.png`; site reuse policy `https://www.gimp.org/about/linking.html` | CC-BY-SA 4.0 unless otherwise noted by GIMP website | Copied unchanged into codec corpus | 90x36 palette PNG from official GIMP website |
+| `codec-real-images/libpng/pngsuite2.png` | libpng/PngSuite | `https://libpng.org/pub/png/img_png/pngsuite2.png`; suite page `https://libpng.org/pub/png/pngsuite.html`; license `http://www.schaik.com/pngsuite2011/PngSuite.LICENSE`; notices `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md` | PngSuite permission grant | Copied unchanged into codec corpus | 48x48 interlaced palette PNG with alpha |
+| `codec-real-images/imagemagick/rose.png` | ImageMagick | `https://imagemagick.org/image/rose.png`; built-in image documented as `ROSE` at `https://imagemagick.org/formats/`; license `https://imagemagick.org/license/`; notices `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md` | ImageMagick License | Copied unchanged into codec corpus | 70x46 RGB PNG from ImageMagick project resources; attribution: ImageMagick Studio LLC |
+| `codec-real-images/gimp/gfx_by_gimp.png` | GIMP | `https://www.gimp.org/images/gfx_by_gimp.png`; site reuse policy `https://www.gimp.org/about/linking.html`; notices `codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md` | CC-BY-SA 4.0 unless otherwise noted by GIMP website | Copied unchanged into codec corpus | 90x36 palette PNG from official GIMP website; attribution: GIMP team |
 | `codec-real-images/jpeg/dog.jpg` | Skia upstream | `kanvas-legacy/src/test/resources/images/dog.jpg`; original import from `/resources/images/dog.jpg` in upstream Skia checkout | Skia license | Copied into codec corpus unchanged | Baseline JFIF JPEG |
 | `codec-real-images/jpeg/ducky_icc_exif.jpg` | Skia upstream | `kanvas-legacy/src/test/resources/images/ducky.jpg`; original import from `/resources/images/ducky.jpg` in upstream Skia checkout | Skia license | Copied into codec corpus with ICC/EXIF-bearing metadata retained | Baseline JPEG with ICC and EXIF |
 | `codec-real-images/jpeg/color_wheel_420.jpg` | Skia upstream | `kanvas-legacy/src/test/resources/images/color_wheel.jpg`; lineage copied from Skia image resources in repo history | Skia license | Copied into codec corpus as 4:2:0 JPEG fixture | Baseline 4:2:0 JPEG |
