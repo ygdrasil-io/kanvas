@@ -1,36 +1,36 @@
 package org.skia.tests
 
-import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.testing.SimilarityTracker
+import org.skia.testing.TestReport
 import org.skia.testing.TestUtils
 
 /**
- * Cross-backend ratchet driver for [DFTextBlobPerspGM]. Disabled until
- * the raster backend grows a distance-field-text rendering path
- * compatible with [org.skia.foundation.SkSurfaceProps.kUseDeviceIndependentFonts_Flag].
+ * Cross-backend ratchet driver for [DFTextBlobPerspGM].
  *
- * Upstream renders the GM through a Ganesh surface with the DF-text
- * flag set, producing glyphs via a signed-distance-field shader.
- * `:kanvas-skia` raster renders glyphs as paths (via
- * `SkFont.getPath(gid)` → `SkCanvas.drawPath`), so the rendered
- * output for this GM exists and exercises the perspective CTM /
- * clip / text-blob plumbing, but will not be pixel-identical to the
- * upstream GPU reference. The cross-backend comparison is parked
- * until the SDF path lands (`STUB.DF_TEXT_RASTER` — same gap as the
- * sibling [DFTextGM]).
+ * The GM now uses the portable raster SDF glyph cache/sampler from
+ * `cpu-raster`, so this is no longer parked behind the old raster-DF stub.
  */
-@Disabled(
-    "STUB.DF_TEXT_RASTER: GPU-only distance-field text path. " +
-        "Body fully ported against `SkSurfaceProps.kUseDeviceIndependentFonts_Flag` " +
-        "+ perspective text-blob plumbing — raster output is path-based, not SDF, " +
-        "so pixels will not match the upstream Ganesh reference. " +
-        "Drop this `@Disabled` once raster grows an SDF text shader path.",
-)
 class DFTextBlobPerspTest {
 
     @Test
     fun `DFTextBlobPerspGM matches reference`() {
         val gm = DFTextBlobPerspGM()
-        TestUtils.runGmTest(gm)
+        val rendered = TestUtils.runGmTest(gm)
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "Missing reference image ${gm.name()}.png")
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 16)
+        TestReport.recordDetailed("DFTextBlobPerspGM", comparison)
+        if (comparison.similarity < 1.0) {
+            TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
+        }
+        val accepted = SimilarityTracker.updateScore("DFTextBlobPerspGM", comparison.similarity)
+        assertTrue(accepted, "DFTextBlobPerspGM regressed below ratchet")
+        assertTrue(
+            comparison.similarity >= 1.0,
+            "DFTextBlobPerspGM similarity ${"%.2f".format(comparison.similarity)}% < 1.0% floor",
+        )
     }
 }

@@ -67,17 +67,12 @@ import org.skia.tools.ToolUtils
  *
  * Body fully ported against the live `:kanvas-skia` text-render path
  * (AA path-fill via [SkCanvas.drawSimpleText] / [SkCanvas.drawTextBlob]).
- * `:kanvas-skia` has **no distance-field text shader** — the SDF
- * pipeline is GPU-only in upstream Skia (lives in
- * `src/gpu/ganesh/text/GrAtlasManager.cpp`'s atlas-page bookkeeping +
- * `Sk*SDFGenerator` shader emission). The
- * `SkSurfaceProps.kUseDeviceIndependentFonts_Flag` flag is propagated
- * to the offscreen surface for API round-tripping, but the raster
- * backend has no SDF code path to dispatch on — glyphs are rendered
- * through the regular coverage-AA path, which won't match upstream's
- * SDF reference pixel-for-pixel.
+ * A minimal portable raster SDF cache/sampler exists for the narrower
+ * [DFTextBlobPerspGM] text-blob case, but this broader GM still routes
+ * its `drawSimpleText` sections through regular coverage-AA and keeps the
+ * upstream optional emoji block omitted.
  *
- * The associated [DFTextTest] is therefore `@Disabled("STUB.DF_TEXT")`
+ * The associated [DFTextTest] is therefore `@Disabled("STUB.DF_TEXT_FULL_GM")`
  * — see the test file for the detailed gap description.
  */
 public class DFTextGM : GM() {
