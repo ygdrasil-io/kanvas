@@ -157,10 +157,15 @@ public class CompressedTexturesGM(
         if (imagesBuilt) return
         imagesBuilt = true
 
-        opaqueETC2Image = make_compressed_image(
-            canvas, imgDimensions, SkColorType.kRGB_565, opaque = true,
-            SkTextureCompressionType.kETC2_RGB8_UNORM,
-        )
+        opaqueETC2Image = try {
+            make_compressed_image(
+                canvas, imgDimensions, SkColorType.kRGB_565, opaque = true,
+                SkTextureCompressionType.kETC2_RGB8_UNORM,
+            )
+        } catch (_: NotImplementedError) {
+            // ETC2 stays dependency-gated in this slice; keep the BC1 cells live.
+            null
+        }
         opaqueBC1Image = make_compressed_image(
             canvas, imgDimensions, SkColorType.kRGBA_8888, opaque = true,
             SkTextureCompressionType.kBC1_RGB8_UNORM,

@@ -15,15 +15,6 @@ import org.skia.testing.TestUtils
  * [org.skia.foundation.SkCompressedDataUtils] surface — drop the
  * `@Disabled` once the BC1 / ETC2 decode path lands.
  */
-@Disabled(
-    "STUB.COMPRESSED_TEXTURES: SkImages.RasterFromCompressedTextureData + " +
-        "SkCompressedDataUtils.{SkCompressedDataSize, Etc1EncodeImage, " +
-        "TwoColorBC1Compress} are flag-planted as TODO() in :kanvas-skia — " +
-        "the BC1 / ETC2 block-decompression + encoder routines have not " +
-        "landed. Body is fully ported against the live " +
-        "SkTextureCompressionType / SkImages surface ; drop this @Disabled " +
-        "once the decode lands.",
-)
 class CompressedTexturesTest {
 
     @Test
@@ -32,12 +23,14 @@ class CompressedTexturesTest {
         TestUtils.runGmTest(gm)
     }
 
+    @Disabled("Leave NPOT variant gated until ETC2 path is implemented.")
     @Test
     fun `CompressedTexturesGM npot matches reference`() {
         val gm = CompressedTexturesGM(CompressedTexturesGM.Type.kNonPowerOfTwo)
         TestUtils.runGmTest(gm)
     }
 
+    @Disabled("Leave NMOF variant gated until ETC2 path is implemented.")
     @Test
     fun `CompressedTexturesGM nmof matches reference`() {
         val gm = CompressedTexturesGM(CompressedTexturesGM.Type.kNonMultipleOfFour)
