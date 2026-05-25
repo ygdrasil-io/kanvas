@@ -286,4 +286,28 @@ class SkShaperTest {
         assertEquals(1, liga.lastInfo!!.glyphCount)
         assertEquals(listOf(0), liga.capturedBuffer!!.clusters.toList())
     }
+
+    @Test
+    fun `discretionary ligature toggle shapes ffi into single glyph with source cluster`() {
+        val tf = SkCustomTypefaceBuilder()
+            .setGlyph('f'.code, 1f, unitGlyph())
+            .setGlyph('i'.code, 1f, unitGlyph())
+            .setGlyph(0xFB03, 2f, unitGlyph())
+            .detach()
+        val font = SkFont(tf, 12f)
+
+        val noDlig = CapturingHandler()
+        SkShaper.MakePortable(
+            SkShaper.Features(standardLigatures = true, discretionaryLigatures = false),
+        ).shape("ffi", font, leftToRight = true, width = 100f, runHandler = noDlig)
+        assertEquals(2, noDlig.lastInfo!!.glyphCount)
+        assertEquals(listOf(0, 1), noDlig.capturedBuffer!!.clusters.toList())
+
+        val dlig = CapturingHandler()
+        SkShaper.MakePortable(
+            SkShaper.Features(standardLigatures = true, discretionaryLigatures = true),
+        ).shape("ffi", font, leftToRight = true, width = 100f, runHandler = dlig)
+        assertEquals(1, dlig.lastInfo!!.glyphCount)
+        assertEquals(listOf(0), dlig.capturedBuffer!!.clusters.toList())
+    }
 }
