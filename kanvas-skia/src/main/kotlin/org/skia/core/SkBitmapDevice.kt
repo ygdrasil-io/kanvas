@@ -480,6 +480,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // Pre-warm the shader (one-time per draw — reused across all
         // pixels of the triangle).
         shader.setupForDraw(ctm, xformSteps)
+        val localToShader = shader.localMatrix.invert()
 
         val (ax, ay) = ctm.mapXY(p0x, p0y)
         val (bx, by) = ctm.mapXY(p1x, p1y)
@@ -511,7 +512,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
 
                 val uvX = uv0x * w0 + uv1x * w1 + uv2x * w2
                 val uvY = uv0y * w0 + uv1y * w1 + uv2y * w2
-                val texColor = shader.sampleAtLocal(uvX, uvY)
+                val (sampleX, sampleY) = if (localToShader != null) {
+                    localToShader.mapXY(uvX, uvY)
+                } else {
+                    uvX to uvY
+                }
+                val texColor = shader.sampleAtLocal(sampleX, sampleY)
 
                 val combinedRaw: SkColor = if (haveColors) {
                     val color0 = c0 ?: error("drawTexturedTriangle: missing c0 despite haveColors")
