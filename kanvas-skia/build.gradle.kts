@@ -52,6 +52,10 @@ sourceSets {
         // but its src/test/resources/{images,original-888} are still required
         // at runtime for kanvas-skia's GMs and DM harness.
         resources.srcDir("../kanvas-legacy/src/test/resources")
+        // Encoder tests reuse the small redistributable real-image corpus
+        // from the codec validation module to prove encode paths against
+        // decoded real fixtures rather than synthetic-only bitmaps.
+        resources.srcDir("../codec-real-image-tests/src/test/resources")
     }
 }
 
