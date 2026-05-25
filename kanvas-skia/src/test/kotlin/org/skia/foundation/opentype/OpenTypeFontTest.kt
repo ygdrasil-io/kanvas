@@ -1644,6 +1644,71 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `unsupported COLRv1 paint format fails closed without rejecting font`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val bytes = liberationSansBytes()
+            .withTableContent("GPOS", "COLR", syntheticColrV1UnsupportedPaint(glyph))
+            .withTableContent("kern", "CPAL", syntheticCpalV0())
+        val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
+
+        assertTrue(typeface.countGlyphs() > glyph)
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertNull(typeface.colorPaint(glyph))
+    }
+
+    @Test
+    fun `malformed COLRv1 layer list fails closed without rejecting font`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("ABC")
+        val colr = syntheticColrV1LayersAndColrGlyph(glyphs[0], glyphs[1], glyphs[2])
+            .also { writeU32(it, 18, it.size + 4) }
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", colr)
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+
+        assertTrue(typeface.countGlyphs() > glyphs[0])
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertNull(typeface.colorPaint(glyphs[0]))
+    }
+
+    @Test
+    fun `malformed COLRv1 clip list fails closed without rejecting font`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val colr = syntheticColrV1ClippedSolid(glyph)
+            .also { writeU32(it, 22, it.size + 4) }
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", colr)
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+
+        assertTrue(typeface.countGlyphs() > glyph)
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertNull(typeface.colorPaint(glyph))
+    }
+
+    @Test
+    fun `malformed COLRv1 var color line fails closed without rejecting font`() {
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val glyph = SkFont(baseTypeface, 12f).textToGlyphs("A").single().toInt() and 0xFFFF
+        val colr = syntheticColrV1VarLinearGradient(glyph)
+            .let { it.copyOf(it.size - 1) }
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes()
+                .withTableContent("GPOS", "COLR", colr)
+                .withTableContent("kern", "CPAL", syntheticCpalV0()),
+        )!!
+
+        assertTrue(typeface.countGlyphs() > glyph)
+        assertTrue(typeface.colorPalettes().isEmpty())
+        assertNull(typeface.colorPaint(glyph))
+    }
+
+    @Test
     fun `SVG table metadata exposes document records without rendering integration`() {
         val baseTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
         val glyphs = SkFont(baseTypeface, 12f).textToGlyphs("AB")
@@ -2697,6 +2762,21 @@ class OpenTypeFontTest {
         writeU32(bytes, gradientPaintOffset + 12, 0) // varIndexBase
 
         writeVarColorLine(bytes, colorLineOffset, listOf(0f to 0, 0.75f to 2))
+        return bytes
+    }
+
+    private fun syntheticColrV1UnsupportedPaint(glyph: Int): ByteArray {
+        val baseGlyphListOffset = 34
+        val paintOffset = baseGlyphListOffset + 10
+        val bytes = ByteArray(paintOffset + 1)
+        writeU16(bytes, 0, 1) // version
+        writeU32(bytes, 14, baseGlyphListOffset) // baseGlyphListOffset
+
+        writeU32(bytes, baseGlyphListOffset, 1) // numBaseGlyphPaintRecords
+        writeU16(bytes, baseGlyphListOffset + 4, glyph)
+        writeU32(bytes, baseGlyphListOffset + 6, paintOffset - baseGlyphListOffset)
+
+        bytes[paintOffset] = 31 // unsupported PaintVarRotateAroundCenter
         return bytes
     }
 
