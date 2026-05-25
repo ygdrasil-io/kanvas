@@ -1,26 +1,26 @@
 package org.skia.tests
 
-import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
+import org.skia.testing.SimilarityTracker
+import org.skia.testing.TestReport
+import org.skia.testing.TestUtils
 
-/**
- * Disabled test for [StrokeTextNativeGM].
- *
- * Blocked by `STUB.LIBERATION_FM` — [org.skia.tools.ToolUtils.TestFontMgr]
- * (required by the `overlap` variable-font branch) throws
- * `TODO("STUB.LIBERATION_FM: …")` until a public [org.skia.foundation.SkFontMgr]
- * backed by the Liberation TTFs with full `makeFromStream` + OpenType variation
- * support is wired into `:kanvas-skia`. The font resources `fonts/Stroking.ttf`,
- * `fonts/Stroking.otf`, and `fonts/Variable.ttf` are also absent from the
- * classpath and must be bundled first.
- *
- * Remove `@Disabled` and update the ratchet once both gaps are closed.
- */
-@Disabled("STUB.LIBERATION_FM: TestFontMgr() not yet backed by a public SkFontMgr with makeFromStream+variation support; Stroking.ttf/otf and Variable.ttf resources also absent from classpath")
 class StrokeTextNativeTest {
 
     @Test
-    fun `StrokeTextNativeGM placeholder`() {
-        StrokeTextNativeGM()
+    fun `StrokeTextNativeGM matches stroketext_native_png within tolerance`() {
+        val gm = StrokeTextNativeGM()
+        val rendered = TestUtils.runGmTest(gm)
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "Missing reference image stroketext_native.png")
+        val comparison = TestUtils.compareBitmapsDetailed(rendered, reference!!, tolerance = 8)
+        TestReport.recordDetailed("StrokeTextNativeGM", comparison)
+        if (comparison.similarity < 50.0) {
+            TestUtils.saveComparisonImage(rendered, reference, comparison, gm.name())
+        }
+        val accepted = SimilarityTracker.updateScore("StrokeTextNativeGM", comparison.similarity)
+        assertTrue(accepted, "StrokeTextNativeGM regressed below ratchet")
     }
 }
