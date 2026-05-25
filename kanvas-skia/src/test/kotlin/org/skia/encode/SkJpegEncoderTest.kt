@@ -24,6 +24,9 @@ import org.skia.foundation.SkColorType
  *    underlying writer.
  *  - The emitted stream is baseline SOF0, not progressive SOF2, and
  *    does not advertise restart intervals.
+ *  - Real fixture bitmaps from the shared codec corpus encode to
+ *    baseline JPEG, honour quality sizing, and decode back within a
+ *    bounded lossy tolerance.
  *  - [SkJpegEncoder.Options] rejects out-of-range quality.
  *  - JPEG output is always opaque even when the source bitmap had
  *    alpha < 255 — alpha is dropped per the
@@ -137,6 +140,30 @@ class SkJpegEncoderTest {
         assertTrue(0xDD !in markers, "DRI restart interval marker is not emitted by the current encoder")
     }
 
+    @Test
+    fun `real fixtures encode as baseline JPEG and decode within quality tolerance`() {
+        val fixtures = listOf(
+            "/codec-real-images/png/mandrill_64.png",
+            "/codec-real-images/png/grayscale_8.png",
+            "/codec-real-images/jpeg/dog.jpg",
+        )
+        for (fixture in fixtures) {
+            val src = decode(readFixture(fixture))
+            val high = SkJpegEncoder.Encode(src, SkJpegEncoder.Options(quality = 95))!!
+            val low = SkJpegEncoder.Encode(src, SkJpegEncoder.Options(quality = 35))!!
+            assertTrue(low.size < high.size, "$fixture low-quality JPEG should be smaller")
+
+            val markers = jpegMarkersBeforeScan(high)
+            assertTrue(0xC0 in markers, "$fixture must encode as baseline SOF0")
+            assertTrue(0xC2 !in markers, "$fixture must not encode as progressive SOF2")
+
+            val roundTrip = decode(high)
+            assertEquals(src.width, roundTrip.width, "$fixture width")
+            assertEquals(src.height, roundTrip.height, "$fixture height")
+            assertSampledSimilarity(src, roundTrip, fixture)
+        }
+    }
+
     private fun makeFlat(width: Int, height: Int, color: Int): SkBitmap {
         val b = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
@@ -164,6 +191,38 @@ class SkJpegEncoderTest {
         assertNotNull(decoded)
         return decoded!!
     }
+
+    private fun readFixture(path: String): ByteArray {
+        val stream = javaClass.getResourceAsStream(path)
+        assertNotNull(stream, "missing real-image fixture $path")
+        return stream!!.use { it.readBytes() }
+    }
+
+    private fun assertSampledSimilarity(expected: SkBitmap, actual: SkBitmap, label: String) {
+        var totalDelta = 0
+        var samples = 0
+        var maxDelta = 0
+        val xs = sampledPositions(expected.width)
+        val ys = sampledPositions(expected.height)
+        for (y in ys) for (x in xs) {
+            val expectedPixel = expected.getPixel(x, y)
+            val actualPixel = actual.getPixel(x, y)
+            for (shift in intArrayOf(16, 8, 0)) {
+                val delta = kotlin.math.abs(((expectedPixel ushr shift) and 0xFF) - ((actualPixel ushr shift) and 0xFF))
+                totalDelta += delta
+                maxDelta = maxOf(maxDelta, delta)
+                samples++
+            }
+        }
+        val averageDelta = totalDelta.toDouble() / samples
+        assertTrue(averageDelta <= 24.0, "$label average sampled RGB delta $averageDelta exceeds JPEG tolerance")
+        assertTrue(maxDelta <= 96, "$label max sampled RGB delta $maxDelta exceeds JPEG tolerance")
+    }
+
+    private fun sampledPositions(size: Int): List<Int> =
+        (0 until minOf(size, 8)).map { index ->
+            if (size == 1) 0 else (index * (size - 1) / maxOf(1, minOf(size, 8) - 1))
+        }.distinct()
 
     private fun sof0YSampling(bytes: ByteArray): Int {
         var offset = 2
