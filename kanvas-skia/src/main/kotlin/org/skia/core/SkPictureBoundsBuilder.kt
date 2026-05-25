@@ -163,6 +163,8 @@ internal object SkPictureBoundsBuilder {
                 is SkRecord.DrawString -> out[i] = cullRect
                 is SkRecord.DrawSimpleText -> out[i] = cullRect
                 is SkRecord.DrawTextBlob -> out[i] = cullRect
+                is SkRecord.DrawMesh -> out[i] =
+                    current().mapRect(adjustForPaint(r.paint, r.mesh.bounds()))
                 is SkRecord.DrawPicture -> out[i] = cullRect
             }
         }

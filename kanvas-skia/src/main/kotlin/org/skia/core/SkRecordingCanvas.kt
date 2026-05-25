@@ -2,6 +2,8 @@ package org.skia.core
 
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkBlender
+import org.skia.foundation.SkData
 import org.graphiks.math.SkColor
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
@@ -228,6 +230,14 @@ internal class SkRecordingCanvas(
         records += SkRecord.DrawTextBlob(blob, x, y, paint.copy())
     }
 
+    override fun drawMesh(mesh: SkMesh, blender: SkBlender?, paint: SkPaint) {
+        records += SkRecord.DrawMesh(snapshotMesh(mesh), blender, paint.copy())
+    }
+
+    override fun drawMesh(mesh: SkMesh, paint: SkPaint) {
+        drawMesh(mesh, null, paint)
+    }
+
     override fun drawPicture(picture: SkPicture, matrix: SkMatrix?, paint: SkPaint?) {
         // R-suivi.22 — record a *reference* to the sub-picture rather
         // than flattening its ops into our own record list. Preserves
@@ -237,5 +247,39 @@ internal class SkRecordingCanvas(
         // re-enter our recording overrides and inline every nested op
         // — losing the sub-picture boundary.
         records += SkRecord.DrawPicture(picture, matrix, paint?.copy())
+    }
+
+    private fun snapshotMesh(mesh: SkMesh): SkMesh {
+        if (!mesh.isValid()) return SkMesh()
+        val vertexBuffer = mesh.vertexBuffer()?.let { SkMeshes.CopyVertexBuffer(it) } ?: return SkMesh()
+        val indexBuffer = mesh.indexBuffer()?.let { SkMeshes.CopyIndexBuffer(it) }
+        val uniforms = mesh.uniforms()?.let { SkData.MakeWithCopy(it.toByteArray()) }
+        val result = if (indexBuffer == null) {
+            SkMesh.Make(
+                specification = mesh.spec(),
+                mode = mesh.mode(),
+                vertexBuffer = vertexBuffer,
+                vertexCount = mesh.vertexCount(),
+                vertexOffset = mesh.vertexOffset(),
+                uniforms = uniforms,
+                children = mesh.children(),
+                bounds = mesh.bounds().copy(),
+            )
+        } else {
+            SkMesh.MakeIndexed(
+                specification = mesh.spec(),
+                mode = mesh.mode(),
+                vertexBuffer = vertexBuffer,
+                vertexCount = mesh.vertexCount(),
+                vertexOffset = mesh.vertexOffset(),
+                indexBuffer = indexBuffer,
+                indexCount = mesh.indexCount(),
+                indexOffset = mesh.indexOffset(),
+                uniforms = uniforms,
+                children = mesh.children(),
+                bounds = mesh.bounds().copy(),
+            )
+        }
+        return result.mesh
     }
 }
