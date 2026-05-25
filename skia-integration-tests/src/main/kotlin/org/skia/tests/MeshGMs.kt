@@ -1,15 +1,26 @@
 package org.skia.tests
 
-import org.skia.core.SkCanvas
 import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
+import org.skia.core.SkCanvas
+import org.skia.core.SkMesh
+import org.skia.core.SkMeshSpecification
+import org.skia.core.SkMeshes
+import org.skia.foundation.SkBlender
+import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkLinearGradient
+import org.skia.foundation.SkPaint
+import org.skia.foundation.SkTileMode
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 // ---------------------------------------------------------------------------
 // Stub ports of Skia's gm/mesh.cpp  (11 GMs)
 //
-// All GMs in this file depend on SkMesh / SkMeshSpecification — a custom
-// GPU mesh-shader API that has no counterpart in :kanvas-skia yet.
-// Every onDraw body calls TODO("STUB.MESH") as the flag-planting marker.
-// The companion test file (MeshTest.kt) is @Disabled with the same tag.
+// The narrow CPU subset for "custommesh" is active. Remaining GMs still
+// depend on unsupported mesh SkSL, uniforms, children, colour management, or
+// picture playback and keep explicit STUB.MESH blockers.
 //
 // Upstream: /Users/chaos/workspace/kanvas-forge/skia-main/gm/mesh.cpp
 // ---------------------------------------------------------------------------
@@ -22,13 +33,191 @@ import org.graphiks.math.SkISize
  * every combination of alpha / colours / shader / blender. Relies on
  * SkMeshes::MakeVertexBuffer / MakeIndexBuffer + GrDirectContext GPU copy.
  *
- * TODO("STUB.MESH") — SkMesh / SkMeshSpecification not implemented.
+ * CPU subset: the upstream mesh SkSL is mapped onto the currently supported
+ * `float2 position` plus optional `ubyte4_unorm color` specification. Shader
+ * children, fragment output UVs, and GPU buffer copies remain out of scope,
+ * but this still exercises the reviewable custommesh surface:
+ * non-indexed/indexed, triangle-strip/triangles, position-only/color, alpha,
+ * shader paint, and blender plumbing.
  */
 public class CustomMeshGM : GM() {
     override fun getName(): String = "custommesh"
     override fun getISize(): SkISize = SkISize.Make(435, 1180)
+
+    private lateinit var positionSpec: SkMeshSpecification
+    private lateinit var positionColorSpec: SkMeshSpecification
+    private lateinit var noColorVB: SkMesh.VertexBuffer
+    private lateinit var colorVB: SkMesh.VertexBuffer
+    private lateinit var noColorIndexedVB: SkMesh.VertexBuffer
+    private lateinit var colorIndexedVB: SkMesh.VertexBuffer
+    private lateinit var indexBuffer: SkMesh.IndexBuffer
+
+    override fun onOnceBeforeDraw() {
+        positionSpec = makeSpec(withColor = false)
+        positionColorSpec = makeSpec(withColor = true)
+        noColorVB = SkMeshes.MakeVertexBuffer(
+            ByteArray(NO_COLOR_OFFSET) + positionBytes(QUAD),
+            NO_COLOR_OFFSET + QUAD.size * POSITION_STRIDE,
+        )
+        colorVB = SkMeshes.MakeVertexBuffer(colorBytes(QUAD), QUAD.size * POSITION_COLOR_STRIDE)
+        noColorIndexedVB = SkMeshes.MakeVertexBuffer(
+            positionBytes(INDEXED_QUAD),
+            INDEXED_QUAD.size * POSITION_STRIDE,
+        )
+        colorIndexedVB = SkMeshes.MakeVertexBuffer(
+            ByteArray(COLOR_INDEXED_OFFSET) + colorBytes(INDEXED_QUAD),
+            COLOR_INDEXED_OFFSET + INDEXED_QUAD.size * POSITION_COLOR_STRIDE,
+        )
+        indexBuffer = SkMeshes.MakeIndexBuffer(ByteArray(INDEX_OFFSET) + shortBytes(INDICES), INDEX_OFFSET + 12)
+    }
+
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.MESH")
+        val c = canvas ?: return
+        val shader = SkLinearGradient.Make(
+            p0 = SkPoint(20f, 20f),
+            p1 = SkPoint(120f, 120f),
+            colors = intArrayOf(0xFFFFFFFF.toInt(), 0x00000000),
+            positions = null,
+            tileMode = SkTileMode.kMirror,
+        )
+
+        var i = 0
+        for (mode in listOf(SkBlendMode.kDst, SkBlendMode.kSrc, SkBlendMode.kSaturation)) {
+            c.save()
+            for (alpha in listOf(0xFF, 0x40)) {
+                for (colors in listOf(false, true)) {
+                    for (useShader in listOf(false, true)) {
+                        val mesh = makeMesh(indexed = i and 1 == 1, colors = colors)
+                        val paint = SkPaint(0xFF00FF00.toInt()).apply {
+                            this.alpha = alpha
+                            if (useShader) this.shader = shader
+                        }
+                        c.drawMesh(mesh, SkBlender.Mode(mode), paint)
+                        c.translate(0f, 150f)
+                        i++
+                    }
+                }
+            }
+            c.restore()
+            c.translate(150f, 0f)
+        }
+    }
+
+    private fun makeSpec(withColor: Boolean): SkMeshSpecification {
+        val attributes = if (withColor) {
+            listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kUByte4_unorm,
+                    offset = 8,
+                    name = "color",
+                ),
+            )
+        } else {
+            listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "position",
+                ),
+            )
+        }
+        val result = SkMeshSpecification.Make(
+            attributes = attributes,
+            vertexStride = if (withColor) POSITION_COLOR_STRIDE else POSITION_STRIDE,
+            vs = "Varyings main(const Attributes a) { Varyings v; v.position = a.position; return v; }",
+            fs = "float4 main(const Varyings v) { return float4(1); }",
+        )
+        return result.specification ?: error("CustomMeshGM spec creation failed: ${result.error}")
+    }
+
+    private fun makeMesh(indexed: Boolean, colors: Boolean): SkMesh {
+        val result = if (indexed) {
+            SkMesh.MakeIndexed(
+                specification = if (colors) positionColorSpec else positionSpec,
+                mode = SkMesh.Mode.kTriangles,
+                vertexBuffer = if (colors) colorIndexedVB else noColorIndexedVB,
+                vertexCount = INDEXED_QUAD.size,
+                vertexOffset = if (colors) COLOR_INDEXED_OFFSET else 0,
+                indexBuffer = indexBuffer,
+                indexCount = INDICES.size,
+                indexOffset = INDEX_OFFSET,
+                bounds = RECT,
+            )
+        } else {
+            SkMesh.Make(
+                specification = if (colors) positionColorSpec else positionSpec,
+                mode = SkMesh.Mode.kTriangleStrip,
+                vertexBuffer = if (colors) colorVB else noColorVB,
+                vertexCount = QUAD.size,
+                vertexOffset = if (colors) 0 else NO_COLOR_OFFSET,
+                bounds = RECT,
+            )
+        }
+        return result.mesh.takeIf { it.isValid() } ?: error("CustomMeshGM mesh creation failed: ${result.error}")
+    }
+
+    private data class MeshVertex(val x: Float, val y: Float, val color: Int = 0xFFFFFFFF.toInt())
+
+    private companion object {
+        val RECT: SkRect = SkRect.MakeLTRB(20f, 20f, 120f, 120f)
+        private const val POSITION_STRIDE = 8
+        private const val POSITION_COLOR_STRIDE = 12
+        private const val NO_COLOR_OFFSET = POSITION_STRIDE
+        private const val COLOR_INDEXED_OFFSET = POSITION_COLOR_STRIDE * 2
+        private const val INDEX_OFFSET = 6
+
+        private val QUAD = arrayOf(
+            MeshVertex(RECT.left, RECT.top, 0xFFFFFF00.toInt()),
+            MeshVertex(RECT.right, RECT.top, 0xFFFFFFFF.toInt()),
+            MeshVertex(RECT.left, RECT.bottom, 0xFFFF00FF.toInt()),
+            MeshVertex(RECT.right, RECT.bottom, 0xFF00FFFF.toInt()),
+        )
+        private val INDEXED_QUAD = arrayOf(
+            QUAD[0],
+            MeshVertex(100f, 0f, 0x00000000),
+            QUAD[1],
+            MeshVertex(200f, 10f, 0x00000000),
+            QUAD[2],
+            QUAD[3],
+        )
+        private val INDICES = intArrayOf(0, 2, 4, 2, 5, 4)
+
+        private fun positionBytes(vertices: Array<MeshVertex>): ByteArray =
+            ByteBuffer.allocate(vertices.size * POSITION_STRIDE)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .apply {
+                    vertices.forEach {
+                        putFloat(it.x)
+                        putFloat(it.y)
+                    }
+                }
+                .array()
+
+        private fun colorBytes(vertices: Array<MeshVertex>): ByteArray =
+            ByteBuffer.allocate(vertices.size * POSITION_COLOR_STRIDE)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .apply {
+                    vertices.forEach {
+                        putFloat(it.x)
+                        putFloat(it.y)
+                        put(((it.color ushr 16) and 0xFF).toByte())
+                        put(((it.color ushr 8) and 0xFF).toByte())
+                        put((it.color and 0xFF).toByte())
+                        put(((it.color ushr 24) and 0xFF).toByte())
+                    }
+                }
+                .array()
+
+        private fun shortBytes(values: IntArray): ByteArray =
+            ByteBuffer.allocate(values.size * 2)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .apply { values.forEach { putShort(it.toShort()) } }
+                .array()
     }
 }
 
