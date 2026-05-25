@@ -8,6 +8,7 @@ import org.graphiks.math.SkIPoint
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
 import org.graphiks.math.SkMatrix
+import org.graphiks.math.SkColorSetARGB
 import java.nio.ByteBuffer
 
 /**
@@ -206,9 +207,11 @@ public object SkImages {
         width: Int,
         height: Int,
         compressionType: SkTextureCompressionType,
-    ): SkImage? = throw NotImplementedError(
-        "STUB.COMPRESSED_TEXTURES: requires ETC1/ETC2 and BC1/DXT1 block-compression " +
-            "decode + raster-image materialisation — out of scope for :kanvas-skia pure-JVM.",
+    ): SkImage? = RasterFromCompressedTextureData(
+        SkData.MakeWithCopy(data),
+        width,
+        height,
+        compressionType,
     )
 
     // `DeferredFromEncodedData(ByteBuffer): SkImage?` factory moved to
@@ -403,14 +406,90 @@ public object SkImages {
         height: Int,
         compression: SkTextureCompressionType,
     ): SkImage? {
-        TODO(
-            "STUB.COMPRESSED_TEXTURES: SkImages.RasterFromCompressedTextureData(" +
-                "data[${data.size} bytes], ${width}x$height, $compression) " +
-                "not implemented — kanvas-skia raster backend lacks the " +
-                "block-compressed texture decode path (BC1 / ETC2 — see " +
-                "BC1TransparencyGM, CompressedTexturesGM)."
-        )
+        if (width <= 0 || height <= 0) return null
+        return when (compression) {
+            SkTextureCompressionType.kBC1_RGB8_UNORM -> decodeBC1(data, width, height, honorAlpha = false)
+            SkTextureCompressionType.kBC1_RGBA8_UNORM -> decodeBC1(data, width, height, honorAlpha = true)
+            SkTextureCompressionType.kETC2_RGB8_UNORM -> throw NotImplementedError(
+                "STUB.COMPRESSED_TEXTURES.ETC: ETC2/ETC1 decode not implemented."
+            )
+            SkTextureCompressionType.kNone -> null
+        }
     }
+
+    private fun decodeBC1(data: SkData, width: Int, height: Int, honorAlpha: Boolean): SkImage? {
+        val blockW = (width + 3) / 4
+        val blockH = (height + 3) / 4
+        val needed = blockW * blockH * 8
+        if (data.size < needed) return null
+        val src = data.bytesUnsafe()
+        val out = IntArray(width * height)
+        var off = 0
+        for (by in 0 until blockH) {
+            for (bx in 0 until blockW) {
+                val c0 = u16(src, off)
+                val c1 = u16(src, off + 2)
+                val idxBits = u32(src, off + 4)
+                val pal = bc1Palette(c0, c1, honorAlpha)
+                var bits = idxBits
+                for (ly in 0 until 4) {
+                    val py = by * 4 + ly
+                    if (py >= height) {
+                        bits = bits ushr 8
+                        continue
+                    }
+                    for (lx in 0 until 4) {
+                        val px = bx * 4 + lx
+                        val idx = bits and 0x3
+                        bits = bits ushr 2
+                        if (px < width) out[py * width + px] = pal[idx]
+                    }
+                }
+                off += 8
+            }
+        }
+        return SkImage(width, height, out, SkColorType.kRGBA_8888)
+    }
+
+    private fun bc1Palette(c0: Int, c1: Int, honorAlpha: Boolean): IntArray {
+        val p0 = rgb565ToColor(c0)
+        val p1 = rgb565ToColor(c1)
+        val r0 = (p0 ushr 16) and 0xFF
+        val g0 = (p0 ushr 8) and 0xFF
+        val b0 = p0 and 0xFF
+        val r1 = (p1 ushr 16) and 0xFF
+        val g1 = (p1 ushr 8) and 0xFF
+        val b1 = p1 and 0xFF
+        val p2: Int
+        val p3: Int
+        if (c0 > c1) {
+            p2 = SkColorSetARGB(255, (2 * r0 + r1) / 3, (2 * g0 + g1) / 3, (2 * b0 + b1) / 3)
+            p3 = SkColorSetARGB(255, (r0 + 2 * r1) / 3, (g0 + 2 * g1) / 3, (b0 + 2 * b1) / 3)
+        } else {
+            p2 = SkColorSetARGB(255, (r0 + r1) / 2, (g0 + g1) / 2, (b0 + b1) / 2)
+            p3 = if (honorAlpha) 0 else SkColorSetARGB(255, 0, 0, 0)
+        }
+        return intArrayOf(p0, p1, p2, p3)
+    }
+
+    private fun rgb565ToColor(v: Int): Int {
+        val r5 = (v ushr 11) and 0x1F
+        val g6 = (v ushr 5) and 0x3F
+        val b5 = v and 0x1F
+        val r = (r5 shl 3) or (r5 ushr 2)
+        val g = (g6 shl 2) or (g6 ushr 4)
+        val b = (b5 shl 3) or (b5 ushr 2)
+        return SkColorSetARGB(255, r, g, b)
+    }
+
+    private fun u16(src: ByteArray, off: Int): Int =
+        (src[off].toInt() and 0xFF) or ((src[off + 1].toInt() and 0xFF) shl 8)
+
+    private fun u32(src: ByteArray, off: Int): Int =
+        (src[off].toInt() and 0xFF) or
+            ((src[off + 1].toInt() and 0xFF) shl 8) or
+            ((src[off + 2].toInt() and 0xFF) shl 16) or
+            ((src[off + 3].toInt() and 0xFF) shl 24)
 
     /**
      * Mirrors Skia's
