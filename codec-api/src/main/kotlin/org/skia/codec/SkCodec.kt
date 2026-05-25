@@ -208,6 +208,15 @@ public abstract class SkCodec protected constructor() {
     )
 
     /**
+     * Mirrors `SkCodec::getRepetitionCount()` for animated formats.
+     *
+     * `0` means the animation should play once and stop,
+     * [kRepetitionCountInfinite] means loop forever, and positive values
+     * are extra full passes after the first. Static formats return `0`.
+     */
+    public open fun getRepetitionCount(): Int = 0
+
+    /**
      * Allocate a fresh [SkBitmap] matching `info` and decode into it.
      * Mirrors upstream's `std::tuple<sk_sp<SkImage>, SkCodec::Result>
      * SkCodec::getImage(const SkImageInfo&)`. Returns `(null, result)`
@@ -234,6 +243,12 @@ public abstract class SkCodec protected constructor() {
          * back-reference / dependency frame.
          */
         public const val kNoFrame: Int = -1
+
+        /**
+         * Sentinel returned by [getRepetitionCount] for animations whose
+         * container requests infinite playback.
+         */
+        public const val kRepetitionCountInfinite: Int = -1
 
         /**
          * Sniff the leading bytes of [data] and return a codec that can

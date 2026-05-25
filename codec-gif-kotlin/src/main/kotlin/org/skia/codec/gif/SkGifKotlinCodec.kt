@@ -23,6 +23,7 @@ public class SkGifKotlinCodec private constructor(
     private val frames: List<DecodedFrame>,
     private val canvasWidth: Int,
     private val canvasHeight: Int,
+    private val repetitionCount: Int,
 ) : SkCodec() {
 
     internal class DecodedFrame(
@@ -51,6 +52,8 @@ public class SkGifKotlinCodec private constructor(
     override fun getICCProfile(): SkcmsICCProfile? = null
 
     override fun getFrameCount(): Int = frames.size
+
+    override fun getRepetitionCount(): Int = repetitionCount
 
     override fun getFrameInfo(): List<FrameInfo> = frames.map { frame ->
         FrameInfo(
@@ -105,6 +108,7 @@ public class SkGifKotlinCodec private constructor(
     private class Parser(private val bytes: ByteArray) {
         private var offset: Int = 0
         private var gce: GraphicControl = GraphicControl()
+        private var repetitionCount: Int = 0
 
         fun parse(): SkGifKotlinCodec? {
             skip(SIGNATURE_SIZE)
@@ -146,7 +150,7 @@ public class SkGifKotlinCodec private constructor(
             }
 
             if (frames.isEmpty()) return null
-            return SkGifKotlinCodec(frames, width, height)
+            return SkGifKotlinCodec(frames, width, height, repetitionCount)
         }
 
         private fun readExtension() {
@@ -167,7 +171,29 @@ public class SkGifKotlinCodec private constructor(
                         transparentIndex = if ((packed and 0x01) != 0) transparentIndex else -1,
                     )
                 }
+                EXT_APPLICATION -> readApplicationExtension()
                 else -> skipSubBlocks()
+            }
+        }
+
+        private fun readApplicationExtension() {
+            val blockSize = readU8()
+            if (blockSize != 11) {
+                skip(blockSize)
+                skipSubBlocks()
+                return
+            }
+            requireRemaining(11)
+            val app = String(bytes, offset, 11, Charsets.US_ASCII)
+            offset += 11
+            val payload = readSubBlocks()
+            if (app == "NETSCAPE2.0" && payload.size >= 3 && (payload[0].toInt() and 0xFF) == 1) {
+                val loopCount = (payload[1].toInt() and 0xFF) or ((payload[2].toInt() and 0xFF) shl 8)
+                repetitionCount = if (loopCount == 0) {
+                    SkCodec.kRepetitionCountInfinite
+                } else {
+                    loopCount
+                }
             }
         }
 
@@ -317,6 +343,7 @@ private const val BLOCK_IMAGE: Int = 0x2C
 private const val BLOCK_EXTENSION: Int = 0x21
 private const val BLOCK_TRAILER: Int = 0x3B
 private const val EXT_GRAPHIC_CONTROL: Int = 0xF9
+private const val EXT_APPLICATION: Int = 0xFF
 private const val DISPOSAL_NONE: Int = 0
 private const val DISPOSAL_RESTORE_BACKGROUND: Int = 2
 private const val DISPOSAL_RESTORE_PREVIOUS: Int = 3

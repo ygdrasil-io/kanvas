@@ -215,6 +215,7 @@ class SkWebpKotlinCodecTest {
         assertEquals(2, checkedCodec.getInfo().height)
         assertEquals(SkAlphaType.kUnpremul, checkedCodec.getInfo().alphaType)
         assertEquals(7, checkedCodec.metadata.animation!!.loopCount)
+        assertEquals(6, checkedCodec.getRepetitionCount())
         assertEquals(argb(0x40, 10, 20, 30), checkedCodec.metadata.animation.backgroundColor)
         val frame = checkedCodec.metadata.animation.frames.single()
         assertEquals(45, frame.durationMs)

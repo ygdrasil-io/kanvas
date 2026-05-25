@@ -92,7 +92,7 @@ public class SkAnimatedImage private constructor(
     private var currentFrameIndex: Int = -1
     private var currentDuration: Int = 0
     private var finished: Boolean = false
-    private var repetitionCount: Int = 0
+    private var repetitionCount: Int = codec.codec().getRepetitionCount()
     private var repetitionsCompleted: Int = 0
 
     init {
@@ -261,7 +261,7 @@ public class SkAnimatedImage private constructor(
          * [setRepetitionCount] to keep the animation looping
          * indefinitely.
          */
-        public const val kRepetitionCountInfinite: Int = -1
+        public const val kRepetitionCountInfinite: Int = SkCodec.kRepetitionCountInfinite
 
         /**
          * Mirrors upstream's
