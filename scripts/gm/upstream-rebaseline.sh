@@ -82,7 +82,9 @@ bucket_for() {
         printf 'fixture-gated\n'
     elif [[ "$cpp" =~ ^(composeshader|dashcubics|rrect|fiddle)$ ]]; then
         printf 'implementation\n'
-    elif [[ "$cpp" =~ ^(circulararcs|cubicpaths|encode|gammatext|gradient_dirty_laundry|gradtext|hugepath|lattice|nonclosedpaths|orientation|overstroke|pathfill|polygons|quadpaths|strokefill|strokes|trickycubicstrokes)$ ]]; then
+    elif [[ "$cpp" =~ ^(gradients)$ ]]; then
+        printf 'implementation\n'
+    elif [[ "$cpp" =~ ^(circulararcs|cubicpaths|encode|gammatext|gradient_dirty_laundry|gradtext|hugepath|lattice|lumafilter|nonclosedpaths|orientation|overstroke|pathfill|polygons|quadpaths|shadowutils|strokefill|strokes|surface|trickycubicstrokes)$ ]]; then
         printf 'partial-coverage\n'
     elif [[ "$tags" =~ (EMOJI_TABLES|FONTATIONS|COLR_V1|LIBERATION_FM|FREETYPE|PDF_TABLE_SUBSET_FONTMGR) ]]; then
         printf 'font-gated\n'
