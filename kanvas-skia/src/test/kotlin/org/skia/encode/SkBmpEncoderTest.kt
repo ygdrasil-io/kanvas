@@ -66,6 +66,28 @@ class SkBmpEncoderTest {
     }
 
     @Test
+    fun `real BMP fixtures re-encode with valid headers and round-trip pixels`() {
+        val fixtures = listOf(
+            "bottom_up_24.bmp",
+            "palette_8.bmp",
+            "top_down_32_alpha.bmp",
+        )
+        for (fixture in fixtures) {
+            val src = decodeBmp(readFixture("/codec-real-images/bmp/$fixture"))
+            val encoded = SkBmpEncoder.Encode(src)!!.toByteArray()
+            assertEquals('B'.code.toByte(), encoded[0], "$fixture BMP signature byte 0")
+            assertEquals('M'.code.toByte(), encoded[1], "$fixture BMP signature byte 1")
+            assertEquals(encoded.size, readU32LE(encoded, 2), "$fixture file-size header")
+            assertEquals(54, readU32LE(encoded, 10), "$fixture pixel-data offset")
+            assertEquals(40, readU32LE(encoded, 14), "$fixture BITMAPINFOHEADER size")
+            assertEquals(32, readU16LE(encoded, 14 + 14), "$fixture default encoder bpp")
+
+            val roundTrip = decodeBmp(encoded)
+            assertSamePixels(src, roundTrip, fixture)
+        }
+    }
+
+    @Test
     fun `BGR_888 format drops alpha and uses 24-bit pixels`() {
         val src = SkBitmap(2, 2)
         src.pixels[0] = 0x80FF0000.toInt() // alpha 50%, red
@@ -154,6 +176,20 @@ class SkBmpEncoderTest {
         assertEquals(SkCodec.Result.kSuccess, result)
         assertNotNull(bitmap)
         return bitmap!!
+    }
+
+    private fun readFixture(path: String): ByteArray {
+        val stream = javaClass.getResourceAsStream(path)
+        assertNotNull(stream, "missing real-image fixture $path")
+        return stream!!.use { it.readBytes() }
+    }
+
+    private fun assertSamePixels(expected: SkBitmap, actual: SkBitmap, label: String) {
+        assertEquals(expected.width, actual.width, "$label width")
+        assertEquals(expected.height, actual.height, "$label height")
+        for (y in 0 until expected.height) for (x in 0 until expected.width) {
+            assertEquals(expected.getPixel(x, y), actual.getPixel(x, y), "$label pixel($x,$y)")
+        }
     }
 
     private fun readU32LE(buf: ByteArray, off: Int): Int =
