@@ -9,7 +9,9 @@ import org.skia.foundation.SkData
  * Valid meshes reference immutable CPU buffers created through [SkMeshes].
  * The only executable specification subset is documented on
  * [SkMeshSpecification]: a `float2 position` attribute consumed by
- * [SkCanvas.drawMesh].
+ * [SkCanvas.drawMesh]. Optional `ubyte4_unorm color` attributes are lowered to
+ * [org.skia.foundation.SkVertices.colors]; SkSL, uniforms, children, varyings,
+ * and fragment output are not executed by the CPU path.
  */
 public class SkMesh private constructor(
     private val specStorage: SkMeshSpecification?,
@@ -214,7 +216,7 @@ public class SkMesh private constructor(
             if (vertexOffset % spec.stride() != 0) return "SkMesh vertexOffset must be aligned to specification stride"
             val vertexBytes = spec.stride() * vertexCount
             if (vertexOffset + vertexBytes > vb.size()) return "SkMesh vertex buffer is too small"
-            if (uniforms != null && uniforms.size < spec.uniformSize()) return "SkMesh uniforms are too small"
+            if (uniforms != null) return "CPU SkMesh does not support uniforms yet"
             if (children.isNotEmpty()) return "CPU SkMesh does not support runtime-effect children yet"
 
             if (indexBuffer == null) {

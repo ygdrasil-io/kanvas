@@ -119,7 +119,7 @@ Completed since this snapshot:
 | `dftext_blob_persp` | `STUB.DF_TEXT_RASTER` | `DFTextBlobPerspGM.kt` |
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, HSL hue-method GM enabled, perceptual/powerless hue sampler still missing | gradient interpolation variants |
-| `mesh` | `STUB.MESH`; minimal CPU `SkMesh` / `SkMeshSpecification` / `SkCanvas.drawMesh` skeleton exists for position-only triangles, but all 11 upstream registrations remain compile-pinned until shader attributes, varyings, uniforms, and color output are implemented | `MeshGMs.kt` |
+| `mesh` | `STUB.MESH`; minimal CPU `SkMesh` / `SkMeshSpecification` / `SkCanvas.drawMesh` skeleton exists for position-only triangles and optional `ubyte4_unorm color`, but all 11 upstream registrations remain compile-pinned until shader attributes, varyings, uniforms, and fragment output are implemented | `MeshGMs.kt` |
 | `vertices` | `STUB.DRAW_VERTICES_VISUAL_PARITY`; `VerticesGM` is source-ported, but focused validation still renders ~60% for both `vertices` and `vertices_scaled_shader` after vertex blend and paint color-filter coverage | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
@@ -186,31 +186,26 @@ correctly disabled with `STUB.MESH`.
 
 Reactivation blocker:
 
-- Active modules have no `org.skia.core.SkMesh`,
-  `org.skia.core.SkMeshSpecification`, `SkCanvas.drawMesh(...)`, or
-  device-level draw-mesh dispatch. The generated legacy files under
-  `kanvas-legacy/src/generated/core/org/skia/core/SkMesh*.kt` are incomplete
-  translation artifacts and should be used only as source notes.
+- Active modules now have minimal `org.skia.core.SkMesh`,
+  `org.skia.core.SkMeshSpecification`, and `SkCanvas.drawMesh(...)` support
+  for CPU-backed position-only meshes plus optional `ubyte4_unorm color`
+  lowering to `SkVertices`. The generated legacy files under
+  `kanvas-legacy/src/generated/core/org/skia/core/SkMesh*.kt` remain
+  incomplete translation artifacts and should be used only as source notes.
 
 Implementation entry points:
 
-- Add public mesh data/API types under
+- Continue the public mesh data/API types under
   `kanvas-skia/src/main/kotlin/org/skia/core/`: `SkMesh`,
   `SkMeshSpecification`, vertex/index buffer abstractions, `Make` /
-  `MakeIndexed`, and specification validation for attributes, varyings,
-  vertex stride, uniforms, children, bounds, draw mode, offsets, and
-  CPU-backed buffer updates.
-- Add `SkCanvas.drawMesh(mesh, blender, paint)` near the existing
-  `drawVertices(...)` implementation in
-  `kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt`; dispatch through
-  the top device after applying clip/CTM behavior consistent with other
-  canvas draws.
-- Add device handling in the active raster path, starting from
-  `kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt`. A first
-  useful slice can rasterize constant-position/constant-color mesh specs by
-  lowering compatible meshes to `SkVertices`; shader-child, color-managed,
-  uniform-driven, update, zero-init, and picture playback cases should remain
-  disabled until their specific behavior is implemented.
+  `MakeIndexed`, and specification validation. The current CPU subset
+  intentionally rejects varyings, uniforms, children, and unsupported
+  attributes.
+- Extend `SkCanvas.drawMesh(mesh, blender, paint)` only through bounded CPU
+  lowering slices. It currently lowers position-only and position+color
+  meshes to `SkVertices`; shader-child, color-managed, uniform-driven, zero-init,
+  and picture playback cases should remain disabled until their specific
+  behavior is implemented.
 - Wire picture recording/playback only after the public draw call exists;
   `PictureMeshGM` depends on recording a mesh operation, not only direct
   raster drawing.

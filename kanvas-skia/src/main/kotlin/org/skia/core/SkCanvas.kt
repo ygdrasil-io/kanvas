@@ -2115,9 +2115,11 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      *
      * Supported subset: [mesh] must be valid, CPU-backed, and its
      * [SkMeshSpecification] must contain a `float2` attribute named
-     * `position`. The mesh is converted to [SkVertices] and drawn with the
-     * supplied [paint]. Mesh SkSL, uniforms, children, fragment colors, and
-     * [blender] are accepted by the surface API but not executed yet.
+     * `position` and may contain one `ubyte4_unorm` attribute named `color`
+     * encoded as RGBA bytes. The mesh is converted to [SkVertices] and drawn
+     * with the supplied [paint]. Mesh SkSL, uniforms, children, varyings,
+     * fragment output, and [blender] are accepted by the surface API but not
+     * executed yet.
      */
     public open fun drawMesh(
         mesh: SkMesh,
@@ -2130,11 +2132,18 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
 
         val spec = mesh.spec() ?: return
         val position = spec.positionAttribute ?: return
+        val color = spec.colorAttribute
         val vb = mesh.vertexBuffer() ?: return
         val vertexBytes = vb.bytesUnsafe()
         val positions = Array(mesh.vertexCount()) { i ->
             val base = mesh.vertexOffset() + i * spec.stride() + position.offset
             SkPoint(readFloatLE(vertexBytes, base), readFloatLE(vertexBytes, base + 4))
+        }
+        val colors = color?.let {
+            IntArray(mesh.vertexCount()) { i ->
+                val base = mesh.vertexOffset() + i * spec.stride() + it.offset
+                readRgbaColorLE(vertexBytes, base)
+            }
         }
         val vertexMode = when (mesh.mode()) {
             SkMesh.Mode.kTriangles -> SkVertices.VertexMode.kTriangles
@@ -2149,6 +2158,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val vertices = SkVertices.MakeCopy(
             mode = vertexMode,
             positions = positions,
+            colors = colors,
             indices = indices,
         )
         drawVertices(vertices, SkBlendMode.kSrcOver, paint)
@@ -2169,6 +2179,14 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
     private fun readU16LE(bytes: ByteArray, offset: Int): Int =
         (bytes[offset].toInt() and 0xFF) or
             ((bytes[offset + 1].toInt() and 0xFF) shl 8)
+
+    private fun readRgbaColorLE(bytes: ByteArray, offset: Int): Int {
+        val r = bytes[offset].toInt() and 0xFF
+        val g = bytes[offset + 1].toInt() and 0xFF
+        val b = bytes[offset + 2].toInt() and 0xFF
+        val a = bytes[offset + 3].toInt() and 0xFF
+        return (a shl 24) or (r shl 16) or (g shl 8) or b
+    }
 
     /**
      * Mirrors Skia's
