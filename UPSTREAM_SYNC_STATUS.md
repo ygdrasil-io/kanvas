@@ -31,19 +31,19 @@ Hard decisions:
 Known from the current tree:
 
 - First mechanical rebaseline: `UPSTREAM_REBASELINE_2026-05-24.md`.
-- Current post-#999 rebaseline:
-  `reports/upstream-rebaseline/2026-05-25-post-999.md`.
+- Current post-#1047 rebaseline:
+  `reports/upstream-rebaseline/2026-05-25-post-1047.md`.
 - Current generated TSV:
-  `reports/upstream-rebaseline/2026-05-25-post-999.tsv`.
+  `reports/upstream-rebaseline/2026-05-25-post-1047.tsv`.
 - Gradle modules include `:kanvas-skia`, `:cpu-raster`, `:gpu-raster`,
   `:skia-integration-tests`, `:integration-tests`, `:math`, and the
   split codec family (`:codec-*`).
 - The root no longer contains active `MIGRATION_PLAN_*.md` or
   `API_*PLAN.md` files. Historical copies are archived.
-- GM status in the post-#999 snapshot reports 334 `PORTED`, 41
-  `TEST_DISABLED`, 40 `PARTIAL`, 17 `MISSING`, 4 `HELPER`, and 1 `STUB`
-  row. The mechanical bucket summary has 333 `ported` rows and 105
-  non-ported rows.
+- GM status in the post-#1047 snapshot reports 342 `PORTED`, 49
+  `TEST_DISABLED`, 40 `PARTIAL`, 4 `HELPER`, 1 `STUB`, and 1 `MISSING`
+  row. The only remaining `MISSING` row, `hello_bazel_world`, is classified
+  as a `build-example`, not active implementation work.
 - Similarity reports exist in `kanvas-skia/`, `cpu-raster/`, and
   `skia-integration-tests/`. `gpu-raster` currently has ratchet
   properties but no generated markdown report in the tree.
@@ -74,20 +74,9 @@ Outputs:
 - Current `STUB.*` inventory grouped by owner track.
 - Current WebGPU GM coverage and missing backend features.
 
-Current actionable tickets from the post-#999 rebaseline:
-
-- https://github.com/ygdrasil-io/kanvas/issues/1007 — vertices
-  texOnly/scaled-gradient sampling.
-- https://github.com/ygdrasil-io/kanvas/issues/1008 — bounded LCH
-  powerless-hue interpolation.
-- https://github.com/ygdrasil-io/kanvas/issues/1009 — `custommesh` CPU
-  subset activation.
-- https://github.com/ygdrasil-io/kanvas/issues/1010 — RGBA
-  `asyncRescaleAndReadPixels` CPU path.
-- https://github.com/ygdrasil-io/kanvas/issues/1011 — YUVA channel flags
-  and location metadata helpers.
-- https://github.com/ygdrasil-io/kanvas/issues/1012 — WebGPU strict
-  source-rect constraint sampling.
+Current actionable tickets from the post-#999 rebaseline have landed
+through #1047. Open new implementation tickets only from fresh non-gated
+rows in the post-#1047 TSV or from explicit dependency deliveries.
 
 ### 2. Single backlog, no phase-plan drift
 
@@ -141,16 +130,14 @@ behind their existing module boundaries.
 
 ### 6. Actionable raster/API gaps
 
-These are current implementation candidates confirmed by the post-#999
-rebaseline. Keep the scope aligned with the linked tickets rather than
-reviving older broad API lists:
+The post-#999 actionable batch has landed:
 
-- Vertices texOnly/scaled-gradient sampling: #1007.
-- Bounded LCH powerless-hue interpolation: #1008.
-- `custommesh` CPU subset activation: #1009.
-- RGBA `asyncRescaleAndReadPixels` CPU path: #1010.
-- YUVA channel flags and location metadata helpers: #1011.
-- WebGPU strict source-rect constraint sampling: #1012.
+- Vertices texOnly/scaled-gradient sampling: #1007 / #1038.
+- Bounded LCH powerless-hue interpolation: #1008 / #1041.
+- `custommesh` CPU subset activation: #1009 / #1033.
+- RGBA `asyncRescaleAndReadPixels` CPU path: #1010 / #1035.
+- YUVA channel flags and location metadata helpers: #1011 / #1039.
+- WebGPU strict source-rect constraint sampling: #1012 / #1047.
 
 Retired or non-actionable in this snapshot:
 
@@ -161,6 +148,7 @@ Retired or non-actionable in this snapshot:
   implementation shortcut.
 - Broad color-filter/color-space and edge-AA entries need fresh API-delta
   evidence before returning to the active backlog.
+- `colrv1` and `palette` are `PORTED` in the post-#1047 GM snapshot.
 
 ## Archived plans
 
