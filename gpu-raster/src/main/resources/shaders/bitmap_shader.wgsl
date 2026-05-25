@@ -208,7 +208,10 @@ struct Uniforms {
     csTfParams1: vec4f,  // offset 144
     // G2.x -- analytical clip-shape payload, mirrors `solid_color.wgsl`.
     // `clipShapeRadiiKind.z` is the kind enum (0 = no shape clip ; 1 =
-    // rrect / oval / circle ; same encoding as the rect pipeline). The
+    // rrect / oval / circle ; same encoding as the rect pipeline).
+    // `clipShapeRadiiKind.w` is a strict-src-constraint flag
+    // (0 = fast, 1 = strict clamp to subset interior).
+    // The
     // two slots come AFTER the G5.3 colorspace block so the colorspace
     // layout stays contiguous (G2.x sits at offsets 160/176).
     clipShapeBounds:    vec4f, // offset 160 : (l, t, r, b) device-px
@@ -479,12 +482,23 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // exists at the shader). The axis-aligned subset reduces to the
     // legacy `srcRect / dstRect` rect-affine ; the rotated / skewed
     // case slots in here without a branch.
-    let sx = uniforms.devToImageRow0.x * pos.x
-           + uniforms.devToImageRow0.y * pos.y
-           + uniforms.devToImageRow0.z;
-    let sy = uniforms.devToImageRow1.x * pos.x
-           + uniforms.devToImageRow1.y * pos.y
-           + uniforms.devToImageRow1.z;
+    let sx_raw = uniforms.devToImageRow0.x * pos.x
+               + uniforms.devToImageRow0.y * pos.y
+               + uniforms.devToImageRow0.z;
+    let sy_raw = uniforms.devToImageRow1.x * pos.x
+               + uniforms.devToImageRow1.y * pos.y
+               + uniforms.devToImageRow1.z;
+
+    // SrcRectConstraint parity: strict keeps bilinear taps inside the
+    // requested src subset by clamping to texel-center bounds, while
+    // fast preserves legacy unconstrained sampling.
+    let strict_constraint = uniforms.clipShapeRadiiKind.w > 0.5;
+    var sx = sx_raw;
+    var sy = sy_raw;
+    if (strict_constraint) {
+        sx = clamp(sx_raw, uniforms.srcRect.x + 0.5, uniforms.srcRect.z - 0.5);
+        sy = clamp(sy_raw, uniforms.srcRect.y + 0.5, uniforms.srcRect.w - 0.5);
+    }
 
     // Normalise to [0, 1] UV. Tile-mode handling is split between the
     // sampler (Clamp/Repeat/Mirror via addressModeU/V) and the shader

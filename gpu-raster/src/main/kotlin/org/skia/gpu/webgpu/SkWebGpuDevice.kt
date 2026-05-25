@@ -1009,6 +1009,7 @@ public class SkWebGpuDevice(
          * clipShapeBounds, clipShapeRx, clipShapeRy)`.
          */
         val clipKind: Float = CLIP_KIND_NONE,
+        val strictConstraint: Float = 0f,
         val clipShapeBounds: FloatArray = FloatArray(4),
         val clipShapeRx: Float = 0f,
         val clipShapeRy: Float = 0f,
@@ -10399,6 +10400,7 @@ public class SkWebGpuDevice(
             devDst = devDst,
             sampling = sampling,
             paint = paint,
+            strictConstraint = constraint == SrcRectConstraint.kStrict,
             tileX = SkTileMode.kClamp,
             tileY = SkTileMode.kClamp,
             clip = clip,
@@ -10429,6 +10431,7 @@ public class SkWebGpuDevice(
         devDst: SkRect,
         sampling: SkSamplingOptions,
         paint: SkPaint?,
+        strictConstraint: Boolean = false,
         tileX: SkTileMode,
         tileY: SkTileMode,
         clip: SkIRect,
@@ -10545,6 +10548,7 @@ public class SkWebGpuDevice(
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
                 mode = mode,
                 clipKind = clipKind,
+                strictConstraint = if (strictConstraint) 1f else 0f,
                 clipShapeBounds = clipBounds,
                 clipShapeRx = clipRx,
                 clipShapeRy = clipRy,
@@ -12976,7 +12980,7 @@ public class SkWebGpuDevice(
         packed[36] = tf[4]; packed[37] = tf[5]; packed[38] = tf[6]; packed[39] = 0f
         packed[40] = cb[0]; packed[41] = cb[1]; packed[42] = cb[2]; packed[43] = cb[3]
         packed[44] = d.clipShapeRx; packed[45] = d.clipShapeRy
-        packed[46] = d.clipKind; packed[47] = 0f
+        packed[46] = d.clipKind; packed[47] = d.strictConstraint
         packed[48] = r0[0]; packed[49] = r0[1]; packed[50] = r0[2]; packed[51] = 0f
         packed[52] = r1[0]; packed[53] = r1[1]; packed[54] = r1[2]; packed[55] = 0f
         // Phase H2 paint-colorFilter -- 6 contiguous vec4f starting at
