@@ -44,8 +44,11 @@ Completed since this snapshot:
 - `STUB.DRAW_VERTICES_VISUAL_PARITY`: `VerticesBatchingGM` is ported through
   the existing `drawVertices` raster path and the test is enabled. `VerticesGM`
   is source-ported, and the vertex blend / paint color-filter paths are now
-  covered, but it remains disabled while the remaining ~60% visual-parity
-  mismatch is isolated.
+  covered. Tranche-2 diagnostics on current `master` reached ~62% for both
+  normal and scaled-shader variants; an alpha/colorFilter ordering experiment
+  regressed slightly, so the remaining visual-parity blocker is not a bounded
+  paint alpha / `paint.colorFilter` order fix. The GM remains disabled without
+  a ratchet until a new bounded color-pipeline fix is proven.
 - `STUB.EDGE_AA_IMAGE_SET`: raster fallback implemented in
   `SkCanvas.experimental_DrawEdgeAAImageSet`; `DrawImageSetGM`,
   `DrawImageSetRectToRectGM`, `DrawImageSetAlphaOnlyGM`, and `Skbug14554GM`
@@ -108,7 +111,7 @@ Completed since this snapshot:
 
 | Priority | Track | Impact | Effort | Why now |
 |---:|---|---:|---|---|
-| 1 | `vertices` | 1 cpp | M | `VerticesBatchingGM` is already ported; after vertex blend and color-filter coverage, the remaining raster `VerticesGM` work is focused visual-diff reconnaissance. |
+| 1 | `vertices` | 1 cpp | M | `VerticesBatchingGM` is already ported; vertex blend, paint alpha, and color-filter ordering have been checked, but `VerticesGM` still needs a new bounded color-pipeline fix before reactivation. |
 | 2 | `gradients` | 1 cpp | M/L | RGB API surface plus HSL hue-method/powerless-hue GMs are covered; remaining work is LCH/OKLCH/HWB perceptual sampler coverage. |
 | 3 | `mesh` | 1 cpp | L/XL | Actionable but broad API work; start with the `custommesh` slice only. |
 | 4 | `STUB.RSXBLOB` / `STUB.DF_TEXT_RASTER` | 2 cpps (`drawatlas`, `dftext_blob_persp`) | L/XL | Text/glyph transform work; defer if font delivery may change internals. |
@@ -121,7 +124,7 @@ Completed since this snapshot:
 | `drawatlas` | `STUB.RSXBLOB` | `BlobRSXformDistortableGM.kt`, `BlobRSXformGM.kt`, `CompareAtlasVerticesGM.kt`, `DrawAtlasGM.kt`, `DrawTextRSXformGM.kt` |
 | `gradients` | `STUB.GRADIENT_INTERPOLATION`; RGB `SkGradient` overload exposed, HSL hue-method and HSL powerless-hue GMs enabled, LCH/OKLCH/HWB perceptual sampler still missing | gradient interpolation variants |
 | `mesh` | `STUB.MESH`; minimal CPU `SkMesh` / `SkMeshSpecification` / `SkCanvas.drawMesh` skeleton exists for position-only triangles and optional `ubyte4_unorm color`, but all 11 upstream registrations remain compile-pinned until shader attributes, varyings, uniforms, and fragment output are implemented | `MeshGMs.kt` |
-| `vertices` | `STUB.DRAW_VERTICES_VISUAL_PARITY`; `VerticesGM` is source-ported, but focused validation still renders ~60% for both `vertices` and `vertices_scaled_shader` after vertex blend and paint color-filter coverage | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
+| `vertices` | `STUB.DRAW_VERTICES_VISUAL_PARITY`; `VerticesGM` is source-ported, but focused validation still renders ~62% for both `vertices` and `vertices_scaled_shader`; paint alpha / color-filter ordering has been isolated as non-improving | `Skbug13047GM.kt`, `VerticesBatchingGM.kt`, `VerticesCollapsedGM.kt`, `VerticesGM.kt`, `VerticesPerspectiveGM.kt` |
 
 ## Notes
 
@@ -150,6 +153,9 @@ Reactivation evidence:
   `original-888/vertices.png`.
 - The scaled variant reached `59.84%` similarity against
   `original-888/vertices_scaled_shader.png`.
+- Tranche-2 validation on current `master` reached `62.10103655210039%`
+  for `VerticesGM` and `62.177501363884346%` for
+  `VerticesScaledShaderGM`.
 - `VerticesBatchingGM` still passes at its existing ratchet.
 
 Real blocker:
@@ -164,16 +170,23 @@ Real blocker:
   `kDarken` filter used by `VerticesGM`, and the colored/textured vertices
   paths apply `paint.colorFilter`.
 - The remaining observed blocker is visual parity: enabling `VerticesTest`
-  still renders at ~60% similarity, so the next step is focused image-diff
-  reconnaissance before setting a ratchet.
+  still renders at ~62% similarity. Dominant mismatch cells are the
+  color-filter columns, especially `Blend(0xFFAABBCC, kDarken)`, plus
+  half-alpha columns and broad blend-mode rows (`Difference`, `Exclusion`,
+  `Luminosity`, `Modulate`, `Overlay`, `Multiply`, `HardLight`).
+- A bounded experiment moving `paint.colorFilter` before paint-alpha
+  modulation in both triangle paths regressed slightly (`VerticesGM` to
+  `62.06%`, `VerticesScaledShaderGM` to `62.14%`) and was reverted. This
+  isolates paint alpha / color-filter ordering as a non-improving path rather
+  than a fix candidate.
 
 Next implementation slice:
 
-1. Diff the generated `vertices` / `vertices_scaled_shader` comparison images
-   by row/column group to identify which attribute/mode combinations dominate
-   the remaining mismatch.
-2. Check shader-local sampling and gradient interpolation semantics in
-   `VerticesGM` before changing the ratchet.
+1. Start from shader-local sampling / gradient interpolation semantics in
+   `VerticesGM`, especially `texOnly` and scaled-gradient cells.
+2. Add unit coverage only with the next bounded fix candidate; the current
+   alpha/colorFilter ordering probe does not justify new golden or ratchet
+   coverage.
 3. Re-enable `VerticesTest` for both `vertices` and `vertices_scaled_shader`
    only after the remaining mismatch has a bounded implementation fix.
 
