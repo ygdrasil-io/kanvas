@@ -22,6 +22,8 @@ import org.skia.foundation.SkColorType
  *  - Lower [SkJpegEncoder.Options.quality] produces a smaller file
  *    than the default — confirms quality plumbing reaches the
  *    underlying writer.
+ *  - The emitted stream is baseline SOF0, not progressive SOF2, and
+ *    does not advertise restart intervals.
  *  - [SkJpegEncoder.Options] rejects out-of-range quality.
  *  - JPEG output is always opaque even when the source bitmap had
  *    alpha < 255 — alpha is dropped per the
@@ -127,6 +129,14 @@ class SkJpegEncoderTest {
         assertEquals(0x11, sof0YSampling(SkJpegEncoder.Encode(bitmap, SkJpegEncoder.Options(downsample = SkJpegEncoder.Downsample.k444))!!))
     }
 
+    @Test
+    fun `encoder emits baseline JPEG without progressive or restart markers`() {
+        val markers = jpegMarkersBeforeScan(SkJpegEncoder.Encode(makeGradient(16, 16))!!)
+        assertTrue(0xC0 in markers, "baseline SOF0 marker must be present")
+        assertTrue(0xC2 !in markers, "progressive SOF2 marker is intentionally out of scope")
+        assertTrue(0xDD !in markers, "DRI restart interval marker is not emitted by the current encoder")
+    }
+
     private fun makeFlat(width: Int, height: Int, color: Int): SkBitmap {
         val b = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
@@ -169,5 +179,21 @@ class SkJpegEncoderTest {
             offset += 2 + length
         }
         error("SOF0 marker not found")
+    }
+
+    private fun jpegMarkersBeforeScan(bytes: ByteArray): Set<Int> {
+        assertEquals(0xFF.toByte(), bytes[0])
+        assertEquals(0xD8.toByte(), bytes[1])
+        val markers = linkedSetOf<Int>()
+        var offset = 2
+        while (offset + 1 < bytes.size) {
+            require(bytes[offset] == 0xFF.toByte()) { "expected marker at $offset" }
+            val marker = bytes[offset + 1].toInt() and 0xFF
+            markers += marker
+            if (marker == 0xDA || marker == 0xD9) break
+            val length = ((bytes[offset + 2].toInt() and 0xFF) shl 8) or (bytes[offset + 3].toInt() and 0xFF)
+            offset += 2 + length
+        }
+        return markers
     }
 }
