@@ -1,15 +1,31 @@
 package org.skia.tests
 
 import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.foundation.SkBitmap
 import org.skia.testing.TestUtils
 
-@Disabled("STUB.ASYNC_RESCALE_READ: requires SkSurface.asyncRescaleAndReadPixels (all 8 grid variants)")
 class AsyncRescaleAndReadGridTest {
 
     @Test
-    fun `AsyncRescaleAndReadGridGM matches reference`() {
+    fun `AsyncRescaleAndReadGridGM runs RGBA CPU grid`() {
         val gm = AsyncRescaleAndReadGridGM()
-        TestUtils.runGmTest(gm)
+        val rendered = TestUtils.runGmTest(gm)
+        assertTrue(hasNonWhitePixel(rendered), "RGBA async readback grid should draw visible cells")
     }
+
+    @Test
+    @Disabled("STUB.ASYNC_RESCALE_READ_YUV: YUV/YUVA async readback variants remain codec-media gated")
+    fun `AsyncRescaleAndReadGridGM YUV variants remain gated`() {
+    }
+}
+
+internal fun hasNonWhitePixel(bitmap: SkBitmap): Boolean {
+    for (y in 0 until bitmap.height) {
+        for (x in 0 until bitmap.width) {
+            if (bitmap.getPixel(x, y) != 0xFFFFFFFF.toInt()) return true
+        }
+    }
+    return false
 }
