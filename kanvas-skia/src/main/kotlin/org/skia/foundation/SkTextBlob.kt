@@ -237,36 +237,37 @@ public class SkTextBlob public constructor(
          * Mirrors Skia's `SkTextBlob::MakeFromRSXformGlyphs(glyphs, count,
          * xforms, font)`. Builds a single-run RSXform text blob from an
          * already-resolved glyph-ID array.
-         *
-         * **STUB.RSXBLOB** — per-glyph RSXform glyph-blob rendering is not
-         * yet supported end-to-end (the [Run.RSXformPositions] run type
-         * exists but [org.skia.core.SkCanvas.drawTextBlob] does not yet
-         * apply the per-glyph affine transforms when rasterising). Returns a
-         * structurally valid [SkTextBlob] so callers compile; the visual
-         * output will fall back to the glyph origins at `(fTx, fTy)` only
-         * (no rotation or scale).
          */
         public fun MakeFromRSXformGlyphs(
             glyphs: IntArray,
             xforms: Array<SkRSXform>,
             font: SkFont,
         ): SkTextBlob {
-            TODO("STUB.RSXBLOB")
+            require(glyphs.size == xforms.size) {
+                "MakeFromRSXformGlyphs: glyph count (${glyphs.size}) must match xform count (${xforms.size})"
+            }
+            val builder = SkTextBlobBuilder()
+            val rec = builder.allocRunRSXform(font, glyphs.size)
+            glyphs.copyInto(rec.glyphs)
+            xforms.copyInto(rec.xforms)
+            return builder.make() ?: SkTextBlob(emptyList(), SkRect.MakeWH(0f, 0f))
         }
 
         /**
          * Mirrors Skia's `SkTextBlob::MakeFromRSXform(text, byteLength,
          * xforms, font)`. Resolves [text] (UTF-8) to glyph IDs via [font],
          * then delegates to [MakeFromRSXformGlyphs].
-         *
-         * **STUB.RSXBLOB** — see [MakeFromRSXformGlyphs].
          */
         public fun MakeFromRSXform(
             text: String,
             xforms: Array<SkRSXform>,
             font: SkFont,
         ): SkTextBlob {
-            TODO("STUB.RSXBLOB")
+            val glyphs = font.textToGlyphs(text)
+            require(glyphs.size == xforms.size) {
+                "MakeFromRSXform: glyph count (${glyphs.size}) from text length ${text.length} must match xform count (${xforms.size})"
+            }
+            return MakeFromRSXformGlyphs(glyphs, xforms, font)
         }
     }
 }

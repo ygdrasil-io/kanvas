@@ -3,6 +3,7 @@ package org.skia.foundation
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -130,5 +131,46 @@ class SkTextBlobTest {
         assertTrue(blob.runs[0] is SkTextBlob.Run.HorizontalSpread)
         assertTrue(blob.runs[1] is SkTextBlob.Run.HorizontalPositions)
         assertTrue(blob.runs[2] is SkTextBlob.Run.FullPositions)
+    }
+
+    @Test
+    fun `MakeFromRSXformGlyphs builds RSXform run with deterministic order`() {
+        val font = SkFont(SkTypeface.MakeEmpty(), 18f)
+        val glyphs = intArrayOf(10, 20, 30)
+        val xforms = arrayOf(
+            SkRSXform.Make(1f, 0f, 5f, 6f),
+            SkRSXform.Make(0f, 1f, 7f, 8f),
+            SkRSXform.Make(1f, 0f, 9f, 10f),
+        )
+        val blob = SkTextBlob.MakeFromRSXformGlyphs(glyphs, xforms, font)
+        assertEquals(1, blob.runs.size)
+        val run = blob.runs[0] as SkTextBlob.Run.RSXformPositions
+        assertTrue(run.glyphIds.contentEquals(glyphs))
+        assertTrue(run.xforms.contentEquals(xforms))
+    }
+
+    @Test
+    fun `MakeFromRSXform resolves text through fallback font path`() {
+        val font = SkFont(SkTypeface.MakeEmpty(), 20f)
+        val text = "Ab?"
+        val xforms = Array(text.length) { i -> SkRSXform.Make(1f, 0f, i.toFloat(), 0f) }
+        val blob = SkTextBlob.MakeFromRSXform(text, xforms, font)
+        val run = blob.runs.single() as SkTextBlob.Run.RSXformPositions
+        val expected = font.textToGlyphs(text)
+        assertTrue(run.glyphIds.contentEquals(expected))
+        assertEquals(text.length, run.glyphIds.size)
+    }
+
+    @Test
+    fun `MakeFromRSXformGlyphs rejects mismatched glyph and xform counts`() {
+        val font = SkFont(SkTypeface.MakeEmpty(), 12f)
+        val ex = assertThrows(IllegalArgumentException::class.java) {
+            SkTextBlob.MakeFromRSXformGlyphs(
+                glyphs = intArrayOf(1, 2),
+                xforms = arrayOf(SkRSXform.Identity),
+                font = font,
+            )
+        }
+        assertTrue(ex.message!!.contains("must match xform count"))
     }
 }
