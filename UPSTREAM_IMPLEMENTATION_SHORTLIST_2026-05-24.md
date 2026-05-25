@@ -203,9 +203,9 @@ Reactivation blocker:
 - Active modules now have minimal `org.skia.core.SkMesh`,
   `org.skia.core.SkMeshSpecification`, and `SkCanvas.drawMesh(...)` support
   for CPU-backed position-only meshes plus optional `ubyte4_unorm color`
-  lowering to `SkVertices`. The generated legacy files under
-  `kanvas-legacy/src/generated/core/org/skia/core/SkMesh*.kt` remain
-  incomplete translation artifacts and should be used only as source notes.
+  lowering to `SkVertices`. There is no generated legacy mesh source left in
+  the active tree; use upstream Skia and the current implementation as the
+  source references.
 
 Implementation entry points:
 
