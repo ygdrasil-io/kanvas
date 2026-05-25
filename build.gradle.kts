@@ -139,6 +139,117 @@ tasks.register("checkSupportedCodecsDoc") {
     }
 }
 
+tasks.register("checkRealImageFixtureDocumentation") {
+    group = "verification"
+    description = "Fails if real codec image fixtures are missing source/license documentation."
+
+    doLast {
+        val doc = file("codec-real-image-tests/FIXTURES.md")
+        val fixtureRoot = file("codec-real-image-tests/src/test/resources/codec-real-images")
+        if (!doc.isFile) {
+            throw GradleException("Missing codec-real-image-tests/FIXTURES.md provenance document.")
+        }
+        if (!fixtureRoot.isDirectory) {
+            throw GradleException("Missing real image fixture resource directory: ${fixtureRoot.relativeTo(rootDir)}")
+        }
+
+        val text = doc.readText()
+        val fixturePaths = fixtureRoot.walkTopDown()
+            .filter { file -> file.isFile }
+            .map { file -> file.relativeTo(fixtureRoot.parentFile).invariantSeparatorsPath }
+            .sorted()
+            .toList()
+        val tableRows = text.lineSequence()
+            .map { line -> line.trim() }
+            .filter { line -> line.startsWith("| `codec-real-images/") }
+            .map { line ->
+                line.trim('|')
+                    .split('|')
+                    .map { cell -> cell.trim() }
+            }
+            .toList()
+        val rowsByPath = tableRows
+            .mapNotNull { cells ->
+                val fixture = cells.getOrNull(0)?.removeSurrounding("`")
+                if (fixture == null) null else fixture to cells
+            }
+            .toMap()
+        val duplicateRows = tableRows
+            .mapNotNull { cells -> cells.getOrNull(0)?.removeSurrounding("`") }
+            .groupingBy { path -> path }
+            .eachCount()
+            .filterValues { count -> count > 1 }
+        val missing = fixturePaths.filterNot { path -> rowsByPath.containsKey(path) }
+        val orphanRows = rowsByPath.keys.filterNot { path -> fixturePaths.contains(path) }
+        val allowedFamilies = setOf(
+            "Skia upstream",
+            "Repository generated",
+            "Repository generated negative",
+        )
+        val malformedRows = rowsByPath.values.mapNotNull { cells ->
+            val path = cells.getOrNull(0)?.removeSurrounding("`") ?: "<unknown>"
+            val family = cells.getOrNull(1).orEmpty()
+            val source = cells.getOrNull(2).orEmpty()
+            val license = cells.getOrNull(3).orEmpty()
+            val transformation = cells.getOrNull(4).orEmpty()
+            val notes = cells.getOrNull(5).orEmpty()
+
+            when {
+                cells.size != 6 -> "$path must have exactly 6 structured provenance columns"
+                family !in allowedFamilies -> "$path has unsupported family '$family'"
+                source.isBlank() || source.equals("unknown", ignoreCase = true) -> "$path must record a source URL/path"
+                license.isBlank() || license.equals("unknown", ignoreCase = true) -> "$path must record a license/source value"
+                transformation.isBlank() || transformation.equals("unknown", ignoreCase = true) -> "$path must record a transformation"
+                notes.isBlank() -> "$path must record notes"
+                family == "Skia upstream" && license != "Skia license" -> "$path Skia-derived row must use 'Skia license'"
+                family.startsWith("Repository generated") && license != "Repository test fixture" -> "$path generated row must use 'Repository test fixture'"
+                else -> null
+            }
+        }
+        val requiredMarkers = listOf(
+            "## License Rules",
+            "## Requested Tool Family Status",
+            "## Fixture Index",
+            "Skia license",
+            "Repository test fixture",
+            "`libpng`:",
+            "`ImageMagick`:",
+            "`Photoshop/GIMP`:",
+            "`Device camera`:",
+            "`Browser`:",
+        ).filterNot { marker -> text.contains(marker) }
+
+        if (missing.isNotEmpty() || duplicateRows.isNotEmpty() || orphanRows.isNotEmpty() || malformedRows.isNotEmpty() || requiredMarkers.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    if (missing.isNotEmpty()) {
+                        appendLine("Real image fixtures are missing provenance rows.")
+                        missing.forEach { appendLine("- $it") }
+                    }
+                    if (duplicateRows.isNotEmpty()) {
+                        appendLine("FIXTURES.md lists duplicate provenance rows.")
+                        duplicateRows.entries.sortedBy { it.key }.forEach { (path, count) ->
+                            appendLine("- $path appears $count times")
+                        }
+                    }
+                    if (orphanRows.isNotEmpty()) {
+                        appendLine("FIXTURES.md lists rows for missing fixture files.")
+                        orphanRows.forEach { appendLine("- $it") }
+                    }
+                    if (malformedRows.isNotEmpty()) {
+                        appendLine("FIXTURES.md has malformed provenance rows.")
+                        malformedRows.forEach { appendLine("- $it") }
+                    }
+                    if (requiredMarkers.isNotEmpty()) {
+                        appendLine("FIXTURES.md is missing required provenance markers.")
+                        requiredMarkers.forEach { appendLine("- $it") }
+                    }
+                }
+            )
+        }
+    }
+}
+
 tasks.register("checkPureKotlinCodecNoAwt") {
     group = "verification"
     description = "Fails if pure Kotlin codec modules depend on or use AWT/ImageIO/java.desktop APIs."
@@ -436,6 +547,7 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
 
     dependsOn(
         "checkSupportedCodecsDoc",
+        "checkRealImageFixtureDocumentation",
         "checkProductionCodecRuntimeNoAwt",
         "checkPureKotlinCodecNoAwt",
         "checkPureKotlinPngEncoderNoAwt",
