@@ -45,6 +45,22 @@ class OpenTypeSystemFontMgrTest {
     }
 
     @Test
+    fun `diagnostics report malformed or unsupported files`() {
+        Files.write(tempDir.resolve("garbage.ttf"), ByteArray(32) { it.toByte() })
+        val diagnostics = mutableListOf<OpenTypeSystemFontDiagnostic>()
+
+        OpenTypeSystemFontMgr.CreateWithPolicy(
+            roots = listOf(tempDir),
+            diagnosticsSink = diagnostics::add,
+        )
+
+        assertTrue(
+            diagnostics.any { it is OpenTypeSystemFontDiagnostic.IgnoredFile && it.reason == "unsupported-or-malformed" },
+            "Malformed/unsupported fonts should be diagnosable when diagnostics sink is provided",
+        )
+    }
+
+    @Test
     fun `scanner skips roots with unreadable children`() {
         val unreadable = Files.createDirectories(tempDir.resolve("unreadable"))
         assumeTrue(unreadable.fileSystem.supportedFileAttributeViews().contains("posix"))
@@ -117,6 +133,76 @@ class OpenTypeSystemFontMgrTest {
         assertNotNull(mgr.matchFamilyStyle("sans-serif", SkFontStyle.Normal()))
         assertNotNull(mgr.matchFamilyStyleCharacter(null, SkFontStyle.Normal(), null, 'A'.code))
         assertTrue(mgr.makeFromFile(regular.toString()) is OpenTypeTypeface)
+    }
+
+    @Test
+    fun `fallback planner honors generic alias chains over incidental order`() {
+        val available = listOf("Liberation Mono", "Liberation Serif", "Liberation Sans")
+        val policy = OpenTypeSystemFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf(
+                "sans-serif" to listOf("Liberation Sans"),
+                "serif" to listOf("Liberation Serif"),
+                "monospace" to listOf("Liberation Mono"),
+            ),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        )
+
+        val planned = OpenTypeSystemFontMgr.planFallbackFamilyNames(
+            availableFamilyNames = available,
+            requestedFamily = "sans-serif",
+            bcp47 = null,
+            character = 'A'.code,
+            policy = policy,
+        )
+
+        assertEquals("Liberation Sans", planned.first())
+    }
+
+    @Test
+    fun `fallback planner applies locale policy zh vs ja`() {
+        val available = listOf("Noto Sans CJK JP", "Noto Sans CJK SC", "Liberation Sans")
+        val policy = OpenTypeSystemFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Liberation Sans")),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = mapOf(
+                "zh" to listOf("Noto Sans CJK SC", "Noto Sans CJK JP"),
+                "ja" to listOf("Noto Sans CJK JP", "Noto Sans CJK SC"),
+            ),
+            emojiPreferredFamilies = emptyList(),
+        )
+
+        val zhOrder = OpenTypeSystemFontMgr.planFallbackFamilyNames(
+            availableFamilyNames = available,
+            requestedFamily = null,
+            bcp47 = arrayOf("zh"),
+            character = 0x5203,
+            policy = policy,
+        )
+        val jaOrder = OpenTypeSystemFontMgr.planFallbackFamilyNames(
+            availableFamilyNames = available,
+            requestedFamily = null,
+            bcp47 = arrayOf("ja"),
+            character = 0x5203,
+            policy = policy,
+        )
+
+        assertEquals("Noto Sans CJK SC", zhOrder.first())
+        assertEquals("Noto Sans CJK JP", jaOrder.first())
+    }
+
+    @Test
+    fun `optional provider can override portable order without being required`() {
+        copyFont("LiberationSans-Regular.ttf", tempDir.resolve("LiberationSans-Regular.ttf"))
+        val mgr = OpenTypeSystemFontMgr.CreateWithPolicy(
+            roots = listOf(tempDir),
+            policyProvider = OpenTypeSystemFallbackPolicyProvider { available, portable, _, _ ->
+                if (available.contains("Liberation Sans")) listOf("Liberation Sans") + portable else portable
+            },
+        )
+        val tf = mgr.matchFamilyStyleCharacter(null, SkFontStyle.Normal(), arrayOf("en"), 'A'.code)
+        assertNotNull(tf)
     }
 
     private fun copyFont(resourceName: String, target: Path) {

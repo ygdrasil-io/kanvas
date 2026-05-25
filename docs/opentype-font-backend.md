@@ -57,6 +57,16 @@ The JVM/cpu-raster `SkFontMgr.RefDefault()` extension now uses
 old AWT system font manager and `RefAwtDefault()` entry point have been
 removed from the font scope.
 
+`OpenTypeSystemFontMgr` now exposes a portable fallback policy model
+(`OpenTypeSystemFallbackPolicy`) that orders fallback families by generic
+family, script class, locale/BCP-47 hints, and emoji preference. A host may
+optionally provide a policy boundary (`OpenTypeSystemFallbackPolicyProvider`)
+to adjust ordering without introducing a mandatory platform dependency.
+
+Diagnostics are opt-in and silent by default. `CreateWithPolicy(...,
+diagnosticsSink = ...)` reports ignored unreadable/malformed/unsupported font
+files and planned fallback order events for troubleshooting.
+
 The old JVM/AWT shaper entry points, `SkShaper.MakeJvmAwtTextLayout()` and
 `SkShaper.MakeJavaTextLayout()`, have been removed from the font scope.
 `SkShaper.MakePrimitive()` is the only built-in shaper until a pure Kotlin
@@ -91,6 +101,9 @@ removed. Portable font code should use `OpenTypeTypeface` and
   System font enumeration itself is now provided by the pure Kotlin
   `OpenTypeSystemFontMgr`, limited to files the current OpenType parser can
   load.
+- There is still no portable equivalent of upstream `SkFontMgr::Request` for
+  variable-axis-aware fallback. Current pure Kotlin behavior uses
+  `matchFamilyStyleCharacter` with policy-driven fallback ordering.
 - Pixel-perfect FreeType/HarfBuzz parity is not guaranteed. This backend reads
   the font data directly, then converts outlines into `SkPath` and relies on
   the Kanvas raster path.
