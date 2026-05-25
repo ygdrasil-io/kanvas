@@ -19,7 +19,6 @@ import org.skia.testing.TestUtils
  *  - `coloremoji_blendmodes_test`
  *  - `coloremoji_blendmodes_svg`
  */
-@Disabled("STUB.EMOJI_TABLES: requires FreeType + (librsvg) emoji table dispatch via JNI — see API_FINALIZATION_PLAN.md")
 class ColoremojiBlendmodesTest {
 
     @Test
@@ -27,16 +26,19 @@ class ColoremojiBlendmodesTest {
         TestUtils.runGmTest(ColoremojiBlendmodesGM(EmojiTypeface.Format.COLRv0))
     }
 
+    @Disabled("STUB.EMOJI_TABLES.SBIX_PNG_RENDER")
     @Test
     fun `coloremoji_blendmodes_sbix matches reference`() {
         TestUtils.runGmTest(ColoremojiBlendmodesGM(EmojiTypeface.Format.Sbix))
     }
 
+    @Disabled("STUB.EMOJI_TABLES.CBDT_PNG_RENDER")
     @Test
     fun `coloremoji_blendmodes_cbdt matches reference`() {
         TestUtils.runGmTest(ColoremojiBlendmodesGM(EmojiTypeface.Format.CBDT))
     }
 
+    @Disabled("STUB.EMOJI_TABLES.SVG")
     @Test
     fun `coloremoji_blendmodes_svg matches reference`() {
         TestUtils.runGmTest(ColoremojiBlendmodesGM(EmojiTypeface.Format.SVG))
