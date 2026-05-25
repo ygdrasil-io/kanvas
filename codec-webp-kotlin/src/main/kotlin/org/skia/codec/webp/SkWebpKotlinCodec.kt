@@ -44,6 +44,11 @@ public class SkWebpKotlinCodec internal constructor(
 
     override fun getFrameCount(): Int = metadata.animation?.frames?.size ?: 1
 
+    override fun getRepetitionCount(): Int =
+        metadata.animation?.loopCount?.let { loopCount ->
+            if (loopCount == 0) SkCodec.kRepetitionCountInfinite else loopCount - 1
+        } ?: 0
+
     override fun getFrameInfo(): List<FrameInfo> =
         metadata.animation?.frames?.mapIndexed { index, frame ->
             FrameInfo(

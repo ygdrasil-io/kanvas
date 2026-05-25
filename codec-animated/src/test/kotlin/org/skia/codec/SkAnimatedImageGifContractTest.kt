@@ -46,6 +46,34 @@ class SkAnimatedImageGifContractTest {
         assertFrame(animated, RED, RED, RED)
     }
 
+    @Test
+    fun `uses GIF loop count as default repetition count`() {
+        val codec = SkCodec.MakeFromData(
+            gif(
+                width = 2,
+                height = 1,
+                palette = intArrayOf(RED, GREEN, BLUE, YELLOW),
+                extensions = listOf(netscapeLoopExtension(loopCount = 1)),
+                frames = listOf(
+                    GifFrameSpec(0, 0, 2, 1, intArrayOf(0, 0), delayCs = 4),
+                    GifFrameSpec(1, 0, 1, 1, intArrayOf(2), delayCs = 7),
+                ),
+            ),
+        )
+        assertNotNull(codec)
+
+        val animated = SkAnimatedImage.MakeFromCodec(codec!!)
+        assertNotNull(animated)
+        animated!!
+
+        assertEquals(1, animated.getRepetitionCount())
+        assertEquals(40, animated.currentFrameDuration())
+        assertEquals(70, animated.decodeNextFrame())
+        assertEquals(40, animated.decodeNextFrame())
+        assertEquals(70, animated.decodeNextFrame())
+        assertEquals(SkAnimatedImage.kFinished, animated.decodeNextFrame())
+    }
+
     private fun assertFrame(animated: SkAnimatedImage, vararg expected: Int) {
         val image = animated.getCurrentFrame()
         assertEquals(expected.size, image.width)
@@ -59,6 +87,7 @@ class SkAnimatedImageGifContractTest {
         width: Int,
         height: Int,
         palette: IntArray,
+        extensions: List<ByteArray> = emptyList(),
         frames: List<GifFrameSpec>,
     ): ByteArray {
         val out = ArrayList<Byte>()
@@ -69,6 +98,9 @@ class SkAnimatedImageGifContractTest {
         out += 0.toByte()
         out += 0.toByte()
         out.addColorTable(palette)
+        for (extension in extensions) {
+            for (byte in extension) out += byte
+        }
 
         for (frame in frames) {
             out += 0x21.toByte()
@@ -89,6 +121,19 @@ class SkAnimatedImageGifContractTest {
             out.addSubBlocks(lzwData(frame.indexes))
         }
         out += 0x3B.toByte()
+        return out.toByteArray()
+    }
+
+    private fun netscapeLoopExtension(loopCount: Int): ByteArray {
+        val out = ArrayList<Byte>()
+        out += 0x21.toByte()
+        out += 0xFF.toByte()
+        out += 11.toByte()
+        out.addAscii("NETSCAPE2.0")
+        out += 3.toByte()
+        out += 1.toByte()
+        out.addU16LE(loopCount)
+        out += 0.toByte()
         return out.toByteArray()
     }
 

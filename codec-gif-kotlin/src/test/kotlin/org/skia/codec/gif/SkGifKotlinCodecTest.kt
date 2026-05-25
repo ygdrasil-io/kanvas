@@ -290,7 +290,7 @@ class SkGifKotlinCodecTest {
     }
 
     @Test
-    fun `skips netscape loop and comment extensions before frames`() {
+    fun `exposes netscape loop count and skips comment extensions before frames`() {
         val codec = SkGifKotlinCodec.Decoder.make(
             gif(
                 width = 2,
@@ -309,6 +309,7 @@ class SkGifKotlinCodecTest {
 
         assertNotNull(codec)
         assertEquals(2, codec!!.getFrameCount())
+        assertEquals(3, codec.getRepetitionCount())
         assertEquals(40, codec.getFrameInfo()[0].durationMs)
         assertEquals(90, codec.getFrameInfo()[1].durationMs)
 
@@ -317,6 +318,22 @@ class SkGifKotlinCodecTest {
         assertEquals(SkCodec.Result.kSuccess, result)
         assertEquals(RED, dst.getPixel(0, 0))
         assertEquals(BLUE, dst.getPixel(1, 0))
+    }
+
+    @Test
+    fun `maps netscape zero loop count to infinite repetition`() {
+        val codec = SkGifKotlinCodec.Decoder.make(
+            gif(
+                width = 1,
+                height = 1,
+                palette = intArrayOf(RED, GREEN),
+                extensions = listOf(netscapeLoopExtension(loopCount = 0)),
+                frames = listOf(GifFrameSpec(0, 0, 1, 1, intArrayOf(0), delayCs = 4)),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertEquals(SkCodec.kRepetitionCountInfinite, codec!!.getRepetitionCount())
     }
 
     @Test
