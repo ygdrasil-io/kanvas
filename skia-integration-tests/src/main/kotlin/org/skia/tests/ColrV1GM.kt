@@ -15,6 +15,7 @@ import org.skia.foundation.SkFontVariation
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTypeface
+import org.skia.foundation.opentype.OpenTypeTypeface
 import org.skia.tools.ToolUtils
 
 /**
@@ -29,13 +30,14 @@ import org.skia.tools.ToolUtils
  * skewed and with the variable-font axes pinned to specific design
  * coordinates.
  *
- * ## Port status — blocked by upstream fixtures / GM wiring
+ * ## Portable fallback status
  *
  * The portable OpenType backend now renders the supported COLR v1
- * paint graph subset with synthetic unit fixtures. This GM still
- * stays disabled because the upstream GM pipeline depends on assets
- * and surfaces that are not wired into the pure Kotlin integration
- * suite yet:
+ * paint graph subset with synthetic unit fixtures. When the upstream
+ * `test_glyphs-glyf_colr_1.ttf` fixtures are absent, the default
+ * no-variation GM falls back to a tiny generated COLRv1/CPAL font based
+ * on bundled Liberation Sans. Variable-axis/upstream-category parity
+ * remains gated by accepted binary fixtures and references:
  *
  *  1. **`STUB.FIXTURE`** — `fonts/test_glyphs-glyf_colr_1.ttf` and its
  *     `_variable` sibling are not shipped under
@@ -50,15 +52,10 @@ import org.skia.tools.ToolUtils
  *  3. **GM references** — the upstream reference images are tied to
  *     the binary fixtures above. Reactivation is tracked in #1020.
  *
- * The body below is **the real upstream pipeline** — load the test
- * font, apply variation coordinates via [SkTypeface.makeClone], iterate
- * 4 text sizes × N codepoints with [SkFont.measureText] +
- * [SkCanvas.drawSimpleText] + per-glyph line-wrap. Today the font load
- * returns `null` and the GM short-circuits to a white canvas (matching
- * upstream's `DrawResult::kSkip` branch — `errorMsg = "Did not
- * recognize COLR v1 font format."`). [ColrV1Test] remains disabled
- * until #1020 supplies accepted fixtures and references for the pure
- * Kotlin renderer.
+ * The upstream body below is preserved for real fixtures. The fallback
+ * path is intentionally smaller: it draws `ABCD` through COLRv1 solid
+ * paints so the integration suite can verify portable colour-glyph
+ * rendering without AWT/JNI or binary upstream assets.
  *
  * ## Constructor parameters
  *
@@ -91,13 +88,23 @@ public class ColrV1GM(
         SkFontArguments.VariationPosition(variations)
 
     private var typeface: SkTypeface? = null
+    private var fallbackText: String? = null
 
     override fun onOnceBeforeDraw() {
-        // Variable-font variants pull from the `_variable` sibling. The
-        // upstream fixtures are not shipped yet, so resource lookup returns
-        // null until #1020 wires accepted fixtures and references.
         val resource = if (variations.isNotEmpty()) K_TEST_FONT_NAME_VARIABLE else K_TEST_FONT_NAME
         typeface = ToolUtils.CreateTypefaceFromResource(resource)
+        if (typeface != null || variations.isNotEmpty()) return
+
+        val baseBytes = ToolUtils.GetResourceAsData("fonts/liberation/LiberationSans-Regular.ttf")?.toByteArray()
+            ?: return
+        val baseTypeface = OpenTypeTypeface.MakeFromBytes(baseBytes) ?: return
+        val glyphs = SkFont(baseTypeface, 12f).textToGlyphs(FALLBACK_TEXT)
+        if (glyphs.size != FALLBACK_TEXT.length) return
+        val colrBytes = baseBytes
+            .withColrV1SubsetTableContent("GPOS", "COLR", colrV1SubsetColr(glyphs.map { it and 0xFFFF }))
+            .withColrV1SubsetTableContent("kern", "CPAL", colrV1SubsetCpal())
+        typeface = OpenTypeTypeface.MakeFromBytes(colrBytes)
+        fallbackText = typeface?.let { FALLBACK_TEXT }
     }
 
     override fun getName(): String {
@@ -143,7 +150,14 @@ public class ColrV1GM(
 
         canvas.translate(X_TRANSLATE.toFloat(), 20f)
 
-        val tf = typeface ?: run {
+        val tf = typeface ?: return
+        val text = fallbackText
+        if (text != null) {
+            canvas.drawString(text, 0f, 180f, SkFont(tf, 160f), SkPaint(SK_ColorBLACK).also { it.isAntiAlias = false })
+            return
+        }
+
+        val upstreamTypeface = typeface ?: run {
             // Mirror upstream's `errorMsg = "Did not recognize COLR v1
             // font format."` + `DrawResult::kSkip` — without the test
             // font, there's nothing further to draw. Leave the canvas
@@ -154,7 +168,7 @@ public class ColrV1GM(
         canvas.rotate(rotateDeg)
         canvas.skew(skewX, 0f)
 
-        val variedTypeface = makeVariedTypeface() ?: tf
+        val variedTypeface = makeVariedTypeface() ?: upstreamTypeface
         val font = SkFont(variedTypeface)
 
         val metrics = SkFontMetrics()
@@ -204,6 +218,7 @@ public class ColrV1GM(
     public companion object {
         private const val X_WIDTH = 1200
         private const val X_TRANSLATE = 200
+        private const val FALLBACK_TEXT = "ABCD"
         private val K_TEXT_SIZES: FloatArray = floatArrayOf(12f, 18f, 30f, 120f)
 
         private const val K_TEST_FONT_NAME = "fonts/test_glyphs-glyf_colr_1.ttf"
@@ -292,4 +307,103 @@ public class ColrV1GM(
         public fun coord(axis: String, value: Float): SkFontArguments.VariationPosition.Coordinate =
             SkFontArguments.VariationPosition.Coordinate(tag(axis), value)
     }
+}
+
+private fun ByteArray.withColrV1SubsetTableContent(from: String, to: String, content: ByteArray): ByteArray {
+    require(from.length == 4)
+    require(to.length == 4)
+    val copy = copyOf()
+    val record = copy.colrV1SubsetTableDirectoryRecord(from)
+    val offset = colrV1SubsetReadU32(copy, record + 8)
+    val length = colrV1SubsetReadU32(copy, record + 12)
+    require(content.size <= length) { "$from table too small for synthetic $to table" }
+    to.toByteArray(Charsets.ISO_8859_1).copyInto(copy, record)
+    colrV1SubsetWriteU32(copy, record + 12, content.size)
+    content.copyInto(copy, offset)
+    for (i in offset + content.size until offset + length) copy[i] = 0
+    return copy
+}
+
+private fun ByteArray.colrV1SubsetTableDirectoryRecord(tag: String): Int {
+    require(tag.length == 4)
+    val numTables = colrV1SubsetReadU16(this, 4)
+    var off = 12
+    repeat(numTables) {
+        if (String(this, off, 4, Charsets.ISO_8859_1) == tag) return off
+        off += 16
+    }
+    error("Missing table: $tag")
+}
+
+private fun colrV1SubsetCpal(): ByteArray {
+    val palette = listOf(SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, 0xffff00ff.toInt())
+    val colorRecordsOffset = 14
+    val bytes = ByteArray(colorRecordsOffset + palette.size * 4)
+    colrV1SubsetWriteU16(bytes, 2, palette.size)
+    colrV1SubsetWriteU16(bytes, 4, 1)
+    colrV1SubsetWriteU16(bytes, 6, palette.size)
+    colrV1SubsetWriteU32(bytes, 8, colorRecordsOffset)
+    colrV1SubsetWriteU16(bytes, 12, 0)
+    palette.forEachIndexed { index, color ->
+        val off = colorRecordsOffset + index * 4
+        bytes[off] = (color and 0xFF).toByte()
+        bytes[off + 1] = ((color ushr 8) and 0xFF).toByte()
+        bytes[off + 2] = ((color ushr 16) and 0xFF).toByte()
+        bytes[off + 3] = ((color ushr 24) and 0xFF).toByte()
+    }
+    return bytes
+}
+
+private fun colrV1SubsetColr(glyphs: List<Int>): ByteArray {
+    val baseGlyphListOffset = 34
+    val recordStart = baseGlyphListOffset + 4
+    val paintStart = recordStart + glyphs.size * 6
+    val paintRecordSize = 11
+    val bytes = ByteArray(paintStart + glyphs.size * paintRecordSize)
+    colrV1SubsetWriteU16(bytes, 0, 1)
+    colrV1SubsetWriteU32(bytes, 14, baseGlyphListOffset)
+
+    colrV1SubsetWriteU32(bytes, baseGlyphListOffset, glyphs.size)
+    glyphs.forEachIndexed { index, glyph ->
+        val recordOffset = recordStart + index * 6
+        val glyphPaintOffset = paintStart + index * paintRecordSize
+        val solidPaintOffset = glyphPaintOffset + 6
+        colrV1SubsetWriteU16(bytes, recordOffset, glyph)
+        colrV1SubsetWriteU32(bytes, recordOffset + 2, glyphPaintOffset - baseGlyphListOffset)
+
+        bytes[glyphPaintOffset] = 10
+        colrV1SubsetWriteU24(bytes, glyphPaintOffset + 1, solidPaintOffset - glyphPaintOffset)
+        colrV1SubsetWriteU16(bytes, glyphPaintOffset + 4, glyph)
+        bytes[solidPaintOffset] = 2
+        colrV1SubsetWriteU16(bytes, solidPaintOffset + 1, index)
+        colrV1SubsetWriteU16(bytes, solidPaintOffset + 3, 0x4000)
+    }
+    return bytes
+}
+
+private fun colrV1SubsetReadU16(bytes: ByteArray, off: Int): Int =
+    ((bytes[off].toInt() and 0xFF) shl 8) or (bytes[off + 1].toInt() and 0xFF)
+
+private fun colrV1SubsetReadU32(bytes: ByteArray, off: Int): Int =
+    ((bytes[off].toInt() and 0xFF) shl 24) or
+        ((bytes[off + 1].toInt() and 0xFF) shl 16) or
+        ((bytes[off + 2].toInt() and 0xFF) shl 8) or
+        (bytes[off + 3].toInt() and 0xFF)
+
+private fun colrV1SubsetWriteU16(bytes: ByteArray, off: Int, value: Int) {
+    bytes[off] = (value ushr 8).toByte()
+    bytes[off + 1] = value.toByte()
+}
+
+private fun colrV1SubsetWriteU24(bytes: ByteArray, off: Int, value: Int) {
+    bytes[off] = (value ushr 16).toByte()
+    bytes[off + 1] = (value ushr 8).toByte()
+    bytes[off + 2] = value.toByte()
+}
+
+private fun colrV1SubsetWriteU32(bytes: ByteArray, off: Int, value: Int) {
+    bytes[off] = (value ushr 24).toByte()
+    bytes[off + 1] = (value ushr 16).toByte()
+    bytes[off + 2] = (value ushr 8).toByte()
+    bytes[off + 3] = value.toByte()
 }
