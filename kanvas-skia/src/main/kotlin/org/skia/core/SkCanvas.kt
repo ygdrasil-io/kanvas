@@ -2161,7 +2161,8 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             colors = colors,
             indices = indices,
         )
-        drawVertices(vertices, SkBlendMode.kSrcOver, paint)
+        val meshPaint = if (blender == null) paint else paint.copy().also { it.blender = blender }
+        drawVertices(vertices, SkBlendMode.kSrcOver, meshPaint)
     }
 
     public open fun drawMesh(mesh: SkMesh, paint: SkPaint) {
