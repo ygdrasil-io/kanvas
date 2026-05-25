@@ -48,10 +48,8 @@ dependencies {
 
 sourceSets {
     test {
-        // kanvas-legacy is excluded from the build (see settings.gradle.kts)
-        // but its src/test/resources/{images,original-888} are still required
-        // at runtime for kanvas-skia's GMs and DM harness.
-        resources.srcDir("../kanvas-legacy/src/test/resources")
+        // Skia GM and image fixtures are owned by :skia-integration-tests.
+        resources.srcDir("../skia-integration-tests/src/test/resources")
         // Encoder tests reuse the small redistributable real-image corpus
         // from the codec validation module to prove encode paths against
         // decoded real fixtures rather than synthetic-only bitmaps.

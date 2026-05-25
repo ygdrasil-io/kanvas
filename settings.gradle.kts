@@ -44,9 +44,8 @@ plugins {
 
 
 // :kanvas-legacy — hand-written legacy implementation under `kanvas-legacy/`.
-// Excluded from the build (frozen as a read-only reference). Test fixtures
-// under kanvas-legacy/src/test/resources/{images,original-888} are still
-// consumed by :kanvas-skia via a srcDir reference in kanvas-skia/build.gradle.kts.
+// Excluded from the build (frozen as a read-only reference). Skia fixtures now
+// live under skia-integration-tests/src/test/resources.
 include(":math")
 include(":kanvas-skia")
 include(":codec-api")

@@ -62,7 +62,7 @@ import org.skia.tools.ToolUtils
  *    `images/color_wheel.gif`. The upstream code path runs only when
  *    `SK_GRAPHITE` is defined ; the raster CPU bot also produces a
  *    black cell for this tile (the gif resource isn't shipped under
- *    `kanvas-legacy/src/test/resources/images/` either — only the
+ *    `skia-integration-tests/src/test/resources/images/` either — only the
  *    `.png` and `.jpg` siblings are).
  *  - **`STUB.GRAPHITE.gaussianCF`** — slot `[4]` of the upper-right
  *    swatch grid uses `SkColorFilterPriv::MakeGaussian()` upstream

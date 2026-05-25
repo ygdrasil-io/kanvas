@@ -93,7 +93,7 @@ public object CrossTestHarness {
      * @param floor the similarity ratchet floor (0..100). A test fails
      *   if the GPU output similarity drops strictly below this.
      * @param referenceName name (without `.png`) of the reference image
-     *   in `kanvas-legacy/src/test/resources/original-888/`. Defaults to
+     *   in `skia-integration-tests/src/test/resources/original-888/`. Defaults to
      *   [GM.name] — every existing GM port matches this convention.
      * @param tolerance per-channel byte tolerance for the bitmap
      *   comparison. Defaults to [TestUtils.TEXTUAL_GM_TOLERANCE].

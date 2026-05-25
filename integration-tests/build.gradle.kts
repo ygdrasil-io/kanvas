@@ -17,8 +17,8 @@ dependencies {
 
 sourceSets {
     test {
-        // GMs need font + reference PNG fixtures from kanvas-legacy.
-        resources.srcDir("../kanvas-legacy/src/test/resources")
+        // GMs need font + image/reference PNG fixtures from :skia-integration-tests.
+        resources.srcDir("../skia-integration-tests/src/test/resources")
     }
 }
 

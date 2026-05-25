@@ -32,10 +32,9 @@ import java.nio.ByteBuffer
  *
  * Body fully ported against the live
  * [org.skia.foundation.SkImage.readPixels] surface. Source fixture
- * `randPixels.png` is shared via the `:kanvas-legacy/src/test/resources`
- * sibling source-set ([build.gradle.kts](../../../build.gradle.kts) line
- * 22), so this test can activate as soon as the cross-backend ratchet
- * accepts the rendered pixels.
+ * `randPixels.png` is shipped with this module's test resources, so this
+ * test can activate as soon as the cross-backend ratchet accepts the
+ * rendered pixels.
  */
 public class ReadPixelsCodecGM : GM() {
 
