@@ -1,6 +1,10 @@
 package org.skia.foundation
 
 import org.graphiks.math.SkISize
+import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkColorGetB
+import org.graphiks.math.SkColorGetG
+import org.graphiks.math.SkColorGetR
 
 /**
  * Mirrors Skia's
@@ -82,13 +86,33 @@ public object SkCompressedDataUtils {
         mipMapOffsetsAndSizes: IntArray? = null,
         mipMapped: Boolean = false,
     ): Long {
-        TODO(
-            "STUB.COMPRESSED_TEXTURES: SkCompressedDataSize(${compression}, " +
-                "${dimensions.width}x${dimensions.height}, mipMapped=$mipMapped) " +
-                "not implemented — kanvas-skia raster backend lacks the block-" +
-                "compressed texture pipeline (see CompressedTexturesGM / " +
-                "BC1TransparencyGM)."
-        )
+        if (dimensions.width <= 0 || dimensions.height <= 0) return 0L
+        val blockBytes = when (compression) {
+            SkTextureCompressionType.kBC1_RGB8_UNORM,
+            SkTextureCompressionType.kBC1_RGBA8_UNORM,
+            SkTextureCompressionType.kETC2_RGB8_UNORM -> 8
+            SkTextureCompressionType.kNone -> return 0L
+        }
+
+        var total = 0L
+        var level = 0
+        var w = dimensions.width
+        var h = dimensions.height
+        while (true) {
+            val bw = (w + 3) / 4
+            val bh = (h + 3) / 4
+            val levelSize = bw.toLong() * bh.toLong() * blockBytes.toLong()
+            if (mipMapOffsetsAndSizes != null && level * 2 + 1 < mipMapOffsetsAndSizes.size) {
+                mipMapOffsetsAndSizes[level * 2] = total.toInt()
+                mipMapOffsetsAndSizes[level * 2 + 1] = levelSize.toInt()
+            }
+            total += levelSize
+            if (!mipMapped || (w == 1 && h == 1)) break
+            w = maxOf(1, w / 2)
+            h = maxOf(1, h / 2)
+            level++
+        }
+        return total
     }
 
     /**
@@ -98,10 +122,12 @@ public object SkCompressedDataUtils {
      * callers normally hard-code `4`.
      */
     public fun SkCompressedBlockWidth(compression: SkTextureCompressionType): Int {
-        TODO(
-            "STUB.COMPRESSED_TEXTURES: SkCompressedBlockWidth($compression) not " +
-                "implemented — see SkCompressedDataSize."
-        )
+        return when (compression) {
+            SkTextureCompressionType.kBC1_RGB8_UNORM,
+            SkTextureCompressionType.kBC1_RGBA8_UNORM,
+            SkTextureCompressionType.kETC2_RGB8_UNORM -> 4
+            SkTextureCompressionType.kNone -> 0
+        }
     }
 
     /**
@@ -109,10 +135,7 @@ public object SkCompressedDataUtils {
      * with [SkCompressedBlockWidth].
      */
     public fun SkCompressedBlockHeight(compression: SkTextureCompressionType): Int {
-        TODO(
-            "STUB.COMPRESSED_TEXTURES: SkCompressedBlockHeight($compression) not " +
-                "implemented — see SkCompressedDataSize."
-        )
+        return SkCompressedBlockWidth(compression)
     }
 
     /**
@@ -133,12 +156,10 @@ public object SkCompressedDataUtils {
         dst: ByteArray,
         dstOffset: Int,
     ) {
-        TODO(
-            "STUB.COMPRESSED_TEXTURES: SkCompressedDataUtils.Etc1EncodeImage(" +
+        throw NotImplementedError(
+            "STUB.COMPRESSED_TEXTURES.ETC: SkCompressedDataUtils.Etc1EncodeImage(" +
                 "${srcBitmap.width}x${srcBitmap.height} ${srcBitmap.colorType}, " +
-                "dst[${dst.size} bytes], offset=$dstOffset) not implemented — " +
-                "kanvas-skia raster backend lacks the ETC2-RGB8 block encoder " +
-                "(see CompressedTexturesGM)."
+                "dst[${dst.size} bytes], offset=$dstOffset) not implemented."
         )
     }
 
@@ -166,13 +187,80 @@ public object SkCompressedDataUtils {
         dst: ByteArray,
         dstOffset: Int,
     ) {
-        TODO(
-            "STUB.COMPRESSED_TEXTURES: SkCompressedDataUtils.TwoColorBC1Compress(" +
-                "${srcBitmap.width}x${srcBitmap.height} ${srcBitmap.colorType}, " +
-                "otherColor=0x${otherColor.toUInt().toString(16)}, " +
-                "dst[${dst.size} bytes], offset=$dstOffset) not implemented — " +
-                "kanvas-skia raster backend lacks the BC1 / DXT1 block encoder " +
-                "(see CompressedTexturesGM, BC1TransparencyGM)."
-        )
+        require(dstOffset >= 0 && dstOffset < dst.size) { "dstOffset out of range: $dstOffset" }
+        val blockWidth = (srcBitmap.width + 3) / 4
+        val blockHeight = (srcBitmap.height + 3) / 4
+        val needed = blockWidth * blockHeight * 8
+        require(dstOffset + needed <= dst.size) {
+            "destination too small for BC1 payload: need=${dstOffset + needed}, have=${dst.size}"
+        }
+
+        val other565 = to565(otherColor)
+        val black565 = 0
+        var write = dstOffset
+        for (by in 0 until blockHeight) {
+            for (bx in 0 until blockWidth) {
+                var hasTransparent = false
+                var indices = 0
+                var bitPos = 0
+                for (ly in 0 until 4) {
+                    for (lx in 0 until 4) {
+                        val x = bx * 4 + lx
+                        val y = by * 4 + ly
+                        val c = if (x < srcBitmap.width && y < srcBitmap.height) srcBitmap.getPixel(x, y) else 0
+                        val a = SkColorGetA(c)
+                        val idx = if (a < 128) {
+                            hasTransparent = true
+                            3
+                        } else {
+                            val isOther = approxSameRgb(c, otherColor)
+                            if (isOther) 1 else 0
+                        }
+                        indices = indices or (idx shl bitPos)
+                        bitPos += 2
+                    }
+                }
+
+                val c0: Int
+                val c1: Int
+                if (hasTransparent) {
+                    c0 = minOf(black565, other565)
+                    c1 = maxOf(black565, other565)
+                } else {
+                    c0 = maxOf(black565, other565)
+                    c1 = minOf(black565, other565)
+                }
+                put16(dst, write, c0)
+                put16(dst, write + 2, c1)
+                put32(dst, write + 4, indices)
+                write += 8
+            }
+        }
+    }
+
+    private fun approxSameRgb(a: Int, b: Int): Boolean {
+        val dr = kotlin.math.abs(SkColorGetR(a) - SkColorGetR(b))
+        val dg = kotlin.math.abs(SkColorGetG(a) - SkColorGetG(b))
+        val db = kotlin.math.abs(SkColorGetB(a) - SkColorGetB(b))
+        return dr <= 2 && dg <= 2 && db <= 2
+    }
+
+    private fun to565(c: Int): Int {
+        val r5 = (SkColorGetR(c) * 31 + 127) / 255
+        val g6 = (SkColorGetG(c) * 63 + 127) / 255
+        val b5 = (SkColorGetB(c) * 31 + 127) / 255
+        return (r5 shl 11) or (g6 shl 5) or b5
+    }
+
+    private fun put16(dst: ByteArray, off: Int, v: Int) {
+        dst[off] = (v and 0xFF).toByte()
+        dst[off + 1] = ((v ushr 8) and 0xFF).toByte()
+    }
+
+    private fun put32(dst: ByteArray, off: Int, v: Int) {
+        dst[off] = (v and 0xFF).toByte()
+        dst[off + 1] = ((v ushr 8) and 0xFF).toByte()
+        dst[off + 2] = ((v ushr 16) and 0xFF).toByte()
+        dst[off + 3] = ((v ushr 24) and 0xFF).toByte()
     }
 }
