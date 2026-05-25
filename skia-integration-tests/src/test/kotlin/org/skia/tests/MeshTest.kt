@@ -79,9 +79,14 @@ class MeshTest {
     }
 
     @Test
-    @Disabled("STUB.MESH.BUFFER_UPDATE_GM: CPU buffer update exists, but upstream GM includes GPU buffer variants")
-    fun `MeshUpdateGM placeholder`() {
-        TestUtils.runGmTest(MeshUpdateGM())
+    fun `MeshUpdateGM runs cpu buffer update subset`() {
+        val rendered = TestUtils.runGmTest(MeshUpdateGM())
+        assertTrue(rendered.width > 0)
+        assertTrue(rendered.height > 0)
+        assertTrue(rendered.getPixel(70, 70) != 0xFFFFFFFF.toInt(), "non-indexed strip should render in updated region")
+        assertTrue(rendered.getPixel(70, 220) != 0xFFFFFFFF.toInt(), "indexed strip should render in updated region")
+        assertTrue(rendered.getPixel(70, 370) != 0xFFFFFFFF.toInt(), "indexed strip after index update should render")
+        assertTrue(rendered.getPixel(20, 70) == 0xFFFFFFFF.toInt(), "pre-update left area should remain background")
     }
 
     @Test
