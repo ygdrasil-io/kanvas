@@ -19,16 +19,12 @@ import kotlin.math.sin
  *
  * Draws `"abcabcabc"` with the same sinusoidal per-glyph scale transform.
  *
- * **STUB.RSXBLOB** — [SkTextBlob.MakeFromRSXform] is not yet implemented
- * end-to-end; the test is `@Disabled("STUB.RSXBLOB")`.
- *
  * **Note on `SkFontMgr.makeFromStream(stream, SkFontArguments)`**: upstream
  * loads the variable font via `fm->makeFromStream(distortable, params)`.
  * The Kotlin [org.skia.foundation.SkFontMgr] does not yet expose an overload
  * that accepts [org.skia.foundation.SkFontArguments], so this port falls
  * back to [ToolUtils.DefaultPortableTypeface] unconditionally (same visual
- * path as when the resource is missing). The STUB tag is `STUB.RSXBLOB`
- * (the blob rendering is the blocking gap).
+ * path as when the resource is missing.
  */
 public class BlobRSXformDistortableGM : GM() {
 
@@ -52,7 +48,6 @@ public class BlobRSXformDistortableGM : GM() {
 
         val xforms = buildXforms(len)
 
-        // STUB.RSXBLOB — will throw NotImplementedError at runtime.
         val blob = SkTextBlob.MakeFromRSXform(text, xforms, font)
 
         val offset = org.graphiks.math.SkPoint(20f, 70f)

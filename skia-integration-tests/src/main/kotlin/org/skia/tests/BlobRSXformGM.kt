@@ -17,9 +17,6 @@ import kotlin.math.sin
  * wave-height effect. The bounding-box rect is filled in grey before
  * drawing the black text.
  *
- * **STUB.RSXBLOB** — [SkTextBlob.MakeFromRSXform] is not yet implemented
- * end-to-end. The GM body calls it; the test is
- * `@Disabled("STUB.RSXBLOB")`.
  */
 public class BlobRSXformGM : GM() {
 
@@ -43,7 +40,6 @@ public class BlobRSXformGM : GM() {
             xform
         }
 
-        // STUB.RSXBLOB — will throw NotImplementedError at runtime.
         val blob = SkTextBlob.MakeFromRSXform(text, xforms, font)
 
         val offset = org.graphiks.math.SkPoint(20f, 70f)

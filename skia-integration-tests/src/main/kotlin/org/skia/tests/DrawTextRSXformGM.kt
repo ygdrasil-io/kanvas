@@ -26,10 +26,6 @@ import kotlin.math.max
  * (CW and CCW) using per-glyph [SkRSXform]s, with a linear red→blue
  * gradient shader. Then repeats with the stroke style.
  *
- * **STUB.RSXBLOB** — [SkTextBlob.MakeFromRSXformGlyphs] is not yet
- * implemented end-to-end; this GM calls it and will throw at runtime
- * unless and until the stub is promoted. The test is therefore
- * `@Disabled("STUB.RSXBLOB")`.
  */
 public class DrawTextRSXformGM : GM() {
 
@@ -95,8 +91,7 @@ public class DrawTextRSXformGM : GM() {
     /**
      * Mirrors `draw_text_on_path` from the cpp. Positions each glyph of
      * [text] along [path] using per-glyph [SkRSXform]s derived from
-     * [SkPathMeasure.getPosTan]. Calls [SkTextBlob.MakeFromRSXformGlyphs]
-     * (STUB.RSXBLOB).
+     * [SkPathMeasure.getPosTan], then draws a single RSXform text blob.
      */
     private fun drawTextOnPath(
         canvas: SkCanvas,
@@ -143,7 +138,6 @@ public class DrawTextRSXformGM : GM() {
             )
         }
 
-        // STUB.RSXBLOB — will throw NotImplementedError at runtime.
         val blob = SkTextBlob.MakeFromRSXformGlyphs(glyphs, xforms, font)
         canvas.drawTextBlob(blob, 0f, 0f, paint)
 
