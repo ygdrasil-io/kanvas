@@ -10,6 +10,7 @@ import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
 import org.graphiks.math.SkScalar
 import org.skia.core.SkColorSpaceXformSteps
+import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkData
 import org.skia.foundation.SkFontArguments
 import org.skia.foundation.SkFontMetrics
@@ -307,6 +308,50 @@ public class OpenTypeTypeface private constructor(
                     ?: return emptyList()
                 listOf(OpenTypeColorPath(null, positionedPath(currentPath, penX, baselineY), shader = shader, clipPaths = clipPaths))
             }
+            is OpenTypeColorPaint.Composite -> {
+                val backdrop = colorPaintPaths(
+                    paint = paint.backdrop,
+                    seenColorGlyphs = seenColorGlyphs,
+                    palette = palette,
+                    penX = penX,
+                    baselineY = baselineY,
+                    size = size,
+                    scaleX = scaleX,
+                    skewX = skewX,
+                    transform = transform,
+                    glyphPath = glyphPath,
+                    clipPaths = clipPaths,
+                    depth = depth + 1,
+                )
+                if (backdrop.isEmpty()) return emptyList()
+                val source = colorPaintPaths(
+                    paint = paint.source,
+                    seenColorGlyphs = seenColorGlyphs,
+                    palette = palette,
+                    penX = penX,
+                    baselineY = baselineY,
+                    size = size,
+                    scaleX = scaleX,
+                    skewX = skewX,
+                    transform = transform,
+                    glyphPath = glyphPath,
+                    clipPaths = clipPaths,
+                    depth = depth + 1,
+                )
+                if (source.isEmpty()) return emptyList()
+                listOf(
+                    OpenTypeColorPath(
+                        null,
+                        emptyColorPath(),
+                        children = backdrop + OpenTypeColorPath(
+                            null,
+                            emptyColorPath(),
+                            blendMode = paint.mode,
+                            children = source,
+                        ),
+                    ),
+                )
+            }
             is OpenTypeColorPaint.Glyph -> {
                 val childPath = font.glyphPath(paint.glyphId, size, scaleX, skewX, variationPosition)
                     ?.makeTransform(transform)
@@ -484,6 +529,9 @@ public class OpenTypeTypeface private constructor(
     }
 
     private fun colorSweepAngleToDesignDegrees(angle: Float): Float = (angle + 1f) * 180f
+
+    private fun emptyColorPath(): SkPath =
+        SkPathBuilder().setFillType(SkPathFillType.kWinding).detach()
 
     private fun colorFontPointToCanvas(
         x: Int,
@@ -1919,8 +1967,51 @@ private class ParsedTrueTypeFont(
                         dy = reader.i16(paintOffset + 6)?.toInt() ?: return null,
                     )
                 }
+                32 -> {
+                    if (!reader.fits(paintOffset, 8)) return null
+                    val sourceOffset = childPaintOffset(reader, paintOffset, 1) ?: return null
+                    val mode = parseCompositeMode(reader.u8(paintOffset + 4) ?: return null)
+                    val backdropOffset = childPaintOffset(reader, paintOffset, 5) ?: return null
+                    OpenTypeColorPaint.Composite(
+                        source = parseColorPaint(reader, colrStart, colrEnd, layerPaintOffsets, sourceOffset, depth + 1) ?: return null,
+                        mode = mode,
+                        backdrop = parseColorPaint(reader, colrStart, colrEnd, layerPaintOffsets, backdropOffset, depth + 1) ?: return null,
+                    )
+                }
                 else -> null
             }
+        }
+
+        private fun parseCompositeMode(mode: Int): SkBlendMode = when (mode) {
+            0 -> SkBlendMode.kClear
+            1 -> SkBlendMode.kSrc
+            2 -> SkBlendMode.kDst
+            3 -> SkBlendMode.kSrcOver
+            4 -> SkBlendMode.kDstOver
+            5 -> SkBlendMode.kSrcIn
+            6 -> SkBlendMode.kDstIn
+            7 -> SkBlendMode.kSrcOut
+            8 -> SkBlendMode.kDstOut
+            9 -> SkBlendMode.kSrcATop
+            10 -> SkBlendMode.kDstATop
+            11 -> SkBlendMode.kXor
+            12 -> SkBlendMode.kPlus
+            13 -> SkBlendMode.kScreen
+            14 -> SkBlendMode.kOverlay
+            15 -> SkBlendMode.kDarken
+            16 -> SkBlendMode.kLighten
+            17 -> SkBlendMode.kColorDodge
+            18 -> SkBlendMode.kColorBurn
+            19 -> SkBlendMode.kHardLight
+            20 -> SkBlendMode.kSoftLight
+            21 -> SkBlendMode.kDifference
+            22 -> SkBlendMode.kExclusion
+            23 -> SkBlendMode.kMultiply
+            24 -> SkBlendMode.kHue
+            25 -> SkBlendMode.kSaturation
+            26 -> SkBlendMode.kColor
+            27 -> SkBlendMode.kLuminosity
+            else -> SkBlendMode.kClear
         }
 
         private fun parseColorLine(
@@ -2655,6 +2746,8 @@ internal data class OpenTypeColorPath(
     val alpha: Float = 1f,
     val clipPaths: List<SkPath> = emptyList(),
     val shader: SkShader? = null,
+    val blendMode: SkBlendMode? = null,
+    val children: List<OpenTypeColorPath> = emptyList(),
 )
 private data class OpenTypePaletteSelection(
     val index: Int,
@@ -2817,6 +2910,11 @@ internal sealed interface OpenTypeColorPaint {
         val centerY: Int,
         val startAngle: Float,
         val endAngle: Float,
+    ) : OpenTypeColorPaint
+    data class Composite(
+        val source: OpenTypeColorPaint,
+        val mode: SkBlendMode,
+        val backdrop: OpenTypeColorPaint,
     ) : OpenTypeColorPaint
     data class Glyph(val glyphId: Int, val paint: OpenTypeColorPaint) : OpenTypeColorPaint
     data class ColrGlyph(val glyphId: Int) : OpenTypeColorPaint
