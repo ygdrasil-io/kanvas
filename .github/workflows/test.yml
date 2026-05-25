@@ -19,6 +19,7 @@ on:
     branches: [master]
     paths:
       - 'math/**'
+      - 'codec-*/**'
       - 'kanvas-skia/**'
       - 'cpu-raster/**'
       - 'gpu-raster/**'
@@ -36,6 +37,7 @@ on:
     branches: [master]
     paths:
       - 'math/**'
+      - 'codec-*/**'
       - 'kanvas-skia/**'
       - 'cpu-raster/**'
       - 'gpu-raster/**'
@@ -91,6 +93,7 @@ jobs:
         # below owns the GPU coverage.
         run: |
           ./gradlew --no-daemon \
+            checkCodecImageComplete \
             :cpu-raster:test \
             :skia-integration-tests:test \
             :math:jvmTest \

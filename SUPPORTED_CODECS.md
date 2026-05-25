@@ -6,13 +6,14 @@ encode paths outside `kanvas-legacy`.
 Validation command:
 
 ```bash
-./gradlew checkCodecKotlinSwitchCriteria
+./gradlew checkCodecImageComplete
 ```
 
 That task runs the pure Kotlin codec tests, real image tests, runtime assembly
-checks, image encode guard checks, and AWT/ImageIO guards. Format-specific rows
-below call out limitations that are intentional for the current implementation,
-either as temporary roadmap gaps or as out-of-scope behavior.
+checks, image encode tests, image encode guard checks, production classpath
+checks, and AWT/ImageIO guards. Format-specific rows below call out limitations
+that are intentional for the current implementation, either as temporary roadmap
+gaps or as out-of-scope behavior.
 
 ## Decode Matrix
 
