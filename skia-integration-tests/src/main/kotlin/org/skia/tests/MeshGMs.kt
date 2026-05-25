@@ -7,12 +7,18 @@ import org.skia.core.SkCanvas
 import org.skia.core.SkMesh
 import org.skia.core.SkMeshSpecification
 import org.skia.core.SkMeshes
+import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBlender
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkData
+import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkSurfaces
 import org.skia.foundation.SkTileMode
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -229,13 +235,118 @@ public class CustomMeshGM : GM() {
  * unpremul) and colour-space (sRGB / colour-spun). Forces an intermediate
  * sRGB surface when the canvas is in legacy mode.
  *
- * TODO("STUB.MESH") — SkMesh / SkMeshSpecification not implemented.
+ * CPU subset: exercises mesh color-space and alpha-type conversion for
+ * position + float4 color attributes. The upstream SkSL varying handoff is
+ * represented by direct per-vertex color lowering in SkCanvas.drawMesh.
  */
 public class CustomMeshCsGM : GM() {
     override fun getName(): String = "custommesh_cs"
     override fun getISize(): SkISize = SkISize.Make(468, 258)
+
+    private lateinit var specs: Array<SkMeshSpecification>
+    private lateinit var premulVB: SkMesh.VertexBuffer
+    private lateinit var unpremulVB: SkMesh.VertexBuffer
+
+    override fun onOnceBeforeDraw() {
+        specs = Array(4) { index ->
+            val unpremul = index >= 2
+            val spin = index % 2 == 1
+            val cs = if (spin) SkColorSpace.makeSRGB().makeColorSpin() else SkColorSpace.makeSRGB()
+            val result = SkMeshSpecification.Make(
+                attributes = listOf(
+                    SkMeshSpecification.Attribute(
+                        SkMeshSpecification.Attribute.Type.kFloat2,
+                        offset = 0,
+                        name = "pos",
+                    ),
+                    SkMeshSpecification.Attribute(
+                        SkMeshSpecification.Attribute.Type.kFloat4,
+                        offset = 8,
+                        name = "color",
+                    ),
+                ),
+                vertexStride = COLOR_SPACE_STRIDE,
+                vs = "Varyings main(const Attributes a) { Varyings v; v.position = a.pos; return v; }",
+                fs = "float2 main(const Varyings v, out half4 color) { return v.position; }",
+                cs = cs,
+                at = if (unpremul) SkAlphaType.kUnpremul else SkAlphaType.kPremul,
+            )
+            result.specification ?: error("CustomMeshCsGM spec creation failed: ${result.error}")
+        }
+        premulVB = SkMeshes.MakeVertexBuffer(colorSpaceVertexBytes(premul = true), 4 * COLOR_SPACE_STRIDE)
+        unpremulVB = SkMeshes.MakeVertexBuffer(colorSpaceVertexBytes(premul = false), 4 * COLOR_SPACE_STRIDE)
+    }
+
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.MESH")
+        val c = canvas ?: return
+        val shader = SkLinearGradient.Make(
+            p0 = SkPoint(COLOR_SPACE_RECT.left, 0f),
+            p1 = SkPoint(COLOR_SPACE_RECT.centerX(), 0f),
+            colors = intArrayOf(0xFFFFFFFF.toInt(), 0x00000000),
+            positions = null,
+            tileMode = SkTileMode.kMirror,
+        )
+
+        for (useShader in listOf(false, true)) {
+            for (unpremul in listOf(false, true)) {
+                c.save()
+                for (spin in listOf(false, true)) {
+                    val mesh = SkMesh.Make(
+                        specification = specs[colorSpaceSpecIndex(unpremul, spin)],
+                        mode = SkMesh.Mode.kTriangleStrip,
+                        vertexBuffer = if (unpremul) unpremulVB else premulVB,
+                        vertexCount = 4,
+                        vertexOffset = 0,
+                        bounds = COLOR_SPACE_RECT,
+                    ).mesh.takeIf { it.isValid() } ?: error("CustomMeshCsGM mesh creation failed")
+                    val paint = SkPaint().apply {
+                        if (useShader) this.shader = shader
+                    }
+                    c.drawMesh(mesh, paint)
+                    c.translate(0f, COLOR_SPACE_RECT.height() + 10f)
+                }
+                c.restore()
+                c.translate(COLOR_SPACE_RECT.width() + 10f, 0f)
+            }
+        }
+    }
+
+    private companion object {
+        private const val COLOR_SPACE_STRIDE = 24
+        private val COLOR_SPACE_RECT: SkRect = SkRect.MakeLTRB(20f, 20f, 120f, 120f)
+        private val COLOR_SPACE_COLORS = arrayOf(
+            floatArrayOf(1f, 0f, 0f, 1f),
+            floatArrayOf(0f, 1f, 0f, 0f),
+            floatArrayOf(1f, 1f, 0f, 0f),
+            floatArrayOf(0f, 0f, 1f, 1f),
+        )
+        private val COLOR_SPACE_POINTS = arrayOf(
+            SkPoint(COLOR_SPACE_RECT.left, COLOR_SPACE_RECT.top),
+            SkPoint(COLOR_SPACE_RECT.right, COLOR_SPACE_RECT.top),
+            SkPoint(COLOR_SPACE_RECT.left, COLOR_SPACE_RECT.bottom),
+            SkPoint(COLOR_SPACE_RECT.right, COLOR_SPACE_RECT.bottom),
+        )
+
+        private fun colorSpaceSpecIndex(unpremul: Boolean, spin: Boolean): Int =
+            (if (unpremul) 2 else 0) + if (spin) 1 else 0
+
+        private fun colorSpaceVertexBytes(premul: Boolean): ByteArray =
+            ByteBuffer.allocate(4 * COLOR_SPACE_STRIDE)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .apply {
+                    for (i in COLOR_SPACE_POINTS.indices) {
+                        val p = COLOR_SPACE_POINTS[i]
+                        val c = COLOR_SPACE_COLORS[i]
+                        val a = c[3]
+                        putFloat(p.fX)
+                        putFloat(p.fY)
+                        putFloat(if (premul) c[0] * a else c[0])
+                        putFloat(if (premul) c[1] * a else c[1])
+                        putFloat(if (premul) c[2] * a else c[2])
+                        putFloat(a)
+                    }
+                }
+                .array()
     }
 }
 
@@ -552,12 +663,121 @@ public class MeshWithEffectsGM : GM() {
  * correctly colour-managed vs raw (non-managed) uniforms across several
  * (meshCS, surfaceCS) combinations. Skips on CPU-only / recording contexts.
  *
- * TODO("STUB.MESH") — SkMesh / SkMeshSpecification not implemented.
+ * CPU subset: covers the color-managed uniform contract for solid half4
+ * mesh fragment output. GPU recording requirements from upstream are not
+ * required for the portable raster cell.
  */
 public class CustomMeshCsUniformsGM : GM() {
     override fun getName(): String = "custommesh_cs_uniforms"
     override fun getISize(): SkISize = SkISize.Make(200, 900)
+
+    private lateinit var vb: SkMesh.VertexBuffer
+    private lateinit var uniforms: SkData
+
+    override fun onOnceBeforeDraw() {
+        vb = SkMeshes.MakeVertexBuffer(csUniformQuadBytes(), 4 * 8)
+        uniforms = SkData.MakeWithCopy(
+            ByteBuffer.allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putFloat(1f)
+                .putFloat(0f)
+                .putFloat(0f)
+                .putFloat(1f)
+                .array(),
+        )
+    }
+
     override fun onDraw(canvas: SkCanvas?) {
-        TODO("STUB.MESH")
+        val c = canvas ?: return
+        for (config in CS_UNIFORM_CONFIGS) {
+            val surface = makeCsUniformSurface(c, config.surfaceCS)
+            val offscreen = surface.canvas
+            offscreen.clear(0xFFFFFFFF.toInt())
+            val mesh = makeCsUniformMesh(config.managed, config.meshCS)
+            offscreen.drawMesh(mesh, SkPaint())
+            offscreen.translate(100f, 0f)
+            offscreen.drawRect(CS_UNIFORM_RECT, SkPaint(config.expectedColor))
+            surface.draw(c, 0f, 0f)
+            c.translate(0f, 100f)
+        }
+    }
+
+    private fun makeCsUniformMesh(managed: Boolean, workingCS: SkColorSpace): SkMesh {
+        val result = SkMeshSpecification.Make(
+            attributes = listOf(
+                SkMeshSpecification.Attribute(
+                    SkMeshSpecification.Attribute.Type.kFloat2,
+                    offset = 0,
+                    name = "pos",
+                ),
+            ),
+            vertexStride = 8,
+            vs = "Varyings main(const Attributes a) { Varyings v; v.position = a.pos; return v; }",
+            fs = if (managed) {
+                "layout(color) uniform half4 color; float2 main(const Varyings v, out half4 c) { c = color; return v.position; }"
+            } else {
+                "uniform half4 color; float2 main(const Varyings v, out half4 c) { c = color; return v.position; }"
+            },
+            cs = workingCS,
+            at = SkAlphaType.kPremul,
+        )
+        val spec = result.specification ?: error("CustomMeshCsUniformsGM spec creation failed: ${result.error}")
+        return SkMesh.Make(
+            specification = spec,
+            mode = SkMesh.Mode.kTriangleStrip,
+            vertexBuffer = vb,
+            vertexCount = 4,
+            vertexOffset = 0,
+            uniforms = uniforms,
+            bounds = CS_UNIFORM_RECT,
+        ).mesh.takeIf { it.isValid() } ?: error("CustomMeshCsUniformsGM mesh creation failed")
+    }
+
+    private fun makeCsUniformSurface(canvas: SkCanvas, cs: SkColorSpace?): org.skia.core.SkSurface {
+        val info = SkImageInfo.MakeN32Premul(200, 100, cs ?: SkColorSpace.makeSRGB())
+        return canvas.makeSurface(info)
+            ?: SkSurfaces.Raster(info)
+            ?: error("CustomMeshCsUniformsGM surface creation failed")
+    }
+
+    private companion object {
+        private val CS_UNIFORM_RECT: SkRect = SkRect.MakeLTRB(20f, 20f, 80f, 80f)
+        private val SRGB_CS: SkColorSpace = SkColorSpace.makeSRGB()
+        private val SPIN_CS: SkColorSpace = SkColorSpace.makeSRGB().makeColorSpin()
+        private val WIDE_CS: SkColorSpace = SkColorSpace.makeRGB(SkNamedTransferFn.k2Dot2, SkNamedGamut.kRec2020)!!
+
+        private data class CsUniformConfig(
+            val meshCS: SkColorSpace,
+            val surfaceCS: SkColorSpace?,
+            val managed: Boolean,
+            val expectedColor: Int = 0xFFFF0000.toInt(),
+        )
+
+        private val CS_UNIFORM_CONFIGS = listOf(
+            CsUniformConfig(SRGB_CS, null, managed = true),
+            CsUniformConfig(SRGB_CS, SRGB_CS, managed = true),
+            CsUniformConfig(SRGB_CS, SPIN_CS, managed = true),
+            CsUniformConfig(SRGB_CS, WIDE_CS, managed = true),
+            CsUniformConfig(SPIN_CS, SRGB_CS, managed = true),
+            CsUniformConfig(SPIN_CS, SPIN_CS, managed = true),
+            CsUniformConfig(SPIN_CS, WIDE_CS, managed = true),
+            CsUniformConfig(SPIN_CS, SRGB_CS, managed = false, expectedColor = 0xFF00FF00.toInt()),
+            CsUniformConfig(SPIN_CS, WIDE_CS, managed = false, expectedColor = 0xFF00FF00.toInt()),
+        )
+
+        private fun csUniformQuadBytes(): ByteArray =
+            ByteBuffer.allocate(4 * 8)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .apply {
+                    putFloat(CS_UNIFORM_RECT.left)
+                    putFloat(CS_UNIFORM_RECT.top)
+                    putFloat(CS_UNIFORM_RECT.right)
+                    putFloat(CS_UNIFORM_RECT.top)
+                    putFloat(CS_UNIFORM_RECT.left)
+                    putFloat(CS_UNIFORM_RECT.bottom)
+                    putFloat(CS_UNIFORM_RECT.right)
+                    putFloat(CS_UNIFORM_RECT.bottom)
+                }
+                .array()
     }
 }
