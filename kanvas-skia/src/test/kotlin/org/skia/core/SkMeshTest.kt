@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkBlender
+import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkData
 import org.skia.foundation.SkPaint
 import java.nio.ByteBuffer
@@ -224,6 +226,33 @@ class SkMeshTest {
 
         assertEquals(0xFFFF0000.toInt(), bm.getPixel(10, 10))
         assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(29, 29))
+    }
+
+    @Test
+    fun `drawMesh applies supplied blender to copied paint`() {
+        val bm = whiteBitmap()
+        val canvas = SkCanvas(bm)
+        val mesh = SkMesh.Make(
+            specification = positionSpec().specification!!,
+            mode = SkMesh.Mode.kTriangles,
+            vertexBuffer = SkMeshes.MakeVertexBuffer(
+                floatBytes(
+                    5f, 5f,
+                    25f, 5f,
+                    5f, 25f,
+                ),
+                24,
+            ),
+            vertexCount = 3,
+            vertexOffset = 0,
+            bounds = SkRect.MakeLTRB(5f, 5f, 25f, 25f),
+        ).mesh
+
+        val paint = SkPaint(0xFFFF0000.toInt())
+        canvas.drawMesh(mesh, SkBlender.Mode(SkBlendMode.kDst), paint)
+
+        assertEquals(0xFFFFFFFF.toInt(), bm.getPixel(10, 10))
+        assertEquals(null, paint.blender, "drawMesh must not mutate the caller paint")
     }
 
     private fun positionSpec(): SkMeshSpecification.Result =
