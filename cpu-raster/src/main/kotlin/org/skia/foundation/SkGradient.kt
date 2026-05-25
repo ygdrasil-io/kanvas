@@ -96,11 +96,13 @@ public class SkGradient(
     }
 
     internal fun requiresDedicatedSampler(): Boolean =
-        interpolation.colorSpace == Interpolation.ColorSpace.kHSL
+        interpolation.colorSpace == Interpolation.ColorSpace.kHSL ||
+            interpolation.colorSpace == Interpolation.ColorSpace.kLCH
 
     internal fun validateDedicatedSampler() {
-        // HSL is intentionally the only dedicated sampler slice here. Other
-        // perceptual spaces still require their own conversion pipelines.
+        if (!requiresDedicatedSampler()) {
+            unsupported("ColorSpace.${interpolation.colorSpace}")
+        }
     }
 
     private fun unsupported(feature: String): Nothing =
