@@ -333,6 +333,9 @@ class WebGpuCoveragePlanSelectorTest {
                 assertEquals("webgpu.coverage.analytic-rect", rect?.routeIdentifier)
                 assertEquals("coverageKind=analyticRect:Code", rect?.pipelineKeyDump)
                 assertTrue(rect?.selectionDump?.contains("diagnostic=none") == true)
+                assertTrue(rect?.productionDump?.contains("mode=Default") == true)
+                assertTrue(rect?.productionDump?.contains("backend=GPU") == true)
+                assertTrue(rect?.productionDump?.contains("cacheCounters=shaderModules=") == true)
 
                 canvas.drawRRect(SkRRect.MakeRectXY(SkRect.MakeLTRB(2f, 2f, 14f, 14f), 4f, 4f), paint)
                 val rrect = device.coverageSelectionDiagnosticsForTests()
@@ -353,6 +356,28 @@ class WebGpuCoveragePlanSelectorTest {
             }
         }
     }
+
+    @Test
+    fun `production device rollback flag records selector disabled route dump`() =
+        withWebGpuCoverageSelectorFlag("false") {
+            val context = WebGpuContext.createOrNull()
+            Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+            context!!.use { ctx ->
+                SkWebGpuDevice(ctx, W, H).use { device ->
+                    SkCanvas(device).drawRect(
+                        SkRect.MakeLTRB(2f, 1f, 7f, 6f),
+                        SkPaint().apply {
+                            color = SK_ColorBLACK
+                            isAntiAlias = true
+                        },
+                    )
+                    val diagnostics = device.coverageSelectionDiagnosticsForTests()
+                    assertEquals("Rollback", diagnostics?.mode)
+                    assertEquals("webgpu.coverage.selector-disabled", diagnostics?.routeIdentifier)
+                    assertTrue(diagnostics?.productionDump?.contains("fallbackReason=coverage.webgpu-selector-disabled") == true)
+                }
+            }
+        }
 
     private fun renderRaster(draw: SkCanvas.() -> Unit): ByteArray {
         val bitmap = SkBitmap(W, H, colorType = SkColorType.kRGBA_8888).apply {
@@ -414,6 +439,25 @@ class WebGpuCoveragePlanSelectorTest {
             maxDelta <= maxObservedChannelDelta,
             "rrect/simple-shape GPU max channel delta exceeded tolerance: exactRatio=$exactRatio maxDelta=$maxDelta",
         )
+    }
+
+    private fun <T> withWebGpuCoverageSelectorFlag(value: String?, block: () -> T): T {
+        val key = "kanvas.webgpu.coverageSelector.enabled"
+        val previous = System.getProperty(key)
+        if (value == null) {
+            System.clearProperty(key)
+        } else {
+            System.setProperty(key, value)
+        }
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(key)
+            } else {
+                System.setProperty(key, previous)
+            }
+        }
     }
 
     private companion object {
