@@ -5,13 +5,31 @@ import kotlin.math.min
 
 data class PixelBuffer(val width: Int, val height: Int, val argb8888: IntArray)
 
+enum class CpuVectorMode {
+    Auto,
+    Disabled,
+    Force,
+}
+
+data class CpuPipelineExecutionOptions(val vectorMode: CpuVectorMode = CpuVectorMode.Auto)
+
 sealed interface CpuExecutionResult {
-    data class Success(val pixels: PixelBuffer) : CpuExecutionResult
+    data class Success(
+        val pixels: PixelBuffer,
+        val kernelId: String = "cpu.scalar",
+        val diagnostics: List<String> = emptyList(),
+    ) : CpuExecutionResult
+
     data class LegacyFallback(val reason: String) : CpuExecutionResult
 }
 
 object CpuScalarPipelineExecutor {
-    fun execute(ir: KanvasPipelineIR, width: Int, height: Int): CpuExecutionResult {
+    fun execute(
+        ir: KanvasPipelineIR,
+        width: Int,
+        height: Int,
+        options: CpuPipelineExecutionOptions = CpuPipelineExecutionOptions(),
+    ): CpuExecutionResult {
         if (width <= 0 || height <= 0) {
             return CpuExecutionResult.LegacyFallback("Invalid target dimensions")
         }
@@ -28,20 +46,34 @@ object CpuScalarPipelineExecutor {
         }
 
         val pixels = IntArray(width * height)
+        if (colorOp != null) {
+            val packed = pack(colorOp.color)
+            val vectorAttempt = CpuVectorSolidRectKernel.tryFillSrcOverClear(width, height, packed, pixels, options.vectorMode)
+            if (vectorAttempt.usedVector) {
+                return CpuExecutionResult.Success(
+                    pixels = PixelBuffer(width = width, height = height, argb8888 = pixels),
+                    kernelId = vectorAttempt.kernelId,
+                    diagnostics = vectorAttempt.diagnostics,
+                )
+            }
+            fillSolidSrcOverClearScalar(pixels, packed)
+            return CpuExecutionResult.Success(
+                pixels = PixelBuffer(width = width, height = height, argb8888 = pixels),
+                kernelId = "cpu.scalar.solid_src_over_clear",
+                diagnostics = vectorAttempt.diagnostics,
+            )
+        }
         for (y in 0 until height) {
             for (x in 0 until width) {
-                val src = when {
-                    colorOp != null -> pack(colorOp.color)
-                    gradientOp != null -> {
-                        val p = gradientOp.payload
-                        pack(sampleLinearGradient(p, x.toFloat(), y.toFloat()))
-                    }
-                    else -> 0
-                }
+                val p = requireNotNull(gradientOp).payload
+                val src = pack(sampleLinearGradient(p, x.toFloat(), y.toFloat()))
                 pixels[y * width + x] = srcOver(src, 0x00000000)
             }
         }
-        return CpuExecutionResult.Success(PixelBuffer(width = width, height = height, argb8888 = pixels))
+        return CpuExecutionResult.Success(
+            pixels = PixelBuffer(width = width, height = height, argb8888 = pixels),
+            kernelId = "cpu.scalar.linear_gradient_src_over_clear",
+        )
     }
 
     fun legacySolidRect(width: Int, height: Int, color: Rgba): PixelBuffer {
@@ -86,6 +118,12 @@ object CpuScalarPipelineExecutor {
         val g = q(c.g)
         val b = q(c.b)
         return (a shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    private fun fillSolidSrcOverClearScalar(dst: IntArray, src: Int) {
+        for (i in dst.indices) {
+            dst[i] = srcOver(src, 0x00000000)
+        }
     }
 
     private fun srcOver(src: Int, dst: Int): Int {
