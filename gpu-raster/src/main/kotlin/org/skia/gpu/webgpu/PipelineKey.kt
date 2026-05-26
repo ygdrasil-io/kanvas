@@ -5,8 +5,9 @@ import java.security.MessageDigest
 public data class PipelineKey(
     val preimage: String,
     val hash: String,
+    val uniformFacts: String,
 ) {
-    public fun dump(): String = "preimage=$preimage;hash=$hash"
+    public fun dump(): String = "preimage=$preimage;hash=$hash;uniformFacts=$uniformFacts"
 }
 
 internal class PipelineKeyedCache<T>(
@@ -61,7 +62,14 @@ internal fun canonicalPipelineKeyIdentity(
         "layout=[${grouped.canonicalGroup(SkWebGpuDevice.PipelineKeyAxisClass.Layout)}] " +
         "code=[${grouped.canonicalGroup(SkWebGpuDevice.PipelineKeyAxisClass.Code)}] " +
         "state=[${grouped.canonicalGroup(SkWebGpuDevice.PipelineKeyAxisClass.PipelineState)}]"
-    return PipelineKey(preimage = preimage, hash = sha256Hex(preimage))
+    return PipelineKey(
+        preimage = preimage,
+        hash = sha256Hex(preimage),
+        uniformFacts = parts
+            .filter { it.axisClass == SkWebGpuDevice.PipelineKeyAxisClass.UniformOnly }
+            .sortedBy { it.axis }
+            .joinToString(prefix = "[", postfix = "]") { "${it.axis}=${it.value}" },
+    )
 }
 
 private fun Map<SkWebGpuDevice.PipelineKeyAxisClass, List<SkWebGpuDevice.PipelineKeyClassification>>.canonicalGroup(
