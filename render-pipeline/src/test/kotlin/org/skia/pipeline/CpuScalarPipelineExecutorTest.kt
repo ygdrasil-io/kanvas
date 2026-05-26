@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class CpuScalarPipelineExecutorTest {
     @Test
@@ -48,5 +49,64 @@ class CpuScalarPipelineExecutorTest {
         val result = CpuScalarPipelineExecutor.execute(ir, width = 4, height = 4)
         val fallback = assertIs<CpuExecutionResult.LegacyFallback>(result)
         assertEquals("Explicit fallback: legacy shader required", fallback.reason)
+    }
+
+    @Test
+    fun solidRectVectorKernelMatchesScalarOutputWhenAvailable() {
+        val color = Rgba(0.1f, 0.7f, 0.3f, 1f)
+        val ir = KanvasPipelineIR.demoSolidRectIr(color)
+
+        val scalar = assertIs<CpuExecutionResult.Success>(
+            CpuScalarPipelineExecutor.execute(
+                ir,
+                width = 33,
+                height = 5,
+                options = CpuPipelineExecutionOptions(vectorMode = CpuVectorMode.Disabled),
+            )
+        )
+        val vector = assertIs<CpuExecutionResult.Success>(
+            CpuScalarPipelineExecutor.execute(
+                ir,
+                width = 33,
+                height = 5,
+                options = CpuPipelineExecutionOptions(vectorMode = CpuVectorMode.Force),
+            )
+        )
+
+        assertContentEquals(scalar.pixels.argb8888, vector.pixels.argb8888)
+        if (vector.kernelId == "java25.vector.solid_src_over_clear") {
+            assertTrue(vector.diagnostics.any { it.startsWith("Vector API selected") })
+        } else {
+            assertEquals("cpu.scalar.solid_src_over_clear", vector.kernelId)
+            assertTrue(vector.diagnostics.any { it.startsWith("Vector API unavailable") })
+        }
+    }
+
+    @Test
+    fun vectorRuntimeGateFallsBackToScalarWithStableDiagnostic() {
+        val previous = System.getProperty(CpuVectorSolidRectKernel.ENABLED_PROPERTY)
+        System.setProperty(CpuVectorSolidRectKernel.ENABLED_PROPERTY, "false")
+        try {
+            val result = assertIs<CpuExecutionResult.Success>(
+                CpuScalarPipelineExecutor.execute(
+                    KanvasPipelineIR.demoSolidRectIr(Rgba(0.2f, 0.4f, 0.6f, 1f)),
+                    width = 8,
+                    height = 8,
+                    options = CpuPipelineExecutionOptions(vectorMode = CpuVectorMode.Force),
+                )
+            )
+
+            assertEquals("cpu.scalar.solid_src_over_clear", result.kernelId)
+            assertEquals(
+                "Vector API disabled by system property kanvas.cpu.vector.enabled=false",
+                result.diagnostics.single(),
+            )
+        } finally {
+            if (previous == null) {
+                System.clearProperty(CpuVectorSolidRectKernel.ENABLED_PROPERTY)
+            } else {
+                System.setProperty(CpuVectorSolidRectKernel.ENABLED_PROPERTY, previous)
+            }
+        }
     }
 }
