@@ -173,6 +173,90 @@ public class SkWebGpuDevice(
      */
     private val intermediateFormat: GPUTextureFormat = GPUTextureFormat.RGBA16Float,
 ) : SkDevice, AutoCloseable {
+    public enum class PipelineKeyAxisClass {
+        Layout,
+        Code,
+        PipelineState,
+        UniformOnly,
+    }
+
+    public data class PipelineKeyClassification(
+        val axis: String,
+        val axisClass: PipelineKeyAxisClass,
+        val value: String,
+    )
+
+    public data class GpuCacheTelemetrySnapshot(
+        val shaderModuleCacheHits: Int,
+        val shaderModuleCacheMisses: Int,
+        val pipelineCacheHits: Int,
+        val pipelineCacheMisses: Int,
+        val resourceCacheHits: Int,
+        val resourceCacheMisses: Int,
+        val pipelineCreations: Int,
+        val shaderModuleCount: Int,
+        val pipelineCacheEntryCount: Int,
+        val resourceCacheEntryCount: Int,
+    )
+
+    private data class CacheCounters(
+        var shaderModuleHits: Int = 0,
+        var shaderModuleMisses: Int = 0,
+        var pipelineHits: Int = 0,
+        var pipelineMisses: Int = 0,
+        var resourceHits: Int = 0,
+        var resourceMisses: Int = 0,
+        var pipelineCreations: Int = 0,
+    )
+
+    private val cacheCounters: CacheCounters = CacheCounters()
+    private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
+
+    private fun classifyPipelineAxis(axis: String): PipelineKeyAxisClass = when (axis) {
+        "shaderFamily", "entryPoint", "generatedPath" -> PipelineKeyAxisClass.Code
+        "blendMode", "colorFormat", "topology", "sampleCount" -> PipelineKeyAxisClass.PipelineState
+        "tileModeX", "tileModeY", "samplerFilter" -> PipelineKeyAxisClass.Layout
+        "uniformSchemaVersion" -> PipelineKeyAxisClass.UniformOnly
+        else -> throw IllegalArgumentException("Unknown PipelineKey axis: $axis")
+    }
+
+    private fun serializePipelineKey(parts: List<PipelineKeyClassification>): String =
+        parts.sortedBy { it.axis }
+            .joinToString("|") { "${it.axis}=${it.value}" }
+
+    public fun cacheTelemetrySnapshot(): GpuCacheTelemetrySnapshot = GpuCacheTelemetrySnapshot(
+        shaderModuleCacheHits = cacheCounters.shaderModuleHits,
+        shaderModuleCacheMisses = cacheCounters.shaderModuleMisses,
+        pipelineCacheHits = cacheCounters.pipelineHits,
+        pipelineCacheMisses = cacheCounters.pipelineMisses,
+        resourceCacheHits = cacheCounters.resourceHits,
+        resourceCacheMisses = cacheCounters.resourceMisses,
+        pipelineCreations = cacheCounters.pipelineCreations,
+        shaderModuleCount = shaderModuleCache.size,
+        pipelineCacheEntryCount = pipelineCacheEntryCount(),
+        resourceCacheEntryCount = imageTextureCache.size + bitmapSamplerCache.size,
+    )
+
+    public fun buildPipelineKeyForDiagnostics(axes: Map<String, String>): String =
+        serializePipelineKey(
+            axes.map { (axis, value) ->
+                PipelineKeyClassification(
+                    axis = axis,
+                    axisClass = classifyPipelineAxis(axis),
+                    value = value,
+                )
+            },
+        )
+
+    private fun pipelineCacheEntryCount(): Int =
+        rectPipelineCache.size +
+            generatedRectPipelineCache.size +
+            polygonPipelineCache.size +
+            coverPipelineCache.size +
+            aaPolygonPipelineCache.size +
+            aaStencilCoverPipelineCache.size +
+            bitmapPipelineCache.size +
+            linearGradientPipelineCache.size
 
     /**
      * Final readback target -- the present pass writes here, then we
@@ -1923,10 +2007,18 @@ public class SkWebGpuDevice(
     private val pending: MutableList<PendingDraw> = mutableListOf()
 
     private fun loadShader(resource: String): GPUShaderModule {
+        val cached = shaderModuleCache[resource]
+        if (cached != null) {
+            cacheCounters.shaderModuleHits += 1
+            return cached
+        }
+        cacheCounters.shaderModuleMisses += 1
         val wgsl = SkWebGpuDevice::class.java.classLoader
             .getResource(resource)?.readText()
             ?: error("$resource missing from classpath")
-        return context.device.createShaderModule(ShaderModuleDescriptor(code = wgsl))
+        return context.device.createShaderModule(ShaderModuleDescriptor(code = wgsl)).also {
+            shaderModuleCache[resource] = it
+        }
     }
 
     // ─── Rect pipeline (G1.2 / G2.3a) — full-screen tri + scissor + coverage ───
@@ -1976,15 +2068,42 @@ public class SkWebGpuDevice(
     private val generatedRectPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
 
     private fun rectPipelineFor(mode: SkBlendMode, useGenerated: Boolean): GPURenderPipeline {
+        serializePipelineKey(
+            listOf(
+                PipelineKeyClassification("blendMode", classifyPipelineAxis("blendMode"), mode.name),
+                PipelineKeyClassification("generatedPath", classifyPipelineAxis("generatedPath"), useGenerated.toString()),
+            ),
+        )
         val shader = if (useGenerated) generatedSolidRectShader else handwrittenRectShader
         if (useGenerated && shader == null) {
             lastGeneratedSolidRectFallbackReason = generatedSolidRectInitFallbackReason ?: "generated solid rect unavailable"
-            return rectPipelineCache.getOrPut(mode) { createRectPipeline(handwrittenRectShader, mode) }
+            val cached = rectPipelineCache[mode]
+            if (cached != null) {
+                cacheCounters.pipelineHits += 1
+                return cached
+            }
+            cacheCounters.pipelineMisses += 1
+            cacheCounters.pipelineCreations += 1
+            return createRectPipeline(handwrittenRectShader, mode).also { rectPipelineCache[mode] = it }
         }
         if (useGenerated) {
-            return generatedRectPipelineCache.getOrPut(mode) { createRectPipeline(shader!!, mode) }
+            val cached = generatedRectPipelineCache[mode]
+            if (cached != null) {
+                cacheCounters.pipelineHits += 1
+                return cached
+            }
+            cacheCounters.pipelineMisses += 1
+            cacheCounters.pipelineCreations += 1
+            return createRectPipeline(shader!!, mode).also { generatedRectPipelineCache[mode] = it }
         }
-        return rectPipelineCache.getOrPut(mode) { createRectPipeline(handwrittenRectShader, mode) }
+        val cached = rectPipelineCache[mode]
+        if (cached != null) {
+            cacheCounters.pipelineHits += 1
+            return cached
+        }
+        cacheCounters.pipelineMisses += 1
+        cacheCounters.pipelineCreations += 1
+        return createRectPipeline(handwrittenRectShader, mode).also { rectPipelineCache[mode] = it }
     }
 
     private fun createRectPipeline(shader: GPUShaderModule, mode: SkBlendMode): GPURenderPipeline =
@@ -2417,7 +2536,12 @@ public class SkWebGpuDevice(
         mode: SkBlendMode,
         filter: SkFilterMode,
     ): GPURenderPipeline =
-        bitmapPipelineCache.getOrPut(mode to filter) {
+        bitmapPipelineCache[mode to filter]?.also {
+            cacheCounters.pipelineHits += 1
+            return it
+        } ?: run {
+            cacheCounters.pipelineMisses += 1
+            cacheCounters.pipelineCreations += 1
             context.device.createRenderPipeline(
                 RenderPipelineDescriptor(
                     layout = bitmapPipelineLayout,
@@ -2434,7 +2558,7 @@ public class SkWebGpuDevice(
                     ),
                 ),
             )
-        }
+        }.also { bitmapPipelineCache[mode to filter] = it }
 
     /**
      * Sampler cache keyed by `(filter, tileX, tileY)`. Per-axis tile mode
@@ -2454,7 +2578,11 @@ public class SkWebGpuDevice(
         tileX: SkTileMode,
         tileY: SkTileMode,
     ): GPUSampler =
-        bitmapSamplerCache.getOrPut(Triple(filter, tileX, tileY)) {
+        bitmapSamplerCache[Triple(filter, tileX, tileY)]?.also {
+            cacheCounters.resourceHits += 1
+            return it
+        } ?: run {
+            cacheCounters.resourceMisses += 1
             val magMin = when (filter) {
                 SkFilterMode.kNearest -> GPUFilterMode.Nearest
                 SkFilterMode.kLinear -> GPUFilterMode.Linear
@@ -2474,7 +2602,7 @@ public class SkWebGpuDevice(
                     label = "SkWebGpuDevice.bitmapSampler($filter,$tileX,$tileY)",
                 ),
             )
-        }
+        }.also { bitmapSamplerCache[Triple(filter, tileX, tileY)] = it }
 
     // ─── Layer composite (Phase G-saveLayer-fast) ────────────────────────
     /**
@@ -3244,7 +3372,11 @@ public class SkWebGpuDevice(
      * matching `SkBitmapShader.sampleLinear` on the raster side).
      */
     private fun imageTextureFor(image: SkImage): GPUTexture =
-        imageTextureCache.getOrPut(image) {
+        imageTextureCache[image]?.also {
+            cacheCounters.resourceHits += 1
+            return it
+        } ?: run {
+            cacheCounters.resourceMisses += 1
             val w = image.width
             val h = image.height
             val tex = context.device.createTexture(
@@ -3276,7 +3408,7 @@ public class SkWebGpuDevice(
                 size = Extent3D(width = w.toUInt(), height = h.toUInt()),
             )
             tex
-        }
+        }.also { imageTextureCache[image] = it }
 
     // ─── AA polygon pipeline (G3.3b.2a) — per-fragment edge coverage ──────
 
