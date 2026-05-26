@@ -163,7 +163,7 @@ Add a backend-neutral pipeline module that owns the common lowering model:
   PipelineKey
   UniformLayout
   ColorSpaceBlock
-  CoverageModel
+  CoveragePlan
   PipelineNormalizer
 ```
 
@@ -203,7 +203,7 @@ sealed interface PipelineOp {
     data class ColorSpaceXform(val payload: ColorSpacePayload) : PipelineOp
     data class ColorFilter(val payload: ColorFilterPayload) : PipelineOp
     data class BlendMode(val mode: SkBlendMode) : PipelineOp
-    data class ApplyCoverage(val coverage: CoverageModel) : PipelineOp
+    data class ApplyCoverage(val coverage: CoveragePlan) : PipelineOp
     data object LoadDst : PipelineOp
     data object Store : PipelineOp
 }
@@ -326,42 +326,84 @@ special cases.
 
 ### Geometry And Coverage
 
-Geometry remains separate from paint.
+Geometry remains separate from paint. The paint pipeline consumes coverage; it
+does not decide how a shape becomes covered pixels.
 
-CPU:
+This follows the useful Graphite lesson without porting Graphite: a draw should
+separate geometric state, paint state, clipping, ordering, and backend
+execution strategy. Kanvas keeps that separation smaller and backend-neutral so
+CPU and WebGPU can share semantics.
 
-- Rects, paths, glyph masks, vertices, and masks produce spans, masks, or
-  typed coverage packets.
-- Coverage is passed into the pipeline runner as span-local input.
+Target flow:
 
-GPU:
+```text
+SkCanvas draw*
+  -> GeometryNormalizer
+  -> stroke / fill / clip lowering
+  -> GeometryPlan
+  -> CoveragePlan
+       CPU: spans, SkAAClip/RLE, alpha masks, analytic rects
+       GPU: analytic rect/rrect, convex fan, stencil-cover, mask atlas
+  -> Paint PipelineIR
+  -> backend blend/store
+```
 
-- Simple rect/rrect coverage can remain analytic in fragment WGSL.
-- Complex paths can use existing stencil/cover strategy.
-- The color pipeline should be shared between rect and cover paths where
-  possible through generated WGSL helpers.
+`GeometryPlan` owns the transformed shape contract:
 
-Coverage should be represented in the IR as a coverage model, not buried in
-each shader implementation. The model describes the shape and contract of
-coverage; it does not force every backend to use the same storage channel.
+- primitive kind: rect, rrect, oval, path, vertices, glyph mask, image rect;
+- fill type and inverse-fill behavior;
+- stroke style after path-effect application;
+- source-to-device transform facts;
+- conservative and tight bounds;
+- clip interaction;
+- fallback reason when the shape cannot be represented safely.
+
+`CoveragePlan` owns how that geometry reaches fragments or spans. It should be
+represented in the IR as a coverage model, not buried in each shader
+implementation. The model describes the shape and contract of coverage; it does
+not force every backend to use the same storage channel.
 
 Representative shape:
 
 ```kotlin
-sealed interface CoverageModel {
-    data object Full : CoverageModel
-    data object Span : CoverageModel
-    data class AlphaMask(val bounds: SkIRect, val format: MaskFormat) : CoverageModel
-    data class AnalyticRect(val bounds: SkRect, val aa: Boolean) : CoverageModel
-    data class AnalyticRRect(val bounds: SkRRect, val aa: Boolean) : CoverageModel
-    data class StencilCover(val fillType: SkPathFillType) : CoverageModel
+sealed interface CoveragePlan {
+    data object Full : CoveragePlan
+    data class AnalyticRect(val bounds: SkRect, val aa: Boolean) : CoveragePlan
+    data class AnalyticRRect(val bounds: SkRRect, val aa: Boolean) : CoveragePlan
+    data class SpanRuns(val bounds: SkIRect) : CoveragePlan
+    data class AlphaMask(val bounds: SkIRect, val format: MaskFormat) : CoveragePlan
+    data class StencilCover(val fillType: SkPathFillType, val aa: Boolean) : CoveragePlan
+    data class CoverageAtlas(val bounds: SkIRect, val cachePolicy: CachePolicy) : CoveragePlan
+    data class Unsupported(val reason: String) : CoveragePlan
 }
 ```
 
-CPU execution can keep spans and masks in native scanline form. GPU execution
-can keep analytic rect/rrect coverage in WGSL and complex paths in the
-stencil-cover path. The shared IR should prevent semantic drift, not impose a
-single low-level coverage representation.
+CPU execution can keep spans, RLE clips, and masks in native scanline form.
+GPU execution can keep analytic rect/rrect coverage in WGSL, use convex fan or
+stencil-cover for paths, and introduce a coverage atlas only when profiling
+shows that repeated path masks justify it.
+
+The shared contract prevents semantic drift. It does not force CPU and GPU to
+use the same storage representation.
+
+Non-goals for this geometry layer:
+
+- Do not port Graphite `DrawList`, `DrawPass`, `Renderer`, `RenderStep`, or
+  resource scheduler.
+- Do not introduce SkSL or Graphite paint-key machinery.
+- Do not move paint lowering decisions into geometry.
+- Do not add GPU compute tessellation until profiling identifies CPU-side
+  geometry preparation as a bottleneck.
+
+Initial geometry milestones should be tracked separately from the WGSL paint
+pipeline:
+
+1. Inventory current rect/path/stroke/clip behavior across CPU and GPU.
+2. Introduce `GeometryPlan` and `CoveragePlan` descriptors.
+3. Extract shared flattening and stroking invariants.
+4. Make CPU coverage the reference oracle.
+5. Formalize GPU coverage strategies and fallback diagnostics.
+6. Add PM-visible geometry-heavy CPU/GPU diff evidence.
 
 ### Concurrency Contract
 
