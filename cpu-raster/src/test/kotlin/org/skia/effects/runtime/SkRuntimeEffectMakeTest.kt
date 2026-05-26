@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
 import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkPoint
 import java.nio.ByteBuffer
@@ -141,6 +142,20 @@ class SkRuntimeEffectMakeTest {
         assertEquals(sksl, effect.source(), "source() must return the input verbatim, not normalised")
     }
 
+    @Test
+    fun `SimpleRT exposes descriptor with CPU and WGSL implementation ids`() {
+        val effect = SkRuntimeEffect.MakeForShader(SkBuiltinShaderEffectsSimple.SIMPLE_RT_SKSL).effect
+        assertNotNull(effect)
+        val descriptor = effect!!.descriptor()
+        assertNotNull(descriptor)
+        assertEquals("runtime.simple_rt", descriptor!!.stableId)
+        assertEquals("kotlin/simple_rt", descriptor.cpuImplementationId)
+        assertEquals("wgsl/runtime_simple_rt", descriptor.wgslImplementationId)
+        assertEquals(SkRuntimeEffect.Kind.kShader, descriptor.kind)
+        assertEquals(listOf("gColor"), descriptor.uniforms.map { it.name })
+        assertTrue(descriptor.children.isEmpty())
+    }
+
     // ─── Failure paths ───────────────────────────────────────────────
 
     @Test
@@ -157,6 +172,10 @@ class SkRuntimeEffectMakeTest {
         assertTrue(
             r.errorText.contains("0x"),
             "errorText must include the canonical hash : ${r.errorText}",
+        )
+        assertEquals(
+            "Runtime effect descriptor not registered: ${SkRuntimeEffectDispatch.canonicalHash(sksl)}",
+            SkRuntimeEffectDescriptorRegistry.missingDiagnostic(sksl),
         )
     }
 
