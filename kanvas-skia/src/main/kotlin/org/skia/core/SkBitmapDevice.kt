@@ -26,6 +26,15 @@ import org.skia.foundation.SkSamplingOptions
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
+import org.skia.pipeline.ClipInteraction
+import org.skia.pipeline.CoveragePlan
+import org.skia.pipeline.CoveragePlanAdapter
+import org.skia.pipeline.FloatRect
+import org.skia.pipeline.GeometryBounds
+import org.skia.pipeline.GeometryPlan
+import org.skia.pipeline.GeometryPrimitive
+import org.skia.pipeline.MatrixSpec
+import org.skia.pipeline.TransformFacts
 import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
 
@@ -46,6 +55,24 @@ private const val PATH_FLATNESS_SQ: Float = PATH_FLATNESS * PATH_FLATNESS
 private const val PATH_MAX_DEPTH: Int = 18
 /** Number of uniform-`t` segments for conic flattening. */
 private const val CONIC_STEPS: Int = 32
+private const val DESCRIPTOR_RECT_FLAG: String = "kanvas.cpu.descriptorRect.enabled"
+
+public data class SkBitmapDescriptorCoverageDiagnostics(
+    val selectedRoute: String,
+    val compatibilityFallbackRoute: String,
+    val coveragePlan: String,
+    val fallbackReason: String?,
+    val touchedPixels: Int,
+) {
+    public fun dump(): String = buildString {
+        appendLine("SkBitmapDescriptorCoverage(v1)")
+        appendLine("selectedRoute=$selectedRoute")
+        appendLine("compatibilityFallbackRoute=$compatibilityFallbackRoute")
+        appendLine("coveragePlan=$coveragePlan")
+        appendLine("fallbackReason=${fallbackReason ?: "none"}")
+        appendLine("touchedPixels=$touchedPixels")
+    }.trimEnd()
+}
 
 /**
  * Skia's non-AA rect rasterization rule: pixel N is covered iff
@@ -120,6 +147,13 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
 
     private var activeClipShader: SkShader? = null
     private var activeClipShaderOp: SkClipOp = SkClipOp.kIntersect
+    private var lastDescriptorCoverageDiagnostics = SkBitmapDescriptorCoverageDiagnostics(
+        selectedRoute = "none",
+        compatibilityFallbackRoute = "kanvas-skia.current.draw-rect",
+        coveragePlan = "none",
+        fallbackReason = "not-run",
+        touchedPixels = 0,
+    )
 
     /** Single-element scratch used by the per-pixel [clipShaderCoverage] helper. */
     private val clipShaderPixelScratch: IntArray = IntArray(1)
@@ -167,7 +201,107 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
 
     override fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val devPaint = inDeviceColorSpace(paint)
+        if (tryDrawDescriptorAxisAlignedFilledRect(rect, clip, devPaint)) return
         if (devPaint.isAntiAlias) drawRectAA(rect, clip, devPaint) else drawRectNonAA(rect, clip, devPaint)
+    }
+
+    internal fun descriptorCoverageDiagnosticsForTests(): SkBitmapDescriptorCoverageDiagnostics =
+        lastDescriptorCoverageDiagnostics
+
+    private fun tryDrawDescriptorAxisAlignedFilledRect(rect: SkRect, clip: SkIRect, paint: SkPaint): Boolean {
+        val coverage = CoveragePlan.AnalyticRect(
+            bounds = FloatRect(rect.left, rect.top, rect.right, rect.bottom),
+            aa = paint.isAntiAlias,
+        )
+        val geometry = GeometryPlan.Supported(
+            primitive = GeometryPrimitive.Rect(
+                source = FloatRect(rect.left, rect.top, rect.right, rect.bottom),
+                device = FloatRect(rect.left, rect.top, rect.right, rect.bottom),
+            ),
+            bounds = GeometryBounds(
+                conservative = FloatRect(rect.left, rect.top, rect.right, rect.bottom),
+                tight = FloatRect(rect.left, rect.top, rect.right, rect.bottom),
+            ),
+            transform = TransformFacts(
+                matrix = MatrixSpec.Identity,
+                isAxisAligned = true,
+                hasPerspective = false,
+                maxScale = 1f,
+                isInvertible = true,
+            ),
+            clip = ClipInteraction.None,
+        )
+        val lowering = CoveragePlanAdapter.lower(coverage)
+        val coverageDiagnostic = dumpAnalyticRectCoverage(coverage)
+        val unsupportedReason = descriptorAxisAlignedRectFallbackReason(paint)
+        if (unsupportedReason != null) {
+            lastDescriptorCoverageDiagnostics = SkBitmapDescriptorCoverageDiagnostics(
+                selectedRoute = "kanvas-skia.current.draw-rect",
+                compatibilityFallbackRoute = "cpu.descriptor.coverage-plan.solid-rect",
+                coveragePlan = coverageDiagnostic,
+                fallbackReason = unsupportedReason,
+                touchedPixels = 0,
+            )
+            return false
+        }
+
+        val touched = countAnalyticRectTouchedPixels(rect, clip, paint.isAntiAlias)
+        lastDescriptorCoverageDiagnostics = SkBitmapDescriptorCoverageDiagnostics(
+            selectedRoute = "cpu.descriptor.coverage-plan.solid-rect",
+            compatibilityFallbackRoute = "kanvas-skia.current.draw-rect",
+            coveragePlan = coverageDiagnostic,
+            fallbackReason = null,
+            touchedPixels = touched,
+        )
+        if (paint.isAntiAlias) {
+            fillRectAA(rect, clip, paint.color4f, paint.blendMode, paint.blender)
+        } else {
+            fillRect(rect, clip, paint.color, paint.blendMode, paint.blender)
+        }
+        return true
+    }
+
+    private fun dumpAnalyticRectCoverage(coverage: CoveragePlan.AnalyticRect): String =
+        "AnalyticRect(${coverage.bounds.left},${coverage.bounds.top},${coverage.bounds.right},${coverage.bounds.bottom},aa=${coverage.aa})"
+
+    private fun descriptorAxisAlignedRectFallbackReason(paint: SkPaint): String? = when {
+        System.getProperty(DESCRIPTOR_RECT_FLAG, "true").toBoolean().not() ->
+            "descriptor rect disabled via -D$DESCRIPTOR_RECT_FLAG=false"
+        paint.style != SkPaint.Style.kFill_Style -> "descriptor rect supports fill style only"
+        paint.shader != null -> "descriptor rect does not support shaders"
+        paint.colorFilter != null -> "descriptor rect does not support colorFilter"
+        paint.maskFilter != null -> "descriptor rect does not support maskFilter"
+        paint.imageFilter != null -> "descriptor rect does not support imageFilter"
+        paint.pathEffect != null -> "descriptor rect does not support pathEffect"
+        paint.blender != null -> "descriptor rect does not support custom blender"
+        paint.blendMode != SkBlendMode.kSrcOver -> "descriptor rect supports kSrcOver only"
+        activeAaClip != null -> "descriptor rect does not support AA clip"
+        activeClipShader != null -> "descriptor rect does not support shader clip"
+        else -> null
+    }
+
+    private fun countAnalyticRectTouchedPixels(rect: SkRect, clip: SkIRect, antiAlias: Boolean): Int {
+        if (rect.right <= rect.left || rect.bottom <= rect.top) return 0
+        if (!antiAlias) {
+            val l = pixelEdge(rect.left).coerceAtLeast(clip.left)
+            val t = pixelEdge(rect.top).coerceAtLeast(clip.top)
+            val r = pixelEdge(rect.right).coerceAtMost(clip.right)
+            val b = pixelEdge(rect.bottom).coerceAtMost(clip.bottom)
+            return maxOf(0, r - l) * maxOf(0, b - t)
+        }
+        val ix0 = floor(rect.left).coerceAtLeast(clip.left)
+        val iy0 = floor(rect.top).coerceAtLeast(clip.top)
+        val ix1 = ceil(rect.right).coerceAtMost(clip.right)
+        val iy1 = ceil(rect.bottom).coerceAtMost(clip.bottom)
+        var touched = 0
+        for (y in iy0 until iy1) {
+            val cy = covAxis(rect.top, rect.bottom, y)
+            if (cy <= 0f) continue
+            for (x in ix0 until ix1) {
+                if (covAxis(rect.left, rect.right, x) > 0f) touched++
+            }
+        }
+        return touched
     }
 
     /**
