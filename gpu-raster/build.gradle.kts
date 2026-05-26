@@ -24,6 +24,7 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":kanvas-skia"))
     implementation(project(":math"))
+    implementation(project(":render-pipeline"))
     implementation("io.ygdrasil:core-jvm:0.0.9-SNAPSHOT")
     implementation("io.ygdrasil:parser-jvm:0.0.9-SNAPSHOT")
     implementation("io.ygdrasil:generator-jvm:0.0.9-SNAPSHOT")
