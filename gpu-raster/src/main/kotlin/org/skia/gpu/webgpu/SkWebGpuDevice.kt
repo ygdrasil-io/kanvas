@@ -113,6 +113,7 @@ import org.skia.pipeline.FloatRect
 import org.skia.pipeline.IntRect
 import org.skia.pipeline.PathFillType as PipelinePathFillType
 import org.skia.pipeline.Point
+import org.skia.pipeline.ProductionRouteDiagnostics
 import org.skia.pipeline.RRectSpec
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -172,6 +173,9 @@ private val layerFixedFunctionBlendModeNames: String =
 
 private val layerShaderCompositeBlendModeNames: String =
     LAYER_SHADER_COMPOSITE_BLEND_MODES.joinToString(" / ") { it.name }
+
+private const val WEBGPU_COVERAGE_SELECTOR_FLAG: String = "kanvas.webgpu.coverageSelector.enabled"
+private const val WEBGPU_COVERAGE_SELECTOR_DISABLED_REASON: String = "coverage.webgpu-selector-disabled"
 
 public fun selectWebGpuBlendPlan(mode: SkBlendMode): BlendPlan = when (mode) {
     in FIXED_FUNCTION_BLEND_MODES -> BlendPlan(
@@ -318,12 +322,15 @@ public class SkWebGpuDevice(
     )
 
     internal data class CoverageSelectionDiagnostics(
+        val mode: String,
+        val backend: org.skia.pipeline.BackendKind,
         val drawKind: String,
         val routeIdentifier: String,
         val strategy: WebGpuCoverageStrategy,
         val pipelineKeyDump: String,
         val diagnosticDump: String?,
         val selectionDump: String,
+        val productionDump: String,
     )
 
     private data class CacheCounters(
@@ -2347,12 +2354,15 @@ public class SkWebGpuDevice(
     internal fun coverageSelectionDiagnosticsForTests(): CoverageSelectionDiagnostics? =
         lastCoverageSelectionForDiagnostics?.let { selection ->
             CoverageSelectionDiagnostics(
+                mode = if (selection.routeIdentifier == "webgpu.coverage.selector-disabled") "Rollback" else "Default",
+                backend = org.skia.pipeline.BackendKind.GPU,
                 drawKind = selection.drawKind,
                 routeIdentifier = selection.routeIdentifier,
                 strategy = selection.strategy,
                 pipelineKeyDump = selection.pipelineKeyDump(),
                 diagnosticDump = selection.diagnostic?.dump(),
                 selectionDump = selection.dump(),
+                productionDump = selection.toProductionRouteDiagnostics(cacheTelemetrySnapshot()).dump(),
             )
         }
 
@@ -7867,6 +7877,20 @@ public class SkWebGpuDevice(
         clip: SkIRect,
         pathFacts: WebGpuPathCoverageFacts? = null,
     ): WebGpuCoverageSelection {
+        if (!System.getProperty(WEBGPU_COVERAGE_SELECTOR_FLAG, "true").toBoolean()) {
+            val selection = WebGpuCoverageSelection(
+                drawKind = drawKind,
+                strategy = WebGpuCoverageStrategy.ExistingGpuCompatibility,
+                coveragePlan = plan,
+                clipInteraction = coverageClipInteraction(clip),
+                loweringResult = org.skia.pipeline.CoveragePlanAdapter.lower(plan),
+                pipelineAxes = emptyList(),
+                routeIdentifier = "webgpu.coverage.selector-disabled",
+                diagnostic = null,
+            )
+            lastCoverageSelectionForDiagnostics = selection
+            return selection
+        }
         val selection = WebGpuCoveragePlanSelector.select(
             drawKind = drawKind,
             plan = plan,
@@ -7878,6 +7902,39 @@ public class SkWebGpuDevice(
             error("SkWebGpuDevice.$drawKind refused coverage selection: ${selection.dump()}")
         }
         return selection
+    }
+
+    private fun WebGpuCoverageSelection.toProductionRouteDiagnostics(
+        cache: GpuCacheTelemetrySnapshot,
+    ): ProductionRouteDiagnostics =
+        ProductionRouteDiagnostics(
+            mode = if (routeIdentifier == "webgpu.coverage.selector-disabled") "Rollback" else "Default",
+            backend = org.skia.pipeline.BackendKind.GPU,
+            drawKind = drawKind,
+            selectedRoute = routeIdentifier,
+            fallbackRoute = "webgpu.existing.compatibility",
+            fallbackReason = diagnostic?.reason?.code
+                ?: if (routeIdentifier == "webgpu.coverage.selector-disabled") {
+                    WEBGPU_COVERAGE_SELECTOR_DISABLED_REASON
+                } else {
+                    null
+                },
+            coveragePlan = coveragePlan.productionDump(),
+            pipelineKey = pipelineKeyDump().ifEmpty { "none" },
+            cacheCounters = "shaderModules=${cache.shaderModuleCount};pipelines=${cache.pipelineCacheEntryCount};" +
+                "pipelineHits=${cache.pipelineCacheHits};pipelineMisses=${cache.pipelineCacheMisses};" +
+                "pipelineCreations=${cache.pipelineCreations}",
+        )
+
+    private fun CoveragePlan.productionDump(): String = when (this) {
+        CoveragePlan.Full -> "Full"
+        is CoveragePlan.AnalyticRect -> "AnalyticRect(aa=$aa)"
+        is CoveragePlan.AnalyticRRect -> "AnalyticRRect(aa=$aa)"
+        is CoveragePlan.SpanRuns -> "SpanRuns"
+        is CoveragePlan.AlphaMask -> "AlphaMask(format=$format)"
+        is CoveragePlan.PathCoverage -> "PathCoverage(fillType=$fillType,aa=$aa,inverse=$inverse)"
+        is CoveragePlan.CoverageAtlas -> "CoverageAtlas(policy=${cachePolicy::class.simpleName})"
+        is CoveragePlan.Unsupported -> "Unsupported(reason=${reason.code})"
     }
 
     private fun coverageClipInteraction(clip: SkIRect): ClipInteraction {
