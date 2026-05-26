@@ -2018,6 +2018,21 @@ public class SkWebGpuDevice(
             lastGeneratedSolidRectFallbackReason = "generated solid rect does not support colorFilter"
             return false
         }
+        val expectedRight = (d.x + d.w).toFloat()
+        val expectedBottom = (d.y + d.h).toFloat()
+        val isPixelAlignedFill = d.ol == d.x.toFloat() &&
+            d.ot == d.y.toFloat() &&
+            d.or == expectedRight &&
+            d.ob == expectedBottom
+        if (!isPixelAlignedFill) {
+            lastGeneratedSolidRectFallbackReason = "generated solid rect currently supports only pixel-aligned fill bounds"
+            return false
+        }
+        val isDegenerateInner = d.il > d.ir && d.it > d.ib
+        if (!isDegenerateInner) {
+            lastGeneratedSolidRectFallbackReason = "generated solid rect currently excludes stroke/hairline coverage path"
+            return false
+        }
         if (generatedSolidRectShader == null) return false
         return true
     }
