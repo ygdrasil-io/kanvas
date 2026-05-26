@@ -323,7 +323,7 @@ public class SkWebGpuDevice(
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
 
     private fun classifyPipelineAxis(axis: String): PipelineKeyAxisClass = when (axis) {
-        "shaderFamily", "entryPoint", "generatedPath" -> PipelineKeyAxisClass.Code
+        "shaderFamily", "entryPoint", "generatedPath", "coverageKind" -> PipelineKeyAxisClass.Code
         "blendMode", "colorFormat", "topology", "sampleCount" -> PipelineKeyAxisClass.PipelineState
         "tileModeX", "tileModeY", "samplerFilter" -> PipelineKeyAxisClass.Layout
         "uniformSchemaVersion" -> PipelineKeyAxisClass.UniformOnly
