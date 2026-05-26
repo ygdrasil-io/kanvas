@@ -27,6 +27,10 @@ class GeneratedSolidRectMigrationTest {
                 assertTrue(diagnostics.generatedDefaultAvailable)
                 assertNull(diagnostics.retainedFallbackReason)
                 assertTrue(diagnostics.handwrittenRetirementCriteria.contains("color filters"))
+                val dump = device.generatedPipelineCacheDumpForTests()
+                assertTrue(dump.contains("hash="))
+                assertTrue(dump.contains("code=[generatedPath=true,shaderFamily=solidRect]"))
+                assertTrue(dump.contains("code=[generatedPath=true] state=[blendMode=kSrcOver]"))
             }
         }
     }
