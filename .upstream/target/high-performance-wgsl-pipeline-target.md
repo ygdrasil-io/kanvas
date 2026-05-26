@@ -160,15 +160,18 @@ Add a backend-neutral pipeline module that owns the common lowering model:
   PipelineOp
   PipelineStageRec
   MatrixRec
-  PipelineKey
+  CoverageModel
+  PipelineKeyClassification
   UniformLayout
   ColorSpaceBlock
-  CoveragePlan
+  CoveragePlan adapter
   PipelineNormalizer
 ```
 
-This module should not depend on WebGPU or Java Vector API. It is the
-contract between `kanvas-skia`, `cpu-raster`, and `gpu-raster`.
+This module should not depend on WebGPU. Its shared contracts must not require
+Java Vector API support, although CPU execution experiments in the module may
+use Java 25 Vector paths behind scalar fallbacks. It is the contract between
+`kanvas-skia`, `cpu-raster`, and `gpu-raster`.
 
 Representative API shape:
 
@@ -203,11 +206,17 @@ sealed interface PipelineOp {
     data class ColorSpaceXform(val payload: ColorSpacePayload) : PipelineOp
     data class ColorFilter(val payload: ColorFilterPayload) : PipelineOp
     data class BlendMode(val mode: SkBlendMode) : PipelineOp
-    data class ApplyCoverage(val coverage: CoveragePlan) : PipelineOp
+    data class ApplyCoverage(val coverage: CoverageModel) : PipelineOp
     data object LoadDst : PipelineOp
     data object Store : PipelineOp
 }
 ```
+
+`CoveragePlan` is the geometry/coverage-side descriptor documented in
+`.upstream/specs/geometry-coverage/`. It is not a direct replacement for the
+current `CoverageModel` in `KanvasPipelineIR`. A lowering adapter maps the
+supported subset of `CoveragePlan` into `PipelineOp.ApplyCoverage(CoverageModel)`
+or into an explicit backend strategy plus diagnostic.
 
 The actual op set should grow from measured needs, not from an attempt to
 mirror every Skia internal opcode.
@@ -329,6 +338,10 @@ special cases.
 Geometry remains separate from paint. The paint pipeline consumes coverage; it
 does not decide how a shape becomes covered pixels.
 
+Detailed implementation specs live under
+`.upstream/specs/geometry-coverage/`. Those specs refine this target into
+contracts, lowering rules, backend mappings, diagnostics, validation, and ADRs.
+
 This follows the useful Graphite lesson without porting Graphite: a draw should
 separate geometric state, paint state, clipping, ordering, and backend
 execution strategy. Kanvas keeps that separation smaller and backend-neutral so
@@ -395,6 +408,12 @@ region, path, and shader clips are normalized into a `ClipInteraction`
 descriptor referenced by the plan. Paint lowering later sees only
 coverage/clip modulation, not raw clip-stack state.
 
+`.upstream/specs/geometry-coverage/01-contracts-geometry-coverage.md` is the
+source of truth for the concrete `GeometryPlan`, `GeometryPrimitive`,
+`ClipInteraction`, `CoveragePlan`, and reason-code contract shapes. This target
+only records the architecture responsibilities so the target and specs do not
+drift.
+
 `GeometryPlan` owns the transformed shape contract:
 
 - primitive kind: rect, rrect, oval, path, vertices, glyph mask, image rect;
@@ -406,66 +425,10 @@ coverage/clip modulation, not raw clip-stack state.
 - clip interaction;
 - fallback reason when the shape cannot be represented safely.
 
-Representative shape:
-
-```kotlin
-sealed interface GeometryPlan {
-    data class Supported(
-        val primitive: GeometryPrimitive,
-        val bounds: GeometryBounds,
-        val transform: TransformFacts,
-        val clip: ClipInteraction,
-    ) : GeometryPlan
-
-    data class Unsupported(val reason: String) : GeometryPlan
-}
-
-sealed interface GeometryPrimitive {
-    data class Rect(val source: SkRect, val device: SkRect) : GeometryPrimitive
-    data class RRect(val rrect: SkRRect) : GeometryPrimitive
-    data class Oval(val bounds: SkRect) : GeometryPrimitive
-    data class Path(
-        val fillType: SkPathFillType,
-        val stroke: StrokePlan?,
-        val verbs: PathVerbSlice,
-    ) : GeometryPrimitive
-    data class GlyphMask(val run: GlyphRunRef, val atlasRef: GlyphAtlasRef?) : GeometryPrimitive
-    data class ImageRect(
-        val source: SkRect,
-        val destination: SkRect,
-        val sampling: SamplingGeometry,
-    ) : GeometryPrimitive
-}
-```
-
 `CoveragePlan` owns how that geometry reaches fragments or spans. It should be
 represented in the IR as a coverage model, not buried in each shader
 implementation. The model describes the shape and contract of coverage; it does
 not force every backend to use the same storage channel.
-
-Representative shape:
-
-```kotlin
-sealed interface CoveragePlan {
-    data object Full : CoveragePlan
-    data class AnalyticRect(val bounds: SkRect, val aa: Boolean) : CoveragePlan
-    data class AnalyticRRect(val bounds: SkRRect, val aa: Boolean) : CoveragePlan
-    data class SpanRuns(val bounds: SkIRect) : CoveragePlan
-    data class AlphaMask(val bounds: SkIRect, val format: MaskFormat) : CoveragePlan
-    data class StencilCover(val fillType: SkPathFillType, val aa: Boolean) : CoveragePlan
-    data class CoverageAtlas(
-        val bounds: SkIRect,
-        val cachePolicy: CoverageCachePolicy,
-    ) : CoveragePlan
-    data class Unsupported(val reason: String) : CoveragePlan
-}
-
-sealed interface CoverageCachePolicy {
-    data object FrameLocal : CoverageCachePolicy
-    data object PersistentByShapeKey : CoverageCachePolicy
-    data object NoCache : CoverageCachePolicy
-}
-```
 
 CPU execution can keep spans, RLE clips, and masks in native scanline form.
 GPU execution can keep analytic rect/rrect coverage in WGSL, use convex fan or
@@ -479,10 +442,10 @@ a WebGPU triangle list. This is not a compute-shader tessellation path.
 glyph atlas lifetime rules; path coverage, glyph masks, and image resources can
 have different invalidation keys and residency pressure.
 
-Glyphs enter geometry as `GeometryPrimitive.GlyphMask` and normally lower to
-`CoveragePlan.AlphaMask` through the text/glyph mask atlas flow. Text rendering
-still owns glyph discovery and atlas population; the geometry layer only
-describes the resulting coverage contract.
+Glyphs enter geometry as glyph-run coverage requests and normally lower to an
+alpha-mask coverage contract through the text/glyph mask atlas flow. Text
+rendering still owns glyph discovery and atlas population; the geometry layer
+does not own glyph atlas invalidation.
 
 Unsupported geometry or coverage must use the same explicit diagnostic style as
 other pipeline fallbacks. A `GeometryPlan.Unsupported` means the draw cannot

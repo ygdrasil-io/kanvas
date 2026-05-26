@@ -10,6 +10,11 @@ For the target high-performance WGSL/WebGPU pipeline architecture, read
 `.upstream/target/high-performance-wgsl-pipeline-target.md` before planning
 pipeline, shader, runtime-effect, or raster/GPU convergence work.
 
+For Geometry/Coverage implementation specs, read
+`.upstream/specs/geometry-coverage/README.md` before planning shape lowering,
+clip lowering, coverage plans, CPU spans, WebGPU stencil-cover, or fallback
+diagnostics work.
+
 For Linear milestone execution, skill usage, subagent handoffs, and PM demo
 evidence, read `.upstream/target/linear-agent-methodology.md`.
 
