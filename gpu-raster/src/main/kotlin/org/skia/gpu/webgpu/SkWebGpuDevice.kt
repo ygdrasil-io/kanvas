@@ -354,9 +354,8 @@ public class SkWebGpuDevice(
         else -> throw IllegalArgumentException("Unknown PipelineKey axis: $axis")
     }
 
-    private fun serializePipelineKey(parts: List<PipelineKeyClassification>): String =
-        parts.sortedBy { it.axis }
-            .joinToString("|") { "${it.axis}=${it.value}" }
+    private fun pipelineKeyIdentity(parts: List<PipelineKeyClassification>): PipelineKey =
+        canonicalPipelineKeyIdentity(parts)
 
     public fun cacheTelemetrySnapshot(): GpuCacheTelemetrySnapshot = GpuCacheTelemetrySnapshot(
         shaderModuleCacheHits = cacheCounters.shaderModuleHits,
@@ -371,8 +370,8 @@ public class SkWebGpuDevice(
         resourceCacheEntryCount = imageTextureCache.size + bitmapSamplerCache.size,
     )
 
-    public fun buildPipelineKeyForDiagnostics(axes: Map<String, String>): String =
-        serializePipelineKey(
+    public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
+        pipelineKeyIdentity(
             axes.map { (axis, value) ->
                 PipelineKeyClassification(
                     axis = axis,
@@ -381,6 +380,9 @@ public class SkWebGpuDevice(
                 )
             },
         )
+
+    public fun buildPipelineKeyForDiagnostics(axes: Map<String, String>): String =
+        buildPipelineKeyIdentityForDiagnostics(axes).dump()
 
     public fun blendPlanForDiagnostics(mode: SkBlendMode): BlendPlan = blendPlanFor(mode)
 
@@ -2217,7 +2219,7 @@ public class SkWebGpuDevice(
     private val generatedRectPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
 
     private fun rectPipelineFor(mode: SkBlendMode, useGenerated: Boolean): GPURenderPipeline {
-        serializePipelineKey(
+        pipelineKeyIdentity(
             listOf(
                 PipelineKeyClassification("blendMode", classifyPipelineAxis("blendMode"), mode.name),
                 PipelineKeyClassification("generatedPath", classifyPipelineAxis("generatedPath"), useGenerated.toString()),
@@ -3727,7 +3729,7 @@ public class SkWebGpuDevice(
         tileMode: SkTileMode,
         useGenerated: Boolean,
     ): GPURenderPipeline {
-        serializePipelineKey(
+        pipelineKeyIdentity(
             listOf(
                 PipelineKeyClassification("shaderFamily", classifyPipelineAxis("shaderFamily"), "linearGradient"),
                 PipelineKeyClassification("entryPoint", classifyPipelineAxis("entryPoint"), linearGradientFragmentEntryPoint(tileMode)),

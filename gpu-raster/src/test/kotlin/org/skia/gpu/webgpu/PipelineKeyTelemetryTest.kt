@@ -21,19 +21,73 @@ class PipelineKeyTelemetryTest {
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
         context!!.use { ctx ->
             SkWebGpuDevice(ctx, 32, 32).use { device ->
-                val a = device.buildPipelineKeyForDiagnostics(
+                val a = device.buildPipelineKeyIdentityForDiagnostics(
                     linkedMapOf(
                         "blendMode" to "kSrcOver",
                         "generatedPath" to "false",
                     ),
                 )
-                val b = device.buildPipelineKeyForDiagnostics(
+                val b = device.buildPipelineKeyIdentityForDiagnostics(
                     linkedMapOf(
                         "generatedPath" to "false",
                         "blendMode" to "kSrcOver",
                     ),
                 )
                 assertEquals(a, b)
+            }
+        }
+    }
+
+    @Test
+    fun `pipeline key uses canonical grouped preimage and full sha256 hash`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, 32, 32).use { device ->
+                val key = device.buildPipelineKeyIdentityForDiagnostics(
+                    linkedMapOf(
+                        "blendMode" to "kSrcOver",
+                        "coverageKind" to "analyticRect",
+                        "generatedPath" to "true",
+                        "pathFillRule" to "winding",
+                        "tileModeY" to "clamp",
+                        "tileModeX" to "repeat",
+                    ),
+                )
+
+                assertEquals(
+                    "pipeline.key v=1 layout=[tileModeX=repeat,tileModeY=clamp] " +
+                        "code=[coverageKind=analyticRect,generatedPath=true] " +
+                        "state=[blendMode=kSrcOver,pathFillRule=winding]",
+                    key.preimage,
+                )
+                assertEquals(
+                    "7ac2b29cceb2f587e6ffed54f86992a028e25e772533ff9d19a5e1d52e4fc199",
+                    key.hash,
+                )
+                assertEquals("preimage=${key.preimage};hash=${key.hash}", key.dump())
+            }
+        }
+    }
+
+    @Test
+    fun `uniform only axes are excluded from canonical pipeline key`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, 32, 32).use { device ->
+                val key = device.buildPipelineKeyIdentityForDiagnostics(
+                    linkedMapOf(
+                        "generatedPath" to "true",
+                        "uniformSchemaVersion" to "3",
+                    ),
+                )
+
+                assertEquals(
+                    "pipeline.key v=1 layout=[] code=[generatedPath=true] state=[]",
+                    key.preimage,
+                )
+                assertTrue(!key.preimage.contains("uniformSchemaVersion"))
             }
         }
     }
