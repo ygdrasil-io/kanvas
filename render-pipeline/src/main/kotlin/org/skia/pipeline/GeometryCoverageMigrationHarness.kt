@@ -8,6 +8,7 @@ enum class DescriptorMigrationMode {
 
 enum class DescriptorPrimitiveFamily(val id: String) {
     AxisAlignedFilledRect("axis-aligned-filled-rect"),
+    AxisAlignedFilledRRect("axis-aligned-filled-rrect"),
 }
 
 data class DescriptorMigrationGate(
@@ -17,6 +18,17 @@ data class DescriptorMigrationGate(
 )
 
 data class DescriptorRoute(val id: String)
+
+data class CpuDescriptorExecutionMetrics(
+    val touchedPixels: Int,
+    val scalarVectorStatus: String,
+    val kernelId: String?,
+    val fallbackReason: String?,
+) {
+    fun dump(): String =
+        "touchedPixels=$touchedPixels,scalarVectorStatus=$scalarVectorStatus," +
+            "kernelId=${kernelId ?: "none"},fallbackReason=${fallbackReason ?: "none"}"
+}
 
 data class DescriptorGateDecision(
     val mode: DescriptorMigrationMode,
@@ -85,13 +97,15 @@ data class DescriptorMigrationCompareResult(
     val currentRoute: DescriptorRoute,
     val descriptorRoute: DescriptorRoute,
     val diffSummary: PixelDiffSummary,
+    val metrics: CpuDescriptorExecutionMetrics,
 ) {
     fun dump(): String = descriptorDumpHeader(DescriptorMigrationMode.Compare, backend, drawKind, transform, clip) +
         "\ncurrentRoute=${currentRoute.id}" +
         "\ndescriptorRoute=${descriptorRoute.id}" +
         "\n${CoverageDescriptorDump(geometryPlan, coveragePlan, loweringResult).dump()}" +
         "\nfallback=${dumpFallback(loweringResult)}" +
-        "\ndiff=${diffSummary.dump()}"
+        "\ndiff=${diffSummary.dump()}" +
+        "\nmetrics=${metrics.dump()}"
 }
 
 data class UnsupportedDescriptorDiagnostic(
@@ -113,8 +127,10 @@ data class UnsupportedDescriptorDiagnostic(
 }
 
 object GeometryCoverageMigrationHarness {
-    private val legacyCpuSolidRectRoute = DescriptorRoute("cpu.legacy.solid-rect")
+    private val legacyCpuSolidRectRoute = DescriptorRoute("kanvas-skia.current.draw-rect")
+    private val legacyCpuRRectRoute = DescriptorRoute("kanvas-skia.current.draw-rrect")
     private val descriptorCpuSolidRectRoute = DescriptorRoute("cpu.descriptor.coverage-plan.solid-rect")
+    private val descriptorCpuRRectRoute = DescriptorRoute("cpu.descriptor.coverage-plan.materialized-rrect")
     private val shadowOnlyRoute = DescriptorRoute("descriptor.shadow-only")
 
     fun shadowAxisAlignedFilledRect(
@@ -155,12 +171,33 @@ object GeometryCoverageMigrationHarness {
         rect: FloatRect,
         color: Rgba,
         artifactPath: String,
+        antiAlias: Boolean = false,
     ): DescriptorMigrationCompareResult {
-        val plans = axisAlignedRectPlans(rect)
-        val lowering = CoveragePlanAdapter.lower(plans.coverage)
         val currentPixels = CpuScalarPipelineExecutor.legacySolidRect(width, height, color)
-        val descriptorPixels = descriptorPixels(width, height, color, lowering)
-        val diff = diffPixels(currentPixels, descriptorPixels, artifactPath)
+        return compareAxisAlignedFilledRectAgainstOracle(
+            width = width,
+            height = height,
+            rect = rect,
+            color = color,
+            oraclePixels = currentPixels,
+            artifactPath = artifactPath,
+            antiAlias = antiAlias,
+        )
+    }
+
+    fun compareAxisAlignedFilledRectAgainstOracle(
+        width: Int,
+        height: Int,
+        rect: FloatRect,
+        color: Rgba,
+        oraclePixels: PixelBuffer,
+        artifactPath: String,
+        antiAlias: Boolean,
+    ): DescriptorMigrationCompareResult {
+        val plans = axisAlignedRectPlans(rect, antiAlias)
+        val lowering = CoveragePlanAdapter.lower(plans.coverage)
+        val descriptor = descriptorPixels(width, height, color, lowering)
+        val diff = diffPixels(oraclePixels, descriptor.pixels, artifactPath)
         return DescriptorMigrationCompareResult(
             backend = BackendKind.CPU,
             drawKind = DescriptorPrimitiveFamily.AxisAlignedFilledRect.id,
@@ -172,6 +209,48 @@ object GeometryCoverageMigrationHarness {
             currentRoute = legacyCpuSolidRectRoute,
             descriptorRoute = descriptorCpuSolidRectRoute,
             diffSummary = diff,
+            metrics = descriptor.metrics,
+        )
+    }
+
+    fun compareMaterializedRRectCoverageAgainstOracle(
+        width: Int,
+        height: Int,
+        rrect: RRectSpec,
+        color: Rgba,
+        oraclePixels: PixelBuffer,
+        coverageAlpha: ByteArray,
+        artifactPath: String,
+    ): DescriptorMigrationCompareResult {
+        require(coverageAlpha.size == width * height) {
+            "coverageAlpha must match target dimensions"
+        }
+        val geometry = GeometryPlan.Supported(
+            primitive = GeometryPrimitive.RRect(rrect),
+            bounds = GeometryBounds(conservative = rrect.bounds, tight = rrect.bounds),
+            transform = identityAxisAlignedTransform(),
+            clip = ClipInteraction.None,
+        )
+        val coverage = CoveragePlan.AlphaMask(
+            ref = AlphaMaskRef("fixture.rrect.a8"),
+            bounds = IntRect(0, 0, width, height),
+            format = MaskFormat.A8,
+        )
+        val lowering = CoveragePlanAdapter.lower(coverage)
+        val descriptor = materializedCoveragePixels(width, height, color, coverageAlpha)
+        val diff = diffPixels(oraclePixels, descriptor.pixels, artifactPath)
+        return DescriptorMigrationCompareResult(
+            backend = BackendKind.CPU,
+            drawKind = DescriptorPrimitiveFamily.AxisAlignedFilledRRect.id,
+            transform = identityAxisAlignedTransform(),
+            clip = ClipInteraction.None,
+            geometryPlan = geometry,
+            coveragePlan = coverage,
+            loweringResult = lowering,
+            currentRoute = legacyCpuRRectRoute,
+            descriptorRoute = descriptorCpuRRectRoute,
+            diffSummary = diff,
+            metrics = descriptor.metrics,
         )
     }
 
@@ -181,16 +260,13 @@ object GeometryCoverageMigrationHarness {
         gates: Collection<DescriptorMigrationGate> = emptyList(),
     ): DescriptorGateDecision {
         val enabled = gates.any { it.primitive == primitive && it.backend == backend && it.enabled }
-        val descriptorRoute = when (backend) {
-            BackendKind.CPU -> descriptorCpuSolidRectRoute
-            BackendKind.GPU -> DescriptorRoute("gpu.descriptor.coverage-plan.solid-rect")
-        }
+        val descriptorRoute = descriptorRouteFor(primitive, backend)
         return DescriptorGateDecision(
             mode = DescriptorMigrationMode.Gated,
             primitive = primitive,
             backend = backend,
             descriptorEnabled = enabled,
-            selectedRoute = if (enabled) descriptorRoute else currentRouteFor(backend),
+            selectedRoute = if (enabled) descriptorRoute else currentRouteFor(primitive, backend),
             descriptorRoute = descriptorRoute,
         )
     }
@@ -212,14 +288,42 @@ object GeometryCoverageMigrationHarness {
         )
     }
 
+    fun unsupportedGeometryDiagnostic(
+        backend: BackendKind,
+        primitive: DescriptorPrimitiveFamily,
+        reason: GeometryReason,
+    ): UnsupportedDescriptorDiagnostic {
+        val geometry = GeometryPlan.Unsupported(reason)
+        val coverage = CoveragePlan.Unsupported(StandardCoverageReason.SpanRunsUnsupported)
+        return UnsupportedDescriptorDiagnostic(
+            backend = backend,
+            drawKind = primitive.id,
+            geometryPlan = geometry,
+            coveragePlan = coverage,
+            loweringResult = CoveragePlanAdapter.lower(coverage),
+            descriptorRoute = descriptorRouteFor(primitive, backend),
+        )
+    }
+
     private fun descriptorPixels(
         width: Int,
         height: Int,
         color: Rgba,
         lowering: CoverageLoweringResult,
-    ): PixelBuffer {
+    ): DescriptorPixelExecution {
         val coverage = (lowering as? CoverageLoweringResult.CoverageModelResult)?.coverage
-            ?: return PixelBuffer(width, height, IntArray(width * height))
+            ?: return DescriptorPixelExecution(
+                pixels = PixelBuffer(width, height, IntArray(width * height)),
+                metrics = CpuDescriptorExecutionMetrics(
+                    touchedPixels = 0,
+                    scalarVectorStatus = "fallback",
+                    kernelId = null,
+                    fallbackReason = "unsupported-lowering",
+                ),
+            )
+        if (coverage is CoverageModel.AnalyticRect) {
+            return analyticRectPixels(width, height, color, coverage)
+        }
         val result = CpuScalarPipelineExecutor.execute(
             KanvasPipelineIR.demoSolidRectIr(color = color, coverage = coverage),
             width = width,
@@ -227,9 +331,80 @@ object GeometryCoverageMigrationHarness {
             options = CpuPipelineExecutionOptions(vectorMode = CpuVectorMode.Disabled),
         )
         return when (result) {
-            is CpuExecutionResult.Success -> result.pixels
-            is CpuExecutionResult.LegacyFallback -> PixelBuffer(width, height, IntArray(width * height))
+            is CpuExecutionResult.Success -> DescriptorPixelExecution(
+                pixels = result.pixels,
+                metrics = CpuDescriptorExecutionMetrics(
+                    touchedPixels = result.pixels.argb8888.count { it != 0 },
+                    scalarVectorStatus = "vector-disabled",
+                    kernelId = result.kernelId,
+                    fallbackReason = null,
+                ),
+            )
+            is CpuExecutionResult.LegacyFallback -> DescriptorPixelExecution(
+                pixels = PixelBuffer(width, height, IntArray(width * height)),
+                metrics = CpuDescriptorExecutionMetrics(
+                    touchedPixels = 0,
+                    scalarVectorStatus = "fallback",
+                    kernelId = null,
+                    fallbackReason = result.reason,
+                ),
+            )
         }
+    }
+
+    private fun analyticRectPixels(
+        width: Int,
+        height: Int,
+        color: Rgba,
+        coverage: CoverageModel.AnalyticRect,
+    ): DescriptorPixelExecution {
+        val pixels = IntArray(width * height)
+        val packed = pack(color)
+        var touchedPixels = 0
+        for (y in 0 until height) {
+            val cy = y + 0.5f
+            if (cy < coverage.bounds.top || cy >= coverage.bounds.bottom) continue
+            for (x in 0 until width) {
+                val cx = x + 0.5f
+                if (cx < coverage.bounds.left || cx >= coverage.bounds.right) continue
+                pixels[y * width + x] = packed
+                touchedPixels++
+            }
+        }
+        return DescriptorPixelExecution(
+            pixels = PixelBuffer(width, height, pixels),
+            metrics = CpuDescriptorExecutionMetrics(
+                touchedPixels = touchedPixels,
+                scalarVectorStatus = if (coverage.aa) "scalar-analytic-rect-aa" else "scalar-analytic-rect",
+                kernelId = "cpu.scalar.analytic_rect_src_over_clear",
+                fallbackReason = null,
+            ),
+        )
+    }
+
+    private fun materializedCoveragePixels(
+        width: Int,
+        height: Int,
+        color: Rgba,
+        coverageAlpha: ByteArray,
+    ): DescriptorPixelExecution {
+        val pixels = IntArray(width * height)
+        var touchedPixels = 0
+        for (i in pixels.indices) {
+            val coverage = coverageAlpha[i].toInt() and 0xFF
+            if (coverage == 0) continue
+            touchedPixels++
+            pixels[i] = pack(color.copy(a = color.a * (coverage / 255f)))
+        }
+        return DescriptorPixelExecution(
+            pixels = PixelBuffer(width, height, pixels),
+            metrics = CpuDescriptorExecutionMetrics(
+                touchedPixels = touchedPixels,
+                scalarVectorStatus = "scalar-materialized-mask",
+                kernelId = "cpu.scalar.materialized_a8_src_over_clear",
+                fallbackReason = null,
+            ),
+        )
     }
 
     private fun diffPixels(
@@ -267,7 +442,7 @@ object GeometryCoverageMigrationHarness {
     private fun channelDelta(a: Int, b: Int, shift: Int): Int =
         kotlin.math.abs(((a ushr shift) and 0xFF) - ((b ushr shift) and 0xFF))
 
-    private fun axisAlignedRectPlans(rect: FloatRect): RectPlans {
+    private fun axisAlignedRectPlans(rect: FloatRect, antiAlias: Boolean = false): RectPlans {
         val transform = identityAxisAlignedTransform()
         val geometry = GeometryPlan.Supported(
             primitive = GeometryPrimitive.Rect(source = rect, device = rect),
@@ -275,7 +450,7 @@ object GeometryCoverageMigrationHarness {
             transform = transform,
             clip = ClipInteraction.None,
         )
-        return RectPlans(geometry = geometry, coverage = CoveragePlan.AnalyticRect(bounds = rect, aa = false))
+        return RectPlans(geometry = geometry, coverage = CoveragePlan.AnalyticRect(bounds = rect, aa = antiAlias))
     }
 
     private fun identityAxisAlignedTransform(): TransformFacts = TransformFacts(
@@ -286,9 +461,29 @@ object GeometryCoverageMigrationHarness {
         isInvertible = true,
     )
 
-    private fun currentRouteFor(backend: BackendKind): DescriptorRoute = when (backend) {
-        BackendKind.CPU -> legacyCpuSolidRectRoute
+    private fun currentRouteFor(backend: BackendKind): DescriptorRoute =
+        currentRouteFor(DescriptorPrimitiveFamily.AxisAlignedFilledRect, backend)
+
+    private fun currentRouteFor(
+        primitive: DescriptorPrimitiveFamily,
+        backend: BackendKind,
+    ): DescriptorRoute = when (backend) {
+        BackendKind.CPU -> when (primitive) {
+            DescriptorPrimitiveFamily.AxisAlignedFilledRect -> legacyCpuSolidRectRoute
+            DescriptorPrimitiveFamily.AxisAlignedFilledRRect -> legacyCpuRRectRoute
+        }
         BackendKind.GPU -> DescriptorRoute("gpu.current.handwritten-solid-rect")
+    }
+
+    private fun descriptorRouteFor(
+        primitive: DescriptorPrimitiveFamily,
+        backend: BackendKind,
+    ): DescriptorRoute = when (backend) {
+        BackendKind.CPU -> when (primitive) {
+            DescriptorPrimitiveFamily.AxisAlignedFilledRect -> descriptorCpuSolidRectRoute
+            DescriptorPrimitiveFamily.AxisAlignedFilledRRect -> descriptorCpuRRectRoute
+        }
+        BackendKind.GPU -> DescriptorRoute("gpu.descriptor.coverage-plan.${primitive.id}")
     }
 
     private fun shadowRouteFor(backend: BackendKind): DescriptorRoute = when (backend) {
@@ -297,6 +492,11 @@ object GeometryCoverageMigrationHarness {
     }
 
     private data class RectPlans(val geometry: GeometryPlan, val coverage: CoveragePlan)
+
+    private data class DescriptorPixelExecution(
+        val pixels: PixelBuffer,
+        val metrics: CpuDescriptorExecutionMetrics,
+    )
 }
 
 private fun descriptorDumpHeader(
@@ -338,4 +538,13 @@ private fun dumpClipForMigration(clip: ClipInteraction): String = when (clip) {
     is ClipInteraction.AaClip -> "AaClip(${clip.ref.id})"
     is ClipInteraction.ShaderClip -> "ShaderClip(reason=${clip.reason.code})"
     is ClipInteraction.Unsupported -> "Unsupported(reason=${clip.reason.code})"
+}
+
+private fun pack(c: Rgba): Int {
+    fun q(v: Float): Int = (v.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+    val a = q(c.a)
+    val r = q(c.r)
+    val g = q(c.g)
+    val b = q(c.b)
+    return (a shl 24) or (r shl 16) or (g shl 8) or b
 }
