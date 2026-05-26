@@ -27,6 +27,10 @@ as the target design for the high-performance WGSL/WebGPU pipeline, including
 the shared Kanvas pipeline IR, WGSL parser/IR module builder, CPU scalar/vector
 execution, and GPU generated-shader direction.
 
+For Linear milestone execution, skill usage, subagent handoffs, and PM demo
+evidence, use
+[.upstream/target/linear-agent-methodology.md](.upstream/target/linear-agent-methodology.md).
+
 Hard architecture decisions:
 
 - Do not port Ganesh or Graphite.

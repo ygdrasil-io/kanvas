@@ -10,6 +10,9 @@ For the target high-performance WGSL/WebGPU pipeline architecture, read
 `.upstream/target/high-performance-wgsl-pipeline-target.md` before planning
 pipeline, shader, runtime-effect, or raster/GPU convergence work.
 
+For Linear milestone execution, skill usage, subagent handoffs, and PM demo
+evidence, read `.upstream/target/linear-agent-methodology.md`.
+
 Hard architecture decisions:
 
 - Do not port Ganesh or Graphite.
