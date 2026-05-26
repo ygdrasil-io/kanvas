@@ -27,6 +27,11 @@ as the target design for the high-performance WGSL/WebGPU pipeline, including
 the shared Kanvas pipeline IR, WGSL parser/IR module builder, CPU scalar/vector
 execution, and GPU generated-shader direction.
 
+For Geometry/Coverage implementation planning, use
+[.upstream/specs/geometry-coverage/README.md](.upstream/specs/geometry-coverage/README.md)
+as the entry point for shape lowering, clip lowering, coverage plans, CPU
+spans, WebGPU stencil-cover, diagnostics, validation, and ADRs.
+
 For Linear milestone execution, skill usage, subagent handoffs, and PM demo
 evidence, use
 [.upstream/target/linear-agent-methodology.md](.upstream/target/linear-agent-methodology.md).
