@@ -4,6 +4,7 @@ enum class DescriptorMigrationMode {
     Shadow,
     Compare,
     Gated,
+    Default,
 }
 
 enum class DescriptorPrimitiveFamily(val id: String) {
@@ -128,6 +129,36 @@ data class DescriptorMigrationCompareResult(
         "\nmetrics=${metrics.dump()}"
 }
 
+data class DescriptorMigrationDefaultResult(
+    val backend: BackendKind,
+    val drawKind: String,
+    val transform: TransformFacts,
+    val clip: ClipInteraction,
+    val geometryPlan: GeometryPlan,
+    val coveragePlan: CoveragePlan,
+    val loweringResult: CoverageLoweringResult,
+    val selectedRoute: DescriptorRoute,
+    val compatibilityFallbackRoute: DescriptorRoute,
+    val legacyRetainedReason: String,
+    val diffSummary: PixelDiffSummary,
+    val metrics: CpuDescriptorExecutionMetrics,
+) {
+    fun dump(): String = descriptorDumpHeader(DescriptorMigrationMode.Default, backend, drawKind, transform, clip) +
+        "\nselectedRoute=${selectedRoute.id}" +
+        "\ncompatibilityFallbackRoute=${compatibilityFallbackRoute.id}" +
+        "\nlegacyRetainedReason=$legacyRetainedReason" +
+        "\n${CoverageDescriptorDump(geometryPlan, coveragePlan, loweringResult).dump()}" +
+        "\nfallback=${dumpFallback(loweringResult)}" +
+        "\ndiff=${diffSummary.dump()}" +
+        "\nmetrics=${metrics.dump()}" +
+        "\nreport=${pmCutoverReport()}"
+
+    private fun pmCutoverReport(): String =
+        "legacy->descriptor default,visualDiff=${diffSummary.passed},diagnostics=${dumpFallback(loweringResult)}," +
+            "metricTable=[touchedPixels=${metrics.touchedPixels};kernel=${metrics.kernelId ?: "none"};" +
+            "fallback=${metrics.fallbackReason ?: "none"}]"
+}
+
 data class UnsupportedDescriptorDiagnostic(
     val backend: BackendKind,
     val drawKind: String,
@@ -233,6 +264,35 @@ object GeometryCoverageMigrationHarness {
             loweringResult = lowering,
             currentRoute = legacyCpuSolidRectRoute,
             descriptorRoute = descriptorCpuSolidRectRoute,
+            diffSummary = diff,
+            metrics = descriptor.metrics,
+        )
+    }
+
+    fun defaultAxisAlignedFilledRect(
+        width: Int,
+        height: Int,
+        rect: FloatRect,
+        color: Rgba,
+        oraclePixels: PixelBuffer = CpuScalarPipelineExecutor.legacySolidRect(width, height, color),
+        artifactPath: String,
+        antiAlias: Boolean = false,
+    ): DescriptorMigrationDefaultResult {
+        val plans = axisAlignedRectPlans(rect, antiAlias)
+        val lowering = CoveragePlanAdapter.lower(plans.coverage)
+        val descriptor = descriptorPixels(width, height, color, lowering)
+        val diff = diffPixels(oraclePixels, descriptor.pixels, artifactPath)
+        return DescriptorMigrationDefaultResult(
+            backend = BackendKind.CPU,
+            drawKind = DescriptorPrimitiveFamily.AxisAlignedFilledRect.id,
+            transform = identityAxisAlignedTransform(),
+            clip = ClipInteraction.None,
+            geometryPlan = plans.geometry,
+            coveragePlan = plans.coverage,
+            loweringResult = lowering,
+            selectedRoute = descriptorCpuSolidRectRoute,
+            compatibilityFallbackRoute = legacyCpuSolidRectRoute,
+            legacyRetainedReason = "rollback fallback retained for unsupported transforms, clips, and descriptor runtime failures",
             diffSummary = diff,
             metrics = descriptor.metrics,
         )
