@@ -21,6 +21,7 @@ dependencies {
     // diagnostic tests). testImplementation only affects the test classpath ;
     // the main JAR stays raster-free.
     testImplementation(project(":cpu-raster"))
+    testImplementation(project(":render-pipeline"))
     testImplementation(project(":codec-core"))
     testImplementation(project(":codec-image-generator"))
     testImplementation(project(":codec-webp-kotlin"))
