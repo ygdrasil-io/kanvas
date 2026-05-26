@@ -7,6 +7,7 @@ rootProject.name = "kanvas-root"
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
+        mavenLocal()
         google()
         mavenCentral()
         maven("https://central.sonatype.com/repository/maven-snapshots/")
