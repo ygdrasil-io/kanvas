@@ -217,8 +217,9 @@ object GeometryCoverageMigrationHarness {
         oraclePixels: PixelBuffer,
         artifactPath: String,
         antiAlias: Boolean,
+        clip: ClipInteraction = ClipInteraction.None,
     ): DescriptorMigrationCompareResult {
-        val plans = axisAlignedRectPlans(rect, antiAlias)
+        val plans = axisAlignedRectPlans(rect, antiAlias, clip)
         val lowering = CoveragePlanAdapter.lower(plans.coverage)
         val descriptor = descriptorPixels(width, height, color, lowering)
         val diff = diffPixels(oraclePixels, descriptor.pixels, artifactPath)
@@ -226,7 +227,7 @@ object GeometryCoverageMigrationHarness {
             backend = BackendKind.CPU,
             drawKind = DescriptorPrimitiveFamily.AxisAlignedFilledRect.id,
             transform = identityAxisAlignedTransform(),
-            clip = ClipInteraction.None,
+            clip = clip,
             geometryPlan = plans.geometry,
             coveragePlan = plans.coverage,
             loweringResult = lowering,
@@ -245,6 +246,7 @@ object GeometryCoverageMigrationHarness {
         oraclePixels: PixelBuffer,
         coverageAlpha: ByteArray,
         artifactPath: String,
+        clip: ClipInteraction = ClipInteraction.None,
     ): DescriptorMigrationCompareResult {
         require(coverageAlpha.size == width * height) {
             "coverageAlpha must match target dimensions"
@@ -253,7 +255,7 @@ object GeometryCoverageMigrationHarness {
             primitive = GeometryPrimitive.RRect(rrect),
             bounds = GeometryBounds(conservative = rrect.bounds, tight = rrect.bounds),
             transform = identityAxisAlignedTransform(),
-            clip = ClipInteraction.None,
+            clip = clip,
         )
         val coverage = CoveragePlan.AlphaMask(
             ref = AlphaMaskRef("fixture.rrect.a8"),
@@ -267,7 +269,7 @@ object GeometryCoverageMigrationHarness {
             backend = BackendKind.CPU,
             drawKind = DescriptorPrimitiveFamily.AxisAlignedFilledRRect.id,
             transform = identityAxisAlignedTransform(),
-            clip = ClipInteraction.None,
+            clip = clip,
             geometryPlan = geometry,
             coveragePlan = coverage,
             loweringResult = lowering,
@@ -286,11 +288,12 @@ object GeometryCoverageMigrationHarness {
         oraclePixels: PixelBuffer,
         coverageAlpha: ByteArray,
         artifactPath: String,
+        clip: ClipInteraction = ClipInteraction.None,
     ): DescriptorMigrationCompareResult {
         require(coverageAlpha.size == width * height) {
             "coverageAlpha must match target dimensions"
         }
-        val geometry = pathGeometry(fixture)
+        val geometry = pathGeometry(fixture, clip)
         val coverage = CoveragePlan.PathCoverage(
             fillType = fixture.fillType,
             aa = fixture.antiAlias,
@@ -308,7 +311,7 @@ object GeometryCoverageMigrationHarness {
             backend = BackendKind.CPU,
             drawKind = primitive.id,
             transform = identityAxisAlignedTransform(),
-            clip = ClipInteraction.None,
+            clip = clip,
             geometryPlan = geometry,
             coveragePlan = coverage,
             loweringResult = lowering,
@@ -530,18 +533,25 @@ object GeometryCoverageMigrationHarness {
     private fun channelDelta(a: Int, b: Int, shift: Int): Int =
         kotlin.math.abs(((a ushr shift) and 0xFF) - ((b ushr shift) and 0xFF))
 
-    private fun axisAlignedRectPlans(rect: FloatRect, antiAlias: Boolean = false): RectPlans {
+    private fun axisAlignedRectPlans(
+        rect: FloatRect,
+        antiAlias: Boolean = false,
+        clip: ClipInteraction = ClipInteraction.None,
+    ): RectPlans {
         val transform = identityAxisAlignedTransform()
         val geometry = GeometryPlan.Supported(
             primitive = GeometryPrimitive.Rect(source = rect, device = rect),
             bounds = GeometryBounds(conservative = rect, tight = rect),
             transform = transform,
-            clip = ClipInteraction.None,
+            clip = clip,
         )
         return RectPlans(geometry = geometry, coverage = CoveragePlan.AnalyticRect(bounds = rect, aa = antiAlias))
     }
 
-    private fun pathGeometry(fixture: PathCoverageFixture): GeometryPlan.Supported =
+    private fun pathGeometry(
+        fixture: PathCoverageFixture,
+        clip: ClipInteraction = ClipInteraction.None,
+    ): GeometryPlan.Supported =
         GeometryPlan.Supported(
             primitive = GeometryPrimitive.Path(
                 fillType = fixture.fillType,
@@ -550,7 +560,7 @@ object GeometryCoverageMigrationHarness {
             ),
             bounds = GeometryBounds(conservative = fixture.bounds, tight = fixture.bounds),
             transform = identityAxisAlignedTransform(),
-            clip = ClipInteraction.None,
+            clip = clip,
         )
 
     private fun identityAxisAlignedTransform(): TransformFacts = TransformFacts(

@@ -18,6 +18,9 @@ import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkRRect
+import org.skia.pipeline.AaClipRef
+import org.skia.pipeline.ClipInteraction
+import org.skia.pipeline.ClipShapeSpec
 import org.skia.pipeline.CoveragePlan
 import org.skia.pipeline.FloatRect
 import org.skia.pipeline.IntRect
@@ -84,6 +87,40 @@ class WebGpuCoveragePlanSelectorTest {
         assertEquals(StandardCoverageReason.SpanRunsUnsupported, selection.diagnostic?.reason)
         assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
         assertTrue(selection.diagnostic?.dump()?.contains("coverage.span-runs-unsupported") == true)
+    }
+
+    @Test
+    fun `analytic clip is accepted and recorded in webgpu selection dump`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "analytic-clipped-rect",
+            plan = CoveragePlan.AnalyticRect(FloatRect(0f, 0f, 8f, 8f), aa = true),
+            clipInteraction = ClipInteraction.AnalyticShape(
+                ClipShapeSpec(bounds = FloatRect(1f, 1f, 7f, 7f), kind = "rrect-intersect"),
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.AnalyticRect, selection.strategy)
+        assertEquals(null, selection.diagnostic)
+        assertTrue(selection.dump().contains("clip=AnalyticShape(rrect-intersect,1.0,1.0,7.0,7.0)"))
+    }
+
+    @Test
+    fun `arbitrary aa clip emits stable gpu diagnostic`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "aa-clip-path",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(isConvex = true, contourCount = 1, edgeCount = 4),
+            clipInteraction = ClipInteraction.AaClip(
+                ref = AaClipRef("cpu.sk-aa-clip.fixture"),
+                bounds = IntRect(0, 0, 8, 8),
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
+        assertEquals(StandardCoverageReason.ArbitraryAaClipUnsupported, selection.diagnostic?.reason)
+        assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
+        assertTrue(selection.dump().contains("coverage.arbitrary-aa-clip-unsupported"))
+        assertTrue(selection.dump().contains("clip=AaClip(ref=cpu.sk-aa-clip.fixture,bounds=0,0,8,8)"))
     }
 
     @Test
