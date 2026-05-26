@@ -333,6 +333,11 @@ matrix, color-filter shader, working-color-space shader, coord-clamp shader,
 and blend shader become compositional appenders instead of backend-specific
 special cases.
 
+Detailed implementation specs for the pre-Geometry paint-pipeline milestones
+live under `.upstream/specs/wgsl-pipeline/`. Those specs refine this target into
+PipelineIR contracts, WGSL parser/reflection rules, CPU/GPU backend mappings,
+runtime-effect descriptors, diagnostics, validation, migration, and ADRs.
+
 ### Geometry And Coverage
 
 Geometry remains separate from paint. The paint pipeline consumes coverage; it
@@ -1137,3 +1142,7 @@ should split the work by independently verifiable capabilities:
 
 Each epic should name the tests, benchmarks, affected GMs, and fallback
 behavior it owns.
+
+That decomposition is now captured in `.upstream/specs/wgsl-pipeline/` for the
+pre-Geometry M0-M11 paint-pipeline work and `.upstream/specs/geometry-coverage/`
+for the Geometry/Coverage convergence work.
