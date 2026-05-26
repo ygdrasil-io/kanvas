@@ -1,0 +1,22 @@
+package org.skia.gpu.webgpu.tools
+
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+
+class GeneratedSolidRectWgslTest {
+
+    @Test
+    fun `generated solid rect wgsl is deterministic`() {
+        val first = GeneratedSolidRectWgsl.generateDeterministic()
+        val second = GeneratedSolidRectWgsl.generateDeterministic()
+        assertEquals(first, second)
+    }
+
+    @Test
+    fun `generated solid rect wgsl parses with parser`() {
+        val source = GeneratedSolidRectWgsl.generateDeterministic()
+        val validation = GeneratedSolidRectWgsl.validate(source)
+        assertTrue(validation.isSuccess, "expected generated WGSL to parse: ${validation.diagnostics}")
+    }
+}
