@@ -1,6 +1,8 @@
 package org.skia.gpu.webgpu
 
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
@@ -8,6 +10,7 @@ import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
 import org.graphiks.math.SkPoint
+import org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgsl
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkTileMode
@@ -55,7 +58,9 @@ class LinearGradientRectTest {
             SkWebGpuDevice(ctx, W, H).use { device ->
                 device.setBackground(SK_ColorWHITE)
                 SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 10f, 62f, 50f), paint)
-                device.flush()
+                val out = device.flush()
+                assertNull(device.generatedLinearGradientFallbackReasonForDiagnostics())
+                out
             }
         }
 
@@ -94,6 +99,50 @@ class LinearGradientRectTest {
     }
 
     @Test
+    fun `kClamp gradient falls back to handwritten shader when generated path is disabled`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val previous = System.getProperty(GeneratedLinearGradientWgsl.FEATURE_FLAG)
+        System.setProperty(GeneratedLinearGradientWgsl.FEATURE_FLAG, "false")
+        try {
+            val grad = SkLinearGradient.Make(
+                p0 = SkPoint(2f, 32f),
+                p1 = SkPoint(62f, 32f),
+                colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+                positions = null,
+                tileMode = SkTileMode.kClamp,
+            )
+            val paint = SkPaint().apply {
+                shader = grad
+                isAntiAlias = false
+            }
+            val pixels = context!!.use { ctx ->
+                SkWebGpuDevice(ctx, W, H).use { device ->
+                    device.setBackground(SK_ColorWHITE)
+                    SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 10f, 62f, 50f), paint)
+                    val out = device.flush()
+                    assertEquals(
+                        "generated linear gradient disabled via -D${GeneratedLinearGradientWgsl.FEATURE_FLAG}=false",
+                        device.generatedLinearGradientFallbackReasonForDiagnostics(),
+                    )
+                    out
+                }
+            }
+
+            val mid = pixels.rgbaAt(32, 30)
+            assertTrue(mid[0] in 80..200, "mid.R balanced, got ${mid[0]}")
+            assertTrue(mid[2] in 80..200, "mid.B balanced, got ${mid[2]}")
+        } finally {
+            if (previous == null) {
+                System.clearProperty(GeneratedLinearGradientWgsl.FEATURE_FLAG)
+            } else {
+                System.setProperty(GeneratedLinearGradientWgsl.FEATURE_FLAG, previous)
+            }
+        }
+    }
+
+    @Test
     fun `kRepeat tiles the gradient across the rect`() {
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
@@ -117,7 +166,12 @@ class LinearGradientRectTest {
             SkWebGpuDevice(ctx, W, H).use { device ->
                 device.setBackground(SK_ColorWHITE)
                 SkCanvas(device).drawRect(SkRect.MakeLTRB(10f, 10f, 60f, 50f), paint)
-                device.flush()
+                val out = device.flush()
+                assertEquals(
+                    "generated linear gradient currently supports only kClamp tile mode",
+                    device.generatedLinearGradientFallbackReasonForDiagnostics(),
+                )
+                out
             }
         }
 

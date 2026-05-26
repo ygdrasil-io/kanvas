@@ -58,6 +58,7 @@ import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.beginRenderPass
 import kotlinx.coroutines.runBlocking
+import org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgsl
 import org.skia.gpu.webgpu.tools.GeneratedSolidRectWgsl
 import org.skia.core.SkClipShape
 import org.skia.core.SkDevice
@@ -3563,6 +3564,23 @@ public class SkWebGpuDevice(
     // ─── Linear gradient pipeline (G4.1) — kClamp tile mode, drawRect ──────
 
     private val linearGradientShader: GPUShaderModule = loadShader("shaders/linear_gradient.wgsl")
+    private val generatedLinearGradientShaderResult: Pair<GPUShaderModule?, String?> = run {
+        val enabled = System.getProperty(GeneratedLinearGradientWgsl.FEATURE_FLAG, "true").toBoolean()
+        if (!enabled) {
+            null to "generated linear gradient disabled via -D${GeneratedLinearGradientWgsl.FEATURE_FLAG}=false"
+        } else {
+            val source = GeneratedLinearGradientWgsl.generateDeterministic()
+            val validation = GeneratedLinearGradientWgsl.validate(source)
+            if (!validation.isSuccess) {
+                null to "generated linear gradient parse failure: ${validation.diagnostics.joinToString("; ")}"
+            } else {
+                context.device.createShaderModule(ShaderModuleDescriptor(code = source)) to null
+            }
+        }
+    }
+    private val generatedLinearGradientShader: GPUShaderModule? = generatedLinearGradientShaderResult.first
+    private val generatedLinearGradientInitFallbackReason: String? = generatedLinearGradientShaderResult.second
+    private var lastGeneratedLinearGradientFallbackReason: String? = generatedLinearGradientInitFallbackReason
 
     private val linearGradientBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
@@ -3591,6 +3609,8 @@ public class SkWebGpuDevice(
      */
     private val linearGradientPipelineCache:
         MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
+    private val generatedLinearGradientPipelineCache:
+        MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
 
     private fun linearGradientFragmentEntryPoint(tileMode: SkTileMode): String = when (tileMode) {
         SkTileMode.kClamp -> "fs_clamp"
@@ -3602,14 +3622,30 @@ public class SkWebGpuDevice(
     private fun linearGradientPipelineFor(
         mode: SkBlendMode,
         tileMode: SkTileMode,
-    ): GPURenderPipeline =
-        linearGradientPipelineCache.getOrPut(mode to tileMode) {
+        useGenerated: Boolean,
+    ): GPURenderPipeline {
+        serializePipelineKey(
+            listOf(
+                PipelineKeyClassification("shaderFamily", classifyPipelineAxis("shaderFamily"), "linearGradient"),
+                PipelineKeyClassification("entryPoint", classifyPipelineAxis("entryPoint"), linearGradientFragmentEntryPoint(tileMode)),
+                PipelineKeyClassification("blendMode", classifyPipelineAxis("blendMode"), mode.name),
+                PipelineKeyClassification("generatedPath", classifyPipelineAxis("generatedPath"), useGenerated.toString()),
+            ),
+        )
+        val shader = if (useGenerated) generatedLinearGradientShader else linearGradientShader
+        if (useGenerated && shader == null) {
+            lastGeneratedLinearGradientFallbackReason =
+                generatedLinearGradientInitFallbackReason ?: "generated linear gradient unavailable"
+            return linearGradientPipelineFor(mode, tileMode, useGenerated = false)
+        }
+        val cache = if (useGenerated) generatedLinearGradientPipelineCache else linearGradientPipelineCache
+        return cache.getOrPut(mode to tileMode) {
             context.device.createRenderPipeline(
                 RenderPipelineDescriptor(
                     layout = linearGradientPipelineLayout,
-                    vertex = VertexState(module = linearGradientShader, entryPoint = "vs_main"),
+                    vertex = VertexState(module = shader!!, entryPoint = "vs_main"),
                     fragment = FragmentState(
-                        module = linearGradientShader,
+                        module = shader,
                         entryPoint = linearGradientFragmentEntryPoint(tileMode),
                         targets = listOf(
                             ColorTargetState(
@@ -3621,6 +3657,42 @@ public class SkWebGpuDevice(
                 ),
             )
         }
+    }
+
+    private fun shouldUseGeneratedLinearGradientPath(d: LinearGradientRectDraw): Boolean {
+        val blendPlan = blendPlanFor(d.mode)
+        if (d.mode != SkBlendMode.kSrcOver || !blendPlan.isFixedFunction) {
+            lastGeneratedLinearGradientFallbackReason =
+                "generated linear gradient refuses ${d.mode}: expected kSrcOver fixed-function BlendPlan, got ${blendPlan.kind}"
+            return false
+        }
+        if (d.tileMode != SkTileMode.kClamp) {
+            lastGeneratedLinearGradientFallbackReason =
+                "generated linear gradient currently supports only kClamp tile mode"
+            return false
+        }
+        if (d.stopCount != 2) {
+            lastGeneratedLinearGradientFallbackReason =
+                "generated linear gradient currently supports exactly two color stops"
+            return false
+        }
+        if (d.clipShape != null) {
+            lastGeneratedLinearGradientFallbackReason =
+                "generated linear gradient currently requires clipKind=none"
+            return false
+        }
+        if (!d.colorFilterPacked.contentEquals(ZERO_COLOR_FILTER_24)) {
+            lastGeneratedLinearGradientFallbackReason =
+                "generated linear gradient does not support colorFilter"
+            return false
+        }
+        if (generatedLinearGradientShader == null) return false
+        lastGeneratedLinearGradientFallbackReason = null
+        return true
+    }
+
+    internal fun generatedLinearGradientFallbackReasonForDiagnostics(): String? =
+        lastGeneratedLinearGradientFallbackReason
 
     // ─── Radial gradient pipeline (G4.2) — kClamp tile mode, drawRect ──────
 
@@ -12316,7 +12388,13 @@ public class SkWebGpuDevice(
                         draw((d.verts.size / 2).toUInt())
                     }
                     is LinearGradientRectDraw -> {
-                        setPipeline(linearGradientPipelineFor(d.mode, d.tileMode))
+                        setPipeline(
+                            linearGradientPipelineFor(
+                                d.mode,
+                                d.tileMode,
+                                useGenerated = shouldUseGeneratedLinearGradientPath(d),
+                            ),
+                        )
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
