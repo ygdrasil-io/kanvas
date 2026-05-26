@@ -65,18 +65,23 @@ class PipelineKeyTelemetryTest {
                     "7ac2b29cceb2f587e6ffed54f86992a028e25e772533ff9d19a5e1d52e4fc199",
                     key.hash,
                 )
-                assertEquals("preimage=${key.preimage};hash=${key.hash}", key.dump())
+                assertEquals("preimage=${key.preimage};hash=${key.hash};uniformFacts=[]", key.dump())
             }
         }
     }
 
     @Test
-    fun `uniform only axes are excluded from canonical pipeline key`() {
+    fun `uniform only axes are excluded from canonical pipeline key and exposed as diagnostics`() {
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
         context!!.use { ctx ->
             SkWebGpuDevice(ctx, 32, 32).use { device ->
-                val key = device.buildPipelineKeyIdentityForDiagnostics(
+                val base = device.buildPipelineKeyIdentityForDiagnostics(
+                    linkedMapOf(
+                        "generatedPath" to "true",
+                    ),
+                )
+                val withUniformFacts = device.buildPipelineKeyIdentityForDiagnostics(
                     linkedMapOf(
                         "generatedPath" to "true",
                         "uniformSchemaVersion" to "3",
@@ -85,9 +90,54 @@ class PipelineKeyTelemetryTest {
 
                 assertEquals(
                     "pipeline.key v=1 layout=[] code=[generatedPath=true] state=[]",
-                    key.preimage,
+                    withUniformFacts.preimage,
                 )
-                assertTrue(!key.preimage.contains("uniformSchemaVersion"))
+                assertEquals(base.hash, withUniformFacts.hash)
+                assertTrue(!withUniformFacts.preimage.contains("uniformSchemaVersion"))
+                assertEquals("[uniformSchemaVersion=3]", withUniformFacts.uniformFacts)
+                assertTrue(withUniformFacts.dump().contains("uniformFacts=[uniformSchemaVersion=3]"))
+            }
+        }
+    }
+
+    @Test
+    fun `layout code and state changes produce distinct pipeline key hashes`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, 32, 32).use { device ->
+                val base = device.buildPipelineKeyIdentityForDiagnostics(
+                    linkedMapOf(
+                        "blendMode" to "kSrcOver",
+                        "generatedPath" to "true",
+                        "tileModeX" to "clamp",
+                    ),
+                )
+                val layoutChanged = device.buildPipelineKeyIdentityForDiagnostics(
+                    linkedMapOf(
+                        "blendMode" to "kSrcOver",
+                        "generatedPath" to "true",
+                        "tileModeX" to "repeat",
+                    ),
+                )
+                val codeChanged = device.buildPipelineKeyIdentityForDiagnostics(
+                    linkedMapOf(
+                        "blendMode" to "kSrcOver",
+                        "generatedPath" to "false",
+                        "tileModeX" to "clamp",
+                    ),
+                )
+                val stateChanged = device.buildPipelineKeyIdentityForDiagnostics(
+                    linkedMapOf(
+                        "blendMode" to "kPlus",
+                        "generatedPath" to "true",
+                        "tileModeX" to "clamp",
+                    ),
+                )
+
+                assertTrue(base.hash != layoutChanged.hash)
+                assertTrue(base.hash != codeChanged.hash)
+                assertTrue(base.hash != stateChanged.hash)
             }
         }
     }
@@ -95,8 +145,8 @@ class PipelineKeyTelemetryTest {
     @Test
     fun `pipeline key cache fails fast on debug collision`() {
         val cache = PipelineKeyedCache<Int>("test", collisionFatal = true)
-        val first = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=1] state=[]", hash = "same")
-        val second = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=2] state=[]", hash = "same")
+        val first = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=1] state=[]", hash = "same", uniformFacts = "[]")
+        val second = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=2] state=[]", hash = "same", uniformFacts = "[]")
 
         assertEquals(1, cache.getOrPut(first) { 1 })
         val error = assertThrows(IllegalStateException::class.java) {
@@ -110,8 +160,8 @@ class PipelineKeyTelemetryTest {
     @Test
     fun `pipeline key cache defaults production collision to safe miss`() {
         val cache = PipelineKeyedCache<Int>("test")
-        val first = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=1] state=[]", hash = "same")
-        val second = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=2] state=[]", hash = "same")
+        val first = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=1] state=[]", hash = "same", uniformFacts = "[]")
+        val second = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=2] state=[]", hash = "same", uniformFacts = "[]")
 
         assertEquals(1, cache.getOrPut(first) { 1 })
         assertEquals(2, cache.getOrPut(second) { 2 })
