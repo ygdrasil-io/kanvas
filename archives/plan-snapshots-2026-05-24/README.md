@@ -6,7 +6,9 @@ These files were moved out of the repository root because their phase
 tracking no longer matches the current implementation reliably. They are
 kept for historical context, estimates, and rationale only.
 
-The current source of truth is `../../UPSTREAM_SYNC_STATUS.md`.
+Current planning instructions live in `../../AGENTS.md` and `../../CLAUDE.md`.
+The archived upstream-sync status snapshot lives at
+`../root-plans-2026-05-26/UPSTREAM_SYNC_STATUS.md`.
 
 Archived files:
 
