@@ -120,6 +120,7 @@ Autorisation explicite:
 
 Réponse finale attendue: (ne pas oublier les liens)
 - Ticket Linear traité;
+- Ticket Linear URL;
 - milestone traitée;
 - PR URL;
 - status review;
