@@ -93,6 +93,14 @@ tasks.register<JavaExec>("wgslParserSmokeInvalid") {
     )
 }
 
+tasks.register<JavaExec>("wgslValidateAll") {
+    group = "verification"
+    description = "Parses all WGSL shaders and emits reflection coverage summary."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.gpu.webgpu.tools.WgslValidationReportKt")
+    args(file("src/main/resources/shaders").absolutePath)
+}
+
 // MIGRATION_PLAN_GPU_WEBGPU.md Phase G0 — GLFW (used by wgpu4k for
 // surface creation, see ClearRedTest / WebGpuContext) requires the
 // AppKit main thread on macOS. `-XstartOnFirstThread` lets the JVM
