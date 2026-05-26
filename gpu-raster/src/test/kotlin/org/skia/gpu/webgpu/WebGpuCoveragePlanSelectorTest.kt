@@ -316,6 +316,44 @@ class WebGpuCoveragePlanSelectorTest {
         }
     }
 
+    @Test
+    fun `production device records coverage selector routes for rect rrect and path`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val canvas = SkCanvas(device)
+                val paint = SkPaint().apply {
+                    color = SK_ColorBLACK
+                    isAntiAlias = true
+                }
+
+                canvas.drawRect(SkRect.MakeLTRB(2f, 1f, 7f, 6f), paint)
+                val rect = device.coverageSelectionDiagnosticsForTests()
+                assertEquals("webgpu.coverage.analytic-rect", rect?.routeIdentifier)
+                assertEquals("coverageKind=analyticRect:Code", rect?.pipelineKeyDump)
+                assertTrue(rect?.selectionDump?.contains("diagnostic=none") == true)
+
+                canvas.drawRRect(SkRRect.MakeRectXY(SkRect.MakeLTRB(2f, 2f, 14f, 14f), 4f, 4f), paint)
+                val rrect = device.coverageSelectionDiagnosticsForTests()
+                assertEquals("webgpu.coverage.analytic-rrect", rrect?.routeIdentifier)
+                assertEquals("coverageKind=analyticRRect:Code", rrect?.pipelineKeyDump)
+
+                canvas.drawPath(convexPath(), paint)
+                val path = device.coverageSelectionDiagnosticsForTests()
+                assertEquals("webgpu.coverage.path-convex-fan", path?.routeIdentifier)
+                assertTrue(path?.pipelineKeyDump?.contains("coverageKind=pathConvexFan:Code") == true)
+                assertFalse(path?.pipelineKeyDump?.contains("3.0") == true)
+
+                canvas.drawPath(concavePath(), paint)
+                val concave = device.coverageSelectionDiagnosticsForTests()
+                assertEquals("webgpu.coverage.path-stencil-cover", concave?.routeIdentifier)
+                assertTrue(concave?.pipelineKeyDump?.contains("coverageKind=pathStencilCover:Code") == true)
+                assertTrue(concave?.selectionDump?.contains("diagnostic=none") == true)
+            }
+        }
+    }
+
     private fun renderRaster(draw: SkCanvas.() -> Unit): ByteArray {
         val bitmap = SkBitmap(W, H, colorType = SkColorType.kRGBA_8888).apply {
             eraseColor(SK_ColorWHITE)

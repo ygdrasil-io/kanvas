@@ -107,6 +107,14 @@ import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
 import org.skia.foundation.SkBlurMaskFilter
 import org.skia.foundation.SkBlurStyle
+import org.skia.pipeline.ClipInteraction
+import org.skia.pipeline.CoveragePlan
+import org.skia.pipeline.FloatRect
+import org.skia.pipeline.IntRect
+import org.skia.pipeline.PathFillType as PipelinePathFillType
+import org.skia.pipeline.Point
+import org.skia.pipeline.RRectSpec
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.floor
@@ -307,6 +315,15 @@ public class SkWebGpuDevice(
         val generatedDefaultAvailable: Boolean,
         val retainedFallbackReason: String?,
         val handwrittenRetirementCriteria: String,
+    )
+
+    internal data class CoverageSelectionDiagnostics(
+        val drawKind: String,
+        val routeIdentifier: String,
+        val strategy: WebGpuCoverageStrategy,
+        val pipelineKeyDump: String,
+        val diagnosticDump: String?,
+        val selectionDump: String,
     )
 
     private data class CacheCounters(
@@ -2165,6 +2182,7 @@ public class SkWebGpuDevice(
     private val generatedSolidRectInitFallbackReason: String? = generatedSolidRectShaderResult.second
     private var lastGeneratedSolidRectFallbackReason: String? = generatedSolidRectInitFallbackReason
     private var lastSolidRectPathForDiagnostics: String? = null
+    private var lastCoverageSelectionForDiagnostics: WebGpuCoverageSelection? = null
 
     private val rectBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
@@ -2325,6 +2343,18 @@ public class SkWebGpuDevice(
                     "color filters, stroke/hairline coverage, and non-SrcOver BlendPlans with green " +
                     "cross-backend tests and cache telemetry.",
         )
+
+    internal fun coverageSelectionDiagnosticsForTests(): CoverageSelectionDiagnostics? =
+        lastCoverageSelectionForDiagnostics?.let { selection ->
+            CoverageSelectionDiagnostics(
+                drawKind = selection.drawKind,
+                routeIdentifier = selection.routeIdentifier,
+                strategy = selection.strategy,
+                pipelineKeyDump = selection.pipelineKeyDump(),
+                diagnosticDump = selection.diagnostic?.dump(),
+                selectionDump = selection.dump(),
+            )
+        }
 
     // ─── Polygon pipeline (G3.3a) — vertex buffer in device coords ─────────
 
@@ -7831,6 +7861,88 @@ public class SkWebGpuDevice(
         activeClipShape = shape
     }
 
+    private fun selectCoveragePlanForDraw(
+        drawKind: String,
+        plan: CoveragePlan,
+        clip: SkIRect,
+        pathFacts: WebGpuPathCoverageFacts? = null,
+    ): WebGpuCoverageSelection {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = drawKind,
+            plan = plan,
+            pathFacts = pathFacts,
+            clipInteraction = coverageClipInteraction(clip),
+        )
+        lastCoverageSelectionForDiagnostics = selection
+        if (selection.strategy == WebGpuCoverageStrategy.RefuseDiagnostic) {
+            error("SkWebGpuDevice.$drawKind refused coverage selection: ${selection.dump()}")
+        }
+        return selection
+    }
+
+    private fun coverageClipInteraction(clip: SkIRect): ClipInteraction {
+        val shape = activeClipShape ?: return ClipInteraction.DeviceRect(clip.toCoverageIntRect())
+        return when (shape) {
+            is SkClipShape.Rect -> ClipInteraction.AnalyticShape(
+                org.skia.pipeline.ClipShapeSpec(
+                    bounds = shape.bounds.toCoverageFloatRect(),
+                    kind = "rect-${shape.op.name}",
+                ),
+            )
+            is SkClipShape.Oval -> ClipInteraction.AnalyticShape(
+                org.skia.pipeline.ClipShapeSpec(
+                    bounds = shape.bounds.toCoverageFloatRect(),
+                    kind = "oval-${shape.op.name}",
+                ),
+            )
+            is SkClipShape.Circle -> ClipInteraction.AnalyticShape(
+                org.skia.pipeline.ClipShapeSpec(
+                    bounds = FloatRect(shape.cx - shape.r, shape.cy - shape.r, shape.cx + shape.r, shape.cy + shape.r),
+                    kind = "circle-${shape.op.name}",
+                ),
+            )
+            is SkClipShape.RRect -> ClipInteraction.AnalyticShape(
+                org.skia.pipeline.ClipShapeSpec(
+                    bounds = shape.bounds.toCoverageFloatRect(),
+                    kind = "rrect-${shape.op.name}",
+                ),
+            )
+        }
+    }
+
+    private fun SkIRect.toCoverageIntRect(): IntRect =
+        IntRect(left, top, right, bottom)
+
+    private fun SkRect.toCoverageFloatRect(): FloatRect =
+        FloatRect(left, top, right, bottom)
+
+    private fun SkPathFillType.toCoveragePathFillType(): PipelinePathFillType = when (this) {
+        SkPathFillType.kEvenOdd,
+        SkPathFillType.kInverseEvenOdd -> PipelinePathFillType.EvenOdd
+        SkPathFillType.kWinding,
+        SkPathFillType.kInverseWinding -> PipelinePathFillType.Winding
+    }
+
+    private fun rrectCoverageSpec(rrect: org.skia.foundation.SkRRect, ctm: SkMatrix): RRectSpec {
+        val src = rrect.rect()
+        val (x0, y0) = ctm.mapXY(src.left, src.top)
+        val (x1, y1) = ctm.mapXY(src.right, src.bottom)
+        val bounds = FloatRect(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
+        val sx = abs(ctm.sx)
+        val sy = abs(ctm.sy)
+        fun radius(corner: org.skia.foundation.SkRRect.Corner): Point {
+            val radii = rrect.radii(corner)
+            return Point(radii.x() * sx, radii.y() * sy)
+        }
+        return RRectSpec(
+            bounds = bounds,
+            topLeftRadius = radius(org.skia.foundation.SkRRect.Corner.kUpperLeft_Corner),
+            topRightRadius = radius(org.skia.foundation.SkRRect.Corner.kUpperRight_Corner),
+            bottomRightRadius = radius(org.skia.foundation.SkRRect.Corner.kLowerRight_Corner),
+            bottomLeftRadius = radius(org.skia.foundation.SkRRect.Corner.kLowerLeft_Corner),
+        )
+    }
+
     /**
      * G2.x slice 2 -- predicate for [drawPath] : `true` if the dispatch
      * would land in one of the bitmap-shader pipelines that now honour
@@ -8511,6 +8623,14 @@ public class SkWebGpuDevice(
             scissor = intArrayOf(l, t, r - l, b - t)
             bounds = floatArrayOf(l.toFloat(), t.toFloat(), r.toFloat(), b.toFloat())
         }
+        selectCoveragePlanForDraw(
+            drawKind = "axis-aligned-filled-rect",
+            plan = CoveragePlan.AnalyticRect(
+                bounds = FloatRect(bounds[0], bounds[1], bounds[2], bounds[3]),
+                aa = paint.isAntiAlias,
+            ),
+            clip = clip,
+        )
 
         // G2.x -- pack the analytic clip shape (if any) into the
         // per-draw uniform. Circle / oval / rrect / rect all reduce to
@@ -9547,6 +9667,42 @@ public class SkWebGpuDevice(
         // fill machinery, which will paint them as solid color (the
         // pre-G4.1 fallback) until a generic gradient-over-polygon
         // pipeline lands later in G4.
+        val analyticShapeCoverageSelected = if (
+            paint.style == SkPaint.Style.kFill_Style &&
+            ctm.isAxisAligned
+        ) {
+            val srcRect = path.isRect()
+            if (srcRect != null) {
+                val (x0, y0) = ctm.mapXY(srcRect.left, srcRect.top)
+                val (x1, y1) = ctm.mapXY(srcRect.right, srcRect.bottom)
+                selectCoveragePlanForDraw(
+                    drawKind = "axis-aligned-filled-rect-path",
+                    plan = CoveragePlan.AnalyticRect(
+                        bounds = FloatRect(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1)),
+                        aa = paint.isAntiAlias,
+                    ),
+                    clip = clip,
+                )
+                true
+            } else {
+                val rrect = path.isRRect()
+                if (rrect != null) {
+                    selectCoveragePlanForDraw(
+                        drawKind = "axis-aligned-filled-rrect",
+                        plan = CoveragePlan.AnalyticRRect(
+                            shape = rrectCoverageSpec(rrect, ctm),
+                            aa = paint.isAntiAlias,
+                        ),
+                        clip = clip,
+                    )
+                    true
+                } else {
+                    false
+                }
+            }
+        } else {
+            false
+        }
         val shader = paint.shader
         if (shader is SkRuntimeShader) {
             val srcRect = path.isRect()
@@ -10094,6 +10250,23 @@ public class SkWebGpuDevice(
         if (bitmapShaderForPath != null) {
             bitmapPayload = buildBitmapShaderPayload(bitmapShaderForPath, ctm, paint)
         }
+        val isSingleContourConvex = contourStarts.size == 1 && isPolygonConvex(devVerts)
+        if (!analyticShapeCoverageSelected) {
+            selectCoveragePlanForDraw(
+                drawKind = "filled-path",
+                plan = CoveragePlan.PathCoverage(
+                    fillType = path.fillType.toCoveragePathFillType(),
+                    aa = paint.isAntiAlias,
+                    inverse = path.fillType.isInverse(),
+                ),
+                clip = clip,
+                pathFacts = WebGpuPathCoverageFacts(
+                    isConvex = isSingleContourConvex,
+                    contourCount = contourStarts.size,
+                    edgeCount = n,
+                ),
+            )
+        }
 
         // G3.3b.2b — multi-contour path : stencil-and-cover. Each contour
         // is fan-tessellated from its own first vertex ; the concatenated
@@ -10356,7 +10529,7 @@ public class SkWebGpuDevice(
         // stencil-and-cover (fan-tess winding cancels in concave pockets ;
         // the stencil decides inside vs outside). Convex non-inverse
         // paths keep the cheap fan-tess + AA-polygon fast paths.
-        if (path.fillType.isInverse() || !isPolygonConvex(devVerts)) {
+        if (path.fillType.isInverse() || !isSingleContourConvex) {
             val stencilTri = fanTessellateContours(devVerts, contourStarts)
             val coverTri = if (path.fillType.isInverse()) {
                 viewportTrianglesFor(width, height)
