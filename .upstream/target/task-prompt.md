@@ -114,7 +114,7 @@ Autorisation explicite:
 - Tu peux merger dans master uniquement si review OK et CI verte.
 - Tu peux mettre à jour Linear.
 
-Réponse finale attendue:
+Réponse finale attendue: (ne pas oublier les liens)
 - Ticket Linear traité;
 - milestone traitée;
 - PR URL;
