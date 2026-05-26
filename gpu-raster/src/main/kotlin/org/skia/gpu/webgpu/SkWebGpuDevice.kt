@@ -110,6 +110,106 @@ import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
 
+public data class BlendPlan(
+    val mode: SkBlendMode,
+    val kind: Kind,
+    val reason: String,
+) {
+    public enum class Kind {
+        FixedFunction,
+        ShaderLayerComposite,
+        RefuseDiagnostic,
+    }
+
+    public val isFixedFunction: Boolean
+        get() = kind == Kind.FixedFunction
+
+    public val isShaderLayerComposite: Boolean
+        get() = kind == Kind.ShaderLayerComposite
+}
+
+private val FIXED_FUNCTION_BLEND_MODES: Set<SkBlendMode> = linkedSetOf(
+    SkBlendMode.kClear,
+    SkBlendMode.kSrc,
+    SkBlendMode.kSrcOver,
+    SkBlendMode.kDstOver,
+    SkBlendMode.kPlus,
+)
+
+private val DRAW_SHADER_LAYER_COMPOSITE_BLEND_MODES: Set<SkBlendMode> = linkedSetOf(
+    SkBlendMode.kModulate,
+    SkBlendMode.kScreen,
+    SkBlendMode.kDarken,
+    SkBlendMode.kLighten,
+    SkBlendMode.kDifference,
+    SkBlendMode.kExclusion,
+    SkBlendMode.kMultiply,
+)
+
+private val LAYER_SHADER_COMPOSITE_BLEND_MODES: Set<SkBlendMode> =
+    linkedSetOf(SkBlendMode.kPlus) + DRAW_SHADER_LAYER_COMPOSITE_BLEND_MODES
+
+private val fixedFunctionBlendModeNames: String =
+    FIXED_FUNCTION_BLEND_MODES.joinToString(" / ") { it.name }
+
+private val drawShaderLayerCompositeBlendModeNames: String =
+    DRAW_SHADER_LAYER_COMPOSITE_BLEND_MODES.joinToString(" / ") { it.name }
+
+private val layerFixedFunctionBlendModeNames: String =
+    FIXED_FUNCTION_BLEND_MODES
+        .filter { it !in LAYER_SHADER_COMPOSITE_BLEND_MODES }
+        .joinToString(" / ") { it.name }
+
+private val layerShaderCompositeBlendModeNames: String =
+    LAYER_SHADER_COMPOSITE_BLEND_MODES.joinToString(" / ") { it.name }
+
+public fun selectWebGpuBlendPlan(mode: SkBlendMode): BlendPlan = when (mode) {
+    in FIXED_FUNCTION_BLEND_MODES -> BlendPlan(
+        mode = mode,
+        kind = BlendPlan.Kind.FixedFunction,
+        reason = "fixed-function WebGPU blend allowlist accepts $mode",
+    )
+
+    in DRAW_SHADER_LAYER_COMPOSITE_BLEND_MODES -> BlendPlan(
+        mode = mode,
+        kind = BlendPlan.Kind.ShaderLayerComposite,
+        reason = "blend mode $mode requires shader/layer composite BlendPlan; " +
+            "fixed-function WebGPU path refuses it",
+    )
+
+    else -> BlendPlan(
+        mode = mode,
+        kind = BlendPlan.Kind.RefuseDiagnostic,
+        reason = "blend mode $mode is not in the M7 WebGPU BlendPlan allowlist. " +
+            "Fixed-function modes: $fixedFunctionBlendModeNames. " +
+            "Shader layer-composite modes: $drawShaderLayerCompositeBlendModeNames. " +
+            "Other modes need additional shader work and are deferred.",
+    )
+}
+
+public fun selectLayerCompositeBlendPlan(mode: SkBlendMode): BlendPlan = when {
+    mode in LAYER_SHADER_COMPOSITE_BLEND_MODES -> BlendPlan(
+        mode = mode,
+        kind = BlendPlan.Kind.ShaderLayerComposite,
+        reason = "blend mode $mode requires shader/layer composite BlendPlan for saveLayer composition",
+    )
+
+    mode in FIXED_FUNCTION_BLEND_MODES -> BlendPlan(
+        mode = mode,
+        kind = BlendPlan.Kind.FixedFunction,
+        reason = "fixed-function layer composite blend allowlist accepts $mode",
+    )
+
+    else -> BlendPlan(
+        mode = mode,
+        kind = BlendPlan.Kind.RefuseDiagnostic,
+        reason = "blend mode $mode is not in the M7 layer composite BlendPlan allowlist. " +
+            "Fixed-function modes: $layerFixedFunctionBlendModeNames. " +
+            "Shader layer-composite modes: $layerShaderCompositeBlendModeNames. " +
+            "Other modes need additional shader work and are deferred.",
+    )
+}
+
 /**
  * G1.2 — first GPU-backed [SkDevice] implementation, built on wgpu4k.
  *
@@ -247,6 +347,8 @@ public class SkWebGpuDevice(
                 )
             },
         )
+
+    public fun blendPlanForDiagnostics(mode: SkBlendMode): BlendPlan = blendPlanFor(mode)
 
     private fun pipelineCacheEntryCount(): Int =
         rectPipelineCache.size +
@@ -2125,8 +2227,10 @@ public class SkWebGpuDevice(
         )
 
     private fun shouldUseGeneratedSolidRectPath(d: RectDraw): Boolean {
+        val blendPlan = blendPlanFor(d.mode)
         if (d.mode != SkBlendMode.kSrcOver) {
-            lastGeneratedSolidRectFallbackReason = "generated solid rect requires kSrcOver"
+            lastGeneratedSolidRectFallbackReason =
+                "generated solid rect refuses ${d.mode}: expected kSrcOver fixed-function BlendPlan, got ${blendPlan.kind}"
             return false
         }
         if (d.clipKind != CLIP_KIND_NONE) {
@@ -4530,34 +4634,34 @@ public class SkWebGpuDevice(
      *  - [SkBlendMode.kSrcOver] : `src * 1 + dst * (1 - src.a)`
      *  - [SkBlendMode.kDstOver] : `src * (1 - dst.a) + dst * 1`
      *
-     * Other modes throw with a pointer to the phase that lands them
-     * (kPlus / kScreen / kModulate need fragment-side blending and are
-     * scheduled for a later G-phase per master plan G2 note).
+     * Other modes refuse through [BlendPlan] unless they are routed
+     * through an explicit shader/layer composite path.
      *
      * Note that fragment output is **premultiplied** (see
      * `solid_color.wgsl`), so `src.a` and `src.rgb * src.a` are already
      * in lockstep when these factors apply — the standard premul-input
      * formulation is what these constants assume.
      */
-    private fun blendStateFor(mode: SkBlendMode): BlendState = when (mode) {
-        SkBlendMode.kClear -> blendAddBoth(src = GPUBlendFactor.Zero, dst = GPUBlendFactor.Zero)
-        SkBlendMode.kSrc -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.Zero)
-        SkBlendMode.kSrcOver -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.OneMinusSrcAlpha)
-        SkBlendMode.kDstOver -> blendAddBoth(src = GPUBlendFactor.OneMinusDstAlpha, dst = GPUBlendFactor.One)
-        // G3.3a.1 — kPlus is `out = clamp(src + dst, 0, 1)` per Skia
-        // (`SkBlendMode.kPlus`). In premul-in / premul-out (our convention),
-        // `(srcFactor=One, dstFactor=One, op=Add)` evaluates exactly to
-        // that clamped sum. The G2.2 plan note about "kPlus needs
-        // fragment-side blending" turned out to be over-conservative for
-        // the premul case.
-        SkBlendMode.kPlus -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.One)
-        else -> error(
-            "SkWebGpuDevice : blend mode $mode not supported yet. " +
-                "Supported : kClear / kSrc / kSrcOver / kDstOver (G2.2), kPlus (G3.3a.1). " +
-                "kScreen / kModulate / etc. require fragment-side blending and land in a " +
-                "later G-phase; see MIGRATION_PLAN_GPU_WEBGPU.md G2.",
-        )
+    private fun blendStateFor(mode: SkBlendMode): BlendState {
+        val plan = blendPlanFor(mode)
+        if (!plan.isFixedFunction) {
+            error(plan.reason)
+        }
+        return when (mode) {
+            SkBlendMode.kClear -> blendAddBoth(src = GPUBlendFactor.Zero, dst = GPUBlendFactor.Zero)
+            SkBlendMode.kSrc -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.Zero)
+            SkBlendMode.kSrcOver -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.OneMinusSrcAlpha)
+            SkBlendMode.kDstOver -> blendAddBoth(src = GPUBlendFactor.OneMinusDstAlpha, dst = GPUBlendFactor.One)
+            // G3.3a.1 — kPlus is `out = clamp(src + dst, 0, 1)` per Skia
+            // (`SkBlendMode.kPlus`). In premul-in / premul-out (our convention),
+            // `(srcFactor=One, dstFactor=One, op=Add)` evaluates exactly to
+            // that clamped sum.
+            SkBlendMode.kPlus -> blendAddBoth(src = GPUBlendFactor.One, dst = GPUBlendFactor.One)
+            else -> error("Fixed-function BlendPlan has no BlendState mapping for $mode")
+        }
     }
+
+    private fun blendPlanFor(mode: SkBlendMode): BlendPlan = selectWebGpuBlendPlan(mode)
 
     /**
      * Helper : symmetric `BlendComponent` for color AND alpha with
@@ -5231,18 +5335,16 @@ public class SkWebGpuDevice(
      * (the child device was built via [makeLayerDevice], which shares
      * the parent's [context] + [intermediateFormat]).
      *
-     * Blend mode is honoured via the composite pipeline's blend state
-     * (matches the natively-blendable subset : kClear / kSrc / kSrcOver
-     * / kDstOver) ; alpha + colour modulation fold into a per-draw
-     * `paintColor` uniform.
+     * Blend mode is selected through [BlendPlan]. Fixed-function modes
+     * use the direct composite pipeline; shader-layer composite modes
+     * route through the snapshot/rebind path; unsupported modes refuse
+     * with a stable diagnostic.
      *
      * **Constraints.**
      *  - [src] must be a child [SkWebGpuDevice] (same context). A
      *    mismatched backend errors out — the cross-device path is not
      *    in scope.
-     *  - Blend mode outside the kClear / kSrc / kSrcOver / kDstOver
-     *    subset errors out -- same gate as the scaffolding's
-     *    [enqueueImageRectDrawInternal].
+     *  - Blend modes outside the M7 [BlendPlan] allowlist error out.
      *  - **Colour filter** : honoured for the two upstream variants
      *    the WGSL shader implements -- `SkColorFilters.Blend(colour,
      *    mode)` and `SkColorFilters.Matrix(20 floats)`. Other variants
@@ -5308,38 +5410,19 @@ public class SkWebGpuDevice(
             )
         }
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
-        // Phase G-saveLayer-blend -- the natively-blendable subset goes
+        // M7 BlendPlan -- the fixed-function subset goes
         // through the fast `LayerCompositeDraw` path (no snapshot, no
-        // in-shader blend). The non-native subset implemented by
-        // `layer_composite_blend.wgsl` (kPlus / kModulate / kScreen /
-        // kDarken / kLighten / kDifference / kExclusion / kMultiply)
+        // in-shader blend). The shader-layer composite subset implemented
+        // by `layer_composite_blend.wgsl` (kModulate / kScreen / kDarken /
+        // kLighten / kDifference / kExclusion / kMultiply)
         // runs through the snapshot-and-rebind in-shader blend path. Any
         // other mode (kOverlay, kHardLight, kColorDodge, kColorBurn,
         // kSoftLight, HSL, ...) is deferred.
-        val nonNativeBlend = when (mode) {
-            SkBlendMode.kClear,
-            SkBlendMode.kSrc,
-            SkBlendMode.kSrcOver,
-            SkBlendMode.kDstOver -> false
-            SkBlendMode.kPlus,
-            SkBlendMode.kModulate,
-            SkBlendMode.kScreen,
-            SkBlendMode.kDarken,
-            SkBlendMode.kLighten,
-            SkBlendMode.kDifference,
-            SkBlendMode.kExclusion,
-            SkBlendMode.kMultiply -> true
-            else -> error(
-                "SkWebGpuDevice.compositeFrom : blend mode $mode not " +
-                    "supported yet. Fast (native) path : kClear / kSrc / " +
-                    "kSrcOver / kDstOver. In-shader path (Phase " +
-                    "G-saveLayer-blend) : kPlus / kModulate / kScreen / " +
-                    "kDarken / kLighten / kDifference / kExclusion / " +
-                    "kMultiply. Other modes (kOverlay / kHardLight / " +
-                    "kColorDodge / kColorBurn / kSoftLight / HSL) need " +
-                    "additional shader work and are deferred.",
-            )
+        val blendPlan = selectLayerCompositeBlendPlan(mode)
+        if (blendPlan.kind == BlendPlan.Kind.RefuseDiagnostic) {
+            error(blendPlan.reason)
         }
+        val nonNativeBlend = blendPlan.isShaderLayerComposite
 
         // Phase G-saveLayer-imageFilter-crop/-tile/-magnifier -- pure
         // UV-remap variants that fold into the composite fragment shader
@@ -10615,10 +10698,9 @@ public class SkWebGpuDevice(
      *                `kDecal` (latter handled in-shader ; sampler stays
      *                ClampToEdge because WebGPU has no `BorderColor`
      *                mode for non-depth sampled textures).
-     *  - blend mode = `SkBlendMode.kClear` / `kSrc` / `kSrcOver` /
-     *                 `kDstOver` (the natively-blendable subset that
+     *  - blend mode = the fixed-function [BlendPlan] subset that
      *                 [blendStateFor] expresses without a fragment-side
-     *                 round-trip).
+     *                 round-trip.
      */
     private fun enqueueImageRectDrawInternal(
         image: SkImage,
@@ -10642,16 +10724,9 @@ public class SkWebGpuDevice(
         if (devDst.right <= devDst.left || devDst.bottom <= devDst.top) return
 
         val mode = paint?.blendMode ?: SkBlendMode.kSrcOver
-        when (mode) {
-            SkBlendMode.kClear,
-            SkBlendMode.kSrc,
-            SkBlendMode.kSrcOver,
-            SkBlendMode.kDstOver -> Unit
-            else -> error(
-                "SkWebGpuDevice.drawImageRect : blend mode $mode not supported in G5.1.1 " +
-                    "(in scope : kClear / kSrc / kSrcOver / kDstOver -- the natively-blendable " +
-                    "subset that [blendStateFor] expresses without fragment-side round-trip).",
-            )
+        val blendPlan = blendPlanFor(mode)
+        if (!blendPlan.isFixedFunction) {
+            error("SkWebGpuDevice.drawImageRect refuses $mode: ${blendPlan.reason}")
         }
         if (sampling.cubic != null || sampling.useAniso) {
             error(
