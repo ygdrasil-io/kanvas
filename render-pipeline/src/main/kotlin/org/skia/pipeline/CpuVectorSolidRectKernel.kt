@@ -11,6 +11,8 @@ data class CpuVectorKernelAttempt(
 
 object CpuVectorSolidRectKernel {
     const val ENABLED_PROPERTY: String = "kanvas.cpu.vector.enabled"
+    const val ACCEPTED_GATE_PROPERTY: String = "kanvas.cpu.vector.solidRect.acceptedGate"
+    const val ACCEPTED_GATE_ID: String = "solid_src_over_clear/java25/reference-v1"
 
     private const val VECTOR_CLASS = "org.skia.pipeline.jvm.CpuVectorSolidRectKernelJvm"
     private const val VECTOR_KERNEL_ID = "java25.vector.solid_src_over_clear"
@@ -34,6 +36,13 @@ object CpuVectorSolidRectKernel {
             return scalar("Vector API disabled by system property $ENABLED_PROPERTY=false")
         }
 
+        if (mode == CpuVectorMode.Auto && System.getProperty(ACCEPTED_GATE_PROPERTY) != ACCEPTED_GATE_ID) {
+            return scalar(
+                "Vector API rejected by benchmark gate: " +
+                    "decision=rejected speedup=0.863 requiredSpeedup=1.500 gate=$ACCEPTED_GATE_ID",
+            )
+        }
+
         val method = vectorMethod
         if (method == null) {
             val reason = vectorLoadFailure ?: "Vector API implementation is unavailable"
@@ -42,10 +51,11 @@ object CpuVectorSolidRectKernel {
 
         return try {
             val lanes = method.invoke(null, width, height, packedSrcOverClear, dst) as Int
+            val selection = if (mode == CpuVectorMode.Force) "force-selected" else "selected"
             CpuVectorKernelAttempt(
                 usedVector = true,
                 kernelId = VECTOR_KERNEL_ID,
-                diagnostics = listOf("Vector API selected: $VECTOR_KERNEL_ID lanes=$lanes"),
+                diagnostics = listOf("Vector API $selection: $VECTOR_KERNEL_ID lanes=$lanes gate=$ACCEPTED_GATE_ID"),
             )
         } catch (e: InvocationTargetException) {
             scalar("Vector API invocation failed: ${e.targetException::class.simpleName}: ${e.targetException.message}")
