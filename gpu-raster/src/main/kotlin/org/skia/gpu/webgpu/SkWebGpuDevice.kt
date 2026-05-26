@@ -58,6 +58,7 @@ import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.beginRenderPass
 import kotlinx.coroutines.runBlocking
+import org.skia.gpu.webgpu.tools.GeneratedSolidRectWgsl
 import org.skia.core.SkClipShape
 import org.skia.core.SkDevice
 import org.skia.core.SrcRectConstraint
@@ -1930,7 +1931,24 @@ public class SkWebGpuDevice(
 
     // ─── Rect pipeline (G1.2 / G2.3a) — full-screen tri + scissor + coverage ───
 
-    private val rectShader: GPUShaderModule = loadShader("shaders/solid_color.wgsl")
+    private val handwrittenRectShader: GPUShaderModule = loadShader("shaders/solid_color.wgsl")
+    private val generatedSolidRectShaderResult: Pair<GPUShaderModule?, String?> = run {
+        val enabled = System.getProperty(GeneratedSolidRectWgsl.FEATURE_FLAG, "true").toBoolean()
+        if (!enabled) {
+            null to "generated solid rect disabled via -D${GeneratedSolidRectWgsl.FEATURE_FLAG}=false"
+        } else {
+            val source = GeneratedSolidRectWgsl.generateDeterministic()
+            val validation = GeneratedSolidRectWgsl.validate(source)
+            if (!validation.isSuccess) {
+                null to "generated solid rect parse failure: ${validation.diagnostics.joinToString("; ")}"
+            } else {
+                context.device.createShaderModule(ShaderModuleDescriptor(code = source)) to null
+            }
+        }
+    }
+    private val generatedSolidRectShader: GPUShaderModule? = generatedSolidRectShaderResult.first
+    private val generatedSolidRectInitFallbackReason: String? = generatedSolidRectShaderResult.second
+    private var lastGeneratedSolidRectFallbackReason: String? = generatedSolidRectInitFallbackReason
 
     private val rectBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
@@ -1955,26 +1973,56 @@ public class SkWebGpuDevice(
      * differs.
      */
     private val rectPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+    private val generatedRectPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
 
-    private fun rectPipelineFor(mode: SkBlendMode): GPURenderPipeline =
-        rectPipelineCache.getOrPut(mode) {
-            context.device.createRenderPipeline(
-                RenderPipelineDescriptor(
-                    layout = rectPipelineLayout,
-                    vertex = VertexState(module = rectShader, entryPoint = "vs_main"),
-                    fragment = FragmentState(
-                        module = rectShader,
-                        entryPoint = "fs_main",
-                        targets = listOf(
-                            ColorTargetState(
-                                format = intermediateFormat,
-                                blend = blendStateFor(mode),
-                            ),
+    private fun rectPipelineFor(mode: SkBlendMode, useGenerated: Boolean): GPURenderPipeline {
+        val shader = if (useGenerated) generatedSolidRectShader else handwrittenRectShader
+        if (useGenerated && shader == null) {
+            lastGeneratedSolidRectFallbackReason = generatedSolidRectInitFallbackReason ?: "generated solid rect unavailable"
+            return rectPipelineCache.getOrPut(mode) { createRectPipeline(handwrittenRectShader, mode) }
+        }
+        if (useGenerated) {
+            return generatedRectPipelineCache.getOrPut(mode) { createRectPipeline(shader!!, mode) }
+        }
+        return rectPipelineCache.getOrPut(mode) { createRectPipeline(handwrittenRectShader, mode) }
+    }
+
+    private fun createRectPipeline(shader: GPUShaderModule, mode: SkBlendMode): GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = rectPipelineLayout,
+                vertex = VertexState(module = shader, entryPoint = "vs_main"),
+                fragment = FragmentState(
+                    module = shader,
+                    entryPoint = "fs_main",
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            blend = blendStateFor(mode),
                         ),
                     ),
                 ),
-            )
+            ),
+        )
+
+    private fun shouldUseGeneratedSolidRectPath(d: RectDraw): Boolean {
+        if (d.mode != SkBlendMode.kSrcOver) {
+            lastGeneratedSolidRectFallbackReason = "generated solid rect requires kSrcOver"
+            return false
         }
+        if (d.clipKind != CLIP_KIND_NONE) {
+            lastGeneratedSolidRectFallbackReason = "generated solid rect requires clipKind=none"
+            return false
+        }
+        if (!d.colorFilterPacked.contentEquals(ZERO_COLOR_FILTER_24)) {
+            lastGeneratedSolidRectFallbackReason = "generated solid rect does not support colorFilter"
+            return false
+        }
+        if (generatedSolidRectShader == null) return false
+        return true
+    }
+
+    internal fun generatedSolidRectFallbackReasonForDiagnostics(): String? = lastGeneratedSolidRectFallbackReason
 
     // ─── Polygon pipeline (G3.3a) — vertex buffer in device coords ─────────
 
@@ -12011,7 +12059,7 @@ public class SkWebGpuDevice(
             ) {
                 when (d) {
                     is RectDraw -> {
-                        setPipeline(rectPipelineFor(d.mode))
+                        setPipeline(rectPipelineFor(d.mode, useGenerated = shouldUseGeneratedSolidRectPath(d)))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.x.toUInt(),
@@ -14558,6 +14606,8 @@ public class SkWebGpuDevice(
     override fun close() {
         rectPipelineCache.values.forEach { it.close() }
         rectPipelineCache.clear()
+        generatedRectPipelineCache.values.forEach { it.close() }
+        generatedRectPipelineCache.clear()
         polygonPipelineCache.values.forEach { it.close() }
         polygonPipelineCache.clear()
         aaPolygonPipelineCache.values.forEach { it.close() }
@@ -14598,7 +14648,8 @@ public class SkWebGpuDevice(
         imageTextureCache.clear()
         stencilWritePipeline.close()
         presentPipeline.close()
-        rectShader.close()
+        handwrittenRectShader.close()
+        generatedSolidRectShader?.close()
         polygonShader.close()
         aaPolygonShader.close()
         aaStencilCoverShader.close()
