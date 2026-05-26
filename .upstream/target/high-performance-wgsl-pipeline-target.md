@@ -146,7 +146,13 @@ Representative API shape:
 
 ```kotlin
 interface PipelineAppendable {
-    fun appendStages(rec: PipelineStageRec, matrix: MatrixRec): Boolean
+    fun appendStages(rec: PipelineStageRec, matrix: MatrixRec): AppendResult
+}
+
+sealed interface AppendResult {
+    data object Success : AppendResult
+    data class Unsupported(val reason: String) : AppendResult
+    data class Fatal(val reason: String) : AppendResult
 }
 
 class PipelineStageRec(
@@ -177,6 +183,13 @@ sealed interface PipelineOp {
 
 The actual op set should grow from measured needs, not from an attempt to
 mirror every Skia internal opcode.
+
+`appendStages` must be transactional. `Success` may mutate the builder.
+`Unsupported` must leave the builder unchanged so the caller can select a
+documented fallback path. `Fatal` means the draw cannot be represented or
+executed safely and should produce a stable diagnostic instead of falling
+through silently. Implementations should build into a temporary child builder
+and commit only on success when partial mutation would otherwise be possible.
 
 ### Matrix Model
 
@@ -231,8 +244,48 @@ GPU:
 - The color pipeline should be shared between rect and cover paths where
   possible through generated WGSL helpers.
 
-Coverage should be represented in the IR as an input source, not buried in
-each shader implementation.
+Coverage should be represented in the IR as a coverage model, not buried in
+each shader implementation. The model describes the shape and contract of
+coverage; it does not force every backend to use the same storage channel.
+
+Representative shape:
+
+```kotlin
+sealed interface CoverageModel {
+    data object Full : CoverageModel
+    data object Span : CoverageModel
+    data class AlphaMask(val bounds: SkIRect, val format: MaskFormat) : CoverageModel
+    data class AnalyticRect(val bounds: SkRect, val aa: Boolean) : CoverageModel
+    data class AnalyticRRect(val bounds: SkRRect, val aa: Boolean) : CoverageModel
+    data class StencilCover(val fillType: SkPathFillType) : CoverageModel
+}
+```
+
+CPU execution can keep spans and masks in native scanline form. GPU execution
+can keep analytic rect/rrect coverage in WGSL and complex paths in the
+stencil-cover path. The shared IR should prevent semantic drift, not impose a
+single low-level coverage representation.
+
+### Concurrency Contract
+
+The architecture should make threading explicit before implementation starts.
+
+Target contract:
+
+- `SkCanvas`, mutable `SkSurface`, and per-draw builders are not thread-safe.
+- Distinct surfaces may render in parallel if they do not share mutable
+  backend-owned objects without synchronization.
+- Pipeline descriptors and generated WGSL module descriptors are immutable
+  after construction.
+- Shared CPU/GPU caches are either thread-safe or explicitly confined to a
+  render/backend thread.
+- Temporary span buffers, uniform pack buffers, and frame-local arenas are
+  thread-local, frame-local, or protected by owner scopes.
+- GPU upload and WebGPU command submission happen through the backend's
+  render queue/thread, not arbitrary coroutine contexts.
+
+The diagnostics layer should expose enough owner/thread context to explain
+fallbacks and cache behavior in parallel render tests.
 
 ## WGSL Parser Role
 
@@ -290,6 +343,22 @@ The assembly step should produce final WGSL modules with:
 
 This is not a general shader language compiler. It is a controlled module
 builder for Kanvas pipeline fragments.
+
+Deterministic output requires a canonical order:
+
+- Bind groups and bindings sort by `(group, binding)`.
+- Uniform structs sort members by reflected byte offset; ties are invalid.
+- Helper fragments sort by topological dependency order, then stable helper
+  id.
+- Functions generated from `KanvasPipelineIR` follow normalized pipeline
+  order.
+- Structs, aliases, constants, globals, functions, and entry points are
+  emitted in fixed declaration buckets.
+- `PipelineKey` serialization is stable and does not depend on object identity
+  or unordered `Map` / `Set` traversal.
+
+CI should include cross-OS golden tests for generated WGSL source so ordering
+drift is detected before it reaches runtime.
 
 ### WGSL IR Module Builder
 
@@ -379,6 +448,21 @@ reflection. It should not attempt to compile arbitrary SkSL.
 
 If a runtime effect is not registered, failure should remain explicit and
 diagnostic. Silent fallback is not acceptable.
+
+This is an intentional compatibility boundary versus upstream Skia. Kanvas
+does not promise arbitrary valid SkSL execution. The supported surface is a
+versioned runtime-effect support matrix:
+
+- canonical source hash or stable effect id;
+- supported effect kind: shader, color filter, blender, or image-filter
+  helper;
+- uniform and child declarations;
+- CPU implementation id;
+- GPU WGSL implementation id;
+- tests or GMs that exercise the effect.
+
+Adding or removing support from this matrix is a public compatibility change
+for Kanvas, even though it is not a Skia API change.
 
 ## CPU Backend
 
@@ -506,6 +590,63 @@ compiled WGSL or WebGPU pipeline state:
 Tile modes, matrices, colors, gradient stops, color-space transforms, and
 most clip data should remain uniforms unless specialization is proven faster.
 
+### Device Lifecycle
+
+WebGPU lifecycle is part of the architecture, not an implementation detail.
+
+The backend must define behavior for:
+
+- device lost;
+- adapter or queue replacement;
+- surface reconfiguration and resize;
+- intermediate format changes;
+- backend shutdown and recreation.
+
+On device loss, WebGPU-owned objects become invalid:
+
+- render pipelines;
+- shader modules;
+- buffers;
+- textures and texture views;
+- samplers;
+- bind groups;
+- backend-owned image/surface resources.
+
+Logical descriptors may survive if they do not own WebGPU resources:
+
+- `PipelineIR`;
+- generated WGSL source or WGSL IR descriptors;
+- immutable shader/material descriptors;
+- CPU-side image pixels where still retained.
+
+Every GPU handle type should document whether it survives device reset. If it
+does not survive, attempts to use it after reset should fail with a stable
+diagnostic or trigger documented re-upload/recreation.
+
+### Cache Policy
+
+GPU caches must be bounded unless their key space is proven finite and small.
+
+Required cache classes:
+
+- `WgslModuleRegistry`: generated WGSL source and reflection descriptors.
+- `WgslPipelineCache`: compiled WebGPU render pipelines.
+- `WebGpuResourceCache`: textures, samplers, staging buffers, and reusable
+  backend resources.
+
+Each cache should expose:
+
+- resident entry count;
+- approximate resident bytes where measurable;
+- hit count and miss count;
+- eviction count;
+- reset/device-lost invalidation count;
+- configurable budget or explicit no-eviction justification.
+
+Default policy should be LRU by approximate resident bytes for unbounded input
+domains. Finite caches may use no eviction only when the maximum key count is
+documented and covered by tests.
+
 ### WGSL Generation
 
 The end state is not one handwritten WGSL file per shader/path combination.
@@ -536,6 +677,10 @@ WebGPU resource ownership remains explicit:
 - uploads happen through render/backend queues;
 - cross-device resource sharing remains illegal unless explicitly supported.
 
+Resource lifetime must be compatible with the device lifecycle and cache
+policy above. Backend-owned resources should carry enough provenance to answer
+"which device/cache owns this?" in diagnostics.
+
 ## Color Management
 
 The pipeline should preserve the current working-space behavior while making
@@ -543,14 +688,24 @@ the stages explicit.
 
 Target model:
 
-- source colors are represented as unpremul floats at pipeline boundaries;
-- shader output convention is explicit per backend path;
-- premul happens before blend when required;
+- public/source colors enter lowering as finite unpremul floats with an
+  associated color space when one is available;
+- shader-stage logical output is unpremul RGBA float in the active working
+  color space unless a specialized op documents otherwise;
+- color filters consume and produce unpremul RGBA float;
+- blend inputs are premultiplied in the backend's declared blend encoding;
+- coverage multiplies premultiplied source alpha/color at the final
+  source-to-destination composition boundary;
 - destination encoding is handled by explicit color-space stages;
-- GPU intermediate conventions remain documented and tested.
+- GPU intermediate conventions remain documented and tested per backend path.
 
 Color-space transforms should be represented as payloads that both CPU and
 WGSL can implement from the same descriptor.
+
+The current WebGPU backend may keep an encoded premul intermediate when that
+is required to match existing cross-test references. That convention must be
+named in the GPU plan and verified with intermediate dumps, not inferred from
+final pixels only.
 
 HDR transfer functions can remain out of scope until a specific GM/API delta
 requires them.
@@ -568,6 +723,30 @@ performance separately.
 - WGSL parser validation tests for all resources and generated modules.
 - Uniform layout reflection tests: reflected offsets vs packer output.
 - Runtime-effect registry tests: missing effects fail with stable diagnostics.
+
+Cross-backend thresholds must be versioned outside ad hoc test code. The
+threshold policy should define, per GM family:
+
+- metric: exact pixel match, max channel delta, PSNR, SSIM, DeltaE, or existing
+  similarity score;
+- threshold value;
+- accepted backend/driver variance;
+- reason for the threshold;
+- owner for ratchet updates.
+
+Suggested initial families:
+
+- solid color and integer-aligned rects;
+- AA geometry;
+- gradients;
+- bitmap sampling;
+- blend modes;
+- color filters;
+- image filters and saveLayer composites;
+- runtime effects.
+
+The target document should reference this policy once it exists. It should not
+hide thresholds in scattered test constants without an index.
 
 ### Performance
 
