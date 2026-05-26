@@ -60,6 +60,10 @@ class LinearGradientRectTest {
                 SkCanvas(device).drawRect(SkRect.MakeLTRB(2f, 10f, 62f, 50f), paint)
                 val out = device.flush()
                 assertNull(device.generatedLinearGradientFallbackReasonForDiagnostics())
+                val dump = device.generatedPipelineCacheDumpForTests()
+                assertTrue(dump.contains("hash="))
+                assertTrue(dump.contains("code=[generatedPath=true,shaderFamily=linearGradient]"))
+                assertTrue(dump.contains("code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient]"))
                 out
             }
         }

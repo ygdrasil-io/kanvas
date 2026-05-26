@@ -93,6 +93,34 @@ class PipelineKeyTelemetryTest {
     }
 
     @Test
+    fun `pipeline key cache fails fast on debug collision`() {
+        val cache = PipelineKeyedCache<Int>("test", collisionFatal = true)
+        val first = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=1] state=[]", hash = "same")
+        val second = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=2] state=[]", hash = "same")
+
+        assertEquals(1, cache.getOrPut(first) { 1 })
+        val error = assertThrows(IllegalStateException::class.java) {
+            cache.getOrPut(second) { 2 }
+        }
+        assertTrue(error.message?.contains("PipelineKey hash collision in test") == true)
+        assertTrue(error.message?.contains("existingPreimage=${first.preimage}") == true)
+        assertTrue(error.message?.contains("newPreimage=${second.preimage}") == true)
+    }
+
+    @Test
+    fun `pipeline key cache defaults production collision to safe miss`() {
+        val cache = PipelineKeyedCache<Int>("test")
+        val first = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=1] state=[]", hash = "same")
+        val second = PipelineKey(preimage = "pipeline.key v=1 layout=[] code=[a=2] state=[]", hash = "same")
+
+        assertEquals(1, cache.getOrPut(first) { 1 })
+        assertEquals(2, cache.getOrPut(second) { 2 })
+        assertEquals(2, cache.size)
+        assertTrue(cache.dump().contains(first.preimage))
+        assertTrue(cache.dump().contains(second.preimage))
+    }
+
+    @Test
     fun `unknown pipeline axis throws stable diagnostic`() {
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
