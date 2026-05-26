@@ -165,6 +165,9 @@ public class SkRuntimeEffect private constructor(
     public fun allowColorFilter(): Boolean = kind == Kind.kColorFilter
     public fun allowBlender(): Boolean = kind == Kind.kBlender
 
+    public fun descriptor(): SkRuntimeEffectDescriptor? =
+        SkRuntimeEffectDescriptorRegistry.lookup(sourceText)
+
     /**
      * Lazily resolves the registered [SkRuntimeImpl]. The factory was
      * captured at construction time — here we instantiate on first
@@ -214,6 +217,7 @@ public class SkRuntimeEffect private constructor(
         )
         return SkRuntimeShader(
             impl = impl,
+            runtimeEffectDescriptor = descriptor(),
             uniformsBuffer = SkRuntimeShader.makeUniformsBuffer(uniforms),
             childResolvers = resolvers,
             localMatrix = localMatrix ?: SkMatrix.Identity,

@@ -109,6 +109,7 @@ public object SkRuntimeEffectDispatch {
      *  isolated test cases that want a fresh dispatch table. */
     internal fun clearForTest() {
         table.clear()
+        SkRuntimeEffectDescriptorRegistry.clearForTest()
     }
 
     // ─── Normalisation pipeline ────────────────────────────────────────
