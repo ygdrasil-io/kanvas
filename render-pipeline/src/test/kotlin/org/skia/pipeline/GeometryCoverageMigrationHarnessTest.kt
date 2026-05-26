@@ -320,6 +320,30 @@ class GeometryCoverageMigrationHarnessTest {
     }
 
     @Test
+    fun `default cutover selects cpu descriptor route for axis aligned filled rect`() {
+        val result = GeometryCoverageMigrationHarness.defaultAxisAlignedFilledRect(
+            width = 8,
+            height = 8,
+            rect = rect,
+            color = color,
+            artifactPath = "artifacts/gra-38/default-rect.json",
+        )
+
+        assertEquals(true, result.diffSummary.passed)
+        assertEquals("cpu.descriptor.coverage-plan.solid-rect", result.selectedRoute.id)
+        assertEquals("kanvas-skia.current.draw-rect", result.compatibilityFallbackRoute.id)
+        assertEquals(null, result.metrics.fallbackReason)
+        val dump = result.dump()
+        assertTrue(dump.contains("mode=Default"))
+        assertTrue(dump.contains("selectedRoute=cpu.descriptor.coverage-plan.solid-rect"))
+        assertTrue(dump.contains("compatibilityFallbackRoute=kanvas-skia.current.draw-rect"))
+        assertTrue(dump.contains("legacyRetainedReason=rollback fallback retained for unsupported transforms, clips, and descriptor runtime failures"))
+        assertTrue(dump.contains("diff=compared(passed=true,width=8,height=8,differingPixels=0,maxChannelDelta=0,artifactPath=artifacts/gra-38/default-rect.json)"))
+        assertTrue(dump.contains("metrics=touchedPixels=64,scalarVectorStatus=scalar-analytic-rect,kernelId=cpu.scalar.analytic_rect_src_over_clear,fallbackReason=none"))
+        assertTrue(dump.contains("report=legacy->descriptor default,visualDiff=true,diagnostics=none,metricTable=[touchedPixels=64;kernel=cpu.scalar.analytic_rect_src_over_clear;fallback=none]"))
+    }
+
+    @Test
     fun `gated mode keeps path descriptor route behind explicit cpu gate`() {
         val defaultDecision = GeometryCoverageMigrationHarness.gateDecision(
             primitive = DescriptorPrimitiveFamily.SimpleFilledPath,
@@ -370,6 +394,7 @@ class GeometryCoverageMigrationHarnessTest {
         assertTrue(dump.contains("geometry=Unsupported(reason=geometry.nonfinite-input)"))
         assertTrue(dump.contains("coverage=Unsupported(reason=coverage.span-runs-unsupported)"))
         assertTrue(dump.contains("descriptorRoute=cpu.descriptor.coverage-plan.solid-rect"))
+        assertFalse(dump.contains("mode=Default"))
     }
 
     @Test
