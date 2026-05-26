@@ -24,6 +24,9 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":kanvas-skia"))
     implementation(project(":math"))
+    implementation("io.ygdrasil:core-jvm:0.0.9-SNAPSHOT")
+    implementation("io.ygdrasil:parser-jvm:0.0.9-SNAPSHOT")
+    implementation("io.ygdrasil:generator-jvm:0.0.9-SNAPSHOT")
     // G4.1 — gradient shaders need to read SkLinearGradient state
     // (endpoints, stops, positions, tile mode). The gradient classes
     // live in :cpu-raster ; this dep is the smallest change that lets
@@ -69,6 +72,25 @@ sourceSets {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+}
+
+tasks.register<JavaExec>("wgslParserSmoke") {
+    group = "verification"
+    description = "Parses one WGSL shader and prints deterministic parser smoke diagnostics."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.gpu.webgpu.tools.WgslParserSmokeMainKt")
+    args(file("src/main/resources/shaders/solid_color.wgsl").absolutePath)
+}
+
+tasks.register<JavaExec>("wgslParserSmokeInvalid") {
+    group = "verification"
+    description = "Parses an intentionally invalid WGSL fixture and requires diagnostics."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.gpu.webgpu.tools.WgslParserSmokeMainKt")
+    args(
+        file("src/main/resources/wgsl-fixtures/invalid_missing_semicolon.wgsl").absolutePath,
+        "--expect-failure",
+    )
 }
 
 // MIGRATION_PLAN_GPU_WEBGPU.md Phase G0 — GLFW (used by wgpu4k for
