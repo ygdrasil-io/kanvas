@@ -301,6 +301,14 @@ public class SkWebGpuDevice(
         val resourceCacheEntryCount: Int,
     )
 
+    internal data class SolidRectMigrationDiagnostics(
+        val shaderFamily: String,
+        val selectedPath: String?,
+        val generatedDefaultAvailable: Boolean,
+        val retainedFallbackReason: String?,
+        val handwrittenRetirementCriteria: String,
+    )
+
     private data class CacheCounters(
         var shaderModuleHits: Int = 0,
         var shaderModuleMisses: Int = 0,
@@ -2156,6 +2164,7 @@ public class SkWebGpuDevice(
     private val generatedSolidRectShader: GPUShaderModule? = generatedSolidRectShaderResult.first
     private val generatedSolidRectInitFallbackReason: String? = generatedSolidRectShaderResult.second
     private var lastGeneratedSolidRectFallbackReason: String? = generatedSolidRectInitFallbackReason
+    private var lastSolidRectPathForDiagnostics: String? = null
 
     private val rectBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
@@ -2192,6 +2201,7 @@ public class SkWebGpuDevice(
         val shader = if (useGenerated) generatedSolidRectShader else handwrittenRectShader
         if (useGenerated && shader == null) {
             lastGeneratedSolidRectFallbackReason = generatedSolidRectInitFallbackReason ?: "generated solid rect unavailable"
+            lastSolidRectPathForDiagnostics = "handwritten"
             val cached = rectPipelineCache[mode]
             if (cached != null) {
                 cacheCounters.pipelineHits += 1
@@ -2202,6 +2212,8 @@ public class SkWebGpuDevice(
             return createRectPipeline(handwrittenRectShader, mode).also { rectPipelineCache[mode] = it }
         }
         if (useGenerated) {
+            lastGeneratedSolidRectFallbackReason = null
+            lastSolidRectPathForDiagnostics = "generated"
             val cached = generatedRectPipelineCache[mode]
             if (cached != null) {
                 cacheCounters.pipelineHits += 1
@@ -2211,6 +2223,7 @@ public class SkWebGpuDevice(
             cacheCounters.pipelineCreations += 1
             return createRectPipeline(shader!!, mode).also { generatedRectPipelineCache[mode] = it }
         }
+        lastSolidRectPathForDiagnostics = "handwritten"
         val cached = rectPipelineCache[mode]
         if (cached != null) {
             cacheCounters.pipelineHits += 1
@@ -2300,6 +2313,18 @@ public class SkWebGpuDevice(
     }
 
     internal fun generatedSolidRectFallbackReasonForDiagnostics(): String? = lastGeneratedSolidRectFallbackReason
+
+    internal fun solidRectMigrationDiagnosticsForTests(): SolidRectMigrationDiagnostics =
+        SolidRectMigrationDiagnostics(
+            shaderFamily = "Rect + SolidColor + SrcOver",
+            selectedPath = lastSolidRectPathForDiagnostics,
+            generatedDefaultAvailable = generatedSolidRectShader != null,
+            retainedFallbackReason = lastGeneratedSolidRectFallbackReason,
+            handwrittenRetirementCriteria =
+                "Remove handwritten solid_color.wgsl fallback only after generated WGSL covers clips, " +
+                    "color filters, stroke/hairline coverage, and non-SrcOver BlendPlans with green " +
+                    "cross-backend tests and cache telemetry.",
+        )
 
     // ─── Polygon pipeline (G3.3a) — vertex buffer in device coords ─────────
 
