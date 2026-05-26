@@ -163,7 +163,7 @@ Add a backend-neutral pipeline module that owns the common lowering model:
   PipelineKey
   UniformLayout
   ColorSpaceBlock
-  CoverageModel
+  CoveragePlan
   PipelineNormalizer
 ```
 
@@ -203,7 +203,7 @@ sealed interface PipelineOp {
     data class ColorSpaceXform(val payload: ColorSpacePayload) : PipelineOp
     data class ColorFilter(val payload: ColorFilterPayload) : PipelineOp
     data class BlendMode(val mode: SkBlendMode) : PipelineOp
-    data class ApplyCoverage(val coverage: CoverageModel) : PipelineOp
+    data class ApplyCoverage(val coverage: CoveragePlan) : PipelineOp
     data object LoadDst : PipelineOp
     data object Store : PipelineOp
 }
@@ -326,42 +326,199 @@ special cases.
 
 ### Geometry And Coverage
 
-Geometry remains separate from paint.
+Geometry remains separate from paint. The paint pipeline consumes coverage; it
+does not decide how a shape becomes covered pixels.
 
-CPU:
+This follows the useful Graphite lesson without porting Graphite: a draw should
+separate geometric state, paint state, clipping, ordering, and backend
+execution strategy. Kanvas keeps that separation smaller and backend-neutral so
+CPU and WebGPU can share semantics.
 
-- Rects, paths, glyph masks, vertices, and masks produce spans, masks, or
-  typed coverage packets.
-- Coverage is passed into the pipeline runner as span-local input.
+Target flow:
 
-GPU:
+```text
+SkCanvas draw*
+  -> GeometryNormalizer
+  -> stroke / fill / clip lowering
+  -> GeometryPlan
+  -> CoveragePlan
+       CPU: spans, SkAAClip/RLE, alpha masks, analytic rects
+       GPU: analytic rect/rrect, CPU-prepared convex fan, stencil-cover, mask atlas
+  -> Paint PipelineIR
+  -> backend blend/store
+```
 
-- Simple rect/rrect coverage can remain analytic in fragment WGSL.
-- Complex paths can use existing stencil/cover strategy.
-- The color pipeline should be shared between rect and cover paths where
-  possible through generated WGSL helpers.
+Mermaid view:
 
-Coverage should be represented in the IR as a coverage model, not buried in
-each shader implementation. The model describes the shape and contract of
-coverage; it does not force every backend to use the same storage channel.
+```mermaid
+flowchart TD
+    canvas["SkCanvas draw*"] --> normalizer["GeometryNormalizer"]
+    normalizer --> lower["Stroke / fill / clip lowering"]
+    lower --> geometry["GeometryPlan"]
+    geometry --> coverage["CoveragePlan"]
+    coverage --> paint["Paint PipelineIR"]
+    paint --> backend["Backend blend / store"]
+
+    coverage --> cpu["CPU coverage: spans, SkAAClip/RLE, alpha masks, analytic rects"]
+    coverage --> gpu["WebGPU coverage: analytic rect/rrect, CPU-prepared fan, stencil-cover, mask atlas"]
+    cpu --> backend
+    gpu --> backend
+```
+
+C4 container view:
+
+```mermaid
+C4Container
+    title Geometry And Coverage Target
+
+    Person(engineer, "Kanvas engineer", "Reviews implementation evidence, diagnostics, and PM demos")
+
+    System_Boundary(kanvas, "Kanvas Rendering") {
+        Container(canvas, "SkCanvas / SkDevice", "Kotlin", "Owns draw API, CTM, save/restore, and clip-stack capture")
+        Container(geometry, "Geometry Layer", "Kotlin", "Normalizes primitives into GeometryPlan")
+        Container(coverage, "Coverage Layer", "Kotlin", "Selects CoveragePlan and stable unsupported reasons")
+        Container(paint, "Paint PipelineIR", "Kotlin", "Lowers paint, shader, color filter, blend, and coverage modulation")
+        Container(cpu, "CPU Coverage Backend", "Kotlin / Java 25", "Executes spans, SkAAClip/RLE, masks, and analytic rects")
+        Container(gpu, "WebGPU Coverage Backend", "Kotlin / WGSL", "Executes analytic coverage, CPU-prepared fan, stencil-cover, and profile-driven mask atlas")
+    }
+
+    Rel(canvas, geometry, "submits normalized draw state")
+    Rel(geometry, coverage, "produces geometry contract")
+    Rel(coverage, paint, "provides coverage contract")
+    Rel(paint, cpu, "specializes CPU plan")
+    Rel(paint, gpu, "specializes WebGPU plan")
+    Rel(engineer, coverage, "reads fallback diagnostics")
+```
+
+Clip-stack lowering happens before `GeometryPlan`: intersect, difference,
+region, path, and shader clips are normalized into a `ClipInteraction`
+descriptor referenced by the plan. Paint lowering later sees only
+coverage/clip modulation, not raw clip-stack state.
+
+`GeometryPlan` owns the transformed shape contract:
+
+- primitive kind: rect, rrect, oval, path, vertices, glyph mask, image rect;
+- fill type and inverse-fill behavior;
+- stroke style after path-effect application;
+- source-to-device transform facts, stored in the plan rather than implied by
+  ambient CTM state;
+- conservative and tight bounds;
+- clip interaction;
+- fallback reason when the shape cannot be represented safely.
 
 Representative shape:
 
 ```kotlin
-sealed interface CoverageModel {
-    data object Full : CoverageModel
-    data object Span : CoverageModel
-    data class AlphaMask(val bounds: SkIRect, val format: MaskFormat) : CoverageModel
-    data class AnalyticRect(val bounds: SkRect, val aa: Boolean) : CoverageModel
-    data class AnalyticRRect(val bounds: SkRRect, val aa: Boolean) : CoverageModel
-    data class StencilCover(val fillType: SkPathFillType) : CoverageModel
+sealed interface GeometryPlan {
+    data class Supported(
+        val primitive: GeometryPrimitive,
+        val bounds: GeometryBounds,
+        val transform: TransformFacts,
+        val clip: ClipInteraction,
+    ) : GeometryPlan
+
+    data class Unsupported(val reason: String) : GeometryPlan
+}
+
+sealed interface GeometryPrimitive {
+    data class Rect(val source: SkRect, val device: SkRect) : GeometryPrimitive
+    data class RRect(val rrect: SkRRect) : GeometryPrimitive
+    data class Oval(val bounds: SkRect) : GeometryPrimitive
+    data class Path(
+        val fillType: SkPathFillType,
+        val stroke: StrokePlan?,
+        val verbs: PathVerbSlice,
+    ) : GeometryPrimitive
+    data class GlyphMask(val run: GlyphRunRef, val atlasRef: GlyphAtlasRef?) : GeometryPrimitive
+    data class ImageRect(
+        val source: SkRect,
+        val destination: SkRect,
+        val sampling: SamplingGeometry,
+    ) : GeometryPrimitive
 }
 ```
 
-CPU execution can keep spans and masks in native scanline form. GPU execution
-can keep analytic rect/rrect coverage in WGSL and complex paths in the
-stencil-cover path. The shared IR should prevent semantic drift, not impose a
-single low-level coverage representation.
+`CoveragePlan` owns how that geometry reaches fragments or spans. It should be
+represented in the IR as a coverage model, not buried in each shader
+implementation. The model describes the shape and contract of coverage; it does
+not force every backend to use the same storage channel.
+
+Representative shape:
+
+```kotlin
+sealed interface CoveragePlan {
+    data object Full : CoveragePlan
+    data class AnalyticRect(val bounds: SkRect, val aa: Boolean) : CoveragePlan
+    data class AnalyticRRect(val bounds: SkRRect, val aa: Boolean) : CoveragePlan
+    data class SpanRuns(val bounds: SkIRect) : CoveragePlan
+    data class AlphaMask(val bounds: SkIRect, val format: MaskFormat) : CoveragePlan
+    data class StencilCover(val fillType: SkPathFillType, val aa: Boolean) : CoveragePlan
+    data class CoverageAtlas(
+        val bounds: SkIRect,
+        val cachePolicy: CoverageCachePolicy,
+    ) : CoveragePlan
+    data class Unsupported(val reason: String) : CoveragePlan
+}
+
+sealed interface CoverageCachePolicy {
+    data object FrameLocal : CoverageCachePolicy
+    data object PersistentByShapeKey : CoverageCachePolicy
+    data object NoCache : CoverageCachePolicy
+}
+```
+
+CPU execution can keep spans, RLE clips, and masks in native scanline form.
+GPU execution can keep analytic rect/rrect coverage in WGSL, use convex fan or
+stencil-cover for paths, and introduce a coverage atlas only when profiling
+shows that repeated path masks justify it.
+
+The convex-fan GPU path is CPU-prepared: flattening and fan tessellation produce
+a WebGPU triangle list. This is not a compute-shader tessellation path.
+
+`CoverageCachePolicy` is coverage-owned. It must not silently inherit image or
+glyph atlas lifetime rules; path coverage, glyph masks, and image resources can
+have different invalidation keys and residency pressure.
+
+Glyphs enter geometry as `GeometryPrimitive.GlyphMask` and normally lower to
+`CoveragePlan.AlphaMask` through the text/glyph mask atlas flow. Text rendering
+still owns glyph discovery and atlas population; the geometry layer only
+describes the resulting coverage contract.
+
+Unsupported geometry or coverage must use the same explicit diagnostic style as
+other pipeline fallbacks. A `GeometryPlan.Unsupported` means the draw cannot
+produce a safe geometry contract; it should either select a declared
+`:kanvas-skia` compatibility CPU route or produce a stable diagnostic. A
+backend-specific
+`CoveragePlan.Unsupported` means the geometry was understood but the selected
+backend cannot execute that coverage strategy. It must not silently reroute to a
+different backend or drop coverage. If geometry is unsupported, the derived
+coverage should normally be `CoveragePlan.Unsupported` with the same reason
+unless an explicit `FallbackPlan` says otherwise.
+
+The shared contract prevents semantic drift. It does not force CPU and GPU to
+use the same storage representation.
+
+Non-goals for this geometry layer:
+
+- Do not port Graphite `DrawList`, `DrawPass`, `Renderer`, `RenderStep`, or
+  resource scheduler.
+- Do not introduce SkSL or Graphite paint-key machinery.
+- Do not move paint lowering decisions into geometry.
+- Do not add GPU compute tessellation until profiling identifies CPU-side
+  geometry preparation as a bottleneck.
+
+Initial geometry milestones should be tracked separately from the WGSL paint
+pipeline:
+
+1. Inventory current rect/path/stroke/clip behavior across CPU and GPU.
+2. Introduce `GeometryPlan` and `CoveragePlan` descriptors.
+3. Extract shared flattening and stroking invariants.
+4. Make `:kanvas-skia` CPU coverage the reference oracle.
+5. Formalize GPU coverage strategies and fallback diagnostics.
+6. Add PM-visible geometry-heavy CPU/GPU diff evidence.
+
+The legacy `:kanvas` implementation may be used as historical or porting
+evidence, but it must not become load-bearing for this target.
 
 ### Concurrency Contract
 
