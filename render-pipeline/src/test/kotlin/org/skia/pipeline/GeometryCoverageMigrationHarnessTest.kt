@@ -107,6 +107,83 @@ class GeometryCoverageMigrationHarnessTest {
     }
 
     @Test
+    fun `path coverage compare records fill type inverse flag and counters`() {
+        val coverage = ByteArray(16) { index ->
+            if (index == 0 || index == 15) 0 else 255.toByte()
+        }
+        val oracle = PixelBuffer(
+            width = 4,
+            height = 4,
+            argb8888 = IntArray(16) { index -> if (index == 0 || index == 15) 0x00000000 else 0xFF000000.toInt() },
+        )
+
+        val result = GeometryCoverageMigrationHarness.comparePathCoverageAgainstOracle(
+            width = 4,
+            height = 4,
+            fixture = PathCoverageFixture(
+                bounds = FloatRect(0f, 0f, 4f, 4f),
+                fillType = PathFillType.EvenOdd,
+                inverse = true,
+                antiAlias = true,
+                verbCount = 10,
+                edgeCount = 8,
+                segmentCount = 8,
+            ),
+            color = Rgba(0f, 0f, 0f, 1f),
+            oraclePixels = oracle,
+            coverageAlpha = coverage,
+            artifactPath = "artifacts/gra-35/path-coverage-even-odd-inverse.json",
+        )
+
+        assertEquals(true, result.diffSummary.passed)
+        val dump = result.dump()
+        assertTrue(dump.contains("drawKind=simple-filled-path"))
+        assertTrue(dump.contains("geometry=Supported(Path(fillType=EvenOdd,stroke=false,verbs=10),clip=None)"))
+        assertTrue(dump.contains("coverage=PathCoverage(fillType=EvenOdd,aa=true,inverse=true)"))
+        assertTrue(dump.contains("lowering=Strategy.CpuSpanPath(fillType=EvenOdd,aa=true,inverse=true)"))
+        assertTrue(dump.contains("fallback=strategy.CpuSpanPath"))
+        assertTrue(dump.contains("metrics=touchedPixels=14,scalarVectorStatus=scalar-path-coverage,kernelId=cpu.scalar.path_coverage_src_over_clear,fallbackReason=none,pathVerbCount=10,edgeCount=8,segmentCount=8"))
+    }
+
+    @Test
+    fun `stroke outline path coverage compare records stroke metadata and counters`() {
+        val coverage = ByteArray(9) { index -> if (index % 2 == 0) 255.toByte() else 0 }
+        val oracle = PixelBuffer(
+            width = 3,
+            height = 3,
+            argb8888 = IntArray(9) { index -> if (index % 2 == 0) 0xFF000000.toInt() else 0x00000000 },
+        )
+
+        val result = GeometryCoverageMigrationHarness.comparePathCoverageAgainstOracle(
+            width = 3,
+            height = 3,
+            fixture = PathCoverageFixture(
+                bounds = FloatRect(0f, 0f, 3f, 3f),
+                fillType = PathFillType.Winding,
+                inverse = false,
+                antiAlias = true,
+                verbCount = 7,
+                edgeCount = 6,
+                segmentCount = 6,
+                stroke = StrokePlan(width = 4f, miterLimit = 4f),
+            ),
+            color = Rgba(0f, 0f, 0f, 1f),
+            oraclePixels = oracle,
+            coverageAlpha = coverage,
+            artifactPath = "artifacts/gra-35/stroke-outline-path-coverage.json",
+        )
+
+        assertEquals(true, result.diffSummary.passed)
+        val dump = result.dump()
+        assertTrue(dump.contains("drawKind=stroke-outline-path"))
+        assertTrue(dump.contains("currentRoute=kanvas-skia.current.stroke-path"))
+        assertTrue(dump.contains("descriptorRoute=cpu.descriptor.coverage-plan.stroke-outline"))
+        assertTrue(dump.contains("geometry=Supported(Path(fillType=Winding,stroke=true,verbs=7),clip=None)"))
+        assertTrue(dump.contains("coverage=PathCoverage(fillType=Winding,aa=true,inverse=false)"))
+        assertTrue(dump.contains("metrics=touchedPixels=5,scalarVectorStatus=scalar-path-coverage,kernelId=cpu.scalar.stroke_outline_path_coverage_src_over_clear,fallbackReason=none,pathVerbCount=7,edgeCount=6,segmentCount=6"))
+    }
+
+    @Test
     fun `gated mode keeps descriptor route off by default`() {
         val decision = GeometryCoverageMigrationHarness.gateDecision(
             primitive = DescriptorPrimitiveFamily.AxisAlignedFilledRect,
@@ -139,6 +216,31 @@ class GeometryCoverageMigrationHarnessTest {
     }
 
     @Test
+    fun `gated mode keeps path descriptor route behind explicit cpu gate`() {
+        val defaultDecision = GeometryCoverageMigrationHarness.gateDecision(
+            primitive = DescriptorPrimitiveFamily.SimpleFilledPath,
+            backend = BackendKind.CPU,
+        )
+        val enabledDecision = GeometryCoverageMigrationHarness.gateDecision(
+            primitive = DescriptorPrimitiveFamily.SimpleFilledPath,
+            backend = BackendKind.CPU,
+            gates = listOf(
+                DescriptorMigrationGate(
+                    primitive = DescriptorPrimitiveFamily.SimpleFilledPath,
+                    backend = BackendKind.CPU,
+                    enabled = true,
+                ),
+            ),
+        )
+
+        assertFalse(defaultDecision.descriptorEnabled)
+        assertEquals("kanvas-skia.current.draw-path", defaultDecision.selectedRoute.id)
+        assertEquals("cpu.descriptor.coverage-plan.path-coverage", defaultDecision.descriptorRoute.id)
+        assertTrue(enabledDecision.descriptorEnabled)
+        assertEquals("cpu.descriptor.coverage-plan.path-coverage", enabledDecision.selectedRoute.id)
+    }
+
+    @Test
     fun `unsupported descriptor path reports stable diagnostic`() {
         val diagnostic = GeometryCoverageMigrationHarness.unsupportedDescriptorDiagnostic(
             backend = BackendKind.CPU,
@@ -164,6 +266,21 @@ class GeometryCoverageMigrationHarnessTest {
         assertTrue(dump.contains("geometry=Unsupported(reason=geometry.nonfinite-input)"))
         assertTrue(dump.contains("coverage=Unsupported(reason=coverage.span-runs-unsupported)"))
         assertTrue(dump.contains("descriptorRoute=cpu.descriptor.coverage-plan.solid-rect"))
+    }
+
+    @Test
+    fun `unsupported path geometry reports stable diagnostic`() {
+        val diagnostic = GeometryCoverageMigrationHarness.unsupportedGeometryDiagnostic(
+            backend = BackendKind.CPU,
+            primitive = DescriptorPrimitiveFamily.SimpleFilledPath,
+            reason = StandardGeometryReason.PathEffectUnsupported,
+        )
+
+        val dump = diagnostic.dump()
+        assertTrue(dump.contains("drawKind=simple-filled-path"))
+        assertTrue(dump.contains("geometry=Unsupported(reason=geometry.path-effect-unsupported)"))
+        assertTrue(dump.contains("coverage=Unsupported(reason=coverage.span-runs-unsupported)"))
+        assertTrue(dump.contains("descriptorRoute=cpu.descriptor.coverage-plan.path-coverage"))
     }
 
     @Test

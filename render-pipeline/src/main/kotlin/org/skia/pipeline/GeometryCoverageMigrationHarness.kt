@@ -9,6 +9,8 @@ enum class DescriptorMigrationMode {
 enum class DescriptorPrimitiveFamily(val id: String) {
     AxisAlignedFilledRect("axis-aligned-filled-rect"),
     AxisAlignedFilledRRect("axis-aligned-filled-rrect"),
+    SimpleFilledPath("simple-filled-path"),
+    StrokeOutlinePath("stroke-outline-path"),
 }
 
 data class DescriptorMigrationGate(
@@ -24,11 +26,29 @@ data class CpuDescriptorExecutionMetrics(
     val scalarVectorStatus: String,
     val kernelId: String?,
     val fallbackReason: String?,
+    val pathVerbCount: Int? = null,
+    val edgeCount: Int? = null,
+    val segmentCount: Int? = null,
 ) {
-    fun dump(): String =
-        "touchedPixels=$touchedPixels,scalarVectorStatus=$scalarVectorStatus," +
-            "kernelId=${kernelId ?: "none"},fallbackReason=${fallbackReason ?: "none"}"
+    fun dump(): String = buildString {
+        append("touchedPixels=$touchedPixels,scalarVectorStatus=$scalarVectorStatus,")
+        append("kernelId=${kernelId ?: "none"},fallbackReason=${fallbackReason ?: "none"}")
+        pathVerbCount?.let { append(",pathVerbCount=$it") }
+        edgeCount?.let { append(",edgeCount=$it") }
+        segmentCount?.let { append(",segmentCount=$it") }
+    }
 }
+
+data class PathCoverageFixture(
+    val bounds: FloatRect,
+    val fillType: PathFillType,
+    val inverse: Boolean,
+    val antiAlias: Boolean,
+    val verbCount: Int,
+    val edgeCount: Int,
+    val segmentCount: Int,
+    val stroke: StrokePlan? = null,
+)
 
 data class DescriptorGateDecision(
     val mode: DescriptorMigrationMode,
@@ -129,8 +149,12 @@ data class UnsupportedDescriptorDiagnostic(
 object GeometryCoverageMigrationHarness {
     private val legacyCpuSolidRectRoute = DescriptorRoute("kanvas-skia.current.draw-rect")
     private val legacyCpuRRectRoute = DescriptorRoute("kanvas-skia.current.draw-rrect")
+    private val legacyCpuPathRoute = DescriptorRoute("kanvas-skia.current.draw-path")
+    private val legacyCpuStrokePathRoute = DescriptorRoute("kanvas-skia.current.stroke-path")
     private val descriptorCpuSolidRectRoute = DescriptorRoute("cpu.descriptor.coverage-plan.solid-rect")
     private val descriptorCpuRRectRoute = DescriptorRoute("cpu.descriptor.coverage-plan.materialized-rrect")
+    private val descriptorCpuPathRoute = DescriptorRoute("cpu.descriptor.coverage-plan.path-coverage")
+    private val descriptorCpuStrokePathRoute = DescriptorRoute("cpu.descriptor.coverage-plan.stroke-outline")
     private val shadowOnlyRoute = DescriptorRoute("descriptor.shadow-only")
 
     fun shadowAxisAlignedFilledRect(
@@ -249,6 +273,47 @@ object GeometryCoverageMigrationHarness {
             loweringResult = lowering,
             currentRoute = legacyCpuRRectRoute,
             descriptorRoute = descriptorCpuRRectRoute,
+            diffSummary = diff,
+            metrics = descriptor.metrics,
+        )
+    }
+
+    fun comparePathCoverageAgainstOracle(
+        width: Int,
+        height: Int,
+        fixture: PathCoverageFixture,
+        color: Rgba,
+        oraclePixels: PixelBuffer,
+        coverageAlpha: ByteArray,
+        artifactPath: String,
+    ): DescriptorMigrationCompareResult {
+        require(coverageAlpha.size == width * height) {
+            "coverageAlpha must match target dimensions"
+        }
+        val geometry = pathGeometry(fixture)
+        val coverage = CoveragePlan.PathCoverage(
+            fillType = fixture.fillType,
+            aa = fixture.antiAlias,
+            inverse = fixture.inverse,
+        )
+        val lowering = CoveragePlanAdapter.lower(coverage)
+        val descriptor = pathCoveragePixels(width, height, color, coverageAlpha, fixture)
+        val diff = diffPixels(oraclePixels, descriptor.pixels, artifactPath)
+        val primitive = if (fixture.stroke == null) {
+            DescriptorPrimitiveFamily.SimpleFilledPath
+        } else {
+            DescriptorPrimitiveFamily.StrokeOutlinePath
+        }
+        return DescriptorMigrationCompareResult(
+            backend = BackendKind.CPU,
+            drawKind = primitive.id,
+            transform = identityAxisAlignedTransform(),
+            clip = ClipInteraction.None,
+            geometryPlan = geometry,
+            coveragePlan = coverage,
+            loweringResult = lowering,
+            currentRoute = currentRouteFor(primitive, BackendKind.CPU),
+            descriptorRoute = descriptorRouteFor(primitive, BackendKind.CPU),
             diffSummary = diff,
             metrics = descriptor.metrics,
         )
@@ -407,6 +472,29 @@ object GeometryCoverageMigrationHarness {
         )
     }
 
+    private fun pathCoveragePixels(
+        width: Int,
+        height: Int,
+        color: Rgba,
+        coverageAlpha: ByteArray,
+        fixture: PathCoverageFixture,
+    ): DescriptorPixelExecution {
+        val base = materializedCoveragePixels(width, height, color, coverageAlpha)
+        return base.copy(
+            metrics = base.metrics.copy(
+                scalarVectorStatus = "scalar-path-coverage",
+                kernelId = if (fixture.stroke == null) {
+                    "cpu.scalar.path_coverage_src_over_clear"
+                } else {
+                    "cpu.scalar.stroke_outline_path_coverage_src_over_clear"
+                },
+                pathVerbCount = fixture.verbCount,
+                edgeCount = fixture.edgeCount,
+                segmentCount = fixture.segmentCount,
+            ),
+        )
+    }
+
     private fun diffPixels(
         current: PixelBuffer,
         descriptor: PixelBuffer,
@@ -453,6 +541,18 @@ object GeometryCoverageMigrationHarness {
         return RectPlans(geometry = geometry, coverage = CoveragePlan.AnalyticRect(bounds = rect, aa = antiAlias))
     }
 
+    private fun pathGeometry(fixture: PathCoverageFixture): GeometryPlan.Supported =
+        GeometryPlan.Supported(
+            primitive = GeometryPrimitive.Path(
+                fillType = fixture.fillType,
+                stroke = fixture.stroke,
+                verbs = PathVerbSlice(fixture.verbCount),
+            ),
+            bounds = GeometryBounds(conservative = fixture.bounds, tight = fixture.bounds),
+            transform = identityAxisAlignedTransform(),
+            clip = ClipInteraction.None,
+        )
+
     private fun identityAxisAlignedTransform(): TransformFacts = TransformFacts(
         matrix = MatrixSpec.Identity,
         isAxisAligned = true,
@@ -471,6 +571,8 @@ object GeometryCoverageMigrationHarness {
         BackendKind.CPU -> when (primitive) {
             DescriptorPrimitiveFamily.AxisAlignedFilledRect -> legacyCpuSolidRectRoute
             DescriptorPrimitiveFamily.AxisAlignedFilledRRect -> legacyCpuRRectRoute
+            DescriptorPrimitiveFamily.SimpleFilledPath -> legacyCpuPathRoute
+            DescriptorPrimitiveFamily.StrokeOutlinePath -> legacyCpuStrokePathRoute
         }
         BackendKind.GPU -> DescriptorRoute("gpu.current.handwritten-solid-rect")
     }
@@ -482,6 +584,8 @@ object GeometryCoverageMigrationHarness {
         BackendKind.CPU -> when (primitive) {
             DescriptorPrimitiveFamily.AxisAlignedFilledRect -> descriptorCpuSolidRectRoute
             DescriptorPrimitiveFamily.AxisAlignedFilledRRect -> descriptorCpuRRectRoute
+            DescriptorPrimitiveFamily.SimpleFilledPath -> descriptorCpuPathRoute
+            DescriptorPrimitiveFamily.StrokeOutlinePath -> descriptorCpuStrokePathRoute
         }
         BackendKind.GPU -> DescriptorRoute("gpu.descriptor.coverage-plan.${primitive.id}")
     }
