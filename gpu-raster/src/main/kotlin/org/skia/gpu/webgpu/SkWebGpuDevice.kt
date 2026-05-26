@@ -345,6 +345,8 @@ public class SkWebGpuDevice(
 
     private val cacheCounters: CacheCounters = CacheCounters()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
+    private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
+        PipelineKeyedCache("generated shader modules")
 
     private fun classifyPipelineAxis(axis: String): PipelineKeyAxisClass = when (axis) {
         "shaderFamily", "entryPoint", "generatedPath", "coverageKind" -> PipelineKeyAxisClass.Code
@@ -365,7 +367,7 @@ public class SkWebGpuDevice(
         resourceCacheHits = cacheCounters.resourceHits,
         resourceCacheMisses = cacheCounters.resourceMisses,
         pipelineCreations = cacheCounters.pipelineCreations,
-        shaderModuleCount = shaderModuleCache.size,
+        shaderModuleCount = shaderModuleCache.size + generatedShaderModuleCache.size,
         pipelineCacheEntryCount = pipelineCacheEntryCount(),
         resourceCacheEntryCount = imageTextureCache.size + bitmapSamplerCache.size,
     )
@@ -384,6 +386,12 @@ public class SkWebGpuDevice(
     public fun buildPipelineKeyForDiagnostics(axes: Map<String, String>): String =
         buildPipelineKeyIdentityForDiagnostics(axes).dump()
 
+    public fun generatedPipelineCacheDumpForTests(): String = listOf(
+        generatedShaderModuleCache.dump(),
+        generatedRectPipelineCache.dump(),
+        generatedLinearGradientPipelineCache.dump(),
+    ).filter { it.isNotEmpty() }.joinToString("\n")
+
     public fun blendPlanForDiagnostics(mode: SkBlendMode): BlendPlan = blendPlanFor(mode)
 
     private fun pipelineCacheEntryCount(): Int =
@@ -394,7 +402,8 @@ public class SkWebGpuDevice(
             aaPolygonPipelineCache.size +
             aaStencilCoverPipelineCache.size +
             bitmapPipelineCache.size +
-            linearGradientPipelineCache.size
+            linearGradientPipelineCache.size +
+            generatedLinearGradientPipelineCache.size
 
     /**
      * Final readback target -- the present pass writes here, then we
@@ -2173,6 +2182,12 @@ public class SkWebGpuDevice(
     // ─── Rect pipeline (G1.2 / G2.3a) — full-screen tri + scissor + coverage ───
 
     private val handwrittenRectShader: GPUShaderModule = loadShader("shaders/solid_color.wgsl")
+    private val generatedSolidRectShaderKey: PipelineKey = pipelineKeyIdentity(
+        listOf(
+            PipelineKeyClassification("shaderFamily", classifyPipelineAxis("shaderFamily"), "solidRect"),
+            PipelineKeyClassification("generatedPath", classifyPipelineAxis("generatedPath"), "true"),
+        ),
+    )
     private val generatedSolidRectShaderResult: Pair<GPUShaderModule?, String?> = run {
         val enabled = System.getProperty(GeneratedSolidRectWgsl.FEATURE_FLAG, "true").toBoolean()
         if (!enabled) {
@@ -2183,7 +2198,9 @@ public class SkWebGpuDevice(
             if (!validation.isSuccess) {
                 null to "generated solid rect parse failure: ${validation.diagnostics.joinToString("; ")}"
             } else {
-                context.device.createShaderModule(ShaderModuleDescriptor(code = source)) to null
+                generatedShaderModuleCache.getOrPut(generatedSolidRectShaderKey) {
+                    context.device.createShaderModule(ShaderModuleDescriptor(code = source))
+                } to null
             }
         }
     }
@@ -2216,10 +2233,11 @@ public class SkWebGpuDevice(
      * differs.
      */
     private val rectPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
-    private val generatedRectPipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+    private val generatedRectPipelineCache: PipelineKeyedCache<GPURenderPipeline> =
+        PipelineKeyedCache("generated solid rect pipelines")
 
     private fun rectPipelineFor(mode: SkBlendMode, useGenerated: Boolean): GPURenderPipeline {
-        pipelineKeyIdentity(
+        val pipelineKey = pipelineKeyIdentity(
             listOf(
                 PipelineKeyClassification("blendMode", classifyPipelineAxis("blendMode"), mode.name),
                 PipelineKeyClassification("generatedPath", classifyPipelineAxis("generatedPath"), useGenerated.toString()),
@@ -2241,14 +2259,16 @@ public class SkWebGpuDevice(
         if (useGenerated) {
             lastGeneratedSolidRectFallbackReason = null
             lastSolidRectPathForDiagnostics = "generated"
-            val cached = generatedRectPipelineCache[mode]
-            if (cached != null) {
-                cacheCounters.pipelineHits += 1
-                return cached
+            val before = generatedRectPipelineCache.size
+            return generatedRectPipelineCache.getOrPut(pipelineKey) {
+                cacheCounters.pipelineMisses += 1
+                cacheCounters.pipelineCreations += 1
+                createRectPipeline(shader!!, mode)
+            }.also {
+                if (generatedRectPipelineCache.size == before) {
+                    cacheCounters.pipelineHits += 1
+                }
             }
-            cacheCounters.pipelineMisses += 1
-            cacheCounters.pipelineCreations += 1
-            return createRectPipeline(shader!!, mode).also { generatedRectPipelineCache[mode] = it }
         }
         lastSolidRectPathForDiagnostics = "handwritten"
         val cached = rectPipelineCache[mode]
@@ -3669,6 +3689,12 @@ public class SkWebGpuDevice(
     // ─── Linear gradient pipeline (G4.1) — kClamp tile mode, drawRect ──────
 
     private val linearGradientShader: GPUShaderModule = loadShader("shaders/linear_gradient.wgsl")
+    private val generatedLinearGradientShaderKey: PipelineKey = pipelineKeyIdentity(
+        listOf(
+            PipelineKeyClassification("shaderFamily", classifyPipelineAxis("shaderFamily"), "linearGradient"),
+            PipelineKeyClassification("generatedPath", classifyPipelineAxis("generatedPath"), "true"),
+        ),
+    )
     private val generatedLinearGradientShaderResult: Pair<GPUShaderModule?, String?> = run {
         val enabled = System.getProperty(GeneratedLinearGradientWgsl.FEATURE_FLAG, "true").toBoolean()
         if (!enabled) {
@@ -3679,7 +3705,9 @@ public class SkWebGpuDevice(
             if (!validation.isSuccess) {
                 null to "generated linear gradient parse failure: ${validation.diagnostics.joinToString("; ")}"
             } else {
-                context.device.createShaderModule(ShaderModuleDescriptor(code = source)) to null
+                generatedShaderModuleCache.getOrPut(generatedLinearGradientShaderKey) {
+                    context.device.createShaderModule(ShaderModuleDescriptor(code = source))
+                } to null
             }
         }
     }
@@ -3715,7 +3743,7 @@ public class SkWebGpuDevice(
     private val linearGradientPipelineCache:
         MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
     private val generatedLinearGradientPipelineCache:
-        MutableMap<Pair<SkBlendMode, SkTileMode>, GPURenderPipeline> = mutableMapOf()
+        PipelineKeyedCache<GPURenderPipeline> = PipelineKeyedCache("generated linear gradient pipelines")
 
     private fun linearGradientFragmentEntryPoint(tileMode: SkTileMode): String = when (tileMode) {
         SkTileMode.kClamp -> "fs_clamp"
@@ -3729,7 +3757,7 @@ public class SkWebGpuDevice(
         tileMode: SkTileMode,
         useGenerated: Boolean,
     ): GPURenderPipeline {
-        pipelineKeyIdentity(
+        val pipelineKey = pipelineKeyIdentity(
             listOf(
                 PipelineKeyClassification("shaderFamily", classifyPipelineAxis("shaderFamily"), "linearGradient"),
                 PipelineKeyClassification("entryPoint", classifyPipelineAxis("entryPoint"), linearGradientFragmentEntryPoint(tileMode)),
@@ -3743,26 +3771,44 @@ public class SkWebGpuDevice(
                 generatedLinearGradientInitFallbackReason ?: "generated linear gradient unavailable"
             return linearGradientPipelineFor(mode, tileMode, useGenerated = false)
         }
-        val cache = if (useGenerated) generatedLinearGradientPipelineCache else linearGradientPipelineCache
-        return cache.getOrPut(mode to tileMode) {
-            context.device.createRenderPipeline(
-                RenderPipelineDescriptor(
-                    layout = linearGradientPipelineLayout,
-                    vertex = VertexState(module = shader!!, entryPoint = "vs_main"),
-                    fragment = FragmentState(
-                        module = shader,
-                        entryPoint = linearGradientFragmentEntryPoint(tileMode),
-                        targets = listOf(
-                            ColorTargetState(
-                                format = intermediateFormat,
-                                blend = blendStateFor(mode),
-                            ),
+        if (useGenerated) {
+            val before = generatedLinearGradientPipelineCache.size
+            return generatedLinearGradientPipelineCache.getOrPut(pipelineKey) {
+                cacheCounters.pipelineMisses += 1
+                cacheCounters.pipelineCreations += 1
+                createLinearGradientPipeline(shader!!, mode, tileMode)
+            }.also {
+                if (generatedLinearGradientPipelineCache.size == before) {
+                    cacheCounters.pipelineHits += 1
+                }
+            }
+        }
+        return linearGradientPipelineCache.getOrPut(mode to tileMode) {
+            createLinearGradientPipeline(shader!!, mode, tileMode)
+        }
+    }
+
+    private fun createLinearGradientPipeline(
+        shader: GPUShaderModule,
+        mode: SkBlendMode,
+        tileMode: SkTileMode,
+    ): GPURenderPipeline =
+        context.device.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout = linearGradientPipelineLayout,
+                vertex = VertexState(module = shader, entryPoint = "vs_main"),
+                fragment = FragmentState(
+                    module = shader,
+                    entryPoint = linearGradientFragmentEntryPoint(tileMode),
+                    targets = listOf(
+                        ColorTargetState(
+                            format = intermediateFormat,
+                            blend = blendStateFor(mode),
                         ),
                     ),
                 ),
-            )
-        }
-    }
+            ),
+        )
 
     private fun shouldUseGeneratedLinearGradientPath(d: LinearGradientRectDraw): Boolean {
         val blendPlan = blendPlanFor(d.mode)
@@ -15307,7 +15353,7 @@ public class SkWebGpuDevice(
     override fun close() {
         rectPipelineCache.values.forEach { it.close() }
         rectPipelineCache.clear()
-        generatedRectPipelineCache.values.forEach { it.close() }
+        generatedRectPipelineCache.values().forEach { it.close() }
         generatedRectPipelineCache.clear()
         polygonPipelineCache.values.forEach { it.close() }
         polygonPipelineCache.clear()
@@ -15332,6 +15378,8 @@ public class SkWebGpuDevice(
         aaStencilCoverBitmapShaderStencilPipeline.close()
         linearGradientPipelineCache.values.forEach { it.close() }
         linearGradientPipelineCache.clear()
+        generatedLinearGradientPipelineCache.values().forEach { it.close() }
+        generatedLinearGradientPipelineCache.clear()
         radialGradientPipelineCache.values.forEach { it.close() }
         radialGradientPipelineCache.clear()
         sweepGradientPipelineCache.values.forEach { it.close() }
