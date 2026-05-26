@@ -73,6 +73,26 @@ class GeometryCoverageMigrationHarnessTest {
     }
 
     @Test
+    fun `cpu rect compare records device rect clip interaction`() {
+        val oracle = CpuScalarPipelineExecutor.legacySolidRect(8, 8, color)
+        val result = GeometryCoverageMigrationHarness.compareAxisAlignedFilledRectAgainstOracle(
+            width = 8,
+            height = 8,
+            rect = rect,
+            color = color,
+            oraclePixels = oracle,
+            artifactPath = "artifacts/gra-37/rect-clip.json",
+            antiAlias = false,
+            clip = ClipInteraction.DeviceRect(IntRect(1, 1, 7, 7)),
+        )
+
+        assertEquals(true, result.diffSummary.passed)
+        val dump = result.dump()
+        assertTrue(dump.contains("clip=DeviceRect(1,1,7,7)"))
+        assertTrue(dump.contains("geometry=Supported(Rect(device=0.0,0.0,8.0,8.0),clip=DeviceRect(1,1,7,7))"))
+    }
+
+    @Test
     fun `materialized rrect coverage compares against oracle pixels`() {
         val coverage = ByteArray(16) { index ->
             if (index % 5 == 0) 0 else 255.toByte()
@@ -104,6 +124,40 @@ class GeometryCoverageMigrationHarnessTest {
         assertTrue(result.dump().contains("coverage=AlphaMask(ref=fixture.rrect.a8,bounds=0,0,4,4,format=A8)"))
         assertTrue(result.dump().contains("lowering=CoverageModel.AlphaMask(0,0,4,4,format=A8)"))
         assertTrue(result.dump().contains("metrics=touchedPixels=12,scalarVectorStatus=scalar-materialized-mask,kernelId=cpu.scalar.materialized_a8_src_over_clear,fallbackReason=none"))
+    }
+
+    @Test
+    fun `cpu rrect compare records analytic rrect path clip interaction and alpha mask ref`() {
+        val coverage = ByteArray(16) { 255.toByte() }
+        val oracle = PixelBuffer(
+            width = 4,
+            height = 4,
+            argb8888 = IntArray(16) { 0xFF000000.toInt() },
+        )
+        val result = GeometryCoverageMigrationHarness.compareMaterializedRRectCoverageAgainstOracle(
+            width = 4,
+            height = 4,
+            rrect = RRectSpec(
+                bounds = FloatRect(0f, 0f, 4f, 4f),
+                topLeftRadius = Point(1f, 1f),
+                topRightRadius = Point(1f, 1f),
+                bottomRightRadius = Point(1f, 1f),
+                bottomLeftRadius = Point(1f, 1f),
+            ),
+            color = Rgba(0f, 0f, 0f, 1f),
+            oraclePixels = oracle,
+            coverageAlpha = coverage,
+            artifactPath = "artifacts/gra-37/rrect-analytic-clip.json",
+            clip = ClipInteraction.AnalyticShape(
+                ClipShapeSpec(bounds = FloatRect(0f, 0f, 4f, 4f), kind = "rrect-intersect"),
+            ),
+        )
+
+        val dump = result.dump()
+        assertEquals(true, result.diffSummary.passed)
+        assertTrue(dump.contains("clip=AnalyticShape(rrect-intersect)"))
+        assertTrue(dump.contains("clip=AnalyticShape(rrect-intersect,0.0,0.0,4.0,4.0)"))
+        assertTrue(dump.contains("coverage=AlphaMask(ref=fixture.rrect.a8,bounds=0,0,4,4,format=A8)"))
     }
 
     @Test
@@ -181,6 +235,56 @@ class GeometryCoverageMigrationHarnessTest {
         assertTrue(dump.contains("geometry=Supported(Path(fillType=Winding,stroke=true,verbs=7),clip=None)"))
         assertTrue(dump.contains("coverage=PathCoverage(fillType=Winding,aa=true,inverse=false)"))
         assertTrue(dump.contains("metrics=touchedPixels=5,scalarVectorStatus=scalar-path-coverage,kernelId=cpu.scalar.stroke_outline_path_coverage_src_over_clear,fallbackReason=none,pathVerbCount=7,edgeCount=6,segmentCount=6"))
+    }
+
+    @Test
+    fun `cpu path compare records aaclip ref and difference clip diagnostics`() {
+        val coverage = ByteArray(4) { 255.toByte() }
+        val oracle = PixelBuffer(
+            width = 2,
+            height = 2,
+            argb8888 = IntArray(4) { 0xFF000000.toInt() },
+        )
+        val aaClipResult = GeometryCoverageMigrationHarness.comparePathCoverageAgainstOracle(
+            width = 2,
+            height = 2,
+            fixture = PathCoverageFixture(
+                bounds = FloatRect(0f, 0f, 2f, 2f),
+                fillType = PathFillType.Winding,
+                inverse = false,
+                antiAlias = true,
+                verbCount = 5,
+                edgeCount = 4,
+                segmentCount = 4,
+            ),
+            color = Rgba(0f, 0f, 0f, 1f),
+            oraclePixels = oracle,
+            coverageAlpha = coverage,
+            artifactPath = "artifacts/gra-37/aaclip-path.json",
+            clip = ClipInteraction.AaClip(AaClipRef("cpu.sk-aa-clip.fixture"), IntRect(0, 0, 2, 2)),
+        )
+        val differenceClipResult = GeometryCoverageMigrationHarness.comparePathCoverageAgainstOracle(
+            width = 2,
+            height = 2,
+            fixture = PathCoverageFixture(
+                bounds = FloatRect(0f, 0f, 2f, 2f),
+                fillType = PathFillType.Winding,
+                inverse = false,
+                antiAlias = false,
+                verbCount = 5,
+                edgeCount = 4,
+                segmentCount = 4,
+            ),
+            color = Rgba(0f, 0f, 0f, 1f),
+            oraclePixels = oracle,
+            coverageAlpha = coverage,
+            artifactPath = "artifacts/gra-37/difference-clip-path.json",
+            clip = ClipInteraction.Unsupported(StandardGeometryReason.ClipStackUnsupported),
+        )
+
+        assertTrue(aaClipResult.dump().contains("clip=AaClip(cpu.sk-aa-clip.fixture)"))
+        assertTrue(aaClipResult.dump().contains("clip=AaClip(ref=cpu.sk-aa-clip.fixture,bounds=0,0,2,2)"))
+        assertTrue(differenceClipResult.dump().contains("clip=Unsupported(reason=geometry.clip-stack-unsupported)"))
     }
 
     @Test

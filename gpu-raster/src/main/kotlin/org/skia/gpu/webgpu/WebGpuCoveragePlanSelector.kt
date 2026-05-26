@@ -1,6 +1,7 @@
 package org.skia.gpu.webgpu
 
 import org.skia.pipeline.BackendKind
+import org.skia.pipeline.ClipInteraction
 import org.skia.pipeline.CoverageLoweringResult
 import org.skia.pipeline.CoveragePlan
 import org.skia.pipeline.CoveragePlanAdapter
@@ -41,6 +42,7 @@ public data class WebGpuCoverageSelection(
     val drawKind: String,
     val strategy: WebGpuCoverageStrategy,
     val coveragePlan: CoveragePlan,
+    val clipInteraction: ClipInteraction,
     val loweringResult: CoverageLoweringResult,
     val pipelineAxes: List<SkWebGpuDevice.PipelineKeyClassification>,
     val routeIdentifier: String,
@@ -56,9 +58,19 @@ public data class WebGpuCoverageSelection(
         appendLine("strategy=$strategy")
         appendLine("route=$routeIdentifier")
         appendLine("coverage=${dumpCoveragePlan(coveragePlan)}")
+        appendLine("clip=${dumpClipInteraction(clipInteraction)}")
         appendLine("pipelineAxes=${pipelineKeyDump()}")
         appendLine("diagnostic=${diagnostic?.dump() ?: "none"}")
     }.trimEnd()
+}
+
+private fun dumpClipInteraction(clip: ClipInteraction): String = when (clip) {
+    ClipInteraction.None -> "None"
+    is ClipInteraction.DeviceRect -> "DeviceRect(${clip.bounds.left},${clip.bounds.top},${clip.bounds.right},${clip.bounds.bottom})"
+    is ClipInteraction.AnalyticShape -> "AnalyticShape(${clip.shape.kind},${clip.shape.bounds.left},${clip.shape.bounds.top},${clip.shape.bounds.right},${clip.shape.bounds.bottom})"
+    is ClipInteraction.AaClip -> "AaClip(ref=${clip.ref.id},bounds=${clip.bounds.left},${clip.bounds.top},${clip.bounds.right},${clip.bounds.bottom})"
+    is ClipInteraction.ShaderClip -> "ShaderClip(reason=${clip.reason.code})"
+    is ClipInteraction.Unsupported -> "Unsupported(reason=${clip.reason.code})"
 }
 
 private fun dumpCoveragePlan(plan: CoveragePlan): String = when (plan) {
@@ -77,13 +89,25 @@ public object WebGpuCoveragePlanSelector {
         drawKind: String,
         plan: CoveragePlan,
         pathFacts: WebGpuPathCoverageFacts? = null,
+        clipInteraction: ClipInteraction = ClipInteraction.None,
     ): WebGpuCoverageSelection {
         val lowering = CoveragePlanAdapter.lower(plan)
+        val clipDiagnosticReason = unsupportedClipReason(clipInteraction)
+        if (clipDiagnosticReason != null) {
+            return unsupported(
+                drawKind = drawKind,
+                plan = plan,
+                clipInteraction = clipInteraction,
+                lowering = lowering,
+                reason = clipDiagnosticReason,
+            )
+        }
         return when (plan) {
             is CoveragePlan.AnalyticRect -> supported(
                 drawKind = drawKind,
                 strategy = WebGpuCoverageStrategy.AnalyticRect,
                 plan = plan,
+                clipInteraction = clipInteraction,
                 lowering = lowering,
                 coverageKind = "analyticRect",
                 route = "webgpu.coverage.analytic-rect",
@@ -92,6 +116,7 @@ public object WebGpuCoveragePlanSelector {
                 drawKind = drawKind,
                 strategy = WebGpuCoverageStrategy.AnalyticRRect,
                 plan = plan,
+                clipInteraction = clipInteraction,
                 lowering = lowering,
                 coverageKind = "analyticRRect",
                 route = "webgpu.coverage.analytic-rrect",
@@ -100,6 +125,7 @@ public object WebGpuCoveragePlanSelector {
                 drawKind = drawKind,
                 strategy = WebGpuCoverageStrategy.ExistingGpuCompatibility,
                 plan = plan,
+                clipInteraction = clipInteraction,
                 lowering = lowering,
                 coverageKind = "full",
                 route = "webgpu.coverage.full-scissor",
@@ -107,25 +133,29 @@ public object WebGpuCoveragePlanSelector {
             is CoveragePlan.AlphaMask -> unsupported(
                 drawKind = drawKind,
                 plan = plan,
+                clipInteraction = clipInteraction,
                 lowering = lowering,
                 reason = StandardCoverageReason.AlphaMaskUnsupported,
             )
             is CoveragePlan.SpanRuns -> unsupported(
                 drawKind = drawKind,
                 plan = plan,
+                clipInteraction = clipInteraction,
                 lowering = lowering,
                 reason = StandardCoverageReason.SpanRunsUnsupported,
             )
-            is CoveragePlan.PathCoverage -> pathStrategy(drawKind, plan, lowering, pathFacts)
+            is CoveragePlan.PathCoverage -> pathStrategy(drawKind, plan, clipInteraction, lowering, pathFacts)
             is CoveragePlan.CoverageAtlas -> unsupported(
                 drawKind = drawKind,
                 plan = plan,
+                clipInteraction = clipInteraction,
                 lowering = lowering,
                 reason = StandardCoverageReason.AtlasPolicyUnavailable,
             )
             is CoveragePlan.Unsupported -> unsupported(
                 drawKind = drawKind,
                 plan = plan,
+                clipInteraction = clipInteraction,
                 lowering = lowering,
                 reason = plan.reason,
             )
@@ -136,6 +166,7 @@ public object WebGpuCoveragePlanSelector {
         drawKind: String,
         strategy: WebGpuCoverageStrategy,
         plan: CoveragePlan,
+        clipInteraction: ClipInteraction,
         lowering: CoverageLoweringResult,
         coverageKind: String,
         route: String,
@@ -143,6 +174,7 @@ public object WebGpuCoveragePlanSelector {
         drawKind = drawKind,
         strategy = strategy,
         coveragePlan = plan,
+        clipInteraction = clipInteraction,
         loweringResult = lowering,
         pipelineAxes = listOf(
             SkWebGpuDevice.PipelineKeyClassification(
@@ -158,11 +190,12 @@ public object WebGpuCoveragePlanSelector {
     private fun pathStrategy(
         drawKind: String,
         plan: CoveragePlan.PathCoverage,
+        clipInteraction: ClipInteraction,
         lowering: CoverageLoweringResult,
         facts: WebGpuPathCoverageFacts?,
     ): WebGpuCoverageSelection {
         if (facts == null) {
-            return unsupported(drawKind, plan, lowering, StandardCoverageReason.StencilCoverUnavailable)
+            return unsupported(drawKind, plan, clipInteraction, lowering, StandardCoverageReason.StencilCoverUnavailable)
         }
         if (plan.aa && facts.edgeCount > WEBGPU_PATH_AA_EDGE_BUDGET) {
             return if (facts.maskOrAtlasFallbackEnabled) {
@@ -170,6 +203,7 @@ public object WebGpuCoveragePlanSelector {
                     drawKind = drawKind,
                     strategy = WebGpuCoverageStrategy.CoverageMaskOrAtlasFallback,
                     plan = plan,
+                    clipInteraction = clipInteraction,
                     lowering = lowering,
                     coverageKind = "pathMaskOrAtlas",
                     route = "webgpu.coverage.path-mask-or-atlas",
@@ -178,6 +212,7 @@ public object WebGpuCoveragePlanSelector {
                 unsupported(
                     drawKind = drawKind,
                     plan = plan,
+                    clipInteraction = clipInteraction,
                     lowering = lowering,
                     reason = StandardCoverageReason.EdgeCountExceeded,
                     pipelineAxes = pathPipelineAxes("pathCoverageUnsupported", plan),
@@ -190,6 +225,7 @@ public object WebGpuCoveragePlanSelector {
                 drawKind = drawKind,
                 strategy = WebGpuCoverageStrategy.CpuPreparedConvexFan,
                 plan = plan,
+                clipInteraction = clipInteraction,
                 lowering = lowering,
                 coverageKind = "pathConvexFan",
                 route = "webgpu.coverage.path-convex-fan",
@@ -199,6 +235,7 @@ public object WebGpuCoveragePlanSelector {
                 drawKind = drawKind,
                 strategy = WebGpuCoverageStrategy.StencilCover,
                 plan = plan,
+                clipInteraction = clipInteraction,
                 lowering = lowering,
                 coverageKind = "pathStencilCover",
                 route = "webgpu.coverage.path-stencil-cover",
@@ -210,6 +247,7 @@ public object WebGpuCoveragePlanSelector {
         drawKind: String,
         strategy: WebGpuCoverageStrategy,
         plan: CoveragePlan.PathCoverage,
+        clipInteraction: ClipInteraction,
         lowering: CoverageLoweringResult,
         coverageKind: String,
         route: String,
@@ -217,6 +255,7 @@ public object WebGpuCoveragePlanSelector {
         drawKind = drawKind,
         strategy = strategy,
         coveragePlan = plan,
+        clipInteraction = clipInteraction,
         loweringResult = lowering,
         pipelineAxes = pathPipelineAxes(coverageKind, plan),
         routeIdentifier = route,
@@ -247,6 +286,7 @@ public object WebGpuCoveragePlanSelector {
     private fun unsupported(
         drawKind: String,
         plan: CoveragePlan,
+        clipInteraction: ClipInteraction,
         lowering: CoverageLoweringResult,
         reason: DiagnosticReason,
         pipelineAxes: List<SkWebGpuDevice.PipelineKeyClassification> = emptyList(),
@@ -254,6 +294,7 @@ public object WebGpuCoveragePlanSelector {
         drawKind = drawKind,
         strategy = WebGpuCoverageStrategy.RefuseDiagnostic,
         coveragePlan = plan,
+        clipInteraction = clipInteraction,
         loweringResult = lowering,
         pipelineAxes = pipelineAxes,
         routeIdentifier = "webgpu.coverage.refuse",
@@ -264,4 +305,12 @@ public object WebGpuCoveragePlanSelector {
         ),
     )
 
+    private fun unsupportedClipReason(clip: ClipInteraction): DiagnosticReason? = when (clip) {
+        ClipInteraction.None,
+        is ClipInteraction.DeviceRect,
+        is ClipInteraction.AnalyticShape -> null
+        is ClipInteraction.AaClip,
+        is ClipInteraction.ShaderClip -> StandardCoverageReason.ArbitraryAaClipUnsupported
+        is ClipInteraction.Unsupported -> clip.reason
+    }
 }
