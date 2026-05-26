@@ -348,6 +348,48 @@ SkCanvas draw*
   -> backend blend/store
 ```
 
+Mermaid view:
+
+```mermaid
+flowchart TD
+    canvas["SkCanvas draw*"] --> normalizer["GeometryNormalizer"]
+    normalizer --> lower["Stroke / fill / clip lowering"]
+    lower --> geometry["GeometryPlan"]
+    geometry --> coverage["CoveragePlan"]
+    coverage --> paint["Paint PipelineIR"]
+    paint --> backend["Backend blend / store"]
+
+    coverage --> cpu["CPU coverage: spans, SkAAClip/RLE, alpha masks, analytic rects"]
+    coverage --> gpu["WebGPU coverage: analytic rect/rrect, CPU-prepared fan, stencil-cover, mask atlas"]
+    cpu --> backend
+    gpu --> backend
+```
+
+C4 container view:
+
+```mermaid
+C4Container
+    title Geometry And Coverage Target
+
+    Person(engineer, "Kanvas engineer", "Reviews implementation evidence, diagnostics, and PM demos")
+
+    System_Boundary(kanvas, "Kanvas Rendering") {
+        Container(canvas, "SkCanvas / SkDevice", "Kotlin", "Owns draw API, CTM, save/restore, and clip-stack capture")
+        Container(geometry, "Geometry Layer", "Kotlin", "Normalizes primitives into GeometryPlan")
+        Container(coverage, "Coverage Layer", "Kotlin", "Selects CoveragePlan and stable unsupported reasons")
+        Container(paint, "Paint PipelineIR", "Kotlin", "Lowers paint, shader, color filter, blend, and coverage modulation")
+        Container(cpu, "CPU Coverage Backend", "Kotlin / Java 25", "Executes spans, SkAAClip/RLE, masks, and analytic rects")
+        Container(gpu, "WebGPU Coverage Backend", "Kotlin / WGSL", "Executes analytic coverage, CPU-prepared fan, stencil-cover, and profile-driven mask atlas")
+    }
+
+    Rel(canvas, geometry, "submits normalized draw state")
+    Rel(geometry, coverage, "produces geometry contract")
+    Rel(coverage, paint, "provides coverage contract")
+    Rel(paint, cpu, "specializes CPU plan")
+    Rel(paint, gpu, "specializes WebGPU plan")
+    Rel(engineer, coverage, "reads fallback diagnostics")
+```
+
 Clip-stack lowering happens before `GeometryPlan`: intersect, difference,
 region, path, and shader clips are normalized into a `ClipInteraction`
 descriptor referenced by the plan. Paint lowering later sees only
