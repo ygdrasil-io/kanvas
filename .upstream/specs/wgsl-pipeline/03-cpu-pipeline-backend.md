@@ -94,6 +94,11 @@ Rules:
 The rest of the project must not directly require `jdk.incubator.vector`
 classes.
 
+Default selection of a vector kernel requires at least `1.5x` speedup over the
+scalar kernel on the named reference machine for the same correctness fixture.
+Lower speedups can remain opt-in experiments, but they cannot gate default
+promotion.
+
 First good vector targets:
 
 - solid source-over-clear fill;
@@ -120,6 +125,17 @@ Promoted CPU plans should use:
 
 Kotlin data classes are acceptable for descriptors and dumps. They are not
 acceptable in inner pixel loops for promoted paths.
+
+## Allocation Verification
+
+The no-per-pixel-allocation rule is testable, not only a review guideline.
+Before a CPU kernel is promoted to default:
+
+- the benchmark command must report allocation evidence;
+- preferred JVM evidence is JMH or equivalent `gc.alloc.rate.norm`;
+- the target for the canonical hot-loop benchmark is `0.0 B/op`;
+- any non-zero allocation requires an explicit exception naming where the
+  allocation occurs and why it is outside the per-pixel loop.
 
 ## Diagnostics
 
@@ -151,3 +167,5 @@ Diagnostics must be suitable for Linear evidence comments and PM demo reports.
 - Benchmarks name machine, JDK, command, scalar baseline, vector result, and
   speedup when claiming performance.
 - Unsupported cases produce stable fallback diagnostics.
+- Default vector promotion meets the `1.5x` reference-machine gate or remains
+  explicitly opt-in.

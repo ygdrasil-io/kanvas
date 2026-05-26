@@ -33,6 +33,7 @@ flowchart TD
 | Compare | Execute current path and descriptor path into separate targets, then compare pixels/artifacts. |
 | Gated | Route selected primitive families through descriptor path behind an explicit flag. |
 | Default | Descriptor path owns the primitive; legacy route remains as declared compatibility fallback only. |
+| Rollback | Default is revoked back to Gated or Compare with a Linear ticket, stable reason, and re-promotion criteria. |
 
 ## Primitive Rollout Order
 
@@ -71,6 +72,8 @@ Rules:
   attached to the relevant ticket.
 - Unsupported descriptor paths must produce stable diagnostics instead of
   silently falling back.
+- Rollback must preserve the evidence that triggered it and name the criteria
+  required for re-promotion.
 
 ## Rollout Gates
 
@@ -88,3 +91,5 @@ Each primitive family needs:
 - Compare mode can run at least one CPU primitive and one WebGPU primitive.
 - Gated mode is explicit per primitive/backend; no implicit auto-switching.
 - Default cutover is allowed only after oracle evidence and fallback tests.
+- Rollback from Default is allowed and documented when post-cutover evidence
+  exposes a correctness, driver, or scene-coverage regression.

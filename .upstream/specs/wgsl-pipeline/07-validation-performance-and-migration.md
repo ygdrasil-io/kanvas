@@ -31,6 +31,22 @@ Required layers:
 - fallback/refusal diagnostics;
 - cache telemetry and benchmark evidence for promoted GPU paths.
 
+## CI Gates
+
+The intended CI gates are:
+
+| Gate | Purpose |
+|---|---|
+| `wgsl-parser-validate` | Parse touched and generated WGSL modules. |
+| `wgsl-reflection-packer` | Verify Kotlin packers against reflected layouts. |
+| `pipeline-ir-snapshots` | Pin IR, fallback, and diagnostic dump versions. |
+| `cpu-pipeline-equivalence` | Compare old CPU path, scalar pipeline, and vector output where relevant. |
+| `gpu-generated-cross-backend` | Compare generated WebGPU output against CPU reference. |
+| `gpu-cache-warmup` | Assert warmup/stable pipeline creation and module-count gates. |
+
+Until these are separate workflows, milestone PRs must run the equivalent
+focused Gradle tasks and paste the command/evidence into Linear or the PR.
+
 ## Correctness Evidence
 
 Each promoted family needs a clear reference:
@@ -43,6 +59,17 @@ Each promoted family needs a clear reference:
 | Blend mode | CPU blend reference with non-opaque source and destination. |
 | Runtime effect | registered CPU implementation and optional registered WGSL implementation. |
 | Geometry/Coverage handoff | `.upstream/specs/geometry-coverage/` oracle rules. |
+
+Initial falsifiable thresholds:
+
+| Metric | Initial value |
+|---|---|
+| Cross-backend channel delta for sRGB byte fixtures | max channel delta <= 1 for at least 99.5 percent of pixels, with no pixel above 3 unless the family-specific policy says otherwise. |
+| DeltaE family policy | Required before using DeltaE as the review metric; until then, use channel delta/PSNR/SSIM policies named by the test. |
+| Generated WGSL modules resident in PM demo scene | <= 16 unless a reviewed scene-specific bound is documented. |
+| Warmup before stable GPU measurement | >= 60 frames or documented 3-sigma stabilization. |
+| Steady-state pipeline creations | 0 over 120 consecutive frames. |
+| Vector default promotion speedup | >= 1.5x scalar on the named reference machine. |
 
 Thresholds must be versioned outside ad hoc assertions when a family graduates
 from pilot to migration candidate.
@@ -86,6 +113,7 @@ Generated GPU families require:
 | Compare | Execute old and new paths into comparable outputs and record diff. |
 | Gated | New path can run behind explicit flag or primitive/family gate. |
 | Default | New path is selected by default for the named family. |
+| Rollback | Default is revoked back to Gated or Compare with a Linear ticket, stable reason, and re-promotion criteria. |
 | Retired | Old handwritten/legacy path is removed or kept only as documented compatibility. |
 
 Default cutover is allowed only after correctness evidence, fallback tests, and
@@ -105,6 +133,32 @@ Retiring a handwritten or legacy path requires:
 
 If a compatibility path remains, it must be named in diagnostics and have a
 retirement criterion.
+
+Rollback is not a failure of the model. It is the required state when a latent
+driver, scene, or correctness issue appears after default promotion.
+
+## Golden Corpus
+
+Golden artifacts live under the owning module:
+
+```text
+<module>/src/test/resources/golden/<family>/<stable-id>.<ext>
+```
+
+Recommended extensions:
+
+- `.wgsl` for generated source;
+- `.json` for descriptors, reflection reports, pipeline keys, and dumps;
+- `.png` for visual outputs or diff images.
+
+Rebaseline rules:
+
+- rebaseline requires an explicit review note explaining why the golden changed;
+- generated WGSL goldens must be deterministic across OSes;
+- CI must fail on unexpected golden drift;
+- bulk updates should use a named Gradle task or documented `UPDATE_GOLDENS=1`
+  path, not manual copy/paste;
+- auto-merge is not allowed for PRs that change golden artifacts.
 
 ## PM Evidence
 
@@ -130,6 +184,25 @@ Good artifacts:
 - benchmark table;
 - cache telemetry snapshot;
 - fallback/refusal report.
+
+Example:
+
+```text
+Milestone: M4 - Generated solid rect WGSL
+Capability: WebGPU renders solid-rect SrcOver through parser-validated generated WGSL.
+Evidence:
+  - golden WGSL: gpu-raster/src/test/resources/golden/solid-rect/gpu.generated.solid-rect.srcover@v1.wgsl
+  - parser report: GeneratedSolidRectWgslTest
+  - cross-backend: GeneratedSolidRectMigrationTest, p99.5 channel delta = 0
+Commands:
+  - rtk ./gradlew :gpu-raster:test --tests '*GeneratedSolidRect*'
+Artifacts:
+  - generated WGSL dump
+  - pipeline key dump
+Known limitations: non-opaque destination coverage remains under BlendPlan M7.
+Next dependency: M5 uniform packer verification.
+Commit or PR: #1127
+```
 
 ## Milestone Acceptance
 

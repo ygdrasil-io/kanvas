@@ -252,6 +252,10 @@ Rules:
 - `PathCoverage.aa` affects backend strategy selection and may affect pipeline
   state after lowering.
 - `CoverageAtlas` is profile-driven only.
+- `CoveragePlan` is the long-lived handoff to paint. Direct `CoverageModel`
+  construction is transitional M0-M11 paint-pipeline scaffolding and should
+  remain isolated to tests or explicit compatibility shims once
+  Geometry/Coverage covers rect, path, glyph, image, and clip coverage.
 
 ## Diagnostic Reasons
 

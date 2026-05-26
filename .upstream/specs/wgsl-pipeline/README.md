@@ -38,6 +38,13 @@ Hard constraints:
 - Treat Java 25 Vector API code as an optional performance path, never as a
   correctness dependency.
 
+## Status Policy
+
+Specs start as `Draft`. A spec can move to `Accepted` only when the owning
+Linear milestone has merged implementation evidence, fallback behavior is
+asserted in tests or reports, and the PM evidence comment links the relevant
+commit or PR. Editorial fixes do not change status.
+
 ## Spec Index
 
 | Spec | Purpose |
@@ -141,3 +148,6 @@ not reopen them ad hoc:
   state axes to generated GPU keys.
 - `adr/0005-runtime-effects-are-registered.md`: keep runtime effects explicit
   and registered instead of compiling arbitrary SkSL.
+- `adr/0006-webgpu-device-thread-ownership.md`: keep WebGPU device, caches, and
+  telemetry updates on the render/device owner thread until a future ADR
+  introduces shared compilation.

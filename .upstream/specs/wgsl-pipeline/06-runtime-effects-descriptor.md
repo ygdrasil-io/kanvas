@@ -50,7 +50,9 @@ Rules:
 
 - comment and whitespace differences may normalize to the same source;
 - hash stability is test-covered;
-- duplicate registration behavior is explicit;
+- duplicate registration is an error in production;
+- tests may opt into override behavior only through an explicit test-only
+  registry option or helper;
 - misses produce a diagnostic that includes the canonical hash or stable id;
 - tests can clear registry state only through test-only helpers.
 
@@ -92,8 +94,10 @@ Each supported runtime effect entry must name:
 - tests or GMs exercising the effect;
 - fallback behavior for missing backends.
 
-The support matrix can live in code plus generated/tested reports, but Linear
-and PR evidence must point to it.
+The authoritative support matrix is the runtime-effect descriptor registry.
+That registry must expose a deterministic walker for generated reports and
+tests. A generated Markdown or JSON report can be committed for PM/readability,
+but it is derived evidence, not the source of truth.
 
 ## Non-Goals
 
@@ -110,3 +114,4 @@ and PR evidence must point to it.
 - WGSL implementation id, when present, has parser/reflection evidence.
 - CPU/GPU output comparison exists for the pilot effect when both backends are
   declared supported.
+- Duplicate registration fails by default and override behavior is test-only.

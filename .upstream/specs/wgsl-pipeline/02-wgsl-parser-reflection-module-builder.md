@@ -19,12 +19,15 @@ from `mavenLocal()`.
 
 Expected local dependency shape:
 
-- publish from `/Volumes/Cache/webgpu-ktypes/wgsl` with
-  `rtk ./gradlew --no-daemon publishToMavenLocal`;
 - artifacts include `io.ygdrasil:core`, `io.ygdrasil:parser`,
   `io.ygdrasil:generator`, and optional tooling artifacts;
 - snapshot version is recorded by the consuming ticket or Linear evidence
-  comment.
+  comment;
+- local publication HOWTOs live in developer-environment docs or Linear
+  comments, not in this checked-in spec.
+
+If the artifacts are not resolvable, parser-dependent tasks must fail with a
+diagnostic that names the missing coordinate and selected repository list.
 
 Parser dependency use must stay inside the smallest module boundary that needs
 it. Code outside that boundary should consume Kanvas-level descriptors and
@@ -161,6 +164,21 @@ the WGSL implementation id and the validation evidence.
 Arbitrary SkSL sources supplied to `SkRuntimeEffect` are not compiled into
 WGSL.
 
+## Parser Safety
+
+Current parser use is internal-source only: checked-in WGSL resources,
+generated modules, and registered runtime-effect WGSL implementations. Before
+accepting WGSL from external users or untrusted runtime inputs, a follow-up ADR
+must define:
+
+- maximum accepted source size;
+- parser timeout or cancellation behavior;
+- out-of-memory failure policy;
+- whether parsing runs in-process or in an isolated worker;
+- diagnostic behavior for parser denial-of-service safeguards.
+
+Until that ADR exists, parser entry points must reject untrusted WGSL inputs.
+
 ## Non-Goals
 
 - Do not accept arbitrary user WGSL as renderer code.
@@ -176,3 +194,4 @@ WGSL.
 - Each reflected packer has a packer-vs-reflection test.
 - Generated source is deterministic and covered by golden tests.
 - Parser and reflection diagnostics are visible in Linear or PR evidence.
+- Parser-dependent failures name the missing artifact or unsafe input class.

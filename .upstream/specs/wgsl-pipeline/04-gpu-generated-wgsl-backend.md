@@ -85,6 +85,32 @@ pipelines.
 Pipeline key serialization must be deterministic and independent of unordered
 map/set traversal.
 
+### PipelineKey Identity
+
+The canonical key preimage is the human-readable dump. The dump format is:
+
+```text
+pipeline.key v=1 layout=[axis=value,...] code=[axis=value,...] state=[axis=value,...]
+```
+
+Rules:
+
+- axes are grouped by axis class in the order `layout`, `code`, `state`;
+- axes within each group sort lexicographically by axis id;
+- values are normalized strings with no object identity, memory address, or
+  unordered collection traversal;
+- `UniformOnly` facts may appear in a separate diagnostic dump, but not in the
+  cache key preimage;
+- the cache key hash is `sha256(preimage)`, encoded lowercase hex;
+- debug dumps must include both preimage and hash;
+- the full hash is the authoritative key unless a future ADR accepts a
+  truncated form plus collision bucket policy.
+
+Collision policy: when two different preimages produce the same hash, the cache
+must treat that as a fatal diagnostic in debug/test builds and must fall back to
+a safe miss in production. A collision must not reuse an incompatible module or
+pipeline.
+
 ## Generated WGSL
 
 Generated modules must:
@@ -129,6 +155,22 @@ Telemetry must expose:
 Unbounded input domains require a budget or an explicit no-eviction
 justification with finite key count evidence.
 
+## Concurrency
+
+Initial WebGPU generated-pipeline work uses a single owner thread for
+`SkWebGpuDevice`, WebGPU handles, caches, and telemetry mutation.
+
+Rules:
+
+- shader module, pipeline, and resource caches are read and written on the
+  device owner thread;
+- telemetry counters are snapshot-based and do not need atomics while this
+  ownership rule holds;
+- any background pipeline build thread must hand immutable descriptors to the
+  device owner thread before touching WebGPU handles;
+- introducing shared mutable caches, atomics, or locks requires a follow-up ADR
+  and stress tests.
+
 ## Resource Lifecycle
 
 GPU resources must document ownership and reset behavior:
@@ -150,9 +192,12 @@ Promoted generated families require:
 - reflected uniform layout evidence;
 - deterministic `PipelineKey` dump;
 - no unexpected fallback reasons;
-- zero pipeline creation in stable repeated frames after warmup for the demo
+- at least 60 warmup frames before steady-state measurement unless the scene
+  provides a documented 3-sigma stabilization rule;
+- zero pipeline creations over 120 consecutive steady-state frames for the demo
   scene, or an explicit accepted exception;
-- bounded shader module count for the scene.
+- at most 16 resident generated WGSL modules for a PM demo scene unless the
+  scene names a higher finite bound and review accepts the cache pressure.
 
 ## Non-Goals
 
@@ -170,3 +215,4 @@ Promoted generated families require:
 - `PipelineKey` axes are classified before use.
 - Cache telemetry is captured in tests or PM evidence.
 - Handwritten fallback retirement follows `07-validation-performance-and-migration.md`.
+- `PipelineKey` dumps include both canonical preimage and `sha256` hash.

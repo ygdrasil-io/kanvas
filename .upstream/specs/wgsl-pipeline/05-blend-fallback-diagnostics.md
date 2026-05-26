@@ -102,6 +102,9 @@ Developer-facing dumps should include:
 PM-facing evidence can summarize these fields, but implementation review needs
 the raw diagnostic artifact or test assertion.
 
+Specs 01, 03, and 04 define local dump producers. This section is the canonical
+checklist for what an end-to-end review artifact must be able to collect.
+
 ## Unsupported Behavior
 
 Unsupported generated paths must prefer correctness over opportunistic GPU

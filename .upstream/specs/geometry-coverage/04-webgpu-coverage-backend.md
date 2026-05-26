@@ -93,6 +93,10 @@ Uniform-only axes:
 - transform values;
 - cache lookup coordinates.
 
+The key identity, hash, collision, and dump policy follows
+`.upstream/specs/wgsl-pipeline/04-gpu-generated-wgsl-backend.md#pipelinekey-identity`
+when coverage axes become production key axes.
+
 ## WGSL Rules
 
 - Generated WGSL must come from deterministic builders and pass parser
@@ -133,6 +137,19 @@ Required before enabling persistent atlas:
 - CPU/GPU synchronization policy;
 - visual tests proving no stale masks.
 
+## Concurrency
+
+Initial WebGPU coverage work follows the same single owner-thread model as the
+generated WGSL backend:
+
+- `SkWebGpuDevice`, WebGPU handles, coverage caches, and telemetry mutation are
+  owned by the render/device thread;
+- host-side geometry lowering may prepare immutable descriptors off-thread;
+- WebGPU handle creation, cache mutation, and telemetry updates happen on the
+  owner thread;
+- shared mutable caches, atomics, or locks require a follow-up ADR and stress
+  tests.
+
 ## Diagnostics
 
 Suggested WebGPU diagnostics use the shared reason code plus `backend=GPU`.
@@ -154,6 +171,15 @@ Required:
 - pipeline key dump for strategy selection;
 - warm-frame pipeline-cache check;
 - fallback reason tests for unsupported coverage.
+
+Initial measurable gates:
+
+- at least 60 warmup frames before steady-state measurement unless the scene
+  provides a documented 3-sigma stabilization rule;
+- zero pipeline creations over 120 consecutive steady-state frames for a PM
+  demo scene, or an explicit accepted exception;
+- at most 16 resident generated/coverage WGSL modules for a PM demo scene
+  unless a reviewed scene-specific bound is documented.
 
 ## Acceptance Criteria
 

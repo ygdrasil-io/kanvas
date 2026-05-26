@@ -21,9 +21,14 @@ Only layout, code, and pipeline-state axes belong in generated GPU keys by
 default. Uniform-only values stay in uniforms unless profiling justifies a
 focused exception.
 
+The canonical key preimage is the versioned human-readable dump. It is hashed
+with SHA-256 for cache lookup; debug artifacts keep both dump and hash.
+
 ## Consequences
 
 - Pipeline cache behavior is measurable.
 - Uniform changes do not cause shader-module explosions.
 - New axes require review and tests.
 - Diagnostics can explain why a fact is or is not part of the key.
+- Collision handling is explicit: incompatible preimages with the same hash are
+  fatal in debug/test builds and safe misses in production.
