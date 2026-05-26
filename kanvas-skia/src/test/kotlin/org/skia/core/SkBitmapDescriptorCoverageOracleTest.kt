@@ -34,7 +34,10 @@ class SkBitmapDescriptorCoverageOracleTest {
             assertEquals("AnalyticRect(2.0,1.0,7.0,6.0,aa=false)", diagnostics.coveragePlan)
             assertEquals(null, diagnostics.fallbackReason)
             assertEquals(25, diagnostics.touchedPixels)
+            assertEquals("Default", diagnostics.mode)
             assertTrue(diagnostics.dump().contains("fallbackReason=none"))
+            assertTrue(diagnostics.dump().contains("backend=CPU"))
+            assertTrue(diagnostics.dump().contains("drawKind=axis-aligned-filled-rect"))
         }
 
     @Test
@@ -47,8 +50,11 @@ class SkBitmapDescriptorCoverageOracleTest {
             val diagnostics = device.descriptorCoverageDiagnosticsForTests()
             assertEquals("kanvas-skia.current.draw-rect", diagnostics.selectedRoute)
             assertEquals("cpu.descriptor.coverage-plan.solid-rect", diagnostics.compatibilityFallbackRoute)
-            assertEquals("descriptor rect disabled via -Dkanvas.cpu.descriptorRect.enabled=false", diagnostics.fallbackReason)
+            assertEquals("coverage.cpu-descriptor-rect-disabled", diagnostics.fallbackReason)
             assertEquals(0, diagnostics.touchedPixels)
+            assertEquals("Rollback", diagnostics.mode)
+            assertTrue(diagnostics.dump().contains("mode=Rollback"))
+            assertTrue(diagnostics.dump().contains("fallbackRoute=cpu.descriptor.coverage-plan.solid-rect"))
         }
 
     @Test
@@ -64,7 +70,8 @@ class SkBitmapDescriptorCoverageOracleTest {
 
             val diagnostics = device.descriptorCoverageDiagnosticsForTests()
             assertEquals("kanvas-skia.current.draw-rect", diagnostics.selectedRoute)
-            assertEquals("descriptor rect supports fill style only", diagnostics.fallbackReason)
+            assertEquals("coverage.cpu-descriptor-fill-style-only", diagnostics.fallbackReason)
+            assertEquals("Fallback", diagnostics.mode)
             assertFalse(bitmap.pixels.all { it == SK_ColorTRANSPARENT })
         }
 
