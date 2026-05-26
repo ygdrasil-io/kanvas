@@ -11,7 +11,7 @@ class KanvasPipelineIRTest {
 
         assertEquals(dump1, dump2)
         assertEquals(
-            """
+            """ 2
             KanvasPipelineIR(v1)
             00 SeedDeviceCoords
             01 ConstantColor(1.0,0.0,0.0,1.0)
