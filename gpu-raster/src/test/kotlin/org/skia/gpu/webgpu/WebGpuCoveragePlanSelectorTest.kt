@@ -71,7 +71,7 @@ class WebGpuCoveragePlanSelectorTest {
 
         assertEquals(WebGpuCoverageStrategy.AnalyticRRect, selection.strategy)
         assertEquals("webgpu.coverage.analytic-rrect", selection.routeIdentifier)
-        assertEquals("coverageKind=analyticRRect:Code", selection.pipelineKeyDump())
+        assertTrue(selection.pipelineKeyDump().contains("code=[coverageKind=analyticRRect]"))
         assertFalse(selection.pipelineKeyDump().contains("14.0"))
     }
 
@@ -134,7 +134,9 @@ class WebGpuCoveragePlanSelectorTest {
         assertEquals(WebGpuCoverageStrategy.CpuPreparedConvexFan, selection.strategy)
         assertEquals("webgpu.coverage.path-convex-fan", selection.routeIdentifier)
         assertEquals(
-            "coverageKind=pathConvexFan:Code|pathFillRule=winding:PipelineState|topology=triangleList:PipelineState",
+                "preimage=pipeline.key v=1 layout=[] code=[coverageKind=pathConvexFan] " +
+                "state=[pathFillRule=winding,topology=triangleList];" +
+                "hash=b40ccbe42d1f6c656423594d71289cb0116a7f9f6300bb457422796f26cde5f0",
             selection.pipelineKeyDump(),
         )
         assertTrue(selection.dump().contains("coverage=PathCoverage(fillType=Winding,aa=true,inverse=false)"))
@@ -163,7 +165,7 @@ class WebGpuCoveragePlanSelectorTest {
         assertEquals(WebGpuCoverageStrategy.StencilCover, inverse.strategy)
         assertEquals(WebGpuCoverageStrategy.StencilCover, multiContour.strategy)
         assertEquals("webgpu.coverage.path-stencil-cover", inverse.routeIdentifier)
-        assertTrue(inverse.pipelineKeyDump().contains("pathFillRule=evenOdd:PipelineState"))
+        assertTrue(inverse.pipelineKeyDump().contains("state=[pathFillRule=evenOdd,topology=triangleList]"))
     }
 
     @Test
@@ -182,7 +184,7 @@ class WebGpuCoveragePlanSelectorTest {
         assertEquals(StandardCoverageReason.EdgeCountExceeded, selection.diagnostic?.reason)
         assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
         assertTrue(selection.dump().contains("coverage.edge-count-exceeded"))
-        assertTrue(selection.pipelineKeyDump().contains("coverageKind=pathCoverageUnsupported:Code"))
+        assertTrue(selection.pipelineKeyDump().contains("code=[coverageKind=pathCoverageUnsupported]"))
     }
 
     @Test
@@ -200,7 +202,7 @@ class WebGpuCoveragePlanSelectorTest {
 
         assertEquals(WebGpuCoverageStrategy.CoverageMaskOrAtlasFallback, selection.strategy)
         assertEquals("webgpu.coverage.path-mask-or-atlas", selection.routeIdentifier)
-        assertTrue(selection.pipelineKeyDump().contains("coverageKind=pathMaskOrAtlas:Code"))
+        assertTrue(selection.pipelineKeyDump().contains("code=[coverageKind=pathMaskOrAtlas]"))
         assertTrue(selection.dump().contains("diagnostic=none"))
     }
 
@@ -218,7 +220,13 @@ class WebGpuCoveragePlanSelectorTest {
                         "pathFillRule" to "winding",
                     ),
                 )
-                assertEquals("blendMode=kSrcOver|coverageKind=analyticRect|generatedPath=true|pathFillRule=winding", key)
+                assertTrue(
+                    key.contains(
+                        "preimage=pipeline.key v=1 layout=[] code=[coverageKind=analyticRect,generatedPath=true] " +
+                            "state=[blendMode=kSrcOver,pathFillRule=winding]",
+                    ),
+                )
+                assertTrue(key.contains("hash="))
             }
         }
     }
@@ -331,7 +339,7 @@ class WebGpuCoveragePlanSelectorTest {
                 canvas.drawRect(SkRect.MakeLTRB(2f, 1f, 7f, 6f), paint)
                 val rect = device.coverageSelectionDiagnosticsForTests()
                 assertEquals("webgpu.coverage.analytic-rect", rect?.routeIdentifier)
-                assertEquals("coverageKind=analyticRect:Code", rect?.pipelineKeyDump)
+                assertTrue(rect?.pipelineKeyDump?.contains("code=[coverageKind=analyticRect]") == true)
                 assertTrue(rect?.selectionDump?.contains("diagnostic=none") == true)
                 assertTrue(rect?.productionDump?.contains("mode=Default") == true)
                 assertTrue(rect?.productionDump?.contains("backend=GPU") == true)
@@ -340,18 +348,18 @@ class WebGpuCoveragePlanSelectorTest {
                 canvas.drawRRect(SkRRect.MakeRectXY(SkRect.MakeLTRB(2f, 2f, 14f, 14f), 4f, 4f), paint)
                 val rrect = device.coverageSelectionDiagnosticsForTests()
                 assertEquals("webgpu.coverage.analytic-rrect", rrect?.routeIdentifier)
-                assertEquals("coverageKind=analyticRRect:Code", rrect?.pipelineKeyDump)
+                assertTrue(rrect?.pipelineKeyDump?.contains("code=[coverageKind=analyticRRect]") == true)
 
                 canvas.drawPath(convexPath(), paint)
                 val path = device.coverageSelectionDiagnosticsForTests()
                 assertEquals("webgpu.coverage.path-convex-fan", path?.routeIdentifier)
-                assertTrue(path?.pipelineKeyDump?.contains("coverageKind=pathConvexFan:Code") == true)
+                assertTrue(path?.pipelineKeyDump?.contains("code=[coverageKind=pathConvexFan]") == true)
                 assertFalse(path?.pipelineKeyDump?.contains("3.0") == true)
 
                 canvas.drawPath(concavePath(), paint)
                 val concave = device.coverageSelectionDiagnosticsForTests()
                 assertEquals("webgpu.coverage.path-stencil-cover", concave?.routeIdentifier)
-                assertTrue(concave?.pipelineKeyDump?.contains("coverageKind=pathStencilCover:Code") == true)
+                assertTrue(concave?.pipelineKeyDump?.contains("code=[coverageKind=pathStencilCover]") == true)
                 assertTrue(concave?.selectionDump?.contains("diagnostic=none") == true)
             }
         }
