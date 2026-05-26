@@ -33,6 +33,8 @@ Must read:
 - CLAUDE.md
 - .upstream/target/high-performance-wgsl-pipeline-target.md
 - .upstream/target/linear-agent-methodology.md
+- .upstream/specs/wgsl-pipeline/README.md pour M0-M11 pre-Geometry
+- .upstream/specs/geometry-coverage/README.md pour M12+ Geometry/Coverage
 - Le ticket Linear sélectionné
 - Son parent epic Linear
 - Les GitHub issues/PRs liées dans Linear

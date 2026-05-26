@@ -19,6 +19,21 @@ flowchart TD
     perf --> pm["PM demo evidence"]
 ```
 
+## CI Gates
+
+The intended CI gates are:
+
+| Gate | Purpose |
+|---|---|
+| `geometry-contracts` | Validate `GeometryPlan`, `CoveragePlan`, transform, clip, and reason-code contracts. |
+| `cpu-coverage-oracle` | Compare descriptor-driven coverage against `:kanvas-skia`. |
+| `webgpu-coverage-cross-backend` | Compare enabled WebGPU strategies against CPU reference. |
+| `wgsl-coverage-validate` | Parse touched/generated coverage WGSL and verify reflected packers. |
+| `geometry-cache-warmup` | Assert warmup/stable pipeline creation and module-count gates. |
+
+Until these are separate workflows, milestone PRs must run the equivalent
+focused Gradle tasks and paste the command/evidence into Linear or the PR.
+
 ## Contract Tests
 
 Required:
@@ -70,6 +85,17 @@ Each test records:
 - similarity/threshold result;
 - artifact paths when the result is near or below floor.
 
+Initial falsifiable thresholds:
+
+| Metric | Initial value |
+|---|---|
+| CPU descriptor vs `:kanvas-skia` integer fixtures | exact pixel match unless the primitive family names a tolerance. |
+| CPU/WebGPU sRGB byte fixtures | max channel delta <= 1 for at least 99.5 percent of pixels, with no pixel above 3 unless the family-specific policy says otherwise. |
+| DeltaE family policy | Required before using DeltaE as the review metric; until then, use channel delta/PSNR/SSIM policies named by the test. |
+| Warmup before stable GPU measurement | >= 60 frames or documented 3-sigma stabilization. |
+| Steady-state pipeline creations | 0 over 120 consecutive frames for the selected PM scene. |
+| Java 25 Vector default promotion | >= 1.5x scalar on the named reference machine. |
+
 ## WGSL Validation
 
 When a coverage strategy touches WGSL:
@@ -97,6 +123,25 @@ Required counters:
 - WebGPU pipeline cache hit/miss;
 - uniform upload bytes.
 
+## Golden Corpus
+
+Golden artifacts live under the owning module:
+
+```text
+<module>/src/test/resources/golden/<family>/<stable-id>.<ext>
+```
+
+Recommended extensions:
+
+- `.json` for descriptors, reflection reports, coverage dumps, and pipeline
+  keys;
+- `.png` for visual outputs or diff images;
+- `.wgsl` for generated coverage WGSL.
+
+Rebaseline requires an explicit review note explaining why the golden changed.
+CI must fail on unexpected golden drift. Bulk updates should use a named Gradle
+task or documented `UPDATE_GOLDENS=1` path, not manual copy/paste.
+
 ## Benchmark Scenes
 
 Initial scenes:
@@ -123,6 +168,23 @@ Each milestone should produce one PM-readable artifact:
 - fallback report;
 - screenshot of geometry-heavy scene;
 - link to PR/commit/test run.
+
+Example:
+
+```text
+Milestone: M15 - WebGPU analytic rect/rrect convergence
+Capability: WebGPU selects analytic rect/rrect coverage from CoveragePlan.
+Evidence:
+  - selector dump: WebGpuCoveragePlanSelectorTest
+  - cross-backend: WebGpuCoveragePlanSelectorTest, p99.5 channel delta <= 1
+Commands:
+  - rtk ./gradlew :gpu-raster:test --tests org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest
+Artifacts:
+  - coverage selection dump
+Known limitations: production draw-route wiring remains a follow-up if not in scope.
+Next dependency: M16 CPU PathCoverage oracle.
+Commit or PR: <link>
+```
 
 ## Definition Of Done
 

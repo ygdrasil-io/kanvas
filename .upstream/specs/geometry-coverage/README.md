@@ -25,6 +25,13 @@ Hard constraints:
 - Keep `:kanvas-skia` CPU coverage as the behavior oracle.
 - Treat legacy `:kanvas` as historical/porting evidence only.
 
+## Status Policy
+
+Specs start as `Draft`. A spec can move to `Accepted` only when the owning
+Geometry/Coverage milestone has merged implementation evidence, fallback
+behavior is asserted in tests or reports, and the PM evidence comment links the
+relevant commit or PR. Editorial fixes do not change status.
+
 ## Spec Index
 
 | Spec | Purpose |

@@ -27,6 +27,12 @@ as the target design for the high-performance WGSL/WebGPU pipeline, including
 the shared Kanvas pipeline IR, WGSL parser/IR module builder, CPU scalar/vector
 execution, and GPU generated-shader direction.
 
+For pre-Geometry WGSL paint-pipeline implementation planning, use
+[.upstream/specs/wgsl-pipeline/README.md](.upstream/specs/wgsl-pipeline/README.md)
+as the entry point for PipelineIR, WGSL parser/reflection/module-builder,
+uniform packers, CPU scalar/vector execution, generated WGSL, BlendPlan,
+runtime-effect descriptors, validation, migration, and ADRs.
+
 For Geometry/Coverage implementation planning, use
 [.upstream/specs/geometry-coverage/README.md](.upstream/specs/geometry-coverage/README.md)
 as the entry point for shape lowering, clip lowering, coverage plans, CPU
