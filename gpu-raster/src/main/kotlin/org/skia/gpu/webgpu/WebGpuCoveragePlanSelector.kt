@@ -49,8 +49,7 @@ public data class WebGpuCoverageSelection(
     val diagnostic: WebGpuCoverageDiagnostic?,
 ) {
     public fun pipelineKeyDump(): String =
-        pipelineAxes.sortedBy { it.axis }
-            .joinToString("|") { "${it.axis}=${it.value}:${it.axisClass}" }
+        canonicalPipelineKeyIdentity(pipelineAxes).dump()
 
     public fun dump(): String = buildString {
         appendLine("WebGpuCoverageSelection(v1)")
