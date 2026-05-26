@@ -181,7 +181,19 @@ A ticket is ready for an implementation subagent when it has:
 - dependency-gated items called out instead of hidden in scope;
 - no unresolved design decision that would change the module boundary.
 
-If any of these are missing, use the architect agent before implementation.
+If any of these are missing, the architect agent should first decide whether
+the missing information is inferable from the target document, parent epic,
+completed previous milestones, or linked GitHub context. If it is inferable,
+update the Linear issue or add a Linear comment with the missing non-goals,
+dependencies, blockers, and acceptance clarification, then continue execution.
+
+Stop and create a readiness blocker only when:
+
+- a required dependency is not completed;
+- an acceptance criterion is contradictory;
+- a required external artifact is missing;
+- the implementation boundary cannot be inferred safely;
+- the missing information changes architecture or product scope.
 
 ## Definition Of Done
 
