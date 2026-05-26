@@ -83,6 +83,29 @@ Workflow obligatoire:
 - commenter Linear avec le blocage précis;
 - répondre avec l’état exact.
 
+Gates obligatoires :
+- Ne jamais marquer un ticket Linear en Done tant que la PR n’est pas confirmée mergée.
+- Avant tout update “Done/merged” dans Linear, vérifier explicitement via GitHub:
+    - `state == MERGED`
+    - `mergedAt` non nul
+    - `mergeCommit` non nul
+- Si la tentative de merge échoue (policy repo, conflit, droits, checks), ne pas marquer Done.
+- Si “no checks reported”, le signaler explicitement comme état CI et appliquer la policy repo en vigueur.
+- En cas d’échec local non-scope (ex: suite de tests baseline cassée), documenter clairement “hors scope” + risque résiduel dans Linear et dans la réponse finale.
+
+Evidence gate obligatoire :
+- Produire et publier en fin d’exécution un bloc preuve structuré:
+    - Linear ticket ID
+    - Milestone
+    - PR URL
+    - SHA commit(s) branche
+    - SHA merge commit
+    - mergedAt (date/heure)
+    - review status
+    - CI status (ou “no checks reported”)
+    - commandes de validation exécutées + résultat
+    - risques/blocages restants
+
 Autorisation explicite:
 - Tu peux créer une branche.
 - Tu peux pousser la branche.
