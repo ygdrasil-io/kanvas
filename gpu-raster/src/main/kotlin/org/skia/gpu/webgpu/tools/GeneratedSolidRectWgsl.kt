@@ -35,7 +35,16 @@ data class WgslValidationResult(
 object GeneratedSolidRectWgsl {
     const val FEATURE_FLAG = "kanvas.gpu.generatedSolidRect.enabled"
 
-    fun generateDeterministic(): String = WgslModule.writeString(buildModule())
+    fun generateDeterministic(): String =
+        normalizeWgpuCompatibleWgsl(WgslModule.writeString(buildModule()))
+
+    // The current WGSL writer emits legacy-style casts like `(f32)(x)`;
+    // it also omits the fragment return location. Normalize until the
+    // upstream writer produces WebGPU-native entry-point syntax directly.
+    private fun normalizeWgpuCompatibleWgsl(source: String): String =
+        source
+            .replace("(f32)(", "f32(")
+            .replace("fn fs_main() -> vec4<f32>", "fn fs_main() -> @location(0) vec4<f32>")
 
     private fun buildModule(): Module {
         val module = Module()
@@ -90,6 +99,7 @@ object GeneratedSolidRectWgsl {
             name = "fs_main",
             function = fragmentHandle,
             stage = ShaderStage.Fragment,
+            bindings = listOf(BindingAttribute.Location(0)),
         )
         // We keep the generated path for fragment-only solid output in this pilot.
         return module
