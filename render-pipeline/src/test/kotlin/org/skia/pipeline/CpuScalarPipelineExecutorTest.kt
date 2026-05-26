@@ -19,6 +19,24 @@ class CpuScalarPipelineExecutorTest {
     }
 
     @Test
+    fun autoVectorModeUsesScalarWhenBenchmarkGateIsRejected() {
+        val result = assertIs<CpuExecutionResult.Success>(
+            CpuScalarPipelineExecutor.execute(
+                KanvasPipelineIR.demoSolidRectIr(Rgba(0.2f, 0.4f, 0.8f, 1f)),
+                width = 16,
+                height = 8,
+            ),
+        )
+
+        assertEquals("cpu.scalar.solid_src_over_clear", result.kernelId)
+        assertEquals(
+            "Vector API rejected by benchmark gate: " +
+                "decision=rejected speedup=0.863 requiredSpeedup=1.500 gate=solid_src_over_clear/java25/reference-v1",
+            result.diagnostics.single(),
+        )
+    }
+
+    @Test
     fun linearGradientPipelineMatchesLegacyPath() {
         val payload = LinearGradientPayload(
             start = Point(0f, 0f),
@@ -75,10 +93,41 @@ class CpuScalarPipelineExecutorTest {
 
         assertContentEquals(scalar.pixels.argb8888, vector.pixels.argb8888)
         if (vector.kernelId == "java25.vector.solid_src_over_clear") {
-            assertTrue(vector.diagnostics.any { it.startsWith("Vector API selected") })
+            assertTrue(vector.diagnostics.any { it.startsWith("Vector API force-selected") })
         } else {
             assertEquals("cpu.scalar.solid_src_over_clear", vector.kernelId)
             assertTrue(vector.diagnostics.any { it.startsWith("Vector API unavailable") })
+        }
+    }
+
+    @Test
+    fun autoVectorModeCanSelectVectorOnlyWithAcceptedBenchmarkGate() {
+        val previous = System.getProperty(CpuVectorSolidRectKernel.ACCEPTED_GATE_PROPERTY)
+        System.setProperty(
+            CpuVectorSolidRectKernel.ACCEPTED_GATE_PROPERTY,
+            CpuVectorSolidRectKernel.ACCEPTED_GATE_ID,
+        )
+        try {
+            val result = assertIs<CpuExecutionResult.Success>(
+                CpuScalarPipelineExecutor.execute(
+                    KanvasPipelineIR.demoSolidRectIr(Rgba(0.1f, 0.7f, 0.3f, 1f)),
+                    width = 33,
+                    height = 5,
+                ),
+            )
+
+            if (result.kernelId == "java25.vector.solid_src_over_clear") {
+                assertTrue(result.diagnostics.any { it.startsWith("Vector API selected") })
+            } else {
+                assertEquals("cpu.scalar.solid_src_over_clear", result.kernelId)
+                assertTrue(result.diagnostics.any { it.startsWith("Vector API unavailable") })
+            }
+        } finally {
+            if (previous == null) {
+                System.clearProperty(CpuVectorSolidRectKernel.ACCEPTED_GATE_PROPERTY)
+            } else {
+                System.setProperty(CpuVectorSolidRectKernel.ACCEPTED_GATE_PROPERTY, previous)
+            }
         }
     }
 
