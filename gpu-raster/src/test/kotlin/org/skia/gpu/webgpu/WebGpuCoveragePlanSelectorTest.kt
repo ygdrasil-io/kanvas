@@ -134,9 +134,10 @@ class WebGpuCoveragePlanSelectorTest {
         assertEquals(WebGpuCoverageStrategy.CpuPreparedConvexFan, selection.strategy)
         assertEquals("webgpu.coverage.path-convex-fan", selection.routeIdentifier)
         assertEquals(
-                "preimage=pipeline.key v=1 layout=[] code=[coverageKind=pathConvexFan] " +
+            "preimage=pipeline.key v=1 layout=[] code=[coverageKind=pathConvexFan] " +
                 "state=[pathFillRule=winding,topology=triangleList];" +
-                "hash=b40ccbe42d1f6c656423594d71289cb0116a7f9f6300bb457422796f26cde5f0",
+                "hash=b40ccbe42d1f6c656423594d71289cb0116a7f9f6300bb457422796f26cde5f0;" +
+                "uniformFacts=[]",
             selection.pipelineKeyDump(),
         )
         assertTrue(selection.dump().contains("coverage=PathCoverage(fillType=Winding,aa=true,inverse=false)"))
