@@ -324,7 +324,7 @@ public class SkWebGpuDevice(
 
     private fun classifyPipelineAxis(axis: String): PipelineKeyAxisClass = when (axis) {
         "shaderFamily", "entryPoint", "generatedPath", "coverageKind" -> PipelineKeyAxisClass.Code
-        "blendMode", "colorFormat", "topology", "sampleCount" -> PipelineKeyAxisClass.PipelineState
+        "blendMode", "colorFormat", "pathFillRule", "topology", "sampleCount" -> PipelineKeyAxisClass.PipelineState
         "tileModeX", "tileModeY", "samplerFilter" -> PipelineKeyAxisClass.Layout
         "uniformSchemaVersion" -> PipelineKeyAxisClass.UniformOnly
         else -> throw IllegalArgumentException("Unknown PipelineKey axis: $axis")

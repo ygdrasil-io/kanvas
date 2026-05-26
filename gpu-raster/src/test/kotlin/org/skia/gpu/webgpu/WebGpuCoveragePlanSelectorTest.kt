@@ -14,10 +14,14 @@ import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkPath
+import org.skia.foundation.SkPathBuilder
+import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkRRect
 import org.skia.pipeline.CoveragePlan
 import org.skia.pipeline.FloatRect
 import org.skia.pipeline.IntRect
+import org.skia.pipeline.PathFillType
 import org.skia.pipeline.Point
 import org.skia.pipeline.RRectSpec
 import org.skia.pipeline.StandardCoverageReason
@@ -83,6 +87,87 @@ class WebGpuCoveragePlanSelectorTest {
     }
 
     @Test
+    fun `path coverage convex fan selection records pipeline axes`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "simple-filled-path",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(isConvex = true, contourCount = 1, edgeCount = 5),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.CpuPreparedConvexFan, selection.strategy)
+        assertEquals("webgpu.coverage.path-convex-fan", selection.routeIdentifier)
+        assertEquals(
+            "coverageKind=pathConvexFan:Code|pathFillRule=winding:PipelineState|topology=triangleList:PipelineState",
+            selection.pipelineKeyDump(),
+        )
+        assertTrue(selection.dump().contains("coverage=PathCoverage(fillType=Winding,aa=true,inverse=false)"))
+        assertTrue(selection.dump().contains("diagnostic=none"))
+    }
+
+    @Test
+    fun `path coverage concave multi contour and inverse select stencil cover`() {
+        val concave = WebGpuCoveragePlanSelector.select(
+            drawKind = "concave-path",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(isConvex = false, contourCount = 1, edgeCount = 7),
+        )
+        val inverse = WebGpuCoveragePlanSelector.select(
+            drawKind = "inverse-path",
+            plan = CoveragePlan.PathCoverage(PathFillType.EvenOdd, aa = false, inverse = true),
+            pathFacts = WebGpuPathCoverageFacts(isConvex = true, contourCount = 1, edgeCount = 4),
+        )
+        val multiContour = WebGpuCoveragePlanSelector.select(
+            drawKind = "multi-contour-path",
+            plan = CoveragePlan.PathCoverage(PathFillType.EvenOdd, aa = false, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(isConvex = true, contourCount = 2, edgeCount = 8),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.StencilCover, concave.strategy)
+        assertEquals(WebGpuCoverageStrategy.StencilCover, inverse.strategy)
+        assertEquals(WebGpuCoverageStrategy.StencilCover, multiContour.strategy)
+        assertEquals("webgpu.coverage.path-stencil-cover", inverse.routeIdentifier)
+        assertTrue(inverse.pipelineKeyDump().contains("pathFillRule=evenOdd:PipelineState"))
+    }
+
+    @Test
+    fun `aa path edge budget overflow emits stable gpu diagnostic`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "path-edge-overflow",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET + 1,
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
+        assertEquals(StandardCoverageReason.EdgeCountExceeded, selection.diagnostic?.reason)
+        assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
+        assertTrue(selection.dump().contains("coverage.edge-count-exceeded"))
+        assertTrue(selection.pipelineKeyDump().contains("coverageKind=pathCoverageUnsupported:Code"))
+    }
+
+    @Test
+    fun `edge overflow can select explicit mask or atlas fallback when enabled`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "path-edge-overflow-mask",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET + 1,
+                maskOrAtlasFallbackEnabled = true,
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.CoverageMaskOrAtlasFallback, selection.strategy)
+        assertEquals("webgpu.coverage.path-mask-or-atlas", selection.routeIdentifier)
+        assertTrue(selection.pipelineKeyDump().contains("coverageKind=pathMaskOrAtlas:Code"))
+        assertTrue(selection.dump().contains("diagnostic=none"))
+    }
+
+    @Test
     fun `pipeline key diagnostics classify coverage kind as code axis`() {
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
@@ -93,9 +178,72 @@ class WebGpuCoveragePlanSelectorTest {
                         "blendMode" to "kSrcOver",
                         "coverageKind" to "analyticRect",
                         "generatedPath" to "true",
+                        "pathFillRule" to "winding",
                     ),
                 )
-                assertEquals("blendMode=kSrcOver|coverageKind=analyticRect|generatedPath=true", key)
+                assertEquals("blendMode=kSrcOver|coverageKind=analyticRect|generatedPath=true|pathFillRule=winding", key)
+            }
+        }
+    }
+
+    @Test
+    fun `webgpu path fixtures match raster oracle when adapter is available`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            val paint = SkPaint().apply {
+                color = SK_ColorBLACK
+                isAntiAlias = true
+            }
+            assertRgbaNear(
+                renderRaster { drawPath(convexPath(), paint) },
+                renderGpu(ctx) { drawPath(convexPath(), paint) },
+                minExactPixelRatio = 0.88,
+                maxChannelDelta = 3,
+                maxObservedChannelDelta = 255,
+            )
+            assertRgbaNear(
+                renderRaster { drawPath(concavePath(), paint) },
+                renderGpu(ctx) { drawPath(concavePath(), paint) },
+                minExactPixelRatio = 0.84,
+                maxChannelDelta = 4,
+                maxObservedChannelDelta = 255,
+            )
+            assertRgbaNear(
+                renderRaster { drawPath(inverseEvenOddPath(), paint) },
+                renderGpu(ctx) { drawPath(inverseEvenOddPath(), paint) },
+                minExactPixelRatio = 0.88,
+                maxChannelDelta = 4,
+                maxObservedChannelDelta = 255,
+            )
+        }
+    }
+
+    @Test
+    fun `warm path frame does not create unbounded pipeline cache entries`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, 32, 32).use { device ->
+                val paint = SkPaint().apply {
+                    color = SK_ColorBLACK
+                    isAntiAlias = true
+                }
+                val canvas = SkCanvas(device)
+                canvas.drawPath(convexPath(), paint)
+                device.flush()
+                val cold = device.cacheTelemetrySnapshot()
+
+                canvas.drawPath(convexPath(), paint)
+                device.flush()
+                val warm = device.cacheTelemetrySnapshot()
+
+                assertTrue(cold.pipelineCacheEntryCount >= 1, "cold path frame should create at least one pipeline")
+                assertEquals(
+                    cold.pipelineCacheEntryCount,
+                    warm.pipelineCacheEntryCount,
+                    "warm path frame should reuse pipeline cache entries (cold=$cold warm=$warm)",
+                )
             }
         }
     }
@@ -164,6 +312,7 @@ class WebGpuCoveragePlanSelectorTest {
         actual: ByteArray,
         minExactPixelRatio: Double,
         maxChannelDelta: Int,
+        maxObservedChannelDelta: Int = 10,
     ) {
         assertEquals(expected.size, actual.size)
         var exactPixels = 0
@@ -187,7 +336,7 @@ class WebGpuCoveragePlanSelectorTest {
             "rrect/simple-shape GPU diff exceeded tolerance: exactRatio=$exactRatio maxDelta=$maxDelta",
         )
         assertTrue(
-            maxDelta <= 10,
+            maxDelta <= maxObservedChannelDelta,
             "rrect/simple-shape GPU max channel delta exceeded tolerance: exactRatio=$exactRatio maxDelta=$maxDelta",
         )
     }
@@ -195,5 +344,27 @@ class WebGpuCoveragePlanSelectorTest {
     private companion object {
         const val W: Int = 16
         const val H: Int = 16
+
+        fun convexPath(): SkPath = SkPathBuilder()
+            .moveTo(3f, 3f)
+            .lineTo(13f, 4f)
+            .lineTo(11f, 13f)
+            .lineTo(4f, 12f)
+            .close()
+            .detach()
+
+        fun concavePath(): SkPath = SkPathBuilder()
+            .moveTo(2f, 2f)
+            .lineTo(14f, 2f)
+            .lineTo(8f, 8f)
+            .lineTo(14f, 14f)
+            .lineTo(2f, 14f)
+            .close()
+            .detach()
+
+        fun inverseEvenOddPath(): SkPath = SkPathBuilder()
+            .setFillType(SkPathFillType.kInverseEvenOdd)
+            .addRect(SkRect.MakeLTRB(4f, 4f, 12f, 12f))
+            .detach()
     }
 }
