@@ -13,6 +13,7 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
+    implementation(project(":render-pipeline"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
 
     // :kanvas-skia/src/main has NO dependency on :cpu-raster (architecture
@@ -21,7 +22,6 @@ dependencies {
     // diagnostic tests). testImplementation only affects the test classpath ;
     // the main JAR stays raster-free.
     testImplementation(project(":cpu-raster"))
-    testImplementation(project(":render-pipeline"))
     testImplementation(project(":codec-core"))
     testImplementation(project(":codec-image-generator"))
     testImplementation(project(":codec-webp-kotlin"))

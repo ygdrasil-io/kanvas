@@ -1,10 +1,13 @@
 package org.skia.core
 
 import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorTRANSPARENT
 import org.graphiks.math.SkColorGetA
+import org.graphiks.math.SkIRect
 import org.graphiks.math.SkRect
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
@@ -18,6 +21,69 @@ import org.skia.pipeline.RRectSpec
 import org.skia.pipeline.Rgba
 
 class SkBitmapDescriptorCoverageOracleTest {
+    @Test
+    fun `production bitmap device selects descriptor route for non aa filled rect by default`() =
+        withDescriptorRectFlag(null) {
+            val bitmap = SkBitmap(8, 8)
+            val device = SkBitmapDevice(bitmap)
+            device.drawRect(SkRect.MakeLTRB(2f, 1f, 7f, 6f), SkIRect.MakeWH(8, 8), blackPaint(antiAlias = false))
+
+            val diagnostics = device.descriptorCoverageDiagnosticsForTests()
+            assertEquals("cpu.descriptor.coverage-plan.solid-rect", diagnostics.selectedRoute)
+            assertEquals("kanvas-skia.current.draw-rect", diagnostics.compatibilityFallbackRoute)
+            assertEquals("AnalyticRect(2.0,1.0,7.0,6.0,aa=false)", diagnostics.coveragePlan)
+            assertEquals(null, diagnostics.fallbackReason)
+            assertEquals(25, diagnostics.touchedPixels)
+            assertTrue(diagnostics.dump().contains("fallbackReason=none"))
+        }
+
+    @Test
+    fun `production descriptor rect can be rolled back to legacy route`() =
+        withDescriptorRectFlag("false") {
+            val bitmap = SkBitmap(8, 8)
+            val device = SkBitmapDevice(bitmap)
+            device.drawRect(SkRect.MakeLTRB(2f, 1f, 7f, 6f), SkIRect.MakeWH(8, 8), blackPaint(antiAlias = false))
+
+            val diagnostics = device.descriptorCoverageDiagnosticsForTests()
+            assertEquals("kanvas-skia.current.draw-rect", diagnostics.selectedRoute)
+            assertEquals("cpu.descriptor.coverage-plan.solid-rect", diagnostics.compatibilityFallbackRoute)
+            assertEquals("descriptor rect disabled via -Dkanvas.cpu.descriptorRect.enabled=false", diagnostics.fallbackReason)
+            assertEquals(0, diagnostics.touchedPixels)
+        }
+
+    @Test
+    fun `production descriptor rect falls back for unsupported stroke style`() =
+        withDescriptorRectFlag(null) {
+            val bitmap = SkBitmap(8, 8)
+            val device = SkBitmapDevice(bitmap)
+            val paint = blackPaint(antiAlias = false).apply {
+                style = SkPaint.Style.kStroke_Style
+                strokeWidth = 1f
+            }
+            device.drawRect(SkRect.MakeLTRB(2f, 1f, 7f, 6f), SkIRect.MakeWH(8, 8), paint)
+
+            val diagnostics = device.descriptorCoverageDiagnosticsForTests()
+            assertEquals("kanvas-skia.current.draw-rect", diagnostics.selectedRoute)
+            assertEquals("descriptor rect supports fill style only", diagnostics.fallbackReason)
+            assertFalse(bitmap.pixels.all { it == SK_ColorTRANSPARENT })
+        }
+
+    @Test
+    fun `production descriptor non aa rect remains pixel equivalent to forced legacy`() {
+        val descriptor = renderWithDescriptorFlag(null, antiAlias = false, rect = SkRect.MakeLTRB(2f, 1f, 7f, 6f))
+        val legacy = renderWithDescriptorFlag("false", antiAlias = false, rect = SkRect.MakeLTRB(2f, 1f, 7f, 6f))
+
+        assertTrue(descriptor.pixels.contentEquals(legacy.pixels))
+    }
+
+    @Test
+    fun `production descriptor aa rect remains pixel equivalent to forced legacy`() {
+        val descriptor = renderWithDescriptorFlag(null, antiAlias = true, rect = SkRect.MakeLTRB(1.25f, 2.5f, 6.75f, 7f))
+        val legacy = renderWithDescriptorFlag("false", antiAlias = true, rect = SkRect.MakeLTRB(1.25f, 2.5f, 6.75f, 7f))
+
+        assertTrue(descriptor.pixels.contentEquals(legacy.pixels))
+    }
+
     @Test
     fun `descriptor rect path matches kanvas skia non aa oracle`() {
         val oracle = render(8, 8) {
@@ -104,6 +170,31 @@ class SkBitmapDescriptorCoverageOracleTest {
     private fun blackPaint(antiAlias: Boolean): SkPaint = SkPaint().apply {
         color = SK_ColorBLACK
         isAntiAlias = antiAlias
+    }
+
+    private fun renderWithDescriptorFlag(value: String?, antiAlias: Boolean, rect: SkRect): SkBitmap =
+        withDescriptorRectFlag(value) {
+            render(8, 8) {
+                drawRect(rect, blackPaint(antiAlias = antiAlias).apply { color = SK_ColorRED })
+            }
+        }
+
+    private fun <T> withDescriptorRectFlag(value: String?, block: () -> T): T {
+        val previous = System.getProperty("kanvas.cpu.descriptorRect.enabled")
+        if (value == null) {
+            System.clearProperty("kanvas.cpu.descriptorRect.enabled")
+        } else {
+            System.setProperty("kanvas.cpu.descriptorRect.enabled", value)
+        }
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty("kanvas.cpu.descriptorRect.enabled")
+            } else {
+                System.setProperty("kanvas.cpu.descriptorRect.enabled", previous)
+            }
+        }
     }
 
     private fun SkBitmap.toPixelBuffer(): PixelBuffer =
