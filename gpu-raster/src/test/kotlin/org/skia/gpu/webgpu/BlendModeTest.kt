@@ -5,13 +5,17 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
+import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
 import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorGREEN
 import org.graphiks.math.SK_ColorRED
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.graphiks.math.SkColorSetARGB
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPaint
+import org.skia.gpu.webgpu.tools.GeneratedSolidRectWgsl
 import org.graphiks.math.SkRect
 
 /**
@@ -25,7 +29,6 @@ import org.graphiks.math.SkRect
  * `setPipeline` in the render pass.
  */
 class BlendModeTest {
-
     @Test
     fun `kSrc replaces destination pixels with the source color`() {
         // bg = red opaque ; rect = opaque blue with kSrc.
@@ -73,6 +76,24 @@ class BlendModeTest {
     }
 
     @Test
+    fun `kSrcOver matches CPU for partial alpha over non opaque destination`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val raster = renderPartialAlphaSrcOverRasterToRgba()
+        val gpu = withGeneratedSolidRectDisabled {
+            renderPartialAlphaSrcOverGpuToRgba(context!!)
+        }
+
+        assertNear(
+            expected = raster.rgbaAt(24, 24).premulRgba(),
+            actual = gpu.rgbaAt(24, 24),
+            tolerance = 2,
+            label = "CPU/GPU kSrcOver partial alpha over non-opaque dst",
+        )
+    }
+
+    @Test
     fun `kDstOver paints under dst — visible on transparent, hidden under opaque`() {
         // First half : bg = transparent. Drawing opaque blue under-mode lands on top
         // (dst.a == 0, so src factor 1-0 = 1, dst factor 1 contributes nothing).
@@ -109,10 +130,12 @@ class BlendModeTest {
             blendMode = SkBlendMode.kModulate
         }
         val thrown = assertThrows(IllegalStateException::class.java) {
-            context!!.use { ctx ->
-                SkWebGpuDevice(ctx, W, H).use { device ->
-                    SkCanvas(device).drawRect(SkRect.MakeLTRB(10f, 10f, 30f, 30f), paint)
-                    device.flush()
+            withGeneratedSolidRectDisabled {
+                context!!.use { ctx ->
+                    SkWebGpuDevice(ctx, W, H).use { device ->
+                        SkCanvas(device).drawRect(SkRect.MakeLTRB(10f, 10f, 30f, 30f), paint)
+                        device.flush()
+                    }
                 }
             }
         }
@@ -140,21 +163,23 @@ class BlendModeTest {
 
         val translucentRed = SkColorSetARGB(0x80, 0xFF, 0x00, 0x00)
         val translucentBlue = SkColorSetARGB(0x80, 0x00, 0x00, 0xFF)
-        val pixels = context!!.use { ctx ->
-            SkWebGpuDevice(ctx, W, H).use { device ->
-                device.setBackground(SkColorSetARGB(0, 0, 0, 0))
-                val canvas = SkCanvas(device)
-                // Both rects cover the same area. First with kSrc to seed,
-                // then with kPlus to test the channel-saturated add.
-                canvas.drawRect(
-                    SkRect.MakeLTRB(10f, 10f, 30f, 30f),
-                    SkPaint().apply { color = translucentRed; blendMode = SkBlendMode.kSrc },
-                )
-                canvas.drawRect(
-                    SkRect.MakeLTRB(10f, 10f, 30f, 30f),
-                    SkPaint().apply { color = translucentBlue; blendMode = SkBlendMode.kPlus },
-                )
-                device.flush()
+        val pixels = withGeneratedSolidRectDisabled {
+            context!!.use { ctx ->
+                SkWebGpuDevice(ctx, W, H).use { device ->
+                    device.setBackground(SkColorSetARGB(0, 0, 0, 0))
+                    val canvas = SkCanvas(device)
+                    // Both rects cover the same area. First with kSrc to seed,
+                    // then with kPlus to test the channel-saturated add.
+                    canvas.drawRect(
+                        SkRect.MakeLTRB(10f, 10f, 30f, 30f),
+                        SkPaint().apply { color = translucentRed; blendMode = SkBlendMode.kSrc },
+                    )
+                    canvas.drawRect(
+                        SkRect.MakeLTRB(10f, 10f, 30f, 30f),
+                        SkPaint().apply { color = translucentBlue; blendMode = SkBlendMode.kPlus },
+                    )
+                    device.flush()
+                }
             }
         }
 
@@ -182,11 +207,73 @@ class BlendModeTest {
             color = srcArgb
             blendMode = mode
         }
-        return context!!.use { ctx ->
+        return withGeneratedSolidRectDisabled {
+            context!!.use { ctx ->
+                SkWebGpuDevice(ctx, W, H).use { device ->
+                    device.setBackground(bgArgb)
+                    SkCanvas(device).drawRect(SkRect.MakeLTRB(10f, 10f, 30f, 30f), paint)
+                    device.flush()
+                }
+            }
+        }
+    }
+
+    private fun renderPartialAlphaSrcOverRasterToRgba(): ByteArray {
+        val bitmap = SkBitmap(W, H, colorType = SkColorType.kRGBA_8888).apply {
+            eraseColor(SkColorSetARGB(0, 0, 0, 0))
+        }
+        drawPartialAlphaSrcOver(SkCanvas(SkBitmapDevice(bitmap)))
+        return bitmap.pixels8888.toRgbaBytes()
+    }
+
+    private fun renderPartialAlphaSrcOverGpuToRgba(context: WebGpuContext): ByteArray =
+        context.use { ctx ->
             SkWebGpuDevice(ctx, W, H).use { device ->
-                device.setBackground(bgArgb)
-                SkCanvas(device).drawRect(SkRect.MakeLTRB(10f, 10f, 30f, 30f), paint)
+                device.setBackground(SkColorSetARGB(0, 0, 0, 0))
+                drawPartialAlphaSrcOver(SkCanvas(device))
                 device.flush()
+            }
+        }
+
+    private fun drawPartialAlphaSrcOver(canvas: SkCanvas) {
+        canvas.drawRect(
+            SkRect.MakeLTRB(8f, 8f, 40f, 40f),
+            SkPaint().apply {
+                color = SkColorSetARGB(0x80, 0xFF, 0x00, 0x00)
+                blendMode = SkBlendMode.kSrc
+            },
+        )
+        canvas.drawRect(
+            SkRect.MakeLTRB(16f, 16f, 48f, 48f),
+            SkPaint().apply {
+                color = SkColorSetARGB(0x80, 0x00, 0x00, 0xFF)
+                blendMode = SkBlendMode.kSrcOver
+            },
+        )
+    }
+
+    private fun IntArray.toRgbaBytes(): ByteArray {
+        val out = ByteArray(size * 4)
+        for (i in indices) {
+            val pixel = this[i]
+            out[i * 4] = ((pixel ushr 16) and 0xFF).toByte()
+            out[i * 4 + 1] = ((pixel ushr 8) and 0xFF).toByte()
+            out[i * 4 + 2] = (pixel and 0xFF).toByte()
+            out[i * 4 + 3] = ((pixel ushr 24) and 0xFF).toByte()
+        }
+        return out
+    }
+
+    private fun <T> withGeneratedSolidRectDisabled(block: () -> T): T {
+        val previous = System.getProperty(GeneratedSolidRectWgsl.FEATURE_FLAG)
+        System.setProperty(GeneratedSolidRectWgsl.FEATURE_FLAG, "false")
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(GeneratedSolidRectWgsl.FEATURE_FLAG)
+            } else {
+                System.setProperty(GeneratedSolidRectWgsl.FEATURE_FLAG, previous)
             }
         }
     }
@@ -198,6 +285,16 @@ class BlendModeTest {
             this[i + 1].toInt() and 0xFF,
             this[i + 2].toInt() and 0xFF,
             this[i + 3].toInt() and 0xFF,
+        )
+    }
+
+    private fun List<Int>.premulRgba(): List<Int> {
+        val alpha = this[3]
+        return listOf(
+            (this[0] * alpha + 127) / 255,
+            (this[1] * alpha + 127) / 255,
+            (this[2] * alpha + 127) / 255,
+            alpha,
         )
     }
 
@@ -215,4 +312,5 @@ class BlendModeTest {
         const val W: Int = 64
         const val H: Int = 64
     }
+
 }

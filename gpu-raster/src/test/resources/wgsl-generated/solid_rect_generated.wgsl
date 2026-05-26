@@ -10,12 +10,12 @@ var<uniform> uniforms: Struct_4;
 
 @vertex
 fn vs_main(@builtin(vertex_index) idx: u32) -> Struct_3 {
-    _ = Struct_3(vec4<f32>((((f32)(((idx << 1u) & 2u)) * 2.0f) - 1.0f), (((f32)((idx & 2u)) * 2.0f) - 1.0f), 0.0f, 1.0f));
-    return Struct_3(vec4<f32>((((f32)(((idx << 1u) & 2u)) * 2.0f) - 1.0f), (((f32)((idx & 2u)) * 2.0f) - 1.0f), 0.0f, 1.0f));
+    _ = Struct_3(vec4<f32>(((f32(((idx << 1u) & 2u)) * 2.0f) - 1.0f), ((f32((idx & 2u)) * 2.0f) - 1.0f), 0.0f, 1.0f));
+    return Struct_3(vec4<f32>(((f32(((idx << 1u) & 2u)) * 2.0f) - 1.0f), ((f32((idx & 2u)) * 2.0f) - 1.0f), 0.0f, 1.0f));
 }
 
 @fragment
-fn fs_main() -> vec4<f32> {
+fn fs_main() -> @location(0) vec4<f32> {
     _ = vec4<f32>((uniforms.color[0] * uniforms.color[3]), (uniforms.color[1] * uniforms.color[3]), (uniforms.color[2] * uniforms.color[3]), uniforms.color[3]);
     return vec4<f32>((uniforms.color[0] * uniforms.color[3]), (uniforms.color[1] * uniforms.color[3]), (uniforms.color[2] * uniforms.color[3]), uniforms.color[3]);
 }
