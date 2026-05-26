@@ -2,6 +2,8 @@ package org.skia.effects.runtime.effects
 
 import org.skia.effects.runtime.ChildResolver
 import org.skia.effects.runtime.SkRuntimeEffect
+import org.skia.effects.runtime.SkRuntimeEffectDescriptor
+import org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistry
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
 import org.skia.effects.runtime.SkRuntimeImpl
 import org.graphiks.math.SkColor4f
@@ -66,6 +68,18 @@ public object SkBuiltinShaderEffectsSimple {
      */
     public fun registerAll() {
         SkRuntimeEffectDispatch.register(SIMPLE_RT_SKSL) { SimpleRTImpl }
+        SkRuntimeEffectDescriptorRegistry.register(
+            SIMPLE_RT_SKSL,
+            SkRuntimeEffectDescriptor(
+                stableId = "runtime.simple_rt",
+                kind = SkRuntimeEffect.Kind.kShader,
+                uniforms = SimpleRTImpl.uniforms,
+                children = SimpleRTImpl.children,
+                flags = SimpleRTImpl.flags,
+                cpuImplementationId = "kotlin/simple_rt",
+                wgslImplementationId = "wgsl/runtime_simple_rt",
+            ),
+        )
         SkRuntimeEffectDispatch.register(SPIRAL_RT_SKSL) { SpiralRTImpl }
         SkRuntimeEffectDispatch.register(LINEAR_GRADIENT_RT_SKSL) { LinearGradientRTImpl }
     }

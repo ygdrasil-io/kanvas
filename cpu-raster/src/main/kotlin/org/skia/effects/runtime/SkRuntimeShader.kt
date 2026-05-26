@@ -44,12 +44,20 @@ import java.nio.ByteOrder
 public class SkRuntimeShader internal constructor(
     /** Registered impl. Already instantiated by [SkRuntimeEffect.impl]. */
     private val impl: SkRuntimeImpl,
+    public val runtimeEffectDescriptor: SkRuntimeEffectDescriptor?,
     /** Snapshot of the uniforms passed at construction. */
     private val uniformsBuffer: ByteBuffer,
     /** Pre-built resolvers, one per declared child. */
     private val childResolvers: Array<ChildResolver>,
     localMatrix: SkMatrix,
 ) : SkShader(localMatrix) {
+    public fun runtimeEffectUniformBytes(): ByteArray {
+        val dup = uniformsBuffer.duplicate()
+        dup.position(0)
+        val out = ByteArray(dup.capacity())
+        dup.get(out)
+        return out
+    }
 
     override fun setupForDraw(
         canvasCtm: SkMatrix,
