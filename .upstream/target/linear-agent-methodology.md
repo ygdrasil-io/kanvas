@@ -21,6 +21,9 @@ this work unless one is created later.
 
 The architecture source of truth remains
 `.upstream/target/high-performance-wgsl-pipeline-target.md`.
+For M0-M11 pre-Geometry implementation details, use
+`.upstream/specs/wgsl-pipeline/README.md`. For M12+ Geometry/Coverage details,
+use `.upstream/specs/geometry-coverage/README.md`.
 
 ## Linear Structure
 
@@ -251,6 +254,8 @@ Must read:
 - AGENTS.md
 - .upstream/target/high-performance-wgsl-pipeline-target.md
 - .upstream/target/linear-agent-methodology.md
+- .upstream/specs/wgsl-pipeline/README.md for M0-M11 pre-Geometry work
+- .upstream/specs/geometry-coverage/README.md for M12+ Geometry/Coverage work
 - the Linear issue and linked GitHub context
 
 Scope:
