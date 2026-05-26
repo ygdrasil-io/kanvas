@@ -44,6 +44,8 @@ data class IntRect(val left: Int, val top: Int, val right: Int, val bottom: Int)
 data class FloatRect(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
 data class Rgba(val r: Float, val g: Float, val b: Float, val a: Float)
+data class Point(val x: Float, val y: Float)
+data class LinearGradientPayload(val start: Point, val end: Point, val startColor: Rgba, val endColor: Rgba)
 
 sealed interface FallbackPlan {
     val reason: String
@@ -74,6 +76,7 @@ enum class BackendKind {
 sealed interface PipelineOp {
     data object SeedDeviceCoords : PipelineOp
     data class ConstantColor(val color: Rgba) : PipelineOp
+    data class LinearGradient(val payload: LinearGradientPayload) : PipelineOp
     data class PaintColorModulate(val paintColor: Rgba) : PipelineOp
     data class ApplyCoverage(val coverage: CoverageModel) : PipelineOp
     data class BlendMode(val mode: String) : PipelineOp
@@ -105,6 +108,7 @@ class KanvasPipelineIR private constructor(
     private fun dumpOp(op: PipelineOp): String = when (op) {
         PipelineOp.SeedDeviceCoords -> "SeedDeviceCoords"
         is PipelineOp.ConstantColor -> "ConstantColor(${op.color.r},${op.color.g},${op.color.b},${op.color.a})"
+        is PipelineOp.LinearGradient -> "LinearGradient(${op.payload.start.x},${op.payload.start.y}->${op.payload.end.x},${op.payload.end.y})"
         is PipelineOp.PaintColorModulate -> "PaintColorModulate(${op.paintColor.r},${op.paintColor.g},${op.paintColor.b},${op.paintColor.a})"
         is PipelineOp.ApplyCoverage -> "ApplyCoverage(${dumpCoverage(op.coverage)})"
         is PipelineOp.BlendMode -> "BlendMode(${op.mode})"
@@ -143,6 +147,23 @@ class KanvasPipelineIR private constructor(
             return builder()
                 .append(PipelineOp.SeedDeviceCoords)
                 .append(PipelineOp.ConstantColor(color))
+                .append(PipelineOp.ApplyCoverage(coverage))
+                .append(PipelineOp.LoadDst)
+                .append(PipelineOp.BlendMode("SrcOver"))
+                .append(PipelineOp.Store)
+                .build()
+        }
+
+        fun demoLinearGradientRectIr(
+            start: Point,
+            end: Point,
+            startColor: Rgba,
+            endColor: Rgba,
+            coverage: CoverageModel = CoverageModel.Full,
+        ): KanvasPipelineIR {
+            return builder()
+                .append(PipelineOp.SeedDeviceCoords)
+                .append(PipelineOp.LinearGradient(LinearGradientPayload(start, end, startColor, endColor)))
                 .append(PipelineOp.ApplyCoverage(coverage))
                 .append(PipelineOp.LoadDst)
                 .append(PipelineOp.BlendMode("SrcOver"))
