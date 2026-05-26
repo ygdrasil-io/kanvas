@@ -92,6 +92,7 @@ class KanvasPipelineIR private constructor(
     val ops: List<PipelineOp>,
     val fallbackPlan: FallbackPlan?,
 ) {
+    // Test-only marker used to verify CI path filters include render-pipeline.
     fun dump(): String {
         val lines = mutableListOf<String>()
         lines += "KanvasPipelineIR(v1)"
