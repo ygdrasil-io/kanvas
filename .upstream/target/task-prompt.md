@@ -10,8 +10,8 @@ Use skills:
 
 Objectif:
 Avancer automatiquement la prochaine phase non clôturée du projet Linear
-"Kanvas - WGSL Pipeline Target", jusqu’à PR, review, correction, CI et merge
-sur master si tout est OK.
+"Kanvas - WGSL Pipeline Target", jusqu’à PR, review, correction, CI, merge
+sur master si tout est OK, et ajouter une phase de rétrospective en commentaire du ticket.
 
 Contexte:
 - Le worktree est déjà créé automatiquement.
@@ -55,7 +55,7 @@ Workflow obligatoire:
 4. Si le ticket est prêt:
     - passer le ticket en In Progress si possible;
     - créer une branche dédiée depuis master si nécessaire, avec un nom du type:
-      <linear-id>-<short-slug>
+      `<linear-id>-<short-slug>`
 5. Implémenter uniquement le scope du ticket sélectionné.
 6. Respecter strictement les non-goals:
     - ne pas porter Ganesh ou Graphite;
@@ -70,18 +70,22 @@ Workflow obligatoire:
 9. Pousser la branche.
 10. Ouvrir ou mettre à jour une Pull Request GitHub liée au ticket Linear.
 11. Faire une review indépendante:
-- si les outils multi-agent sont disponibles, lancer un review subagent;
-- sinon faire toi-même une passe de review séparée en mode code-review strict.
+    - si les outils multi-agent sont disponibles, lancer un review subagent;
+    - sinon faire toi-même une passe de review séparée en mode code-review strict.
 12. Corriger tous les retours bloquants dans la même branche.
 13. Vérifier la CI GitHub.
 14. Si review OK et CI verte:
-- merger la PR dans master;
-- mettre le ticket Linear en Done;
-- commenter Linear avec PR, commits, validations et evidence PM.
-15. Si review ou CI bloque:
-- ne pas merger;
-- commenter Linear avec le blocage précis;
-- répondre avec l’état exact.
+    - merger la PR dans master;
+    - mettre le ticket Linear en Done;
+    - commenter Linear avec PR, commits, validations et evidence PM.
+15. **Ajouter un commentaire de rétrospective sur le ticket Linear avec :**
+    **- Points positifs (ce qui a bien fonctionné)**
+    **- Points à améliorer (blocages, retards, difficultés rencontrées)**
+    **- Actions correctives proposées pour les prochains tickets**
+16. Si review ou CI bloque:
+    - ne pas merger;
+    - commenter Linear avec le blocage précis;
+    - répondre avec l’état exact.
 
 Gates obligatoires :
 - Ne jamais marquer un ticket Linear en Done tant que la PR n’est pas confirmée mergée.
