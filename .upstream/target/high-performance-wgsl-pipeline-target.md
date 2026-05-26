@@ -120,6 +120,34 @@ ported shader
   -> native pipeline stages
 ```
 
+Migration fallbacks must be explicit, not inferred from missing support.
+
+Representative shape:
+
+```kotlin
+sealed interface FallbackPlan {
+    val reason: String
+    val supportedBackends: Set<BackendKind>
+
+    data class CpuShadeRow(override val reason: String) : FallbackPlan
+    data class HandwrittenGpuCompat(override val reason: String, val shaderId: String) : FallbackPlan
+    data class RefuseDiagnostic(override val reason: String) : FallbackPlan
+    data class ExplicitLayerOrReadbackCompat(override val reason: String) : FallbackPlan
+}
+```
+
+Each fallback must declare:
+
+- supported backends;
+- stable diagnostic reason;
+- whether GPU should refuse, route to an existing handwritten WGSL path, or
+  use an explicit compatibility path;
+- tests that assert the fallback reason when the image path is intentionally
+  unavailable.
+
+`ShadeRowFallbackOp` is a CPU migration bridge. It is not automatically a GPU
+fallback.
+
 ## Core Architecture
 
 ### Shared Pipeline IR
@@ -190,6 +218,75 @@ documented fallback path. `Fatal` means the draw cannot be represented or
 executed safely and should produce a stable diagnostic instead of falling
 through silently. Implementations should build into a temporary child builder
 and commit only on success when partial mutation would otherwise be possible.
+
+### IR Value Semantics
+
+Pipeline values must carry enough type information to make alpha and color
+space transitions auditable before CPU/GPU specialization.
+
+Representative shape:
+
+```kotlin
+enum class AlphaDomain {
+    Unpremul,
+    Premul,
+    Raw,
+    Destination,
+}
+
+sealed interface ColorSpaceRole {
+    data object SRGB : ColorSpaceRole
+    data object Destination : ColorSpaceRole
+    data object Working : ColorSpaceRole
+    data class Explicit(val colorSpace: SkColorSpace?) : ColorSpaceRole
+    data object RawBytes : ColorSpaceRole
+}
+
+enum class PrecisionDomain {
+    U8,
+    F16,
+    F32,
+}
+
+data class ColorValueSpec(
+    val alpha: AlphaDomain,
+    val colorSpace: ColorSpaceRole,
+    val precision: PrecisionDomain,
+)
+```
+
+Every critical `PipelineOp` should declare preconditions and postconditions for
+its color values. At minimum this applies to:
+
+- shader evaluation;
+- raw image shader sampling;
+- gradient interpolation;
+- `SkWorkingColorSpaceShader`;
+- color filters;
+- blenders;
+- runtime effects, including `layout(color)` uniforms;
+- saveLayer restore/composite;
+- final store.
+
+Initial target contracts:
+
+| Operation | Input | Output |
+|---|---|---|
+| Shader eval | local/device coords + op payload | unpremul RGBA float in declared working space, unless op is `Raw` |
+| Raw image sample | image bytes + sampling payload | `Raw` value with explicit conversion stage required before blend |
+| Color filter | unpremul RGBA float in active working/destination role | unpremul RGBA float in same declared role unless filter declares a working-format transition |
+| Blender | premul source and premul destination in declared blend encoding | premul RGBA in blend encoding |
+| Runtime shader | coords + uniforms + children | declared `ColorValueSpec`; unsupported specs are diagnostic failures |
+| SaveLayer restore | premul layer texture in layer encoding + paint pipeline | premul source for parent blend |
+| Store | premul RGBA in destination encoding | destination pixel format |
+
+Pipeline normalization may insert explicit conversion ops between mismatched
+specs. It must not silently reinterpret raw, premul, unpremul, working-space,
+or destination-space values.
+
+Focused tests should cover runtime-effect `layout(color)`, raw image shader
+sampling, gradient interpolation spaces, color-filter working formats,
+blenders with partial alpha, and saveLayer color-space restoration.
 
 ### Matrix Model
 
@@ -587,8 +684,70 @@ compiled WGSL or WebGPU pipeline state:
 - sampling mode when it changes shader or bind layout;
 - fill/coverage mode when it changes pipeline state.
 
+Specialization axes must be classified before they are added to
+`PipelineKey`:
+
+```kotlin
+sealed interface SpecializationAxis {
+    data class LayoutAffecting(val id: String) : SpecializationAxis
+    data class CodeAffecting(val id: String) : SpecializationAxis
+    data class PipelineStateAffecting(val id: String) : SpecializationAxis
+    data class UniformOnly(val id: String) : SpecializationAxis
+}
+```
+
+Classification rules:
+
+- `LayoutAffecting`: changes bind-group layout, texture/sampler presence,
+  uniform struct shape, vertex input shape, or attachment layout.
+- `CodeAffecting`: changes required helpers, loop shape, static branch
+  removal, child shader graph shape, or generated entry-point structure.
+- `PipelineStateAffecting`: changes WebGPU render pipeline state, blend state,
+  primitive topology, format class, multisampling, or depth/stencil state.
+- `UniformOnly`: changes only values consumed by already-generated code and
+  existing layouts.
+
+Only the first three categories belong in `PipelineKey`. `UniformOnly` values
+must be measured before promotion to specialization. The measurement package
+for a proposed key axis should include shader count, pipeline cache hit/miss
+rate, pipeline creations per frame after warmup, uniform upload bytes, and
+draw count.
+
 Tile modes, matrices, colors, gradient stops, color-space transforms, and
-most clip data should remain uniforms unless specialization is proven faster.
+clip data may be uniforms only when they truly do not alter layout, helper
+selection, pipeline state, or generated loop structure.
+
+### Blend Plan
+
+GPU blending must be selected through an explicit `BlendPlan`, not by ad hoc
+choice between fixed-function state and WGSL helper code.
+
+Representative shape:
+
+```kotlin
+sealed interface BlendPlan {
+    data class FixedFunction(val mode: SkBlendMode, val format: FormatClass) : BlendPlan
+    data class ShaderCompositeFromTexture(val mode: SkBlendMode) : BlendPlan
+    data class LayerComposite(val mode: SkBlendMode) : BlendPlan
+    data class Unsupported(val mode: SkBlendMode, val reason: String) : BlendPlan
+}
+```
+
+Contracts:
+
+- `FixedFunction` is an allowlist only. Each `(mode, format, alpha convention)`
+  entry requires CPU-vs-GPU tests with partial source alpha, non-opaque
+  destination, and each supported intermediate format class.
+- `ShaderCompositeFromTexture` is used when blend math must read destination
+  color in shader code. WebGPU cannot read and write the same color attachment
+  in one render pass, so this plan implies a separate texture/pass/copy
+  strategy.
+- `LayerComposite` is used when Skia semantics require an intermediate layer
+  or when the destination must be sampled as a texture for correctness.
+- `Unsupported` must produce a stable diagnostic and must not silently draw
+  with a weaker mode.
+
+The blend plan becomes part of diagnostics and benchmark telemetry.
 
 ### Device Lifecycle
 
@@ -768,6 +927,31 @@ Benchmarks should track:
 Performance gates should compare to current baseline before each major
 replacement, not to theoretical upstream Skia numbers.
 
+### GPU Gates
+
+Generated WGSL pipelines need GPU-specific success gates in addition to visual
+correctness:
+
+- zero render-pipeline creation in a stable frame after warmup for
+  representative scenes;
+- minimum pipeline cache hit rate per benchmark scene;
+- maximum generated shader module count per scene and per GM family;
+- bounded uniform upload bytes per frame;
+- draw count stable against the handwritten path or explicitly justified;
+- no unexpected fallback reasons in cross-backend runs;
+- measured GPU time or wall-clock render time for solid rect, gradient, image
+  sampling, blend/color-filter, and saveLayer composite scenes.
+
+Initial benchmark scenes should include:
+
+- solid rect batch;
+- AA rect/rrect batch;
+- linear/radial/sweep gradient fills;
+- bitmap nearest and bilinear sampling;
+- blend-mode matrix with partial alpha and non-opaque destination;
+- saveLayer composite;
+- generated shader warmup followed by stable repeated frames.
+
 ### Diagnostics
 
 Add developer-facing dumps:
@@ -807,6 +991,7 @@ The architecture target is reached when:
 - Runtime effects have a single registry entry that describes CPU and GPU
   implementations plus uniform/child layout.
 - Cross-backend tests prove parity for the selected GM set.
+- GPU generated-shader benchmarks meet the GPU gates after warmup.
 - Performance benchmarks show that the pipeline layer does not regress common
   CPU raster paths and improves at least one vectorized shader/composite path.
 
@@ -820,9 +1005,14 @@ should split the work by independently verifiable capabilities:
 - WGSL parser validation integration.
 - WGSL IR module builder pilot.
 - Uniform reflection and packer generation.
+- IR color/alpha value contracts.
+- PipelineKey specialization taxonomy.
+- BlendPlan allowlist and diagnostics.
 - GPU generated-shader pilot.
 - Runtime-effect descriptor unification.
 - Java 25 vector kernels.
+- Migration fallback policy.
+- GPU success gates.
 - Legacy path retirement criteria.
 
 Each epic should name the tests, benchmarks, affected GMs, and fallback
