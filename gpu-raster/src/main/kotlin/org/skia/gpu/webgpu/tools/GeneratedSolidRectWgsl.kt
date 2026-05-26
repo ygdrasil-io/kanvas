@@ -1,6 +1,8 @@
 package org.skia.gpu.webgpu.tools
 
 import io.ygdrasil.wgsl.parser.parseWgslResult
+import io.ygdrasil.wgsl.parser.Lowerer
+import io.ygdrasil.wgsl.wgsl.WgslModule
 
 data class WgslValidationResult(
     val isSuccess: Boolean,
@@ -10,7 +12,18 @@ data class WgslValidationResult(
 object GeneratedSolidRectWgsl {
     const val FEATURE_FLAG = "kanvas.gpu.generatedSolidRect.enabled"
 
-    fun generateDeterministic(): String = listOf(
+    fun generateDeterministic(): String {
+        val seedSource = seedRectSolidSrcOverWgsl()
+        val parsed = parseWgslResult(seedSource)
+        if (!parsed.isSuccess) {
+            val diagnostics = parsed.errors.joinToString("; ") { "${it.message} span=${it.span}" }
+            error("generated solid rect seed parse failure: $diagnostics")
+        }
+        val module = Lowerer().lower(parsed.translationUnit)
+        return WgslModule.writeString(module)
+    }
+
+    private fun seedRectSolidSrcOverWgsl(): String = listOf(
         "struct Uniforms {",
         "    color: vec4f,",
         "    outerBounds: vec4f,",
