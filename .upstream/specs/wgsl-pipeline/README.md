@@ -87,6 +87,8 @@ Evidence:
 | `05-blend-fallback-diagnostics.md` | `BlendPlan`, fallback taxonomy, diagnostic dumps, and refusal behavior. |
 | `06-runtime-effects-descriptor.md` | Registered runtime-effect descriptors, support matrix, CPU/GPU implementations, and misses. |
 | `07-validation-performance-and-migration.md` | Test layers, PM evidence, migration stages, retirement policy, and milestone acceptance. |
+| `08-bitmap-image-rect-sampling.md` | M32 bitmap/image-rect strict sampling, smoke promotion, and closeout evidence. |
+| `09-image-filter-mvp-lane.md` | M34 image-filter MVP boundary for supported fixtures and accepted `Crop(input = nonNull)` limitations. |
 
 Decision records live under `adr/`.
 
@@ -148,6 +150,8 @@ C4Container
 | M9 Runtime effect descriptor pilot | GRA-27 | `06-runtime-effects-descriptor.md` |
 | M10 Java 25 Vector pilot | GRA-28 | `03-cpu-pipeline-backend.md` |
 | M11 Migration batch 1 | GRA-29 | `07-validation-performance-and-migration.md` |
+| M32 Bitmap/ImageRect remediation | GRA-93 | `08-bitmap-image-rect-sampling.md` |
+| M34 Image-filter MVP lane | GRA-102 | `09-image-filter-mvp-lane.md` |
 
 ## Spec Acceptance Rules
 
