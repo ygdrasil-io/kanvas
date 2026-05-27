@@ -87,6 +87,7 @@ families.
 | `05-fallback-diagnostics.md` | Stable fallback reason taxonomy and reporting rules. |
 | `06-validation-and-perf.md` | Tests, visual evidence, benchmarks, counters, and Definition of Done. |
 | `07-migration-shim.md` | Shadow logging, equivalence checks, rollout gates, and progressive cutover. |
+| `08-path-aa-mvp-boundary.md` | M33 Path AA MVP boundary for edge-budget refusals, inventory classification, and smoke promotion decisions. |
 
 Decision records live under `adr/`.
 
