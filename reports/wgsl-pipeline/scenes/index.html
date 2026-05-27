@@ -184,9 +184,11 @@
     }
 
     function artifactItems(scene) {
-      const paths = [scene.reference];
+      const paths = [scene.reference, scene.source];
       if (scene.cpu) paths.push(scene.cpu.image, scene.cpu.diff);
       if (scene.gpu) paths.push(scene.gpu.image, scene.gpu.diff);
+      if (scene.diffs) paths.push(scene.diffs.cpu, scene.diffs.gpu);
+      if (scene.routeDiagnostics) paths.push(scene.routeDiagnostics.cpu, scene.routeDiagnostics.gpu);
       if (Array.isArray(scene.evidence)) paths.push(...scene.evidence);
       return paths.filter(Boolean).map((path) => `<li><code>${path}</code></li>`).join('');
     }
@@ -201,6 +203,8 @@
           <b>${text(scene.id)}</b>
           <h2>${text(scene.title, scene.id)}</h2>
           <span class="status ${status}">${status}</span>
+          <p>Priority: <code>${text(scene.priority)}</code></p>
+          <p>Source: <code>${text(scene.source)}</code></p>
           <p>Reference: <code>${text(scene.referenceKind)}</code></p>
           <p>CPU route: <code>${text(cpuRoute)}</code></p>
           <p>GPU route: <code>${text(gpuRoute)}</code></p>

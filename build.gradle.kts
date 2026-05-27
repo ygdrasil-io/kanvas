@@ -590,6 +590,12 @@ tasks.register("pipelineSceneDashboard") {
 
         val sceneData = JsonSlurper().parse(sourceData)
         val referencedPaths = mutableSetOf<String>()
+        val validationErrors = mutableListOf<String>()
+        val allowedSceneStatuses = setOf("pass", "expected-unsupported", "tracked-gap", "fail")
+        val allowedPriorities = setOf("P0", "P1", "P2")
+
+        fun String.isScenePath(): Boolean =
+            startsWith("artifacts/") || startsWith("data/") || startsWith("reports/")
 
         fun collectReferencedPaths(value: Any?) {
             when (value) {
@@ -597,27 +603,164 @@ tasks.register("pipelineSceneDashboard") {
                 is Iterable<*> -> value.forEach(::collectReferencedPaths)
                 is String -> {
                     val normalized = value.replace('\\', '/')
-                    if (
-                        normalized.startsWith("artifacts/") ||
-                        normalized.startsWith("data/") ||
-                        normalized.startsWith("reports/")
-                    ) {
+                    if (normalized.isScenePath()) {
                         referencedPaths += normalized
                     }
                 }
             }
         }
 
+        fun pathExists(relativePath: String): Boolean {
+            val normalized = relativePath.replace('\\', '/')
+            return when {
+                normalized.startsWith("artifacts/") -> sourceRoot.resolve(normalized).isFile
+                normalized.startsWith("data/") -> sourceRoot.resolve(normalized).isFile
+                normalized.startsWith("reports/") -> rootDir.resolve(normalized).isFile
+                else -> false
+            }
+        }
+
+        fun missingField(sceneId: String, field: String) {
+            validationErrors += "$sceneId: missing or invalid `$field`"
+        }
+
+        fun requireString(sceneId: String, owner: Map<*, *>, field: String, displayField: String = field): String? {
+            val value = owner[field]
+            if (value !is String || value.isBlank()) {
+                missingField(sceneId, displayField)
+                return null
+            }
+            return value
+        }
+
+        fun requireMap(sceneId: String, owner: Map<*, *>, field: String, displayField: String = field): Map<*, *>? {
+            val value = owner[field]
+            if (value !is Map<*, *>) {
+                missingField(sceneId, displayField)
+                return null
+            }
+            return value
+        }
+
+        fun requireNumber(sceneId: String, owner: Map<*, *>, field: String, displayField: String = field) {
+            if (owner[field] !is Number) {
+                missingField(sceneId, displayField)
+            }
+        }
+
+        fun requireStats(sceneId: String, owner: Map<*, *>, fieldPrefix: String) {
+            val stats = requireMap(sceneId, owner, "stats") ?: return
+            listOf("pixels", "matchingPixels", "maxChannelDelta", "threshold").forEach { field ->
+                requireNumber(sceneId, stats, field, "$fieldPrefix.stats.$field")
+            }
+            requireString(sceneId, stats, "backend", "$fieldPrefix.stats.backend")
+            requireString(sceneId, stats, "command", "$fieldPrefix.stats.command")
+        }
+
+        fun requireRoute(sceneId: String, owner: Map<*, *>, fieldPrefix: String) {
+            val route = requireMap(sceneId, owner, "route") ?: return
+            val hasSelectedRoute = route["selectedRoute"] is String && (route["selectedRoute"] as String).isNotBlank()
+            val hasCoverageStrategy = route["coverageStrategy"] is String && (route["coverageStrategy"] as String).isNotBlank()
+            if (!hasSelectedRoute && !hasCoverageStrategy) {
+                validationErrors += "$sceneId: missing route selector in `$fieldPrefix.route`"
+            }
+            requireString(sceneId, route, "fallbackReason", "$fieldPrefix.route.fallbackReason")
+        }
+
+        fun validateScene(rawScene: Any?, index: Int, seenIds: MutableSet<String>) {
+            if (rawScene !is Map<*, *>) {
+                validationErrors += "scenes[$index]: scene record must be an object"
+                return
+            }
+
+            val sceneId = requireString("scenes[$index]", rawScene, "id") ?: "scenes[$index]"
+            if (!Regex("[a-z0-9][a-z0-9-]*").matches(sceneId)) {
+                validationErrors += "$sceneId: `id` must use lowercase kebab-case"
+            }
+            if (!seenIds.add(sceneId)) {
+                validationErrors += "$sceneId: duplicate scene id"
+            }
+
+            listOf("title", "source", "reference").forEach { requireString(sceneId, rawScene, it) }
+            val priority = requireString(sceneId, rawScene, "priority")
+            if (priority != null && priority !in allowedPriorities) {
+                validationErrors += "$sceneId: unknown `priority` '$priority'; expected ${allowedPriorities.sorted().joinToString()}"
+            }
+            val status = requireString(sceneId, rawScene, "status")
+            if (status != null && status !in allowedSceneStatuses) {
+                validationErrors += "$sceneId: unknown `status` '$status'; expected ${allowedSceneStatuses.sorted().joinToString()}"
+            }
+
+            val cpu = requireMap(sceneId, rawScene, "cpu")
+            val gpu = requireMap(sceneId, rawScene, "gpu")
+            val diffs = requireMap(sceneId, rawScene, "diffs")
+            val routeDiagnostics = requireMap(sceneId, rawScene, "routeDiagnostics")
+            requireMap(sceneId, rawScene, "stats")
+
+            if (cpu != null) {
+                requireString(sceneId, cpu, "image", "cpu.image")
+                requireString(sceneId, cpu, "diff", "cpu.diff")
+                requireRoute(sceneId, cpu, "cpu")
+                requireStats(sceneId, cpu, "cpu")
+            }
+
+            if (gpu != null) {
+                val gpuStatus = requireString(sceneId, gpu, "status", "gpu.status")
+                if (gpuStatus != null && gpuStatus !in allowedSceneStatuses) {
+                    validationErrors += "$sceneId: unknown `gpu.status` '$gpuStatus'; expected ${allowedSceneStatuses.sorted().joinToString()}"
+                }
+                val route = requireMap(sceneId, gpu, "route")
+                val fallbackReason = route?.get("fallbackReason") as? String
+                if (gpuStatus == "expected-unsupported") {
+                    if (fallbackReason.isNullOrBlank() || fallbackReason == "none") {
+                        validationErrors += "$sceneId: `gpu.status=expected-unsupported` requires stable non-empty `gpu.route.fallbackReason`"
+                    }
+                } else {
+                    requireString(sceneId, gpu, "image", "gpu.image")
+                    requireString(sceneId, gpu, "diff", "gpu.diff")
+                    requireStats(sceneId, gpu, "gpu")
+                }
+                if (route != null) {
+                    requireRoute(sceneId, gpu, "gpu")
+                }
+            }
+
+            if (diffs != null) {
+                requireString(sceneId, diffs, "cpu", "diffs.cpu")
+                if (gpu?.get("status") != "expected-unsupported") {
+                    requireString(sceneId, diffs, "gpu", "diffs.gpu")
+                }
+            }
+
+            if (routeDiagnostics != null) {
+                requireString(sceneId, routeDiagnostics, "cpu", "routeDiagnostics.cpu")
+                requireString(sceneId, routeDiagnostics, "gpu", "routeDiagnostics.gpu")
+            }
+        }
+
+        val root = sceneData as? Map<*, *>
+            ?: throw GradleException("Scene dashboard data root must be a JSON object: ${sourceData.relativeTo(rootDir)}")
+        val scenes = root["scenes"] as? List<*>
+            ?: throw GradleException("Scene dashboard data must contain a `scenes` array: ${sourceData.relativeTo(rootDir)}")
+        val seenIds = mutableSetOf<String>()
+        scenes.forEachIndexed { index, rawScene -> validateScene(rawScene, index, seenIds) }
+
         collectReferencedPaths(sceneData)
 
         val missing = referencedPaths
-            .filter { relativePath -> !sourceRoot.resolve(relativePath).isFile }
+            .filterNot(::pathExists)
             .sorted()
         if (missing.isNotEmpty()) {
+            validationErrors += missing.map { relativePath ->
+                "missing referenced artifact or report: `$relativePath`"
+            }
+        }
+
+        if (validationErrors.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("Scene dashboard references missing source artifacts:")
-                    missing.forEach { appendLine("- reports/wgsl-pipeline/scenes/$it") }
+                    appendLine("Scene dashboard validation failed:")
+                    validationErrors.sorted().forEach { appendLine("- $it") }
                 }
             )
         }
