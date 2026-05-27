@@ -23,6 +23,8 @@ import org.skia.pipeline.ClipStackBackendDisposition
 import org.skia.pipeline.ClipStackBreadthMatrix
 import org.skia.pipeline.ClipInteraction
 import org.skia.pipeline.ClipShapeSpec
+import org.skia.pipeline.CoverageAtlasRef
+import org.skia.pipeline.CoverageCachePolicy
 import org.skia.pipeline.CoveragePlan
 import org.skia.pipeline.FloatRect
 import org.skia.pipeline.IntRect
@@ -89,6 +91,24 @@ class WebGpuCoveragePlanSelectorTest {
         assertEquals(StandardCoverageReason.SpanRunsUnsupported, selection.diagnostic?.reason)
         assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
         assertTrue(selection.diagnostic?.dump()?.contains("coverage.span-runs-unsupported") == true)
+    }
+
+    @Test
+    fun `persistent coverage atlas emits policy unavailable diagnostic`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "coverage-atlas-fixture",
+            plan = CoveragePlan.CoverageAtlas(
+                ref = CoverageAtlasRef("atlas-persistent"),
+                bounds = IntRect(0, 0, 16, 16),
+                cachePolicy = CoverageCachePolicy.PersistentByShapeKey,
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
+        assertEquals("webgpu.coverage.refuse", selection.routeIdentifier)
+        assertEquals(StandardCoverageReason.AtlasPolicyUnavailable, selection.diagnostic?.reason)
+        assertTrue(selection.dump().contains("CoverageAtlas(policy=PersistentByShapeKey)"))
+        assertTrue(selection.diagnostic?.dump()?.contains("coverage.atlas-policy-unavailable") == true)
     }
 
     @Test

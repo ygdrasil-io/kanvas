@@ -128,8 +128,8 @@ public object WebGpuCoverageStrategyInventory {
             status = WebGpuCoverageEvidenceStatus.Refused,
             routeIdentifier = "webgpu.coverage.refuse",
             diagnosticReason = StandardCoverageReason.AtlasPolicyUnavailable,
-            evidence = "persistent atlas remains profile-gated and unavailable by policy",
-            unblockCondition = "Complete coverage atlas policy gate and adapter-backed cache evidence before promotion.",
+            evidence = "persistent atlas policy gate reports no-go until profiling and ownership evidence are accepted",
+            unblockCondition = "Add profiling, ownership, cache metrics, and adapter-backed cache evidence before promotion.",
         ),
         WebGpuCoverageStrategyInventoryRow(
             branch = "path-edge-overflow",

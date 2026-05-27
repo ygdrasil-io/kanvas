@@ -265,6 +265,93 @@ sealed interface CoverageCachePolicy {
     data object NoCache : CoverageCachePolicy
 }
 
+enum class CoverageAtlasPolicyCheckStatus {
+    Present,
+    Missing,
+    NotRequired,
+}
+
+enum class CoverageAtlasPolicyVerdict(val wireName: String) {
+    GoNonPersistent("go-non-persistent"),
+    NoGo("no-go"),
+}
+
+data class CoverageAtlasPolicyCheck(
+    val name: String,
+    val status: CoverageAtlasPolicyCheckStatus,
+    val evidence: String,
+)
+
+data class CoverageAtlasPolicyDecision(
+    val cachePolicy: CoverageCachePolicy,
+    val persistentCacheEnabled: Boolean,
+    val verdict: CoverageAtlasPolicyVerdict,
+    val reason: CoverageReason?,
+    val checks: List<CoverageAtlasPolicyCheck>,
+    val hitCount: Int,
+    val missCount: Int,
+    val residentBytes: Long,
+    val evictionCount: Int,
+) {
+    fun dump(): String =
+        "coverageAtlasPolicy(policy=${cachePolicy::class.simpleName}," +
+            "persistent=$persistentCacheEnabled,verdict=${verdict.wireName}," +
+            "reason=${reason?.code ?: "none"},hits=$hitCount,misses=$missCount," +
+            "residentBytes=$residentBytes,evictions=$evictionCount," +
+            "checks=${checks.joinToString("|") { "${it.name}:${it.status}:${it.evidence}" }})"
+}
+
+object CoverageAtlasPolicyGate {
+    private val persistentRequirements = listOf(
+        "shape-key" to "shape key definition",
+        "transform-key" to "transform key definition",
+        "invalidation" to "invalidation policy",
+        "memory-budget" to "memory budget",
+        "eviction" to "eviction policy",
+        "cpu-gpu-sync" to "CPU/GPU synchronization policy",
+        "owner-thread" to "owner-thread handling",
+    )
+
+    fun evaluate(cachePolicy: CoverageCachePolicy): CoverageAtlasPolicyDecision = when (cachePolicy) {
+        CoverageCachePolicy.PersistentByShapeKey -> CoverageAtlasPolicyDecision(
+            cachePolicy = cachePolicy,
+            persistentCacheEnabled = false,
+            verdict = CoverageAtlasPolicyVerdict.NoGo,
+            reason = StandardCoverageReason.AtlasPolicyUnavailable,
+            checks = persistentRequirements.map { (name, evidence) ->
+                CoverageAtlasPolicyCheck(
+                    name = name,
+                    status = CoverageAtlasPolicyCheckStatus.Missing,
+                    evidence = "$evidence not accepted",
+                )
+            },
+            hitCount = 0,
+            missCount = 0,
+            residentBytes = 0L,
+            evictionCount = 0,
+        )
+        CoverageCachePolicy.FrameLocal -> nonPersistentDecision(cachePolicy, "frame-local atlas is not persistent")
+        CoverageCachePolicy.NoCache -> nonPersistentDecision(cachePolicy, "no atlas cache requested")
+    }
+
+    private fun nonPersistentDecision(
+        cachePolicy: CoverageCachePolicy,
+        evidence: String,
+    ): CoverageAtlasPolicyDecision = CoverageAtlasPolicyDecision(
+        cachePolicy = cachePolicy,
+        persistentCacheEnabled = false,
+        verdict = CoverageAtlasPolicyVerdict.GoNonPersistent,
+        reason = null,
+        checks = persistentRequirements.map { (name, _) ->
+            CoverageAtlasPolicyCheck(name, CoverageAtlasPolicyCheckStatus.NotRequired, evidence)
+        },
+        hitCount = 0,
+        missCount = 0,
+        residentBytes = 0L,
+        evictionCount = 0,
+    )
+}
+
 sealed interface CoveragePlan {
     data object Full : CoveragePlan
     data class AnalyticRect(val bounds: FloatRect, val aa: Boolean) : CoveragePlan
@@ -331,13 +418,20 @@ object CoveragePlanAdapter {
                 inverse = plan.inverse,
             ),
         )
-        is CoveragePlan.CoverageAtlas -> CoverageLoweringResult.StrategyResult(
-            CoverageBackendStrategy.CoverageAtlasSample(
-                ref = plan.ref,
-                bounds = plan.bounds,
-                cachePolicy = plan.cachePolicy,
-            ),
-        )
+        is CoveragePlan.CoverageAtlas -> {
+            val policyDecision = CoverageAtlasPolicyGate.evaluate(plan.cachePolicy)
+            if (policyDecision.reason != null) {
+                unsupported(policyDecision.reason)
+            } else {
+                CoverageLoweringResult.StrategyResult(
+                    CoverageBackendStrategy.CoverageAtlasSample(
+                        ref = plan.ref,
+                        bounds = plan.bounds,
+                        cachePolicy = plan.cachePolicy,
+                    ),
+                )
+            }
+        }
         is CoveragePlan.Unsupported -> unsupported(plan.reason)
     }
 
