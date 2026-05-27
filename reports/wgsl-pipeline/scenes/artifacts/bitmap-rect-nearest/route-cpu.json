@@ -1,0 +1,10 @@
+{
+  "sceneId": "bitmap-rect-nearest",
+  "backend": "CPU",
+  "drawKind": "bitmap-rect-nearest",
+  "selectedRoute": "cpu.image-rect.strict-nearest",
+  "coveragePlan": "AnalyticRect(image-rect-destination,aa=false)",
+  "sampling": "strict-nearest integer texel loads constrained to source rect",
+  "fallbackReason": "none",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-27-m32-drawbitmaprect-skbug4734-resolution.md"
+}
