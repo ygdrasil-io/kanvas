@@ -326,6 +326,70 @@ class GeometryCoverageMigrationHarnessTest {
     }
 
     @Test
+    fun `clip stack breadth matrix covers supported and refused families`() {
+        val matrix = ClipStackBreadthMatrix.cases
+        val byFamily = matrix.associateBy { it.family }
+
+        assertEquals(
+            setOf(
+                "rect-intersect",
+                "rrect-intersect",
+                "rect-difference",
+                "arbitrary-aa-path-intersect",
+                "multi-shape-aa-difference",
+                "shader-clip",
+                "unlowerable-stack",
+            ),
+            byFamily.keys,
+        )
+        assertEquals(ClipStackBackendDisposition.Supported, byFamily.getValue("rect-intersect").webGpuDisposition)
+        assertEquals(ClipStackBackendDisposition.Supported, byFamily.getValue("rrect-intersect").webGpuDisposition)
+        assertEquals(ClipStackBackendDisposition.Supported, byFamily.getValue("rect-difference").webGpuDisposition)
+        assertEquals(ClipStackBackendDisposition.Supported, byFamily.getValue("arbitrary-aa-path-intersect").cpuDisposition)
+        assertEquals(ClipStackBackendDisposition.Supported, byFamily.getValue("multi-shape-aa-difference").cpuDisposition)
+        assertEquals(ClipStackBackendDisposition.Supported, byFamily.getValue("shader-clip").cpuDisposition)
+        assertEquals(ClipStackBackendDisposition.Refused, byFamily.getValue("unlowerable-stack").cpuDisposition)
+        assertEquals(
+            "coverage.cpu-descriptor-aa-clip-unsupported",
+            byFamily.getValue("arbitrary-aa-path-intersect").cpuDescriptorFallbackReason,
+        )
+        assertEquals(
+            "coverage.cpu-descriptor-aa-clip-unsupported",
+            byFamily.getValue("multi-shape-aa-difference").cpuDescriptorFallbackReason,
+        )
+        assertEquals(
+            "coverage.cpu-descriptor-clip-shader-unsupported",
+            byFamily.getValue("shader-clip").cpuDescriptorFallbackReason,
+        )
+        assertEquals(
+            StandardCoverageReason.ArbitraryAaClipUnsupported,
+            byFamily.getValue("arbitrary-aa-path-intersect").webGpuReason,
+        )
+        assertEquals(
+            StandardCoverageReason.ArbitraryAaClipUnsupported,
+            byFamily.getValue("multi-shape-aa-difference").webGpuReason,
+        )
+        assertEquals(
+            StandardCoverageReason.ArbitraryAaClipUnsupported,
+            byFamily.getValue("shader-clip").webGpuReason,
+        )
+        assertEquals(
+            StandardGeometryReason.ClipStackUnsupported,
+            byFamily.getValue("unlowerable-stack").webGpuReason,
+        )
+
+        val dump = ClipStackBreadthMatrix.dump()
+        assertTrue(dump.contains("family=rect-difference;operation=difference"))
+        assertTrue(dump.contains("family=multi-shape-aa-difference;operation=difference"))
+        assertTrue(dump.contains("cpuRoute=kanvas-skia.current.sk-aa-clip-rle"))
+        assertTrue(dump.contains("cpuDescriptorFallbackReason=coverage.cpu-descriptor-aa-clip-unsupported"))
+        assertTrue(dump.contains("cpuDescriptorFallbackReason=coverage.cpu-descriptor-clip-shader-unsupported"))
+        assertTrue(dump.contains("webgpuReason=coverage.arbitrary-aa-clip-unsupported"))
+        assertTrue(dump.contains("webgpuReason=geometry.clip-stack-unsupported"))
+        assertTrue(dump.contains("pmEvidence=clip stress grid"))
+    }
+
+    @Test
     fun `gated mode keeps descriptor route off by default`() {
         val decision = GeometryCoverageMigrationHarness.gateDecision(
             primitive = DescriptorPrimitiveFamily.AxisAlignedFilledRect,
