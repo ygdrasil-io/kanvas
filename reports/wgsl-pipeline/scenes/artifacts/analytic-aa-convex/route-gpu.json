@@ -1,0 +1,12 @@
+{
+  "sceneId": "analytic-aa-convex",
+  "backend": "WebGPU",
+  "drawKind": "AnalyticAntialiasConvexWebGpuTest",
+  "status": "expected-unsupported",
+  "coverageStrategy": "webgpu.coverage.path-convex-fan",
+  "pipelineKey": "coverageKind=pathConvexFan",
+  "fallbackReason": "gpu.adapter-backed-analytic-aa-convex-capture-not-produced-in-m36-e-local-run",
+  "edgeBudgetReason": "not coverage.edge-count-exceeded",
+  "test": "org.skia.gpu.webgpu.AnalyticAntialiasConvexWebGpuTest",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md"
+}
