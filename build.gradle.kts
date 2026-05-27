@@ -389,6 +389,9 @@ fun renderPipelineConformanceReport(
         |- Runtime-effect support matrix: `reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md`
         |  lists `runtime.simple_rt` as descriptor-backed and dispatch-only builtins as missing descriptor/WGSL evidence;
         |  current counts are $runtimeEffectSupportMatrixCounts.
+        |- GPU similarity investigation: `reports/wgsl-pipeline/2026-05-27-m31-gpu-similarity-investigation.md`
+        |  classifies `DrawBitmapRect3*` and `DrawBitmapRectSkbug4734*` below-floor failures as implementation-regression candidates
+        |  with no floor change in this milestone slice.
         |
         |## Full Test Summary
         |
