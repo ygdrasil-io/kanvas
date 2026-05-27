@@ -43,6 +43,14 @@ public data class SkRuntimeEffectSupportMatrixEntry(
         }
 }
 
+public data class SkRuntimeEffectSupportMatrixStatusCounts(
+    val total: Int,
+    val descriptorBacked: Int,
+    val dispatchOnlyMissingDescriptor: Int,
+    val cpuOnly: Int,
+    val gpuBacked: Int,
+)
+
 public object SkRuntimeEffectDescriptorRegistry {
     private val byHash: MutableMap<Long, SkRuntimeEffectDescriptor> = HashMap()
     private val byStableId: MutableMap<String, SkRuntimeEffectDescriptor> = HashMap()
@@ -99,10 +107,28 @@ public object SkRuntimeEffectDescriptorRegistry {
                     .thenBy { it.canonicalHash },
             )
 
+    public fun supportMatrixStatusCounts(): SkRuntimeEffectSupportMatrixStatusCounts {
+        val entries = supportMatrixEntries()
+        return SkRuntimeEffectSupportMatrixStatusCounts(
+            total = entries.size,
+            descriptorBacked = entries.count { it.descriptorStatus == "descriptor-backed" },
+            dispatchOnlyMissingDescriptor = entries.count { it.descriptorStatus == "dispatch-only; missing descriptor" },
+            cpuOnly = entries.count { it.cpuImplementationId.isNotBlank() && it.wgslImplementationId.isNullOrBlank() },
+            gpuBacked = entries.count { !it.wgslImplementationId.isNullOrBlank() },
+        )
+    }
+
     public fun exportSupportMatrixMarkdown(): String = buildString {
+        val counts = supportMatrixStatusCounts()
         appendLine("# Runtime Effect Descriptor Support Matrix")
         appendLine()
         appendLine("Derived evidence. The descriptor registry is the source of truth.")
+        appendLine()
+        appendLine(
+            "Status counts: total=${counts.total}; descriptor-backed=${counts.descriptorBacked}; " +
+                "dispatch-only/missing-descriptor=${counts.dispatchOnlyMissingDescriptor}; " +
+                "CPU-only=${counts.cpuOnly}; GPU-backed=${counts.gpuBacked}.",
+        )
         appendLine()
         appendLine(
             "| Stable id | Canonical hash | Kind | Uniforms | Children | Flags | CPU support | GPU support | Descriptor status | Missing reason |",
