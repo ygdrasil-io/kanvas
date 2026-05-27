@@ -20,23 +20,47 @@ class SkRuntimeEffectDescriptorRegistryTest {
 
         val entries = SkRuntimeEffectDescriptorRegistry.supportMatrixEntries()
 
-        assertEquals(listOf("runtime.a", "runtime.z"), entries.map { it.descriptor.stableId })
+        assertEquals(listOf("runtime.a", "runtime.z"), entries.map { it.stableId })
     }
 
     @Test
     fun `support matrix contains SimpleRT CPU and GPU status`() {
         SkBuiltinShaderEffectsSimple.registerAll()
 
-        val entry = SkRuntimeEffectDescriptorRegistry.supportMatrixEntries().single()
+        val entry = SkRuntimeEffectDescriptorRegistry.supportMatrixEntries()
+            .single { it.stableId == "runtime.simple_rt" }
 
         assertEquals(3617365546103039931L, entry.canonicalHash)
-        assertEquals("runtime.simple_rt", entry.descriptor.stableId)
+        assertEquals("runtime.simple_rt", entry.stableId)
+        assertEquals("descriptor-backed", entry.descriptorStatus)
         assertEquals("supported:kotlin/simple_rt", entry.cpuSupport)
         assertEquals("supported:wgsl/runtime_simple_rt", entry.gpuSupport)
+        assertEquals("none", entry.missingReason)
+    }
+
+    @Test
+    fun `support matrix reports dispatch-only builtins as missing descriptors`() {
+        SkBuiltinShaderEffectsSimple.registerAll()
+
+        val entries = SkRuntimeEffectDescriptorRegistry.supportMatrixEntries()
+
         assertEquals(
-            "Runtime effect descriptor not registered: ${entry.canonicalHash}",
-            entry.missingDiagnostic,
+            listOf("runtime.linear_gradient_rt", "runtime.simple_rt", "runtime.spiral_rt"),
+            entries.map { it.stableId },
         )
+        val linearGradient = entries.single { it.stableId == "runtime.linear_gradient_rt" }
+        assertEquals("dispatch-only; missing descriptor", linearGradient.descriptorStatus)
+        assertEquals("supported:kotlin/linear_gradient_rt", linearGradient.cpuSupport)
+        assertEquals("unsupported: WGSL implementation id missing", linearGradient.gpuSupport)
+        assertEquals(
+            "Runtime effect descriptor missing for dispatch-only effect: ${linearGradient.canonicalHash}",
+            linearGradient.missingReason,
+        )
+
+        val spiral = entries.single { it.stableId == "runtime.spiral_rt" }
+        assertEquals("dispatch-only; missing descriptor", spiral.descriptorStatus)
+        assertEquals("supported:kotlin/spiral_rt", spiral.cpuSupport)
+        assertTrue(spiral.uniforms.map { it.name }.containsAll(listOf("rad_scale", "in_center", "in_colors0", "in_colors1")))
     }
 
     @Test
@@ -51,7 +75,9 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(first.contains("gColor:kFloat4"))
         assertTrue(first.contains("supported:kotlin/simple_rt"))
         assertTrue(first.contains("supported:wgsl/runtime_simple_rt"))
-        assertTrue(first.contains("Runtime effect descriptor not registered:"))
+        assertTrue(first.contains("descriptor-backed"))
+        assertTrue(first.contains("dispatch-only; missing descriptor"))
+        assertTrue(first.contains("Runtime effect descriptor missing for dispatch-only effect:"))
     }
 
     @Test

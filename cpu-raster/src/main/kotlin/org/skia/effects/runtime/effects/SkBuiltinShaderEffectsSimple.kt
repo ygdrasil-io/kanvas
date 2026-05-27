@@ -66,7 +66,10 @@ public object SkBuiltinShaderEffectsSimple {
      * present, so calling this twice in a row is safe.
      */
     public fun registerAll() {
-        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(SIMPLE_RT_SKSL) { SimpleRTImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(
+            SIMPLE_RT_SKSL,
+            SimpleRTImpl.dispatchMetadata("runtime.simple_rt", "kotlin/simple_rt"),
+        ) { SimpleRTImpl }
         SkRuntimeEffectDescriptorRegistry.registerBuiltinIfAbsent(
             SIMPLE_RT_SKSL,
             SkRuntimeEffectDescriptor(
@@ -79,8 +82,14 @@ public object SkBuiltinShaderEffectsSimple {
                 wgslImplementationId = "wgsl/runtime_simple_rt",
             ),
         )
-        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(SPIRAL_RT_SKSL) { SpiralRTImpl }
-        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(LINEAR_GRADIENT_RT_SKSL) { LinearGradientRTImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(
+            SPIRAL_RT_SKSL,
+            SpiralRTImpl.dispatchMetadata("runtime.spiral_rt", "kotlin/spiral_rt"),
+        ) { SpiralRTImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(
+            LINEAR_GRADIENT_RT_SKSL,
+            LinearGradientRTImpl.dispatchMetadata("runtime.linear_gradient_rt", "kotlin/linear_gradient_rt"),
+        ) { LinearGradientRTImpl }
     }
 
     // ─── SkSL sources (verbatim copies of upstream) ──────────────────
@@ -395,4 +404,17 @@ public object SkBuiltinShaderEffectsSimple {
     }
 
     private const val INV_255: Float = 1f / 255f
+
+    private fun SkRuntimeImpl.dispatchMetadata(
+        stableId: String,
+        cpuImplementationId: String,
+    ): org.skia.effects.runtime.SkRuntimeEffectDispatchMetadata =
+        org.skia.effects.runtime.SkRuntimeEffectDispatchMetadata(
+            stableId = stableId,
+            kind = SkRuntimeEffect.Kind.kShader,
+            uniforms = uniforms,
+            children = children,
+            flags = flags,
+            cpuImplementationId = cpuImplementationId,
+        )
 }

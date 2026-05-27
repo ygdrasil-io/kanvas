@@ -230,6 +230,41 @@ class SkRuntimeEffectDispatchTest {
     }
 
     @Test
+    fun `test override helper removes builtin support metadata for replaced hash`() {
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(
+            identityShaderSksl,
+            dispatchMetadata("runtime.identity"),
+        ) { stubImpl() }
+        assertEquals(listOf("runtime.identity"), SkRuntimeEffectDispatch.builtinMetadataEntries().map { it.second.stableId })
+
+        SkRuntimeEffectDispatch.registerForTestOverride(identityShaderSksl) { stubImpl() }
+
+        assertEquals(emptyList<String>(), SkRuntimeEffectDispatch.builtinMetadataEntries().map { it.second.stableId })
+    }
+
+    @Test
+    fun `conflicting builtin support metadata is rejected`() {
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(
+            identityShaderSksl,
+            dispatchMetadata("runtime.identity"),
+        ) { stubImpl() }
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            SkRuntimeEffectDispatch.registerBuiltinIfAbsent(
+                identityShaderSksl,
+                dispatchMetadata("runtime.identity.replacement"),
+            ) { stubImpl() }
+        }
+
+        assertEquals(
+            "Duplicate runtime effect dispatch metadata: " +
+                "canonicalHash=${SkRuntimeEffectDispatch.canonicalHash(identityShaderSksl)} " +
+                "stableId=runtime.identity.replacement",
+            error.message,
+        )
+    }
+
+    @Test
     fun `duplicate descriptor register is rejected with hash and stable id`() {
         val descriptor = descriptor("runtime.identity")
         SkRuntimeEffectDescriptorRegistry.register(identityShaderSksl, descriptor)
@@ -258,6 +293,7 @@ class SkRuntimeEffectDispatchTest {
         assertEquals(1, SkRuntimeEffectDispatch.size)
         SkRuntimeEffectDispatch.clearForTest()
         assertEquals(0, SkRuntimeEffectDispatch.size)
+        assertEquals(emptyList<String>(), SkRuntimeEffectDispatch.builtinMetadataEntries().map { it.second.stableId })
         assertNull(SkRuntimeEffectDispatch.lookup(identityShaderSksl))
     }
 
@@ -270,5 +306,15 @@ class SkRuntimeEffectDispatchTest {
             flags = 0,
             cpuImplementationId = "kotlin/test",
             wgslImplementationId = null,
+        )
+
+    private fun dispatchMetadata(stableId: String): SkRuntimeEffectDispatchMetadata =
+        SkRuntimeEffectDispatchMetadata(
+            stableId = stableId,
+            kind = SkRuntimeEffect.Kind.kShader,
+            uniforms = emptyList(),
+            children = emptyList(),
+            flags = 0,
+            cpuImplementationId = "kotlin/test",
         )
 }
