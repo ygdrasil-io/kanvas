@@ -76,6 +76,8 @@ class GpuInventoryFailureReportTest {
         val json = Files.readString(jsonPath)
         assertTrue(markdown.contains("GPU Inventory Failure Classification"))
         assertTrue(markdown.contains("| `expected-unsupported-diagnostic` | 1 |"))
+        assertTrue(markdown.contains("Expected Unsupported Reason Catalog"))
+        assertTrue(markdown.contains("| `coverage.edge-count-exceeded` | `GRA-70"))
         assertTrue(markdown.contains("expected-unsupported-diagnostic"))
         assertTrue(json.contains("\"records\""))
         assertTrue(json.contains("\"expected-unsupported-diagnostic\""))
