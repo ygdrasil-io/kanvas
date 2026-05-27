@@ -1,6 +1,6 @@
 # MVP Release Readiness
 
-Status: Draft (technical gates green, PM evidence and Linear closeout pending)
+Status: Draft (PM evidence ready, Linear closeout pending)
 Target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 Milestone: M35 -- MVP Release Candidate
 
@@ -69,7 +69,7 @@ As of 2026-05-27, the technical M35 gates are green:
 | Similarity regressions | Pass | final inventory has `similarity-regression=0` |
 | Unexpected exceptions | Pass | final inventory has `unexpected-exception=0` |
 | Accepted image-filter limitation | Pass | exactly two `SimpleOffsetImageFilter*` rows remain `image-filter.crop-input-nonnull-prepass-required` |
-| PM evidence package | Pending | GRA-117 |
+| PM evidence package | Pass | `reports/wgsl-pipeline/2026-05-27-m35-pm-evidence-package.md` |
 | Linear/project closeout | Pending | GRA-118 |
 
 The full inventory still fails the non-blocking inventory job because it runs
@@ -97,6 +97,6 @@ The release candidate does not:
 
 ## Status Policy
 
-This spec remains Draft until M35 PM evidence and closeout land. It can move
-to Accepted only after the Linear project state, README status, and reports
-agree on the final MVP decision.
+This spec remains Draft until M35 closeout lands. It can move to Accepted only
+after the Linear project state, README status, and reports agree on the final
+MVP decision.
