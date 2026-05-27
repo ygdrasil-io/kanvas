@@ -32,3 +32,21 @@ tasks.register<JavaExec>("cpuVectorPilotBenchmark") {
         System.getProperty(key)?.let { systemProperty(key, it) }
     }
 }
+
+tasks.register<JavaExec>("cpuVectorAllocationBenchmark") {
+    group = "verification"
+    description = "Runs the scalar vs Java 25 Vector API solid-rect benchmark with allocation evidence."
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("org.skia.pipeline.CpuVectorPilotBenchmarkKt")
+    jvmArgs("--add-modules", "jdk.incubator.vector")
+    listOf(
+        "kanvas.cpu.vector.benchmark.width",
+        "kanvas.cpu.vector.benchmark.height",
+        "kanvas.cpu.vector.benchmark.warmups",
+        "kanvas.cpu.vector.benchmark.iterations",
+        "kanvas.cpu.vector.benchmark.allocationIterations",
+    ).forEach { key ->
+        System.getProperty(key)?.let { systemProperty(key, it) }
+    }
+}

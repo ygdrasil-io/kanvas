@@ -92,6 +92,13 @@ Benchmark reports should capture:
 Claims of "faster" or "ready to retire" require benchmark evidence, not only
 passing pixel tests.
 
+CPU vector default-promotion evidence must include
+`rtk ./gradlew --no-daemon :render-pipeline:cpuVectorAllocationBenchmark`.
+The report must name the allocation metric, its units, the `0.0 B/op`
+hot-loop target, measured scalar/vector bytes per operation, and any explicit
+exception for allocations outside the per-pixel loop. A rejected benchmark is
+valid evidence and must remain visible with its decision line.
+
 ## GPU Success Gates
 
 Generated GPU families require:

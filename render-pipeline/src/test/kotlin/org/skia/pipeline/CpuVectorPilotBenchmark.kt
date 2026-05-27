@@ -9,6 +9,8 @@ fun main() {
     val height = System.getProperty("kanvas.cpu.vector.benchmark.height")?.toIntOrNull() ?: 2048
     val warmups = System.getProperty("kanvas.cpu.vector.benchmark.warmups")?.toIntOrNull() ?: 5
     val iterations = System.getProperty("kanvas.cpu.vector.benchmark.iterations")?.toIntOrNull() ?: 20
+    val allocationIterations = System.getProperty("kanvas.cpu.vector.benchmark.allocationIterations")?.toIntOrNull()
+        ?: iterations
     val ir = KanvasPipelineIR.demoSolidRectIr(Rgba(0.25f, 0.5f, 0.9f, 1f))
 
     repeat(warmups) {
@@ -23,11 +25,17 @@ fun main() {
     val vector = measure(iterations) {
         CpuScalarPipelineExecutor.execute(ir, width, height, CpuPipelineExecutionOptions(CpuVectorMode.Force))
     }
+    val scalarAllocation = measureAllocation(allocationIterations) {
+        CpuScalarPipelineExecutor.execute(ir, width, height, CpuPipelineExecutionOptions(CpuVectorMode.Disabled))
+    }
+    val vectorAllocation = measureAllocation(allocationIterations) {
+        CpuScalarPipelineExecutor.execute(ir, width, height, CpuPipelineExecutionOptions(CpuVectorMode.Force))
+    }
     val scalarResult = CpuScalarPipelineExecutor.execute(ir, width, height, CpuPipelineExecutionOptions(CpuVectorMode.Disabled))
     val speedup = scalar.medianNanos.toDouble() / vector.medianNanos.toDouble()
     val accepted = vectorResult is CpuExecutionResult.Success &&
         vectorResult.kernelId == "java25.vector.solid_src_over_clear" &&
-        speedup > 1.0
+        speedup >= 1.5
 
     check(scalarResult is CpuExecutionResult.Success)
     check(vectorResult is CpuExecutionResult.Success)
@@ -45,6 +53,12 @@ fun main() {
     println("speedup=${format(speedup)}")
     println("scalarGcCollections=${scalar.gcCollections} scalarGcTimeMillis=${scalar.gcTimeMillis}")
     println("vectorGcCollections=${vector.gcCollections} vectorGcTimeMillis=${vector.gcTimeMillis}")
+    println("allocationMetric=threadAllocatedBytesPerExecute")
+    println("allocationTargetBPerOp=0.0")
+    println("allocationIterations=$allocationIterations")
+    println("scalarAllocBytesPerOp=${scalarAllocation.bytesPerOpString()} units=B/op supported=${scalarAllocation.supported}")
+    println("vectorAllocBytesPerOp=${vectorAllocation.bytesPerOpString()} units=B/op supported=${vectorAllocation.supported}")
+    println("allocationException=CpuScalarPipelineExecutor.execute allocates the destination IntArray/PixelBuffer per benchmark operation; promoted hot-loop target remains 0.0 B/op inside the fill kernel.")
     println("decision=${if (accepted) "accepted" else "rejected"}")
 }
 
@@ -76,6 +90,36 @@ private fun measure(iterations: Int, block: () -> Unit): Measurement {
         gcCollections = afterGc.collections - beforeGc.collections,
         gcTimeMillis = afterGc.timeMillis - beforeGc.timeMillis,
     )
+}
+
+private data class AllocationMeasurement(
+    val bytesPerOp: Double?,
+    val supported: Boolean,
+) {
+    fun bytesPerOpString(): String = bytesPerOp?.let(::format) ?: "unavailable"
+}
+
+private fun measureAllocation(iterations: Int, block: () -> Unit): AllocationMeasurement {
+    val bean = ManagementFactory.getThreadMXBean() as? com.sun.management.ThreadMXBean
+        ?: return AllocationMeasurement(bytesPerOp = null, supported = false)
+    if (!bean.isThreadAllocatedMemorySupported) {
+        return AllocationMeasurement(bytesPerOp = null, supported = false)
+    }
+    val wasEnabled = bean.isThreadAllocatedMemoryEnabled
+    if (!wasEnabled) bean.isThreadAllocatedMemoryEnabled = true
+    return try {
+        val threadId = Thread.currentThread().threadId()
+        val before = bean.getThreadAllocatedBytes(threadId)
+        repeat(iterations) { block() }
+        val after = bean.getThreadAllocatedBytes(threadId)
+        if (before < 0L || after < before) {
+            AllocationMeasurement(bytesPerOp = null, supported = false)
+        } else {
+            AllocationMeasurement(bytesPerOp = (after - before).toDouble() / iterations.toDouble(), supported = true)
+        }
+    } finally {
+        if (!wasEnabled) bean.isThreadAllocatedMemoryEnabled = false
+    }
 }
 
 private data class GcSnapshot(val collections: Long, val timeMillis: Long)
