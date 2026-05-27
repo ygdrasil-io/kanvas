@@ -24,5 +24,5 @@ that area.
 |---|---|---|
 | M32 | `wgsl-pipeline/08-bitmap-image-rect-sampling.md` | Accepted |
 | M33 | `geometry-coverage/08-path-aa-mvp-boundary.md` | Accepted |
-| M34 | `wgsl-pipeline/09-image-filter-mvp-lane.md` | Draft |
+| M34 | `wgsl-pipeline/09-image-filter-mvp-lane.md` | Accepted |
 | M35 | `release-readiness-mvp.md` | Draft |

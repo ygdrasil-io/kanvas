@@ -1,6 +1,6 @@
 # Spec 09: Image-Filter MVP Lane
 
-Status: Draft
+Status: Accepted
 Target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 Milestone: M34 -- Image-filter MVP Lane
 
@@ -43,7 +43,7 @@ and adapter-backed evidence that removes the reason from inventory.
 | GRA-110 | Decided accepted MVP limitation rather than pre-pass implementation. |
 | GRA-111 | Hardened the limitation path with required-smoke guards. |
 | GRA-112 | Update image-filter spec, README, and release-readiness wording. |
-| GRA-113 | Close M34 with PM-readable evidence. |
+| GRA-113 | Closed M34 with PM-readable evidence. |
 
 ## Acceptance Rules
 
@@ -76,3 +76,11 @@ Expected evidence sources:
 - focused image-filter WebGPU/cross-backend tests when implementation changes;
 - `rtk ./gradlew --no-daemon :gpu-raster:validateGpuSmokePromotionPolicy`
 - M34 reports under `reports/wgsl-pipeline/`
+
+## Acceptance Evidence
+
+- GRA-109: `reports/wgsl-pipeline/2026-05-27-m34-crop-nonnull-inventory-reproduction.md`
+- GRA-110: `reports/wgsl-pipeline/2026-05-27-m34-crop-nonnull-decision.md`
+- GRA-111: `reports/wgsl-pipeline/2026-05-27-m34-crop-nonnull-limitation-hardening.md`
+- GRA-112: `reports/wgsl-pipeline/2026-05-27-m34-spec-readiness-sync.md`
+- GRA-113: `reports/wgsl-pipeline/2026-05-27-m34-image-filter-closeout.md`
