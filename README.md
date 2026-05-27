@@ -10,7 +10,7 @@ GPU backend.
 
 Last updated: 2026-05-27
 
-MVP readiness: approximately 99%.
+MVP readiness: 100%.
 
 The percentage is a readiness score, not an effort estimate. A block only moves
 when its milestone Definition of Done has CI, Linear, report, or artifact
@@ -32,7 +32,7 @@ Active execution source:
 | Bitmap/ImageRect remediation | M32: fix or evidence-classify `DrawBitmapRect3` and `DrawBitmapRectSkbug4734` GPU similarity deltas | Done | 10% | 100% | `GRA-93` through `GRA-100`; image-rect similarity regressions are zero and `DrawBitmapRectSkbug4734` is required smoke |
 | Path AA inventory boundary | M33: classify edge-budget refusals and promote only stable AA coverage | Done | 10% | 100% | `GRA-105` through `GRA-108`; `coverage.edge-count-exceeded` remains inventory-only and `AnalyticAntialiasConvexWebGpuTest` is required smoke |
 | Image-filter MVP lane | M34: gate `Crop(input = nonNull)` image-filter cases as an accepted MVP limitation | Done | 5% | 100% | `GRA-109` through `GRA-113`; `image-filter.crop-input-nonnull-prepass-required` remains inventory-only and `SimpleOffsetImageFilter*` fixtures are blocked from required smoke |
-| MVP release candidate | M35: final smoke, inventory, PM demo, limitations, and release notes | In Progress | 5% | 95% | Required CI, conformance, smoke, full inventory, and PM evidence package are complete; closeout remains |
+| MVP release candidate | M35: final smoke, inventory, PM demo, limitations, and release notes | Done | 5% | 100% | Required CI, conformance, smoke, full inventory, PM evidence package, and closeout evidence are complete |
 
 ```mermaid
 flowchart LR
