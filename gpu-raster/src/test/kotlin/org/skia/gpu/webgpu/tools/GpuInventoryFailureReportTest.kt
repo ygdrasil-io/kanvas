@@ -22,7 +22,7 @@ class GpuInventoryFailureReportTest {
             |    <failure message="floor">DrawBitmapRect3 regressed below floor : 97,15% &lt; 99,95%. See gpu-raster/build/debug-images/draw_bitmap_rect3-{raster,gpu,diff}.png.</failure>
             |  </testcase>
             |  <testcase classname="org.skia.gpu.webgpu.FilterCase" name="cropNonNull">
-            |    <failure message="crop">SkImageFilters.Crop(input = nonNull) with a non-null child filter needs a pre-pass.</failure>
+            |    <failure message="crop">reason=image-filter.crop-input-nonnull-prepass-required: SkImageFilters.Crop(input = nonNull) with a non-null child filter needs a pre-pass.</failure>
             |  </testcase>
             |  <testcase classname="org.skia.gpu.webgpu.SkipCase" name="adapterMissing">
             |    <skipped message="No WebGPU adapter"/>
@@ -50,6 +50,8 @@ class GpuInventoryFailureReportTest {
         assertEquals(97.15, similarity.actualSimilarityPercent)
         assertEquals(99.95, similarity.floorSimilarityPercent)
         assertEquals("gpu-raster/build/debug-images/draw_bitmap_rect3-{raster,gpu,diff}.png", similarity.artifactPath)
+        val cropNonNull = summary.records.first { it.category == GpuInventoryFailureCategory.UnsupportedImageFilter }
+        assertEquals("image-filter.crop-input-nonnull-prepass-required", cropNonNull.reason)
     }
 
     @Test
@@ -78,8 +80,45 @@ class GpuInventoryFailureReportTest {
         assertTrue(markdown.contains("| `expected-unsupported-diagnostic` | 1 |"))
         assertTrue(markdown.contains("Expected Unsupported Reason Catalog"))
         assertTrue(markdown.contains("| `coverage.edge-count-exceeded` | `GRA-70"))
+        assertTrue(markdown.contains("Unsupported Image-Filter Reason Catalog"))
+        assertTrue(markdown.contains("image-filter.crop-input-nonnull-prepass-required"))
         assertTrue(markdown.contains("expected-unsupported-diagnostic"))
         assertTrue(json.contains("\"records\""))
         assertTrue(json.contains("\"expected-unsupported-diagnostic\""))
+    }
+
+    @Test
+    fun `lists exact crop non null failing tests in expected unsupported inventory section`() {
+        val testRoot = Files.createTempDirectory("gpu-inventory-crop-tests")
+        val xml = testRoot.resolve("TEST-org.skia.gpu.webgpu.InventoryCrop.xml")
+        Files.writeString(
+            xml,
+            """
+            |<?xml version="1.0" encoding="UTF-8"?>
+            |<testsuite name="org.skia.gpu.webgpu.InventoryCrop" tests="2" failures="2" skipped="0" errors="0">
+            |  <testcase classname="org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest" name="SimpleOffsetImageFilterGM renders close to reference PNG on the GPU backend()">
+            |    <failure message="crop">reason=image-filter.crop-input-nonnull-prepass-required: SkImageFilters.Crop(input = nonNull) with a non-null child filter needs a pre-pass.</failure>
+            |  </testcase>
+            |  <testcase classname="org.skia.gpu.webgpu.crossbackend.SimpleOffsetImageFilterCrossBackendTest" name="SimpleOffsetImageFilterGM matches reference on raster and GPU backends()">
+            |    <failure message="crop">reason=image-filter.crop-input-nonnull-prepass-required: SkImageFilters.Crop(input = nonNull) with a non-null child filter needs a pre-pass.</failure>
+            |  </testcase>
+            |</testsuite>
+            """.trimMargin(),
+        )
+
+        val summary = GpuInventoryFailureReport.run(testRoot)
+        val markdown = GpuInventoryFailureReport.toMarkdown(summary)
+
+        assertTrue(markdown.contains("Crop(input = nonNull) Expected Unsupported Inventory Tests"))
+        assertTrue(
+            markdown.contains(
+                "org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest#SimpleOffsetImageFilterGM renders close to reference PNG on the GPU backend()",
+            ),
+        )
+        assertTrue(
+            markdown.contains(
+                "org.skia.gpu.webgpu.crossbackend.SimpleOffsetImageFilterCrossBackendTest#SimpleOffsetImageFilterGM matches reference on raster and GPU backends()",
+            ),
+        )
     }
 }

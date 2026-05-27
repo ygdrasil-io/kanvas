@@ -7749,7 +7749,10 @@ public class SkWebGpuDevice(
         if (cropParams != null) {
             if (cropParams.input != null) {
                 error(
-                    "SkWebGpuDevice.compositeFrom : paint.imageFilter is a " +
+                    "SkWebGpuDevice.compositeFrom refused route=webgpu.image-filter.crop-nonnull " +
+                        "diagnostic=backend=GPU,reason=image-filter.crop-input-nonnull-prepass-required," +
+                        "action=RefuseDiagnostic(image-filter.crop-input-nonnull-prepass-required): " +
+                        "paint.imageFilter is a " +
                         "SkImageFilters.Crop(input = nonNull) with a non-null " +
                         "child filter. Only the input == null case is " +
                         "supported (Phase G-saveLayer-imageFilter-crop) -- a " +

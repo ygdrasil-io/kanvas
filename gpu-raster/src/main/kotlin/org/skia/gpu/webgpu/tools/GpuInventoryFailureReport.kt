@@ -41,6 +41,25 @@ public data class GpuInventoryFailureSummary(
 }
 
 public object GpuInventoryFailureReport {
+    private data class UnsupportedImageFilterDiagnostic(
+        val marker: String,
+        val reasonCode: String,
+        val followUp: String?,
+    )
+
+    private val unsupportedImageFilterDiagnostics: List<UnsupportedImageFilterDiagnostic> = listOf(
+        UnsupportedImageFilterDiagnostic(
+            marker = "SkImageFilters.Crop(input = nonNull)",
+            reasonCode = "image-filter.crop-input-nonnull-prepass-required",
+            followUp = "Render-to-texture pre-pass implementation evidence (promotion blocker)",
+        ),
+    )
+
+    private val unsupportedImageFilterReasonByMarker: Map<String, UnsupportedImageFilterDiagnostic> =
+        unsupportedImageFilterDiagnostics.associateBy { it.marker }
+    private val unsupportedImageFilterReasonAllowlist: Set<String> =
+        unsupportedImageFilterDiagnostics.map { it.reasonCode }.toSet()
+
     private val expectedUnsupportedReasonCatalog: LinkedHashMap<String, String?> = linkedMapOf(
         "coverage.edge-count-exceeded" to "GRA-70 (WebGPU coverage strategy promotion/fallback scope)",
         "coverage.arbitrary-aa-clip-unsupported" to null,
@@ -52,12 +71,8 @@ public object GpuInventoryFailureReport {
     )
     private val expectedUnsupportedReasonAllowlist: Set<String> = expectedUnsupportedReasonCatalog.keys
 
-    private val unsupportedImageFilterMarkers: List<String> = listOf(
-        "SkImageFilters.Crop(input = nonNull)",
-    )
-
-    private val reasonKeyRegex = Regex("""reason=(coverage\.[a-z0-9-]+)""")
-    private val reasonCodeRegex = Regex("""coverage\.[a-z0-9-]+""")
+    private val reasonKeyRegex = Regex("""reason=([a-z0-9.-]+)""")
+    private val reasonCodeRegex = Regex("""(?:coverage|image-filter)\.[a-z0-9.-]+""")
     private val similarityFloorRegex = Regex("""([0-9]+(?:[.,][0-9]+)?)%\s*<\s*([0-9]+(?:[.,][0-9]+)?)%""")
     private val debugImageRegex = Regex("""(?:gpu-raster/)?build/debug-images/[A-Za-z0-9._/\-{},]+""")
 
@@ -90,6 +105,20 @@ public object GpuInventoryFailureReport {
         val expectedUnsupportedReasonRows = expectedUnsupportedReasonCatalog.entries.joinToString("\n") { (reason, followUp) ->
             "| `$reason` | ${followUp?.let { "`$it`" } ?: "-"} |"
         }
+        val unsupportedImageFilterReasonRows = unsupportedImageFilterDiagnostics.joinToString("\n") { diagnostic ->
+            "| `${diagnostic.reasonCode}` | `${diagnostic.marker}` | " +
+                "${diagnostic.followUp?.let { "`$it`" } ?: "-"} |"
+        }
+        val cropNonNullRows = summary.records
+            .filter {
+                it.category == GpuInventoryFailureCategory.UnsupportedImageFilter &&
+                    it.reason == "image-filter.crop-input-nonnull-prepass-required"
+            }
+            .ifEmpty { null }
+            ?.joinToString("\n") { record ->
+                "| `${record.testName}` | `${record.sourceXml}` |"
+            }
+            ?: "| _none_ | _none_ |"
         val recordRows = if (summary.records.isEmpty()) {
             "| _none_ | _none_ | _none_ | _none_ | _none_ | _none_ |"
         } else {
@@ -118,6 +147,20 @@ public object GpuInventoryFailureReport {
             appendLine(expectedUnsupportedReasonRows)
             appendLine()
             appendLine("`coverage.edge-count-exceeded` is tracked as a known unsupported WebGPU breadth gap and is not smoke-eligible until follow-up implementation evidence exists.")
+            appendLine()
+            appendLine("## Unsupported Image-Filter Reason Catalog")
+            appendLine()
+            appendLine("| Reason code | Signature marker | Follow-up dependency |")
+            appendLine("|---|---|---|")
+            appendLine(unsupportedImageFilterReasonRows)
+            appendLine()
+            appendLine("`image-filter.crop-input-nonnull-prepass-required` remains inventory-only expected unsupported coverage until a render-to-texture pre-pass lands.")
+            appendLine()
+            appendLine("### Crop(input = nonNull) Expected Unsupported Inventory Tests")
+            appendLine()
+            appendLine("| Test | Source XML |")
+            appendLine("|---|---|")
+            appendLine(cropNonNullRows)
             appendLine()
             appendLine("## Classified Records")
             appendLine()
@@ -228,21 +271,46 @@ public object GpuInventoryFailureReport {
             }
         }
 
-        unsupportedImageFilterMarkers.firstOrNull { marker -> mergedText.contains(marker) }?.let { marker ->
+        val preferredReasonCode = reasonKeyRegex.find(mergedText)?.groupValues?.get(1)
+        if (preferredReasonCode != null && preferredReasonCode in unsupportedImageFilterReasonAllowlist) {
             return Classification(
                 category = GpuInventoryFailureCategory.UnsupportedImageFilter,
-                reason = marker,
+                reason = preferredReasonCode,
                 artifactPath = artifactPath,
             )
         }
 
-        val preferredReasonCode = reasonKeyRegex.find(mergedText)?.groupValues?.get(1)
+        if (preferredReasonCode != null && preferredReasonCode in expectedUnsupportedReasonAllowlist) {
+            return Classification(
+                category = GpuInventoryFailureCategory.ExpectedUnsupportedDiagnostic,
+                reason = preferredReasonCode,
+                artifactPath = artifactPath,
+            )
+        }
+
+        unsupportedImageFilterReasonByMarker.keys.firstOrNull { marker -> mergedText.contains(marker) }?.let { marker ->
+            return Classification(
+                category = GpuInventoryFailureCategory.UnsupportedImageFilter,
+                reason = unsupportedImageFilterReasonByMarker.getValue(marker).reasonCode,
+                artifactPath = artifactPath,
+            )
+        }
+
         val reasonCode = preferredReasonCode
-            ?: reasonCodeRegex.findAll(mergedText).map { it.value }.firstOrNull { it in expectedUnsupportedReasonAllowlist }
+            ?: reasonCodeRegex.findAll(mergedText).map { it.value }.firstOrNull {
+                it in expectedUnsupportedReasonAllowlist || it in unsupportedImageFilterReasonAllowlist
+            }
             ?: reasonCodeRegex.find(mergedText)?.value
         if (reasonCode != null && reasonCode in expectedUnsupportedReasonAllowlist) {
             return Classification(
                 category = GpuInventoryFailureCategory.ExpectedUnsupportedDiagnostic,
+                reason = reasonCode,
+                artifactPath = artifactPath,
+            )
+        }
+        if (reasonCode != null && reasonCode in unsupportedImageFilterReasonAllowlist) {
+            return Classification(
+                category = GpuInventoryFailureCategory.UnsupportedImageFilter,
                 reason = reasonCode,
                 artifactPath = artifactPath,
             )
