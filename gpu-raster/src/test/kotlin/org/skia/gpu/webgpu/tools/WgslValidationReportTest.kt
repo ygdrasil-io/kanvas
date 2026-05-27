@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.file.Files
 import java.nio.file.Path
 
 class WgslValidationReportTest {
@@ -79,6 +80,29 @@ class WgslValidationReportTest {
         assertTrue(error.message!!.contains("actual=16"), "diagnostic should include actual offset")
     }
 
+    @Test
+    fun `legacy wgsl diagnostics match deterministic allowlist`() {
+        val report = WgslValidationReport.run(Path.of("src/main/resources/shaders"))
+        val actual = report.files
+            .flatMap { fileReport ->
+                val shaderPath = Path.of("src/main/resources/shaders")
+                    .relativize(Path.of(fileReport.path))
+                    .let { Path.of("src/main/resources/shaders").resolve(it) }
+                    .toString()
+                fileReport.diagnostics.map { diagnostic ->
+                    "$shaderPath|${diagnosticKind(diagnostic)}|$diagnostic"
+                }
+            }
+            .sorted()
+
+        val expected = Files.readAllLines(Path.of("src/test/resources/wgsl-diagnostics-allowlist.txt"))
+            .filter { line -> line.isNotBlank() && !line.startsWith("#") }
+            .sorted()
+
+        assertEquals(expected, actual)
+        assertEquals(28, actual.size)
+    }
+
     private fun verifyUniformLayout(expectedByName: Map<String, Int>, reflectedByName: Map<String, Int>) {
         expectedByName.forEach { (name, expectedOffset) ->
             val actualOffset = reflectedByName[name]
@@ -88,4 +112,7 @@ class WgslValidationReportTest {
             }
         }
     }
+
+    private fun diagnosticKind(diagnostic: String): String =
+        if (diagnostic.startsWith("reflection-skip ")) "reflection" else "parser"
 }

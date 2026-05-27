@@ -212,6 +212,7 @@ fun renderPipelineConformanceReport(
     commit: String,
     suites: List<PipelineConformanceSuiteSummary>,
     vectorDecisionReportPresent: Boolean,
+    legacyWgslDiagnosticsAllowlistCount: Int,
 ): String {
     val byName = suites
         .sortedBy { it.className }
@@ -239,7 +240,7 @@ fun renderPipelineConformanceReport(
     return """
         |# M24 Pipeline Conformance PM Report
         |
-        |Linear: GRA-53, GRA-56, GRA-57, GRA-58
+        |Linear: GRA-53, GRA-56, GRA-57, GRA-58, GRA-59
         |Source commit: `$commit`
         |
         |## Commands
@@ -262,7 +263,7 @@ fun renderPipelineConformanceReport(
         ||---|---|---|
         |${row("Tests", conformanceStatus(suites), "$totalTests tests, $totalFailures failures, $totalErrors errors, $totalSkipped skipped")}
         |${row("Strict WGSL status", status("org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest"), "`WgslStrictValidationReportTest` plus required `:gpu-raster:wgslValidateStrict` dependency")}
-        |${row("Legacy WGSL diagnostics", status("org.skia.gpu.webgpu.tools.WgslValidationReportTest"), "`WgslValidationReportTest` plus diagnostic `:gpu-raster:wgslValidateAll` dependency")}
+        |${row("Legacy WGSL diagnostics", status("org.skia.gpu.webgpu.tools.WgslValidationReportTest"), "$legacyWgslDiagnosticsAllowlistCount known diagnostics allowlisted by `gpu-raster/src/test/resources/wgsl-diagnostics-allowlist.txt`; `:gpu-raster:wgslValidateAll` remains the diagnostic inventory")}
         |${row("Generated WGSL status", status("org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest", "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest"), "`GeneratedSolidRectWgslTest`, `GeneratedLinearGradientWgslTest`")}
         |${row("PipelineKey status", status("org.skia.gpu.webgpu.PipelineKeyTelemetryTest"), "`PipelineKeyTelemetryTest`")}
         |${row("BlendPlan status", status("org.skia.gpu.webgpu.BlendPlanTest"), "`BlendPlanTest`")}
@@ -295,7 +296,7 @@ fun renderPipelineConformanceReport(
         |
         |- GPU adapter-dependent checks can be JUnit-skipped on machines without a usable WebGPU adapter; this is recorded risk, not a green adapter pass.
         |- Slow benchmark gates are not part of `pipelineConformance`; vector promotion remains rejected until the allocation-aware benchmark meets the promotion threshold.
-        |- Existing legacy WGSL parser diagnostics are surfaced by `:gpu-raster:wgslValidateAll`; strict release readiness applies only to generated and registered WGSL modules until the legacy allowlist/remediation tickets land.
+        |- Existing legacy WGSL parser/reflection diagnostics are allowlisted by `gpu-raster/src/test/resources/wgsl-diagnostics-allowlist.txt`; strict release readiness applies only to generated and registered WGSL modules until legacy remediation lands.
         |
         |## Outcome
         |
@@ -422,10 +423,14 @@ tasks.register("pipelineConformanceReport") {
 
         val commit = runPipelineConformanceCommand("git", "rev-parse", "HEAD")
         val vectorDecisionReportPresent = file("reports/wgsl-pipeline/2026-05-27-m22-vector-promotion-decision.md").isFile
+        val legacyWgslDiagnosticsAllowlistCount = file("gpu-raster/src/test/resources/wgsl-diagnostics-allowlist.txt")
+            .readLines()
+            .count { line -> line.isNotBlank() && !line.startsWith("#") }
         val report = renderPipelineConformanceReport(
             commit = commit,
             suites = suites,
             vectorDecisionReportPresent = vectorDecisionReportPresent,
+            legacyWgslDiagnosticsAllowlistCount = legacyWgslDiagnosticsAllowlistCount,
         )
         val target = outputFile.get().asFile
         target.parentFile.mkdirs()
