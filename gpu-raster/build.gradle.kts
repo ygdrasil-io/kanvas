@@ -188,6 +188,13 @@ val gpuSmokePatternSpecs = listOf(
         pattern = "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
         evidencePath = "../reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md",
     ),
+    // M32 image-rect promotion: the 64x64 Skbug4734 fixture is the
+    // smallest fixed bitmap/image-rect regression and exercises strict
+    // nearest fractional-src sampling without adding cross-backend cost.
+    GpuSmokePatternSpec(
+        pattern = "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+        evidencePath = "../reports/wgsl-pipeline/2026-05-27-m32-image-rect-smoke-promotion.md",
+    ),
 )
 
 val gpuSmokePatterns = gpuSmokePatternSpecs.map { it.pattern }
