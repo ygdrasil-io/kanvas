@@ -2,6 +2,7 @@ package org.skia.effects.runtime
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
@@ -54,10 +55,10 @@ class SkRuntimeEffectDescriptorRegistryTest {
     }
 
     @Test
-    fun `blank WGSL implementation id is exported as unsupported`() {
+    fun `CPU-only descriptor is valid and exports GPU unsupported`() {
         SkRuntimeEffectDescriptorRegistry.register(
             "half4 main(vec2 p) { return vec4(0); }",
-            descriptor("runtime.blank-wgsl", wgslImplementationId = " "),
+            descriptor("runtime.cpu_only"),
         )
 
         val entry = SkRuntimeEffectDescriptorRegistry.supportMatrixEntries().single()
@@ -66,6 +67,70 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(
             SkRuntimeEffectDescriptorRegistry.exportSupportMatrixMarkdown()
                 .contains("unsupported: WGSL implementation id missing"),
+        )
+    }
+
+    @Test
+    fun `blank WGSL implementation id fails registration`() {
+        val source = "half4 main(vec2 p) { return vec4(0); }"
+        val error = assertThrows(IllegalStateException::class.java) {
+            SkRuntimeEffectDescriptorRegistry.register(
+                source,
+                descriptor("runtime.blank_wgsl", wgslImplementationId = " "),
+            )
+        }
+        assertEquals(
+            "Invalid runtime effect descriptor WGSL implementation id: " +
+                "canonicalHash=${SkRuntimeEffectDispatch.canonicalHash(source)} " +
+                "stableId=runtime.blank_wgsl wgslImplementationId= ",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `invalid stable id fails registration`() {
+        val source = "half4 main(vec2 p) { return vec4(0); }"
+        val error = assertThrows(IllegalStateException::class.java) {
+            SkRuntimeEffectDescriptorRegistry.register(source, descriptor("Runtime.Bad"))
+        }
+        assertEquals(
+            "Invalid runtime effect descriptor stableId: " +
+                "canonicalHash=${SkRuntimeEffectDispatch.canonicalHash(source)} stableId=Runtime.Bad",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `missing CPU implementation id fails registration`() {
+        val source = "half4 main(vec2 p) { return vec4(0); }"
+        val error = assertThrows(IllegalStateException::class.java) {
+            SkRuntimeEffectDescriptorRegistry.register(
+                source,
+                descriptor("runtime.missing_cpu").copy(cpuImplementationId = ""),
+            )
+        }
+        assertEquals(
+            "Invalid runtime effect descriptor CPU implementation id: " +
+                "canonicalHash=${SkRuntimeEffectDispatch.canonicalHash(source)} " +
+                "stableId=runtime.missing_cpu cpuImplementationId=",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `unknown WGSL implementation id fails without parser evidence`() {
+        val source = "half4 main(vec2 p) { return vec4(0); }"
+        val error = assertThrows(IllegalStateException::class.java) {
+            SkRuntimeEffectDescriptorRegistry.register(
+                source,
+                descriptor("runtime.unknown_wgsl", wgslImplementationId = "wgsl/unknown_rt"),
+            )
+        }
+        assertEquals(
+            "Runtime effect descriptor WGSL evidence missing: " +
+                "canonicalHash=${SkRuntimeEffectDispatch.canonicalHash(source)} " +
+                "stableId=runtime.unknown_wgsl wgslImplementationId=wgsl/unknown_rt",
+            error.message,
         )
     }
 
