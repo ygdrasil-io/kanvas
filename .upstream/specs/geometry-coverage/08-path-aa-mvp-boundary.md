@@ -46,6 +46,18 @@ diagnostic itself; that is not a rendered fixture promotion.
 | GRA-107 | Decide AA smoke promotion or document no-promotion. |
 | GRA-108 | Close M33 with PM-readable evidence. |
 
+## GRA-107 Smoke Decision
+
+M33 promotes one rendered Path AA fixture to required GPU smoke:
+
+```text
+org.skia.gpu.webgpu.AnalyticAntialiasConvexWebGpuTest
+```
+
+This fixture is separate from the 50 `coverage.edge-count-exceeded` inventory
+refusals. It exercises the analytic-AA convex-fill path, passed the current
+full inventory, and is covered by `gpuSmokeTest` after GRA-107.
+
 ## Acceptance Rules
 
 M33 can be accepted when:
