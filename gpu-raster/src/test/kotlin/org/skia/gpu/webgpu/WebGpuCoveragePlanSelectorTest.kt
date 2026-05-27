@@ -330,7 +330,10 @@ class WebGpuCoveragePlanSelectorTest {
 
         assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
         assertEquals(StandardCoverageReason.EdgeCountExceeded, selection.diagnostic?.reason)
+        assertEquals("coverage.edge-count-exceeded", selection.diagnostic?.reason?.code)
+        assertEquals("webgpu.coverage.refuse", selection.routeIdentifier)
         assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
+        assertTrue(selection.diagnostic?.dump()?.contains("action=RefuseDiagnostic(coverage.edge-count-exceeded)") == true)
         assertTrue(selection.dump().contains("coverage.edge-count-exceeded"))
         assertTrue(selection.pipelineKeyDump().contains("code=[coverageKind=pathCoverageUnsupported]"))
     }

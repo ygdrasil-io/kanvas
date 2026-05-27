@@ -88,6 +88,51 @@ class GpuInventoryFailureReportTest {
     }
 
     @Test
+    fun `edge budget diagnostics are expected unsupported and unknown coverage codes fail closed`() {
+        val testRoot = Files.createTempDirectory("gpu-inventory-edge-budget")
+        val xml = testRoot.resolve("TEST-org.skia.gpu.webgpu.InventoryEdgeBudget.xml")
+        Files.writeString(
+            xml,
+            """
+            |<?xml version="1.0" encoding="UTF-8"?>
+            |<testsuite name="org.skia.gpu.webgpu.InventoryEdgeBudget" tests="4" failures="4" skipped="0" errors="0">
+            |  <testcase classname="org.skia.gpu.webgpu.PathCase" name="edgeByReasonKey">
+            |    <failure message="reason=coverage.edge-count-exceeded">Refused AA path over WebGPU edge budget.</failure>
+            |  </testcase>
+            |  <testcase classname="org.skia.gpu.webgpu.PathCase" name="edgeByDiagnosticDump">
+            |    <failure message="refused path">diagnostic=backend=GPU,reason=coverage.edge-count-exceeded,action=RefuseDiagnostic(coverage.edge-count-exceeded)</failure>
+            |  </testcase>
+            |  <testcase classname="org.skia.gpu.webgpu.PathCase" name="unknownCoverageReasonKey">
+            |    <failure message="reason=coverage.edge-count-exceeded-v2">Unknown future diagnostic must not be accepted silently.</failure>
+            |  </testcase>
+            |  <testcase classname="org.skia.gpu.webgpu.PathCase" name="unknownCoverageBody">
+            |    <failure message="refused path">diagnostic=backend=GPU,reason=coverage.experimental-gap,action=RefuseDiagnostic(coverage.experimental-gap)</failure>
+            |  </testcase>
+            |</testsuite>
+            """.trimMargin(),
+        )
+
+        val summary = GpuInventoryFailureReport.run(testRoot)
+
+        assertEquals(2, summary.byCategory.getValue(GpuInventoryFailureCategory.ExpectedUnsupportedDiagnostic))
+        assertEquals(2, summary.byCategory.getValue(GpuInventoryFailureCategory.UnexpectedException))
+
+        val expectedUnsupported = summary.records
+            .filter { it.category == GpuInventoryFailureCategory.ExpectedUnsupportedDiagnostic }
+        assertTrue(expectedUnsupported.all { it.reason == "coverage.edge-count-exceeded" })
+
+        val unknownReasons = summary.records
+            .filter { it.category == GpuInventoryFailureCategory.UnexpectedException }
+            .map { it.reason }
+            .toSet()
+        assertTrue(unknownReasons.contains("unknown diagnostic code: coverage.edge-count-exceeded-v2"))
+        assertTrue(unknownReasons.contains("unknown diagnostic code: coverage.experimental-gap"))
+
+        val markdown = GpuInventoryFailureReport.toMarkdown(summary)
+        assertTrue(markdown.contains("not smoke-eligible until follow-up implementation evidence exists"))
+    }
+
+    @Test
     fun `lists exact crop non null failing tests in expected unsupported inventory section`() {
         val testRoot = Files.createTempDirectory("gpu-inventory-crop-tests")
         val xml = testRoot.resolve("TEST-org.skia.gpu.webgpu.InventoryCrop.xml")
