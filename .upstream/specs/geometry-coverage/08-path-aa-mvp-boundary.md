@@ -26,6 +26,17 @@ This reason is expected unsupported inventory until implementation evidence
 lands for a broader WebGPU strategy. It must not be treated as a similarity
 regression, an unclassified exception, or a smoke candidate.
 
+## GRA-106 Classification Hardening
+
+`coverage.edge-count-exceeded` is inventory-only for the MVP unless follow-up
+implementation evidence lands for a broader WebGPU Path AA strategy. The
+classifier must accept only the stable reason code and must fail closed for
+unknown future `coverage.*` codes by leaving them in `unexpected-exception`.
+
+Required smoke must not include a Path AA fixture whose pass condition depends
+on this expected unsupported diagnostic. Selector unit tests may assert the
+diagnostic itself; that is not a rendered fixture promotion.
+
 ## M33 Tickets
 
 | Ticket | Purpose |
