@@ -2,6 +2,8 @@
 
 Derived evidence. The descriptor registry is the source of truth.
 
+Status counts: total=3; descriptor-backed=1; dispatch-only/missing-descriptor=2; CPU-only=2; GPU-backed=1.
+
 | Stable id | Canonical hash | Kind | Uniforms | Children | Flags | CPU support | GPU support | Descriptor status | Missing reason |
 |---|---:|---|---|---|---:|---|---|---|---|
 | runtime.linear_gradient_rt | -705551463242925998 | kShader | in_colors0:kFloat4, in_colors1:kFloat4 | - | 36 | supported:kotlin/linear_gradient_rt | unsupported: WGSL implementation id missing | dispatch-only; missing descriptor | Runtime effect descriptor missing for dispatch-only effect: -705551463242925998 |
