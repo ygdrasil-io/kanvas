@@ -32,7 +32,13 @@ data class WgslValidationFileReport(
 data class UniformStructReport(
     val variable: String,
     val members: List<UniformMemberOffset>,
+    val source: UniformReflectionSource = UniformReflectionSource.AstDeclaration,
 )
+
+enum class UniformReflectionSource {
+    AstDeclaration,
+    LoweredLayout,
+}
 
 data class UniformMemberOffset(
     val name: String,
@@ -61,8 +67,16 @@ object WgslValidationReport {
         return WgslValidationSummary(files)
     }
 
+    fun validateSource(pathLabel: String, source: String): WgslValidationFileReport {
+        return validateSource(Path.of(pathLabel), source)
+    }
+
     private fun validateFile(path: Path): WgslValidationFileReport {
         val source = Files.readString(path)
+        return validateSource(path, source)
+    }
+
+    private fun validateSource(path: Path, source: String): WgslValidationFileReport {
         val parsed = parseWgslResult(source)
         val diagnostics = parsed.errors.map { "${it.message} span=${it.span}" }
         val entryPoints = parsed.translationUnit.declarations.asSequence()
@@ -121,7 +135,11 @@ object WgslValidationReport {
                                 ?.toInt()
                             UniformMemberOffset(name = member.name, offset = annotatedOffset ?: index * 16)
                         }
-                        uniformStructs += UniformStructReport(variable = decl.name, members = members)
+                        uniformStructs += UniformStructReport(
+                            variable = decl.name,
+                            members = members,
+                            source = UniformReflectionSource.AstDeclaration,
+                        )
                     }
                 }
             }
@@ -173,7 +191,11 @@ object WgslValidationReport {
             }
             else -> emptyList()
         }
-        return UniformStructReport(variable = global.name, members = members)
+        return UniformStructReport(
+            variable = global.name,
+            members = members,
+            source = UniformReflectionSource.LoweredLayout,
+        )
     }
 }
 
