@@ -1,0 +1,12 @@
+{
+  "sceneId": "solid-rect",
+  "backend": "CPU",
+  "drawKind": "axis-aligned-filled-rect",
+  "selectedRoute": "cpu.descriptor.coverage-plan.solid-rect",
+  "compatibilityFallbackRoute": "kanvas-skia.current.draw-rect",
+  "coveragePlan": "AnalyticRect(2.0,1.0,7.0,6.0,aa=false)",
+  "loweringResult": "CoverageModel.AnalyticRect(2.0,1.0,7.0,6.0,aa=false)",
+  "executionEvidence": "lowering-consumed:CoverageModel.AnalyticRect;kernel=cpu.scalar.analytic_rect_coverage;touchedPixels=25",
+  "fallbackReason": "none",
+  "test": "org.skia.core.SkBitmapDescriptorCoverageOracleTest#production bitmap device selects descriptor route for non aa filled rect by default"
+}
