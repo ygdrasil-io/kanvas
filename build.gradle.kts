@@ -207,26 +207,59 @@ data class GpuAdapterEvidence(
     val unblockCondition: String,
 )
 
-fun gpuAdapterEvidenceForReport(suites: List<PipelineConformanceSuiteSummary>): GpuAdapterEvidence {
+private val ADAPTER_PASS = "adapter-pass"
+private val ADAPTER_FAIL = "adapter-fail"
+private val ADAPTER_SKIPPED = "adapter-skipped"
+private val ADAPTER_TIMEOUT = "adapter-timeout"
+private val ADAPTER_BLOCKED = "blocked-no-adapter-lane"
+
+fun gpuAdapterEvidenceForReport(
+    suites: List<PipelineConformanceSuiteSummary>,
+    ciLaneAvailable: Boolean = true,
+): GpuAdapterEvidence {
     val adapterSuites = suites.filter {
         it.className == "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest" ||
             it.className == "org.skia.gpu.webgpu.PipelineKeyTelemetryTest"
     }
     val localStatus = conformanceStatus(adapterSuites)
-    val ciLaneAvailable = false
-    val status = when {
-        adapterSuites.any { it.failed } -> "failed"
-        !ciLaneAvailable -> "blocked-no-adapter-lane"
-        adapterSuites.any { it.skipped > 0 } -> "skipped-known-risk"
-        adapterSuites.all { it.passed } -> "passed"
-        else -> "skipped-known-risk"
+    val observedStatus = when {
+        adapterSuites.any { it.failed } -> ADAPTER_FAIL
+        adapterSuites.any { it.skipped > 0 } -> ADAPTER_SKIPPED
+        adapterSuites.all { it.passed } -> ADAPTER_PASS
+        adapterSuites.isEmpty() -> ADAPTER_TIMEOUT
+        else -> ADAPTER_TIMEOUT
+    }
+    val status = if (!ciLaneAvailable) ADAPTER_BLOCKED else observedStatus
+    val blockerText = when (status) {
+        ADAPTER_PASS ->
+            "No release blocker from required GitHub Actions `GPU tests (macos)` smoke lane."
+        ADAPTER_FAIL ->
+            "Release blocker: required GitHub Actions `GPU tests (macos)` smoke lane failed adapter-backed checks."
+        ADAPTER_SKIPPED ->
+            "Release blocker: required GitHub Actions `GPU tests (macos)` smoke lane reported adapter-dependent skips."
+        ADAPTER_TIMEOUT ->
+            "Release blocker: required GitHub Actions `GPU tests (macos)` smoke lane did not produce a completed adapter verdict (timeout/not-run)."
+        else ->
+            "Release blocker: required GitHub Actions `GPU tests (macos)` smoke lane is unavailable."
+    }
+    val unblockCondition = when (status) {
+        ADAPTER_PASS ->
+            "Keep required smoke lane green and keep full GPU inventory classification as a separate signal."
+        ADAPTER_FAIL ->
+            "Fix adapter-backed smoke regressions until `GPU tests (macos)` reports adapter-pass."
+        ADAPTER_SKIPPED ->
+            "Ensure adapter-dependent smoke fixtures run without skips and fail closed on skip."
+        ADAPTER_TIMEOUT ->
+            "Stabilize CI execution so the required smoke lane completes with adapter-backed results and artifacts."
+        else ->
+            "Enable a required/scheduled adapter lane (`GPU tests (macos)` or equivalent) that uploads artifacts and fails on adapter skips."
     }
     return GpuAdapterEvidence(
         status = status,
         localJUnitStatus = localStatus,
         ciLaneAvailable = ciLaneAvailable,
-        blockerText = "Release blocker: GitHub Actions `GPU tests (macos)` is disabled with `if: false`, so PR CI cannot prove rect/rrect/path adapter fixtures or warm pipeline cache telemetry.",
-        unblockCondition = "Unblock by enabling a non-skippable GPU adapter CI/scheduled lane that uploads `gpu-raster` reports/artifacts and fails when adapter-dependent tests skip, or by attaching an equivalent scheduled adapter artifact to the release.",
+        blockerText = blockerText,
+        unblockCondition = unblockCondition,
     )
 }
 
@@ -263,10 +296,10 @@ fun renderPipelineConformanceReport(
     val totalErrors = suites.sumOf { it.errors }
     val totalSkipped = suites.sumOf { it.skipped }
     val gpuAdapterEvidence = gpuAdapterEvidenceForReport(suites)
-    val releaseReadinessStatus = if (gpuAdapterEvidence.status == "passed") "passed" else "blocked"
+    val releaseReadinessStatus = if (gpuAdapterEvidence.status == ADAPTER_PASS) "passed" else "blocked"
     val webGpuCoverageInventoryStatus = when (gpuAdapterEvidence.status) {
-        "passed" -> "passed"
-        "failed" -> "failed"
+        ADAPTER_PASS -> "passed"
+        ADAPTER_FAIL -> "failed"
         else -> "blocked"
     }
     val vectorStatus = if (vectorDecisionReportPresent) "rejected benchmark" else "not run"
@@ -311,7 +344,7 @@ fun renderPipelineConformanceReport(
         |${row("Clip-stack breadth", status("org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.pipeline.GeometryCoverageMigrationHarnessTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest"), "`ClipStackBreadthMatrix` classifies CPU route expectations and WebGPU support/refusal: rect/rrect/rect-difference supported, arbitrary-AA and multi-shape AA refused on WebGPU, shader clip refused on WebGPU, unlowerable stacks use stable diagnostics; CPU descriptor AA-clip and clip-shader fallbacks are asserted")}
         |${row("kanvas-skia production route", status("org.skia.core.SkBitmapDescriptorCoverageOracleTest"), "`SkBitmapDescriptorCoverageOracleTest` proves `SkBitmapDevice` descriptor routing consumes CoveragePlan lowering through the shared analytic rect executor, preserves rollback, and remains pixel-equivalent with legacy")}
         |${row("GPU adapter evidence", gpuAdapterEvidence.status, "`gpuAdapterEvidence=${gpuAdapterEvidence.status}`; local adapter JUnit status `${gpuAdapterEvidence.localJUnitStatus}`; ci adapter lane available `${gpuAdapterEvidence.ciLaneAvailable}`; ${gpuAdapterEvidence.blockerText}")}
-        |${row("WebGPU coverage strategy inventory", webGpuCoverageInventoryStatus, "`WebGpuCoverageStrategyInventory` separates selector-only `proven` mask/atlas route selection, `blocked-no-adapter-lane` promoted candidates (analytic rect/rrect, convex fan, stencil-cover), `compatibility` full-scissor, and `refused` span-runs/alpha-mask/coverage-atlas/edge-overflow/arbitrary-AA-clip branches with stable diagnostics; inventory status tracks adapter evidence failures instead of masking them as blocked")}
+        |${row("WebGPU coverage strategy inventory", webGpuCoverageInventoryStatus, "`WebGpuCoverageStrategyInventory` separates selector-only `proven` mask/atlas route selection, adapter-evidence promoted candidates (analytic rect/rrect, convex fan, stencil-cover) with explicit statuses (`adapter-pass`, `adapter-fail`, `adapter-skipped`, `adapter-timeout`; `blocked-no-adapter-lane` only when the lane is missing), `compatibility` full-scissor, and `refused` span-runs/alpha-mask/coverage-atlas/edge-overflow/arbitrary-AA-clip branches with stable diagnostics")}
         |${row("CoverageAtlas policy gate", "blocked", "`CoverageAtlasPolicyGate` keeps persistent atlas caching disabled by default: persistent policy verdict `no-go`, shape-key/transform-key/invalidation/memory-budget/eviction/CPU-GPU-sync/owner-thread checks are missing by policy, static gate counters remain hits=0 misses=0 residentBytes=0 evictions=0 because runtime atlas telemetry is not enabled, and unsupported persistent atlas use emits `coverage.atlas-policy-unavailable`")}
         |${row("Glyph mask ownership", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`GlyphMaskLowering` defines the descriptor boundary for glyph-run mask handoff: text/glyph infrastructure owns discovery, rasterization, atlas lifetime, and invalidation; geometry only consumes an opaque alpha-mask ref or emits `coverage.glyph-mask-dependency-unavailable`; WebGPU currently refuses alpha-mask coverage with `coverage.alpha-mask-unsupported`")}
         |${row("Image rect lowering", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`ImageRectLowering` captures source rect, destination rect, transform facts, opaque paint-owned sampling payload handoff, and route id; axis-aligned image rects select analytic rect coverage, transformed descriptor tests select path-like coverage without moving sampling/pixels/filtering/colorspace into geometry; CPU oracle covers one axis-aligned image rect and WebGPU selector diagnostics record the adapter-gated image-rect route")}
@@ -333,7 +366,8 @@ fun renderPipelineConformanceReport(
         |  (`productionDump`, selector disabled rollback, and coverage selector route identifiers).
         |- WebGPU coverage strategy inventory: `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt`
         |  (`proven` is limited to selector-only mask/atlas route selection, not adapter CI;
-        |  adapter-dependent promoted routes remain `blocked-no-adapter-lane` while `ciAdapterLaneAvailable=false`).
+        |  adapter-dependent promoted routes use explicit adapter lane statuses (`adapter-pass`, `adapter-fail`,
+        |  `adapter-skipped`, `adapter-timeout`) and reserve `blocked-no-adapter-lane` for missing-lane cases only).
         |- CoverageAtlas policy gate: `render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt`
         |  (`CoverageAtlasPolicyGate` reports persistent atlas `no-go` until shape key, transform key,
         |  invalidation, memory budget, eviction, CPU/GPU synchronization, and owner-thread handling are accepted).
@@ -439,7 +473,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
             |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
             |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
-            |- GPU adapter residual risk: adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; a skip is recorded risk, not a green adapter pass.
+            |- GPU adapter residual risk: local adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; required CI smoke lane (`GPU tests (macos)`) fails closed on adapter skips.
             |- Slow benchmark gates remain opt-in: :render-pipeline:cpuVectorPilotBenchmark and :render-pipeline:cpuVectorAllocationBenchmark.
             """.trimMargin()
         )
