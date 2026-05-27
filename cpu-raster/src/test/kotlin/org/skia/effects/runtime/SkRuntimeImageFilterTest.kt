@@ -56,7 +56,7 @@ class SkRuntimeImageFilterTest {
 
     @BeforeEach
     fun registerStub() {
-        SkRuntimeEffectDispatch.register(FADE_TO_BLUE_SKSL) { FadeToBlueImpl }
+        SkRuntimeEffectDispatch.registerForTestOverride(FADE_TO_BLUE_SKSL) { FadeToBlueImpl }
     }
 
     @Test

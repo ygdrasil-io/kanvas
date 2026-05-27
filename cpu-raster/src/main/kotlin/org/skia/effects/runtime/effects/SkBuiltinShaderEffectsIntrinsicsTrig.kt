@@ -70,7 +70,7 @@ public object SkBuiltinShaderEffectsIntrinsicsTrig {
     public fun registerAll() {
         for (entry in TRIG_ENTRIES) {
             val sksl = makeUnarySksl1d(entry.fn, requireES3 = false)
-            SkRuntimeEffectDispatch.register(sksl) {
+            SkRuntimeEffectDispatch.registerBuiltinIfAbsent(sksl) {
                 UnaryIntrinsicImpl(entry.eval)
             }
         }

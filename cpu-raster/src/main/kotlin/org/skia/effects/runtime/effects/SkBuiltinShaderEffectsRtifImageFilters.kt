@@ -30,8 +30,8 @@ public object SkBuiltinShaderEffectsRtifImageFilters {
     init { registerAll() }
 
     public fun registerAll() {
-        SkRuntimeEffectDispatch.register(RTIF_DISTORT_SKSL) { RtifDistortImpl }
-        SkRuntimeEffectDispatch.register(RTIF_UNSHARP_SKSL) { RtifUnsharpImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(RTIF_DISTORT_SKSL) { RtifDistortImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(RTIF_UNSHARP_SKSL) { RtifUnsharpImpl }
     }
 
     // ─── SkSL sources (verbatim from upstream) ───────────────────────

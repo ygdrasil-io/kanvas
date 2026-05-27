@@ -46,7 +46,7 @@ public object SkBuiltinShaderEffectsIntrinsicsCommon {
         for (entry in COMMON_ENTRIES) {
             val sksl = SkBuiltinShaderEffectsIntrinsicsTrig
                 .makeUnarySksl1d(entry.fn, requireES3 = false)
-            SkRuntimeEffectDispatch.register(sksl) {
+            SkRuntimeEffectDispatch.registerBuiltinIfAbsent(sksl) {
                 SkBuiltinShaderEffectsIntrinsicsTrig.UnaryIntrinsicImpl(entry.eval)
             }
         }

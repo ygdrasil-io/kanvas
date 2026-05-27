@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkPoint
@@ -20,8 +21,8 @@ import java.nio.ByteBuffer
  *  - clearForTest resets the dispatch table.
  *  - Lambda factory is invoked at lookup time, not at register time
  *    (lazy instantiation contract).
- *  - Re-registering the same source replaces the prior factory
- *    (deliberate test-convenience semantic).
+ *  - Duplicate production registration is rejected.
+ *  - Intentional test replacement uses an explicit test-only helper.
  */
 class SkRuntimeEffectDispatchTest {
 
@@ -204,15 +205,51 @@ class SkRuntimeEffectDispatchTest {
     }
 
     @Test
-    fun `re-register replaces prior factory`() {
+    fun `duplicate production register is rejected with canonical hash`() {
+        SkRuntimeEffectDispatch.register(identityShaderSksl) { stubImpl() }
+        val error = assertThrows(IllegalStateException::class.java) {
+            SkRuntimeEffectDispatch.register(identityShaderSksl) { stubImpl() }
+        }
+        assertEquals(
+            "Duplicate runtime effect dispatch registration: " +
+                "canonicalHash=${SkRuntimeEffectDispatch.canonicalHash(identityShaderSksl)}",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `test override helper replaces prior factory`() {
         SkRuntimeEffectDispatch.register(identityShaderSksl) { stubImpl() }
         var newImplUsed = false
-        SkRuntimeEffectDispatch.register(identityShaderSksl) {
+        SkRuntimeEffectDispatch.registerForTestOverride(identityShaderSksl) {
             newImplUsed = true
             stubImpl()
         }
         SkRuntimeEffectDispatch.lookup(identityShaderSksl)!!()
         assertEquals(true, newImplUsed, "second register should replace the first")
+    }
+
+    @Test
+    fun `duplicate descriptor register is rejected with hash and stable id`() {
+        val descriptor = descriptor("runtime.identity")
+        SkRuntimeEffectDescriptorRegistry.register(identityShaderSksl, descriptor)
+        val error = assertThrows(IllegalStateException::class.java) {
+            SkRuntimeEffectDescriptorRegistry.register(identityShaderSksl, descriptor)
+        }
+        assertEquals(
+            "Duplicate runtime effect descriptor registration: " +
+                "canonicalHash=${SkRuntimeEffectDispatch.canonicalHash(identityShaderSksl)} " +
+                "stableId=runtime.identity",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `descriptor test override helper replaces prior descriptor`() {
+        SkRuntimeEffectDescriptorRegistry.register(identityShaderSksl, descriptor("runtime.identity"))
+        val replacement = descriptor("runtime.identity.replacement")
+        SkRuntimeEffectDescriptorRegistry.registerForTestOverride(identityShaderSksl, replacement)
+        assertEquals(replacement, SkRuntimeEffectDescriptorRegistry.lookup(identityShaderSksl))
     }
 
     @Test
@@ -223,4 +260,15 @@ class SkRuntimeEffectDispatchTest {
         assertEquals(0, SkRuntimeEffectDispatch.size)
         assertNull(SkRuntimeEffectDispatch.lookup(identityShaderSksl))
     }
+
+    private fun descriptor(stableId: String): SkRuntimeEffectDescriptor =
+        SkRuntimeEffectDescriptor(
+            stableId = stableId,
+            kind = SkRuntimeEffect.Kind.kShader,
+            uniforms = emptyList(),
+            children = emptyList(),
+            flags = 0,
+            cpuImplementationId = "kotlin/test",
+            wgslImplementationId = null,
+        )
 }
