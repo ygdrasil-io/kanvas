@@ -157,6 +157,10 @@ tasks.named<Test>("test") {
 }
 
 val gpuSmokePatterns = listOf(
+    // M31 promotion policy baseline:
+    // `reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md`
+    // Keep smoke minimal, adapter-backed, and free of expected unsupported
+    // diagnostics. Broader coverage stays in :gpu-raster:test inventory.
     "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
     "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
 )

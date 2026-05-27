@@ -6,6 +6,8 @@ name: Test matrix (raster + GPU)
 #  - `gpu_smoke`     : required macOS smoke gate using `:gpu-raster:gpuSmokeTest`.
 #                      This lane must prove adapter-backed fixtures with zero
 #                      adapter skips.
+#                      Promotion policy for what is allowed in this required
+#                      smoke lane: reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md
 #  - `gpu_inventory` : non-blocking full `:gpu-raster:test` inventory lane that
 #                      stays runnable and uploads triage artifacts.
 #
@@ -144,6 +146,10 @@ jobs:
         # `:gpu-raster:gpuSmokeTest` injects `-XstartOnFirstThread` on
         # macOS, plus `--add-opens=java.base/java.lang=ALL-UNNAMED` and
         # `--enable-native-access=ALL-UNNAMED` (see build.gradle.kts).
+        # Smoke fixture scope is governed by the M31 promotion policy:
+        # `reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md`.
+        # Expected unsupported diagnostics and adapter skips stay out of
+        # required smoke and remain in non-blocking inventory.
         # macOS runners ship a Metal adapter that wgpu4k-toolkit can
         # bind via `WebGpuContext.createOrNull()`. The smoke task fails
         # closed when adapter-dependent tests are skipped.
