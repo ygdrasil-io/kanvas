@@ -1,6 +1,6 @@
 # MVP Release Readiness
 
-Status: Draft
+Status: Draft (technical gates green, PM evidence and Linear closeout pending)
 Target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 Milestone: M35 -- MVP Release Candidate
 
@@ -54,6 +54,29 @@ The limitation is release-acceptable only while required GPU smoke excludes
 those fixtures and the final inventory audit classifies them as expected
 unsupported rather than unexpected failures.
 
+## Current Gate Evidence
+
+As of 2026-05-27, the technical M35 gates are green:
+
+| Gate | Status | Evidence |
+|---|---|---|
+| Required raster CI | Pass | PR #1187 `Raster tests (ubuntu)` job `78181317676` |
+| Required GPU CI | Pass | PR #1187 `GPU tests (macos)` job `78181317681` |
+| `pipelineConformance` | Pass | `reports/wgsl-pipeline/2026-05-27-m35-ci-conformance-evidence.md` |
+| `pipelineConformanceReport` | Pass | `reports/wgsl-pipeline/2026-05-27-m35-ci-conformance-evidence.md` |
+| Required `gpuSmokeTest` | Pass | local adapter-backed run in `reports/wgsl-pipeline/2026-05-27-m35-ci-conformance-evidence.md` |
+| Full GPU inventory classification | Pass | `reports/wgsl-pipeline/2026-05-27-m35-full-gpu-inventory.md` |
+| Similarity regressions | Pass | final inventory has `similarity-regression=0` |
+| Unexpected exceptions | Pass | final inventory has `unexpected-exception=0` |
+| Accepted image-filter limitation | Pass | exactly two `SimpleOffsetImageFilter*` rows remain `image-filter.crop-input-nonnull-prepass-required` |
+| PM evidence package | Pending | GRA-117 |
+| Linear/project closeout | Pending | GRA-118 |
+
+The full inventory still fails the non-blocking inventory job because it runs
+the classified breadth suite. That failure is release-acceptable only while
+the generated report has no `similarity-regression`, `adapter-missing`, or
+`unexpected-exception` rows.
+
 ## Required Reports
 
 M35 should leave these PM-readable artifacts under `reports/wgsl-pipeline/`:
@@ -74,6 +97,6 @@ The release candidate does not:
 
 ## Status Policy
 
-This spec remains Draft until M35 closeout evidence lands. It can move to
-Accepted only after the Linear project state, README status, and reports agree
-on the final MVP decision.
+This spec remains Draft until M35 PM evidence and closeout land. It can move
+to Accepted only after the Linear project state, README status, and reports
+agree on the final MVP decision.
