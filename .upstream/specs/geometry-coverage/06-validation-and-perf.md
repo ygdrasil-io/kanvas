@@ -1,7 +1,25 @@
 # Spec 06: Validation And Performance
 
-Status: Draft
+Status: Accepted
 Target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
+
+## M24 Acceptance Evidence
+
+Accepted on 2026-05-27 for the geometry/coverage scope covered by the M24
+conformance gate.
+
+Evidence links:
+
+- PR #1142 / `12684fb7259644bb2932e930026c7134177e1964`: `pipelineConformance`.
+- PR #1143 / `637e42344a335504bfe8d95b63351dfc40ebd872`: PM convergence report.
+- PR #1144 / `2035b455535e35452097154d9b5d0f05eea8a866`: report regeneration fix.
+
+Acceptance is limited to descriptor, selector, oracle, fallback, and migration
+fixtures covered by `GeometryCoverageContractsTest`,
+`GeometryCoverageMigrationHarnessTest`, and `WebGpuCoveragePlanSelectorTest`.
+Additional primitive families need their own rollout evidence before default
+routing.
+
 
 ## Purpose
 

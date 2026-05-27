@@ -45,6 +45,36 @@ Linear milestone has merged implementation evidence, fallback behavior is
 asserted in tests or reports, and the PM evidence comment links the relevant
 commit or PR. Editorial fixes do not change status.
 
+## M24 Status Review
+
+Review date: 2026-05-27
+
+Evidence:
+
+- Conformance command:
+  `rtk ./gradlew --no-daemon pipelineConformance`
+- PM report command:
+  `rtk ./gradlew --no-daemon pipelineConformanceReport`
+- M24 conformance task: PR #1142 / merge
+  `12684fb7259644bb2932e930026c7134177e1964`
+- PM report generation: PR #1143 / merge
+  `637e42344a335504bfe8d95b63351dfc40ebd872`
+- Report regeneration fix: PR #1144 / merge
+  `2035b455535e35452097154d9b5d0f05eea8a866`
+- Runtime-effect production hardening: PR #1139, PR #1140, PR #1141.
+- Vector promotion decision: PR #1137, PR #1138.
+
+| Spec | M24 status | Evidence | Remaining gaps |
+|---|---|---|---|
+| `00-current-state-inventory.md` | Draft | Inventory updated with M24 evidence. | Historical M0-M11 inventory still records dependency and breadth gaps. |
+| `01-pipeline-ir-contracts.md` | Accepted | `KanvasPipelineIRTest`, `CpuScalarPipelineExecutorTest`, `pipelineConformance`. | Future paint families must add operations under this contract. |
+| `02-wgsl-parser-reflection-module-builder.md` | Draft | `WgslValidationReportTest`, generated WGSL parser tests. | Existing handwritten WGSL still reports parser diagnostics; broad generated packers remain future work. |
+| `03-cpu-pipeline-backend.md` | Accepted | CPU scalar tests, vector allocation benchmark decision, PM report. | Vector remains rejected as a default path until the benchmark gate passes. |
+| `04-gpu-generated-wgsl-backend.md` | Accepted | Generated solid/linear WGSL tests, PipelineKey tests, WebGPU selector tests. | GPU adapter CI is skipped under current gate and remains residual risk. |
+| `05-blend-fallback-diagnostics.md` | Accepted | `BlendPlanTest`, fallback diagnostics in conformance report. | New blend families still need per-family evidence before promotion. |
+| `06-runtime-effects-descriptor.md` | Accepted | Duplicate registration rejection, support matrix export, implementation-id validation. | New runtime effects must register descriptors and parser evidence. |
+| `07-validation-performance-and-migration.md` | Accepted | `pipelineConformance`, `pipelineConformanceReport`, Linear evidence comments. | Slow benchmarks remain explicitly opt-in. |
+
 ## Spec Index
 
 | Spec | Purpose |

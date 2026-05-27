@@ -27,6 +27,25 @@ draw input
 Paint lowering starts after coverage selection. It may consume the coverage
 contract but must not reinterpret raw path, stroke, or clip-stack state.
 
+## Remaining Gaps
+
+This spec remains `Draft` after the M24 review.
+
+Accepted evidence exists for rect, rrect, path, stroke-outline, clip
+interaction, CPU descriptor oracle, and WebGPU selector slices covered by
+`pipelineConformance`. The full lowering-rules spec is not accepted yet
+because glyph mask coverage, image rect lowering, coverage atlas policy, and
+full clip-stack breadth still require per-family rollout evidence.
+
+Evidence links:
+
+- PR #1142 / `12684fb7259644bb2932e930026c7134177e1964`:
+  `pipelineConformance`.
+- PR #1143 / `637e42344a335504bfe8d95b63351dfc40ebd872`:
+  PM convergence report.
+- PR #1144 / `2035b455535e35452097154d9b5d0f05eea8a866`:
+  report regeneration fix.
+
 ```mermaid
 sequenceDiagram
     participant Canvas as SkCanvas
