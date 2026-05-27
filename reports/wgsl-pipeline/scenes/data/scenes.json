@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "title": "Kanvas WGSL pipeline scene evidence",
   "milestone": "M36",
-  "status": "p0-in-progress",
+  "status": "m36-p0-complete",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [

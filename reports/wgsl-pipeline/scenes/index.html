@@ -166,6 +166,21 @@
       <article class="card"><b>Task</b><span><code>rtk ./gradlew --no-daemon pipelineSceneDashboard</code></span></article>
     </section>
 
+    <section class="meta-grid" aria-label="How to read this dashboard">
+      <article class="card">
+        <b>Render Panels</b>
+        <span>Reference is Skia/upstream when available, otherwise a CPU oracle. CPU and GPU rows link render, diff, and raw stats artifacts.</span>
+      </article>
+      <article class="card">
+        <b>Route Diagnostics</b>
+        <span>Route JSON records selected CPU/GPU routes, coverage plans, pipeline keys, fallback routes, and stable fallback reasons.</span>
+      </article>
+      <article class="card">
+        <b>Status</b>
+        <span><code>pass</code> means artifacts are attached. <code>tracked-gap</code> means at least one backend is visible but missing a render capture. <code>expected-unsupported</code> must include a stable reason.</span>
+      </article>
+    </section>
+
     <section id="scenes" class="scene-grid" aria-live="polite"></section>
     <section id="empty" class="empty" hidden>
       The shell is ready and the scene registry is empty. M36-B will enforce the
