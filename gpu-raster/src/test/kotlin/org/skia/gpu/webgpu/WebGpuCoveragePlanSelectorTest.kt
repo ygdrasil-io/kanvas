@@ -19,6 +19,8 @@ import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkRRect
 import org.skia.pipeline.AaClipRef
+import org.skia.pipeline.ClipStackBackendDisposition
+import org.skia.pipeline.ClipStackBreadthMatrix
 import org.skia.pipeline.ClipInteraction
 import org.skia.pipeline.ClipShapeSpec
 import org.skia.pipeline.CoveragePlan
@@ -121,6 +123,30 @@ class WebGpuCoveragePlanSelectorTest {
         assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
         assertTrue(selection.dump().contains("coverage.arbitrary-aa-clip-unsupported"))
         assertTrue(selection.dump().contains("clip=AaClip(ref=cpu.sk-aa-clip.fixture,bounds=0,0,8,8)"))
+    }
+
+    @Test
+    fun `clip stack breadth matrix maps webgpu support and refusal diagnostics`() {
+        ClipStackBreadthMatrix.cases.forEach { case ->
+            val selection = WebGpuCoveragePlanSelector.select(
+                drawKind = "clip-stack-${case.family}",
+                plan = CoveragePlan.AnalyticRect(FloatRect(0f, 0f, 16f, 16f), aa = true),
+                clipInteraction = case.webGpuClip,
+            )
+
+            when (case.webGpuDisposition) {
+                ClipStackBackendDisposition.Supported -> {
+                    assertEquals(WebGpuCoverageStrategy.AnalyticRect, selection.strategy, case.family)
+                    assertEquals(null, selection.diagnostic, case.family)
+                }
+                ClipStackBackendDisposition.Refused -> {
+                    assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy, case.family)
+                    assertEquals("webgpu.coverage.refuse", selection.routeIdentifier, case.family)
+                    assertEquals(case.webGpuReason, selection.diagnostic?.reason, case.family)
+                    assertTrue(selection.dump().contains(case.webGpuReason?.code ?: ""), case.family)
+                }
+            }
+        }
     }
 
     @Test

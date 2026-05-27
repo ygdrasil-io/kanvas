@@ -5,14 +5,18 @@ import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorTRANSPARENT
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkIRect
+import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkShader
 import org.skia.pipeline.CoverageBackendStrategy
 import org.skia.pipeline.CoverageLoweringResult
 import org.skia.pipeline.CoverageModel
@@ -92,6 +96,40 @@ class SkBitmapDescriptorCoverageOracleTest {
             assertEquals("legacy-fallback-before-descriptor-execution", diagnostics.executionEvidence)
             assertEquals("Fallback", diagnostics.mode)
             assertFalse(bitmap.pixels.all { it == SK_ColorTRANSPARENT })
+        }
+
+    @Test
+    fun `production descriptor rect records stable fallback for active aa clip`() =
+        withDescriptorRectFlag(null) {
+            val bitmap = SkBitmap(8, 8)
+            val device = SkBitmapDevice(bitmap)
+            device.setActiveClip(SkAAClip(SkIRect.MakeLTRB(1, 1, 7, 7)))
+            device.drawRect(SkRect.MakeLTRB(2f, 1f, 7f, 6f), SkIRect.MakeWH(8, 8), blackPaint(antiAlias = false))
+
+            val diagnostics = device.descriptorCoverageDiagnosticsForTests()
+            assertEquals("Fallback", diagnostics.mode)
+            assertEquals("kanvas-skia.current.draw-rect", diagnostics.selectedRoute)
+            assertEquals("coverage.cpu-descriptor-aa-clip-unsupported", diagnostics.fallbackReason)
+            assertEquals("legacy-fallback-before-descriptor-execution", diagnostics.executionEvidence)
+            assertEquals(0, diagnostics.touchedPixels)
+            assertTrue(diagnostics.dump().contains("fallbackReason=coverage.cpu-descriptor-aa-clip-unsupported"))
+        }
+
+    @Test
+    fun `production descriptor rect records stable fallback for active clip shader`() =
+        withDescriptorRectFlag(null) {
+            val bitmap = SkBitmap(8, 8)
+            val device = SkBitmapDevice(bitmap)
+            device.setActiveClipShader(opaqueClipShader(), SkMatrix.Identity, SkClipOp.kIntersect)
+            device.drawRect(SkRect.MakeLTRB(2f, 1f, 7f, 6f), SkIRect.MakeWH(8, 8), blackPaint(antiAlias = false))
+
+            val diagnostics = device.descriptorCoverageDiagnosticsForTests()
+            assertEquals("Fallback", diagnostics.mode)
+            assertEquals("kanvas-skia.current.draw-rect", diagnostics.selectedRoute)
+            assertEquals("coverage.cpu-descriptor-clip-shader-unsupported", diagnostics.fallbackReason)
+            assertEquals("legacy-fallback-before-descriptor-execution", diagnostics.executionEvidence)
+            assertEquals(0, diagnostics.touchedPixels)
+            assertTrue(diagnostics.dump().contains("fallbackReason=coverage.cpu-descriptor-clip-shader-unsupported"))
         }
 
     @Test
@@ -290,6 +328,14 @@ class SkBitmapDescriptorCoverageOracleTest {
     private fun blackPaint(antiAlias: Boolean): SkPaint = SkPaint().apply {
         color = SK_ColorBLACK
         isAntiAlias = antiAlias
+    }
+
+    private fun opaqueClipShader(): SkShader = object : SkShader() {
+        override fun shadeRow(devX: Int, devY: Int, count: Int, dst: IntArray) {
+            for (i in 0 until count) {
+                dst[i] = 0xFF000000.toInt()
+            }
+        }
     }
 
     private fun renderWithDescriptorFlag(value: String?, antiAlias: Boolean, rect: SkRect): SkBitmap =

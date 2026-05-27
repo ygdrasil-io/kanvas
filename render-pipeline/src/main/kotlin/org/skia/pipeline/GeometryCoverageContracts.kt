@@ -120,6 +120,130 @@ sealed interface ClipInteraction {
     data class Unsupported(val reason: GeometryReason) : ClipInteraction
 }
 
+enum class ClipStackBackendDisposition {
+    Supported,
+    Refused,
+}
+
+data class ClipStackBreadthCase(
+    val family: String,
+    val operation: String,
+    val cpuClip: ClipInteraction,
+    val cpuRoute: String,
+    val cpuDisposition: ClipStackBackendDisposition,
+    val cpuDescriptorFallbackReason: String?,
+    val webGpuClip: ClipInteraction,
+    val webGpuDisposition: ClipStackBackendDisposition,
+    val webGpuReason: DiagnosticReason?,
+    val pmEvidence: String,
+) {
+    fun dump(): String =
+        "family=$family;operation=$operation;cpu=${dumpClipInteraction(cpuClip)};" +
+            "cpuRoute=$cpuRoute;cpuDisposition=$cpuDisposition;" +
+            "cpuDescriptorFallbackReason=${cpuDescriptorFallbackReason ?: "none"};" +
+            "webgpu=${dumpClipInteraction(webGpuClip)};webgpuDisposition=$webGpuDisposition;" +
+            "webgpuReason=${webGpuReason?.code ?: "none"};pmEvidence=$pmEvidence"
+}
+
+object ClipStackBreadthMatrix {
+    val cases: List<ClipStackBreadthCase> = listOf(
+        ClipStackBreadthCase(
+            family = "rect-intersect",
+            operation = "intersect",
+            cpuClip = ClipInteraction.DeviceRect(IntRect(0, 0, 16, 16)),
+            cpuRoute = "kanvas-skia.current.device-rect-clip",
+            cpuDisposition = ClipStackBackendDisposition.Supported,
+            cpuDescriptorFallbackReason = null,
+            webGpuClip = ClipInteraction.DeviceRect(IntRect(0, 0, 16, 16)),
+            webGpuDisposition = ClipStackBackendDisposition.Supported,
+            webGpuReason = null,
+            pmEvidence = "clip stress grid: rect intersect uses bounds tightening/scissor",
+        ),
+        ClipStackBreadthCase(
+            family = "rrect-intersect",
+            operation = "intersect",
+            cpuClip = ClipInteraction.AnalyticShape(
+                ClipShapeSpec(bounds = FloatRect(1f, 1f, 15f, 15f), kind = "rrect-intersect"),
+            ),
+            cpuRoute = "kanvas-skia.current.sk-aa-clip-or-analytic-shape",
+            cpuDisposition = ClipStackBackendDisposition.Supported,
+            cpuDescriptorFallbackReason = null,
+            webGpuClip = ClipInteraction.AnalyticShape(
+                ClipShapeSpec(bounds = FloatRect(1f, 1f, 15f, 15f), kind = "rrect-intersect"),
+            ),
+            webGpuDisposition = ClipStackBackendDisposition.Supported,
+            webGpuReason = null,
+            pmEvidence = "clip stress grid: rrect intersect uses analytic shape clip",
+        ),
+        ClipStackBreadthCase(
+            family = "rect-difference",
+            operation = "difference",
+            cpuClip = ClipInteraction.AnalyticShape(
+                ClipShapeSpec(bounds = FloatRect(4f, 4f, 12f, 12f), kind = "rect-difference"),
+            ),
+            cpuRoute = "kanvas-skia.current.sk-aa-clip-difference",
+            cpuDisposition = ClipStackBackendDisposition.Supported,
+            cpuDescriptorFallbackReason = null,
+            webGpuClip = ClipInteraction.AnalyticShape(
+                ClipShapeSpec(bounds = FloatRect(4f, 4f, 12f, 12f), kind = "rect-difference"),
+            ),
+            webGpuDisposition = ClipStackBackendDisposition.Supported,
+            webGpuReason = null,
+            pmEvidence = "clip stress grid: simple-shape difference remains analytic",
+        ),
+        ClipStackBreadthCase(
+            family = "arbitrary-aa-path-intersect",
+            operation = "intersect",
+            cpuClip = ClipInteraction.AaClip(AaClipRef("cpu.sk-aa-clip.path-intersect"), IntRect(0, 0, 16, 16)),
+            cpuRoute = "kanvas-skia.current.sk-aa-clip-rle",
+            cpuDisposition = ClipStackBackendDisposition.Supported,
+            cpuDescriptorFallbackReason = "coverage.cpu-descriptor-aa-clip-unsupported",
+            webGpuClip = ClipInteraction.AaClip(AaClipRef("cpu.sk-aa-clip.path-intersect"), IntRect(0, 0, 16, 16)),
+            webGpuDisposition = ClipStackBackendDisposition.Refused,
+            webGpuReason = StandardCoverageReason.ArbitraryAaClipUnsupported,
+            pmEvidence = "clip stress grid: arbitrary AA path intersect refused on WebGPU",
+        ),
+        ClipStackBreadthCase(
+            family = "multi-shape-aa-difference",
+            operation = "difference",
+            cpuClip = ClipInteraction.AaClip(AaClipRef("cpu.sk-aa-clip.multi-shape-difference"), IntRect(0, 0, 16, 16)),
+            cpuRoute = "kanvas-skia.current.sk-aa-clip-rle",
+            cpuDisposition = ClipStackBackendDisposition.Supported,
+            cpuDescriptorFallbackReason = "coverage.cpu-descriptor-aa-clip-unsupported",
+            webGpuClip = ClipInteraction.AaClip(AaClipRef("cpu.sk-aa-clip.multi-shape-difference"), IntRect(0, 0, 16, 16)),
+            webGpuDisposition = ClipStackBackendDisposition.Refused,
+            webGpuReason = StandardCoverageReason.ArbitraryAaClipUnsupported,
+            pmEvidence = "clip stress grid: multi-shape AA difference refused until mask/list/atlas strategy exists",
+        ),
+        ClipStackBreadthCase(
+            family = "shader-clip",
+            operation = "intersect",
+            cpuClip = ClipInteraction.ShaderClip(StandardCoverageReason.ArbitraryAaClipUnsupported),
+            cpuRoute = "kanvas-skia.current.clip-shader-coverage",
+            cpuDisposition = ClipStackBackendDisposition.Supported,
+            cpuDescriptorFallbackReason = "coverage.cpu-descriptor-clip-shader-unsupported",
+            webGpuClip = ClipInteraction.ShaderClip(StandardCoverageReason.ArbitraryAaClipUnsupported),
+            webGpuDisposition = ClipStackBackendDisposition.Refused,
+            webGpuReason = StandardCoverageReason.ArbitraryAaClipUnsupported,
+            pmEvidence = "clip stress grid: shader clip refuses as arbitrary coverage modulation on WebGPU",
+        ),
+        ClipStackBreadthCase(
+            family = "unlowerable-stack",
+            operation = "mixed",
+            cpuClip = ClipInteraction.Unsupported(StandardGeometryReason.ClipStackUnsupported),
+            cpuRoute = "kanvas-skia.current.unsupported",
+            cpuDisposition = ClipStackBackendDisposition.Refused,
+            cpuDescriptorFallbackReason = null,
+            webGpuClip = ClipInteraction.Unsupported(StandardGeometryReason.ClipStackUnsupported),
+            webGpuDisposition = ClipStackBackendDisposition.Refused,
+            webGpuReason = StandardGeometryReason.ClipStackUnsupported,
+            pmEvidence = "clip stress grid: unlowerable stack reports geometry.clip-stack-unsupported",
+        ),
+    )
+
+    fun dump(): String = cases.joinToString(separator = "\n") { it.dump() }
+}
+
 sealed interface GeometryPlan {
     data class Supported(
         val primitive: GeometryPrimitive,
@@ -295,4 +419,13 @@ data class CoverageDescriptorDump(
 
     private fun dumpIntRect(rect: IntRect): String =
         "${rect.left},${rect.top},${rect.right},${rect.bottom}"
+}
+
+fun dumpClipInteraction(clip: ClipInteraction): String = when (clip) {
+    ClipInteraction.None -> "None"
+    is ClipInteraction.DeviceRect -> "DeviceRect(${clip.bounds.left},${clip.bounds.top},${clip.bounds.right},${clip.bounds.bottom})"
+    is ClipInteraction.AnalyticShape -> "AnalyticShape(${clip.shape.kind},${clip.shape.bounds.left},${clip.shape.bounds.top},${clip.shape.bounds.right},${clip.shape.bounds.bottom})"
+    is ClipInteraction.AaClip -> "AaClip(ref=${clip.ref.id},bounds=${clip.bounds.left},${clip.bounds.top},${clip.bounds.right},${clip.bounds.bottom})"
+    is ClipInteraction.ShaderClip -> "ShaderClip(reason=${clip.reason.code})"
+    is ClipInteraction.Unsupported -> "Unsupported(reason=${clip.reason.code})"
 }
