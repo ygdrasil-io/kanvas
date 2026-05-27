@@ -10,6 +10,27 @@ public data class SkRuntimeEffectDescriptor(
     val wgslImplementationId: String?,
 )
 
+public data class SkRuntimeEffectSupportMatrixEntry(
+    val canonicalHash: Long,
+    val descriptor: SkRuntimeEffectDescriptor,
+) {
+    public val cpuSupport: String =
+        if (descriptor.cpuImplementationId.isBlank()) {
+            "unsupported: CPU implementation id missing"
+        } else {
+            "supported:${descriptor.cpuImplementationId}"
+        }
+
+    public val gpuSupport: String =
+        descriptor.wgslImplementationId
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "supported:$it" }
+            ?: "unsupported: WGSL implementation id missing"
+
+    public val missingDiagnostic: String =
+        "Runtime effect descriptor not registered: $canonicalHash"
+}
+
 public object SkRuntimeEffectDescriptorRegistry {
     private val byHash: MutableMap<Long, SkRuntimeEffectDescriptor> = HashMap()
     private val byStableId: MutableMap<String, SkRuntimeEffectDescriptor> = HashMap()
@@ -26,6 +47,47 @@ public object SkRuntimeEffectDescriptorRegistry {
 
     public fun missingDiagnostic(source: String): String =
         "Runtime effect descriptor not registered: ${SkRuntimeEffectDispatch.canonicalHash(source)}"
+
+    public fun supportMatrixEntries(): List<SkRuntimeEffectSupportMatrixEntry> =
+        byHash.entries
+            .map { SkRuntimeEffectSupportMatrixEntry(it.key, it.value) }
+            .sortedWith(
+                compareBy<SkRuntimeEffectSupportMatrixEntry> { it.descriptor.stableId }
+                    .thenBy { it.canonicalHash },
+            )
+
+    public fun exportSupportMatrixMarkdown(): String = buildString {
+        appendLine("# Runtime Effect Descriptor Support Matrix")
+        appendLine()
+        appendLine("Derived evidence. The descriptor registry is the source of truth.")
+        appendLine()
+        appendLine(
+            "| Stable id | Canonical hash | Kind | Uniforms | Children | Flags | CPU support | GPU support | Missing diagnostic |",
+        )
+        appendLine("|---|---:|---|---|---|---:|---|---|---|")
+        supportMatrixEntries().forEach { entry ->
+            val descriptor = entry.descriptor
+            append("| ")
+            append(markdownCell(descriptor.stableId))
+            append(" | ")
+            append(entry.canonicalHash)
+            append(" | ")
+            append(descriptor.kind)
+            append(" | ")
+            append(markdownCell(descriptor.uniforms.joinToString(", ") { "${it.name}:${it.type}" }.ifEmpty { "-" }))
+            append(" | ")
+            append(markdownCell(descriptor.children.joinToString(", ") { "${it.name}:${it.type}" }.ifEmpty { "-" }))
+            append(" | ")
+            append(descriptor.flags)
+            append(" | ")
+            append(markdownCell(entry.cpuSupport))
+            append(" | ")
+            append(markdownCell(entry.gpuSupport))
+            append(" | ")
+            append(markdownCell(entry.missingDiagnostic))
+            appendLine(" |")
+        }
+    }
 
     internal fun registerBuiltinIfAbsent(source: String, descriptor: SkRuntimeEffectDescriptor) {
         val hash = SkRuntimeEffectDispatch.canonicalHash(source)
@@ -63,4 +125,7 @@ public object SkRuntimeEffectDescriptorRegistry {
 
     private fun duplicateDiagnostic(hash: Long, descriptor: SkRuntimeEffectDescriptor): String =
         "Duplicate runtime effect descriptor registration: canonicalHash=$hash stableId=${descriptor.stableId}"
+
+    private fun markdownCell(value: String): String =
+        value.replace("|", "\\|").replace("\n", " ")
 }
