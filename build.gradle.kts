@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.testing.Test
@@ -561,6 +562,71 @@ tasks.register("pipelineConformanceReport") {
         target.parentFile.mkdirs()
         target.writeText(report)
         logger.lifecycle("Wrote pipeline conformance PM report: ${target.relativeTo(rootDir)}")
+    }
+}
+
+tasks.register("pipelineSceneDashboard") {
+    group = "verification"
+    description = "Validates and exports the static WGSL pipeline scene evidence dashboard."
+
+    val sourceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
+    inputs.dir(sourceDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val sourceRoot = sourceDir.asFile
+        val targetRoot = outputDir.get().asFile
+        val sourceIndex = sourceRoot.resolve("index.html")
+        val sourceData = sourceRoot.resolve("data/scenes.json")
+
+        if (!sourceIndex.isFile) {
+            throw GradleException("Missing scene dashboard source: ${sourceIndex.relativeTo(rootDir)}")
+        }
+        if (!sourceData.isFile) {
+            throw GradleException("Missing scene dashboard data: ${sourceData.relativeTo(rootDir)}")
+        }
+
+        val sceneData = JsonSlurper().parse(sourceData)
+        val referencedPaths = mutableSetOf<String>()
+
+        fun collectReferencedPaths(value: Any?) {
+            when (value) {
+                is Map<*, *> -> value.forEach { (_, child) -> collectReferencedPaths(child) }
+                is Iterable<*> -> value.forEach(::collectReferencedPaths)
+                is String -> {
+                    val normalized = value.replace('\\', '/')
+                    if (
+                        normalized.startsWith("artifacts/") ||
+                        normalized.startsWith("data/") ||
+                        normalized.startsWith("reports/")
+                    ) {
+                        referencedPaths += normalized
+                    }
+                }
+            }
+        }
+
+        collectReferencedPaths(sceneData)
+
+        val missing = referencedPaths
+            .filter { relativePath -> !sourceRoot.resolve(relativePath).isFile }
+            .sorted()
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("Scene dashboard references missing source artifacts:")
+                    missing.forEach { appendLine("- reports/wgsl-pipeline/scenes/$it") }
+                }
+            )
+        }
+
+        if (targetRoot.exists()) {
+            targetRoot.deleteRecursively()
+        }
+        sourceRoot.copyRecursively(targetRoot, overwrite = true)
+        logger.lifecycle("Wrote WGSL scene dashboard: ${targetRoot.resolve("index.html").relativeTo(rootDir)}")
     }
 }
 
