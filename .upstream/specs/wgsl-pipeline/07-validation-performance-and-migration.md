@@ -63,6 +63,19 @@ GPU adapter-dependent tests may report JUnit `SKIPPED` when the local or CI
 environment has no usable WebGPU adapter. Such skips are residual risk and must
 be named in the evidence summary; they are not a green GPU adapter pass.
 
+For PM review, generate the compact convergence report with:
+
+```bash
+rtk ./gradlew --no-daemon pipelineConformanceReport
+```
+
+The report is written to
+`build/reports/pipeline-conformance/m24-pipeline-conformance-report.md` and
+summarizes commit, commands, JUnit pass/fail/skipped counts, parser/generated
+WGSL status, PipelineKey and BlendPlan status, descriptor routing, runtime
+effects, vector benchmark decision, route dump references, skipped checks, and
+residual risks.
+
 ## Correctness Evidence
 
 Each promoted family needs a clear reference:
