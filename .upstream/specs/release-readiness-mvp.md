@@ -56,7 +56,9 @@ unsupported rather than unexpected failures.
 
 ## Current Gate Evidence
 
-As of 2026-05-27, the technical M35 gates are green:
+As of 2026-05-28, Linear and repository documentation have been reverified.
+The technical M35 gate evidence landed on 2026-05-27 and remains the
+release-readiness source:
 
 | Gate | Status | Evidence |
 |---|---|---|
@@ -71,6 +73,7 @@ As of 2026-05-27, the technical M35 gates are green:
 | Accepted image-filter limitation | Pass | exactly two `SimpleOffsetImageFilter*` rows remain `image-filter.crop-input-nonnull-prepass-required` |
 | PM evidence package | Pass | `reports/wgsl-pipeline/2026-05-27-m35-pm-evidence-package.md` |
 | Linear/project closeout | Pass | `reports/wgsl-pipeline/2026-05-27-m35-closeout.md` |
+| Sprint closeout verification | Pass | `reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md` |
 
 The full inventory still fails the non-blocking inventory job because it runs
 the classified breadth suite. That failure is release-acceptable only while
@@ -85,6 +88,7 @@ M35 should leave these PM-readable artifacts under `reports/wgsl-pipeline/`:
 - final full GPU inventory audit;
 - MVP evidence package;
 - Linear/project closeout note if administrative closure is required.
+- sprint closeout verification after Linear reports all M33-M35 backlog done.
 
 ## Non-Goals
 

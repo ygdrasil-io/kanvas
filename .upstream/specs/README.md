@@ -26,3 +26,9 @@ that area.
 | M33 | `geometry-coverage/08-path-aa-mvp-boundary.md` | Accepted |
 | M34 | `wgsl-pipeline/09-image-filter-mvp-lane.md` | Accepted |
 | M35 | `release-readiness-mvp.md` | Accepted |
+
+## Sprint Evidence
+
+| Scope | Report | Status |
+|---|---|---|
+| M33-M35 MVP tail closeout | `reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md` | Verified complete |
