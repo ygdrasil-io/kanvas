@@ -13926,8 +13926,8 @@ public class SkWebGpuDevice(
 
         // Snapshot-pass uniform : layer_composite.wgsl with
         // dstOriginSize = (0, 0, parentW, parentH), paintColor = (1,1,1,1),
-        // colorFilter kind = 0 (identity), so the shader's output equals
-        // the loaded texel verbatim.
+        // colorFilter/imageFilter/sampling kind = 0 (identity), so the
+        // shader's output equals the loaded texel verbatim.
         val snapUniform = context.device.createBuffer(
             BufferDescriptor(
                 size = LAYER_COMPOSITE_UNIFORM_SIZE,
@@ -13935,12 +13935,12 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.nonNativeBlendSnapshotUniform",
             ),
         )
-        val snapPacked = FloatArray(32)
+        val snapPacked = FloatArray(LAYER_COMPOSITE_UNIFORM_FLOATS)
         snapPacked[0] = 0f; snapPacked[1] = 0f
         snapPacked[2] = width.toFloat(); snapPacked[3] = height.toFloat()
         snapPacked[4] = 1f; snapPacked[5] = 1f; snapPacked[6] = 1f; snapPacked[7] = 1f
-        // Remaining 24 floats (colour-filter payload) stay zero ; the
-        // shader's `kind == 0` fast path runs.
+        // Remaining layout slots stay zero; the shader's identity fast
+        // paths run for color filters, matrix sampling and image filters.
         context.queue.writeBuffer(snapUniform, 0uL, ArrayBuffer.of(snapPacked))
 
         val snapBindGroup = context.device.createBindGroup(
@@ -13964,7 +13964,7 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.nonNativeBlendComposite",
             ),
         )
-        val blendPacked = FloatArray(32)
+        val blendPacked = FloatArray(LAYER_COMPOSITE_UNIFORM_FLOATS)
         blendPacked[0] = d.dstOriginX.toFloat()
         blendPacked[1] = d.dstOriginY.toFloat()
         blendPacked[2] = d.layerWidth.toFloat()
