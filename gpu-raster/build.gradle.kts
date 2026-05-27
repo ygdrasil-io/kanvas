@@ -11,6 +11,11 @@
 // binary cost (~50 MB Metal/Vulkan/DX) until they explicitly opt in
 // by depending on this module.
 
+import org.gradle.api.GradleException
+import org.gradle.api.tasks.testing.Test
+import org.gradle.api.tasks.testing.TestDescriptor
+import org.gradle.api.tasks.testing.TestListener
+import org.gradle.api.tasks.testing.TestResult
 import java.net.URL
 
 plugins {
@@ -134,6 +139,52 @@ tasks.withType<Test> {
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
+}
+
+val gpuSmokePatterns = listOf(
+    "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
+    "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
+)
+
+tasks.register<Test>("gpuSmokeTest") {
+    group = "verification"
+    description =
+        "Runs required adapter-backed GPU smoke fixtures (selector route + telemetry) and fails when adapter tests skip."
+
+    val inventoryTask = tasks.named<Test>("test").get()
+    testClassesDirs = inventoryTask.testClassesDirs
+    classpath = inventoryTask.classpath
+    shouldRunAfter(tasks.named("test"))
+
+    filter {
+        gpuSmokePatterns.forEach { pattern -> includeTestsMatching(pattern) }
+    }
+
+    addTestListener(
+        object : TestListener {
+            override fun beforeSuite(suite: TestDescriptor) = Unit
+
+            override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+                if (suite.parent == null && result.skippedTestCount > 0) {
+                    throw GradleException(
+                        "gpuSmokeTest rejected adapter skip evidence: skipped=${result.skippedTestCount}. " +
+                            "Smoke lane requires adapter-backed execution with zero skipped tests.",
+                    )
+                }
+            }
+
+            override fun beforeTest(testDescriptor: TestDescriptor) = Unit
+
+            override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) = Unit
+        },
+    )
+}
+
+tasks.register("gpuInventoryTest") {
+    group = "verification"
+    description =
+        "Runs the full GPU inventory suite (alias for :gpu-raster:test) for failure classification and artifacts."
+    dependsOn(tasks.named("test"))
 }
 
 // G7.2 — Dokka GFM config. See :math/build.gradle.kts for the

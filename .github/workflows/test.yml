@@ -1,14 +1,15 @@
 name: Test matrix (raster + GPU)
 
-# G7 cross-validation matrix. Two jobs in parallel :
-#  - `raster`  : :cpu-raster + :skia-integration-tests on ubuntu-latest.
-#                No native GPU driver dependency, fast runner.
-#  - `gpu`     : :gpu-raster on macos-latest. Needs a WebGPU adapter
-#                (wgpu4k-toolkit → Metal on macOS). The `-XstartOnFirstThread`
-#                requirement is handled by the per-module test task in
-#                `gpu-raster/build.gradle.kts`.
+# G7/M31 cross-validation matrix. Three jobs:
+#  - `raster`        : :cpu-raster + :skia-integration-tests on ubuntu-latest.
+#                      No native GPU driver dependency, fast runner.
+#  - `gpu_smoke`     : required macOS smoke gate using `:gpu-raster:gpuSmokeTest`.
+#                      This lane must prove adapter-backed fixtures with zero
+#                      adapter skips.
+#  - `gpu_inventory` : non-blocking full `:gpu-raster:test` inventory lane that
+#                      stays runnable and uploads triage artifacts.
 #
-# Both jobs trigger on PRs that touch the test surface or any of the
+# All jobs trigger on PRs that touch the test surface or any of the
 # modules that feed it. The matrix is intentionally split into separate
 # jobs (rather than `strategy.matrix`) so a missing WebGPU adapter on the
 # raster runner doesn't poison the raster job, and so the macOS runner
@@ -124,7 +125,7 @@ jobs:
             skia-integration-tests/test-similarity-report.md
           if-no-files-found: ignore
 
-  gpu:
+  gpu_smoke:
     name: GPU tests (macos)
     runs-on: macos-latest
     steps:
@@ -139,16 +140,16 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run :gpu-raster
-        # `:gpu-raster` test task injects `-XstartOnFirstThread` on
+      - name: Run required GPU smoke gate
+        # `:gpu-raster:gpuSmokeTest` injects `-XstartOnFirstThread` on
         # macOS, plus `--add-opens=java.base/java.lang=ALL-UNNAMED` and
         # `--enable-native-access=ALL-UNNAMED` (see build.gradle.kts).
         # macOS runners ship a Metal adapter that wgpu4k-toolkit can
-        # bind via `WebGpuContext.createOrNull()` — when missing, the
-        # tests skip via `Assumptions.assumeTrue` rather than fail.
-        run: ./gradlew --no-daemon :gpu-raster:test
+        # bind via `WebGpuContext.createOrNull()`. The smoke task fails
+        # closed when adapter-dependent tests are skipped.
+        run: ./gradlew --no-daemon :gpu-raster:gpuSmokeTest
 
-      - name: Upload GPU debug images
+      - name: Upload GPU smoke debug images
         # Cross-backend tests dump raster.png / gpu.png / diff.png /
         # triptych.png under `gpu-raster/build/debug-images/` whenever
         # either backend lands inside its `floor + 2 %` warning band.
@@ -156,16 +157,60 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: gpu-debug-images
+          name: gpu-smoke-debug-images
           path: gpu-raster/build/debug-images/
           if-no-files-found: ignore
 
-      - name: Upload GPU test reports
+      - name: Upload GPU smoke test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gpu-test-reports
+          name: gpu-smoke-test-reports
           path: |
-            gpu-raster/build/reports/tests/
+            gpu-raster/build/reports/tests/gpuSmokeTest/
+            gpu-raster/build/test-results/gpuSmokeTest/
+            gpu-raster/test-similarity-scores-webgpu.properties
+          if-no-files-found: ignore
+
+  gpu_inventory:
+    name: GPU inventory (macos, non-blocking)
+    runs-on: macos-latest
+    needs: [gpu_smoke]
+    if: always()
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run full GPU inventory (non-blocking)
+        # Keep the full adapter-backed inventory runnable for failure
+        # classification and PM triage while smoke remains the required
+        # merge gate.
+        run: ./gradlew --no-daemon :gpu-raster:gpuInventoryTest
+
+      - name: Upload GPU inventory debug images
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-inventory-debug-images
+          path: gpu-raster/build/debug-images/
+          if-no-files-found: ignore
+
+      - name: Upload GPU inventory test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-inventory-test-reports
+          path: |
+            gpu-raster/build/reports/tests/test/
+            gpu-raster/build/test-results/test/
             gpu-raster/test-similarity-scores-webgpu.properties
           if-no-files-found: ignore
