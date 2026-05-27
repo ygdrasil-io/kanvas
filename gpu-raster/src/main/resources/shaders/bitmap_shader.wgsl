@@ -209,11 +209,10 @@ struct Uniforms {
     // G2.x -- analytical clip-shape payload, mirrors `solid_color.wgsl`.
     // `clipShapeRadiiKind.z` is the kind enum (0 = no shape clip ; 1 =
     // rrect / oval / circle ; same encoding as the rect pipeline).
-    // `clipShapeRadiiKind.w` is a strict-src-constraint flag
-    // (0 = fast, 1 = strict clamp to subset interior).
-    // The
-    // two slots come AFTER the G5.3 colorspace block so the colorspace
-    // layout stays contiguous (G2.x sits at offsets 160/176).
+    // `clipShapeRadiiKind.w` is the strict-src-constraint mode
+    // (0 = fast, 1 = strict filter taps, 2 = strict nearest texels).
+    // The two slots come AFTER the G5.3 colorspace block so the
+    // colorspace layout stays contiguous (G2.x sits at offsets 160/176).
     clipShapeBounds:    vec4f, // offset 160 : (l, t, r, b) device-px
     clipShapeRadiiKind: vec4f, // offset 176 : (rx, ry, clipKind, _)
     // G5.2.2 -- 2x3 device-to-image affine `M^-1 = (ctm * localMatrix)^-1`.
@@ -489,13 +488,16 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                + uniforms.devToImageRow1.y * pos.y
                + uniforms.devToImageRow1.z;
 
-    // SrcRectConstraint parity: strict keeps bilinear taps inside the
-    // requested src subset by clamping to texel-center bounds, while
-    // fast preserves legacy unconstrained sampling.
-    let strict_constraint = uniforms.clipShapeRadiiKind.w > 0.5;
+    // SrcRectConstraint parity: strict linear keeps filter taps inside
+    // the requested src subset by clamping to texel-center bounds. Strict
+    // nearest must instead clamp the integer texel selected by floor(),
+    // matching SkBitmapDevice's strictSampleMin/Max rules.
+    let strict_mode = uniforms.clipShapeRadiiKind.w;
+    let strict_constraint = strict_mode > 0.5;
+    let strict_nearest = strict_mode > 1.5;
     var sx = sx_raw;
     var sy = sy_raw;
-    if (strict_constraint) {
+    if (strict_constraint && !strict_nearest) {
         sx = clamp(sx_raw, uniforms.srcRect.x + 0.5, uniforms.srcRect.z - 0.5);
         sy = clamp(sy_raw, uniforms.srcRect.y + 0.5, uniforms.srcRect.w - 0.5);
     }
@@ -523,8 +525,23 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         return vec4f(0.0, 0.0, 0.0, 0.0);
     }
 
-    // Sample (filter mode = Nearest or Linear, picked by the sampler).
-    let sampled = textureSampleLevel(image_texture, image_sampler, vec2f(u, v), 0.0);
+    // Sample. Linear and fast-nearest use the sampler. Strict-nearest uses
+    // textureLoad so half-pixel source subsets keep their border texels
+    // instead of snapping to the center-only bilinear clamp.
+    var sampled: vec4f;
+    if (strict_nearest) {
+        let max_x = uniforms.imageSize.x - 1.0;
+        let max_y = uniforms.imageSize.y - 1.0;
+        let min_x = clamp(ceil(uniforms.srcRect.x - 0.5), 0.0, max_x);
+        let min_y = clamp(ceil(uniforms.srcRect.y - 0.5), 0.0, max_y);
+        let strict_max_x = clamp(floor(uniforms.srcRect.z - 0.5), min_x, max_x);
+        let strict_max_y = clamp(floor(uniforms.srcRect.w - 0.5), min_y, max_y);
+        let ix = i32(clamp(floor(sx_raw), min_x, strict_max_x));
+        let iy = i32(clamp(floor(sy_raw), min_y, strict_max_y));
+        sampled = textureLoad(image_texture, vec2i(ix, iy), 0);
+    } else {
+        sampled = textureSampleLevel(image_texture, image_sampler, vec2f(u, v), 0.0);
+    }
 
     // G5.3 -- texture color management. When the host marks the source
     // image as non-sRGB (csFlags.x != CS_MODE_IDENTITY), apply the
