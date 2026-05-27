@@ -13,12 +13,18 @@ import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
+import org.skia.pipeline.CoverageBackendStrategy
+import org.skia.pipeline.CoverageLoweringResult
+import org.skia.pipeline.CoverageModel
+import org.skia.pipeline.CoveragePlan
+import org.skia.pipeline.FallbackPlan
 import org.skia.pipeline.FloatRect
 import org.skia.pipeline.GeometryCoverageMigrationHarness
 import org.skia.pipeline.PixelBuffer
 import org.skia.pipeline.Point
 import org.skia.pipeline.RRectSpec
 import org.skia.pipeline.Rgba
+import org.skia.pipeline.StandardCoverageReason
 
 class SkBitmapDescriptorCoverageOracleTest {
     @Test
@@ -32,12 +38,19 @@ class SkBitmapDescriptorCoverageOracleTest {
             assertEquals("cpu.descriptor.coverage-plan.solid-rect", diagnostics.selectedRoute)
             assertEquals("kanvas-skia.current.draw-rect", diagnostics.compatibilityFallbackRoute)
             assertEquals("AnalyticRect(2.0,1.0,7.0,6.0,aa=false)", diagnostics.coveragePlan)
+            assertEquals("CoverageModel.AnalyticRect(2.0,1.0,7.0,6.0,aa=false)", diagnostics.loweringResult)
+            assertEquals(
+                "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRect;touchedPixels=25",
+                diagnostics.executionEvidence,
+            )
             assertEquals(null, diagnostics.fallbackReason)
             assertEquals(25, diagnostics.touchedPixels)
             assertEquals("Default", diagnostics.mode)
             assertTrue(diagnostics.dump().contains("fallbackReason=none"))
             assertTrue(diagnostics.dump().contains("backend=CPU"))
             assertTrue(diagnostics.dump().contains("drawKind=axis-aligned-filled-rect"))
+            assertTrue(diagnostics.dump().contains("loweringResult=CoverageModel.AnalyticRect(2.0,1.0,7.0,6.0,aa=false)"))
+            assertTrue(diagnostics.dump().contains("executionEvidence=lowering-consumed:CoverageModel.AnalyticRect"))
         }
 
     @Test
@@ -51,10 +64,13 @@ class SkBitmapDescriptorCoverageOracleTest {
             assertEquals("kanvas-skia.current.draw-rect", diagnostics.selectedRoute)
             assertEquals("cpu.descriptor.coverage-plan.solid-rect", diagnostics.compatibilityFallbackRoute)
             assertEquals("coverage.cpu-descriptor-rect-disabled", diagnostics.fallbackReason)
+            assertEquals("CoverageModel.AnalyticRect(2.0,1.0,7.0,6.0,aa=false)", diagnostics.loweringResult)
+            assertEquals("legacy-fallback-before-descriptor-execution", diagnostics.executionEvidence)
             assertEquals(0, diagnostics.touchedPixels)
             assertEquals("Rollback", diagnostics.mode)
             assertTrue(diagnostics.dump().contains("mode=Rollback"))
             assertTrue(diagnostics.dump().contains("fallbackRoute=cpu.descriptor.coverage-plan.solid-rect"))
+            assertTrue(diagnostics.dump().contains("loweringResult=CoverageModel.AnalyticRect(2.0,1.0,7.0,6.0,aa=false)"))
         }
 
     @Test
@@ -71,8 +87,84 @@ class SkBitmapDescriptorCoverageOracleTest {
             val diagnostics = device.descriptorCoverageDiagnosticsForTests()
             assertEquals("kanvas-skia.current.draw-rect", diagnostics.selectedRoute)
             assertEquals("coverage.cpu-descriptor-fill-style-only", diagnostics.fallbackReason)
+            assertEquals("CoverageModel.AnalyticRect(2.0,1.0,7.0,6.0,aa=false)", diagnostics.loweringResult)
+            assertEquals("legacy-fallback-before-descriptor-execution", diagnostics.executionEvidence)
             assertEquals("Fallback", diagnostics.mode)
             assertFalse(bitmap.pixels.all { it == SK_ColorTRANSPARENT })
+        }
+
+    @Test
+    fun `production bitmap device descriptor route records aa lowering execution evidence`() =
+        withDescriptorRectFlag(null) {
+            val bitmap = SkBitmap(8, 8)
+            val device = SkBitmapDevice(bitmap)
+            device.drawRect(SkRect.MakeLTRB(1.25f, 2.5f, 6.75f, 7f), SkIRect.MakeWH(8, 8), blackPaint(antiAlias = true))
+
+            val diagnostics = device.descriptorCoverageDiagnosticsForTests()
+            assertEquals("cpu.descriptor.coverage-plan.solid-rect", diagnostics.selectedRoute)
+            assertEquals("AnalyticRect(1.25,2.5,6.75,7.0,aa=true)", diagnostics.coveragePlan)
+            assertEquals("CoverageModel.AnalyticRect(1.25,2.5,6.75,7.0,aa=true)", diagnostics.loweringResult)
+            assertTrue(
+                diagnostics.executionEvidence.startsWith(
+                    "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRectAA;touchedPixels=",
+                ),
+            )
+            assertEquals(diagnostics.touchedPixels.toString(), diagnostics.executionEvidence.substringAfter("touchedPixels="))
+            assertTrue(diagnostics.touchedPixels > 0)
+        }
+
+    @Test
+    fun `production descriptor execution consumes lowered analytic rect bounds`() =
+        withDescriptorRectFlag(null) {
+            withCoverageLoweringForTests(
+                CoverageLoweringResult.CoverageModelResult(
+                    CoverageModel.AnalyticRect(bounds = FloatRect(3f, 2f, 5f, 4f), aa = false),
+                ),
+            ) {
+                val bitmap = SkBitmap(8, 8)
+                val device = SkBitmapDevice(bitmap)
+                device.drawRect(SkRect.MakeLTRB(1f, 1f, 7f, 7f), SkIRect.MakeWH(8, 8), blackPaint(antiAlias = false))
+
+                val diagnostics = device.descriptorCoverageDiagnosticsForTests()
+                assertEquals("AnalyticRect(1.0,1.0,7.0,7.0,aa=false)", diagnostics.coveragePlan)
+                assertEquals("CoverageModel.AnalyticRect(3.0,2.0,5.0,4.0,aa=false)", diagnostics.loweringResult)
+                assertEquals(
+                    "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRect;touchedPixels=4",
+                    diagnostics.executionEvidence,
+                )
+                assertEquals(4, diagnostics.touchedPixels)
+                assertEquals(SK_ColorTRANSPARENT, bitmap.getPixel(1, 1))
+                assertEquals(SK_ColorBLACK, bitmap.getPixel(3, 2))
+                assertEquals(SK_ColorBLACK, bitmap.getPixel(4, 3))
+                assertEquals(SK_ColorTRANSPARENT, bitmap.getPixel(5, 4))
+            }
+        }
+
+    @Test
+    fun `production descriptor route falls back when lowering returns strategy result`() =
+        withDescriptorRectFlag(null) {
+            withCoverageLoweringForTests(
+                CoverageLoweringResult.StrategyResult(
+                    CoverageBackendStrategy.UnsupportedFallback(
+                        fallback = FallbackPlan.RefuseDiagnostic(StandardCoverageReason.AlphaMaskUnsupported.code),
+                        reason = StandardCoverageReason.AlphaMaskUnsupported,
+                    ),
+                ),
+            ) {
+                val bitmap = SkBitmap(8, 8)
+                val device = SkBitmapDevice(bitmap)
+                device.drawRect(SkRect.MakeLTRB(2f, 1f, 7f, 6f), SkIRect.MakeWH(8, 8), blackPaint(antiAlias = false))
+
+                val diagnostics = device.descriptorCoverageDiagnosticsForTests()
+                assertEquals("Fallback", diagnostics.mode)
+                assertEquals("kanvas-skia.current.draw-rect", diagnostics.selectedRoute)
+                assertEquals("cpu.descriptor.coverage-plan.solid-rect", diagnostics.compatibilityFallbackRoute)
+                assertEquals("StrategyResult(coverage.alpha-mask-unsupported)", diagnostics.loweringResult)
+                assertEquals("descriptor-execution-refused", diagnostics.executionEvidence)
+                assertEquals("coverage.cpu-descriptor-lowering-unsupported", diagnostics.fallbackReason)
+                assertEquals(0, diagnostics.touchedPixels)
+                assertFalse(bitmap.pixels.all { it == SK_ColorTRANSPARENT })
+            }
         }
 
     @Test
@@ -185,6 +277,16 @@ class SkBitmapDescriptorCoverageOracleTest {
                 drawRect(rect, blackPaint(antiAlias = antiAlias).apply { color = SK_ColorRED })
             }
         }
+
+    private fun <T> withCoverageLoweringForTests(lowering: CoverageLoweringResult, block: () -> T): T {
+        val previous = SkBitmapDescriptorCoverageLowering.lower
+        SkBitmapDescriptorCoverageLowering.lower = { _: CoveragePlan -> lowering }
+        return try {
+            block()
+        } finally {
+            SkBitmapDescriptorCoverageLowering.lower = previous
+        }
+    }
 
     private fun <T> withDescriptorRectFlag(value: String?, block: () -> T): T {
         val previous = System.getProperty("kanvas.cpu.descriptorRect.enabled")
