@@ -69,7 +69,7 @@ public object SkBuiltinShaderEffectsIntrinsicsRelational {
     public fun registerAll() {
         for (entry in RELATIONAL_ENTRIES) {
             val sksl = makeBvecSksl(entry.type, entry.fn)
-            SkRuntimeEffectDispatch.register(sksl) {
+            SkRuntimeEffectDispatch.registerBuiltinIfAbsent(sksl) {
                 BvecRelationalImpl(useInt = entry.type == "int", cmp = entry.eval)
             }
         }

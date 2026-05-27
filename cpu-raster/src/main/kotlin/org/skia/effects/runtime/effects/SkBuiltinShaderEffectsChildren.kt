@@ -50,13 +50,12 @@ public object SkBuiltinShaderEffectsChildren {
      * the dispatch table, so the next `MakeForXxx` call must repopulate
      * before lookup.
      *
-     * Each `register` call replaces the prior factory at the same hash
-     * key (deliberate — see [SkRuntimeEffectDispatch.register] KDoc) so
-     * calling this twice in a row is safe.
+     * Each builtin registration is skipped when the same hash is already
+     * present, so calling this twice in a row is safe.
      */
     public fun registerAll() {
-        SkRuntimeEffectDispatch.register(THRESHOLD_RT_SKSL) { ThresholdRTImpl }
-        SkRuntimeEffectDispatch.register(UNSHARP_RT_SKSL) { UnsharpRTImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(THRESHOLD_RT_SKSL) { ThresholdRTImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(UNSHARP_RT_SKSL) { UnsharpRTImpl }
     }
 
     // ─── SkSL sources (verbatim copies of upstream) ──────────────────

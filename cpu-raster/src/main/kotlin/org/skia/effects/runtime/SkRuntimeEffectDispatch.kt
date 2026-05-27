@@ -33,13 +33,13 @@ package org.skia.effects.runtime
  * UTF-8 byte sequence (Kotlin's `String.toByteArray()` — bit-iso
  * with upstream's `SkString::data()`).
  *
- * **Thread-safety** : registrations are typically done via class-
- * load `init { … }` blocks, which the JVM serializes per loader.
- * Lookups can come from any thread (the dispatch table is a
- * [HashMap] but writes after class-load only happen during test
- * setup ; if a future use case needs concurrent registration, swap
- * to [java.util.concurrent.ConcurrentHashMap] — no other code
- * change required).
+ * **Thread-safety** : registrations are typically done via
+ * explicit builtin registration calls before lookup. Lookups can
+ * come from any thread (the dispatch table is a [HashMap] but
+ * writes after class-load only happen during test setup ; if a
+ * future use case needs concurrent registration, swap to
+ * [java.util.concurrent.ConcurrentHashMap] — no other code change
+ * required).
  *
  * **Misses** : `lookup(unregisteredSkSL)` returns `null`. The
  * caller (typically [SkRuntimeEffect.Companion]) wraps that into
@@ -54,15 +54,9 @@ public object SkRuntimeEffectDispatch {
     private val table: MutableMap<Long, () -> SkRuntimeImpl> = HashMap()
 
     /**
-     * Register a hand-ported impl under the canonical form of the
-     * supplied SkSL source. The factory is invoked **lazily** on
-     * each [lookup] hit — implementations must therefore be cheap
-     * to construct (typically just an empty class with no state).
-     *
-     * Registering twice for the same source replaces the prior
-     * factory ; this is a deliberate convenience for tests that
-     * stub out an effect (the production registration happens via
-     * a class-init that always wins on first JVM load).
+     * Register a hand-ported impl under the canonical form of the supplied
+     * SkSL source. Duplicate production registration is rejected; tests that
+     * intentionally replace an entry must use [registerForTestOverride].
      *
      * @param canonicalSource the SkSL string. May contain comments
      *   and arbitrary whitespace — normalisation runs before
@@ -72,7 +66,19 @@ public object SkRuntimeEffectDispatch {
      */
     public fun register(canonicalSource: String, factory: () -> SkRuntimeImpl) {
         val hash = hashCanonical(canonicalSource)
+        check(hash !in table) {
+            "Duplicate runtime effect dispatch registration: canonicalHash=$hash"
+        }
         table[hash] = factory
+    }
+
+    internal fun registerBuiltinIfAbsent(canonicalSource: String, factory: () -> SkRuntimeImpl) {
+        val hash = hashCanonical(canonicalSource)
+        table.putIfAbsent(hash, factory)
+    }
+
+    internal fun registerForTestOverride(canonicalSource: String, factory: () -> SkRuntimeImpl) {
+        table[hashCanonical(canonicalSource)] = factory
     }
 
     /**

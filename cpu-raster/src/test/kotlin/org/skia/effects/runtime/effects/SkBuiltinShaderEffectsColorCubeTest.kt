@@ -323,7 +323,7 @@ class SkBuiltinShaderEffectsColorCubeTest {
 
     /** Build a [SkShader] that returns [c] at every sample point. */
     private fun makeConstantShader(c: SkColor4f, sksl: String): SkShader {
-        SkRuntimeEffectDispatch.register(sksl) { constantColorImpl(c) }
+        SkRuntimeEffectDispatch.registerForTestOverride(sksl) { constantColorImpl(c) }
         val effect = SkRuntimeEffect.MakeForShader(sksl).effect!!
         return effect.makeShader(uniforms = null)!!
     }

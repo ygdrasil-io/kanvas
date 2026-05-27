@@ -400,13 +400,13 @@ public class SkRuntimeEffect private constructor(
         /**
          * Re-populates the dispatch table with every hand-ported
          * built-in effect. Called once per [makeFor] (cheap —
-         * each `register` is a single map insert).
+         * each builtin registration is a map lookup or insert).
          *
          * Idempotent : if a test calls
          * [SkRuntimeEffectDispatch.clearForTest] between cases,
          * the next [makeFor] re-registers everything. If the
-         * registry is already populated, the calls just overwrite
-         * with the same factories.
+         * registry is already populated, builtin registration skips
+         * the existing entries.
          */
         private fun ensureBuiltinsLoaded() {
             org.skia.effects.runtime.effects.SkBuiltinColorFilterEffects.registerAll()
