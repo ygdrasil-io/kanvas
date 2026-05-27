@@ -96,6 +96,95 @@ class GeometryCoverageContractsTest {
     }
 
     @Test
+    fun persistentCoverageAtlasPolicyIsGatedByExecutableChecks() {
+        val bounds = IntRect(2, 3, 10, 11)
+        val result = CoveragePlanAdapter.lower(
+            CoveragePlan.CoverageAtlas(
+                ref = CoverageAtlasRef("atlas-persistent"),
+                bounds = bounds,
+                cachePolicy = CoverageCachePolicy.PersistentByShapeKey,
+            ),
+        )
+
+        val strategyResult = assertIs<CoverageLoweringResult.StrategyResult>(result)
+        val fallback = assertIs<CoverageBackendStrategy.UnsupportedFallback>(strategyResult.strategy)
+        assertEquals(StandardCoverageReason.AtlasPolicyUnavailable, fallback.reason)
+        assertEquals(FallbackPlan.RefuseDiagnostic("coverage.atlas-policy-unavailable"), fallback.fallback)
+
+        val decision = CoverageAtlasPolicyGate.evaluate(CoverageCachePolicy.PersistentByShapeKey)
+        assertEquals(CoverageAtlasPolicyVerdict.NoGo, decision.verdict)
+        assertEquals(false, decision.persistentCacheEnabled)
+        assertEquals(StandardCoverageReason.AtlasPolicyUnavailable, decision.reason)
+        assertEquals(0, decision.hitCount)
+        assertEquals(0, decision.missCount)
+        assertEquals(0L, decision.residentBytes)
+        assertEquals(0, decision.evictionCount)
+        assertEquals(
+            listOf(
+                "shape-key",
+                "transform-key",
+                "invalidation",
+                "memory-budget",
+                "eviction",
+                "cpu-gpu-sync",
+                "owner-thread",
+            ),
+            decision.checks.map { it.name },
+        )
+        assertEquals(
+            List(decision.checks.size) { CoverageAtlasPolicyCheckStatus.Missing },
+            decision.checks.map { it.status },
+        )
+        assertEquals(
+            "coverageAtlasPolicy(policy=PersistentByShapeKey,persistent=false,verdict=no-go," +
+                "reason=coverage.atlas-policy-unavailable,hits=0,misses=0,residentBytes=0,evictions=0," +
+                "checks=shape-key:Missing:shape key definition not accepted|" +
+                "transform-key:Missing:transform key definition not accepted|" +
+                "invalidation:Missing:invalidation policy not accepted|" +
+                "memory-budget:Missing:memory budget not accepted|" +
+                "eviction:Missing:eviction policy not accepted|" +
+                "cpu-gpu-sync:Missing:CPU/GPU synchronization policy not accepted|" +
+                "owner-thread:Missing:owner-thread handling not accepted)",
+            decision.dump(),
+        )
+    }
+
+    @Test
+    fun nonPersistentCoverageAtlasPoliciesAreNotBlockedByPersistentGate() {
+        val frameLocal = CoverageAtlasPolicyGate.evaluate(CoverageCachePolicy.FrameLocal)
+        val noCache = CoverageAtlasPolicyGate.evaluate(CoverageCachePolicy.NoCache)
+
+        assertEquals(CoverageAtlasPolicyVerdict.GoNonPersistent, frameLocal.verdict)
+        assertEquals(false, frameLocal.persistentCacheEnabled)
+        assertEquals(null, frameLocal.reason)
+        assertEquals(
+            List(frameLocal.checks.size) { CoverageAtlasPolicyCheckStatus.NotRequired },
+            frameLocal.checks.map { it.status },
+        )
+
+        assertEquals(CoverageAtlasPolicyVerdict.GoNonPersistent, noCache.verdict)
+        assertEquals(false, noCache.persistentCacheEnabled)
+        assertEquals(null, noCache.reason)
+        assertEquals(
+            List(noCache.checks.size) { CoverageAtlasPolicyCheckStatus.NotRequired },
+            noCache.checks.map { it.status },
+        )
+
+        val noCacheResult = CoveragePlanAdapter.lower(
+            CoveragePlan.CoverageAtlas(
+                ref = CoverageAtlasRef("atlas-no-cache"),
+                bounds = IntRect(4, 5, 12, 13),
+                cachePolicy = CoverageCachePolicy.NoCache,
+            ),
+        )
+        val noCacheStrategyResult = assertIs<CoverageLoweringResult.StrategyResult>(noCacheResult)
+        val noCacheStrategy = assertIs<CoverageBackendStrategy.CoverageAtlasSample>(
+            noCacheStrategyResult.strategy,
+        )
+        assertEquals(CoverageCachePolicy.NoCache, noCacheStrategy.cachePolicy)
+    }
+
+    @Test
     fun unsupportedCoverageBridgesToFallbackReasonCodeOnly() {
         val result = CoveragePlanAdapter.lower(
             CoveragePlan.Unsupported(StandardCoverageReason.EdgeCountExceeded),
