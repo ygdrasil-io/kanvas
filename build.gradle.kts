@@ -153,6 +153,10 @@ val requiredPipelineConformanceSuites = listOf(
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
         className = "org.skia.pipeline.CpuScalarPipelineExecutorTest",
         resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
     ),
@@ -235,7 +239,7 @@ fun renderPipelineConformanceReport(
     return """
         |# M24 Pipeline Conformance PM Report
         |
-        |Linear: GRA-53, GRA-56, GRA-57
+        |Linear: GRA-53, GRA-56, GRA-57, GRA-58
         |Source commit: `$commit`
         |
         |## Commands
@@ -247,7 +251,8 @@ fun renderPipelineConformanceReport(
         |
         |## PM Summary
         |
-        |The standard conformance entry point completed and produced JUnit evidence for parser/golden coverage,
+        |The standard conformance entry point completed and produced JUnit evidence for strict generated/registered WGSL,
+        |legacy WGSL diagnostic coverage, parser/golden coverage,
         |PipelineKey and BlendPlan contracts, runtime-effect descriptor routing, CPU descriptor coverage,
         |kanvas-skia production descriptor routing, WebGPU selector routing, and geometry oracle checks.
         |
@@ -256,7 +261,8 @@ fun renderPipelineConformanceReport(
         || Area | Status | Evidence |
         ||---|---|---|
         |${row("Tests", conformanceStatus(suites), "$totalTests tests, $totalFailures failures, $totalErrors errors, $totalSkipped skipped")}
-        |${row("Parser status", status("org.skia.gpu.webgpu.tools.WgslValidationReportTest"), "`WgslValidationReportTest` plus required `:gpu-raster:wgslValidateAll` dependency")}
+        |${row("Strict WGSL status", status("org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest"), "`WgslStrictValidationReportTest` plus required `:gpu-raster:wgslValidateStrict` dependency")}
+        |${row("Legacy WGSL diagnostics", status("org.skia.gpu.webgpu.tools.WgslValidationReportTest"), "`WgslValidationReportTest` plus diagnostic `:gpu-raster:wgslValidateAll` dependency")}
         |${row("Generated WGSL status", status("org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest", "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest"), "`GeneratedSolidRectWgslTest`, `GeneratedLinearGradientWgslTest`")}
         |${row("PipelineKey status", status("org.skia.gpu.webgpu.PipelineKeyTelemetryTest"), "`PipelineKeyTelemetryTest`")}
         |${row("BlendPlan status", status("org.skia.gpu.webgpu.BlendPlanTest"), "`BlendPlanTest`")}
@@ -289,7 +295,7 @@ fun renderPipelineConformanceReport(
         |
         |- GPU adapter-dependent checks can be JUnit-skipped on machines without a usable WebGPU adapter; this is recorded risk, not a green adapter pass.
         |- Slow benchmark gates are not part of `pipelineConformance`; vector promotion remains rejected until the allocation-aware benchmark meets the promotion threshold.
-        |- Existing WGSL parser diagnostics are surfaced by `:gpu-raster:wgslValidateAll`; parser coverage is conformance evidence, not a claim that all handwritten WGSL resources are diagnostic-free.
+        |- Existing legacy WGSL parser diagnostics are surfaced by `:gpu-raster:wgslValidateAll`; strict release readiness applies only to generated and registered WGSL modules until the legacy allowlist/remediation tickets land.
         |
         |## Outcome
         |
@@ -310,6 +316,7 @@ project(":gpu-raster").registerPipelineConformanceTest(
     descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, and WebGPU selector conformance tests.",
     testPatterns = listOf(
         "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
+        "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
         "org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest",
         "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest",
         "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
@@ -341,6 +348,7 @@ tasks.register("pipelineConformance") {
     description = "Runs the standard production pipeline conformance suite without slow benchmark gates."
 
     dependsOn(
+        ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
         ":cpu-raster:pipelineConformanceTest",
@@ -352,7 +360,8 @@ tasks.register("pipelineConformance") {
         logger.lifecycle(
             """
             |pipelineConformance summary:
-            |- REQUIRED parser validation: :gpu-raster:wgslValidateAll
+            |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
+            |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, and selector tests: :gpu-raster:pipelineConformanceTest
             |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
             |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest

@@ -102,6 +102,14 @@ tasks.register<JavaExec>("wgslValidateAll") {
     args(file("src/main/resources/shaders").absolutePath)
 }
 
+tasks.register<JavaExec>("wgslValidateStrict") {
+    group = "verification"
+    description = "Fails on parser or reflection diagnostics in generated and registered WGSL modules."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.gpu.webgpu.tools.WgslStrictValidationReportKt")
+    args(file("src/main/resources/shaders").absolutePath)
+}
+
 // MIGRATION_PLAN_GPU_WEBGPU.md Phase G0 — GLFW (used by wgpu4k for
 // surface creation, see ClearRedTest / WebGpuContext) requires the
 // AppKit main thread on macOS. `-XstartOnFirstThread` lets the JVM
