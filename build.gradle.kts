@@ -240,7 +240,7 @@ fun renderPipelineConformanceReport(
     return """
         |# M24 Pipeline Conformance PM Report
         |
-        |Linear: GRA-53, GRA-56, GRA-57, GRA-58, GRA-59
+        |Linear: GRA-53, GRA-56, GRA-57, GRA-58, GRA-59, GRA-60
         |Source commit: `$commit`
         |
         |## Commands
@@ -254,7 +254,7 @@ fun renderPipelineConformanceReport(
         |
         |The standard conformance entry point completed and produced JUnit evidence for strict generated/registered WGSL,
         |legacy WGSL diagnostic coverage, parser/golden coverage,
-        |PipelineKey and BlendPlan contracts, runtime-effect descriptor routing, CPU descriptor coverage,
+        |PipelineKey and BlendPlan contracts, runtime-effect descriptor routing and dispatch-only matrix coverage, CPU descriptor coverage,
         |kanvas-skia production descriptor routing, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -269,7 +269,7 @@ fun renderPipelineConformanceReport(
         |${row("BlendPlan status", status("org.skia.gpu.webgpu.BlendPlanTest"), "`BlendPlanTest`")}
         |${row("Descriptor routing status", status("org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.pipeline.GeometryCoverageMigrationHarnessTest"), "`WebGpuCoveragePlanSelectorTest`, `GeometryCoverageMigrationHarnessTest`")}
         |${row("kanvas-skia production route", status("org.skia.core.SkBitmapDescriptorCoverageOracleTest"), "`SkBitmapDescriptorCoverageOracleTest` proves `SkBitmapDevice` descriptor routing and rollback evidence")}
-        |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test")}
+        |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; matrix artifact lists descriptor-backed and dispatch-only missing-descriptor rows")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -285,6 +285,8 @@ fun renderPipelineConformanceReport(
         |  (`productionDump`, selector disabled rollback, and coverage selector route identifiers).
         |- Pipeline cache telemetry: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/PipelineKeyTelemetryTest.kt`
         |  verifies cold frame misses are at least one and warm frame cache hits increase.
+        |- Runtime-effect support matrix: `reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md`
+        |  lists `runtime.simple_rt` as descriptor-backed and dispatch-only builtins as missing descriptor/WGSL evidence.
         |
         |## Full Test Summary
         |
