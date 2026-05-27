@@ -54,7 +54,9 @@ class GeometryCoverageMigrationHarnessTest {
         assertEquals(0, result.diffSummary.maxChannelDelta)
         assertEquals("artifacts/gra-32/compare-rect.json", result.diffSummary.artifactPath)
         assertTrue(result.dump().contains("diff=compared(passed=true,width=8,height=8,differingPixels=0,maxChannelDelta=0,artifactPath=artifacts/gra-32/compare-rect.json)"))
-        assertTrue(result.dump().contains("metrics=touchedPixels=64,scalarVectorStatus=scalar-analytic-rect,kernelId=cpu.scalar.analytic_rect_src_over_clear,fallbackReason=none"))
+        assertEquals(64, result.metrics.touchedPixels)
+        assertEquals(CpuAnalyticRectCoverageExecutor.KERNEL_ID, result.metrics.kernelId)
+        assertEquals("scalar-analytic-rect", result.metrics.scalarVectorStatus)
     }
 
     @Test
@@ -70,6 +72,42 @@ class GeometryCoverageMigrationHarnessTest {
 
         assertEquals(true, result.diffSummary.passed)
         assertTrue(result.dump().contains("coverage=AnalyticRect(0.0,0.0,8.0,8.0,aa=true)"))
+        assertEquals("scalar-analytic-rect-aa", result.metrics.scalarVectorStatus)
+        assertEquals(CpuAnalyticRectCoverageExecutor.KERNEL_ID, result.metrics.kernelId)
+    }
+
+    @Test
+    fun `shared analytic rect coverage executor uses skia non aa edge rules`() {
+        val visited = mutableListOf<Pair<Int, Int>>()
+        val metrics = CpuAnalyticRectCoverageExecutor.execute(
+            CoverageModel.AnalyticRect(bounds = FloatRect(1.25f, 1.25f, 3.25f, 3.25f), aa = false),
+            clip = IntRect(0, 0, 5, 5),
+        ) { x, y, coverage ->
+            assertEquals(1f, coverage)
+            visited += x to y
+        }
+
+        assertEquals(4, metrics.touchedPixels)
+        assertEquals(CpuAnalyticRectCoverageExecutor.KERNEL_ID, metrics.kernelId)
+        assertEquals(listOf(1 to 1, 2 to 1, 1 to 2, 2 to 2), visited)
+    }
+
+    @Test
+    fun `shared analytic rect coverage executor reports aa fractional coverage`() {
+        val visited = mutableMapOf<Pair<Int, Int>, Float>()
+        val metrics = CpuAnalyticRectCoverageExecutor.execute(
+            CoverageModel.AnalyticRect(bounds = FloatRect(1.25f, 1.5f, 2.75f, 2.5f), aa = true),
+            clip = IntRect(0, 0, 5, 5),
+        ) { x, y, coverage ->
+            visited[x to y] = coverage
+        }
+
+        assertEquals(4, metrics.touchedPixels)
+        assertEquals("scalar-analytic-rect-aa", metrics.scalarVectorStatus)
+        assertEquals(0.375f, visited.getValue(1 to 1))
+        assertEquals(0.375f, visited.getValue(2 to 1))
+        assertEquals(0.375f, visited.getValue(1 to 2))
+        assertEquals(0.375f, visited.getValue(2 to 2))
     }
 
     @Test
@@ -339,8 +377,10 @@ class GeometryCoverageMigrationHarnessTest {
         assertTrue(dump.contains("compatibilityFallbackRoute=kanvas-skia.current.draw-rect"))
         assertTrue(dump.contains("legacyRetainedReason=rollback fallback retained for unsupported transforms, clips, and descriptor runtime failures"))
         assertTrue(dump.contains("diff=compared(passed=true,width=8,height=8,differingPixels=0,maxChannelDelta=0,artifactPath=artifacts/gra-38/default-rect.json)"))
-        assertTrue(dump.contains("metrics=touchedPixels=64,scalarVectorStatus=scalar-analytic-rect,kernelId=cpu.scalar.analytic_rect_src_over_clear,fallbackReason=none"))
-        assertTrue(dump.contains("report=legacy->descriptor default,visualDiff=true,diagnostics=none,metricTable=[touchedPixels=64;kernel=cpu.scalar.analytic_rect_src_over_clear;fallback=none]"))
+        assertEquals(64, result.metrics.touchedPixels)
+        assertEquals(CpuAnalyticRectCoverageExecutor.KERNEL_ID, result.metrics.kernelId)
+        assertEquals("scalar-analytic-rect", result.metrics.scalarVectorStatus)
+        assertTrue(dump.contains("report=legacy->descriptor default,visualDiff=true,diagnostics=none,metricTable=[touchedPixels=64;kernel=${CpuAnalyticRectCoverageExecutor.KERNEL_ID};fallback=none]"))
     }
 
     @Test
