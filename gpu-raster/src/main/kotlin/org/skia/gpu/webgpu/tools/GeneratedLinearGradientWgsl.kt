@@ -1,6 +1,6 @@
 package org.skia.gpu.webgpu.tools
 
-import io.ygdrasil.wgsl.parser.parseWgslResult
+import org.graphiks.wgsl.parser.parseWgslResult
 
 object GeneratedLinearGradientWgsl {
     const val FEATURE_FLAG = "kanvas.gpu.generatedLinearGradient.enabled"

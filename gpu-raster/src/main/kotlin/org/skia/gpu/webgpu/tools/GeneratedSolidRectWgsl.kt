@@ -1,31 +1,31 @@
 package org.skia.gpu.webgpu.tools
 
-import io.ygdrasil.wgsl.arena.Arena
-import io.ygdrasil.wgsl.arena.rangeOf
-import io.ygdrasil.wgsl.ir.BinaryOperator
-import io.ygdrasil.wgsl.ir.Binding
-import io.ygdrasil.wgsl.ir.BindingAttribute
-import io.ygdrasil.wgsl.ir.Block
-import io.ygdrasil.wgsl.ir.BuiltinValue
-import io.ygdrasil.wgsl.ir.EntryPoint
-import io.ygdrasil.wgsl.ir.Expression
-import io.ygdrasil.wgsl.ir.ExpressionKind
-import io.ygdrasil.wgsl.ir.Function
-import io.ygdrasil.wgsl.ir.FunctionParameter
-import io.ygdrasil.wgsl.ir.GlobalVariable
-import io.ygdrasil.wgsl.ir.LiteralValue
-import io.ygdrasil.wgsl.ir.Module
-import io.ygdrasil.wgsl.ir.ScalarKind
-import io.ygdrasil.wgsl.ir.ScalarValue
-import io.ygdrasil.wgsl.ir.ShaderStage
-import io.ygdrasil.wgsl.ir.Statement
-import io.ygdrasil.wgsl.ir.StorageClass
-import io.ygdrasil.wgsl.ir.StructMember
-import io.ygdrasil.wgsl.ir.Type
-import io.ygdrasil.wgsl.ir.TypeInner
-import io.ygdrasil.wgsl.ir.VectorSize
-import io.ygdrasil.wgsl.parser.parseWgslResult
-import io.ygdrasil.wgsl.wgsl.WgslModule
+import org.graphiks.wgsl.arena.Arena
+import org.graphiks.wgsl.arena.rangeOf
+import org.graphiks.wgsl.ir.BinaryOperator
+import org.graphiks.wgsl.ir.Binding
+import org.graphiks.wgsl.ir.BindingAttribute
+import org.graphiks.wgsl.ir.Block
+import org.graphiks.wgsl.ir.BuiltinValue
+import org.graphiks.wgsl.ir.EntryPoint
+import org.graphiks.wgsl.ir.Expression
+import org.graphiks.wgsl.ir.ExpressionKind
+import org.graphiks.wgsl.ir.Function
+import org.graphiks.wgsl.ir.FunctionParameter
+import org.graphiks.wgsl.ir.GlobalVariable
+import org.graphiks.wgsl.ir.LiteralValue
+import org.graphiks.wgsl.ir.Module
+import org.graphiks.wgsl.ir.ScalarKind
+import org.graphiks.wgsl.ir.ScalarValue
+import org.graphiks.wgsl.ir.ShaderStage
+import org.graphiks.wgsl.ir.Statement
+import org.graphiks.wgsl.ir.StorageClass
+import org.graphiks.wgsl.ir.StructMember
+import org.graphiks.wgsl.ir.Type
+import org.graphiks.wgsl.ir.TypeInner
+import org.graphiks.wgsl.ir.VectorSize
+import org.graphiks.wgsl.parser.parseWgslResult
+import org.graphiks.wgsl.wgsl.WgslModule
 
 data class WgslValidationResult(
     val isSuccess: Boolean,
@@ -106,10 +106,10 @@ object GeneratedSolidRectWgsl {
     }
 
     private fun buildVertexMain(
-        u32: io.ygdrasil.wgsl.arena.Handle<Type>,
-        f32: io.ygdrasil.wgsl.arena.Handle<Type>,
-        vec4f: io.ygdrasil.wgsl.arena.Handle<Type>,
-        vertexOut: io.ygdrasil.wgsl.arena.Handle<Type>,
+        u32: org.graphiks.wgsl.arena.Handle<Type>,
+        f32: org.graphiks.wgsl.arena.Handle<Type>,
+        vec4f: org.graphiks.wgsl.arena.Handle<Type>,
+        vertexOut: org.graphiks.wgsl.arena.Handle<Type>,
     ): Function {
         val expressions = Arena<Expression>()
         val blocks = Arena<Block>()
@@ -162,8 +162,8 @@ object GeneratedSolidRectWgsl {
     }
 
     private fun buildFragmentMain(
-        vec4f: io.ygdrasil.wgsl.arena.Handle<Type>,
-        uniformsHandle: io.ygdrasil.wgsl.arena.Handle<GlobalVariable>,
+        vec4f: org.graphiks.wgsl.arena.Handle<Type>,
+        uniformsHandle: org.graphiks.wgsl.arena.Handle<GlobalVariable>,
     ): Function {
         val expressions = Arena<Expression>()
         val blocks = Arena<Block>()
