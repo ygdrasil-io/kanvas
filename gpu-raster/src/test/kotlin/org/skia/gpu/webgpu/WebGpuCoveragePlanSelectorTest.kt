@@ -150,6 +150,46 @@ class WebGpuCoveragePlanSelectorTest {
     }
 
     @Test
+    fun `strategy inventory separates adapter blocked proven candidates from refused and compatibility branches`() {
+        val byBranch = WebGpuCoverageStrategyInventory.rows.associateBy { it.branch }
+
+        assertEquals(false, WebGpuCoverageStrategyInventory.ciAdapterLaneAvailable)
+        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("analytic-rect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("analytic-rrect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("path-convex-fan").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("path-stencil-cover").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.Proven, byBranch.getValue("path-mask-or-atlas-selector").status)
+        assertEquals("webgpu.coverage.path-mask-or-atlas", byBranch.getValue("path-mask-or-atlas-selector").routeIdentifier)
+        assertTrue(byBranch.getValue("path-mask-or-atlas-selector").evidence.contains("selector-only proof"))
+        assertEquals(WebGpuCoverageEvidenceStatus.Compatibility, byBranch.getValue("full-scissor").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.Refused, byBranch.getValue("span-runs").status)
+        assertEquals(StandardCoverageReason.SpanRunsUnsupported, byBranch.getValue("span-runs").diagnosticReason)
+        assertEquals(WebGpuCoverageEvidenceStatus.Refused, byBranch.getValue("alpha-mask").status)
+        assertEquals(StandardCoverageReason.AlphaMaskUnsupported, byBranch.getValue("alpha-mask").diagnosticReason)
+        assertEquals(WebGpuCoverageEvidenceStatus.Refused, byBranch.getValue("coverage-atlas").status)
+        assertEquals(StandardCoverageReason.AtlasPolicyUnavailable, byBranch.getValue("coverage-atlas").diagnosticReason)
+        assertEquals(WebGpuCoverageEvidenceStatus.Refused, byBranch.getValue("path-edge-overflow").status)
+        assertEquals(StandardCoverageReason.EdgeCountExceeded, byBranch.getValue("path-edge-overflow").diagnosticReason)
+        assertEquals(WebGpuCoverageEvidenceStatus.Refused, byBranch.getValue("arbitrary-aa-clip").status)
+        assertEquals(
+            StandardCoverageReason.ArbitraryAaClipUnsupported,
+            byBranch.getValue("arbitrary-aa-clip").diagnosticReason,
+        )
+        assertEquals(listOf("path-mask-or-atlas-selector"), WebGpuCoverageStrategyInventory.rows.filter {
+            it.status == WebGpuCoverageEvidenceStatus.Proven
+        }.map { it.branch })
+
+        val dump = WebGpuCoverageStrategyInventory.dump()
+        assertTrue(dump.contains("branch=analytic-rect"))
+        assertTrue(dump.contains("branch=path-mask-or-atlas-selector"))
+        assertTrue(dump.contains("status=proven"))
+        assertTrue(dump.contains("status=blocked-no-adapter-lane"))
+        assertTrue(dump.contains("status=refused"))
+        assertTrue(dump.contains("status=compatibility"))
+        assertTrue(dump.contains("reason=coverage.arbitrary-aa-clip-unsupported"))
+    }
+
+    @Test
     fun `path coverage convex fan selection records pipeline axes`() {
         val selection = WebGpuCoveragePlanSelector.select(
             drawKind = "simple-filled-path",
