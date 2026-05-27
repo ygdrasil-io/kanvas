@@ -89,6 +89,8 @@ data class GlyphRunRef(val id: String)
 
 data class SamplingGeometry(val filter: String)
 
+data class ImageSamplingPayloadRef(val id: String)
+
 sealed interface GeometryPrimitive {
     data class Rect(val source: FloatRect, val device: FloatRect) : GeometryPrimitive
     data class RRect(val shape: RRectSpec) : GeometryPrimitive
@@ -143,6 +145,54 @@ data class ClipStackBreadthCase(
             "cpuDescriptorFallbackReason=${cpuDescriptorFallbackReason ?: "none"};" +
             "webgpu=${dumpClipInteraction(webGpuClip)};webgpuDisposition=$webGpuDisposition;" +
             "webgpuReason=${webGpuReason?.code ?: "none"};pmEvidence=$pmEvidence"
+}
+
+data class ImageRectDescriptor(
+    val primitive: GeometryPrimitive.ImageRect,
+    val transform: TransformFacts,
+    val payloadRef: ImageSamplingPayloadRef,
+    val coveragePlan: CoveragePlan,
+    val routeIdentifier: String,
+    val payloadBoundary: String,
+) {
+    fun dump(): String =
+        "imageRectDescriptor(route=$routeIdentifier,source=${primitive.source.left},${primitive.source.top}," +
+            "${primitive.source.right},${primitive.source.bottom},destination=${primitive.destination.left}," +
+            "${primitive.destination.top},${primitive.destination.right},${primitive.destination.bottom}," +
+            "axisAligned=${transform.isAxisAligned},perspective=${transform.hasPerspective},payload=${payloadRef.id}," +
+            "payloadBoundary=$payloadBoundary,coverage=${dumpImageRectCoverage(coveragePlan)})"
+}
+
+object ImageRectLowering {
+    private const val PAYLOAD_BOUNDARY =
+        "geometry owns source/destination/transform coverage; paint owns sampling, pixels, filtering, and colorspace"
+
+    fun lower(
+        source: FloatRect,
+        destination: FloatRect,
+        transform: TransformFacts,
+        payloadRef: ImageSamplingPayloadRef,
+    ): ImageRectDescriptor {
+        val primitive = GeometryPrimitive.ImageRect(source, destination, SamplingGeometry("paint-owned"))
+        val coveragePlan = if (transform.isAxisAligned && !transform.hasPerspective) {
+            CoveragePlan.AnalyticRect(bounds = destination, aa = true)
+        } else {
+            CoveragePlan.PathCoverage(fillType = PathFillType.Winding, aa = true, inverse = false)
+        }
+        val route = when (coveragePlan) {
+            is CoveragePlan.AnalyticRect -> "geometry.image-rect.analytic-rect"
+            is CoveragePlan.PathCoverage -> "geometry.image-rect.path-like"
+            else -> "geometry.image-rect.unsupported"
+        }
+        return ImageRectDescriptor(
+            primitive = primitive,
+            transform = transform,
+            payloadRef = payloadRef,
+            coveragePlan = coveragePlan,
+            routeIdentifier = route,
+            payloadBoundary = PAYLOAD_BOUNDARY,
+        )
+    }
 }
 
 object ClipStackBreadthMatrix {
@@ -513,6 +563,17 @@ data class CoverageDescriptorDump(
 
     private fun dumpIntRect(rect: IntRect): String =
         "${rect.left},${rect.top},${rect.right},${rect.bottom}"
+}
+
+private fun dumpImageRectCoverage(plan: CoveragePlan): String = when (plan) {
+    CoveragePlan.Full -> "Full"
+    is CoveragePlan.AnalyticRect -> "AnalyticRect(${plan.bounds.left},${plan.bounds.top},${plan.bounds.right},${plan.bounds.bottom},aa=${plan.aa})"
+    is CoveragePlan.AnalyticRRect -> "AnalyticRRect(${plan.shape.bounds.left},${plan.shape.bounds.top},${plan.shape.bounds.right},${plan.shape.bounds.bottom},aa=${plan.aa})"
+    is CoveragePlan.SpanRuns -> "SpanRuns(${plan.bounds.left},${plan.bounds.top},${plan.bounds.right},${plan.bounds.bottom})"
+    is CoveragePlan.AlphaMask -> "AlphaMask(ref=${plan.ref.id},bounds=${plan.bounds.left},${plan.bounds.top},${plan.bounds.right},${plan.bounds.bottom},format=${plan.format})"
+    is CoveragePlan.PathCoverage -> "PathCoverage(fillType=${plan.fillType},aa=${plan.aa},inverse=${plan.inverse})"
+    is CoveragePlan.CoverageAtlas -> "CoverageAtlas(ref=${plan.ref.id},bounds=${plan.bounds.left},${plan.bounds.top},${plan.bounds.right},${plan.bounds.bottom},policy=${plan.cachePolicy::class.simpleName})"
+    is CoveragePlan.Unsupported -> "Unsupported(reason=${plan.reason.code})"
 }
 
 fun dumpClipInteraction(clip: ClipInteraction): String = when (clip) {

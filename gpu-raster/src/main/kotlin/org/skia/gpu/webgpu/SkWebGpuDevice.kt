@@ -11159,6 +11159,14 @@ public class SkWebGpuDevice(
         // is a sub-pixel filter-overflow tweak ; both treat out-of-src
         // samples as "clamp at src edge". Tests can route the alternative
         // tile modes via [enqueueImageRectDrawForTest].
+        selectCoveragePlanForDraw(
+            drawKind = "axis-aligned-image-rect",
+            plan = CoveragePlan.AnalyticRect(
+                bounds = FloatRect(devDst.left, devDst.top, devDst.right, devDst.bottom),
+                aa = paint?.isAntiAlias ?: true,
+            ),
+            clip = clip,
+        )
         enqueueImageRectDrawInternal(
             image = image,
             src = src,

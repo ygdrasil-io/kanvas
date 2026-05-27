@@ -46,6 +46,73 @@ class GeometryCoverageContractsTest {
     }
 
     @Test
+    fun imageRectAxisAlignedLoweringKeepsSamplingPayloadOutsideGeometry() {
+        val descriptor = ImageRectLowering.lower(
+            source = FloatRect(0f, 0f, 4f, 4f),
+            destination = FloatRect(2f, 3f, 10f, 11f),
+            transform = TransformFacts(
+                matrix = MatrixSpec.Identity,
+                isAxisAligned = true,
+                hasPerspective = false,
+                maxScale = 2f,
+                isInvertible = true,
+            ),
+            payloadRef = ImageSamplingPayloadRef("image.quadrants.rgba8888"),
+        )
+
+        val coverage = assertIs<CoveragePlan.AnalyticRect>(descriptor.coveragePlan)
+        assertEquals(FloatRect(2f, 3f, 10f, 11f), coverage.bounds)
+        assertEquals(true, coverage.aa)
+        assertEquals("geometry.image-rect.analytic-rect", descriptor.routeIdentifier)
+        assertEquals(
+            "geometry owns source/destination/transform coverage; paint owns sampling, pixels, filtering, and colorspace",
+            descriptor.payloadBoundary,
+        )
+        assertEquals(
+            "imageRectDescriptor(route=geometry.image-rect.analytic-rect,source=0.0,0.0,4.0,4.0," +
+                "destination=2.0,3.0,10.0,11.0,axisAligned=true,perspective=false," +
+                "payload=image.quadrants.rgba8888,payloadBoundary=geometry owns source/destination/transform coverage; " +
+                "paint owns sampling, pixels, filtering, and colorspace,coverage=AnalyticRect(2.0,3.0,10.0,11.0,aa=true))",
+            descriptor.dump(),
+        )
+        assertEquals("paint-owned", descriptor.primitive.sampling.filter)
+    }
+
+    @Test
+    fun imageRectTransformedLoweringUsesPathLikeCoverageWithoutMovingSamplingPayload() {
+        val descriptor = ImageRectLowering.lower(
+            source = FloatRect(0f, 0f, 4f, 4f),
+            destination = FloatRect(2f, 3f, 10f, 11f),
+            transform = TransformFacts(
+                matrix = MatrixSpec(
+                    m00 = 0f,
+                    m01 = -1f,
+                    m02 = 12f,
+                    m10 = 1f,
+                    m11 = 0f,
+                    m12 = 0f,
+                    m20 = 0f,
+                    m21 = 0f,
+                    m22 = 1f,
+                ),
+                isAxisAligned = false,
+                hasPerspective = false,
+                maxScale = 1f,
+                isInvertible = true,
+            ),
+            payloadRef = ImageSamplingPayloadRef("image.rotated.rgba8888"),
+        )
+
+        val coverage = assertIs<CoveragePlan.PathCoverage>(descriptor.coveragePlan)
+        assertEquals(PathFillType.Winding, coverage.fillType)
+        assertEquals(true, coverage.aa)
+        assertEquals(false, coverage.inverse)
+        assertEquals("geometry.image-rect.path-like", descriptor.routeIdentifier)
+        assertEquals("image.rotated.rgba8888", descriptor.payloadRef.id)
+        assertEquals("paint-owned", descriptor.primitive.sampling.filter)
+    }
+
+    @Test
     fun alphaMaskLowersToCoverageModelAlphaMask() {
         val bounds = IntRect(1, 2, 9, 10)
         val result = CoveragePlanAdapter.lower(
