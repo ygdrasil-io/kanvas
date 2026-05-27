@@ -167,7 +167,7 @@ fun renderPipelineConformanceReport(
     return """
         |# M24 Pipeline Conformance PM Report
         |
-        |Linear: GRA-53
+        |Linear: GRA-53, GRA-56
         |Source commit: `$commit`
         |
         |## Commands
@@ -181,7 +181,7 @@ fun renderPipelineConformanceReport(
         |
         |The standard conformance entry point completed and produced JUnit evidence for parser/golden coverage,
         |PipelineKey and BlendPlan contracts, runtime-effect descriptor routing, CPU descriptor coverage,
-        |WebGPU selector routing, and geometry oracle checks.
+        |kanvas-skia production descriptor routing, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
         |
@@ -193,6 +193,7 @@ fun renderPipelineConformanceReport(
         |${row("PipelineKey status", status("org.skia.gpu.webgpu.PipelineKeyTelemetryTest"), "`PipelineKeyTelemetryTest`")}
         |${row("BlendPlan status", status("org.skia.gpu.webgpu.BlendPlanTest"), "`BlendPlanTest`")}
         |${row("Descriptor routing status", status("org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.pipeline.GeometryCoverageMigrationHarnessTest"), "`WebGpuCoveragePlanSelectorTest`, `GeometryCoverageMigrationHarnessTest`")}
+        |${row("kanvas-skia production route", status("org.skia.core.SkBitmapDescriptorCoverageOracleTest"), "`SkBitmapDescriptorCoverageOracleTest` proves `SkBitmapDevice` descriptor routing and rollback evidence")}
         |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
@@ -201,6 +202,8 @@ fun renderPipelineConformanceReport(
         |
         |- CPU default descriptor route dump: `render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageMigrationHarnessTest.kt`
         |  (`selectedRoute=cpu.descriptor.coverage-plan.solid-rect`, fallback route retained for rollback).
+        |- kanvas-skia production descriptor route dump: `kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt`
+        |  (`selectedRoute=cpu.descriptor.coverage-plan.solid-rect`, `fallbackRoute=kanvas-skia.current.draw-rect`).
         |- GPU descriptor shadow route dump: `render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageMigrationHarnessTest.kt`
         |  (`descriptorRoute=gpu.shadow.generated-rect-candidate`).
         |- WebGPU selector production dump: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt`
@@ -258,6 +261,13 @@ project(":render-pipeline").registerPipelineConformanceTest(
     ),
 )
 
+project(":kanvas-skia").registerPipelineConformanceTest(
+    descriptionText = "Runs kanvas-skia production descriptor-route coverage conformance tests.",
+    testPatterns = listOf(
+        "org.skia.core.SkBitmapDescriptorCoverageOracleTest",
+    ),
+)
+
 tasks.register("pipelineConformance") {
     group = "verification"
     description = "Runs the standard production pipeline conformance suite without slow benchmark gates."
@@ -267,6 +277,7 @@ tasks.register("pipelineConformance") {
         ":gpu-raster:pipelineConformanceTest",
         ":cpu-raster:pipelineConformanceTest",
         ":render-pipeline:pipelineConformanceTest",
+        ":kanvas-skia:pipelineConformanceTest",
     )
 
     doLast {
@@ -277,6 +288,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, and selector tests: :gpu-raster:pipelineConformanceTest
             |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
             |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
+            |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
             |- GPU adapter residual risk: adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; a skip is recorded risk, not a green adapter pass.
             |- Slow benchmark gates remain opt-in: :render-pipeline:cpuVectorPilotBenchmark and :render-pipeline:cpuVectorAllocationBenchmark.
             """.trimMargin()
@@ -299,6 +311,7 @@ tasks.register("pipelineConformanceReport") {
             "cpu-raster/build/test-results/pipelineConformanceTest",
             "gpu-raster/build/test-results/pipelineConformanceTest",
             "render-pipeline/build/test-results/pipelineConformanceTest",
+            "kanvas-skia/build/test-results/pipelineConformanceTest",
         )
         val suites = resultRoots
             .flatMap { relativePath ->
