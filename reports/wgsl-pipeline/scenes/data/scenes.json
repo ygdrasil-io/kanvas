@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "title": "Kanvas WGSL pipeline scene evidence",
+  "milestone": "M36",
+  "status": "shell",
+  "generatedBy": "pipelineSceneDashboard",
+  "scenes": []
+}
