@@ -156,6 +156,17 @@ class SkRuntimeEffectMakeTest {
         assertTrue(descriptor.children.isEmpty())
     }
 
+    @Test
+    fun `dispatch-only builtins resolve without descriptor metadata`() {
+        val spiral = SkRuntimeEffect.MakeForShader(SkBuiltinShaderEffectsSimple.SPIRAL_RT_SKSL).effect
+        val linearGradient = SkRuntimeEffect.MakeForShader(SkBuiltinShaderEffectsSimple.LINEAR_GRADIENT_RT_SKSL).effect
+
+        assertNotNull(spiral)
+        assertNotNull(linearGradient)
+        assertNull(spiral!!.descriptor())
+        assertNull(linearGradient!!.descriptor())
+    }
+
     // ─── Failure paths ───────────────────────────────────────────────
 
     @Test

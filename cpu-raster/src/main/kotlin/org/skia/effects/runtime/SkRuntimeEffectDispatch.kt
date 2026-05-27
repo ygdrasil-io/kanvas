@@ -52,6 +52,7 @@ public object SkRuntimeEffectDispatch {
 
     /** Canonical-source-hash → impl factory. */
     private val table: MutableMap<Long, () -> SkRuntimeImpl> = HashMap()
+    private val builtinMetadataByHash: MutableMap<Long, SkRuntimeEffectDispatchMetadata> = HashMap()
 
     /**
      * Register a hand-ported impl under the canonical form of the supplied
@@ -77,8 +78,23 @@ public object SkRuntimeEffectDispatch {
         table.putIfAbsent(hash, factory)
     }
 
+    internal fun registerBuiltinIfAbsent(
+        canonicalSource: String,
+        metadata: SkRuntimeEffectDispatchMetadata,
+        factory: () -> SkRuntimeImpl,
+    ) {
+        val hash = hashCanonical(canonicalSource)
+        table.putIfAbsent(hash, factory)
+        val existing = builtinMetadataByHash.putIfAbsent(hash, metadata)
+        check(existing == null || existing == metadata) {
+            "Duplicate runtime effect dispatch metadata: canonicalHash=$hash stableId=${metadata.stableId}"
+        }
+    }
+
     internal fun registerForTestOverride(canonicalSource: String, factory: () -> SkRuntimeImpl) {
-        table[hashCanonical(canonicalSource)] = factory
+        val hash = hashCanonical(canonicalSource)
+        table[hash] = factory
+        builtinMetadataByHash.remove(hash)
     }
 
     /**
@@ -111,10 +127,16 @@ public object SkRuntimeEffectDispatch {
     /** Number of registered entries. Test-surface only. */
     internal val size: Int get() = table.size
 
+    internal fun builtinMetadataEntries(): List<Pair<Long, SkRuntimeEffectDispatchMetadata>> =
+        builtinMetadataByHash.entries
+            .map { it.key to it.value }
+            .sortedWith(compareBy<Pair<Long, SkRuntimeEffectDispatchMetadata>> { it.second.stableId }.thenBy { it.first })
+
     /** Drop every registration. Test-surface only — call between
      *  isolated test cases that want a fresh dispatch table. */
     internal fun clearForTest() {
         table.clear()
+        builtinMetadataByHash.clear()
         SkRuntimeEffectDescriptorRegistry.clearForTest()
     }
 
@@ -282,3 +304,12 @@ public object SkRuntimeEffectDispatch {
         return hash
     }
 }
+
+internal data class SkRuntimeEffectDispatchMetadata(
+    val stableId: String,
+    val kind: SkRuntimeEffect.Kind,
+    val uniforms: List<SkRuntimeEffect.Uniform>,
+    val children: List<SkRuntimeEffect.Child>,
+    val flags: Int,
+    val cpuImplementationId: String,
+)

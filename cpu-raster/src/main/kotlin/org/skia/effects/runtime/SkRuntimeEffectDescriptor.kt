@@ -12,23 +12,35 @@ public data class SkRuntimeEffectDescriptor(
 
 public data class SkRuntimeEffectSupportMatrixEntry(
     val canonicalHash: Long,
-    val descriptor: SkRuntimeEffectDescriptor,
+    val stableId: String,
+    val kind: SkRuntimeEffect.Kind,
+    val uniforms: List<SkRuntimeEffect.Uniform>,
+    val children: List<SkRuntimeEffect.Child>,
+    val flags: Int,
+    val cpuImplementationId: String,
+    val wgslImplementationId: String?,
+    val descriptorStatus: String,
+    val descriptor: SkRuntimeEffectDescriptor?,
 ) {
     public val cpuSupport: String =
-        if (descriptor.cpuImplementationId.isBlank()) {
+        if (cpuImplementationId.isBlank()) {
             "unsupported: CPU implementation id missing"
         } else {
-            "supported:${descriptor.cpuImplementationId}"
+            "supported:$cpuImplementationId"
         }
 
     public val gpuSupport: String =
-        descriptor.wgslImplementationId
+        wgslImplementationId
             ?.takeIf { it.isNotBlank() }
             ?.let { "supported:$it" }
             ?: "unsupported: WGSL implementation id missing"
 
-    public val missingDiagnostic: String =
-        "Runtime effect descriptor not registered: $canonicalHash"
+    public val missingReason: String =
+        if (descriptor == null) {
+            "Runtime effect descriptor missing for dispatch-only effect: $canonicalHash"
+        } else {
+            "none"
+        }
 }
 
 public object SkRuntimeEffectDescriptorRegistry {
@@ -51,10 +63,39 @@ public object SkRuntimeEffectDescriptorRegistry {
         "Runtime effect descriptor not registered: ${SkRuntimeEffectDispatch.canonicalHash(source)}"
 
     public fun supportMatrixEntries(): List<SkRuntimeEffectSupportMatrixEntry> =
-        byHash.entries
-            .map { SkRuntimeEffectSupportMatrixEntry(it.key, it.value) }
+        (
+            byHash.entries.map { (hash, descriptor) ->
+                SkRuntimeEffectSupportMatrixEntry(
+                    canonicalHash = hash,
+                    stableId = descriptor.stableId,
+                    kind = descriptor.kind,
+                    uniforms = descriptor.uniforms,
+                    children = descriptor.children,
+                    flags = descriptor.flags,
+                    cpuImplementationId = descriptor.cpuImplementationId,
+                    wgslImplementationId = descriptor.wgslImplementationId,
+                    descriptorStatus = "descriptor-backed",
+                    descriptor = descriptor,
+                )
+            } + SkRuntimeEffectDispatch.builtinMetadataEntries()
+                .filter { (hash, _) -> hash !in byHash }
+                .map { (hash, metadata) ->
+                    SkRuntimeEffectSupportMatrixEntry(
+                        canonicalHash = hash,
+                        stableId = metadata.stableId,
+                        kind = metadata.kind,
+                        uniforms = metadata.uniforms,
+                        children = metadata.children,
+                        flags = metadata.flags,
+                        cpuImplementationId = metadata.cpuImplementationId,
+                        wgslImplementationId = null,
+                        descriptorStatus = "dispatch-only; missing descriptor",
+                        descriptor = null,
+                    )
+                }
+            )
             .sortedWith(
-                compareBy<SkRuntimeEffectSupportMatrixEntry> { it.descriptor.stableId }
+                compareBy<SkRuntimeEffectSupportMatrixEntry> { it.stableId }
                     .thenBy { it.canonicalHash },
             )
 
@@ -64,29 +105,30 @@ public object SkRuntimeEffectDescriptorRegistry {
         appendLine("Derived evidence. The descriptor registry is the source of truth.")
         appendLine()
         appendLine(
-            "| Stable id | Canonical hash | Kind | Uniforms | Children | Flags | CPU support | GPU support | Missing diagnostic |",
+            "| Stable id | Canonical hash | Kind | Uniforms | Children | Flags | CPU support | GPU support | Descriptor status | Missing reason |",
         )
-        appendLine("|---|---:|---|---|---|---:|---|---|---|")
+        appendLine("|---|---:|---|---|---|---:|---|---|---|---|")
         supportMatrixEntries().forEach { entry ->
-            val descriptor = entry.descriptor
             append("| ")
-            append(markdownCell(descriptor.stableId))
+            append(markdownCell(entry.stableId))
             append(" | ")
             append(entry.canonicalHash)
             append(" | ")
-            append(descriptor.kind)
+            append(entry.kind)
             append(" | ")
-            append(markdownCell(descriptor.uniforms.joinToString(", ") { "${it.name}:${it.type}" }.ifEmpty { "-" }))
+            append(markdownCell(entry.uniforms.joinToString(", ") { "${it.name}:${it.type}" }.ifEmpty { "-" }))
             append(" | ")
-            append(markdownCell(descriptor.children.joinToString(", ") { "${it.name}:${it.type}" }.ifEmpty { "-" }))
+            append(markdownCell(entry.children.joinToString(", ") { "${it.name}:${it.type}" }.ifEmpty { "-" }))
             append(" | ")
-            append(descriptor.flags)
+            append(entry.flags)
             append(" | ")
             append(markdownCell(entry.cpuSupport))
             append(" | ")
             append(markdownCell(entry.gpuSupport))
             append(" | ")
-            append(markdownCell(entry.missingDiagnostic))
+            append(markdownCell(entry.descriptorStatus))
+            append(" | ")
+            append(markdownCell(entry.missingReason))
             appendLine(" |")
         }
     }
@@ -180,7 +222,8 @@ public object SkRuntimeEffectDescriptorRegistry {
             SkRuntimeEffect.kAllowColorFilter_Flag or
             SkRuntimeEffect.kAllowShader_Flag or
             SkRuntimeEffect.kAllowBlender_Flag or
-            SkRuntimeEffect.kSamplesOutsideMain_Flag
+            SkRuntimeEffect.kSamplesOutsideMain_Flag or
+            SkRuntimeEffect.kUsesColorTransform_Flag
         return flags and allowed.inv() == 0
     }
 
