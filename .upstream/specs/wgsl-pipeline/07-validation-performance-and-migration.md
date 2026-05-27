@@ -47,6 +47,22 @@ The intended CI gates are:
 Until these are separate workflows, milestone PRs must run the equivalent
 focused Gradle tasks and paste the command/evidence into Linear or the PR.
 
+The standard production convergence entry point is:
+
+```bash
+rtk ./gradlew --no-daemon pipelineConformance
+```
+
+This task aggregates parser validation, generated WGSL golden tests,
+PipelineKey tests, BlendPlan tests, runtime descriptor registry/routing tests,
+CPU PipelineIR/executor/geometry oracle tests, and WebGPU selector tests. It
+does not run slow benchmark gates; benchmark evidence remains explicit through
+the named benchmark tasks.
+
+GPU adapter-dependent tests may report JUnit `SKIPPED` when the local or CI
+environment has no usable WebGPU adapter. Such skips are residual risk and must
+be named in the evidence summary; they are not a green GPU adapter pass.
+
 ## Correctness Evidence
 
 Each promoted family needs a clear reference:

@@ -1,4 +1,6 @@
 import org.gradle.api.GradleException
+import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.api.tasks.testing.Test
 
 val pureKotlinCodecProjects = setOf(
     "codec-api",
@@ -69,6 +71,84 @@ fun String.withoutKotlinOrJavaComments(): String {
             val commentStart = line.indexOf("//")
             if (commentStart >= 0) line.substring(0, commentStart) else line
         }
+}
+
+fun Project.registerPipelineConformanceTest(descriptionText: String, testPatterns: List<String>) {
+    plugins.withId("buildsrc.convention.kotlin-jvm") {
+        val projectSourceSets = extensions.getByType<SourceSetContainer>()
+
+        tasks.register<Test>("pipelineConformanceTest") {
+            group = "verification"
+            description = descriptionText
+
+            val testSourceSet = projectSourceSets.named("test").get()
+            testClassesDirs = testSourceSet.output.classesDirs
+            classpath = testSourceSet.runtimeClasspath
+            shouldRunAfter(tasks.named("test"))
+
+            filter {
+                testPatterns.forEach { pattern -> includeTestsMatching(pattern) }
+            }
+        }
+    }
+}
+
+project(":cpu-raster").registerPipelineConformanceTest(
+    descriptionText = "Runs runtime-effect descriptor and CPU dispatch conformance tests.",
+    testPatterns = listOf(
+        "org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest",
+        "org.skia.effects.runtime.SkRuntimeEffectDispatchTest",
+        "org.skia.effects.runtime.SkRuntimeEffectMakeTest",
+    ),
+)
+
+project(":gpu-raster").registerPipelineConformanceTest(
+    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, and WebGPU selector conformance tests.",
+    testPatterns = listOf(
+        "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
+        "org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest",
+        "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest",
+        "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
+        "org.skia.gpu.webgpu.BlendPlanTest",
+        "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
+        "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
+    ),
+)
+
+project(":render-pipeline").registerPipelineConformanceTest(
+    descriptionText = "Runs PipelineIR, CPU executor, and geometry coverage oracle conformance tests.",
+    testPatterns = listOf(
+        "org.skia.pipeline.KanvasPipelineIRTest",
+        "org.skia.pipeline.CpuScalarPipelineExecutorTest",
+        "org.skia.pipeline.GeometryCoverageContractsTest",
+        "org.skia.pipeline.GeometryCoverageMigrationHarnessTest",
+    ),
+)
+
+tasks.register("pipelineConformance") {
+    group = "verification"
+    description = "Runs the standard production pipeline conformance suite without slow benchmark gates."
+
+    dependsOn(
+        ":gpu-raster:wgslValidateAll",
+        ":gpu-raster:pipelineConformanceTest",
+        ":cpu-raster:pipelineConformanceTest",
+        ":render-pipeline:pipelineConformanceTest",
+    )
+
+    doLast {
+        logger.lifecycle(
+            """
+            |pipelineConformance summary:
+            |- REQUIRED parser validation: :gpu-raster:wgslValidateAll
+            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, and selector tests: :gpu-raster:pipelineConformanceTest
+            |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
+            |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
+            |- GPU adapter residual risk: adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; a skip is recorded risk, not a green adapter pass.
+            |- Slow benchmark gates remain opt-in: :render-pipeline:cpuVectorPilotBenchmark and :render-pipeline:cpuVectorAllocationBenchmark.
+            """.trimMargin()
+        )
+    }
 }
 
 tasks.register("checkSupportedCodecsDoc") {
