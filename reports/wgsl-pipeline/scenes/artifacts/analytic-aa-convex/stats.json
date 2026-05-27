@@ -1,0 +1,12 @@
+{
+  "sceneId": "analytic-aa-convex",
+  "dimensions": { "width": 16, "height": 16 },
+  "pixels": 256,
+  "matchingPixels": 256,
+  "maxChannelDelta": 0,
+  "threshold": 99.85,
+  "cpuSimilarity": 100.0,
+  "gpuSimilarity": null,
+  "gpuStatus": "expected-unsupported",
+  "edgeBudgetReason": "not coverage.edge-count-exceeded"
+}

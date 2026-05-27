@@ -1,0 +1,10 @@
+{
+  "sceneId": "analytic-aa-convex",
+  "backend": "CPU",
+  "drawKind": "single-contour-convex-aa-path",
+  "selectedRoute": "cpu.path-coverage.analytic-aa-convex-oracle",
+  "coveragePlan": "PathCoverage(singleContour=true,convex=true,aa=true,edgeCountWithinBudget=true)",
+  "fallbackReason": "none",
+  "edgeBudgetReason": "not coverage.edge-count-exceeded",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md"
+}

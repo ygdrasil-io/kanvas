@@ -153,6 +153,61 @@
         "reports/wgsl-pipeline/2026-05-27-m32-image-rect-smoke-promotion.md",
         "reports/wgsl-pipeline/scenes/artifacts/bitmap-rect-nearest/stats.json"
       ]
+    },
+    {
+      "id": "analytic-aa-convex",
+      "title": "Analytic AA convex path",
+      "priority": "P0",
+      "status": "tracked-gap",
+      "source": "reports/wgsl-pipeline/2026-05-28-m36-analytic-aa-convex-scene.md",
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/analytic-aa-convex/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/analytic-aa-convex/cpu.png",
+        "diff": "artifacts/analytic-aa-convex/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "PathCoverage(singleContour=true,convex=true,aa=true,edgeCountWithinBudget=true)",
+          "selectedRoute": "cpu.path-coverage.analytic-aa-convex-oracle",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 256,
+          "matchingPixels": 256,
+          "maxChannelDelta": 0,
+          "threshold": 99.85,
+          "backend": "CPU",
+          "command": "M36 static CPU AA oracle fixture for analytic-aa-convex"
+        }
+      },
+      "gpu": {
+        "status": "expected-unsupported",
+        "route": {
+          "coverageStrategy": "webgpu.coverage.path-convex-fan",
+          "pipelineKey": "coverageKind=pathConvexFan",
+          "fallbackReason": "gpu.adapter-backed-analytic-aa-convex-capture-not-produced-in-m36-e-local-run"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/analytic-aa-convex/cpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/analytic-aa-convex/route-cpu.json",
+        "gpu": "artifacts/analytic-aa-convex/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 256,
+        "matchingPixels": 256,
+        "maxChannelDelta": 0,
+        "threshold": 99.85
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m36-analytic-aa-convex-scene.md",
+        "reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md",
+        "reports/wgsl-pipeline/2026-05-27-m33-path-aa-closeout.md",
+        "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/stats.json"
+      ]
     }
   ]
 }
