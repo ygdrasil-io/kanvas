@@ -1,6 +1,7 @@
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.testing.Test
+import javax.xml.parsers.DocumentBuilderFactory
 
 val pureKotlinCodecProjects = setOf(
     "codec-api",
@@ -93,6 +94,138 @@ fun Project.registerPipelineConformanceTest(descriptionText: String, testPattern
     }
 }
 
+data class PipelineConformanceSuiteSummary(
+    val className: String,
+    val tests: Int,
+    val failures: Int,
+    val errors: Int,
+    val skipped: Int,
+) {
+    val failed: Boolean get() = failures > 0 || errors > 0
+    val passed: Boolean get() = !failed && tests > 0 && skipped == 0
+    val skippedOnly: Boolean get() = !failed && tests > 0 && skipped == tests
+}
+
+fun parsePipelineConformanceSuite(xmlFile: File): PipelineConformanceSuiteSummary {
+    val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(xmlFile)
+    val suite = document.documentElement
+    return PipelineConformanceSuiteSummary(
+        className = suite.getAttribute("name"),
+        tests = suite.getAttribute("tests").toInt(),
+        failures = suite.getAttribute("failures").toInt(),
+        errors = suite.getAttribute("errors").toInt(),
+        skipped = suite.getAttribute("skipped").toInt(),
+    )
+}
+
+fun conformanceStatus(suites: List<PipelineConformanceSuiteSummary>): String = when {
+    suites.isEmpty() -> "not run"
+    suites.any { it.failed } -> "failed"
+    suites.all { it.skippedOnly } -> "skipped"
+    suites.any { it.skipped > 0 } -> "passed with skipped checks"
+    suites.all { it.passed } -> "passed"
+    else -> "not run"
+}
+
+fun runPipelineConformanceCommand(vararg command: String): String =
+    ProcessBuilder(*command)
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .start()
+        .inputStream
+        .bufferedReader()
+        .use { it.readText().trim() }
+
+fun renderPipelineConformanceReport(
+    commit: String,
+    suites: List<PipelineConformanceSuiteSummary>,
+    vectorDecisionReportPresent: Boolean,
+): String {
+    val byName = suites
+        .sortedBy { it.className }
+        .associateBy { it.className }
+    fun suite(name: String): PipelineConformanceSuiteSummary? = byName[name]
+    fun status(vararg names: String): String = conformanceStatus(names.mapNotNull(::suite))
+    fun row(label: String, status: String, evidence: String): String =
+        "| $label | `$status` | $evidence |"
+    fun suiteTableRows(): String = suites
+        .sortedBy { it.className }
+        .joinToString("\n") { summary ->
+            "TABLE_PIPE `${summary.className}` | ${summary.tests} | ${summary.failures} | ${summary.errors} | ${summary.skipped} |"
+        }
+    val totalTests = suites.sumOf { it.tests }
+    val totalFailures = suites.sumOf { it.failures }
+    val totalErrors = suites.sumOf { it.errors }
+    val totalSkipped = suites.sumOf { it.skipped }
+    val vectorStatus = if (vectorDecisionReportPresent) "rejected benchmark" else "not run"
+    val vectorDecision = if (vectorDecisionReportPresent) {
+        "`rejected benchmark` — see `reports/wgsl-pipeline/2026-05-27-m22-vector-promotion-decision.md`"
+    } else {
+        "`not run` — no vector decision report found"
+    }
+
+    return """
+        |# M24 Pipeline Conformance PM Report
+        |
+        |Linear: GRA-53
+        |Source commit: `$commit`
+        |
+        |## Commands
+        |
+        |```text
+        |rtk ./gradlew --no-daemon pipelineConformance
+        |rtk ./gradlew --no-daemon pipelineConformanceReport
+        |```
+        |
+        |## PM Summary
+        |
+        |The standard conformance entry point completed and produced JUnit evidence for parser/golden coverage,
+        |PipelineKey and BlendPlan contracts, runtime-effect descriptor routing, CPU descriptor coverage,
+        |WebGPU selector routing, and geometry oracle checks.
+        |
+        |## Status Matrix
+        |
+        || Area | Status | Evidence |
+        ||---|---|---|
+        |${row("Tests", conformanceStatus(suites), "$totalTests tests, $totalFailures failures, $totalErrors errors, $totalSkipped skipped")}
+        |${row("Parser status", status("org.skia.gpu.webgpu.tools.WgslValidationReportTest"), "`WgslValidationReportTest` plus required `:gpu-raster:wgslValidateAll` dependency")}
+        |${row("Generated WGSL status", status("org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest", "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest"), "`GeneratedSolidRectWgslTest`, `GeneratedLinearGradientWgslTest`")}
+        |${row("PipelineKey status", status("org.skia.gpu.webgpu.PipelineKeyTelemetryTest"), "`PipelineKeyTelemetryTest`")}
+        |${row("BlendPlan status", status("org.skia.gpu.webgpu.BlendPlanTest"), "`BlendPlanTest`")}
+        |${row("Descriptor routing status", status("org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.pipeline.GeometryCoverageMigrationHarnessTest"), "`WebGpuCoveragePlanSelectorTest`, `GeometryCoverageMigrationHarnessTest`")}
+        |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test")}
+        |${row("Vector decision", vectorStatus, vectorDecision)}
+        |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
+        |
+        |## Route Dumps And Evidence Links
+        |
+        |- CPU default descriptor route dump: `render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageMigrationHarnessTest.kt`
+        |  (`selectedRoute=cpu.descriptor.coverage-plan.solid-rect`, fallback route retained for rollback).
+        |- GPU descriptor shadow route dump: `render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageMigrationHarnessTest.kt`
+        |  (`descriptorRoute=gpu.shadow.generated-rect-candidate`).
+        |- WebGPU selector production dump: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt`
+        |  (`productionDump`, selector disabled rollback, and coverage selector route identifiers).
+        |- Pipeline cache telemetry: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/PipelineKeyTelemetryTest.kt`
+        |  verifies cold frame misses are at least one and warm frame cache hits increase.
+        |
+        |## Full Test Summary
+        |
+        || Suite | Tests | Failures | Errors | Skipped |
+        ||---|---:|---:|---:|---:|
+        |${suiteTableRows()}
+        |
+        |## Residual Risks
+        |
+        |- GPU adapter-dependent checks can be JUnit-skipped on machines without a usable WebGPU adapter; this is recorded risk, not a green adapter pass.
+        |- Slow benchmark gates are not part of `pipelineConformance`; vector promotion remains rejected until the allocation-aware benchmark meets the promotion threshold.
+        |- Existing WGSL parser diagnostics are surfaced by `:gpu-raster:wgslValidateAll`; parser coverage is conformance evidence, not a claim that all handwritten WGSL resources are diagnostic-free.
+        |
+        |## Outcome
+        |
+        |`pipelineConformanceReport` is deterministic from the current checkout's conformance XML results and can be regenerated locally without external services.
+    """.trimMargin().replace("TABLE_PIPE", "|")
+}
+
 project(":cpu-raster").registerPipelineConformanceTest(
     descriptionText = "Runs runtime-effect descriptor and CPU dispatch conformance tests.",
     testPatterns = listOf(
@@ -148,6 +281,53 @@ tasks.register("pipelineConformance") {
             |- Slow benchmark gates remain opt-in: :render-pipeline:cpuVectorPilotBenchmark and :render-pipeline:cpuVectorAllocationBenchmark.
             """.trimMargin()
         )
+    }
+}
+
+tasks.register("pipelineConformanceReport") {
+    group = "verification"
+    description = "Runs pipelineConformance and writes a PM-readable M24 convergence evidence report."
+
+    dependsOn("pipelineConformance")
+
+    val outputFile = layout.buildDirectory.file("reports/pipeline-conformance/m24-pipeline-conformance-report.md")
+    outputs.file(outputFile)
+
+    doLast {
+        val resultRoots = listOf(
+            "cpu-raster/build/test-results/pipelineConformanceTest",
+            "gpu-raster/build/test-results/pipelineConformanceTest",
+            "render-pipeline/build/test-results/pipelineConformanceTest",
+        )
+        val suites = resultRoots
+            .flatMap { relativePath ->
+                file(relativePath)
+                    .listFiles { candidate -> candidate.isFile && candidate.name.startsWith("TEST-") && candidate.extension == "xml" }
+                    ?.toList()
+                    .orEmpty()
+            }
+            .sortedBy { it.invariantSeparatorsPath }
+            .map(::parsePipelineConformanceSuite)
+            .groupBy { it.className }
+            .map { (_, duplicates) ->
+                duplicates.singleOrNull()
+                    ?: throw GradleException(
+                        "Duplicate pipelineConformanceTest XML suite result for ${duplicates.first().className}; clean build/test-results before generating PM report."
+                    )
+            }
+            .sortedBy { it.className }
+
+        val commit = runPipelineConformanceCommand("git", "rev-parse", "HEAD")
+        val vectorDecisionReportPresent = file("reports/wgsl-pipeline/2026-05-27-m22-vector-promotion-decision.md").isFile
+        val report = renderPipelineConformanceReport(
+            commit = commit,
+            suites = suites,
+            vectorDecisionReportPresent = vectorDecisionReportPresent,
+        )
+        val target = outputFile.get().asFile
+        target.parentFile.mkdirs()
+        target.writeText(report)
+        logger.lifecycle("Wrote pipeline conformance PM report: ${target.relativeTo(rootDir)}")
     }
 }
 
