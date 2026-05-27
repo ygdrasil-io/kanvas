@@ -1,6 +1,6 @@
 # Spec 08: Path AA MVP Boundary
 
-Status: Draft
+Status: Accepted
 Target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 Milestone: M33 -- Path AA MVP Boundary
 
@@ -12,6 +12,24 @@ The goal is not to make every complex AA path render through WebGPU for the
 MVP. The goal is to prove that supported AA routes are adapter-backed, that
 edge-budget refusals are explicit expected unsupported inventory, and that no
 refused AA path can enter required GPU smoke.
+
+## Acceptance Evidence
+
+Accepted on 2026-05-27 for the M33 MVP boundary.
+
+Evidence:
+
+- GRA-105 / PR #1177 / `ee710a2479741d91e41a0213cd80e4dc2a6449b2`:
+  post-M32 Path AA inventory audit.
+- GRA-106 / PR #1178 / `d1031ad2020358ba1dd25760ec447dfcfdd7c087`:
+  fail-closed edge-budget classifier hardening.
+- GRA-107 / PR #1179 / `0fdfbb43553903ece9abdcbbace231ae25f29b67`:
+  rendered AA smoke promotion for `AnalyticAntialiasConvexWebGpuTest`.
+- GRA-108: M33 PM closeout report.
+
+Acceptance is limited to the M33 MVP decision boundary. Broader Path AA support
+for edge-budget overflow remains explicitly out of scope until follow-up
+implementation evidence lands.
 
 ## Current Baseline
 

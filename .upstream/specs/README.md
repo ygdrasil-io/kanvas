@@ -23,6 +23,6 @@ that area.
 | Milestone | Spec | Status |
 |---|---|---|
 | M32 | `wgsl-pipeline/08-bitmap-image-rect-sampling.md` | Accepted |
-| M33 | `geometry-coverage/08-path-aa-mvp-boundary.md` | Draft |
+| M33 | `geometry-coverage/08-path-aa-mvp-boundary.md` | Accepted |
 | M34 | `wgsl-pipeline/09-image-filter-mvp-lane.md` | Draft |
 | M35 | `release-readiness-mvp.md` | Draft |
