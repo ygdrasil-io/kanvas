@@ -22,6 +22,138 @@ public enum class WebGpuCoverageStrategy {
     RefuseDiagnostic,
 }
 
+public enum class WebGpuCoverageEvidenceStatus(public val wireName: String) {
+    Proven("proven"),
+    Refused("refused"),
+    Compatibility("compatibility"),
+    BlockedNoAdapterLane("blocked-no-adapter-lane"),
+}
+
+public data class WebGpuCoverageStrategyInventoryRow(
+    val branch: String,
+    val strategy: WebGpuCoverageStrategy,
+    val status: WebGpuCoverageEvidenceStatus,
+    val routeIdentifier: String,
+    val diagnosticReason: DiagnosticReason?,
+    val evidence: String,
+    val unblockCondition: String?,
+) {
+    public fun dump(): String =
+        "branch=$branch;strategy=$strategy;status=${status.wireName};route=$routeIdentifier;" +
+            "reason=${diagnosticReason?.code ?: "none"};evidence=$evidence;" +
+            "unblock=${unblockCondition ?: "none"}"
+}
+
+public object WebGpuCoverageStrategyInventory {
+    public const val ciAdapterLaneAvailable: Boolean = false
+    private const val ADAPTER_UNBLOCK: String =
+        "Enable a non-skippable GPU adapter CI/scheduled lane that uploads gpu-raster artifacts and fails on adapter skips."
+
+    public val rows: List<WebGpuCoverageStrategyInventoryRow> = listOf(
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "analytic-rect",
+            strategy = WebGpuCoverageStrategy.AnalyticRect,
+            status = WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane,
+            routeIdentifier = "webgpu.coverage.analytic-rect",
+            diagnosticReason = null,
+            evidence = "selector, pipeline-key, and local adapter rect fixture exist; release CI adapter lane is disabled",
+            unblockCondition = ADAPTER_UNBLOCK,
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "analytic-rrect",
+            strategy = WebGpuCoverageStrategy.AnalyticRRect,
+            status = WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane,
+            routeIdentifier = "webgpu.coverage.analytic-rrect",
+            diagnosticReason = null,
+            evidence = "selector, pipeline-key, and local adapter rrect fixture exist; release CI adapter lane is disabled",
+            unblockCondition = ADAPTER_UNBLOCK,
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "path-convex-fan",
+            strategy = WebGpuCoverageStrategy.CpuPreparedConvexFan,
+            status = WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane,
+            routeIdentifier = "webgpu.coverage.path-convex-fan",
+            diagnosticReason = null,
+            evidence = "selector and local adapter convex path fixture exist; release CI adapter lane is disabled",
+            unblockCondition = ADAPTER_UNBLOCK,
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "path-stencil-cover",
+            strategy = WebGpuCoverageStrategy.StencilCover,
+            status = WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane,
+            routeIdentifier = "webgpu.coverage.path-stencil-cover",
+            diagnosticReason = null,
+            evidence = "selector and local adapter concave/inverse path fixtures exist; release CI adapter lane is disabled",
+            unblockCondition = ADAPTER_UNBLOCK,
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "path-mask-or-atlas-selector",
+            strategy = WebGpuCoverageStrategy.CoverageMaskOrAtlasFallback,
+            status = WebGpuCoverageEvidenceStatus.Proven,
+            routeIdentifier = "webgpu.coverage.path-mask-or-atlas",
+            diagnosticReason = null,
+            evidence = "selector-only proof: edge-overflow path chooses the explicit mask/atlas route when enabled; this is not adapter CI evidence",
+            unblockCondition = "Add mask/atlas ownership, cache policy, and adapter-backed rendering evidence before release promotion.",
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "full-scissor",
+            strategy = WebGpuCoverageStrategy.ExistingGpuCompatibility,
+            status = WebGpuCoverageEvidenceStatus.Compatibility,
+            routeIdentifier = "webgpu.coverage.full-scissor",
+            diagnosticReason = null,
+            evidence = "existing GPU compatibility route, not promoted as new adapter evidence",
+            unblockCondition = null,
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "span-runs",
+            strategy = WebGpuCoverageStrategy.RefuseDiagnostic,
+            status = WebGpuCoverageEvidenceStatus.Refused,
+            routeIdentifier = "webgpu.coverage.refuse",
+            diagnosticReason = StandardCoverageReason.SpanRunsUnsupported,
+            evidence = "WebGPU selector refuses span-run coverage with stable diagnostic",
+            unblockCondition = "Add an upload/mask strategy and adapter-backed cross-backend evidence before promotion.",
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "alpha-mask",
+            strategy = WebGpuCoverageStrategy.RefuseDiagnostic,
+            status = WebGpuCoverageEvidenceStatus.Refused,
+            routeIdentifier = "webgpu.coverage.refuse",
+            diagnosticReason = StandardCoverageReason.AlphaMaskUnsupported,
+            evidence = "WebGPU selector refuses standalone alpha-mask coverage with stable diagnostic",
+            unblockCondition = "Define mask upload/sampling ownership and adapter-backed evidence before promotion.",
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "coverage-atlas",
+            strategy = WebGpuCoverageStrategy.RefuseDiagnostic,
+            status = WebGpuCoverageEvidenceStatus.Refused,
+            routeIdentifier = "webgpu.coverage.refuse",
+            diagnosticReason = StandardCoverageReason.AtlasPolicyUnavailable,
+            evidence = "persistent atlas remains profile-gated and unavailable by policy",
+            unblockCondition = "Complete coverage atlas policy gate and adapter-backed cache evidence before promotion.",
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "path-edge-overflow",
+            strategy = WebGpuCoverageStrategy.RefuseDiagnostic,
+            status = WebGpuCoverageEvidenceStatus.Refused,
+            routeIdentifier = "webgpu.coverage.refuse",
+            diagnosticReason = StandardCoverageReason.EdgeCountExceeded,
+            evidence = "AA edge overflow refuses when mask/atlas fallback is disabled",
+            unblockCondition = "Enable a reviewed mask/atlas fallback or raise the budget with adapter-backed evidence.",
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "arbitrary-aa-clip",
+            strategy = WebGpuCoverageStrategy.RefuseDiagnostic,
+            status = WebGpuCoverageEvidenceStatus.Refused,
+            routeIdentifier = "webgpu.coverage.refuse",
+            diagnosticReason = StandardCoverageReason.ArbitraryAaClipUnsupported,
+            evidence = "arbitrary AA clips and shader clips refuse instead of scissor-only approximation",
+            unblockCondition = "Add mask/list/atlas clip strategy plus adapter-backed cross-backend evidence.",
+        ),
+    )
+
+    public fun dump(): String = rows.joinToString(separator = "\n") { it.dump() }
+}
+
 public data class WebGpuPathCoverageFacts(
     val isConvex: Boolean,
     val contourCount: Int,
