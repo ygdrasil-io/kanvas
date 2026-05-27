@@ -23,9 +23,21 @@ public enum class WebGpuCoverageStrategy {
 }
 
 public enum class WebGpuCoverageEvidenceStatus(public val wireName: String) {
+    AdapterPass("adapter-pass"),
+    AdapterFail("adapter-fail"),
+    AdapterSkipped("adapter-skipped"),
+    AdapterTimeout("adapter-timeout"),
     Proven("proven"),
     Refused("refused"),
     Compatibility("compatibility"),
+    BlockedNoAdapterLane("blocked-no-adapter-lane"),
+}
+
+public enum class CiAdapterLaneStatus(public val wireName: String) {
+    AdapterPass("adapter-pass"),
+    AdapterFail("adapter-fail"),
+    AdapterSkipped("adapter-skipped"),
+    AdapterTimeout("adapter-timeout"),
     BlockedNoAdapterLane("blocked-no-adapter-lane"),
 }
 
@@ -45,46 +57,96 @@ public data class WebGpuCoverageStrategyInventoryRow(
 }
 
 public object WebGpuCoverageStrategyInventory {
-    public const val ciAdapterLaneAvailable: Boolean = false
+    public const val requiredCiAdapterJobName: String = "GPU tests (macos)"
+    public val defaultCiAdapterLaneStatus: CiAdapterLaneStatus = CiAdapterLaneStatus.AdapterPass
+    public val ciAdapterLaneAvailable: Boolean
+        get() = defaultCiAdapterLaneStatus != CiAdapterLaneStatus.BlockedNoAdapterLane
+
     private const val ADAPTER_UNBLOCK: String =
         "Enable a non-skippable GPU adapter CI/scheduled lane that uploads gpu-raster artifacts and fails on adapter skips."
 
-    public val rows: List<WebGpuCoverageStrategyInventoryRow> = listOf(
+    private fun promotedStatus(ciAdapterLaneStatus: CiAdapterLaneStatus): WebGpuCoverageEvidenceStatus = when (ciAdapterLaneStatus) {
+        CiAdapterLaneStatus.AdapterPass -> WebGpuCoverageEvidenceStatus.AdapterPass
+        CiAdapterLaneStatus.AdapterFail -> WebGpuCoverageEvidenceStatus.AdapterFail
+        CiAdapterLaneStatus.AdapterSkipped -> WebGpuCoverageEvidenceStatus.AdapterSkipped
+        CiAdapterLaneStatus.AdapterTimeout -> WebGpuCoverageEvidenceStatus.AdapterTimeout
+        CiAdapterLaneStatus.BlockedNoAdapterLane -> WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane
+    }
+
+    private fun promotedEvidence(branchEvidence: String, ciAdapterLaneStatus: CiAdapterLaneStatus): String = when (ciAdapterLaneStatus) {
+        CiAdapterLaneStatus.AdapterPass ->
+            "$branchEvidence; required `$requiredCiAdapterJobName` lane reports adapter-pass"
+        CiAdapterLaneStatus.AdapterFail ->
+            "$branchEvidence; required `$requiredCiAdapterJobName` lane reports adapter-fail"
+        CiAdapterLaneStatus.AdapterSkipped ->
+            "$branchEvidence; required `$requiredCiAdapterJobName` lane reports adapter-skipped"
+        CiAdapterLaneStatus.AdapterTimeout ->
+            "$branchEvidence; required `$requiredCiAdapterJobName` lane reports adapter-timeout"
+        CiAdapterLaneStatus.BlockedNoAdapterLane ->
+            "$branchEvidence; required `$requiredCiAdapterJobName` lane is unavailable"
+    }
+
+    private fun promotedUnblockCondition(ciAdapterLaneStatus: CiAdapterLaneStatus): String? = when (ciAdapterLaneStatus) {
+        CiAdapterLaneStatus.AdapterPass -> null
+        CiAdapterLaneStatus.AdapterFail ->
+            "Fix adapter-lane failures in `$requiredCiAdapterJobName` before release promotion."
+        CiAdapterLaneStatus.AdapterSkipped ->
+            "Remove adapter skips in `$requiredCiAdapterJobName`; smoke must fail closed on skipped adapter-dependent tests."
+        CiAdapterLaneStatus.AdapterTimeout ->
+            "Stabilize `$requiredCiAdapterJobName` until it completes with adapter-backed results and artifacts."
+        CiAdapterLaneStatus.BlockedNoAdapterLane -> ADAPTER_UNBLOCK
+    }
+
+    public fun rowsForCiAdapterStatus(
+        ciAdapterLaneStatus: CiAdapterLaneStatus,
+    ): List<WebGpuCoverageStrategyInventoryRow> = listOf(
         WebGpuCoverageStrategyInventoryRow(
             branch = "analytic-rect",
             strategy = WebGpuCoverageStrategy.AnalyticRect,
-            status = WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane,
+            status = promotedStatus(ciAdapterLaneStatus),
             routeIdentifier = "webgpu.coverage.analytic-rect",
             diagnosticReason = null,
-            evidence = "selector, pipeline-key, and local adapter rect fixture exist; release CI adapter lane is disabled",
-            unblockCondition = ADAPTER_UNBLOCK,
+            evidence = promotedEvidence(
+                branchEvidence = "selector, pipeline-key, and local adapter rect fixture exist",
+                ciAdapterLaneStatus = ciAdapterLaneStatus,
+            ),
+            unblockCondition = promotedUnblockCondition(ciAdapterLaneStatus),
         ),
         WebGpuCoverageStrategyInventoryRow(
             branch = "analytic-rrect",
             strategy = WebGpuCoverageStrategy.AnalyticRRect,
-            status = WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane,
+            status = promotedStatus(ciAdapterLaneStatus),
             routeIdentifier = "webgpu.coverage.analytic-rrect",
             diagnosticReason = null,
-            evidence = "selector, pipeline-key, and local adapter rrect fixture exist; release CI adapter lane is disabled",
-            unblockCondition = ADAPTER_UNBLOCK,
+            evidence = promotedEvidence(
+                branchEvidence = "selector, pipeline-key, and local adapter rrect fixture exist",
+                ciAdapterLaneStatus = ciAdapterLaneStatus,
+            ),
+            unblockCondition = promotedUnblockCondition(ciAdapterLaneStatus),
         ),
         WebGpuCoverageStrategyInventoryRow(
             branch = "path-convex-fan",
             strategy = WebGpuCoverageStrategy.CpuPreparedConvexFan,
-            status = WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane,
+            status = promotedStatus(ciAdapterLaneStatus),
             routeIdentifier = "webgpu.coverage.path-convex-fan",
             diagnosticReason = null,
-            evidence = "selector and local adapter convex path fixture exist; release CI adapter lane is disabled",
-            unblockCondition = ADAPTER_UNBLOCK,
+            evidence = promotedEvidence(
+                branchEvidence = "selector and local adapter convex path fixture exist",
+                ciAdapterLaneStatus = ciAdapterLaneStatus,
+            ),
+            unblockCondition = promotedUnblockCondition(ciAdapterLaneStatus),
         ),
         WebGpuCoverageStrategyInventoryRow(
             branch = "path-stencil-cover",
             strategy = WebGpuCoverageStrategy.StencilCover,
-            status = WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane,
+            status = promotedStatus(ciAdapterLaneStatus),
             routeIdentifier = "webgpu.coverage.path-stencil-cover",
             diagnosticReason = null,
-            evidence = "selector and local adapter concave/inverse path fixtures exist; release CI adapter lane is disabled",
-            unblockCondition = ADAPTER_UNBLOCK,
+            evidence = promotedEvidence(
+                branchEvidence = "selector and local adapter concave/inverse path fixtures exist",
+                ciAdapterLaneStatus = ciAdapterLaneStatus,
+            ),
+            unblockCondition = promotedUnblockCondition(ciAdapterLaneStatus),
         ),
         WebGpuCoverageStrategyInventoryRow(
             branch = "path-mask-or-atlas-selector",
@@ -150,6 +212,9 @@ public object WebGpuCoverageStrategyInventory {
             unblockCondition = "Add mask/list/atlas clip strategy plus adapter-backed cross-backend evidence.",
         ),
     )
+
+    public val rows: List<WebGpuCoverageStrategyInventoryRow>
+        get() = rowsForCiAdapterStatus(defaultCiAdapterLaneStatus)
 
     public fun dump(): String = rows.joinToString(separator = "\n") { it.dump() }
 }

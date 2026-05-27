@@ -205,14 +205,14 @@ class WebGpuCoveragePlanSelectorTest {
     }
 
     @Test
-    fun `strategy inventory separates adapter blocked proven candidates from refused and compatibility branches`() {
+    fun `strategy inventory separates adapter evidence states from refused and compatibility branches`() {
         val byBranch = WebGpuCoverageStrategyInventory.rows.associateBy { it.branch }
 
-        assertEquals(false, WebGpuCoverageStrategyInventory.ciAdapterLaneAvailable)
-        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("analytic-rect").status)
-        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("analytic-rrect").status)
-        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("path-convex-fan").status)
-        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("path-stencil-cover").status)
+        assertEquals(true, WebGpuCoverageStrategyInventory.ciAdapterLaneAvailable)
+        assertEquals(WebGpuCoverageEvidenceStatus.AdapterPass, byBranch.getValue("analytic-rect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.AdapterPass, byBranch.getValue("analytic-rrect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.AdapterPass, byBranch.getValue("path-convex-fan").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.AdapterPass, byBranch.getValue("path-stencil-cover").status)
         assertEquals(WebGpuCoverageEvidenceStatus.Proven, byBranch.getValue("path-mask-or-atlas-selector").status)
         assertEquals("webgpu.coverage.path-mask-or-atlas", byBranch.getValue("path-mask-or-atlas-selector").routeIdentifier)
         assertTrue(byBranch.getValue("path-mask-or-atlas-selector").evidence.contains("selector-only proof"))
@@ -237,11 +237,37 @@ class WebGpuCoveragePlanSelectorTest {
         val dump = WebGpuCoverageStrategyInventory.dump()
         assertTrue(dump.contains("branch=analytic-rect"))
         assertTrue(dump.contains("branch=path-mask-or-atlas-selector"))
+        assertTrue(dump.contains("status=adapter-pass"))
         assertTrue(dump.contains("status=proven"))
-        assertTrue(dump.contains("status=blocked-no-adapter-lane"))
         assertTrue(dump.contains("status=refused"))
         assertTrue(dump.contains("status=compatibility"))
         assertTrue(dump.contains("reason=coverage.arbitrary-aa-clip-unsupported"))
+    }
+
+    @Test
+    fun `strategy inventory marks promoted routes as adapter-fail when adapter lane fails`() {
+        val byBranch = WebGpuCoverageStrategyInventory
+            .rowsForCiAdapterStatus(CiAdapterLaneStatus.AdapterFail)
+            .associateBy { it.branch }
+
+        assertEquals(WebGpuCoverageEvidenceStatus.AdapterFail, byBranch.getValue("analytic-rect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.AdapterFail, byBranch.getValue("analytic-rrect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.AdapterFail, byBranch.getValue("path-convex-fan").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.AdapterFail, byBranch.getValue("path-stencil-cover").status)
+        assertTrue(byBranch.getValue("analytic-rect").evidence.contains("adapter-fail"))
+    }
+
+    @Test
+    fun `strategy inventory uses blocked-no-adapter-lane only when required adapter lane is missing`() {
+        val byBranch = WebGpuCoverageStrategyInventory
+            .rowsForCiAdapterStatus(CiAdapterLaneStatus.BlockedNoAdapterLane)
+            .associateBy { it.branch }
+
+        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("analytic-rect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("analytic-rrect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("path-convex-fan").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("path-stencil-cover").status)
+        assertTrue(byBranch.getValue("analytic-rect").evidence.contains("lane is unavailable"))
     }
 
     @Test
