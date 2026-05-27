@@ -264,6 +264,11 @@ fun renderPipelineConformanceReport(
     val totalSkipped = suites.sumOf { it.skipped }
     val gpuAdapterEvidence = gpuAdapterEvidenceForReport(suites)
     val releaseReadinessStatus = if (gpuAdapterEvidence.status == "passed") "passed" else "blocked"
+    val webGpuCoverageInventoryStatus = when (gpuAdapterEvidence.status) {
+        "passed" -> "passed"
+        "failed" -> "failed"
+        else -> "blocked"
+    }
     val vectorStatus = if (vectorDecisionReportPresent) "rejected benchmark" else "not run"
     val vectorDecision = if (vectorDecisionReportPresent) {
         "`rejected benchmark` — see `reports/wgsl-pipeline/2026-05-27-m22-vector-promotion-decision.md`"
@@ -274,7 +279,7 @@ fun renderPipelineConformanceReport(
     return """
         |# M24 Pipeline Conformance PM Report
         |
-        |Linear: GRA-53, GRA-56, GRA-57, GRA-58, GRA-59, GRA-60, GRA-61, GRA-62, GRA-63, GRA-64, GRA-69
+        |Linear: GRA-53, GRA-56, GRA-57, GRA-58, GRA-59, GRA-60, GRA-61, GRA-62, GRA-63, GRA-64, GRA-69, GRA-70
         |Source commit: `$commit`
         |
         |## Commands
@@ -306,6 +311,7 @@ fun renderPipelineConformanceReport(
         |${row("Clip-stack breadth", status("org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.pipeline.GeometryCoverageMigrationHarnessTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest"), "`ClipStackBreadthMatrix` classifies CPU route expectations and WebGPU support/refusal: rect/rrect/rect-difference supported, arbitrary-AA and multi-shape AA refused on WebGPU, shader clip refused on WebGPU, unlowerable stacks use stable diagnostics; CPU descriptor AA-clip and clip-shader fallbacks are asserted")}
         |${row("kanvas-skia production route", status("org.skia.core.SkBitmapDescriptorCoverageOracleTest"), "`SkBitmapDescriptorCoverageOracleTest` proves `SkBitmapDevice` descriptor routing consumes CoveragePlan lowering through the shared analytic rect executor, preserves rollback, and remains pixel-equivalent with legacy")}
         |${row("GPU adapter evidence", gpuAdapterEvidence.status, "`gpuAdapterEvidence=${gpuAdapterEvidence.status}`; local adapter JUnit status `${gpuAdapterEvidence.localJUnitStatus}`; ci adapter lane available `${gpuAdapterEvidence.ciLaneAvailable}`; ${gpuAdapterEvidence.blockerText}")}
+        |${row("WebGPU coverage strategy inventory", webGpuCoverageInventoryStatus, "`WebGpuCoverageStrategyInventory` separates selector-only `proven` mask/atlas route selection, `blocked-no-adapter-lane` promoted candidates (analytic rect/rrect, convex fan, stencil-cover), `compatibility` full-scissor, and `refused` span-runs/alpha-mask/coverage-atlas/edge-overflow/arbitrary-AA-clip branches with stable diagnostics; inventory status tracks adapter evidence failures instead of masking them as blocked")}
         |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; matrix counts $runtimeEffectSupportMatrixCounts")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
@@ -322,6 +328,9 @@ fun renderPipelineConformanceReport(
         |  (`descriptorRoute=gpu.shadow.generated-rect-candidate`).
         |- WebGPU selector production dump: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt`
         |  (`productionDump`, selector disabled rollback, and coverage selector route identifiers).
+        |- WebGPU coverage strategy inventory: `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt`
+        |  (`proven` is limited to selector-only mask/atlas route selection, not adapter CI;
+        |  adapter-dependent promoted routes remain `blocked-no-adapter-lane` while `ciAdapterLaneAvailable=false`).
         |- Clip-stack breadth matrix: `render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt`
         |  maps rect intersect, rrect intersect, rect difference, arbitrary AA path intersect,
         |  multi-shape AA difference, shader clip, and unlowerable stacks to supported clips or stable refusal codes.
