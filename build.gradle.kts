@@ -292,6 +292,7 @@ tasks.register("pipelineConformanceReport") {
 
     val outputFile = layout.buildDirectory.file("reports/pipeline-conformance/m24-pipeline-conformance-report.md")
     outputs.file(outputFile)
+    outputs.upToDateWhen { false }
 
     doLast {
         val resultRoots = listOf(
