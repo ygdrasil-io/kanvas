@@ -32,6 +32,34 @@ Geometry/Coverage milestone has merged implementation evidence, fallback
 behavior is asserted in tests or reports, and the PM evidence comment links the
 relevant commit or PR. Editorial fixes do not change status.
 
+## M24 Status Review
+
+Review date: 2026-05-27
+
+Evidence:
+
+- Conformance command:
+  `rtk ./gradlew --no-daemon pipelineConformance`
+- PM report command:
+  `rtk ./gradlew --no-daemon pipelineConformanceReport`
+- M24 conformance task: PR #1142 / merge
+  `12684fb7259644bb2932e930026c7134177e1964`
+- PM report generation: PR #1143 / merge
+  `637e42344a335504bfe8d95b63351dfc40ebd872`
+- Report regeneration fix: PR #1144 / merge
+  `2035b455535e35452097154d9b5d0f05eea8a866`
+
+| Spec | M24 status | Evidence | Remaining gaps |
+|---|---|---|---|
+| `00-current-state-inventory.md` | Draft | Inventory updated with descriptor and selector evidence. | The inventory remains descriptive and tracks unresolved atlas/glyph/image coverage ownership. |
+| `01-contracts-geometry-coverage.md` | Accepted | `GeometryCoverageContractsTest`, `GeometryCoverageMigrationHarnessTest`, `pipelineConformance`. | New primitives must add contract fixtures before default routing. |
+| `02-lowering-rules.md` | Draft | Rect, rrect, path, stroke, and clip slices have migration evidence. | Glyph masks, image rect lowering, coverage atlas policy, and full clip-stack breadth remain partial. |
+| `03-cpu-coverage-backend.md` | Accepted | CPU descriptor oracle tests in `GeometryCoverageMigrationHarnessTest`. | More primitive families need old-path vs descriptor comparisons before default routing. |
+| `04-webgpu-coverage-backend.md` | Accepted | `WebGpuCoveragePlanSelectorTest`, PipelineKey diagnostics, PM report. | GPU adapter CI is skipped under the current gate and remains residual risk. |
+| `05-fallback-diagnostics.md` | Accepted | Stable reason-code tests and unsupported descriptor diagnostics in conformance. | New refusal modes must add stable codes before use. |
+| `06-validation-and-perf.md` | Accepted | `pipelineConformance`, `pipelineConformanceReport`, Linear evidence comments. | Slow performance gates remain opt-in until CI budget accepts them. |
+| `07-migration-shim.md` | Accepted | Shadow, compare, gated, default, rollback, and unsupported diagnostics in migration harness tests. | Additional primitive families still need their own rollout evidence. |
+
 ## Spec Index
 
 | Spec | Purpose |

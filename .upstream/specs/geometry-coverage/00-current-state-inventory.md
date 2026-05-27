@@ -78,10 +78,12 @@ Current behavior:
 
 Current risks:
 
-- GPU geometry selection is encoded directly in `SkWebGpuDevice.drawPath`.
-- CPU-prepared fan/stencil data does not pass through a named `CoveragePlan`.
-- Pipeline-key axes are exposed in local GPU code, not derived from a shared
-  geometry/coverage descriptor.
+- GPU geometry selection now has conformance-covered selector diagnostics, but
+  broader draw-route migration is still incremental.
+- CPU-prepared fan/stencil data has selector and migration evidence for the
+  accepted slices, but not every primitive family is descriptor-owned.
+- Pipeline-key axes have conformance-covered diagnostics for current coverage
+  strategies; a shared public key type remains future work.
 - Coverage atlas behavior is not formalized.
 
 ## Current Test Evidence
@@ -111,6 +113,23 @@ The spec work should identify a small baseline set before implementation:
 - glyph mask path;
 - image rect path;
 - path-heavy GPU cross-backend scenes.
+
+## M24 Evidence Links
+
+- PR #1142 / `12684fb7259644bb2932e930026c7134177e1964`:
+  `pipelineConformance`.
+- PR #1143 / `637e42344a335504bfe8d95b63351dfc40ebd872`:
+  PM convergence report.
+- PR #1144 / `2035b455535e35452097154d9b5d0f05eea8a866`:
+  report regeneration fix.
+
+## Remaining Gaps
+
+This inventory remains `Draft` because it describes evolving renderer state.
+The M24 accepted scope covers descriptor contracts, CPU oracle fixtures, WebGPU
+selector diagnostics, stable fallback reasons, and migration modes exercised by
+`pipelineConformance`. Glyph mask coverage, image rect coverage, coverage atlas
+policy, and full clip-stack breadth remain future rollout work.
 
 ## Inventory Acceptance Criteria
 
