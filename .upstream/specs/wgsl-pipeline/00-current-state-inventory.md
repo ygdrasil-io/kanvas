@@ -23,23 +23,39 @@ This avoids treating Linear summaries as the only technical record.
 |---|---|---|---|
 | M0 parser dependency integration | Done | `WgslParserSmokeMain`; `gpu-raster` parser dependencies; Linear `GRA-18` | Remote publication policy is not settled. |
 | M1 `KanvasPipelineIR` foundation | Done | `KanvasPipelineIR.kt`; `KanvasPipelineIRTest` | IR is intentionally a pilot subset. |
-| M2 WGSL validation and reflection | Partial | `WgslValidationReport`; `WgslValidationReportTest` | Reflection does not yet cover every layout shape. |
+| M2 WGSL validation and reflection | Accepted for generated/registered modules | `WgslValidationReport`; `WgslValidationReportTest`; `pipelineConformance` | Existing handwritten resources still surface parser diagnostics in the report. |
 | M3 CPU scalar pilot | Done | `CpuScalarPipelineExecutor`; `CpuScalarPipelineExecutorTest` | CPU backend is not yet a full compiled pipeline. |
 | M4 generated solid WGSL pilot | Done | `GeneratedSolidRectWgsl`; `GeneratedSolidRectWgslTest`; `GeneratedSolidRectMigrationTest` | General WGSL assembly is still limited. |
-| M5 uniform packer verification | Partial | `WgslValidationReport` uniform reflection; focused packer checks | Broad generated packers are not yet implemented. |
+| M5 uniform packer verification | Accepted for current packers | `WgslValidationReport` uniform reflection; focused packer checks; `pipelineConformance` | Broad generated packers are not yet implemented. |
 | M6 pipeline key and cache telemetry | Done | `PipelineKeyClassification`; `GpuCacheTelemetrySnapshot`; `PipelineKeyTelemetryTest` | Shared public `PipelineKey` type is still future work. |
 | M7 blend diagnostics | Done | `BlendPlan`; `BlendPlanTest` | Shader/layer composite paths need per-family promotion evidence. |
 | M8 generated gradient WGSL | Done | `GeneratedLinearGradientWgsl`; `GeneratedLinearGradientWgslTest`; gradient GPU tests | Current source is template-based rather than full IR assembly. |
-| M9 runtime-effect descriptor pilot | Done | `SkRuntimeEffectDescriptor`; `RuntimeEffectDescriptorWebGpuTest`; runtime-effect dispatch tests | Support matrix export is not centralized yet. |
-| M10 Java 25 Vector pilot | Done | `CpuVectorSolidRectKernel`; vector benchmark/test evidence | Default gating still requires machine-specific speedup evidence. |
+| M9 runtime-effect descriptor pilot | Done | `SkRuntimeEffectDescriptor`; `RuntimeEffectDescriptorWebGpuTest`; runtime-effect dispatch tests; support matrix report | New runtime effects still require registration and parser evidence. |
+| M10 Java 25 Vector pilot | Rejected for default | `CpuVectorSolidRectKernel`; vector benchmark/test evidence; PR #1137; PR #1138 | Default gating still requires `>= 1.5x` speedup evidence. |
 | M11 migration batch 1 | Done | `GeneratedSolidRectMigrationTest`; generated solid rect default path | Retirement remains evidence-driven per family. |
 
-## Known Gaps
+## Remaining Gaps
 
-- This spec pack is the first checked-in implementation spec for M0-M11; older
-  acceptance lived mostly in Linear and the target document.
-- Geometry/Coverage convergence is a separate active track and must not be
-  inferred from M0-M11 paint-pipeline tickets.
+- This inventory remains `Draft` because it records evolving state, not a
+  frozen implementation contract.
+- Existing handwritten WGSL parser diagnostics remain visible in
+  `:gpu-raster:wgslValidateAll`; generated and registered WGSL modules are the
+  accepted M24 conformance scope.
+- Geometry/Coverage convergence is tracked separately under
+  `.upstream/specs/geometry-coverage/` and only the conformance-covered handoff
+  is accepted here.
+
+## M24 Evidence Links
+
+- PR #1142 / `12684fb7259644bb2932e930026c7134177e1964`:
+  `pipelineConformance`.
+- PR #1143 / `637e42344a335504bfe8d95b63351dfc40ebd872`:
+  PM convergence report.
+- PR #1144 / `2035b455535e35452097154d9b5d0f05eea8a866`:
+  report regeneration fix.
+- PR #1137 and PR #1138: vector benchmark and promotion decision.
+- PR #1139, PR #1140, PR #1141: runtime-effect descriptor hardening,
+  support matrix, and implementation-id validation.
 
 ## Non-Goals
 

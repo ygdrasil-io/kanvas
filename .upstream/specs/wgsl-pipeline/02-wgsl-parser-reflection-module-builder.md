@@ -12,6 +12,28 @@ WGSL, reflects layout data, and supports deterministic module construction.
 It is not a SkSL compiler, not a CPU execution model, and not an extension
 point for arbitrary user WGSL.
 
+## Remaining Gaps
+
+This spec remains `Draft` after the M24 review.
+
+Accepted evidence exists for generated WGSL goldens, registered runtime-effect
+WGSL, `WgslValidationReportTest`, and the `pipelineConformance` gate. The full
+parser/reflection/module-builder contract is not accepted yet because:
+
+- existing handwritten WGSL resources still surface parser diagnostics in
+  `:gpu-raster:wgslValidateAll`;
+- broad generated uniform packers are not implemented for every layout shape;
+- remote publication policy for parser artifacts remains dependency-gated.
+
+Evidence links:
+
+- PR #1142 / `12684fb7259644bb2932e930026c7134177e1964`:
+  `pipelineConformance`.
+- PR #1143 / `637e42344a335504bfe8d95b63351dfc40ebd872`:
+  PM convergence report.
+- PR #1144 / `2035b455535e35452097154d9b5d0f05eea8a866`:
+  report regeneration fix.
+
 ## Dependency Contract
 
 Until remote publication is settled, Kanvas may consume the parser artifacts
