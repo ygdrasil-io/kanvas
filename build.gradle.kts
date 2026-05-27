@@ -199,6 +199,37 @@ fun conformanceStatus(suites: List<PipelineConformanceSuiteSummary>): String = w
     else -> "not run"
 }
 
+data class GpuAdapterEvidence(
+    val status: String,
+    val localJUnitStatus: String,
+    val ciLaneAvailable: Boolean,
+    val blockerText: String,
+    val unblockCondition: String,
+)
+
+fun gpuAdapterEvidenceForReport(suites: List<PipelineConformanceSuiteSummary>): GpuAdapterEvidence {
+    val adapterSuites = suites.filter {
+        it.className == "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest" ||
+            it.className == "org.skia.gpu.webgpu.PipelineKeyTelemetryTest"
+    }
+    val localStatus = conformanceStatus(adapterSuites)
+    val ciLaneAvailable = false
+    val status = when {
+        adapterSuites.any { it.failed } -> "failed"
+        !ciLaneAvailable -> "blocked-no-adapter-lane"
+        adapterSuites.any { it.skipped > 0 } -> "skipped-known-risk"
+        adapterSuites.all { it.passed } -> "passed"
+        else -> "skipped-known-risk"
+    }
+    return GpuAdapterEvidence(
+        status = status,
+        localJUnitStatus = localStatus,
+        ciLaneAvailable = ciLaneAvailable,
+        blockerText = "Release blocker: GitHub Actions `GPU tests (macos)` is disabled with `if: false`, so PR CI cannot prove rect/rrect/path adapter fixtures or warm pipeline cache telemetry.",
+        unblockCondition = "Unblock by enabling a non-skippable GPU adapter CI/scheduled lane that uploads `gpu-raster` reports/artifacts and fails when adapter-dependent tests skip, or by attaching an equivalent scheduled adapter artifact to the release.",
+    )
+}
+
 fun runPipelineConformanceCommand(vararg command: String): String =
     ProcessBuilder(*command)
         .directory(rootDir)
@@ -231,6 +262,8 @@ fun renderPipelineConformanceReport(
     val totalFailures = suites.sumOf { it.failures }
     val totalErrors = suites.sumOf { it.errors }
     val totalSkipped = suites.sumOf { it.skipped }
+    val gpuAdapterEvidence = gpuAdapterEvidenceForReport(suites)
+    val releaseReadinessStatus = if (gpuAdapterEvidence.status == "passed") "passed" else "blocked"
     val vectorStatus = if (vectorDecisionReportPresent) "rejected benchmark" else "not run"
     val vectorDecision = if (vectorDecisionReportPresent) {
         "`rejected benchmark` — see `reports/wgsl-pipeline/2026-05-27-m22-vector-promotion-decision.md`"
@@ -241,7 +274,7 @@ fun renderPipelineConformanceReport(
     return """
         |# M24 Pipeline Conformance PM Report
         |
-        |Linear: GRA-53, GRA-56, GRA-57, GRA-58, GRA-59, GRA-60, GRA-61, GRA-62, GRA-63
+        |Linear: GRA-53, GRA-56, GRA-57, GRA-58, GRA-59, GRA-60, GRA-61, GRA-62, GRA-63, GRA-64
         |Source commit: `$commit`
         |
         |## Commands
@@ -263,6 +296,7 @@ fun renderPipelineConformanceReport(
         || Area | Status | Evidence |
         ||---|---|---|
         |${row("Tests", conformanceStatus(suites), "$totalTests tests, $totalFailures failures, $totalErrors errors, $totalSkipped skipped")}
+        |${row("Release readiness", releaseReadinessStatus, "`releaseReadiness=$releaseReadinessStatus`; GPU adapter evidence `${gpuAdapterEvidence.status}`")}
         |${row("Strict WGSL status", status("org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest"), "`WgslStrictValidationReportTest` plus required `:gpu-raster:wgslValidateStrict` dependency")}
         |${row("Legacy WGSL diagnostics", status("org.skia.gpu.webgpu.tools.WgslValidationReportTest"), "$legacyWgslDiagnosticsAllowlistCount known diagnostics allowlisted by `gpu-raster/src/test/resources/wgsl-diagnostics-allowlist.txt`; `:gpu-raster:wgslValidateAll` remains the diagnostic inventory")}
         |${row("Generated WGSL status", status("org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest", "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest"), "`GeneratedSolidRectWgslTest`, `GeneratedLinearGradientWgslTest`")}
@@ -270,6 +304,7 @@ fun renderPipelineConformanceReport(
         |${row("BlendPlan status", status("org.skia.gpu.webgpu.BlendPlanTest"), "`BlendPlanTest`")}
         |${row("Descriptor routing status", status("org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.pipeline.GeometryCoverageMigrationHarnessTest"), "`WebGpuCoveragePlanSelectorTest`, `GeometryCoverageMigrationHarnessTest`; CPU rect harness uses `CpuAnalyticRectCoverageExecutor`")}
         |${row("kanvas-skia production route", status("org.skia.core.SkBitmapDescriptorCoverageOracleTest"), "`SkBitmapDescriptorCoverageOracleTest` proves `SkBitmapDevice` descriptor routing consumes CoveragePlan lowering through the shared analytic rect executor, preserves rollback, and remains pixel-equivalent with legacy")}
+        |${row("GPU adapter evidence", gpuAdapterEvidence.status, "`gpuAdapterEvidence=${gpuAdapterEvidence.status}`; local adapter JUnit status `${gpuAdapterEvidence.localJUnitStatus}`; ci adapter lane available `${gpuAdapterEvidence.ciLaneAvailable}`; ${gpuAdapterEvidence.blockerText}")}
         |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; matrix counts $runtimeEffectSupportMatrixCounts")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
@@ -300,6 +335,8 @@ fun renderPipelineConformanceReport(
         |
         |## Residual Risks
         |
+        |- `gpuAdapterEvidence=${gpuAdapterEvidence.status}`: ${gpuAdapterEvidence.blockerText}
+        |- Unblock condition: ${gpuAdapterEvidence.unblockCondition}
         |- GPU adapter-dependent checks can be JUnit-skipped on machines without a usable WebGPU adapter; this is recorded risk, not a green adapter pass.
         |- Slow benchmark gates are not part of `pipelineConformance`; vector promotion remains rejected until the allocation-aware benchmark meets the promotion threshold.
         |- Existing legacy WGSL parser/reflection diagnostics are allowlisted by `gpu-raster/src/test/resources/wgsl-diagnostics-allowlist.txt`; strict release readiness applies only to generated and registered WGSL modules until legacy remediation lands.
