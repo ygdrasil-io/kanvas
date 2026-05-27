@@ -45,7 +45,7 @@ public object SkBuiltinShaderEffectsIntrinsicsGeometric {
         for (entry in GEOMETRIC_ENTRIES) {
             val sksl = SkBuiltinShaderEffectsIntrinsicsTrig
                 .makeUnarySksl1d(entry.fn, requireES3 = false)
-            SkRuntimeEffectDispatch.register(sksl) {
+            SkRuntimeEffectDispatch.registerBuiltinIfAbsent(sksl) {
                 SkBuiltinShaderEffectsIntrinsicsTrig.UnaryIntrinsicImpl(entry.eval)
             }
         }

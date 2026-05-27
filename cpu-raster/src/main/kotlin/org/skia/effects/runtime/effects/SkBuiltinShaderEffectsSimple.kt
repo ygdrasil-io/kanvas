@@ -23,8 +23,8 @@ import kotlin.math.sqrt
  * (uniforms only, no children, no `sample(...)` calls). Each
  * [SkRuntimeImpl] is registered against the canonical SkSL source
  * of the upstream effect ; the registration happens automatically
- * when this `object` is loaded (idempotent — `register` overwrites
- * the same hash key safely).
+ * when this `object` is loaded (idempotent via the builtin-if-absent
+ * registry helper).
  *
  * **Why not parse SkSL** : the project's strategy is hand-port-per-
  * shader-type (Kotlin for raster, WGSL for GPU — see
@@ -62,13 +62,12 @@ public object SkBuiltinShaderEffectsSimple {
      * that test hook empties the dispatch table, so the next
      * `MakeForXxx` call must repopulate before lookup.
      *
-     * Each `register` call replaces the prior factory at the same
-     * hash key (deliberate — see [SkRuntimeEffectDispatch.register]
-     * KDoc) so calling this twice in a row is safe.
+     * Each builtin registration is skipped when the same hash is already
+     * present, so calling this twice in a row is safe.
      */
     public fun registerAll() {
-        SkRuntimeEffectDispatch.register(SIMPLE_RT_SKSL) { SimpleRTImpl }
-        SkRuntimeEffectDescriptorRegistry.register(
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(SIMPLE_RT_SKSL) { SimpleRTImpl }
+        SkRuntimeEffectDescriptorRegistry.registerBuiltinIfAbsent(
             SIMPLE_RT_SKSL,
             SkRuntimeEffectDescriptor(
                 stableId = "runtime.simple_rt",
@@ -80,8 +79,8 @@ public object SkBuiltinShaderEffectsSimple {
                 wgslImplementationId = "wgsl/runtime_simple_rt",
             ),
         )
-        SkRuntimeEffectDispatch.register(SPIRAL_RT_SKSL) { SpiralRTImpl }
-        SkRuntimeEffectDispatch.register(LINEAR_GRADIENT_RT_SKSL) { LinearGradientRTImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(SPIRAL_RT_SKSL) { SpiralRTImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(LINEAR_GRADIENT_RT_SKSL) { LinearGradientRTImpl }
     }
 
     // ─── SkSL sources (verbatim copies of upstream) ──────────────────

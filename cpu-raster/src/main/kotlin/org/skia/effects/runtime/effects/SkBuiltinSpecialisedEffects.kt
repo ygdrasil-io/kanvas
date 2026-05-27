@@ -54,11 +54,11 @@ import java.nio.ByteBuffer
 public object SkBuiltinSpecialisedEffects {
 
     public fun registerAll() {
-        SkRuntimeEffectDispatch.register(INVERT_BLENDER_SKSL) { InvertBlenderImpl }
-        SkRuntimeEffectDispatch.register(STRETCH_COLORS_BLENDER_SKSL) { StretchColorsBlenderImpl }
-        SkRuntimeEffectDispatch.register(KAWASE_BLUR_SHADER_SKSL) { KawaseBlurShaderImpl }
-        SkRuntimeEffectDispatch.register(KAWASE_MIX_SHADER_SKSL) { KawaseMixShaderImpl }
-        SkRuntimeEffectDispatch.register(RUNTIME_FUNCTIONS_SHADER_SKSL) { RuntimeFunctionsShaderImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(INVERT_BLENDER_SKSL) { InvertBlenderImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(STRETCH_COLORS_BLENDER_SKSL) { StretchColorsBlenderImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(KAWASE_BLUR_SHADER_SKSL) { KawaseBlurShaderImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(KAWASE_MIX_SHADER_SKSL) { KawaseMixShaderImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(RUNTIME_FUNCTIONS_SHADER_SKSL) { RuntimeFunctionsShaderImpl }
     }
 
     // ─── destcolor.cpp invert blender ────────────────────────────────

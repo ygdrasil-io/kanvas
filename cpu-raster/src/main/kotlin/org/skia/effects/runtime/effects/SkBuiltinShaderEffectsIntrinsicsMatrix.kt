@@ -95,10 +95,10 @@ public object SkBuiltinShaderEffectsIntrinsicsMatrix {
 
     public fun registerAll() {
         for (dim in 2..4) {
-            SkRuntimeEffectDispatch.register(makeMatrixCompMultSksl(dim)) {
+            SkRuntimeEffectDispatch.registerBuiltinIfAbsent(makeMatrixCompMultSksl(dim)) {
                 MatrixCompMultImpl(dim)
             }
-            SkRuntimeEffectDispatch.register(makeMatrixInverseSksl(dim)) {
+            SkRuntimeEffectDispatch.registerBuiltinIfAbsent(makeMatrixInverseSksl(dim)) {
                 MatrixInverseImpl(dim)
             }
         }

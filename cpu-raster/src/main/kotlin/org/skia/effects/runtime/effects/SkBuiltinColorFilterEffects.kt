@@ -14,8 +14,8 @@ import kotlin.math.min
  * Hand-ported color-filter runtime effects from Phase D2.4.a. Each
  * [SkRuntimeImpl] is registered against the canonical SkSL source
  * of the upstream effect ; the registration happens automatically
- * when this `object` is loaded (idempotent — `register` overwrites
- * the same hash key safely).
+ * when this `object` is loaded (idempotent via the builtin-if-absent
+ * registry helper).
  *
  * **Why not parse SkSL** : the project's strategy is hand-port-per-
  * shader-type (Kotlin for raster, WGSL for GPU — see
@@ -49,33 +49,32 @@ public object SkBuiltinColorFilterEffects {
      * that test hook empties the dispatch table, so the next
      * `MakeForXxx` call must repopulate before lookup.
      *
-     * Each `register` call replaces the prior factory at the same
-     * hash key (deliberate — see [SkRuntimeEffectDispatch.register]
-     * KDoc) so calling this twice in a row is safe.
+     * Each builtin registration is skipped when the same hash is already
+     * present, so calling this twice in a row is safe.
      */
     public fun registerAll() {
         // Identity color filter (Noop) — gNoop in upstream.
-        SkRuntimeEffectDispatch.register(NOOP_SKSL) { IdentityImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(NOOP_SKSL) { IdentityImpl }
 
         // Luma → alpha (gLumaSrc from runtimecolorfilter.cpp).
-        SkRuntimeEffectDispatch.register(LUMA_SRC_SKSL) { LumaToAlphaImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(LUMA_SRC_SKSL) { LumaToAlphaImpl }
 
         // G-channel splat (AlternateLuma's `inColor.ggga` from
         // lumafilter.cpp). Replicates the G channel into R, G, B
         // and preserves A — models a linear-light Y-channel readout
         // when the working colour space is CIE XYZ (G = Y).
-        SkRuntimeEffectDispatch.register(G_CHANNEL_SPLAT_SKSL) { GChannelSplatImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(G_CHANNEL_SPLAT_SKSL) { GChannelSplatImpl }
 
         // Tone-map (gTernary / gIfs / gEarlyReturn — all
         // semantically equivalent ; register all 3 hashes against
         // the same Kotlin impl).
-        SkRuntimeEffectDispatch.register(TERNARY_SKSL) { ToneMapImpl }
-        SkRuntimeEffectDispatch.register(IFS_SKSL) { ToneMapImpl }
-        SkRuntimeEffectDispatch.register(EARLY_RETURN_SKSL) { ToneMapImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(TERNARY_SKSL) { ToneMapImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(IFS_SKSL) { ToneMapImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(EARLY_RETURN_SKSL) { ToneMapImpl }
 
         // Compose two color-filter children (gComposeCF from
         // composecolorfilter.cpp).
-        SkRuntimeEffectDispatch.register(COMPOSE_CF_SKSL) { ComposeChildrenImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(COMPOSE_CF_SKSL) { ComposeChildrenImpl }
     }
 
     // ─── SkSL sources (verbatim copies of upstream) ──────────────────

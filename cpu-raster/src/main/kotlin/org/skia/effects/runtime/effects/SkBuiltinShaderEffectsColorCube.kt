@@ -82,13 +82,12 @@ public object SkBuiltinShaderEffectsColorCube {
      * that test hook empties the dispatch table, so the next
      * `MakeForXxx` call must repopulate before lookup.
      *
-     * Each `register` call replaces the prior factory at the same
-     * hash key (deliberate — see [SkRuntimeEffectDispatch.register]
-     * KDoc) so calling this twice in a row is safe.
+     * Each builtin registration is skipped when the same hash is already
+     * present, so calling this twice in a row is safe.
      */
     public fun registerAll() {
-        SkRuntimeEffectDispatch.register(COLOR_CUBE_RT_SKSL) { ColorCubeRTImpl }
-        SkRuntimeEffectDispatch.register(COLOR_CUBE_CF_RT_SKSL) { ColorCubeColorFilterRTImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(COLOR_CUBE_RT_SKSL) { ColorCubeRTImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(COLOR_CUBE_CF_RT_SKSL) { ColorCubeColorFilterRTImpl }
     }
 
     // ─── SkSL sources (verbatim copies of upstream) ──────────────────
