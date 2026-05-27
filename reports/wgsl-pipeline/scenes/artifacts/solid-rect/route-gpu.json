@@ -1,0 +1,11 @@
+{
+  "sceneId": "solid-rect",
+  "backend": "WebGPU",
+  "drawKind": "axis-aligned-filled-rect",
+  "status": "expected-unsupported",
+  "coverageStrategy": "webgpu.coverage.analytic-rect",
+  "pipelineKey": "coverageKind=analyticRect",
+  "fallbackReason": "gpu.adapter-backed-solid-rect-capture-not-produced-in-m36-c-local-run",
+  "test": "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest#analytic rect selection adds only coverage kind code axis",
+  "note": "The route selector supports analytic rect coverage; this scene row keeps GPU render artifacts absent until an adapter-backed capture is attached."
+}

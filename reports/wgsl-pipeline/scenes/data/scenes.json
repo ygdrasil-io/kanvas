@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "title": "Kanvas WGSL pipeline scene evidence",
   "milestone": "M36",
-  "status": "shell",
+  "status": "p0-in-progress",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [
@@ -30,5 +30,62 @@
     ],
     "gpuUnsupportedPolicy": "A GPU row with status=expected-unsupported must keep the gpu section and provide a stable non-none gpu.route.fallbackReason."
   },
-  "scenes": []
+  "scenes": [
+    {
+      "id": "solid-rect",
+      "title": "Solid filled rect",
+      "priority": "P0",
+      "status": "tracked-gap",
+      "source": "reports/wgsl-pipeline/2026-05-28-m36-solid-rect-scene.md",
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/solid-rect/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/solid-rect/cpu.png",
+        "diff": "artifacts/solid-rect/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "AnalyticRect(2.0,1.0,7.0,6.0,aa=false)",
+          "selectedRoute": "cpu.descriptor.coverage-plan.solid-rect",
+          "compatibilityFallbackRoute": "kanvas-skia.current.draw-rect",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 64,
+          "matchingPixels": 64,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:pipelineConformanceTest --tests org.skia.core.SkBitmapDescriptorCoverageOracleTest"
+        }
+      },
+      "gpu": {
+        "status": "expected-unsupported",
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect",
+          "pipelineKey": "coverageKind=analyticRect",
+          "fallbackReason": "gpu.adapter-backed-solid-rect-capture-not-produced-in-m36-c-local-run"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/solid-rect/cpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/solid-rect/route-cpu.json",
+        "gpu": "artifacts/solid-rect/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 64,
+        "matchingPixels": 64,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m36-solid-rect-scene.md",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/stats.json",
+        "kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt"
+      ]
+    }
+  ]
 }
