@@ -1,23 +1,84 @@
 # kanvas
 
-This project uses [Gradle](https://gradle.org/).
-To build and run the application, use the *Gradle* tool window by clicking the Gradle icon in the right-hand toolbar,
-or run it directly from the terminal:
+Kanvas is a Kotlin graphics stack that is converging toward a shared
+high-performance rendering pipeline for CPU raster and WebGPU. The active
+pipeline target is based on a typed Kanvas IR, WGSL parser/generator support,
+CPU scalar/vector execution plans, and parser-validated generated WGSL for the
+GPU backend.
 
-* Run `./gradlew run` to build and run the application.
-* Run `./gradlew build` to only build the application.
-* Run `./gradlew check` to run all checks, including tests.
-* Run `./gradlew clean` to clean all build outputs.
+## MVP Roadmap
 
-Note the usage of the Gradle Wrapper (`./gradlew`).
-This is the suggested way to use Gradle in production projects.
+Last updated: 2026-05-27
 
-[Learn more about the Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html).
+MVP readiness: approximately 70%.
 
-[Learn more about Gradle tasks](https://docs.gradle.org/current/userguide/command_line_interface.html#common_tasks).
+The percentage is a readiness score, not an effort estimate. A block only moves
+when its milestone Definition of Done has CI, Linear, report, or artifact
+evidence. Archived migration plans are historical evidence only and must not be
+used as active backlog.
 
-This project follows the suggested multi-module setup and consists of the `app` and `utils` subprojects.
-The shared build logic was extracted to a convention plugin located in `buildSrc`.
+Active execution source:
 
-This project uses a version catalog (see `gradle/libs.versions.toml`) to declare and version dependencies
-and both a build cache and a configuration cache (see `gradle.properties`).
+- Linear project: [Kanvas - WGSL Pipeline Target](https://linear.app/forge-yg/project/kanvas-wgsl-pipeline-target-ef9e97757caa)
+- Architecture target: [.upstream/target/high-performance-wgsl-pipeline-target.md](.upstream/target/high-performance-wgsl-pipeline-target.md)
+- Linear/agent methodology: [.upstream/target/linear-agent-methodology.md](.upstream/target/linear-agent-methodology.md)
+
+| Block | Scope | Status | Weight | Progress | MVP evidence gate |
+| --- | --- | --- | ---: | ---: | --- |
+| Foundation pipeline | M0-M11: parser deps, PipelineIR, CPU scalar pilot, generated WGSL pilot, runtime effect pilot, Java 25 Vector pilot | Done | 15% | 100% | Parser/generator smoke, stable IR dumps, generated WGSL pilot evidence |
+| Geometry/Coverage convergence | M12-M20: GeometryPlan/CoveragePlan contracts, shadow harness, CPU/GPU routing | Done | 20% | 100% | Descriptor-driven geometry coverage baseline and migration evidence |
+| Conformance hardening | M21-M30: PipelineKey, parser validation, runtime matrix, CPU vector gate, evidence gates, residual scope | Done | 20% | 100% | Conformance report, release-readiness gates, residual work made explicit |
+| GPU CI stabilization | M31: required GPU smoke gate separated from full non-blocking inventory | Done | 15% | 100% | Adapter-backed smoke gate and inventory classification policy |
+| Bitmap/ImageRect remediation | M32: fix or evidence-classify `DrawBitmapRect3` and `DrawBitmapRectSkbug4734` GPU similarity deltas | Backlog | 10% | 0% | `GRA-93` through `GRA-99`; no unresolved image-rect smoke candidate |
+| Path AA inventory boundary | M33 proposed: classify edge-budget refusals and promote only stable AA coverage | Proposed | 10% | 0% | Expected unsupported paths are explicit; safe AA subset has adapter evidence |
+| Image-filter MVP lane | M34 proposed: support or gate `Crop(input != null)` image-filter cases | Proposed | 5% | 0% | Simple filter fixtures pass or are accepted unsupported with diagnostics |
+| MVP release candidate | M35 proposed: final smoke, inventory, PM demo, limitations, and release notes | Proposed | 5% | 0% | Required CI green, PM evidence linked, README status updated |
+
+```mermaid
+flowchart LR
+    A["Foundation M0-M11"] --> B["Geometry/Coverage M12-M20"]
+    B --> C["Conformance hardening M21-M30"]
+    C --> D["GPU CI stabilization M31"]
+    D --> E["Bitmap/ImageRect M32"]
+    E --> F["Path AA boundary M33"]
+    F --> G["Image-filter MVP lane M34"]
+    G --> H["MVP release candidate M35"]
+```
+
+### MVP Definition
+
+The MVP is reached when:
+
+- the required CPU and GPU smoke gates are green on CI;
+- remaining GPU inventory failures are classified as expected unsupported,
+  dependency-gated, or tracked follow-up work;
+- generated/validated WGSL is the accepted path for promoted pipeline slices;
+- CPU reference behavior and GPU similarity policy are visible in tests or
+  reports;
+- PM-facing evidence links Linear milestones, PRs, CI runs, and known
+  limitations.
+
+Non-goals for the MVP:
+
+- porting Ganesh or Graphite;
+- rebuilding Skia's SkSL compiler, IR, or VM;
+- hiding GPU inventory failures by lowering floors in bulk;
+- adding short-lived font or codec substitutes for dependency-gated gaps.
+
+## Development Commands
+
+Use the Gradle wrapper from the repository root:
+
+```bash
+./gradlew build
+./gradlew check
+./gradlew clean
+```
+
+For project workflow commands, prefer the repository `rtk` wrapper when it is
+available, for example:
+
+```bash
+rtk git diff --check
+rtk ./gradlew --no-daemon check
+```
