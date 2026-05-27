@@ -8,7 +8,7 @@ GPU backend.
 
 ## MVP Roadmap
 
-Last updated: 2026-05-27
+Last updated: 2026-05-28
 
 MVP readiness: 100%.
 
@@ -20,6 +20,7 @@ used as active backlog.
 Active execution source:
 
 - Linear project: [Kanvas - WGSL Pipeline Target](https://linear.app/forge-yg/project/kanvas-wgsl-pipeline-target-ef9e97757caa)
+- Sprint closeout: [reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md](reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md)
 - Architecture target: [.upstream/target/high-performance-wgsl-pipeline-target.md](.upstream/target/high-performance-wgsl-pipeline-target.md)
 - Linear/agent methodology: [.upstream/target/linear-agent-methodology.md](.upstream/target/linear-agent-methodology.md)
 
@@ -33,6 +34,10 @@ Active execution source:
 | Path AA inventory boundary | M33: classify edge-budget refusals and promote only stable AA coverage | Done | 10% | 100% | `GRA-105` through `GRA-108`; `coverage.edge-count-exceeded` remains inventory-only and `AnalyticAntialiasConvexWebGpuTest` is required smoke |
 | Image-filter MVP lane | M34: gate `Crop(input = nonNull)` image-filter cases as an accepted MVP limitation | Done | 5% | 100% | `GRA-109` through `GRA-113`; `image-filter.crop-input-nonnull-prepass-required` remains inventory-only and `SimpleOffsetImageFilter*` fixtures are blocked from required smoke |
 | MVP release candidate | M35: final smoke, inventory, PM demo, limitations, and release notes | Done | 5% | 100% | Required CI, conformance, smoke, full inventory, PM evidence package, and closeout evidence are complete |
+
+Sprint verification on 2026-05-28 confirmed that Linear epics `GRA-101`,
+`GRA-102`, and `GRA-103`, their M33-M35 child tasks, and the M33-M35
+milestones are all `Done` / 100%.
 
 ```mermaid
 flowchart LR

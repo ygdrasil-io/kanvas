@@ -28,6 +28,8 @@ Kanvas has an MVP release-candidate WebGPU path whose required CI, conformance, 
 | GRA-114 | https://github.com/ygdrasil-io/kanvas/pull/1186 | `7d92391490e59746257297de962f7a6474922307` | Collected final CI, conformance, and smoke evidence. |
 | GRA-115 | https://github.com/ygdrasil-io/kanvas/pull/1187 | `eb8fa2b2af1f4bde38e90ab91e1464d44201dd3d` | Fixed SaveLayer unexpected rows and finalized full GPU inventory audit. |
 | GRA-116 | https://github.com/ygdrasil-io/kanvas/pull/1188 | `8b952109b7ee006246103cdabeb03ea638cce244` | Synced README/spec readiness state after technical gates turned green. |
+| GRA-117 | https://github.com/ygdrasil-io/kanvas/pull/1189 | `41a1d55032797c2e74a6ba1b6f517c16c99ffdee` | Added the PM evidence package. |
+| GRA-118 | https://github.com/ygdrasil-io/kanvas/pull/1190 | `743f20743763790e89141dc91187f639762107e3` | Closed the MVP release candidate and project state. |
 
 ## Required CI Evidence
 
@@ -77,20 +79,20 @@ The smoke lane excludes known inventory-only limitation rows until implementatio
 
 Use this as the PM closeout walkthrough:
 
-1. Open `README.md` and show MVP readiness at approximately 99% with M32, M33, M34 done and M35 in progress at 95%.
+1. Open `README.md` and show MVP readiness at 100% with M32, M33, M34, and M35 done.
 2. Open `reports/wgsl-pipeline/2026-05-27-m35-ci-conformance-evidence.md` and point to required CI, conformance, and adapter-backed smoke evidence.
 3. Open `reports/wgsl-pipeline/2026-05-27-m35-full-gpu-inventory.md` and point to the final inventory summary: `similarity-regression=0`, `unexpected-exception=0`, `adapter-missing=0`.
-4. Open `.upstream/specs/release-readiness-mvp.md` and show that PM evidence is now ready while Linear/project closeout remains the only pending administrative gate.
+4. Open `.upstream/specs/release-readiness-mvp.md` and show that the release-readiness spec is accepted and linked to final PM/Linear closeout evidence.
 5. State the accepted limitations without implying full Skia coverage: edge-budget breadth and `Crop(input = nonNull)` pre-pass remain post-MVP work.
 
 ## Closeout Handoff
 
-GRA-118 should perform the final administrative closeout:
+GRA-118 performed the final administrative closeout:
 
-- update README M35 to Done / 100%;
-- move `.upstream/specs/release-readiness-mvp.md` to Accepted;
-- add the final closeout note under `reports/wgsl-pipeline/`;
-- mark M35 and parent GRA-103/project state done in Linear when the connector is available.
+- README M35 is Done / 100%;
+- `.upstream/specs/release-readiness-mvp.md` is Accepted;
+- final closeout note exists under `reports/wgsl-pipeline/`;
+- M35 and parent GRA-103 are Done in Linear.
 
 ## Validation
 
