@@ -14,6 +14,7 @@ not be treated as active backlog.
 | `wgsl-pipeline/` | Pre-Geometry paint-pipeline work: PipelineIR, WGSL parser/reflection/module builder, CPU scalar/vector, generated WGSL, BlendPlan, runtime effects, validation, and migration. |
 | `geometry-coverage/` | Geometry and coverage work: GeometryPlan, CoveragePlan, lowering rules, CPU coverage oracle, WebGPU coverage strategies, diagnostics, validation, and migration. |
 | `release-readiness-mvp.md` | MVP release candidate gate tying M32 image-rect, M33 Path AA, M34 image filters, required CI, inventory classification, and PM evidence together. |
+| `../target/post-mvp-pipeline-backlog.md` | Post-MVP backlog proposal for M36-M40 after the WGSL/WebGPU MVP closeout. |
 
 Use the pack README as the entry point before planning or reviewing work in
 that area.
@@ -26,6 +27,7 @@ that area.
 | M33 | `geometry-coverage/08-path-aa-mvp-boundary.md` | Accepted |
 | M34 | `wgsl-pipeline/09-image-filter-mvp-lane.md` | Accepted |
 | M35 | `release-readiness-mvp.md` | Accepted |
+| M36 | `wgsl-pipeline/10-scene-evidence-dashboard.md` | Draft |
 
 ## Sprint Evidence
 
