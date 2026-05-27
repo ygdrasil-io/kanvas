@@ -10,7 +10,7 @@ GPU backend.
 
 Last updated: 2026-05-27
 
-MVP readiness: approximately 94%.
+MVP readiness: approximately 95%.
 
 The percentage is a readiness score, not an effort estimate. A block only moves
 when its milestone Definition of Done has CI, Linear, report, or artifact
@@ -31,7 +31,7 @@ Active execution source:
 | GPU CI stabilization | M31: required GPU smoke gate separated from full non-blocking inventory | Done | 15% | 100% | Adapter-backed smoke gate and inventory classification policy |
 | Bitmap/ImageRect remediation | M32: fix or evidence-classify `DrawBitmapRect3` and `DrawBitmapRectSkbug4734` GPU similarity deltas | Done | 10% | 100% | `GRA-93` through `GRA-100`; image-rect similarity regressions are zero and `DrawBitmapRectSkbug4734` is required smoke |
 | Path AA inventory boundary | M33: classify edge-budget refusals and promote only stable AA coverage | Done | 10% | 100% | `GRA-105` through `GRA-108`; `coverage.edge-count-exceeded` remains inventory-only and `AnalyticAntialiasConvexWebGpuTest` is required smoke |
-| Image-filter MVP lane | M34: gate `Crop(input = nonNull)` image-filter cases as an accepted MVP limitation | In Progress | 5% | 80% | `GRA-109` through `GRA-112`; `image-filter.crop-input-nonnull-prepass-required` remains inventory-only and `SimpleOffsetImageFilter*` fixtures are blocked from required smoke |
+| Image-filter MVP lane | M34: gate `Crop(input = nonNull)` image-filter cases as an accepted MVP limitation | Done | 5% | 100% | `GRA-109` through `GRA-113`; `image-filter.crop-input-nonnull-prepass-required` remains inventory-only and `SimpleOffsetImageFilter*` fixtures are blocked from required smoke |
 | MVP release candidate | M35 proposed: final smoke, inventory, PM demo, limitations, and release notes | Proposed | 5% | 0% | Required CI green, PM evidence linked, README status updated |
 
 ```mermaid
