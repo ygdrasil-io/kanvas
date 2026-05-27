@@ -25,6 +25,25 @@ plugins {
     id("org.jetbrains.dokka") version "2.2.0"
 }
 
+data class GpuSmokePatternSpec(
+    val pattern: String,
+    val evidencePath: String,
+    val unresolvedSimilarityRegression: String? = null,
+)
+
+data class ImageRectSimilarityGuard(
+    val testClass: String,
+    val issue: String,
+    val resolutionEvidencePath: String,
+)
+
+fun testPatternMayIncludeClass(pattern: String, testClass: String): Boolean =
+    pattern == testClass ||
+        pattern == "$testClass.*" ||
+        (pattern.endsWith("*") && testClass.startsWith(pattern.removeSuffix("*"))) ||
+        pattern.contains(testClass) ||
+        testClass.contains(pattern)
+
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":kanvas-skia"))
@@ -156,19 +175,98 @@ tasks.named<Test>("test") {
     finalizedBy(tasks.named("gpuInventoryFailureReport"))
 }
 
-val gpuSmokePatterns = listOf(
+val gpuSmokePatternSpecs = listOf(
     // M31 promotion policy baseline:
     // `reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md`
     // Keep smoke minimal, adapter-backed, and free of expected unsupported
     // diagnostics. Broader coverage stays in :gpu-raster:test inventory.
-    "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
-    "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
+    GpuSmokePatternSpec(
+        pattern = "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
+        evidencePath = "../reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md",
+    ),
+    GpuSmokePatternSpec(
+        pattern = "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
+        evidencePath = "../reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md",
+    ),
 )
+
+val gpuSmokePatterns = gpuSmokePatternSpecs.map { it.pattern }
+
+val imageRectSimilarityGuards = listOf(
+    ImageRectSimilarityGuard(
+        testClass = "org.skia.gpu.webgpu.DrawBitmapRect3WebGpuTest",
+        issue = "GRA-95",
+        resolutionEvidencePath = "../reports/wgsl-pipeline/2026-05-27-m32-drawbitmaprect3-strict-nearest-fix.md",
+    ),
+    ImageRectSimilarityGuard(
+        testClass = "org.skia.gpu.webgpu.crossbackend.DrawBitmapRect3CrossBackendTest",
+        issue = "GRA-95",
+        resolutionEvidencePath = "../reports/wgsl-pipeline/2026-05-27-m32-drawbitmaprect3-strict-nearest-fix.md",
+    ),
+    ImageRectSimilarityGuard(
+        testClass = "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+        issue = "GRA-96",
+        resolutionEvidencePath = "../reports/wgsl-pipeline/2026-05-27-m32-drawbitmaprect-skbug4734-resolution.md",
+    ),
+    ImageRectSimilarityGuard(
+        testClass = "org.skia.gpu.webgpu.crossbackend.DrawBitmapRectSkbug4734CrossBackendTest",
+        issue = "GRA-96",
+        resolutionEvidencePath = "../reports/wgsl-pipeline/2026-05-27-m32-drawbitmaprect-skbug4734-resolution.md",
+    ),
+)
+
+tasks.register("validateGpuSmokePromotionPolicy") {
+    group = "verification"
+    description = "Fails when required GPU smoke includes unresolved inventory-only similarity regressions."
+
+    inputs.property("gpuSmokePatterns", gpuSmokePatterns)
+    inputs.files(gpuSmokePatternSpecs.map { file(it.evidencePath) })
+    inputs.files(imageRectSimilarityGuards.map { file(it.resolutionEvidencePath) })
+
+    doLast {
+        val explicitlyBlocked = gpuSmokePatternSpecs.filter { it.unresolvedSimilarityRegression != null }
+        if (explicitlyBlocked.isNotEmpty()) {
+            val details = explicitlyBlocked.joinToString(separator = "\n") { spec ->
+                "- ${spec.pattern}: ${spec.unresolvedSimilarityRegression}"
+            }
+            throw GradleException(
+                "gpuSmokeTest promotion blocked: unresolved similarity-regression entries are not smoke-eligible.\n" +
+                    details + "\n" +
+                    "Fix/rebaseline with artifact evidence first, or leave the fixture in gpuInventoryTest.",
+            )
+        }
+
+        val missingEvidence = gpuSmokePatternSpecs.filter { !file(it.evidencePath).isFile }
+        if (missingEvidence.isNotEmpty()) {
+            val details = missingEvidence.joinToString(separator = "\n") { spec ->
+                "- ${spec.pattern}: missing ${spec.evidencePath}"
+            }
+            throw GradleException("gpuSmokeTest promotion evidence is missing.\n$details")
+        }
+
+        val unresolvedImageRectPromotions = imageRectSimilarityGuards.filter { guard ->
+            gpuSmokePatterns.any { pattern -> testPatternMayIncludeClass(pattern, guard.testClass) } &&
+                !file(guard.resolutionEvidencePath).isFile
+        }
+        if (unresolvedImageRectPromotions.isNotEmpty()) {
+            val details = unresolvedImageRectPromotions.joinToString(separator = "\n") { guard ->
+                "- ${guard.testClass}: ${guard.issue} resolution evidence missing at ${guard.resolutionEvidencePath}"
+            }
+            throw GradleException(
+                "gpuSmokeTest promotion blocked: known bitmap/image-rect similarity regressions " +
+                    "are not smoke-eligible until resolution evidence exists.\n" +
+                    details,
+            )
+        }
+    }
+}
 
 tasks.register<Test>("gpuSmokeTest") {
     group = "verification"
     description =
         "Runs required adapter-backed GPU smoke fixtures (selector route + telemetry) and fails when adapter tests skip."
+
+    dependsOn(tasks.named("validateGpuSmokePromotionPolicy"))
 
     val inventoryTask = tasks.named<Test>("test").get()
     testClassesDirs = inventoryTask.testClassesDirs
