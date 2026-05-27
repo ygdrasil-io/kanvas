@@ -20,6 +20,7 @@ enum class StandardGeometryReason(override val code: String) : GeometryReason {
 enum class StandardCoverageReason(override val code: String) : CoverageReason {
     SpanRunsUnsupported("coverage.span-runs-unsupported"),
     AlphaMaskUnsupported("coverage.alpha-mask-unsupported"),
+    GlyphMaskDependencyUnavailable("coverage.glyph-mask-dependency-unavailable"),
     StencilCoverUnavailable("coverage.stencil-cover-unavailable"),
     EdgeCountExceeded("coverage.edge-count-exceeded"),
     AtlasPolicyUnavailable("coverage.atlas-policy-unavailable"),
@@ -86,6 +87,26 @@ data class StrokePlan(
 data class PathVerbSlice(val verbCount: Int)
 
 data class GlyphRunRef(val id: String)
+
+data class GlyphMaskOwnership(
+    val discoveryOwner: String,
+    val rasterizationOwner: String,
+    val atlasLifetimeOwner: String,
+    val invalidationOwner: String,
+) {
+    fun dump(): String =
+        "discovery=$discoveryOwner,rasterization=$rasterizationOwner," +
+            "atlasLifetime=$atlasLifetimeOwner,invalidation=$invalidationOwner"
+
+    companion object {
+        val TextGlyphInfrastructure: GlyphMaskOwnership = GlyphMaskOwnership(
+            discoveryOwner = "text-glyph-infrastructure",
+            rasterizationOwner = "text-glyph-infrastructure",
+            atlasLifetimeOwner = "text-glyph-infrastructure",
+            invalidationOwner = "text-glyph-infrastructure",
+        )
+    }
+}
 
 data class SamplingGeometry(val filter: String)
 
@@ -161,6 +182,57 @@ data class ImageRectDescriptor(
             "${primitive.destination.top},${primitive.destination.right},${primitive.destination.bottom}," +
             "axisAligned=${transform.isAxisAligned},perspective=${transform.hasPerspective},payload=${payloadRef.id}," +
             "payloadBoundary=$payloadBoundary,coverage=${dumpImageRectCoverage(coveragePlan)})"
+}
+
+data class GlyphMaskDescriptor(
+    val primitive: GeometryPrimitive.GlyphMask,
+    val owner: GlyphMaskOwnership,
+    val maskRef: AlphaMaskRef?,
+    val maskBounds: IntRect?,
+    val maskFormat: MaskFormat,
+    val coveragePlan: CoveragePlan,
+    val routeIdentifier: String,
+    val dependencyDiagnostic: CoverageReason?,
+) {
+    fun dump(): String =
+        "glyphMaskDescriptor(route=$routeIdentifier,run=${primitive.run.id}," +
+            "owner=${owner.dump()},maskRef=${maskRef?.id ?: "none"}," +
+            "bounds=${maskBounds?.let { "${it.left},${it.top},${it.right},${it.bottom}" } ?: "none"}," +
+            "format=$maskFormat,diagnostic=${dependencyDiagnostic?.code ?: "none"}," +
+            "coverage=${dumpGlyphMaskCoverage(coveragePlan)})"
+}
+
+object GlyphMaskLowering {
+    fun lower(
+        run: GlyphRunRef,
+        maskRef: AlphaMaskRef?,
+        maskBounds: IntRect?,
+        maskFormat: MaskFormat = MaskFormat.A8,
+        owner: GlyphMaskOwnership = GlyphMaskOwnership.TextGlyphInfrastructure,
+    ): GlyphMaskDescriptor {
+        val primitive = GeometryPrimitive.GlyphMask(run)
+        val coveragePlan = if (maskRef != null && maskBounds != null) {
+            CoveragePlan.AlphaMask(ref = maskRef, bounds = maskBounds, format = maskFormat)
+        } else {
+            CoveragePlan.Unsupported(StandardCoverageReason.GlyphMaskDependencyUnavailable)
+        }
+        val diagnostic = (coveragePlan as? CoveragePlan.Unsupported)?.reason
+        val route = when (coveragePlan) {
+            is CoveragePlan.AlphaMask -> "geometry.glyph-mask.alpha-mask-handoff"
+            is CoveragePlan.Unsupported -> "geometry.glyph-mask.dependency-gated"
+            else -> "geometry.glyph-mask.unsupported"
+        }
+        return GlyphMaskDescriptor(
+            primitive = primitive,
+            owner = owner,
+            maskRef = maskRef,
+            maskBounds = maskBounds,
+            maskFormat = maskFormat,
+            coveragePlan = coveragePlan,
+            routeIdentifier = route,
+            dependencyDiagnostic = diagnostic,
+        )
+    }
 }
 
 object ImageRectLowering {
@@ -566,6 +638,17 @@ data class CoverageDescriptorDump(
 }
 
 private fun dumpImageRectCoverage(plan: CoveragePlan): String = when (plan) {
+    CoveragePlan.Full -> "Full"
+    is CoveragePlan.AnalyticRect -> "AnalyticRect(${plan.bounds.left},${plan.bounds.top},${plan.bounds.right},${plan.bounds.bottom},aa=${plan.aa})"
+    is CoveragePlan.AnalyticRRect -> "AnalyticRRect(${plan.shape.bounds.left},${plan.shape.bounds.top},${plan.shape.bounds.right},${plan.shape.bounds.bottom},aa=${plan.aa})"
+    is CoveragePlan.SpanRuns -> "SpanRuns(${plan.bounds.left},${plan.bounds.top},${plan.bounds.right},${plan.bounds.bottom})"
+    is CoveragePlan.AlphaMask -> "AlphaMask(ref=${plan.ref.id},bounds=${plan.bounds.left},${plan.bounds.top},${plan.bounds.right},${plan.bounds.bottom},format=${plan.format})"
+    is CoveragePlan.PathCoverage -> "PathCoverage(fillType=${plan.fillType},aa=${plan.aa},inverse=${plan.inverse})"
+    is CoveragePlan.CoverageAtlas -> "CoverageAtlas(ref=${plan.ref.id},bounds=${plan.bounds.left},${plan.bounds.top},${plan.bounds.right},${plan.bounds.bottom},policy=${plan.cachePolicy::class.simpleName})"
+    is CoveragePlan.Unsupported -> "Unsupported(reason=${plan.reason.code})"
+}
+
+private fun dumpGlyphMaskCoverage(plan: CoveragePlan): String = when (plan) {
     CoveragePlan.Full -> "Full"
     is CoveragePlan.AnalyticRect -> "AnalyticRect(${plan.bounds.left},${plan.bounds.top},${plan.bounds.right},${plan.bounds.bottom},aa=${plan.aa})"
     is CoveragePlan.AnalyticRRect -> "AnalyticRRect(${plan.shape.bounds.left},${plan.shape.bounds.top},${plan.shape.bounds.right},${plan.shape.bounds.bottom},aa=${plan.aa})"

@@ -19,6 +19,10 @@ class GeometryCoverageContractsTest {
 
         assertEquals("coverage.span-runs-unsupported", StandardCoverageReason.SpanRunsUnsupported.code)
         assertEquals("coverage.alpha-mask-unsupported", StandardCoverageReason.AlphaMaskUnsupported.code)
+        assertEquals(
+            "coverage.glyph-mask-dependency-unavailable",
+            StandardCoverageReason.GlyphMaskDependencyUnavailable.code,
+        )
         assertEquals("coverage.stencil-cover-unavailable", StandardCoverageReason.StencilCoverUnavailable.code)
         assertEquals("coverage.edge-count-exceeded", StandardCoverageReason.EdgeCountExceeded.code)
         assertEquals("coverage.atlas-policy-unavailable", StandardCoverageReason.AtlasPolicyUnavailable.code)
@@ -121,6 +125,69 @@ class GeometryCoverageContractsTest {
 
         val model = assertIs<CoverageLoweringResult.CoverageModelResult>(result)
         assertEquals(CoverageModel.AlphaMask(bounds, MaskFormat.A8), model.coverage)
+    }
+
+    @Test
+    fun glyphMaskHandoffNamesTextOwnerAndLowersToAlphaMask() {
+        val descriptor = GlyphMaskLowering.lower(
+            run = GlyphRunRef("glyph-run.title.3"),
+            maskRef = AlphaMaskRef("glyph-atlas.page0.run-title-3"),
+            maskBounds = IntRect(4, 5, 20, 21),
+        )
+
+        val coverage = assertIs<CoveragePlan.AlphaMask>(descriptor.coveragePlan)
+        assertEquals(AlphaMaskRef("glyph-atlas.page0.run-title-3"), coverage.ref)
+        assertEquals(IntRect(4, 5, 20, 21), coverage.bounds)
+        assertEquals(MaskFormat.A8, coverage.format)
+        assertEquals("geometry.glyph-mask.alpha-mask-handoff", descriptor.routeIdentifier)
+        assertEquals(null, descriptor.dependencyDiagnostic)
+        assertEquals(
+            "discovery=text-glyph-infrastructure,rasterization=text-glyph-infrastructure," +
+                "atlasLifetime=text-glyph-infrastructure,invalidation=text-glyph-infrastructure",
+            descriptor.owner.dump(),
+        )
+        assertEquals(
+            "glyphMaskDescriptor(route=geometry.glyph-mask.alpha-mask-handoff,run=glyph-run.title.3," +
+                "owner=discovery=text-glyph-infrastructure,rasterization=text-glyph-infrastructure," +
+                "atlasLifetime=text-glyph-infrastructure,invalidation=text-glyph-infrastructure," +
+                "maskRef=glyph-atlas.page0.run-title-3,bounds=4,5,20,21,format=A8,diagnostic=none," +
+                "coverage=AlphaMask(ref=glyph-atlas.page0.run-title-3,bounds=4,5,20,21,format=A8))",
+            descriptor.dump(),
+        )
+
+        val model = assertIs<CoverageLoweringResult.CoverageModelResult>(
+            CoveragePlanAdapter.lower(descriptor.coveragePlan),
+        )
+        assertEquals(CoverageModel.AlphaMask(IntRect(4, 5, 20, 21), MaskFormat.A8), model.coverage)
+    }
+
+    @Test
+    fun glyphMaskWithoutTextOwnedMaskEmitsStableDependencyDiagnostic() {
+        val descriptor = GlyphMaskLowering.lower(
+            run = GlyphRunRef("glyph-run.missing-atlas"),
+            maskRef = null,
+            maskBounds = null,
+        )
+
+        val unsupported = assertIs<CoveragePlan.Unsupported>(descriptor.coveragePlan)
+        assertEquals(StandardCoverageReason.GlyphMaskDependencyUnavailable, unsupported.reason)
+        assertEquals("geometry.glyph-mask.dependency-gated", descriptor.routeIdentifier)
+        assertEquals(StandardCoverageReason.GlyphMaskDependencyUnavailable, descriptor.dependencyDiagnostic)
+        assertEquals(
+            "glyphMaskDescriptor(route=geometry.glyph-mask.dependency-gated,run=glyph-run.missing-atlas," +
+                "owner=discovery=text-glyph-infrastructure,rasterization=text-glyph-infrastructure," +
+                "atlasLifetime=text-glyph-infrastructure,invalidation=text-glyph-infrastructure," +
+                "maskRef=none,bounds=none,format=A8,diagnostic=coverage.glyph-mask-dependency-unavailable," +
+                "coverage=Unsupported(reason=coverage.glyph-mask-dependency-unavailable))",
+            descriptor.dump(),
+        )
+
+        val strategy = assertIs<CoverageLoweringResult.StrategyResult>(
+            CoveragePlanAdapter.lower(descriptor.coveragePlan),
+        )
+        val fallback = assertIs<CoverageBackendStrategy.UnsupportedFallback>(strategy.strategy)
+        assertEquals(StandardCoverageReason.GlyphMaskDependencyUnavailable, fallback.reason)
+        assertEquals(FallbackPlan.RefuseDiagnostic("coverage.glyph-mask-dependency-unavailable"), fallback.fallback)
     }
 
     @Test
