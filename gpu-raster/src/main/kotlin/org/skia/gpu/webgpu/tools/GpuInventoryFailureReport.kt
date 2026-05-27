@@ -41,15 +41,16 @@ public data class GpuInventoryFailureSummary(
 }
 
 public object GpuInventoryFailureReport {
-    private val expectedUnsupportedReasonAllowlist: Set<String> = setOf(
-        "coverage.edge-count-exceeded",
-        "coverage.arbitrary-aa-clip-unsupported",
-        "coverage.alpha-mask-unsupported",
-        "coverage.span-runs-unsupported",
-        "coverage.atlas-policy-unavailable",
-        "coverage.stencil-cover-unavailable",
-        "coverage.glyph-mask-dependency-unavailable",
+    private val expectedUnsupportedReasonCatalog: LinkedHashMap<String, String?> = linkedMapOf(
+        "coverage.edge-count-exceeded" to "GRA-70 (WebGPU coverage strategy promotion/fallback scope)",
+        "coverage.arbitrary-aa-clip-unsupported" to null,
+        "coverage.alpha-mask-unsupported" to null,
+        "coverage.span-runs-unsupported" to null,
+        "coverage.atlas-policy-unavailable" to null,
+        "coverage.stencil-cover-unavailable" to null,
+        "coverage.glyph-mask-dependency-unavailable" to null,
     )
+    private val expectedUnsupportedReasonAllowlist: Set<String> = expectedUnsupportedReasonCatalog.keys
 
     private val unsupportedImageFilterMarkers: List<String> = listOf(
         "SkImageFilters.Crop(input = nonNull)",
@@ -86,6 +87,9 @@ public object GpuInventoryFailureReport {
         val categoryRows = GpuInventoryFailureCategory.entries.joinToString("\n") { category ->
             "| `${category.wireName}` | ${summary.byCategory.getValue(category)} |"
         }
+        val expectedUnsupportedReasonRows = expectedUnsupportedReasonCatalog.entries.joinToString("\n") { (reason, followUp) ->
+            "| `$reason` | ${followUp?.let { "`$it`" } ?: "-"} |"
+        }
         val recordRows = if (summary.records.isEmpty()) {
             "| _none_ | _none_ | _none_ | _none_ | _none_ | _none_ |"
         } else {
@@ -106,6 +110,14 @@ public object GpuInventoryFailureReport {
             appendLine("| Category | Count |")
             appendLine("|---|---:|")
             appendLine(categoryRows)
+            appendLine()
+            appendLine("## Expected Unsupported Reason Catalog")
+            appendLine()
+            appendLine("| Reason code | Follow-up dependency |")
+            appendLine("|---|---|")
+            appendLine(expectedUnsupportedReasonRows)
+            appendLine()
+            appendLine("`coverage.edge-count-exceeded` is tracked as a known unsupported WebGPU breadth gap and is not smoke-eligible until follow-up implementation evidence exists.")
             appendLine()
             appendLine("## Classified Records")
             appendLine()
