@@ -31,10 +31,12 @@ import org.skia.pipeline.CoverageLoweringResult
 import org.skia.pipeline.CoverageModel
 import org.skia.pipeline.CoveragePlan
 import org.skia.pipeline.CoveragePlanAdapter
+import org.skia.pipeline.CpuAnalyticRectCoverageExecutor
 import org.skia.pipeline.FloatRect
 import org.skia.pipeline.GeometryBounds
 import org.skia.pipeline.GeometryPlan
 import org.skia.pipeline.GeometryPrimitive
+import org.skia.pipeline.IntRect
 import org.skia.pipeline.MatrixSpec
 import org.skia.pipeline.BackendKind
 import org.skia.pipeline.ProductionRouteDiagnostics
@@ -306,18 +308,9 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             return false
         }
 
-        val loweredRect = SkRect.MakeLTRB(
-            analyticRect.bounds.left,
-            analyticRect.bounds.top,
-            analyticRect.bounds.right,
-            analyticRect.bounds.bottom,
-        )
-        val touched = countAnalyticRectTouchedPixels(loweredRect, clip, analyticRect.aa)
-        val executionEvidence = if (analyticRect.aa) {
-            "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRectAA;touchedPixels=$touched"
-        } else {
-            "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRect;touchedPixels=$touched"
-        }
+        val execution = executeDescriptorAnalyticRect(analyticRect, clip, paint)
+        val executionEvidence =
+            "lowering-consumed:CoverageModel.AnalyticRect;kernel=${execution.kernelId};touchedPixels=${execution.touchedPixels}"
         lastDescriptorCoverageDiagnostics = SkBitmapDescriptorCoverageDiagnostics(
             mode = "Default",
             backend = BackendKind.CPU,
@@ -328,14 +321,54 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             loweringResult = loweringDiagnostic,
             executionEvidence = executionEvidence,
             fallbackReason = null,
-            touchedPixels = touched,
+            touchedPixels = execution.touchedPixels,
         )
-        if (analyticRect.aa) {
-            fillRectAA(loweredRect, clip, paint.color4f, paint.blendMode, paint.blender)
-        } else {
-            fillRect(loweredRect, clip, paint.color, paint.blendMode, paint.blender)
-        }
         return true
+    }
+
+    private fun executeDescriptorAnalyticRect(
+        coverage: CoverageModel.AnalyticRect,
+        clip: SkIRect,
+        paint: SkPaint,
+    ) = if (coverage.aa) {
+        executeDescriptorAnalyticRectAA(coverage, clip, paint)
+    } else {
+        CpuAnalyticRectCoverageExecutor.execute(coverage, clip.toPipelineIntRect()) { x, y, _ ->
+            dispatchBlend(x, y, paint.color, paint.blendMode, paint.blender)
+        }
+    }
+
+    private fun executeDescriptorAnalyticRectAA(
+        coverage: CoverageModel.AnalyticRect,
+        clip: SkIRect,
+        paint: SkPaint,
+    ): org.skia.pipeline.CpuAnalyticRectCoverageMetrics {
+        val baseA = (paint.color4f.fA * 255f + 0.5f).toInt().coerceIn(0, 255)
+        val mustBlendZero = modeAffectsZeroAlphaSrc(paint.blendMode)
+        val customBlender = paint.blender != null && paint.blender !is org.skia.foundation.SkBlendModeBlender
+        if (bitmap.colorType == org.skia.foundation.SkColorType.kRGBA_F16Norm && !customBlender) {
+            val src = FloatArray(4)
+            colorToF16Premul(paint.color4f, src)
+            val sr = src[0]
+            val sg = src[1]
+            val sb = src[2]
+            val sa = src[3]
+            return CpuAnalyticRectCoverageExecutor.execute(coverage, clip.toPipelineIntRect()) { x, y, cov ->
+                val saCov = sa * cov
+                if (saCov > 0f || mustBlendZero) {
+                    blendF16PremulMode(x, y, sr * cov, sg * cov, sb * cov, saCov, paint.blendMode)
+                }
+            }
+        }
+
+        val color = paint.color4f.toSkColor()
+        val rgb = color and 0x00FFFFFF
+        return CpuAnalyticRectCoverageExecutor.execute(coverage, clip.toPipelineIntRect()) { x, y, cov ->
+            val effA = scaleAlpha(baseA, cov)
+            if (effA != 0 || mustBlendZero) {
+                dispatchBlend(x, y, (effA shl 24) or rgb, paint.blendMode, paint.blender)
+            }
+        }
     }
 
     private fun dumpAnalyticRectCoverage(coverage: CoveragePlan.AnalyticRect): String =
@@ -371,29 +404,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
     private fun descriptorRectEnabled(): Boolean =
         System.getProperty(DESCRIPTOR_RECT_FLAG, "true").toBoolean()
 
-    private fun countAnalyticRectTouchedPixels(rect: SkRect, clip: SkIRect, antiAlias: Boolean): Int {
-        if (rect.right <= rect.left || rect.bottom <= rect.top) return 0
-        if (!antiAlias) {
-            val l = pixelEdge(rect.left).coerceAtLeast(clip.left)
-            val t = pixelEdge(rect.top).coerceAtLeast(clip.top)
-            val r = pixelEdge(rect.right).coerceAtMost(clip.right)
-            val b = pixelEdge(rect.bottom).coerceAtMost(clip.bottom)
-            return maxOf(0, r - l) * maxOf(0, b - t)
-        }
-        val ix0 = floor(rect.left).coerceAtLeast(clip.left)
-        val iy0 = floor(rect.top).coerceAtLeast(clip.top)
-        val ix1 = ceil(rect.right).coerceAtMost(clip.right)
-        val iy1 = ceil(rect.bottom).coerceAtMost(clip.bottom)
-        var touched = 0
-        for (y in iy0 until iy1) {
-            val cy = covAxis(rect.top, rect.bottom, y)
-            if (cy <= 0f) continue
-            for (x in ix0 until ix1) {
-                if (covAxis(rect.left, rect.right, x) > 0f) touched++
-            }
-        }
-        return touched
-    }
+    private fun SkIRect.toPipelineIntRect(): IntRect = IntRect(left, top, right, bottom)
 
     /**
      * `true` when the blend mode produces a non-`dst` output for a fully

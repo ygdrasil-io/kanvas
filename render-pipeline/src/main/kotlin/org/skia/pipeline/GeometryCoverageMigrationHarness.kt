@@ -488,23 +488,19 @@ object GeometryCoverageMigrationHarness {
     ): DescriptorPixelExecution {
         val pixels = IntArray(width * height)
         val packed = pack(color)
-        var touchedPixels = 0
-        for (y in 0 until height) {
-            val cy = y + 0.5f
-            if (cy < coverage.bounds.top || cy >= coverage.bounds.bottom) continue
-            for (x in 0 until width) {
-                val cx = x + 0.5f
-                if (cx < coverage.bounds.left || cx >= coverage.bounds.right) continue
-                pixels[y * width + x] = packed
-                touchedPixels++
+        val execution = CpuAnalyticRectCoverageExecutor.execute(coverage, IntRect(0, 0, width, height)) { x, y, cov ->
+            pixels[y * width + x] = if (coverage.aa) {
+                pack(color.copy(a = color.a * cov))
+            } else {
+                packed
             }
         }
         return DescriptorPixelExecution(
             pixels = PixelBuffer(width, height, pixels),
             metrics = CpuDescriptorExecutionMetrics(
-                touchedPixels = touchedPixels,
-                scalarVectorStatus = if (coverage.aa) "scalar-analytic-rect-aa" else "scalar-analytic-rect",
-                kernelId = "cpu.scalar.analytic_rect_src_over_clear",
+                touchedPixels = execution.touchedPixels,
+                scalarVectorStatus = execution.scalarVectorStatus,
+                kernelId = execution.kernelId,
                 fallbackReason = null,
             ),
         )

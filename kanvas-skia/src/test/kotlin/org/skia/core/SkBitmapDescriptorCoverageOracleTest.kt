@@ -17,6 +17,7 @@ import org.skia.pipeline.CoverageBackendStrategy
 import org.skia.pipeline.CoverageLoweringResult
 import org.skia.pipeline.CoverageModel
 import org.skia.pipeline.CoveragePlan
+import org.skia.pipeline.CpuAnalyticRectCoverageExecutor
 import org.skia.pipeline.FallbackPlan
 import org.skia.pipeline.FloatRect
 import org.skia.pipeline.GeometryCoverageMigrationHarness
@@ -40,7 +41,7 @@ class SkBitmapDescriptorCoverageOracleTest {
             assertEquals("AnalyticRect(2.0,1.0,7.0,6.0,aa=false)", diagnostics.coveragePlan)
             assertEquals("CoverageModel.AnalyticRect(2.0,1.0,7.0,6.0,aa=false)", diagnostics.loweringResult)
             assertEquals(
-                "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRect;touchedPixels=25",
+                "lowering-consumed:CoverageModel.AnalyticRect;kernel=${CpuAnalyticRectCoverageExecutor.KERNEL_ID};touchedPixels=25",
                 diagnostics.executionEvidence,
             )
             assertEquals(null, diagnostics.fallbackReason)
@@ -106,7 +107,7 @@ class SkBitmapDescriptorCoverageOracleTest {
             assertEquals("CoverageModel.AnalyticRect(1.25,2.5,6.75,7.0,aa=true)", diagnostics.loweringResult)
             assertTrue(
                 diagnostics.executionEvidence.startsWith(
-                    "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRectAA;touchedPixels=",
+                    "lowering-consumed:CoverageModel.AnalyticRect;kernel=${CpuAnalyticRectCoverageExecutor.KERNEL_ID};touchedPixels=",
                 ),
             )
             assertEquals(diagnostics.touchedPixels.toString(), diagnostics.executionEvidence.substringAfter("touchedPixels="))
@@ -129,7 +130,7 @@ class SkBitmapDescriptorCoverageOracleTest {
                 assertEquals("AnalyticRect(1.0,1.0,7.0,7.0,aa=false)", diagnostics.coveragePlan)
                 assertEquals("CoverageModel.AnalyticRect(3.0,2.0,5.0,4.0,aa=false)", diagnostics.loweringResult)
                 assertEquals(
-                    "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRect;touchedPixels=4",
+                    "lowering-consumed:CoverageModel.AnalyticRect;kernel=${CpuAnalyticRectCoverageExecutor.KERNEL_ID};touchedPixels=4",
                     diagnostics.executionEvidence,
                 )
                 assertEquals(4, diagnostics.touchedPixels)
@@ -138,6 +139,26 @@ class SkBitmapDescriptorCoverageOracleTest {
                 assertEquals(SK_ColorBLACK, bitmap.getPixel(4, 3))
                 assertEquals(SK_ColorTRANSPARENT, bitmap.getPixel(5, 4))
             }
+        }
+
+    @Test
+    fun `production descriptor shared executor honors explicit clip bounds`() =
+        withDescriptorRectFlag(null) {
+            val bitmap = SkBitmap(8, 8)
+            val device = SkBitmapDevice(bitmap)
+            device.drawRect(SkRect.MakeLTRB(1f, 1f, 7f, 7f), SkIRect.MakeLTRB(2, 3, 5, 6), blackPaint(antiAlias = false))
+
+            val diagnostics = device.descriptorCoverageDiagnosticsForTests()
+            assertEquals("cpu.descriptor.coverage-plan.solid-rect", diagnostics.selectedRoute)
+            assertEquals(9, diagnostics.touchedPixels)
+            assertEquals(
+                "lowering-consumed:CoverageModel.AnalyticRect;kernel=${CpuAnalyticRectCoverageExecutor.KERNEL_ID};touchedPixels=9",
+                diagnostics.executionEvidence,
+            )
+            assertEquals(SK_ColorTRANSPARENT, bitmap.getPixel(1, 3))
+            assertEquals(SK_ColorBLACK, bitmap.getPixel(2, 3))
+            assertEquals(SK_ColorBLACK, bitmap.getPixel(4, 5))
+            assertEquals(SK_ColorTRANSPARENT, bitmap.getPixel(5, 5))
         }
 
     @Test
