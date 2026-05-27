@@ -10,7 +10,7 @@ GPU backend.
 
 Last updated: 2026-05-27
 
-MVP readiness: approximately 80%.
+MVP readiness: approximately 90%.
 
 The percentage is a readiness score, not an effort estimate. A block only moves
 when its milestone Definition of Done has CI, Linear, report, or artifact
@@ -30,7 +30,7 @@ Active execution source:
 | Conformance hardening | M21-M30: PipelineKey, parser validation, runtime matrix, CPU vector gate, evidence gates, residual scope | Done | 20% | 100% | Conformance report, release-readiness gates, residual work made explicit |
 | GPU CI stabilization | M31: required GPU smoke gate separated from full non-blocking inventory | Done | 15% | 100% | Adapter-backed smoke gate and inventory classification policy |
 | Bitmap/ImageRect remediation | M32: fix or evidence-classify `DrawBitmapRect3` and `DrawBitmapRectSkbug4734` GPU similarity deltas | Done | 10% | 100% | `GRA-93` through `GRA-100`; image-rect similarity regressions are zero and `DrawBitmapRectSkbug4734` is required smoke |
-| Path AA inventory boundary | M33 proposed: classify edge-budget refusals and promote only stable AA coverage | Proposed | 10% | 0% | Expected unsupported paths are explicit; safe AA subset has adapter evidence |
+| Path AA inventory boundary | M33: classify edge-budget refusals and promote only stable AA coverage | Done | 10% | 100% | `GRA-105` through `GRA-108`; `coverage.edge-count-exceeded` remains inventory-only and `AnalyticAntialiasConvexWebGpuTest` is required smoke |
 | Image-filter MVP lane | M34 proposed: support or gate `Crop(input != null)` image-filter cases | Proposed | 5% | 0% | Simple filter fixtures pass or are accepted unsupported with diagnostics |
 | MVP release candidate | M35 proposed: final smoke, inventory, PM demo, limitations, and release notes | Proposed | 5% | 0% | Required CI green, PM evidence linked, README status updated |
 
