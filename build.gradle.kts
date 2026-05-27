@@ -106,6 +106,74 @@ data class PipelineConformanceSuiteSummary(
     val skippedOnly: Boolean get() = !failed && tests > 0 && skipped == tests
 }
 
+data class RequiredPipelineConformanceSuite(
+    val className: String,
+    val resultRoot: String,
+)
+
+val requiredPipelineConformanceSuites = listOf(
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest",
+        resultRoot = "cpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.effects.runtime.SkRuntimeEffectDispatchTest",
+        resultRoot = "cpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.effects.runtime.SkRuntimeEffectMakeTest",
+        resultRoot = "cpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.BlendPlanTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.pipeline.CpuScalarPipelineExecutorTest",
+        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.pipeline.GeometryCoverageContractsTest",
+        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.pipeline.GeometryCoverageMigrationHarnessTest",
+        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.pipeline.KanvasPipelineIRTest",
+        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
+        className = "org.skia.core.SkBitmapDescriptorCoverageOracleTest",
+        resultRoot = "kanvas-skia/build/test-results/pipelineConformanceTest",
+    ),
+)
+
 fun parsePipelineConformanceSuite(xmlFile: File): PipelineConformanceSuiteSummary {
     val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(xmlFile)
     val suite = document.documentElement
@@ -167,7 +235,7 @@ fun renderPipelineConformanceReport(
     return """
         |# M24 Pipeline Conformance PM Report
         |
-        |Linear: GRA-53, GRA-56
+        |Linear: GRA-53, GRA-56, GRA-57
         |Source commit: `$commit`
         |
         |## Commands
@@ -225,7 +293,7 @@ fun renderPipelineConformanceReport(
         |
         |## Outcome
         |
-        |`pipelineConformanceReport` is deterministic from the current checkout's conformance XML results and can be regenerated locally without external services.
+        |`pipelineConformanceReport` is deterministic from the current checkout's required conformance XML results and fails if required suite evidence is missing.
     """.trimMargin().replace("TABLE_PIPE", "|")
 }
 
@@ -307,12 +375,9 @@ tasks.register("pipelineConformanceReport") {
     outputs.upToDateWhen { false }
 
     doLast {
-        val resultRoots = listOf(
-            "cpu-raster/build/test-results/pipelineConformanceTest",
-            "gpu-raster/build/test-results/pipelineConformanceTest",
-            "render-pipeline/build/test-results/pipelineConformanceTest",
-            "kanvas-skia/build/test-results/pipelineConformanceTest",
-        )
+        val resultRoots = requiredPipelineConformanceSuites
+            .map { it.resultRoot }
+            .distinct()
         val suites = resultRoots
             .flatMap { relativePath ->
                 file(relativePath)
@@ -330,6 +395,21 @@ tasks.register("pipelineConformanceReport") {
                     )
             }
             .sortedBy { it.className }
+        val suitesByName = suites.associateBy { it.className }
+        val missingSuites = requiredPipelineConformanceSuites.filterNot { expected -> expected.className in suitesByName }
+        if (missingSuites.isNotEmpty()) {
+            val missingSummary = missingSuites.joinToString("\n") { expected ->
+                "- ${expected.className}; expected XML under `${expected.resultRoot}`"
+            }
+            throw GradleException(
+                """
+                |Missing required pipeline conformance suite evidence:
+                |$missingSummary
+                |
+                |Clean and rerun `rtk ./gradlew --no-daemon pipelineConformanceReport` so the PM report is generated from current required XML results.
+                """.trimMargin()
+            )
+        }
 
         val commit = runPipelineConformanceCommand("git", "rev-parse", "HEAD")
         val vectorDecisionReportPresent = file("reports/wgsl-pipeline/2026-05-27-m22-vector-promotion-decision.md").isFile
