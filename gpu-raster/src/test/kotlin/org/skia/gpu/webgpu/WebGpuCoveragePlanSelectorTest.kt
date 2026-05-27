@@ -19,6 +19,7 @@ import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkRRect
+import org.skia.pipeline.AlphaMaskRef
 import org.skia.pipeline.AaClipRef
 import org.skia.pipeline.ClipStackBackendDisposition
 import org.skia.pipeline.ClipStackBreadthMatrix
@@ -29,6 +30,7 @@ import org.skia.pipeline.CoverageCachePolicy
 import org.skia.pipeline.CoveragePlan
 import org.skia.pipeline.FloatRect
 import org.skia.pipeline.IntRect
+import org.skia.pipeline.MaskFormat
 import org.skia.pipeline.PathFillType
 import org.skia.pipeline.Point
 import org.skia.pipeline.RRectSpec
@@ -92,6 +94,38 @@ class WebGpuCoveragePlanSelectorTest {
         assertEquals(StandardCoverageReason.SpanRunsUnsupported, selection.diagnostic?.reason)
         assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
         assertTrue(selection.diagnostic?.dump()?.contains("coverage.span-runs-unsupported") == true)
+    }
+
+    @Test
+    fun `glyph alpha mask coverage emits explicit webgpu unsupported diagnostic`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "glyph-mask",
+            plan = CoveragePlan.AlphaMask(
+                ref = AlphaMaskRef("glyph-atlas.page0.run-title-3"),
+                bounds = IntRect(4, 5, 20, 21),
+                format = MaskFormat.A8,
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
+        assertEquals("webgpu.coverage.refuse", selection.routeIdentifier)
+        assertEquals(StandardCoverageReason.AlphaMaskUnsupported, selection.diagnostic?.reason)
+        assertTrue(selection.dump().contains("drawKind=glyph-mask"))
+        assertTrue(selection.dump().contains("coverage=AlphaMask(format=A8)"))
+        assertTrue(selection.diagnostic?.dump()?.contains("coverage.alpha-mask-unsupported") == true)
+    }
+
+    @Test
+    fun `glyph mask dependency diagnostic is preserved through webgpu selector`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "glyph-mask",
+            plan = CoveragePlan.Unsupported(StandardCoverageReason.GlyphMaskDependencyUnavailable),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
+        assertEquals("webgpu.coverage.refuse", selection.routeIdentifier)
+        assertEquals(StandardCoverageReason.GlyphMaskDependencyUnavailable, selection.diagnostic?.reason)
+        assertTrue(selection.dump().contains("coverage=Unsupported(reason=coverage.glyph-mask-dependency-unavailable)"))
     }
 
     @Test
