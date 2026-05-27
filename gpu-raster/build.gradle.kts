@@ -25,9 +25,9 @@ dependencies {
     implementation(project(":kanvas-skia"))
     implementation(project(":math"))
     implementation(project(":render-pipeline"))
-    implementation("io.ygdrasil:core-jvm:0.0.9-SNAPSHOT")
-    implementation("io.ygdrasil:parser-jvm:0.0.9-SNAPSHOT")
-    implementation("io.ygdrasil:generator-jvm:0.0.9-SNAPSHOT")
+    implementation("org.graphiks:core-jvm:1.0.0-SNAPSHOT")
+    implementation("org.graphiks:parser-jvm:1.0.0-SNAPSHOT")
+    implementation("org.graphiks:generator-jvm:1.0.0-SNAPSHOT")
     // G4.1 — gradient shaders need to read SkLinearGradient state
     // (endpoints, stops, positions, tile mode). The gradient classes
     // live in :cpu-raster ; this dep is the smallest change that lets
