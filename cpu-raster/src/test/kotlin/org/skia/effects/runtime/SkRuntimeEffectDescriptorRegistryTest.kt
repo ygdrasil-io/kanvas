@@ -43,10 +43,21 @@ class SkRuntimeEffectDescriptorRegistryTest {
         SkBuiltinShaderEffectsSimple.registerAll()
 
         val entries = SkRuntimeEffectDescriptorRegistry.supportMatrixEntries()
+        val counts = SkRuntimeEffectDescriptorRegistry.supportMatrixStatusCounts()
 
         assertEquals(
             listOf("runtime.linear_gradient_rt", "runtime.simple_rt", "runtime.spiral_rt"),
             entries.map { it.stableId },
+        )
+        assertEquals(
+            SkRuntimeEffectSupportMatrixStatusCounts(
+                total = 3,
+                descriptorBacked = 1,
+                dispatchOnlyMissingDescriptor = 2,
+                cpuOnly = 2,
+                gpuBacked = 1,
+            ),
+            counts,
         )
         val linearGradient = entries.single { it.stableId == "runtime.linear_gradient_rt" }
         assertEquals("dispatch-only; missing descriptor", linearGradient.descriptorStatus)
@@ -61,6 +72,52 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertEquals("dispatch-only; missing descriptor", spiral.descriptorStatus)
         assertEquals("supported:kotlin/spiral_rt", spiral.cpuSupport)
         assertTrue(spiral.uniforms.map { it.name }.containsAll(listOf("rad_scale", "in_center", "in_colors0", "in_colors1")))
+    }
+
+    @Test
+    fun `support matrix rows always include descriptor status and missing reason`() {
+        SkBuiltinShaderEffectsSimple.registerAll()
+
+        val entries = SkRuntimeEffectDescriptorRegistry.supportMatrixEntries()
+        val markdown = SkRuntimeEffectDescriptorRegistry.exportSupportMatrixMarkdown()
+
+        entries.forEach { entry ->
+            assertTrue(entry.descriptorStatus.isNotBlank(), "descriptor status missing for ${entry.stableId}")
+            assertTrue(entry.missingReason.isNotBlank(), "missing reason missing for ${entry.stableId}")
+            if (entry.descriptorStatus == "descriptor-backed") {
+                assertEquals("none", entry.missingReason)
+            }
+            if (entry.descriptorStatus == "dispatch-only; missing descriptor") {
+                assertTrue(
+                    entry.missingReason.startsWith("Runtime effect descriptor missing for dispatch-only effect: "),
+                    "dispatch-only row missing stable descriptor diagnostic for ${entry.stableId}",
+                )
+            }
+        }
+        assertTrue(markdown.contains("| Descriptor status | Missing reason |"))
+        assertTrue(
+            markdown.contains(
+                "Status counts: total=3; descriptor-backed=1; " +
+                    "dispatch-only/missing-descriptor=2; CPU-only=2; GPU-backed=1.",
+            ),
+        )
+        markdown.lines()
+            .filter { it.startsWith("| runtime.") }
+            .forEach { row ->
+                val cells = row.trim('|').split('|').map { it.trim() }
+                assertEquals(10, cells.size)
+                assertTrue(cells[8].isNotBlank(), "markdown descriptor status missing in row: $row")
+                assertTrue(cells[9].isNotBlank(), "markdown missing reason missing in row: $row")
+                if (cells[8] == "descriptor-backed") {
+                    assertEquals("none", cells[9])
+                }
+                if (cells[8] == "dispatch-only; missing descriptor") {
+                    assertTrue(
+                        cells[9].startsWith("Runtime effect descriptor missing for dispatch-only effect: "),
+                        "markdown dispatch-only row missing stable descriptor diagnostic: $row",
+                    )
+                }
+            }
     }
 
     @Test

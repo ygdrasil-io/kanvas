@@ -114,6 +114,37 @@ That registry must expose a deterministic walker for generated reports and
 tests. A generated Markdown or JSON report can be committed for PM/readability,
 but it is derived evidence, not the source of truth.
 
+## Descriptor Coverage Policy
+
+Every newly supported runtime-effect family must enter the support matrix in
+one of these states before it can be treated as release-ready:
+
+- descriptor-backed: the descriptor registry entry names the stable id,
+  canonical hash or canonical source identity, effect kind, uniforms,
+  children, flags, CPU implementation id, and WGSL implementation id when GPU
+  support exists;
+- CPU-only: the descriptor registry entry names the same metadata and records
+  an explicit GPU unsupported reason instead of a WGSL implementation id;
+- dispatch-only legacy: the dispatch registry exposes explicit read-only
+  metadata for the Kotlin implementation, and the matrix row carries a named
+  missing-descriptor reason;
+- dependency-gated: the row or linked issue names the external dependency that
+  prevents descriptor, CPU, or WGSL evidence from being completed.
+
+WGSL-backed entries additionally require parser/reflection evidence for the
+registered WGSL module or fragment. A WGSL implementation id without parser
+evidence is not valid support.
+
+Support matrix rows must always expose descriptor status and missing reason
+fields. Reports must include counts for descriptor-backed,
+dispatch-only/missing-descriptor, CPU-only, and GPU-backed entries so PM
+evidence can distinguish shipped support from accepted exceptions.
+
+Adding a runtime-effect registration through dispatch without descriptor
+metadata is acceptable only for existing legacy support. New dispatch-only
+entries must either provide explicit matrix metadata in the same change or
+remain unsupported until a follow-up ticket defines the dependency gate.
+
 ## Non-Goals
 
 - Do not implement arbitrary SkSL parsing or compilation.
