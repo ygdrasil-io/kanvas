@@ -195,6 +195,12 @@ val gpuSmokePatternSpecs = listOf(
         pattern = "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
         evidencePath = "../reports/wgsl-pipeline/2026-05-27-m32-image-rect-smoke-promotion.md",
     ),
+    // M33 Path AA promotion: this fixture renders a stable analytic-AA
+    // convex path and is separate from edge-budget refusal inventory.
+    GpuSmokePatternSpec(
+        pattern = "org.skia.gpu.webgpu.AnalyticAntialiasConvexWebGpuTest",
+        evidencePath = "../reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md",
+    ),
 )
 
 val gpuSmokePatterns = gpuSmokePatternSpecs.map { it.pattern }
