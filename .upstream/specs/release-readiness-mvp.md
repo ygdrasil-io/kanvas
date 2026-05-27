@@ -20,7 +20,7 @@ migration plans.
 |---|---|
 | M32 | Bitmap/image-rect accepted spec and closeout evidence. |
 | M33 | Path AA boundary evidence, edge-budget classification, and smoke decision. |
-| M34 | Image-filter MVP decision and inventory/smoke evidence. |
+| M34 | Image-filter MVP decision, accepted `Crop(input = nonNull)` limitation, and inventory/smoke guard evidence. |
 | M35 | Final CI, conformance, inventory audit, README/spec sync, and PM package. |
 
 ## MVP Release Gates
@@ -35,9 +35,24 @@ The MVP release candidate is ready only when:
 - bitmap/image-rect similarity regressions remain zero;
 - `SaveLayer kScreen` remains out of `unexpected-exception`;
 - Path AA edge-budget refusals are expected unsupported or resolved;
-- image-filter pre-pass gaps are accepted limitations or resolved;
+- `Crop(input = nonNull)` image-filter pre-pass gaps are accepted MVP
+  limitations or resolved, and no `SimpleOffsetImageFilter*` fixture is in
+  required GPU smoke while it emits `image-filter.crop-input-nonnull-prepass-required`;
 - README and active specs match Linear milestone state;
 - PM evidence links PRs, CI, reports, limitations, and follow-ups.
+
+## Current Accepted Limitations
+
+M34 intentionally retains `SkImageFilters.Crop(input = nonNull)` as an MVP
+limitation. The stable inventory reason is
+`image-filter.crop-input-nonnull-prepass-required`, currently limited to:
+
+- `org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest`
+- `org.skia.gpu.webgpu.crossbackend.SimpleOffsetImageFilterCrossBackendTest`
+
+The limitation is release-acceptable only while required GPU smoke excludes
+those fixtures and the final inventory audit classifies them as expected
+unsupported rather than unexpected failures.
 
 ## Required Reports
 
