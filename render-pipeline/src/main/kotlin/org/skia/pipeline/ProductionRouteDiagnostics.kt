@@ -11,6 +11,8 @@ data class ProductionRouteDiagnostics(
     val touchedPixels: Int? = null,
     val pipelineKey: String? = null,
     val cacheCounters: String? = null,
+    val loweringResult: String? = null,
+    val executionEvidence: String? = null,
 ) {
     fun dump(): String = buildString {
         appendLine("ProductionRouteDiagnostics(v1)")
@@ -22,6 +24,8 @@ data class ProductionRouteDiagnostics(
         appendLine("fallbackReason=${fallbackReason ?: "none"}")
         appendLine("coveragePlan=$coveragePlan")
         appendLine("touchedPixels=${touchedPixels ?: "n/a"}")
+        appendLine("loweringResult=${loweringResult ?: "n/a"}")
+        appendLine("executionEvidence=${executionEvidence ?: "n/a"}")
         appendLine("pipelineKey=${pipelineKey ?: "none"}")
         appendLine("cacheCounters=${cacheCounters ?: "none"}")
     }.trimEnd()

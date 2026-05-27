@@ -27,6 +27,8 @@ import org.graphiks.math.SkIRect
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
 import org.skia.pipeline.ClipInteraction
+import org.skia.pipeline.CoverageLoweringResult
+import org.skia.pipeline.CoverageModel
 import org.skia.pipeline.CoveragePlan
 import org.skia.pipeline.CoveragePlanAdapter
 import org.skia.pipeline.FloatRect
@@ -69,6 +71,11 @@ private const val CPU_DESCRIPTOR_BLENDER_REASON: String = "coverage.cpu-descript
 private const val CPU_DESCRIPTOR_BLEND_MODE_REASON: String = "coverage.cpu-descriptor-blend-mode-unsupported"
 private const val CPU_DESCRIPTOR_AA_CLIP_REASON: String = "coverage.cpu-descriptor-aa-clip-unsupported"
 private const val CPU_DESCRIPTOR_CLIP_SHADER_REASON: String = "coverage.cpu-descriptor-clip-shader-unsupported"
+private const val CPU_DESCRIPTOR_LOWERING_UNSUPPORTED_REASON: String = "coverage.cpu-descriptor-lowering-unsupported"
+
+internal object SkBitmapDescriptorCoverageLowering {
+    var lower: (CoveragePlan) -> CoverageLoweringResult = CoveragePlanAdapter::lower
+}
 
 public data class SkBitmapDescriptorCoverageDiagnostics(
     val mode: String,
@@ -77,6 +84,8 @@ public data class SkBitmapDescriptorCoverageDiagnostics(
     val selectedRoute: String,
     val compatibilityFallbackRoute: String,
     val coveragePlan: String,
+    val loweringResult: String,
+    val executionEvidence: String,
     val fallbackReason: String?,
     val touchedPixels: Int,
 ) {
@@ -90,6 +99,8 @@ public data class SkBitmapDescriptorCoverageDiagnostics(
             fallbackReason = fallbackReason,
             coveragePlan = coveragePlan,
             touchedPixels = touchedPixels,
+            loweringResult = loweringResult,
+            executionEvidence = executionEvidence,
         )
 
     public fun dump(): String = toProductionRouteDiagnostics().dump()
@@ -175,6 +186,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         selectedRoute = "none",
         compatibilityFallbackRoute = "kanvas-skia.current.draw-rect",
         coveragePlan = "none",
+        loweringResult = "none",
+        executionEvidence = "none",
         fallbackReason = "not-run",
         touchedPixels = 0,
     )
@@ -255,8 +268,9 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             ),
             clip = ClipInteraction.None,
         )
-        val lowering = CoveragePlanAdapter.lower(coverage)
+        val lowering = SkBitmapDescriptorCoverageLowering.lower(coverage)
         val coverageDiagnostic = dumpAnalyticRectCoverage(coverage)
+        val loweringDiagnostic = dumpCoverageLowering(lowering)
         val unsupportedReason = descriptorAxisAlignedRectFallbackReason(paint)
         if (unsupportedReason != null) {
             lastDescriptorCoverageDiagnostics = SkBitmapDescriptorCoverageDiagnostics(
@@ -266,13 +280,44 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 selectedRoute = "kanvas-skia.current.draw-rect",
                 compatibilityFallbackRoute = "cpu.descriptor.coverage-plan.solid-rect",
                 coveragePlan = coverageDiagnostic,
+                loweringResult = loweringDiagnostic,
+                executionEvidence = "legacy-fallback-before-descriptor-execution",
                 fallbackReason = unsupportedReason,
                 touchedPixels = 0,
             )
             return false
         }
 
-        val touched = countAnalyticRectTouchedPixels(rect, clip, paint.isAntiAlias)
+        val loweredCoverage = (lowering as? CoverageLoweringResult.CoverageModelResult)?.coverage
+        val analyticRect = loweredCoverage as? CoverageModel.AnalyticRect
+        if (analyticRect == null) {
+            lastDescriptorCoverageDiagnostics = SkBitmapDescriptorCoverageDiagnostics(
+                mode = "Fallback",
+                backend = BackendKind.CPU,
+                drawKind = "axis-aligned-filled-rect",
+                selectedRoute = "kanvas-skia.current.draw-rect",
+                compatibilityFallbackRoute = "cpu.descriptor.coverage-plan.solid-rect",
+                coveragePlan = coverageDiagnostic,
+                loweringResult = loweringDiagnostic,
+                executionEvidence = "descriptor-execution-refused",
+                fallbackReason = CPU_DESCRIPTOR_LOWERING_UNSUPPORTED_REASON,
+                touchedPixels = 0,
+            )
+            return false
+        }
+
+        val loweredRect = SkRect.MakeLTRB(
+            analyticRect.bounds.left,
+            analyticRect.bounds.top,
+            analyticRect.bounds.right,
+            analyticRect.bounds.bottom,
+        )
+        val touched = countAnalyticRectTouchedPixels(loweredRect, clip, analyticRect.aa)
+        val executionEvidence = if (analyticRect.aa) {
+            "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRectAA;touchedPixels=$touched"
+        } else {
+            "lowering-consumed:CoverageModel.AnalyticRect;kernel=kanvas-skia.current.fillRect;touchedPixels=$touched"
+        }
         lastDescriptorCoverageDiagnostics = SkBitmapDescriptorCoverageDiagnostics(
             mode = "Default",
             backend = BackendKind.CPU,
@@ -280,19 +325,33 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             selectedRoute = "cpu.descriptor.coverage-plan.solid-rect",
             compatibilityFallbackRoute = "kanvas-skia.current.draw-rect",
             coveragePlan = coverageDiagnostic,
+            loweringResult = loweringDiagnostic,
+            executionEvidence = executionEvidence,
             fallbackReason = null,
             touchedPixels = touched,
         )
-        if (paint.isAntiAlias) {
-            fillRectAA(rect, clip, paint.color4f, paint.blendMode, paint.blender)
+        if (analyticRect.aa) {
+            fillRectAA(loweredRect, clip, paint.color4f, paint.blendMode, paint.blender)
         } else {
-            fillRect(rect, clip, paint.color, paint.blendMode, paint.blender)
+            fillRect(loweredRect, clip, paint.color, paint.blendMode, paint.blender)
         }
         return true
     }
 
     private fun dumpAnalyticRectCoverage(coverage: CoveragePlan.AnalyticRect): String =
         "AnalyticRect(${coverage.bounds.left},${coverage.bounds.top},${coverage.bounds.right},${coverage.bounds.bottom},aa=${coverage.aa})"
+
+    private fun dumpCoverageLowering(lowering: CoverageLoweringResult): String = when (lowering) {
+        is CoverageLoweringResult.CoverageModelResult -> when (val coverage = lowering.coverage) {
+            is CoverageModel.AnalyticRect ->
+                "CoverageModel.AnalyticRect(${coverage.bounds.left},${coverage.bounds.top},${coverage.bounds.right},${coverage.bounds.bottom},aa=${coverage.aa})"
+            CoverageModel.Full -> "CoverageModel.Full"
+            CoverageModel.Span -> "CoverageModel.Span"
+            is CoverageModel.AlphaMask ->
+                "CoverageModel.AlphaMask(${coverage.bounds.left},${coverage.bounds.top},${coverage.bounds.right},${coverage.bounds.bottom},format=${coverage.format})"
+        }
+        is CoverageLoweringResult.StrategyResult -> "StrategyResult(${lowering.strategy.reasonCode})"
+    }
 
     private fun descriptorAxisAlignedRectFallbackReason(paint: SkPaint): String? = when {
         !descriptorRectEnabled() -> CPU_DESCRIPTOR_RECT_DISABLED_REASON
