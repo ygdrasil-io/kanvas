@@ -60,6 +60,21 @@ Evidence:
 | `06-validation-and-perf.md` | Accepted | `pipelineConformance`, `pipelineConformanceReport`, Linear evidence comments. | Slow performance gates remain opt-in until CI budget accepts them. |
 | `07-migration-shim.md` | Accepted | Shadow, compare, gated, default, rollback, and unsupported diagnostics in migration harness tests. | Additional primitive families still need their own rollout evidence. |
 
+## M30 Residual Scope Decomposition
+
+GRA-65 converts the remaining Draft Geometry/Coverage breadth into explicit
+Linear follow-up tickets. These tickets describe future scope and evidence
+requirements; they do not claim implementation completion for the listed
+families.
+
+| Residual scope | Classification | Follow-up | Evidence boundary |
+|---|---|---|---|
+| Glyph masks and text coverage ownership | Dependency-gated post-baseline capability | GRA-66 | Text/glyph infrastructure keeps glyph discovery, rasterization, atlas lifetime, and invalidation ownership; geometry only consumes a glyph mask or glyph-run coverage contract. |
+| Image rect lowering and image/bitmap coverage interaction | Post-baseline capability | GRA-67 | Geometry owns source/destination rect facts and coverage selection; paint/image shader logic owns sampling, filtering, and colorspace payloads. |
+| Coverage atlas policy | Dependency-gated | GRA-68 | Persistent atlas remains disabled until shape keys, transform keys, budgets, eviction, synchronization, and profiling evidence justify it. |
+| Full clip-stack breadth | Release-blocking for full lowering-rules acceptance | GRA-69 | Intersect, difference, AA, and multi-shape clips must map to supported `ClipInteraction` strategies or stable refusal diagnostics. |
+| WebGPU coverage strategies with adapter-risk-only evidence | Dependency-gated and post-baseline | GRA-70 | GPU-supported claims require adapter-backed or equivalent scheduled evidence; skipped adapter lanes remain explicit blockers or risk states. |
+
 ## Spec Index
 
 | Spec | Purpose |
