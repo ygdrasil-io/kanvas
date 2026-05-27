@@ -4,5 +4,31 @@
   "milestone": "M36",
   "status": "shell",
   "generatedBy": "pipelineSceneDashboard",
+  "sceneContract": {
+    "requiredFields": [
+      "id",
+      "title",
+      "priority",
+      "source",
+      "reference",
+      "cpu",
+      "gpu",
+      "diffs",
+      "routeDiagnostics",
+      "stats"
+    ],
+    "allowedSceneStatuses": [
+      "pass",
+      "expected-unsupported",
+      "tracked-gap",
+      "fail"
+    ],
+    "allowedPriorities": [
+      "P0",
+      "P1",
+      "P2"
+    ],
+    "gpuUnsupportedPolicy": "A GPU row with status=expected-unsupported must keep the gpu section and provide a stable non-none gpu.route.fallbackReason."
+  },
   "scenes": []
 }
