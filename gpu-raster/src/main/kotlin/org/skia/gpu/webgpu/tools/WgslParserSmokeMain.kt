@@ -1,7 +1,7 @@
 package org.skia.gpu.webgpu.tools
 
-import io.ygdrasil.wgsl.ast.FunctionDecl
-import io.ygdrasil.wgsl.parser.parseWgslResult
+import org.graphiks.wgsl.ast.FunctionDecl
+import org.graphiks.wgsl.parser.parseWgslResult
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.isRegularFile

@@ -1,18 +1,18 @@
 package org.skia.gpu.webgpu.tools
 
-import io.ygdrasil.wgsl.ast.FunctionDecl
-import io.ygdrasil.wgsl.ast.IntLiteral
-import io.ygdrasil.wgsl.ast.NamedType
-import io.ygdrasil.wgsl.ast.StructDecl
-import io.ygdrasil.wgsl.ast.StructType
-import io.ygdrasil.wgsl.ast.VariableDecl
-import io.ygdrasil.wgsl.ir.GlobalVariable
-import io.ygdrasil.wgsl.ir.StorageClass
-import io.ygdrasil.wgsl.ir.Type
-import io.ygdrasil.wgsl.ir.TypeInner
-import io.ygdrasil.wgsl.parser.Lowerer
-import io.ygdrasil.wgsl.parser.parseWgslResult
-import io.ygdrasil.wgsl.proc.Layouter
+import org.graphiks.wgsl.ast.FunctionDecl
+import org.graphiks.wgsl.ast.IntLiteral
+import org.graphiks.wgsl.ast.NamedType
+import org.graphiks.wgsl.ast.StructDecl
+import org.graphiks.wgsl.ast.StructType
+import org.graphiks.wgsl.ast.VariableDecl
+import org.graphiks.wgsl.ir.GlobalVariable
+import org.graphiks.wgsl.ir.StorageClass
+import org.graphiks.wgsl.ir.Type
+import org.graphiks.wgsl.ir.TypeInner
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
+import org.graphiks.wgsl.proc.Layouter
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.extension
@@ -175,7 +175,7 @@ object WgslValidationReport {
 
     private fun reflectUniformStruct(
         global: GlobalVariable,
-        types: io.ygdrasil.wgsl.arena.UniqueArena<Type>,
+        types: org.graphiks.wgsl.arena.UniqueArena<Type>,
         layouter: Layouter,
     ): UniformStructReport {
         val members = when (val inner = types[global.type].inner) {

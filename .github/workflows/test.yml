@@ -126,8 +126,6 @@ jobs:
 
   gpu:
     name: GPU tests (macos)
-    # TEMPORARILY DISABLED — same rationale as the raster job above.
-    if: false
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
