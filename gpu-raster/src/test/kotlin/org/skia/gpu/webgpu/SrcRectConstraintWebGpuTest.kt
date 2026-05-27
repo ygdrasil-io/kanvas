@@ -1,5 +1,6 @@
 package org.skia.gpu.webgpu
 
+import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorGRAY
 import org.graphiks.math.SK_ColorGREEN
 import org.graphiks.math.SK_ColorRED
@@ -15,6 +16,38 @@ import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkSamplingOptions
 
 class SrcRectConstraintWebGpuTest {
+    @Test
+    fun `strict nearest half-pixel subset keeps border texels on webgpu`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val source = SkBitmap(3, 1).apply {
+            setPixel(0, 0, SK_ColorRED)
+            setPixel(1, 0, SK_ColorGREEN)
+            setPixel(2, 0, SK_ColorBLUE)
+        }.asImage()
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, 4, 1).use { device ->
+                device.setBackground(SK_ColorGRAY)
+                val canvas = SkCanvas(device)
+                canvas.drawImageRect(
+                    source,
+                    SkRect.MakeLTRB(0.5f, 0f, 2.5f, 1f),
+                    SkRect.MakeXYWH(0f, 0f, 4f, 1f),
+                    SkSamplingOptions.nearest(),
+                    constraint = SrcRectConstraint.kStrict,
+                )
+                device.flush()
+            }
+        }
+
+        assertEquals(listOf(255, 0, 0, 255), rgbaAt(pixels, 0, 0, 4), "left border texel")
+        assertEquals(listOf(0, 255, 0, 255), rgbaAt(pixels, 1, 0, 4), "first center texel")
+        assertEquals(listOf(0, 255, 0, 255), rgbaAt(pixels, 2, 0, 4), "second center texel")
+        assertEquals(listOf(0, 0, 255, 255), rgbaAt(pixels, 3, 0, 4), "right border texel")
+    }
+
     @Test
     fun `strict drawImageRect prevents linear filter guard-pixel bleed on webgpu`() {
         val context = WebGpuContext.createOrNull()

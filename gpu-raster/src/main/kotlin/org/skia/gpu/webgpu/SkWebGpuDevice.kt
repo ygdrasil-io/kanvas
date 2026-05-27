@@ -11316,7 +11316,11 @@ public class SkWebGpuDevice(
                 r = 1f, g = 1f, b = 1f, a = paintAlpha,
                 mode = mode,
                 clipKind = clipKind,
-                strictConstraint = if (strictConstraint) 1f else 0f,
+                strictConstraint = when {
+                    !strictConstraint -> 0f
+                    sampling.filter == SkFilterMode.kNearest -> 2f
+                    else -> 1f
+                },
                 clipShapeBounds = clipBounds,
                 clipShapeRx = clipRx,
                 clipShapeRy = clipRy,
@@ -13711,7 +13715,7 @@ public class SkWebGpuDevice(
         //   offset 128 : csTfParams0         (vec4f -- (g, a, b, c) parametric TF ; G5.3.x)
         //   offset 144 : csTfParams1         (vec4f -- (d, e, f, _) parametric TF ; G5.3.x)
         //   offset 160 : clipShapeBounds     (vec4f -- l, t, r, b device-px ; G2.x)
-        //   offset 176 : clipShapeRadiiKind  (vec4f -- rx, ry, clipKind, _ ; G2.x)
+        //   offset 176 : clipShapeRadiiKind  (vec4f -- rx, ry, clipKind, strict mode ; G2.x/GRA-95)
         //   offset 192 : devToImageRow0      (vec4f -- (sx, kx, tx, _) ; G5.2.2)
         //   offset 208 : devToImageRow1      (vec4f -- (ky, sy, ty, _) ; G5.2.2)
         //   offset 224 : colorFilterKindMode (vec4f -- (kind, mode, _, _) ; Phase H2)
