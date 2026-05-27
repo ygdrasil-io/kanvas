@@ -1,6 +1,6 @@
 # MVP Release Readiness
 
-Status: Draft (PM evidence ready, Linear closeout pending)
+Status: Accepted
 Target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 Milestone: M35 -- MVP Release Candidate
 
@@ -70,7 +70,7 @@ As of 2026-05-27, the technical M35 gates are green:
 | Unexpected exceptions | Pass | final inventory has `unexpected-exception=0` |
 | Accepted image-filter limitation | Pass | exactly two `SimpleOffsetImageFilter*` rows remain `image-filter.crop-input-nonnull-prepass-required` |
 | PM evidence package | Pass | `reports/wgsl-pipeline/2026-05-27-m35-pm-evidence-package.md` |
-| Linear/project closeout | Pending | GRA-118 |
+| Linear/project closeout | Pass | `reports/wgsl-pipeline/2026-05-27-m35-closeout.md` |
 
 The full inventory still fails the non-blocking inventory job because it runs
 the classified breadth suite. That failure is release-acceptable only while
@@ -97,6 +97,6 @@ The release candidate does not:
 
 ## Status Policy
 
-This spec remains Draft until M35 closeout lands. It can move to Accepted only
-after the Linear project state, README status, and reports agree on the final
-MVP decision.
+This spec is Accepted for the WGSL/WebGPU MVP release candidate. Future work
+must open scoped follow-up tickets rather than reopening archived migration
+plans or broadening the MVP boundary in place.
