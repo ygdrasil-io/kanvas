@@ -211,6 +211,7 @@ jobs:
           name: gpu-inventory-test-reports
           path: |
             gpu-raster/build/reports/tests/test/
+            gpu-raster/build/reports/gpu-inventory/
             gpu-raster/build/test-results/test/
             gpu-raster/test-similarity-scores-webgpu.properties
           if-no-files-found: ignore

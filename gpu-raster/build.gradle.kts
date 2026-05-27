@@ -115,6 +115,17 @@ tasks.register<JavaExec>("wgslValidateStrict") {
     args(file("src/main/resources/shaders").absolutePath)
 }
 
+tasks.register<JavaExec>("gpuInventoryFailureReport") {
+    group = "verification"
+    description = "Classifies full GPU inventory failures from JUnit XML and emits markdown/json artifacts."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.gpu.webgpu.tools.GpuInventoryFailureReportKt")
+    args(
+        file("build/test-results/test").absolutePath,
+        file("build/reports/gpu-inventory").absolutePath,
+    )
+}
+
 // MIGRATION_PLAN_GPU_WEBGPU.md Phase G0 — GLFW (used by wgpu4k for
 // surface creation, see ClearRedTest / WebGpuContext) requires the
 // AppKit main thread on macOS. `-XstartOnFirstThread` lets the JVM
@@ -139,6 +150,10 @@ tasks.withType<Test> {
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
+}
+
+tasks.named<Test>("test") {
+    finalizedBy(tasks.named("gpuInventoryFailureReport"))
 }
 
 val gpuSmokePatterns = listOf(
