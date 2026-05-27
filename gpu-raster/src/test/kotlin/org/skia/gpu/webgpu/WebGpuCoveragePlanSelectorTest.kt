@@ -13,6 +13,7 @@ import org.skia.core.SkBitmapDevice
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
+import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathBuilder
@@ -453,6 +454,28 @@ class WebGpuCoveragePlanSelectorTest {
     }
 
     @Test
+    fun `production device records coverage selector route for image rect`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                SkCanvas(device).drawImageRect(
+                    image = quadrantImage(),
+                    src = SkRect.MakeLTRB(0f, 0f, 2f, 2f),
+                    dst = SkRect.MakeLTRB(2f, 2f, 10f, 10f),
+                )
+
+                val imageRect = device.coverageSelectionDiagnosticsForTests()
+                assertEquals("axis-aligned-image-rect", imageRect?.drawKind)
+                assertEquals("webgpu.coverage.analytic-rect", imageRect?.routeIdentifier)
+                assertTrue(imageRect?.pipelineKeyDump?.contains("code=[coverageKind=analyticRect]") == true)
+                assertTrue(imageRect?.productionDump?.contains("coveragePlan=AnalyticRect(aa=true)") == true)
+                assertTrue(imageRect?.productionDump?.contains("backend=GPU") == true)
+            }
+        }
+    }
+
+    @Test
     fun `production device rollback flag records selector disabled route dump`() =
         withWebGpuCoverageSelectorFlag("false") {
             val context = WebGpuContext.createOrNull()
@@ -468,6 +491,27 @@ class WebGpuCoveragePlanSelectorTest {
                     )
                     val diagnostics = device.coverageSelectionDiagnosticsForTests()
                     assertEquals("Rollback", diagnostics?.mode)
+                    assertEquals("webgpu.coverage.selector-disabled", diagnostics?.routeIdentifier)
+                    assertTrue(diagnostics?.productionDump?.contains("fallbackReason=coverage.webgpu-selector-disabled") == true)
+                }
+            }
+        }
+
+    @Test
+    fun `image rect rollback flag records selector disabled route dump`() =
+        withWebGpuCoverageSelectorFlag("false") {
+            val context = WebGpuContext.createOrNull()
+            Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+            context!!.use { ctx ->
+                SkWebGpuDevice(ctx, W, H).use { device ->
+                    SkCanvas(device).drawImageRect(
+                        image = quadrantImage(),
+                        src = SkRect.MakeLTRB(0f, 0f, 2f, 2f),
+                        dst = SkRect.MakeLTRB(2f, 2f, 10f, 10f),
+                    )
+                    val diagnostics = device.coverageSelectionDiagnosticsForTests()
+                    assertEquals("Rollback", diagnostics?.mode)
+                    assertEquals("axis-aligned-image-rect", diagnostics?.drawKind)
                     assertEquals("webgpu.coverage.selector-disabled", diagnostics?.routeIdentifier)
                     assertTrue(diagnostics?.productionDump?.contains("fallbackReason=coverage.webgpu-selector-disabled") == true)
                 }
@@ -500,6 +544,15 @@ class WebGpuCoveragePlanSelectorTest {
             out[i * 4 + 3] = ((pixel ushr 24) and 0xFF).toByte()
         }
         return out
+    }
+
+    private fun quadrantImage(): SkImage {
+        val bitmap = SkBitmap(2, 2, colorType = SkColorType.kRGBA_8888)
+        bitmap.setPixel(0, 0, 0xFFFF0000.toInt())
+        bitmap.setPixel(1, 0, 0xFF00FF00.toInt())
+        bitmap.setPixel(0, 1, 0xFF0000FF.toInt())
+        bitmap.setPixel(1, 1, 0xFFFFFFFF.toInt())
+        return SkImage.Make(bitmap)
     }
 
     private fun assertRgbaNear(

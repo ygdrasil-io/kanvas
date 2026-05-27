@@ -13,9 +13,12 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkAAClip
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkFilterMode
+import org.skia.foundation.SkImage
 import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkRRect
+import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkShader
 import org.skia.pipeline.CoverageBackendStrategy
 import org.skia.pipeline.CoverageLoweringResult
@@ -25,11 +28,15 @@ import org.skia.pipeline.CpuAnalyticRectCoverageExecutor
 import org.skia.pipeline.FallbackPlan
 import org.skia.pipeline.FloatRect
 import org.skia.pipeline.GeometryCoverageMigrationHarness
+import org.skia.pipeline.ImageRectLowering
+import org.skia.pipeline.ImageSamplingPayloadRef
+import org.skia.pipeline.MatrixSpec
 import org.skia.pipeline.PixelBuffer
 import org.skia.pipeline.Point
 import org.skia.pipeline.RRectSpec
 import org.skia.pipeline.Rgba
 import org.skia.pipeline.StandardCoverageReason
+import org.skia.pipeline.TransformFacts
 
 class SkBitmapDescriptorCoverageOracleTest {
     @Test
@@ -318,6 +325,47 @@ class SkBitmapDescriptorCoverageOracleTest {
         assertTrue(result.dump().contains("lowering=CoverageModel.AlphaMask(0,0,16,16,format=A8)"))
     }
 
+    @Test
+    fun `image rect descriptor captures analytic coverage while sampling remains paint owned`() {
+        val src = SkRect.MakeLTRB(0f, 0f, 2f, 2f)
+        val dst = SkRect.MakeLTRB(2f, 2f, 6f, 6f)
+        val image = quadrantImage()
+        val oracleBitmap = render(8, 8) {
+            drawImageRect(
+                image = image,
+                src = src,
+                dst = dst,
+                sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                paint = null,
+                constraint = SrcRectConstraint.kStrict,
+            )
+        }
+        val descriptor = ImageRectLowering.lower(
+            source = FloatRect(src.left, src.top, src.right, src.bottom),
+            destination = FloatRect(dst.left, dst.top, dst.right, dst.bottom),
+            transform = TransformFacts(
+                matrix = MatrixSpec.Identity,
+                isAxisAligned = true,
+                hasPerspective = false,
+                maxScale = 2f,
+                isInvertible = true,
+            ),
+            payloadRef = ImageSamplingPayloadRef("kanvas-skia.quadrant-image"),
+        )
+
+        assertEquals(SK_ColorTRANSPARENT, oracleBitmap.getPixel(1, 1))
+        assertEquals(0xFFFF0000.toInt(), oracleBitmap.getPixel(2, 2))
+        assertEquals(0xFF00FF00.toInt(), oracleBitmap.getPixel(5, 2))
+        assertEquals(0xFF0000FF.toInt(), oracleBitmap.getPixel(2, 5))
+        assertEquals(0xFFFFFFFF.toInt(), oracleBitmap.getPixel(5, 5))
+        assertEquals(SK_ColorTRANSPARENT, oracleBitmap.getPixel(6, 6))
+        assertEquals("geometry.image-rect.analytic-rect", descriptor.routeIdentifier)
+        assertEquals("AnalyticRect(2.0,2.0,6.0,6.0,aa=true)", descriptor.dump().substringAfter("coverage=").dropLast(1))
+        assertTrue(descriptor.dump().contains("payload=kanvas-skia.quadrant-image"))
+        assertTrue(descriptor.dump().contains("paint owns sampling, pixels, filtering, and colorspace"))
+        assertEquals("paint-owned", descriptor.primitive.sampling.filter)
+    }
+
     private fun render(width: Int, height: Int, draw: SkCanvas.() -> Unit): SkBitmap {
         val bitmap = SkBitmap(width, height)
         bitmap.eraseColor(SK_ColorTRANSPARENT)
@@ -336,6 +384,15 @@ class SkBitmapDescriptorCoverageOracleTest {
                 dst[i] = 0xFF000000.toInt()
             }
         }
+    }
+
+    private fun quadrantImage(): SkImage {
+        val bitmap = SkBitmap(2, 2)
+        bitmap.setPixel(0, 0, 0xFFFF0000.toInt())
+        bitmap.setPixel(1, 0, 0xFF00FF00.toInt())
+        bitmap.setPixel(0, 1, 0xFF0000FF.toInt())
+        bitmap.setPixel(1, 1, 0xFFFFFFFF.toInt())
+        return SkImage.Make(bitmap)
     }
 
     private fun renderWithDescriptorFlag(value: String?, antiAlias: Boolean, rect: SkRect): SkBitmap =
