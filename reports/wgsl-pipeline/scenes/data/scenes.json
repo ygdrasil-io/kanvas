@@ -268,11 +268,22 @@
           "command": "Static premul byte oracle aligned to BlendModeTest partial-alpha stack"
         },
         "performanceTrend": {
-          "status": "estimated",
+          "sceneId": "src-over-stack",
+          "lane": "CPU",
+          "status": "measured",
+          "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+          "phase": "cpu-dashboard-row",
           "sampleCount": 30,
           "timing": {
-            "medianMs": 0.028,
-            "p95Ms": 0.039
+            "medianMs": 0.016708,
+            "p95Ms": 0.10075
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "CPU scalar Kotlin dashboard benchmark",
+            "vector": "not used"
           },
           "counters": {
             "routeInvocations": 2,
@@ -281,15 +292,51 @@
             "coveragePlanCount": 2
           },
           "baseline": {
-            "name": "m40-cpu-static-seed",
-            "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
+            "name": "m43-cpu-measured-local",
+            "commit": "40eed32e0cbc5d3e0fac1f040fd14c4b8770a0b4"
           },
           "regression": {
             "label": "unknown"
           },
-          "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
+          "gate": {
+            "mode": "reporting-only",
+            "reason": "M43 measured CPU metrics do not gate CI until budget and rollback policy exist"
+          },
           "route": "cpu.blend.src-over-stack",
-          "rawMetrics": "artifacts/src-over-stack/cpu-performance.json"
+          "rawMetrics": "artifacts/src-over-stack/cpu-performance.json",
+          "rawSamples": [
+            0.120833,
+            0.088375,
+            0.088583,
+            0.094375,
+            0.10075,
+            0.088375,
+            0.095625,
+            0.09075,
+            0.049541,
+            0.051417,
+            0.052833,
+            0.056916,
+            0.019208,
+            0.016667,
+            0.016708,
+            0.016334,
+            0.016208,
+            0.016166,
+            0.016375,
+            0.016083,
+            0.015875,
+            0.015833,
+            0.016084,
+            0.016083,
+            0.016416,
+            0.016167,
+            0.016375,
+            0.020875,
+            0.01625,
+            0.017875
+          ],
+          "checksum": -1665679360
         }
       },
       "gpu": {
@@ -358,7 +405,8 @@
         "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md",
         "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/stats.json",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BlendModeTest.kt",
-        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TranslucentSrcOverTest.kt"
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TranslucentSrcOverTest.kt",
+        "reports/wgsl-pipeline/2026-05-28-m43-cpu-measured-metrics.md"
       ]
     },
     {
@@ -625,11 +673,22 @@
           "command": "Static oracle aligned to BitmapShaderRotatedTest rotated localMatrix rect"
         },
         "performanceTrend": {
-          "status": "estimated",
+          "sceneId": "bitmap-shader-local-matrix",
+          "lane": "CPU",
+          "status": "measured",
+          "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+          "phase": "cpu-dashboard-row",
           "sampleCount": 30,
           "timing": {
-            "medianMs": 0.018,
-            "p95Ms": 0.024
+            "medianMs": 0.015875,
+            "p95Ms": 0.016125
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "CPU scalar Kotlin dashboard benchmark",
+            "vector": "not used"
           },
           "counters": {
             "routeInvocations": 1,
@@ -638,15 +697,51 @@
             "coveragePlanCount": 1
           },
           "baseline": {
-            "name": "m40-cpu-static-seed",
-            "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
+            "name": "m43-cpu-measured-local",
+            "commit": "40eed32e0cbc5d3e0fac1f040fd14c4b8770a0b4"
           },
           "regression": {
             "label": "unknown"
           },
-          "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
+          "gate": {
+            "mode": "reporting-only",
+            "reason": "M43 measured CPU metrics do not gate CI until budget and rollback policy exist"
+          },
           "route": "cpu.shader.bitmap.local-matrix",
-          "rawMetrics": "artifacts/bitmap-shader-local-matrix/cpu-performance.json"
+          "rawMetrics": "artifacts/bitmap-shader-local-matrix/cpu-performance.json",
+          "rawSamples": [
+            0.0185,
+            0.015667,
+            0.01575,
+            0.015792,
+            0.016083,
+            0.016041,
+            0.015917,
+            0.015916,
+            0.015792,
+            0.016042,
+            0.015917,
+            0.015791,
+            0.015875,
+            0.015917,
+            0.016042,
+            0.015875,
+            0.015708,
+            0.01575,
+            0.015709,
+            0.01575,
+            0.016125,
+            0.015917,
+            0.015875,
+            0.015833,
+            0.015708,
+            0.015875,
+            0.015625,
+            0.015834,
+            0.016084,
+            0.015709
+          ],
+          "checksum": 1386683128
         }
       },
       "gpu": {
@@ -714,7 +809,8 @@
         "reports/wgsl-pipeline/2026-05-28-m39-p1-scene-selection.md",
         "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
         "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/stats.json",
-        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BitmapShaderRotatedTest.kt"
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BitmapShaderRotatedTest.kt",
+        "reports/wgsl-pipeline/2026-05-28-m43-cpu-measured-metrics.md"
       ]
     },
     {
