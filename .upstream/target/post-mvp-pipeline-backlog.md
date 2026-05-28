@@ -188,13 +188,30 @@ Evidence:
 
 ## M40 Backlog Seed
 
-Status: Next after M39.
+Status: Done through GRA-190.
 
-- Add trendable benchmark outputs for promoted CPU/GPU routes.
-- Track warm/cold GPU pipeline cache behavior.
-- Keep Java 25 Vector as optional acceleration until benchmark gates justify
-  promotion.
-- Publish performance stats in the same dashboard model used by M36.
+Delivered:
+
+- Added optional validated `performanceTrend` schema fields for CPU/GPU lanes.
+- Updated the static dashboard to display performance as measured/estimated or
+  `unavailable`.
+- Populated CPU timing/counter metric seeds for five selected M39 P1 rows.
+- Populated GPU timing/cache metric seeds for the same five selected M39 P1
+  rows.
+- Published the M40 performance/regression closeout report.
+- Kept Java 25 Vector optional; no promotion without benchmark-gate evidence.
+
+Evidence:
+
+- `reports/wgsl-pipeline/2026-05-28-m40-performance-trend-schema.md`
+- `reports/wgsl-pipeline/2026-05-28-m40-cpu-performance-metrics.md`
+- `reports/wgsl-pipeline/2026-05-28-m40-gpu-cache-performance-metrics.md`
+- `reports/wgsl-pipeline/2026-05-28-m40-performance-regression-closeout.md`
+- `reports/wgsl-pipeline/scenes/data/scenes.json`
+
+Future native/live benchmark writing remains a recommendation, not active
+backlog, until a real benchmark harness is ready to own reproducibility and
+baseline comparison.
 
 ## Execution Policy
 
