@@ -211,6 +211,7 @@ class WebGpuCoveragePlanSelectorTest {
         assertEquals(true, WebGpuCoverageStrategyInventory.ciAdapterLaneAvailable)
         assertEquals(WebGpuCoverageEvidenceStatus.AdapterPass, byBranch.getValue("analytic-rect").status)
         assertEquals(WebGpuCoverageEvidenceStatus.AdapterPass, byBranch.getValue("analytic-rrect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.AdapterPass, byBranch.getValue("path-aa-stroke-primitive").status)
         assertEquals(WebGpuCoverageEvidenceStatus.AdapterPass, byBranch.getValue("path-convex-fan").status)
         assertEquals(WebGpuCoverageEvidenceStatus.AdapterPass, byBranch.getValue("path-stencil-cover").status)
         assertEquals(WebGpuCoverageEvidenceStatus.Proven, byBranch.getValue("path-mask-or-atlas-selector").status)
@@ -265,6 +266,7 @@ class WebGpuCoveragePlanSelectorTest {
 
         assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("analytic-rect").status)
         assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("analytic-rrect").status)
+        assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("path-aa-stroke-primitive").status)
         assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("path-convex-fan").status)
         assertEquals(WebGpuCoverageEvidenceStatus.BlockedNoAdapterLane, byBranch.getValue("path-stencil-cover").status)
         assertTrue(byBranch.getValue("analytic-rect").evidence.contains("lane is unavailable"))
@@ -339,7 +341,7 @@ class WebGpuCoveragePlanSelectorTest {
     }
 
     @Test
-    fun `stroke outline edge overflow emits narrower stable gpu diagnostic`() {
+    fun `selected stroke primitive edge overflow selects bounded stroke route`() {
         val selection = WebGpuCoveragePlanSelector.select(
             drawKind = "stroke-outline-overflow",
             plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
@@ -351,16 +353,10 @@ class WebGpuCoveragePlanSelectorTest {
             ),
         )
 
-        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
-        assertEquals(StandardCoverageReason.StrokeOutlineEdgeCountExceeded, selection.diagnostic?.reason)
-        assertEquals("coverage.stroke-outline-edge-count-exceeded", selection.diagnostic?.reason?.code)
-        assertEquals("webgpu.coverage.refuse", selection.routeIdentifier)
-        assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
-        assertTrue(
-            selection.diagnostic?.dump()
-                ?.contains("action=RefuseDiagnostic(coverage.stroke-outline-edge-count-exceeded)") == true,
-        )
-        assertTrue(selection.pipelineKeyDump().contains("code=[coverageKind=pathStrokeOutlineOverflow]"))
+        assertEquals(WebGpuCoverageStrategy.PathAaStrokePrimitive, selection.strategy)
+        assertEquals("webgpu.coverage.path-aa-stroke-primitive", selection.routeIdentifier)
+        assertEquals(null, selection.diagnostic)
+        assertTrue(selection.pipelineKeyDump().contains("code=[coverageKind=pathAaStrokePrimitive]"))
     }
 
     @Test
