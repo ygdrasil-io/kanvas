@@ -105,3 +105,27 @@ Expected evidence sources:
 - GRA-113: `reports/wgsl-pipeline/2026-05-27-m34-image-filter-closeout.md`
 - GRA-181: `reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md`
 - GRA-182: `reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md`
+
+## M45 Bounded DAG Subset Update
+
+GRA-216 selects the first post-M38 image-filter DAG subset:
+
+```text
+Compose(
+  outer = ColorFilter(Matrix|Blend, input = null),
+  inner = MatrixTransform(affine 2x3, input = null)
+)
+```
+
+The selected source test is
+`SaveLayerImageFilterTest#saveLayer with Compose(ColorFilter, MatrixTransform) grayscales the transformed pixels()`
+and the planned dashboard scene id is `image-filter-compose-cf-matrix-transform`.
+The route must materialise the affine MatrixTransform into one WebGPU scratch
+texture, then apply the outer ColorFilter during the final layer composite. This
+keeps M45 scoped to a two-node single-input DAG and does not introduce a general
+image-filter graph compiler.
+
+Non-selected DAG shapes, including perspective MatrixTransform, non-null child
+filters outside the selected shape, duplicate ColorFilter or Blur chains, Crop
+beyond the M38 shape, and arbitrary nested image-filter graphs, remain out of
+scope with stable diagnostics.
