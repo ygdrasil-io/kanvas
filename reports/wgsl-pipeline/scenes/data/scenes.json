@@ -85,8 +85,8 @@
       "id": "solid-rect",
       "title": "Solid filled rect",
       "priority": "P0",
-      "status": "tracked-gap",
-      "source": "reports/wgsl-pipeline/2026-05-28-m36-solid-rect-scene.md",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m42-solid-rect-adapter-capture.md",
       "referenceKind": "cpu-oracle",
       "reference": "artifacts/solid-rect/skia.png",
       "cpu": {
@@ -110,15 +110,28 @@
         }
       },
       "gpu": {
-        "status": "expected-unsupported",
+        "status": "pass",
+        "image": "artifacts/solid-rect/gpu.png",
+        "diff": "artifacts/solid-rect/gpu-diff.png",
+        "similarity": 100.0,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "pipelineKey": "coverageKind=analyticRect",
-          "fallbackReason": "gpu.adapter-backed-solid-rect-capture-not-produced-in-m36-c-local-run"
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 64,
+          "matchingPixels": 64,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "adapter": "Apple M2 Max",
+          "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.SolidRectSceneCaptureTest"
         }
       },
       "diffs": {
-        "cpu": "artifacts/solid-rect/cpu-diff.png"
+        "cpu": "artifacts/solid-rect/cpu-diff.png",
+        "gpu": "artifacts/solid-rect/gpu-diff.png"
       },
       "routeDiagnostics": {
         "cpu": "artifacts/solid-rect/route-cpu.json",
@@ -128,13 +141,21 @@
         "pixels": 64,
         "matchingPixels": 64,
         "maxChannelDelta": 0,
-        "threshold": 99.95
+        "threshold": 99.95,
+        "gpuMatchingPixels": 64,
+        "gpuMaxChannelDelta": 0,
+        "adapter": "Apple M2 Max",
+        "backend": "WebGPU"
       },
       "evidence": [
         "reports/wgsl-pipeline/2026-05-28-m36-solid-rect-scene.md",
+        "reports/wgsl-pipeline/2026-05-28-m42-solid-rect-adapter-capture.md",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/route-gpu.json",
         "reports/wgsl-pipeline/scenes/artifacts/solid-rect/stats.json",
         "kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt",
-        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt"
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SolidRectSceneCaptureTest.kt"
       ]
     },
     {
