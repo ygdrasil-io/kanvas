@@ -5707,6 +5707,100 @@ public class SkWebGpuDevice(
             return
         }
 
+        val cropNonNullOffsetPrePass = resolveCropNonNullOffsetPrePassPlan(paint)
+        if (cropNonNullOffsetPrePass != null) {
+            if (nonNativeBlend) {
+                error(
+                    "SkWebGpuDevice.compositeFrom : paint.imageFilter routes " +
+                        "through webgpu.image-filter.crop-nonnull.prepass." +
+                        "offset-child but the layer paint's blendMode is $mode. " +
+                        "Combining the Crop(input = nonNull) pre-pass with a " +
+                        "non-native layer blend mode is deferred -- the first " +
+                        "M38 slice materialises the child and then composites " +
+                        "through the fixed-function layer path only."
+                )
+            }
+            val w0 = gpuSrc.width
+            val h0 = gpuSrc.height
+            val ix0e = originX.coerceAtLeast(clip.left).coerceAtLeast(0)
+            val iy0e = originY.coerceAtLeast(clip.top).coerceAtLeast(0)
+            val ix1e = (originX + w0).coerceAtMost(clip.right).coerceAtMost(width)
+            val iy1e = (originY + h0).coerceAtMost(clip.bottom).coerceAtMost(height)
+            if (ix0e >= ix1e || iy0e >= iy1e) return
+
+            gpuSrc.flushDrawsOnly()
+            val childScratch = context.device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = w0.toUInt(), height = h0.toUInt()),
+                    format = intermediateFormat,
+                    usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                    label = "SkWebGpuDevice.cropNonNullOffsetChildPrePassScratch",
+                ),
+            )
+            val childScratchView = childScratch.createView()
+
+            pending.add(
+                LayerCompositeDraw(
+                    layerView = gpuSrc.intermediateView,
+                    layerWidth = w0,
+                    layerHeight = h0,
+                    dstOriginX = cropNonNullOffsetPrePass.offsetDx,
+                    dstOriginY = cropNonNullOffsetPrePass.offsetDy,
+                    scissor = intArrayOf(0, 0, w0, h0),
+                    paintR = 1f,
+                    paintG = 1f,
+                    paintB = 1f,
+                    paintA = 1f,
+                    r = 1f,
+                    g = 1f,
+                    b = 1f,
+                    a = 1f,
+                    mode = SkBlendMode.kSrc,
+                    colorFilterPacked = FloatArray(24),
+                    matrixPacked = IDENTITY_LAYER_MATRIX_12,
+                    imageFilterPacked = FloatArray(12),
+                    materializeTargetTexture = childScratch,
+                    materializeTargetView = childScratchView,
+                ),
+            )
+
+            val cropPacked = packCropImageFilterPayload(
+                cropNonNullOffsetPrePass.cropRect,
+                cropNonNullOffsetPrePass.cropTileMode,
+            )
+            val ox = originX.toFloat()
+            val oy = originY.toFloat()
+            cropPacked[4] -= ox
+            cropPacked[5] -= oy
+            cropPacked[6] -= ox
+            cropPacked[7] -= oy
+
+            val paintAlphaE = (paint?.alpha ?: 0xFF) / 255f
+            pending.add(
+                LayerCompositeDraw(
+                    layerView = childScratchView,
+                    layerWidth = w0,
+                    layerHeight = h0,
+                    dstOriginX = originX,
+                    dstOriginY = originY,
+                    scissor = intArrayOf(ix0e, iy0e, ix1e - ix0e, iy1e - iy0e),
+                    paintR = paintAlphaE,
+                    paintG = paintAlphaE,
+                    paintB = paintAlphaE,
+                    paintA = paintAlphaE,
+                    r = 1f,
+                    g = 1f,
+                    b = 1f,
+                    a = paintAlphaE,
+                    mode = mode,
+                    colorFilterPacked = FloatArray(24),
+                    matrixPacked = IDENTITY_LAYER_MATRIX_12,
+                    imageFilterPacked = cropPacked,
+                ),
+            )
+            return
+        }
+
         // Phase G-saveLayer-imageFilter-compose -- walk the paint's
         // imageFilter tree (possibly Compose-wrapped) into a normalized
         // plan of "[pre-blur CF][Blur?][post-blur CF folded with
@@ -7235,6 +7329,13 @@ public class SkWebGpuDevice(
         val materialiseChain: List<MaterialisePreStage> = emptyList(),
     )
 
+    private data class CropNonNullOffsetPrePassPlan(
+        val cropRect: SkRect,
+        val cropTileMode: SkTileMode,
+        val offsetDx: Int,
+        val offsetDy: Int,
+    )
+
     /**
      * Phase G-saveLayer-imageFilter -- resolver for the layer paint's
      * [SkImageFilter] slot. See [ResolvedLayerImageFilterPlan] for the
@@ -7742,8 +7843,38 @@ public class SkWebGpuDevice(
      * branch may interact with it -- this slice keeps the two
      * orthogonal).
      */
+    private fun resolveCropNonNullOffsetPrePassPlan(paint: SkPaint?): CropNonNullOffsetPrePassPlan? {
+        val cropParams = paint?.imageFilter?.asCropImageFilter() ?: return null
+        val childOffset = cropParams.input?.asOffsetImageFilter()
+            ?: return null
+        if (cropParams.tileMode != SkTileMode.kDecal ||
+            childOffset.input != null ||
+            paint.colorFilter != null
+        ) {
+            return null
+        }
+        return CropNonNullOffsetPrePassPlan(
+            cropRect = cropParams.rect,
+            cropTileMode = cropParams.tileMode,
+            offsetDx = floor(childOffset.dx + 0.5f).toInt(),
+            offsetDy = floor(childOffset.dy + 0.5f).toInt(),
+        )
+    }
+
+    private fun packCropImageFilterPayload(rect: SkRect, tileMode: SkTileMode): FloatArray {
+        val out = FloatArray(12)
+        out[0] = 1f
+        out[1] = tileMode.ordinal.toFloat()
+        out[4] = rect.left
+        out[5] = rect.top
+        out[6] = rect.right
+        out[7] = rect.bottom
+        return out
+    }
+
     private fun computeImageFilterUvRemapPayload(paint: SkPaint?): FloatArray? {
         val imf = paint?.imageFilter ?: return null
+        if (resolveCropNonNullOffsetPrePassPlan(paint) != null) return null
 
         val cropParams = imf.asCropImageFilter()
         if (cropParams != null) {
@@ -7772,16 +7903,7 @@ public class SkWebGpuDevice(
                         "or set only one of the two on the layer paint."
                 )
             }
-            val out = FloatArray(12)
-            out[0] = 1f                                        // kind = 1
-            out[1] = cropParams.tileMode.ordinal.toFloat()
-            // out[2..3] : unused for Crop, zeroed.
-            out[4] = cropParams.rect.left
-            out[5] = cropParams.rect.top
-            out[6] = cropParams.rect.right
-            out[7] = cropParams.rect.bottom
-            // out[8..11] : RectB unused, zeroed.
-            return out
+            return packCropImageFilterPayload(cropParams.rect, cropParams.tileMode)
         }
 
         val tileParams = imf.asTileImageFilter()
