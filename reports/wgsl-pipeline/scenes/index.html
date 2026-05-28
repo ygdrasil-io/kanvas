@@ -295,6 +295,51 @@
       font: 0.88rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
 
+    .aggregate-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .aggregate-card {
+      border: 1px solid var(--line);
+      background: rgba(248, 241, 226, 0.74);
+      padding: 12px;
+    }
+
+    .aggregate-card b {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--accent);
+      font: 700 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .aggregate-card code {
+      display: inline-block;
+      margin: 0 6px 6px 0;
+      padding: 3px 6px;
+      border: 1px solid rgba(36, 92, 69, 0.18);
+      background: #fffaf0;
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 14px 0 0;
+    }
+
+    .tag-list code {
+      padding: 3px 6px;
+      border: 1px solid rgba(36, 92, 69, 0.18);
+      background: #f8f1e2;
+      color: var(--accent);
+      font-size: 0.72rem;
+    }
+
     .empty {
       margin-top: 24px;
       border: 1px dashed var(--line);
@@ -405,11 +450,15 @@
         <label>Performance
           <select id="performance-filter"></select>
         </label>
+        <label>Tag
+          <select id="tag-filter"></select>
+        </label>
         <label>Search
-          <input id="search-filter" type="search" placeholder="scene, route, fallback">
+          <input id="search-filter" type="search" placeholder="scene, route, fallback, tag">
         </label>
       </div>
       <p id="filter-summary" class="filter-summary"></p>
+      <div id="tag-aggregates" class="aggregate-grid" aria-label="Visible tag aggregates"></div>
     </section>
 
     <section id="scenes" class="scene-grid" aria-live="polite"></section>
@@ -430,9 +479,11 @@
       reference: document.getElementById('reference-filter'),
       fallback: document.getElementById('fallback-filter'),
       performance: document.getElementById('performance-filter'),
+      tag: document.getElementById('tag-filter'),
       search: document.getElementById('search-filter'),
     };
     const filterSummary = document.getElementById('filter-summary');
+    const tagAggregates = document.getElementById('tag-aggregates');
     let allScenes = [];
 
     function text(value, fallback = 'unavailable') {
@@ -511,6 +562,10 @@
       return 'unavailable';
     }
 
+    function sceneTags(scene) {
+      return Array.isArray(scene.tags) ? scene.tags : [];
+    }
+
     function optionLabel(value) {
       return value === 'all' ? 'All' : value;
     }
@@ -532,6 +587,7 @@
       fillSelect(filterControls.reference, uniqueValues(scenes, (scene) => scene.referenceKind), 'All references');
       fillSelect(filterControls.fallback, uniqueValues(scenes, gpuFallback), 'All fallbacks');
       fillSelect(filterControls.performance, uniqueValues(scenes, performanceStatus), 'All performance');
+      fillSelect(filterControls.tag, [...new Set(scenes.flatMap(sceneTags))].sort(), 'All tags');
       Object.values(filterControls).forEach((control) => control.addEventListener('input', applyFilters));
     }
 
@@ -550,8 +606,35 @@
         gpuFallback(scene),
         gpuBlocker(scene),
         gpuFollowUp(scene),
+        ...sceneTags(scene),
       ].join(' ').toLowerCase();
       return haystack.includes(query.toLowerCase());
+    }
+
+    function countTagsByPrefix(scenes, prefix) {
+      return scenes
+        .flatMap(sceneTags)
+        .filter((tag) => tag.startsWith(prefix))
+        .reduce((acc, tag) => {
+          acc[tag] = (acc[tag] || 0) + 1;
+          return acc;
+        }, {});
+    }
+
+    function renderTagAggregate(title, counts) {
+      const entries = Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
+      const body = entries.length
+        ? entries.map(([tag, count]) => `<code>${tag}: ${count}</code>`).join('')
+        : '<span>none</span>';
+      return `<article class="aggregate-card"><b>${title}</b>${body}</article>`;
+    }
+
+    function renderTagAggregates(scenes) {
+      tagAggregates.innerHTML = [
+        renderTagAggregate('feature.*', countTagsByPrefix(scenes, 'feature.')),
+        renderTagAggregate('maturity.*', countTagsByPrefix(scenes, 'maturity.')),
+        renderTagAggregate('risk.*', countTagsByPrefix(scenes, 'risk.')),
+      ].join('');
     }
 
     function applyFilters() {
@@ -561,6 +644,7 @@
         reference: filterControls.reference.value,
         fallback: filterControls.fallback.value,
         performance: filterControls.performance.value,
+        tag: filterControls.tag.value,
         search: filterControls.search.value.trim(),
       };
       const filtered = allScenes.filter((scene) => (
@@ -569,6 +653,7 @@
         (filters.reference === 'all' || scene.referenceKind === filters.reference) &&
         (filters.fallback === 'all' || gpuFallback(scene) === filters.fallback) &&
         (filters.performance === 'all' || performanceStatus(scene) === filters.performance) &&
+        (filters.tag === 'all' || sceneTags(scene).includes(filters.tag)) &&
         matchesSearch(scene, filters.search)
       ));
       scenesRoot.innerHTML = filtered.map(renderScene).join('');
@@ -581,6 +666,7 @@
         return acc;
       }, {});
       filterSummary.textContent = `${filtered.length}/${allScenes.length} scenes shown -- pass=${counts.pass || 0}, tracked-gap=${counts['tracked-gap'] || 0}, expected-unsupported=${counts['expected-unsupported'] || 0}, fail=${counts.fail || 0}`;
+      renderTagAggregates(filtered);
     }
 
     function renderScene(scene) {
@@ -611,6 +697,7 @@
           <p>Raw source: <code>${text(generation.sourceTest || generation.sourceTask || generation.sourceReport)}</code></p>
           <p>CPU perf: <code>${performanceText(scene.cpu)}</code></p>
           <p>GPU perf: <code>${performanceText(scene.gpu)}</code></p>
+          <div class="tag-list" aria-label="Scene tags">${sceneTags(scene).map((tag) => `<code>${tag}</code>`).join('')}</div>
           ${visualPanels(scene)}
           <details class="artifact-details">
             <summary>Artifacts and raw diagnostics</summary>

@@ -94,6 +94,14 @@ Each scene record must be deterministic and self-contained:
     "maxChannelDelta": 0,
     "threshold": 99.95
   },
+  "tags": [
+    "source.static",
+    "feature.shape.solid",
+    "route.gpu.webgpu",
+    "reference.cpu-oracle",
+    "maturity.static-evidence",
+    "risk.none"
+  ],
   "evidence": [
     "reports/wgsl-pipeline/2026-05-27-m35-full-gpu-inventory.md"
   ]
@@ -108,6 +116,9 @@ Rules:
 - CPU and GPU sections are both required in the schema.
 - A non-GPU-eligible scene must keep the `gpu` section with
   `status=expected-unsupported` and a stable `fallbackReason`.
+- Scene rows must carry stable taxonomy tags. See
+  `13-scene-tag-taxonomy.md`; tags are for filtering and aggregates, not support
+  claims.
 - Missing artifacts must fail the export task.
 
 ## P0 Scene Pack
@@ -196,6 +207,9 @@ M36 is complete when:
 - `scenes.json` validates against the expected fields.
 - All referenced source and exported artifacts exist.
 - The static dashboard renders without missing images or links.
+- Tags validate against `13-scene-tag-taxonomy.md`, exact-tag filtering works,
+  and visible/exported aggregates include `feature.*`, `maturity.*`, and
+  `risk.*` counts.
 - P0 includes CPU and GPU sections for all three scenes.
 - Unsupported GPU rows show stable diagnostics instead of blank cells.
 - The export task writes `build/reports/wgsl-pipeline-scenes/index.html`.

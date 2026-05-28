@@ -96,6 +96,7 @@ Evidence:
 | `10-scene-evidence-dashboard.md` | M36 post-MVP scene dashboard with CPU/GPU renders, Skia/reference diffs, route diagnostics, and stats. |
 | `11-conformance-dashboard-generation.md` | M41 generated conformance dashboard contract for test-produced scene evidence. |
 | `12-benchmark-harness-and-performance-gates.md` | M43 benchmark harness and performance gate policy for measured CPU/GPU metrics. |
+| `13-scene-tag-taxonomy.md` | M41 scene tag taxonomy for dashboard filtering, search, and feature/maturity/risk aggregates. |
 
 Decision records live under `adr/`.
 

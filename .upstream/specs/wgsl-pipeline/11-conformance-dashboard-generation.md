@@ -25,6 +25,7 @@ Each generated scene result must provide:
 - stable fallback reason when GPU refuses;
 - optional `performanceTrend`;
 - raw evidence links.
+- stable taxonomy tags as defined in `13-scene-tag-taxonomy.md`.
 
 ## Scene Status Rules
 
@@ -133,6 +134,14 @@ so the failure is reviewable.
   },
   "referenceKind": "skia-upstream",
   "reference": "artifacts/bitmap-rect-nearest/skia.png",
+  "tags": [
+    "source.generated",
+    "feature.image.bitmap",
+    "route.gpu.webgpu",
+    "reference.skia-upstream",
+    "maturity.generated-evidence",
+    "risk.none"
+  ],
   "cpu": {
     "status": "pass",
     "image": "artifacts/bitmap-rect-nearest/cpu.png",
@@ -210,6 +219,8 @@ Each generated scene row must:
 - use `generation.mode=generated` or `generation.mode=mixed`;
 - set `generation.artifactRoot` to `artifacts/<scene-id>`;
 - include producer, commit, schema, and source task/test/report traceability;
+- include at least one `source.*`, `feature.*`, `route.*`, `reference.*`, and
+  `maturity.*` tag;
 - expose non-empty raw `evidence` links;
 - reference canonical artifact paths under `artifacts/<scene-id>/`.
 
@@ -278,7 +289,11 @@ rtk ./gradlew --no-daemon pipelineSceneDashboard
 ```
 
 Generated scene tasks must also validate that every referenced artifact exists
-and that unsupported GPU rows include stable fallback reasons.
+and that unsupported GPU rows include stable fallback reasons. The dashboard
+export also rejects duplicate, empty, uppercase, whitespace, or slash-containing
+tags; generated rows missing required tag namespaces; `maturity.adapter-backed`
+without `gpu.stats.adapter`; and `route.gpu.expected-unsupported` without a
+stable GPU fallback reason.
 
 ## Non-Goals
 
