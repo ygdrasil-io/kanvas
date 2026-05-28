@@ -333,6 +333,15 @@ public class SkWebGpuDevice(
         val productionDump: String,
     )
 
+    internal data class ImageFilterRouteDiagnostics(
+        val selectedRoute: String,
+        val prepassRoute: String?,
+        val scratchOwner: String?,
+        val scratchLifetime: String?,
+        val materialiseStages: Int,
+        val fallbackReason: String?,
+    )
+
     private data class CacheCounters(
         var shaderModuleHits: Int = 0,
         var shaderModuleMisses: Int = 0,
@@ -2209,6 +2218,7 @@ public class SkWebGpuDevice(
     private var lastGeneratedSolidRectFallbackReason: String? = generatedSolidRectInitFallbackReason
     private var lastSolidRectPathForDiagnostics: String? = null
     private var lastCoverageSelectionForDiagnostics: WebGpuCoverageSelection? = null
+    private var lastImageFilterRouteForDiagnostics: ImageFilterRouteDiagnostics? = null
 
     private val rectBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
@@ -2387,6 +2397,9 @@ public class SkWebGpuDevice(
                 productionDump = selection.toProductionRouteDiagnostics(cacheTelemetrySnapshot()).dump(),
             )
         }
+
+    internal fun imageFilterRouteDiagnosticsForTests(): ImageFilterRouteDiagnostics? =
+        lastImageFilterRouteForDiagnostics
 
     // ─── Polygon pipeline (G3.3a) — vertex buffer in device coords ─────────
 
@@ -5615,6 +5628,7 @@ public class SkWebGpuDevice(
         clip: SkIRect,
         paint: SkPaint?,
     ) {
+        lastImageFilterRouteForDiagnostics = null
         val gpuSrc = src as? SkWebGpuDevice
             ?: error(
                 "SkWebGpuDevice.compositeFrom : source device is " +
@@ -5810,6 +5824,15 @@ public class SkWebGpuDevice(
         // filter. See [resolveLayerImageFilterPlan] for the full set
         // of supported / rejected patterns.
         val plan = resolveLayerImageFilterPlan(paint)
+        val selectedM45CfMatrixTransformRoute =
+            plan.materialiseChain.size == 1 &&
+                plan.materialiseChain.single().matrixTransform != null &&
+                !plan.materialiseChain.single().hasBlurCfPrefix &&
+                plan.preBlurColorFilter == null &&
+                plan.blurParams == null &&
+                plan.effectiveColorFilter != null &&
+                plan.offsetDx == 0 &&
+                plan.offsetDy == 0
 
         val w = gpuSrc.width
         val h = gpuSrc.height
@@ -6184,6 +6207,16 @@ public class SkWebGpuDevice(
                 imageFilterPacked = FloatArray(12),
             ),
         )
+        if (selectedM45CfMatrixTransformRoute) {
+            lastImageFilterRouteForDiagnostics = ImageFilterRouteDiagnostics(
+                selectedRoute = "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+                prepassRoute = "webgpu.image-filter.compose.cf-matrix-transform.materialize-matrix",
+                scratchOwner = "LayerCompositeDraw.materializeTargetTexture",
+                scratchLifetime = "per-composite-dispatch",
+                materialiseStages = 1,
+                fallbackReason = null,
+            )
+        }
     }
 
     /**

@@ -1845,6 +1845,59 @@ class SaveLayerImageFilterTest {
     }
 
     @Test
+    fun `saveLayer with Compose ColorFilter MatrixTransform exposes M45 route diagnostics`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val diagnostics = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                val layerBounds = SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat())
+                val rectBounds = SkRect.MakeLTRB(4f, 8f, 8f, 12f)
+                val luma = floatArrayOf(
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0.299f, 0.587f, 0.114f, 0f, 0f,
+                    0f,     0f,     0f,     1f, 0f,
+                )
+                val grayscale = SkColorFilters.Matrix(luma)
+                val translate = SkMatrix.MakeAll(1f, 0f, 8f, 0f, 1f, 4f)
+                val mt = SkImageFilters.MatrixTransform(
+                    matrix = translate,
+                    sampling = SkSamplingOptions(SkFilterMode.kNearest),
+                    input = null,
+                )!!
+                val layerPaint = SkPaint().apply {
+                    imageFilter = SkImageFilters.Compose(
+                        outer = SkImageFilters.ColorFilter(grayscale, input = null),
+                        inner = mt,
+                    )
+                }
+                canvas.saveLayer(layerBounds, layerPaint)
+                canvas.drawRect(rectBounds, SkPaint().apply { color = SK_ColorRED })
+                canvas.restore()
+                device.flush()
+                device.imageFilterRouteDiagnosticsForTests()
+            }
+        }
+
+        assertTrue(diagnostics != null, "M45 selected route diagnostics must be recorded")
+        assertEquals(
+            "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+            diagnostics!!.selectedRoute,
+        )
+        assertEquals(
+            "webgpu.image-filter.compose.cf-matrix-transform.materialize-matrix",
+            diagnostics.prepassRoute,
+        )
+        assertEquals("LayerCompositeDraw.materializeTargetTexture", diagnostics.scratchOwner)
+        assertEquals("per-composite-dispatch", diagnostics.scratchLifetime)
+        assertEquals(1, diagnostics.materialiseStages)
+        assertEquals(null, diagnostics.fallbackReason)
+    }
+
+    @Test
     fun `saveLayer with Compose(MatrixTransform, Blur) chains BlurCF materialise then MT materialise`() {
         // N1 -- chain-of-passes : the inverse Compose layout
         // (MatrixTransform on the OUTER side, Blur on the INNER side)
