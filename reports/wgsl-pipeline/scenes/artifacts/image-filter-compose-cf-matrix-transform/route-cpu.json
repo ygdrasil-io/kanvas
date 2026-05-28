@@ -1,0 +1,9 @@
+{
+  "backend": "CPU",
+  "sceneId": "image-filter-compose-cf-matrix-transform",
+  "drawKind": "SaveLayerImageFilterTest Compose(ColorFilter, MatrixTransform)",
+  "selectedRoute": "cpu.image-filter.compose.cf-matrix-transform-oracle",
+  "compatibilityFallbackRoute": "kanvas-skia.current.image-filter-raster",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.SaveLayerImageFilterTest#saveLayer with Compose(ColorFilter, MatrixTransform) grayscales the transformed pixels()"
+}
