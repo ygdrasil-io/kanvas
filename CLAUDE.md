@@ -27,6 +27,12 @@ as the target design for the high-performance WGSL/WebGPU pipeline, including
 the shared Kanvas pipeline IR, WGSL parser/IR module builder, CPU scalar/vector
 execution, and GPU generated-shader direction.
 
+For post-MVP rendering conformance and performance planning, use
+[.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
+as the big target and
+[.upstream/target/post-mvp-conformance-backlog.md](.upstream/target/post-mvp-conformance-backlog.md)
+as the M41-M45 backlog entry point.
+
 For pre-Geometry WGSL paint-pipeline implementation planning, use
 [.upstream/specs/wgsl-pipeline/README.md](.upstream/specs/wgsl-pipeline/README.md)
 as the entry point for PipelineIR, WGSL parser/reflection/module-builder,
@@ -49,6 +55,9 @@ Hard architecture decisions:
 - Keep WebGPU as the GPU backend.
 - Keep `SkRuntimeEffect` as a compatibility facade backed by registered
   Kotlin/WGSL implementations.
+- Do not mark rendering support as complete without reference, CPU/GPU
+  evidence or explicit refusal, diff/stat artifacts, route diagnostics, and
+  stable fallback policy.
 - Treat font/codec gaps as dependency-gated until the real deliveries land;
   do not add short-lived substitutes just to clear archived backlog rows.
 

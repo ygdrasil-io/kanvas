@@ -1,9 +1,10 @@
 # Post-MVP Pipeline Backlog
 
-Status: Active -- M38 closed, M39 next
+Status: Closed -- M36-M40 complete
 Date: 2026-05-28
 Target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 Input: `reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md`
+Next target: `.upstream/target/rendering-conformance-performance-target.md`
 
 ## Purpose
 
@@ -14,7 +15,7 @@ scoped post-MVP work.
 
 ## Current Baseline
 
-Current post-M38 inventory:
+Current post-M40 inventory:
 
 | Category | Count | Interpretation |
 |---|---:|---|
@@ -31,15 +32,19 @@ M38 removed the two M34 `SimpleOffsetImageFilter*` rows from
 out-of-scope `Crop(input = nonNull)` graph shapes that are not covered by the
 selected M38 pre-pass.
 
-## Proposed Milestones
+## Closed Milestones
 
 | Milestone | Name | Goal |
 |---|---|---|
 | M36 | Scene Evidence Dashboard | Done -- static dashboard with CPU/GPU renders, diffs, diagnostics, and stats. |
 | M37 | Path AA Breadth Strategy | Done -- stroke-outline overflow split and dashboard evidence without hiding breadth. |
 | M38 | Image-filter Child Pre-pass | Done -- selected render-to-texture child pre-pass for `Crop(kDecal, input = Offset(null))`. |
-| M39 | Pipeline Route Convergence | Next -- move more `kanvas-skia` integration scenes through explicit CoveragePlan/PipelineIR diagnostics. |
-| M40 | Performance And Regression Dashboard | Proposed -- add benchmark and trend evidence for promoted CPU/GPU pipeline routes. |
+| M39 | Pipeline Route Convergence | Done -- selected P1 scenes expose explicit CoveragePlan/PipelineIR diagnostics. |
+| M40 | Performance And Regression Dashboard | Done -- dashboard supports optional performance trends and static estimated metrics. |
+
+Future M41-M45 planning lives in
+`.upstream/target/post-mvp-conformance-backlog.md`. Do not add new work to this
+closed backlog except corrections to the historical record.
 
 ## M36 Backlog
 
