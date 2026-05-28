@@ -1,0 +1,26 @@
+{
+  "backend": "CPU",
+  "sceneId": "linear-gradient-rect",
+  "drawKind": "LinearGradientRectTest.horizontalRedToBlue",
+  "status": "pass",
+  "selectedRoute": "cpu.shader.linear-gradient.rect",
+  "shaderFamily": "linearGradient",
+  "coveragePlan": "AnalyticRect(2.0,10.0,62.0,50.0,aa=false)",
+  "gradient": {
+    "p0": [
+      2.0,
+      32.0
+    ],
+    "p1": [
+      62.0,
+      32.0
+    ],
+    "tileMode": "kClamp",
+    "colors": [
+      "SK_ColorRED",
+      "SK_ColorBLUE"
+    ]
+  },
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.LinearGradientRectTest#horizontal red-to-blue gradient interpolates across the rect"
+}

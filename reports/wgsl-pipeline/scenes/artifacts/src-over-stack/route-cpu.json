@@ -1,0 +1,15 @@
+{
+  "backend": "CPU",
+  "sceneId": "src-over-stack",
+  "drawKind": "BlendModeTest.partialAlphaSrcOver",
+  "status": "pass",
+  "selectedRoute": "cpu.blend.src-over-stack",
+  "coveragePlan": "AnalyticRect stack: red kSrc [8,8,40,40], blue kSrcOver [16,16,48,48]",
+  "blendStack": [
+    "kSrc(seed translucent red)",
+    "kSrcOver(translucent blue)"
+  ],
+  "byteOracleTolerance": 1,
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.BlendModeTest#kSrcOver matches CPU for partial alpha over non opaque destination"
+}
