@@ -1,6 +1,6 @@
 # Post-MVP Pipeline Backlog
 
-Status: Proposed
+Status: Active -- M38 closed, M39 next
 Date: 2026-05-28
 Target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 Input: `reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md`
@@ -14,26 +14,32 @@ scoped post-MVP work.
 
 ## Current Baseline
 
-Final MVP inventory:
+Current post-M38 inventory:
 
 | Category | Count | Interpretation |
 |---|---:|---|
-| `expected-unsupported-diagnostic` | 50 | Path AA / coverage breadth under `coverage.edge-count-exceeded`. |
-| `unsupported-image-filter` | 2 | `Crop(input = nonNull)` child pre-pass limitation. |
+| `expected-unsupported-diagnostic` | 50 | Path AA / coverage breadth under `coverage.edge-count-exceeded` and `coverage.stroke-outline-edge-count-exceeded`. |
+| `unsupported-image-filter` | 0 | Selected `Crop(kDecal, input = Offset(null))` SimpleOffset child pre-pass is implemented; no selected image-filter rows remain in this bucket. |
 | `adapter-skip` | 48 | Adapter/dependency placeholder families outside required smoke. |
 | `similarity-regression` | 0 | No unresolved similarity regression. |
 | `adapter-missing` | 0 | Adapter-backed evidence exists for required smoke. |
 | `unexpected-exception` | 0 | No unowned blocker category remains. |
 
+M38 removed the two M34 `SimpleOffsetImageFilter*` rows from
+`unsupported-image-filter`. The diagnostic
+`image-filter.crop-input-nonnull-prepass-required` remains reserved for future
+out-of-scope `Crop(input = nonNull)` graph shapes that are not covered by the
+selected M38 pre-pass.
+
 ## Proposed Milestones
 
 | Milestone | Name | Goal |
 |---|---|---|
-| M36 | Scene Evidence Dashboard | Build a static scene dashboard with CPU/GPU renders, diffs, diagnostics, and stats. |
-| M37 | Path AA Breadth Strategy | Reduce or better route `coverage.edge-count-exceeded` inventory rows without hiding breadth. |
-| M38 | Image-filter Child Pre-pass | Implement or prototype render-to-texture child pre-pass for `Crop(input = nonNull)`. |
-| M39 | Pipeline Route Convergence | Move more `kanvas-skia` integration scenes through explicit CoveragePlan/PipelineIR diagnostics. |
-| M40 | Performance And Regression Dashboard | Add benchmark and trend evidence for promoted CPU/GPU pipeline routes. |
+| M36 | Scene Evidence Dashboard | Done -- static dashboard with CPU/GPU renders, diffs, diagnostics, and stats. |
+| M37 | Path AA Breadth Strategy | Done -- stroke-outline overflow split and dashboard evidence without hiding breadth. |
+| M38 | Image-filter Child Pre-pass | Done -- selected render-to-texture child pre-pass for `Crop(kDecal, input = Offset(null))`. |
+| M39 | Pipeline Route Convergence | Next -- move more `kanvas-skia` integration scenes through explicit CoveragePlan/PipelineIR diagnostics. |
+| M40 | Performance And Regression Dashboard | Proposed -- add benchmark and trend evidence for promoted CPU/GPU pipeline routes. |
 
 ## M36 Backlog
 
@@ -131,10 +137,28 @@ References:
 
 ## M38 Backlog Seed
 
-- Design the render-to-texture child pre-pass for `Crop(input = nonNull)`.
-- Define intermediate surface format, bounds, tile mode, lifetime, and fallback
-  diagnostics.
-- Promote one image-filter scene only after CPU/GPU/reference evidence exists.
+Status: Done through GRA-184.
+
+Delivered:
+
+- Designed the bounded render-to-texture child pre-pass for the selected
+  `Crop(kDecal, input = Offset(null))` SimpleOffset shape.
+- Implemented child materialisation into
+  `SkWebGpuDevice.cropNonNullOffsetChildPrePassScratch` and final crop
+  composite sampling from scratch.
+- Promoted `SimpleOffsetImageFilterWebGpuTest` to required GPU smoke.
+- Moved selected image-filter inventory from `unsupported-image-filter=2` to
+  `unsupported-image-filter=0`.
+- Added dashboard scene `crop-image-filter-nonnull-prepass` with CPU/GPU
+  artifacts, diffs, route diagnostics, pre-pass diagnostics, and stats.
+
+Evidence:
+
+- `reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-design.md`
+- `reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md`
+- `reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md`
+- `reports/wgsl-pipeline/2026-05-28-m38-image-filter-dashboard-scene.md`
+- `reports/wgsl-pipeline/2026-05-28-m38-image-filter-closeout.md`
 
 ## M39 Backlog Seed
 
