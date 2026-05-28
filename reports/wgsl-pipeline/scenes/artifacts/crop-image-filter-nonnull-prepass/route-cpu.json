@@ -1,0 +1,11 @@
+{
+  "backend": "CPU",
+  "sceneId": "crop-image-filter-nonnull-prepass",
+  "drawKind": "SimpleOffsetImageFilterGM",
+  "selectedRoute": "cpu.image-filter.crop-nonnull.offset-oracle",
+  "imageFilterGraph": "Crop(kDecal, rect=20,10,60,40, input=Offset(dx=16, dy=16, input=null))",
+  "compatibilityFallbackRoute": "kanvas-skia.current.image-filter-raster",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.crossbackend.SimpleOffsetImageFilterCrossBackendTest",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md"
+}
