@@ -162,10 +162,15 @@ Evidence:
 
 ## M39 Backlog Seed
 
-- Add integration scenes that prove more `skia-integration-tests` routes emit
-  CoveragePlan/PipelineIR diagnostics.
-- Prioritize linear gradient rect, `SrcOver` stack, local matrix shader, and
-  color-filter-over-bitmap.
+- Add integration scenes that prove more `skia-integration-tests` and focused
+  WebGPU tests emit CoveragePlan/PipelineIR/route diagnostics.
+- Selected GRA-175 scene set:
+  `linear-gradient-rect`, `src-over-stack`, `runtime-effect-simple`,
+  `clip-rect-difference`, and `bitmap-shader-local-matrix`.
+- GRA-185 owns gradient and `SrcOver` stack dashboard rows.
+- GRA-186 owns runtime-effect, clip, and local-matrix route rows.
+- GRA-187 closes route convergence evidence across P0, M37/M38 rows, and the
+  new M39 P1 rows.
 - Keep text/glyph scenes dependency-gated unless font infrastructure has landed.
 
 ## M40 Backlog Seed
