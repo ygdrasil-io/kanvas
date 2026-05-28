@@ -88,7 +88,7 @@ Evidence:
 | `06-runtime-effects-descriptor.md` | Registered runtime-effect descriptors, support matrix, CPU/GPU implementations, and misses. |
 | `07-validation-performance-and-migration.md` | Test layers, PM evidence, migration stages, retirement policy, and milestone acceptance. |
 | `08-bitmap-image-rect-sampling.md` | M32 bitmap/image-rect strict sampling, smoke promotion, and closeout evidence. |
-| `09-image-filter-mvp-lane.md` | M34 image-filter MVP boundary for supported fixtures and accepted `Crop(input = nonNull)` limitations. |
+| `09-image-filter-mvp-lane.md` | M34 image-filter MVP boundary plus M38 selected `Crop(kDecal, input = Offset(null))` child pre-pass promotion and remaining out-of-scope `Crop(input = nonNull)` limitations. |
 | `10-scene-evidence-dashboard.md` | M36 post-MVP scene dashboard with CPU/GPU renders, Skia/reference diffs, route diagnostics, and stats. |
 
 Decision records live under `adr/`.

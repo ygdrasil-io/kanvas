@@ -32,7 +32,7 @@ Active execution source:
 | GPU CI stabilization | M31: required GPU smoke gate separated from full non-blocking inventory | Done | 15% | 100% | Adapter-backed smoke gate and inventory classification policy |
 | Bitmap/ImageRect remediation | M32: fix or evidence-classify `DrawBitmapRect3` and `DrawBitmapRectSkbug4734` GPU similarity deltas | Done | 10% | 100% | `GRA-93` through `GRA-100`; image-rect similarity regressions are zero and `DrawBitmapRectSkbug4734` is required smoke |
 | Path AA inventory boundary | M33: classify edge-budget refusals and promote only stable AA coverage | Done | 10% | 100% | `GRA-105` through `GRA-108`; `coverage.edge-count-exceeded` remains inventory-only and `AnalyticAntialiasConvexWebGpuTest` is required smoke |
-| Image-filter MVP lane | M34: gate `Crop(input = nonNull)` image-filter cases as an accepted MVP limitation | Done | 5% | 100% | `GRA-109` through `GRA-113`; `image-filter.crop-input-nonnull-prepass-required` remains inventory-only and `SimpleOffsetImageFilter*` fixtures are blocked from required smoke |
+| Image-filter MVP lane | M34/M38: gate unsupported `Crop(input = nonNull)` graphs and promote the selected SimpleOffset child pre-pass | Done | 5% | 100% | `GRA-109` through `GRA-113`, `GRA-181`, and `GRA-182`; selected `SimpleOffsetImageFilterWebGpuTest` is required smoke, while `image-filter.crop-input-nonnull-prepass-required` is retained only for out-of-scope Crop(input nonNull) graph shapes |
 | MVP release candidate | M35: final smoke, inventory, PM demo, limitations, and release notes | Done | 5% | 100% | Required CI, conformance, smoke, full inventory, PM evidence package, and closeout evidence are complete |
 
 Sprint verification on 2026-05-28 confirmed that Linear epics `GRA-101`,
