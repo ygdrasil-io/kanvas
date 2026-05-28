@@ -51,7 +51,7 @@ public object GpuInventoryFailureReport {
         UnsupportedImageFilterDiagnostic(
             marker = "SkImageFilters.Crop(input = nonNull)",
             reasonCode = "image-filter.crop-input-nonnull-prepass-required",
-            followUp = "Render-to-texture pre-pass implementation evidence (promotion blocker)",
+            followUp = "Out-of-scope Crop(input = nonNull) graph requires a selected pre-pass implementation",
         ),
     )
 
@@ -155,7 +155,7 @@ public object GpuInventoryFailureReport {
             appendLine("|---|---|---|")
             appendLine(unsupportedImageFilterReasonRows)
             appendLine()
-            appendLine("`image-filter.crop-input-nonnull-prepass-required` remains inventory-only expected unsupported coverage until a render-to-texture pre-pass lands.")
+            appendLine("`image-filter.crop-input-nonnull-prepass-required` is retained only for out-of-scope Crop(input = nonNull) graph shapes. The M38-selected SimpleOffset shape should not appear in this section after the child pre-pass promotion.")
             appendLine()
             appendLine("### Crop(input = nonNull) Expected Unsupported Inventory Tests")
             appendLine()

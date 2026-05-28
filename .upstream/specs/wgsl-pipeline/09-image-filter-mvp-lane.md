@@ -35,6 +35,25 @@ No required smoke fixture may include either row while this reason remains
 inventory-only. A future promotion requires a render-to-texture child pre-pass
 and adapter-backed evidence that removes the reason from inventory.
 
+## M38 Policy Update
+
+GRA-181 implemented the selected render-to-texture child pre-pass for the
+bounded `Crop(kDecal, input = Offset(null))` SimpleOffset fixture shape. GRA-182
+updates the smoke and inventory policy accordingly:
+
+- `org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest` is required GPU
+  smoke after adapter-backed implementation evidence.
+- `org.skia.gpu.webgpu.crossbackend.SimpleOffsetImageFilterCrossBackendTest`
+  remains full-inventory parity evidence, not a required smoke expansion.
+- `unsupported-image-filter` inventory count for the selected SimpleOffset rows
+  is `0`.
+- `image-filter.crop-input-nonnull-prepass-required` remains a stable
+  inventory-only reason for out-of-scope Crop(input = nonNull) graph shapes that
+  are not covered by the selected M38 pre-pass.
+
+The M38 promotion is intentionally not a general image-filter DAG compiler and
+does not change the M34 non-goals.
+
 ## M34 Tickets
 
 | Ticket | Purpose |
@@ -84,3 +103,5 @@ Expected evidence sources:
 - GRA-111: `reports/wgsl-pipeline/2026-05-27-m34-crop-nonnull-limitation-hardening.md`
 - GRA-112: `reports/wgsl-pipeline/2026-05-27-m34-spec-readiness-sync.md`
 - GRA-113: `reports/wgsl-pipeline/2026-05-27-m34-image-filter-closeout.md`
+- GRA-181: `reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md`
+- GRA-182: `reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md`
