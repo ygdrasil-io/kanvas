@@ -17,6 +17,7 @@ public enum class WebGpuCoverageStrategy {
     AnalyticRRect,
     CpuPreparedConvexFan,
     StencilCover,
+    PathAaStrokePrimitive,
     CoverageMaskOrAtlasFallback,
     ExistingGpuCompatibility,
     RefuseDiagnostic,
@@ -120,6 +121,18 @@ public object WebGpuCoverageStrategyInventory {
             diagnosticReason = null,
             evidence = promotedEvidence(
                 branchEvidence = "selector, pipeline-key, and local adapter rrect fixture exist",
+                ciAdapterLaneStatus = ciAdapterLaneStatus,
+            ),
+            unblockCondition = promotedUnblockCondition(ciAdapterLaneStatus),
+        ),
+        WebGpuCoverageStrategyInventoryRow(
+            branch = "path-aa-stroke-primitive",
+            strategy = WebGpuCoverageStrategy.PathAaStrokePrimitive,
+            status = promotedStatus(ciAdapterLaneStatus),
+            routeIdentifier = "webgpu.coverage.path-aa-stroke-primitive",
+            diagnosticReason = null,
+            evidence = promotedEvidence(
+                branchEvidence = "selector and adapter-backed StrokeRectGM/StrokeCircleGM fixtures exist",
                 ciAdapterLaneStatus = ciAdapterLaneStatus,
             ),
             unblockCondition = promotedUnblockCondition(ciAdapterLaneStatus),
@@ -396,13 +409,14 @@ public object WebGpuCoveragePlanSelector {
         }
         if (plan.aa && facts.edgeCount > WEBGPU_PATH_AA_EDGE_BUDGET) {
             if (facts.strokeOutlineFallbackEnabled) {
-                return unsupported(
+                return supportedPath(
                     drawKind = drawKind,
+                    strategy = WebGpuCoverageStrategy.PathAaStrokePrimitive,
                     plan = plan,
                     clipInteraction = clipInteraction,
                     lowering = lowering,
-                    reason = StandardCoverageReason.StrokeOutlineEdgeCountExceeded,
-                    pipelineAxes = pathPipelineAxes("pathStrokeOutlineOverflow", plan),
+                    coverageKind = "pathAaStrokePrimitive",
+                    route = "webgpu.coverage.path-aa-stroke-primitive",
                 )
             }
             return if (facts.maskOrAtlasFallbackEnabled) {
