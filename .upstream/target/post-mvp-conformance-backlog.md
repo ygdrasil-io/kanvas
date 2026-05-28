@@ -191,3 +191,15 @@ M45's bounded image-filter DAG subset. The planned dashboard scene is
 `image-filter-compose-cf-matrix-transform`; it requires one MatrixTransform
 materialise scratch followed by a final ColorFilter composite. Broader DAG
 shapes remain explicitly out of scope until separately scoped.
+
+## M45 Outcome
+
+Closed on 2026-05-28 by `reports/wgsl-pipeline/2026-05-28-m45-image-filter-dag-subset-closeout.md`.
+
+M45 promoted the bounded two-node image-filter DAG subset
+`Compose(ColorFilter(Matrix|Blend), MatrixTransform(affine))` with dashboard
+scene `image-filter-compose-cf-matrix-transform`. The route materialises the
+affine MatrixTransform into `LayerCompositeDraw.materializeTargetTexture`, then
+applies the ColorFilter during final composite. No full Skia image-filter DAG
+support is claimed; broader DAG shapes remain explicitly scoped with stable
+refusal policy.
