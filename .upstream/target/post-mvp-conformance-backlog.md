@@ -35,6 +35,7 @@ Current M40 dashboard state:
 | M43 Real Benchmark Harness | Replace selected estimated metrics with measured benchmark output. | At least two CPU and two GPU rows have measured host/JDK/backend/adapter metadata, warm/cold context, baseline name, and regression label. Estimated fields remain non-gating. |
 | M44 First Real Path AA Family Promotion | Promote one narrow Path AA family to rendered support. | One selected family has CPU/GPU/reference artifacts, route diagnostics, passing thresholds, and reduced expected-unsupported inventory without weakening fallback diagnostics. |
 | M45 Image-Filter DAG Subset V1 | Extend image-filter support beyond the selected M38 pre-pass. | A bounded multi-node or multi-family image-filter subset renders through explicit pre-pass/layer contracts with dashboard evidence and stable out-of-scope diagnostics. |
+| M46 Generated Evidence Expansion | Convert high-value static pass rows to generated evidence. | At least five additional dashboard rows are generated from test/report outputs, merged export remains 0 tracked-gap / 0 fail, and remaining static rows are explicitly listed with owners. |
 
 ## M41 Seed Tickets
 
@@ -74,6 +75,21 @@ Current M40 dashboard state:
 - Implement explicit intermediate texture/layer ownership.
 - Add CPU/GPU/reference dashboard rows.
 - Keep unsupported DAG shapes visible through stable diagnostics.
+
+## M46 Seed Tickets
+
+- Convert `solid-rect` to generated evidence using the adapter-backed P0
+  capture path.
+- Convert `analytic-aa-convex` to generated evidence while preserving the
+  composited `SrcOver` AA oracle contract.
+- Convert `path-aa-stroke-primitive` to generated evidence and preserve the M44
+  inventory delta evidence.
+- Convert `image-filter-compose-cf-matrix-transform` to generated evidence and
+  preserve pre-pass/intermediate texture route diagnostics.
+- Convert one measured-performance scene, preferably `src-over-stack` or
+  `bitmap-shader-local-matrix`, without losing M43 measured payload links.
+- Publish a sprint review that reports generated/static counts, remaining
+  static rows, tag aggregates, support status counts, and validation commands.
 
 ## Execution Rules
 
@@ -206,3 +222,32 @@ affine MatrixTransform into `LayerCompositeDraw.materializeTargetTexture`, then
 applies the ColorFilter during final composite. No full Skia image-filter DAG
 support is claimed; broader DAG shapes remain explicitly scoped with stable
 refusal policy.
+
+## M46 Plan
+
+M46 should harden evidence for already-supported rows before adding new feature
+scope. Starting point after M45/GRA-221:
+
+| Signal | Count |
+|---|---:|
+| Merged scene rows | 13 |
+| `pass` | 11 |
+| `tracked-gap` | 0 |
+| `expected-unsupported` | 2 |
+| `fail` | 0 |
+| `maturity.generated-evidence` | 3 |
+| `maturity.static-evidence` | 10 |
+| `maturity.adapter-backed` | 2 |
+
+M46 target:
+
+| Signal | Target |
+|---|---:|
+| `maturity.generated-evidence` | >= 8 |
+| `maturity.static-evidence` | <= 5 |
+| `tracked-gap` | 0 |
+| `fail` | 0 |
+
+M46 should not change runtime support claims unless the generated artifacts
+prove the same route, threshold, fallback, and tag semantics as the static row
+being replaced.
