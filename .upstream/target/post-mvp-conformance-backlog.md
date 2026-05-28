@@ -172,3 +172,14 @@ unsupported inventory from 50 to 46 rows. The selected `StrokeRectGM` and
 `webgpu.coverage.path-aa-stroke-primitive`; broad Path AA suites remain visible
 as `coverage.edge-count-exceeded` with zero unexpected exceptions and zero
 similarity regressions.
+
+## M44 Outcome
+
+Closed on 2026-05-28 by `reports/wgsl-pipeline/2026-05-28-m44-path-aa-family-promotion-closeout.md`.
+
+M44 promoted the selected primitive-stroke Path AA family (`StrokeRectGM` and
+`StrokeCircleGM`) through `webgpu.coverage.path-aa-stroke-primitive` with
+adapter-backed rendered evidence and dashboard scene `path-aa-stroke-primitive`.
+The expected unsupported Path AA inventory moved from 50 to 46 rows with zero
+unexpected exceptions and zero similarity regressions. Remaining broad Path AA
+families stay explicitly expected unsupported until separately scoped.
