@@ -83,6 +83,93 @@
         "schema": "generated-scene-result.v1",
         "linearIssue": "GRA-198"
       }
+    },
+    {
+      "id": "crop-image-filter-nonnull-prepass",
+      "title": "Crop non-null image-filter child pre-pass",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
+      "referenceKind": "skia-upstream",
+      "reference": "artifacts/crop-image-filter-nonnull-prepass/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+        "diff": "artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+        "similarity": 84.88,
+        "route": {
+          "selectedRoute": "cpu.image-filter.crop-nonnull.offset-oracle",
+          "imageFilterGraph": "Crop(kDecal, input=Offset(input=null))",
+          "compatibilityFallbackRoute": "kanvas-skia.current.image-filter-raster",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 128000,
+          "matchingPixels": 108644,
+          "maxChannelDelta": 110,
+          "threshold": 50.0,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*SimpleOffsetImageFilterCrossBackendTest'"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+        "diff": "artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+        "similarity": 98.13,
+        "route": {
+          "coverageStrategy": "webgpu.image-filter.crop-nonnull-offset-prepass",
+          "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+          "pipelineKey": "layerComposite.materializeChildPrePass + imageFilterCropUvRemap",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 128000,
+          "matchingPixels": 125600,
+          "maxChannelDelta": 110,
+          "threshold": 50.0,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*SimpleOffsetImageFilterWebGpuTest'"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+        "gpu": "artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+        "gpu": "artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+        "prepass": "artifacts/crop-image-filter-nonnull-prepass/route-prepass.json"
+      },
+      "stats": {
+        "pixels": 128000,
+        "matchingPixels": 125600,
+        "maxChannelDelta": 110,
+        "threshold": 50.0
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
+        "reports/wgsl-pipeline/2026-05-28-m38-image-filter-dashboard-scene.md",
+        "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+        "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
+        "reports/wgsl-pipeline/2026-05-28-m38-image-filter-closeout.md",
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/scenes/generated/artifacts/crop-image-filter-nonnull-prepass/stats.json",
+        "reports/wgsl-pipeline/scenes/generated/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleOffsetImageFilterWebGpuTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/SimpleOffsetImageFilterCrossBackendTest.kt"
+      ],
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:gpuSmokeTest",
+        "sourceTest": "org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+        "commit": "9136fca2d3582c409785ae74f6114bb5d680b1a9",
+        "artifactRoot": "artifacts/crop-image-filter-nonnull-prepass",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-199"
+      }
     }
   ]
 }
