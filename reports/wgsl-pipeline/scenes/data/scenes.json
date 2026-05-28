@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "title": "Kanvas WGSL pipeline scene evidence",
   "milestone": "M40",
-  "status": "m40-performance-regression-dashboard-closeout",
+  "status": "m41-generated-result-schema-ready",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [
@@ -55,6 +55,27 @@
         "pipelineCacheMisses",
         "bindGroupCount",
         "resourceBytes"
+      ]
+    },
+    "generationPolicy": "generation is optional. Static rows remain valid. When present, generation.mode must be static, generated, or mixed. generated/mixed rows require producer, sourceTask or sourceTest, commit, artifactRoot, and schema. tracked-gap generated rows must describe missing evidence.",
+    "optionalGenerationFields": {
+      "mode": [
+        "static",
+        "generated",
+        "mixed"
+      ],
+      "requiredWhenGeneratedOrMixed": [
+        "producer",
+        "commit",
+        "artifactRoot",
+        "schema"
+      ],
+      "traceability": [
+        "sourceTask",
+        "sourceTest",
+        "sourceReport",
+        "linearIssue",
+        "missing"
       ]
     }
   },
