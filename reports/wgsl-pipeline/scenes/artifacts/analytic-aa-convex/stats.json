@@ -2,11 +2,18 @@
   "sceneId": "analytic-aa-convex",
   "dimensions": { "width": 16, "height": 16 },
   "pixels": 256,
-  "matchingPixels": 256,
-  "maxChannelDelta": 0,
+  "matchingPixels": 232,
+  "maxChannelDelta": 127,
   "threshold": 99.85,
   "cpuSimilarity": 100.0,
-  "gpuSimilarity": null,
-  "gpuStatus": "expected-unsupported",
-  "edgeBudgetReason": "not coverage.edge-count-exceeded"
+  "gpuSimilarity": 90.6,
+  "gpuMatchingPixels": 232,
+  "gpuMaxChannelDelta": 127,
+  "gpuStatus": "tracked-gap",
+  "blockerReason": "gpu.analytic-aa-convex-edge-alpha-oracle-mismatch",
+  "edgeBudgetReason": "not coverage.edge-count-exceeded",
+  "followUp": "GRA-222",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.AnalyticAaConvexSceneCaptureTest"
 }
