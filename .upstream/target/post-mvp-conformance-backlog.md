@@ -83,3 +83,27 @@ Current M40 dashboard state:
 - Do not hide expected unsupported rows from dashboard or inventory evidence.
 - Keep Linear tickets linked to specs, reports, validation commands, and raw
   artifacts.
+
+## M41 Outcome
+
+Closed on 2026-05-28 by `reports/wgsl-pipeline/2026-05-28-m41-generated-dashboard-closeout.md`.
+
+Final M41 dashboard evidence:
+
+| Signal | Count |
+|---|---:|
+| Total scene rows | 11 |
+| Generated rows | 3 |
+| Static rows | 8 |
+| `pass` | 7 |
+| `tracked-gap` | 2 |
+| `expected-unsupported` | 2 |
+| `fail` | 0 |
+
+Generated rows:
+
+- `bitmap-rect-nearest`
+- `crop-image-filter-nonnull-prepass`
+- `linear-gradient-rect`
+
+M42 starts from two explicit P0 tracked gaps: `solid-rect` and `analytic-aa-convex`.
