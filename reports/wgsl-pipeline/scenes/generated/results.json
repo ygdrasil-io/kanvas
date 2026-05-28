@@ -170,6 +170,141 @@
         "schema": "generated-scene-result.v1",
         "linearIssue": "GRA-199"
       }
+    },
+    {
+      "id": "linear-gradient-rect",
+      "title": "Linear gradient rect generated WGSL route",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m41-linear-gradient-generated-evidence.md",
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/linear-gradient-rect/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/linear-gradient-rect/cpu.png",
+        "diff": "artifacts/linear-gradient-rect/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "AnalyticRect(2.0,10.0,62.0,50.0,aa=false)",
+          "selectedRoute": "cpu.shader.linear-gradient.rect",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "Static oracle aligned to LinearGradientRectTest plus GeneratedLinearGradientWgslTest"
+        },
+        "performanceTrend": {
+          "status": "estimated",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.035,
+            "p95Ms": 0.046
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pixels": 4096,
+            "shaderStages": 1,
+            "coveragePlanCount": 1
+          },
+          "baseline": {
+            "name": "m40-cpu-static-seed",
+            "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
+          "route": "cpu.shader.linear-gradient.rect",
+          "rawMetrics": "artifacts/linear-gradient-rect/cpu-performance.json"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/linear-gradient-rect/gpu.png",
+        "diff": "artifacts/linear-gradient-rect/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect",
+          "selectedRoute": "webgpu.generated.linear-gradient.rect",
+          "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests '*GeneratedLinearGradientWgslTest'"
+        },
+        "performanceTrend": {
+          "status": "estimated",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.09,
+            "p95Ms": 0.128
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pipelineCacheHits": 29,
+            "pipelineCacheMisses": 1,
+            "bindGroupCount": 1,
+            "resourceBytes": 4096
+          },
+          "baseline": {
+            "name": "m40-gpu-cache-static-seed",
+            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
+          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+          "route": "webgpu.generated.linear-gradient.rect",
+          "rawMetrics": "artifacts/linear-gradient-rect/gpu-performance.json"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/linear-gradient-rect/cpu-diff.png",
+        "gpu": "artifacts/linear-gradient-rect/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/linear-gradient-rect/route-cpu.json",
+        "gpu": "artifacts/linear-gradient-rect/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m41-linear-gradient-generated-evidence.md",
+        "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md",
+        "reports/wgsl-pipeline/2026-05-28-m39-route-convergence-closeout.md",
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/stats.json",
+        "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/cpu-performance.json",
+        "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/gpu-performance.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/LinearGradientRectTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/tools/GeneratedLinearGradientWgslTest.kt"
+      ],
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.LinearGradientRectTest + org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md",
+        "commit": "74d34d868223f17e5a176127339bdc53c8f5eca8",
+        "artifactRoot": "artifacts/linear-gradient-rect",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-200"
+      }
     }
   ]
 }
